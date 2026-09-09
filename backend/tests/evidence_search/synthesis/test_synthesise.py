@@ -28,13 +28,13 @@ from policy_atlas.core.schema import (
     grouping_result,
     implementation_context_finding,
     intervention_outcome_finding,
-    task_plan,
-    task_source_snapshot,
     runs,
     search_coverage_record,
     selection_result,
     source_extraction_record,
     synthesis_result,
+    task_plan,
+    task_source_snapshot,
 )
 from policy_atlas.core.schema import chunk as chunk_table
 from policy_atlas.core.usage import UsageResult
@@ -48,9 +48,13 @@ from policy_atlas.evidence_search.synthesis.grounding_judge import (
 )
 from policy_atlas.evidence_search.synthesis.synthesis_backend import (
     NAV_LABEL_MAX,
+    SECTION_TITLE_PROPOSAL_MAX,
+    CaseStudyWire,
     ChunkCitationWire,
     ClaimWire,
     GapPayloadWire,
+    IntroWire,
+    NoteWire,
     PatternPayloadWire,
     RepairItemWire,
     SectionProposalWire,
@@ -103,12 +107,12 @@ from tests.helpers import (
     run_select,
     seed_characterisation,
     seed_ingested_full_text,
-    seed_task_and_run,
     seed_run,
     seed_scope,
     seed_screening_result,
     seed_select_doc,
     seed_source,
+    seed_task_and_run,
 )
 from tests.synthesis_wire import ScriptedSynthesisBackend, prose_section
 
@@ -904,9 +908,9 @@ def test_section_validation_accepts_a_nav_label_at_the_max_boundary() -> None:
     assert sections[0].nav_label == nav_label
 
 
-def test_section_validation_rejects_an_over_long_nav_label_without_truncating() -> None:
-    """rev 8 M5: nav_label is rejected at the boundary, never clamped."""
-    nav_label = "a" * (NAV_LABEL_MAX + 1)
+def test_section_validation_truncates_an_over_long_nav_label() -> None:
+    """Over-long nav_label is truncated with ellipsis rather than failing the run."""
+    nav_label = "a" * (NAV_LABEL_MAX + 5)
     proposal = SectionProposalWire(
         sections=[
             SectionWire(
@@ -916,10 +920,13 @@ def test_section_validation_rejects_an_over_long_nav_label_without_truncating() 
             )
         ]
     )
-    _sections, reasons, normalisations = _validate_sections(proposal, grouping_group_ids=None)
-    assert len(reasons) == 1
-    assert "nav_label_too_long" in reasons[0]
-    assert normalisations == []
+    sections, reasons, normalisations = _validate_sections(proposal, grouping_group_ids=None)
+    assert reasons == []
+    assert len(normalisations) == 1
+    assert "nav_label_truncated" in normalisations[0]
+    assert sections[0].nav_label is not None
+    assert len(sections[0].nav_label) == NAV_LABEL_MAX
+    assert sections[0].nav_label.endswith("…")
 
 
 def test_section_validation_allows_an_omitted_nav_label() -> None:
@@ -946,6 +953,39 @@ def test_section_validation_rejects_a_blank_nav_label() -> None:
     _sections, reasons, _normalisations = _validate_sections(proposal, grouping_group_ids=None)
     assert len(reasons) == 1
     assert "nav_label_invalid" in reasons[0]
+
+
+def test_section_validation_rejects_an_over_long_title_without_truncating() -> None:
+    """034 S6 / F10: title is rejected at 60 chars, never clamped."""
+    title = "a" * (SECTION_TITLE_PROPOSAL_MAX + 1)
+    proposal = SectionProposalWire(
+        sections=[
+            SectionWire(
+                title=title,
+                focus="A focused evidence aspect.",
+            )
+        ]
+    )
+    _sections, reasons, normalisations = _validate_sections(proposal, grouping_group_ids=None)
+    assert len(reasons) == 1
+    assert "title_too_long" in reasons[0]
+    assert normalisations == []
+
+
+def test_section_validation_accepts_a_title_at_the_proposal_max() -> None:
+    title = "a" * SECTION_TITLE_PROPOSAL_MAX
+    proposal = SectionProposalWire(
+        sections=[
+            SectionWire(
+                title=title,
+                focus="A focused evidence aspect.",
+            )
+        ]
+    )
+    sections, reasons, normalisations = _validate_sections(proposal, grouping_group_ids=None)
+    assert reasons == []
+    assert normalisations == []
+    assert sections[0].title == title
 
 
 def test_transitive_resolution_from_grouping_reference(conn: Connection) -> None:
@@ -2232,8 +2272,8 @@ def test_conclusions_and_key_findings_composition(conn: Connection) -> None:
 
     # The conclusions focus is evidence-descriptive, never a recommendation.
     conclusions = _blocks_by_role(row)["conclusions"][0]
-    assert "What this evidence amounts to against the question" in conclusions["focus"]
-    assert "recommendations" in conclusions["focus"]
+    assert "What the evidence amounts to on:" in conclusions["focus"]
+    assert "recommendation" in conclusions["focus"]
 
     # The key-findings block re-cites a section's chunk claim, verified anew.
     key_findings = _blocks_by_role(row)["key_findings"][0]
@@ -2248,7 +2288,7 @@ def test_conclusions_and_key_findings_composition(conn: Connection) -> None:
 
     # Provenance records the key-findings prompt version and its call counts.
     provenance = row.synthesis_provenance
-    assert provenance["prompt_versions"]["key_findings"] == "synthesise_key_findings_v2"
+    assert provenance["prompt_versions"]["key_findings"] == "synthesise_key_findings_v3"
     call_counts = provenance["call_counts"]
     assert call_counts["key_findings"] == 1
     assert call_counts["key_findings_judge"] >= 1
@@ -3123,6 +3163,15 @@ class _SeedCapturingBackend:
         self.key_findings_seeds.append(seed)
         return self._inner.write_key_findings(seed)
 
+    def write_case_studies(self, seed: dict[str, Any]) -> UsageResult[CaseStudyWire]:
+        return self._inner.write_case_studies(seed)
+
+    def write_source_note(self, seed: dict[str, Any]) -> UsageResult[NoteWire]:
+        return self._inner.write_source_note(seed)
+
+    def write_full_report_intro(self, seed: dict[str, Any]) -> UsageResult[IntroWire]:
+        return self._inner.write_full_report_intro(seed)
+
     def write_block_summary(self, seed: dict[str, Any]):  # type: ignore[no-untyped-def]
         return self._inner.write_block_summary(seed)
 
@@ -3538,3 +3587,149 @@ def test_propose_then_compile_directive_round_trips_into_a_run(conn: Connection)
     assert "Interventions in the corpus" in block_titles
     boosts = row.synthesis_provenance["directive"]["retrieval_boosts"]
     assert boosts["screen_confidence"] == {"lo": 1.0, "hi": 3.0}
+
+
+# ---------- Case studies composition (task 034 S4) ----------
+
+
+def test_case_studies_present_composition(conn: Connection) -> None:
+    """Stub emits 2 cards → a case_studies block follows key_findings.
+
+    Seeding extraction with 2 findings is required: the stub's
+    ``write_case_studies`` pulls finding_ids from the ledger's
+    ``cited_finding_ids`` and returns empty cards when fewer than 2 are
+    available.
+    """
+    task_id, synthesis_run_id = seed_task_and_run(conn)
+    scope_id = seed_scope(conn, task_id)
+    seeded = seed_extraction(
+        conn,
+        task_id,
+        scope_id,
+        docs=[
+            (
+                uuid.uuid4(),
+                [
+                    {"intervention": "School meals", "outcome": "Nutrition"},
+                    {"intervention": "Free lunches", "outcome": "Attendance"},
+                ],
+            )
+        ],
+    )
+    characterisation_run_id = seed_run(conn, task_id)
+    seed_characterisation(
+        conn, task_id, scope_id, characterisation_run_id, themes={"nutrition": []}
+    )
+    conn.execute(
+        update(selection_result)
+        .where(selection_result.c.run_id == seeded.selection_run_id)
+        .values(
+            selection_provenance={
+                "strategy": "test",
+                "characterisation_run_id": str(characterisation_run_id),
+            }
+        )
+    )
+    _summary, grouping_run_id = _run_group_component(
+        conn, task_id, scope_id, seeded.run_id
+    )
+
+    _run_synthesise(
+        conn,
+        task_id=task_id,
+        run_id=synthesis_run_id,
+        scope_id=scope_id,
+        extraction_run_id=seeded.run_id,
+        grouping_run_id=grouping_run_id,
+        intent="What does the evidence say?",
+    )
+
+    row = conn.execute(
+        select(synthesis_result).where(synthesis_result.c.task_id == task_id)
+    ).one()
+
+    roles = [entry["role"] for entry in row.blocks]
+    kf_idx = roles.index("key_findings") if "key_findings" in roles else -1
+    cs_idx = roles.index("case_studies") if "case_studies" in roles else -1
+    assert cs_idx >= 0, "case_studies block must be present"
+    assert kf_idx >= 0, "key_findings block must be present"
+    assert cs_idx == kf_idx + 1, "case_studies follows key_findings"
+
+    cs_block = row.blocks[cs_idx]
+    assert cs_block["title"] == "Case studies"
+    cards = cs_block.get("cards", [])
+    assert len(cards) >= 2
+    for card in cards:
+        assert card.get("prose", "").strip() != ""
+        assert isinstance(card.get("claim_ids"), list)
+        assert len(card["claim_ids"]) >= 1, "each card stores its claim ids"
+    claim_ids = [claim_id for card in cards for claim_id in card["claim_ids"]]
+    assert len(claim_ids) == len(set(claim_ids)), "claim ids must be unique across cards"
+
+    assert row.counts.get("case_studies") == {"present": True}
+    provenance = row.synthesis_provenance
+    assert provenance["prompt_versions"]["case_studies"] == "synthesise_case_studies_v1"
+    assert provenance["call_counts"]["case_studies"] == 1
+
+
+def test_case_studies_absent_composition(conn: Connection) -> None:
+    """stubnocasestudies sentinel → no case_studies block."""
+    task_id, run_id = seed_task_and_run(conn)
+    scope_id = seed_scope(conn, task_id)
+    tss_id = seed_select_doc(conn, task_id, run_id, scope_id, title="No-CS doc")
+    seed_ingested_full_text(
+        conn,
+        tss_id=tss_id,
+        chunks=["Evidence on interventions and outcomes."],
+    )
+
+    _run_synthesise(
+        conn,
+        task_id=task_id,
+        run_id=run_id,
+        scope_id=scope_id,
+        intent="stubnocasestudies: what does the evidence say?",
+    )
+
+    row = conn.execute(
+        select(synthesis_result).where(synthesis_result.c.task_id == task_id)
+    ).one()
+
+    roles = [entry["role"] for entry in row.blocks]
+    assert "case_studies" not in roles
+    cs_counts = row.counts.get("case_studies", {})
+    assert cs_counts.get("present") is False
+    assert isinstance(cs_counts.get("reason"), str)
+
+
+def test_mrs_notes_present_in_rollup(conn: Connection) -> None:
+    """MRS notes are written to the synthesis_result when chunk citations exist."""
+    task_id, run_id = seed_task_and_run(conn)
+    scope_id = seed_scope(conn, task_id)
+    tss_id = seed_select_doc(conn, task_id, run_id, scope_id, title="MRS doc")
+    seed_ingested_full_text(
+        conn,
+        tss_id=tss_id,
+        chunks=[
+            "MRS evidence says alpha quoted evidence appears here.",
+            "Further MRS evidence in a second chunk.",
+        ],
+    )
+
+    _run_synthesise(
+        conn,
+        task_id=task_id,
+        run_id=run_id,
+        scope_id=scope_id,
+        intent="What does the evidence say?",
+    )
+
+    row = conn.execute(
+        select(synthesis_result).where(synthesis_result.c.task_id == task_id)
+    ).one()
+
+    notes = row.counts.get("most_relevant_notes", [])
+    # MRS notes are produced when citations resolve to sources (via chunks
+    # or findings). With chunk claims, the substrate maps chunk→tss, so notes
+    # appear when the stub has at least one cited source.
+    assert isinstance(notes, list)

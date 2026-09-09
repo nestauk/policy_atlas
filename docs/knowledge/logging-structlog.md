@@ -21,6 +21,23 @@ first scaffold — retrofitting structured logging later is costly, and ad-hoc p
 Mandatory from the **first** slice onward, not a later hardening step. New modules import the project
 logger, never `logging.getLogger` or `print`.
 
+**`configure_logging(cache_logger_on_first_use=True)` and
+`structlog.testing.capture_logs()` are mutually exclusive across a test
+suite** (033): once any code path configures with caching and a
+module-level logger fires, `capture_logs` in *later* tests silently sees
+nothing. Symptom: order-dependent failures in suites alphabetically after
+the configuring one. The entrypoint config runs with caching off — one
+config lookup per call is the price of testability. Related: bare
+`capture_logs()` replaces the processor chain, so a test asserting
+contextvars-bound keys must pass
+`capture_logs(processors=[structlog.contextvars.merge_contextvars])`.
+
+**Binding contextvars from a sync FastAPI dependency does not work** (033
+review): FastAPI runs a sync dependency in a worker thread whose context is
+a *copy*, so the bind lands where no later code can read it. The dependency
+that binds the route template must be `async`; the middleware half
+(request id, method) is safe either way.
+
 # Citations
 
 - [engineering-considerations.md](../agentic-ops/engineering-considerations.md) §Stack

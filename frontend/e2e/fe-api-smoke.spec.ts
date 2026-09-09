@@ -21,13 +21,15 @@ test.describe.serial("@fe-api-smoke built frontend against real API", () => {
     await page.goto("/");
     await loadedTasks;
 
-    await expect(page.getByRole("heading", { name: "Tasks" })).toBeVisible();
-    await expect(page.getByRole("link", { name: "New task" })).toBeVisible();
+    // S4: a first-time account has no active or archived tasks, so `/`
+    // redirects to `/new`. The GET 200 above is still the wiring check.
+    await expect(page).toHaveURL(/\/new$/);
+    await expect(page.getByRole("heading", { name: "What would you like to do?" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Evidence search" })).toBeVisible();
   });
 
   test("creates a task through the real authenticated POST", async ({ page }) => {
-    await page.goto("/");
-    await page.getByRole("link", { name: "New", exact: true }).click();
+    await page.goto("/new");
     await page.getByRole("button", { name: "Evidence search" }).click();
     await page.getByLabel("Your question").fill("FE API smoke task");
 
@@ -48,9 +50,9 @@ test.describe.serial("@fe-api-smoke built frontend against real API", () => {
     if (!taskId) throw new Error("real-API task creation did not supply a task id");
 
     await page.goto(`/tasks/${taskId}`);
-    await page.getByLabel("Message the planner").fill("Map school-meal evidence.");
+    await page.getByLabel("Message the Task Agent").fill("Map school-meal evidence.");
     await page.getByRole("button", { name: "Send" }).click();
-    await page.getByLabel("Message the planner").fill("landscape only");
+    await page.getByLabel("Message the Task Agent").fill("landscape only");
     await page.getByRole("button", { name: "Send" }).click();
     await page.getByRole("button", { name: "Start search" }).click();
 

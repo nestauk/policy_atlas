@@ -3,7 +3,7 @@ import type { components } from "../api/gen/types";
 export type CheckInOut = components["schemas"]["CheckInOut"];
 export type PlanDraft = components["schemas"]["PlanDraft"];
 export type RunStatus = components["schemas"]["RunStatusFrame"]["status"];
-export type StageName = components["schemas"]["StageStartedFrame"]["stage"];
+type StageName = components["schemas"]["StageStartedFrame"]["stage"];
 
 export type StageStatus = "started" | "completed" | "failed" | "skipped";
 
@@ -18,7 +18,7 @@ export interface StageEntry {
 }
 
 /** The current run, as far as the reducer needs to track it. */
-export interface RunRef {
+interface RunRef {
   id: string;
   status: RunStatus;
   /** First `run.status` / `occurred_at` seen for this run id. */
@@ -38,7 +38,7 @@ export interface ResolvedDecision {
 }
 
 /** The current plan row, as surfaced by `plan.updated`. */
-export interface PlanState {
+interface PlanState {
   version: number;
   plan: PlanDraft;
 }
@@ -47,14 +47,14 @@ export interface PlanState {
  *  Fields are independently set (a rename touches `name` only, an archive
  *  touches `status` only) — `null` on the wire means "not touched by this
  *  event", not "cleared". */
-export interface TaskSummary {
+interface TaskSummary {
   name?: string | null;
   question?: string | null;
   status?: "active" | "archived" | null;
 }
 
 /** Last tick note for one stage (or the global key, for stage-less ticks). */
-export interface StageLiveness {
+interface StageLiveness {
   note: string;
   occurredAt: string;
 }

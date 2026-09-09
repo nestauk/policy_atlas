@@ -11,8 +11,15 @@ from typing import Any, cast
 from policy_atlas.core import tracing
 from policy_atlas.core.usage import TokenUsage, UsageResult
 from policy_atlas.evidence_search.assess.classify import _ClassifyDoc, _run_classification_calls
-from policy_atlas.evidence_search.assess.classify_prompt import ClassifyEnvelopePayload, ClassifyWire
-from policy_atlas.evidence_search.assess.screen import _run_stage1_reps, _run_stage2_reps, _Stage1Doc
+from policy_atlas.evidence_search.assess.classify_prompt import (
+    ClassifyEnvelopePayload,
+    ClassifyWire,
+)
+from policy_atlas.evidence_search.assess.screen import (
+    _run_stage1_reps,
+    _run_stage2_reps,
+    _Stage1Doc,
+)
 from policy_atlas.evidence_search.assess.screen_prompt import (
     ScreenEnvelopePayload,
     ScreenFullTextPayload,

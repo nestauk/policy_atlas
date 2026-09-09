@@ -54,9 +54,9 @@ from tests.helpers import (
     profile_doc,
     profile_findings,
     profile_provenance,
-    seed_task_and_run,
     seed_run,
     seed_scope,
+    seed_task_and_run,
 )
 
 from .test_extract import (

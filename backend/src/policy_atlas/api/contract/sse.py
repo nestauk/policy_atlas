@@ -18,8 +18,8 @@ from pydantic import BaseModel, Field
 
 from .check_ins import CheckInOut
 from .planning import PlanDraft
-from .tasks import TaskStatus
 from .runs import RunStatus
+from .tasks import TaskStatus
 
 #: The pinned stable component-vocabulary stage keys (spec § SSE).
 StageKey = Literal[

@@ -13,13 +13,13 @@ from policy_atlas.core.schema import (
     EVIDENCE_TYPES,
     TOPIC_THEME,
     capability_run,
-    task_source_snapshot,
     runs,
     search_coverage_record,
     source_appraisal_result,
     source_classification_result,
     source_screening_result,
     source_tag,
+    task_source_snapshot,
 )
 from tests.helpers import now
 from tests.runtime.test_runner import _cleanup, _seed_task

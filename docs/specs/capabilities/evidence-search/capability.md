@@ -1,12 +1,12 @@
 ---
 type: Capability spec
-title: Evidence Base (EB)
+title: Evidence search (EB)
 description: The declarative EB spec and §5 compile target — EB as an instance of the capability framework.
-tags: [capability, evidence-base, compile-target]
+tags: [capability, evidence-search, compile-target]
 timestamp: 2026-06-22
 ---
 
-# Capability spec — Evidence Base (EB)
+# Capability spec — Evidence search (EB)
 
 **The declarative spec — the §5 compile target.** Distilled from
 [backend-evidence-base-build-spec.md](../../sources/backend/backend-evidence-base-build-spec.md), now
@@ -34,7 +34,7 @@ Companion files: [components.md](components.md) (the skeleton) · [provenance.md
   each is its own component by the I/O test). This is a distinction in **production and grounding
   mode, not presentation** (see [components.md](components.md) and output structure below).
 - **The components are a registry the plan selects from** (task 013 flow-back, refining "how far
-  down the chain a run goes"): which components fire is the orchestrator's plan-time selection
+  down the chain a run goes"): which components fire is the Agent's plan-time selection
   from intent, adjusted by the lighter/deeper nudge — **data dependencies stay structural**
   (extract needs a selection; group and finding claims need an extraction; the artefact needs
   **at least one groundable substrate** — every upstream reference is optional, ADR 0010), expressed as explicit run references that compile
@@ -45,14 +45,24 @@ Companion files: [components.md](components.md) (the skeleton) · [provenance.md
   existing selection, assembling the corpus broadly *is* EB's distinctive job, so its skeleton
   **includes the assembly components** and **`search` egress originates from inside the EB run**.
 - **Rigidity:** fairly structured (toward the deterministic end of the dial).
-- **Dependencies:** none upstream (EB is the front of the v3.0 chain). Downstream capabilities
+- **Dependencies:** none upstream by default (EB is the front of the v3.0 chain). When a task is
+  started from an Options scoping task, the shared `inherit` component seeds it with that task's
+  documents, light findings, user context and evidence scope before acquire runs (OS ruling 48;
+  [components.md § 0](components.md)). Downstream capabilities
   (Options Assessment, Impact, Transferability, VfM) consume EB's findings layer — all ⏸ deferred.
 
 **Scope boundaries** (the evidence-vs-analysis line):
 - Narrow, single-intervention deep analysis is **out of EB** → the **Impact** capability (⏸).
 - **Precise option resolution is out of EB** — EB groups interventions *descriptively*
   (corpus-grounded thematic clusters); resolving them into named, comparable options is
-  decision-relative → a future **Options Assessment** (⏸).
+  decision-relative → the **Options scoping** capability
+  ([../options-scoping/](../options-scoping/capability.md)). **One declared widening (owner,
+  2026-09-07, OS ruling 41):** when an Evidence search task is spawned by a scoping task as its
+  "full evidence search" and written with the **option-profile template**, its report carries
+  that profile's judgement cells (how sure, transferability and conditions, key assumption),
+  computed with the parent's user context under the OS trust rules, and that report **is** the
+  option profile shown in the scoping task (OS ruling 47). Such a task opens with `inherit` from
+  the scoping task (OS ruling 48). Outside that case the evidence-descriptive rule stands.
 - EB may answer broader questions through grounded narrative synthesis over its **existing**
   findings, but must **not** add new schemas, structured computations or tools belonging to
   future capabilities (handoff §7.9). **Direct chunk-grounded narrative synthesis** is
@@ -78,7 +88,7 @@ acquire → screen → classify → appraise → ingest(fetch) → synthesise   
 every run — rapid included — executes the spine, so every artefact synthesises over fetched
 text (or a document's labelled abstract basis where fetch failed — a mandatory *attempt*,
 reason-coded per document, never a substrate guarantee); characterise, select, extract, group
-and stage-2 screen are orchestrator-discretionary per the depth gradation.
+and stage-2 screen are Agent-discretionary per the depth gradation.
 `screen` / `classify` / `appraise` run as **per-document fan-out**. **Full-text ingestion is
 gated post-`screen`** (cheap shared substrate built for *all* screened-in — so even a shallow
 landscape run builds the full-text corpus); **Tier-1 extraction is gated by `select`** (the
@@ -97,11 +107,11 @@ landscape. Per-component detail in [components.md](components.md).
   addressable units are the substrate. **Grounding is a per-unit property**, so a single section
   **mixes grounding modes freely** (a pattern, a cited finding and a gap in one paragraph). The
   characterise/synthesise split is about **production, not presentation**.
-- **EB declares little; the orchestrator *shapes* the sections at plan time** (how many, around
+- **EB declares little; the Agent *shapes* the sections at plan time** (how many, around
   what facets, in what order — compiled plan parameters derived from intent); **EB's synthesise
   component composes the artefact at the run terminus** (task 013 flow-back — the
   capability-composes rule: every capability sub-agent composes its own artefact; the
-  orchestrator owns no runtime content machinery). "Synthesis" is therefore **multiple
+  Agent owns no runtime content machinery). "Synthesis" is therefore **multiple
   sections** (typically one per facet/intervention family), not one.
 - EB fixes only that the artefact carries:
   - an **artefact summary** — citation-free navigation, faithfulness-checked, **outside the

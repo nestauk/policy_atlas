@@ -32,13 +32,13 @@ from policy_atlas.api.contract import (
     PlanStep,
 )
 from policy_atlas.api.deps import get_current_user, get_engine, get_planner_backend
-from policy_atlas.api.routers._common import owned_task
+from policy_atlas.api.routers._access import accessible_task
 from policy_atlas.api.stage_vocabulary import STAGE_BY_REGISTRY, STAGE_PRESENTATION
 from policy_atlas.core.schema import (
     capability_run,
     conversation,
-    task_plan,
     planning_transcript,
+    task_plan,
 )
 from policy_atlas.evidence_search.sourcing.country_filters import (
     ISO_3166_ALPHA2,
@@ -48,11 +48,13 @@ from policy_atlas.evidence_search.sourcing.country_filters import (
     overton_display_names,
     validate_iso_alpha2,
 )
+from policy_atlas.runtime.agent import build_plan, persist_approved_plan
 from policy_atlas.runtime.conversation_lifecycle import (
     ensure_active_planning_conversation,
     seed_draft_from_executed_plan,
 )
-from policy_atlas.runtime.agent import build_plan, persist_approved_plan
+from policy_atlas.runtime.planner import PlannerBackend
+from policy_atlas.runtime.planner_prompt import PlanDraftWire
 from policy_atlas.runtime.task_plan import (
     TaskPlan,
     _enabled_components,
@@ -60,8 +62,6 @@ from policy_atlas.runtime.task_plan import (
     registry_component_for,
     time_band_for,
 )
-from policy_atlas.runtime.planner import PlannerBackend
-from policy_atlas.runtime.planner_prompt import PlanDraftWire
 
 log = structlog.get_logger()
 
@@ -121,12 +121,22 @@ def _draft_from_wire(draft: PlanDraftWire, *, ready: bool) -> PlanDraft:
         "published_after",
         "published_before",
         "publisher_country",
+        "publisher_source",
         "author_affiliation_countries",
         "country_group",
     ):
         value = values.pop(key, None)
         if value is not None:
             constraints[key] = value
+    # The wire's publisher_source is a loose str (planner output) while the
+    # draft narrows to Literal["apo"]. Normalise the taught spellings and drop
+    # anything else — the turn must degrade (ready=false), never 500.
+    source = constraints.pop("publisher_source", None)
+    if isinstance(source, str) and source.strip().casefold() in {
+        "apo",
+        "australian policy online",
+    }:
+        constraints["publisher_source"] = "apo"
     if constraints:
         values["scope_constraints"] = constraints
     values.pop("steer_point_defaults", None)
@@ -150,7 +160,12 @@ def _draft_from_plan(plan: TaskPlan) -> PlanDraft:
     seen_stages: set[str] = set()
     for step in compose(plan).steps:
         registry_component = registry_component_for(step.component)
-        stage = STAGE_BY_REGISTRY[registry_component]
+        # Ingest is unmapped from public acquire so Searching is not overwritten
+        # by full-text fetch (033 S5). Skip any registry component with no
+        # public stage rather than crashing the draft projection.
+        stage = STAGE_BY_REGISTRY.get(registry_component)
+        if stage is None:
+            continue
         if stage in seen_stages:
             continue
         seen_stages.add(stage)
@@ -297,7 +312,7 @@ def _phase_one_turn(
     # the loser's INSERT dies on a unique constraint as a raw 500 (review
     # finding, 2026-07-29). The transaction is short — the LLM call stays
     # outside it (finding I2 rule).
-    owned_task(conn, task_id=task_id, user_id=user_id, for_update=True)
+    accessible_task(conn, task_id=task_id, user_id=user_id, write=True, for_update=True)
     _expire_stale_pending_turns(conn, task_id)
     existing = conn.execute(
         select(planning_transcript)
@@ -411,7 +426,9 @@ def create_planning_turn(
             turns, previous_draft = _planner_inputs(conn, task_id, conversation_id)
         turns.append({"role": "user", "text": payload.message})
         try:
-            turn = planner.plan_turn(turns, previous_draft, session_id=conversation_id)
+            turn = planner.plan_turn(
+                turns, previous_draft, session_id=task_id, conversation_id=conversation_id
+            )
         except Exception:
             with engine.begin() as conn:
                 conn.execute(
@@ -455,7 +472,9 @@ def create_planning_turn(
         run_started_meanwhile = False
         with engine.begin() as conn:
             if approved is not None:
-                owned_task(conn, task_id=task_id, user_id=user.user_id, for_update=True)
+                accessible_task(
+                    conn, task_id=task_id, user_id=user.user_id, write=True, for_update=True
+                )
                 # Re-check the run fence under the task row lock: a run may
                 # have started during the out-of-transaction planner call, and
                 # persisting a new approved plan under a live walk would hand
@@ -527,10 +546,23 @@ def list_planning_turns(
     page: Annotated[int, Query(ge=1)] = 1,
     page_size: Annotated[int, Query(ge=1, le=PAGE_SIZE_MAX)] = PAGE_SIZE_DEFAULT,
 ) -> Page[PlanningTranscriptTurnOut]:
-    """Return the durable planning transcript in ascending conversation order."""
+    """Return the durable planning transcript in ascending conversation order.
+
+    **Read-graded, and the sweep is owner-only.** The grade here is the read
+    grade — owner ∪ same-org colleague ∪ administrator — but
+    :func:`_expire_stale_pending_turns` is a *write*, and contract § 3 makes
+    the admin leg read-only: a support read that fails somebody else's pending
+    planning turn is a mutation nobody asked for and nothing records. So the
+    sweep runs only for the owner, whose own turn it is. Nothing is lost: the
+    owner's own GET sweeps, and every mutating planning path sweeps under the
+    write grade before it does anything.
+    """
     with engine.begin() as conn:
-        owned_task(conn, task_id=task_id, user_id=user.user_id)
-        _expire_stale_pending_turns(conn, task_id)
+        access = accessible_task(
+            conn, task_id=task_id, user_id=user.user_id, write=False
+        )
+        if access.is_owner:
+            _expire_stale_pending_turns(conn, task_id)
         total_items = conn.execute(
             select(func.count())
             .select_from(planning_transcript)
@@ -555,10 +587,17 @@ def get_plan(
     user: Annotated[AuthenticatedUser, Depends(get_current_user)],
     engine: Annotated[Engine, Depends(get_engine)],
 ) -> PlanOut:
-    """Return the durable approved plan or latest completed durable draft."""
+    """Return the durable approved plan or latest completed durable draft.
+
+    Owner-only sweep, for the reason :func:`list_planning_turns` states: a
+    colleague's or an administrator's read must not write the owner's rows.
+    """
     with engine.begin() as conn:
-        owned_task(conn, task_id=task_id, user_id=user.user_id)
-        _expire_stale_pending_turns(conn, task_id)
+        access = accessible_task(
+            conn, task_id=task_id, user_id=user.user_id, write=False
+        )
+        if access.is_owner:
+            _expire_stale_pending_turns(conn, task_id)
         row = conn.execute(
             select(task_plan)
             .where(task_plan.c.task_id == task_id)
@@ -646,6 +685,18 @@ def _geography_constraints(geography: str, backend_scope: str) -> dict[str, Any]
             "publisher_country": None,
             "author_affiliation_countries": None,
             "country_group": None,
+            "publisher_source": None,
+        }
+    if geography.strip().casefold() in {"apo", "australian policy online"}:
+        if backend_scope != "grey_lit_only":
+            raise ValueError(
+                "the APO restriction needs Sources set to policy literature only"
+            )
+        return {
+            "publisher_country": None,
+            "author_affiliation_countries": None,
+            "country_group": None,
+            "publisher_source": "apo",
         }
     if geography in TIER1_GROUPS:
         return {
@@ -656,6 +707,7 @@ def _geography_constraints(geography: str, backend_scope: str) -> dict[str, Any]
                 "countries": None,
                 "authorship": "pinned-table",
             },
+            "publisher_source": None,
         }
     tokens = [part.strip() for part in geography.split(",") if part.strip() != ""]
     codes: list[str] = []
@@ -673,6 +725,7 @@ def _geography_constraints(geography: str, backend_scope: str) -> dict[str, Any]
         "publisher_country": None,
         "author_affiliation_countries": None,
         "country_group": None,
+        "publisher_source": None,
     }
     if len(codes) == 1:
         if backend_scope != "grey_lit_only":
@@ -690,7 +743,7 @@ def _geography_constraints(geography: str, backend_scope: str) -> dict[str, Any]
         if len(names) == 1:
             constraints["publisher_country"] = next(iter(names))
             return constraints
-        raise ValueError("grey literature geography must resolve to one Overton country")
+        raise ValueError("policy literature geography must resolve to one Overton country")
     constraints["country_group"] = {
         "label": geography,
         "countries": codes,
@@ -704,6 +757,8 @@ def _drop_scope_incompatible_geo(constraints: dict[str, Any], backend_scope: str
         constraints["publisher_country"] = None
     elif backend_scope == "grey_lit_only":
         constraints["author_affiliation_countries"] = None
+    if backend_scope != "grey_lit_only":
+        constraints["publisher_source"] = None
 
 
 def _apply_plan_patch(plan: TaskPlan, patch: PlanPatchIn) -> TaskPlan:
@@ -802,7 +857,7 @@ def patch_plan(
 ) -> PlanOut:
     """Apply typed edits to the current plan and persist a new approved version."""
     with engine.begin() as conn:
-        owned_task(conn, task_id=task_id, user_id=user.user_id)
+        accessible_task(conn, task_id=task_id, user_id=user.user_id, write=True)
         _expire_stale_pending_turns(conn, task_id)
         run_active = (
             conn.execute(

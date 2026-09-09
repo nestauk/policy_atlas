@@ -1,87 +1,52 @@
-"""Private ownership and contract-projection helpers shared by API routers."""
+"""Private contract-projection helpers shared by API routers.
+
+The owner-only row helpers this module used to carry (``owned_task``,
+``owned_project``, ``_owned_conversation``) are gone: every task-,
+project- and conversation-scoped route now resolves through the graded
+helpers in ``_access`` (task 033). What is left is projection and display.
+"""
 
 from __future__ import annotations
 
 import uuid
-from typing import Any
+from typing import Any, Literal, cast
 
-from fastapi import HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.engine import Connection, RowMapping
 
-from policy_atlas.api.contract import LatestRun, TaskOut, RunOut
-from policy_atlas.core.schema import (
-    capability_run,
-    project,
-    task,
-    task_source_snapshot,
-)
+from policy_atlas.api.contract import LatestRun, RunOut, TaskOut
+from policy_atlas.api.identity import owner_display_for
+from policy_atlas.core.schema import app_user, capability_run, project_membership
+from policy_atlas.evidence_search.assess.screen import effective_screen_rows
+
+#: Sentinel for "resolve the owner's display name yourself". Distinct from
+#: ``None``, which is a legitimate resolved value (an ownerless row).
+_RESOLVE = object()
 
 
-def owned_task(
-    conn: Connection,
-    *,
-    task_id: uuid.UUID,
-    user_id: str,
-    include_archived: bool = False,
-    for_update: bool = False,
-) -> RowMapping:
-    """Return an owned task or the contract's indistinguishable 404.
+def resolve_owner_display(conn: Connection, owner_user_id: str | None) -> str | None:
+    """Look up one row owner's display name.
 
-    Args:
-        conn: Open database connection.
-        task_id: Requested task identity.
-        user_id: Authenticated owner's subject.
-        include_archived: Whether an archived task can be observed.
-        for_update: Whether the caller needs a row lock for a mutation.
-
-    Returns:
-        The owned task row.
-
-    Raises:
-        HTTPException: Always 404 for missing, archived, or cross-owner rows.
-    """
-    statement = select(task).where(task.c.task_id == task_id).where(
-        task.c.owner_user_id == user_id
-    )
-    if not include_archived:
-        statement = statement.where(task.c.status == "active")
-    if for_update:
-        statement = statement.with_for_update()
-    row = conn.execute(statement).mappings().one_or_none()
-    if row is None:
-        raise HTTPException(status_code=404, detail="resource not found")
-    return row
-
-
-def owned_project(
-    conn: Connection,
-    *,
-    project_id: uuid.UUID,
-    user_id: str,
-) -> RowMapping:
-    """Return an owned project or the contract's indistinguishable 404.
+    The single-row path. Listings must **not** call this per row — they join
+    ``app_user`` once and hand the joined value to :func:`task_out` — but
+    for a route that has already loaded exactly one row, one more indexed
+    primary-key lookup is cheaper than reshaping the query.
 
     Args:
         conn: Open database connection.
-        project_id: Requested project identity.
-        user_id: Authenticated owner's subject.
+        owner_user_id: The row's owner, or ``None`` for an ownerless row.
 
     Returns:
-        The owned project row.
-
-    Raises:
-        HTTPException: Always 404 for missing or cross-owner rows, so an
-            unknown project and someone else's are indistinguishable.
+        The owner's display name, the sub rendering when they have no
+        ``app_user`` row, or ``None`` when the row has no owner. Never an
+        email (contract § 3b).
     """
-    row = conn.execute(
-        select(project)
-        .where(project.c.project_id == project_id)
-        .where(project.c.owner_user_id == user_id)
-    ).mappings().one_or_none()
-    if row is None:
-        raise HTTPException(status_code=404, detail="resource not found")
-    return row
+    if owner_user_id is None:
+        return None
+    display_name = conn.execute(
+        select(app_user.c.display_name).where(app_user.c.user_id == owner_user_id)
+    ).scalar_one_or_none()
+    return owner_display_for(owner_user_id, display_name)
 
 
 def run_out(row: RowMapping | dict[str, Any]) -> RunOut:
@@ -97,8 +62,77 @@ def run_out(row: RowMapping | dict[str, Any]) -> RunOut:
     )
 
 
-def task_out(conn: Connection, row: RowMapping | dict[str, Any]) -> TaskOut:
-    """Project a task row with its derived latest capability-run read model."""
+def memberships_for_tasks(
+    conn: Connection, task_ids: list[uuid.UUID]
+) -> dict[uuid.UUID, list[uuid.UUID]]:
+    """Return each task's project ids, ordered by membership age then id."""
+    grouped: dict[uuid.UUID, list[uuid.UUID]] = {task_id: [] for task_id in task_ids}
+    if not task_ids:
+        return grouped
+    rows = conn.execute(
+        select(project_membership.c.task_id, project_membership.c.project_id)
+        .where(project_membership.c.task_id.in_(task_ids))
+        .order_by(project_membership.c.created_at, project_membership.c.project_id)
+    ).all()
+    for task_id, project_id in rows:
+        grouped[task_id].append(project_id)
+    return grouped
+
+
+def included_source_count(conn: Connection, task_id: uuid.UUID) -> int:
+    """Count effective screens with status ``relevant`` for one task.
+
+    Same population the funnel's Included / ``relevant`` count uses.
+    """
+    effective = effective_screen_rows()
+    return int(
+        conn.execute(
+            select(func.count())
+            .select_from(effective)
+            .where(effective.c.task_id == task_id)
+            .where(effective.c.status == "relevant")
+        ).scalar_one()
+    )
+
+
+def task_out(
+    conn: Connection,
+    row: RowMapping | dict[str, Any],
+    *,
+    user_id: str,
+    owner_display: str | None | object = _RESOLVE,
+    project_ids: list[uuid.UUID] | None = None,
+    access: Literal["full", "public"] = "full",
+) -> TaskOut:
+    """Project a task row with its derived read models, for one caller.
+
+    Two of the three task-033 fields are **caller-relative**, not properties
+    of the row: ``is_owner`` answers "does *this* caller own it", and
+    ``owner_display`` is what *this* caller is shown about the owner. That is
+    why the caller's subject is a required argument rather than something the
+    row carries.
+
+    Args:
+        conn: Open database connection.
+        row: The task row.
+        user_id: The calling subject, for ``is_owner``.
+        owner_display: The owner's display name when the caller already
+            joined ``app_user`` (listings do, to avoid one query per row).
+            Left unset, this resolves it with one lookup — correct for
+            single-row routes, an N+1 in a listing.
+        project_ids: The task's project memberships when the caller
+            already batch-loaded them (listings do). Left unset, this
+            resolves them with one lookup — correct for single-row routes,
+            an N+1 in a listing.
+        access: ``"public"`` when this read was served by the public leg
+            (task 037) — the returned shape is then redacted
+            (``is_owner=False``, ``owner_display=None``,
+            ``project_ids=[]``), skipping the membership lookup entirely.
+            ``"full"`` (default) leaves behaviour unchanged.
+
+    Returns:
+        The public task shape.
+    """
     latest = conn.execute(
         select(capability_run)
         .where(capability_run.c.task_id == row["task_id"])
@@ -114,16 +148,28 @@ def task_out(conn: Connection, row: RowMapping | dict[str, Any]) -> TaskOut:
             started_at=latest["started_at"],
             ended_at=latest["ended_at"],
         )
-        # Same population the funnel's ``found`` counts. Derived per read and
-        # only once a run exists: before that, ``None`` says the question has
-        # not been asked, which is not the same as a run that found nothing.
-        source_count = int(
-            conn.execute(
-                select(func.count())
-                .select_from(task_source_snapshot)
-                .where(task_source_snapshot.c.task_id == row["task_id"])
-            ).scalar_one()
+        # Same population the funnel's ``relevant`` (Included) counts. Derived
+        # per read and only once a run exists: before that, ``None`` says the
+        # question has not been asked, which is not the same as a run that
+        # found nothing Included.
+        source_count = included_source_count(conn, row["task_id"])
+    if access == "public":
+        # Redacted shape (D5): no owner display, no project membership —
+        # skip the membership lookup entirely rather than compute and discard.
+        project_ids = []
+        display = None
+        is_owner = False
+    else:
+        if project_ids is None:
+            project_ids = memberships_for_tasks(conn, [row["task_id"]])[row["task_id"]]
+        display = (
+            resolve_owner_display(conn, row["owner_user_id"])
+            if owner_display is _RESOLVE
+            else cast(str | None, owner_display)
         )
+        # Safe in Python: SQL has already decided visibility, and a NULL
+        # ``owner_user_id`` never equals a subject string.
+        is_owner = row["owner_user_id"] == user_id
     return TaskOut(
         task_id=row["task_id"],
         name=row["name"],
@@ -133,6 +179,11 @@ def task_out(conn: Connection, row: RowMapping | dict[str, Any]) -> TaskOut:
         updated_at=row["updated_at"],
         archived_at=row["archived_at"],
         latest_run=latest_out,
-        project_id=row["project_id"],
+        project_ids=project_ids,
         source_count=source_count,
+        visibility=row["visibility"],
+        is_owner=is_owner,
+        owner_display=display,
+        is_public=row["is_public"],
+        access=access,
     )

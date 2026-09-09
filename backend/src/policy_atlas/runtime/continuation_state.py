@@ -10,9 +10,9 @@ from sqlalchemy import select
 from sqlalchemy.engine import Engine
 
 from policy_atlas.core import events
-from policy_atlas.core.schema import capability_run, task_plan, runs
-from policy_atlas.runtime.task_plan import ComposedChain, TaskPlan, compose
+from policy_atlas.core.schema import capability_run, runs, task_plan
 from policy_atlas.runtime.steering import PausePoint, pause_points
+from policy_atlas.runtime.task_plan import ComposedChain, TaskPlan, compose
 
 
 @dataclass(frozen=True)
@@ -137,7 +137,7 @@ def build(
             .order_by(task_plan.c.version.desc())
         ).first()
         if plan_row is None:
-            raise LookupError("parked walk has no approved orchestration plan")
+            raise LookupError("parked walk has no approved task plan")
         event_rows = events.read(conn, task_id)
         run_rows = [
             dict(row._mapping)

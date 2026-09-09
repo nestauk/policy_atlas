@@ -16,10 +16,10 @@ from policy_atlas.core.schema import (
     conversation,
     implementation_context_finding,
     intervention_outcome_finding,
-    task_source_snapshot,
-    tss_owns_snapshot,
     source_extraction_record,
     source_snapshot,
+    task_source_snapshot,
+    tss_owns_snapshot,
 )
 from policy_atlas.core.schema import chunk as chunk_table
 from policy_atlas.evidence_search.extract.quote_verify import QuoteMatcher, build_basis

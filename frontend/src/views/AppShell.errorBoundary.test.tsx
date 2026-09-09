@@ -8,11 +8,21 @@ import { AppShell } from "./AppShell";
 const TASK_ID = "11111111-1111-1111-1111-111111111111";
 
 vi.mock("../api/queries", () => ({
-  useTask: () => ({ data: { task_id: TASK_ID, name: "Acme task" } }),
+  useMe: () => ({ data: { user_id: "policy-lead", display_name: "Ada Lovelace", organisation: null, is_admin: false } }),
+  useTask: () => ({
+    data: { task_id: TASK_ID, name: "Acme task", visibility: "org", is_owner: true },
+  }),
   useCheckIns: () => ({ data: { data: [] } }),
+  // The nav logo checks all tasks for an active run outside a task.
+  useTasks: () => ({ data: { data: [] } }),
   // The header's task-settings popover wires rename/archive mutations,
   // which resolve their client through this hook.
   useApiClient: () => ({}),
+}));
+
+vi.mock("../api/mutations", () => ({
+  useUpdateTask: () => ({ mutate: vi.fn(), isPending: false }),
+  useArchiveTask: () => ({ mutate: vi.fn(), isPending: false, isError: false }),
 }));
 
 vi.mock("../auth", () => ({
@@ -24,6 +34,10 @@ vi.mock("../auth", () => ({
     onUnauthenticated: vi.fn(),
     getAccessToken: async () => "token",
   }),
+}));
+
+vi.mock("../api/sse", () => ({
+  connectEventStream: () => ({ close: vi.fn() }),
 }));
 
 // A render error inside the chat subtree (029 fix 6): the panel must not

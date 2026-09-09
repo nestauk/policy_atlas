@@ -15,11 +15,11 @@ from policy_atlas.core.prompt_fields import clamp_reason, metadata_dict
 from policy_atlas.core.schema import (
     EVIDENCE_TYPES,
     METHODOLOGICAL_STRUCTURAL,
-    task_source_snapshot,
     source_classification_result,
     source_screening_result,
     source_snapshot,
     source_tag,
+    task_source_snapshot,
 )
 from policy_atlas.core.tags import has_control_character, insert_source_tags
 from policy_atlas.core.usage import UsageAccumulator

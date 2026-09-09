@@ -40,10 +40,19 @@ export function useCreateTask() {
       if (task === undefined) raise(error, response.status);
 
       if (input.projectId != null) {
-        await client.PATCH("/api/v1/tasks/{task_id}", {
-          params: { path: { task_id: task.task_id } },
-          body: { project_id: input.projectId },
-        });
+        // Unlike the opening turn below, this result IS checked: openapi-fetch
+        // never throws on its own, so an ignored error here (e.g. a colleague
+        // picking a colleague-owned org-visible project, which is readable
+        // but not writable) would silently leave the task unassigned with no
+        // sign anything went wrong.
+        const { data: patched, error: patchError, response: patchResponse } = await client.PATCH(
+          "/api/v1/tasks/{task_id}",
+          {
+            params: { path: { task_id: task.task_id } },
+            body: { project_ids: [input.projectId] },
+          },
+        );
+        if (patched === undefined) raise(patchError, patchResponse.status);
       }
 
       // The opening turn. A failure here leaves a real, usable task whose
@@ -55,7 +64,15 @@ export function useCreateTask() {
       });
       return task;
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["tasks"] }),
+    // "projects" is invalidated too, symmetric with `useUpdateTask`/
+    // `useArchiveTask` below: a successful `projectId` assignment above
+    // changes that project's derived `task_count`, a cross-family effect
+    // the project list would otherwise keep showing stale until an
+    // unrelated refetch.
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["tasks"] });
+      queryClient.invalidateQueries({ queryKey: ["projects"] });
+    },
   });
 }
 
@@ -88,11 +105,9 @@ export function useUpdateTask(taskId: string) {
   const client = useApiClient();
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (body: {
-      name?: string | null;
-      question?: string | null;
-      project_id?: string | null;
-    }) => {
+    // `visibility` (task 033 phase 10b): owner-only, and refused 422 combined
+    // with `project_ids` in one body — see `TaskUpdate`'s own docstring.
+    mutationFn: async (body: components["schemas"]["TaskUpdate"]) => {
       const { data, error, response } = await client.PATCH("/api/v1/tasks/{task_id}", {
         params: { path: { task_id: taskId } },
         body,
@@ -103,7 +118,15 @@ export function useUpdateTask(taskId: string) {
     // The bare "tasks" root covers BOTH this task's detail key and the
     // tasks-list key (["tasks", "list", …]) — a rename must refresh the
     // landing card, not just the workspace header (F.2 finding, 2026-07-29).
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["tasks"] }),
+    // "projects" is invalidated too (task 033 phase 10a): `visibility` and
+    // `project_ids` are both patchable here, and either can change a
+    // project's derived `task_count` or member visibility — a cross-family
+    // effect from a task-family mutation, the same class of bug the
+    // project-PATCH cascade below has to cover in the other direction.
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["tasks"] });
+      queryClient.invalidateQueries({ queryKey: ["projects"] });
+    },
   });
 }
 
@@ -120,7 +143,42 @@ export function useArchiveTask(taskId: string) {
       if (data === undefined) raise(error, response.status);
       return data;
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["tasks"] }),
+    // Same cross-family reasoning as `useUpdateTask`: archiving removes
+    // the task from its project's active `task_count`.
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["tasks"] });
+      queryClient.invalidateQueries({ queryKey: ["projects"] });
+    },
+  });
+}
+
+/**
+ * `PATCH /api/v1/projects/{id}` — rename, re-describe, or (supplying
+ * `visibility`) run the server's i.4 visibility cascade onto every member
+ * task in one transaction (contract § 6). No component calls this yet —
+ * the visibility control lands in phase 10b/10c — but the cache wiring is
+ * data-layer work: a cascade rewrites rows in the *task* family from a
+ * *project* mutation, so both families are invalidated by prefix (not the
+ * exact filtered key) so every `scope` variant currently cached is covered,
+ * or a card would keep showing the pre-cascade visibility until an
+ * unrelated refetch.
+ */
+export function useUpdateProject(projectId: string) {
+  const client = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (body: components["schemas"]["ProjectUpdate"]) => {
+      const { data, error, response } = await client.PATCH("/api/v1/projects/{project_id}", {
+        params: { path: { project_id: projectId } },
+        body,
+      });
+      if (data === undefined) raise(error, response.status);
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["projects"] });
+      queryClient.invalidateQueries({ queryKey: ["tasks"] });
+    },
   });
 }
 

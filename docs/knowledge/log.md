@@ -1,6 +1,150 @@
 # Knowledge update log
 
-## 2026-08-13 (task 031 step 8)
+## 2026-09-08 (task 040 step 8)
+* **Creation**: Added
+  [additive-max-md-variants-prove-desktop-invariant](additive-max-md-variants-prove-desktop-invariant.md) —
+  additive `max-md:` classes make a desktop-unchanged invariant cheap and
+  provable from the compiled cascade; folds in the build's Sheet-conversion and
+  compute-once/render-twice lessons (040 build handoff + review finding F3).
+* **Creation**: Added
+  [native-control-replacement-rebuilds-free-a11y](native-control-replacement-rebuilds-free-a11y.md) —
+  a styled replacement for a native control must rebuild its free keyboard/
+  label/announcement bundle (040 review stack, convergent 3-lane finding).
+* **Adjudication notes**: the build's worktree/`COMPOSE_PROJECT_NAME` gotcha and
+  isolated-rerun baseline diagnosis went to `docs/agentic-ops/environment.md`
+  (living env doc, not a concept); "lifecycle tab list computed once, rendered
+  twice" stays a code-site comment inside the max-md concept's Watch out —
+  promote if a third placement appears.
+
+## 2026-09-08 (task 039 step 8)
+* **Creation**: Added
+  [scope-constraint-fields-projection-surfaces](scope-constraint-fields-projection-surfaces.md) —
+  the five surfaces a new `ScopeConstraints` field must touch; the planner
+  sees constraints via `PlanDraftWire`, not the CLI render (the build's
+  claim, corrected by the step-7 contract verifier), and the loose-wire →
+  strict-draft fold needs a normaliser (039 review stack).
+* **Creation**: Added
+  [jointly-compiled-fields-patch-together](jointly-compiled-fields-patch-together.md) —
+  a dirty-only patch that prunes an "unchanged" geography from a
+  scope-changing PATCH silently deletes the restriction (039 review stack,
+  confirmed + fixed).
+* **Update**: [testing-database](testing-database.md) — cross-checkout
+  variant: other working copies share the default `policy_atlas_test` name;
+  isolate the gate with a per-checkout `TEST_DATABASE_URL` override (039
+  step-7 incident, 86 phantom failures).
+* **Declined candidates** (recorded per the step-8 rule): "re-apply slices
+  carry a rename table in the contract" — process guidance; the 039 contract
+  itself is the exemplar and task-cycle-design is the enforcement point.
+  "Vacuously-true `all()` on an empty list" — generic language pitfall, now
+  pinned by tests.
+
+## 2026-09-05 (task 038 step 8)
+* **Creation**: Added
+  [stored-json-keys-are-vocabulary-too](stored-json-keys-are-vocabulary-too.md) —
+  an identifier sweep renames stored JSON keys in code but not in data; the
+  per-column audit on real rows, reversible key rewrites for derived rows,
+  both-names readers for append-only logs (038 review stack R5/R6/R28).
+* **Creation**: Added
+  [rename-sweep-inverts-screen-sense-words](rename-sweep-inverts-screen-sense-words.md) —
+  prose, identifiers and message strings written in the screen sense invert
+  under a code-word sweep; the pairing check and the doubled-word grep
+  (038 build + R2).
+* **Creation**: Added
+  [two-step-rename-needs-ledger-and-anchored-exemptions](two-step-rename-needs-ledger-and-anchored-exemptions.md) —
+  the sweep tool's ledger, anchored never-map patterns, prose-counting
+  collision check and the re-sweep hazard (038 build + R15).
+* **Creation**: Added
+  [schema-manifest-from-catalog-not-metadata](schema-manifest-from-catalog-not-metadata.md) —
+  auto-named FK sort determinism, explicit catalog names, generate from the
+  pre-rename checkout, `(table, name)` pairs in the round-trip test (038
+  Phase 0/3.2 + R13/R14).
+* **Creation**: Added
+  [migration-tests-reflect-old-names-below-rename-revision](migration-tests-reflect-old-names-below-rename-revision.md) —
+  `legacy_table` below the rename, current metadata at head (038 D9).
+* **Creation**: Added
+  [prompt-hash-guard-hashes-whole-module](prompt-hash-guard-hashes-whole-module.md) —
+  a package move changes prompt hashes through import lines; the words-only
+  proof is the prose diff (038 Phase 3.3).
+* **Creation**: Added
+  [react-router-singleton-pinned-to-import-location](react-router-singleton-pinned-to-import-location.md) —
+  `replaceState` is invisible to a module-level router; the one-shot sync
+  and the controls that make it same-origin (038 V11 + security lane).
+* **Rewrite**: [run-component-driver-for-scoped-live-checks](run-component-driver-for-scoped-live-checks.md)
+  — its subject `skeleton._run_component` was retired in task 023; the body
+  now names the agent CLI as the live-check vehicle (filename kept: OKF id).
+* **Declined** (recorded here so the candidates are not re-raised): "a phase
+  split can make one gate structurally red" (a plan-template note, not
+  durable system knowledge — verification.md § Phase 3 gate records it);
+  "BSD `sed` has no `\b`" (AGENTS.md already routes deterministic edits to
+  a script); "compatibility maps are legitimate I4 residue" (folded into the
+  stored-JSON-keys concept).
+
+## 2026-09-04 (task 037 step 8)
+* **Creation**: Added
+  [auth-boundary-widening-needs-both-caller-sweeps](auth-boundary-widening-needs-both-caller-sweeps.md)
+  — the `decisions` public-leg leak (masked by the route's own 401 for
+  anonymous callers) and the silently-shrunk derived cross-owner sweep,
+  both from the 037 review stack.
+* **Creation**: Added
+  [optional-auth-keys-on-raw-header](optional-auth-keys-on-raw-header.md) —
+  the `HTTPBearer(auto_error=False)` anonymity trap and the raw-header rule
+  (037 D2, adversarial finding 4).
+* **Creation**: Added
+  [query-cache-clears-on-identity-change](query-cache-clears-on-identity-change.md)
+  — resource-keyed query caches leak across auth identities; whole-cache
+  clear at render time, not in a passive effect (037).
+* **Creation**: Added
+  [new-table-bumps-count-asserts](new-table-bumps-count-asserts.md) — the
+  table-count asserts fail the *next* slice's baseline (036 → 037).
+* **Update**: [testing-database](testing-database.md) — third recurrence of
+  the shared-test-DB race recorded: a step-7 background `make verify`
+  raced a review lane's own pytest run (72 `UndefinedTable` failures).
+* **Declined as duplicates** (037 build candidates): Codex-sandbox-no-
+  Postgres and the delegation fence — both already in
+  [delegated-executor-practices](delegated-executor-practices.md) /
+  [testing-database](testing-database.md); the 037 events are
+  confirmations, not new knowledge.
+
+## 2026-08-25 (task 033 step 8)
+* **Creation**: Added
+  [tenancy-predicates-in-sql](tenancy-predicates-in-sql.md) — four ways a
+  tenancy predicate's compiled SQL or lock semantics diverge from its Python
+  intent (missing `.correlate` → cross join; un-coalesced boolean leg → SQL
+  NULL read as denial; bare `with_for_update` on a join; lock subject ≠
+  invariant subject), each hit in 033.
+* **Creation**: Added
+  [uv-run-resyncs-default-groups](uv-run-resyncs-default-groups.md) — a CI
+  dependency group must live in `[tool.uv] default-groups`; `uv run` silently
+  reverts install-step syncs; the image excludes via `--no-group` on every
+  Dockerfile sync line.
+* **Creation**: Added
+  [state-keyed-guards-day-zero](state-keyed-guards-day-zero.md) — a guard
+  keyed on accumulated state is weakest on deploy day, a wrong write in the
+  weak state self-certifies, and the honest degradation is an unliftable
+  interactive confirmation (033 deleted its assume-yes flag).
+* **Creation**: Added
+  [stream-fed-state-needs-ownership-gates](stream-fed-state-needs-ownership-gates.md)
+  — SSE-fed store state is ownership-blind; widening read access converts
+  implicit owner-only assumptions into live bugs (`stream.pendingCheckIn`).
+* **Update**: [guard-tests-name-real-invariant](guard-tests-name-real-invariant.md)
+  — two 033 additions to the vacuity family: a property walk whose fixture
+  cannot produce the breach (single-org invariant walk; non-vacuity counts
+  promoted to assertions), and a drain-and-ignore stream helper that cannot
+  see a post-revocation leak.
+* **Update**: [alembic-roundtrip-explicit-revisions](alembic-roundtrip-explicit-revisions.md)
+  — a second `"-1"` instance survived fifteen revisions; the rule needs a
+  sweep of existing tests when it lands, plus the own-connection seed-cleanup
+  corollary.
+* **Update**: [logging-structlog](logging-structlog.md) —
+  `cache_logger_on_first_use` × `capture_logs` mutual exclusion; contextvars
+  binding requires an async dependency (worker-thread context copies).
+* **Update**: [testing-database](testing-database.md) — delegation briefs
+  must state the shared-DB pytest fence explicitly (033 build-open baseline).
+* **Declined** (with reasons, per the step-8 rule): Stubber+capture_logs as a
+  technique preference (marginal durability); red-baseline triage order and
+  subagent transient-death recovery (agentic-ops/failure-log territory, not
+  system knowledge); "widen grade + filter together" folded into the tenancy
+  concept rather than standing alone.
 * **Creation**: Added
   [success-map-is-stale-on-the-failure-path](success-map-is-stale-on-the-failure-path.md)
   — `successful_runs` is written only on the success path, but the runner still presents

@@ -7,7 +7,7 @@ from sqlalchemy.engine import Connection
 from sqlalchemy.exc import IntegrityError
 
 from policy_atlas.core.schema import capability_run, runs, source_screening_result
-from tests.helpers import now, seed_task_and_run, seed_scope, seed_screening_result, seed_source
+from tests.helpers import now, seed_scope, seed_screening_result, seed_source, seed_task_and_run
 
 
 def _seed_capability_run(

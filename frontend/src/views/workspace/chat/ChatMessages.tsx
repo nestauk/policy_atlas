@@ -105,13 +105,13 @@ function AssistantMessage({ turn, onCitation, onClaim, onOpenDossier, onOpenPlan
     const code = errorCodeOf(turn);
     const message = isConflictCode(code) ? conflictSentences[code] : "This answer failed.";
     return <div className="mr-8 space-y-2">
-      {answer && <p className="max-w-[52ch] whitespace-pre-wrap text-body leading-relaxed text-ink"><AnnotatedChatProse text={answer} citations={citations} claims={claims} turn={turn} disabled onCitation={onCitation} onClaim={onClaim} /></p>}
+      {answer && <p className="max-w-prose-measure whitespace-pre-wrap text-lead text-ink"><AnnotatedChatProse text={answer} citations={citations} claims={claims} turn={turn} disabled onCitation={onCitation} onClaim={onClaim} /></p>}
       <p role="alert" className="text-body text-red">{message}</p>
       <Button size="sm" variant="secondary" onClick={() => onRetry(clientTurnIdOf(turn))}>Retry</Button>
     </div>;
   }
   if (!answer && !("id" in turn && turn.status === "pending")) return null;
-  return <div className="mr-8 space-y-2"><p className="max-w-[52ch] whitespace-pre-wrap text-body leading-relaxed text-ink"><AnnotatedChatProse text={answer} citations={citations} claims={claims} turn={turn} disabled={cancelled} onCitation={onCitation} onClaim={onClaim} /></p>{"id" in turn && turn.status === "pending" && <p role="status" className="animate-pulse text-body text-grey">Checking the evidence…</p>}{cancelled && <Chip tone="yellow">Stopped before evidence check</Chip>}{warning && <Chip tone="yellow">Not evidence-checked</Chip>}{handoff && <div className="border-l-2 border-yellow bg-yellow-tint/50 p-3 text-body text-navy">The evidence base does not hold this.<Button size="sm" variant="secondary" className="ml-2" onClick={onOpenPlanning}>Open planning</Button></div>}{citations.length > 0 && <References citations={citations} turn={turn} onCitation={onCitation} onOpenDossier={onOpenDossier} />}{answer && <button type="button" aria-label="Copy answer" title="Copy answer" onClick={() => void copy()} className="text-grey hover:text-blue"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="5" y="5" width="9" height="10" rx="1" /><path d="M11 5V3a1 1 0 0 0-1-1H3a1 1 0 0 0-1 1v9a1 1 0 0 0 1 1h2" /></svg></button>}</div>;
+  return <div className="mr-8 space-y-2"><p className="max-w-prose-measure whitespace-pre-wrap text-lead text-ink"><AnnotatedChatProse text={answer} citations={citations} claims={claims} turn={turn} disabled={cancelled} onCitation={onCitation} onClaim={onClaim} /></p>{"id" in turn && turn.status === "pending" && <p role="status" className="animate-pulse text-body text-grey">Checking the evidence…</p>}{cancelled && <Chip tone="yellow">Stopped before evidence check</Chip>}{warning && <Chip tone="yellow">Not evidence-checked</Chip>}{handoff && <div className="border-l-2 border-yellow bg-yellow-tint/50 p-3 text-body text-navy">The evidence base does not hold this.<Button size="sm" variant="secondary" className="ml-2" onClick={onOpenPlanning}>Open planning</Button></div>}{citations.length > 0 && <References citations={citations} turn={turn} onCitation={onCitation} onOpenDossier={onOpenDossier} />}{answer && <button type="button" aria-label="Copy answer" title="Copy answer" onClick={() => void copy()} className="text-grey hover:text-blue"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="5" y="5" width="9" height="10" rx="1" /><path d="M11 5V3a1 1 0 0 0-1-1H3a1 1 0 0 0-1 1v9a1 1 0 0 0 1 1h2" /></svg></button>}</div>;
 }
 
 /** The prose's annotation layer (029 Fix C + 030 fold): span-anchored claims
@@ -239,7 +239,7 @@ function resolveCitation(citations: ChatCitation[], n: number): ChatCitation | n
 // support (Enter/Space on the summary) for free, styled to the footer's
 // existing caption typography.
 function References({ citations, turn, onCitation, onOpenDossier }: { citations: ChatCitation[]; turn: ChatConversationRow; onCitation: (citation: ChatCitation) => void; onOpenDossier: (sourceRef: string) => void }) {
-  return <footer className="border-t border-line pt-2"><details><summary className="cursor-pointer text-caption font-bold uppercase tracking-[0.06em] text-grey">References ({citations.length})</summary><div className="mt-2 space-y-2">{citations.map((citation, index) => {
+  return <footer className="border-t border-line pt-2"><details><summary className="cursor-pointer text-meta font-bold uppercase tracking-[0.06em] text-grey">References ({citations.length})</summary><div className="mt-2 space-y-2">{citations.map((citation, index) => {
     const sourceRef = citation.source_id ?? citation.source_title ?? null;
     const titleText = scrub(citation.source_title ?? citation.title ?? citationId(citation) ?? "Citation");
     return <div key={citationId(citation) || index} className="text-caption text-ink"><button type="button" onClick={() => onCitation(citation)} className={CITATION_MARKER_CLASS}>[{citation.n ?? index + 1}]</button>{" "}
@@ -393,7 +393,7 @@ function ChatCitationBlock({ taskId, turn, citation, onOpenDossier }: { taskId: 
   );
 }
 
-function UserBubble({ text }: { text: string }) { return <div className="ml-8 border border-blue-tint bg-blue-tint-2 px-3.5 py-2.5"><p className="max-w-prose-measure whitespace-pre-wrap text-body text-ink">{scrub(text)}</p></div>; }
+function UserBubble({ text }: { text: string }) { return <div className="ml-8 border border-blue-tint bg-blue-tint-2 px-3.5 py-2.5"><p className="max-w-prose-measure whitespace-pre-wrap text-lead text-ink">{scrub(text)}</p></div>; }
 function DateDivider({ value }: { value: string }) { return <div className="flex items-center gap-2 text-caption text-grey"><span className="h-px flex-1 bg-line" />{new Date(value).toLocaleDateString(undefined, { month: "short", day: "numeric" })}<span className="h-px flex-1 bg-line" /></div>; }
 function createdAt(row: ChatConversationRow) { return "id" in row ? row.created_at : row.createdAt; }
 function userMessageOf(row: ChatConversationRow) { return "id" in row ? row.user_message : row.userMessage; }
@@ -407,7 +407,26 @@ function errorCodeOf(row: ChatConversationRow) { return "id" in row ? undefined 
 function activitySummary(labels: string[]) { return labels.length === 1 ? labels[0] : `${labels.at(-1) ?? "Checked the evidence"} — ${labels.length} searches`; }
 function citationsOf(turn: ChatConversationRow): ChatCitation[] { return "id" in turn && Array.isArray(turn.citations) ? turn.citations.filter((citation) => citation !== null && typeof citation === "object") as ChatCitation[] : []; }
 function citationId(citation: ChatCitation) { return citation.id ?? citation.chunk_id ?? citation.citation_id ?? ""; }
+// Best-first tier order for the chat display choice below.
+const TIER_RANK = ["tier_1", "tier_2", "tier_3", "tier_4", "unsupported_mis_cited"];
+
 function verdictInfoFor(turn: ChatConversationRow, citation: ChatCitation): { tier: string | null; rationale: string | null } {
+  // Chat shows a citation's BEST-supported claim (tier and rationale from
+  // that same claim, so they can never contradict). The backend stamps
+  // `citation.state` with the WORST claim verdict — right for the report,
+  // misleading here: short chat answers routinely add meta-claims ("the
+  // evidence base contains no other…") that cite a perfectly good source
+  // and would drag its reference chip to Unsupported.
+  const judged = claimsCiting(turn, citation)
+    .filter((claim) => typeof claim.verdict === "string" && TIER_LABEL[claim.verdict])
+    .sort((left, right) => TIER_RANK.indexOf(left.verdict as string) - TIER_RANK.indexOf(right.verdict as string));
+  const best = judged[0];
+  if (best !== undefined) {
+    return {
+      tier: best.verdict as string,
+      rationale: typeof best.rationale === "string" && best.rationale !== "" ? best.rationale : null,
+    };
+  }
   const claim = claimFor(turn, citation);
   const rationale = claim !== null && typeof claim.rationale === "string" && claim.rationale !== "" ? claim.rationale : null;
   // The only live shape is `citation.state === "verdict:<tier>"` — the

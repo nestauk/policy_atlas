@@ -1,6 +1,6 @@
 import type { components } from "../api/gen/types";
 
-type LatestRun = components["schemas"]["ProjectOut"]["latest_run"];
+type LatestRun = components["schemas"]["TaskOut"]["latest_run"];
 
 /** The precise local-state reset used when a task rename is cancelled. */
 export function cancelledRenameState(taskName: string): { editing: false; draftName: string } {
@@ -8,9 +8,9 @@ export function cancelledRenameState(taskName: string): { editing: false; draftN
 }
 
 /** A task is stale once its finished run is this old. */
-export const STALE_AFTER_MONTHS = 12;
+const STALE_AFTER_MONTHS = 12;
 
-export type RunPresentation = {
+type RunPresentation = {
   dot: "running" | "complete" | "paused" | "idle" | "failed";
   label: string;
   tone: "default" | "blue" | "soft" | "green" | "yellow" | "red";

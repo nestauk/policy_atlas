@@ -21,15 +21,14 @@ from policy_atlas.core.schema import (
     capability_run,
     conversation,
     evidence_scope,
-    task_plan,
     planning_transcript,
+    task_plan,
 )
 from policy_atlas.runtime.conversation_lifecycle import (
     close_planning_conversation,
     ensure_active_planning_conversation,
     seed_draft_from_executed_plan,
 )
-from policy_atlas.runtime.task_plan import TIME_BANDS, TaskPlan, compose
 from policy_atlas.runtime.planner import StubPlannerBackend
 from policy_atlas.runtime.planner_prompt import (
     PartChipWire,
@@ -38,6 +37,7 @@ from policy_atlas.runtime.planner_prompt import (
     PlanDraftWire,
     PlannerTurnWire,
 )
+from policy_atlas.runtime.task_plan import TIME_BANDS, TaskPlan, compose
 from tests.api.resource_support import api_client, create_task
 
 
@@ -54,8 +54,10 @@ class CountingPlanner(StubPlannerBackend):
         previous_draft: dict[str, object] | None,
         *,
         session_id: uuid.UUID | None = None,
+        conversation_id: uuid.UUID | None = None,
     ) -> PlannerTurnWire:
         """Record and delegate the deterministic planner turn."""
+        del conversation_id
         self.calls.append((turns, previous_draft))
         self.session_ids.append(session_id)
         return super().plan_turn(turns, previous_draft)
@@ -70,12 +72,15 @@ class FailOncePlanner(CountingPlanner):
         previous_draft: dict[str, object] | None,
         *,
         session_id: uuid.UUID | None = None,
+        conversation_id: uuid.UUID | None = None,
     ) -> PlannerTurnWire:
         """Fail once, then use the ordinary deterministic reply."""
         if not self.calls:
             self.calls.append((turns, previous_draft))
             raise RuntimeError("planned test failure")
-        return super().plan_turn(turns, previous_draft, session_id=session_id)
+        return super().plan_turn(
+            turns, previous_draft, session_id=session_id, conversation_id=conversation_id
+        )
 
 
 class PartPlanner(CountingPlanner):
@@ -91,9 +96,12 @@ class PartPlanner(CountingPlanner):
         previous_draft: dict[str, object] | None,
         *,
         session_id: uuid.UUID | None = None,
+        conversation_id: uuid.UUID | None = None,
     ) -> PlannerTurnWire:
         """Return the ordinary stub turn with the configured structured part."""
-        turn = super().plan_turn(turns, previous_draft, session_id=session_id)
+        turn = super().plan_turn(
+            turns, previous_draft, session_id=session_id, conversation_id=conversation_id
+        )
         return turn.model_copy(update={"part": self.part})
 
 
@@ -131,6 +139,25 @@ def _pending_values(
     }
 
 
+def test_draft_from_wire_normalises_loose_publisher_source() -> None:
+    """A sloppy planner value must degrade the draft, never 500 the turn."""
+    spelled = planning._draft_from_wire(
+        PlanDraftWire(publisher_source=" Australian Policy Online "), ready=False
+    )
+    assert spelled.scope_constraints is not None
+    assert spelled.scope_constraints.publisher_source == "apo"
+    upper = planning._draft_from_wire(PlanDraftWire(publisher_source="APO"), ready=False)
+    assert upper.scope_constraints is not None
+    assert upper.scope_constraints.publisher_source == "apo"
+    unsupported = planning._draft_from_wire(
+        PlanDraftWire(publisher_source="worldbank"), ready=False
+    )
+    assert (
+        unsupported.scope_constraints is None
+        or unsupported.scope_constraints.publisher_source is None
+    )
+
+
 def test_draft_projection_derives_time_band_and_deduplicates_public_stages() -> None:
     """Drafts gain an honest time band; approved steps use presentation vocabulary."""
     draft = planning._draft_from_wire(
@@ -163,6 +190,13 @@ def test_draft_projection_derives_time_band_and_deduplicates_public_stages() -> 
     # stage frames keep the pre-027 behaviour (no second "screen" stage row).
     assert (
         stage_for_payload({"component": "screen_full", "registry_component": "screen_full"}) is None
+    )
+    # Full-text ingest used to map onto public acquire and overwrite Searching.
+    assert (
+        stage_for_payload(
+            {"component": "ingest_full_text", "registry_component": "ingest_full_text"}
+        )
+        is None
     )
 
 
@@ -209,7 +243,8 @@ def test_planning_turn_is_durable_idempotent_and_ready_turn_persists_plan(
         assert ready.status_code == 200
         assert ready.json()["plan"]["ready"] is True
         assert ready.json()["conversation_id"] == conversation_id
-        assert stub.session_ids == [uuid.UUID(conversation_id), uuid.UUID(conversation_id)]
+        # task 038, V9: session_id groups by task, not by planning conversation.
+        assert stub.session_ids == [uuid.UUID(task_id), uuid.UUID(task_id)]
         persisted = client.get(f"/api/v1/tasks/{task_id}/plan", headers=owner)
         assert persisted.status_code == 200
         assert persisted.json()["status"] == "approved"
@@ -863,8 +898,11 @@ def test_run_starting_mid_planner_call_fails_turn_and_persists_no_plan(
             previous_draft: dict[str, object] | None,
             *,
             session_id: uuid.UUID | None = None,
+            conversation_id: uuid.UUID | None = None,
         ) -> PlannerTurnWire:
-            wire = super().plan_turn(turns, previous_draft, session_id=session_id)
+            wire = super().plan_turn(
+                turns, previous_draft, session_id=session_id, conversation_id=conversation_id
+            )
             if wire.ready and self.task_id is not None:
                 scope_id = uuid.uuid4()
                 with engine.begin() as conn:
@@ -981,7 +1019,8 @@ def test_closed_planning_conversation_creates_seeded_successor(
         assert stub.calls[-1][1] == seed_draft_from_executed_plan(
             TaskPlan.model_validate(plan_payload)
         ).model_dump(mode="json")
-        assert stub.session_ids[-1] == successor_id
+        # task 038, V9: session_id groups by task, not by planning conversation.
+        assert stub.session_ids[-1] == uuid.UUID(task_id)
 
         follow_up = client.post(
             f"/api/v1/tasks/{task_id}/planning-turns",
@@ -997,7 +1036,8 @@ def test_closed_planning_conversation_creates_seeded_successor(
             {"role": "planner", "text": successor.json()["reply"]},
             {"role": "user", "text": "Keep the same evidence question"},
         ]
-        assert stub.session_ids[-1] == successor_id
+        # task 038, V9: session_id groups by task, not by planning conversation.
+        assert stub.session_ids[-1] == uuid.UUID(task_id)
 
 
 def _approve_stub_plan(client: TestClient, owner: dict[str, str]) -> str:
@@ -1091,3 +1131,111 @@ def test_patch_plan_422s_unknown_geography(tmp_path: Path) -> None:
             json={"geography": "Not a real country"},
         )
         assert response.status_code == 422
+
+
+def test_patch_plan_apo_geography_token_sets_publisher_source(tmp_path: Path) -> None:
+    """Test mod, task 039: the APO token requires grey_lit_only scope and sets
+    publisher_source; the alternate casing/spelled-out form resolves the same
+    way."""
+    _reset_turn_locks()
+    with api_client(tmp_path, {get_planner_backend: lambda: StubPlannerBackend()}) as (
+        client,
+        owner,
+        _,
+    ):
+        task_id = _approve_stub_plan(client, owner)
+        patched = client.patch(
+            f"/api/v1/tasks/{task_id}/plan",
+            headers=owner,
+            json={"backend_scope": "grey_lit_only", "geography": "APO"},
+        )
+        assert patched.status_code == 200, patched.text
+        assert (
+            patched.json()["plan"]["scope_constraints"]["publisher_source"] == "apo"
+        )
+
+
+def test_patch_plan_apo_geography_token_accepts_spelled_out_mixed_case(
+    tmp_path: Path,
+) -> None:
+    _reset_turn_locks()
+    with api_client(tmp_path, {get_planner_backend: lambda: StubPlannerBackend()}) as (
+        client,
+        owner,
+        _,
+    ):
+        task_id = _approve_stub_plan(client, owner)
+        patched = client.patch(
+            f"/api/v1/tasks/{task_id}/plan",
+            headers=owner,
+            json={
+                "backend_scope": "grey_lit_only",
+                "geography": "australian POLICY online",
+            },
+        )
+        assert patched.status_code == 200, patched.text
+        assert (
+            patched.json()["plan"]["scope_constraints"]["publisher_source"] == "apo"
+        )
+
+
+def test_patch_plan_apo_geography_token_422s_without_grey_lit_only_scope(
+    tmp_path: Path,
+) -> None:
+    _reset_turn_locks()
+    with api_client(tmp_path, {get_planner_backend: lambda: StubPlannerBackend()}) as (
+        client,
+        owner,
+        _,
+    ):
+        task_id = _approve_stub_plan(client, owner)
+        response = client.patch(
+            f"/api/v1/tasks/{task_id}/plan",
+            headers=owner,
+            json={"geography": "APO"},
+        )
+        assert response.status_code == 422
+
+
+def test_patch_plan_apo_cleared_by_later_country_geography_edit(tmp_path: Path) -> None:
+    _reset_turn_locks()
+    with api_client(tmp_path, {get_planner_backend: lambda: StubPlannerBackend()}) as (
+        client,
+        owner,
+        _,
+    ):
+        task_id = _approve_stub_plan(client, owner)
+        client.patch(
+            f"/api/v1/tasks/{task_id}/plan",
+            headers=owner,
+            json={"backend_scope": "grey_lit_only", "geography": "APO"},
+        )
+        patched = client.patch(
+            f"/api/v1/tasks/{task_id}/plan",
+            headers=owner,
+            json={"geography": "France"},
+        )
+        assert patched.status_code == 200, patched.text
+        assert patched.json()["plan"]["scope_constraints"]["publisher_source"] is None
+
+
+def test_patch_plan_apo_cleared_by_later_backend_scope_edit(tmp_path: Path) -> None:
+    _reset_turn_locks()
+    with api_client(tmp_path, {get_planner_backend: lambda: StubPlannerBackend()}) as (
+        client,
+        owner,
+        _,
+    ):
+        task_id = _approve_stub_plan(client, owner)
+        client.patch(
+            f"/api/v1/tasks/{task_id}/plan",
+            headers=owner,
+            json={"backend_scope": "grey_lit_only", "geography": "APO"},
+        )
+        patched = client.patch(
+            f"/api/v1/tasks/{task_id}/plan",
+            headers=owner,
+            json={"backend_scope": "both"},
+        )
+        assert patched.status_code == 200, patched.text
+        assert patched.json()["plan"]["scope_constraints"]["publisher_source"] is None

@@ -52,7 +52,7 @@ failed-then-retried) are the template.
 029 addenda: the helper now takes an optional creating-run snapshot
 (`effective_screen_rows(run_ids=…)`) — chat's terminal-run readers bound the
 effective choice to the resolved run set before ranking. And
-`screening_by_doc`'s doc-id resolution is deliberately **project-wide** (022
+`screening_by_doc`'s doc-id resolution is deliberately **task-wide** (022
 rider 16 — a screened-out doc's history stays readable); snapshot binding
 applies to its ROWS, not its resolution, so leak tests must assert empty
 row lists for a newer-walk doc, never an unknown-doc error.

@@ -92,14 +92,14 @@ export function HistoryView() {
                 >
                   <time
                     dateTime={row.at}
-                    className="w-32 shrink-0 text-caption tabular-nums text-grey"
+                    className="w-32 shrink-0 text-body tabular-nums text-grey"
                   >
                     {new Date(row.at).toLocaleString()}
                   </time>
                   <Chip tone={row.tone}>{row.category}</Chip>
                   <span className="min-w-0 flex-1 text-body text-ink">{scrub(row.sentence)}</span>
                   {expandable && (
-                    <span aria-hidden="true" className="text-caption text-grey">
+                    <span aria-hidden="true" className="text-body text-grey">
                       {expanded ? "▾" : "▸"}
                     </span>
                   )}
@@ -108,7 +108,7 @@ export function HistoryView() {
                   <dl className="border-t border-line bg-paper-2 px-4 py-3">
                     {(row.details ?? []).map((detail) => (
                       <div key={detail.label}>
-                        <dt className="text-caption font-bold uppercase tracking-[0.06em] text-grey">
+                        <dt className="text-meta font-bold uppercase tracking-[0.06em] text-grey">
                           {detail.label}
                         </dt>
                         <dd className="mt-1 whitespace-pre-wrap text-body text-navy">

@@ -27,10 +27,10 @@ from policy_atlas.core.schema import chunk as chunk_table
 from policy_atlas.core.schema import (
     event_log,
     metadata,
-    task_source_snapshot,
     source_appraisal_result,
     source_classification_result,
     source_snapshot,
+    task_source_snapshot,
 )
 from policy_atlas.evidence_search.assess.appraise import AppraiseContext, appraise_sources
 from policy_atlas.evidence_search.assess.classify import ClassifyContext, classify_sources
@@ -56,11 +56,11 @@ from tests.helpers import (
     delete_task_data,
     executed_calls_for,
     now,
-    seed_task_and_run,
     seed_run,
     seed_scope,
     seed_screening_result,
     seed_source,
+    seed_task_and_run,
 )
 from tests.provider_fixtures import OpenAlexFixtureBackend, OvertonFixtureBackend
 
@@ -1354,7 +1354,10 @@ def test_licence_guard() -> None:
 
 
 def test_migration_roundtrip_and_checks(conn: Connection) -> None:
-    assert len(metadata.tables) == 33
+    # 33 -> 36: task 033 adds `organisation` and `app_user` (tenancy above the
+    # entity hierarchy) and ADR 0032 adds `project_membership`; 36 -> 37:
+    # task 036 adds `waitlist_entry`; no evidence-search table changed.
+    assert len(metadata.tables) == 37
     task_id, _ = seed_task_and_run(conn)
     snap_id, tss_id = seed_source(conn, task_id)
 

@@ -57,6 +57,15 @@ export function PrivacyView() {
           <strong>Search Queries &amp; Results:</strong> We store the text of the queries you input
           and the results generated to populate your evidence blueprints.
         </p>
+        <p>
+          <strong>Access requests:</strong> If you ask for access to Policy Atlas through the
+          &quot;Request access&quot; form, we collect your name, your email address, your
+          organisation (if you give it), and what you tell us about how you would use the tool. We
+          use this information only to review your request and to contact you about access to the
+          beta. We keep it until the private beta ends, or until you ask us to remove it (contact
+          the DPO at the address above). We do not share it outside Nesta. The lawful basis is our
+          legitimate interest in responding to your request.
+        </p>
       </LegalSection>
 
       <LegalSection title="4. What we do not collect">

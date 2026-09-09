@@ -2,16 +2,18 @@ import { describe, expect, it, vi } from "vitest";
 
 import { consumeEventStream } from "../api/sse";
 import type { SseFrame } from "../api/sseFrame";
-import { mockFetch, resetMockScenario } from "./api";
+import { mockFetch, resetMockScenario, setMockMe } from "./api";
 import {
   MOCK_CHAT_CITATION_CHUNK_ID,
   MOCK_CHAT_CITATION_QUOTE,
   MOCK_CHECK_IN_ID,
   MOCK_PLANNING_CONVERSATION_ID,
+  MOCK_PROJECT_ID,
   MOCK_TASK_ID,
   MOCK_THEME_ID_ACTIVE_TRAVEL,
   MOCK_THEME_ID_SCHOOL_FOOD,
   mockEvidenceThemeIds,
+  mockMeEnrolled,
 } from "./fixtures";
 
 interface MockChatTurn {
@@ -298,6 +300,79 @@ describe("mock API", () => {
       const context = await response.json() as { context: string; clamped: boolean };
       expect(context.context).toContain(MOCK_CHAT_CITATION_QUOTE.slice(0, 30));
       expect(context.clamped).toBe(false);
+    });
+  });
+
+  // Task 033 phase 10a: /me and the project routes the § 11 journeys
+  // need that the mock never served before this phase.
+  describe("identity + projects (task 033 phase 10a)", () => {
+    it("GET /me defaults to the unenrolled fixture — dark launch", async () => {
+      resetMockScenario();
+      const response = await mockFetch("http://localhost/api/v1/me");
+      const me = await response.json() as { organisation: unknown };
+      expect(me.organisation).toBeNull();
+    });
+
+    it("GET /me reflects setMockMe(mockMeEnrolled) for tests that need the enrolled journey", async () => {
+      resetMockScenario();
+      setMockMe(mockMeEnrolled);
+      const response = await mockFetch("http://localhost/api/v1/me");
+      const me = await response.json() as { organisation: { name: string } | null };
+      expect(me.organisation?.name).toBe(mockMeEnrolled.organisation?.name);
+    });
+
+    it("GET /projects returns the fixture project", async () => {
+      resetMockScenario();
+      const response = await mockFetch("http://localhost/api/v1/projects");
+      const { data } = await response.json() as { data: { project_id: string }[] };
+      expect(data).toHaveLength(1);
+      expect(data[0].project_id).toBe(MOCK_PROJECT_ID);
+    });
+
+    it("GET /projects/{id} resolves the fixture and 404s for an unknown id", async () => {
+      resetMockScenario();
+      const found = await mockFetch(`http://localhost/api/v1/projects/${MOCK_PROJECT_ID}`);
+      expect(found.status).toBe(200);
+      expect((await found.json() as { project_id: string }).project_id).toBe(MOCK_PROJECT_ID);
+
+      const missing = await mockFetch("http://localhost/api/v1/projects/00000000-0000-4000-8000-000000000000");
+      expect(missing.status).toBe(404);
+    });
+
+    it("GET /tasks?project_id= narrows to that project's members, server-side", async () => {
+      resetMockScenario();
+      const matching = await mockFetch(`http://localhost/api/v1/tasks?project_id=${MOCK_PROJECT_ID}`);
+      const { data: matchingData } = await matching.json() as { data: { task_id: string }[] };
+      expect(matchingData).toHaveLength(1);
+      expect(matchingData[0].task_id).toBe(MOCK_TASK_ID);
+
+      const nonMatching = await mockFetch(
+        "http://localhost/api/v1/tasks?project_id=00000000-0000-4000-8000-000000000000",
+      );
+      const { data: nonMatchingData } = await nonMatching.json() as { data: unknown[] };
+      expect(nonMatchingData).toHaveLength(0);
+
+      const unfiltered = await mockFetch("http://localhost/api/v1/tasks");
+      const { data: unfilteredData } = await unfiltered.json() as { data: unknown[] };
+      expect(unfilteredData).toHaveLength(1);
+    });
+
+    it("PATCH /tasks/{id} refuses a rename bundled with a visibility conflict all-or-nothing — the name is never assigned before the 409", async () => {
+      resetMockScenario();
+      // `mockTask.project_ids` is seeded non-empty (task 033 phase 10a
+      // fixture), so any `visibility` in the body always conflicts here.
+      const response = await mockFetch(`http://localhost/api/v1/tasks/${MOCK_TASK_ID}`, {
+        method: "PATCH",
+        body: JSON.stringify({ name: "Renamed while conflicted", visibility: "private" }),
+      });
+      expect(response.status).toBe(409);
+      const body = await response.json() as { error: { code: string } };
+      expect(body.error.code).toBe("visibility_conflict");
+
+      const reread = await mockFetch(`http://localhost/api/v1/tasks/${MOCK_TASK_ID}`);
+      const task = await reread.json() as { name: string; visibility: string };
+      expect(task.name).not.toBe("Renamed while conflicted");
+      expect(task.visibility).toBe("org");
     });
   });
 });

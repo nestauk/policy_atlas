@@ -66,9 +66,9 @@ EvidenceStatusFilter = Literal[
 #: Run-scoped B2' relevance mark on a finding.
 FindingRelevance = Literal["priority", "normal"]
 
-#: Artefact section role (page order: key_findings, then standard, then
-#: conclusions).
-SectionRole = Literal["key_findings", "standard", "conclusions"]
+#: Artefact section role (page order: key_findings, case_studies, then
+#: standard, then conclusions).
+SectionRole = Literal["key_findings", "case_studies", "standard", "conclusions"]
 
 #: Claim annotation type. Every annotation is a prose span; `citations` is
 #: populated for `citation`-type claims only.
@@ -211,6 +211,10 @@ class EvidenceItemOut(BaseModel):
     screen_reason: str | None = None
     classification_reason: str | None = None
     read_in_full: bool = False
+    # The document's own description — the provider abstract, a snippet, or
+    # the provider's LLM-written description (flagged as such).
+    abstract: str | None = None
+    abstract_source: Literal["provider", "llm_description"] | None = None
 
 
 class FindingBaseOut(BaseModel):
@@ -223,6 +227,8 @@ class FindingBaseOut(BaseModel):
         source_title: Title of that source.
         profile: Extraction profile the finding came from.
         relevance: Run-scoped B2' relevance mark, when the run has them.
+        chunk_id: Verified chunk identity from the first grounding anchor, or
+            ``None`` for abstract-only findings.
     """
 
     finding_id: uuid.UUID
@@ -231,6 +237,7 @@ class FindingBaseOut(BaseModel):
     source_title: str
     profile: ExtractProfile
     relevance: FindingRelevance | None = None
+    chunk_id: uuid.UUID | None = None
 
 
 class IofStatisticsOut(BaseModel):
@@ -297,6 +304,19 @@ class IcfFindingOut(FindingBaseOut):
 type FindingOut = Annotated[IofFindingOut | IcfFindingOut, Field(discriminator="profile")]
 
 
+class AuthorshipOut(BaseModel):
+    """One author and their institutions, for display.
+
+    Args:
+        name: Author display name. For a policy document with no named
+            people this is the issuing organisation (corporate author).
+        institutions: Institution display names, possibly empty.
+    """
+
+    name: str
+    institutions: list[str] = Field(default_factory=list)
+
+
 class SourceTagOut(BaseModel):
     """One source tag assertion and its provenance."""
 
@@ -316,8 +336,6 @@ class CitedInOut(BaseModel):
 class SourceDossierOut(EvidenceItemOut):
     """The optional source dossier, including provenance and latest citations."""
 
-    abstract: str | None = None
-    abstract_source: Literal["provider", "llm_description"] | None = None
     publisher: str | None = None
     record_type: str | None = None
     language: str | None = None
@@ -326,6 +344,7 @@ class SourceDossierOut(EvidenceItemOut):
     fwci: float | None = None
     tags: list[SourceTagOut] = Field(default_factory=list)
     cited_in: list[CitedInOut] = Field(default_factory=list)
+    authorships: list[AuthorshipOut] = Field(default_factory=list)
 
 
 class DecisionOut(BaseModel):
@@ -478,6 +497,31 @@ class BlockOut(BaseModel):
     gaps: list[str] = Field(default_factory=list)
 
 
+class CaseStudyCardOut(BaseModel):
+    """One case-study programme card within the case-studies section.
+
+    Args:
+        card_id: Stable card identity.
+        title: Programme name (place — instrument).
+        prose: Short mechanism prose.
+        claims: Span-anchored claim annotations within `prose`.
+        result_claim_id: The claim carrying the programme's primary result,
+            or ``None`` when the binding degrades.
+        strength: Appraisal label of the cited evidence, when known.
+        design: Evidence type / study design, when known.
+        since_year: Earliest cited publication year, when known.
+    """
+
+    card_id: uuid.UUID
+    title: str
+    prose: str
+    claims: list[ClaimOut] = Field(default_factory=list)
+    result_claim_id: uuid.UUID | None = None
+    strength: str | None = None
+    design: str | None = None
+    since_year: int | None = None
+
+
 class SectionOut(BaseModel):
     """One artefact section.
 
@@ -488,6 +532,7 @@ class SectionOut(BaseModel):
             an artefact produced before the label existed. Absence is a normal
             state: the client falls back to a shortened title.
         blocks: The section's prose blocks, in order.
+        cards: Case-study cards (populated only for ``case_studies`` sections).
         summary: Verified summary for a single-block section, if available.
         summary_status: Summary production state for a single-block section.
     """
@@ -497,6 +542,7 @@ class SectionOut(BaseModel):
     focus: str | None = None
     nav_label: str | None = None
     blocks: list[BlockOut] = Field(default_factory=list)
+    cards: list[CaseStudyCardOut] = Field(default_factory=list)
     summary: str | None = None
     summary_status: Literal["pending", "verified", "failed"] | None = None
 
@@ -510,6 +556,7 @@ class ReferenceOut(BaseModel):
         year: Publication year, or `None` if unknown.
         venue: Publication venue, or `None` if unknown.
         url: Optional reference URL.
+        authorships: Authors and their institutions, for display.
     """
 
     n: int
@@ -517,6 +564,7 @@ class ReferenceOut(BaseModel):
     year: int | None = None
     venue: str | None = None
     url: str | None = None
+    authorships: list[AuthorshipOut] = Field(default_factory=list)
 
 
 class CoverageSnapshotOut(BaseModel):
@@ -537,6 +585,18 @@ class CoverageSnapshotOut(BaseModel):
     screened_out: int | None = None
 
 
+class MostRelevantNoteOut(BaseModel):
+    """A grounded one-liner note for a top cited source.
+
+    Args:
+        source_id: The task source identity.
+        note: One-sentence note restating only supplied evidence.
+    """
+
+    source_id: str
+    note: str
+
+
 class ArtefactOut(BaseModel):
     """The `artefact` read model — the synthesised evidence base.
 
@@ -548,6 +608,8 @@ class ArtefactOut(BaseModel):
         coverage_snapshot: Embedded coverage snapshot.
         sections: Artefact sections, in final page order.
         references: Numbered reference list.
+        most_relevant_notes: Grounded notes for top cited sources.
+        full_report_intro: Generated introduction to the full-report body, when present.
         summary: Artefact-level summary, if produced.
         summary_status: Artefact-level summary production state.
     """
@@ -558,6 +620,8 @@ class ArtefactOut(BaseModel):
     coverage_snapshot: CoverageSnapshotOut
     sections: list[SectionOut] = Field(default_factory=list)
     references: list[ReferenceOut] = Field(default_factory=list)
+    most_relevant_notes: list[MostRelevantNoteOut] = Field(default_factory=list)
+    full_report_intro: str | None = None
     summary: str | None = None
     summary_status: Literal["pending", "verified", "failed"] | None = None
 
@@ -601,10 +665,16 @@ class ChunkContextOut(BaseModel):
 
     Args:
         context: Context text, clamped to a character window around the
-            cited span.
+            cited span. Truncated edges are snapped to a word boundary and
+            marked with ``...``.
         span_start: Start offset of the clamped context.
         span_end: End offset of the clamped context.
         clamped: Whether the window was clamped (hit a chunk boundary).
+        previous: Short tail of the previous chunk, only when the window
+            reaches the start of this chunk; otherwise omitted.
+        next: Short head of the next chunk, only when the window reaches
+            the end of this chunk; otherwise omitted.
+        authorships: Authors and their institutions, for display.
     """
 
     context: str
@@ -615,3 +685,4 @@ class ChunkContextOut(BaseModel):
     next: str | None = None
     year: int | None = None
     venue: str | None = None
+    authorships: list[AuthorshipOut] = Field(default_factory=list)

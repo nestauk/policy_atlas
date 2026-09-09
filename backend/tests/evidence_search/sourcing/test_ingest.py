@@ -7,7 +7,7 @@ from sqlalchemy.engine import Connection
 
 from policy_atlas.core.fixtures import get_source
 from policy_atlas.core.schema import chunk as chunk_table
-from policy_atlas.core.schema import task, task_source_snapshot, source_snapshot
+from policy_atlas.core.schema import source_snapshot, task, task_source_snapshot
 from policy_atlas.evidence_search.sourcing.ingest_upload import ingest_upload
 from tests.helpers import now
 

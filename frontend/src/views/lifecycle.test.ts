@@ -1,22 +1,34 @@
 import { describe, expect, it } from "vitest";
 
-import { LIFECYCLE_TABS, isTabOpen, lifecycleTabs, taskDestination } from "./lifecycle";
+import { LIFECYCLE_TABS, isTabOpen, lifecycleTabs, taskDestination, withChat } from "./lifecycle";
 import type { LifecycleTab } from "./lifecycle";
 
-/** The contract's locking table, transcribed independently of the source. */
+describe("withChat", () => {
+  it("carries the open chat onto every tab link but the Agent tab's", () => {
+    const tabs = lifecycleTabs("/tasks/t1", "succeeded");
+    const carried = withChat(tabs, "c 1");
+    expect(carried.find((item) => item.tab === "sources")?.to).toBe("/tasks/t1/sources?chat=c%201");
+    expect(carried.find((item) => item.tab === "agent")?.to).toBe("/tasks/t1");
+    expect(withChat(tabs, null)).toBe(tabs);
+  });
+});
+
+/** The locking table after the 2026-08-25 steer: Result opens while a run
+ *  is executing so the in-progress write-up is reachable. Failed runs still
+ *  lock Result. */
 const LOCKING_TABLE: ReadonlyArray<{
   state: string;
   status: Parameters<typeof isTabOpen>[1];
   open: readonly LifecycleTab[];
 }> = [
-  { state: "no run yet", status: null, open: ["plan"] },
-  { state: "running", status: "running", open: ["plan", "sources", "history"] },
-  { state: "paused", status: "paused", open: ["plan", "sources", "history"] },
+  { state: "no run yet", status: null, open: ["agent", "share"] },
+  { state: "running", status: "running", open: [...LIFECYCLE_TABS] },
+  { state: "paused", status: "paused", open: [...LIFECYCLE_TABS] },
   { state: "succeeded", status: "succeeded", open: [...LIFECYCLE_TABS] },
   { state: "degraded", status: "degraded", open: [...LIFECYCLE_TABS] },
-  { state: "failed", status: "failed", open: ["plan", "sources", "history"] },
-  { state: "aborted", status: "aborted", open: ["plan", "sources", "history"] },
-  { state: "interrupted", status: "interrupted", open: ["plan", "sources", "history"] },
+  { state: "failed", status: "failed", open: ["agent", "sources", "share", "history"] },
+  { state: "aborted", status: "aborted", open: ["agent", "sources", "share", "history"] },
+  { state: "interrupted", status: "interrupted", open: ["agent", "sources", "share", "history"] },
 ];
 
 describe("lifecycle tab locking", () => {
@@ -36,12 +48,12 @@ describe("lifecycle tab locking", () => {
 
   it("keeps Sources open after a failed run, because the corpus is real", () => {
     expect(isTabOpen("sources", "failed")).toBe(true);
-    expect(isTabOpen("results", "failed")).toBe(false);
+    expect(isTabOpen("result", "failed")).toBe(false);
   });
 
-  it("never locks Plan, at any state", () => {
+  it("never locks Agent, at any state", () => {
     for (const { status } of LOCKING_TABLE) {
-      expect(isTabOpen("plan", status)).toBe(true);
+      expect(isTabOpen("agent", status)).toBe(true);
     }
   });
 });
@@ -52,7 +64,7 @@ describe("lifecycleTabs", () => {
     expect(tabs.map((entry) => entry.tab)).toEqual([...LIFECYCLE_TABS]);
     expect(tabs.map((entry) => entry.to)).toEqual([
       "/tasks/p1",
-      "/tasks/p1/results",
+      "/tasks/p1/result",
       "/tasks/p1/sources",
       "/tasks/p1/share",
       "/tasks/p1/history",
@@ -60,19 +72,25 @@ describe("lifecycleTabs", () => {
   });
 
   it("marks the locked ones rather than dropping them", () => {
-    const locked = lifecycleTabs("/tasks/p1", "running")
+    const locked = lifecycleTabs("/tasks/p1", "failed")
       .filter((entry) => entry.locked)
       .map((entry) => entry.tab);
-    expect(locked).toEqual(["results", "share"]);
+    expect(locked).toEqual(["result"]);
+  });
+
+  it("opens Result while a run is executing", () => {
+    expect(
+      lifecycleTabs("/tasks/p1", "running").filter((entry) => entry.locked),
+    ).toEqual([]);
   });
 });
 
 describe("taskDestination", () => {
-  it("opens Results for a succeeded task", () => {
-    expect(taskDestination("p1", "succeeded")).toBe("/tasks/p1/results");
+  it("opens Result for a succeeded task", () => {
+    expect(taskDestination("p1", "succeeded")).toBe("/tasks/p1/result");
   });
 
-  it("opens Plan for every other state", () => {
+  it("opens Agent for every other state", () => {
     for (const status of ["running", "paused", "degraded", "failed", "aborted", "interrupted"] as const) {
       expect(taskDestination("p1", status)).toBe("/tasks/p1");
     }

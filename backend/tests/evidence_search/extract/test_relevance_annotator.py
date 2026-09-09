@@ -48,9 +48,9 @@ from policy_atlas.evidence_search.extract.relevance_prompt import (
 )
 from tests.helpers import (
     profile_doc,
-    seed_task_and_run,
     seed_run,
     seed_scope,
+    seed_task_and_run,
 )
 
 from .test_extract import _record, _seed_full_text_doc, _seed_selection

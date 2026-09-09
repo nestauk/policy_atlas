@@ -76,18 +76,22 @@ export function DistributionChartTooltip({
   const heading = row.payload?.label ?? String(label ?? "");
   return (
     <div className="border border-line-2 bg-paper px-2.5 py-1.5 shadow-sm">
-      <p className="text-caption font-semibold text-navy">{heading}</p>
-      <p className="text-caption text-grey">
+      <p className="text-meta font-semibold text-navy">{heading}</p>
+      <p className="text-meta text-grey">
         {row.value} source{row.value === 1 ? "" : "s"}
       </p>
     </div>
   );
 }
 
-const TRUNCATE_AT = 24;
+const TRUNCATE_AT = { compact: 24, full: 42 } as const;
+const LABEL_WIDTH = { compact: 150, full: 280 } as const;
 
-function truncateTick(value: string): string {
-  return value.length > TRUNCATE_AT ? `${value.slice(0, TRUNCATE_AT - 1)}…` : value;
+/** Tick labels match `text-meta` (14px). */
+export const CHART_TICK_FONT_SIZE = 14;
+
+function truncateTick(value: string, limit: number): string {
+  return value.length > limit ? `${value.slice(0, limit - 1)}…` : value;
 }
 
 /** Shared horizontal distribution chart for evidence types and publication
@@ -114,16 +118,16 @@ export function EvidenceDistributionChart({
           <XAxis
             type="number"
             allowDecimals={false}
-            tick={{ fontSize: 11, fill: CHART_TOKENS.text }}
+            tick={{ fontSize: CHART_TICK_FONT_SIZE, fill: CHART_TOKENS.text }}
             axisLine={{ stroke: CHART_TOKENS.grid }}
             tickLine={false}
           />
           <YAxis
             type="category"
             dataKey="label"
-            width={size === "compact" ? 130 : 170}
-            tickFormatter={truncateTick}
-            tick={{ fontSize: 11, fill: CHART_TOKENS.navy }}
+            width={LABEL_WIDTH[size]}
+            tickFormatter={(value: string) => truncateTick(value, TRUNCATE_AT[size])}
+            tick={{ fontSize: CHART_TICK_FONT_SIZE, fill: CHART_TOKENS.navy }}
             axisLine={false}
             tickLine={false}
           />
@@ -154,13 +158,13 @@ export function PublicationYearsChart({
             dataKey="label"
             interval="preserveStartEnd"
             minTickGap={18}
-            tick={{ fontSize: 11, fill: CHART_TOKENS.navy }}
+            tick={{ fontSize: CHART_TICK_FONT_SIZE, fill: CHART_TOKENS.navy }}
             axisLine={{ stroke: CHART_TOKENS.grid }}
             tickLine={false}
           />
           <YAxis
             allowDecimals={false}
-            tick={{ fontSize: 11, fill: CHART_TOKENS.text }}
+            tick={{ fontSize: CHART_TICK_FONT_SIZE, fill: CHART_TOKENS.text }}
             width={28}
             axisLine={false}
             tickLine={false}

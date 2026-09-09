@@ -323,9 +323,7 @@ def test_validated_queries_drops_over_length_instead_of_truncating() -> None:
     )
     assert len(boolean) > 120, "must exceed the old cap for this to be a regression test"
 
-    queries, _ = validated_queries(
-        SearchQueriesWire(queries=[boolean], overton_paraphrases=[])
-    )
+    queries, _ = validated_queries(SearchQueriesWire(queries=[boolean], overton_paraphrases=[]))
     assert queries == [boolean]
     assert queries[0].count("(") == queries[0].count(")")
 

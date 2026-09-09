@@ -16,9 +16,9 @@ from policy_atlas.core import events
 from policy_atlas.core.inference import StubEchoProvider
 from policy_atlas.core.schema import (
     evidence_scope,
-    task_source_snapshot,
     search_coverage_record,
     source_screening_result,
+    task_source_snapshot,
 )
 from policy_atlas.evidence_search.sourcing.acquire import AcquireContext, BackendCaps
 from policy_atlas.evidence_search.sourcing.search_loop import (
@@ -50,10 +50,10 @@ from tests.helpers import (
     ScriptedGenerationBackend,
     now,
     oa_record,
-    seed_task_and_run,
     seed_run,
     seed_scope,
     seed_source,
+    seed_task_and_run,
 )
 
 ScriptResult = list[dict[str, Any]] | BaseException
@@ -566,7 +566,7 @@ def test_rapid_result_cap_is_flat_per_call(
     assert capped["results_returned"] == rapid_quota * 15
     assert capped["search"]["queries_executed"]["openalex"] == 15
     # Honest stop attribution: exhausting the planned fan-out is not an error —
-    # a clean completion. (Rapid's OpenAlex http_budget of 20 is never reached
+    # a clean completion. (Rapid's OpenAlex call_budget of 20 is never reached
     # by a 15-call fan-out; the per-round record cap bites at acquisition, not
     # here — the scripted records above are cross-call duplicates and dedup to
     # a handful of acquired rows.)

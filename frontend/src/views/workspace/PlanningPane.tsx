@@ -1,9 +1,10 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router";
 
 import { useCheckIns, useDecisions, useFunnel, usePlan, useRuns } from "../../api/queries";
 import { useComposerSeed } from "../../lib/composerSeed";
 import { scrub } from "../../lib/scrub";
+import { COPY, TASK } from "../../lib/vocabulary";
 import { composePlanningThread, usePlanningTranscript } from "../../store";
 import type {
   OptimisticPlanningTurn,
@@ -23,6 +24,10 @@ import { cn } from "../../ui/brand/cn";
 import { conflictSentences, errorCode, isConflictCode } from "../../lib/errors";
 import { ReauthRedirect } from "../../ui/feedback";
 import { groupSearchDecisions } from "../decisionsPresentation";
+import { LIFECYCLE_PAGE_CLASS } from "../listPageChrome";
+import { JumpToEnd } from "./chat/JumpToEnd";
+import { useFooterReveal } from "./chat/useFooterReveal";
+import { usePinToBottom } from "./chat/usePinToBottom";
 import { AnsweredCheckIn } from "./AnsweredCheckIn";
 import { CheckInCard } from "./CheckInCard";
 import { PartCard, type PartState, confirmTarget, derivePartStates } from "./PartCard";
@@ -31,10 +36,10 @@ import type { PlanOverlay } from "./planOverlay";
 import { COMPONENT_LABEL, RUN_BLOCK_STATUS } from "./planVocabulary";
 import { RunningCard, RunningCardDock } from "./RunningCard";
 import {
-  CHAT_PRIMARY_CTA_CLASS,
   completedSignposts,
   elapsedSeconds,
   formatElapsed,
+  runFinishedSignpost,
 } from "./runProgress";
 
 /** The server page-size cap; one planning conversation fits comfortably. */
@@ -79,6 +84,10 @@ export function threadInputs(
  * Args:
  *   runStatus: The task's current run status, or undefined before any run.
  *   planReady: True once the approved plan is ready to review and start.
+ *   isOwner: Steering is owner-only (task 033 phase 10c, contract § 11 /
+ *     rubric 37) — a non-owner always sees the same honest line, regardless
+ *     of run state, the same idiom the run-state copy already uses rather
+ *     than a "you cannot edit this" banner.
  *
  * Returns:
  *   Copy that matches the run and plan state.
@@ -86,7 +95,11 @@ export function threadInputs(
 export function planningComposerPlaceholder(
   runStatus: RunStatus | undefined,
   planReady = false,
+  isOwner = true,
 ): string {
+  if (!isOwner) {
+    return `Steering is limited to the ${TASK.lower} owner.`;
+  }
   if (runStatus === "running" || runStatus === "paused") {
     return "Replanning unlocks when this run finishes.";
   }
@@ -115,6 +128,8 @@ export function Composer({
   placeholder,
   disabled,
   sendDisabled,
+  id = "planning-message",
+  label = COPY.messageTaskAgent,
 }: {
   value: string;
   onChange: (value: string) => void;
@@ -124,6 +139,13 @@ export function Composer({
   disabled: boolean;
   /** Send button's disabled state (027: also covers in-flight submission). */
   sendDisabled: boolean;
+  /** DOM id and label, defaulting to the Task Agent's own composer. A chat
+   *  passes its own (038 V8): with the Agent overlay beside the Task Agent's
+   *  pane, one shared id would be two elements, and `getElementById` — the
+   *  seed hand-off and the overlay's focus hand-off both use it — would take
+   *  whichever came first in the document. */
+  id?: string;
+  label?: string;
 }) {
   return (
     <div>
@@ -134,11 +156,11 @@ export function Composer({
           onSubmit();
         }}
       >
-        <label className="sr-only" htmlFor="planning-message">
-          Message the planner
+        <label className="sr-only" htmlFor={id}>
+          {label}
         </label>
         <textarea
-          id="planning-message"
+          id={id}
           rows={2}
           value={value}
           onChange={(event) => onChange(event.target.value)}
@@ -337,6 +359,28 @@ function AnsweredCheckIns({
   ));
 }
 
+function RunFinishedNotice({
+  taskId,
+  status,
+}: {
+  taskId: string;
+  status: RunStatus | undefined;
+}) {
+  const notice = runFinishedSignpost(taskId, status);
+  if (notice === null) return null;
+  return (
+    <div className="anim-rise mr-8 border-2 border-[#17A88D] bg-[#DDF2EE] px-4 py-3">
+      <p className="max-w-prose-measure text-lead text-navy">
+        Evidence search is finished. You can read the report in the{" "}
+        <Link to={notice.href} className="font-semibold text-blue underline">
+          {notice.label}
+        </Link>{" "}
+        tab.
+      </p>
+    </div>
+  );
+}
+
 function RunBlock({
   taskId,
   run,
@@ -354,7 +398,6 @@ function RunBlock({
 }) {
   const status = RUN_BLOCK_STATUS[run.status] ?? null;
   const presentedDecisions = presentRunDecisions(decisions, stages);
-  const complete = run.status === "succeeded" || run.status === "degraded";
   return (
     <div className="space-y-2">
       <div className="flex items-center gap-2 text-caption text-grey">
@@ -375,14 +418,7 @@ function RunBlock({
       <AnsweredCheckIns answered={answered} checkIns={checkIns} />
       {/* The chat's own destination once the run lands (owner, 2026-08-05):
           a completed run's last word shouldn't be a quiet stage echo. */}
-      {complete && (
-        <div className="anim-rise mr-8 border border-green-tint bg-green-tint/40 px-4 py-3">
-          <p className="text-body font-semibold text-navy">The evidence base is ready.</p>
-          <Link to={`/tasks/${taskId}/results`} className={cn("mt-2", CHAT_PRIMARY_CTA_CLASS)}>
-            Read the evidence base
-          </Link>
-        </div>
-      )}
+      <RunFinishedNotice taskId={taskId} status={run.status} />
     </div>
   );
 }
@@ -398,16 +434,32 @@ export function PlanningPane({
   taskId,
   runStatus,
   stream,
+  isOwner,
   onReviewPlan,
   planOverlay,
   onOverlayApplied,
+  onDiscardOverlay,
+  onAtBottomChange,
 }: {
   taskId: string;
   runStatus: RunStatus | undefined;
   stream: RunStreamState;
+  /** Steering is owner-only (task 033 phase 10c, contract § 11 / rubric 37):
+   *  gates the composer, retry controls, suggestion chips, the plan-ready
+   *  card's Start action and the check-in card. Required, not defaulted —
+   *  a forgotten prop must fail closed to read-only, never silently grant
+   *  every colleague the owner's mutation surface. */
+  isOwner: boolean;
   onReviewPlan?: () => void;
   planOverlay?: PlanOverlay;
   onOverlayApplied?: () => void;
+  /** Clears the same overlay state as `onOverlayApplied` — wired to the
+   *  plan-ready card's Discard edits and start action. */
+  onDiscardOverlay?: () => void;
+  /** Reports when the reader asks for the site footer (a deliberate scroll
+   *  past the transcript's end) and when they scroll back up (038 V8); the
+   *  Agent tab reveals the footer under both columns accordingly. */
+  onAtBottomChange?: (atBottom: boolean) => void;
 }) {
   const transcript = usePlanningTranscript(taskId, { page_size: TRANSCRIPT_PAGE_SIZE });
   const planQuery = usePlan(taskId);
@@ -436,7 +488,11 @@ export function PlanningPane({
   const partStates = derivePartStates(durableTurns);
 
   const runActive = runStatus === "running" || runStatus === "paused";
-  const composerDisabled = runActive || transcript.isSubmitting;
+  // `!isOwner` folds into the same `composerDisabled` flag that already
+  // disables the composer, DurableTurn's retry button and PartCard's options
+  // during an active run (task 033 phase 10c, contract § 11 / rubric 37) —
+  // one mechanism, not a second parallel disabled path.
+  const composerDisabled = runActive || transcript.isSubmitting || !isOwner;
 
   // Chat scroll: pinned to the bottom (newest messages) unless the user has
   // scrolled up to read history; new content re-pins only when near-bottom.
@@ -446,19 +502,12 @@ export function PlanningPane({
   const scrollRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const cardRef = useRef<HTMLDivElement>(null);
-  const pinnedToBottom = useRef(true);
-  useLayoutEffect(() => {
-    const el = scrollRef.current;
-    const content = contentRef.current;
-    if (el === null || content === null) return;
-    const pin = () => {
-      if (pinnedToBottom.current) el.scrollTop = el.scrollHeight;
-    };
-    pin();
-    const observer = new ResizeObserver(pin);
-    observer.observe(content);
-    return () => observer.disconnect();
-  }, []);
+  // The site footer lives in `WorkspaceView`, under both columns (038 V8),
+  // and opens only on a deliberate nudge past the transcript's end.
+  const footer = useFooterReveal(onAtBottomChange);
+  // The transcript opens at its end and stays there while new turns land
+  // (shared with the chat pane).
+  const pin = usePinToBottom(scrollRef, contentRef, taskId);
 
   // The plan card sits at its chronological position: right after the last
   // planning turn (approval always comes from a turn; turns are 409-fenced
@@ -544,18 +593,26 @@ export function PlanningPane({
 
   return (
     <section aria-label="Planning conversation" className="flex h-full min-h-0 flex-col">
+      {/* The scroll region spans the whole pane so its scrollbar sits at the
+          pane's edge like every other tab's; the reading column is inside. */}
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+      {/* `relative` for the jump-to-end pill, which floats over the region's bottom edge. */}
+      <div className="relative flex min-h-0 flex-1 flex-col">
       <div
         ref={scrollRef}
         onScroll={(event) => {
-          const el = event.currentTarget;
-          pinnedToBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+          pin.onScroll(event);
+          footer.onScroll(event);
         }}
-        className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-4"
+        onWheel={footer.onWheel}
+        onTouchStart={footer.onTouchStart}
+        onTouchMove={footer.onTouchMove}
+        className="flex min-h-0 flex-1 flex-col overflow-y-auto py-4 [scrollbar-gutter:stable]"
       >
         {/* Bottom-anchor: pushes a short thread to the composer end; the
             landing prompt sits in the top third (1:2 spacer split). */}
         <div aria-hidden="true" className={landing ? "flex-[1]" : "mt-auto"} />
-        <div ref={contentRef} className="space-y-6">
+        <div ref={contentRef} className={cn("space-y-6", LIFECYCLE_PAGE_CLASS)}>
         {transcript.isPending && (
           <div role="status" className="anim-breathe text-body text-grey">
             Loading your planning conversation…
@@ -601,6 +658,7 @@ export function PlanningPane({
                 {liveCard}
                 <AnsweredCheckIns answered={stream.decisions} checkIns={checkInsQuery.data} />
                 {signpostBubbles}
+                <RunFinishedNotice taskId={taskId} status={stream.run?.status} />
               </div>
             ) : (
               <RunBlock
@@ -616,7 +674,7 @@ export function PlanningPane({
               />
             );
           return index === planCardAt - 1
-            ? [rendered, <PlanCard key="plan-card" taskId={taskId} runActive={runActive} started={planStarted} onReviewPlan={onReviewPlan} overlay={planOverlay} onOverlayApplied={onOverlayApplied} />]
+            ? [rendered, <PlanCard key="plan-card" taskId={taskId} runActive={runActive} started={planStarted} isOwner={isOwner} onReviewPlan={onReviewPlan} overlay={planOverlay} onOverlayApplied={onOverlayApplied} onDiscardOverlay={onDiscardOverlay} />]
             : [rendered];
         })}
 
@@ -666,7 +724,10 @@ export function PlanningPane({
           </div>
         )}
 
-        {suggestions.length > 0 && !transcript.isSubmitting && !runActive && (
+        {/* Suggestion chips send a planning turn (task 033 phase 10c,
+            contract § 11 / rubric 37) — owner-only, hidden for a colleague
+            rather than left clickable to a 403. */}
+        {isOwner && suggestions.length > 0 && !transcript.isSubmitting && !runActive && (
           <div className="flex flex-wrap gap-1.5">
             {suggestions.map((suggestion) => (
               <button
@@ -687,6 +748,7 @@ export function PlanningPane({
             taskId={taskId}
             checkIn={stream.pendingCheckIn}
             stages={stream.stages}
+            isOwner={isOwner}
           />
         )}
         {liveCard !== null && !threadHasLiveRun && (
@@ -694,10 +756,13 @@ export function PlanningPane({
             {liveCard}
             <AnsweredCheckIns answered={stream.decisions} checkIns={checkInsQuery.data} />
             {signpostBubbles}
+            <RunFinishedNotice taskId={taskId} status={stream.run?.status} />
           </div>
         )}
         </div>
         {landing && <div aria-hidden="true" className="flex-[2]" />}
+      </div>
+      <JumpToEnd visible={!pin.atEnd} onClick={pin.jumpToEnd} />
       </div>
 
       <div className="shrink-0 border-t border-line">
@@ -713,16 +778,17 @@ export function PlanningPane({
             }}
           />
         )}
-        <div className="px-4 py-3">
+        <div className={cn("py-3", LIFECYCLE_PAGE_CLASS)}>
         <Composer
           value={message}
           onChange={setMessage}
           onSubmit={() => send({ message, clientTurnId: crypto.randomUUID() })}
-          placeholder={planningComposerPlaceholder(runStatus, planReady)}
-          disabled={runActive}
+          placeholder={planningComposerPlaceholder(runStatus, planReady, isOwner)}
+          disabled={runActive || !isOwner}
           sendDisabled={composerDisabled}
         />
         </div>
+      </div>
       </div>
     </section>
   );

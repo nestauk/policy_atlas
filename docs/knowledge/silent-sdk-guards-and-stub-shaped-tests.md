@@ -42,9 +42,9 @@ When a dependency majors, grep for `getattr(`-guarded calls into it — each one
 is a place an upgrade can silently amputate behaviour. And when a review claims
 "tests cover X", check what the double is shaped to.
 
-Fixtures are doubles too: the 029 review's own project-scoping fix shipped
+Fixtures are doubles too: the 029 review's own task-scoping fix shipped
 broken for full-text chunks because its new fixture seeded only the
-uploaded/envelope snapshot linkage — `project_source_snapshot` reaches chunks
+uploaded/envelope snapshot linkage — `task_source_snapshot` reaches chunks
 by TWO arms (`source_snapshot_id` and `full_text_snapshot_id`), and a fixture
 covering one arm green-lights a join missing the other. When a table has
 alternative linkage shapes, the fixture set must span them.

@@ -6,6 +6,7 @@ from typing import Any
 
 from policy_atlas.api.contract import CheckInOption, CheckInOut, CheckInTrigger
 from policy_atlas.api.stage_vocabulary import stage_for_payload
+from policy_atlas.runtime.task_plan import canonical_steer_point
 
 
 def _render(payload: dict[str, Any]) -> str:
@@ -79,7 +80,9 @@ def _check_in(row: dict[str, Any], *, decided: bool) -> CheckInOut:
 def _task_bundle(payload: dict[str, Any]) -> dict[str, Any] | None:
     """Project only the owner-approved display fields from a durable bundle."""
     bundle = payload.get("bundle")
-    point = payload.get("steer_point")
+    # Pause records are never rewritten, so a pre-038 record still carries
+    # the old P2 steer-point id (task 038, contract A3).
+    point = canonical_steer_point(payload.get("steer_point"))
     if not isinstance(bundle, dict) or not isinstance(point, str):
         return None
     if point == "search_review":

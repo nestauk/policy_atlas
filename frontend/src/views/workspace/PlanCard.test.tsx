@@ -1,9 +1,10 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { components } from "../../api/gen/types";
 import { PlanCard } from "./PlanCard";
+import * as mutations from "../../api/mutations";
 import * as queries from "../../api/queries";
 
 type PlanDraft = components["schemas"]["PlanDraft"];
@@ -14,9 +15,18 @@ vi.mock("../../api/queries", () => ({
 }));
 
 vi.mock("../../api/mutations", () => ({
-  useStartRun: () => ({ mutate: vi.fn(), isPending: false }),
-  usePatchPlan: () => ({ mutate: vi.fn(), isPending: false }),
+  useStartRun: vi.fn(),
+  usePatchPlan: vi.fn(),
 }));
+
+beforeEach(() => {
+  vi.mocked(mutations.useStartRun).mockReturnValue(
+    { mutate: vi.fn(), isPending: false } as unknown as ReturnType<typeof mutations.useStartRun>,
+  );
+  vi.mocked(mutations.usePatchPlan).mockReturnValue(
+    { mutate: vi.fn(), isPending: false } as unknown as ReturnType<typeof mutations.usePatchPlan>,
+  );
+});
 
 const TASK_ID = "11111111-1111-1111-1111-111111111111";
 
@@ -51,7 +61,7 @@ function mockPlanQuery(data: PlanOut | undefined) {
 }
 
 function renderCard(overrides: Partial<Parameters<typeof PlanCard>[0]> = {}) {
-  return render(<PlanCard taskId={TASK_ID} runActive={false} {...overrides} />);
+  return render(<PlanCard taskId={TASK_ID} runActive={false} isOwner {...overrides} />);
 }
 
 describe("PlanCard — ready actions", () => {
@@ -82,5 +92,51 @@ describe("PlanCard — ready actions", () => {
     mockPlanQuery({ plan: basePlan(), status: "approved", version: 1 });
     const { container } = renderCard({ started: true });
     expect(container).toBeEmptyDOMElement();
+  });
+
+  it("offers Discard edits and start alongside a failed-apply notice, and it starts without a PATCH", async () => {
+    mockPlanQuery({ plan: basePlan(), status: "approved", version: 1 });
+    const startRunMutate = vi.fn();
+    vi.mocked(mutations.useStartRun).mockReturnValue(
+      { mutate: startRunMutate, isPending: false } as unknown as ReturnType<typeof mutations.useStartRun>,
+    );
+    vi.mocked(mutations.usePatchPlan).mockReturnValue(
+      {
+        mutate: vi.fn((_body, handlers) =>
+          handlers.onError(Object.assign(new Error("Geography must be a known ISO country."), { code: "internal" })),
+        ),
+        isPending: false,
+      } as unknown as ReturnType<typeof mutations.usePatchPlan>,
+    );
+    const onDiscardOverlay = vi.fn();
+    const user = userEvent.setup();
+    renderCard({ overlay: { geography: "Nowhereland" }, onDiscardOverlay });
+
+    await user.click(screen.getByRole("button", { name: "Start search" }));
+    expect(
+      screen.getByText("Those plan edits couldn't be saved: Geography must be a known ISO country."),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Discard edits and start" }));
+    expect(onDiscardOverlay).toHaveBeenCalledTimes(1);
+    expect(startRunMutate).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("PlanCard — non-owner read-only (task 033 phase 10c, rubric 37)", () => {
+  it("keeps Review the plan but hides Start search for a non-owner", () => {
+    mockPlanQuery({ plan: basePlan(), status: "approved", version: 1 });
+    renderCard({ isOwner: false });
+    expect(screen.getByRole("button", { name: "Review the plan" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Start search" })).not.toBeInTheDocument();
+  });
+
+  it("Review the plan still opens the plan document for a non-owner", async () => {
+    mockPlanQuery({ plan: basePlan(), status: "approved", version: 1 });
+    const onReviewPlan = vi.fn();
+    const user = userEvent.setup();
+    renderCard({ isOwner: false, onReviewPlan });
+    await user.click(screen.getByRole("button", { name: "Review the plan" }));
+    expect(onReviewPlan).toHaveBeenCalledTimes(1);
   });
 });

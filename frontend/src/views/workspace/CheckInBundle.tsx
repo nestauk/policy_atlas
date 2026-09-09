@@ -79,7 +79,7 @@ function ListBlock({
 }) {
   return (
     <div className="mt-3 border border-line bg-paper-2 px-3 py-2.5">
-      <p className="text-caption font-bold uppercase tracking-[0.06em] text-grey">{heading}</p>
+      <p className="text-meta font-bold uppercase tracking-[0.06em] text-grey">{heading}</p>
       {children}
     </div>
   );

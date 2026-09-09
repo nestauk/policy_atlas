@@ -70,7 +70,9 @@ def test_v2_generate_queries_uses_split_prompt_versions_and_aggregates_usage(
     openalex_counter = 0
     overton_counter = 0
 
-    def fake_call_wire(self: V2SearchGenerationBackend, **kwargs: Any) -> tuple[V2SingleQueryWire, TokenUsage]:
+    def fake_call_wire(
+        self: V2SearchGenerationBackend, **kwargs: Any
+    ) -> tuple[V2SingleQueryWire, TokenUsage]:
         nonlocal openalex_counter, overton_counter
         calls.append(kwargs)
         if kwargs["prompt_version"] == SEARCH_QUERIES_V2_OPENALEX_PROMPT_VERSION:
@@ -109,7 +111,9 @@ def test_v2_reformulate_deduplicates_provider_outputs(
 ) -> None:
     backend: V2SearchGenerationBackend = object.__new__(V2SearchGenerationBackend)
 
-    def fake_call_wire(self: V2SearchGenerationBackend, **kwargs: Any) -> tuple[V2SingleQueryWire, None]:
+    def fake_call_wire(
+        self: V2SearchGenerationBackend, **kwargs: Any
+    ) -> tuple[V2SingleQueryWire, None]:
         if kwargs["prompt_version"] == SEARCH_QUERIES_V2_OPENALEX_PROMPT_VERSION:
             return V2SingleQueryWire(query="same openalex query"), None
         if kwargs["prompt_version"] == SEARCH_QUERIES_V2_OVERTON_PROMPT_VERSION:

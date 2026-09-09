@@ -1,7 +1,7 @@
-"""EB capability-runner for executing approved orchestration plans.
+"""EB capability-runner for executing approved task plans.
 
 The runner is the deterministic sub-agent boundary for task 017: it walks a
-composed orchestration plan, owns per-component commits, applies component
+composed task plan, owns per-component commits, applies component
 directive deltas to the scope context, and delegates one component at a time to
 the existing harness.
 """
@@ -27,8 +27,8 @@ from policy_atlas.core.schema import (
     capability_run,
     event_log,
     evidence_scope,
-    task_plan,
     runs,
+    task_plan,
 )
 from policy_atlas.core.usage import UsageAccumulator
 from policy_atlas.evidence_search.assess.classification_backend import ClassificationBackend
@@ -68,17 +68,6 @@ from policy_atlas.evidence_search.synthesis.synthesise import (
     write_summaries_after_commit,
 )
 from policy_atlas.runtime import steering_events
-from policy_atlas.runtime.continuation_state import ContinuationState, ResumeDecision
-from policy_atlas.runtime.conversation_lifecycle import close_planning_conversation
-from policy_atlas.runtime.harness import run_harness
-from policy_atlas.runtime.task_plan import (
-    SPINE,
-    ComponentStep,
-    ComposedChain,
-    TaskPlan,
-    compose,
-    registry_component_for,
-)
 from policy_atlas.runtime.agent_backend import (
     AgentBackend,
     build_watch_discretion_hook,
@@ -86,6 +75,9 @@ from policy_atlas.runtime.agent_backend import (
     run_watch_decision,
 )
 from policy_atlas.runtime.agent_prompt import WATCH_AUTHORING_PROMPT_VERSION
+from policy_atlas.runtime.continuation_state import ContinuationState, ResumeDecision
+from policy_atlas.runtime.conversation_lifecycle import close_planning_conversation
+from policy_atlas.runtime.harness import run_harness
 from policy_atlas.runtime.progress import ProgressEmitter
 from policy_atlas.runtime.run_spec import Plan, compile
 from policy_atlas.runtime.steering import (
@@ -140,6 +132,14 @@ from policy_atlas.runtime.steering_triggers import (
     floor_triggers,
     grouping_flag_triggers,
     p1_coverage_triggers,
+)
+from policy_atlas.runtime.task_plan import (
+    SPINE,
+    ComponentStep,
+    ComposedChain,
+    TaskPlan,
+    compose,
+    registry_component_for,
 )
 
 log = structlog.get_logger()
@@ -287,7 +287,7 @@ class CheckInIO(Protocol):
         """Report a component boundary outcome.
 
         Args:
-            component: Orchestration step name.
+            component: Plan step name.
             payload: Deterministic outcome payload containing status and
                 headline counts.
         """
@@ -311,7 +311,7 @@ class NullIO:
         """Ignore a component boundary outcome.
 
         Args:
-            component: Orchestration step name.
+            component: Plan step name.
             payload: Deterministic outcome payload.
         """
         del component, payload
@@ -332,10 +332,10 @@ class NullIO:
 
 @dataclass
 class RunStepOutcome:
-    """Outcome for one composed orchestration step.
+    """Outcome for one composed plan step.
 
     Args:
-        component: Orchestration step name.
+        component: Plan step name.
         run_id: Final attempted run id, or ``None`` for skipped steps.
         status: Final step status.
         wall_clock_s: Final attempt wall-clock seconds, or ``None`` for skips.
@@ -357,7 +357,7 @@ class RunStepOutcome:
 
 @dataclass
 class RunPlanOutcome:
-    """End-of-run outcome for an orchestration plan walk.
+    """End-of-run outcome for an task plan walk.
 
     Args:
         status: Overall plan-run status.
@@ -467,7 +467,7 @@ class _DiscretionContext:
         component: The component the boundary concerns.
         triggers: The fired floor triggers at this boundary (never suppressible —
             the watch can add to the floor, never remove from it).
-        plan: The current orchestration plan.
+        plan: The current task plan.
         bundle: The pre-fetched decision bundle (P2/P3/P4), or ``None`` (Task 14 —
             the watch decides over the same option-complete state a pause shows).
         header: Orienting header — refined question, plan summary, mode, standing
@@ -545,13 +545,13 @@ def leg_directive(
     """Return the directive delta for the next component.
 
     This is the named directive-authoring seam for a future EB-expert agent:
-    given the approved orchestration plan, the next component step and the
+    given the approved task plan, the next component step and the
     successful upstream state, that agent can author the component's context
     delta. V1 is intentionally deterministic and returns the composer-emitted
     directive unchanged.
 
     Args:
-        plan: Approved orchestration plan.
+        plan: Approved task plan.
         step: Composed component step.
         upstream_state: Successful predecessor state accumulated by the runner.
 
@@ -608,17 +608,17 @@ def _run_plan_impl(
     resume_decision: ResumeDecision | None = None,
     park_context: dict[str, Any] | None = None,
 ) -> RunPlanOutcome:
-    """Execute an approved orchestration plan with per-component commits.
+    """Execute an approved task plan with per-component commits.
 
     Args:
         engine: SQLAlchemy engine. The runner owns short transactions and
             commits component work as it completes.
         task_id: Task owning the scope and runs.
         evidence_scope_id: Evidence scope all components execute over.
-        plan: Approved orchestration plan to compose and walk.
-        plan_id: Persisted orchestration-plan id carried into compile events.
-        plan_version: Persisted orchestration-plan version carried into events.
-        plan_row_id: Current orchestration-plan row id for steering amendments
+        plan: Approved task plan to compose and walk.
+        plan_id: Persisted task-plan id carried into compile events.
+        plan_version: Persisted task-plan version carried into events.
+        plan_row_id: Current task-plan row id for steering amendments
             and abort status flips. ``None`` rejects adjustment persistence and
             makes abort a run-local stop only.
         backends: Optional backend seam bundle. ``None`` uses harness defaults.
@@ -1288,7 +1288,7 @@ def run_plan(
     resume_from: ContinuationState | None = None,
     resume_decision: ResumeDecision | None = None,
 ) -> RunPlanOutcome:
-    """Execute or resume an approved orchestration-plan walk.
+    """Execute or resume an approved task-plan walk.
 
     A park-disposition IO raises :class:`WalkParked`. This single boundary
     converts that control flow into the durable paused state and snapshot; the
@@ -4627,7 +4627,10 @@ def _watch_digest(
             {
                 "boundary": entry["payload"].get("boundary"),
                 "component": entry["payload"].get("component"),
-                "decided_by": entry["payload"].get("decided_by"),
+                # Pre-038 rows carry the old actor word (task 038, A5).
+                "decided_by": steering_events.canonical_actor(
+                    entry["payload"].get("decided_by")
+                ),
                 "response": entry["payload"].get("response"),
             }
             for entry in events.read(
@@ -4943,7 +4946,7 @@ def _search_round_continues(
         engine: Engine for the short evaluation reads and the stop write.
         task_id: Owning task.
         evidence_scope_id: Scope being searched.
-        plan: Current orchestration plan; ``search_effort`` picks the budget.
+        plan: Current task plan; ``search_effort`` picks the budget.
         successful_runs: Per-component last successful run ids.
 
     Returns:

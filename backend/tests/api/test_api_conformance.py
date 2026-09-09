@@ -28,8 +28,41 @@ from policy_atlas.core.schema import capability_run, evidence_scope
 from tests.api.resource_support import api_client, create_task
 
 # Routes that intentionally sit outside the bearer-token boundary: process
-# liveness/readiness probes, checked before any orchestration or auth I/O.
-_UNAUTHENTICATED_ALLOWLIST = frozenset({"/healthz", "/readyz"})
+# liveness/readiness probes, checked before any agent or auth I/O.
+# `/api/v1/waitlist` is the splash-page Request-access intake — the first
+# intentional public write. Health probes sit outside `/api/v1`.
+_UNAUTHENTICATED_ALLOWLIST = frozenset({"/healthz", "/readyz", "/api/v1/waitlist"})
+
+# These GET routes are conditionally public: absent Authorization gets an
+# indistinguishable 404 unless the requested active task has is_public.
+_CONDITIONALLY_PUBLIC_GETS = frozenset(
+    {
+        "/api/v1/tasks/{task_id}",
+        "/api/v1/tasks/{task_id}/funnel",
+        "/api/v1/tasks/{task_id}/landscape",
+        "/api/v1/tasks/{task_id}/groups",
+        "/api/v1/tasks/{task_id}/evidence",
+        "/api/v1/tasks/{task_id}/findings",
+        "/api/v1/tasks/{task_id}/sources/{source_id}",
+        "/api/v1/tasks/{task_id}/artefact",
+        "/api/v1/tasks/{task_id}/coverage",
+        "/api/v1/tasks/{task_id}/citations/{citation_key}/context",
+        "/api/v1/tasks/{task_id}/chunks/{chunk_id}/context",
+    }
+)
+
+# The public routes that must 200 on an empty public task. Derived by
+# subtracting the detail routes that legitimately 404 while their derived
+# data is absent, so a route added to the surface lands here by default.
+_PUBLIC_STRUCTURAL_GETS = _CONDITIONALLY_PUBLIC_GETS - frozenset(
+    {
+        "/api/v1/tasks/{task_id}/sources/{source_id}",
+        "/api/v1/tasks/{task_id}/artefact",
+        "/api/v1/tasks/{task_id}/coverage",
+        "/api/v1/tasks/{task_id}/citations/{citation_key}/context",
+        "/api/v1/tasks/{task_id}/chunks/{chunk_id}/context",
+    }
+)
 
 # --- Pagination conformance --------------------------------------------------
 
@@ -124,6 +157,8 @@ def _api_v1_route_cases() -> list[tuple[str, str]]:
             if not route.path.startswith("/api/v1") or route.path in _UNAUTHENTICATED_ALLOWLIST:
                 continue
             for method in sorted((route.methods or set()) - {"HEAD", "OPTIONS"}):
+                if method == "GET" and route.path in _CONDITIONALLY_PUBLIC_GETS:
+                    continue
                 cases.append((method, route.path))
         return cases
 
@@ -149,11 +184,21 @@ def _fill_non_task_path_params(path_template: str) -> str:
 
 _UNAUTHENTICATED_CASES = _api_v1_route_cases()
 
+
+def test_unauthenticated_sweep_keeps_non_public_routes() -> None:
+    """The History endpoint remains in the always-401 conformance class."""
+    assert ("GET", "/api/v1/tasks/{task_id}/decisions") in _UNAUTHENTICATED_CASES
+
+# The signed-in cross-owner sweep must cover the conditionally-public GETs
+# too: against a *private* task, a signed-in outsider still gets the
+# byte-identical 404 (task 033's tenancy pin — the 037 public leg must not
+# have weakened it). `_UNAUTHENTICATED_CASES` excludes them by design, so
+# they are added back here explicitly.
 _TASK_SCOPED_GET_CASES = [
     (method, path)
     for method, path in _UNAUTHENTICATED_CASES
     if method == "GET" and "{task_id}" in path
-]
+] + [("GET", path) for path in sorted(_CONDITIONALLY_PUBLIC_GETS)]
 
 
 @pytest.mark.parametrize(
@@ -181,6 +226,33 @@ def test_every_api_v1_route_is_unauthenticated_without_a_token(
         assert set(body) == {"error"}
         assert set(body["error"]) == {"code", "message"}
         assert body["error"]["code"] == "unauthenticated"
+
+
+@pytest.mark.parametrize("path_template", sorted(_CONDITIONALLY_PUBLIC_GETS))
+def test_conditionally_public_gets_hide_private_and_unknown_tasks_and_open_public_ones(
+    tmp_path: Path, path_template: str
+) -> None:
+    """Public GETs are tokenless only for active shared tasks, never 401."""
+    templated = _fill_non_task_path_params(path_template)
+    if path_template.endswith("/chunks/{chunk_id}/context"):
+        templated = f"{templated}?quote=excerpt"
+    with api_client(tmp_path) as (client, owner, _other):
+        task_id = create_task(client, owner)
+        private = client.get(templated.format(task_id=task_id))
+        unknown = client.get(templated.format(task_id=uuid.uuid4()))
+
+        assert private.status_code == unknown.status_code == 404, path_template
+        assert private.content == unknown.content, path_template
+        assert private.json()["error"]["code"] == "not_found"
+
+        shared = client.patch(
+            f"/api/v1/tasks/{task_id}", headers=owner, json={"is_public": True}
+        )
+        assert shared.status_code == 200, shared.text
+        response = client.get(templated.format(task_id=task_id))
+        assert response.status_code in {200, 404}, (path_template, response.text)
+        if path_template in _PUBLIC_STRUCTURAL_GETS:
+            assert response.status_code == 200, (path_template, response.text)
 
 
 @pytest.mark.parametrize(

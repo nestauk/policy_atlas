@@ -14,7 +14,9 @@ from sqlalchemy.engine import Connection
 from policy_atlas.api.contract import (
     EVIDENCE_STATUS_INCLUDED,
     ArtefactOut,
+    AuthorshipOut,
     BlockOut,
+    CaseStudyCardOut,
     ChunkContextOut,
     CitationOut,
     CitedInOut,
@@ -35,6 +37,7 @@ from policy_atlas.api.contract import (
     IofFindingOut,
     IofStatisticsOut,
     LandscapeOut,
+    MostRelevantNoteOut,
     Page,
     PageMeta,
     ReferenceOut,
@@ -46,6 +49,7 @@ from policy_atlas.api.contract import (
     ThemeRefOut,
     ThemeSourceOut,
 )
+from policy_atlas.api.lifecycle import LIFECYCLE_EVENT_KINDS, both_generations
 from policy_atlas.core.schema import (
     GROUPING_FACETS,
     addressable_unit,
@@ -61,8 +65,6 @@ from policy_atlas.core.schema import (
     grouping_result,
     implementation_context_finding,
     intervention_outcome_finding,
-    task_source_snapshot,
-    tss_owns_snapshot,
     search_coverage_record,
     selection_result,
     source_appraisal_result,
@@ -71,10 +73,13 @@ from policy_atlas.core.schema import (
     source_snapshot,
     source_tag,
     synthesis_result,
+    task_source_snapshot,
+    tss_owns_snapshot,
 )
 from policy_atlas.evidence_search.assess.appraise import SCORE_LABELS
 from policy_atlas.evidence_search.assess.screen import effective_screen_rows
 from policy_atlas.evidence_search.extract.quote_verify import build_basis, locate_unique_span
+from policy_atlas.runtime.steering_events import canonical_actor
 from policy_atlas.runtime.steering_history import steering_history
 
 
@@ -87,6 +92,17 @@ def _title(metadata: Mapping[str, Any], locator: str) -> str:
     return _metadata_text(metadata, "title") or locator
 
 
+def _abstract_fields(
+    metadata: Mapping[str, Any],
+) -> tuple[str | None, Literal["provider", "llm_description"] | None]:
+    """The document's description and its provenance label, dossier-identical."""
+    abstract = _metadata_text(metadata, "abstract")
+    if abstract is None:
+        return None, None
+    raw_source = _metadata_text(metadata, "abstract_source")
+    return abstract, "llm_description" if raw_source == "llm_description" else "provider"
+
+
 def _year(metadata: Mapping[str, Any]) -> int | None:
     value = metadata.get("publication_year", metadata.get("year"))
     return value if isinstance(value, int) and not isinstance(value, bool) else None
@@ -94,6 +110,56 @@ def _year(metadata: Mapping[str, Any]) -> int | None:
 
 def _venue(metadata: Mapping[str, Any]) -> str | None:
     return _metadata_text(metadata, "venue") or _metadata_text(metadata, "journal")
+
+
+def _institution_names(raw: Any) -> list[str]:
+    """Return string institution names; a non-list shape (e.g. a bare string,
+    which would iterate per character) is malformed and yields none."""
+    if not isinstance(raw, list):
+        return []
+    return [i for i in raw if isinstance(i, str) and i]
+
+
+def _authorships(metadata: Mapping[str, Any]) -> list[AuthorshipOut]:
+    """Return display authorships for a source, first non-empty rung wins.
+
+    Args:
+        metadata: Envelope (or chunk-owning envelope) metadata.
+
+    Returns:
+        Named authors with their institutions (OpenAlex-shaped provider
+        data), else bare author names (a plainer provider shape), else a
+        single Overton corporate author (the issuing organisation), else
+        an empty list. Malformed provider shapes are skipped, never raised.
+    """
+    provider = metadata.get("provider_fields")
+    provider = provider if isinstance(provider, Mapping) else {}
+    raw_authorships = provider.get("authorships")
+    if isinstance(raw_authorships, list):
+        named = [
+            AuthorshipOut(
+                name=entry["author_name"],
+                institutions=_institution_names(entry.get("institutions")),
+            )
+            for entry in raw_authorships
+            if isinstance(entry, Mapping)
+            and isinstance(entry.get("author_name"), str)
+            and entry.get("author_name")
+        ]
+        if named:
+            return named
+    raw_authors = provider.get("authors")
+    names: list[str] = []
+    if isinstance(raw_authors, str) and raw_authors:
+        names = [raw_authors]
+    elif isinstance(raw_authors, list):
+        names = [a for a in raw_authors if isinstance(a, str) and a]
+    if names:
+        return [AuthorshipOut(name=name) for name in names]
+    publisher_org = _metadata_text(metadata, "publisher_org")
+    if _metadata_text(metadata, "backend") == "overton" and publisher_org:
+        return [AuthorshipOut(name=publisher_org)]
+    return []
 
 
 def _provider_landing_page(metadata: Mapping[str, Any]) -> str | None:
@@ -547,7 +613,13 @@ def _source_reason_maps(
     for row in rows:
         payload = row.payload if isinstance(row.payload, Mapping) else {}
         try:
-            tss_id = uuid.UUID(str(payload.get("task_source_snapshot_id")))
+            tss_id = uuid.UUID(
+                str(
+                    payload.get("task_source_snapshot_id")
+                    # Pre-038 rows carry the old key; `event_log` is never rewritten.
+                    or payload.get("project_source_snapshot_id")
+                )
+            )
         except (TypeError, ValueError):
             continue
         if row.event_type == "source.classified":
@@ -737,6 +809,7 @@ def evidence_page(
             or (year_to is not None and year_value > year_to)
         ):
             continue
+        abstract, abstract_source = _abstract_fields(metadata)
         sortable_items.append(
             (
                 EvidenceItemOut(
@@ -763,6 +836,8 @@ def evidence_page(
                         row.task_source_snapshot_id
                     ),
                     read_in_full=row.full_text_status == "ingested",
+                    abstract=abstract,
+                    abstract_source=abstract_source,
                 ),
                 appraisal.quality_score if appraisal is not None else None,
             )
@@ -996,6 +1071,7 @@ def findings_page(
             "relevance": cast(Any, relevance.get(str(row["finding_id"]))),
             "quote": _grounding_value(row["grounding"], "quote"),
             "quote_verified": _grounding_value(row["grounding"], "quote_verified"),
+            "chunk_id": _grounding_value(row["grounding"], "chunk_id"),
             "groups": groups.get(row["finding_id"], {}),
         }
         if profile == "iof":
@@ -1068,6 +1144,11 @@ def _grounding_value(grounding: Any, key: str) -> Any | None:
     value = grounding[0].get(key)
     if key == "quote_verified":
         return value if isinstance(value, bool) else None
+    if key == "chunk_id":
+        try:
+            return uuid.UUID(str(value)) if value is not None else None
+        except (TypeError, ValueError):
+            return None
     return value if isinstance(value, str) else None
 
 
@@ -1099,19 +1180,20 @@ def _finding_groups(conn: Connection, task_id: uuid.UUID) -> dict[uuid.UUID, dic
     return result
 
 
+# The allowlisted audit events. The four lifecycle kinds appear under BOTH
+# generations: `event_log` is append-only, so rows written before task 038 say
+# `project.renamed` / `project.archived` and must still reach the read model.
 _EVENT_KINDS = {
     "component.completed",
     "component.failed",
     "component.skipped",
     "search.executed",
-    "task.renamed",
-    "task.archived",
     "run.opened",
     "run.parked",
     "run.finished",
     "run.interrupted",
     "plan.approved",
-}
+} | both_generations(*LIFECYCLE_EVENT_KINDS)
 
 
 def _event_decision(row: Any) -> DecisionOut:
@@ -1122,13 +1204,17 @@ def _event_decision(row: Any) -> DecisionOut:
         "component.failed": "An evidence-search step failed.",
         "component.skipped": "Skipped an evidence-search step.",
         "search.executed": "Executed a search query.",
-        "task.renamed": "Renamed the task.",
-        "task.archived": "Archived the task.",
         "run.opened": "Opened an evidence-search run.",
         "run.parked": "Parked the run for a check-in.",
         "run.finished": "Finished the run.",
         "run.interrupted": "Interrupted the run.",
         "plan.approved": "Approved the plan.",
+        # Both generations read as the same sentence — the words on screen are
+        # today's, whichever word the stored row carries.
+        **dict.fromkeys(both_generations("renamed"), "Renamed the task."),
+        **dict.fromkeys(both_generations("archived"), "Archived the task."),
+        **dict.fromkeys(both_generations("shared_publicly"), "Made the task public."),
+        **dict.fromkeys(both_generations("unshared"), "Made the task private."),
     }[row.event_type]
     return DecisionOut(
         sequence=int(row.sequence),
@@ -1159,14 +1245,16 @@ def decisions_page(
             if event["event_type"] != "steering.decision":
                 continue
             payload = event["payload"] if isinstance(event["payload"], Mapping) else {}
+            # Pre-038 rows carry the old actor word; the set would drop them.
+            decided_by = canonical_actor(payload.get("decided_by"))
             decision_events.append(
                 DecisionOut(
                     sequence=int(event["sequence"]),
                     occurred_at=event["occurred_at"],
                     kind="steering.decision",
                     summary="Recorded a steering decision.",
-                    decided_by=cast(Any, payload.get("decided_by"))
-                    if payload.get("decided_by") in {"user", "agent", "standing_default"}
+                    decided_by=cast(Any, decided_by)
+                    if decided_by in {"user", "agent", "standing_default"}
                     else None,
                     detail=dict(payload),
                 )
@@ -1334,10 +1422,14 @@ def artefact_out(conn: Connection, task_id: uuid.UUID) -> ArtefactOut | None:
     refs: dict[uuid.UUID, int] = {}
     reference_order: list[uuid.UUID] = []
     claims_by_block: dict[uuid.UUID, list[ClaimOut]] = {block_id: [] for block_id in ids}
+    claims_alias_by_block: dict[uuid.UUID, dict[str, ClaimOut]] = {
+        block_id: {} for block_id in ids
+    }
     for row in annotations:
         locator = row.locator if isinstance(row.locator, Mapping) else {}
         start, end = locator.get("start"), locator.get("end")
         span = (start, end) if isinstance(start, int) and isinstance(end, int) else None
+        row_payload = row.payload if isinstance(row.payload, Mapping) else {}
         claim_citations: list[CitationOut] = []
         for cited in citations_by_annotation.get(row.annotation_id, []):
             snapshot_id = cited.source_snapshot_id
@@ -1350,7 +1442,7 @@ def artefact_out(conn: Connection, task_id: uuid.UUID) -> ArtefactOut | None:
                 reference_order.append(doc_key)
             source_meta, locator_text = meta.get(_envelope_id(snapshot_id), ({}, "Unknown source"))
             score_row = appraisal.get(tss_id) if tss_id is not None else None
-            payload = row.payload if isinstance(row.payload, Mapping) else {}
+            payload = row_payload
             claim_citations.append(
                 CitationOut(
                     citation_id=cited.citation_id,
@@ -1381,8 +1473,7 @@ def artefact_out(conn: Connection, task_id: uuid.UUID) -> ArtefactOut | None:
             in {"citation", "gap", "reasoning", "pattern", "theme", "unspanned_assertion"}
             else "reasoning"
         )
-        claims_by_block[row.block_id].append(
-            ClaimOut(
+        claim_out = ClaimOut(
                 claim_id=row.unit_id,
                 claim_type=cast(Any, claim_type),
                 text=row.content,
@@ -1392,13 +1483,16 @@ def artefact_out(conn: Connection, task_id: uuid.UUID) -> ArtefactOut | None:
                 gap=_gap_out(row.payload),
                 theme=_theme_out(row.payload, characterisation_themes, grouping_themes),
             )
-        )
+        claims_by_block[row.block_id].append(claim_out)
+        synthesis_claim_id = row_payload.get("claim_id")
+        if isinstance(synthesis_claim_id, str):
+            claims_alias_by_block[row.block_id][synthesis_claim_id] = claim_out
     section_entries: dict[tuple[str, str, str | None, str | None], list[uuid.UUID]] = {}
     for spec, block_id in parsed_specs:
         role: str = cast(
             str,
             spec.get("role")
-            if spec.get("role") in {"key_findings", "standard", "conclusions"}
+            if spec.get("role") in {"key_findings", "case_studies", "standard", "conclusions"}
             else "standard",
         )
         title = cast(str, spec.get("title") or "")
@@ -1411,9 +1505,74 @@ def artefact_out(conn: Connection, task_id: uuid.UUID) -> ArtefactOut | None:
             else None
         )
         section_entries.setdefault((title, role, focus, nav_label), []).append(block_id)
+    # Build a lookup from block_id → rollup spec for card projection.
+    spec_by_block_id: dict[uuid.UUID, Mapping[str, Any]] = {}
+    for spec_item, bid in parsed_specs:
+        spec_by_block_id[bid] = spec_item
+
     sections: list[SectionOut] = []
     for (title, role, focus, nav_label), section_block_ids in section_entries.items():
         single_block = block_rows.get(section_block_ids[0]) if len(section_block_ids) == 1 else None
+        # Task case-study cards from the block rollup when role is case_studies.
+        cards: list[CaseStudyCardOut] = []
+        if role == "case_studies":
+            for bid in section_block_ids:
+                rollup_spec = spec_by_block_id.get(bid, {})
+                raw_cards = rollup_spec.get("cards", [])
+                if isinstance(raw_cards, list):
+                    block_claims = claims_by_block.get(bid, [])
+                    block_claim_by_id = {str(c.claim_id): c for c in block_claims}
+                    block_claim_by_id.update(claims_alias_by_block.get(bid, {}))
+                    claim_id_map = {str(c.claim_id): c.claim_id for c in block_claims}
+                    for alias_id, claim in claims_alias_by_block.get(bid, {}).items():
+                        claim_id_map.setdefault(alias_id, claim.claim_id)
+                    for raw_card in raw_cards:
+                        if not isinstance(raw_card, dict):
+                            continue
+                        card_id_str = raw_card.get("card_id")
+                        try:
+                            card_uuid = (
+                                uuid.UUID(card_id_str)
+                                if isinstance(card_id_str, str)
+                                else uuid.uuid4()
+                            )
+                        except ValueError:
+                            card_uuid = uuid.uuid4()
+                        # Task per-card claims from stored claim_ids/spans
+                        card_claims = _task_card_claims(
+                            raw_card, block_claim_by_id,
+                        )
+                        result_claim_str = raw_card.get("result_claim_id")
+                        result_claim_uuid = (
+                            claim_id_map.get(result_claim_str)
+                            if isinstance(result_claim_str, str)
+                            else None
+                        )
+                        if result_claim_uuid not in {claim.claim_id for claim in card_claims}:
+                            result_ordinal = raw_card.get("result_ordinal")
+                            if (
+                                isinstance(result_ordinal, int)
+                                and not isinstance(result_ordinal, bool)
+                                and 0 <= result_ordinal < len(card_claims)
+                            ):
+                                result_claim_uuid = card_claims[result_ordinal].claim_id
+                            else:
+                                result_claim_uuid = None
+                        strength, design, since_year = _card_evidence_fields(
+                            raw_card, card_claims,
+                        )
+                        cards.append(
+                            CaseStudyCardOut(
+                                card_id=card_uuid,
+                                title=raw_card.get("title", ""),
+                                prose=raw_card.get("prose", ""),
+                                claims=card_claims,
+                                result_claim_id=result_claim_uuid,
+                                strength=strength,
+                                design=design,
+                                since_year=since_year,
+                            )
+                        )
         sections.append(
             SectionOut(
                 title=title,
@@ -1428,6 +1587,7 @@ def artefact_out(conn: Connection, task_id: uuid.UUID) -> ArtefactOut | None:
                     )
                     for block_id in section_block_ids
                 ],
+                cards=cards,
                 summary=single_block.summary if single_block is not None else None,
                 summary_status=(
                     cast(Any, single_block.summary_status) if single_block is not None else None
@@ -1449,6 +1609,7 @@ def artefact_out(conn: Connection, task_id: uuid.UUID) -> ArtefactOut | None:
                 # A missed metadata lookup has only the display placeholder —
                 # never let that fall through _url's locator rung as a "URL".
                 url=_url(ref_meta, ref_locator) if ref_entry is not None else None,
+                authorships=_authorships(ref_meta),
             )
         )
     study_types = {
@@ -1477,6 +1638,31 @@ def artefact_out(conn: Connection, task_id: uuid.UUID) -> ArtefactOut | None:
     )
     reference_years = [reference.year for reference in refs_out if reference.year is not None]
     year_range = (min(reference_years), max(reference_years)) if reference_years else None
+    # Task most_relevant_notes from counts JSONB (task 034 S5).
+    raw_counts = synthesis.get("counts")
+    raw_mrs_notes = (
+        raw_counts.get("most_relevant_notes", [])
+        if isinstance(raw_counts, Mapping)
+        else []
+    )
+    mrs_notes_out = [
+        MostRelevantNoteOut(source_id=str(note["source_id"]), note=str(note["note"]))
+        for note in (raw_mrs_notes if isinstance(raw_mrs_notes, list) else [])
+        if isinstance(note, dict)
+        and isinstance(note.get("source_id"), str)
+        and isinstance(note.get("note"), str)
+    ]
+    raw_full_report_intro = (
+        raw_counts.get("full_report_intro")
+        if isinstance(raw_counts, Mapping)
+        else None
+    )
+    full_report_intro_out = (
+        raw_full_report_intro.strip()
+        if isinstance(raw_full_report_intro, str) and raw_full_report_intro.strip() != ""
+        else None
+    )
+
     return ArtefactOut(
         artefact_id=artefact_row["artefact_id"],
         title=artefact_row["title"],
@@ -1492,11 +1678,128 @@ def artefact_out(conn: Connection, task_id: uuid.UUID) -> ArtefactOut | None:
         ),
         sections=sections,
         references=refs_out,
+        most_relevant_notes=mrs_notes_out,
+        full_report_intro=full_report_intro_out,
     )
 
 
+def _card_evidence_fields(
+    raw_card: dict[str, Any],
+    card_claims: list[ClaimOut],
+) -> tuple[str | None, str | None, int | None]:
+    """Strength, design and year for a case-study card.
+
+    Rollup JSONB may omit metadata when finding-level lookup missed; fill
+    from the card claims' citation rows when present.
+
+    Args:
+        raw_card: One card dict from the rollup JSONB.
+        card_claims: Projected claims for the card.
+
+    Returns:
+        Tuple of (strength, design, since_year).
+    """
+    strength = raw_card.get("strength") if isinstance(raw_card.get("strength"), str) else None
+    design = raw_card.get("design") if isinstance(raw_card.get("design"), str) else None
+    since_year = raw_card.get("since_year") if isinstance(raw_card.get("since_year"), int) else None
+    for claim in card_claims:
+        for cite in claim.citations:
+            strength = strength or cite.appraisal_label
+            design = design or cite.evidence_type
+    return strength, design, since_year
+
+
+def _task_card_claims(
+    raw_card: dict[str, Any],
+    block_claim_by_id: dict[str, ClaimOut],
+) -> list[ClaimOut]:
+    """Project per-card claims with spans re-anchored into card prose.
+
+    Uses stored ``claim_ids`` and ``claim_spans`` from the rollup when
+    available; falls back to substring matching for rollups written before
+    per-card claim storage.
+
+    Args:
+        raw_card: One card dict from the rollup JSONB.
+        block_claim_by_id: Block-level ClaimOut objects keyed by claim_id str.
+
+    Returns:
+        ClaimOut list with spans relative to card.prose.
+    """
+    card_prose = raw_card.get("prose", "")
+    stored_ids = raw_card.get("claim_ids")
+    stored_spans = raw_card.get("claim_spans")
+
+    if isinstance(stored_ids, list) and stored_ids:
+        span_by_id: dict[str, tuple[int, int] | None] = {}
+        null_span_ids: set[str] = set()
+        if isinstance(stored_spans, list):
+            for entry in stored_spans:
+                if isinstance(entry, dict):
+                    cid = entry.get("claim_id")
+                    sp = entry.get("span")
+                    if isinstance(cid, str) and isinstance(sp, (list, tuple)) and len(sp) == 2:
+                        span_by_id[cid] = (int(sp[0]), int(sp[1]))
+                    elif isinstance(cid, str) and sp is None:
+                        null_span_ids.add(cid)
+        result: list[ClaimOut] = []
+        trusted: list[bool] = []
+        for cid in stored_ids:
+            if not isinstance(cid, str):
+                continue
+            block_claim = block_claim_by_id.get(cid)
+            if block_claim is None:
+                continue
+            span = span_by_id.get(cid)
+            result.append(ClaimOut(
+                claim_id=block_claim.claim_id,
+                claim_type=block_claim.claim_type,
+                text=block_claim.text,
+                span=span,
+                citations=block_claim.citations,
+                weakly_grounded=block_claim.weakly_grounded,
+                gap=block_claim.gap,
+                theme=block_claim.theme,
+            ))
+            # A stored entry with an explicitly-null span is the write path's
+            # own record that this claim's text bound into the card title, not
+            # the prose (synthesise.py stores span=None on a prose miss) —
+            # trust it rather than treating the miss as collision evidence.
+            trusted.append(block_claim.text in card_prose or cid in null_span_ids)
+        # Old case-study rollups minted aliases afresh for each card.  The
+        # block alias map then resolves every colliding id to one claim, which
+        # may not belong to this card.  Only trust stored aliases when their
+        # resolved text is actually present in the card prose (or the write
+        # path recorded the miss deliberately). An empty resolution means the
+        # aliases are unusable — fall through to prose matching, don't return
+        # an empty card.
+        if result and all(trusted):
+            return result
+
+    # Fallback: match block claims whose text is a substring of card prose.
+    # The lookup holds each claim under both its UUID and its synthesis alias,
+    # so dedupe by identity before matching.
+    unique_claims = {claim.claim_id: claim for claim in block_claim_by_id.values()}
+    result = []
+    for claim in unique_claims.values():
+        pos = card_prose.find(claim.text)
+        if pos >= 0:
+            result.append(ClaimOut(
+                claim_id=claim.claim_id,
+                claim_type=claim.claim_type,
+                text=claim.text,
+                span=(pos, pos + len(claim.text)),
+                citations=claim.citations,
+                weakly_grounded=claim.weakly_grounded,
+                gap=claim.gap,
+                theme=claim.theme,
+            ))
+    result.sort(key=lambda claim: claim.span[0] if claim.span is not None else -1)
+    return result
+
+
 def _weakly_grounded(payload: Any) -> bool | None:
-    """Task stored grounding warnings without inventing a verification result."""
+    """Map stored grounding warnings without inventing a verification result."""
     if not isinstance(payload, Mapping):
         return None
     for key in ("weakly_grounded", "quote_unverified"):
@@ -1652,7 +1955,7 @@ def _uuid_members(values: Any) -> list[uuid.UUID]:
 def _resolved_theme_sources(
     member_ids: Any, source_refs: Mapping[uuid.UUID, ThemeSourceOut]
 ) -> list[ThemeSourceOut] | None:
-    """Task resolvable member sources once, preserving stored member order."""
+    """Map resolvable member sources once, preserving stored member order."""
     if not isinstance(member_ids, list):
         return None
     result: list[ThemeSourceOut] = []
@@ -2062,8 +2365,7 @@ def source_dossier_out(
     ).get(source_id)
     provider_value = metadata.get("provider_fields")
     provider: Mapping[str, Any] = provider_value if isinstance(provider_value, Mapping) else {}
-    abstract = _metadata_text(metadata, "abstract")
-    raw_abstract_source = _metadata_text(metadata, "abstract_source")
+    abstract, abstract_source = _abstract_fields(metadata)
     tags = [
         SourceTagOut(tag=tag_row.tag, tag_type=tag_row.tag_type, asserted_by=tag_row.asserted_by)
         for tag_row in conn.execute(
@@ -2097,11 +2399,7 @@ def source_dossier_out(
         classification_reason=classification_reasons.get(source_id),
         read_in_full=row["full_text_status"] == "ingested",
         abstract=abstract,
-        abstract_source="llm_description"
-        if raw_abstract_source == "llm_description"
-        else "provider"
-        if abstract is not None
-        else None,
+        abstract_source=abstract_source,
         publisher=_metadata_text(metadata, "publisher_org"),
         record_type=_metadata_text(metadata, "record_type"),
         language=_metadata_text(metadata, "language"),
@@ -2116,6 +2414,7 @@ def source_dossier_out(
         else None,
         tags=tags,
         cited_in=_source_cited_in(conn, task_id, source_id),
+        authorships=_authorships(metadata),
     )
 
 
@@ -2166,10 +2465,153 @@ def _source_cited_in(
     ]
 
 
+# Immediate window around a located quote. Neighbour chunks are only attached
+# when this window hits that edge of the current chunk, and then only a short
+# snippet — never the whole adjacent chunk (that read as off-topic grey text).
+_CONTEXT_SIDE_CHARS = 800
+_ADJACENT_SNIPPET_CHARS = 220
+_ELLIPSIS = "..."
+
+
+def _adjacent_chunk(conn: Connection, source_snapshot_id: uuid.UUID, sequence: int) -> str | None:
+    """Return one adjacent chunk's content when the sequence exists."""
+    return conn.execute(
+        select(chunk.c.content).where(
+            chunk.c.source_snapshot_id == source_snapshot_id, chunk.c.sequence == sequence
+        )
+    ).scalar_one_or_none()
+
+
+def _snap_start(text: str, index: int, *, not_past: int) -> int:
+    """Advance a start cut to the next word, without crossing ``not_past``.
+
+    A mid-word cut drops the partial word. An unspaced run that reaches the
+    quote is left as-is so the window does not collapse onto the span.
+    """
+    if index <= 0:
+        return 0
+    limit = min(not_past, len(text))
+    if index >= limit:
+        return limit
+    if not text[index].isspace() and not text[index - 1].isspace():
+        at = index
+        while at < limit and not text[at].isspace():
+            at += 1
+        if at >= limit:
+            return index
+        index = at
+    while index < limit and text[index].isspace():
+        index += 1
+    return index
+
+
+def _snap_end(text: str, index: int, *, not_before: int) -> int:
+    """Retreat an end cut to the previous word, without crossing ``not_before``.
+
+    A mid-word cut drops the partial word. An unspaced run out of the quote
+    is left as-is so the window does not collapse onto the span.
+    """
+    if index >= len(text):
+        return len(text)
+    limit = max(not_before, 0)
+    if index <= limit:
+        return limit
+    if not text[index - 1].isspace() and (index == len(text) or not text[index].isspace()):
+        at = index
+        while at > limit and not text[at - 1].isspace():
+            at -= 1
+        if at <= limit:
+            return index
+        index = at
+    while index > limit and text[index - 1].isspace():
+        index -= 1
+    return index
+
+
+def _edge_snippet(raw: str, *, from_end: bool) -> str:
+    """Clip an adjacent chunk to a short seam snippet, ellipsis-marked both sides."""
+    if from_end:
+        start = _snap_start(raw, max(0, len(raw) - _ADJACENT_SNIPPET_CHARS), not_past=len(raw))
+        snippet = raw[start:].strip()
+        if snippet == "":
+            snippet = raw[-_ADJACENT_SNIPPET_CHARS:].strip()
+            start = max(0, len(raw) - _ADJACENT_SNIPPET_CHARS)
+        prefix = _ELLIPSIS if start > 0 else ""
+        return f"{prefix}{snippet}{_ELLIPSIS}"
+    end = _snap_end(raw, min(len(raw), _ADJACENT_SNIPPET_CHARS), not_before=0)
+    snippet = raw[:end].strip()
+    if snippet == "":
+        snippet = raw[:_ADJACENT_SNIPPET_CHARS].strip()
+        end = min(len(raw), _ADJACENT_SNIPPET_CHARS)
+    suffix = _ELLIPSIS if end < len(raw) else ""
+    return f"{_ELLIPSIS}{snippet}{suffix}"
+
+
+def _clamped_quote_window(
+    conn: Connection,
+    task_id: uuid.UUID,
+    text: str,
+    quote: str,
+    sequence: int,
+    source_snapshot_id: uuid.UUID,
+) -> ChunkContextOut | None:
+    """Clamp a unique quote to a local window, with short edge neighbours.
+
+    Args:
+        conn: Open connection.
+        task_id: Owning task (for year/venue).
+        text: The cited chunk's raw content.
+        quote: The citation or chat quote, as stored.
+        sequence: Chunk sequence in the snapshot.
+        source_snapshot_id: Snapshot the chunk belongs to.
+
+    Returns:
+        The window, or ``None`` when the quote is absent or ambiguous.
+    """
+    span = locate_unique_span(build_basis([(None, text)]), quote)
+    if span is None:
+        return None
+    position, end = span
+    start_window = max(0, position - _CONTEXT_SIDE_CHARS)
+    end_window = min(len(text), end + _CONTEXT_SIDE_CHARS)
+    previous = None
+    following = None
+    if start_window == 0:
+        raw = _adjacent_chunk(conn, source_snapshot_id, sequence - 1)
+        if raw:
+            previous = _edge_snippet(raw, from_end=True)
+    if end_window == len(text):
+        raw = _adjacent_chunk(conn, source_snapshot_id, sequence + 1)
+        if raw:
+            following = _edge_snippet(raw, from_end=False)
+    start_window = _snap_start(text, start_window, not_past=position)
+    end_window = _snap_end(text, end_window, not_before=end)
+    prefix = _ELLIPSIS if start_window > 0 else ""
+    suffix = _ELLIPSIS if end_window < len(text) else ""
+    chunk_meta = _chunk_metadata(conn, task_id, source_snapshot_id)
+    return ChunkContextOut(
+        context=prefix + text[start_window:end_window] + suffix,
+        span_start=position - start_window + len(prefix),
+        span_end=end - start_window + len(prefix),
+        clamped=start_window > 0 or end_window < len(text),
+        previous=previous,
+        next=following,
+        year=_year(chunk_meta),
+        venue=_venue(chunk_meta),
+        authorships=_authorships(chunk_meta),
+    )
+
+
 def chunk_context_out(
     conn: Connection, task_id: uuid.UUID, citation_id: uuid.UUID
 ) -> ChunkContextOut | None:
-    """Return at most 800 characters either side of a cited, anchored source span."""
+    """Return a local window around an artefact citation's quote.
+
+    Locates the stored quote with the same ``locate_unique_span`` locator as
+    the chat/findings path (case, whitespace, curly quotes), then clamps to
+    :data:`_CONTEXT_SIDE_CHARS` either side. An ambiguous or absent quote is
+    honest absence, not a guessed span.
+    """
     row = conn.execute(
         select(citation.c.quote, chunk.c.content, chunk.c.sequence, chunk.c.source_snapshot_id)
         .select_from(
@@ -2182,28 +2624,13 @@ def chunk_context_out(
     ).one_or_none()
     if row is None:
         return None
-    quote = row.quote
-    text = row.content
-    # Citation rows keep a verified quote but not a character interval.  An
-    # ambiguous repeated quote has no honest recoverable span, so this seam is
-    # absent rather than guessing at a document position.
-    if text.count(quote) != 1:
-        return None
-    position = text.find(quote)
-    if position < 0:
-        return None
-    end = position + len(quote)
-    start_window = max(0, position - 800)
-    end_window = min(len(text), end + 800)
-    return ChunkContextOut(
-        context=text[start_window:end_window],
-        span_start=position - start_window,
-        span_end=end - start_window,
-        clamped=start_window > 0 or end_window < len(text),
-        previous=_adjacent_chunk(conn, row.source_snapshot_id, row.sequence - 1),
-        next=_adjacent_chunk(conn, row.source_snapshot_id, row.sequence + 1),
-        year=_chunk_year(conn, task_id, row.source_snapshot_id),
-        venue=_chunk_venue(conn, task_id, row.source_snapshot_id),
+    return _clamped_quote_window(
+        conn,
+        task_id,
+        row.content,
+        row.quote,
+        row.sequence,
+        row.source_snapshot_id,
     )
 
 
@@ -2241,32 +2668,9 @@ def chunk_quote_context_out(
     ).one_or_none()
     if row is None:
         return None
-    text = row.content
-    span = locate_unique_span(build_basis([(None, text)]), quote)
-    if span is None:
-        return None
-    position, end = span
-    start_window = max(0, position - 800)
-    end_window = min(len(text), end + 800)
-    return ChunkContextOut(
-        context=text[start_window:end_window],
-        span_start=position - start_window,
-        span_end=end - start_window,
-        clamped=start_window > 0 or end_window < len(text),
-        previous=_adjacent_chunk(conn, row.source_snapshot_id, row.sequence - 1),
-        next=_adjacent_chunk(conn, row.source_snapshot_id, row.sequence + 1),
-        year=_chunk_year(conn, task_id, row.source_snapshot_id),
-        venue=_chunk_venue(conn, task_id, row.source_snapshot_id),
+    return _clamped_quote_window(
+        conn, task_id, row.content, quote, row.sequence, row.source_snapshot_id
     )
-
-
-def _adjacent_chunk(conn: Connection, source_snapshot_id: uuid.UUID, sequence: int) -> str | None:
-    """Return one adjacent chunk's content when the sequence exists."""
-    return conn.execute(
-        select(chunk.c.content).where(
-            chunk.c.source_snapshot_id == source_snapshot_id, chunk.c.sequence == sequence
-        )
-    ).scalar_one_or_none()
 
 
 def _chunk_metadata(
@@ -2288,17 +2692,3 @@ def _chunk_metadata(
         )
     ).scalar_one_or_none()
     return metadata if isinstance(metadata, Mapping) else {}
-
-
-def _chunk_year(
-    conn: Connection, task_id: uuid.UUID, source_snapshot_id: uuid.UUID
-) -> int | None:
-    """Read the publication year for a chunk through its task source link."""
-    return _year(_chunk_metadata(conn, task_id, source_snapshot_id))
-
-
-def _chunk_venue(
-    conn: Connection, task_id: uuid.UUID, source_snapshot_id: uuid.UUID
-) -> str | None:
-    """Read the venue for a chunk through its task source link."""
-    return _venue(_chunk_metadata(conn, task_id, source_snapshot_id))

@@ -9,7 +9,7 @@ from sqlalchemy.engine import Engine
 
 from policy_atlas.api.routers import sse
 from policy_atlas.core import events
-from policy_atlas.core.schema import artefact, task, runs
+from policy_atlas.core.schema import artefact, runs, task
 from policy_atlas.runtime.progress import ProgressEmitter
 from tests.helpers import delete_task_data, now
 
@@ -153,6 +153,12 @@ def test_progress_emitter_does_not_block_on_open_synthesis_like_transaction(
             held.rollback()
             held.close()
         _cleanup(engine, task_id)
+
+
+def test_progress_emitter_has_no_case_studies_stream_surface() -> None:
+    """Contract F6: case studies are post-run only and never streamed."""
+    assert not hasattr(ProgressEmitter, "case_studies_started")
+    assert not hasattr(ProgressEmitter, "case_studies_completed")
 
 
 def test_progress_emitter_failure_degrades_without_raising(engine: Engine) -> None:

@@ -1,8 +1,8 @@
 """The ``planner_v1`` prompt — the repo's 11th product prompt surface and the
-017 orchestrator's one new LLM surface (contract decision 5).
+017 agent's one new LLM surface (contract decision 5).
 
 Lead-authored and versioned. The planner refines a user's intent into a sharp
-evidence question and proposes a depth-graded orchestration plan anchored to
+evidence question and proposes a depth-graded task plan anchored to
 concrete numbers and a measured time band. It is question-type-neutral by
 design (the V2 wizard hard-coded an intervention frame into every prompt and
 suggestion — the named anti-pattern), asks only when a missing piece would
@@ -11,7 +11,7 @@ findings or states what the evidence says.
 
 Fail-closed by construction: the planner's structured turn output carries a
 *draft* plan whose executable content is validated against the registry-backed
-``OrchestrationPlan`` model code-side; derived fields (expected artefact
+``TaskPlan`` model code-side; derived fields (expected artefact
 shape, time band) are computed deterministically in code and never authored by
 the model. The planner completes before acquire begins — it is never invoked
 mid-run (contract decision 5, sequencing invariant).
@@ -26,12 +26,17 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from policy_atlas.core.prompt_fields import sanitize_prompt_field
 
-# planner_v8: Analysis level screen words (Evidence overview / Full-text
-# synthesis / Findings synthesis); research-approach "report" not
-# "review"; search-scope acquire caps in thoroughness option subs.
-# Succeeds planner_v7 (plain reader language; ready-update copy).
+# planner_v11: APO (Australian Policy Online) source-collection restriction —
+# publisher_source "apo" + backend_scope grey_lit_only when the user asks for
+# APO (task 039 test mod) — and the per-criterion screening cap raised to
+# 1000 characters (matches SCREENING_CRITERION_MAX). Succeeds planner_v10
+# (OECD members source-origin default + OECD setting screening criterion).
 # The router and watch moments live in agent_prompt.py.
-PLANNER_PROMPT_VERSION = "planner_v8"
+PLANNER_PROMPT_VERSION = "planner_v11"
+
+# Default screening criterion when the OECD source-origin default applies.
+# Emitted verbatim into screening_criteria. Contiguous for pin tests.
+OECD_SETTING_CRITERION = "Study, programme, or policy setting is in an OECD member country."
 
 # Input-side caps at prompt assembly. Generous for legitimate intents; a
 # bound, not a filter (the screen prompt's M10 discipline).
@@ -83,7 +88,7 @@ class SteerPointDefaultDraft(BaseModel):
     steer_point: str = Field(
         description=(
             "The steer point this default covers: search_exception, "
-            "evidence_base_coverage, deepening_selection, or synthesis_shape."
+            "evidence_search_coverage, deepening_selection, or synthesis_shape."
         )
     )
     action: str = Field(
@@ -236,6 +241,7 @@ class PlanDraftWire(BaseModel):
     published_after: str | None = None
     published_before: str | None = None
     publisher_country: str | None = None
+    publisher_source: str | None = None
     author_affiliation_countries: list[str] | None = None
     country_group: CountryGroupDraft | None = None
     search_effort: str | None = None
@@ -276,7 +282,7 @@ class PlannerTurnWire(BaseModel):
     )
     plan_draft: PlanDraftWire = Field(
         description=(
-            "Your current draft of the orchestration plan, updated every "
+            "Your current draft of the task plan, updated every "
             "turn. Leave fields null until you have grounds to fill them."
         )
     )
@@ -428,9 +434,11 @@ Intent-awareness — binding:
   outcomes...). Never invent scoping the user did not give.
 - screening_criteria: inclusion/exclusion rules for individual documents
   ("only studies with under-5s", "exclude opinion pieces") — user-expressed,
-  plus ones you suggest when the intent type warrants them. Each criterion
-  is ONE short rule, strictly under 200 characters; split compound rules
-  into separate criteria rather than writing long sentences.
+  plus ones you suggest when the intent type warrants them, plus the OECD
+  setting criterion when the source-origin default below applies. Each
+  criterion is ONE rule of at most 1000 characters; keep each rule short and
+  single-purpose, and split compound rules into separate criteria rather
+  than writing long sentences.
 - backend_scope: academic_only | grey_lit_only | both. Default both.
 - Scope constraints: published_after / published_before (ISO dates) for a
   recency window. NEVER set published_before unless the user explicitly
@@ -470,6 +478,21 @@ Intent-awareness — binding:
     countries — "what are G7 governments publishing", "Nordic ministry
     documents", or the user confirms the origin reading): set
     country_group.
+  Default SOURCE ORIGIN when the user has named no geography and has not
+  cleared it: set country_group to the pinned label "OECD members"
+  (countries null). Say so in `reply` — this is publisher / author-affiliation
+  origin, not study setting — and emit the matching scope chip.
+  Also add this screening criterion, verbatim, to screening_criteria:
+  "Study, programme, or policy setting is in an OECD member country."
+  Origin filters cannot see study setting; without this rule, documents about
+  other settings still get in. If they name a different geography, replace
+  both the country_group default and this OECD setting criterion — do not
+  stack them. If they ask about a specific study setting (e.g. UK), use that
+  setting as the screening criterion instead.
+  Do NOT add a UK or high-income screening criterion unless the user asks
+  about study setting. If they cleared geography, leave country_group unset,
+  omit that OECD screening criterion, and do not re-apply this default on
+  later turns.
   Three cases for the label:
   - Pinned groups — emit the label EXACTLY as written, countries null
     (membership expands at compile from provenance-stamped tables, never
@@ -491,6 +514,21 @@ Intent-awareness — binding:
     ("everywhere except the UK") and groupings the user won't pin to a
     concrete list are not yet supported — say so plainly, never
     approximate silently.
+- publisher_source: restricts grey-literature search to ONE named source
+  collection. The only supported value is "apo" — Australian Policy Online,
+  a curated Australian policy collection. When the user asks to source only
+  from APO / Australian Policy Online (however phrased), set
+  publisher_source: "apo" AND backend_scope: grey_lit_only, and leave
+  publisher_country, author_affiliation_countries and country_group unset —
+  the collection restriction replaces geography, and publisher_country is
+  never the way to express APO. Say plainly in `reply` that results will
+  come only from Australian Policy Online (via the grey-literature database)
+  and that academic databases are excluded, and emit the matching scope
+  chip. If they ask for APO plus academic sources, or APO plus another
+  collection, say that is not supported: offer APO-only, or Australian
+  publishers generally (publisher_country "Australia") plus academic search.
+  If the user later widens sources beyond grey literature, drop
+  publisher_source and say so. Never invent other collection values.
 - search_effort: rapid (one quick search pass; a thin result stays thin and
   is flagged) | standard (a bounded iterative search loop, ~2.5-3.5 min) |
   deep (the full iterative loop with citation snowballing, ~6 min of
@@ -579,7 +617,7 @@ Intent-awareness — binding:
   standing instructions otherwise compile from the check-in mode, and you
   never walk the user through steer points. Runtime-data-specific choices
   (which theme to deepen, which document to exclude) cannot be
-  pre-declared — the orchestrator handles those within the standing
+  pre-declared — the agent handles those within the standing
   instructions' bounds.
 - assumptions: every guess you are making, stated plainly. A thin-context
   plan is a fine plan if its thinness is visible.
@@ -671,7 +709,7 @@ def build_planner_messages(
     PROVENANCE INVARIANT: a turn's ``"planner"`` role label puts its text in an
     assistant-role message — a position models treat as their own prior output.
     Callers MUST only label text ``"planner"`` when it is verbatim prior model
-    output (as ``orchestrate`` does); never accept role labels from a client
+    output (as ``agent`` does); never accept role labels from a client
     or any external payload.
 
     Every untrusted field is sanitized at assembly. Each bounded conversation

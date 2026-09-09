@@ -56,9 +56,9 @@ from policy_atlas.core.schema import (
     chunk as chunk_table,
 )
 from policy_atlas.core.schema import (
-    task_source_snapshot,
     source_screening_result,
     source_snapshot,
+    task_source_snapshot,
 )
 
 log = structlog.get_logger()

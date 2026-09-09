@@ -1,13 +1,15 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { flushSync } from "react-dom";
+import { Link } from "react-router";
 
 import { useFunnel, useLandscape } from "../api/queries";
-import { Link } from "react-router";
 import { scrub } from "../lib/scrub";
+import { REPORT_SECTION_HEADING_CLASS } from "./artefactPresentation";
 
 /** Minimal section shape the outline consumes (mirrors SectionOut). */
 export interface OutlineSection {
   title: string;
-  role: "key_findings" | "standard" | "conclusions";
+  role: "key_findings" | "case_studies" | "standard" | "conclusions";
   summary?: string | null;
   summary_status?: "pending" | "verified" | "failed" | null;
   blocks?: Array<{ prose: string }> | null;
@@ -43,6 +45,8 @@ export function sectionAnchor(title: string, index: number): string {
 }
 
 const OPEN_SECTION_EVENT = "artefact-open-section";
+/** Matches the per-section Expand + / Collapse − affordance. */
+export const SECTION_EXPAND_LINK_CLASS = "print-hide shrink-0 text-meta font-bold text-blue";
 /** Leave a little air under the scrollport top after a contents jump. */
 const SECTION_SCROLL_OFFSET_PX = 8;
 /** Ignore the spy while a click-driven scroll is settling. */
@@ -92,6 +96,48 @@ function requestOpenSection(id: string): void {
   window.dispatchEvent(new CustomEvent(OPEN_SECTION_EVENT, { detail: id }));
 }
 
+interface FullReportExpandControl {
+  expanded: boolean;
+  revision: number;
+  setAllExpanded: (expanded: boolean) => void;
+}
+
+const FullReportExpandContext = createContext<FullReportExpandControl | null>(null);
+
+/** Syncs collapsible full-report blocks to the Expand all / Collapse all control. */
+export function FullReportExpandProvider({ children }: { children: React.ReactNode }) {
+  const [expanded, setExpanded] = useState(false);
+  const [revision, setRevision] = useState(0);
+  const setAllExpanded = useCallback((next: boolean) => {
+    if (!next && window.location.hash !== "") {
+      history.replaceState(null, "", `${window.location.pathname}${window.location.search}`);
+    }
+    setExpanded(next);
+    setRevision((value) => value + 1);
+  }, []);
+  const value = useMemo(
+    () => ({ expanded, revision, setAllExpanded }),
+    [expanded, revision, setAllExpanded],
+  );
+  return <FullReportExpandContext.Provider value={value}>{children}</FullReportExpandContext.Provider>;
+}
+
+/** Expand all / Collapse all beside the Full report heading. */
+export function FullReportExpandAllButton() {
+  const control = useContext(FullReportExpandContext);
+  if (control == null) return null;
+  const { expanded, setAllExpanded } = control;
+  return (
+    <button
+      type="button"
+      onClick={() => setAllExpanded(!expanded)}
+      className={`${SECTION_EXPAND_LINK_CLASS} cursor-pointer`}
+    >
+      {expanded ? "Collapse all" : "Expand all"}
+    </button>
+  );
+}
+
 /** Expand when the contents sidebar or a hash URL points at this section,
  *  then scroll — even if the section was already open. */
 export function useOpenWhenNavigated(id: string, setOpen: (open: boolean) => void): void {
@@ -122,14 +168,54 @@ export function useOpenWhenNavigated(id: string, setOpen: (open: boolean) => voi
   }, [navTick, id]);
 }
 
+/** Scroll when the contents sidebar or hash targets a block that is always visible. */
+export function useScrollWhenNavigated(id: string): void {
+  useOpenWhenNavigated(id, () => {});
+}
+
 /** Open a collapsed section when the browser is about to print, so the PDF
- *  contains the full report rather than the on-screen collapsed summaries. */
+ *  contains the full report rather than the on-screen collapsed summaries.
+ *  `flushSync` is required: without it, `window.print()` can capture the
+ *  still-collapsed DOM before React commits the expand. */
 export function useExpandForPrint(setOpen: (open: boolean) => void): void {
   useEffect(() => {
-    const expand = () => setOpen(true);
+    const expand = () => {
+      flushSync(() => {
+        setOpen(true);
+      });
+    };
     window.addEventListener("beforeprint", expand);
     return () => window.removeEventListener("beforeprint", expand);
   }, [setOpen]);
+}
+
+/** Expand or collapse when the full-report Expand all / Collapse all control is used. */
+export function useExpandAll(setOpen: (open: boolean) => void, enabled = true): void {
+  const control = useContext(FullReportExpandContext);
+  useEffect(() => {
+    if (!enabled || control == null || control.revision === 0) return;
+    setOpen(control.expanded);
+  }, [control, enabled, setOpen]);
+}
+
+export type SidebarEntry =
+  | { id: string; title: string }
+  | { kind: "part"; id: string; title: string };
+
+function sidebarNavEntries(entries: SidebarEntry[]): Array<{ id: string; title: string; part: boolean }> {
+  return entries.map((entry) =>
+    "kind" in entry
+      ? { id: entry.id, title: entry.title, part: true }
+      : { id: entry.id, title: entry.title, part: false },
+  );
+}
+
+function requestScrollToSection(id: string): void {
+  const next = `#${id}`;
+  if (window.location.hash !== next) {
+    history.replaceState(null, "", `${window.location.pathname}${window.location.search}${next}`);
+  }
+  scrollSectionIntoView(id);
 }
 
 /**
@@ -137,17 +223,21 @@ export function useExpandForPrint(setOpen: (open: boolean) => void): void {
  * for the real section-list shape — long question-specific titles wrap).
  * Stacks above the report on small screens so the outline stays reachable
  * instead of disappearing below a breakpoint.
+ *
+ * Entries with `kind: "part"` render as clickable part headings (Executive
+ * summary, Full report) that scroll to the matching anchor on the page.
  */
 export function ContentsSidebar({
   entries,
 }: {
-  entries: Array<{ id: string; title: string }>;
+  entries: SidebarEntry[];
 }) {
-  const [activeId, setActiveId] = useState<string | null>(entries[0]?.id ?? null);
+  const navEntries = useMemo(() => sidebarNavEntries(entries), [entries]);
+  const [activeId, setActiveId] = useState<string | null>(navEntries[0]?.id ?? null);
   const spyLockUntil = useRef(0);
 
   useEffect(() => {
-    const list = entries;
+    const list = navEntries;
     const first = list
       .map((entry) => document.getElementById(entry.id))
       .find((element): element is HTMLElement => element != null);
@@ -175,36 +265,57 @@ export function ContentsSidebar({
     scroller.addEventListener("scroll", checkpoint, { passive: true });
     checkpoint();
     return () => scroller.removeEventListener("scroll", checkpoint);
-  }, [entries]);
+  }, [navEntries]);
 
   return (
     <nav
       aria-label="Contents"
-      className="mb-6 w-full shrink-0 md:sticky md:top-0 md:mb-0 md:max-h-[calc(100svh-10rem)] md:w-56 md:self-start md:overflow-y-auto md:pr-4"
+      className="max-md:hidden mb-6 w-full shrink-0 pt-4 md:sticky md:top-0 md:mb-0 md:max-h-[calc(100svh-10rem)] md:w-56 md:self-start md:overflow-y-auto md:pr-4"
     >
-      <p className="text-caption font-bold uppercase tracking-[0.06em] text-grey">Contents</p>
-      <ul className="mt-2 space-y-1 border-l border-line">
-        {entries.map((entry) => (
-          <li key={entry.id}>
-            <a
-              href={`#${entry.id}`}
-              aria-current={activeId === entry.id ? "location" : undefined}
-              onClick={(event) => {
-                event.preventDefault();
-                spyLockUntil.current = Date.now() + SPY_LOCK_MS;
-                setActiveId(entry.id);
-                requestOpenSection(entry.id);
-              }}
-              className={`block border-l-2 py-0.5 pl-3 text-body leading-snug hover:text-navy ${
-                activeId === entry.id
-                  ? "border-l-blue font-semibold text-navy"
-                  : "border-l-transparent text-grey"
-              }`}
-            >
-              {scrub(entry.title)}
-            </a>
-          </li>
-        ))}
+      <ul className="space-y-1 border-l border-line">
+        {entries.map((entry, index) =>
+          "kind" in entry ? (
+            <li key={entry.id} className={index === 0 ? "pb-0.5" : "pb-0.5 pt-3"}>
+              <a
+                href={`#${entry.id}`}
+                aria-current={activeId === entry.id ? "location" : undefined}
+                onClick={(event) => {
+                  event.preventDefault();
+                  spyLockUntil.current = Date.now() + SPY_LOCK_MS;
+                  setActiveId(entry.id);
+                  requestScrollToSection(entry.id);
+                }}
+                className={`block border-l-2 py-0.5 pl-3 text-meta font-bold uppercase tracking-[0.06em] leading-snug hover:text-navy ${
+                  activeId === entry.id
+                    ? "border-l-blue text-navy"
+                    : "border-l-transparent text-grey"
+                }`}
+              >
+                {scrub(entry.title)}
+              </a>
+            </li>
+          ) : (
+            <li key={entry.id}>
+              <a
+                href={`#${entry.id}`}
+                aria-current={activeId === entry.id ? "location" : undefined}
+                onClick={(event) => {
+                  event.preventDefault();
+                  spyLockUntil.current = Date.now() + SPY_LOCK_MS;
+                  setActiveId(entry.id);
+                  requestOpenSection(entry.id);
+                }}
+                className={`block border-l-2 py-0.5 pl-3 text-body leading-snug hover:text-navy ${
+                  activeId === entry.id
+                    ? "border-l-blue font-semibold text-navy"
+                    : "border-l-transparent text-grey"
+                }`}
+              >
+                {scrub(entry.title)}
+              </a>
+            </li>
+          ),
+        )}
       </ul>
     </nav>
   );
@@ -232,6 +343,7 @@ export function SectionDisclosure({
   const [open, setOpen] = useState(defaultOpen);
   useOpenWhenNavigated(id, setOpen);
   useExpandForPrint(setOpen);
+  useExpandAll(setOpen, collapsible);
   const summary = sectionSummary(section);
   const expanded = !collapsible || open;
 
@@ -247,24 +359,53 @@ export function SectionDisclosure({
           onClick={() => setOpen((value) => !value)}
           className="flex w-full cursor-pointer items-baseline gap-2 text-left"
         >
-          <h2 className="flex-1 text-heading font-bold text-navy">
+          <h2 className={`flex-1 ${REPORT_SECTION_HEADING_CLASS}`}>
             {scrub(section.title)}
           </h2>
-          <span aria-hidden="true" className="print-hide shrink-0 text-meta font-bold text-blue">
+          <span aria-hidden="true" className={`${SECTION_EXPAND_LINK_CLASS} max-md:hidden`}>
             {expanded ? "Collapse −" : "Expand +"}
           </span>
         </button>
       ) : (
-        <h2 className="text-heading font-bold text-navy">{scrub(section.title)}</h2>
+        <h2 className={REPORT_SECTION_HEADING_CLASS}>{scrub(section.title)}</h2>
       )}
       {/* Fallback (first-sentence) summaries render unmarked — the checked/
           fallback distinction is provenance for reviewers, not users
           (owner, 2026-08-05). */}
       {!expanded && summary !== null && (
-        <p className="mt-1.5 max-w-prose-measure text-lead text-grey">{scrub(summary.text)}</p>
+        <p className="mt-1.5 max-w-prose-measure text-lead text-grey max-md:text-body">{scrub(summary.text)}</p>
       )}
+      {!expanded && <MobileDisclosureToggle expanded={false} onToggle={() => setOpen(true)} />}
       {expanded && <div className="mt-3 space-y-4">{children}</div>}
+      {expanded && collapsible && (
+        <MobileDisclosureToggle expanded onToggle={() => setOpen(false)} />
+      )}
     </section>
+  );
+}
+
+/**
+ * Mobile-only secondary disclosure toggle (040 D8): the heading row hides its
+ * Expand/Collapse label below md, so collapsible sections render this tappable
+ * twin after the summary (collapsed) or at the section end (expanded). The
+ * heading row remains a toggle too; this one carries its own aria-expanded.
+ */
+export function MobileDisclosureToggle({
+  expanded,
+  onToggle,
+}: {
+  expanded: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      aria-expanded={expanded}
+      onClick={onToggle}
+      className={`${SECTION_EXPAND_LINK_CLASS} block md:hidden ${expanded ? "mt-3" : "mt-1.5"}`}
+    >
+      {expanded ? "Collapse −" : "Expand +"}
+    </button>
   );
 }
 
@@ -278,6 +419,7 @@ export function GatheredSection({ taskId, id }: { taskId: string; id: string }) 
   const [open, setOpen] = useState(false);
   useOpenWhenNavigated(id, setOpen);
   useExpandForPrint(setOpen);
+  useExpandAll(setOpen);
   const landscape = useLandscape(taskId, "cited");
   const funnel = useFunnel(taskId);
   const cited = landscape.data;
@@ -313,16 +455,17 @@ export function GatheredSection({ taskId, id }: { taskId: string; id: string }) 
         onClick={() => setOpen((value) => !value)}
         className="flex w-full cursor-pointer items-baseline gap-2 text-left"
       >
-        <h2 className="flex-1 text-heading font-bold text-navy">
+        <h2 className="flex-1 text-heading font-bold text-navy max-md:text-[20px]">
           How the evidence was gathered
         </h2>
-        <span aria-hidden="true" className="print-hide shrink-0 text-meta font-bold text-blue">
+        <span aria-hidden="true" className={`${SECTION_EXPAND_LINK_CLASS} max-md:hidden`}>
           {open ? "Collapse −" : "Expand +"}
         </span>
       </button>
       {!open && funnelLine !== null && (
         <p className="mt-1.5 text-body text-grey">{funnelLine}</p>
       )}
+      {!open && <MobileDisclosureToggle expanded={false} onToggle={() => setOpen(true)} />}
       {open && (
         <div className="mt-3 space-y-4">
           {funnelLine !== null && (
@@ -340,7 +483,7 @@ export function GatheredSection({ taskId, id }: { taskId: string; id: string }) 
           )}
           {distributions.map((row) => (
             <div key={row.label}>
-              <p className="text-caption font-bold uppercase tracking-[0.06em] text-grey">{row.label}</p>
+              <p className="text-meta font-bold uppercase tracking-[0.06em] text-grey">{row.label}</p>
               <ul className="mt-1 space-y-0.5">
                 {row.entries.slice(0, 8).map(([label, count]) => (
                   <li key={label} className="flex items-baseline gap-2 text-body text-navy">
@@ -361,7 +504,7 @@ export function GatheredSection({ taskId, id }: { taskId: string; id: string }) 
           ))}
           {(cited?.themes ?? []).length > 0 && (
             <div>
-              <p className="text-caption font-bold uppercase tracking-[0.06em] text-grey">Key themes</p>
+              <p className="text-meta font-bold uppercase tracking-[0.06em] text-grey">Key themes</p>
               <ul className="mt-1 space-y-0.5">
                 {(cited?.themes ?? []).map((theme) => (
                   <li key={theme.name} className="flex items-baseline gap-2 text-body text-navy">
@@ -385,6 +528,7 @@ export function GatheredSection({ taskId, id }: { taskId: string; id: string }) 
           )}
         </div>
       )}
+      {open && <MobileDisclosureToggle expanded onToggle={() => setOpen(false)} />}
     </section>
   );
 }

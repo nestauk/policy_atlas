@@ -29,3 +29,13 @@ silently for 14 minutes.
 The hang only appears once a *later* migration's DDL touches the seeded
 tables — the test passes for every slice until it doesn't, and the failure
 points at the new migration rather than the old test.
+
+A second instance survived **fifteen revisions** before 033 found it:
+`test_migration_roundtrip_screen_stage_and_classify_tags` used `"-1"`, so it
+had been round-tripping whatever migration happened to be head, and its
+assertions passed vacuously the whole time. When this rule lands in a repo
+that predates it, sweep the *existing* roundtrip tests for the relative
+form — the rule prevents new rot but does not find old rot. Roundtrip tests
+also run on their own connection, so the `conn` fixture's rollback cannot
+clean their seeds: commit outside the fixture, delete in `finally`, verify
+zero residue (033).

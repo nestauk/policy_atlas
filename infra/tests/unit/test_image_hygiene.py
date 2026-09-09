@@ -66,6 +66,28 @@ def test_dockerfile_has_dockerignore_when_copying_context() -> None:
         assert DOCKERIGNORE_PATH.is_file(), "COPY . . requires backend/.dockerignore"
 
 
+def test_every_uv_sync_excludes_the_ops_group() -> None:
+    """The operator CLI's boto3 must not reach the runtime image (task 033 § 10).
+
+    `ops` is a *default* group (backend/pyproject.toml `[tool.uv] default-groups`)
+    so tests, strict mypy and pip-audit can all see boto3. The image is the one
+    place that opts out, and `--no-dev` does not do it — only `--no-group ops`.
+    Both sync invocations need the flag: the second re-resolves the environment
+    and would reinstate the group on its own.
+    """
+    sync_lines = [
+        line.strip()
+        for line in DOCKERFILE_PATH.read_text().splitlines()
+        if re.search(r"(?<![\w-])uv sync(?![\w-])", line)
+    ]
+
+    assert len(sync_lines) >= 2, f"expected both uv sync stages, found: {sync_lines}"
+    missing = [line for line in sync_lines if "--no-group ops" not in line]
+    assert not missing, "uv sync without `--no-group ops` ships boto3 in the image:\n- " + "\n- ".join(
+        missing
+    )
+
+
 def test_dockerfile_runs_as_non_root_and_uses_factory_entrypoint() -> None:
     """The image must drop root and invoke the FastAPI factory entrypoint."""
     dockerfile = DOCKERFILE_PATH.read_text()

@@ -21,11 +21,11 @@ from policy_atlas.core.schema import (
     extraction_result,
     implementation_context_finding,
     intervention_outcome_finding,
-    task_source_snapshot,
     selection_result,
     source_classification_result,
     source_extraction_record,
     source_snapshot,
+    task_source_snapshot,
 )
 from policy_atlas.core.usage import UsageResult
 from policy_atlas.evidence_search.extract import extract, iof_prompt
@@ -67,10 +67,10 @@ from tests.helpers import (
     profile_docs,
     profile_findings,
     profile_vetted_out,
-    seed_task_and_run,
     seed_run,
     seed_scope,
     seed_source,
+    seed_task_and_run,
 )
 
 # --- Local seeding helpers (reused/extended by the later contract suite) ---

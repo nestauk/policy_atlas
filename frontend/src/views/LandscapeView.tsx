@@ -8,6 +8,7 @@ import { useDocumentTitle } from "../lib/title";
 import { Card, Divider, PaneHeading } from "../ui/brand/Card";
 import { Chip } from "../ui/brand/Chip";
 import {
+  CHART_TICK_FONT_SIZE,
   DistributionChartTooltip,
   EvidenceDistributionChart,
   normaliseGeographies,
@@ -31,6 +32,9 @@ const CHART_TOKENS = {
   navy: "var(--color-navy)",
   blueTint: "var(--color-blue-tint)",
 } as const;
+
+/** One centred plot per row so classification labels stay readable. */
+const LANDSCAPE_PLOT_CLASS = "mx-auto w-full max-w-3xl";
 
 /**
  * Landscape: distributions over the screened-in set ONLY (the funnel is the
@@ -71,9 +75,9 @@ export function LandscapeView() {
   return (
     <main className="py-8">
       {(landscape.isPending || funnel.isPending) && (
-        <div aria-busy="true" aria-label="Loading the landscape" className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <div aria-busy="true" aria-label="Loading the landscape" className="flex flex-col gap-4">
           {Array.from({ length: 2 }).map((_, i) => (
-            <div key={i} className="h-72 animate-pulse border border-line bg-paper-2" />
+            <div key={i} className={`${LANDSCAPE_PLOT_CLASS} h-72 animate-pulse border border-line bg-paper-2`} />
           ))}
         </div>
       )}
@@ -103,9 +107,9 @@ export function LandscapeView() {
         </Card>
       )}
 
-      <div className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-2">
+      <div className="flex flex-col gap-4">
         {funnelRows.length > 0 && (
-          <Card>
+          <Card className={LANDSCAPE_PLOT_CLASS}>
             <PaneHeading>From search to citation</PaneHeading>
             <Divider />
             <div className="h-64 p-4">
@@ -115,13 +119,13 @@ export function LandscapeView() {
                   <XAxis
                     type="number"
                     allowDecimals={false}
-                    tick={{ fontSize: 11, fill: CHART_TOKENS.text }}
+                    tick={{ fontSize: CHART_TICK_FONT_SIZE, fill: CHART_TOKENS.text }}
                   />
                   <YAxis
                     type="category"
                     dataKey="label"
-                    width={120}
-                    tick={{ fontSize: 11, fill: CHART_TOKENS.navy }}
+                    width={140}
+                    tick={{ fontSize: CHART_TICK_FONT_SIZE, fill: CHART_TOKENS.navy }}
                   />
                   <Tooltip cursor={{ fill: CHART_TOKENS.blueTint }} content={<DistributionChartTooltip />} />
                   <Bar dataKey="count" fill={CHART_TOKENS.navy} isAnimationActive={false} barSize={14} />
@@ -133,7 +137,7 @@ export function LandscapeView() {
 
         {landscape.data !== undefined &&
           Object.keys(landscape.data.evidence_types ?? {}).length > 0 && (
-            <Card className="min-w-0">
+            <Card className={`min-w-0 ${LANDSCAPE_PLOT_CLASS}`}>
               <PaneHeading>Evidence types</PaneHeading>
               <Divider />
               <div className="min-w-0 p-4">
@@ -143,7 +147,7 @@ export function LandscapeView() {
           )}
 
         {landscape.data !== undefined && Object.keys(landscape.data.years ?? {}).length > 0 && (
-          <Card className="min-w-0">
+          <Card className={`min-w-0 ${LANDSCAPE_PLOT_CLASS}`}>
             <PaneHeading>Publication years</PaneHeading>
             <Divider />
             <div className="min-w-0 p-4">
@@ -155,32 +159,30 @@ export function LandscapeView() {
         {landscape.data?.geographies !== null &&
           landscape.data?.geographies !== undefined &&
           Object.keys(landscape.data.geographies).length > 0 && (
-            <div className="min-w-0 lg:col-span-2">
-              <Card className="min-w-0">
-                <PaneHeading>Where sources were published</PaneHeading>
-                <Divider />
-                <div className="min-w-0 p-4">
-                  {/* Task 031: publisher country only — never the authors'
-                      countries, which answer a different question. */}
-                  <p className="mb-3 break-words text-body text-grey">
-                    The country of the publishing venue, when the database reports it. Sources
-                    without one are counted as “Not reported”.
-                  </p>
-                  <EvidenceDistributionChart data={normaliseGeographies(landscape.data.geographies ?? {})} />
-                </div>
-              </Card>
-            </div>
+            <Card className={`min-w-0 ${LANDSCAPE_PLOT_CLASS}`}>
+              <PaneHeading>Where sources were published</PaneHeading>
+              <Divider />
+              <div className="min-w-0 p-4">
+                {/* Task 031: publisher country only — never the authors'
+                    countries, which answer a different question. */}
+                <p className="mb-3 break-words text-body text-grey">
+                  The country of the publishing venue, when the database reports it. Sources
+                  without one are counted as “Not reported”.
+                </p>
+                <EvidenceDistributionChart data={normaliseGeographies(landscape.data.geographies ?? {})} />
+              </div>
+            </Card>
           )}
       </div>
 
       {groups.data !== undefined && (groups.data.facets ?? []).length > 0 && (
-        <Card className="mt-4">
+        <Card className={`mt-4 ${LANDSCAPE_PLOT_CLASS}`}>
           <PaneHeading>Finding groups</PaneHeading>
           <Divider />
           <div className="space-y-4 p-4">
             {(groups.data.facets ?? []).map((facet) => (
               <div key={facet.facet}>
-                <p className="text-caption font-bold uppercase tracking-[0.06em] text-grey">
+                <p className="text-meta font-bold uppercase tracking-[0.06em] text-grey">
                   {scrub(facet.facet)}
                 </p>
                 <ul role="list" className="mt-1.5 flex flex-wrap gap-1.5">

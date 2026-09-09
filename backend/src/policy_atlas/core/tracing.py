@@ -341,6 +341,7 @@ def component_span(
     task_id: uuid.UUID,
     component: str,
     session_id: uuid.UUID | None = None,
+    conversation_id: uuid.UUID | None = None,
 ) -> Iterator[Any]:
     """Open run and component spans when tracing is enabled.
 
@@ -349,7 +350,11 @@ def component_span(
         run_id: Current run id.
         task_id: Current task id.
         component: Component name.
-        session_id: Optional Langfuse session id shared across one conversation.
+        session_id: Optional Langfuse session id shared by the Task's traces
+            (task 038, V9: no longer the conversation id).
+        conversation_id: Optional chat/planning conversation id recorded in
+            trace metadata next to ``task_id``, so one chat is still
+            filterable now that ``session_id`` groups by task.
 
     Yields:
         The root ``run:{component}:{run_id}`` span (trace-level input/output
@@ -365,7 +370,10 @@ def component_span(
         _session_scope(session_id),
         _observation(client, name=f"run:{component}:{run_id}", as_type="span") as run_span,
     ):
-        run_span.update(metadata={"task_id": str(task_id), "run_id": str(run_id)})
+        metadata = {"task_id": str(task_id), "run_id": str(run_id)}
+        if conversation_id is not None:
+            metadata["conversation_id"] = str(conversation_id)
+        run_span.update(metadata=metadata)
         with _observation(
             client,
             name=f"component:{component}",

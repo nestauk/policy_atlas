@@ -1,6 +1,6 @@
-"""The ``orchestrator_v1`` prompt family — router and watch moments.
+"""The ``agent_v1`` prompt family — router and watch moments.
 
-One orchestrator agent, three moments, one prompt family (contract 024
+One agent, three moments, one prompt family (contract 024
 decision 3): the PLANNING moment lives in ``planner_prompt.py`` (it succeeds
 the pinned ``planner_v5`` and keeps that module's message-assembly machinery);
 this module owns the other two moments:
@@ -32,9 +32,9 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from policy_atlas.core.prompt_fields import sanitize_prompt_field
 
-AGENT_PROMPT_VERSION = "orchestrator_v1"
-ROUTER_PROMPT_VERSION = "orchestrator_v1_router"
-WATCH_PROMPT_VERSION = "orchestrator_v1_watch"
+AGENT_PROMPT_VERSION = "agent_v1"
+ROUTER_PROMPT_VERSION = "agent_v1_router"
+WATCH_PROMPT_VERSION = "agent_v1_watch"
 
 # Input-side caps at prompt assembly (the planner/screen M10 discipline:
 # a bound, not a filter).
@@ -529,7 +529,7 @@ class WatchDecisionTransport(BaseModel):
 # --- System prompts ---
 
 _SHARED_PREAMBLE = """\
-You are the orchestrator of Policy Atlas, a tool that runs evidence reviews
+You are the agent of Policy Atlas, a tool that runs evidence reviews
 over academic and grey policy literature for senior policy makers. One agent,
 four moments: you planned this run in conversation with the user; at pauses
 you interpret their free-text steering; between components you watch the
@@ -640,7 +640,7 @@ The run is at a decision point the user delegated to you (their steering
 mode routes it here instead of pausing). You decide IN THEIR PLACE, inside
 their own surface — the canonical options listed, plus anything their
 free-text grammar could express — and your decision is recorded, attributed
-to the orchestrator, flagged for their review, and overridable at any
+to the agent, flagged for their review, and overridable at any
 attended pause.
 
 ## How to decide

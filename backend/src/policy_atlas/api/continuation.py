@@ -26,9 +26,8 @@ from policy_atlas.core.schema import capability_run, characterisation_result, ta
 from policy_atlas.core.tags import has_control_character
 from policy_atlas.runtime import runner as runner_module
 from policy_atlas.runtime import steering_events
-from policy_atlas.runtime.continuation_state import ResumeDecision, build
-from policy_atlas.runtime.task_plan import compose
 from policy_atlas.runtime.agent_backend import AgentBackend
+from policy_atlas.runtime.continuation_state import ResumeDecision, build
 from policy_atlas.runtime.runner import RunPlanOutcome, run_plan
 from policy_atlas.runtime.steering import (
     Adjust,
@@ -47,6 +46,7 @@ from policy_atlas.runtime.steering import (
     render_fanout_confirmation,
     validate_steering_delta,
 )
+from policy_atlas.runtime.task_plan import canonical_steer_point, compose
 
 log = structlog.get_logger()
 
@@ -271,7 +271,9 @@ def compile_free_text(
     context = runner_module._router_pause_context(
         point,
         state=router_state,
-        steer_point_name=_optional_str(pause.payload.get("steer_point")),
+        steer_point_name=_optional_str(
+            canonical_steer_point(pause.payload.get("steer_point"))
+        ),
         options=_options(pause.payload),
         completed_components=state.completed_components,
         rerun_component=_optional_str(pause.payload.get("rerun_component")),
@@ -1052,7 +1054,7 @@ def _theme_renames(params: Any, pause_payload: dict[str, Any]) -> list[tuple[str
     """Validate P2-only card-local theme-name edits from one option response."""
     if not isinstance(params, Mapping) or "renames" not in params:
         return []
-    if pause_payload.get("steer_point") != "evidence_search_coverage":
+    if canonical_steer_point(pause_payload.get("steer_point")) != "evidence_search_coverage":
         raise InvalidResponseError("rename_theme is only available at evidence_search_coverage")
     raw = params["renames"]
     if not isinstance(raw, list):

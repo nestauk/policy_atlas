@@ -37,15 +37,23 @@ function findStageLabel(stages: StageEntry[], stage: string | null): string | nu
  * record; options are ALWAYS server-supplied (never invented client-side);
  * free text goes through the router confirm gate — the compiled deltas
  * render before anything applies (the 024 fidelity mitigation).
+ *
+ * `isOwner` (task 033 phase 10c, contract § 11 / rubric 37): steering is
+ * owner-only (the same invariant Phase 10b gave the check-in banner), so a
+ * non-owner never gets this card at all — hidden entirely, matching
+ * `VisibilityControl`'s idiom, rather than a read-only render of a form
+ * whose every control is a mutation.
  */
 export function CheckInCard({
   taskId,
   checkIn,
   stages,
+  isOwner,
 }: {
   taskId: string;
   checkIn: CheckInOut;
   stages: StageEntry[];
+  isOwner: boolean;
 }) {
   const answer = useAnswerCheckIn(taskId);
   const toast = useToast();
@@ -58,6 +66,8 @@ export function CheckInCard({
   const [editedSections, setEditedSections] = useState<SectionRow[] | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const freeTextRef = useRef<HTMLInputElement>(null);
+
+  if (!isOwner) return null;
 
   // Toast complements the inline `notice` below — it doesn't replace it: the
   // inline copy is load-bearing right where the user is looking, the toast
@@ -333,7 +343,7 @@ export function CheckInCard({
 
       {suggestedOptions.length > 0 && (
         <div className="mt-4 border border-blue-tint bg-blue-tint/40 px-3 py-2.5">
-          <p className="text-caption font-bold uppercase tracking-[0.06em] text-blue">
+          <p className="text-meta font-bold uppercase tracking-[0.06em] text-blue">
             Suggested from this run's results
           </p>
           <div className="mt-2 flex flex-col gap-2">

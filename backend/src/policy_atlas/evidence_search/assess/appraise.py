@@ -19,9 +19,9 @@ from sqlalchemy.engine import Connection
 from policy_atlas.core import events
 from policy_atlas.core.schema import (
     EVIDENCE_TYPES,
-    task_source_snapshot,
     source_appraisal_result,
     source_classification_result,
+    task_source_snapshot,
 )
 from policy_atlas.evidence_search.assess.screen import effective_screen_rows
 

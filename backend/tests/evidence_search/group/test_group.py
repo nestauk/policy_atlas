@@ -47,7 +47,7 @@ from policy_atlas.evidence_search.group.group import (
     group_findings,
     group_max_labels,
 )
-from tests.helpers import now, seed_task_and_run, seed_run, seed_scope, seed_source
+from tests.helpers import now, seed_run, seed_scope, seed_source, seed_task_and_run
 
 DocSpec = tuple[uuid.UUID, list[dict[str, Any]]]
 

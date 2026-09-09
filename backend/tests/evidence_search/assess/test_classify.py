@@ -39,17 +39,20 @@ from policy_atlas.runtime.run_spec import Plan, compile
 from tests.helpers import (
     fake_parse_client,
     now,
-    seed_task_and_run,
     seed_run,
     seed_scope,
     seed_screening_result,
     seed_source,
+    seed_task_and_run,
 )
 
 # --- Schema ---
 
 def test_table_count(conn: Connection) -> None:
-    assert len(metadata.tables) == 33
+    # 33 -> 36: task 033 adds `organisation` and `app_user` (tenancy above the
+    # entity hierarchy) and ADR 0032 adds `project_membership`; 36 -> 37:
+    # task 036 adds `waitlist_entry`; no evidence-search table changed.
+    assert len(metadata.tables) == 37
 
 
 # --- Stub logic (pure Python, no DB) ---

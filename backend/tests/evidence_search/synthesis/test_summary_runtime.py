@@ -20,7 +20,7 @@ from policy_atlas.evidence_search.synthesis.synthesise import (
     SUMMARY_REGENERATE_CAP,
     write_summaries_after_commit,
 )
-from tests.helpers import delete_task_data, now, seed_task_and_run, seed_scope
+from tests.helpers import delete_task_data, now, seed_scope, seed_task_and_run
 
 
 class _ScriptedSummaryBackend(StubSynthesisBackend):

@@ -14,7 +14,7 @@ from policy_atlas.core.embeddings import (
 )
 from policy_atlas.core.hashing import content_hash
 from policy_atlas.core.schema import chunk as chunk_table
-from policy_atlas.core.schema import task_source_snapshot, source_snapshot
+from policy_atlas.core.schema import source_snapshot, task_source_snapshot
 
 log = structlog.get_logger()
 

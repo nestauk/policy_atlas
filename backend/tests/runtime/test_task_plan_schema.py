@@ -9,7 +9,7 @@ from sqlalchemy.exc import IntegrityError
 
 from policy_atlas.core.schema import task_plan
 from policy_atlas.runtime.task_plan import TaskPlan
-from tests.helpers import now, seed_task_and_run, seed_scope
+from tests.helpers import now, seed_scope, seed_task_and_run
 
 
 def _insert_plan(

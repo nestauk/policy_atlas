@@ -208,6 +208,34 @@ async def get_current_user(
         raise _unauthenticated() from None
 
 
+async def get_optional_user(
+    request: Request,
+    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(_bearer_scheme)],
+) -> AuthenticatedUser | None:
+    """Return no user only when the raw ``Authorization`` header is absent.
+
+    The conditionally-public read surface treats a missing header as
+    anonymous. Any present header, including a wrong scheme or malformed
+    bearer value that ``HTTPBearer`` does not parse, follows the strict
+    authentication path and therefore returns 401 on failure.
+
+    Args:
+        request: Incoming FastAPI request carrying the raw headers.
+        credentials: Parsed HTTP bearer credentials, if present.
+
+    Returns:
+        The authenticated subject, or ``None`` when no Authorization header
+        was sent.
+
+    Raises:
+        HTTPException: 401 when an Authorization header is present but does
+            not authenticate.
+    """
+    if "authorization" not in request.headers:
+        return None
+    return await get_current_user(request, credentials)
+
+
 def _unauthenticated() -> HTTPException:
     """Build the contract-preserving unauthenticated response exception."""
     return HTTPException(

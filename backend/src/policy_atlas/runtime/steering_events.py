@@ -55,6 +55,28 @@ _NO_RUN_ID_INVARIANT = (
     "emitted before the first component run exists (event_log.run_id is NOT NULL)"
 )
 
+# --- Stored-actor compatibility (task 038, contract A5) --------------------
+# `event_log` is append-only: decisions written before the slice still say
+# `orchestrator` where the persona is now named `agent`. Nothing rewrites the
+# stored payloads, so every projection of a stored `decided_by`/`authored_by`
+# reads through `canonical_actor` — the ONE place the old word is mapped.
+_LEGACY_ACTORS: dict[str, str] = {"orchestrator": "agent"}
+
+
+def canonical_actor(value: object) -> str | None:
+    """Canonicalise one stored ``decided_by``/``authored_by`` payload value.
+
+    Args:
+        value: The raw payload value, which may be any JSON scalar or absent.
+
+    Returns:
+        The current actor name — a pre-038 ``orchestrator`` reads back as
+        ``agent`` — or ``None`` when the value is missing or not a string.
+    """
+    if not isinstance(value, str):
+        return None
+    return _LEGACY_ACTORS.get(value, value)
+
 
 def base_payload(
     *,

@@ -26,12 +26,12 @@ from policy_atlas.core.schema import (
     characterisation_result,
     extraction_result,
     grouping_result,
-    task_source_snapshot,
     search_coverage_record,
     selection_result,
     source_appraisal_result,
     source_classification_result,
     source_snapshot,
+    task_source_snapshot,
 )
 from policy_atlas.evidence_search.assess.screen import effective_screen_rows
 from policy_atlas.evidence_search.synthesis.synthesis_backend import SynthesisBackend

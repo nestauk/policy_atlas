@@ -10,8 +10,8 @@ import {
 describe("listPageChrome — project last updated", () => {
   it("uses the newest task update when tasks exist", () => {
     const map = newestTaskUpdateByProject([
-      { project_id: "p1", updated_at: "2026-03-01T00:00:00Z" },
-      { project_id: "p1", updated_at: "2026-06-01T00:00:00Z" },
+      { project_ids: ["p1"], updated_at: "2026-03-01T00:00:00Z" },
+      { project_ids: ["p1"], updated_at: "2026-06-01T00:00:00Z" },
     ]);
     expect(
       projectLastUpdated(
@@ -32,8 +32,8 @@ describe("listPageChrome — project last updated", () => {
 
   it("sorts projects by last updated, newest first", () => {
     const map = newestTaskUpdateByProject([
-      { project_id: "older", updated_at: "2026-01-01T00:00:00Z" },
-      { project_id: "newer", updated_at: "2026-08-01T00:00:00Z" },
+      { project_ids: ["older"], updated_at: "2026-01-01T00:00:00Z" },
+      { project_ids: ["newer"], updated_at: "2026-08-01T00:00:00Z" },
     ]);
     const sorted = sortProjectsByLastUpdated(
       [

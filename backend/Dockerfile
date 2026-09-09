@@ -13,12 +13,18 @@ WORKDIR /app
 COPY pyproject.toml uv.lock ./
 
 # Cache locked production dependencies separately from application source.
-RUN uv sync --no-dev --no-install-project --frozen
+# `--no-group ops` (task 033, approved Dockerfile change): the operator CLI's
+# boto3/botocore are a DEFAULT group (pyproject `[tool.uv] default-groups`) so
+# tests, mypy and pip-audit reach them — the image opts out. `--no-dev` drops only
+# `dev`, so this flag is load-bearing, and it must appear on BOTH sync
+# invocations: the second one re-resolves the environment and would reinstate the
+# group, shipping boto3 while the declaration says otherwise.
+RUN uv sync --no-dev --no-group ops --no-install-project --frozen
 
 COPY . .
 
 # Install the src-layout project itself into the virtual environment.
-RUN uv sync --no-dev --frozen
+RUN uv sync --no-dev --no-group ops --frozen
 
 
 FROM python:3.12-slim

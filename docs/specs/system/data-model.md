@@ -3,7 +3,7 @@ type: System contract
 title: Core data model
 description: Entity hierarchy, blocks and addressable units, the annotation layer, findings, versioning and staleness.
 tags: [system, data-model, schema, annotations]
-timestamp: 2026-07-06
+timestamp: 2026-08-25
 ---
 
 # System contract — Core data model
@@ -14,14 +14,39 @@ origin ([ADR 0002](../../adr/0002-spec-governance.md)).
 
 ## Entity hierarchy
 
-`tools → components → capabilities → artefacts`, all **within a project**, drawing on a
+`tools → components → capabilities → artefacts`, all **within a task**, drawing on a
 **corpus** of sources, surfaced through a shared **information layer** (holds the corpus
 *and* the artefacts; the unit-level annotation layer cross-cuts both). No separate collective
 name for the derived side ("the artefacts" suffices — a symmetry-only term would be inert,
 Principle 10).
 
+A **project** sits *above* the task (ADR 0031, amended by ADR 0032; the rows
+were `project` and `portfolio` until task 038 renamed them `task` and `project`
+— ADR 0036, one vocabulary across code, schema, API and screen). Membership is
+many-to-many via `project_membership`. That is not a container between task and
+artefact — nothing below the task row gains a parent.
+
+**Tenancy (task 033, ADR 0033).** An **organisation** sits *above* the
+hierarchy: `organisation` (name, unique) and `app_user` (`user_id` = the
+token `sub`; nullable `org_id`; `display_name` NOT NULL; nullable `email`,
+ops/admin-facing only; `is_admin`, one global read-only boolean). `task`
+and `project` each carry a nullable `org_id` and a `visibility`
+(`org|private`, default `private` — owner amendment 2026-08-26, from the
+staging canary: new work is unshared until deliberately shared);
+`conversation` carries `created_by` (NULL on
+pre-033 rows = the task owner's). Nothing below the task row is
+tenancy-aware — access to children resolves through their task. A row
+with NULL `org_id` is reachable by its owner and an admin only; membership
+is app-owned and ops-assigned, never read from the IdP. A task inside a
+project matches it on `visibility` **and** `org_id` (the write-path
+invariant; the visibility cascade is the sole writer of
+`project.visibility`). Membership being many-to-many (ADR 0032), a
+task is org-visible iff *any* project it belongs to is org-visible
+(owner ruling 2026-08-27), and its projects span one organisation — a
+write that would put one task in two organisations is refused.
+
 Whole-item organisation is **just columns + tags + scoping** — no special container between
-project and artefact.
+task and artefact.
 - **Structured columns** — single-valued, closed/known vocabulary on the item record:
   `origin`, document type, date/year, format, plus derived columns (appraisal **quality
   tier**, and on uploads an inferred **function**). Queried directly; behavioural hooks read
@@ -37,7 +62,7 @@ project and artefact.
   provider-LLM and own-capability assertions **never mix** — the same tag from two asserters
   is two rows (corroboration, not duplication). **Created by the capabilities that read
   documents** (`classify` → methodological/structural; characterise → topic/theme), **never
-  by the orchestrator**, which only **keeps the namespace consistent**. Vocabulary is
+  by the Agent**, which only **keeps the namespace consistent**. Vocabulary is
   open-but-seeded and namespace-consolidated (consolidation buys *precision*; *recall* rides
   the soft-prior widening over hybrid retrieval).
 - **Scoping** is the behaviour of pointing an agent at a subset (queries over columns + tags
@@ -82,9 +107,9 @@ tool-governance level instead (see [security/egress — not yet drafted]; arch �
 
 ## Corpus & source snapshots
 
-- **One project corpus; source classes collapsed to `origin`** (`uploaded` | `acquired`).
+- **One task corpus; source classes collapsed to `origin`** (`uploaded` | `acquired`).
   Wireframe source classes have no distinct v3.0 lifecycle → not modelled (inert). `Library`
-  (curated cross-project) and `Connected` (auth'd departmental ingest) are ⏸ deferred seams.
+  (curated cross-task) and `Connected` (auth'd departmental ingest) are ⏸ deferred seams.
 - **Immutable source snapshots; no original bytes retained.** The raw file is fetched
   transiently to parse; **frozen parsed chunks are the content-of-record** for citation,
   grounding and audit. **A source whose full text can't be fetched (paywall, dead link) is
@@ -94,22 +119,22 @@ tool-governance level instead (see [security/egress — not yet drafted]; arch �
   event + source locator**. A corrected re-upload is a **new snapshot**, optionally carrying a
   human-asserted `supersedes(source_snapshot_id)` edge (a link only — no diffing, no
   monitoring).
-- **Acquired snapshots are a shared, content-addressed, cross-project substrate** (key =
+- **Acquired snapshots are a shared, content-addressed, cross-task substrate** (key =
   content hash × parse-profile × segmentation-policy × embedding-model version); derived
   substrate computed **once per unique key**; reference-counted GC; reference edges
-  project-private (no cross-project enumeration). **Uploaded snapshots stay per-project, never
+  task-private (no cross-task enumeration). **Uploaded snapshots stay per-task, never
   shared.** Sharpens a cross-tenant boundary flag → carry to security/egress (arch §11). ⚠️
 - **Origin drives classification richness & default priority, not appraisal** — an uploaded
   SR is appraised the same as an acquired one; priority is handled by **scoping** (soft prior),
   not a hidden re-weight. Uploaded docs get an **inferred `function`** (never user-entered;
   user-confirmable on a misroute) routing each to a treatment lane. 🟡 The lane set is
   **illustrative — to be specced** (examples: *evidence* → the evidence pool; *framing/subject* →
-  orchestrator task-definition; *directive* → execution-shaping; *contextual* → a context lane;
+  Agent task-definition; *directive* → execution-shaping; *contextual* → a context lane;
   *prior work* → build-on); refined against real upload patterns closer to implementation.
 - **Segmentation is trust-relevant, not a hidden detail.** Structure-aware parse first
   (pages/headings/tables/captions/footnotes), semantic splitting only as a layer over it; a
   named, versioned **segmentation policy**. **One parse, one segmentation per snapshot** —
-  re-chunking/re-embedding/re-parsing in a project's life is not designed for; a policy/parser
+  re-chunking/re-embedding/re-parsing in a task's life is not designed for; a policy/parser
   upgrade applies to **newly ingested snapshots only** (re-parse-without-refetch is impossible
   by construction since no bytes are retained). **The provenance anchor is `(source, verbatim
   quote, recorded location)`** — location is the recorded by-product of the verify step, not a
@@ -219,7 +244,7 @@ historical state.**
   `implementation_context_finding`, disjoint payloads — a single merged table is the
   generic-container failure mode this data model rejects). The **cross-kind UNION read
   view** over the shared reference columns is **built** (task 022, owner decision 5:
-  `finding_reference_union` — finding id · kind discriminator · extraction/project scoping ·
+  `finding_reference_union` — finding id · kind discriminator · extraction/task scoping ·
   the six shared reference columns, reference-columns-only); its first reader is group's
   value-facet loader. Kind-scoped payloads (ICF `claim`/`context_type`) stay direct table
   reads — a kind-scoped facet gets a kind-scoped read, honestly.
@@ -241,7 +266,7 @@ historical state.**
   `unclear` · `extraction_failed`. A source that **reports** a null is a **finding**; a source
   that **doesn't mention** an outcome is **coverage**. (Consumed by the gap-provenance rule in
   [provenance-grounding.md](provenance-grounding.md) and the EB
-  [provenance.md](../capabilities/evidence-base/provenance.md).)
+  [provenance.md](../capabilities/evidence-search/provenance.md).)
 - **Hybrid-queryable dimensions**: ⏸ **deferred behind the dimension-promotion gate for ALL
   dimensions, `intervention`/`outcome` included** (owner adjudication at the task-022
   contract gate, 2026-07-14, superseding the earlier committed-for-v3.0 line): no observed
@@ -250,7 +275,7 @@ historical state.**
   promoted, reuses the `retrieve` adapter with a second index target; ICF's source-named
   values co-ride free by construction.
 - ⏸ **Graph-structured synthesis** is a live seam over the findings graph at *query time*
-  (run-local → project-scoped persistent → graph datastore, gated on an entity-resolution-
+  (run-local → task-scoped persistent → graph datastore, gated on an entity-resolution-
   quality bar) — **never** an ingestion-time global KG (rejected: re-creates the v2 monolith).
 
 ## Versioning, multiplicity & propagation
@@ -258,15 +283,34 @@ historical state.**
 *(Folded here for the first pass; may split into its own contract when reruns-with-dependencies
 land. arch §3.5–§3.6.)*
 
+### The option entity (declared 2026-09-07 for options scoping; OS ruling 44)
+
+EB clusters are persisted per run (`characterisation_result` holds each run's themes and
+memberships as JSON; `source_tag` rows carry the theme label per document) but are deliberately
+**never promoted to canonical, queryable state**: there is no theme table, memberships belong to the
+run that computed them, and a re-run replaces rather than matches them, so a cluster has no identity
+across runs. Addressable-unit ids change on substantive regeneration. Neither can carry a user's
+shortlist choice, a variant's link to its parent or a child task's dependency across re-runs. So an **option** is a **task-scoped entity with a stable id** for the life of the task:
+- a **specified design**, versioned — a substantive user edit mints a new design version; a
+  *variant* is a **new option** linked to its parent, never a new version of it;
+- typed relations **variant of** / **part of** between option ids;
+- **state records** against the id: included · excluded (with the constraint) · on the shortlist
+  (proposed by Policy Atlas / added by you) · assessed (scoping pass / full run);
+- **membership records** against the id and a design version: the intervention mentions and the
+  findings that belong to it (also the validated set behind its pattern claims);
+- a link to the child Evidence search task a full run mints.
+Matching a regenerated option to an existing id after a plan change (deltas, not restarts) is
+**open** — OS open question 7 — and is a labelled judgement or a user confirmation, never silent.
+
 - **Three grains:** **block** = capture grain (own version chain; summary co-versions);
   **artefact** = snapshot grain (lock-on-advance freezes a named immutable binding of block
-  versions; supersede-by-rerun mints the next, prior retained); **project** = living
+  versions; supersede-by-rerun mints the next, prior retained); **task** = living
   aggregate, never frozen.
 - **History is linear per artefact** (no branchable tree). Branching lives in the
   cross-artefact **derivation DAG**, not in any one chain.
 - **Capability → artefact is one-to-many** (sibling artefacts of the same capability).
   **Supersede is the quiet default** (keeps work in the existing instance); creating a **new
-  sibling is the only path requiring an explicit orchestration-plan act** — the
+  sibling is the only path requiring an explicit task-plan act** — the
   overwrite-vs-proliferate inference is designed out. The **plan is the registry of artefact
   instances**; dependencies resolve to a **specific instance**, not a capability type.
 - **Annotation fate across regeneration**: new version → entirely new unit IDs; **no
@@ -275,7 +319,7 @@ land. arch §3.5–§3.6.)*
 - **Edit propagation = two distinct mechanisms**: **staleness** (traverse derivation edges;
   cheap head-version query; **flag, don't auto-run**; `same_content_as` auto-downgrades to
   informational) and **coherence** (a semantic pass within an artefact — no edges to traverse;
-  flags what no longer hangs together; orchestrator-mediated, augment-not-replace). Two entry
+  flags what no longer hangs together; Agent-mediated, augment-not-replace). Two entry
   points (artefact supersession via traversal; source supersession via provenance
   back-reference), one behaviour. ⏸ Body-level coherence across artefacts is a deferred seam.
   🟡 the magnitude threshold is open (eval territory).
@@ -291,7 +335,7 @@ land. arch §3.5–§3.6.)*
   Reuses the to-source provenance the core artefacts already need — no new machinery.
 - ⏸ **Deferred behind the addressable-span seam:** statement-to-statement cross-artefact tracing;
   composing chain-strength across a multi-hop chain; how to display a chain to a reviewer;
-  version-pinned cross-artefact staleness; deeper cross-project reconciliation. Buildable later
+  version-pinned cross-artefact staleness; deeper cross-task reconciliation. Buildable later
   *because* spans are addressable from day one.
 - ❓ **Inherited-artefact edit — open.** When a meta-synthesis builds on an inherited artefact and
   the user then edits it: **copy-on-write** (fork a local copy) vs **in-place** (edit the shared

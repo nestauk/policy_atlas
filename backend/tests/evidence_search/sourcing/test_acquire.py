@@ -18,10 +18,10 @@ from policy_atlas.core.inference import StubEchoProvider
 from policy_atlas.core.schema import (
     chunk,
     metadata,
-    task,
-    task_source_snapshot,
     search_coverage_record,
     source_snapshot,
+    task,
+    task_source_snapshot,
 )
 from policy_atlas.evidence_search.assess.appraise import AppraiseContext, appraise_sources
 from policy_atlas.evidence_search.assess.classify import ClassifyContext, classify_sources
@@ -43,9 +43,9 @@ from tests.helpers import (
     executed_calls_for,
     now,
     oa_record,
-    seed_task_and_run,
     seed_run,
     seed_scope,
+    seed_task_and_run,
 )
 from tests.provider_fixtures import OpenAlexFixtureBackend, OvertonFixtureBackend
 
@@ -175,7 +175,10 @@ def assert_invariant(counts: dict[str, Any]) -> None:
 
 
 def test_acquire_table_count(conn: Connection) -> None:
-    assert len(metadata.tables) == 33
+    # 33 -> 36: task 033 adds `organisation` and `app_user` (tenancy above the
+    # entity hierarchy) and ADR 0032 adds `project_membership`; 36 -> 37:
+    # task 036 adds `waitlist_entry`; no evidence-search table changed.
+    assert len(metadata.tables) == 37
 
 
 def seed_coverage_row(
@@ -373,11 +376,16 @@ def test_map_overton_string_or_list_shapes() -> None:
     rec = ov_record(snippet="s")
     rec["authors"] = "Alex Sampleton"
     rec["topics"] = "Affordable housing"
-    assert _map_overton_document(rec) is not None
+    mapped = _map_overton_document(rec)
+    assert mapped is not None
+    # 042: author names ride in provider_fields, normalised at read time.
+    assert mapped["provider_fields"]["authors"] == "Alex Sampleton"
     rec2 = ov_record(snippet="s")
     rec2["authors"] = ["Alex Sampleton"]
     rec2["topics"] = ["Affordable housing"]
-    assert _map_overton_document(rec2) is not None
+    mapped2 = _map_overton_document(rec2)
+    assert mapped2 is not None
+    assert mapped2["provider_fields"]["authors"] == ["Alex Sampleton"]
 
 
 def test_map_overton_absent_shapes_tolerated() -> None:

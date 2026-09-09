@@ -6,7 +6,8 @@ plan-pinned constants, the three read-only scoped tools (``search_chunks`` /
 ``retrieve`` seam's first increment, the bounded loop runner, and the
 fail-closed ``context["synthesis"]`` directive parser. The prompt-bearing
 surfaces live in :mod:`policy_atlas.evidence_search.synthesis.synthesis_backend` and
-:mod:`policy_atlas.evidence_search.synthesis.grounding_judge`; nothing in this module composes prose.
+:mod:`policy_atlas.evidence_search.synthesis.grounding_judge`; nothing in this module
+composes prose.
 
 Disciplines binding here (contract 013): the tool set is closed, read-only and
 substrate-scoped; an unknown tool name is a validation error, never executed;
@@ -46,7 +47,6 @@ from policy_atlas.core.schema import (
     grouping_result,
     implementation_context_finding,
     intervention_outcome_finding,
-    task_source_snapshot,
     search_coverage_record,
     selection_result,
     source_appraisal_result,
@@ -55,6 +55,7 @@ from policy_atlas.core.schema import (
     source_screening_result,
     source_snapshot,
     source_tag,
+    task_source_snapshot,
 )
 from policy_atlas.core.schema import chunk as chunk_table
 from policy_atlas.core.tags import has_control_character

@@ -40,10 +40,10 @@ from policy_atlas.runtime.run_spec import Plan, compile
 from tests.helpers import (
     delete_task_data,
     now,
-    seed_task_and_run,
     seed_run,
     seed_scope,
     seed_source,
+    seed_task_and_run,
 )
 
 from .test_group import (

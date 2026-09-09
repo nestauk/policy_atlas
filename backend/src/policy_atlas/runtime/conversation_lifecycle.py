@@ -11,8 +11,8 @@ from sqlalchemy import select, update
 from sqlalchemy.engine import Connection
 
 from policy_atlas.core.schema import conversation
-from policy_atlas.runtime.task_plan import TaskPlan
 from policy_atlas.runtime.planner_prompt import PlanDraftWire
+from policy_atlas.runtime.task_plan import TaskPlan
 
 log = structlog.get_logger()
 

@@ -1,7 +1,7 @@
 ---
 type: Invariant
 title: Every EB run terminates in synthesise; every other component is a plan choice
-description: Synthesise mints the capability's artefact, so no valid run shape ends before it; characterise and the rest of the composition run at the orchestrator/sub-agent's discretion per intent.
+description: Synthesise mints the capability's artefact, so no valid run shape ends before it; characterise and the rest of the composition run at the agent/sub-agent's discretion per intent.
 tags: [architecture, run-shape, orchestration, synthesise, invariant]
 timestamp: 2026-07-09
 ---
@@ -14,7 +14,7 @@ artefact. A chain described (in a contract, a smoke test, a skeleton profile, a
 doc) as ending at characterise or any other component is not a valid run shape:
 it produces no artefact, so nothing of value was delivered. Every component
 *between* the front edge and the terminus — characterise especially — is a
-**plan choice**: the orchestrator / EB sub-agent composes which registry
+**plan choice**: the agent / EB sub-agent composes which registry
 components run for a given intent.
 
 # Why
@@ -51,6 +51,6 @@ caught. The mistake recurred across multiple slices before being captured here
   envelopes" is written against intent, not the as-built rule.
 - **UI/spec assertions must target always-present stages** (026 smoke spec, the
   pitfall's first bite in a committed spec): a browser test asserting the
-  characterise stage label ("Mapping the landscape") races orchestrator
+  characterise stage label ("Mapping the landscape") races agent
   discretion; assert the acquire stage ("Searching sources"), which every chain
   contains and which persists in the timeline.

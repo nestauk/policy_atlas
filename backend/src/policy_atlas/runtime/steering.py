@@ -1,4 +1,4 @@
-"""Deterministic steering primitives for orchestration-plan runs.
+"""Deterministic steering primitives for task-plan runs.
 
 This module owns the task-017 structural steering core: pause-boundary
 compilation, deterministic human-readable renders, bounded adjustment
@@ -20,7 +20,7 @@ from sqlalchemy import select as sa_select
 from sqlalchemy.engine import Connection
 
 from policy_atlas.core.prompt_fields import scrub_nul
-from policy_atlas.core.schema import task_plan, selection_result
+from policy_atlas.core.schema import selection_result, task_plan
 from policy_atlas.evidence_search.assess import appraise as appraise_module
 from policy_atlas.evidence_search.assess import screen as screen_module
 from policy_atlas.evidence_search.corpus import characterise as characterise_module
@@ -39,20 +39,20 @@ from policy_atlas.evidence_search.synthesis.synthesis_tools import (
     SynthesisDirectiveError,
     parse_synthesis_directive,
 )
+from policy_atlas.runtime.agent_prompt import RouterCompileWire
 from policy_atlas.runtime.task_plan import (
     ANALYSIS_DEPTH_TABLE,
     EXTRACT_PROFILE_IDS,
     NAMED_PAIRINGS,
     AnalysisDepth,
     ComposedChain,
-    TaskPlan,
     SearchEffort,
     SteeringMode,
+    TaskPlan,
     _enabled_components,
     compose,
     time_band_for,
 )
-from policy_atlas.runtime.agent_prompt import RouterCompileWire
 
 PauseBoundary = Literal["after_component", "before_component"]
 UnattendedAction = Literal["proceed_flag", "stop"]
@@ -160,7 +160,7 @@ def commit_layer_overlay(component: str, delta: dict[str, Any]) -> dict[str, Any
 SEARCH_REVIEW = "search_review"
 # Compatibility alias for callers compiled before the owner-ruled rename.
 SEARCH_EXCEPTION = SEARCH_REVIEW
-EVIDENCE_SEARCH_COVERAGE = "evidence_base_coverage"
+EVIDENCE_SEARCH_COVERAGE = "evidence_search_coverage"
 DEEPENING_SELECTION = "deepening_selection"
 FINDING_GROUPS = "finding_groups"
 SYNTHESIS_SHAPE = "synthesis_shape"
@@ -425,7 +425,7 @@ def pause_points(mode: SteeringMode, chain: ComposedChain) -> set[PausePoint]:
     P2/P3/P4; Minimal: none — all four are fired-only). Unattended is empty.
 
     Args:
-        mode: Steering mode from the approved orchestration plan.
+        mode: Steering mode from the approved task plan.
         chain: Deterministically composed component chain.
 
     Returns:
@@ -519,23 +519,6 @@ def render_collation(flagged_events: list[dict[str, Any]]) -> str:
     return "\n".join(lines)
 
 
-def resolve_unattended(plan: TaskPlan, point: str) -> str:
-    """Resolve an Unattended-mode steer point from visible plan defaults.
-
-    Args:
-        plan: Approved orchestration plan.
-        point: Steer-point name to resolve.
-
-    Returns:
-        ``"proceed_flag"`` or ``"stop"``. Missing defaults proceed with a
-        visible unconfigured-default flag owned by the caller.
-    """
-    for rule in plan.steer_point_defaults:
-        if rule.steer_point == point:
-            return rule.action
-    return "proceed_flag"
-
-
 # Deepening-selection emphasis multipliers (plan-pinned, contract decision 6
 # rev 2.5): weight_emphasis values MULTIPLY the default signal weights — select
 # multiplies the defaults by these values and sums unnormalised (select.py:439,
@@ -583,7 +566,7 @@ def steer_point_triggers(
         conn: Open read connection.
         task_id: Owning task.
         selection_run_id: Run id whose ``selection_result`` carries the rationale.
-        plan: Approved orchestration plan (nomination source, read-only).
+        plan: Approved task plan (nomination source, read-only).
 
     Returns:
         Fired trigger dicts, each ``{"trigger": str, "detail": Any}``. Empty when
@@ -636,7 +619,7 @@ def build_steer_point_options(
     ``refuse_inexpressible`` and recorded as a seam, never approximated.
 
     Args:
-        plan: Current orchestration plan (source of the current select budget), or
+        plan: Current task plan (source of the current select budget), or
             ``None`` when only the option vocabulary is needed (plan-validation
             time): P3's budget-adjust template then falls back to
             ``DEFAULT_SELECTION_BUDGET`` — the ids and grammar are plan-independent.
@@ -1595,8 +1578,8 @@ def apply_adjustment(
     Args:
         conn: Open transaction used for the short plan-version write.
         task_id: Task owning the plan lineage.
-        plan_row: Current persisted orchestration-plan row.
-        plan: Current validated orchestration plan payload.
+        plan_row: Current persisted task-plan row.
+        plan: Current validated task plan payload.
         adjustment: Requested steering adjustment.
         completed_components: Components whose boundary has already passed.
 
@@ -1658,7 +1641,7 @@ def _persist_new_plan_version(
     Args:
         conn: Open transaction for the version-row write.
         task_id: Task owning the plan lineage.
-        plan_row: Current persisted orchestration-plan row.
+        plan_row: Current persisted task-plan row.
         payload: JSON payload for the new approved version row.
 
     Returns:
@@ -1774,8 +1757,8 @@ def apply_replacement_rerun(
     Args:
         conn: Open transaction for the version-row write.
         task_id: Task owning the plan lineage.
-        plan_row: Current persisted orchestration-plan row.
-        plan: Current validated orchestration plan (carried forward unchanged).
+        plan_row: Current persisted task-plan row.
+        plan: Current validated task plan (carried forward unchanged).
         component: The re-run component — ``select``/``characterise``/``group``.
         directive: The merged fine directive, validated fail-closed.
 
@@ -1821,8 +1804,8 @@ def apply_segment_reentry(
     Args:
         conn: Open transaction for the version-row write.
         task_id: Task owning the plan lineage.
-        plan_row: Current persisted orchestration-plan row.
-        plan: Current validated orchestration plan (carried forward unchanged).
+        plan_row: Current persisted task-plan row.
+        plan: Current validated task plan (carried forward unchanged).
         segment_start: The segment start component; must be ``"acquire"``.
         directive_deltas: The amendment, keyed by component.
 

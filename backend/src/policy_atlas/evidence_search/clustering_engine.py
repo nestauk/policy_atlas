@@ -1,4 +1,4 @@
-"""Shared two-stage clustering orchestration and validation.
+"""Shared two-stage clustering coordination and validation.
 
 The engine owns the common shape used by clustering components: discover labels
 openly, then assign known units in bounded batches with deterministic validation.
@@ -73,7 +73,7 @@ class ClusteringBackend(Protocol):
 
     Implementations build component-specific prompts and parse provider output
     structurally. The engine performs semantic validation and retry/repair
-    orchestration.
+    coordination.
     """
 
     def discover(
@@ -176,7 +176,7 @@ class CallBudget:
 
 @dataclass(frozen=True)
 class ClusteringPolicy:
-    """Validation and orchestration policy for one clustering caller.
+    """Validation and coordination policy for one clustering caller.
 
     Attributes:
         min_labels: Minimum accepted discovery label count.

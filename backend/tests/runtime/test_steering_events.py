@@ -16,7 +16,7 @@ from sqlalchemy import select
 from sqlalchemy.engine import Connection, Engine
 
 from policy_atlas.core import events
-from policy_atlas.core.schema import capability_run, task_plan, runs
+from policy_atlas.core.schema import capability_run, runs, task_plan
 from policy_atlas.evidence_search.corpus.characterise import CharacteriseFailure
 from policy_atlas.runtime import harness, steering_events
 from policy_atlas.runtime.runner import run_plan

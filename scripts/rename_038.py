@@ -151,6 +151,9 @@ NEVER_MAPPED: dict[str, frozenset[int]] = {
     "Tasks": frozenset({4}),
     "Project": frozenset({4}),
     "Projects": frozenset({4}),
+    # Dead export; deleted by hand in phase 8, and `useCreateTask` already
+    # exists (plan D4 -- the one predicted collision).
+    "useCreateProject": frozenset({4}),
     # Already-correct names that merely contain a target word.
     "agent_judgement_routed": ALL_PHASES,
     "task_count": ALL_PHASES,

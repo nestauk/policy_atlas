@@ -24,12 +24,13 @@ from policy_atlas.api.deps import (
     get_runner_backends,
     get_settings,
 )
-from policy_atlas.api.routers._common import owned_task, run_out
+from policy_atlas.api.routers._access import accessible_task
+from policy_atlas.api.routers._common import run_out
 from policy_atlas.api.run_io import ParkIO
 from policy_atlas.api.settings import Settings
-from policy_atlas.core.schema import capability_run, task_plan, planning_transcript
-from policy_atlas.runtime.task_plan import TaskPlan
+from policy_atlas.core.schema import capability_run, planning_transcript, task_plan
 from policy_atlas.runtime.runner import RunnerBackends, run_plan
+from policy_atlas.runtime.task_plan import TaskPlan
 
 log = structlog.get_logger()
 
@@ -75,6 +76,7 @@ def _dispatch_run(
             plan_row_id=plan_row["plan_id"],  # type: ignore[arg-type]
             backends=backends,
             io=ParkIO(),
+            session_id=task_id,
         )
     except Exception:
         log.exception("api.run_dispatch_failed", task_id=str(task_id))
@@ -125,7 +127,9 @@ def create_run(
     """Dispatch an approved plan off the request path and return its walk row."""
     with _dispatch_lock:
         with engine.begin() as conn:
-            owned_task(conn, task_id=task_id, user_id=user.user_id, for_update=True)
+            accessible_task(
+                conn, task_id=task_id, user_id=user.user_id, write=True, for_update=True
+            )
             active = conn.execute(
                 select(capability_run.c.capability_run_id)
                 .where(capability_run.c.task_id == task_id)
@@ -198,7 +202,7 @@ def list_runs(
 ) -> Page[RunOut]:
     """List a task's walks from newest to oldest (paginated — runs accumulate)."""
     with engine.connect() as conn:
-        owned_task(conn, task_id=task_id, user_id=user.user_id)
+        accessible_task(conn, task_id=task_id, user_id=user.user_id, write=False)
         total = conn.execute(
             select(func.count())
             .select_from(capability_run)
@@ -224,9 +228,9 @@ def get_run(
     user: Annotated[AuthenticatedUser, Depends(get_current_user)],
     engine: Annotated[Engine, Depends(get_engine)],
 ) -> RunOut:
-    """Return one owned task's capability run, or the opaque 404."""
+    """Return one readable task's capability run, or the opaque 404."""
     with engine.connect() as conn:
-        owned_task(conn, task_id=task_id, user_id=user.user_id)
+        accessible_task(conn, task_id=task_id, user_id=user.user_id, write=False)
         row = conn.execute(
             select(capability_run)
             .where(capability_run.c.task_id == task_id)

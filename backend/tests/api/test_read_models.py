@@ -6,8 +6,10 @@ import uuid
 from pathlib import Path
 
 from sqlalchemy import insert, select, update
-from sqlalchemy.engine import Engine
+from sqlalchemy.engine import Connection, Engine
 
+from policy_atlas.api.contract import AuthorshipOut
+from policy_atlas.api.contract.read_models import ClaimOut
 from policy_atlas.api.readmodels import repository
 from policy_atlas.core import events
 from policy_atlas.core.schema import (
@@ -22,7 +24,6 @@ from policy_atlas.core.schema import (
     grouping_result,
     implementation_context_finding,
     intervention_outcome_finding,
-    task_source_snapshot,
     runs,
     search_coverage_record,
     selection_result,
@@ -32,6 +33,7 @@ from policy_atlas.core.schema import (
     source_snapshot,
     source_tag,
     synthesis_result,
+    task_source_snapshot,
 )
 from tests.api.resource_support import api_client, create_task
 from tests.helpers import (
@@ -90,7 +92,16 @@ def _seed_read_model_ladder(
                     "record_type": "article",
                     "language": "en",
                     "doi": "10.1234/trial",
-                    "provider_fields": {"cited_by_count": 12, "fwci": 1.5},
+                    "provider_fields": {
+                        "cited_by_count": 12,
+                        "fwci": 1.5,
+                        "authorships": [
+                            {
+                                "author_name": "Alex Sampleton",
+                                "institutions": ["Acme Institute"],
+                            }
+                        ],
+                    },
                 }
             )
         )
@@ -104,8 +115,8 @@ def _seed_read_model_ladder(
             tss_id=selected_tss,
             chunks=[
                 "Cited evidence sentence." + "B" * 900,
-                "A" * 900 + "Cited evidence sentence." + "B" * 900,
-                "A" * 900 + "Cited evidence sentence.",
+                "A" * 900 + " Cited evidence sentence." + "B" * 900,
+                "A" * 900 + " Cited evidence sentence.",
             ],
         )
         conn.execute(
@@ -141,6 +152,7 @@ def _seed_read_model_ladder(
             )
         )
         iof_id, icf_id = uuid.uuid4(), uuid.uuid4()
+        iof_chunk_id = uuid.uuid4()
         conn.execute(
             insert(intervention_outcome_finding).values(
                 finding_id=iof_id,
@@ -157,6 +169,7 @@ def _seed_read_model_ladder(
                         "quote": "Training increased uptake.",
                         "match_status": "exact",
                         "quote_verified": True,
+                        "chunk_id": str(iof_chunk_id),
                     }
                 ],
                 created_at=now(),
@@ -374,6 +387,275 @@ def test_evidence_url_fallback_ladder() -> None:
     assert repository._url({"doi": "10.1234/example"}, None) == "https://doi.org/10.1234/example"
 
 
+def test_authorships_named_rung_filters_malformed_institutions() -> None:
+    """Rung 1: named authorships win, with non-string institution entries dropped."""
+    metadata = {
+        "provider_fields": {
+            "authorships": [
+                {"author_name": "Alex Sampleton", "institutions": ["Acme Institute", None, ""]},
+                {"author_name": "", "institutions": ["Dropped Institute"]},  # empty name skipped
+                "not a mapping",  # malformed entry skipped
+                {"institutions": ["No name key"]},  # missing author_name skipped
+                {"author_name": None},  # non-string author_name skipped
+                # A string institutions value is malformed (would iterate per
+                # character) — skipped, the author survives with none.
+                {"author_name": "Casey Mockford", "institutions": "Acme Institute"},
+            ],
+        }
+    }
+    assert repository._authorships(metadata) == [
+        AuthorshipOut(name="Alex Sampleton", institutions=["Acme Institute"]),
+        AuthorshipOut(name="Casey Mockford", institutions=[]),
+    ]
+
+
+def test_authorships_falls_back_to_bare_author_names() -> None:
+    """Rung 2: a plain 'authors' string or list, when no named authorships rung fires."""
+    assert repository._authorships({"provider_fields": {"authors": "Alex Sampleton"}}) == [
+        AuthorshipOut(name="Alex Sampleton")
+    ]
+    assert repository._authorships(
+        {"provider_fields": {"authors": ["Alex Sampleton", "", None, "Jo Person"]}}
+    ) == [
+        AuthorshipOut(name="Alex Sampleton"),
+        AuthorshipOut(name="Jo Person"),
+    ]
+
+
+def test_authorships_overton_corporate_author_fallback() -> None:
+    """Rung 3: an Overton document with a publisher_org but no authors gets one corporate author."""
+    assert repository._authorships({"backend": "overton", "publisher_org": "Marble Agency"}) == [
+        AuthorshipOut(name="Marble Agency")
+    ]
+    # Not applied for a non-Overton backend, even with a publisher_org present.
+    assert repository._authorships({"backend": "openalex", "publisher_org": "Marble Agency"}) == []
+
+
+def test_authorships_empty_for_uploaded_style_envelope() -> None:
+    """Rung 4: no provider authorships, no authors, no Overton fallback -> empty list."""
+    assert repository._authorships({}) == []
+    assert repository._authorships({"provider_fields": "not a mapping"}) == []
+    assert repository._authorships({"provider_fields": {"authorships": "not a list"}}) == []
+
+
+def test_context_window_snaps_cuts_to_word_boundaries() -> None:
+    """A mid-word cut drops the partial word; an unspaced run into the quote does not."""
+    text = "one two three four five"
+    assert repository._snap_start(text, 5, not_past=len(text)) == 8
+    assert repository._snap_start(text, 4, not_past=len(text)) == 4
+    assert repository._snap_start(text, 0, not_past=len(text)) == 0
+    assert repository._snap_end(text, 10, not_before=0) == 7
+    assert repository._snap_end(text, len(text), not_before=0) == len(text)
+    glued = ("A" * 50) + " quote"
+    assert repository._snap_start(glued, 10, not_past=50) == 10
+    assert repository._snap_end(glued + ("B" * 50), 60, not_before=56) == 60
+
+
+def test_edge_snippet_marks_both_ends_and_starts_on_a_word() -> None:
+    """Neighbour snippets wrap with '...' and do not begin mid-word."""
+    previous = "OFFTOPIC PREVIOUS " + ("P" * 400) + " trailing previous sentence."
+    assert repository._edge_snippet(previous, from_end=True) == "...trailing previous sentence...."
+    following = "leading next sentence. " + ("N" * 400) + " OFFTOPIC NEXT"
+    assert repository._edge_snippet(following, from_end=False) == "...leading next sentence...."
+
+
+def _seed_case_study_cards(
+    engine: Engine,
+    task_id: uuid.UUID,
+    *,
+    colliding_aliases: bool,
+) -> None:
+    """Replace the ladder artefact with two case-study cards."""
+    with engine.begin() as conn:
+        synthesis = conn.execute(
+            select(synthesis_result.c.blocks).where(synthesis_result.c.task_id == task_id)
+        ).one()
+        block_id = uuid.UUID(synthesis.blocks[0]["block_id"])
+        first_text = "First card evidence."
+        second_text = "Second card evidence."
+        conn.execute(
+            update(block)
+            .where(block.c.block_id == block_id)
+            .values(content=f"{first_text}\n\n{second_text}")
+        )
+        first_unit_id = conn.execute(
+            select(addressable_unit.c.unit_id).where(addressable_unit.c.block_id == block_id)
+        ).scalar_one()
+        first_annotation_id = conn.execute(
+            select(annotation.c.annotation_id).where(annotation.c.unit_id == first_unit_id)
+        ).scalar_one()
+        conn.execute(
+            update(addressable_unit)
+            .where(addressable_unit.c.unit_id == first_unit_id)
+            .values(content=first_text, locator={"start": 0, "end": len(first_text)})
+        )
+        conn.execute(
+            update(annotation)
+            .where(annotation.c.annotation_id == first_annotation_id)
+            .values(payload={"claim_id": "s9c0"})
+        )
+        second_unit_id, second_annotation_id = uuid.uuid4(), uuid.uuid4()
+        conn.execute(
+            insert(addressable_unit).values(
+                unit_id=second_unit_id,
+                block_id=block_id,
+                unit_type="text_span",
+                locator={
+                    "start": len(first_text) + 2,
+                    "end": len(first_text) + 2 + len(second_text),
+                },
+                content=second_text,
+                created_at=now(),
+            )
+        )
+        second_alias = "s9c0" if colliding_aliases else "s9c1"
+        conn.execute(
+            insert(annotation).values(
+                annotation_id=second_annotation_id,
+                block_id=block_id,
+                unit_id=second_unit_id,
+                annotation_type="citation",
+                payload={"claim_id": second_alias},
+                created_at=now(),
+            )
+        )
+        conn.execute(
+            update(synthesis_result)
+            .where(synthesis_result.c.task_id == task_id)
+            .values(
+                blocks=[
+                    {
+                        "block_id": str(block_id),
+                        "title": "Case studies",
+                        "role": "case_studies",
+                        "cards": [
+                            {
+                                "card_id": str(uuid.uuid4()),
+                                "title": "First",
+                                "prose": first_text,
+                                "claim_ids": ["s9c0"],
+                                "claim_spans": [
+                                    {"claim_id": "s9c0", "span": [42, 42 + len(first_text)]}
+                                ],
+                                "result_claim_id": "s9c0",
+                                "result_ordinal": 0,
+                            },
+                            {
+                                "card_id": str(uuid.uuid4()),
+                                "title": "Second",
+                                "prose": second_text,
+                                "claim_ids": [second_alias],
+                                "claim_spans": [
+                                    {"claim_id": second_alias, "span": [0, len(second_text)]}
+                                ],
+                                "result_claim_id": second_alias,
+                                "result_ordinal": 0,
+                            },
+                        ],
+                    }
+                ]
+            )
+        )
+
+
+def test_artefact_case_studies_recover_colliding_claim_aliases(
+    tmp_path: Path, engine: Engine
+) -> None:
+    """Colliding legacy aliases recover claims and result ids from card prose."""
+    with api_client(tmp_path) as (client, owner, _):
+        task_id = uuid.UUID(create_task(client, owner))
+        _seed_read_model_ladder(engine, task_id)
+        try:
+            _seed_case_study_cards(engine, task_id, colliding_aliases=True)
+            cards = client.get(f"/api/v1/tasks/{task_id}/artefact", headers=owner).json()[
+                "sections"
+            ][0]["cards"]
+            assert [card["claims"][0]["text"] for card in cards] == [
+                "First card evidence.",
+                "Second card evidence.",
+            ]
+            assert all(card["claims"][0]["text"] in card["prose"] for card in cards)
+            assert [card["result_claim_id"] for card in cards] == [
+                card["claims"][0]["claim_id"] for card in cards
+            ]
+        finally:
+            with engine.begin() as conn:
+                delete_task_data(conn, task_id)
+
+
+def test_artefact_case_studies_keep_healthy_claim_aliases(
+    tmp_path: Path, engine: Engine
+) -> None:
+    """Healthy per-card aliases retain their stored span-based projection."""
+    with api_client(tmp_path) as (client, owner, _):
+        task_id = uuid.UUID(create_task(client, owner))
+        _seed_read_model_ladder(engine, task_id)
+        try:
+            _seed_case_study_cards(engine, task_id, colliding_aliases=False)
+            cards = client.get(f"/api/v1/tasks/{task_id}/artefact", headers=owner).json()[
+                "sections"
+            ][0]["cards"]
+            assert [card["claims"][0]["text"] for card in cards] == [
+                "First card evidence.",
+                "Second card evidence.",
+            ]
+            assert cards[0]["claims"][0]["span"] == [42, 42 + len("First card evidence.")]
+        finally:
+            with engine.begin() as conn:
+                delete_task_data(conn, task_id)
+
+
+def _card_claim(text: str) -> ClaimOut:
+    return ClaimOut(claim_id=uuid.uuid4(), claim_type="citation", text=text)
+
+
+def test_task_card_claims_trusts_explicit_null_span_aliases() -> None:
+    """A write-path span=None record (title-bound text) is not collision evidence."""
+    prose_claim = _card_claim("In the prose.")
+    title_claim = _card_claim("Bold Title Programme")
+    raw_card = {
+        "prose": "In the prose. And more.",
+        "claim_ids": ["s0c0", "s0c1"],
+        "claim_spans": [
+            {"claim_id": "s0c0", "span": [0, 13]},
+            {"claim_id": "s0c1", "span": None},
+        ],
+    }
+    result = repository._task_card_claims(
+        raw_card, {"s0c0": prose_claim, "s0c1": title_claim}
+    )
+    assert [claim.claim_id for claim in result] == [
+        prose_claim.claim_id,
+        title_claim.claim_id,
+    ]
+    assert result[1].span is None
+
+
+def test_task_card_claims_unresolvable_aliases_fall_back_to_prose() -> None:
+    """Stored ids that resolve to nothing must not project an empty card."""
+    known = _card_claim("Known claim text.")
+    raw_card = {
+        "prose": "Known claim text. Context.",
+        "claim_ids": ["ghost"],
+        "claim_spans": [],
+    }
+    result = repository._task_card_claims(
+        raw_card, {"s9c9": known, str(known.claim_id): known}
+    )
+    assert [claim.claim_id for claim in result] == [known.claim_id]
+
+
+def test_task_card_claims_fallback_sorts_by_span_position() -> None:
+    """The prose fallback orders claims by their position in the card."""
+    later = _card_claim("zeta point.")
+    earlier = _card_claim("alpha point.")
+    raw_card = {"prose": "alpha point. Then zeta point."}
+    result = repository._task_card_claims(
+        raw_card, {str(later.claim_id): later, str(earlier.claim_id): earlier}
+    )
+    assert [claim.text for claim in result] == ["alpha point.", "zeta point."]
+
+
 def test_read_model_goldens_and_owner_scope(tmp_path: Path, engine: Engine) -> None:
     """Assert exact ladder, screened-in distributions, artefact and context projections."""
     with api_client(tmp_path) as (client, owner, other):
@@ -432,9 +714,11 @@ def test_read_model_goldens_and_owner_scope(tmp_path: Path, engine: Engine) -> N
             }
             assert iof["quote"] == "Training increased uptake."
             assert iof["quote_verified"] is True
+            assert iof["chunk_id"] is not None
             assert iof["groups"] == {"intervention": "Training"}
             assert icf["claim"] == "Staff time constrained implementation."
             assert icf["quote_verified"] is True
+            assert icf["chunk_id"] is None
             assert (
                 client.get(f"/api/v1/tasks/{task_id}/groups", headers=owner).json()["facets"][
                     0
@@ -476,6 +760,9 @@ def test_read_model_goldens_and_owner_scope(tmp_path: Path, engine: Engine) -> N
             assert [
                 (reference["n"], reference["title"]) for reference in artefact["references"]
             ] == [(1, "Selected trial")]
+            assert artefact["references"][0]["authorships"] == [
+                {"name": "Alex Sampleton", "institutions": ["Acme Institute"]}
+            ]
             dossier = client.get(
                 f"/api/v1/tasks/{task_id}/sources/{cited_source['source_id']}", headers=owner
             )
@@ -484,6 +771,9 @@ def test_read_model_goldens_and_owner_scope(tmp_path: Path, engine: Engine) -> N
             assert dossier.json()["fwci"] == 1.5
             assert dossier.json()["tags"] == [
                 {"tag": "School health", "tag_type": "topic_theme", "asserted_by": "openalex"}
+            ]
+            assert dossier.json()["authorships"] == [
+                {"name": "Alex Sampleton", "institutions": ["Acme Institute"]}
             ]
             assert (
                 dossier.json()["cited_in"]
@@ -511,18 +801,28 @@ def test_read_model_goldens_and_owner_scope(tmp_path: Path, engine: Engine) -> N
                 for citation_id in citation_ids
             ]
             assert near_start["span_start"] == 0
-            assert middle["span_start"] == near_end["span_start"] == 800
-            # 24-char quote + 800-char window on the unclamped side(s).
-            assert [len(context["context"]) for context in (near_start, middle, near_end)] == [
-                824,
-                1624,
-                824,
-            ]
+            assert near_start["context"].endswith("...")
+            assert not near_start["context"].startswith("...")
+            assert middle["context"].startswith("...")
+            assert middle["context"].endswith("...")
+            assert near_end["context"].startswith("...")
+            assert not near_end["context"].endswith("...")
             assert all(context["clamped"] is True for context in (near_start, middle, near_end))
             assert all(
-                "Cited evidence sentence." in context["context"]
+                context["authorships"]
+                == [{"name": "Alex Sampleton", "institutions": ["Acme Institute"]}]
                 for context in (near_start, middle, near_end)
             )
+            assert all(
+                context["context"][context["span_start"] : context["span_end"]]
+                == "Cited evidence sentence."
+                for context in (near_start, middle, near_end)
+            )
+            # Left padding is a word of A's, so the start cut snaps to the quote.
+            # Right padding is unspaced B's, so the end cut stays a character window.
+            assert near_end["context"] == "...Cited evidence sentence."
+            assert middle["context"].startswith("...Cited evidence sentence.")
+            assert len(near_start["context"]) == 827
         finally:
             with engine.begin() as conn:
                 delete_task_data(conn, task_id)
@@ -1954,3 +2254,219 @@ def test_evidence_facet_filters_reasons_and_read_depth(tmp_path: Path, engine: E
         finally:
             with engine.begin() as conn:
                 delete_task_data(conn, task_id)
+
+
+def _seed_artefact_citation(
+    conn: Connection,
+    *,
+    task_id: uuid.UUID,
+    chunks: tuple[str, ...],
+    quote: str,
+    cite_sequence: int,
+) -> uuid.UUID:
+    """Insert one artefact citation over a snapshot's chunks; return citation id."""
+    snapshot_id, _ = seed_source(conn, task_id)
+    cited_chunk_id: uuid.UUID | None = None
+    for sequence, content in enumerate(chunks):
+        chunk_id = uuid.uuid4()
+        conn.execute(
+            insert(chunk).values(
+                chunk_id=chunk_id,
+                source_snapshot_id=snapshot_id,
+                sequence=sequence,
+                content=content,
+                content_hash=f"ctx-{sequence}",
+                locator={"start": 0, "end": len(content)},
+                segmentation_policy="manual_v1",
+                created_at=now(),
+            )
+        )
+        if sequence == cite_sequence:
+            cited_chunk_id = chunk_id
+    assert cited_chunk_id is not None
+    artefact_id, block_id, unit_id, annotation_id, citation_id = (uuid.uuid4() for _ in range(5))
+    conn.execute(
+        insert(artefact).values(
+            artefact_id=artefact_id, task_id=task_id, title="Evidence base", created_at=now()
+        )
+    )
+    conn.execute(
+        insert(block).values(
+            block_id=block_id,
+            artefact_id=artefact_id,
+            version=1,
+            content="claim",
+            content_hash="ctx",
+            created_at=now(),
+        )
+    )
+    conn.execute(
+        insert(addressable_unit).values(
+            unit_id=unit_id,
+            block_id=block_id,
+            unit_type="text_span",
+            locator={"start": 0, "end": 5},
+            content="claim",
+            created_at=now(),
+        )
+    )
+    conn.execute(
+        insert(annotation).values(
+            annotation_id=annotation_id,
+            block_id=block_id,
+            unit_id=unit_id,
+            annotation_type="citation",
+            payload={"verdict": "grounded"},
+            created_at=now(),
+        )
+    )
+    conn.execute(
+        insert(citation).values(
+            citation_id=citation_id,
+            annotation_id=annotation_id,
+            chunk_id=cited_chunk_id,
+            quote=quote,
+            verification_result="pass",
+            created_at=now(),
+        )
+    )
+    return citation_id
+
+
+def test_artefact_citation_context_tolerates_quote_normalisation(
+    tmp_path: Path, engine: Engine
+) -> None:
+    """Curly quotes / case still locate a unique span (same locator as chat)."""
+    task_id: uuid.UUID | None = None
+    with api_client(tmp_path) as (client, owner, _):
+        try:
+            task_id = uuid.UUID(create_task(client, owner))
+            raw_span = "The report found “Clear   Evidence”\nacross studies."
+            content = "Before text. " + "x" * 900 + " " + raw_span + " " + "y" * 900
+            with engine.begin() as conn:
+                citation_id = _seed_artefact_citation(
+                    conn,
+                    task_id=task_id,
+                    chunks=(content,),
+                    quote='the report found "clear evidence" across studies.',
+                    cite_sequence=0,
+                )
+            response = client.get(
+                f"/api/v1/tasks/{task_id}/citations/{citation_id}/context",
+                headers=owner,
+            )
+            assert response.status_code == 200
+            body = response.json()
+            assert raw_span in body["context"]
+            assert body["context"][body["span_start"] : body["span_end"]] == raw_span
+        finally:
+            if task_id is not None:
+                with engine.begin() as conn:
+                    delete_task_data(conn, task_id)
+
+
+def test_citation_context_keeps_neighbours_as_short_edge_snippets(
+    tmp_path: Path, engine: Engine
+) -> None:
+    """Whole adjacent chunks are not attached; only a short edge snippet is."""
+    task_id: uuid.UUID | None = None
+    with api_client(tmp_path) as (client, owner, _):
+        try:
+            task_id = uuid.UUID(create_task(client, owner))
+            previous = "OFFTOPIC PREVIOUS " + ("P" * 400) + " trailing previous sentence."
+            quoted = "The quoted evidence span."
+            middle = ("x" * 900) + f" {quoted} " + ("y" * 900)
+            following = "leading next sentence. " + ("N" * 400) + " OFFTOPIC NEXT"
+            with engine.begin() as conn:
+                mid_id = _seed_artefact_citation(
+                    conn,
+                    task_id=task_id,
+                    chunks=(previous, middle, following),
+                    quote=quoted,
+                    cite_sequence=1,
+                )
+            mid = client.get(
+                f"/api/v1/tasks/{task_id}/citations/{mid_id}/context",
+                headers=owner,
+            ).json()
+            assert quoted in mid["context"]
+            assert mid["previous"] is None
+            assert mid["next"] is None
+            assert "OFFTOPIC PREVIOUS" not in (mid["context"] or "")
+            assert "OFFTOPIC NEXT" not in (mid["context"] or "")
+
+            with engine.begin() as conn:
+                start_id = _seed_artefact_citation(
+                    conn,
+                    task_id=task_id,
+                    chunks=(previous, quoted + " " + ("y" * 900), following),
+                    quote=quoted,
+                    cite_sequence=1,
+                )
+            start = client.get(
+                f"/api/v1/tasks/{task_id}/citations/{start_id}/context",
+                headers=owner,
+            ).json()
+            assert start["previous"] is not None
+            assert start["previous"].startswith("...")
+            assert start["previous"].endswith("...")
+            assert "trailing previous sentence." in start["previous"]
+            assert "OFFTOPIC PREVIOUS" not in start["previous"]
+            assert len(start["previous"]) <= 226
+
+            with engine.begin() as conn:
+                end_id = _seed_artefact_citation(
+                    conn,
+                    task_id=task_id,
+                    chunks=(previous, ("x" * 900) + " " + quoted, following),
+                    quote=quoted,
+                    cite_sequence=1,
+                )
+            end = client.get(
+                f"/api/v1/tasks/{task_id}/citations/{end_id}/context",
+                headers=owner,
+            ).json()
+            assert end["next"] is not None
+            assert end["next"].startswith("...")
+            assert end["next"].endswith("...")
+            assert "leading next sentence." in end["next"]
+            assert "OFFTOPIC NEXT" not in end["next"]
+            assert len(end["next"]) <= 226
+        finally:
+            if task_id is not None:
+                with engine.begin() as conn:
+                    delete_task_data(conn, task_id)
+
+
+def test_citation_context_starts_and_ends_on_whole_words(
+    tmp_path: Path, engine: Engine
+) -> None:
+    """The clamped window drops partial words and wraps truncated sides with '...'."""
+    task_id: uuid.UUID | None = None
+    with api_client(tmp_path) as (client, owner, _):
+        try:
+            task_id = uuid.UUID(create_task(client, owner))
+            quote = "The quoted evidence span."
+            content = ("alpha " * 200) + quote + " " + ("omega " * 200)
+            with engine.begin() as conn:
+                citation_id = _seed_artefact_citation(
+                    conn,
+                    task_id=task_id,
+                    chunks=(content,),
+                    quote=quote,
+                    cite_sequence=0,
+                )
+            body = client.get(
+                f"/api/v1/tasks/{task_id}/citations/{citation_id}/context",
+                headers=owner,
+            ).json()
+            assert body["context"].startswith("...")
+            assert body["context"].endswith("...")
+            inner = body["context"].removeprefix("...").removesuffix("...")
+            assert inner.startswith("alpha ")
+            assert inner.endswith("omega")
+            assert body["context"][body["span_start"] : body["span_end"]] == quote
+        finally:
+            if task_id is not None:
+                with engine.begin() as conn:
+                    delete_task_data(conn, task_id)

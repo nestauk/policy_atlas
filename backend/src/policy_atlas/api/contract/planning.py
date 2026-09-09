@@ -102,11 +102,14 @@ class ScopeConstraintsDraft(BaseModel):
         author_affiliation_countries: Optional OpenAlex author-affiliation
             country filter (2-letter alpha codes).
         country_group: Optional named group applied to both search backends.
+        publisher_source: Optional Overton source-collection filter; the only
+            supported value is `apo` (Australian Policy Online).
     """
 
     published_after: str | None = None
     published_before: str | None = None
     publisher_country: str | None = None
+    publisher_source: Literal["apo"] | None = None
     author_affiliation_countries: list[str] | None = None
     country_group: CountryGroupDraft | None = None
 
@@ -127,7 +130,7 @@ class PlanStep(BaseModel):
 
 
 class PlanDraft(BaseModel):
-    """Draft or approved orchestration plan, as surfaced to the client.
+    """Draft or approved task plan, as surfaced to the client.
 
     Mirrors the runtime `TaskPlan` field-by-field. Every field
     except `steps`/`ready` may be `None`/absent while drafting.
@@ -141,7 +144,7 @@ class PlanDraft(BaseModel):
         scope_constraints: Optional recency and publisher-geography constraints.
         search_effort: Acquisition effort rung.
         analysis_depth: Analysis component and budget rung.
-        components: Discretionary orchestration components only.
+        components: Discretionary plan components only.
         component_rationale: Visible intent-fit rationale keyed by
             discretionary component.
         grouping_facets: Optional grouping facets, valid only when `group`

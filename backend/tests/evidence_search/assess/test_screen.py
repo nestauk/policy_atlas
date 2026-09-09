@@ -28,6 +28,7 @@ from policy_atlas.core.usage import UsageResult
 from policy_atlas.core.windowing import greedy_windows
 from policy_atlas.evidence_search.assess.screen import (
     CRITERIA_LIST_MAX,
+    SCREENING_CRITERION_MAX,
     ScreenContext,
     ScreenDirectiveError,
     ScreenSupersessionError,
@@ -56,17 +57,20 @@ from policy_atlas.runtime.run_spec import Plan, compile
 from tests.helpers import (
     now,
     seed_ingested_full_text,
-    seed_task_and_run,
     seed_run,
     seed_scope,
     seed_screening_result,
     seed_source,
+    seed_task_and_run,
 )
 
 # --- Schema / structure ---
 
 def test_screen_table_count(conn: Connection) -> None:
-    assert len(metadata.tables) == 33
+    # 33 -> 36: task 033 adds `organisation` and `app_user` (tenancy above the
+    # entity hierarchy) and ADR 0032 adds `project_membership`; 36 -> 37:
+    # task 036 adds `waitlist_entry`; no evidence-search table changed.
+    assert len(metadata.tables) == 37
 
 
 def test_tss_has_composite_unique(conn: Connection) -> None:
@@ -971,10 +975,31 @@ def test_parse_screen_directive_criteria_over_cap_list_rejects() -> None:
 
 
 def test_parse_screen_directive_criteria_over_cap_string_rejects() -> None:
+    """Task 039 bug 2: the per-entry cap is `SCREENING_CRITERION_MAX` (1000),
+    not the shared `DIRECTIVE_STRING_MAX` (200) — real screening rules
+    outgrew 200 chars."""
     with pytest.raises(ScreenDirectiveError):
         _parse_screen_directive(
-            {"screening": {"criteria": ["x" * (DIRECTIVE_STRING_MAX + 1)]}}
+            {"screening": {"criteria": ["x" * (SCREENING_CRITERION_MAX + 1)]}}
         )
+
+
+def test_parse_screen_directive_criteria_at_cap_string_accepted() -> None:
+    stage, criteria, _ = _parse_screen_directive(
+        {"screening": {"criteria": ["x" * SCREENING_CRITERION_MAX]}}
+    )
+    assert stage == 1
+    assert criteria == ["x" * SCREENING_CRITERION_MAX]
+
+
+def test_parse_screen_directive_criteria_over_old_200_cap_now_accepted() -> None:
+    """A >200-char criterion (the old cap) is exactly the case live check 017
+    found too restrictive for real screening rules — it must now pass."""
+    stage, criteria, _ = _parse_screen_directive(
+        {"screening": {"criteria": ["x" * (DIRECTIVE_STRING_MAX + 1)]}}
+    )
+    assert stage == 1
+    assert criteria == ["x" * (DIRECTIVE_STRING_MAX + 1)]
 
 
 # --- Criteria composition into the screen intent INPUT (never evidence_scope.intent) ---

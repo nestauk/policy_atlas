@@ -12,10 +12,10 @@ from sqlalchemy.engine import Connection
 
 from policy_atlas.core import events
 from policy_atlas.core.schema import (
-    task_source_snapshot,
     search_coverage_record,
     source_snapshot,
     source_tag,
+    task_source_snapshot,
 )
 from policy_atlas.evidence_search.sourcing.acquire import (
     REFERENCED_WORKS_RETAIN_CAP,
@@ -26,7 +26,7 @@ from policy_atlas.evidence_search.sourcing.acquire import (
     acquire_sources,
 )
 from tests.evidence_search.sourcing.test_acquire import FakeBackend, assert_invariant, ov_record
-from tests.helpers import executed_calls_for, oa_record, seed_task_and_run, seed_scope
+from tests.helpers import executed_calls_for, oa_record, seed_scope, seed_task_and_run
 
 # --- _map_openalex_work: decision-20 retain-key deltas ---
 

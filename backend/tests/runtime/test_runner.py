@@ -20,17 +20,17 @@ from policy_atlas.core.schema import (
     event_log,
     evidence_scope,
     extraction_result,
-    task,
     runs,
     source_snapshot,
+    task,
 )
 from policy_atlas.evidence_search.assess.screen import ScreenContext, screen_sources
 from policy_atlas.evidence_search.corpus.characterise import CharacteriseFailure
 from policy_atlas.evidence_search.extract.extract import KNOWN_PROFILE_IDS
 from policy_atlas.evidence_search.sourcing.ingest_upload import ingest_upload
 from policy_atlas.runtime import harness
-from policy_atlas.runtime.task_plan import ComponentStep, TaskPlan, compose
 from policy_atlas.runtime.runner import RunnerBackends, run_plan
+from policy_atlas.runtime.task_plan import ComponentStep, TaskPlan, compose
 from tests.helpers import delete_task_data, now
 
 FULL_COMPONENTS = ["screen_full", "characterise", "select", "extract", "group"]

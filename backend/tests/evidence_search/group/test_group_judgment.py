@@ -22,7 +22,7 @@ from policy_atlas.evidence_search.group.group import (
     StubGroupClusteringBackend,
     group_findings,
 )
-from tests.helpers import seed_task_and_run, seed_run, seed_scope
+from tests.helpers import seed_run, seed_scope, seed_task_and_run
 
 from .test_group import seed_extraction
 

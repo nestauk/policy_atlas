@@ -13,7 +13,7 @@ from sqlalchemy.engine import Engine
 
 from policy_atlas.api import chat_enrichment, chat_turns
 from policy_atlas.api.chat_enrichment import enrich_chat_turn
-from policy_atlas.core.schema import chat_turn, task_source_snapshot, source_snapshot
+from policy_atlas.core.schema import chat_turn, source_snapshot, task_source_snapshot
 from policy_atlas.core.schema import chunk as chunk_table
 from policy_atlas.evidence_search.synthesis.grounding_judge import StubGroundingJudgeBackend
 from policy_atlas.runtime.chat_backend import StubChatBackend

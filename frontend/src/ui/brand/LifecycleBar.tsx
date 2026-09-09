@@ -3,7 +3,7 @@ import { NavLink } from "react-router";
 
 import { cn } from "./cn";
 
-export type LifecycleBarItem = {
+type LifecycleBarItem = {
   tab: string;
   label: string;
   to: string;
@@ -20,6 +20,30 @@ export type LifecycleBarItem = {
  * legible — but it is not a link, is not focusable, and carries
  * `aria-disabled` so it reads as unavailable rather than broken.
  */
+/**
+ * Mobile placement of the same tabs (040 D2): a bar pinned under the content,
+ * horizontally scrollable when the viewport is too narrow. Hidden from `md`
+ * up, where LifecycleBar sits in the task NavBar instead.
+ */
+export function LifecycleBottomBar({
+  items,
+  hint,
+}: {
+  items: readonly LifecycleBarItem[];
+  hint: string;
+}) {
+  return (
+    <nav
+      aria-label="Task stages"
+      className="print-hide shrink-0 border-t border-line bg-paper md:hidden"
+    >
+      <div className="overflow-x-auto px-4 pt-2.5 pb-[max(0.625rem,env(safe-area-inset-bottom))]">
+        <LifecycleBar items={items} hint={hint} />
+      </div>
+    </nav>
+  );
+}
+
 export function LifecycleBar({ items, hint }: { items: readonly LifecycleBarItem[]; hint: string }) {
   return (
     <div className="flex items-end gap-5">
@@ -38,9 +62,9 @@ export function LifecycleBar({ items, hint }: { items: readonly LifecycleBarItem
           <NavLink
             key={item.tab}
             to={item.to}
-            // Plan is the bare task path, so without `end` it would stay
+            // Agent is the bare task path, so without `end` it would stay
             // active on every stage beneath it.
-            end={item.tab === "plan"}
+            end={item.tab === "agent"}
             className={({ isActive }) =>
               cn(
                 "inline-flex items-center gap-1.5 border-b-[3px] border-transparent pb-1 text-lead font-semibold leading-none text-grey no-underline hover:text-navy",

@@ -21,12 +21,12 @@ from policy_atlas.evidence_search.sourcing.search_prompts import (
     ReformulatePayload,
     SuggestPayload,
     build_queries_messages,
+    build_reformulate_messages,
+    build_suggest_messages,
     build_v2_openalex_queries_messages,
     build_v2_openalex_reformulate_messages,
     build_v2_overton_queries_messages,
     build_v2_overton_reformulate_messages,
-    build_reformulate_messages,
-    build_suggest_messages,
 )
 
 # --- Guidance absent: byte-identical to as-built (guard) ---
@@ -42,16 +42,12 @@ def test_build_queries_messages_absent_guidance_is_byte_identical_to_as_built() 
 
 def test_build_queries_messages_empty_guidance_list_is_byte_identical() -> None:
     messages_none = build_queries_messages(QueriesPayload(intent="Housing First"))
-    messages_default = build_queries_messages(
-        QueriesPayload(intent="Housing First", guidance=None)
-    )
+    messages_default = build_queries_messages(QueriesPayload(intent="Housing First", guidance=None))
     assert messages_none == messages_default
 
 
 def test_build_reformulate_messages_absent_guidance_is_byte_identical_to_as_built() -> None:
-    messages = build_reformulate_messages(
-        ReformulatePayload(intent="Housing First", round_index=2)
-    )
+    messages = build_reformulate_messages(ReformulatePayload(intent="Housing First", round_index=2))
     assert messages[0]["content"] == SEARCH_REFORMULATE_SYSTEM_PROMPT
 
 

@@ -18,8 +18,8 @@ from policy_atlas.core.schema import (
     chunk,
     citation,
     conversation,
-    task,
     synthesis_result,
+    task,
 )
 from policy_atlas.runtime.chat_context import assemble_chat_frame, window_turns
 from tests.helpers import (

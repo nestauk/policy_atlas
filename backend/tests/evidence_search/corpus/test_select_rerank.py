@@ -17,10 +17,10 @@ from policy_atlas.core.inference import StubEchoProvider
 from policy_atlas.core.schema import (
     TOPIC_THEME,
     event_log,
-    task_source_snapshot,
     selection_result,
     source_snapshot,
     source_tag,
+    task_source_snapshot,
 )
 from policy_atlas.core.usage import UsageResult
 from policy_atlas.evidence_search.corpus import ranking
@@ -38,10 +38,10 @@ from tests.helpers import (
     now,
     run_select,
     seed_characterisation,
-    seed_task_and_run,
     seed_run,
     seed_scope,
     seed_select_doc,
+    seed_task_and_run,
 )
 
 

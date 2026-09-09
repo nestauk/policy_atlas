@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -61,6 +61,7 @@ function fullPlan(): PlanDraft {
       published_after: "2015-01-01",
       published_before: "2024-01-01",
       publisher_country: "GB",
+      publisher_source: null,
     },
     search_effort: "standard",
     analysis_depth: "standard",
@@ -117,7 +118,7 @@ describe("PlanDocument", () => {
     expect(screen.getByText("Searching")).toBeInTheDocument();
     expect(screen.getByText("Querying academic and policy databases.")).toBeInTheDocument();
     expect(screen.getByText("2015–2024")).toBeInTheDocument();
-    expect(screen.getByText("Document geography")).toBeInTheDocument();
+    expect(screen.getByText("Source geography")).toBeInTheDocument();
     expect(screen.getByText("Academic + Policy (OpenAlex, Overton)")).toBeInTheDocument();
     expect(screen.getByText("Thoroughness")).toBeInTheDocument();
     expect(screen.getByText("Standard report")).toBeInTheDocument();
@@ -129,7 +130,8 @@ describe("PlanDocument", () => {
     mockUsePlan({ data: planOut(emptyPlan()) });
     renderPlan();
     expect(screen.getByText("Publication years")).toBeInTheDocument();
-    expect(screen.getAllByText("No preference")).toHaveLength(2);
+    expect(screen.getByText("No preference")).toBeInTheDocument();
+    expect(screen.getByText("None selected")).toBeInTheDocument();
     expect(screen.getAllByText(COPY.notDecided).length).toBeGreaterThan(0);
   });
 
@@ -164,9 +166,10 @@ describe("PlanDocument", () => {
     expect(screen.getByRole("button", { name: "Thoroughness" })).toHaveTextContent("Custom");
     await user.click(screen.getByRole("button", { name: "Save" }));
 
-    expect(onOverlayChange).toHaveBeenCalledWith(
-      expect.objectContaining({ search_effort: "rapid", analysis_depth: "standard" }),
-    );
+    // Only the field that actually changed (rapid vs. the plan's "standard")
+    // enters the overlay — analysis_depth and steering_mode are unchanged
+    // from the plan's own values, so a dirty-only save omits them.
+    expect(onOverlayChange).toHaveBeenCalledWith({ search_effort: "rapid" });
   });
 
   it("snaps both axes when a research-approach preset is picked", async () => {
@@ -328,6 +331,48 @@ describe("PlanDocument", () => {
     expect(dock.querySelector("svg")?.getAttribute("class")).toBe(
       close.querySelector("svg")?.getAttribute("class"),
     );
+  });
+
+  it("edits screening rules as separate inputs with add/remove", async () => {
+    mockUsePlan({ data: planOut(fullPlan()) });
+    const onOverlayChange = vi.fn();
+    const user = userEvent.setup();
+    renderPlan(onOverlayChange);
+
+    const edits = screen.getAllByRole("button", { name: "Edit" });
+    await user.click(edits[3]);
+
+    expect(screen.getByDisplayValue("Peer-reviewed")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("Published after 2015")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Remove rule 2" }));
+    expect(screen.queryByDisplayValue("Published after 2015")).toBeNull();
+
+    await user.click(screen.getByRole("button", { name: "+ Add rule" }));
+    const newField = screen.getByDisplayValue("");
+    await user.type(newField, "New rule");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(onOverlayChange).toHaveBeenCalledWith({
+      screening_criteria: ["Peer-reviewed", "New rule"],
+    });
+  });
+
+  it("soft-rejects an overlong screening rule without writing the overlay", async () => {
+    mockUsePlan({ data: planOut(fullPlan()) });
+    const onOverlayChange = vi.fn();
+    const user = userEvent.setup();
+    renderPlan(onOverlayChange);
+
+    const edits = screen.getAllByRole("button", { name: "Edit" });
+    await user.click(edits[3]);
+
+    const field = screen.getByDisplayValue("Peer-reviewed");
+    fireEvent.change(field, { target: { value: "x".repeat(1001) } });
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(onOverlayChange).not.toHaveBeenCalled();
+    expect(screen.getByRole("alert")).toHaveTextContent("1000");
   });
 
   it("hides Edit and Start search when the plan is a read-only record", () => {

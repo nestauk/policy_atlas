@@ -24,3 +24,32 @@ describe("queryKeys.evidence", () => {
     }
   });
 });
+
+// Task 033 phase 10a: `scope` (and, for tasks, `project_id`) must be
+// part of the list-query key — otherwise a switcher toggling scope (10b)
+// would silently serve another scope's cached rows.
+describe("queryKeys.tasks", () => {
+  it("keys scope and project_id", () => {
+    const base = queryKeys.tasks({});
+    expect(queryKeys.tasks({ scope: "mine" })).not.toEqual(base);
+    expect(queryKeys.tasks({ scope: "all" })).not.toEqual(base);
+    expect(queryKeys.tasks({ scope: "mine" })).not.toEqual(queryKeys.tasks({ scope: "all" }));
+    expect(queryKeys.tasks({ project_id: "p1" })).not.toEqual(base);
+    expect(queryKeys.tasks({ project_id: "p1" })).not.toEqual(queryKeys.tasks({ project_id: "p2" }));
+  });
+});
+
+describe("queryKeys.projects", () => {
+  it("keys scope", () => {
+    const base = queryKeys.projects({});
+    expect(queryKeys.projects({ scope: "mine" })).not.toEqual(base);
+    expect(queryKeys.projects({ scope: "mine" })).not.toEqual(queryKeys.projects({ scope: "all" }));
+  });
+});
+
+describe("queryKeys.me", () => {
+  it("is a stable, parameterless key", () => {
+    expect(queryKeys.me()).toEqual(["me"]);
+    expect(queryKeys.me()).toEqual(queryKeys.me());
+  });
+});

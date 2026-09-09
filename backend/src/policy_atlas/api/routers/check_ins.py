@@ -20,13 +20,13 @@ from policy_atlas.api.checkin_read import _check_in
 from policy_atlas.api.contract import CheckInOut, CheckInResponse, FreeTextCompileOut
 from policy_atlas.api.contract.common import PAGE_SIZE_DEFAULT, PAGE_SIZE_MAX, Page, PageMeta
 from policy_atlas.api.deps import (
+    get_agent_backend,
     get_current_user,
     get_engine,
     get_executor,
-    get_agent_backend,
     get_runner_backends,
 )
-from policy_atlas.api.routers._common import owned_task
+from policy_atlas.api.routers._access import accessible_task
 from policy_atlas.api.run_io import ParkIO
 from policy_atlas.core import events
 from policy_atlas.core.schema import capability_run
@@ -71,7 +71,7 @@ def list_check_ins(
     the pending view is at most one card by construction.
     """
     with engine.connect() as connection:
-        owned_task(connection, task_id=task_id, user_id=user.user_id)
+        accessible_task(connection, task_id=task_id, user_id=user.user_id, write=False)
         pauses = _walk_pause_rows(connection, task_id)
         all_events = events.read(connection, task_id)
         latest_walk = next(
@@ -175,7 +175,7 @@ def respond_to_check_in(
 ) -> FreeTextCompileOut | Response:
     """Compile or durably answer one check-in, dispatching continuations after commit."""
     with engine.connect() as conn:
-        owned_task(conn, task_id=task_id, user_id=user.user_id)
+        accessible_task(conn, task_id=task_id, user_id=user.user_id, write=True)
     try:
         if response.kind == "free_text":
             compiled = continuation.compile_free_text(

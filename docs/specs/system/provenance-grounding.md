@@ -95,7 +95,7 @@ the **coverage base** grades what it rests on — orthogonal, both required.
   record, an absence degrades to "not found in extracted / selected material," never corpus-level.
 
 The EB instance (and where this rule is most acute) is
-[../capabilities/evidence-base/provenance.md](../capabilities/evidence-base/provenance.md).
+[../capabilities/evidence-search/provenance.md](../capabilities/evidence-search/provenance.md).
 
 ## Patterns — the third assertion type
 
@@ -116,6 +116,19 @@ Two further positions relative to the rungs:
 - **Thematic clustering** (`cluster`, LLM-labelled) — an **interpretive shape, not a count**;
   recomputable, never a deterministic fact; a **softer grade below both rungs** (facet grouping
   over findings also inherits the extraction dependency).
+
+## Column-grounded blocks (declared 2026-09-07 for options scoping)
+
+A fourth shape beside claims, gaps and patterns: a **tabular block whose columns are grounded
+differently**. The first instance is options scoping's **transferability working** (Factor ·
+Evidence says · Your context · Basis): the *Evidence says* cell is a claim at tiers 1–3 with its
+citations; the *Your context* cell is typed **retrieved** (a cited fact, applicable at the target
+unit by its nature), **stated by you** (a present fact the user gave) or **planned by you** (a
+commitment, which can only ever be a named condition); the *Basis* cell names which; and a
+**verdict word** is derived deterministically from the rows (the weakest leg decides, no factor
+fractions). Verify checks each cell against its own rule, and the derivation against the rows.
+Declared here so the block kind is shared; the row semantics are the capability's
+([../capabilities/options-scoping/trust.md](../capabilities/options-scoping/trust.md)).
 
 ## `produce-grounded-block` — how verify works
 
@@ -162,7 +175,7 @@ field**; whether/how the judge is calibrated is owned wholesale by the eval work
 source is faithfully reported but weakly evidenced; the reverse for a careful inference from
 strong sources). Document type (from `classify`) picks the yardstick. Modelled as **extensible
 typed dimensions + a rubric version**; the **rubric travels with each appraisal**. The type→tier
-rubric is **steerable, default-first** (orchestrator seeds a provisional default; user may
+rubric is **steerable, default-first** (Agent seeds a provisional default; user may
 inspect/adjust but needn't). **v3.0 = a single light pass** (cheap tier, all screened-in,
 document-type-based); ⏸ a fuller full-text second pass and ⏸ a relative-to-feasible tier are
 deferred. The axes combine **only at an aggregate roll-up** — itself ⏸ **deferred**. One

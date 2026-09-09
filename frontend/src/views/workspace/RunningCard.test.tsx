@@ -12,7 +12,11 @@ import {
   elapsedSeconds,
   formatElapsed,
   resultsSignpost,
+  RUN_FINISHED_MESSAGE,
+  runFinishedSignpost,
+  RUNNING_CARD_SHELL_CLASS,
   runningCardCopy,
+  SEE_PLAN_CTA_CLASS,
   signpostForStage,
   stageDetailLines,
   stageRows,
@@ -95,6 +99,73 @@ describe("runningCard helpers", () => {
     expect(rows[1]?.label).toBe("Screening");
   });
 
+  it("keeps every search/screen round and numbers them when there is more than one", () => {
+    const rows = stageRows(
+      [
+        stage({
+          stage: "acquire",
+          label: "Searching",
+          status: "completed",
+          summary: { round_index: 1 },
+        }),
+        stage({
+          stage: "screen",
+          label: "Screening",
+          status: "completed",
+          summary: { round_index: 1 },
+        }),
+        stage({
+          stage: "acquire",
+          label: "Searching",
+          status: "completed",
+          summary: { round_index: 2 },
+        }),
+        stage({
+          stage: "screen",
+          label: "Screening",
+          status: "started",
+          summary: { round_index: 2 },
+        }),
+      ],
+      planWithSteps(),
+    );
+    expect(rows.filter((row) => row.stage === "acquire").map((row) => row.label)).toEqual([
+      "Searching (Round 1)",
+      "Searching (Round 2)",
+    ]);
+    expect(rows.filter((row) => row.stage === "screen").map((row) => row.label)).toEqual([
+      "Screening (Round 1)",
+      "Screening (Round 2)",
+    ]);
+    expect(new Set(rows.map((row) => row.id)).size).toBe(rows.length);
+  });
+
+  it("numbers Screening from the preceding Searching round when the screen summary has no round_index", () => {
+    const rows = stageRows(
+      [
+        stage({
+          stage: "acquire",
+          label: "Searching",
+          status: "completed",
+          summary: { round_index: 1 },
+        }),
+        stage({ stage: "screen", label: "Screening", status: "completed" }),
+        stage({
+          stage: "acquire",
+          label: "Searching",
+          status: "completed",
+          summary: { round_index: 2 },
+        }),
+        stage({ stage: "screen", label: "Screening", status: "completed" }),
+      ],
+      planWithSteps(),
+    );
+    expect(rows.filter((row) => row.stage === "screen").map((row) => row.label)).toEqual([
+      "Screening (Round 1)",
+      "Screening (Round 2)",
+    ]);
+  });
+
   it("signposts Sources after acquire and Results when the write-up exists", () => {
     expect(signpostForStage("acquire", TASK_ID, false)).toEqual({
       href: `/tasks/${TASK_ID}/sources/all`,
@@ -104,8 +175,14 @@ describe("runningCard helpers", () => {
     expect(signpostForStage("extract", TASK_ID, false)).toBeNull();
     expect(signpostForStage("extract", TASK_ID, true)?.href).toContain("/findings");
     expect(signpostForStage("extract", TASK_ID, true)?.message).toBe("Findings are ready.");
-    expect(resultsSignpost(TASK_ID, "succeeded")?.label).toBe("Read the evidence base");
+    expect(resultsSignpost(TASK_ID, "succeeded")?.label).toBe("Read the report");
     expect(resultsSignpost(TASK_ID, "running")).toBeNull();
+    expect(runFinishedSignpost(TASK_ID, "succeeded")).toEqual({
+      href: `/tasks/${TASK_ID}/result`,
+      label: "Result",
+      message: RUN_FINISHED_MESSAGE,
+    });
+    expect(runFinishedSignpost(TASK_ID, "running")).toBeNull();
   });
 
   it("lists completed signposts in stage order", () => {
@@ -127,6 +204,7 @@ describe("runningCard helpers", () => {
   it("lists blurb, counts and elapsed on a completed step", () => {
     expect(
       stageDetailLines({
+        id: "acquire:1:1",
         stage: "acquire",
         label: "Searching",
         status: "completed",
@@ -142,6 +220,7 @@ describe("runningCard helpers", () => {
       "running",
       [
         {
+          id: "acquire:1:1",
           stage: "acquire",
           label: "Searching",
           status: "started",
@@ -185,6 +264,12 @@ describe("RunningCard", () => {
     );
 
     expect(screen.getByRole("heading", { name: "Analysis running…" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Analysis run" }).className).toContain("bg-[#DDF2EE]");
+    expect(screen.getByRole("region", { name: "Analysis run" }).className).toContain("border-[#17A88D]");
+    expect(RUNNING_CARD_SHELL_CLASS).toContain("bg-[#DDF2EE]");
+    expect(screen.getByRole("button", { name: "Minimise" }).className).toContain("text-blue");
+    expect(screen.getByText("Mapping").className).toContain("text-grey");
+    expect(screen.getByText("Done").className).toContain("text-navy");
     expect(screen.getByRole("list", { name: "Stage timeline" })).toHaveTextContent("Searching");
     expect(screen.queryByRole("link", { name: /Sources are ready/ })).toBeNull();
 
@@ -223,7 +308,7 @@ describe("RunningCard", () => {
     expect(screen.getByRole("button", { name: "Expand" })).toBeInTheDocument();
   });
 
-  it("offers Read the evidence base and See plan when the run has succeeded", async () => {
+  it("offers Read the report and See plan when the run has succeeded", async () => {
     const onSeePlan = vi.fn();
     const user = userEvent.setup();
     render(
@@ -231,7 +316,7 @@ describe("RunningCard", () => {
         <RunningCard
           taskId={TASK_ID}
           status="succeeded"
-          stages={[stage({ stage: "synthesise", label: "Writing the evidence base", status: "completed" })]}
+          stages={[stage({ stage: "synthesise", label: "Writing the report", status: "completed" })]}
           plan={null}
           startedAt="2026-07-21T10:00:00Z"
           endedAt="2026-07-21T10:12:00Z"
@@ -242,12 +327,85 @@ describe("RunningCard", () => {
         />
       </MemoryRouter>,
     );
-    const results = screen.getByRole("link", { name: "Read the evidence base" });
-    expect(results).toHaveAttribute("href", `/tasks/${TASK_ID}/results`);
+    const results = screen.getByRole("link", { name: "Read the report" });
+    expect(results).toHaveAttribute("href", `/tasks/${TASK_ID}/result`);
     expect(results.className).toContain("px-6");
     expect(results.className).toContain("text-body");
     expect(CHAT_PRIMARY_CTA_CLASS).toContain("px-6 py-3.5 text-body font-bold");
+    expect(SEE_PLAN_CTA_CLASS).toContain("border-2");
+    expect(SEE_PLAN_CTA_CLASS).toContain("bg-paper");
     await user.click(screen.getByRole("button", { name: "See plan" }));
     expect(onSeePlan).toHaveBeenCalledTimes(1);
+  });
+
+  it("expands only the Searching round that was clicked", async () => {
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter>
+        <RunningCard
+          taskId={TASK_ID}
+          status="running"
+          stages={[
+            stage({
+              stage: "acquire",
+              label: "Searching",
+              status: "completed",
+              summary: { round_index: 1, found: 12 },
+              seconds: 4,
+            }),
+            stage({
+              stage: "screen",
+              label: "Screening",
+              status: "completed",
+              summary: { round_index: 1 },
+            }),
+            stage({
+              stage: "acquire",
+              label: "Searching",
+              status: "completed",
+              summary: { round_index: 2, found: 8 },
+              seconds: 6,
+            }),
+            stage({
+              stage: "screen",
+              label: "Screening",
+              status: "completed",
+              summary: { round_index: 2 },
+            }),
+          ]}
+          plan={planWithSteps()}
+          startedAt="2026-07-21T10:00:00Z"
+          hasFindings={false}
+          minimised={false}
+          onMinimisedChange={() => undefined}
+        />
+      </MemoryRouter>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Searching (Round 2)" }));
+    expect(screen.getByText("Took 6s")).toBeInTheDocument();
+    expect(screen.queryByText("Took 4s")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Searching (Round 1)" })).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    );
+    expect(screen.getByRole("button", { name: "Searching (Round 2)" })).toHaveAttribute(
+      "aria-expanded",
+      "true",
+    );
+
+    await user.click(screen.getByRole("button", { name: "Screening (Round 1)" }));
+    expect(screen.getByRole("button", { name: "Searching (Round 2)" })).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    );
+    expect(screen.getByRole("button", { name: "Screening (Round 1)" })).toHaveAttribute(
+      "aria-expanded",
+      "true",
+    );
+    expect(screen.getByRole("button", { name: "Screening (Round 2)" })).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    );
   });
 });

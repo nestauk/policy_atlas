@@ -15,6 +15,7 @@ from fastapi import APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy import func, select
 from sqlalchemy.engine import Connection, Engine
+from sqlalchemy.sql.elements import ColumnElement
 
 from policy_atlas.api.auth import AuthenticatedUser
 from policy_atlas.api.checkin_read import _check_in
@@ -25,17 +26,23 @@ from policy_atlas.api.contract import (
     CheckinPendingFrame,
     CheckinResolvedFrame,
     PlanUpdatedFrame,
-    TaskUpdatedFrame,
     RunStatus,
     RunStatusFrame,
     StageCompletedFrame,
     StageFailedFrame,
     StageKey,
     StageStartedFrame,
+    TaskUpdatedFrame,
     TickFrame,
 )
 from policy_atlas.api.deps import get_current_user, get_engine, get_settings
-from policy_atlas.api.routers._common import owned_task
+from policy_atlas.api.lifecycle import LIFECYCLE_EVENT_KINDS, both_generations
+from policy_atlas.api.routers._access import (
+    accessible_task,
+    may_read_task,
+    readable_task_exists,
+    trace_admin_stream_read,
+)
 from policy_atlas.api.routers.planning import _draft_from_plan
 from policy_atlas.api.settings import Settings
 
@@ -52,6 +59,7 @@ from policy_atlas.api.stage_vocabulary import (
 from policy_atlas.core import events
 from policy_atlas.core.liveness import Tick, tick_hub
 from policy_atlas.core.schema import event_log, task_plan
+from policy_atlas.runtime import steering_events
 from policy_atlas.runtime.task_plan import TaskPlan
 
 log = structlog.get_logger()
@@ -69,9 +77,17 @@ def _snapshot(
     user_id: str,
     cursor: int,
 ) -> tuple[int, list[dict[str, Any]]]:
-    """Authorise then read a cursor-bounded durable backlog in one connection."""
+    """Authorise then read a cursor-bounded durable backlog in one connection.
+
+    This is also the **subscribe** half of contract § 3a's SSE trace grain:
+    the grade resolves through `accessible_task`, so a stream opened on the
+    admin leg emits exactly one `admin_read` line for the task row here,
+    and the tail emits one `admin_stream_read` per re-authorised batch after
+    it. Nothing extra is logged for a caller who was entitled to the task
+    anyway.
+    """
     with engine.connect() as conn:
-        owned_task(conn, task_id=task_id, user_id=user_id)
+        accessible_task(conn, task_id=task_id, user_id=user_id, write=False)
         snapshot = int(
             conn.execute(
                 select(func.coalesce(func.max(event_log.c.sequence), 0)).where(
@@ -87,11 +103,61 @@ def _tail(
     engine: Engine,
     *,
     task_id: uuid.UUID,
+    user_id: str,
     after: int,
-) -> tuple[int, list[dict[str, Any]]]:
-    """Read and map the next durable tail batch without blocking the event loop."""
+) -> tuple[int, list[dict[str, Any]]] | None:
+    """Re-authorise, then read and map the next durable tail batch.
+
+    Contract § 5: the stream authorised once at ``_snapshot`` and then looped
+    indefinitely, so none of this slice's four revocation events — de-enrolment,
+    a visibility flip, an i.4 project cascade, an admin revoke — reached an
+    already-open stream. The re-check happens **before** the batch is read, so a
+    caller whose access has gone is never handed the events of the interval in
+    which they lost it.
+
+    **The batch select carries the grade too, in its own statement.** Checking
+    first and reading second is two statements, and a revocation committing
+    between them was still worth one batch of frames to the caller who had just
+    lost access. So the event read is gated by
+    :func:`_access.readable_task_exists` — the same legs, expressed as a
+    predicate rather than a value — and the two do different jobs: the gate
+    makes the batch empty, ``may_read_task`` ends the response. Neither
+    alone is the fix; the reason both exist is that the response must *close*,
+    not merely go quiet.
+
+    **The fourth revocation event is now real.** The re-check resolves through
+    `_access._read_legs`, which carries the admin leg, so clearing `is_admin`
+    on a streaming administrator closes their stream on the next batch — no
+    second tenancy predicate here, and no edit to this function when the leg
+    landed.
+
+    **One trace line per admin-carried batch**, not per frame (contract
+    § 3a). `may_read_task` reports the leg in the same query that answers
+    the grade, so the line costs nothing beyond the call.
+
+    Args:
+        engine: Application engine; this runs in a worker thread.
+        task_id: The task being streamed.
+        user_id: The caller's token subject, re-checked every batch.
+        after: Exclusive lower bound on the durable sequence to read.
+
+    Returns:
+        The batch's last sequence and its mapped frames, or ``None`` when the
+        caller's read grade has gone and the stream must close.
+    """
     with engine.connect() as conn:
-        rows = _event_rows(conn, task_id=task_id, after=after, through=None)
+        check = may_read_task(conn, task_id=task_id, user_id=user_id)
+        if not check.allowed:
+            return None
+        if check.via_admin:
+            trace_admin_stream_read(user_id=user_id, task_id=task_id)
+        rows = _event_rows(
+            conn,
+            task_id=task_id,
+            after=after,
+            through=None,
+            guard=readable_task_exists(task_id, user_id),
+        )
         last_sequence = rows[-1]["sequence"] if rows else after
         return last_sequence, _map_rows(conn, task_id=task_id, rows=rows, through=None)
 
@@ -102,13 +168,28 @@ def _event_rows(
     task_id: uuid.UUID,
     after: int,
     through: int | None,
+    guard: ColumnElement[bool] | None = None,
 ) -> list[dict[str, Any]]:
-    """Read ordered durable events in the inclusive/exclusive SSE sequence interval."""
+    """Read ordered durable events in the inclusive/exclusive SSE sequence interval.
+
+    Args:
+        conn: Open database connection.
+        task_id: The task whose log is read.
+        after: Exclusive lower bound on the durable sequence.
+        through: Inclusive upper bound, or ``None`` for "everything since".
+        guard: An access predicate to AND into **this** statement, so the grade
+            and the rows are decided together. The tail passes one (see
+            :func:`_tail`); ``_snapshot`` does not, because it has just
+            resolved the row through ``accessible_task`` in the same
+            connection and nothing has been yielded yet.
+    """
     statement = select(event_log).where(event_log.c.task_id == task_id).where(
         event_log.c.sequence > after
     )
     if through is not None:
         statement = statement.where(event_log.c.sequence <= through)
+    if guard is not None:
+        statement = statement.where(guard)
     return [dict(row._mapping) for row in conn.execute(statement.order_by(event_log.c.sequence))]
 
 
@@ -271,7 +352,8 @@ def _frames_for_row(
     if event_type == "plan.approved":
         plan_frame = _plan_frame(conn, task_id=task_id, payload=payload, persisted=persisted)
         return [plan_frame.model_dump(mode="json")] if plan_frame is not None else []
-    if event_type in {"task.renamed", "task.archived"}:
+    # Both generations: pre-038 rows say `project.*` (task 038, contract V1).
+    if event_type in both_generations(*LIFECYCLE_EVENT_KINDS):
         task_frame = _task_frame(
             conn,
             task_id=task_id,
@@ -299,13 +381,24 @@ def _uuid(value: Any) -> uuid.UUID | None:
 def _summary(payload: dict[str, Any]) -> dict[str, int | float | str]:
     """Keep only scalar terminal counts; never expose nested raw component payloads."""
     hidden = {"component", "registry_component", "plan_id", "plan_version", "session_id"}
-    return {
+    summary: dict[str, int | float | str] = {
         key: value
         for key, value in payload.items()
         if key not in hidden
         and isinstance(value, (int, float, str))
         and not isinstance(value, bool)
     }
+    # Search-loop round index is nested under ``search`` today; flatten it
+    # so the running card can label Searching (Round 2) without seeing the
+    # raw component payload.
+    if "round_index" not in summary:
+        for value in payload.values():
+            if isinstance(value, dict):
+                round_index = value.get("round_index")
+                if isinstance(round_index, int):
+                    summary["round_index"] = round_index
+                    break
+    return summary
 
 
 def _seconds(
@@ -386,6 +479,8 @@ def _decision_frames(
     if check_in_id is None:
         return []
     response = payload.get("interpreted_action")
+    # Pre-038 rows carry the old actor word; the set below would drop them.
+    decided_by = steering_events.canonical_actor(payload.get("decided_by"))
     frame: list[CheckinResolvedFrame | PlanUpdatedFrame] = [
         CheckinResolvedFrame(
             type="checkin.resolved",
@@ -394,8 +489,8 @@ def _decision_frames(
                 response if isinstance(response, dict) else {"response": payload.get("response")}
             ),
             decided_by=(
-                payload.get("decided_by")
-                if payload.get("decided_by") in {"user", "agent", "standing_default"}
+                cast(Any, decided_by)
+                if decided_by in {"user", "agent", "standing_default"}
                 else None
             ),
             **persisted,
@@ -448,14 +543,20 @@ def _task_frame(
     payload: dict[str, Any],
     persisted: dict[str, Any],
 ) -> TaskUpdatedFrame:
-    """Project a lifecycle audit event without leaking its actor or old values."""
+    """Project a lifecycle audit event without leaking its actor or old values.
+
+    A sharing flip carries no row field the frame names, so it projects as a
+    bare ``task.updated`` (the client re-reads the task).
+    """
     del conn, task_id
-    if event_type == "task.renamed":
+    if event_type in both_generations("renamed"):
         name = payload.get("name_to")
         return TaskUpdatedFrame(
             type="task.updated", name=name if isinstance(name, str) else None, **persisted
         )
-    return TaskUpdatedFrame(type="task.updated", status="archived", **persisted)
+    if event_type in both_generations("archived"):
+        return TaskUpdatedFrame(type="task.updated", status="archived", **persisted)
+    return TaskUpdatedFrame(type="task.updated", **persisted)
 
 
 def _encode_frame(frame: dict[str, Any]) -> str:
@@ -479,7 +580,13 @@ async def stream_events(
     settings: Annotated[Settings, Depends(get_settings)],
     cursor: Annotated[int, Query(ge=0)] = 0,
 ) -> StreamingResponse:
-    """Stream an owner-scoped durable replay followed by a non-blocking live tail."""
+    """Stream a read-graded durable replay followed by a re-authorising live tail.
+
+    The replay is authorised once by ``_snapshot``; the tail re-authorises on
+    every batch through the same read legs and ends the response the moment the
+    caller's access is gone (contract § 5). **Re-authorisation precedes every
+    frame of its iteration, ephemeral ticks included** — see the loop.
+    """
     snapshot, replay = await anyio.to_thread.run_sync(
         partial(_snapshot, engine, task_id=task_id, user_id=user.user_id, cursor=cursor)
     )
@@ -501,11 +608,35 @@ async def stream_events(
                     tick = await asyncio.wait_for(queue.get(), timeout=timeout)
                 except TimeoutError:
                     tick = None
-                if tick is not None:
-                    yield _encode_tick(tick)
-                last_sequence, tail = await anyio.to_thread.run_sync(
-                    partial(_tail, engine, task_id=task_id, after=next_sequence - 1)
+                # The tick is **held**, not yielded, until the tail has
+                # re-authorised. A tick carries the task's current stage and
+                # its progress note — task-derived content — so yielding it
+                # first handed a caller whose access had just gone one more
+                # frame about work they may no longer read. Re-authorisation is
+                # the first thing every iteration does; nothing is written to
+                # the response before it answers.
+                pending_tick = _encode_tick(tick) if tick is not None else None
+                batch = await anyio.to_thread.run_sync(
+                    partial(
+                        _tail,
+                        engine,
+                        task_id=task_id,
+                        user_id=user.user_id,
+                        after=next_sequence - 1,
+                    )
                 )
+                # Access revoked mid-stream. Ending the generator completes the
+                # HTTP response and the client's `EventSource` sees a normal
+                # close; the protocol carries no error frame and inventing one
+                # here would be a new public frame type.
+                if batch is None:
+                    log.info("api.sse_revoked", task_id=str(task_id))
+                    return
+                last_sequence, tail = batch
+                # Order within the iteration is unchanged: the ephemeral tick
+                # still precedes the durable frames it was observed alongside.
+                if pending_tick is not None:
+                    yield pending_tick
                 for frame in tail:
                     yield _encode_frame(frame)
                 next_sequence = last_sequence + 1

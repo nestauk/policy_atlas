@@ -10,7 +10,7 @@ from sqlalchemy.engine import Connection, Engine
 
 from policy_atlas.core import events
 from policy_atlas.core.inference import StubEchoProvider
-from policy_atlas.core.schema import artefact, task, runs
+from policy_atlas.core.schema import artefact, runs, task
 from policy_atlas.evidence_search.corpus.theme_grouping import StubThemeGroupingBackend
 from policy_atlas.evidence_search.synthesis.grounding_judge import StubGroundingJudgeBackend
 from policy_atlas.evidence_search.synthesis.synthesis_backend import StubSynthesisBackend
@@ -22,9 +22,9 @@ from tests.helpers import (
     delete_task_data,
     now,
     seed_characterisation,
-    seed_task_and_run,
     seed_run,
     seed_scope,
+    seed_task_and_run,
 )
 
 # NOTE: these tests exercise generic harness dispatch/lifecycle machinery.

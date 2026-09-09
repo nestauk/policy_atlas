@@ -20,16 +20,16 @@ from sqlalchemy import select
 from sqlalchemy.engine import Engine
 
 from policy_atlas.core import events
-from policy_atlas.core.schema import task_plan, selection_result
+from policy_atlas.core.schema import selection_result, task_plan
 from policy_atlas.runtime import runner as runner_module
 from policy_atlas.runtime import steering_events
-from policy_atlas.runtime.task_plan import STEER_POINTS, SteerPointDefault
 from policy_atlas.runtime.runner import (
     _DiscretionContext,
     _DiscretionOutcome,
     run_plan,
 )
 from policy_atlas.runtime.steering import LATTICE_POINTS
+from policy_atlas.runtime.task_plan import STEER_POINTS, SteerPointDefault
 from tests.runtime.test_runner import _base_plan, _runner_backends, _seed_task
 from tests.runtime.test_steering import _cleanup_task, _insert_plan_row
 
@@ -288,7 +288,11 @@ def test_unconfigured_default_proceeds_flags_loudest_and_evented(engine: Engine)
             event["steer_point"] for event in auto if event["rule"] == "unconfigured_default"
         }
         # The always-on decision points all fell to the loudest floor.
-        assert {"evidence_search_coverage", "deepening_selection", "synthesis_shape"} <= floor_points
+        assert {
+            "evidence_search_coverage",
+            "deepening_selection",
+            "synthesis_shape",
+        } <= floor_points
 
         # Every floor decision is evented decided_by=standing_default.
         decisions = _standing_decisions(engine, task_id)

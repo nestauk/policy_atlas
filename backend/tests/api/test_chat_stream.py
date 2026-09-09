@@ -21,7 +21,7 @@ from policy_atlas.api.deps import (
 )
 from policy_atlas.api.routers import conversations as conversations_router
 from policy_atlas.core.embeddings import StubEmbeddingBackend
-from policy_atlas.core.schema import chat_turn, task_source_snapshot, source_snapshot
+from policy_atlas.core.schema import chat_turn, source_snapshot, task_source_snapshot
 from policy_atlas.core.schema import chunk as chunk_table
 from policy_atlas.evidence_search.synthesis.grounding_judge import StubGroundingJudgeBackend
 from policy_atlas.runtime.chat_backend import StubChatBackend

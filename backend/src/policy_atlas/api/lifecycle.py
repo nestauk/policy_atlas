@@ -14,6 +14,38 @@ from policy_atlas.core.schema import task
 
 log = structlog.get_logger()
 
+# --- Lifecycle event vocabulary, both generations (task 038, contract V1) ---
+#
+# New writes emit `task.*`. `event_log` is append-only, so rows written before
+# the slice still say `project.*` and every reader must accept both — this is
+# the one place the pairing is declared. The four kinds are the ones the
+# writers emit: rename and archive here, share and unshare in `routers/tasks`.
+LIFECYCLE_EVENT_KINDS: tuple[str, ...] = (
+    "renamed",
+    "archived",
+    "shared_publicly",
+    "unshared",
+)
+
+
+def both_generations(*kinds: str) -> frozenset[str]:
+    """Return each lifecycle kind under both the new and the pre-038 prefix.
+
+    Args:
+        *kinds: Bare kind names, e.g. ``"renamed"`` — each must be one of
+            :data:`LIFECYCLE_EVENT_KINDS`.
+
+    Returns:
+        The ``task.<kind>`` and ``project.<kind>`` event types for every kind.
+
+    Raises:
+        ValueError: If a name is not a declared lifecycle kind.
+    """
+    unknown = set(kinds) - set(LIFECYCLE_EVENT_KINDS)
+    if unknown:
+        raise ValueError(f"not lifecycle event kinds: {sorted(unknown)}")
+    return frozenset(f"{prefix}.{kind}" for kind in kinds for prefix in ("task", "project"))
+
 
 def rename_task(
     conn: Connection,

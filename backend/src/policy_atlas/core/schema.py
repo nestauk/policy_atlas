@@ -1,4 +1,4 @@
-"""SQLAlchemy Core table metadata — thirty-three tables plus one read view.
+"""SQLAlchemy Core table metadata — thirty-seven tables plus one read view.
 
 No deferred columns (no same_content_as or lineage key).
 """
@@ -28,6 +28,43 @@ from sqlalchemy.dialects.postgresql import JSONB, UUID
 
 metadata = MetaData()
 
+# Task 033 tenancy: an organisation sits above the entity hierarchy, and a row's
+# `org_id` is NULL until its owner is enrolled. NULL never matches NULL — the org
+# leg is a SQL predicate everywhere, never a Python comparison of two loaded values.
+organisation = Table(
+    "organisation",
+    metadata,
+    Column("org_id", UUID(as_uuid=True), primary_key=True),
+    Column("name", Text, nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    UniqueConstraint("name", name="uq_organisation_name"),
+)
+
+app_user = Table(
+    "app_user",
+    metadata,
+    Column("user_id", Text, primary_key=True),  # the token `sub`
+    Column("org_id", UUID(as_uuid=True), ForeignKey("organisation.org_id"), nullable=True),
+    Column("display_name", Text, nullable=False),  # never falls back to the email
+    Column("email", Text, nullable=True),  # ops- and admin-facing only
+    Column("is_admin", Boolean, nullable=False, server_default=text("false")),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+)
+
+# Splash-page Request-access intake. No FK to app_user — ops enrolment is the
+# Cognito on-ramp; this table is a queue for humans, not an identity store.
+waitlist_entry = Table(
+    "waitlist_entry",
+    metadata,
+    Column("entry_id", UUID(as_uuid=True), primary_key=True),
+    Column("email", Text, nullable=False),
+    Column("name", Text, nullable=False),
+    Column("organisation", Text, nullable=True),
+    Column("role_or_reason", Text, nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    UniqueConstraint("email", name="uq_waitlist_entry_email"),
+)
+
 project = Table(
     "project",
     metadata,
@@ -36,6 +73,29 @@ project = Table(
     Column("name", Text, nullable=False),
     Column("description", Text, nullable=True),
     Column("created_at", DateTime(timezone=True), nullable=False),
+    Column("org_id", UUID(as_uuid=True), ForeignKey("organisation.org_id"), nullable=True),
+    Column("visibility", Text, nullable=False, server_default="private"),
+    CheckConstraint("visibility IN ('org', 'private')", name="ck_project_visibility"),
+    Index("ix_project_org_visibility", "org_id", "visibility"),
+)
+
+project_membership = Table(
+    "project_membership",
+    metadata,
+    Column(
+        "project_id",
+        UUID(as_uuid=True),
+        ForeignKey("project.project_id"),
+        primary_key=True,
+    ),
+    Column(
+        "task_id",
+        UUID(as_uuid=True),
+        ForeignKey("task.task_id"),
+        primary_key=True,
+    ),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    Index("ix_project_membership_task_id", "task_id"),
 )
 
 task = Table(
@@ -49,17 +109,16 @@ task = Table(
     Column("updated_at", DateTime(timezone=True), nullable=False),
     Column("archived_at", DateTime(timezone=True), nullable=True),
     Column("owner_user_id", Text, nullable=True),
-    Column(
-        "project_id",
-        UUID(as_uuid=True),
-        ForeignKey("project.project_id"),
-        nullable=True,
-    ),
+    Column("org_id", UUID(as_uuid=True), ForeignKey("organisation.org_id"), nullable=True),
+    Column("visibility", Text, nullable=False, server_default="private"),
+    Column("is_public", Boolean, nullable=False, server_default=text("false")),
     CheckConstraint("status IN ('active', 'archived')", name="ck_task_status"),
     CheckConstraint(
         "(status = 'archived') = (archived_at IS NOT NULL)",
         name="ck_task_archived_at",
     ),
+    CheckConstraint("visibility IN ('org', 'private')", name="ck_task_visibility"),
+    Index("ix_task_org_visibility_status", "org_id", "visibility", "status"),
 )
 
 artefact = Table(
@@ -97,6 +156,9 @@ conversation = Table(
     Column("created_at", DateTime(timezone=True), nullable=False),
     Column("closed_at", DateTime(timezone=True), nullable=True),
     Column("archived_at", DateTime(timezone=True), nullable=True),
+    # The author's `sub`. Nullable because rows predating task 033 have no
+    # recorded author — those belong to the task owner (the legacy disjunct).
+    Column("created_by", Text, nullable=True),
     ForeignKeyConstraint(
         ["entry_artefact_id", "task_id"],
         ["artefact.artefact_id", "artefact.task_id"],
@@ -186,7 +248,7 @@ runs = Table(
     Column("capability_run_id", UUID(as_uuid=True), nullable=True),
     # Composite unique so event_log can FK on (run_id, task_id) and prevent cross-task events.
     UniqueConstraint("run_id", "task_id", name="uq_runs_run_task"),
-    # Cross-task FK guard, per the synthesis-result/orchestration-plan
+    # Cross-task FK guard, per the synthesis-result/task-plan
     # precedent: NULL capability_run_id skips the check (MATCH SIMPLE), so the
     # guard binds only once a run is actually attributed to a walk.
     ForeignKeyConstraint(
@@ -1147,7 +1209,7 @@ synthesis_result = Table(
     UniqueConstraint("evidence_scope_id", "run_id", name="uq_synr_scope_run"),
 )
 
-# --- Orchestration plan (task 017) ---
+# --- Task plan (task 017) ---
 
 task_plan = Table(
     "plan",
@@ -1215,7 +1277,7 @@ planning_transcript = Table(
 # --- Capability run (task 024) ---
 #
 # The steering-surface walk entity (contract decision 2): one row per
-# orchestrated capability walk (v1: 'evidence_search' only), carrying the
+# planned capability walk (v1: 'evidence_search' only), carrying the
 # approved plan identity at walk open and the walk's terminal status.
 # `runs.capability_run_id` (nullable, MATCH SIMPLE) attributes each
 # component run to the walk it executed within. Deliberately not modelled:

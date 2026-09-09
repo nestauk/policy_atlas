@@ -55,6 +55,8 @@ from policy_atlas.evidence_search.synthesis.synthesis_tools import (
     run_section_loop,
 )
 from policy_atlas.evidence_search.synthesis.synthesise import (
+    CASE_STUDIES_MAX_CARDS,
+    MRS_NOTE_MAX,
     SynthesiseContext,
     SynthesiseFailure,
     generation_budget_max,
@@ -64,11 +66,11 @@ from tests.helpers import (
     now,
     seed_characterisation,
     seed_ingested_full_text,
-    seed_task_and_run,
     seed_run,
     seed_scope,
     seed_screening_result,
     seed_select_doc,
+    seed_task_and_run,
 )
 from tests.synthesis_wire import ScriptedSynthesisBackend, prose_section
 
@@ -212,8 +214,17 @@ def test_caps_bind() -> None:
         is SECTION_TURN_CAP
     )
     # The code-injected conclusions section rides above SECTION_CAP and the
-    # final key-findings pass adds one emission + judge/repair/rejudge (ADR 0015 §8).
-    assert generation_budget_max() == 2 + (SECTION_CAP + 1) * (SECTION_TURN_CAP + 3) + 4
+    # final key-findings pass adds one emission + judge/repair/rejudge (ADR 0015 §8),
+    # plus the case-studies pass (emission + per-card judge) and MRS notes.
+    assert (
+        generation_budget_max()
+        == 2
+        + (SECTION_CAP + 1) * (SECTION_TURN_CAP + 3)
+        + 4
+        + (1 + CASE_STUDIES_MAX_CARDS)
+        + MRS_NOTE_MAX
+        + 1
+    )
 
 
 # --- Test 2: unknown and injection-shaped tool names never execute ---

@@ -32,7 +32,7 @@ from policy_atlas.evidence_search.extract.relevance_prompt import (
     RelevanceAnnotationWire,
     build_relevance_messages,
 )
-from tests.helpers import profile_doc, seed_task_and_run, seed_scope
+from tests.helpers import profile_doc, seed_scope, seed_task_and_run
 
 from .test_extract import _record, _seed_full_text_doc, _seed_selection
 from .test_relevance_annotator import (

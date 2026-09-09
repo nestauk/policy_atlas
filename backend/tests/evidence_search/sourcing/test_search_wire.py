@@ -14,7 +14,10 @@ from policy_atlas.core import events
 from policy_atlas.core.schema import search_coverage_record
 from policy_atlas.evidence_search.sourcing import search_live
 from policy_atlas.evidence_search.sourcing.acquire import AcquireContext
-from policy_atlas.evidence_search.sourcing.search_live import OpenAlexLiveBackend, OvertonLiveBackend
+from policy_atlas.evidence_search.sourcing.search_live import (
+    OpenAlexLiveBackend,
+    OvertonLiveBackend,
+)
 from policy_atlas.evidence_search.sourcing.search_loop import (
     SearchDirectiveError,
     overton_wire_params,
@@ -22,7 +25,7 @@ from policy_atlas.evidence_search.sourcing.search_loop import (
     to_wire_params,
 )
 from policy_atlas.evidence_search.sourcing.search_prompts import SearchQueriesWire
-from tests.helpers import ScriptedGenerationBackend, seed_task_and_run, seed_scope
+from tests.helpers import ScriptedGenerationBackend, seed_scope, seed_task_and_run
 from tests.provider_fixtures import OvertonFixtureBackend
 
 

@@ -1,27 +1,39 @@
 import type { HTMLAttributes, ReactNode } from "react";
 import { Link, NavLink, useLocation } from "react-router";
 
+import { Tooltip } from "../radix/Tooltip";
+import { Chip } from "./Chip";
 import { cn } from "./cn";
+import { FoldMarkAnimated } from "./FoldMarkAnimated";
+import { FoldMarkIcon } from "./FoldMarkIcon";
 
-/** Height of one chrome row. The shell stacks two of these inside a task. */
-export const NAV_BAR_HEIGHT_PX = 64;
+/** Hover copy for the BETA chip beside the wordmark. */
+export const BETA_CHIP_HINT =
+  "Beta means Policy Atlas is an experimental tool under development. Features may be incomplete or change, and outputs should be verified before they inform advice or decisions. We're testing with users and improving it continuously.";
 
 /** Top nav bar: brand left, links right, full viewport width. */
 export function NavBar({ className, children, ...props }: HTMLAttributes<HTMLElement>) {
   return (
     <nav className={cn("w-full border-b border-line bg-paper", className)} {...props}>
-      <div className="flex h-16 w-full items-center justify-between px-6">
+      <div className="flex h-16 w-full items-center justify-between px-6 max-md:h-auto max-md:min-h-14 max-md:flex-wrap max-md:gap-x-5 max-md:gap-y-1 max-md:px-4 max-md:py-2">
         {children}
       </div>
     </nav>
   );
 }
 
-/** Wordmark: "Policy" navy + "Atlas" electric blue, display face. */
-export function NavLogo() {
+/**
+ * Wordmark: fold-mark diamond + "Policy" navy + "Atlas" electric blue.
+ *
+ * @param running - When true the mark animates, signalling an active run.
+ */
+export function NavLogo({ running = false }: { running?: boolean }) {
   return (
-    <span className="whitespace-nowrap font-display text-heading font-extrabold tracking-[-0.02em] text-navy">
-      Policy <b className="font-extrabold text-blue">Atlas</b>
+    <span className="inline-flex items-center gap-1.25 whitespace-nowrap font-display text-heading font-extrabold tracking-[-0.02em] text-navy">
+      {running ? <FoldMarkAnimated onDark={false} /> : <FoldMarkIcon />}
+      <span>
+        Policy <b className="font-extrabold text-blue">Atlas</b>
+      </span>
     </span>
   );
 }
@@ -29,12 +41,23 @@ export function NavLogo() {
 /**
  * Brand wordmark, always home. It is not a nav item — the active underline
  * is reserved for New / Tasks / Projects, so the logo never looks selected.
+ *
+ * @param running - When true the fold-mark animates (active run in progress).
  */
-export function NavHomeLink() {
+export function NavHomeLink({ running = false }: { running?: boolean }) {
   return (
-    <Link to="/" className="min-w-0 no-underline">
-      <NavLogo />
-    </Link>
+    <div className="flex min-w-0 items-center gap-3">
+      <Link to="/" className="min-w-0 no-underline">
+        <NavLogo running={running} />
+      </Link>
+      <Tooltip
+        content={<p className="text-body leading-relaxed text-navy">{BETA_CHIP_HINT}</p>}
+      >
+        <span tabIndex={0} className="inline-flex">
+          <Chip tone="blue">BETA</Chip>
+        </span>
+      </Tooltip>
+    </div>
   );
 }
 

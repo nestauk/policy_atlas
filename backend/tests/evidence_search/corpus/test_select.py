@@ -51,11 +51,11 @@ from tests.helpers import (
     now,
     run_select,
     seed_characterisation,
-    seed_task_and_run,
     seed_run,
     seed_scope,
     seed_select_doc,
     seed_source,
+    seed_task_and_run,
 )
 
 NON_EVIDENCE_TYPE = "Other (Non-evidence documents)"

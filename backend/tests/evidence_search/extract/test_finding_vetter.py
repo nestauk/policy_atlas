@@ -43,9 +43,9 @@ from tests.helpers import (
     profile_findings,
     profile_provenance,
     profile_vetted_out,
-    seed_task_and_run,
     seed_run,
     seed_scope,
+    seed_task_and_run,
 )
 
 from .test_extract import _record, _run, _seed_full_text_doc, _seed_selection

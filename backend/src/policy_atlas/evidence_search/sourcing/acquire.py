@@ -32,9 +32,9 @@ from policy_atlas.core.hashing import content_hash
 from policy_atlas.core.schema import (
     METHODOLOGICAL_STRUCTURAL,
     TOPIC_THEME,
-    task_source_snapshot,
     search_coverage_record,
     source_snapshot,
+    task_source_snapshot,
 )
 from policy_atlas.core.schema import chunk as chunk_table
 from policy_atlas.core.tags import has_control_character, insert_source_tags
@@ -262,6 +262,7 @@ _OVERTON_RETAIN_KEYS = (
     "added_on",
     "languages",
     "authors_are_organizations",
+    "authors",  # 042: author names (string or list); normalised at read time
     # LLM-generated, like llm_document_description — retained but always
     # identifiable as machine text, never mixed into document-own-words fields
     "llm_document_theme",

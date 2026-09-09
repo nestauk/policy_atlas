@@ -67,7 +67,7 @@ describe("NewTaskView — capability step", () => {
     ).toBeInTheDocument();
   });
 
-  it("keeps a task preset when opened from a task, and still starts on the capability picker", async () => {
+  it("keeps a project preset when opened from a project, and still starts on the capability picker", async () => {
     const user = userEvent.setup();
     vi.mocked(queries.useProjects).mockReturnValue(
       {
@@ -79,6 +79,7 @@ describe("NewTaskView — capability step", () => {
               description: null,
               created_at: "2026-01-01T00:00:00Z",
               task_count: 0,
+              is_owner: true,
             },
           ],
         },
@@ -89,7 +90,7 @@ describe("NewTaskView — capability step", () => {
       screen.getByRole("heading", { name: "What would you like to do?" }),
     ).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /Evidence search/ }));
-    expect(screen.getByLabelText(/Add to a task/)).toHaveTextContent("Housing");
+    expect(screen.getByLabelText(/Add to a project/)).toHaveTextContent("Housing");
   });
 
   it("shows the capability-picker eyebrow and prompt", () => {
@@ -134,13 +135,13 @@ describe("NewTaskView — question step", () => {
   });
 });
 
-describe("NewTaskView — task selector", () => {
-  it("has no task selector when there are no tasks", () => {
+describe("NewTaskView — project selector", () => {
+  it("has no project selector when there are no projects", () => {
     renderNewTask("/new?capability=evidence_search");
-    expect(screen.queryByLabelText(/Add to a task/)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/Add to a project/)).not.toBeInTheDocument();
   });
 
-  it("offers the task selector when a task exists, and passes the choice to mutate", async () => {
+  it("offers the project selector when a project exists, and passes the choice to mutate", async () => {
     const user = userEvent.setup();
     vi.mocked(queries.useProjects).mockReturnValue(
       {
@@ -152,6 +153,7 @@ describe("NewTaskView — task selector", () => {
               description: null,
               created_at: "2026-01-01T00:00:00Z",
               task_count: 0,
+              is_owner: true,
             },
           ],
         },
@@ -159,7 +161,7 @@ describe("NewTaskView — task selector", () => {
     );
     renderNewTask("/new?capability=evidence_search");
 
-    await user.click(screen.getByLabelText(/Add to a task/));
+    await user.click(screen.getByLabelText(/Add to a project/));
     await user.click(screen.getByRole("option", { name: "Housing" }));
     await user.type(screen.getByLabelText("Your question"), "A question");
     await user.click(screen.getByRole("button", { name: "Start" }));
@@ -169,5 +171,57 @@ describe("NewTaskView — task selector", () => {
       question: "A question",
       projectId: "project-1",
     });
+  });
+
+  it("offers a colleague-owned, org-visible project — colleague assignment (owner ruling 2026-08-27)", async () => {
+    const user = userEvent.setup();
+    vi.mocked(queries.useProjects).mockReturnValue(
+      {
+        data: {
+          data: [
+            {
+              project_id: "project-1",
+              name: "Housing",
+              description: null,
+              created_at: "2026-01-01T00:00:00Z",
+              task_count: 0,
+              is_owner: true,
+            },
+            {
+              project_id: "project-2",
+              name: "A colleague's project",
+              description: null,
+              created_at: "2026-01-01T00:00:00Z",
+              task_count: 0,
+              is_owner: false,
+            },
+          ],
+        },
+      } as unknown as ReturnType<typeof queries.useProjects>,
+    );
+    renderNewTask("/new?capability=evidence_search");
+    await user.click(screen.getByLabelText(/Add to a project/));
+    expect(screen.getByRole("option", { name: "A colleague's project" })).toBeInTheDocument();
+  });
+
+  it("keeps the project selector when every project is colleague-owned", () => {
+    vi.mocked(queries.useProjects).mockReturnValue(
+      {
+        data: {
+          data: [
+            {
+              project_id: "project-2",
+              name: "A colleague's project",
+              description: null,
+              created_at: "2026-01-01T00:00:00Z",
+              task_count: 0,
+              is_owner: false,
+            },
+          ],
+        },
+      } as unknown as ReturnType<typeof queries.useProjects>,
+    );
+    renderNewTask("/new?capability=evidence_search");
+    expect(screen.getByLabelText(/Add to a project/)).toBeInTheDocument();
   });
 });

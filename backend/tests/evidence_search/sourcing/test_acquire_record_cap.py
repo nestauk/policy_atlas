@@ -12,7 +12,7 @@ from typing import Any, cast
 from sqlalchemy import func, select
 from sqlalchemy.engine import Connection
 
-from policy_atlas.core.schema import task_source_snapshot, source_snapshot
+from policy_atlas.core.schema import source_snapshot, task_source_snapshot
 from policy_atlas.evidence_search.sourcing.acquire import (
     AcquireContext,
     SearchBackend,
@@ -21,7 +21,7 @@ from policy_atlas.evidence_search.sourcing.acquire import (
     acquire_sources,
 )
 from policy_atlas.evidence_search.sourcing.search_loop import ExecutedCall
-from tests.helpers import oa_record, seed_task_and_run, seed_run, seed_scope
+from tests.helpers import oa_record, seed_run, seed_scope, seed_task_and_run
 from tests.provider_fixtures import OpenAlexFixtureBackend, OvertonFixtureBackend
 
 

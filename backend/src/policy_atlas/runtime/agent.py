@@ -2,7 +2,7 @@
 
 Runnable as ``python -m policy_atlas.runtime.agent``. It owns the whole
 user-facing product path: a planning conversation (intent -> refined,
-depth-graded orchestration plan), plan review and approval, and driving the EB
+depth-graded task plan), plan review and approval, and driving the EB
 capability-runner with steering check-ins. Sub-agents never address the user;
 the agent relays deterministic runner check-ins and steering pauses
 through a small, injectable console seam.
@@ -35,7 +35,7 @@ from policy_atlas.core.db import get_engine
 from policy_atlas.core.embeddings import EmbeddingBackend, OpenAIEmbeddingBackend
 from policy_atlas.core.fixtures import get_source
 from policy_atlas.core.logging import configure_logging
-from policy_atlas.core.schema import artefact, evidence_scope, task_plan, task
+from policy_atlas.core.schema import artefact, evidence_scope, task, task_plan
 from policy_atlas.evidence_search.assess.classification_backend import OpenAIClassificationBackend
 from policy_atlas.evidence_search.assess.screening_backend import OpenAIScreeningBackend
 from policy_atlas.evidence_search.corpus.ranking import OpenAIRankingBackend
@@ -59,10 +59,9 @@ from policy_atlas.evidence_search.sourcing.fetch_live import LiveDocumentFetcher
 from policy_atlas.evidence_search.sourcing.ingest_upload import ingest_upload
 from policy_atlas.evidence_search.synthesis.grounding_judge import OpenAIGroundingJudgeBackend
 from policy_atlas.evidence_search.synthesis.synthesis_backend import OpenAISynthesisBackend
-from policy_atlas.runtime.task_plan import CountryGroupAuthorship, TaskPlan
 from policy_atlas.runtime.agent_backend import (
-    OpenAIAgentBackend,
     AgentBackend,
+    OpenAIAgentBackend,
     StubAgentBackend,
 )
 from policy_atlas.runtime.planner import OpenAIPlannerBackend, PlannerBackend, StubPlannerBackend
@@ -77,6 +76,7 @@ from policy_atlas.runtime.steering import (
     refuse_inexpressible,
     render_check_in,
 )
+from policy_atlas.runtime.task_plan import CountryGroupAuthorship, TaskPlan
 
 log = structlog.get_logger()
 
@@ -275,8 +275,8 @@ class AgentResult:
 
     Args:
         exit_code: Process exit code the ``python -m`` entrypoint returns.
-        plan: The approved orchestration plan, or ``None`` if none was approved.
-        plan_id: The persisted orchestration-plan row id, or ``None``.
+        plan: The approved task plan, or ``None`` if none was approved.
+        plan_id: The persisted task-plan row id, or ``None``.
         task_id: The created task id, or ``None`` if nothing was created.
         evidence_scope_id: The created evidence-scope id, or ``None``.
         outcome: The runner outcome, or ``None`` if no run was launched.
@@ -314,7 +314,7 @@ class CliIO:
         """Relay one deterministic runner check-in to the console.
 
         Args:
-            component: Orchestration step name.
+            component: Plan step name.
             payload: Deterministic outcome payload.
         """
         del component
@@ -509,7 +509,7 @@ class UnattendedIO:
         """Relay one deterministic runner check-in to the console.
 
         Args:
-            component: Orchestration step name.
+            component: Plan step name.
             payload: Deterministic outcome payload.
         """
         del component
@@ -613,10 +613,10 @@ def build_plan(
         draft: The planner's ready plan draft.
 
     Returns:
-        The validated orchestration plan.
+        The validated task plan.
 
     Raises:
-        ValidationError: If the draft is not a valid orchestration plan.
+        ValidationError: If the draft is not a valid task plan.
     """
     data = draft.model_dump(exclude_none=True)
     constraints: dict[str, object] = {}
@@ -624,6 +624,7 @@ def build_plan(
         "published_after",
         "published_before",
         "publisher_country",
+        "publisher_source",
         "author_affiliation_countries",
     ):
         if key in data:
@@ -688,6 +689,8 @@ def _render_scope_constraints(plan: TaskPlan) -> list[str]:
         lines.append(f"    published_before: {constraints.published_before}")
     if constraints.publisher_country is not None:
         lines.append(f"    publisher_country: {constraints.publisher_country}")
+    if constraints.publisher_source is not None:
+        lines.append(f"    publisher_source: {constraints.publisher_source}")
     if constraints.author_affiliation_countries is not None:
         lines.append(
             "    author_affiliation_countries: "
@@ -710,7 +713,7 @@ def _render_scope_constraints(plan: TaskPlan) -> list[str]:
 
 def _render_full_plan(plan: TaskPlan) -> str:
     lines = [
-        "Proposed orchestration plan:",
+        "Proposed task plan:",
         f"  title: {plan.title}",
         f"  question: {plan.question}",
         f"  backend_scope: {plan.backend_scope}",
@@ -926,7 +929,7 @@ def _write_plan_row(
 
     Args:
         engine: SQLAlchemy engine.
-        plan: The approved orchestration plan.
+        plan: The approved task plan.
 
     Returns:
         ``(task_id, evidence_scope_id, plan_id)``.

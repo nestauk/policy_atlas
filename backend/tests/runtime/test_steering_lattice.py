@@ -22,7 +22,6 @@ from policy_atlas.evidence_search.synthesis.synthesis_backend import StubSynthes
 from policy_atlas.evidence_search.synthesis.synthesis_tools import parse_synthesis_directive
 from policy_atlas.runtime import runner as runner_module
 from policy_atlas.runtime import steering_bundles
-from policy_atlas.runtime.task_plan import compose
 from policy_atlas.runtime.runner import run_plan
 from policy_atlas.runtime.steering import (
     DEEPENING_SELECTION,
@@ -36,6 +35,7 @@ from policy_atlas.runtime.steering import (
     build_steer_point_options,
     generic_floor_options,
 )
+from policy_atlas.runtime.task_plan import compose
 from tests.runtime.test_runner import _base_plan, _runner_backends, _seed_task
 from tests.runtime.test_steering import ScriptedIO, _cleanup_task, _insert_plan_row
 

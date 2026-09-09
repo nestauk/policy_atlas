@@ -8,7 +8,7 @@ from sqlalchemy.engine import Connection
 
 from policy_atlas.core.schema import METHODOLOGICAL_STRUCTURAL, source_tag
 from policy_atlas.core.tags import TAG_INSERT_BATCH, insert_source_tags
-from tests.helpers import now, seed_task_and_run, seed_source
+from tests.helpers import now, seed_source, seed_task_and_run
 
 # PostgreSQL's hard limit on bind parameters in one statement.
 _MAX_BIND_PARAMS = 65_535
@@ -71,7 +71,10 @@ def test_insert_source_tags_default_topic_theme(conn: Connection) -> None:
     _, tss_id = seed_source(conn, pid)
 
     insert_source_tags(
-        conn, task_id=pid, run_id=rid, now=now(),
+        conn,
+        task_id=pid,
+        run_id=rid,
+        now=now(),
         assertions=[(tss_id, "housing", "test")],
     )
 
@@ -86,7 +89,10 @@ def test_insert_source_tags_methodological_structural(conn: Connection) -> None:
     _, tss_id = seed_source(conn, pid)
 
     insert_source_tags(
-        conn, task_id=pid, run_id=rid, now=now(),
+        conn,
+        task_id=pid,
+        run_id=rid,
+        now=now(),
         assertions=[(tss_id, "rct", "test")],
         tag_type=METHODOLOGICAL_STRUCTURAL,
     )
@@ -106,12 +112,18 @@ def test_insert_source_tags_theme_less_reassertion_keeps_existing_theme_id(
     theme_id = uuid.uuid4()
 
     insert_source_tags(
-        conn, task_id=pid, run_id=rid, now=now(),
+        conn,
+        task_id=pid,
+        run_id=rid,
+        now=now(),
         assertions=[(tss_id, "housing", "test")],
         theme_id=theme_id,
     )
     insert_source_tags(
-        conn, task_id=pid, run_id=rid, now=now(),
+        conn,
+        task_id=pid,
+        run_id=rid,
+        now=now(),
         assertions=[(tss_id, "housing", "test")],
     )
 
@@ -131,12 +143,18 @@ def test_insert_source_tags_theme_reassertion_with_new_theme_id_updates(
     new_theme_id = uuid.uuid4()
 
     insert_source_tags(
-        conn, task_id=pid, run_id=rid, now=now(),
+        conn,
+        task_id=pid,
+        run_id=rid,
+        now=now(),
         assertions=[(tss_id, "housing", "test")],
         theme_id=theme_id,
     )
     insert_source_tags(
-        conn, task_id=pid, run_id=rid, now=now(),
+        conn,
+        task_id=pid,
+        run_id=rid,
+        now=now(),
         assertions=[(tss_id, "housing", "test")],
         theme_id=new_theme_id,
     )
@@ -155,7 +173,10 @@ def test_insert_source_tags_theme_less_duplicate_assertion_in_one_batch_does_not
     _, tss_id = seed_source(conn, pid)
 
     insert_source_tags(
-        conn, task_id=pid, run_id=rid, now=now(),
+        conn,
+        task_id=pid,
+        run_id=rid,
+        now=now(),
         assertions=[(tss_id, "housing", "test"), (tss_id, "housing", "test")],
     )
 

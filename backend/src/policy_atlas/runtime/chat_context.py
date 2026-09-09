@@ -34,8 +34,8 @@ from policy_atlas.core.schema import (
     artefact,
     block,
     citation,
-    task,
     synthesis_result,
+    task,
 )
 from policy_atlas.runtime.chat_prompt import CHAT_FRAME_ARTEFACT_BUDGET, CHAT_WINDOW_CEILING
 

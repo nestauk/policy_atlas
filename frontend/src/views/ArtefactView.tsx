@@ -5,12 +5,29 @@ import { Link, useParams, useSearchParams } from "react-router";
 import type { components } from "../api/gen/types";
 import { useApiClient, useArtefact, useConversations, useEvidence, useFindings, useLandscape, useTask, useSourceDossier } from "../api/queries";
 import { useQuery } from "@tanstack/react-query";
-import { mostRelevantSources, sectionNavLabel } from "./artefactPresentation";
+import {
+  cardEvidenceMeta,
+  CASE_STUDIES_INTRO,
+  EXECUTIVE_SUMMARY_ANCHOR,
+  fullReportIntro,
+  FULL_REPORT_ANCHOR,
+  mergeMostRelevantNotes,
+  mostRelevantSources,
+  MOST_RELEVANT_SOURCES_INTRO,
+  REPORT_BODY_CLASS,
+  REPORT_PART_HEADING_CLASS,
+  REPORT_SECTION_HEADING_CLASS,
+  sectionNavLabel,
+  splitLeadColon,
+} from "./artefactPresentation";
 import type { TopSource } from "./artefactPresentation";
+import type { SidebarEntry } from "./ArtefactOutline";
 import { ArtefactDownload } from "./ArtefactDownload";
 import { errorCode } from "../lib/errors";
 import { scrub } from "../lib/scrub";
 import { useDocumentTitle } from "../lib/title";
+import { COPY } from "../lib/vocabulary";
+import { hasResult } from "./lifecycle";
 import { hasTerminalPartialLiveArtefact, useRunStream } from "../store";
 import type { LiveSection, RunStreamState } from "../store";
 import { Card } from "../ui/brand/Card";
@@ -18,18 +35,26 @@ import { Chip, type ChipProps } from "../ui/brand/Chip";
 import { ReauthRedirect } from "../ui/feedback";
 import { Sheet, SheetContent } from "../ui/radix/Sheet";
 import { LIFECYCLE_PAGE_CLASS, READING_COLUMN_MAX_W } from "./listPageChrome";
+import { usePublicView } from "./publicView";
 import {
   ContentsSidebar,
+  FullReportExpandAllButton,
+  FullReportExpandProvider,
   GatheredSection,
+  MobileDisclosureToggle,
   type OutlineSection,
   SectionDisclosure,
+  SECTION_EXPAND_LINK_CLASS,
   sectionAnchor,
+  useExpandAll,
   useOpenWhenNavigated,
+  useScrollWhenNavigated,
   useExpandForPrint,
 } from "./ArtefactOutline";
 import { Tooltip } from "../ui/radix/Tooltip";
-import { SourceDossierBody } from "./SourcesView";
-import { addOpenChatTab, useActiveConversation, useConversationMutations } from "./workspace/chat/conversationState";
+import { AuthorsLine, InstitutionsLine, SourceDossierBody } from "./SourcesView";
+import { referenceAuthorsLine } from "./artefactPresentation";
+import { useActiveConversation } from "./workspace/chat/conversationState";
 
 type CitationOut = components["schemas"]["CitationOut"];
 type GapOut = components["schemas"]["GapOut"];
@@ -63,11 +88,23 @@ interface BlockLike {
   prose: string;
   claims?: ClaimLike[];
 }
+interface CaseStudyCardLike {
+  card_id?: string;
+  title: string;
+  prose: string;
+  claims?: ClaimLike[];
+  result_claim_id?: string | null;
+  strength?: string | null;
+  design?: string | null;
+  since_year?: number | null;
+}
 interface SectionLike {
   title: string;
-  role?: "key_findings" | "standard" | "conclusions";
+  nav_label?: string | null;
+  role?: "key_findings" | "case_studies" | "standard" | "conclusions";
   focus?: string | null;
   blocks?: BlockLike[];
+  cards?: CaseStudyCardLike[];
 }
 
 /* --- typed annotation vocabulary (strand 5): claim breadth beyond
@@ -132,7 +169,7 @@ export const TIER_LABEL: Record<string, string> = {
   tier_2: "Tier 2 · grounded",
   tier_3: "Tier 3 · supported",
   tier_4: "Tier 4 · reasoning",
-  unsupported_mis_cited: "Unsupported — flagged",
+  unsupported_mis_cited: "Unsupported",
 };
 
 export const TIER_TEXT: Record<string, string> = {
@@ -160,8 +197,12 @@ const TYPE_HINT: Partial<Record<ClaimLike["claim_type"], string>> = {
  * server's block order within a section is preserved untouched.
  */
 export function orderSections<T extends SectionLike>(sections: T[]): T[] {
-  const rank = (section: T) =>
-    section.role === "key_findings" ? 0 : section.role === "conclusions" ? 2 : 1;
+  const rank = (section: T) => {
+    if (section.role === "key_findings") return 0;
+    if (section.role === "case_studies") return 1;
+    if (section.role === "conclusions") return 3;
+    return 2; // standard
+  };
   return [...sections].sort((a, b) => rank(a) - rank(b));
 }
 
@@ -311,9 +352,11 @@ export function CitationProvenanceBlock({
           <span>{scrub(sourceTitle)}</span>
         )}
       </p>
+      <AuthorsLine authorships={context.data?.authorships} className="mt-0.5 text-body text-grey" />
       {meta.length > 0 && (
         <p className="mt-0.5 text-body text-grey">{meta.map((m) => scrub(String(m))).join(" · ")}</p>
       )}
+      <InstitutionsLine authorships={context.data?.authorships} className="mt-0.5 text-caption text-grey" />
       <div className="mt-2 flex flex-wrap gap-1.5">{chips}</div>
       <div className="mt-3 space-y-2 text-body leading-relaxed">
         {context.isPending && (
@@ -452,9 +495,6 @@ export function ProvenanceSheet({
             ))}
           {extras}
           {children}
-          <p className="border-t border-line pt-3 text-body text-grey">
-            Every claim links to the exact passage it came from.
-          </p>
         </div>
       </SheetContent>
     </Sheet>
@@ -639,10 +679,14 @@ function ClaimSpan({
   claim,
   text,
   onOpen,
+  showCitationMarker = true,
 }: {
   claim: ClaimLike;
   text: string;
   onOpen: (claim: ClaimLike) => void;
+  /** When false, the [n] marker button is suppressed — used for the lead
+   *  half of a colon-crossing citation so the marker shows only once. */
+  showCitationMarker?: boolean;
 }) {
   // Dev-facing markings (source-check flags, connective reasoning) carry no
   // user-facing detail: their prose renders unmarked (owner, 2026-07-29).
@@ -712,7 +756,7 @@ function ClaimSpan({
           {scrub(text)}
         </span>
       </Tooltip>
-      {claim.claim_type === "citation" && citationNumbers.length > 0 && (
+      {claim.claim_type === "citation" && citationNumbers.length > 0 && showCitationMarker && (
         <button
           type="button"
           aria-label={`Citations ${citationNumbers.join(", ")}`}
@@ -739,7 +783,7 @@ function ClaimSpan({
   );
 }
 
-export type SpanSegment<C> = { kind: "plain"; text: string } | { kind: "claim"; text: string; claim: C };
+type SpanSegment<C> = { kind: "plain"; text: string } | { kind: "claim"; text: string; claim: C };
 
 /**
  * Split `prose` into plain/claim segments by each claim's `[start, end)`
@@ -779,6 +823,104 @@ export function spanSegments<C extends { span?: number[] | null }>(
   }
   if (cursor < chars.length) parts.push({ kind: "plain", text: chars.slice(cursor).join("") });
   return parts;
+}
+
+type BulletSegment = SpanSegment<ClaimLike>;
+
+function stripBulletPrefix(text: string, isFirst: boolean): string {
+  return isFirst ? text.replace(/^\s*- /, "") : text;
+}
+
+function sliceSegment(segment: BulletSegment, start: number, end: number): BulletSegment {
+  const text = segment.text.slice(start, end);
+  return segment.kind === "plain" ? { kind: "plain", text } : { kind: "claim", text, claim: segment.claim };
+}
+
+/**
+ * Bold everything before the first `: ` on a key-findings bullet (034 S3).
+ *
+ * The split is display-only. A claim span that crosses the colon is sliced
+ * into two affordances of the same claim rather than mis-joined. No colon
+ * leaves the line unbolded.
+ */
+function renderLeadColonBullet(
+  segments: BulletSegment[],
+  onOpenClaim: (claim: ClaimLike) => void,
+): ReactNode {
+  const cleaned: BulletSegment[] = segments.map((segment, index) => {
+    const text = stripBulletPrefix(segment.text, index === 0);
+    return segment.kind === "plain"
+      ? { kind: "plain", text }
+      : { kind: "claim", text, claim: segment.claim };
+  });
+  const full = cleaned.map((segment) => segment.text).join("");
+  const split = splitLeadColon(full);
+
+  const renderSegs = (
+    parts: BulletSegment[],
+    keyPrefix: string,
+    suppressMarkerIds?: Set<string>,
+  ) =>
+    parts.map((segment, index) =>
+      segment.kind === "plain" ? (
+        <span key={`${keyPrefix}${index}`}>{scrub(segment.text)}</span>
+      ) : (
+        <ClaimSpan
+          key={`${keyPrefix}${index}`}
+          claim={segment.claim}
+          text={segment.text}
+          onOpen={onOpenClaim}
+          showCitationMarker={
+            suppressMarkerIds !== undefined
+              ? !suppressMarkerIds.has(segment.claim.claim_id)
+              : true
+          }
+        />
+      ),
+    );
+
+  if (split === null) return renderSegs(cleaned, "u");
+
+  const splitAt = full.indexOf(": ");
+  const colonEnd = splitAt + 2;
+  const leadPieces: BulletSegment[] = [];
+  const restPieces: BulletSegment[] = [];
+  let offset = 0;
+  for (const segment of cleaned) {
+    const start = offset;
+    const end = offset + segment.text.length;
+    offset = end;
+    if (end <= splitAt) {
+      leadPieces.push(segment);
+      continue;
+    }
+    if (start >= colonEnd) {
+      restPieces.push(segment);
+      continue;
+    }
+    if (start < splitAt) {
+      leadPieces.push(sliceSegment(segment, 0, splitAt - start));
+    }
+    if (end > colonEnd) {
+      restPieces.push(sliceSegment(segment, colonEnd - start, segment.text.length));
+    }
+  }
+  // Claims whose span crosses the colon appear in both halves: show [n] only
+  // in the rest half so the marker is never duplicated (034 S3 fix).
+  const restClaimIds = new Set(
+    restPieces
+      .filter((s): s is Extract<BulletSegment, { kind: "claim" }> => s.kind === "claim")
+      .map((s) => s.claim.claim_id),
+  );
+  return (
+    <>
+      <strong>
+        {renderSegs(leadPieces, "l", restClaimIds)}
+        :
+      </strong>
+      {restPieces.length > 0 ? <> {renderSegs(restPieces, "r")}</> : null}
+    </>
+  );
 }
 
 /**
@@ -831,35 +973,30 @@ export function AnnotatedProse({
     }
     if (current.length > 0) bullets.push(current);
     return (
-      <div className="max-w-prose-measure text-lead text-ink">
+      <div className={`max-w-prose-measure ${REPORT_BODY_CLASS}`}>
         <ul className="list-none space-y-1.5">
-          {bullets.map((bullet, bulletIndex) => (
-            <li key={bulletIndex} className="flex gap-2">
-              <span aria-hidden="true" className="mt-2 h-1.5 w-1.5 shrink-0 bg-blue" />
-              <span>
-                {bullet.map((segment, index) =>
-                  segment.kind === "plain" ? (
-                    <span key={index}>{scrub(segment.text.replace(/^\s*- /, ""))}</span>
-                  ) : (
-                    <ClaimSpan
-                      key={index}
-                      claim={segment.claim}
-                      text={segment.text.replace(/^\s*- /, "")}
-                      onOpen={onOpenClaim}
-                    />
-                  ),
-                )}
-              </span>
-            </li>
-          ))}
+          {bullets.map((bullet, bulletIndex) => {
+            const isGap = bullet.some(
+              (segment) => segment.kind === "claim" && segment.claim.claim_type === "gap",
+            );
+            return (
+              <li key={bulletIndex} className="flex gap-2">
+                <span
+                  aria-hidden="true"
+                  className={`mt-2 h-1.5 w-1.5 shrink-0 ${isGap ? "bg-yellow" : "bg-blue"}`}
+                />
+                <span>{renderLeadColonBullet(bullet, onOpenClaim)}</span>
+              </li>
+            );
+          })}
         </ul>
         {crossing.map((claim) => (
-          <p key={claim.claim_id} className="mt-2 text-lead text-grey">
+          <p key={claim.claim_id} className="mt-2 text-lead text-grey max-md:text-body">
             <ClaimSpan claim={claim} text={claim.text} onOpen={onOpenClaim} />
           </p>
         ))}
         {unspanned.map((claim) => (
-          <p key={claim.claim_id} className="mt-2 text-lead text-grey">
+          <p key={claim.claim_id} className="mt-2 text-lead text-grey max-md:text-body">
             <ClaimSpan claim={claim} text={claim.text} onOpen={onOpenClaim} />
           </p>
         ))}
@@ -868,7 +1005,7 @@ export function AnnotatedProse({
   }
 
   return (
-    <div className="max-w-prose-measure text-lead text-ink">
+    <div className={`max-w-prose-measure ${REPORT_BODY_CLASS}`}>
       <p className="whitespace-pre-line">
         {segments.map((segment, index) => {
           if (segment.kind === "plain") {
@@ -880,7 +1017,7 @@ export function AnnotatedProse({
         })}
       </p>
       {unspanned.map((claim) => (
-        <p key={claim.claim_id} className="mt-2 text-lead text-grey">
+        <p key={claim.claim_id} className="mt-2 text-lead text-grey max-md:text-body">
           <ClaimSpan claim={claim} text={claim.text} onOpen={onOpenClaim} />
         </p>
       ))}
@@ -921,7 +1058,6 @@ export function SourceDossier({
     >
       <SheetContent
         title={scrub(byId ? (dossier.data?.title ?? source?.title ?? "Source") : sourceRef)}
-        description="Source dossier"
       >
         {evidence.isPending && (
           <p role="status" className="animate-pulse text-body text-grey">
@@ -983,7 +1119,7 @@ export function LiveArtefactBody({ stream }: { stream: RunStreamState }) {
     (section: LiveSection) => !(section.state === "filled" && (section.prose ?? "") === ""),
   );
   return (
-    <main className={`artefact-page anim-rise mx-auto my-8 ${READING_COLUMN_MAX_W} bg-paper px-10 py-9 shadow-sm ring-1 ring-line`}>
+    <main className={`artefact-page anim-rise mx-auto my-8 ${READING_COLUMN_MAX_W} bg-paper px-10 py-9 shadow-sm ring-1 ring-line max-md:my-0 max-md:px-4 max-md:py-6 max-md:shadow-none max-md:ring-0`}>
       {terminalPartial ? (
         <div
           role="alert"
@@ -992,7 +1128,7 @@ export function LiveArtefactBody({ stream }: { stream: RunStreamState }) {
           <p className="font-bold">This run ended before the write-up completed.</p>
           <p className="mt-0.5">
             The sections below are drafted text from the interrupted run — not the checked
-            evidence base. Citations were never attached. Start a fresh run to produce the full
+            report. Citations were never attached. Start a fresh run to produce the full
             artefact.
           </p>
         </div>
@@ -1030,51 +1166,6 @@ export function LiveArtefactBody({ stream }: { stream: RunStreamState }) {
   );
 }
 
-/** The evidence base: A4 page frame, coverage snapshot, key-findings-first
- *  ordering, typed annotated prose, citation ladder, shared dossier
- *  (?source=… — deep-linkable, refresh-safe), and the live streaming state
- *  while synthesis writes. */
-/**
- * The report's opening statement.
- *
- * Only a verified summary is shown as the answer: an unverified one has not
- * passed the faithfulness check, and presenting it as the answer would be the
- * report vouching for something it has not checked. `pending` and `failed`
- * each say what is true instead, and the report still opens correctly at Key
- * findings beneath.
- */
-function AnswerCallout({
-  summary,
-  status,
-}: {
-  summary: string | null;
-  status: "pending" | "verified" | "failed" | null;
-}) {
-  if (status === "verified" && summary != null && summary !== "") {
-    return (
-      <p className="mt-4 max-w-prose-measure border-l-2 border-l-blue bg-blue-tint/30 px-4 py-3 text-lead text-ink">
-        {scrub(summary)}
-      </p>
-    );
-  }
-  if (status === "pending") {
-    return (
-      <p role="status" className="mt-4 max-w-prose-measure text-body text-grey">
-        The summary is still being checked. The findings below are complete.
-      </p>
-    );
-  }
-  if (status === "failed") {
-    return (
-      <p role="status" className="mt-4 max-w-prose-measure text-body text-grey">
-        A summary couldn't be verified for this report, so none is shown. The
-        findings below are complete.
-      </p>
-    );
-  }
-  return null;
-}
-
 /**
  * The handful of sources the report leans on most.
  *
@@ -1083,6 +1174,81 @@ function AnswerCallout({
  * a study matters: that is a judgement nobody made, and asserting it would be
  * the report inventing authority for itself.
  */
+
+function CaseStudyCardProse({
+  card,
+  onOpenClaim,
+}: {
+  card: CaseStudyCardLike;
+  onOpenClaim: (claim: ClaimLike) => void;
+}) {
+  const claims = card.claims ?? [];
+  if (claims.length === 0) {
+    return <p className={`mt-1 max-w-prose-measure ${REPORT_BODY_CLASS}`}>{scrub(card.prose)}</p>;
+  }
+
+  const block: BlockLike = { block_id: card.card_id ?? card.title, prose: card.prose, claims };
+  const segments = spanSegments(block.prose, block.claims ?? []);
+
+  return (
+    <p className={`mt-1 max-w-prose-measure whitespace-pre-line ${REPORT_BODY_CLASS}`}>
+      {segments.map((segment, index) => {
+        if (segment.kind === "plain") return <span key={index}>{scrub(segment.text)}</span>;
+        const isResult = card.result_claim_id != null && segment.claim.claim_id === card.result_claim_id;
+        return (
+          <span key={index}>
+            {isResult ? (
+              <strong>
+                <ClaimSpan claim={segment.claim} text={segment.text} onOpen={onOpenClaim} />
+              </strong>
+            ) : (
+              <ClaimSpan claim={segment.claim} text={segment.text} onOpen={onOpenClaim} />
+            )}
+          </span>
+        );
+      })}
+    </p>
+  );
+}
+
+function CaseStudiesSection({
+  section,
+  id,
+  onOpenClaim,
+}: {
+  section: SectionLike;
+  id: string;
+  onOpenClaim: (claim: ClaimLike) => void;
+}) {
+  useScrollWhenNavigated(id);
+  const cards = section.cards ?? [];
+  if (cards.length === 0) return null;
+  return (
+    <section id={id} className="mb-9">
+      <h2 className={REPORT_SECTION_HEADING_CLASS}>{scrub(section.title)}</h2>
+      <p className={`mt-1.5 max-w-prose-measure ${REPORT_BODY_CLASS}`}>{CASE_STUDIES_INTRO}</p>
+      <ul role="list" className="mt-3 grid gap-3">
+        {cards.map((card) => {
+          const { strength, design, sinceYear } = cardEvidenceMeta(card);
+          return (
+            <li key={card.card_id ?? card.title} className="border border-line p-4">
+              <p className={`${REPORT_BODY_CLASS} font-bold`}>{scrub(card.title)}</p>
+              <CaseStudyCardProse card={card} onOpenClaim={onOpenClaim} />
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {strength != null && (
+                  <AppraisalChip label={strength} evidenceType={design} />
+                )}
+                {design != null && <Chip tone="soft">{scrub(design)}</Chip>}
+                {sinceYear != null && <Chip tone="soft">Since {sinceYear}</Chip>}
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+    </section>
+  );
+}
+
 function MostRelevantSources({
   sources,
   onOpenDossier,
@@ -1090,30 +1256,39 @@ function MostRelevantSources({
   sources: TopSource[];
   onOpenDossier: (title: string) => void;
 }) {
+  useScrollWhenNavigated("sources");
   if (sources.length === 0) return null;
   return (
-    <section className="mt-8 border-t border-line pt-6">
-      <h2 className="text-caption font-extrabold uppercase tracking-[0.06em] text-grey">
-        Most cited sources
-      </h2>
-      <ul role="list" className="mt-3 space-y-3">
+    <section id="sources" className="mb-9">
+      <h2 className={REPORT_SECTION_HEADING_CLASS}>Most relevant sources</h2>
+      <p className={`mt-1.5 max-w-prose-measure ${REPORT_BODY_CLASS}`}>{MOST_RELEVANT_SOURCES_INTRO}</p>
+      <ul role="list" className="mt-3 grid gap-3">
         {sources.map((source) => (
-          <li key={source.sourceId} className="border border-line p-3">
+          <li key={source.sourceId} className="border border-line p-4">
             <button
               type="button"
               onClick={() => onOpenDossier(source.title)}
-              className="cursor-pointer text-left text-body font-semibold text-navy hover:underline"
+              className={`cursor-pointer text-left ${REPORT_BODY_CLASS} font-bold hover:underline`}
             >
               {scrub(source.title)}
             </button>
-            <p className="mt-1 text-body text-grey">
-              Cited by {source.citationCount === 1 ? "1 claim" : `${source.citationCount} claims`}
-              {source.appraisalLabel != null && ` · ${scrub(source.appraisalLabel)}`}
-              {source.evidenceType != null && ` · ${scrub(source.evidenceType)}`}
-            </p>
-            <p className="mt-1 text-body text-grey">
-              In {source.citedInSections.map((title) => scrub(title)).join(", ")}
-            </p>
+            {source.authors != null && source.authors.length > 0 && (
+              <p className={`mt-0.5 ${REPORT_BODY_CLASS}`}>
+                {source.authors.map((a) => scrub(a)).join(", ")}
+              </p>
+            )}
+            {source.note != null && source.note !== "" && (
+              <p className={`mt-1 max-w-prose-measure ${REPORT_BODY_CLASS}`}>{scrub(source.note)}</p>
+            )}
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {source.appraisalLabel != null && (
+                <AppraisalChip label={source.appraisalLabel} evidenceType={source.evidenceType} />
+              )}
+              {source.evidenceType != null && <Chip tone="soft">{scrub(source.evidenceType)}</Chip>}
+              <Chip tone="soft">
+                {source.citationCount === 1 ? "Cited by 1 claim" : `Cited by ${source.citationCount} claims`}
+              </Chip>
+            </div>
           </li>
         ))}
       </ul>
@@ -1121,12 +1296,22 @@ function MostRelevantSources({
   );
 }
 
+/** The evidence base: A4 page frame, coverage snapshot, key-findings-first
+ *  ordering, typed annotated prose, citation ladder, shared dossier
+ *  (?source=… — deep-linkable, refresh-safe), and the live streaming state
+ *  while synthesis writes. */
 export function ArtefactView() {
   const { taskId = "" } = useParams();
+  const isPublicView = usePublicView();
   const task = useTask(taskId);
   const artefact = useArtefact(taskId);
-  const chats = useConversations(taskId, { kind: "chat", status: "active" });
-  const { create } = useConversationMutations(taskId);
+  // The public view (task 037) must issue only public-surface requests:
+  // conversations stay unfetched and the chat affordance below is hidden.
+  const chats = useConversations(
+    taskId,
+    { kind: "chat", status: "active" },
+    { enabled: !isPublicView },
+  );
   // Cited-scoped distributions for the facts strip: study types and years
   // count what the report CITES, not the whole included corpus (owner,
   // 2026-08-05); the durable coverage_snapshot keeps the corpus-wide counts.
@@ -1135,7 +1320,7 @@ export function ArtefactView() {
   const [searchParams, setSearchParams] = useSearchParams();
   const dossierSource = searchParams.get("source");
   const [detailClaim, setDetailClaim] = useState<ClaimLike | null>(null);
-  useDocumentTitle(task.data?.name, "Evidence base");
+  useDocumentTitle(task.data?.name, "Report");
 
   const openDossier = (title: string) => {
     setSearchParams((current) => {
@@ -1151,24 +1336,25 @@ export function ArtefactView() {
       return next;
     });
   };
-  const { setActiveConversation } = useActiveConversation();
-  const askAboutAnalysis = async () => {
+  const { setActiveConversation, openDraftChat } = useActiveConversation();
+  // Chats need a result to ask about (038 V8) — the same gate as New chat.
+  const chatsEnabled = hasResult(task.data?.latest_run?.status) || hasResult(stream.run?.status);
+  const askAboutAnalysis = () => {
     // The open artefact is the chat's entry context (a chip and provenance
-    // fact, never a scope fence); reuse a blank chat already carrying it.
+    // fact, never a scope fence); reuse a blank chat already carrying it,
+    // else open a DRAFT beside the artefact (rev 3.4) — the row is created
+    // on the first message, never before (038 V8).
     const artefactId = artefact.data?.artefact_id ?? null;
     const blank = chats.data?.data.find(
       (chat) => chat.title === "New chat" && chat.entry_artefact_id === artefactId,
     );
-    const conversation = blank ?? await create(artefactId);
-    // Open the side panel HERE (rev 3.4): questions arise while reading, so
-    // the chat lands beside the artefact instead of navigating away.
-    addOpenChatTab(taskId, conversation.id);
-    setActiveConversation(conversation.id);
+    if (blank !== undefined) return setActiveConversation(blank.id);
+    openDraftChat(artefactId);
   };
 
   if (artefact.isPending) {
     return (
-      <main aria-busy="true" aria-label="Loading the evidence base" className={`${LIFECYCLE_PAGE_CLASS} py-10`}>
+      <main aria-busy="true" aria-label="Loading the report" className={`${LIFECYCLE_PAGE_CLASS} py-10`}>
         {Array.from({ length: 4 }).map((_, i) => (
           <div key={i} className="mb-4 h-24 animate-pulse border border-line bg-paper-2" />
         ))}
@@ -1186,7 +1372,7 @@ export function ArtefactView() {
       return (
         <main className={`${LIFECYCLE_PAGE_CLASS} py-10`}>
           <Card role="alert" className="p-8 text-center text-body text-navy">
-            The evidence base couldn't be loaded.{" "}
+            The report couldn't be loaded.{" "}
             <button
               type="button"
               className="cursor-pointer font-bold text-blue hover:underline"
@@ -1209,9 +1395,9 @@ export function ArtefactView() {
     return (
       <main className={`${LIFECYCLE_PAGE_CLASS} py-10`}>
         <Card role="status" className="p-8 text-center">
-          <h1 className="text-title font-bold text-navy">No evidence base yet</h1>
+          <h1 className="text-title font-bold text-navy">Preparing your results...</h1>
           <p className="mt-1.5 text-body text-grey">
-            The evidence base appears here once an analysis reaches synthesis.
+          Your synthesised report will appear here when the Writing step begins.
           </p>
         </Card>
       </main>
@@ -1241,6 +1427,20 @@ export function ArtefactView() {
     .map(Number)
     .filter(Number.isInteger);
   const sections = orderSections((data.sections ?? []) as SectionLike[]);
+  // frontSections = key_findings + case_studies (executive summary part);
+  // bodySections = standard + conclusions (full report part).
+  const firstBodyIndex = sections.findIndex(
+    (section) => section.role !== "key_findings" && section.role !== "case_studies",
+  );
+  const frontSections =
+    firstBodyIndex === -1 ? sections.map((section, index) => ({ section, index })) : sections.slice(0, firstBodyIndex).map((section, index) => ({ section, index }));
+  const bodySections =
+    firstBodyIndex === -1
+      ? []
+      : sections.slice(firstBodyIndex).map((section, index) => ({
+          section,
+          index: firstBodyIndex + index,
+        }));
 
   // Sources links into the sources view, filtered to the cited set
   // (028 F.5): there is no `status=cited` value, so the cited count routes
@@ -1265,7 +1465,7 @@ export function ArtefactView() {
   }
   if (citedYears.length > 0) {
     snapshotCells.push([
-      "Years covered",
+      "Published",
       `${Math.min(...citedYears)}–${Math.max(...citedYears)}`,
       null,
     ]);
@@ -1279,42 +1479,51 @@ export function ArtefactView() {
     snapshotCells.push(["Last updated", new Date(lastUpdated).toLocaleDateString(), null]);
   }
 
-  const topSources = mostRelevantSources(sections);
+  const topSources = mergeMostRelevantNotes(
+    mostRelevantSources(sections),
+    (data.most_relevant_notes ?? []) as Array<{ source_id: string; note: string }>,
+  );
 
-  const outlineEntries = [
-    ...orderSections((data.sections ?? []) as SectionLike[]).map((section, index) => ({
+  const roadmapText = fullReportIntro(bodySections.length, data.full_report_intro);
+
+  const outlineEntries: SidebarEntry[] = [
+    { kind: "part", id: EXECUTIVE_SUMMARY_ANCHOR, title: "Executive summary" },
+    ...frontSections.map(({ section, index }) => ({
+      id: sectionAnchor(section.title, index),
+      title: sectionNavLabel(section, 28),
+    })),
+    ...(topSources.length > 0 ? [{ id: "sources", title: "Most relevant sources" }] : []),
+    ...(bodySections.length > 0
+      ? [{ kind: "part" as const, id: FULL_REPORT_ANCHOR, title: "Full report" }]
+      : []),
+    ...bodySections.map(({ section, index }) => ({
       id: sectionAnchor(section.title, index),
       title: sectionNavLabel(section, 28),
     })),
     ...((data.references ?? []).length > 0 ? [{ id: "references", title: "References" }] : []),
-    { id: "gathered", title: "How the evidence was gathered" },
+    { id: "gathered", title: "Method" },
   ];
 
   return (
-    <div className="mx-auto flex w-full flex-col justify-center gap-6 px-6 md:flex-row">
+    <div className="mx-auto flex w-full flex-col justify-center gap-6 px-6 max-md:gap-0 max-md:px-0 md:flex-row">
       <ContentsSidebar entries={outlineEntries} />
-      <main className={`artefact-page anim-rise my-8 min-w-0 ${READING_COLUMN_MAX_W} flex-1 bg-paper px-10 py-9 shadow-sm ring-1 ring-line`}>
-      <header className="mb-8">
-        <div className="flex items-start justify-between gap-4">
-          <div className="min-w-0">
-            <p className="text-caption font-extrabold uppercase tracking-[0.06em] text-grey">
-              Evidence base
-            </p>
-            <h1 className="mt-1 text-display font-extrabold leading-tight tracking-[-0.5px] text-navy">
-              {scrub(data.title)}
-            </h1>
-          </div>
+      <main className={`artefact-page anim-rise my-8 min-w-0 ${READING_COLUMN_MAX_W} flex-1 bg-paper px-10 py-9 shadow-sm ring-1 ring-line max-md:my-0 max-md:px-4 max-md:py-6 max-md:shadow-none max-md:ring-0`}>
+      <header id="answer" className="mb-8">
+        <div className="flex items-center justify-between gap-4">
+          <p className="text-meta font-extrabold uppercase tracking-[0.06em] text-grey">
+            Report
+          </p>
           <ArtefactDownload artefact={data} />
         </div>
-        <button type="button" onClick={() => void askAboutAnalysis()} className="print-hide mt-3 text-caption font-bold text-blue hover:underline">Ask about this analysis</button>
-        {/* No question subtitle — the title already carries it (owner, 2026-08-05). */}
-        <AnswerCallout summary={data.summary ?? null} status={data.summary_status ?? null} />
+        <h1 className="mt-1 text-display font-extrabold leading-tight tracking-[-0.5px] text-navy max-md:text-title">
+          {scrub(data.title)}
+        </h1>
         {snapshotCells.length > 0 && (
-          <div className="mt-5 grid grid-cols-4 border border-line">
+          <div className="mt-4 grid grid-cols-2 border border-line sm:grid-cols-4">
             {snapshotCells.map(([label, value, href]) => {
               const content = (
                 <>
-                  <p className="text-caption font-bold uppercase tracking-[0.06em] text-grey">{label}</p>
+                  <p className="text-meta font-bold uppercase tracking-[0.06em] text-grey">{label}</p>
                   <p className="mt-1 text-body font-medium leading-snug text-navy">{scrub(value)}</p>
                 </>
               );
@@ -1334,37 +1543,93 @@ export function ArtefactView() {
             })}
           </div>
         )}
+        {!isPublicView && (
+          <button
+            type="button"
+            onClick={askAboutAnalysis}
+            disabled={!chatsEnabled}
+            title={chatsEnabled ? undefined : COPY.newChatUnavailable}
+            className="print-hide mt-3 text-caption font-bold text-blue hover:underline disabled:text-grey disabled:no-underline"
+          >
+            Ask about this analysis
+          </button>
+        )}
         {/* Coverage banner removed (owner, 2026-07-29): the adequacy verdict
             surfaces where it matters — inside each gap claim's detail. */}
       </header>
 
-      {sections.map((section, index) => (
-        <SectionDisclosure
-          key={index}
-          id={sectionAnchor(section.title, index)}
-          section={section as OutlineSection}
-          // Key findings is never collapsible (always in full); every other
-          // section — conclusions included — starts collapsed on its summary
-          // (owner, 2026-08-05).
-          collapsible={section.role !== "key_findings"}
-          defaultOpen={false}
-        >
-          {(section.blocks ?? []).map((block) => (
-            <AnnotatedProse key={block.block_id} block={block} onOpenClaim={setDetailClaim} />
-          ))}
-        </SectionDisclosure>
-      ))}
+      {/* Executive summary part — In brief hidden (034 owner steer: overlaps key findings). */}
+      <h2 id={EXECUTIVE_SUMMARY_ANCHOR} className={`mb-6 ${REPORT_PART_HEADING_CLASS}`}>
+        Executive summary
+      </h2>
+
+      {frontSections.map(({ section, index }) =>
+        section.role === "case_studies" ? (
+          <CaseStudiesSection key={index} section={section} id={sectionAnchor(section.title, index)} onOpenClaim={setDetailClaim} />
+        ) : (
+          <SectionDisclosure
+            key={index}
+            id={sectionAnchor(section.title, index)}
+            section={section as OutlineSection}
+            collapsible={section.role !== "key_findings"}
+            defaultOpen={false}
+          >
+            {(section.blocks ?? []).map((block) => (
+              <AnnotatedProse key={block.block_id} block={block} onOpenClaim={setDetailClaim} />
+            ))}
+          </SectionDisclosure>
+        ),
+      )}
 
       <MostRelevantSources sources={topSources} onOpenDossier={openDossier} />
 
-      {(data.references ?? []).length > 0 && (
-        <ReferencesSection
-          references={data.references ?? []}
-          onOpenReference={openDossier}
-        />
-      )}
+      {/* Full report part */}
+      {bodySections.length > 0 ? (
+        <FullReportExpandProvider key={data.artefact_id}>
+          <div id={FULL_REPORT_ANCHOR} className="mb-6 mt-10 border-t border-line pt-4">
+            <div className="flex items-baseline gap-2">
+              <h2 className={`flex-1 ${REPORT_PART_HEADING_CLASS}`}>Full report</h2>
+              <FullReportExpandAllButton />
+            </div>
+            {roadmapText !== null && (
+              <p className={`mt-1.5 max-w-prose-measure ${REPORT_BODY_CLASS}`}>{scrub(roadmapText)}</p>
+            )}
+          </div>
 
-      <GatheredSection taskId={taskId} id="gathered" />
+          {bodySections.map(({ section, index }) => (
+            <SectionDisclosure
+              key={index}
+              id={sectionAnchor(section.title, index)}
+              section={section as OutlineSection}
+              collapsible={section.role !== "key_findings"}
+              defaultOpen={false}
+            >
+              {(section.blocks ?? []).map((block) => (
+                <AnnotatedProse key={block.block_id} block={block} onOpenClaim={setDetailClaim} />
+              ))}
+            </SectionDisclosure>
+          ))}
+
+          {(data.references ?? []).length > 0 && (
+            <ReferencesSection
+              references={data.references ?? []}
+              onOpenReference={openDossier}
+            />
+          )}
+
+          <GatheredSection taskId={taskId} id="gathered" />
+        </FullReportExpandProvider>
+      ) : (
+        <>
+          {(data.references ?? []).length > 0 && (
+            <ReferencesSection
+              references={data.references ?? []}
+              onOpenReference={openDossier}
+            />
+          )}
+          <GatheredSection taskId={taskId} id="gathered" />
+        </>
+      )}
 
       <ClaimPanel
         taskId={taskId}
@@ -1387,16 +1652,23 @@ export function ArtefactView() {
 /** References as a collapsible entry with an always-visible summary line —
  *  it is the ArtefactOut.references collection, not a synthesis section
  *  (028 strand 10, binding record). */
-function ReferencesSection({
+export function ReferencesSection({
   references,
   onOpenReference,
 }: {
-  references: Array<{ n: number; title: string; year?: number | null; venue?: string | null }>;
+  references: Array<{
+    n: number;
+    title: string;
+    year?: number | null;
+    venue?: string | null;
+    authorships?: components["schemas"]["AuthorshipOut"][];
+  }>;
   onOpenReference: (title: string) => void;
 }) {
   const [open, setOpen] = useState(false);
   useOpenWhenNavigated("references", setOpen);
   useExpandForPrint(setOpen);
+  useExpandAll(setOpen);
   return (
     <section aria-label="References" id="references" className="mt-12 border-t border-line pt-6">
       <button
@@ -1405,41 +1677,47 @@ function ReferencesSection({
         onClick={() => setOpen((value) => !value)}
         className="flex w-full cursor-pointer items-baseline gap-2 text-left"
       >
-        <h2 className="flex-1 text-heading font-bold text-navy">References</h2>
-        <span aria-hidden="true" className="print-hide shrink-0 text-meta font-bold text-blue">
+        <h2 className={`flex-1 ${REPORT_SECTION_HEADING_CLASS}`}>References</h2>
+        <span aria-hidden="true" className={`${SECTION_EXPAND_LINK_CLASS} max-md:hidden`}>
           {open ? "Collapse −" : "Expand +"}
         </span>
       </button>
       {!open && (
-        <p className="mt-1.5 text-lead text-grey">
+        <p className="mt-1.5 text-lead text-grey max-md:text-body">
           {references.length === 1 ? "1 numbered source" : `${references.length} numbered sources`} cited
           in this report
         </p>
       )}
+      {!open && <MobileDisclosureToggle expanded={false} onToggle={() => setOpen(true)} />}
       {open && (
-        <ol className="mt-3 space-y-1.5 text-lead text-ink">
-          {references.map((reference) => (
-            <li key={reference.n} className="flex gap-2">
-              <span className="font-bold text-blue">[{reference.n}]</span>
-              <span>
-                <button
-                  type="button"
-                  className="cursor-pointer text-left hover:underline"
-                  onClick={() => onOpenReference(reference.title)}
-                >
-                  {scrub(reference.title)}
-                </button>
-                {reference.year !== null && reference.year !== undefined && (
-                  <span className="text-grey"> ({reference.year})</span>
-                )}
-                {reference.venue !== null && reference.venue !== undefined && (
-                  <span className="text-grey"> · {scrub(reference.venue)}</span>
-                )}
-              </span>
-            </li>
-          ))}
+        <ol className="mt-3 space-y-1.5 text-lead text-ink max-md:text-body">
+          {references.map((reference) => {
+            const authors = referenceAuthorsLine(reference.authorships);
+            return (
+              <li key={reference.n} className="flex gap-2">
+                <span className="font-bold text-blue">[{reference.n}]</span>
+                <span>
+                  <button
+                    type="button"
+                    className="cursor-pointer text-left hover:underline"
+                    onClick={() => onOpenReference(reference.title)}
+                  >
+                    {scrub(reference.title)}
+                  </button>
+                  {authors !== null && <span className="text-grey"> — {scrub(authors)}</span>}
+                  {reference.year !== null && reference.year !== undefined && (
+                    <span className="text-grey"> ({reference.year})</span>
+                  )}
+                  {reference.venue !== null && reference.venue !== undefined && (
+                    <span className="text-grey"> · {scrub(reference.venue)}</span>
+                  )}
+                </span>
+              </li>
+            );
+          })}
         </ol>
       )}
+      {open && <MobileDisclosureToggle expanded onToggle={() => setOpen(false)} />}
     </section>
   );
 }

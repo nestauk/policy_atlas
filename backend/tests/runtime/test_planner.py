@@ -12,7 +12,6 @@ import pytest
 
 from policy_atlas.core import tracing
 from policy_atlas.evidence_search.extract.extract import KNOWN_PROFILE_IDS
-from policy_atlas.runtime.task_plan import TaskPlan, compose
 from policy_atlas.runtime.planner import (
     OpenAIPlannerBackend,
     PlannerBackend,
@@ -20,11 +19,13 @@ from policy_atlas.runtime.planner import (
     _degrade_suggestions,
 )
 from policy_atlas.runtime.planner_prompt import (
+    OECD_SETTING_CRITERION,
     PLANNER_PROMPT_VERSION,
     PLANNER_SYSTEM_PROMPT,
     PlanDraftWire,
     PlannerTurnWire,
 )
+from policy_atlas.runtime.task_plan import TaskPlan, compose
 from tests.helpers import fake_parse_client
 
 
@@ -47,8 +48,32 @@ def _plan_from_draft(draft: PlanDraftWire) -> TaskPlan:
 
 
 def test_planner_prompt_version_pinned() -> None:
-    # planner_v8: Analysis level screen words; report not review; search caps.
-    assert PLANNER_PROMPT_VERSION == "planner_v8"
+    # planner_v11: APO source-collection restriction + 1000-char screening cap.
+    assert PLANNER_PROMPT_VERSION == "planner_v11"
+
+
+def test_planner_prompt_teaches_apo_source_restriction() -> None:
+    assert 'publisher_source: "apo"' in PLANNER_SYSTEM_PROMPT
+    assert "Australian Policy Online" in PLANNER_SYSTEM_PROMPT
+    assert "backend_scope: grey_lit_only" in PLANNER_SYSTEM_PROMPT
+    assert "never the way to express APO" in PLANNER_SYSTEM_PROMPT
+    assert "Never invent other collection values" in PLANNER_SYSTEM_PROMPT
+
+
+def test_planner_prompt_screening_cap_wording() -> None:
+    assert "at most 1000 characters" in PLANNER_SYSTEM_PROMPT
+    assert "under 200 characters" not in PLANNER_SYSTEM_PROMPT
+
+
+def test_planner_prompt_defaults_source_origin_to_oecd_members() -> None:
+    assert 'set country_group to the pinned label "OECD members"' in PLANNER_SYSTEM_PROMPT
+    assert "publisher / author-affiliation" in PLANNER_SYSTEM_PROMPT
+    assert "not study setting" in PLANNER_SYSTEM_PROMPT
+    assert "Do NOT add a UK or high-income screening criterion" in PLANNER_SYSTEM_PROMPT
+    assert OECD_SETTING_CRITERION in PLANNER_SYSTEM_PROMPT
+    assert OECD_SETTING_CRITERION == (
+        "Study, programme, or policy setting is in an OECD member country."
+    )
 
 
 def test_planner_prompt_plain_language_and_ready_update() -> None:

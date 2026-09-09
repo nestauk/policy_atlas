@@ -15,11 +15,11 @@ from policy_atlas.core.schema import (
     characterisation_result,
     evidence_scope,
     grouping_result,
-    task_plan,
     runs,
     selection_result,
     source_appraisal_result,
     synthesis_result,
+    task_plan,
 )
 from policy_atlas.evidence_search.assess.appraise import (
     DEFAULT_RUBRIC_VERSION,
@@ -35,7 +35,6 @@ from policy_atlas.evidence_search.corpus.select import (
 from policy_atlas.evidence_search.extract.extract import KNOWN_PROFILE_IDS
 from policy_atlas.evidence_search.sourcing.search_loop import DEPTH_CONSTANTS
 from policy_atlas.runtime import harness, steering_events
-from policy_atlas.runtime.task_plan import TaskPlan, compose
 from policy_atlas.runtime.runner import (
     NullIO,
     _apply_replacement_rerun,
@@ -61,6 +60,7 @@ from policy_atlas.runtime.steering import (
     render_collation,
     steer_point_triggers,
 )
+from policy_atlas.runtime.task_plan import TaskPlan, compose
 from tests.helpers import now
 from tests.runtime.test_runner import _base_plan, _cleanup, _runner_backends, _seed_task
 

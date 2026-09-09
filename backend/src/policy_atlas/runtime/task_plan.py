@@ -1,6 +1,6 @@
-"""Orchestration-plan model and deterministic chain composer.
+"""Coordination-plan model and deterministic chain composer.
 
-The orchestration plan is the approved user-facing run proposal. This module
+The task plan is the approved user-facing run proposal. This module
 keeps it fail-closed and compiles it into the fixed EB chain shape without
 executing any component or widening any existing runtime directive grammar.
 """
@@ -12,9 +12,9 @@ from typing import Any, Literal, Self, TypedDict
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from policy_atlas.core.schema import DIRECTIVE_STRING_MAX
 from policy_atlas.evidence_search.assess.screen import (
     CRITERIA_LIST_MAX,
+    SCREENING_CRITERION_MAX,
     ScreenDirectiveError,
     _compose_screen_intent,
 )
@@ -70,6 +70,32 @@ STEER_POINTS: tuple[str, ...] = (
     "synthesis_shape",
 )
 
+# --- Stored steer-point compatibility (task 038, contract V3/A3) -----------
+#
+# Task 038 renamed the P2 point's id. Stored plan payloads and pause records
+# are NOT rewritten, and `validate_steer_point` is fail-closed, so an old
+# payload would fail validation before any reader saw it. Canonicalisation
+# therefore happens at deserialisation — the `mode="before"` validator on
+# `SteerPointDefault.steer_point` — and the pause-record readers call this same
+# helper. One map, one place.
+_LEGACY_STEER_POINTS: dict[str, str] = {"evidence_base_coverage": "evidence_search_coverage"}
+
+
+def canonical_steer_point(value: object) -> object:
+    """Canonicalise one stored steer-point id.
+
+    Args:
+        value: The raw stored value, which may be any JSON scalar or absent.
+
+    Returns:
+        The current id — a pre-038 ``evidence_base_coverage`` reads back as
+        ``evidence_search_coverage`` — and anything else unchanged, so the
+        caller's own validation still decides what is acceptable.
+    """
+    if not isinstance(value, str):
+        return value
+    return _LEGACY_STEER_POINTS.get(value, value)
+
 SPINE: tuple[str, ...] = (
     "acquire",
     "screen_abstract",
@@ -111,7 +137,7 @@ if tuple(EXTRACT_PROFILE_IDS.values()) != KNOWN_PROFILE_IDS:
 
 
 class AnalysisDepthDirective(TypedDict):
-    """Depth-row flags compiled by orchestration, not by component code."""
+    """Depth-row flags compiled by coordination, not by component code."""
 
     screen_full: bool
     characterise: bool
@@ -243,10 +269,10 @@ _SCREENING_STEPS = frozenset(("screen_abstract", "screen_full"))
 
 
 def registry_component_for(step: str) -> str:
-    """Map a composed orchestration step name to its harness registry component.
+    """Map a composed plan step name to its harness registry component.
 
     Args:
-        step: Composed orchestration step name (plan vocabulary).
+        step: Composed plan step name (plan vocabulary).
 
     Returns:
         The ``COMPONENT_REGISTRY`` key that step dispatches to.
@@ -297,7 +323,7 @@ def _enabled_components(depth: AnalysisDepth) -> set[DiscretionaryComponent]:
 def _validate_registry() -> None:
     missing = sorted({registry_component_for(step) for step in ALL_STEPS} - set(COMPONENT_REGISTRY))
     if missing:
-        raise ValueError(f"orchestration references unknown registry component(s): {missing}")
+        raise ValueError(f"coordination references unknown registry component(s): {missing}")
 
 
 def _derive_expected_artefact_shape(
@@ -402,6 +428,9 @@ class ScopeConstraints(BaseModel):
         author_affiliation_countries: Optional OpenAlex author-affiliation
             country filter, as 2-letter alpha codes normalised to upper-case.
         country_group: Optional named group applied to both search backends.
+        publisher_source: Optional Overton source-collection filter; the only
+            supported value is ``apo`` (Australian Policy Online). Test mod,
+            task 039.
     """
 
     model_config = ConfigDict(extra="forbid", strict=True)
@@ -411,6 +440,7 @@ class ScopeConstraints(BaseModel):
     publisher_country: str | None = None
     author_affiliation_countries: list[str] | None = None
     country_group: CountryGroup | None = None
+    publisher_source: Literal["apo"] | None = None
 
     @field_validator("published_after", "published_before")
     @classmethod
@@ -512,6 +542,15 @@ class ScopeConstraints(BaseModel):
                 "country_group is mutually exclusive with publisher_country "
                 "and author_affiliation_countries"
             )
+        if self.publisher_source is not None and (
+            self.publisher_country is not None
+            or self.author_affiliation_countries is not None
+            or self.country_group is not None
+        ):
+            raise ValueError(
+                "publisher_source is mutually exclusive with publisher_country, "
+                "author_affiliation_countries and country_group"
+            )
         return self
 
     def to_filters(self) -> dict[str, dict[str, Any]]:
@@ -519,8 +558,9 @@ class ScopeConstraints(BaseModel):
 
         Returns:
             A ``filters`` object with recency under ``shared``, publisher
-            geography under ``overton``, and author-affiliation geography
-            under ``openalex``. Empty constraints compile to ``{}``.
+            geography or source collection under ``overton`` (the latter as
+            ``publisher_source``), and author-affiliation geography under
+            ``openalex``. Empty constraints compile to ``{}``.
         """
         filters: dict[str, dict[str, Any]] = {}
         shared: dict[str, str] = {}
@@ -545,6 +585,8 @@ class ScopeConstraints(BaseModel):
             return filters
         if self.publisher_country is not None:
             filters["overton"] = {"publisher_country": self.publisher_country}
+        elif self.publisher_source is not None:
+            filters["overton"] = {"publisher_source": self.publisher_source}
         if self.author_affiliation_countries is not None:
             filters["openalex"] = {
                 "author_affiliation_countries": self.author_affiliation_countries
@@ -580,6 +622,23 @@ class SteerPointDefault(BaseModel):
     action: SteerAction
     option_id: str | None = None
     delta: dict[str, Any] | None = None
+
+    @field_validator("steer_point", mode="before")
+    @classmethod
+    def canonicalise_steer_point(cls, value: object) -> object:
+        """Map a pre-038 steer-point id onto its current name before validation.
+
+        Stored plan payloads are never rewritten (task 038, contract V3), and
+        ``model_validate`` runs at ten call sites, so the compatibility map
+        belongs here — ahead of the fail-closed check below.
+
+        Args:
+            value: The raw field value from the payload.
+
+        Returns:
+            The canonical steer-point id, or ``value`` unchanged.
+        """
+        return canonical_steer_point(value)
 
     @field_validator("steer_point")
     @classmethod
@@ -631,7 +690,7 @@ class SteerPointDefault(BaseModel):
 
 
 class TaskPlan(BaseModel):
-    """Approved orchestration proposal compiled into an EB component chain.
+    """Approved coordination proposal compiled into an EB component chain.
 
     Args:
         title: Short user-visible title for the run.
@@ -642,7 +701,7 @@ class TaskPlan(BaseModel):
         scope_constraints: Optional recency and publisher-geography constraints.
         search_effort: Acquisition effort rung.
         analysis_depth: Analysis component and budget rung.
-        components: Discretionary orchestration components only.
+        components: Discretionary plan components only.
         component_rationale: Visible intent-fit rationale keyed by discretionary
             component.
         grouping_facets: Optional grouping facets, valid only when ``group`` runs.
@@ -715,7 +774,8 @@ class TaskPlan(BaseModel):
                 grammar's caps (the compile target must accept every valid
                 plan by construction; live check 017 caught a >200-char
                 criterion validating here and rejecting at the screen
-                boundary).
+                boundary; task 039 bug 2 raised the per-entry cap to
+                ``SCREENING_CRITERION_MAX``).
         """
         if info.field_name == "screening_criteria":
             if len(values) > CRITERIA_LIST_MAX:
@@ -723,10 +783,10 @@ class TaskPlan(BaseModel):
                     f"screening_criteria must have at most {CRITERIA_LIST_MAX} entries"
                 )
             for value in values:
-                if len(value) > DIRECTIVE_STRING_MAX:
+                if len(value) > SCREENING_CRITERION_MAX:
                     raise ValueError(
                         "screening_criteria entries must be at most "
-                        f"{DIRECTIVE_STRING_MAX} characters"
+                        f"{SCREENING_CRITERION_MAX} characters"
                     )
         return [_require_clean_string(value, field_name=info.field_name) for value in values]
 
@@ -874,7 +934,7 @@ class TaskPlan(BaseModel):
             and self.backend_scope == "academic_only"
         ):
             raise ValueError(
-                "publisher_country filters the grey-literature backend, which "
+                "publisher_country filters the policy-literature backend, which "
                 "backend_scope 'academic_only' excludes"
             )
 
@@ -885,6 +945,15 @@ class TaskPlan(BaseModel):
             raise ValueError(
                 "author_affiliation_countries filters the academic backend, "
                 "which backend_scope 'grey_lit_only' excludes"
+            )
+
+        if (
+            self.scope_constraints.publisher_source is not None
+            and self.backend_scope != "grey_lit_only"
+        ):
+            raise ValueError(
+                "publisher_source restricts the policy-literature backend; "
+                "backend_scope must be 'grey_lit_only'"
             )
 
         # Compile-target parity for the screen prompt: the composed intent
@@ -908,7 +977,7 @@ class ComponentStep(BaseModel):
     """One deterministic component invocation in a composed chain.
 
     Args:
-        component: Orchestration component step name.
+        component: Coordination component step name.
         directive_delta: Context directive delta for the component.
         reference_rule: Optional reference-threading rule for the runner.
     """
@@ -1004,10 +1073,10 @@ def _directive_delta(component: str, plan: TaskPlan) -> dict[str, Any]:
 
 
 def compose(plan: TaskPlan) -> ComposedChain:
-    """Compose an approved orchestration plan into a fixed EB chain.
+    """Compose an approved task plan into a fixed EB chain.
 
     Args:
-        plan: Validated orchestration plan.
+        plan: Validated task plan.
 
     Returns:
         A composed chain whose mandatory spine is present in order and whose

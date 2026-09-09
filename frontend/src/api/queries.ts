@@ -6,14 +6,19 @@ import { createAuthedApiClient } from "./client";
 import type { components } from "./gen/types";
 
 /**
- * Query-key roots, shared with `src/store/useRunStream.ts` so SSE-driven
+ * Query-key roots, shared with `src/store/useRunStream.tsx` so SSE-driven
  * invalidation can target "everything under this task" without every
  * hook here needing to know about the stream.
  */
 export const queryKeys = {
+  me: () => ["me"] as const,
   taskRoot: (taskId: string) => ["tasks", taskId] as const,
-  tasks: (query?: { status?: "active" | "archived" | "all"; page?: number; page_size?: number }) =>
-    ["tasks", "list", query] as const,
+  // `scope` and `project_id` are embedded via the whole `query` object, so
+  // they participate in the key automatically (task 033 phase 10a) — every
+  // distinct filter combination, including the switcher's future `scope`,
+  // gets its own cache entry rather than silently serving another scope's
+  // rows.
+  tasks: (query?: TasksQuery) => ["tasks", "list", query] as const,
   task: (taskId: string) => ["tasks", taskId, "detail"] as const,
   checkIns: (taskId: string, status?: "pending" | "all") =>
     ["tasks", taskId, "check-ins", status] as const,
@@ -43,9 +48,30 @@ export const queryKeys = {
     [...queryKeys.conversationsRoot(taskId), query?.kind, query?.status] as const,
   conversation: (conversationId: string) => ["conversations", conversationId, "detail"] as const,
   chatTurns: (conversationId: string) => ["conversations", conversationId, "turns"] as const,
-  projects: (page?: number, pageSize?: number) => ["projects", "list", page, pageSize] as const,
+  // Same whole-object embedding as `tasks` above, so `scope` differs the
+  // key without a separate positional argument.
+  projects: (query?: ProjectsQuery) => ["projects", "list", query] as const,
   project: (projectId: string) => ["projects", projectId, "detail"] as const,
 };
+
+/** `GET /api/v1/tasks` filters (task 033 phase 10a adds `scope` and
+ *  `project_id`). `scope` defaults server-side to `all`; the frontend
+ *  passes it explicitly only where a caller needs something other than that
+ *  default (the phase 10b switcher), so day-one behaviour is unchanged. */
+interface TasksQuery {
+  status?: "active" | "archived" | "all";
+  scope?: "all" | "mine";
+  project_id?: string | null;
+  page?: number;
+  page_size?: number;
+}
+
+/** `GET /api/v1/projects` filters (task 033 phase 10a adds `scope`). */
+interface ProjectsQuery {
+  scope?: "all" | "mine";
+  page?: number;
+  page_size?: number;
+}
 
 /** Shared shape for the paginated read models (`evidence`, `findings`,
  *  `decisions`) — server page-size cap is 200, default 50 (web-api.md
@@ -82,7 +108,7 @@ export interface EvidenceQuery extends PageQuery {
   year_to?: number;
 }
 
-export interface FindingsQuery extends PageQuery {
+interface FindingsQuery extends PageQuery {
   profile?: "iof" | "icf";
   facet?: string;
   group?: string;
@@ -91,7 +117,7 @@ export interface FindingsQuery extends PageQuery {
 }
 
 /** Filters for the task conversation library. */
-export interface ConversationQuery {
+interface ConversationQuery {
   kind?: "planning" | "chat";
   status?: "active" | "closed" | "archived";
 }
@@ -102,6 +128,31 @@ export function useApiClient() {
   return useMemo(() => createAuthedApiClient(auth), [auth]);
 }
 
+/**
+ * `GET /api/v1/me` — the caller's own identity row (task 033), provisioned
+ * on first call. Keys the whole tenancy UI: a `null` `organisation` hides
+ * the scope switcher and every org-scoped affordance.
+ *
+ * `staleTime: Infinity` is deliberate: the row changes only via an ops
+ * action (enrol/de-enrol, admin grant/revoke) — never something this app
+ * writes — so there is no in-session event that should invalidate it, and
+ * paying for a refetch on every navigation would buy nothing. The only path
+ * an ops change reaches an open session is a fresh load anyway, which starts
+ * a fresh `QueryClient` and re-fetches for free.
+ */
+export function useMe() {
+  const client = useApiClient();
+  return useQuery({
+    queryKey: queryKeys.me(),
+    queryFn: async () => {
+      const { data, error } = await client.GET("/api/v1/me");
+      if (error) throw error;
+      return data;
+    },
+    staleTime: Infinity,
+  });
+}
+
 const ACTIVE_RUN_STATUSES = new Set(["running", "paused"]);
 
 /** `GET /api/v1/tasks` — paginated, owner-scoped. Live landing statuses
@@ -110,7 +161,7 @@ const ACTIVE_RUN_STATUSES = new Set(["running", "paused"]);
  *  keeps showing "Analysing"/"Paused" after the run has actually moved on.
  *  `refetchIntervalInBackground` defaults to `false`, so this only polls
  *  while the tab is visible. */
-export function useTasks(query?: { status?: "active" | "archived" | "all"; page?: number; page_size?: number }) {
+export function useTasks(query?: TasksQuery) {
   const client = useApiClient();
   return useQuery({
     queryKey: queryKeys.tasks(query),
@@ -131,10 +182,10 @@ export function useTasks(query?: { status?: "active" | "archived" | "all"; page?
 }
 
 /** `GET /api/v1/projects` — the screen's Projects, with a derived task count. */
-export function useProjects(query?: { page?: number; page_size?: number }) {
+export function useProjects(query?: ProjectsQuery) {
   const client = useApiClient();
   return useQuery({
-    queryKey: queryKeys.projects(query?.page, query?.page_size),
+    queryKey: queryKeys.projects(query),
     queryFn: async () => {
       const { data, error } = await client.GET("/api/v1/projects", { params: { query } });
       if (error) throw error;
@@ -162,21 +213,33 @@ export function useProject(projectId: string) {
 /** `GET /api/v1/tasks/{task_id}`.
  *
  *  `options.pollWhileRunning` keeps `latest_run.status` fresh for a caller
- *  with no run stream of its own — the app shell's lifecycle locking. On the
- *  pages that do mount `useRunStream`, the stream already invalidates this
- *  query, so those callers leave it off rather than pay for both. */
+ *  with no run stream of its own — historically the app shell's lifecycle
+ *  locking. The shell now also owns `RunStreamProvider`, which invalidates
+ *  this query on `stage.completed` / `run.status`; polling remains as a
+ *  reconnect-gap belt-and-braces. */
 export function useTask(taskId: string, options?: { pollWhileRunning?: boolean }) {
   const client = useApiClient();
   return useQuery({
     queryKey: queryKeys.task(taskId),
     queryFn: async () => {
-      const { data, error } = await client.GET("/api/v1/tasks/{task_id}", {
+      const { data, error, response } = await client.GET("/api/v1/tasks/{task_id}", {
         params: { path: { task_id: taskId } },
       });
-      if (error) throw error;
+      if (error) throw Object.assign(new Error("Failed to load task"), { status: response.status });
       return data;
     },
     enabled: Boolean(taskId),
+    // A 4xx (an anonymous 404 on a private/unknown Task, task 037) means the
+    // same thing on every attempt — retrying it just holds the caller
+    // (PublicTaskShell's stash-and-splash fallback) for ~7s across the
+    // default 3 retries before landing where it was always going to land.
+    // Retry only a network failure (no `status`) or a server error, up to
+    // the default cap.
+    retry: (failureCount, error) => {
+      const status = (error as { status?: number }).status;
+      if (status !== undefined && status < 500) return false;
+      return failureCount < 3;
+    },
     refetchInterval: (activeQuery) => {
       if (options?.pollWhileRunning !== true) return false;
       const status = activeQuery.state.data?.latest_run?.status;
@@ -346,8 +409,13 @@ export function usePlanningTurns(taskId: string, query?: PageQuery) {
 }
 
 /** `GET /api/v1/tasks/{task_id}/conversations` — the task chat and
- * planning-conversation library. */
-export function useConversations(taskId: string, query?: ConversationQuery) {
+ * planning-conversation library. `options.enabled` lets the public task view
+ * (task 037) keep the hook mounted without issuing the non-public request. */
+export function useConversations(
+  taskId: string,
+  query?: ConversationQuery,
+  options?: { enabled?: boolean },
+) {
   const client = useApiClient();
   return useQuery({
     queryKey: queryKeys.conversations(taskId, query),
@@ -358,7 +426,7 @@ export function useConversations(taskId: string, query?: ConversationQuery) {
       if (error) throw error;
       return data;
     },
-    enabled: Boolean(taskId),
+    enabled: Boolean(taskId) && (options?.enabled ?? true),
   });
 }
 

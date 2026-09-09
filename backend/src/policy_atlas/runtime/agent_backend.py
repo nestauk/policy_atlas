@@ -27,7 +27,7 @@ from __future__ import annotations
 import json
 import os
 import uuid
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Protocol
 
@@ -69,6 +69,27 @@ AGENT_MODEL = os.environ.get("POLICY_ATLAS_AGENT_MODEL", "gpt-5.5")
 AGENT_TRIAGE_MODEL = os.environ.get(
     "POLICY_ATLAS_AGENT_TRIAGE_MODEL", SCREEN_MODEL
 )
+
+
+def _warn_stale_agent_env(environ: Mapping[str, str]) -> list[str]:
+    """Name any pre-038 ``POLICY_ATLAS_ORCHESTRATOR_*`` override still set.
+
+    Task 038 renamed the overrides to ``POLICY_ATLAS_AGENT_*``; an old name is
+    ignored, so it is logged rather than silently falling back to the default.
+
+    Args:
+        environ: The process environment (or a stand-in).
+
+    Returns:
+        The stale keys, sorted.
+    """
+    stale = sorted(key for key in environ if key.startswith("POLICY_ATLAS_ORCHESTRATOR_"))
+    if stale:
+        log.warning("agent_env_override_stale", keys=stale, renamed_to="POLICY_ATLAS_AGENT_*")
+    return stale
+
+
+_warn_stale_agent_env(os.environ)
 
 # Fallback deliberation loop cap (internal constant + telemetry, never plan content
 # — costs are dev-side only, contract decision 3). At most this many

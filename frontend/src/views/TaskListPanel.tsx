@@ -12,24 +12,34 @@ import { TaskListRow } from "./TaskListRow";
 
 type LatestRun = components["schemas"]["TaskOut"]["latest_run"];
 
-export type TaskListItem = {
+type TaskListItem = {
   task_id: string;
   name: string;
   updated_at: string;
   latest_run?: LatestRun;
-  project_id?: string | null;
+  project_ids?: string[];
   source_count?: number | null;
+  is_owner?: boolean;
+  owner_display?: string | null;
 };
+
+function projectPrefix(
+  ids: readonly string[] | undefined,
+  names?: ReadonlyMap<string, string>,
+): string {
+  if (ids == null || ids.length === 0) return "";
+  return ids.map((id) => names?.get(id) ?? "").filter((name) => name !== "").join(" · ");
+}
 
 function FindTask({
   rows,
   projectNames,
-  showTaskPrefix,
+  showProjectPrefix,
   onClose,
 }: {
   rows: readonly TaskListItem[];
   projectNames?: ReadonlyMap<string, string>;
-  showTaskPrefix?: boolean;
+  showProjectPrefix?: boolean;
   onClose: () => void;
 }) {
   const [term, setTerm] = useState("");
@@ -40,9 +50,7 @@ function FindTask({
       ? rows
       : rows.filter((row) => {
           const project =
-            showTaskPrefix && row.project_id != null
-              ? (projectNames?.get(row.project_id) ?? "")
-              : "";
+            showProjectPrefix ? projectPrefix(row.project_ids, projectNames) : "";
           const haystack = `${project} ${row.name}`.toLowerCase();
           return haystack.includes(needle);
         });
@@ -83,10 +91,9 @@ function FindTask({
           <li className="px-1 py-3 text-body text-grey">Nothing matches “{scrub(term)}”.</li>
         )}
         {matches.map((row) => {
-          const projectName =
-            showTaskPrefix && row.project_id != null
-              ? (projectNames?.get(row.project_id) ?? null)
-              : null;
+          const projectName = showProjectPrefix
+            ? projectPrefix(row.project_ids, projectNames) || null
+            : null;
           const label =
             projectName != null ? `${projectName} / ${row.name}` : row.name;
           return (
@@ -113,12 +120,12 @@ function FindTask({
 export function TaskListActions({
   rows,
   projectNames,
-  showTaskPrefix = false,
+  showProjectPrefix = false,
   newTaskHref,
 }: {
   rows: readonly TaskListItem[];
   projectNames?: ReadonlyMap<string, string>;
-  showTaskPrefix?: boolean;
+  showProjectPrefix?: boolean;
   newTaskHref: string;
 }) {
   const [finding, setFinding] = useState(false);
@@ -141,7 +148,7 @@ export function TaskListActions({
         <FindTask
           rows={rows}
           projectNames={projectNames}
-          showTaskPrefix={showTaskPrefix}
+          showProjectPrefix={showProjectPrefix}
           onClose={() => setFinding(false)}
         />
       )}
@@ -152,22 +159,29 @@ export function TaskListActions({
 type TaskListPanelProps = {
   rows: readonly TaskListItem[];
   projectNames?: ReadonlyMap<string, string>;
-  showTaskPrefix?: boolean;
+  showProjectPrefix?: boolean;
   isPending?: boolean;
   isError?: boolean;
   onRetry?: () => void;
   loaded?: boolean;
+  /** Task 033 phase 10b: render the `owner_display` column, and what a null
+   *  value renders as (see `ownerLabelRule` — the em dash by default, or
+   *  the admin-wide-list's "No organisation" when the caller passes it). */
+  showOwner?: boolean;
+  ownerlessLabel?: string;
 };
 
 /** Shared task list body: loading, empty, and rows. */
 export function TaskListPanel({
   rows,
   projectNames,
-  showTaskPrefix = false,
+  showProjectPrefix = false,
   isPending = false,
   isError = false,
   onRetry,
   loaded = true,
+  showOwner = false,
+  ownerlessLabel,
 }: TaskListPanelProps) {
   if (isPending) {
     return (
@@ -206,14 +220,14 @@ export function TaskListPanel({
             to={taskDestination(row.task_id, row.latest_run?.status)}
             name={row.name}
             projectName={
-              showTaskPrefix && row.project_id != null
-                ? (projectNames?.get(row.project_id) ?? null)
-                : null
+              showProjectPrefix ? projectPrefix(row.project_ids, projectNames) || null : null
             }
-            showTaskPrefix={showTaskPrefix}
+            showProjectPrefix={showProjectPrefix}
             sourceCount={row.source_count}
             updatedAt={row.updated_at}
             latestRun={row.latest_run}
+            ownerDisplay={showOwner ? (row.owner_display ?? null) : undefined}
+            ownerlessLabel={ownerlessLabel}
           />
         </li>
       ))}

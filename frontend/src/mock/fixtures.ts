@@ -1,10 +1,13 @@
 import type { components } from "../api/gen/types";
+import { TASK } from "../lib/vocabulary";
 
 export const MOCK_TASK_ID = "0d91c2e7-9b9b-4f4d-bd20-1f6819fb3425";
 export const MOCK_RUN_ID = "7b40cc12-c3a7-4457-92fc-23d15a26d433";
 export const MOCK_CHECK_IN_ID = "4c1acbe7-c4a1-4e0b-8d5a-bb25ea2ef634";
 export const MOCK_PLAN_ID = "80000000-0000-4000-8000-000000000001";
 export const MOCK_PLANNING_CONVERSATION_ID = "50000000-0000-4000-8000-000000000001";
+export const MOCK_PROJECT_ID = "60000000-0000-4000-8000-000000000001";
+const MOCK_ORGANISATION_ID = "90000000-0000-4000-8000-000000000001";
 
 const now = "2026-07-21T09:30:00Z";
 
@@ -21,6 +24,56 @@ export const mockTask: components["schemas"]["TaskOut"] = {
   updated_at: now,
   archived_at: null,
   latest_run: null,
+  // Task 033 tenancy. The mock signs in as the row's owner, so `is_owner` is
+  // true and every affordance stays live; the org journeys the switcher needs
+  // arrive with the mock's `/me` and project routes.
+  visibility: "org",
+  is_owner: true,
+  owner_display: "Ada Lovelace",
+  // Task 037 public sharing: the mock's task starts unshared, read at the
+  // full grade — mock mode signs in as the owner.
+  is_public: false,
+  access: "full",
+  // Assigned to `mockProject` below so `GET /tasks?project_id=` has a
+  // real member to return (task 033 phase 10a; membership is a list, ADR 0032).
+  project_ids: [MOCK_PROJECT_ID],
+};
+
+/** Task 033 phase 10a: the one project the mock serves. `task_count`
+ *  mirrors the real read model's own derivation (never cached on the row) —
+ *  it counts `mockTask`, the fixture's only member. */
+export const mockProject: components["schemas"]["ProjectOut"] = {
+  project_id: MOCK_PROJECT_ID,
+  name: "Child health, Tower Hamlets",
+  description: `${TASK.many} assessing childhood health policy levers for the borough.`,
+  created_at: "2026-07-15T09:00:00Z",
+  task_count: 1,
+  visibility: "org",
+  is_owner: true,
+  owner_display: "Ada Lovelace",
+};
+
+/**
+ * `GET /api/v1/me` fixtures (task 033 phase 10a). `mockMeUnenrolled` is the
+ * mock's default identity — dark launch: an unenrolled caller (`organisation:
+ * null`) so the switcher and every org-scoped affordance stay hidden and
+ * every pre-033 mock journey is unchanged until a test opts into
+ * `mockMeEnrolled` via `setMockMe` (`mock/api.ts`).
+ */
+export const mockMeUnenrolled: components["schemas"]["MeOut"] = {
+  user_id: "mock-policy-lead",
+  display_name: "Ada Lovelace",
+  email: null,
+  organisation: null,
+  is_admin: false,
+};
+
+export const mockMeEnrolled: components["schemas"]["MeOut"] = {
+  user_id: "mock-policy-lead",
+  display_name: "Ada Lovelace",
+  email: "ada.lovelace@example.gov.uk",
+  organisation: { org_id: MOCK_ORGANISATION_ID, name: "Department for Local Growth" },
+  is_admin: false,
 };
 
 export const mockFunnel: components["schemas"]["FunnelOut"] = {
@@ -76,9 +129,18 @@ export const mockEvidenceThemeIds: Record<string, string[]> = {
   [mockEvidence[6].source_id]: [MOCK_THEME_ID_ACTIVE_TRAVEL],
 };
 
+/** Shared + distinct institutions: markers 1, 1-2 — the D5 numbering path.
+ *  One copy feeds the dossier, the reference list and both chunk-context
+ *  handlers so the surfaces can never silently disagree. */
+export const mockAuthorships: components["schemas"]["AuthorshipOut"][] = [
+  { name: "Alex Sampleton", institutions: ["University of Exampleshire"] },
+  { name: "Casey Mockford", institutions: ["University of Exampleshire", "Institute of Fictional Studies"] },
+];
+
 export const mockSourceDossiers: Record<string, components["schemas"]["SourceDossierOut"]> = {
   [mockEvidence[2].source_id]: {
     ...mockEvidence[2],
+    authorships: mockAuthorships,
     abstract: "A cohort study of universal breakfast provision and regular breakfast consumption.",
     abstract_source: "provider",
     publisher: "BMJ",
@@ -99,6 +161,8 @@ export const mockSourceDossiers: Record<string, components["schemas"]["SourceDos
   // the "grouped by asserter, never merged" rendering (contract strand 7).
   [mockEvidence[7].source_id]: {
     ...mockEvidence[7],
+    // Corporate author (042 D2): one name, no institutions, no markers.
+    authorships: [{ name: "Example Policy Institute" }],
     abstract: "An AI-generated summary: measures near the school gate that make the healthy choice the easy choice.",
     abstract_source: "llm_description",
     publisher: null,
@@ -151,6 +215,7 @@ export const mockFindings: components["schemas"]["FindingOut"][] = [
     stratum_qualifiers: [{ "Age band": "5-7" }, { Deprivation: "IMD quintile 1-2" }],
     quote: "Breakfast participation increased when provision was universal, particularly where uptake carried no separate sign-up.",
     quote_verified: true,
+    chunk_id: "70000000-0000-4000-8000-000000000001",
     groups: { "Intervention type": "Universal breakfast provision" },
   },
   {
@@ -175,6 +240,7 @@ export const mockFindings: components["schemas"]["FindingOut"][] = [
     workforce_requirements: "School travel coordinator time",
     quote: "Where routes felt safe and arrival was coordinated with the school day, participation held up over the term.",
     quote_verified: false,
+    chunk_id: null,
     groups: { "Intervention type": "Active-travel offers" },
   },
 ];
@@ -248,7 +314,14 @@ export const mockArtefact: components["schemas"]["ArtefactOut"] = {
       }],
     },
   ],
-  references: [{ n: 1, title: mockEvidence[2].title, year: 2022, venue: "BMJ Open", url: null }],
+  references: [{
+    n: 1,
+    title: mockEvidence[2].title,
+    year: 2022,
+    venue: "BMJ Open",
+    url: null,
+    authorships: mockAuthorships,
+  }],
 };
 
 /** The live-artefact skeleton (contract strand 13), display-index ordered —
@@ -345,6 +418,7 @@ export const mockPlanReady: components["schemas"]["PlanDraft"] = {
     published_after: "2019-01-01",
     published_before: null,
     publisher_country: null,
+    publisher_source: null,
     author_affiliation_countries: null,
     country_group: { label: "United Kingdom", countries: ["GB"], authorship: "planner-proposed" },
   },
@@ -365,12 +439,12 @@ export const mockPlanReady: components["schemas"]["PlanDraft"] = {
     { stage: "classify", label: "Classifying evidence", blurb: "Labelling evidence types and settings." },
     { stage: "appraise", label: "Appraising quality", blurb: "Reviewing the strength of selected evidence." },
     { stage: "characterise", label: "Characterising findings", blurb: "Extracting implementation conditions." },
-    { stage: "synthesise", label: "Synthesising the evidence", blurb: "Preparing a decision-ready evidence base." },
+    { stage: "synthesise", label: "Writing the report", blurb: "Preparing a decision-ready evidence base." },
   ],
   ready: true,
 };
 
-export const MOCK_PLANNING_TURN_IDS = {
+const MOCK_PLANNING_TURN_IDS = {
   first: "60000000-0000-4000-8000-000000000001",
   second: "60000000-0000-4000-8000-000000000002",
   failed: "60000000-0000-4000-8000-000000000003",

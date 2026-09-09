@@ -27,10 +27,10 @@ from policy_atlas.core.schema import (
     chunk,
     extraction_result,
     intervention_outcome_finding,
-    task_source_snapshot,
     source_classification_result,
     source_extraction_record,
     source_snapshot,
+    task_source_snapshot,
 )
 from policy_atlas.evidence_search.extract import extract
 from policy_atlas.evidence_search.extract.extract import (
@@ -49,10 +49,10 @@ from tests.helpers import (
     profile_docs,
     profile_findings,
     profile_provenance,
-    seed_task_and_run,
     seed_run,
     seed_scope,
     seed_source,
+    seed_task_and_run,
 )
 
 from .test_extract import (

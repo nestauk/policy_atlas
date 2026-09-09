@@ -17,12 +17,12 @@ from policy_atlas.core.schema import (
     DIRECTIVE_STRING_MAX,
     characterisation_result,
     chunk_embedding,
-    task_source_snapshot,
     source_appraisal_result,
     source_classification_result,
     source_screening_result,
     source_snapshot,
     source_tag,
+    task_source_snapshot,
 )
 from policy_atlas.core.schema import (
     chunk as chunk_table,

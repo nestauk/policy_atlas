@@ -25,8 +25,8 @@ from policy_atlas.core.schema import (
     citation,
     extraction_result,
     grouping_result,
-    task_source_snapshot,
     synthesis_result,
+    task_source_snapshot,
 )
 from policy_atlas.core.schema import chunk as chunk_table
 from policy_atlas.core.usage import UsageResult
@@ -55,10 +55,10 @@ from tests.helpers import (
     run_select,
     seed_characterisation,
     seed_ingested_full_text,
-    seed_task_and_run,
     seed_run,
     seed_scope,
     seed_select_doc,
+    seed_task_and_run,
 )
 from tests.synthesis_wire import ScriptedSynthesisBackend, prose_section, repair_wire
 
@@ -363,7 +363,7 @@ def test_characterisation_only_stub_writes_substrate_and_rollup(conn: Connection
     row = conn.execute(
         select(synthesis_result).where(synthesis_result.c.task_id == task_id)
     ).one()
-    assert row.synthesis_provenance["prompt_versions"]["sections"] == "synthesise_sections_v4"
+    assert row.synthesis_provenance["prompt_versions"]["sections"] == "synthesise_sections_v5"
     assert row.synthesis_provenance["section_set"]["source"] == "proposal"
     claim_types = {
         claim_type

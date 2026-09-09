@@ -28,11 +28,11 @@ from policy_atlas.core.schema import (
 from policy_atlas.runtime import steering_triggers as st
 from tests.helpers import (
     now,
-    seed_task_and_run,
     seed_run,
     seed_scope,
     seed_screening_result,
     seed_source,
+    seed_task_and_run,
 )
 
 _seed_task_run = seed_task_and_run

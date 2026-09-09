@@ -34,8 +34,8 @@ from sqlalchemy.engine import Engine
 
 from policy_atlas.core import events
 from policy_atlas.core.schema import capability_run, runs
-from policy_atlas.runtime.task_plan import compose
 from policy_atlas.runtime.runner import NullIO, RunPlanOutcome, run_plan
+from policy_atlas.runtime.task_plan import compose
 from tests.runtime.test_runner import (
     _base_plan,
     _cleanup,

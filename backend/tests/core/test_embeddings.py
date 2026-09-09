@@ -41,9 +41,9 @@ from tests.helpers import (
     delete_task_data,
     executed_calls_for,
     now,
-    seed_task_and_run,
     seed_scope,
     seed_source,
+    seed_task_and_run,
 )
 from tests.provider_fixtures import OpenAlexFixtureBackend, OvertonFixtureBackend
 
@@ -71,7 +71,10 @@ def _insert_chunk(
 
 
 def test_table_count(conn: Connection) -> None:
-    assert len(metadata.tables) == 33
+    # 33 -> 36: task 033 adds `organisation` and `app_user` (tenancy above the
+    # entity hierarchy) and ADR 0032 adds `project_membership`; 36 -> 37:
+    # task 036 adds `waitlist_entry`; no evidence-search table changed.
+    assert len(metadata.tables) == 37
 
 
 def test_uq_chunk_embedding_unit_rejects_duplicate(conn: Connection) -> None:

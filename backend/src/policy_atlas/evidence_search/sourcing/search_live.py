@@ -121,6 +121,7 @@ _OVERTON_ALLOWED_WIRE_KEYS = frozenset(
         "sdgcategories",
         "source_type",
         "source_country",
+        "source",
         "source_region",
         "language",
     }

@@ -1,6 +1,7 @@
 import type { SseFrame } from "../api/sseFrame";
 import type { AuthApi } from "../auth/types";
 import type { components } from "../api/gen/types";
+import { PROJECT, TASK } from "../lib/vocabulary";
 import type { EvidenceSortField } from "../views/sourcesPresentation";
 import {
   mockArtefact,
@@ -15,7 +16,9 @@ import {
   mockFunnel,
   mockGroups,
   mockLandscape,
+  mockMeUnenrolled,
   mockPlanReady,
+  mockProject,
   mockTask,
   mockSourceDossiers,
   seedPlanningTurns,
@@ -30,7 +33,11 @@ import {
   MOCK_PLANNING_CONVERSATION_ID,
   MOCK_TASK_ID,
   MOCK_RUN_ID,
+  mockAuthorships,
 } from "./fixtures";
+
+type MeOut = components["schemas"]["MeOut"];
+type ProjectOut = components["schemas"]["ProjectOut"];
 
 type RunOut = components["schemas"]["RunOut"];
 type PlanningTranscriptTurnOut = components["schemas"]["PlanningTranscriptTurnOut"];
@@ -166,6 +173,19 @@ let chatTurnsByConversation = new Map<string, ChatTurnOut[]>();
 let chatTurnEnrichmentReads = new Map<string, number>();
 let currentPlan: components["schemas"]["PlanDraft"] = { ...mockPlanReady };
 
+// --- Identity + projects (task 033 phase 10a) --------------------------
+// `currentMe` defaults to the unenrolled fixture — dark launch: every
+// pre-033 mock journey sees `organisation: null` and stays unchanged. Tests
+// that need the enrolled/org-scoped journeys call `setMockMe(mockMeEnrolled)`.
+let currentMe: MeOut = { ...mockMeUnenrolled };
+let mockProjects: ProjectOut[] = [{ ...mockProject }];
+const mockWaitlistEmails = new Set<string>();
+
+/** Test helper: switch the mock's `/me` identity (e.g. to `mockMeEnrolled`). */
+export function setMockMe(me: MeOut) {
+  currentMe = { ...me };
+}
+
 /** Reset every scripted scenario; useful for isolated mock tests. */
 export function resetMockScenario() {
   checkInAnswer = createDeferred();
@@ -179,6 +199,8 @@ export function resetMockScenario() {
   chatTurnsByConversation = new Map();
   chatTurnEnrichmentReads = new Map();
   currentPlan = { ...mockPlanReady };
+  currentMe = { ...mockMeUnenrolled };
+  mockProjects = [{ ...mockProject }];
 }
 
 function currentMockScenario(requestUrl: URL): MockScenario {
@@ -192,6 +214,29 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
   const url = new URL(request?.url ?? input.toString(), globalThis.location?.origin ?? "http://localhost");
   const method = init?.method ?? request?.method ?? "GET";
   const path = url.pathname;
+
+  if (method === "POST" && path.endsWith("/api/v1/waitlist")) {
+    const body = await requestBody(request, init);
+    if (!isRecord(body) || typeof body.email !== "string" || typeof body.name !== "string") {
+      return json({ error: { code: "validation_error", message: "Invalid waitlist body" } }, 422);
+    }
+    const email = String(body.email).trim().toLowerCase();
+    if (mockWaitlistEmails.has(email)) {
+      return json(
+        { error: { code: "already_registered", message: "This email is already on the waitlist." } },
+        409,
+      );
+    }
+    mockWaitlistEmails.add(email);
+    return json(
+      {
+        entry_id: crypto.randomUUID(),
+        email,
+        created_at: new Date().toISOString(),
+      },
+      201,
+    );
+  }
 
   if (method === "GET" && path.endsWith(`/api/v1/tasks/${MOCK_TASK_ID}/events`)) {
     return new Response(createMockEventStream(currentMockScenario(url)), {
@@ -214,8 +259,29 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
   // --- Project lifecycle (landing rename/archive, contract strand 8) ------
   if (method === "PATCH" && path.endsWith(`/api/v1/tasks/${MOCK_TASK_ID}`)) {
     const body = await requestBody(request, init);
+    // Task 033 phase 10b: i.5 — a Task's own visibility can't be set while
+    // it's in a Project (project membership). The mock mirrors the real
+    // 409 `visibility_conflict` so the control's error line is exercisable
+    // in mock mode too, not just against a live backend. Checked before any
+    // field is assigned, matching the real API's all-or-nothing conflict —
+    // a 409 must leave every field (including a same-body rename) untouched.
+    if (
+      isRecord(body) &&
+      (body.visibility === "org" || body.visibility === "private") &&
+      (mockTask.project_ids?.length ?? 0) > 0
+    ) {
+      return json({ error: { code: "visibility_conflict", message: `${TASK.one} is in a ${PROJECT.one}.` } }, 409);
+    }
     if (isRecord(body) && typeof body.name === "string") mockTask.name = body.name;
     if (isRecord(body) && typeof body.question === "string") mockTask.question = body.question;
+    if (isRecord(body) && (body.visibility === "org" || body.visibility === "private")) {
+      mockTask.visibility = body.visibility;
+    }
+    if (isRecord(body) && Array.isArray(body.project_ids)) {
+      mockTask.project_ids = body.project_ids.filter(
+        (value): value is string => typeof value === "string",
+      );
+    }
     mockTask.updated_at = new Date().toISOString();
     return json(mockTask);
   }
@@ -327,7 +393,44 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
     return json(page(rows));
   }
 
-  if (method === "GET" && path.endsWith("/api/v1/tasks")) return json(page([mockTask]));
+  // --- Identity + projects (task 033 phase 10a) -------------------------
+  if (method === "GET" && path.endsWith("/api/v1/me")) return json(currentMe);
+  if (method === "GET" && path.endsWith("/api/v1/projects")) return json(page(mockProjects));
+  const projectDetailMatch = /\/api\/v1\/projects\/([^/]+)$/.exec(path);
+  if (method === "GET" && projectDetailMatch) {
+    const found = mockProjects.find((project) => project.project_id === projectDetailMatch[1]);
+    return found !== undefined ? json(found) : json({ detail: "resource not found" }, 404);
+  }
+  // Task 033 phase 10b: the visibility control's cascade (i.4) — the mock's
+  // one task is the project's only member, so "every member follows"
+  // is a single assignment, but the shape (mutate both rows, return the
+  // updated `task_count`) matches what the visibility-outcome copy reads.
+  if (method === "PATCH" && projectDetailMatch) {
+    const found = mockProjects.find((project) => project.project_id === projectDetailMatch[1]);
+    if (found === undefined) return json({ detail: "resource not found" }, 404);
+    const body = await requestBody(request, init);
+    if (isRecord(body) && typeof body.name === "string") found.name = body.name;
+    if (isRecord(body) && typeof body.description === "string") found.description = body.description;
+    if (isRecord(body) && (body.visibility === "org" || body.visibility === "private")) {
+      found.visibility = body.visibility;
+      if (mockTask.project_ids?.includes(found.project_id) === true) {
+        mockTask.visibility = body.visibility;
+      }
+    }
+    return json(found);
+  }
+
+  // `project_id` narrows to one project's members, server-side — mirrors
+  // the real list's filter (contract task 033 phase 10a: `ProjectDetailView`
+  // no longer filters the global page client-side).
+  if (method === "GET" && path.endsWith("/api/v1/tasks")) {
+    const projectId = url.searchParams.get("project_id");
+    const rows =
+      projectId === null || mockTask.project_ids?.includes(projectId) === true
+        ? [mockTask]
+        : [];
+    return json(page(rows));
+  }
   if (method === "GET" && path.endsWith(`/api/v1/tasks/${MOCK_TASK_ID}`)) return json(mockTask);
   if (method === "GET" && path.endsWith(`/api/v1/tasks/${MOCK_TASK_ID}/funnel`)) return json(mockFunnel);
   if (method === "GET" && path.endsWith(`/api/v1/tasks/${MOCK_TASK_ID}/landscape`)) return json(mockLandscape);
@@ -387,6 +490,7 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
       span_end: context.length,
       year: 2022,
       venue: "BMJ Open",
+      authorships: mockAuthorships,
     });
   }
   if (method === "GET" && path.includes(`/api/v1/tasks/${MOCK_TASK_ID}/citations/`) && path.endsWith("/context")) {
@@ -403,6 +507,7 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
       span_end: context.length,
       year: 2022,
       venue: "BMJ Open",
+      authorships: mockAuthorships,
     });
   }
   if (method === "GET" && path.endsWith(`/api/v1/tasks/${MOCK_TASK_ID}/findings`)) {
@@ -671,7 +776,7 @@ function createMockEventStream(scenario: MockScenario): ReadableStream<Uint8Arra
       emit(stageCompleted("appraise", "Appraising quality", { quality_checked: 31 }, nextSequence()));
       emit(stageStarted("characterise", "Characterising findings", "Extracting implementation conditions", nextSequence()));
       emit(stageCompleted("characterise", "Characterising findings", { findings: 34 }, nextSequence()));
-      emit(stageStarted("synthesise", "Synthesising the evidence", "Preparing a decision-ready evidence base", nextSequence()));
+      emit(stageStarted("synthesise", "Writing the report", "Preparing a decision-ready evidence base", nextSequence()));
       // The run genuinely parks at this boundary (028 pause salience: paused
       // must read distinct from executing on every tab) — an explicit
       // `run.status` frame, not just the pending check-in itself.
@@ -725,7 +830,7 @@ function createMockEventStream(scenario: MockScenario): ReadableStream<Uint8Arra
           occurred_at: FRAME_TIME,
           sequence: nextSequence(),
         });
-        emit(stageFailed("synthesise", "Synthesising the evidence", "The write-up run hit an unrecoverable error.", nextSequence()));
+        emit(stageFailed("synthesise", "Writing the report", "The write-up run hit an unrecoverable error.", nextSequence()));
         finishRun("failed");
         emit(runStatus("failed", nextSequence()));
         controller.close();
@@ -740,7 +845,7 @@ function createMockEventStream(scenario: MockScenario): ReadableStream<Uint8Arra
         occurred_at: FRAME_TIME,
         sequence: nextSequence(),
       });
-      emit(stageCompleted("synthesise", "Synthesising the evidence", { cited: 12, sections: 2 }, nextSequence()));
+      emit(stageCompleted("synthesise", "Writing the report", { cited: 12, sections: 2 }, nextSequence()));
       finishRun("succeeded");
       emit(runStatus("succeeded", nextSequence()));
       controller.close();

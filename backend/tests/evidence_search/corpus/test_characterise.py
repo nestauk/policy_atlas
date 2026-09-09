@@ -20,13 +20,13 @@ from policy_atlas.core.schema import (
     DIRECTIVE_STRING_MAX,
     characterisation_result,
     event_log,
-    task_source_snapshot,
     runs,
     source_appraisal_result,
     source_classification_result,
     source_screening_result,
     source_snapshot,
     source_tag,
+    task_source_snapshot,
 )
 from policy_atlas.core.usage import UsageResult
 from policy_atlas.evidence_search.assess.appraise import AppraiseContext, appraise_sources
@@ -60,11 +60,11 @@ from tests.helpers import (
     delete_task_data,
     executed_calls_for,
     now,
-    seed_task_and_run,
     seed_run,
     seed_scope,
     seed_screening_result,
     seed_source,
+    seed_task_and_run,
 )
 from tests.provider_fixtures import OpenAlexFixtureBackend, OvertonFixtureBackend
 

@@ -27,12 +27,11 @@ from sqlalchemy.engine import Engine
 from policy_atlas.core import events
 from policy_atlas.core.schema import (
     characterisation_result,
-    task_plan,
     runs,
     source_screening_result,
+    task_plan,
 )
 from policy_atlas.runtime import harness, steering_events
-from policy_atlas.runtime.task_plan import TaskPlan, compose
 from policy_atlas.runtime.runner import (
     NullIO,
     _run_segment_reentry,
@@ -46,6 +45,7 @@ from policy_atlas.runtime.steering import (
     SteeringResponse,
     apply_segment_reentry,
 )
+from policy_atlas.runtime.task_plan import TaskPlan, compose
 from tests.runtime.test_runner import _base_plan, _runner_backends, _seed_task
 from tests.runtime.test_steering import ScriptedIO, _cleanup_task, _insert_plan_row
 

@@ -1,7 +1,25 @@
 # Environment
 
 How to bring up a working local environment and the gotchas that bite. Reflects the repo as it
-stands (tasks 001–029 — 029 adds the chat surface: no new env vars required locally,
+stands (tasks 001–040; 040 is frontend-only and changes no env; 039 adds the APO test-mod (`publisher_source`,
+Overton `source=apo`) plus planning/artefact bug fixes — no migration; when
+another checkout of this repo may be running tests, isolate the gate with a
+per-checkout `TEST_DATABASE_URL` `*_test` override; 038 renames the catalog (`project`→`task`,
+`portfolio`→`project`, `orchestration_plan`→`plan`) and the API paths
+(`/api/v1/tasks`, `/api/v1/projects`) — run `alembic upgrade head` against
+the dev DB after pulling (reversible: ADR 0036 § Rollback), and rename any
+local `POLICY_ATLAS_ORCHESTRATOR_*` override to `POLICY_ATLAS_AGENT_*` (a
+stale one is logged at boot and ignored); the CLI is
+`python -m policy_atlas.runtime.agent`; 030–032 change no env; 034 changes no env; 036 adds the
+`waitlist_entry` table and 037 adds `project.is_public` — both additive
+migrations, so run `alembic upgrade head` against the dev DB after pulling;
+neither adds env vars; 033 adds the `ops` dependency
+group to `[tool.uv] default-groups` — synced automatically by `uv run`, excluded
+from the image — plus the organisation schema, so run `alembic upgrade head`
+against the dev DB after pulling it; the ops CLI (`python -m policy_atlas.ops`)
+is tunnel-only and needs no local setup, but `make dev-seed` puts the tenancy
+UI on screen locally — it enrols dev-user/dev-colleague/dev-admin into
+"Dev Org" on the dev DB via the real enrol logic with a faked Cognito; 029 adds the chat surface: no new env vars required locally,
 `POLICY_ATLAS_CHAT_MODEL` optional with an application default; a live chat turn needs the
 funded OpenAI key `make dev` already loads; 025 hoists the Python project to `backend/` and adds the `frontend/`
 web app; 026 adds `infra/` (CDK, own venv from `infra/requirements*.txt`; `make -C infra test`
@@ -180,3 +198,12 @@ the Makefile; if they ever diverge, that's a bug in the workflow, not a fact to 
   failing deep in pytest.
 - **Migration is idempotent** — `alembic upgrade head` runs in both `make setup` and the test
   session fixture; running twice is safe.
+- **Git worktrees silently lose the shared dev Postgres** (040 build) — `docker compose` derives
+  its project name from the directory, so a worktree checkout looks for containers under the
+  worktree's name and finds none. Root-Makefile DB checks need `COMPOSE_PROJECT_NAME=policy_atlas`
+  (e.g. `COMPOSE_PROJECT_NAME=policy_atlas make verify`).
+- **Diagnose baseline test reds with an isolated rerun before believing them** (040 build) — the
+  first `make verify` on a fresh branch showed 13 backend failures; an isolated `make test` (nothing
+  else touching the shared Postgres) cleared 12 as test-DB pollution (the stranded-rows/parallel-lane
+  landmine, AGENTS.md § Landmines). A red baseline read without isolation misattributes pre-existing
+  pollution to the slice.

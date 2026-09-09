@@ -274,10 +274,7 @@ def delete_task_data(conn: Connection, task_id: uuid.UUID) -> None:
         grouping_result,
         implementation_context_finding,
         intervention_outcome_finding,
-        task_plan,
         planning_transcript,
-        task,
-        task_source_snapshot,
         runs,
         search_coverage_record,
         selection_result,
@@ -288,6 +285,9 @@ def delete_task_data(conn: Connection, task_id: uuid.UUID) -> None:
         source_snapshot,
         source_tag,
         synthesis_result,
+        task,
+        task_plan,
+        task_source_snapshot,
     )
     from policy_atlas.core.schema import (
         chunk as chunk_table,
@@ -440,7 +440,7 @@ def seed_ingested_full_text(
     from policy_atlas.core.embeddings import EMBEDDING_PROFILE, UNIT_POLICY, StubEmbeddingBackend
     from policy_atlas.core.hashing import content_hash
     from policy_atlas.core.schema import chunk as chunk_table
-    from policy_atlas.core.schema import chunk_embedding, task_source_snapshot, source_snapshot
+    from policy_atlas.core.schema import chunk_embedding, source_snapshot, task_source_snapshot
 
     full_snapshot_id = uuid.uuid4()
     conn.execute(
@@ -493,7 +493,7 @@ def seed_source(
     conn: Connection, task_id: uuid.UUID, meta: dict[str, Any] | None = None
 ) -> tuple[uuid.UUID, uuid.UUID]:
     """Insert source_snapshot + task_source_snapshot; return (source_snapshot_id, tss_id)."""
-    from policy_atlas.core.schema import task_source_snapshot, source_snapshot
+    from policy_atlas.core.schema import source_snapshot, task_source_snapshot
 
     snap_id = uuid.uuid4()
     tss_id = uuid.uuid4()
@@ -626,10 +626,10 @@ def seed_select_doc(
 ) -> uuid.UUID:
     """Insert a screened-relevant source ready for select, with optional classification."""
     from policy_atlas.core.schema import (
-        task_source_snapshot,
         source_appraisal_result,
         source_classification_result,
         source_snapshot,
+        task_source_snapshot,
     )
 
     snap_id, tss_id = seed_source(

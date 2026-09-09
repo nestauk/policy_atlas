@@ -32,7 +32,7 @@ process unscrubbed. Three coordinated pieces enforce this:
 # Why
 
 The 025 live check found a keyed `backend/.env` silently drove a CLI pin test
-(`orchestrate.main`) into the real OpenAI branch under socket-deny — the
+(`agent.main`) into the real OpenAI branch under socket-deny — the
 developer's own live keys reached pytest via alembic's redundant
 `load_dotenv()`, even with conftest's scrub already in place. The suite is now
 green with real keys present in `backend/.env`, which is the exact state every

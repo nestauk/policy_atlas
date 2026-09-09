@@ -45,7 +45,7 @@ live (review finding codex-1).
 
 "Progress" is defined narrowly: any run-attached, non-`continuation.*` event with a
 higher sequence than the claim. Component-emission events always carry a `run_id`
-once a walk is executing, and only one walk runs per project at a time, so this is
+once a walk is executing, and only one walk runs per task at a time, so this is
 unambiguous — but getting the boundary wrong in either direction is bad: too loose
 re-runs an already-committed component, too strict discards live work. Never widen
 the raise-suppression to any OTHER exception class in the sweep loop; the null-

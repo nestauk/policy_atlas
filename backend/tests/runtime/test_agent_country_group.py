@@ -5,8 +5,8 @@ from policy_atlas.runtime.agent import (
     _build_plan,
     _render_full_plan,
 )
-from policy_atlas.runtime.task_plan import CountryGroupAuthorship
 from policy_atlas.runtime.planner_prompt import CountryGroupDraft, PlanDraftWire
+from policy_atlas.runtime.task_plan import CountryGroupAuthorship
 
 
 def _draft(
@@ -78,3 +78,40 @@ def test_custom_country_group_render_uses_custom_count_and_authorship() -> None:
 
     assert "Country group: Nordic countries (3 countries, planner-proposed)" in render
     assert "NO" not in render
+
+
+def test_publisher_source_round_trips_through_build_plan() -> None:
+    """Test mod, task 039: the flat->nested fold must carry publisher_source
+    or the draft->plan round trip silently loses the APO restriction."""
+    draft = PlanDraftWire(
+        title="APO-only review",
+        question="What evidence exists on scoped policy outcomes?",
+        backend_scope="grey_lit_only",
+        search_effort="rapid",
+        analysis_depth="landscape",
+        components=["characterise"],
+        steering_mode="moderate",
+        publisher_source="apo",
+    )
+
+    plan = _build_plan(draft)
+
+    assert plan.scope_constraints.publisher_source == "apo"
+
+
+def test_publisher_source_renders_in_scope_constraints() -> None:
+    draft = PlanDraftWire(
+        title="APO-only review",
+        question="What evidence exists on scoped policy outcomes?",
+        backend_scope="grey_lit_only",
+        search_effort="rapid",
+        analysis_depth="landscape",
+        components=["characterise"],
+        steering_mode="moderate",
+        publisher_source="apo",
+    )
+    plan = _build_plan(draft)
+
+    render = _render_full_plan(plan)
+
+    assert "publisher_source: apo" in render
