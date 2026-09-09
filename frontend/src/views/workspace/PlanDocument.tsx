@@ -284,7 +284,7 @@ function PlanChrome({
 
 /**
  * The search plan, edited in place. Saves stay local until Start search —
- * a planner round-trip on every field would rewrite the whole plan.
+ * a task_agent round-trip on every field would rewrite the whole plan.
  */
 export function PlanDocument({
   taskId,

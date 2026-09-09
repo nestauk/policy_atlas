@@ -12,7 +12,7 @@ type PlanDraft = components["schemas"]["PlanDraft"];
 const EMPTY_OVERLAY: PlanOverlay = {};
 
 /**
- * Inline actions once the three planning steps are done: review in the plan
+ * Inline actions once the three task_agent steps are done: review in the plan
  * document, or start the search. Local plan edits apply on start, not on each save.
  *
  * `isOwner` (task 033 phase 10c, contract § 11 / rubric 37): starting a run

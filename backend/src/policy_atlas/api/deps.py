@@ -24,7 +24,7 @@ from policy_atlas.evidence_search.synthesis.grounding_judge import (
     OpenAIGroundingJudgeBackend,
     StubGroundingJudgeBackend,
 )
-from policy_atlas.runtime.agent import live_planner_and_backends
+from policy_atlas.runtime.agent import live_task_agent_and_backends
 from policy_atlas.runtime.agent_backend import (
     AgentBackend,
     OpenAIAgentBackend,
@@ -32,8 +32,8 @@ from policy_atlas.runtime.agent_backend import (
 )
 from policy_atlas.runtime.chat_backend import ChatBackend, StubChatBackend
 from policy_atlas.runtime.chat_backend_openai import OpenAIChatBackend
-from policy_atlas.runtime.planner import PlannerBackend, StubPlannerBackend
 from policy_atlas.runtime.runner import RunnerBackends
+from policy_atlas.runtime.task_agent import StubTaskAgentBackend, TaskAgentBackend
 
 log = structlog.get_logger()
 
@@ -136,18 +136,18 @@ def get_executor(request: Request) -> ThreadPoolExecutor:
     return cast(ThreadPoolExecutor, request.app.state.run_executor)
 
 
-def get_planner_backend() -> PlannerBackend:
-    """Build the planner backend, key-driven exactly like `agent`.
+def get_task_agent_backend() -> TaskAgentBackend:
+    """Build the task_agent backend, key-driven exactly like `agent`.
 
     Returns:
-        The live OpenAI planner (Langfuse-traced) when `OPENAI_API_KEY` is
+        The live OpenAI task_agent (Langfuse-traced) when `OPENAI_API_KEY` is
         configured, else the deterministic stub. Tests override this
         dependency with a scripted backend before creating a client.
     """
     if _live():
-        planner, _ = live_planner_and_backends(tracing.get_langfuse())
-        return planner
-    return StubPlannerBackend()
+        task_agent, _ = live_task_agent_and_backends(tracing.get_langfuse())
+        return task_agent
+    return StubTaskAgentBackend()
 
 
 def get_runner_backends() -> RunnerBackends:
@@ -160,7 +160,7 @@ def get_runner_backends() -> RunnerBackends:
         deterministic component doubles.
     """
     if _live():
-        _, backends = live_planner_and_backends(tracing.get_langfuse())
+        _, backends = live_task_agent_and_backends(tracing.get_langfuse())
         return backends
     return RunnerBackends()
 
@@ -214,7 +214,7 @@ __all__ = [
     "get_executor",
     "get_grounding_judge_backend",
     "get_agent_backend",
-    "get_planner_backend",
+    "get_task_agent_backend",
     "get_runner_backends",
     "get_settings",
 ]

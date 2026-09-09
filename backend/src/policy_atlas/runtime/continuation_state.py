@@ -127,7 +127,7 @@ def build(
             raise LookupError(f"capability run {capability_run_id} does not exist")
         # Latest-approved is the walk's own lineage BY CONSTRUCTION, not by
         # accident (review finding codex-2, 2026-07-21): steering amendments
-        # supersede within the walk's lineage, and the planning router 409s
+        # supersede within the walk's lineage, and the task_agent router 409s
         # any turn while a walk is running or parked — so no unrelated plan
         # can become latest-approved between park and continuation.
         plan_row = conn.execute(

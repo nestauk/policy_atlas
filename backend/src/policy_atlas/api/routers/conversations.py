@@ -72,8 +72,8 @@ from policy_atlas.core.schema import (
     artefact,
     chat_turn,
     conversation,
-    planning_transcript,
     task,
+    task_agent_transcript,
 )
 from policy_atlas.evidence_search.synthesis.grounding_judge import GroundingJudgeBackend
 from policy_atlas.runtime.chat_backend import ChatBackend
@@ -141,8 +141,8 @@ def _graded_conversation(
     A **chat** conversation is visible only to the colleague who created it,
     or — for the legacy pre-033 rows that carry no ``created_by`` — the
     task owner (the same NULL disjunct :func:`list_conversations` applies
-    to the listing). A **planning** conversation stays owner-only this phase
-    (contract § 4); colleague-authored planning turns are a later slice.
+    to the listing). A **task_agent** conversation stays owner-only this phase
+    (contract § 4); colleague-authored task_agent turns are a later slice.
 
     Not accessible is always a **404**, never a 403: a colleague who did not
     create a chat must not learn the row exists at all — this is the guard
@@ -198,7 +198,7 @@ def _graded_conversation(
         or_(
             own_chat_leg(user_id),
             and_(
-                conversation.c.kind == "planning",
+                conversation.c.kind == "task_agent",
                 task.c.owner_user_id == user_id,
             ),
         ),
@@ -269,12 +269,12 @@ def _latest_turn_preview(
         )
     latest = conn.execute(
         select(
-            planning_transcript.c.user_message,
-            planning_transcript.c.reply,
-            planning_transcript.c.completed_at,
+            task_agent_transcript.c.user_message,
+            task_agent_transcript.c.reply,
+            task_agent_transcript.c.completed_at,
         )
-        .where(planning_transcript.c.conversation_id == row["id"])
-        .order_by(planning_transcript.c.turn_index.desc())
+        .where(task_agent_transcript.c.conversation_id == row["id"])
+        .order_by(task_agent_transcript.c.turn_index.desc())
         .limit(1)
     ).mappings().one_or_none()
     if latest is None:
@@ -352,8 +352,8 @@ def list_conversations(
 
     The filter is :func:`own_conversation_leg`, **not** its chat-narrowed
     sibling: this library lists both kinds, and the owner must keep seeing
-    their task's planning conversation here. A colleague never matches a
-    planning row anyway — planning conversations are minted by the runtime
+    their task's task_agent conversation here. A colleague never matches a
+    task_agent row anyway — task_agent conversations are minted by the runtime
     and record no ``created_by``, so only the task owner reaches them
     through the legacy disjunct.
     """
@@ -411,16 +411,16 @@ def create_conversation(
 
     **This route can only ever mint a chat**, for anybody: ``kind`` is not a
     field on ``ConversationCreate`` (which forbids extras), it is written as
-    the literal ``"chat"`` below, and planning conversations are minted
-    exclusively by ``runtime.conversation_lifecycle`` under ``planning.py``'s
-    owner-graded task lock. So "a planning conversation can only ever be
+    the literal ``"chat"`` below, and task_agent conversations are minted
+    exclusively by ``runtime.conversation_lifecycle`` under ``task_agent.py``'s
+    owner-graded task lock. So "a task_agent conversation can only ever be
     created by the task owner" needs no branch here to hold — the shape of
     the request body is what enforces it, and a body carrying ``kind`` is
     rejected 422 before this function runs.
 
     **No task-row lock** (contract § 4). The lock this route used to take
     protected nothing a chat insert needs: the only uniqueness constraint on
-    ``conversation`` is the partial index over ``kind = 'planning' AND status
+    ``conversation`` is the partial index over ``kind = 'task_agent' AND status
     = 'active'``, which a chat row cannot collide with, and the insert itself
     carries a freshly minted primary key. Kept, it would have let any
     colleague block the owner's rename, archive and run-start.
@@ -482,7 +482,7 @@ def update_conversation(
         for_update=True,
     )
     if row["kind"] != "chat":
-        raise HTTPException(status_code=422, detail="planning conversations cannot be renamed")
+        raise HTTPException(status_code=422, detail="task_agent conversations cannot be renamed")
     changes = payload.model_dump(exclude_unset=True)
     if "title" in changes and changes["title"] is None:
         # Unlike entry_artefact_id, title has no clearable meaning — a chat's
@@ -519,7 +519,7 @@ def archive_conversation(
         for_update=True,
     )
     if row["kind"] != "chat":
-        raise HTTPException(status_code=422, detail="planning conversations cannot be archived")
+        raise HTTPException(status_code=422, detail="task_agent conversations cannot be archived")
     if row["status"] != "archived":
         conn.execute(
             update(conversation)
@@ -548,7 +548,7 @@ def unarchive_conversation(
         for_update=True,
     )
     if row["kind"] != "chat":
-        raise HTTPException(status_code=422, detail="planning conversations cannot be unarchived")
+        raise HTTPException(status_code=422, detail="task_agent conversations cannot be unarchived")
     if row["status"] == "archived":
         conn.execute(
             update(conversation)

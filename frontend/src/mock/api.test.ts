@@ -7,7 +7,7 @@ import {
   MOCK_CHAT_CITATION_CHUNK_ID,
   MOCK_CHAT_CITATION_QUOTE,
   MOCK_CHECK_IN_ID,
-  MOCK_PLANNING_CONVERSATION_ID,
+  MOCK_TASK_AGENT_CONVERSATION_ID,
   MOCK_PROJECT_ID,
   MOCK_TASK_ID,
   MOCK_THEME_ID_ACTIVE_TRAVEL,
@@ -132,7 +132,7 @@ describe("mock API", () => {
     expect(plan.plan.ready).toBe(true);
     expect(plan.plan.search_effort).toBe("rapid");
 
-    const turnsResponse = await mockFetch(`http://localhost/api/v1/tasks/${MOCK_TASK_ID}/planning-turns`);
+    const turnsResponse = await mockFetch(`http://localhost/api/v1/tasks/${MOCK_TASK_ID}/task-agent-turns`);
     const turns = await turnsResponse.json() as {
       data: {
         status: string;
@@ -190,20 +190,20 @@ describe("mock API", () => {
   // async enrichment poll's second-read flip, and the chat citation's own
   // chunk-context read.
   describe("chat conversations", () => {
-    it("lists the seeded planning conversation when kind is not filtered to chat", async () => {
+    it("lists the seeded task_agent conversation when kind is not filtered to chat", async () => {
       resetMockScenario();
       const listed = await mockFetch(`http://localhost/api/v1/tasks/${MOCK_TASK_ID}/conversations?status=active`);
       const { data } = await listed.json() as { data: { id: string; kind: string; title: string }[] };
       expect(data).toEqual(expect.arrayContaining([
         expect.objectContaining({
-          id: MOCK_PLANNING_CONVERSATION_ID,
-          kind: "planning",
+          id: MOCK_TASK_AGENT_CONVERSATION_ID,
+          kind: "task_agent",
           title: "Planning",
         }),
       ]));
       const chatsOnly = await mockFetch(`http://localhost/api/v1/tasks/${MOCK_TASK_ID}/conversations?kind=chat&status=active`);
       const { data: chats } = await chatsOnly.json() as { data: { id: string }[] };
-      expect(chats.map((row) => row.id)).not.toContain(MOCK_PLANNING_CONVERSATION_ID);
+      expect(chats.map((row) => row.id)).not.toContain(MOCK_TASK_AGENT_CONVERSATION_ID);
     });
 
     it("creates, lists, updates, and archives/unarchives a conversation", async () => {

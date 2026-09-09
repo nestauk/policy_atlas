@@ -28,7 +28,7 @@ from policy_atlas.api.routers._access import accessible_task
 from policy_atlas.api.routers._common import run_out
 from policy_atlas.api.run_io import ParkIO
 from policy_atlas.api.settings import Settings
-from policy_atlas.core.schema import capability_run, planning_transcript, task_plan
+from policy_atlas.core.schema import capability_run, task_agent_transcript, task_plan
 from policy_atlas.runtime.runner import RunnerBackends, run_plan
 from policy_atlas.runtime.task_plan import TaskPlan
 
@@ -155,9 +155,9 @@ def create_run(
                 raise HTTPException(status_code=400, detail="no approved plan")
             approved_plan = TaskPlan.model_validate(plan_row["payload"])
             latest_completed_turn = conn.execute(
-                select(func.max(planning_transcript.c.turn_index))
-                .where(planning_transcript.c.task_id == task_id)
-                .where(planning_transcript.c.status == "completed")
+                select(func.max(task_agent_transcript.c.turn_index))
+                .where(task_agent_transcript.c.task_id == task_id)
+                .where(task_agent_transcript.c.status == "completed")
             ).scalar_one()
             if (
                 approved_plan.source_turn_index is not None
@@ -166,7 +166,7 @@ def create_run(
             ):
                 raise ApiConflict(
                     "plan_stale",
-                    "the plan predates your latest planning message — review it, then start",
+                    "the plan predates your latest task_agent message — review it, then start",
                 )
             existing_ids = {
                 row[0]

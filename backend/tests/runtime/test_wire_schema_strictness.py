@@ -22,7 +22,7 @@ from policy_atlas.runtime.agent_prompt import (
     WatchDecisionTransport,
     WatchTriageWire,
 )
-from policy_atlas.runtime.planner_prompt import PlannerTurnWire
+from policy_atlas.runtime.task_agent_prompt import PlannerTurnWire
 
 
 def _open_object_nodes(schema: Any, path: str = "$") -> list[str]:

@@ -19,7 +19,7 @@
 ## 2026-09-08 (task 039 step 8)
 * **Creation**: Added
   [scope-constraint-fields-projection-surfaces](scope-constraint-fields-projection-surfaces.md) —
-  the five surfaces a new `ScopeConstraints` field must touch; the planner
+  the five surfaces a new `ScopeConstraints` field must touch; the Task Agent
   sees constraints via `PlanDraftWire`, not the CLI render (the build's
   claim, corrected by the step-7 contract verifier), and the loose-wire →
   strict-draft fold needs a normaliser (039 review stack).
@@ -294,7 +294,7 @@
 * **Creation**: Added [run-id-fk-shapes-audit-carriers](run-id-fk-shapes-audit-carriers.md) — no run, no event: the carrier decision (table-first / outcome-object / re-run provenance) recurred three times in 017.
 * **Creation**: Added [two-phase-run-lifecycle-evented-vs-escaped](two-phase-run-lifecycle-evented-vs-escaped.md) — evented failure vs escaped exception; identity-first commit makes the failure backstop's FK trivial (017, decision 8).
 * **Creation**: Added [compile-target-parity-covers-composed-wholes](compile-target-parity-covers-composed-wholes.md) — parity checks compose with the real composer against the real bound; containment for canonicalising round-trips; registries for runtime-consumed names (017 review stack, three instances of one class).
-* **Update**: [model-output-nul-scrub](model-output-nul-scrub.md) — the planner became `_scrub_nul`'s second consumer; the scrub must be recursive over the whole record (017 review stack).
+* **Update**: [model-output-nul-scrub](model-output-nul-scrub.md) — the Task Agent became `_scrub_nul`'s second consumer; the scrub must be recursive over the whole record (017 review stack).
 * **Declined**: weight_emphasis multiplier semantics (already carried by `steering.py`'s constants comment + rank-shift tests); planner ~20–30 s/turn latency (an 018 surface input, carried in 017's review handoff, not durable knowledge).
 
 ## 2026-07-10 (task 016 step 8)

@@ -1,4 +1,4 @@
-"""EB capability-runner for executing approved task plans.
+"""ES capability-runner for executing approved task plans.
 
 The runner is the deterministic sub-agent boundary for task 017: it walks a
 composed task plan, owns per-component commits, applies component
@@ -76,7 +76,7 @@ from policy_atlas.runtime.agent_backend import (
 )
 from policy_atlas.runtime.agent_prompt import WATCH_AUTHORING_PROMPT_VERSION
 from policy_atlas.runtime.continuation_state import ContinuationState, ResumeDecision
-from policy_atlas.runtime.conversation_lifecycle import close_planning_conversation
+from policy_atlas.runtime.conversation_lifecycle import close_task_agent_conversation
 from policy_atlas.runtime.harness import run_harness
 from policy_atlas.runtime.progress import ProgressEmitter
 from policy_atlas.runtime.run_spec import Plan, compile
@@ -544,7 +544,7 @@ def leg_directive(
 ) -> dict[str, Any]:
     """Return the directive delta for the next component.
 
-    This is the named directive-authoring seam for a future EB-expert agent:
+    This is the named directive-authoring seam for a future ES-expert agent:
     given the approved task plan, the next component step and the
     successful upstream state, that agent can author the component's context
     delta. V1 is intentionally deterministic and returns the composer-emitted
@@ -623,7 +623,7 @@ def _run_plan_impl(
             makes abort a run-local stop only.
         backends: Optional backend seam bundle. ``None`` uses harness defaults.
         io: Optional agent IO seam. ``None`` uses ``NullIO``.
-        session_id: Optional Langfuse session id shared by the planner and all
+        session_id: Optional Langfuse session id shared by the task_agent and all
             component attempts for one agent conversation.
         discretion_hook: Optional Unattended-mode discretion hook consulted only
             at a lattice boundary with NO pinned standing rule (the Phase-5 watch
@@ -5077,11 +5077,11 @@ def _finish_run(
             event_type="run.finished",
             payload={"capability_run_id": str(capability_run_id), "status": status},
         )
-        # A completed run closes its planning conversation atomically with the
+        # A completed run closes its task_agent conversation atomically with the
         # terminal status + run.finished event (029 strand 2): a crash can
-        # never leave a succeeded run with an active planning conversation.
+        # never leave a succeeded run with an active task_agent conversation.
         if status in ("succeeded", "degraded"):
-            close_planning_conversation(conn, task_id=task_id, closed_at=ended_at)
+            close_task_agent_conversation(conn, task_id=task_id, closed_at=ended_at)
     collation = render_collation(flagged_events)
     log.info("runner.collation", render=collation)
     _log_run_summary(outcomes, status=status)

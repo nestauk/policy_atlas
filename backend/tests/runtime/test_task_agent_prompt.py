@@ -1,7 +1,7 @@
 """Tests for ``build_planner_messages``'s message-array assembly.
 
 No dedicated test file existed for this function before this rewrite (it was
-previously only exercised indirectly via ``planner.py`` callers); these tests
+previously only exercised indirectly via ``task_agent.py`` callers); these tests
 cover its prompt-assembly contract directly.
 """
 
@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 
-from policy_atlas.runtime.planner_prompt import (
+from policy_atlas.runtime.task_agent_prompt import (
     PLANNER_HISTORY_TURNS_MAX,
     PLANNER_INTENT_MAX,
     PLANNER_SYSTEM_PROMPT,
@@ -28,10 +28,10 @@ def test_first_message_is_unchanged_system_prompt() -> None:
     assert messages[0] == {"role": "system", "content": PLANNER_SYSTEM_PROMPT}
 
 
-def test_role_mapping_user_planner_and_unknown() -> None:
+def test_role_mapping_user_task_agent_and_unknown() -> None:
     turns = [
         _turn("first user turn", role="user"),
-        _turn("a planner reply", role="planner"),
+        _turn("a task_agent reply", role="planner"),
         _turn("an unknown-role turn", role="mystery"),
     ]
 
@@ -109,11 +109,11 @@ def test_previous_draft_is_null_json_on_first_turn() -> None:
     assert "null" in str(messages[-1]["content"])
 
 
-def test_latest_planner_turn_gets_trailing_user_message_for_draft() -> None:
-    # Defensive case: the latest turn is a planner/assistant turn, so the
+def test_latest_task_agent_turn_gets_trailing_user_message_for_draft() -> None:
+    # Defensive case: the latest turn is a task_agent/assistant turn, so the
     # draft attachment cannot live inside that assistant message and must
     # ride a separate trailing user message instead.
-    turns = [_turn("a user turn"), _turn("latest is a planner turn", role="planner")]
+    turns = [_turn("a user turn"), _turn("latest is a task_agent turn", role="planner")]
     previous_draft: dict[str, object] = {"title": "Evidence review"}
 
     messages = build_planner_messages(turns, previous_draft)

@@ -274,7 +274,6 @@ def delete_task_data(conn: Connection, task_id: uuid.UUID) -> None:
         grouping_result,
         implementation_context_finding,
         intervention_outcome_finding,
-        planning_transcript,
         runs,
         search_coverage_record,
         selection_result,
@@ -286,6 +285,7 @@ def delete_task_data(conn: Connection, task_id: uuid.UUID) -> None:
         source_tag,
         synthesis_result,
         task,
+        task_agent_transcript,
         task_plan,
         task_source_snapshot,
     )
@@ -411,9 +411,9 @@ def delete_task_data(conn: Connection, task_id: uuid.UUID) -> None:
         conn.execute(delete(source_snapshot).where(
             source_snapshot.c.source_snapshot_id.in_(snapshot_ids)
         ))
-    # Durable planning turns before their task parent.
-    conn.execute(delete(planning_transcript).where(
-        planning_transcript.c.task_id == task_id
+    # Durable task_agent turns before their task parent.
+    conn.execute(delete(task_agent_transcript).where(
+        task_agent_transcript.c.task_id == task_id
     ))
     # task_plan before evidence_scope (fk_plan_scope_task) and
     # before conversation (task_plan.conversation_id FKs onto it).
@@ -421,7 +421,7 @@ def delete_task_data(conn: Connection, task_id: uuid.UUID) -> None:
         task_plan.c.task_id == task_id
     ))
     # conversation after its FK dependants (chat_turn above,
-    # planning_transcript/task_plan above) and before task.
+    # task_agent_transcript/task_plan above) and before task.
     conn.execute(delete(conversation).where(conversation.c.task_id == task_id))
     conn.execute(delete(evidence_scope).where(evidence_scope.c.task_id == task_id))
     conn.execute(delete(task).where(task.c.task_id == task_id))

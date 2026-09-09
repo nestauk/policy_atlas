@@ -21,7 +21,7 @@ import {
   mockProject,
   mockTask,
   mockSourceDossiers,
-  seedPlanningTurns,
+  seedTaskAgentTurns,
   MOCK_CHAT_ANSWER_DELTAS,
   MOCK_CHAT_CITATION_CHUNK_ID,
   MOCK_CHAT_CITATION_QUOTE,
@@ -30,7 +30,7 @@ import {
   MOCK_CHAT_PROGRESS_LABEL,
   MOCK_CHECK_IN_ID,
   MOCK_PLAN_ID,
-  MOCK_PLANNING_CONVERSATION_ID,
+  MOCK_TASK_AGENT_CONVERSATION_ID,
   MOCK_TASK_ID,
   MOCK_RUN_ID,
   mockAuthorships,
@@ -40,7 +40,7 @@ type MeOut = components["schemas"]["MeOut"];
 type ProjectOut = components["schemas"]["ProjectOut"];
 
 type RunOut = components["schemas"]["RunOut"];
-type PlanningTranscriptTurnOut = components["schemas"]["PlanningTranscriptTurnOut"];
+type TaskAgentTranscriptTurnOut = components["schemas"]["TaskAgentTranscriptTurnOut"];
 type EvidenceItemOut = components["schemas"]["EvidenceItemOut"];
 type ConversationOut = components["schemas"]["ConversationOut"];
 type ConversationListItemOut = components["schemas"]["ConversationListItemOut"];
@@ -141,19 +141,19 @@ let checkInAnswer = createDeferred();
 let checkInAnswered = false;
 let runStarted = createDeferred();
 let currentRun: RunOut | null = null;
-let planningTurns: PlanningTranscriptTurnOut[] = seedPlanningTurns();
+let taskAgentTurns: TaskAgentTranscriptTurnOut[] = seedTaskAgentTurns();
 let nextTurnIndex = 4; // the seed transcript occupies turn_index 1-3
 
 // --- Chat conversations + turns (task 029 phase G3 mock) -----------------
-// Follow-up chats are created on demand. The planning conversation is
-// pre-seeded so the chats overlay (G14) has a planning row in mock mode,
+// Follow-up chats are created on demand. The task_agent conversation is
+// pre-seeded so the chats overlay (G14) has a task_agent row in mock mode,
 // matching a real task that already has a plan lineage.
 function seedConversations(): ConversationOut[] {
   return [
     {
-      id: MOCK_PLANNING_CONVERSATION_ID,
+      id: MOCK_TASK_AGENT_CONVERSATION_ID,
       task_id: MOCK_TASK_ID,
-      kind: "planning",
+      kind: "task_agent",
       title: "Planning",
       status: "active",
       entry_artefact_id: null,
@@ -193,7 +193,7 @@ export function resetMockScenario() {
   runStarted = createDeferred();
   currentRun = null;
   mockTask.latest_run = null;
-  planningTurns = seedPlanningTurns();
+  taskAgentTurns = seedTaskAgentTurns();
   nextTurnIndex = 4;
   chatConversations = seedConversations();
   chatTurnsByConversation = new Map();
@@ -291,17 +291,17 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
     return json(mockTask);
   }
 
-  // --- Durable planning transcript (contract strand 12) -------------------
-  if (method === "GET" && path.endsWith(`/api/v1/tasks/${MOCK_TASK_ID}/planning-turns`)) {
-    return json(page(planningTurns));
+  // --- Durable task_agent transcript (contract strand 12) -------------------
+  if (method === "GET" && path.endsWith(`/api/v1/tasks/${MOCK_TASK_ID}/task-agent-turns`)) {
+    return json(page(taskAgentTurns));
   }
-  if (method === "POST" && path.endsWith(`/api/v1/tasks/${MOCK_TASK_ID}/planning-turns`)) {
+  if (method === "POST" && path.endsWith(`/api/v1/tasks/${MOCK_TASK_ID}/task-agent-turns`)) {
     const body = await requestBody(request, init);
     const clientTurnId = isRecord(body) && typeof body.client_turn_id === "string" ? body.client_turn_id : crypto.randomUUID();
     const message = isRecord(body) && typeof body.message === "string" ? body.message : "";
     const now = new Date().toISOString();
     const reply = "Noted — I'll keep that in mind for the analysis.";
-    const existing = planningTurns.find((turn) => turn.client_turn_id === clientTurnId);
+    const existing = taskAgentTurns.find((turn) => turn.client_turn_id === clientTurnId);
     if (existing !== undefined) {
       // Retry-in-place (finding 6): the same client_turn_id re-runs, never a
       // fresh turn_index.
@@ -310,7 +310,7 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
       existing.suggestions = [];
       existing.completed_at = now;
     } else {
-      planningTurns.push({
+      taskAgentTurns.push({
         client_turn_id: clientTurnId,
         turn_index: nextTurnIndex,
         user_message: message,
@@ -614,7 +614,7 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
  *  cross-kind preview join closely enough for the mock library surface. */
 function conversationListItem(conversation: ConversationOut): ConversationListItemOut {
   const latestChat = (chatTurnsByConversation.get(conversation.id) ?? []).at(-1);
-  const latestPlanning = conversation.kind === "planning" ? planningTurns.at(-1) : undefined;
+  const latestTaskAgent = conversation.kind === "task_agent" ? taskAgentTurns.at(-1) : undefined;
   const latestTurnPreview =
     latestChat !== undefined
       ? {
@@ -622,11 +622,11 @@ function conversationListItem(conversation: ConversationOut): ConversationListIt
           reply_snippet: latestChat.status === "completed" ? latestChat.answer : null,
           at: latestChat.completed_at,
         }
-      : latestPlanning !== undefined
+      : latestTaskAgent !== undefined
         ? {
-            user_message: latestPlanning.user_message,
-            reply_snippet: latestPlanning.status === "completed" ? latestPlanning.reply : null,
-            at: latestPlanning.completed_at,
+            user_message: latestTaskAgent.user_message,
+            reply_snippet: latestTaskAgent.status === "completed" ? latestTaskAgent.reply : null,
+            at: latestTaskAgent.completed_at,
           }
         : null;
   return {

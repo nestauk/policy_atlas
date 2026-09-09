@@ -1,7 +1,7 @@
 """Coordination-plan model and deterministic chain composer.
 
 The task plan is the approved user-facing run proposal. This module
-keeps it fail-closed and compiles it into the fixed EB chain shape without
+keeps it fail-closed and compiles it into the fixed ES chain shape without
 executing any component or widening any existing runtime directive grammar.
 """
 
@@ -218,7 +218,7 @@ TIME_BANDS: dict[tuple[SearchEffort, AnalysisDepth], str] = {
     ("rapid", "standard"): "~30-45 min",
     # Re-seeded from the 019 Phase E measured run (2026-07-12, heat-pump
     # question, standard x standard WITH select-at-standard, 58 docs acquired,
-    # 20 full-text screened): 805 s ≈ 13.4 min end to end incl. the planner
+    # 20 full-text screened): 805 s ≈ 13.4 min end to end incl. the task_agent
     # turn — acquire 12s + screen_abstract 14s + classify 58s + appraise 0.1s
     # + ingest 76s + screen_full 6s + characterise 8s + select 5s +
     # synthesise 602s. Displayed-band-is-measured; synthesise dominates, so
@@ -340,7 +340,7 @@ class CountryGroup(BaseModel):
     """Named country group compiled into backend-specific search filters.
 
     Args:
-        label: Pinned Tier-1 label, or a user/planner label for an explicit
+        label: Pinned Tier-1 label, or a user/task_agent label for an explicit
             Tier-2 country list.
         countries: Explicit ISO-3166 alpha-2 country list for Tier-2 groups.
             Must be ``None`` for pinned Tier-1 labels.
@@ -690,7 +690,7 @@ class SteerPointDefault(BaseModel):
 
 
 class TaskPlan(BaseModel):
-    """Approved coordination proposal compiled into an EB component chain.
+    """Approved coordination proposal compiled into an ES component chain.
 
     Args:
         title: Short user-visible title for the run.
@@ -713,8 +713,8 @@ class TaskPlan(BaseModel):
         assumptions: Visible assumptions and open guesses.
         time_band: Deterministic wall-clock band derived from the two axes.
         section_budget: Optional future synthesis cap for ordinary sections.
-        source_turn_index: Planning turn that approved this payload, when it
-            was created through the planning API.
+        source_turn_index: Task Agent turn that approved this payload, when it
+            was created through the task_agent API.
     """
 
     model_config = ConfigDict(extra="forbid", strict=True)
@@ -1073,7 +1073,7 @@ def _directive_delta(component: str, plan: TaskPlan) -> dict[str, Any]:
 
 
 def compose(plan: TaskPlan) -> ComposedChain:
-    """Compose an approved task plan into a fixed EB chain.
+    """Compose an approved task plan into a fixed ES chain.
 
     Args:
         plan: Validated task plan.

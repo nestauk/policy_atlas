@@ -43,7 +43,7 @@ from policy_atlas.api.routers._access import (
     readable_task_exists,
     trace_admin_stream_read,
 )
-from policy_atlas.api.routers.planning import _draft_from_plan
+from policy_atlas.api.routers.task_agent import _draft_from_plan
 from policy_atlas.api.settings import Settings
 
 # Shared with the check-in read model — one vocabulary, one leak surface.

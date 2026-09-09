@@ -20,7 +20,7 @@ def _insert_plan(
     status: str = "proposed",
     evidence_scope_id: uuid.UUID | None = None,
     payload: object = None,
-    created_by: str = "planner",
+    created_by: str = "task_agent",
     approved_at: object = None,
 ) -> uuid.UUID:
     plan_id = uuid.uuid4()
@@ -50,7 +50,7 @@ def test_task_plan_insert_and_read_back(conn: Connection) -> None:
     assert row.version == 1
     assert row.status == "proposed"
     assert row.payload == {"intent": "test intent", "chains": []}
-    assert row.created_by == "planner"
+    assert row.created_by == "task_agent"
     assert row.evidence_scope_id is None
     assert row.approved_at is None
 

@@ -171,7 +171,7 @@ def _conclusions_focus(intent: str) -> str:
     """Return the code-injected conclusions section focus (ADR 0015 §8).
 
     Evidence-descriptive by construction — weigh the assembled evidence as a
-    whole, never a recommendation or a verdict (EB scope).
+    whole, never a recommendation or a verdict (ES scope).
     """
     return (
         f"What the evidence amounts to on: {intent}. "

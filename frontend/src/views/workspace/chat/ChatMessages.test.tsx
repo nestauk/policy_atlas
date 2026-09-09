@@ -31,12 +31,12 @@ function optimisticTurn(overrides: Partial<OptimisticChatTurn> = {}): Optimistic
   return { clientTurnId: "ct-opt", userMessage: "What does the evidence say?", createdAt: "2026-08-11T10:00:00Z", answer: "", status: "pending", activityLabels: [], ...overrides };
 }
 
-function renderChat(rows: ChatConversationRow[], props: { onOpenPlanning?: () => void; onRetry?: (clientTurnId: string) => void } = {}) {
+function renderChat(rows: ChatConversationRow[], props: { onOpenTaskAgent?: () => void; onRetry?: (clientTurnId: string) => void } = {}) {
   const queryClient = new QueryClient();
   return render(
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
-        <ChatMessages taskId="p1" rows={rows} onOpenPlanning={props.onOpenPlanning ?? vi.fn()} onRetry={props.onRetry ?? vi.fn()} />
+        <ChatMessages taskId="p1" rows={rows} onOpenTaskAgent={props.onOpenTaskAgent ?? vi.fn()} onRetry={props.onRetry ?? vi.fn()} />
       </TooltipProvider>
     </QueryClientProvider>,
   );
@@ -54,15 +54,15 @@ async function openAllReferences() {
 
 describe("ChatMessages", () => {
   it("renders citation markers, references, verdicts, warnings and handoff", async () => {
-    const openPlanning = vi.fn();
-    renderChat([turn({ warning_not_evidence_checked: true, handoff: "evidence_not_held" }), turn({ id: "t2", client_turn_id: "ct2", status: "cancelled", stopped_before_evidence_check: true, answer: "Partial" })], { onOpenPlanning: openPlanning });
+    const openTaskAgent = vi.fn();
+    renderChat([turn({ warning_not_evidence_checked: true, handoff: "evidence_not_held" }), turn({ id: "t2", client_turn_id: "ct2", status: "cancelled", stopped_before_evidence_check: true, answer: "Partial" })], { onOpenTaskAgent: openTaskAgent });
     await openAllReferences();
     expect(screen.getAllByRole("button", { name: "[1]" })).not.toHaveLength(0);
     expect(screen.getAllByText("Tier 2 · grounded").length).toBeGreaterThan(0);
     expect(screen.getByText("Not evidence-checked")).toBeInTheDocument();
     expect(screen.getByText("Stopped before evidence check")).toBeInTheDocument();
-    await userEvent.setup().click(screen.getByRole("button", { name: "Open planning" }));
-    expect(openPlanning).toHaveBeenCalledOnce();
+    await userEvent.setup().click(screen.getByRole("button", { name: "Open Task Agent" }));
+    expect(openTaskAgent).toHaveBeenCalledOnce();
   });
 
   it("shows a citation's best-supported claim, not the worst-verdict stamp", async () => {

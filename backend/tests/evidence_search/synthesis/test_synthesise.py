@@ -716,7 +716,7 @@ def test_multi_facet_grouping_row_consumed_with_per_facet_honesty() -> None:
     draft = _validate_theme_claim(
         ClaimWire(
             claim_type="theme",
-            text="The barrier grouping identifies planning delays.",
+            text="The barrier grouping identifies task_agent delays.",
             theme=ThemePayloadWire(
                 source="grouping",
                 referenced_ids=["barrier_theme:g01"],
@@ -1082,7 +1082,7 @@ def test_artefact_records_walkable_conversation_plan_run_lineage(conn: Connectio
         conversation.insert().values(
             id=conversation_id,
             task_id=task_id,
-            kind="planning",
+            kind="task_agent",
             title="Planning",
             entry_artefact_id=None,
             status="active",

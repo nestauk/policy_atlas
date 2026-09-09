@@ -256,7 +256,7 @@ describe("AppShell — global chrome", () => {
   it("does not pin the site footer under the Plan tab (it scrolls with the chat)", () => {
     renderShell(`/tasks/${TASK_ID}`);
     // AppShell stubs the Plan outlet — the real footer mounts inside
-    // PlanningPane's transcript scroll, not as a shell chrome strip.
+    // TaskAgentPane's transcript scroll, not as a shell chrome strip.
     expect(screen.queryByRole("contentinfo")).not.toBeInTheDocument();
   });
 

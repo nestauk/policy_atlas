@@ -158,7 +158,7 @@ describe("cross-family cache invalidation (task 033 phase 10a)", () => {
             headers: { "Content-Type": "application/json" },
           });
         }
-        if (request.method === "POST" && request.url.endsWith("/planning-turns")) {
+        if (request.method === "POST" && request.url.endsWith("/task-agent-turns")) {
           return new Response(JSON.stringify({ turn_index: 1 }), {
             headers: { "Content-Type": "application/json" },
           });
@@ -225,9 +225,9 @@ describe("useCreateTask — the project-assignment PATCH result is checked", () 
     await waitFor(() => expect(result.current.isError).toBe(true));
     expect((result.current.error as { code?: string } | null)?.code).toBe("forbidden");
 
-    // The opening planning turn never fires once the assignment is refused.
+    // The opening task_agent turn never fires once the assignment is refused.
     const calledUrls = fetchMock.mock.calls.map(([req]) => (req as Request).url);
-    expect(calledUrls.some((url) => url.includes("/planning-turns"))).toBe(false);
+    expect(calledUrls.some((url) => url.includes("/task-agent-turns"))).toBe(false);
   });
 
   it("still succeeds when the caller owns the chosen task", async () => {
@@ -241,7 +241,7 @@ describe("useCreateTask — the project-assignment PATCH result is checked", () 
           headers: { "Content-Type": "application/json" },
         });
       }
-      if (request.method === "POST" && request.url.endsWith("/planning-turns")) {
+      if (request.method === "POST" && request.url.endsWith("/task-agent-turns")) {
         return new Response(JSON.stringify({ turn_index: 1 }), {
           headers: { "Content-Type": "application/json" },
         });

@@ -21,10 +21,10 @@ function raise(error: unknown, status?: number): never {
  * Start a task from a question (plan D4).
  *
  * Two calls, no backend change: create the task, then post the same
- * question as its first planning turn, so the conversation opens with the
+ * question as its first task_agent turn, so the conversation opens with the
  * words the person actually typed rather than a system greeting.
  *
- * The task's name is derived from the question here (D5). The planner's own
+ * The task's name is derived from the question here (D5). The task_agent's own
  * `plan.title` is deliberately not written back — that would be new
  * behaviour — so a task shows its derived name until renamed.
  */
@@ -58,7 +58,7 @@ export function useCreateTask() {
       // The opening turn. A failure here leaves a real, usable task whose
       // conversation is simply empty, so it is not worth unwinding the
       // creation — the person can just type the question again.
-      await client.POST("/api/v1/tasks/{task_id}/planning-turns", {
+      await client.POST("/api/v1/tasks/{task_id}/task-agent-turns", {
         params: { path: { task_id: task.task_id } },
         body: { message: question, client_turn_id: crypto.randomUUID() },
       });
@@ -182,17 +182,17 @@ export function useUpdateProject(projectId: string) {
   });
 }
 
-/** `POST .../planning-turns` — one real planner turn. `clientTurnId` is
+/** `POST .../task-agent-turns` — one real task_agent turn. `clientTurnId` is
  *  minted by the caller per logical turn (one per submitted message, not
  *  per send attempt) so that retrying the same submission reuses the id
  *  rather than minting a fresh one the server would treat as a new turn. */
-export function usePlanningTurn(taskId: string) {
+export function useTaskAgentTurn(taskId: string) {
   const client = useApiClient();
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (input: { message: string; clientTurnId: string }) => {
       const { data, error, response } = await client.POST(
-        "/api/v1/tasks/{task_id}/planning-turns",
+        "/api/v1/tasks/{task_id}/task-agent-turns",
         {
           params: { path: { task_id: taskId } },
           body: { message: input.message, client_turn_id: input.clientTurnId },

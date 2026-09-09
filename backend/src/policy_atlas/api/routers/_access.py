@@ -459,12 +459,12 @@ def own_conversation_leg(user_id: str) -> ColumnElement[bool]:
 
     **A NULL ``created_by`` is not only a legacy state.** The migration
     backfilled pre-033 rows from their task's owner, but
-    ``runtime/conversation_lifecycle.ensure_active_planning_conversation``
-    still inserts every planning conversation without the column — they are
+    ``runtime/conversation_lifecycle.ensure_active_task_agent_conversation``
+    still inserts every task_agent conversation without the column — they are
     minted by the runtime rather than by a request, so there is no acting
-    subject to record. So this disjunct is the live rule for planning
+    subject to record. So this disjunct is the live rule for task_agent
     conversations (which is exactly how the owner reaches their own task's
-    planning lineage, and why no colleague ever can) and a legacy rule for
+    task_agent lineage, and why no colleague ever can) and a legacy rule for
     chats, whose creator has been recorded since this slice.
     ``conversations.list_conversations`` states the same thing from the
     listing's side.
@@ -496,13 +496,13 @@ def own_chat_leg(user_id: str) -> ColumnElement[bool]:
     """:func:`own_conversation_leg` narrowed to chats.
 
     The grade the two turn mutations, the pending cap and the sweeper carry.
-    Planning conversations are excluded outright: they are owner steering, and
-    a planning turn resolves through ``planning.py``'s own owner-graded path,
+    Task Agent conversations are excluded outright: they are owner steering, and
+    a task_agent turn resolves through ``task_agent.py``'s own owner-graded path,
     never through here.
 
     The library listing deliberately uses the *un*-narrowed
     :func:`own_conversation_leg` instead — it lists both kinds, and the owner
-    must keep seeing their task's planning conversation there.
+    must keep seeing their task's task_agent conversation there.
 
     Args:
         user_id: The caller's token subject.

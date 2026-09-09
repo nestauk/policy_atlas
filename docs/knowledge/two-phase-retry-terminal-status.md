@@ -14,7 +14,7 @@ phase-2 `UPDATE ... WHERE status IN (...)` must include the retried row's
 terminal status (`failed`), not just the fresh status (`pending`). The happy
 path never sees the difference; the first real retry 500s.
 
-`planning.py::create_planning_turn` is the shipped instance:
+`task_agent.py::create_task_agent_turn` is the shipped instance:
 `WHERE status IN ('pending','failed')`, with the retry rules (latest-only, 409
 `stale_turn`) enforced in phase one. Regression test:
 `test_failed_turn_retries_in_place_and_stale_rules_are_honest`.

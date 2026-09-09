@@ -2,9 +2,9 @@ import { useState } from "react";
 
 import { useComposerDraft } from "../../../store";
 import { Button } from "../../../ui/brand/Button";
-import { Composer } from "../PlanningPane";
+import { Composer } from "../TaskAgentPane";
 
-/** Chat wrapper around the shared planning composer and its session draft.
+/** Chat wrapper around the shared task_agent composer and its session draft.
  *
  * Args:
  *   props: Conversation controls and stream status.

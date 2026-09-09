@@ -311,7 +311,7 @@ export function AppShell() {
   const chatParam = new URLSearchParams(location.search).get("chat") || null;
   const chatOpen = showChatPanel && chatParam !== null;
   // Non-Plan task tabs: footer rides the shell scroll pane. Plan keeps its
-  // own inner chat scroll, so the footer mounts there (PlanningPane) instead
+  // own inner chat scroll, so the footer mounts there (TaskAgentPane) instead
   // of sticking under the composer.
   const footerInScrollPane = base !== null && !inWorkspace;
 

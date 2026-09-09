@@ -1,4 +1,4 @@
-"""Planning-turn and plan-draft contract.
+"""TaskAgent-turn and plan-draft contract.
 
 `PlanDraft` mirrors the runtime `TaskPlan`
 (`policy_atlas.runtime.task_plan`) field-by-field, but this package
@@ -9,7 +9,7 @@ vocabularies below (`BackendScope`, `SearchEffort`, `AnalysisDepth`,
 here independently; a guard test should keep the two from drifting.
 
 Every field on `PlanDraft` except `steps`/`ready` may be `None`/absent while
-the planner conversation is still converging (spec § Planning turns) — never
+the Task Agent conversation is still converging (spec § Task Agent turns) — never
 trust an optional field as "finalised".
 """
 
@@ -22,7 +22,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 #: Search backend scope. Mirrors `task_plan.BackendScope`.
-PLANNING_MESSAGE_MAX = 10_000
+TASK_AGENT_MESSAGE_MAX = 10_000
 
 BackendScope = Literal["academic_only", "grey_lit_only", "both"]
 
@@ -81,7 +81,7 @@ class CountryGroupDraft(BaseModel):
     """Draft mirror of the runtime `CountryGroup`.
 
     Args:
-        label: Pinned Tier-1 label, or a user/planner label for an explicit
+        label: Pinned Tier-1 label, or a user/task_agent label for an explicit
             Tier-2 country list. `None` while undecided.
         countries: Explicit ISO-3166 alpha-2 country list for Tier-2 groups.
         authorship: Provenance of the group membership, when settled.
@@ -182,27 +182,27 @@ class PlanDraft(BaseModel):
     ready: bool = False
 
 
-class PlanningTurnCreate(BaseModel):
-    """Inbound body for `POST /api/v1/tasks/{id}/planning-turns`.
+class TaskAgentTurnCreate(BaseModel):
+    """Inbound body for `POST /api/v1/tasks/{id}/task-agent-turns`.
 
     Args:
-        message: The user's chat message for this planner turn.
+        message: The user's chat message for this task_agent turn.
         client_turn_id: Caller-minted UUID making double-submit idempotent —
             resubmitting the same `client_turn_id` returns the same turn
-            rather than re-running the planner.
+            rather than re-running the task_agent.
     """
 
     model_config = ConfigDict(extra="forbid")
 
-    # Turns are durable and every prior message re-enters each planner call
+    # Turns are durable and every prior message re-enters each task_agent call
     # (rehydration), so an unbounded message inflates storage AND every future
     # turn's prompt forever (security review, 2026-07-29).
-    message: str = Field(min_length=1, max_length=PLANNING_MESSAGE_MAX)
+    message: str = Field(min_length=1, max_length=TASK_AGENT_MESSAGE_MAX)
     client_turn_id: uuid.UUID
 
 
 class PartOptionOut(BaseModel):
-    """One selectable option on a sequential planning part.
+    """One selectable option on a sequential task_agent part.
 
     Args:
         id: Stable option identifier within the part.
@@ -220,7 +220,7 @@ class PartOptionOut(BaseModel):
 
 
 class PartChipOut(BaseModel):
-    """One typed, editable chip attached to a planning part.
+    """One typed, editable chip attached to a task_agent part.
 
     Args:
         label: Short user-visible chip label.
@@ -234,10 +234,10 @@ class PartChipOut(BaseModel):
 
 
 class PartProposalOut(BaseModel):
-    """One structured proposal in the sequential planning conversation.
+    """One structured proposal in the sequential task_agent conversation.
 
     Args:
-        id: The proposed planning part.
+        id: The proposed task_agent part.
         step_label: User-visible position and context for the proposal.
         title: Plain-language proposal heading.
         body: Optional supporting explanation.
@@ -253,16 +253,16 @@ class PartProposalOut(BaseModel):
     options: list[PartOptionOut]
 
 
-class PlanningTurnOut(BaseModel):
-    """Response body for one planner turn.
+class TaskAgentTurnOut(BaseModel):
+    """Response body for one task_agent turn.
 
     Args:
-        reply: The planner's conversational reply for this turn.
+        reply: The task_agent's conversational reply for this turn.
         plan: The full current draft plan.
-        suggestions: The planner's suggested answers to its clarifying
+        suggestions: The task_agent's suggested answers to its clarifying
             question, rendered as tappable quick replies. Empty when none.
-        part: Structured sequential-planning proposal, when this turn carries one.
-        conversation_id: Planning conversation that produced this turn.
+        part: Structured sequential-task_agent proposal, when this turn carries one.
+        conversation_id: Task Agent conversation that produced this turn.
     """
 
     reply: str
@@ -272,18 +272,18 @@ class PlanningTurnOut(BaseModel):
     conversation_id: uuid.UUID | None = None
 
 
-class PlanningTranscriptTurnOut(BaseModel):
-    """One durable planning-transcript turn shown in chronological order.
+class TaskAgentTranscriptTurnOut(BaseModel):
+    """One durable task_agent-transcript turn shown in chronological order.
 
     Args:
         turn_index: Monotonic per-task conversation coordinate.
-        conversation_id: Owning planning conversation, absent only on legacy rows.
+        conversation_id: Owning task_agent conversation, absent only on legacy rows.
         client_turn_id: The caller's idempotency key for this turn — returned
             so a reloaded client can retry its own incomplete latest turn.
         user_message: Submitted user message.
-        reply: Planner reply, absent until a pending turn completes.
-        suggestions: Planner quick-reply suggestions, if the turn completed.
-        part: Structured sequential-planning proposal, absent for legacy turns.
+        reply: Task Agent reply, absent until a pending turn completes.
+        suggestions: Task Agent quick-reply suggestions, if the turn completed.
+        part: Structured sequential-task_agent proposal, absent for legacy turns.
         status: Durable execution state for this turn.
         created_at: Receipt timestamp, retained as display metadata.
         completed_at: Terminal timestamp, absent while still pending.

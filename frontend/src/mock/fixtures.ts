@@ -5,7 +5,7 @@ export const MOCK_TASK_ID = "0d91c2e7-9b9b-4f4d-bd20-1f6819fb3425";
 export const MOCK_RUN_ID = "7b40cc12-c3a7-4457-92fc-23d15a26d433";
 export const MOCK_CHECK_IN_ID = "4c1acbe7-c4a1-4e0b-8d5a-bb25ea2ef634";
 export const MOCK_PLAN_ID = "80000000-0000-4000-8000-000000000001";
-export const MOCK_PLANNING_CONVERSATION_ID = "50000000-0000-4000-8000-000000000001";
+export const MOCK_TASK_AGENT_CONVERSATION_ID = "50000000-0000-4000-8000-000000000001";
 export const MOCK_PROJECT_ID = "60000000-0000-4000-8000-000000000001";
 const MOCK_ORGANISATION_ID = "90000000-0000-4000-8000-000000000001";
 
@@ -370,7 +370,7 @@ export const mockCoverage: components["schemas"]["CoverageOut"] = {
 //
 // The chat citation carries a durable chunk id (not the artefact citation
 // table's id) — a distinct fixture id in the same 8-4-4-4-12 style, one
-// prefix on from the planning-turn ids above.
+// prefix on from the task_agent-turn ids above.
 export const MOCK_CHAT_CITATION_CHUNK_ID = "70000000-0000-4000-8000-000000000001";
 export const MOCK_CHAT_CLAIM_ID = "70000000-0000-4000-8000-000000000002";
 
@@ -403,8 +403,8 @@ export const MOCK_CHAT_PROGRESS_LABEL = "Searching the evidence…";
 
 /**
  * A ready plan draft (contract 027 F.2 fixture item 1b): the mock task
- * represents a resumed session — the planning conversation already
- * happened, and its transcript persisted (`seedPlanningTurns`), so the
+ * represents a resumed session — the task_agent conversation already
+ * happened, and its transcript persisted (`seedTaskAgentTurns`), so the
  * plan pane renders ready immediately. Demonstrates `time_band`,
  * `scope_constraints.country_group` and labelled `steps`.
  */
@@ -444,23 +444,23 @@ export const mockPlanReady: components["schemas"]["PlanDraft"] = {
   ready: true,
 };
 
-const MOCK_PLANNING_TURN_IDS = {
+const MOCK_TASK_AGENT_TURN_IDS = {
   first: "60000000-0000-4000-8000-000000000001",
   second: "60000000-0000-4000-8000-000000000002",
   failed: "60000000-0000-4000-8000-000000000003",
 } as const;
 
 /**
- * The durable planning transcript (contract 027 F.2 fixture item 1a): two
+ * The durable task_agent transcript (contract 027 F.2 fixture item 1a): two
  * completed turns that formed the ready plan above, plus one FAILED row —
  * the honest incomplete-turn render — deliberately the latest turn so it
  * carries a Retry control. Returns a fresh array each call so
  * `resetMockScenario` can restore pristine seed state.
  */
-export function seedPlanningTurns(): components["schemas"]["PlanningTranscriptTurnOut"][] {
+export function seedTaskAgentTurns(): components["schemas"]["TaskAgentTranscriptTurnOut"][] {
   return [
     {
-      client_turn_id: MOCK_PLANNING_TURN_IDS.first,
+      client_turn_id: MOCK_TASK_AGENT_TURN_IDS.first,
       turn_index: 1,
       user_message: "Which local policy approaches reduce childhood obesity for primary-school children?",
       reply: "Here's how I've read your question.",
@@ -481,7 +481,7 @@ export function seedPlanningTurns(): components["schemas"]["PlanningTranscriptTu
       completed_at: "2026-07-18T09:02:04Z",
     },
     {
-      client_turn_id: MOCK_PLANNING_TURN_IDS.second,
+      client_turn_id: MOCK_TASK_AGENT_TURN_IDS.second,
       turn_index: 2,
       user_message: "That's my question\n\n[confirm part=question option=confirm]",
       reply: "What counts as in-scope? Edit any chip directly. I'll search from 2016 onward. UK as the primary setting is judged from each document.",
@@ -505,7 +505,7 @@ export function seedPlanningTurns(): components["schemas"]["PlanningTranscriptTu
       completed_at: "2026-07-18T09:03:16Z",
     },
     {
-      client_turn_id: MOCK_PLANNING_TURN_IDS.failed,
+      client_turn_id: MOCK_TASK_AGENT_TURN_IDS.failed,
       turn_index: 3,
       user_message: "Also fold in whether family-support programmes should be a separate lever.",
       reply: null,

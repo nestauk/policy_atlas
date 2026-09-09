@@ -1,8 +1,8 @@
 import type { components } from "../api/gen/types";
 
-export type PlanningThreadTurn = components["schemas"]["PlanningTranscriptTurnOut"];
-export type PlanningThreadRun = components["schemas"]["RunOut"];
-export type PlanningThreadDecision = components["schemas"]["DecisionOut"];
+export type TaskAgentThreadTurn = components["schemas"]["TaskAgentTranscriptTurnOut"];
+export type TaskAgentThreadRun = components["schemas"]["RunOut"];
+export type TaskAgentThreadDecision = components["schemas"]["DecisionOut"];
 
 interface SessionAnsweredCheckIn {
   chosenOptionLabel: string;
@@ -56,32 +56,32 @@ export function sessionAnsweredCheckIn(checkInId: string): SessionAnsweredCheckI
 }
 
 /** A run from the runs read plus its durable run-phase boundary. This
- * boundary deliberately is not inferred from timestamps: planning turns are
+ * boundary deliberately is not inferred from timestamps: task_agent turns are
  * ordered by `turn_index`, and an active/parked run 409-fences new turns. */
 export interface RunThreadBoundary {
-  run: PlanningThreadRun;
-  /** The last planning turn before this run block, or null if no turn
+  run: TaskAgentThreadRun;
+  /** The last task_agent turn before this run block, or null if no turn
    * precedes the run (for imported/pre-transcript history). */
   afterTurnIndex: number | null;
 }
 
 /** A steering decision keeps its own durable record and declares the run
- * block it belongs to. It is never copied into the planning-turn list. */
+ * block it belongs to. It is never copied into the task_agent-turn list. */
 export interface RunThreadDecision {
-  decision: PlanningThreadDecision;
+  decision: TaskAgentThreadDecision;
   capabilityRunId: string;
 }
 
-export type PlanningThreadItem =
-  | { type: "planning_turn"; turn: PlanningThreadTurn }
+export type TaskAgentThreadItem =
+  | { type: "task_agent_turn"; turn: TaskAgentThreadTurn }
   | {
       type: "run_block";
-      run: PlanningThreadRun;
-      decisions: PlanningThreadDecision[];
+      run: TaskAgentThreadRun;
+      decisions: TaskAgentThreadDecision[];
     };
 
 /**
- * Compose a planning conversation into turn and run blocks.
+ * Compose a task_agent conversation into turn and run blocks.
  *
  * Args:
  *   turns: Durable transcript rows; sorted by `turn_index`, never timestamp.
@@ -90,15 +90,15 @@ export type PlanningThreadItem =
  *   decisions: Steering records associated to their owning run blocks.
  *
  * Returns:
- *   Discriminated items for the rail. Each planning turn occurs once between
+ *   Discriminated items for the rail. Each task_agent turn occurs once between
  *   run blocks, and each decision occurs once inside its run block in
  *   ascending event-log sequence.
  */
-export function composePlanningThread(
-  turns: PlanningThreadTurn[],
+export function composeTaskAgentThread(
+  turns: TaskAgentThreadTurn[],
   runBoundaries: RunThreadBoundary[],
   decisions: RunThreadDecision[],
-): PlanningThreadItem[] {
+): TaskAgentThreadItem[] {
   const orderedTurns = [...turns].sort((left, right) => left.turn_index - right.turn_index);
   const orderedRuns = [...runBoundaries].sort((left, right) => {
     const leftBoundary = left.afterTurnIndex ?? -1;
@@ -109,14 +109,14 @@ export function composePlanningThread(
     }
     return left.run.capability_run_id.localeCompare(right.run.capability_run_id);
   });
-  const decisionsByRun = new Map<string, PlanningThreadDecision[]>();
+  const decisionsByRun = new Map<string, TaskAgentThreadDecision[]>();
   for (const { capabilityRunId, decision } of decisions) {
     const entries = decisionsByRun.get(capabilityRunId) ?? [];
     entries.push(decision);
     decisionsByRun.set(capabilityRunId, entries);
   }
 
-  const items: PlanningThreadItem[] = [];
+  const items: TaskAgentThreadItem[] = [];
   let turnCursor = 0;
   for (const boundary of orderedRuns) {
     while (
@@ -125,7 +125,7 @@ export function composePlanningThread(
       boundary.afterTurnIndex !== null &&
       orderedTurns[turnCursor].turn_index <= boundary.afterTurnIndex
     ) {
-      items.push({ type: "planning_turn", turn: orderedTurns[turnCursor] });
+      items.push({ type: "task_agent_turn", turn: orderedTurns[turnCursor] });
       turnCursor += 1;
     }
     items.push({
@@ -137,7 +137,7 @@ export function composePlanningThread(
     });
   }
   for (; turnCursor < orderedTurns.length; turnCursor += 1) {
-    items.push({ type: "planning_turn", turn: orderedTurns[turnCursor] });
+    items.push({ type: "task_agent_turn", turn: orderedTurns[turnCursor] });
   }
   return items;
 }

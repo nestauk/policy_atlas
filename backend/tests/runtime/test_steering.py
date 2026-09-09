@@ -151,7 +151,7 @@ def _insert_plan_row(
                 status="approved",
                 payload=plan.model_dump(mode="json"),
                 created_at=now(),
-                created_by="planner",
+                created_by="task_agent",
                 approved_at=now(),
             )
         )
@@ -654,7 +654,7 @@ def test_adjustment_writes_new_plan_version_and_changes_not_yet_run_group_direct
             ).scalar_one()["facets"]
 
         assert [(row.version, row.status, row.created_by) for row in rows] == [
-            (1, "superseded", "planner"),
+            (1, "superseded", "task_agent"),
             (2, "approved", "user"),
         ]
         assert rows[1].payload["grouping_facets"] == ["population"]
@@ -779,7 +779,7 @@ def test_appraise_adjustment_accepted_end_to_end_but_absent_from_plan_payload(
                 .order_by(task_plan.c.version)
             ).all()
         assert [(row.version, row.status, row.created_by) for row in rows] == [
-            (1, "superseded", "planner"),
+            (1, "superseded", "task_agent"),
             (2, "approved", "user"),
         ]
         # No TaskPlan field carries the appraisal directive.
@@ -1296,7 +1296,7 @@ def test_moderate_steer_point_reselect_reruns_select_and_threads_new_run_id(
 
         # A new user-attributed plan version row records the steering event.
         assert [(row.version, row.status, row.created_by) for row in plan_rows] == [
-            (1, "superseded", "planner"),
+            (1, "superseded", "task_agent"),
             (2, "approved", "user"),
         ]
 
@@ -1974,7 +1974,7 @@ def test_re_characterise_moves_reference_preserves_rows_and_stamps_replacement(
         assert set(char_run_ids) == {original_char, new_char}
 
         assert _plan_version_rows(engine, task_id) == [
-            (1, "superseded", "planner"),
+            (1, "superseded", "task_agent"),
             (2, "approved", "user"),
         ]
         decisions = _replacement_decisions(engine, task_id)
@@ -2055,7 +2055,7 @@ def test_re_group_moves_reference_preserves_rows_and_stamps_replacement(
         assert set(group_run_ids) == {original_group, new_group}
 
         assert _plan_version_rows(engine, task_id) == [
-            (1, "superseded", "planner"),
+            (1, "superseded", "task_agent"),
             (2, "approved", "user"),
         ]
         decisions = _replacement_decisions(engine, task_id)

@@ -125,7 +125,7 @@ def test_wire_messages_are_two_role_shaped() -> None:
 
 
 def test_openai_backend_protocol_and_key_guard(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Mirror the planner test: construct with an explicit key (no call), guard absence."""
+    """Mirror the task_agent test: construct with an explicit key (no call), guard absence."""
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     backend: AgentBackend = OpenAIAgentBackend(api_key="sk-test")
     assert isinstance(backend, OpenAIAgentBackend)

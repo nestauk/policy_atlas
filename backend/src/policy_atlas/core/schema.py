@@ -165,7 +165,7 @@ conversation = Table(
         name="fk_conversation_entry_artefact_task",
         match="SIMPLE",
     ),
-    CheckConstraint("kind IN ('planning', 'chat')", name="ck_conversation_kind"),
+    CheckConstraint("kind IN ('task_agent', 'chat')", name="ck_conversation_kind"),
     CheckConstraint(
         "status IN ('active', 'closed', 'archived')", name="ck_conversation_status"
     ),
@@ -175,13 +175,13 @@ conversation = Table(
     ),
     CheckConstraint(
         "kind = 'chat' OR status <> 'archived'",
-        name="ck_conversation_planning_never_archived",
+        name="ck_conversation_task_agent_never_archived",
     ),
     Index(
-        "uq_conversation_one_active_planning",
+        "uq_conversation_one_active_task_agent",
         "task_id",
         unique=True,
-        postgresql_where=text("kind = 'planning' AND status = 'active'"),
+        postgresql_where=text("kind = 'task_agent' AND status = 'active'"),
     ),
 )
 
@@ -1224,7 +1224,7 @@ task_plan = Table(
     Column("status", Text, nullable=False),  # proposed|approved|superseded|abandoned
     Column("payload", JSONB, nullable=False),  # the validated TaskPlan dump
     Column("created_at", DateTime(timezone=True), nullable=False),
-    Column("created_by", Text, nullable=False),  # 'user'|'planner' attribution
+    Column("created_by", Text, nullable=False),  # 'user'|'task_agent' attribution
     Column("approved_at", DateTime(timezone=True), nullable=True),
     # Cross-task FK guard, per the synthesis-result precedent: NULL
     # evidence_scope_id skips the check (MATCH SIMPLE), so the guard binds
@@ -1243,10 +1243,10 @@ task_plan = Table(
     CheckConstraint("jsonb_typeof(payload) = 'object'", name="ck_plan_payload_object"),
 )
 
-# --- Durable planning transcript (task 027) ---
+# --- Durable task_agent transcript (task 027) ---
 
-planning_transcript = Table(
-    "planning_transcript",
+task_agent_transcript = Table(
+    "task_agent_transcript",
     metadata,
     Column("id", UUID(as_uuid=True), primary_key=True),
     Column("task_id", UUID(as_uuid=True), ForeignKey("task.task_id"), nullable=False),
@@ -1257,21 +1257,21 @@ planning_transcript = Table(
     Column("turn_index", Integer, nullable=False),
     Column("user_message", Text, nullable=False),
     Column("reply", Text, nullable=True),
-    # ``planner_state`` is the raw PlanDraftWire dump used as the next call's
+    # ``task_agent_state`` is the raw PlanDraftWire dump used as the next call's
     # ``previous_draft``. ``response`` is the distinct projected API result.
-    Column("planner_state", JSONB, nullable=True),
+    Column("task_agent_state", JSONB, nullable=True),
     Column("response", JSONB, nullable=True),
     Column("part", JSONB, nullable=True),
     Column("suggestions", JSONB, nullable=False),
     Column("status", Text, nullable=False),  # pending|completed|failed
     Column("created_at", DateTime(timezone=True), nullable=False),
     Column("completed_at", DateTime(timezone=True), nullable=True),
-    UniqueConstraint("task_id", "client_turn_id", name="uq_ptr_task_client_turn"),
-    UniqueConstraint("task_id", "turn_index", name="uq_ptr_task_turn_index"),
+    UniqueConstraint("task_id", "client_turn_id", name="uq_tat_task_client_turn"),
+    UniqueConstraint("task_id", "turn_index", name="uq_tat_task_turn_index"),
     CheckConstraint(
-        "status IN ('pending', 'completed', 'failed')", name="ck_ptr_status"
+        "status IN ('pending', 'completed', 'failed')", name="ck_tat_status"
     ),
-    CheckConstraint("jsonb_typeof(suggestions) = 'array'", name="ck_ptr_suggestions_array"),
+    CheckConstraint("jsonb_typeof(suggestions) = 'array'", name="ck_tat_suggestions_array"),
 )
 
 # --- Capability run (task 024) ---

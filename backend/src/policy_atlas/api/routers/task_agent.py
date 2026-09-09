@@ -1,4 +1,4 @@
-"""Task-scoped planner turns backed by a durable transcript."""
+"""Task-scoped task_agent turns backed by a durable transcript."""
 
 from __future__ import annotations
 
@@ -24,20 +24,20 @@ from policy_atlas.api.contract import (
     PageMeta,
     PartProposalOut,
     PlanDraft,
-    PlanningTranscriptTurnOut,
-    PlanningTurnCreate,
-    PlanningTurnOut,
     PlanOut,
     PlanPatchIn,
     PlanStep,
+    TaskAgentTranscriptTurnOut,
+    TaskAgentTurnCreate,
+    TaskAgentTurnOut,
 )
-from policy_atlas.api.deps import get_current_user, get_engine, get_planner_backend
+from policy_atlas.api.deps import get_current_user, get_engine, get_task_agent_backend
 from policy_atlas.api.routers._access import accessible_task
 from policy_atlas.api.stage_vocabulary import STAGE_BY_REGISTRY, STAGE_PRESENTATION
 from policy_atlas.core.schema import (
     capability_run,
     conversation,
-    planning_transcript,
+    task_agent_transcript,
     task_plan,
 )
 from policy_atlas.evidence_search.sourcing.country_filters import (
@@ -50,11 +50,11 @@ from policy_atlas.evidence_search.sourcing.country_filters import (
 )
 from policy_atlas.runtime.agent import build_plan, persist_approved_plan
 from policy_atlas.runtime.conversation_lifecycle import (
-    ensure_active_planning_conversation,
+    ensure_active_task_agent_conversation,
     seed_draft_from_executed_plan,
 )
-from policy_atlas.runtime.planner import PlannerBackend
-from policy_atlas.runtime.planner_prompt import PlanDraftWire
+from policy_atlas.runtime.task_agent import TaskAgentBackend
+from policy_atlas.runtime.task_agent_prompt import PlanDraftWire
 from policy_atlas.runtime.task_plan import (
     TaskPlan,
     _enabled_components,
@@ -71,7 +71,7 @@ _OPTION_ID_RE = re.compile(r"[a-z][a-z0-9_]*")
 
 router = APIRouter(
     prefix="/api/v1/tasks",
-    tags=["planning"],
+    tags=["task_agent"],
     dependencies=[Depends(get_current_user)],
 )
 
@@ -83,12 +83,12 @@ _turn_locks: dict[uuid.UUID, threading.Lock] = {}
 # bound was lost in the 027 port — security review, 2026-07-29). Evicting an
 # unheld lock is safe: correctness rests on the phase-1 task row lock and
 # the transcript unique constraints, this lock only single-flights the
-# planner spend.
+# task_agent spend.
 _TURN_LOCKS_MAX = 256
 
 
 def _turn_lock(task_id: uuid.UUID) -> threading.Lock:
-    """Return the process-local concurrency guard for one task's planner turn."""
+    """Return the process-local concurrency guard for one task's task_agent turn."""
     with _turn_locks_guard:
         if task_id not in _turn_locks and len(_turn_locks) >= _TURN_LOCKS_MAX:
             for key in [k for k, v in _turn_locks.items() if not v.locked()]:
@@ -105,16 +105,16 @@ def _expire_stale_pending_turns(conn: Connection, task_id: uuid.UUID) -> None:
     """Terminally fail pending transcript rows older than the retry window."""
     now = _now()
     conn.execute(
-        update(planning_transcript)
-        .where(planning_transcript.c.task_id == task_id)
-        .where(planning_transcript.c.status == "pending")
-        .where(planning_transcript.c.created_at < now - _PENDING_TTL)
+        update(task_agent_transcript)
+        .where(task_agent_transcript.c.task_id == task_id)
+        .where(task_agent_transcript.c.status == "pending")
+        .where(task_agent_transcript.c.created_at < now - _PENDING_TTL)
         .values(status="failed", completed_at=now)
     )
 
 
 def _draft_from_wire(draft: PlanDraftWire, *, ready: bool) -> PlanDraft:
-    """Translate the runtime planner wire into the standalone API draft model."""
+    """Translate the runtime task_agent wire into the standalone API draft model."""
     values = draft.model_dump(exclude_none=True)
     constraints: dict[str, Any] = {}
     for key in (
@@ -128,7 +128,7 @@ def _draft_from_wire(draft: PlanDraftWire, *, ready: bool) -> PlanDraft:
         value = values.pop(key, None)
         if value is not None:
             constraints[key] = value
-    # The wire's publisher_source is a loose str (planner output) while the
+    # The wire's publisher_source is a loose str (task_agent output) while the
     # draft narrows to Literal["apo"]. Normalise the taught spellings and drop
     # anything else — the turn must degrade (ready=false), never 500.
     source = constraints.pop("publisher_source", None)
@@ -176,19 +176,19 @@ def _draft_from_plan(plan: TaskPlan) -> PlanDraft:
     return PlanDraft.model_validate(values)
 
 
-def _response_from_row(row: RowMapping) -> PlanningTurnOut:
+def _response_from_row(row: RowMapping) -> TaskAgentTurnOut:
     """Return a completed turn's stored projected response without recomputing it."""
     response = row["response"]
     if response is None:
-        raise RuntimeError("completed planning transcript row has no response")
-    return PlanningTurnOut.model_validate(response)
+        raise RuntimeError("completed task_agent transcript row has no response")
+    return TaskAgentTurnOut.model_validate(response)
 
 
 def _validated_part(raw_part: object) -> PartProposalOut | None:
-    """Validate one planner part proposal, degrading malformed cards to prose.
+    """Validate one task_agent part proposal, degrading malformed cards to prose.
 
     Args:
-        raw_part: The optional runtime wire proposal returned by the planner.
+        raw_part: The optional runtime wire proposal returned by the task_agent.
 
     Returns:
         A standalone API proposal when it meets the card rules, else ``None``.
@@ -201,23 +201,23 @@ def _validated_part(raw_part: object) -> PartProposalOut | None:
             raw_part = raw_part.model_dump(mode="json")
         part = PartProposalOut.model_validate(raw_part)
     except ValidationError:
-        log.warning("planning_part_dropped", reason="invalid_shape")
+        log.warning("task_agent_part_dropped", reason="invalid_shape")
         return None
     if part.id not in {"question", "scope", "thoroughness"}:
-        log.warning("planning_part_dropped", reason="invalid_part_id")
+        log.warning("task_agent_part_dropped", reason="invalid_part_id")
         return None
     if not 2 <= len(part.options) <= 4:
-        log.warning("planning_part_dropped", reason="invalid_option_count")
+        log.warning("task_agent_part_dropped", reason="invalid_option_count")
         return None
     if sum(option.primary for option in part.options) != 1:
-        log.warning("planning_part_dropped", reason="invalid_primary_count")
+        log.warning("task_agent_part_dropped", reason="invalid_primary_count")
         return None
     # The confirm-marker grammar the client derives ✓-state from admits only
     # snake_case option ids; the rule lived in prompt text alone, so a
-    # planner-emitted id like "quick-look" broke marker parsing after refresh
+    # task_agent-emitted id like "quick-look" broke marker parsing after refresh
     # (review 028: security lane + Codex lane convergent finding).
     if any(_OPTION_ID_RE.fullmatch(option.id) is None for option in part.options):
-        log.warning("planning_part_dropped", reason="invalid_option_id")
+        log.warning("task_agent_part_dropped", reason="invalid_option_id")
         return None
     for chip in part.chips or []:
         if chip.kind not in {"date_range", "country_list"}:
@@ -225,44 +225,44 @@ def _validated_part(raw_part: object) -> PartProposalOut | None:
         try:
             decoded = json.loads(chip.value)
         except (TypeError, ValueError):
-            log.warning("planning_part_dropped", reason="invalid_chip_json")
+            log.warning("task_agent_part_dropped", reason="invalid_chip_json")
             return None
         if not isinstance(decoded, dict):
-            log.warning("planning_part_dropped", reason="invalid_chip_json")
+            log.warning("task_agent_part_dropped", reason="invalid_chip_json")
             return None
     return part
 
 
-def _planner_inputs(
+def _task_agent_inputs(
     conn: Connection, task_id: uuid.UUID, conversation_id: uuid.UUID
 ) -> tuple[list[dict[str, str]], dict[str, object] | None]:
-    """Rehydrate the exact planner context for one planning conversation."""
+    """Rehydrate the exact task_agent context for one task_agent conversation."""
     rows = conn.execute(
-        select(planning_transcript)
-        .where(planning_transcript.c.task_id == task_id)
-        .where(planning_transcript.c.conversation_id == conversation_id)
-        .where(planning_transcript.c.status == "completed")
-        .order_by(planning_transcript.c.turn_index.asc())
+        select(task_agent_transcript)
+        .where(task_agent_transcript.c.task_id == task_id)
+        .where(task_agent_transcript.c.conversation_id == conversation_id)
+        .where(task_agent_transcript.c.status == "completed")
+        .order_by(task_agent_transcript.c.turn_index.asc())
     ).mappings().all()
     turns: list[dict[str, str]] = []
     previous_draft: dict[str, object] | None = None
     for row in rows:
         reply = row["reply"]
-        planner_state = row["planner_state"]
-        if reply is None or planner_state is None:
-            raise RuntimeError("completed planning transcript row is incomplete")
+        task_agent_state = row["task_agent_state"]
+        if reply is None or task_agent_state is None:
+            raise RuntimeError("completed task_agent transcript row is incomplete")
         turns.extend((
             {"role": "user", "text": row["user_message"]},
             {"role": "planner", "text": reply},
         ))
-        previous_draft = cast("dict[str, object]", planner_state)
+        previous_draft = cast("dict[str, object]", task_agent_state)
     if turns:
         return turns, previous_draft
 
     closed_predecessor = conn.execute(
         select(conversation.c.id)
         .where(conversation.c.task_id == task_id)
-        .where(conversation.c.kind == "planning")
+        .where(conversation.c.kind == "task_agent")
         .where(conversation.c.status == "closed")
         .order_by(conversation.c.closed_at.desc())
         .limit(1)
@@ -283,9 +283,9 @@ def _planner_inputs(
     return turns, previous_draft
 
 
-def _transcript_out(row: RowMapping) -> PlanningTranscriptTurnOut:
+def _transcript_out(row: RowMapping) -> TaskAgentTranscriptTurnOut:
     """Project one durable transcript row into its honest read representation."""
-    return PlanningTranscriptTurnOut(
+    return TaskAgentTranscriptTurnOut(
         turn_index=row["turn_index"],
         conversation_id=row["conversation_id"],
         client_turn_id=row["client_turn_id"],
@@ -304,8 +304,8 @@ def _phase_one_turn(
     *,
     task_id: uuid.UUID,
     user_id: str,
-    payload: PlanningTurnCreate,
-) -> PlanningTurnOut | uuid.UUID:
+    payload: TaskAgentTurnCreate,
+) -> TaskAgentTurnOut | uuid.UUID:
     """Authenticate, fence, and either replay or durably reserve one turn."""
     # The row lock serialises phase one across processes: without it, two
     # processes can both read "no pending turn" / the same max turn_index and
@@ -315,9 +315,9 @@ def _phase_one_turn(
     accessible_task(conn, task_id=task_id, user_id=user_id, write=True, for_update=True)
     _expire_stale_pending_turns(conn, task_id)
     existing = conn.execute(
-        select(planning_transcript)
-        .where(planning_transcript.c.task_id == task_id)
-        .where(planning_transcript.c.client_turn_id == payload.client_turn_id)
+        select(task_agent_transcript)
+        .where(task_agent_transcript.c.task_id == task_id)
+        .where(task_agent_transcript.c.client_turn_id == payload.client_turn_id)
     ).mappings().one_or_none()
     if existing is not None:
         if existing["user_message"] != payload.message:
@@ -342,33 +342,33 @@ def _phase_one_turn(
 
     if existing is not None:
         latest_id = conn.execute(
-            select(planning_transcript.c.id)
-            .where(planning_transcript.c.task_id == task_id)
-            .order_by(planning_transcript.c.turn_index.desc())
+            select(task_agent_transcript.c.id)
+            .where(task_agent_transcript.c.task_id == task_id)
+            .order_by(task_agent_transcript.c.turn_index.desc())
             .limit(1)
         ).scalar_one()
         if latest_id != existing["id"]:
-            raise ApiConflict("stale_turn", "only the latest planning turn may be retried")
+            raise ApiConflict("stale_turn", "only the latest task_agent turn may be retried")
         return cast(uuid.UUID, existing["id"])
 
     pending = conn.execute(
-        select(planning_transcript.c.id)
-        .where(planning_transcript.c.task_id == task_id)
-        .where(planning_transcript.c.status == "pending")
+        select(task_agent_transcript.c.id)
+        .where(task_agent_transcript.c.task_id == task_id)
+        .where(task_agent_transcript.c.status == "pending")
         .limit(1)
     ).scalar_one_or_none()
     if pending is not None:
-        raise ApiConflict("planning_turn_in_progress", "a planning turn is already running")
+        raise ApiConflict("task_agent_turn_in_progress", "a task_agent turn is already running")
 
-    conversation_id = ensure_active_planning_conversation(conn, task_id=task_id, now=_now())
+    conversation_id = ensure_active_task_agent_conversation(conn, task_id=task_id, now=_now())
     max_turn_index = conn.execute(
-        select(func.coalesce(func.max(planning_transcript.c.turn_index), -1)).where(
-            planning_transcript.c.task_id == task_id
+        select(func.coalesce(func.max(task_agent_transcript.c.turn_index), -1)).where(
+            task_agent_transcript.c.task_id == task_id
         )
     ).scalar_one()
     transcript_id = uuid.uuid4()
     conn.execute(
-        planning_transcript.insert().values(
+        task_agent_transcript.insert().values(
             id=transcript_id,
             task_id=task_id,
             conversation_id=conversation_id,
@@ -376,7 +376,7 @@ def _phase_one_turn(
             turn_index=int(max_turn_index) + 1,
             user_message=payload.message,
             reply=None,
-            planner_state=None,
+            task_agent_state=None,
             response=None,
             suggestions=[],
             status="pending",
@@ -387,20 +387,20 @@ def _phase_one_turn(
     return transcript_id
 
 
-@router.post("/{task_id}/planning-turns", response_model=PlanningTurnOut)
-def create_planning_turn(
+@router.post("/{task_id}/task-agent-turns", response_model=TaskAgentTurnOut)
+def create_task_agent_turn(
     task_id: uuid.UUID,
-    payload: PlanningTurnCreate,
+    payload: TaskAgentTurnCreate,
     user: Annotated[AuthenticatedUser, Depends(get_current_user)],
     engine: Annotated[Engine, Depends(get_engine)],
-    planner: Annotated[PlannerBackend, Depends(get_planner_backend)],
-) -> PlanningTurnOut:
-    """Advance one task's durable planner conversation once per client turn id."""
+    task_agent: Annotated[TaskAgentBackend, Depends(get_task_agent_backend)],
+) -> TaskAgentTurnOut:
+    """Advance one task's durable task_agent conversation once per client turn id."""
     lock = _turn_lock(task_id)
     if not lock.acquire(blocking=False):
-        raise ApiConflict("planning_turn_in_progress", "a planning turn is already running")
+        raise ApiConflict("task_agent_turn_in_progress", "a task_agent turn is already running")
     try:
-        # Phase 1 is deliberately short. The planner call below must remain
+        # Phase 1 is deliberately short. The task_agent call below must remain
         # OUTSIDE any transaction: holding the task row lock (and a pool
         # connection) across a live LLM call blocked every mutation on the
         # task — and via the global dispatch lock, run creation process-wide
@@ -412,30 +412,30 @@ def create_planning_turn(
                 user_id=user.user_id,
                 payload=payload,
             )
-        if isinstance(phase_one, PlanningTurnOut):
+        if isinstance(phase_one, TaskAgentTurnOut):
             return phase_one
 
         with engine.connect() as conn:
             conversation_id = conn.execute(
-                select(planning_transcript.c.conversation_id).where(
-                    planning_transcript.c.id == phase_one
+                select(task_agent_transcript.c.conversation_id).where(
+                    task_agent_transcript.c.id == phase_one
                 )
             ).scalar_one()
             if conversation_id is None:
-                raise RuntimeError("planning transcript turn has no conversation")
-            turns, previous_draft = _planner_inputs(conn, task_id, conversation_id)
+                raise RuntimeError("task_agent transcript turn has no conversation")
+            turns, previous_draft = _task_agent_inputs(conn, task_id, conversation_id)
         turns.append({"role": "user", "text": payload.message})
         try:
-            turn = planner.plan_turn(
+            turn = task_agent.plan_turn(
                 turns, previous_draft, session_id=task_id, conversation_id=conversation_id
             )
         except Exception:
             with engine.begin() as conn:
                 conn.execute(
-                    update(planning_transcript)
-                    .where(planning_transcript.c.id == phase_one)
-                    .where(planning_transcript.c.task_id == task_id)
-                    .where(planning_transcript.c.status.in_(("pending", "failed")))
+                    update(task_agent_transcript)
+                    .where(task_agent_transcript.c.id == phase_one)
+                    .where(task_agent_transcript.c.task_id == task_id)
+                    .where(task_agent_transcript.c.status.in_(("pending", "failed")))
                     .values(status="failed", completed_at=_now())
                 )
             raise
@@ -451,7 +451,7 @@ def create_planning_turn(
             turn.plan_draft, ready=ready
         )
         part = _validated_part(turn.part)
-        result = PlanningTurnOut(
+        result = TaskAgentTurnOut(
             reply=turn.reply,
             plan=draft,
             suggestions=turn.suggested_answers or [],
@@ -460,7 +460,7 @@ def create_planning_turn(
         )
         phase_two_values = {
             "reply": turn.reply,
-            "planner_state": turn.plan_draft.model_dump(mode="json"),
+            "task_agent_state": turn.plan_draft.model_dump(mode="json"),
             "response": result.model_dump(mode="json"),
             "part": part.model_dump(mode="json") if part is not None else None,
             "suggestions": result.suggestions,
@@ -476,7 +476,7 @@ def create_planning_turn(
                     conn, task_id=task_id, user_id=user.user_id, write=True, for_update=True
                 )
                 # Re-check the run fence under the task row lock: a run may
-                # have started during the out-of-transaction planner call, and
+                # have started during the out-of-transaction task_agent call, and
                 # persisting a new approved plan under a live walk would hand
                 # continuation an unrelated plan (adversarial review,
                 # 2026-07-29). Mirror phase one: fail the turn, same conflict.
@@ -491,27 +491,27 @@ def create_planning_turn(
                 )
             if run_started_meanwhile:
                 conn.execute(
-                    update(planning_transcript)
-                    .where(planning_transcript.c.id == phase_one)
-                    .where(planning_transcript.c.status.in_(("pending", "failed")))
+                    update(task_agent_transcript)
+                    .where(task_agent_transcript.c.id == phase_one)
+                    .where(task_agent_transcript.c.status.in_(("pending", "failed")))
                     .values(status="failed", completed_at=_now())
                 )
             else:
                 completed = conn.execute(
-                    update(planning_transcript)
-                    .where(planning_transcript.c.id == phase_one)
-                    .where(planning_transcript.c.task_id == task_id)
+                    update(task_agent_transcript)
+                    .where(task_agent_transcript.c.id == phase_one)
+                    .where(task_agent_transcript.c.task_id == task_id)
                     # A fresh turn completes from "pending"; a retried latest turn
                     # re-runs in place from "failed" (retry rules, plan pin 2).
-                    .where(planning_transcript.c.status.in_(("pending", "failed")))
+                    .where(task_agent_transcript.c.status.in_(("pending", "failed")))
                     .values(**phase_two_values)
                 )
                 if completed.rowcount != 1:
-                    raise RuntimeError("planning transcript turn was not open at phase two")
+                    raise RuntimeError("task_agent transcript turn was not open at phase two")
                 if approved is not None:
                     turn_index = conn.execute(
-                        select(planning_transcript.c.turn_index).where(
-                            planning_transcript.c.id == phase_one
+                        select(task_agent_transcript.c.turn_index).where(
+                            task_agent_transcript.c.id == phase_one
                         )
                     ).scalar_one()
                     approved.source_turn_index = int(turn_index)
@@ -538,23 +538,23 @@ def create_planning_turn(
         lock.release()
 
 
-@router.get("/{task_id}/planning-turns", response_model=Page[PlanningTranscriptTurnOut])
-def list_planning_turns(
+@router.get("/{task_id}/task-agent-turns", response_model=Page[TaskAgentTranscriptTurnOut])
+def list_task_agent_turns(
     task_id: uuid.UUID,
     user: Annotated[AuthenticatedUser, Depends(get_current_user)],
     engine: Annotated[Engine, Depends(get_engine)],
     page: Annotated[int, Query(ge=1)] = 1,
     page_size: Annotated[int, Query(ge=1, le=PAGE_SIZE_MAX)] = PAGE_SIZE_DEFAULT,
-) -> Page[PlanningTranscriptTurnOut]:
-    """Return the durable planning transcript in ascending conversation order.
+) -> Page[TaskAgentTranscriptTurnOut]:
+    """Return the durable task_agent transcript in ascending conversation order.
 
     **Read-graded, and the sweep is owner-only.** The grade here is the read
     grade — owner ∪ same-org colleague ∪ administrator — but
     :func:`_expire_stale_pending_turns` is a *write*, and contract § 3 makes
     the admin leg read-only: a support read that fails somebody else's pending
-    planning turn is a mutation nobody asked for and nothing records. So the
+    task_agent turn is a mutation nobody asked for and nothing records. So the
     sweep runs only for the owner, whose own turn it is. Nothing is lost: the
-    owner's own GET sweeps, and every mutating planning path sweeps under the
+    owner's own GET sweeps, and every mutating task_agent path sweeps under the
     write grade before it does anything.
     """
     with engine.begin() as conn:
@@ -565,13 +565,13 @@ def list_planning_turns(
             _expire_stale_pending_turns(conn, task_id)
         total_items = conn.execute(
             select(func.count())
-            .select_from(planning_transcript)
-            .where(planning_transcript.c.task_id == task_id)
+            .select_from(task_agent_transcript)
+            .where(task_agent_transcript.c.task_id == task_id)
         ).scalar_one()
         rows = conn.execute(
-            select(planning_transcript)
-            .where(planning_transcript.c.task_id == task_id)
-            .order_by(planning_transcript.c.turn_index.asc())
+            select(task_agent_transcript)
+            .where(task_agent_transcript.c.task_id == task_id)
+            .order_by(task_agent_transcript.c.turn_index.asc())
             .offset((page - 1) * page_size)
             .limit(page_size)
         ).mappings().all()
@@ -589,7 +589,7 @@ def get_plan(
 ) -> PlanOut:
     """Return the durable approved plan or latest completed durable draft.
 
-    Owner-only sweep, for the reason :func:`list_planning_turns` states: a
+    Owner-only sweep, for the reason :func:`list_task_agent_turns` states: a
     colleague's or an administrator's read must not write the owner's rows.
     """
     with engine.begin() as conn:
@@ -606,10 +606,10 @@ def get_plan(
             .limit(1)
         ).mappings().one_or_none()
         latest_completed = conn.execute(
-            select(planning_transcript.c.turn_index, planning_transcript.c.response)
-            .where(planning_transcript.c.task_id == task_id)
-            .where(planning_transcript.c.status == "completed")
-            .order_by(planning_transcript.c.turn_index.desc())
+            select(task_agent_transcript.c.turn_index, task_agent_transcript.c.response)
+            .where(task_agent_transcript.c.task_id == task_id)
+            .where(task_agent_transcript.c.status == "completed")
+            .order_by(task_agent_transcript.c.turn_index.desc())
             .limit(1)
         ).mappings().one_or_none()
         approved_is_stale = False
@@ -625,7 +625,7 @@ def get_plan(
         if approved_is_stale:
             if draft_row is None or draft_row["response"] is None:
                 raise HTTPException(status_code=404, detail="resource not found")
-            response = PlanningTurnOut.model_validate(draft_row["response"])
+            response = TaskAgentTurnOut.model_validate(draft_row["response"])
             return PlanOut(plan=response.plan, version=0, status="draft")
         return PlanOut(
             plan=_draft_from_plan(approved_plan),
@@ -634,7 +634,7 @@ def get_plan(
         )
     if draft_row is None or draft_row["response"] is None:
         raise HTTPException(status_code=404, detail="resource not found")
-    response = PlanningTurnOut.model_validate(draft_row["response"])
+    response = TaskAgentTurnOut.model_validate(draft_row["response"])
     return PlanOut(plan=response.plan, version=0, status="draft")
 
 
@@ -817,13 +817,13 @@ def _load_editable_plan(
     ).mappings().one_or_none()
     latest_completed = conn.execute(
         select(
-            planning_transcript.c.turn_index,
-            planning_transcript.c.response,
-            planning_transcript.c.conversation_id,
+            task_agent_transcript.c.turn_index,
+            task_agent_transcript.c.response,
+            task_agent_transcript.c.conversation_id,
         )
-        .where(planning_transcript.c.task_id == task_id)
-        .where(planning_transcript.c.status == "completed")
-        .order_by(planning_transcript.c.turn_index.desc())
+        .where(task_agent_transcript.c.task_id == task_id)
+        .where(task_agent_transcript.c.status == "completed")
+        .order_by(task_agent_transcript.c.turn_index.desc())
         .limit(1)
     ).mappings().one_or_none()
     approved_is_stale = False
@@ -839,7 +839,7 @@ def _load_editable_plan(
             return approved_plan, conversation_id
     if latest_completed is None or latest_completed["response"] is None:
         raise HTTPException(status_code=404, detail="resource not found")
-    response = PlanningTurnOut.model_validate(latest_completed["response"])
+    response = TaskAgentTurnOut.model_validate(latest_completed["response"])
     if conversation_id is None:
         conversation_id = latest_completed["conversation_id"]
     try:
@@ -879,14 +879,14 @@ def patch_plan(
         except (ValidationError, ValueError) as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
         latest_turn = conn.execute(
-            select(func.max(planning_transcript.c.turn_index))
-            .where(planning_transcript.c.task_id == task_id)
-            .where(planning_transcript.c.status == "completed")
+            select(func.max(task_agent_transcript.c.turn_index))
+            .where(task_agent_transcript.c.task_id == task_id)
+            .where(task_agent_transcript.c.status == "completed")
         ).scalar_one()
         if latest_turn is not None:
             patched.source_turn_index = int(latest_turn)
         if conversation_id is None:
-            conversation_id = ensure_active_planning_conversation(
+            conversation_id = ensure_active_task_agent_conversation(
                 conn, task_id=task_id, now=_now()
             )
         persist_approved_plan(

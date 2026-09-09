@@ -14,8 +14,8 @@ from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, Field
 
-from .planning import ExtractProfile
 from .sse import DecidedBy
+from .task_agent import ExtractProfile
 
 #: Evidence acquisition/screening origin. Mirrors the acquisition backends.
 EvidenceOrigin = Literal["OpenAlex", "Overton", "Uploaded"]

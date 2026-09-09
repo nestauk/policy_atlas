@@ -71,7 +71,7 @@ the field, never as proven absence (we searched our corpus, not the whole litera
 
 ## The coverage base — what licenses an absence claim
 
-Framework-level (arch §4, EB-prompted). The gap *tier* above grades how far an absence travels;
+Framework-level (arch §4, ES-prompted). The gap *tier* above grades how far an absence travels;
 the **coverage base** grades what it rests on — orthogonal, both required.
 
 - **Every gap / absence claim carries its coverage base** as a required structural field — the
@@ -94,7 +94,7 @@ the **coverage base** grades what it rests on — orthogonal, both required.
   (→ `search` governance events) and scope filters. **Fail closed:** absent a non-`inadequate`
   record, an absence degrades to "not found in extracted / selected material," never corpus-level.
 
-The EB instance (and where this rule is most acute) is
+The ES instance (and where this rule is most acute) is
 [../capabilities/evidence-search/provenance.md](../capabilities/evidence-search/provenance.md).
 
 ## Patterns — the third assertion type

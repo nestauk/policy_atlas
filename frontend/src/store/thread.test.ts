@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { composePlanningThread } from "./thread";
-import type { PlanningThreadDecision, PlanningThreadRun, PlanningThreadTurn } from "./thread";
+import { composeTaskAgentThread } from "./thread";
+import type { TaskAgentThreadDecision, TaskAgentThreadRun, TaskAgentThreadTurn } from "./thread";
 
-function turn(turnIndex: number): PlanningThreadTurn {
+function turn(turnIndex: number): TaskAgentThreadTurn {
   return {
     turn_index: turnIndex,
     client_turn_id: `00000000-0000-0000-0000-00000000000${turnIndex}`,
@@ -17,7 +17,7 @@ function turn(turnIndex: number): PlanningThreadTurn {
   };
 }
 
-function run(id: string, startedAt: string): PlanningThreadRun {
+function run(id: string, startedAt: string): TaskAgentThreadRun {
   return {
     capability_run_id: id,
     task_id: "task-1",
@@ -29,7 +29,7 @@ function run(id: string, startedAt: string): PlanningThreadRun {
   };
 }
 
-function decision(sequence: number): PlanningThreadDecision {
+function decision(sequence: number): TaskAgentThreadDecision {
   return {
     sequence,
     occurred_at: "2026-07-28T10:03:00Z",
@@ -40,13 +40,13 @@ function decision(sequence: number): PlanningThreadDecision {
   };
 }
 
-describe("composePlanningThread", () => {
-  it("places turn-index ordered planning turns between run blocks and keeps decisions inside their own block", () => {
+describe("composeTaskAgentThread", () => {
+  it("places turn-index ordered task_agent turns between run blocks and keeps decisions inside their own block", () => {
     const firstRun = run("run-1", "2026-07-28T10:02:00Z");
     const secondRun = run("run-2", "2026-07-28T10:05:00Z");
     const firstDecision = decision(8);
     const secondDecision = decision(3);
-    const result = composePlanningThread(
+    const result = composeTaskAgentThread(
       [turn(2), turn(0), turn(1)],
       [
         { run: secondRun, afterTurnIndex: 1 },
@@ -59,7 +59,7 @@ describe("composePlanningThread", () => {
       ],
     );
 
-    expect(result.map((item) => item.type === "planning_turn" ? `turn:${item.turn.turn_index}` : `run:${item.run.capability_run_id}`)).toEqual([
+    expect(result.map((item) => item.type === "task_agent_turn" ? `turn:${item.turn.turn_index}` : `run:${item.run.capability_run_id}`)).toEqual([
       "turn:0",
       "run:run-1",
       "turn:1",
@@ -75,7 +75,7 @@ describe("composePlanningThread", () => {
   });
 
   it("renders a run with no preceding turn before every turn, not after them", () => {
-    const result = composePlanningThread(
+    const result = composeTaskAgentThread(
       [turn(0)],
       [{ run: run("run-1", "2026-07-28T09:00:00Z"), afterTurnIndex: null }],
       [],
@@ -83,7 +83,7 @@ describe("composePlanningThread", () => {
 
     expect(
       result.map((item) =>
-        item.type === "planning_turn" ? `turn:${item.turn.turn_index}` : `run:${item.run.capability_run_id}`,
+        item.type === "task_agent_turn" ? `turn:${item.turn.turn_index}` : `run:${item.run.capability_run_id}`,
       ),
     ).toEqual(["run:run-1", "turn:0"]);
   });

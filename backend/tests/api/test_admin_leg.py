@@ -304,8 +304,8 @@ def test_an_administrator_is_refused_every_mutation(
                 "create run": client.post(
                     f"/api/v1/tasks/{task_id}/runs", headers=admin.headers, json={}
                 ),
-                "planning turn": client.post(
-                    f"/api/v1/tasks/{task_id}/planning-turns",
+                "task_agent turn": client.post(
+                    f"/api/v1/tasks/{task_id}/task-agent-turns",
                     headers=admin.headers,
                     json={"message": "Hello", "client_turn_id": str(uuid.uuid4())},
                 ),
@@ -392,17 +392,17 @@ def test_an_administrator_cannot_write_through_the_conversation_id_router(
             chat = make_conversation(
                 conn, task_id=task_id, kind="chat", created_by=owner.user_id
             )
-            planning = make_conversation(
-                conn, task_id=task_id, kind="planning", created_by=None
+            task_agent = make_conversation(
+                conn, task_id=task_id, kind="task_agent", created_by=None
             )
 
         with capture_logs() as captured:
             reads = [
                 client.get(f"/api/v1/conversations/{chat}", headers=admin.headers),
                 client.get(f"/api/v1/conversations/{chat}/turns", headers=admin.headers),
-                # Planning conversations are the owner's steering, and the leg
+                # Task Agent conversations are the owner's steering, and the leg
                 # reads them too: § 4 grades this router by route, not by kind.
-                client.get(f"/api/v1/conversations/{planning}", headers=admin.headers),
+                client.get(f"/api/v1/conversations/{task_agent}", headers=admin.headers),
             ]
             writes = [
                 client.patch(
@@ -423,7 +423,7 @@ def test_an_administrator_cannot_write_through_the_conversation_id_router(
         assert _reads(captured) == [
             ("conversation", str(chat)),
             ("conversation", str(chat)),
-            ("conversation", str(planning)),
+            ("conversation", str(task_agent)),
         ]
 
 

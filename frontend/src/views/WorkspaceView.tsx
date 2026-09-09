@@ -12,9 +12,9 @@ import { hasResult } from "./lifecycle";
 import { ChatPane } from "./workspace/chat/ChatPane";
 import { DraftChatPane } from "./workspace/chat/DraftChatPane";
 import { ConversationSidebar } from "./workspace/chat/ConversationSidebar";
-import { DRAFT_CHAT_ID, isPlanningConversation, taskAgentConversationId, useActiveConversation } from "./workspace/chat/conversationState";
+import { DRAFT_CHAT_ID, isTaskAgentConversation, taskAgentConversationId, useActiveConversation } from "./workspace/chat/conversationState";
 import { PlanDocument } from "./workspace/PlanDocument";
-import { PlanningPane } from "./workspace/PlanningPane";
+import { TaskAgentPane } from "./workspace/TaskAgentPane";
 import type { PlanOverlay } from "./workspace/planOverlay";
 
 /**
@@ -22,7 +22,7 @@ import type { PlanOverlay } from "./workspace/planOverlay";
  * the main column (owner ruling 2026-09-05, contract 038 § V8).
  *
  * The Task Agent is the default and carries no `?chat=`; it keeps this tab's
- * original layout, the planning pane with its plan-document rail. Any other
+ * original layout, the task_agent pane with its plan-document rail. Any other
  * chat takes the main column instead, and the rail — which belongs to the
  * plan, not to a chat — stays shut. The overlay (`ChatSidePanel`) is not
  * mounted here: this sidebar is what it would have been.
@@ -35,10 +35,10 @@ export function WorkspaceView() {
   const conversations = useConversations(taskId, { status: "active" });
   const rows = conversations.data?.data ?? [];
   const artefact = useArtefact(taskId);
-  // A planning id in the URL (a deep link, or the overlay's own selection
+  // A task_agent id in the URL (a deep link, or the overlay's own selection
   // carried over) reads as the Task Agent: the pane renders the Task's
-  // planning thread, never one lineage on its own.
-  const onTaskAgent = activeConversationId === null || isPlanningConversation(activeConversationId, rows);
+  // task_agent thread, never one lineage on its own.
+  const onTaskAgent = activeConversationId === null || isTaskAgentConversation(activeConversationId, rows);
   const chatId = onTaskAgent ? null : activeConversationId;
   const sectionTitles = (artefact.data?.sections ?? []).map((section) => section.title);
   // Chats need a result to ask about. Either source may be behind: the task
@@ -125,7 +125,7 @@ export function WorkspaceView() {
             inert={railOpen && planPlacement === "center" ? true : undefined}
           >
             {chatId === null ? (
-              <PlanningPane
+              <TaskAgentPane
                 taskId={taskId}
                 runStatus={stream.run?.status}
                 stream={stream}
@@ -149,7 +149,7 @@ export function WorkspaceView() {
                 taskId={taskId}
                 conversationId={chatId}
                 sectionTitles={sectionTitles}
-                onOpenPlanning={() => setActiveConversation(null)}
+                onOpenTaskAgent={() => setActiveConversation(null)}
                 wide
                 onAtBottomChange={setFooterOpen}
               />

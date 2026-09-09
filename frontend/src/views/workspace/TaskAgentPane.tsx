@@ -5,13 +5,13 @@ import { useCheckIns, useDecisions, useFunnel, usePlan, useRuns } from "../../ap
 import { useComposerSeed } from "../../lib/composerSeed";
 import { scrub } from "../../lib/scrub";
 import { COPY, TASK } from "../../lib/vocabulary";
-import { composePlanningThread, usePlanningTranscript } from "../../store";
+import { composeTaskAgentThread, useTaskAgentTranscript } from "../../store";
 import type {
-  OptimisticPlanningTurn,
-  PlanningThreadDecision,
-  PlanningThreadItem,
-  PlanningThreadRun,
-  PlanningThreadTurn,
+  OptimisticTaskAgentTurn,
+  TaskAgentThreadDecision,
+  TaskAgentThreadItem,
+  TaskAgentThreadRun,
+  TaskAgentThreadTurn,
   ResolvedDecision,
   RunStatus,
   RunStreamState,
@@ -42,20 +42,20 @@ import {
   runFinishedSignpost,
 } from "./runProgress";
 
-/** The server page-size cap; one planning conversation fits comfortably. */
+/** The server page-size cap; one task_agent conversation fits comfortably. */
 const TRANSCRIPT_PAGE_SIZE = 200;
 
 /**
- * Assign each run its turn boundary and each decision its run block. Planning
+ * Assign each run its turn boundary and each decision its run block. TaskAgent
  * turns are 409-fenced while a run executes or parks, so a turn's receipt
  * time genuinely falls outside every run window — comparing it to run starts
  * only ANCHORS blocks; ordering within lists stays `turn_index` (turns) and
  * event-log `sequence` (decisions), never timestamps.
  */
 export function threadInputs(
-  turns: PlanningThreadTurn[],
-  runs: PlanningThreadRun[],
-  decisions: PlanningThreadDecision[],
+  turns: TaskAgentThreadTurn[],
+  runs: TaskAgentThreadRun[],
+  decisions: TaskAgentThreadDecision[],
 ): { boundaries: RunThreadBoundary[]; runDecisions: RunThreadDecision[] } {
   const boundaries = runs.map((run) => {
     const before = turns.filter((turn) => turn.created_at <= run.started_at);
@@ -79,7 +79,7 @@ export function threadInputs(
   return { boundaries, runDecisions };
 }
 
-/** Placeholder for the planning composer — planning/replanning, not follow-up Q&A.
+/** Placeholder for the task_agent composer — task_agent/replanning, not follow-up Q&A.
  *
  * Args:
  *   runStatus: The task's current run status, or undefined before any run.
@@ -92,7 +92,7 @@ export function threadInputs(
  * Returns:
  *   Copy that matches the run and plan state.
  */
-export function planningComposerPlaceholder(
+export function taskAgentComposerPlaceholder(
   runStatus: RunStatus | undefined,
   planReady = false,
   isOwner = true,
@@ -118,7 +118,7 @@ export function planningComposerPlaceholder(
 /**
  * The message composer: a bounded auto-growing textarea (Enter sends,
  * Shift+Enter inserts a newline) plus its keybinding hint. Split out from
- * `PlanningPane` so the Enter/Shift+Enter/disabled behaviour is unit-testable
+ * `TaskAgentPane` so the Enter/Shift+Enter/disabled behaviour is unit-testable
  * without the transcript/run/decision store wiring.
  */
 export function Composer({
@@ -128,7 +128,7 @@ export function Composer({
   placeholder,
   disabled,
   sendDisabled,
-  id = "planning-message",
+  id = "task_agent-message",
   label = COPY.messageTaskAgent,
 }: {
   value: string;
@@ -207,9 +207,9 @@ function UserBubble({ text }: { text: string }) {
   );
 }
 
-/** Planner replies are plain text — no box (binding record: planning-stage
- *  `.planner`); only part cards and the plan card are bordered. */
-function PlannerBubble({ text }: { text: string }) {
+/** TaskAgent replies are plain text — no box (binding record: task_agent-stage
+ *  `.task_agent`); only part cards and the plan card are bordered. */
+function TaskAgentBubble({ text }: { text: string }) {
   return (
     <div className="anim-rise mr-8">
       <p className="max-w-prose-measure whitespace-pre-wrap text-lead text-ink">{scrub(text)}</p>
@@ -217,7 +217,7 @@ function PlannerBubble({ text }: { text: string }) {
   );
 }
 
-/** A durable turn: user bubble, then the planner reply — or an honest
+/** A durable turn: user bubble, then the task_agent reply — or an honest
  *  incomplete row (pending spinner copy / failed with retry). */
 function DurableTurn({
   turn,
@@ -228,7 +228,7 @@ function DurableTurn({
   onSend,
   onPrefill,
 }: {
-  turn: PlanningThreadTurn;
+  turn: TaskAgentThreadTurn;
   isLatest: boolean;
   onRetry: (input: { message: string; clientTurnId: string }) => void;
   retryDisabled: boolean;
@@ -237,15 +237,15 @@ function DurableTurn({
   onPrefill: (message: string) => void;
 }) {
   // A button-confirm turn's record is the ✓ on its part card — the canned
-  // marker bubble would only duplicate it (binding record: planning-stage).
+  // marker bubble would only duplicate it (binding record: task_agent-stage).
   const isConfirmTurn = confirmTarget(turn.user_message) !== null;
-  const plannerText = [turn.reply, turn.part?.body]
+  const taskAgentText = [turn.reply, turn.part?.body]
     .filter((piece): piece is string => piece != null && piece !== "")
     .join("\n\n");
   return (
     <div className="space-y-6">
       {!isConfirmTurn && <UserBubble text={turn.user_message} />}
-      {turn.status === "completed" && plannerText !== "" && <PlannerBubble text={plannerText} />}
+      {turn.status === "completed" && taskAgentText !== "" && <TaskAgentBubble text={taskAgentText} />}
       {turn.part != null && partState !== undefined && (
         <PartCard
           part={turn.part}
@@ -292,7 +292,7 @@ interface PresentedRunDecision {
  * Search grouping delegates to the shared decision presentation helper; the
  * remaining adjacent duplicate collapse is limited to this compact rail. */
 export function presentRunDecisions(
-  decisions: PlanningThreadDecision[],
+  decisions: TaskAgentThreadDecision[],
   stages: StageEntry[],
 ): PresentedRunDecision[] {
   const labelled = decisions.flatMap((decision) => {
@@ -314,7 +314,7 @@ export function presentRunDecisions(
   for (let index = 0; index < labelled.length; index += 1) {
     const entry = labelled[index];
     if (entry.kind !== "search.executed" || labelled[index - 1]?.kind === "search.executed") continue;
-    const consecutive: PlanningThreadDecision[] = [];
+    const consecutive: TaskAgentThreadDecision[] = [];
     for (let cursor = index; labelled[cursor]?.kind === "search.executed"; cursor += 1) {
       consecutive.push(labelled[cursor]);
     }
@@ -390,8 +390,8 @@ function RunBlock({
   checkIns,
 }: {
   taskId: string;
-  run: PlanningThreadRun;
-  decisions: PlanningThreadDecision[];
+  run: TaskAgentThreadRun;
+  decisions: TaskAgentThreadDecision[];
   stages: StageEntry[];
   answered: ResolvedDecision[];
   checkIns: ReturnType<typeof useCheckIns>["data"];
@@ -424,13 +424,13 @@ function RunBlock({
 }
 
 /**
- * The planning conversation, rendered from the durable transcript (strand 12):
+ * The task_agent conversation, rendered from the durable transcript (strand 12):
  * it survives navigation and restarts. Message bubbles, the thinking row,
  * tappable suggestion chips, run blocks with their steering-decision echoes,
  * and the composer — which disables honestly while a run executes or parks
- * (planning turns 409 then; check-ins are the sanctioned steering channel).
+ * (task_agent turns 409 then; check-ins are the sanctioned steering channel).
  */
-export function PlanningPane({
+export function TaskAgentPane({
   taskId,
   runStatus,
   stream,
@@ -461,7 +461,7 @@ export function PlanningPane({
    *  Agent tab reveals the footer under both columns accordingly. */
   onAtBottomChange?: (atBottom: boolean) => void;
 }) {
-  const transcript = usePlanningTranscript(taskId, { page_size: TRANSCRIPT_PAGE_SIZE });
+  const transcript = useTaskAgentTranscript(taskId, { page_size: TRANSCRIPT_PAGE_SIZE });
   const planQuery = usePlan(taskId);
   const planReady =
     planQuery.data?.status === "approved" && planQuery.data.plan.ready === true;
@@ -476,13 +476,13 @@ export function PlanningPane({
   const [nowMs, setNowMs] = useState(() => Date.now());
   useComposerSeed(setMessage);
 
-  const durableTurns = (transcript.data?.data ?? []) as PlanningThreadTurn[];
+  const durableTurns = (transcript.data?.data ?? []) as TaskAgentThreadTurn[];
   const { boundaries, runDecisions } = threadInputs(
     durableTurns,
     runsQuery.data?.data ?? [],
     decisionsQuery.data?.data ?? [],
   );
-  const thread: PlanningThreadItem[] = composePlanningThread(durableTurns, boundaries, runDecisions);
+  const thread: TaskAgentThreadItem[] = composeTaskAgentThread(durableTurns, boundaries, runDecisions);
   const latestTurnIndex =
     durableTurns.length > 0 ? Math.max(...durableTurns.map((turn) => turn.turn_index)) : null;
   const partStates = derivePartStates(durableTurns);
@@ -510,9 +510,9 @@ export function PlanningPane({
   const pin = usePinToBottom(scrollRef, contentRef, taskId);
 
   // The plan card sits at its chronological position: right after the last
-  // planning turn (approval always comes from a turn; turns are 409-fenced
+  // task_agent turn (approval always comes from a turn; turns are 409-fenced
   // during runs), so a started run's block renders BELOW it, not above.
-  const lastTurnAt = thread.findLastIndex((item) => item.type === "planning_turn");
+  const lastTurnAt = thread.findLastIndex((item) => item.type === "task_agent_turn");
   const planCardAt = lastTurnAt === -1 ? thread.length : lastTurnAt + 1;
   const planStarted = thread.slice(planCardAt).some((item) => item.type === "run_block");
   const liveRunId = stream.run?.id;
@@ -592,7 +592,7 @@ export function PlanningPane({
     transcript.data !== undefined && thread.length === 0 && transcript.optimisticTurns.length === 0;
 
   return (
-    <section aria-label="Planning conversation" className="flex h-full min-h-0 flex-col">
+    <section aria-label="Task Agent conversation" className="flex h-full min-h-0 flex-col">
       {/* The scroll region spans the whole pane so its scrollbar sits at the
           pane's edge like every other tab's; the reading column is inside. */}
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
@@ -615,7 +615,7 @@ export function PlanningPane({
         <div ref={contentRef} className={cn("space-y-6", LIFECYCLE_PAGE_CLASS)}>
         {transcript.isPending && (
           <div role="status" className="anim-breathe text-body text-grey">
-            Loading your planning conversation…
+            Loading your task_agent conversation…
           </div>
         )}
         {transcript.isError &&
@@ -623,7 +623,7 @@ export function PlanningPane({
             <ReauthRedirect />
           ) : (
             <div role="status" className="text-body text-grey">
-              <p>Your planning conversation couldn't be loaded.</p>
+              <p>Your Task Agent conversation couldn't be loaded.</p>
               <Button
                 size="sm"
                 variant="secondary"
@@ -642,7 +642,7 @@ export function PlanningPane({
 
         {thread.flatMap((item, index) => {
           const rendered =
-            item.type === "planning_turn" ? (
+            item.type === "task_agent_turn" ? (
               <DurableTurn
                 key={`turn-${item.turn.turn_index}`}
                 turn={item.turn}
@@ -678,7 +678,7 @@ export function PlanningPane({
             : [rendered];
         })}
 
-        {transcript.optimisticTurns.map((turn: OptimisticPlanningTurn) => (
+        {transcript.optimisticTurns.map((turn: OptimisticTaskAgentTurn) => (
           <div key={turn.clientTurnId} className="space-y-6">
             {/* Button-confirm turns never show a bubble — durable turns hide
                 them too; the ✓ on the part card is the record. */}
@@ -720,11 +720,11 @@ export function PlanningPane({
         {transcript.isSubmitting && (
           <div role="status" className="anim-breathe mr-8 flex items-center gap-2 px-3.5 text-body text-grey">
             <span aria-hidden="true" className="h-2 w-2 bg-blue" />
-            Planning…
+            TaskAgent…
           </div>
         )}
 
-        {/* Suggestion chips send a planning turn (task 033 phase 10c,
+        {/* Suggestion chips send a task_agent turn (task 033 phase 10c,
             contract § 11 / rubric 37) — owner-only, hidden for a colleague
             rather than left clickable to a 403. */}
         {isOwner && suggestions.length > 0 && !transcript.isSubmitting && !runActive && (
@@ -783,7 +783,7 @@ export function PlanningPane({
           value={message}
           onChange={setMessage}
           onSubmit={() => send({ message, clientTurnId: crypto.randomUUID() })}
-          placeholder={planningComposerPlaceholder(runStatus, planReady, isOwner)}
+          placeholder={taskAgentComposerPlaceholder(runStatus, planReady, isOwner)}
           disabled={runActive || !isOwner}
           sendDisabled={composerDisabled}
         />

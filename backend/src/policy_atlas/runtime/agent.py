@@ -1,14 +1,14 @@
 """The agent CLI — the one new public interface of slice 017.
 
 Runnable as ``python -m policy_atlas.runtime.agent``. It owns the whole
-user-facing product path: a planning conversation (intent -> refined,
-depth-graded task plan), plan review and approval, and driving the EB
+user-facing product path: a task_agent conversation (intent -> refined,
+depth-graded task plan), plan review and approval, and driving the ES
 capability-runner with steering check-ins. Sub-agents never address the user;
 the agent relays deterministic runner check-ins and steering pauses
 through a small, injectable console seam.
 
 Live switch mirrors ``skeleton.py``: a configured ``OPENAI_API_KEY`` selects the
-live planner + live backend set (with Langfuse tracing); its absence selects the
+live task_agent + live backend set (with Langfuse tracing); its absence selects the
 deterministic stubs and an egress-free fixture corpus, so the demo/dev path
 never leaves the machine.
 """
@@ -64,8 +64,6 @@ from policy_atlas.runtime.agent_backend import (
     OpenAIAgentBackend,
     StubAgentBackend,
 )
-from policy_atlas.runtime.planner import OpenAIPlannerBackend, PlannerBackend, StubPlannerBackend
-from policy_atlas.runtime.planner_prompt import PLANNER_HISTORY_TURNS_MAX, PlanDraftWire
 from policy_atlas.runtime.runner import RunnerBackends, RunPlanOutcome, run_plan
 from policy_atlas.runtime.steering import (
     Abort,
@@ -76,26 +74,32 @@ from policy_atlas.runtime.steering import (
     refuse_inexpressible,
     render_check_in,
 )
+from policy_atlas.runtime.task_agent import (
+    OpenAITaskAgentBackend,
+    StubTaskAgentBackend,
+    TaskAgentBackend,
+)
+from policy_atlas.runtime.task_agent_prompt import PLANNER_HISTORY_TURNS_MAX, PlanDraftWire
 from policy_atlas.runtime.task_plan import CountryGroupAuthorship, TaskPlan
 
 log = structlog.get_logger()
 
-# Cap the planning conversation so a planner that never returns ``ready`` (or a
+# Cap the task_agent conversation so a task_agent that never returns ``ready`` (or a
 # plan that never validates) fails honestly instead of looping forever.
-MAX_PLANNER_TURNS = 10
+MAX_TASK_AGENT_TURNS = 10
 
 # The prompt's history window must hold every turn a conversation can have
-# accumulated when the planner is called (1 intent + 2 per completed
+# accumulated when the task_agent is called (1 intent + 2 per completed
 # iteration): if it rotated, the original intent would silently drop and the
 # intent-sized first-turn cap would land on a mid-conversation turn.
-assert (MAX_PLANNER_TURNS - 1) * 2 + 1 <= PLANNER_HISTORY_TURNS_MAX
+assert (MAX_TASK_AGENT_TURNS - 1) * 2 + 1 <= PLANNER_HISTORY_TURNS_MAX
 
 # Exit codes. No token/cost surface — time only (contract decision 11).
 EXIT_SUCCESS = 0
 EXIT_RUN_FAILED = 2
 EXIT_ABORTED = 3
 EXIT_ABANDONED = 4
-EXIT_NO_PLAN = 2  # planner never converged on an approved, valid plan
+EXIT_NO_PLAN = 2  # task_agent never converged on an approved, valid plan
 
 _EXIT_BY_STATUS: dict[str, int] = {
     "succeeded": EXIT_SUCCESS,
@@ -203,7 +207,7 @@ def _now() -> datetime:
 
 
 class ConsoleIO(Protocol):
-    """Console seam for the planning conversation and steering menus.
+    """Console seam for the task_agent conversation and steering menus.
 
     The ``python -m`` entrypoint injects a stdin/stdout implementation;
     scripted tests inject a deterministic double.
@@ -259,7 +263,7 @@ class StdConsole:
     def print(self, message: str) -> None:
         """Write one line to stdout, stripped of terminal control characters.
 
-        Planner output is untrusted model text; escape sequences could rewrite
+        Task Agent output is untrusted model text; escape sequences could rewrite
         or hide the very plan lines the user is approving, so everything but
         newlines and tabs in the C0/C1/DEL ranges is dropped at this seam.
 
@@ -280,7 +284,7 @@ class AgentResult:
         task_id: The created task id, or ``None`` if nothing was created.
         evidence_scope_id: The created evidence-scope id, or ``None``.
         outcome: The runner outcome, or ``None`` if no run was launched.
-        turns: The full planning-conversation turn log.
+        turns: The full task_agent-conversation turn log.
         runner_io: The steering IO used for the run (``CliIO``/``UnattendedIO``),
             or ``None`` if no run was launched.
         artefact_present: Whether a synthesis artefact row exists for the task.
@@ -610,7 +614,7 @@ def build_plan(
     the derived fields (expected artefact shape, time band).
 
     Args:
-        draft: The planner's ready plan draft.
+        draft: The task_agent's ready plan draft.
 
     Returns:
         The validated task plan.
@@ -748,14 +752,14 @@ def _render_full_plan(plan: TaskPlan) -> str:
 
 
 def _ask(console: ConsoleIO, question: str, suggestions: list[str] | None) -> str:
-    """Render a planner question with numbered suggestions and read the answer.
+    """Render a task_agent question with numbered suggestions and read the answer.
 
     A numeric answer within range picks that suggestion; any other text is
     accepted verbatim (free text is always allowed).
 
     Args:
         console: The console seam.
-        question: The planner's clarifying question.
+        question: The task_agent's clarifying question.
         suggestions: Ordered suggested answers, or ``None``.
 
     Returns:
@@ -776,17 +780,17 @@ def _ask(console: ConsoleIO, question: str, suggestions: list[str] | None) -> st
     return raw
 
 
-def live_planner_and_backends(
+def live_task_agent_and_backends(
     langfuse_client: Any,
-) -> tuple[PlannerBackend, RunnerBackends]:
-    """Build the live planner + full live backend set, mirroring skeleton.py.
+) -> tuple[TaskAgentBackend, RunnerBackends]:
+    """Build the live task_agent + full live backend set, mirroring skeleton.py.
 
     Args:
         langfuse_client: The resolved Langfuse client (tracing lives inside the
             backends, as in ``skeleton.py``).
 
     Returns:
-        The live planner backend and the live runner backend bundle.
+        The live task_agent backend and the live runner backend bundle.
     """
     embedding: EmbeddingBackend = OpenAIEmbeddingBackend()
     theme_grouping: ThemeGroupingBackend = OpenAIThemeGroupingBackend()
@@ -819,8 +823,8 @@ def live_planner_and_backends(
         document_fetcher=fetcher,
         langfuse_client=langfuse_client,
     )
-    planner = OpenAIPlannerBackend(langfuse_client=langfuse_client)
-    return planner, backends
+    task_agent = OpenAITaskAgentBackend(langfuse_client=langfuse_client)
+    return task_agent, backends
 
 
 def _seed_stub_corpus(engine: Engine, task_id: uuid.UUID) -> None:
@@ -865,7 +869,7 @@ def persist_approved_plan(
         conn: Open transaction that owns the task and plan writes.
         task_id: Existing task receiving the approved plan.
         plan: Validated plan approved by the caller.
-        conversation_id: Planning conversation that owns this plan lineage.
+        conversation_id: Task Agent conversation that owns this plan lineage.
 
     Returns:
         The new ``(evidence_scope_id, plan_id)`` pair.
@@ -967,23 +971,23 @@ def _artefact_present(engine: Engine, task_id: uuid.UUID) -> bool:
 
 def _plan_conversation(
     console: ConsoleIO,
-    planner: PlannerBackend,
+    task_agent: TaskAgentBackend,
     turns: list[dict[str, str]],
     *,
     session_id: uuid.UUID,
 ) -> TaskPlan | Literal["abandoned", "no_plan"]:
-    """Drive the planning conversation to an approved plan, or abandonment.
+    """Drive the task_agent conversation to an approved plan, or abandonment.
 
     Returns:
         The approved plan, ``"abandoned"`` if the user abandoned, or
-        ``"no_plan"`` if the planner never converged within the turn cap.
+        ``"no_plan"`` if the task_agent never converged within the turn cap.
     """
     previous_draft: dict[str, object] | None = None
     first_country_groups: dict[str, tuple[str, ...] | None] = {}
     country_group_authorship: dict[str, CountryGroupAuthorship] = {}
-    for _ in range(MAX_PLANNER_TURNS):
+    for _ in range(MAX_TASK_AGENT_TURNS):
         follows_user_turn = bool(turns and turns[-1]["role"] == "user")
-        turn = planner.plan_turn(turns, previous_draft, session_id=session_id)
+        turn = task_agent.plan_turn(turns, previous_draft, session_id=session_id)
         assigned_country_group_authorship = _assign_country_group_authorship(
             turn.plan_draft,
             previous_draft,
@@ -1028,14 +1032,14 @@ def _plan_conversation(
         change = console.prompt("What would you like to change? ")
         turns.append({"role": "user", "text": change})
 
-    console.print("Planner did not reach an approved plan within the turn cap.")
+    console.print("Task Agent did not reach an approved plan within the turn cap.")
     return "no_plan"
 
 
 def main(
     console: ConsoleIO | None = None,
     engine: Engine | None = None,
-    planner: PlannerBackend | None = None,
+    task_agent: TaskAgentBackend | None = None,
     backends: RunnerBackends | None = None,
     agent: AgentBackend | None = None,
 ) -> AgentResult:
@@ -1044,10 +1048,10 @@ def main(
     Args:
         console: Console seam; defaults to real stdin/stdout.
         engine: SQLAlchemy engine; defaults to the configured engine.
-        planner: Planner backend; defaults to the live/stub choice by key.
+        task_agent: Task Agent backend; defaults to the live/stub choice by key.
         backends: Runner backend bundle; defaults to the live/stub choice by key.
         agent: Agent backend (router + watch moments); defaults to
-            the live/stub choice by key, mirroring the planner. Threaded into
+            the live/stub choice by key, mirroring the task_agent. Threaded into
             ``run_plan`` so free-text steering compiles at pauses and the watch
             observes boundaries; the deterministic stub keeps CI zero-egress.
 
@@ -1063,13 +1067,13 @@ def main(
     langfuse_client = tracing.get_langfuse() if live else None
     default_agent: AgentBackend
     if live:
-        default_planner, default_backends = live_planner_and_backends(langfuse_client)
+        default_task_agent, default_backends = live_task_agent_and_backends(langfuse_client)
         default_agent = OpenAIAgentBackend(langfuse_client=langfuse_client)
     else:
-        default_planner = StubPlannerBackend()
+        default_task_agent = StubTaskAgentBackend()
         default_backends = RunnerBackends()
         default_agent = StubAgentBackend()
-    planner = planner if planner is not None else default_planner
+    task_agent = task_agent if task_agent is not None else default_task_agent
     backends = backends if backends is not None else default_backends
     agent = agent if agent is not None else default_agent
     log.info(
@@ -1081,7 +1085,7 @@ def main(
     intent = console.prompt("Describe the evidence review you want: ")
     turns: list[dict[str, str]] = [{"role": "user", "text": intent}]
 
-    plan = _plan_conversation(console, planner, turns, session_id=conversation_id)
+    plan = _plan_conversation(console, task_agent, turns, session_id=conversation_id)
     if isinstance(plan, str):
         console.print("No plan approved; nothing was run.")
         exit_code = EXIT_NO_PLAN if plan == "no_plan" else EXIT_ABANDONED

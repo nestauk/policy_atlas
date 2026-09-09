@@ -11,7 +11,7 @@ historical origin ([ADR 0002](../adr/0002-spec-governance.md)).
 ## Conflict-resolution order (frozen sources)
 
 The numbered order in [../specs/index.md](../specs/index.md) is the read-order for the **frozen**
-sources (ratified from the EB handoff §2): lower number wins; backend architecture + EB capability
+sources (ratified from the EB handoff §2): lower number wins; backend architecture + ES capability
 design outrank visual shorthand. It governs which source to trust when consulting them for an area
 no spec covers yet — *not* whether a source overrides a spec (it doesn't; ADR 0002).
 

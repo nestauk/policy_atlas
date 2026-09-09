@@ -10,7 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 CHAT_MESSAGE_MAX = 10_000
 
-ConversationKind = Literal["planning", "chat"]
+ConversationKind = Literal["task_agent", "chat"]
 ConversationStatus = Literal["active", "closed", "archived"]
 
 
@@ -49,7 +49,7 @@ class ConversationOut(BaseModel):
     Args:
         id: Conversation identity.
         task_id: Owning task identity.
-        kind: Whether this is a planning conversation or a follow-up chat.
+        kind: Whether this is a task_agent conversation or a follow-up chat.
         title: User-visible conversation title.
         status: Current conversation lifecycle status.
         entry_artefact_id: Optional task-local entry-context artefact.
@@ -87,7 +87,7 @@ class ConversationListItemOut(ConversationOut):
     """A conversation plus its latest cross-kind turn preview.
 
     Args:
-        latest_turn_preview: Most recent chat or planning turn, when one exists.
+        latest_turn_preview: Most recent chat or task_agent turn, when one exists.
     """
 
     latest_turn_preview: LatestTurnPreviewOut | None

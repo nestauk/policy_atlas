@@ -573,8 +573,8 @@ export interface paths {
          *
          *     The filter is :func:`own_conversation_leg`, **not** its chat-narrowed
          *     sibling: this library lists both kinds, and the owner must keep seeing
-         *     their task's planning conversation here. A colleague never matches a
-         *     planning row anyway — planning conversations are minted by the runtime
+         *     their task's task_agent conversation here. A colleague never matches a
+         *     task_agent row anyway — task_agent conversations are minted by the runtime
          *     and record no ``created_by``, so only the task owner reaches them
          *     through the legacy disjunct.
          */
@@ -590,16 +590,16 @@ export interface paths {
          *
          *     **This route can only ever mint a chat**, for anybody: ``kind`` is not a
          *     field on ``ConversationCreate`` (which forbids extras), it is written as
-         *     the literal ``"chat"`` below, and planning conversations are minted
-         *     exclusively by ``runtime.conversation_lifecycle`` under ``planning.py``'s
-         *     owner-graded task lock. So "a planning conversation can only ever be
+         *     the literal ``"chat"`` below, and task_agent conversations are minted
+         *     exclusively by ``runtime.conversation_lifecycle`` under ``task_agent.py``'s
+         *     owner-graded task lock. So "a task_agent conversation can only ever be
          *     created by the task owner" needs no branch here to hold — the shape of
          *     the request body is what enforces it, and a body carrying ``kind`` is
          *     rejected 422 before this function runs.
          *
          *     **No task-row lock** (contract § 4). The lock this route used to take
          *     protected nothing a chat insert needs: the only uniqueness constraint on
-         *     ``conversation`` is the partial index over ``kind = 'planning' AND status
+         *     ``conversation`` is the partial index over ``kind = 'task_agent' AND status
          *     = 'active'``, which a chat row cannot collide with, and the insert itself
          *     carries a freshly minted primary key. Kept, it would have let any
          *     colleague block the owner's rename, archive and run-start.
@@ -787,7 +787,7 @@ export interface paths {
          * Get Plan
          * @description Return the durable approved plan or latest completed durable draft.
          *
-         *     Owner-only sweep, for the reason :func:`list_planning_turns` states: a
+         *     Owner-only sweep, for the reason :func:`list_task_agent_turns` states: a
          *     colleague's or an administrator's read must not write the owner's rows.
          */
         get: operations["get_plan_api_v1_tasks__task_id__plan_get"];
@@ -801,39 +801,6 @@ export interface paths {
          * @description Apply typed edits to the current plan and persist a new approved version.
          */
         patch: operations["patch_plan_api_v1_tasks__task_id__plan_patch"];
-        trace?: never;
-    };
-    "/api/v1/tasks/{task_id}/planning-turns": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * List Planning Turns
-         * @description Return the durable planning transcript in ascending conversation order.
-         *
-         *     **Read-graded, and the sweep is owner-only.** The grade here is the read
-         *     grade — owner ∪ same-org colleague ∪ administrator — but
-         *     :func:`_expire_stale_pending_turns` is a *write*, and contract § 3 makes
-         *     the admin leg read-only: a support read that fails somebody else's pending
-         *     planning turn is a mutation nobody asked for and nothing records. So the
-         *     sweep runs only for the owner, whose own turn it is. Nothing is lost: the
-         *     owner's own GET sweeps, and every mutating planning path sweeps under the
-         *     write grade before it does anything.
-         */
-        get: operations["list_planning_turns_api_v1_tasks__task_id__planning_turns_get"];
-        put?: never;
-        /**
-         * Create Planning Turn
-         * @description Advance one task's durable planner conversation once per client turn id.
-         */
-        post: operations["create_planning_turn_api_v1_tasks__task_id__planning_turns_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
         trace?: never;
     };
     "/api/v1/tasks/{task_id}/runs": {
@@ -894,6 +861,39 @@ export interface paths {
         get: operations["source_dossier_api_v1_tasks__task_id__sources__source_id__get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tasks/{task_id}/task-agent-turns": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Task Agent Turns
+         * @description Return the durable task_agent transcript in ascending conversation order.
+         *
+         *     **Read-graded, and the sweep is owner-only.** The grade here is the read
+         *     grade — owner ∪ same-org colleague ∪ administrator — but
+         *     :func:`_expire_stale_pending_turns` is a *write*, and contract § 3 makes
+         *     the admin leg read-only: a support read that fails somebody else's pending
+         *     task_agent turn is a mutation nobody asked for and nothing records. So the
+         *     sweep runs only for the owner, whose own turn it is. Nothing is lost: the
+         *     owner's own GET sweeps, and every mutating task_agent path sweeps under the
+         *     write grade before it does anything.
+         */
+        get: operations["list_task_agent_turns_api_v1_tasks__task_id__task_agent_turns_get"];
+        put?: never;
+        /**
+         * Create Task Agent Turn
+         * @description Advance one task's durable task_agent conversation once per client turn id.
+         */
+        post: operations["create_task_agent_turn_api_v1_tasks__task_id__task_agent_turns_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1626,7 +1626,7 @@ export interface components {
          * @description A conversation plus its latest cross-kind turn preview.
          *
          *     Args:
-         *         latest_turn_preview: Most recent chat or planning turn, when one exists.
+         *         latest_turn_preview: Most recent chat or task_agent turn, when one exists.
          */
         ConversationListItemOut: {
             /** Archived At */
@@ -1649,7 +1649,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "planning" | "chat";
+            kind: "task_agent" | "chat";
             latest_turn_preview: components["schemas"]["LatestTurnPreviewOut"] | null;
             /**
              * Status
@@ -1671,7 +1671,7 @@ export interface components {
          *     Args:
          *         id: Conversation identity.
          *         task_id: Owning task identity.
-         *         kind: Whether this is a planning conversation or a follow-up chat.
+         *         kind: Whether this is a task_agent conversation or a follow-up chat.
          *         title: User-visible conversation title.
          *         status: Current conversation lifecycle status.
          *         entry_artefact_id: Optional task-local entry-context artefact.
@@ -1700,7 +1700,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "planning" | "chat";
+            kind: "task_agent" | "chat";
             /**
              * Status
              * @enum {string}
@@ -1736,7 +1736,7 @@ export interface components {
          * @description Draft mirror of the runtime `CountryGroup`.
          *
          *     Args:
-         *         label: Pinned Tier-1 label, or a user/planner label for an explicit
+         *         label: Pinned Tier-1 label, or a user/task_agent label for an explicit
          *             Tier-2 country list. `None` while undecided.
          *         countries: Explicit ISO-3166 alpha-2 country list for Tier-2 groups.
          *         authorship: Provenance of the group membership, when settled.
@@ -2515,12 +2515,6 @@ export interface components {
             data: components["schemas"]["FindingOut"][];
             pagination: components["schemas"]["PageMeta"];
         };
-        /** Page[PlanningTranscriptTurnOut] */
-        Page_PlanningTranscriptTurnOut_: {
-            /** Data */
-            data: components["schemas"]["PlanningTranscriptTurnOut"][];
-            pagination: components["schemas"]["PageMeta"];
-        };
         /** Page[ProjectOut] */
         Page_ProjectOut_: {
             /** Data */
@@ -2533,6 +2527,12 @@ export interface components {
             data: components["schemas"]["RunOut"][];
             pagination: components["schemas"]["PageMeta"];
         };
+        /** Page[TaskAgentTranscriptTurnOut] */
+        Page_TaskAgentTranscriptTurnOut_: {
+            /** Data */
+            data: components["schemas"]["TaskAgentTranscriptTurnOut"][];
+            pagination: components["schemas"]["PageMeta"];
+        };
         /** Page[TaskOut] */
         Page_TaskOut_: {
             /** Data */
@@ -2541,7 +2541,7 @@ export interface components {
         };
         /**
          * PartChipOut
-         * @description One typed, editable chip attached to a planning part.
+         * @description One typed, editable chip attached to a task_agent part.
          *
          *     Args:
          *         label: Short user-visible chip label.
@@ -2561,7 +2561,7 @@ export interface components {
         };
         /**
          * PartOptionOut
-         * @description One selectable option on a sequential planning part.
+         * @description One selectable option on a sequential task_agent part.
          *
          *     Args:
          *         id: Stable option identifier within the part.
@@ -2584,10 +2584,10 @@ export interface components {
         };
         /**
          * PartProposalOut
-         * @description One structured proposal in the sequential planning conversation.
+         * @description One structured proposal in the sequential task_agent conversation.
          *
          *     Args:
-         *         id: The proposed planning part.
+         *         id: The proposed task_agent part.
          *         step_label: User-visible position and context for the proposal.
          *         title: Plain-language proposal heading.
          *         body: Optional supporting explanation.
@@ -2832,94 +2832,6 @@ export interface components {
             type: "plan.updated";
             /** Version */
             version: number;
-        };
-        /**
-         * PlanningTranscriptTurnOut
-         * @description One durable planning-transcript turn shown in chronological order.
-         *
-         *     Args:
-         *         turn_index: Monotonic per-task conversation coordinate.
-         *         conversation_id: Owning planning conversation, absent only on legacy rows.
-         *         client_turn_id: The caller's idempotency key for this turn — returned
-         *             so a reloaded client can retry its own incomplete latest turn.
-         *         user_message: Submitted user message.
-         *         reply: Planner reply, absent until a pending turn completes.
-         *         suggestions: Planner quick-reply suggestions, if the turn completed.
-         *         part: Structured sequential-planning proposal, absent for legacy turns.
-         *         status: Durable execution state for this turn.
-         *         created_at: Receipt timestamp, retained as display metadata.
-         *         completed_at: Terminal timestamp, absent while still pending.
-         */
-        PlanningTranscriptTurnOut: {
-            /**
-             * Client Turn Id
-             * Format: uuid
-             */
-            client_turn_id: string;
-            /** Completed At */
-            completed_at: string | null;
-            /** Conversation Id */
-            conversation_id?: string | null;
-            /**
-             * Created At
-             * Format: date-time
-             */
-            created_at: string;
-            part?: components["schemas"]["PartProposalOut"] | null;
-            /** Reply */
-            reply: string | null;
-            /**
-             * Status
-             * @enum {string}
-             */
-            status: "pending" | "completed" | "failed";
-            /** Suggestions */
-            suggestions?: string[];
-            /** Turn Index */
-            turn_index: number;
-            /** User Message */
-            user_message: string;
-        };
-        /**
-         * PlanningTurnCreate
-         * @description Inbound body for `POST /api/v1/tasks/{id}/planning-turns`.
-         *
-         *     Args:
-         *         message: The user's chat message for this planner turn.
-         *         client_turn_id: Caller-minted UUID making double-submit idempotent —
-         *             resubmitting the same `client_turn_id` returns the same turn
-         *             rather than re-running the planner.
-         */
-        PlanningTurnCreate: {
-            /**
-             * Client Turn Id
-             * Format: uuid
-             */
-            client_turn_id: string;
-            /** Message */
-            message: string;
-        };
-        /**
-         * PlanningTurnOut
-         * @description Response body for one planner turn.
-         *
-         *     Args:
-         *         reply: The planner's conversational reply for this turn.
-         *         plan: The full current draft plan.
-         *         suggestions: The planner's suggested answers to its clarifying
-         *             question, rendered as tappable quick replies. Empty when none.
-         *         part: Structured sequential-planning proposal, when this turn carries one.
-         *         conversation_id: Planning conversation that produced this turn.
-         */
-        PlanningTurnOut: {
-            /** Conversation Id */
-            conversation_id?: string | null;
-            part?: components["schemas"]["PartProposalOut"] | null;
-            plan: components["schemas"]["PlanDraft"];
-            /** Reply */
-            reply: string;
-            /** Suggestions */
-            suggestions?: string[];
         };
         /**
          * ProgressEvent
@@ -3414,6 +3326,94 @@ export interface components {
              * @enum {string}
              */
             type: "stage.started";
+        };
+        /**
+         * TaskAgentTranscriptTurnOut
+         * @description One durable task_agent-transcript turn shown in chronological order.
+         *
+         *     Args:
+         *         turn_index: Monotonic per-task conversation coordinate.
+         *         conversation_id: Owning task_agent conversation, absent only on legacy rows.
+         *         client_turn_id: The caller's idempotency key for this turn — returned
+         *             so a reloaded client can retry its own incomplete latest turn.
+         *         user_message: Submitted user message.
+         *         reply: Task Agent reply, absent until a pending turn completes.
+         *         suggestions: Task Agent quick-reply suggestions, if the turn completed.
+         *         part: Structured sequential-task_agent proposal, absent for legacy turns.
+         *         status: Durable execution state for this turn.
+         *         created_at: Receipt timestamp, retained as display metadata.
+         *         completed_at: Terminal timestamp, absent while still pending.
+         */
+        TaskAgentTranscriptTurnOut: {
+            /**
+             * Client Turn Id
+             * Format: uuid
+             */
+            client_turn_id: string;
+            /** Completed At */
+            completed_at: string | null;
+            /** Conversation Id */
+            conversation_id?: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            part?: components["schemas"]["PartProposalOut"] | null;
+            /** Reply */
+            reply: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "pending" | "completed" | "failed";
+            /** Suggestions */
+            suggestions?: string[];
+            /** Turn Index */
+            turn_index: number;
+            /** User Message */
+            user_message: string;
+        };
+        /**
+         * TaskAgentTurnCreate
+         * @description Inbound body for `POST /api/v1/tasks/{id}/task-agent-turns`.
+         *
+         *     Args:
+         *         message: The user's chat message for this task_agent turn.
+         *         client_turn_id: Caller-minted UUID making double-submit idempotent —
+         *             resubmitting the same `client_turn_id` returns the same turn
+         *             rather than re-running the task_agent.
+         */
+        TaskAgentTurnCreate: {
+            /**
+             * Client Turn Id
+             * Format: uuid
+             */
+            client_turn_id: string;
+            /** Message */
+            message: string;
+        };
+        /**
+         * TaskAgentTurnOut
+         * @description Response body for one task_agent turn.
+         *
+         *     Args:
+         *         reply: The task_agent's conversational reply for this turn.
+         *         plan: The full current draft plan.
+         *         suggestions: The task_agent's suggested answers to its clarifying
+         *             question, rendered as tappable quick replies. Empty when none.
+         *         part: Structured sequential-task_agent proposal, when this turn carries one.
+         *         conversation_id: Task Agent conversation that produced this turn.
+         */
+        TaskAgentTurnOut: {
+            /** Conversation Id */
+            conversation_id?: string | null;
+            part?: components["schemas"]["PartProposalOut"] | null;
+            plan: components["schemas"]["PlanDraft"];
+            /** Reply */
+            reply: string;
+            /** Suggestions */
+            suggestions?: string[];
         };
         /**
          * TaskCreate
@@ -4494,7 +4494,7 @@ export interface operations {
     list_conversations_api_v1_tasks__task_id__conversations_get: {
         parameters: {
             query?: {
-                kind?: ("planning" | "chat") | null;
+                kind?: ("task_agent" | "chat") | null;
                 status?: ("active" | "closed" | "archived") | null;
                 page?: number;
                 page_size?: number;
@@ -4904,75 +4904,6 @@ export interface operations {
             };
         };
     };
-    list_planning_turns_api_v1_tasks__task_id__planning_turns_get: {
-        parameters: {
-            query?: {
-                page?: number;
-                page_size?: number;
-            };
-            header?: never;
-            path: {
-                task_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Page_PlanningTranscriptTurnOut_"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    create_planning_turn_api_v1_tasks__task_id__planning_turns_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                task_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["PlanningTurnCreate"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PlanningTurnOut"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     list_runs_api_v1_tasks__task_id__runs_get: {
         parameters: {
             query?: {
@@ -5093,6 +5024,75 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SourceDossierOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_task_agent_turns_api_v1_tasks__task_id__task_agent_turns_get: {
+        parameters: {
+            query?: {
+                page?: number;
+                page_size?: number;
+            };
+            header?: never;
+            path: {
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_TaskAgentTranscriptTurnOut_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_task_agent_turn_api_v1_tasks__task_id__task_agent_turns_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TaskAgentTurnCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskAgentTurnOut"];
                 };
             };
             /** @description Validation Error */

@@ -70,9 +70,9 @@ Status legend: ✅ settled · 🟡 leaning · ❓ open · ⏸ deferred.
   longlist as labelled suggestions, and — when the search ran the deep chain — its **extracted
   findings** are inherited too, so clustering works at finding grain and assessment skips the
   light extraction for those documents (ruling 31); the run still retrieves beyond the inherited set and the
-  Sources tab states inherited versus added. Otherwise OS assembles its own pool with the EB's
-  acquire and screen components inside its own pipeline; it never orchestrates full EB runs per
-  option (concept § Architecture stance). Downstream: a shortlisted option can **spawn an EB
+  Sources tab states inherited versus added. Otherwise OS assembles its own pool with the ES's
+  acquire and screen components inside its own pipeline; it never orchestrates full ES runs per
+  option (concept § Architecture stance). Downstream: a shortlisted option can **spawn an ES
   task** (the full evidence search, ruling 9) and can seed a Theory-of-Change session (⏸, a
   dotted-line consumer). ⏸ Meta-analysis across several corpora stays deferred.
 
@@ -91,7 +91,7 @@ Status legend: ✅ settled · 🟡 leaning · ❓ open · ⏸ deferred.
   assessment (reported distributional effects only); composite scores or rankings;
   collaborative rating (single-user v1; the data model anticipates multiple raters);
   organisation-level institutional memory (workspace-level v1); a visual Theory-of-Change
-  editor; deep mode; meta-analysis over EB corpora; meeting-speed latency; free-text editing of
+  editor; deep mode; meta-analysis over ES corpora; meeting-speed latency; free-text editing of
   the summary (ruling 14); a whole-longlist "Assess all kept options" action (ruling 19,
   inference cost); an orientation / domain-primer capability for newcomers (ruling 24; see
   `docs/deferred.md`).
@@ -105,7 +105,7 @@ Status legend: ✅ settled · 🟡 leaning · ❓ open · ⏸ deferred.
 
 - ✅ **Three depths of evidence work, one gate between the cheap and the expensive**
   (concept ruling 3):
-  1. *Longlist depth* — the EB's mandatory spine as is (acquire, title-and-abstract screen,
+  1. *Longlist depth* — the ES's mandatory spine as is (acquire, title-and-abstract screen,
      classify, appraise, full-text ingest) once at the plan level, then clustering into options
      with per-option coverage: study count by evidence type and **quality tier**, countries,
      populations, outcomes measured (owner, 2026-09-07: classify and appraise always run on
@@ -120,8 +120,8 @@ Status legend: ✅ settled · 🟡 leaning · ❓ open · ⏸ deferred.
      its document set is thin, a light extraction for the countable cells, and synthesise with
      the profile template. Fills the verdict strip and the option profile. Every cell is labelled
      *scoping pass*.
-  3. *Full evidence search* — the complete EB pipeline for **one option**, user-triggered, which
-     mints its own EB task (ruling 9).
+  3. *Full evidence search* — the complete ES pipeline for **one option**, user-triggered, which
+     mints its own ES task (ruling 9).
 - ✅ **Claim depth follows reading depth** (ruling 16). Screening stays title-and-abstract; no
   stage-2 confirmation in scoping (that is one of the things "full run" buys). Every claim
   carries the depth of what was read; a section may not assert what the read material does not
@@ -130,12 +130,12 @@ Status legend: ✅ settled · 🟡 leaning · ❓ open · ⏸ deferred.
   full text read for the documents cited, document set not confirmed.
 - 🟡 **Assessment shape to check** (concept open question 2, owner 2026-09-07). The countable
   cells (direction per study, magnitude with its comparator and period, study design, setting)
-  come from a **light per-document extraction** — a small field set, not the EB's full schema —
+  come from a **light per-document extraction** — a small field set, not the ES's full schema —
   run as a parallel fan-out over the capped set so latency is close to one document's, not the
   sum. The narrative sections (mechanism, case studies, what it would take, moderator quotes)
   come from **retrieval-augmented reading** over the read texts. The stage-1 screen's structured
   fields give an abstract-level strip before any full text is read. The per-option document cap
-  is the latency lever; the **read set under the cap is chosen by the EB's `select` with a scoping
+  is the latency lever; the **read set under the cap is chosen by the ES's `select` with a scoping
   strategy so that distinct implementations, the required outcomes and the counter-case
   survive**, omissions are represented, and a budget-limited result may be explicitly incomplete
   (rulings 38, 43); the check measures **whole-run** time to a usable result, not extraction alone.
@@ -161,14 +161,14 @@ Stage order (concept § Shape 1–6, rulings 2–6, 14):
 plan ──confirm──▶ baseline ══PAUSE: confirm plan against baseline══▶ longlist
      ──▶ [screens + coverage proposal, as options complete] ──▶ shortlist (user adds/removes)
      ══GATE: "Assess these N"══▶ assessment ──▶ summary ──▶ export
-                                     └──per option──▶ full evidence search (EB task)
+                                     └──per option──▶ full evidence search (ES task)
 ```
 
 - ✅ **Plan.** A scaffolded conversation fills the plan: the question · what we are trying to
   change · **who or what should change** (the target unit — people, firms, places,
   organisations, systems; PICO's "population" is the special case) · where · outcomes · depth ·
   constraints, each tagged *from your question* / *assumed* / *your call*. Presented exactly like
-  the EB search plan (ruling 1; see § Product surface). *(Owner ruling 2026-09-09, with
+  the ES search plan (ruling 1; see § Product surface). *(Owner ruling 2026-09-09, with
   decision-sheet row D3.)* **Where** is the jurisdiction the policy would apply to — country, UK
   nation, region or local authority — and **defaults to the United Kingdom**; the user narrows or
   changes it, and the agent asks when the question implies a nation or place. **Setting** is where
@@ -176,7 +176,7 @@ plan ──confirm──▶ baseline ══PAUSE: confirm plan against baseline�
   workplaces, primary care, an employer's payroll, the planning system — generalised from the
   finding field's people-centric wording as target unit was from population. It is **not a
   mandatory slot**: a user with a preference states it as a scope-shaped constraint (ruling 12),
-  which the planning conversation offers and which is checked against the specified design;
+  which the Task Agent conversation offers and which is checked against the specified design;
   without one the longlist spans settings and shows setting as a facet. Where and setting are
   never conflated. The UK default is a candidate for the Evidence search's planning chat, not
   applied there in this ruling. Non-linear: the user revises the plan
@@ -271,7 +271,7 @@ plan ──confirm──▶ baseline ══PAUSE: confirm plan against baseline�
   **shortlist assembly record** (each place, its reason, who filled it) and the Sources statement
   of what was searched; it claims breadth, never exhaustiveness. The author's own steer is
   written outside Atlas.
-- ✅ **The full evidence search mints its own EB task** (rulings 9, 41): seeded from the option,
+- ✅ **The full evidence search mints its own ES task** (rulings 9, 41): seeded from the option,
   synthesis template = the option-profile sections, listed under the parent scoping task and
   linked both ways, sharing its project and visibility. The child report, written with that
   template and given the scoping task's user context as input, **computes the profile's
@@ -417,11 +417,11 @@ Settled by the owner on the wireframes (rulings 1, 13; source
   rows are the fixed lever types (ruling 20). The boards were redrawn to rulings 15–44 on
   2026-09-07 and refined to rulings 45–50 on 2026-09-08; where a board and a ruling still differ,
   the ruling wins (source README).
-- ✅ **The plan is presented exactly like the EB search plan**, in the Agent tab: the navy plan
-  document beside the planning conversation, with Question · What we are trying to change · Settings · Constraints
+- ✅ **The plan is presented exactly like the ES search plan**, in the Agent tab: the navy plan
+  document beside the Task Agent conversation, with Question · What we are trying to change · Settings · Constraints
   (each with when it is checked) · Plan steps · Check-ins, an Edit action per section, and one
   start action.
-- ✅ **Design language follows the EB report**: one body size, grey for secondary text, small
+- ✅ **Design language follows the ES report**: one body size, grey for secondary text, small
   uppercase labels only where necessary, as few chips and colours as possible (blue for links,
   the primary action and shortlist state; states written as words), no jargon. Outputs (baseline,
   profile) read as **linear text** with a side contents outline and collapsible sections;

@@ -9,22 +9,22 @@ import type { components } from "../../api/gen/types";
 import * as mutations from "../../api/mutations";
 import * as queries from "../../api/queries";
 import { createInitialRunStreamState } from "../../store";
-import type { PlanningThreadDecision, PlanningThreadRun, PlanningThreadTurn } from "../../store";
+import type { TaskAgentThreadDecision, TaskAgentThreadRun, TaskAgentThreadTurn } from "../../store";
 import { ToastProvider } from "../../ui/radix/Toast";
-import { Composer, PlanningPane, planningComposerPlaceholder, presentRunDecisions, threadInputs } from "./PlanningPane";
+import { Composer, TaskAgentPane, taskAgentComposerPlaceholder, presentRunDecisions, threadInputs } from "./TaskAgentPane";
 
 type CheckInOut = components["schemas"]["CheckInOut"];
 
 // Task 033 phase 10c (contract § 11 / rubric 37): the full-render read-only
-// suite below mocks every query/mutation `PlanningPane` and its children
+// suite below mocks every query/mutation `TaskAgentPane` and its children
 // (`PlanCard`, `CheckInCard`) resolve through — same shape as
 // `PlanCard.test.tsx` / `PlanDocument.test.tsx`'s `usePlan` mock, extended
-// to the rest of the planning surface.
+// to the rest of the task_agent surface.
 vi.mock("../../api/queries", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../api/queries")>();
   return {
     ...actual,
-    usePlanningTurns: vi.fn(),
+    useTaskAgentTurns: vi.fn(),
     usePlan: vi.fn(),
     useRuns: vi.fn(),
     useDecisions: vi.fn(),
@@ -36,14 +36,14 @@ vi.mock("../../api/mutations", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../api/mutations")>();
   return {
     ...actual,
-    usePlanningTurn: vi.fn(),
+    useTaskAgentTurn: vi.fn(),
     useStartRun: vi.fn(),
     usePatchPlan: vi.fn(),
     useAnswerCheckIn: vi.fn(),
   };
 });
 
-function turn(index: number, createdAt: string): PlanningThreadTurn {
+function turn(index: number, createdAt: string): TaskAgentThreadTurn {
   return {
     turn_index: index,
     client_turn_id: `00000000-0000-0000-0000-00000000000${index}`,
@@ -57,7 +57,7 @@ function turn(index: number, createdAt: string): PlanningThreadTurn {
   };
 }
 
-function run(id: string, startedAt: string, endedAt: string | null): PlanningThreadRun {
+function run(id: string, startedAt: string, endedAt: string | null): TaskAgentThreadRun {
   return {
     capability_run_id: id,
     task_id: "p1",
@@ -69,7 +69,7 @@ function run(id: string, startedAt: string, endedAt: string | null): PlanningThr
   };
 }
 
-function decision(sequence: number, occurredAt: string): PlanningThreadDecision {
+function decision(sequence: number, occurredAt: string): TaskAgentThreadDecision {
   return { kind: "steering.decision", sequence, occurred_at: occurredAt, summary: `Decision ${sequence}` };
 }
 
@@ -99,7 +99,7 @@ describe("threadInputs", () => {
 
 describe("presentRunDecisions", () => {
   it("collapses consecutive search echoes with a counter and stage-labels completed components", () => {
-    const entries: PlanningThreadDecision[] = [
+    const entries: TaskAgentThreadDecision[] = [
       { kind: "search.executed", sequence: 1, occurred_at: "2026-07-28T10:00:00Z", summary: "Executed a search query." },
       { kind: "search.executed", sequence: 2, occurred_at: "2026-07-28T10:00:01Z", summary: "Executed a search query." },
       { kind: "component.completed", sequence: 3, occurred_at: "2026-07-28T10:00:02Z", summary: "Completed an evidence-search step.", detail: { component: "screen_full" } },
@@ -172,45 +172,45 @@ describe("Composer", () => {
   });
 });
 
-describe("planningComposerPlaceholder", () => {
+describe("taskAgentComposerPlaceholder", () => {
   it("matches the run state", () => {
-    expect(planningComposerPlaceholder(undefined)).toBe(
+    expect(taskAgentComposerPlaceholder(undefined)).toBe(
       "Describe the policy question you need evidence for.",
     );
-    expect(planningComposerPlaceholder(undefined, true)).toBe(
+    expect(taskAgentComposerPlaceholder(undefined, true)).toBe(
       "Suggest changes here, or edit directly in the plan.",
     );
-    expect(planningComposerPlaceholder("running")).toBe(
+    expect(taskAgentComposerPlaceholder("running")).toBe(
       "Replanning unlocks when this run finishes.",
     );
-    expect(planningComposerPlaceholder("paused")).toBe(
+    expect(taskAgentComposerPlaceholder("paused")).toBe(
       "Replanning unlocks when this run finishes.",
     );
-    expect(planningComposerPlaceholder("succeeded", true)).toBe(
+    expect(taskAgentComposerPlaceholder("succeeded", true)).toBe(
       "Describe a change to the plan to run again.",
     );
-    expect(planningComposerPlaceholder("failed")).toBe(
+    expect(taskAgentComposerPlaceholder("failed")).toBe(
       "Describe what to change, then start again.",
     );
   });
 
   it("names the owner-only limit for a non-owner regardless of run state (task 033 phase 10c, rubric 37)", () => {
-    expect(planningComposerPlaceholder(undefined, false, false)).toBe(
+    expect(taskAgentComposerPlaceholder(undefined, false, false)).toBe(
       "Steering is limited to the task owner.",
     );
-    expect(planningComposerPlaceholder("running", false, false)).toBe(
+    expect(taskAgentComposerPlaceholder("running", false, false)).toBe(
       "Steering is limited to the task owner.",
     );
-    expect(planningComposerPlaceholder("failed", true, false)).toBe(
+    expect(taskAgentComposerPlaceholder("failed", true, false)).toBe(
       "Steering is limited to the task owner.",
     );
   });
 });
 
-describe("PlanningPane — non-owner read-only (task 033 phase 10c, contract § 11 / rubric 37)", () => {
+describe("TaskAgentPane — non-owner read-only (task 033 phase 10c, contract § 11 / rubric 37)", () => {
   const TASK_ID = "11111111-1111-1111-1111-111111111111";
 
-  function readyTurn(): PlanningThreadTurn {
+  function readyTurn(): TaskAgentThreadTurn {
     return {
       turn_index: 0,
       client_turn_id: "00000000-0000-0000-0000-000000000000",
@@ -244,13 +244,13 @@ describe("PlanningPane — non-owner read-only (task 033 phase 10c, contract § 
   }
 
   beforeEach(() => {
-    vi.mocked(queries.usePlanningTurns).mockReturnValue({
+    vi.mocked(queries.useTaskAgentTurns).mockReturnValue({
       data: { data: [readyTurn()] },
       isPending: false,
       isError: false,
       error: null,
       refetch: vi.fn(),
-    } as unknown as ReturnType<typeof queries.usePlanningTurns>);
+    } as unknown as ReturnType<typeof queries.useTaskAgentTurns>);
     vi.mocked(queries.usePlan).mockReturnValue({
       data: { plan: { question: "Q", ready: true }, status: "approved", version: 1 },
     } as unknown as ReturnType<typeof queries.usePlan>);
@@ -266,10 +266,10 @@ describe("PlanningPane — non-owner read-only (task 033 phase 10c, contract § 
     vi.mocked(queries.useFunnel).mockReturnValue({ data: undefined } as unknown as ReturnType<
       typeof queries.useFunnel
     >);
-    vi.mocked(mutations.usePlanningTurn).mockReturnValue({
+    vi.mocked(mutations.useTaskAgentTurn).mockReturnValue({
       mutateAsync: vi.fn(),
       isPending: false,
-    } as unknown as ReturnType<typeof mutations.usePlanningTurn>);
+    } as unknown as ReturnType<typeof mutations.useTaskAgentTurn>);
     vi.mocked(mutations.useStartRun).mockReturnValue({
       mutate: vi.fn(),
       isPending: false,
@@ -284,11 +284,11 @@ describe("PlanningPane — non-owner read-only (task 033 phase 10c, contract § 
     } as unknown as ReturnType<typeof mutations.useAnswerCheckIn>);
   });
 
-  function renderPane(overrides: Partial<ComponentProps<typeof PlanningPane>> = {}) {
+  function renderPane(overrides: Partial<ComponentProps<typeof TaskAgentPane>> = {}) {
     return render(
       <MemoryRouter>
         <ToastProvider>
-          <PlanningPane
+          <TaskAgentPane
             taskId={TASK_ID}
             runStatus={undefined}
             stream={createInitialRunStreamState()}

@@ -114,7 +114,7 @@ export const STEERING_MODE_LABEL: Record<string, string> = {
 /**
  * Display bands seeded from the runtime `TIME_BANDS` table — search effort
  * × analysis depth. Kept here so the plan panel can update the estimate
- * without a planner round-trip.
+ * without a task_agent round-trip.
  */
 const TIME_BANDS: Record<string, Record<string, string>> = {
   rapid: {
@@ -202,7 +202,7 @@ export function timeBandFor(effort: string, depth: string): string | null {
   return TIME_BANDS[effort]?.[depth] ?? null;
 }
 
-/** Run-block status labels for the planning thread's run divider ("Analysis
+/** Run-block status labels for the task_agent thread's run divider ("Analysis
  *  run — running/paused/completed/…"). Unknown status → the caller omits. */
 export const RUN_BLOCK_STATUS: Record<string, string> = {
   running: "running",

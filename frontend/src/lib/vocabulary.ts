@@ -68,16 +68,16 @@ export const COPY = {
   /** The collapsed overlay's launcher — its `aria-label`, then its `title`. */
   openAgent: "Open the Agent",
   agent: "Agent",
-  /** A Task's primary chat: the `kind = planning` conversation — the active
+  /** A Task's primary chat: the `kind = task_agent` conversation — the active
    *  one, else the most recently closed. Exactly one row ever carries this
    *  label (contract § V8, invariant I8 / fold A10). */
   taskAgent: `${TASK.one} Agent`,
   newChat: "New chat",
   newChatUnavailable: `New chat — available once the ${TASK.lower} has a result`,
-  /** An older, closed planning lineage in the chats library — chipped, never
+  /** An older, closed task_agent lineage in the chats library — chipped, never
    *  pinned. */
   earlierPlan: "Earlier plan",
-  /** `PlanningPane`'s composer label. */
+  /** `TaskAgentPane`'s composer label. */
   messageTaskAgent: `Message the ${TASK.one} Agent`,
 } as const;
 

@@ -210,7 +210,7 @@ describe("PlanDocument", () => {
     );
   });
 
-  it("saves the research question locally without a planner turn", async () => {
+  it("saves the research question locally without a task_agent turn", async () => {
     mockUsePlan({ data: planOut(fullPlan()) });
     const onOverlayChange = vi.fn();
     const user = userEvent.setup();

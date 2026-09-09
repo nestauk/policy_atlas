@@ -1,7 +1,7 @@
 """Depth-graded search strategy, directives, and pure filter wire mapping.
 
 This module stays HTTP-import-free. It owns the search directive grammar,
-validated per-backend filter dictionaries, rapid/deep round-1 fan-out planning,
+validated per-backend filter dictionaries, rapid/deep round-1 fan-out task_agent,
 and the harness-facing ``run_search`` entrypoint that hands executed calls to
 ``acquire_sources`` for the existing mapping, deduplication, and persistence
 machinery.

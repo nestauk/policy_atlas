@@ -161,7 +161,7 @@ def _session_scope(session_id: uuid.UUID | None) -> Iterator[None]:
     """Propagate a Langfuse session id to every observation opened inside the scope.
 
     SDK 4.13 has no ``update_current_trace`` (the pre-fix code silently no-opped
-    on every trace, chat and planning alike — confirmed live, sessionId null
+    on every trace, chat and task_agent alike — confirmed live, sessionId null
     since 2026-08-09): the v4 seam is ``propagate_attributes``, which only
     reaches observations OPENED while its context is active. Callers must
     therefore wrap the WHOLE observation-creation call in this scope, never
@@ -352,7 +352,7 @@ def component_span(
         component: Component name.
         session_id: Optional Langfuse session id shared by the Task's traces
             (task 038, V9: no longer the conversation id).
-        conversation_id: Optional chat/planning conversation id recorded in
+        conversation_id: Optional chat/task_agent conversation id recorded in
             trace metadata next to ``task_id``, so one chat is still
             filterable now that ``session_id`` groups by task.
 

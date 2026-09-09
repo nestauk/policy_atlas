@@ -1188,7 +1188,7 @@
         "type": "object"
       },
       "ConversationListItemOut": {
-        "description": "A conversation plus its latest cross-kind turn preview.\n\nArgs:\n    latest_turn_preview: Most recent chat or planning turn, when one exists.",
+        "description": "A conversation plus its latest cross-kind turn preview.\n\nArgs:\n    latest_turn_preview: Most recent chat or task_agent turn, when one exists.",
         "properties": {
           "archived_at": {
             "anyOf": [
@@ -1238,7 +1238,7 @@
           },
           "kind": {
             "enum": [
-              "planning",
+              "task_agent",
               "chat"
             ],
             "title": "Kind",
@@ -1289,7 +1289,7 @@
         "type": "object"
       },
       "ConversationOut": {
-        "description": "Durable public projection of one conversation.\n\nArgs:\n    id: Conversation identity.\n    task_id: Owning task identity.\n    kind: Whether this is a planning conversation or a follow-up chat.\n    title: User-visible conversation title.\n    status: Current conversation lifecycle status.\n    entry_artefact_id: Optional task-local entry-context artefact.\n    created_at: When the conversation was created.\n    closed_at: When it closed, if applicable.\n    archived_at: When it was archived, if applicable.",
+        "description": "Durable public projection of one conversation.\n\nArgs:\n    id: Conversation identity.\n    task_id: Owning task identity.\n    kind: Whether this is a task_agent conversation or a follow-up chat.\n    title: User-visible conversation title.\n    status: Current conversation lifecycle status.\n    entry_artefact_id: Optional task-local entry-context artefact.\n    created_at: When the conversation was created.\n    closed_at: When it closed, if applicable.\n    archived_at: When it was archived, if applicable.",
         "properties": {
           "archived_at": {
             "anyOf": [
@@ -1339,7 +1339,7 @@
           },
           "kind": {
             "enum": [
-              "planning",
+              "task_agent",
               "chat"
             ],
             "title": "Kind",
@@ -1411,7 +1411,7 @@
         "type": "object"
       },
       "CountryGroupDraft": {
-        "description": "Draft mirror of the runtime `CountryGroup`.\n\nArgs:\n    label: Pinned Tier-1 label, or a user/planner label for an explicit\n        Tier-2 country list. `None` while undecided.\n    countries: Explicit ISO-3166 alpha-2 country list for Tier-2 groups.\n    authorship: Provenance of the group membership, when settled.",
+        "description": "Draft mirror of the runtime `CountryGroup`.\n\nArgs:\n    label: Pinned Tier-1 label, or a user/task_agent label for an explicit\n        Tier-2 country list. `None` while undecided.\n    countries: Explicit ISO-3166 alpha-2 country list for Tier-2 groups.\n    authorship: Provenance of the group membership, when settled.",
         "properties": {
           "authorship": {
             "anyOf": [
@@ -3249,26 +3249,6 @@
         "title": "Page[FindingOut]",
         "type": "object"
       },
-      "Page_PlanningTranscriptTurnOut_": {
-        "properties": {
-          "data": {
-            "items": {
-              "$ref": "#/components/schemas/PlanningTranscriptTurnOut"
-            },
-            "title": "Data",
-            "type": "array"
-          },
-          "pagination": {
-            "$ref": "#/components/schemas/PageMeta"
-          }
-        },
-        "required": [
-          "data",
-          "pagination"
-        ],
-        "title": "Page[PlanningTranscriptTurnOut]",
-        "type": "object"
-      },
       "Page_ProjectOut_": {
         "properties": {
           "data": {
@@ -3309,6 +3289,26 @@
         "title": "Page[RunOut]",
         "type": "object"
       },
+      "Page_TaskAgentTranscriptTurnOut_": {
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/TaskAgentTranscriptTurnOut"
+            },
+            "title": "Data",
+            "type": "array"
+          },
+          "pagination": {
+            "$ref": "#/components/schemas/PageMeta"
+          }
+        },
+        "required": [
+          "data",
+          "pagination"
+        ],
+        "title": "Page[TaskAgentTranscriptTurnOut]",
+        "type": "object"
+      },
       "Page_TaskOut_": {
         "properties": {
           "data": {
@@ -3330,7 +3330,7 @@
         "type": "object"
       },
       "PartChipOut": {
-        "description": "One typed, editable chip attached to a planning part.\n\nArgs:\n    label: Short user-visible chip label.\n    kind: Editor type for the chip value.\n    value: Machine-readable value consumed by that editor.",
+        "description": "One typed, editable chip attached to a task_agent part.\n\nArgs:\n    label: Short user-visible chip label.\n    kind: Editor type for the chip value.\n    value: Machine-readable value consumed by that editor.",
         "properties": {
           "kind": {
             "enum": [
@@ -3359,7 +3359,7 @@
         "type": "object"
       },
       "PartOptionOut": {
-        "description": "One selectable option on a sequential planning part.\n\nArgs:\n    id: Stable option identifier within the part.\n    label: Short user-visible option label.\n    sub: Optional outcome and time-band sub-label.\n    primary: Whether this is the single recommended option.\n    reason: Optional explanation for the recommendation.",
+        "description": "One selectable option on a sequential task_agent part.\n\nArgs:\n    id: Stable option identifier within the part.\n    label: Short user-visible option label.\n    sub: Optional outcome and time-band sub-label.\n    primary: Whether this is the single recommended option.\n    reason: Optional explanation for the recommendation.",
         "properties": {
           "id": {
             "title": "Id",
@@ -3405,7 +3405,7 @@
         "type": "object"
       },
       "PartProposalOut": {
-        "description": "One structured proposal in the sequential planning conversation.\n\nArgs:\n    id: The proposed planning part.\n    step_label: User-visible position and context for the proposal.\n    title: Plain-language proposal heading.\n    body: Optional supporting explanation.\n    chips: Optional typed scope chips.\n    options: The available response options.",
+        "description": "One structured proposal in the sequential task_agent conversation.\n\nArgs:\n    id: The proposed task_agent part.\n    step_label: User-visible position and context for the proposal.\n    title: Plain-language proposal heading.\n    body: Optional supporting explanation.\n    chips: Optional typed scope chips.\n    options: The available response options.",
         "properties": {
           "body": {
             "anyOf": [
@@ -3969,171 +3969,6 @@
           "version"
         ],
         "title": "PlanUpdatedFrame",
-        "type": "object"
-      },
-      "PlanningTranscriptTurnOut": {
-        "description": "One durable planning-transcript turn shown in chronological order.\n\nArgs:\n    turn_index: Monotonic per-task conversation coordinate.\n    conversation_id: Owning planning conversation, absent only on legacy rows.\n    client_turn_id: The caller's idempotency key for this turn \u2014 returned\n        so a reloaded client can retry its own incomplete latest turn.\n    user_message: Submitted user message.\n    reply: Planner reply, absent until a pending turn completes.\n    suggestions: Planner quick-reply suggestions, if the turn completed.\n    part: Structured sequential-planning proposal, absent for legacy turns.\n    status: Durable execution state for this turn.\n    created_at: Receipt timestamp, retained as display metadata.\n    completed_at: Terminal timestamp, absent while still pending.",
-        "properties": {
-          "client_turn_id": {
-            "format": "uuid",
-            "title": "Client Turn Id",
-            "type": "string"
-          },
-          "completed_at": {
-            "anyOf": [
-              {
-                "format": "date-time",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Completed At"
-          },
-          "conversation_id": {
-            "anyOf": [
-              {
-                "format": "uuid",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Conversation Id"
-          },
-          "created_at": {
-            "format": "date-time",
-            "title": "Created At",
-            "type": "string"
-          },
-          "part": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/PartProposalOut"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "reply": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Reply"
-          },
-          "status": {
-            "enum": [
-              "pending",
-              "completed",
-              "failed"
-            ],
-            "title": "Status",
-            "type": "string"
-          },
-          "suggestions": {
-            "items": {
-              "type": "string"
-            },
-            "title": "Suggestions",
-            "type": "array"
-          },
-          "turn_index": {
-            "title": "Turn Index",
-            "type": "integer"
-          },
-          "user_message": {
-            "title": "User Message",
-            "type": "string"
-          }
-        },
-        "required": [
-          "turn_index",
-          "client_turn_id",
-          "user_message",
-          "reply",
-          "status",
-          "created_at",
-          "completed_at"
-        ],
-        "title": "PlanningTranscriptTurnOut",
-        "type": "object"
-      },
-      "PlanningTurnCreate": {
-        "additionalProperties": false,
-        "description": "Inbound body for `POST /api/v1/tasks/{id}/planning-turns`.\n\nArgs:\n    message: The user's chat message for this planner turn.\n    client_turn_id: Caller-minted UUID making double-submit idempotent \u2014\n        resubmitting the same `client_turn_id` returns the same turn\n        rather than re-running the planner.",
-        "properties": {
-          "client_turn_id": {
-            "format": "uuid",
-            "title": "Client Turn Id",
-            "type": "string"
-          },
-          "message": {
-            "maxLength": 10000,
-            "minLength": 1,
-            "title": "Message",
-            "type": "string"
-          }
-        },
-        "required": [
-          "message",
-          "client_turn_id"
-        ],
-        "title": "PlanningTurnCreate",
-        "type": "object"
-      },
-      "PlanningTurnOut": {
-        "description": "Response body for one planner turn.\n\nArgs:\n    reply: The planner's conversational reply for this turn.\n    plan: The full current draft plan.\n    suggestions: The planner's suggested answers to its clarifying\n        question, rendered as tappable quick replies. Empty when none.\n    part: Structured sequential-planning proposal, when this turn carries one.\n    conversation_id: Planning conversation that produced this turn.",
-        "properties": {
-          "conversation_id": {
-            "anyOf": [
-              {
-                "format": "uuid",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Conversation Id"
-          },
-          "part": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/PartProposalOut"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "plan": {
-            "$ref": "#/components/schemas/PlanDraft"
-          },
-          "reply": {
-            "title": "Reply",
-            "type": "string"
-          },
-          "suggestions": {
-            "items": {
-              "type": "string"
-            },
-            "title": "Suggestions",
-            "type": "array"
-          }
-        },
-        "required": [
-          "reply",
-          "plan"
-        ],
-        "title": "PlanningTurnOut",
         "type": "object"
       },
       "ProgressEvent": {
@@ -5227,6 +5062,171 @@
           "blurb"
         ],
         "title": "StageStartedFrame",
+        "type": "object"
+      },
+      "TaskAgentTranscriptTurnOut": {
+        "description": "One durable task_agent-transcript turn shown in chronological order.\n\nArgs:\n    turn_index: Monotonic per-task conversation coordinate.\n    conversation_id: Owning task_agent conversation, absent only on legacy rows.\n    client_turn_id: The caller's idempotency key for this turn \u2014 returned\n        so a reloaded client can retry its own incomplete latest turn.\n    user_message: Submitted user message.\n    reply: Task Agent reply, absent until a pending turn completes.\n    suggestions: Task Agent quick-reply suggestions, if the turn completed.\n    part: Structured sequential-task_agent proposal, absent for legacy turns.\n    status: Durable execution state for this turn.\n    created_at: Receipt timestamp, retained as display metadata.\n    completed_at: Terminal timestamp, absent while still pending.",
+        "properties": {
+          "client_turn_id": {
+            "format": "uuid",
+            "title": "Client Turn Id",
+            "type": "string"
+          },
+          "completed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          },
+          "conversation_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conversation Id"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "part": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PartProposalOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "reply": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reply"
+          },
+          "status": {
+            "enum": [
+              "pending",
+              "completed",
+              "failed"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "suggestions": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Suggestions",
+            "type": "array"
+          },
+          "turn_index": {
+            "title": "Turn Index",
+            "type": "integer"
+          },
+          "user_message": {
+            "title": "User Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "turn_index",
+          "client_turn_id",
+          "user_message",
+          "reply",
+          "status",
+          "created_at",
+          "completed_at"
+        ],
+        "title": "TaskAgentTranscriptTurnOut",
+        "type": "object"
+      },
+      "TaskAgentTurnCreate": {
+        "additionalProperties": false,
+        "description": "Inbound body for `POST /api/v1/tasks/{id}/task-agent-turns`.\n\nArgs:\n    message: The user's chat message for this task_agent turn.\n    client_turn_id: Caller-minted UUID making double-submit idempotent \u2014\n        resubmitting the same `client_turn_id` returns the same turn\n        rather than re-running the task_agent.",
+        "properties": {
+          "client_turn_id": {
+            "format": "uuid",
+            "title": "Client Turn Id",
+            "type": "string"
+          },
+          "message": {
+            "maxLength": 10000,
+            "minLength": 1,
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "message",
+          "client_turn_id"
+        ],
+        "title": "TaskAgentTurnCreate",
+        "type": "object"
+      },
+      "TaskAgentTurnOut": {
+        "description": "Response body for one task_agent turn.\n\nArgs:\n    reply: The task_agent's conversational reply for this turn.\n    plan: The full current draft plan.\n    suggestions: The task_agent's suggested answers to its clarifying\n        question, rendered as tappable quick replies. Empty when none.\n    part: Structured sequential-task_agent proposal, when this turn carries one.\n    conversation_id: Task Agent conversation that produced this turn.",
+        "properties": {
+          "conversation_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conversation Id"
+          },
+          "part": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PartProposalOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "plan": {
+            "$ref": "#/components/schemas/PlanDraft"
+          },
+          "reply": {
+            "title": "Reply",
+            "type": "string"
+          },
+          "suggestions": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Suggestions",
+            "type": "array"
+          }
+        },
+        "required": [
+          "reply",
+          "plan"
+        ],
+        "title": "TaskAgentTurnOut",
         "type": "object"
       },
       "TaskCreate": {
@@ -7227,7 +7227,7 @@
     },
     "/api/v1/tasks/{task_id}/conversations": {
       "get": {
-        "description": "List one readable task's conversations the caller created, newest first.\n\nRead-graded on the task (owner or same-org colleague may open the\nlibrary), but the conversation rows themselves are narrowed further: a\ncolleague sees only the chats *they* created, never the owner's or\nanother colleague's. The owner keeps seeing every legacy pre-033 row\n(``created_by IS NULL``) as their own, in addition to rows their own\nsubject created since.\n\nThe filter is :func:`own_conversation_leg`, **not** its chat-narrowed\nsibling: this library lists both kinds, and the owner must keep seeing\ntheir task's planning conversation here. A colleague never matches a\nplanning row anyway \u2014 planning conversations are minted by the runtime\nand record no ``created_by``, so only the task owner reaches them\nthrough the legacy disjunct.",
+        "description": "List one readable task's conversations the caller created, newest first.\n\nRead-graded on the task (owner or same-org colleague may open the\nlibrary), but the conversation rows themselves are narrowed further: a\ncolleague sees only the chats *they* created, never the owner's or\nanother colleague's. The owner keeps seeing every legacy pre-033 row\n(``created_by IS NULL``) as their own, in addition to rows their own\nsubject created since.\n\nThe filter is :func:`own_conversation_leg`, **not** its chat-narrowed\nsibling: this library lists both kinds, and the owner must keep seeing\ntheir task's task_agent conversation here. A colleague never matches a\ntask_agent row anyway \u2014 task_agent conversations are minted by the runtime\nand record no ``created_by``, so only the task owner reaches them\nthrough the legacy disjunct.",
         "operationId": "list_conversations_api_v1_tasks__task_id__conversations_get",
         "parameters": [
           {
@@ -7248,7 +7248,7 @@
               "anyOf": [
                 {
                   "enum": [
-                    "planning",
+                    "task_agent",
                     "chat"
                   ],
                   "type": "string"
@@ -7338,7 +7338,7 @@
         ]
       },
       "post": {
-        "description": "Create one active chat conversation with optional entry context.\n\nThe first of the three mutations owner call (b) grants a same-org\ncolleague (contract \u00a7 4). The grade is :func:`chat_mutable_task` \u2014 the\nowner or a colleague who can read the task, and never an admin.\n\n**This route can only ever mint a chat**, for anybody: ``kind`` is not a\nfield on ``ConversationCreate`` (which forbids extras), it is written as\nthe literal ``\"chat\"`` below, and planning conversations are minted\nexclusively by ``runtime.conversation_lifecycle`` under ``planning.py``'s\nowner-graded task lock. So \"a planning conversation can only ever be\ncreated by the task owner\" needs no branch here to hold \u2014 the shape of\nthe request body is what enforces it, and a body carrying ``kind`` is\nrejected 422 before this function runs.\n\n**No task-row lock** (contract \u00a7 4). The lock this route used to take\nprotected nothing a chat insert needs: the only uniqueness constraint on\n``conversation`` is the partial index over ``kind = 'planning' AND status\n= 'active'``, which a chat row cannot collide with, and the insert itself\ncarries a freshly minted primary key. Kept, it would have let any\ncolleague block the owner's rename, archive and run-start.",
+        "description": "Create one active chat conversation with optional entry context.\n\nThe first of the three mutations owner call (b) grants a same-org\ncolleague (contract \u00a7 4). The grade is :func:`chat_mutable_task` \u2014 the\nowner or a colleague who can read the task, and never an admin.\n\n**This route can only ever mint a chat**, for anybody: ``kind`` is not a\nfield on ``ConversationCreate`` (which forbids extras), it is written as\nthe literal ``\"chat\"`` below, and task_agent conversations are minted\nexclusively by ``runtime.conversation_lifecycle`` under ``task_agent.py``'s\nowner-graded task lock. So \"a task_agent conversation can only ever be\ncreated by the task owner\" needs no branch here to hold \u2014 the shape of\nthe request body is what enforces it, and a body carrying ``kind`` is\nrejected 422 before this function runs.\n\n**No task-row lock** (contract \u00a7 4). The lock this route used to take\nprotected nothing a chat insert needs: the only uniqueness constraint on\n``conversation`` is the partial index over ``kind = 'task_agent' AND status\n= 'active'``, which a chat row cannot collide with, and the insert itself\ncarries a freshly minted primary key. Kept, it would have let any\ncolleague block the owner's rename, archive and run-start.",
         "operationId": "create_conversation_api_v1_tasks__task_id__conversations_post",
         "parameters": [
           {
@@ -8174,7 +8174,7 @@
     },
     "/api/v1/tasks/{task_id}/plan": {
       "get": {
-        "description": "Return the durable approved plan or latest completed durable draft.\n\nOwner-only sweep, for the reason :func:`list_planning_turns` states: a\ncolleague's or an administrator's read must not write the owner's rows.",
+        "description": "Return the durable approved plan or latest completed durable draft.\n\nOwner-only sweep, for the reason :func:`list_task_agent_turns` states: a\ncolleague's or an administrator's read must not write the owner's rows.",
         "operationId": "get_plan_api_v1_tasks__task_id__plan_get",
         "parameters": [
           {
@@ -8217,7 +8217,7 @@
         ],
         "summary": "Get Plan",
         "tags": [
-          "planning"
+          "task_agent"
         ]
       },
       "patch": {
@@ -8274,136 +8274,7 @@
         ],
         "summary": "Patch Plan",
         "tags": [
-          "planning"
-        ]
-      }
-    },
-    "/api/v1/tasks/{task_id}/planning-turns": {
-      "get": {
-        "description": "Return the durable planning transcript in ascending conversation order.\n\n**Read-graded, and the sweep is owner-only.** The grade here is the read\ngrade \u2014 owner \u222a same-org colleague \u222a administrator \u2014 but\n:func:`_expire_stale_pending_turns` is a *write*, and contract \u00a7 3 makes\nthe admin leg read-only: a support read that fails somebody else's pending\nplanning turn is a mutation nobody asked for and nothing records. So the\nsweep runs only for the owner, whose own turn it is. Nothing is lost: the\nowner's own GET sweeps, and every mutating planning path sweeps under the\nwrite grade before it does anything.",
-        "operationId": "list_planning_turns_api_v1_tasks__task_id__planning_turns_get",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "task_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Task Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "page",
-            "required": false,
-            "schema": {
-              "default": 1,
-              "minimum": 1,
-              "title": "Page",
-              "type": "integer"
-            }
-          },
-          {
-            "in": "query",
-            "name": "page_size",
-            "required": false,
-            "schema": {
-              "default": 50,
-              "maximum": 200,
-              "minimum": 1,
-              "title": "Page Size",
-              "type": "integer"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Page_PlanningTranscriptTurnOut_"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
-        "summary": "List Planning Turns",
-        "tags": [
-          "planning"
-        ]
-      },
-      "post": {
-        "description": "Advance one task's durable planner conversation once per client turn id.",
-        "operationId": "create_planning_turn_api_v1_tasks__task_id__planning_turns_post",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "task_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Task Id",
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/PlanningTurnCreate"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PlanningTurnOut"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
-        "summary": "Create Planning Turn",
-        "tags": [
-          "planning"
+          "task_agent"
         ]
       }
     },
@@ -8651,6 +8522,135 @@
         "summary": "Source Dossier",
         "tags": [
           "read-models"
+        ]
+      }
+    },
+    "/api/v1/tasks/{task_id}/task-agent-turns": {
+      "get": {
+        "description": "Return the durable task_agent transcript in ascending conversation order.\n\n**Read-graded, and the sweep is owner-only.** The grade here is the read\ngrade \u2014 owner \u222a same-org colleague \u222a administrator \u2014 but\n:func:`_expire_stale_pending_turns` is a *write*, and contract \u00a7 3 makes\nthe admin leg read-only: a support read that fails somebody else's pending\ntask_agent turn is a mutation nobody asked for and nothing records. So the\nsweep runs only for the owner, whose own turn it is. Nothing is lost: the\nowner's own GET sweeps, and every mutating task_agent path sweeps under the\nwrite grade before it does anything.",
+        "operationId": "list_task_agent_turns_api_v1_tasks__task_id__task_agent_turns_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Task Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Page Size",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Page_TaskAgentTranscriptTurnOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Task Agent Turns",
+        "tags": [
+          "task_agent"
+        ]
+      },
+      "post": {
+        "description": "Advance one task's durable task_agent conversation once per client turn id.",
+        "operationId": "create_task_agent_turn_api_v1_tasks__task_id__task_agent_turns_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Task Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TaskAgentTurnCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskAgentTurnOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Create Task Agent Turn",
+        "tags": [
+          "task_agent"
         ]
       }
     },

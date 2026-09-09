@@ -1,9 +1,9 @@
 """Agent backend seam (task 024, decision 3) — router + watch moments.
 
-Mirrors :mod:`policy_atlas.runtime.planner`: a live OpenAI structured-output
+Mirrors :mod:`policy_atlas.runtime.task_agent`: a live OpenAI structured-output
 backend with tracing inside the backend, and a deterministic zero-egress stub for
-tests and the CLI. One backend, three moments (contract decision 3): the planning
-moment lives in the planner seam; this module owns the two mid-run moments —
+tests and the CLI. One backend, three moments (contract decision 3): the task_agent
+moment lives in the task_agent seam; this module owns the two mid-run moments —
 
 - **route**: compiles a user's free-text steering prose at a pause into a fan-out
   plan of bounded directive deltas (Task 15 wires its APPLY path; Task 14 only
@@ -62,9 +62,9 @@ if TYPE_CHECKING:
 log = structlog.get_logger()
 
 # Model routing by moment (contract decision 3 — cost tiering, not agent identity).
-# route/decide are judgment-class (the planner's default judgment model); triage is
+# route/decide are judgment-class (the task_agent's default judgment model); triage is
 # mini-class (the screen/vetter mini default). Both env-overridable so ops can pin a
-# different model without a code change (the SYNTHESIS_MODEL/PLANNER_MODEL pattern).
+# different model without a code change (the SYNTHESIS_MODEL/TASK_AGENT_MODEL pattern).
 AGENT_MODEL = os.environ.get("POLICY_ATLAS_AGENT_MODEL", "gpt-5.5")
 AGENT_TRIAGE_MODEL = os.environ.get(
     "POLICY_ATLAS_AGENT_TRIAGE_MODEL", SCREEN_MODEL
@@ -101,7 +101,7 @@ WATCH_FALLBACK_TOOL_CALLS = 2
 WATCH_READ_TOOLS: tuple[str, ...] = ("lookup", "query_findings")
 
 # The wire models ARE the moment shapes, code-side and model-side — no separate
-# dataclass to keep in sync (the planner pattern).
+# dataclass to keep in sync (the task_agent pattern).
 RouterCompile = RouterCompileWire
 WatchTriage = WatchTriageWire
 WatchDecision = WatchDecisionWire
