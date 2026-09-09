@@ -101,6 +101,22 @@ referent). Instead:
   nudge survives as the *edit* path beside the chosen level. Options scoping uses the **same
   three words** (owner ruling 2026-09-07), so this is one vocabulary across capabilities, not an
   exception. Reconcile this section when the plan contract is next revised.
+- **Time, reading and depth for options scoping** *(owner ruling on OS decision-sheet rows B3, C5,
+  E12 and E16, 2026-09-09)*. Measured on staging (2026-09-08): a standard Evidence search walk is a
+  median 15 minutes of compute, 72 percent of it writing the report; a fresh rapid walk 11.3
+  minutes, 59 percent; reading all of an option's 10 to 12 documents 16 to 25 seconds in parallel.
+  **Writing, not reading, is where the time goes.** Time to a result is stated as **compute time**
+  and, separately, **waiting time at pauses** (median 17 minutes, up to two hours, on staging);
+  depth is asked every time (OS ruling 25). **Reading is not capped for focus**: the assessment
+  reads every document whose evaluated mention belongs to the option; a high safety ceiling (a
+  plan setting decided in task 3, of the order of 25 documents) applies stratified selection only
+  above it, with omissions listed. Time is managed by **design targets verified during
+  development, never by run-time cut-offs**: the baseline's section list is graded by depth as the
+  Evidence search's reports are — a named subset of its ruled sections at **rapid, within about two
+  minutes of compute**; all eight at **standard, within about five** — and the option profile's
+  targets are set in task 3. A section is never left incomplete for time; "not found" is a content
+  state (OS ruling 40). No rapid number is promised until the real path is timed; the plan shows a
+  coarse time band (OS open question 3 stays open).
 
 ## Source / evidence policy
 
