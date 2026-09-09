@@ -213,7 +213,30 @@ owner would weigh in a future revision of that contract; a real parallel
 mode would need a durable join and the extras proposer decided once, not
 per arm. The bound (a concurrent ledger) did not fire.
 
-_(Phase 5 … Phase 7 rows are appended as each phase closes.)_
+### Phase 5.2 — the gate — commit 234a4f79; 5.3 — answer core — commit b4650560 (2026-09-09)
+
+| Command | Result | Notes |
+|---|---:|---|
+| 5.2 `make verify-fast` | pass | 2779 passed; mypy 333 files clean; ruff clean; 18 new tests |
+| 5.3 targeted suites | pass | `tests/api` 472 passed (the one failure was 5.2's in-flight `ContinuationState(capability)`); 32/32 on the final targeted re-run; `make openapi-sync` + `drift-check: OK` (additive: `AnswerPayloadOut`, `TurnDecisionOut`, three optional turn fields) |
+
+**Deviations (5.2):** the runner chassis and continuation reducer were typed
+Evidence-search-only (`expect_task_plan` narrowing in `ContinuationState.build`;
+`plan.backend_scope` and `plan.search_effort` reads on the hot path), so a
+scoping walk could not reach the gate code at all — they were made
+capability-agnostic (`AnyPlan`; ES-only hand-offs narrow and fail loudly).
+`capability` on the two state dataclasses carries an ES default so the
+existing steering tests construct them unchanged (every production site passes
+it). `stage_vocabulary` maps `baseline_confirm` → stage `synthesise` rather
+than adding a `StageKey` member (a contract enum change). The CLI/stub
+Continue at the gate does not attach `artefact_id` (only the API path does).
+**Deviations (5.3):** `answer_over_scope` gained `on_progress`,
+`conversation_id` and an `AnswerBackends` bundle to keep the chat route
+byte-for-byte; `DecisionOut` → `TurnDecisionOut` (name collision with the
+decision-log model); two chat tests' monkeypatch targets moved with the lifted
+code; the core still traces as `component="chat_v1"` (5.4 may relabel).
+
+_(Phase 5.4/5.5, the Phase 5 full gate and Phase 7 rows are appended as each closes.)_
 
 ## Checks beyond the build
 
@@ -352,6 +375,10 @@ _(step 7)_
     plan payloads) went through the 044 sweep and surfaced only as an enum
     change in the OpenAPI diff. Review every changed quoted literal in the
     sweep diff against the migration's rewrite list before the gate.
+  - A killed concurrent test run can leave an `idle in transaction` Postgres
+    backend holding locks; the next suite on the shared test DB hangs on it
+    for hours (5.2 lost 2h16m). Check `pg_stat_activity` before blaming the
+    code.
   - Writing the synthesis directive onto the shared `evidence_scope` row
     before a run takes a Postgres row lock that serialises concurrent
     synthesise runs perfectly (check 7's first parallel run summed its arms:
