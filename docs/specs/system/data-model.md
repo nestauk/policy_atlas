@@ -298,9 +298,24 @@ shortlist choice, a variant's link to its parent or a child task's dependency ac
   (proposed by Policy Atlas / added by you) · assessed (scoping pass / full run);
 - **membership records** against the id and a design version: the intervention mentions and the
   findings that belong to it (also the validated set behind its pattern claims);
-- a link to the child Evidence search task a full run mints.
+- a link to the child Evidence search task a full run mints (one row of `task_link`, below).
 Matching a regenerated option to an existing id after a plan change (deltas, not restarts) is
 **open** — OS open question 7 — and is a labelled judgement or a user confirmation, never silent.
+
+### Links between tasks (declared 2026-09-09; owner ruling on decision-sheet row A6)
+
+"Link" and "Context" in [vocabulary.md](../vocabulary.md) had no record. **`task_link`** — source
+task · target task · kind · optional option id · pinned source run ids · created by · created at —
+is the input the shared `inherit` component reads in both directions, and the row the option
+entity's child-task link is. Two tasks may be linked only while they **share a project**, so they
+share visibility and organisation; a link that stops satisfying this is flagged, not broken.
+`inherit` **reads across a link; it does not copy**: snapshots, chunks, embeddings and findings are
+read by snapshot id; classification and appraisal rows are read from the pinned source run and
+shown as inherited; the receiving task writes only its own document rows and its own screening
+(OS ruling 22). A task with inbound links is archived, never hard-deleted. A link changes no one's
+access. *(Owner, 2026-09-09: kept generic — a task-to-task record — as the foundation later
+capabilities such as meta-analysis will build on; the option id is optional so the full run's
+child link can name its option.)*
 
 - **Three grains:** **block** = capture grain (own version chain; summary co-versions);
   **artefact** = snapshot grain (lock-on-advance freezes a named immutable binding of block
