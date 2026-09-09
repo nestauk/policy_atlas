@@ -32,7 +32,8 @@ either problem.
 
 The References list still opens by title: `ReferenceOut` carries no `source_id` on the
 wire, so the same drift can in principle still miss there. Fixing that needs a backend
-schema change (add `source_id` to `ReferenceOut`) — a separate slice.
+schema change (add `source_id` to `ReferenceOut`) — a separate slice. Recorded in
+`docs/deferred.md` § Web app, under the `CitationOut.source_id` entry.
 
 ## Verification
 
