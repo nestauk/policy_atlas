@@ -1,6 +1,6 @@
 export { hasTerminalPartialLiveArtefact } from "./reducer";
 export { useTaskAgentTranscript } from "./transcript";
-export { composeTaskAgentThread } from "./thread";
+export { composeTaskAgentThread, taskAgentAnswerRow, taskAgentTurnKind } from "./thread";
 export { useChatConversation, useComposerDraft } from "./conversations";
 export { RunStreamProvider, useRunStream } from "./useRunStream";
 export { createInitialRunStreamState } from "./types";
@@ -20,6 +20,9 @@ export type {
   OptimisticChatTurn,
 } from "./conversations";
 export type {
+  GateThreadDecision,
+  GateThreadInput,
+  TaskAgentThreadCheckIn,
   TaskAgentThreadDecision,
   TaskAgentThreadItem,
   TaskAgentThreadRun,

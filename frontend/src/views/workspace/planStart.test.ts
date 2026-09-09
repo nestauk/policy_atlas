@@ -296,6 +296,25 @@ describe("useScopingPlanStart — the five start states (task 044, contract deli
     expect(result.current.kind).toBe("rebuild_or_confirm");
   });
 
+  // Task 044 Phase 5.5: the state the plan document lands in straight after
+  // "Change the plan" — the walk ended `aborted` and the plan is untouched,
+  // so both doors are open by name.
+  it("offers Rebuild baseline and Confirm plan and build longlist after Change the plan", () => {
+    mockScopingPlan({ version: 1 });
+    mockRuns([run({ status: "aborted", plan_version: 1 })]);
+    mockArtefact("artefact-1");
+    mockScopingMutations();
+
+    const { result } = renderHook(() => useScopingPlanStart({ taskId: "t1", runActive: false }));
+    expect(result.current.kind).toBe("rebuild_or_confirm");
+    if (result.current.kind === "rebuild_or_confirm") {
+      expect(result.current.rebuild.label).toBe("Rebuild baseline");
+      expect(result.current.rebuild.disabled).toBe(false);
+      expect(result.current.confirm.label).toBe("Confirm plan and build longlist");
+      expect(result.current.confirm.disabled).toBe(false);
+    }
+  });
+
   it("baseline_confirmed for a stale version does not suppress a fresh rebuild-or-confirm", () => {
     mockScopingPlan({ version: 2, baselineConfirmed: { artefact_id: "artefact-1", plan_version: 1 } });
     mockRuns([run({ status: "succeeded", plan_version: 1 })]);

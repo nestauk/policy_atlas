@@ -208,3 +208,83 @@ describe("CheckInCard — non-owner read-only (task 033 phase 10c, contract § 1
     expect(screen.queryByRole("button", { name: "Stop the analysis" })).not.toBeInTheDocument();
   });
 });
+
+/** Task 044 Phase 5.5: the options-scoping baseline gate's card (D12). */
+describe("CheckInCard — the baseline gate", () => {
+  function gateCheckIn(bundle: Record<string, unknown> | null) {
+    return baseCheckIn({
+      kind: "baseline_confirm",
+      stage: "synthesise",
+      component: "synthesise",
+      render: "Confirm the plan against the baseline",
+      bundle,
+      options: [
+        option({
+          id: "confirm_plan",
+          label: "Confirm plan and build longlist",
+          description: "Accept the plan as it stands and go on to the longlist.",
+        }),
+        option({
+          id: "change_plan",
+          label: "Change the plan",
+          description: "Stop here and edit the plan; the baseline you have read is kept.",
+        }),
+      ],
+    });
+  }
+
+  const bundle = {
+    key_assumption: "Careers advice reaches those still in school, not those who have left.",
+    settings: {
+      target_unit: "16-24 year-olds at risk of becoming NEET",
+      where: "United Kingdom",
+      outcomes: ["NEET rate at 6 months", "Sustained employment at 12 months"],
+      depth: "standard",
+    },
+  };
+
+  it("quotes the key assumption and the plan settings under the gate heading", () => {
+    renderCard(gateCheckIn(bundle));
+
+    expect(
+      screen.getByRole("heading", { name: "Confirm the plan against the baseline" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText(bundle.key_assumption)).toBeInTheDocument();
+    expect(screen.getByText("Who or what should change")).toBeInTheDocument();
+    expect(screen.getByText("16-24 year-olds at risk of becoming NEET")).toBeInTheDocument();
+    expect(screen.getByText("United Kingdom")).toBeInTheDocument();
+    expect(
+      screen.getByText("NEET rate at 6 months · Sustained employment at 12 months"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Standard scoping")).toBeInTheDocument();
+  });
+
+  it("offers exactly the two server-supplied options and nothing else", () => {
+    renderCard(gateCheckIn(bundle));
+
+    expect(screen.getByRole("button", { name: "Confirm plan and build longlist" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Change the plan" })).toBeInTheDocument();
+    // The gate is a decision, not a steer: no free-text compile, no abort.
+    expect(screen.queryByRole("button", { name: "Compile" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Stop the analysis" })).not.toBeInTheDocument();
+  });
+
+  it("posts Change the plan as an ordinary card option", async () => {
+    mutate.mockClear();
+    const user = userEvent.setup();
+    renderCard(gateCheckIn(bundle));
+
+    await user.click(screen.getByRole("button", { name: "Change the plan" }));
+
+    expect(mutate.mock.calls[0][0]).toEqual({
+      checkInId: CHECK_IN_ID,
+      body: { kind: "option", option_id: "change_plan", params: null },
+    });
+  });
+
+  it("states an absent key assumption rather than quoting nothing", () => {
+    renderCard(gateCheckIn({ key_assumption: "   ", settings: {} }));
+
+    expect(screen.getByText("The baseline records no key assumption.")).toBeInTheDocument();
+  });
+});

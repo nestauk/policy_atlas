@@ -88,6 +88,47 @@ export function ChatMessages({ taskId, rows, onOpenTaskAgent, onRetry }: { taskI
   return <div className="space-y-5">{datedRows.map(({ row, showDate }) => <div key={keyOf(row)} className="space-y-3">{showDate && <DateDivider value={createdAt(row)} />}<UserBubble text={userMessageOf(row)} />{activityOf(row).length > 0 && <p className="mr-8 text-body text-grey">{activitySummary(activityOf(row))}</p>}<AssistantMessage turn={row} onCitation={(citation) => setActive({ kind: "citation", turn: row, citation })} onClaim={(claim) => setActive({ kind: "claim", turn: row, claim })} onOpenDossier={setDossierRef} onOpenTaskAgent={onOpenTaskAgent} onRetry={onRetry} /></div>)}{active !== null && <ChatProvenanceSheet taskId={taskId} active={active} onClose={() => setActive(null)} onOpenDossier={setDossierRef} />}{dossierRef !== null && <SourceDossier taskId={taskId} sourceRef={dossierRef} onClose={() => setDossierRef(null)} />}</div>;
 }
 
+/** One grounded answer on its own — the chat's assistant prose, its claim
+ *  spans, its `[n]` markers, its References footer and both provenance sheets
+ *  — for a surface that is not the chat thread.
+ *
+ *  Task 044 Phase 5.5: a Task Agent turn whose `kind` is `answer` carries
+ *  `AnswerPayloadOut`, the same citation fields `ChatTurnOut` has always
+ *  carried (`store/thread.taskAgentAnswerRow` restates that identity), so the
+ *  Task Agent thread renders its answers through THIS component rather than a
+ *  second citation renderer that would drift from this one. `ChatMessages`
+ *  keeps its own single sheet shared across rows; this owns one per answer,
+ *  which is what a lone answer needs.
+ *
+ * Args:
+ *   taskId: The owning task, for the on-demand chunk-context and dossier reads.
+ *   turn: The answer, in the chat's turn shape.
+ *   onOpenTaskAgent: Where the "evidence base does not hold this" hand-off
+ *     goes. A caller already inside the Task Agent passes a no-op.
+ *   onRetry: Retry for a failed answer.
+ *
+ * Returns:
+ *   The answer, its citations, and the sheets they open.
+ */
+export function ChatAnswer({ taskId, turn, onOpenTaskAgent, onRetry }: { taskId: string; turn: ChatConversationRow; onOpenTaskAgent: () => void; onRetry: (clientTurnId: string) => void }) {
+  const [active, setActive] = useState<ActiveProvenance | null>(null);
+  const [dossierRef, setDossierRef] = useState<string | null>(null);
+  return (
+    <>
+      <AssistantMessage
+        turn={turn}
+        onCitation={(citation) => setActive({ kind: "citation", turn, citation })}
+        onClaim={(claim) => setActive({ kind: "claim", turn, claim })}
+        onOpenDossier={setDossierRef}
+        onOpenTaskAgent={onOpenTaskAgent}
+        onRetry={onRetry}
+      />
+      {active !== null && <ChatProvenanceSheet taskId={taskId} active={active} onClose={() => setActive(null)} onOpenDossier={setDossierRef} />}
+      {dossierRef !== null && <SourceDossier taskId={taskId} sourceRef={dossierRef} onClose={() => setDossierRef(null)} />}
+    </>
+  );
+}
+
 function AssistantMessage({ turn, onCitation, onClaim, onOpenDossier, onOpenTaskAgent, onRetry }: { turn: ChatConversationRow; onCitation: (citation: ChatCitation) => void; onClaim: (claim: ChatClaim) => void; onOpenDossier: (sourceRef: string) => void; onOpenTaskAgent: () => void; onRetry: (clientTurnId: string) => void }) {
   const answer = "id" in turn ? turn.answer ?? "" : turn.answer;
   const citations = citationsOf(turn);

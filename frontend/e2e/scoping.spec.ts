@@ -88,3 +88,69 @@ test.describe("mock options-scoping journey", () => {
     await expect(page.getByRole("heading", { name: "Sources", exact: true }).first()).toBeVisible();
   });
 });
+
+/**
+ * Phase 5.5: the Task Agent thread at the baseline gate. The mock's scoping
+ * walk parks after the baseline (`mockBaselineGateCheckIn`), so the gate card
+ * lands IN the thread, the composer stays open, a question comes back as a
+ * cited answer, and "Change the plan" reopens the plan document's two start
+ * actions.
+ */
+test.describe("mock options-scoping baseline gate", () => {
+  async function startScopingWalk(page: import("@playwright/test").Page) {
+    await page.goto("/new");
+    await page.getByRole("button", { name: "Options scoping" }).click();
+    await page
+      .getByLabel("Your question")
+      .fill("How can we reduce the number of young people not in education, employment or training?");
+    await page.getByRole("button", { name: "Prepare plan" }).click();
+    await expect(page.getByRole("region", { name: "Task Agent conversation" })).toBeVisible();
+
+    await page.getByRole("button", { name: "Review the plan" }).click();
+    const plan = page.getByRole("dialog", { name: "Scoping plan" });
+    await plan.getByRole("button", { name: "Confirm and build baseline" }).click();
+    await plan.getByRole("button", { name: "Close the scoping plan" }).click();
+  }
+
+  test("the gate card sits in the thread and the composer takes a question about the baseline", async ({
+    page,
+  }) => {
+    await startScopingWalk(page);
+
+    const thread = page.getByRole("region", { name: "Task Agent conversation" });
+    await expect(
+      thread.getByRole("heading", { name: "Confirm the plan against the baseline" }),
+    ).toBeVisible();
+    await expect(
+      thread.getByText("Careers advice reaches the young people already in school"),
+    ).toBeVisible();
+    await expect(thread.getByRole("button", { name: "Confirm plan and build longlist" })).toBeVisible();
+    await expect(thread.getByRole("button", { name: "Change the plan" })).toBeVisible();
+
+    // The composer is open at the gate, not fenced.
+    const composer = page.getByLabel("Message the Task Agent");
+    await expect(composer).toBeEnabled();
+    await expect(composer).toHaveAttribute("placeholder", "Question the baseline…");
+
+    await composer.fill("Does the baseline cover young people who have already left school?");
+    await page.getByRole("button", { name: "Send" }).click();
+
+    // The turn comes back as a cited answer, rendered by the chat's own
+    // citation renderer.
+    await expect(thread.getByText("References (1)")).toBeVisible();
+  });
+
+  test("Change the plan records a decision and reopens both start actions", async ({ page }) => {
+    await startScopingWalk(page);
+
+    const thread = page.getByRole("region", { name: "Task Agent conversation" });
+    await thread.getByRole("button", { name: "Change the plan" }).click();
+
+    await expect(thread.getByText("recorded")).toBeVisible();
+
+    await page.getByRole("button", { name: "Review the plan" }).click();
+    const plan = page.getByRole("dialog", { name: "Scoping plan" });
+    await expect(plan.getByRole("button", { name: "Rebuild baseline" })).toBeVisible();
+    await expect(plan.getByRole("button", { name: "Confirm plan and build longlist" })).toBeVisible();
+  });
+});

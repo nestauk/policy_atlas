@@ -6,6 +6,11 @@ import type { EvidenceSortField } from "../views/sourcesPresentation";
 import {
   mockArtefact,
   mockArtefactSectionProse,
+  mockBaselineGateCheckIn,
+  mockScopingAnswerTurn,
+  mockScopingDecisionTurn,
+  seedScopingTaskAgentTurns,
+  MOCK_BASELINE_CHECK_IN_ID,
   mockArtefactSkeleton,
   mockCheckIn,
   mockCoverage,
@@ -144,6 +149,10 @@ interface Deferred {
 
 let checkInAnswer = createDeferred();
 let checkInAnswered = false;
+// Task 044 Phase 5.5: the options-scoping baseline gate, held separately
+// from the Evidence search check-in above so the two scripts cannot collide.
+let baselineGateAnswer = createDeferred();
+let baselineGateDecision: { optionId: string; label: string } | null = null;
 let runStarted = createDeferred();
 let currentRun: RunOut | null = null;
 let taskAgentTurns: TaskAgentTranscriptTurnOut[] = seedTaskAgentTurns();
@@ -198,6 +207,8 @@ export function setMockMe(me: MeOut) {
 export function resetMockScenario() {
   checkInAnswer = createDeferred();
   checkInAnswered = false;
+  baselineGateAnswer = createDeferred();
+  baselineGateDecision = null;
   runStarted = createDeferred();
   currentRun = null;
   mockTask.latest_run = null;
@@ -252,6 +263,28 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
       headers: { "Content-Type": "text/event-stream", "Cache-Control": "no-cache" },
     });
   }
+  // Task 044 Phase 5.5: the baseline gate. Both options end the walk — one
+  // through to the longlist, one back to an editable plan — and each leaves a
+  // `decision` turn in the Task Agent thread, exactly as the turn route does.
+  if (method === "POST" && path.endsWith(`/api/v1/tasks/${MOCK_TASK_ID}/check-ins/${MOCK_BASELINE_CHECK_IN_ID}/response`)) {
+    const body = await requestBody(request, init);
+    if (baselineGateDecision !== null) {
+      return json({ error: { code: "already_answered", message: "This check-in has already been answered." } }, 409);
+    }
+    const optionId = isRecord(body) && typeof body.option_id === "string" ? body.option_id : "confirm_plan";
+    const option = (mockBaselineGateCheckIn.options ?? []).find((entry) => entry.id === optionId);
+    baselineGateDecision = { optionId, label: option?.label ?? optionId };
+    const decidedAt = new Date().toISOString();
+    taskAgentTurns.push(
+      mockScopingDecisionTurn(optionId, baselineGateDecision.label, nextTurnIndex, decidedAt),
+    );
+    nextTurnIndex += 1;
+    // The walk ends in the same request the decision lands in, so the runs
+    // read is already terminal when the answer's invalidation refetches it.
+    finishRun(optionId === "change_plan" ? "aborted" : "succeeded");
+    baselineGateAnswer.resolve();
+    return json({ accepted: true });
+  }
   if (method === "POST" && path.endsWith(`/api/v1/tasks/${MOCK_TASK_ID}/check-ins/${MOCK_CHECK_IN_ID}/response`)) {
     const body = await requestBody(request, init);
     checkInAnswer.resolve();
@@ -284,6 +317,15 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
     // current task as a "Starts from" candidate — its name is captured here,
     // before the same object below is overwritten to become the new task.
     const sourceTaskName = mockTask.name;
+    // Task 044 Phase 5.5: a scoping task's thread starts from its own one
+    // planning turn — the Evidence search seed above is another task's
+    // history and would read as this one's.
+    if (capability === "options_scoping") {
+      taskAgentTurns = seedScopingTaskAgentTurns();
+      nextTurnIndex = 2;
+      baselineGateAnswer = createDeferred();
+      baselineGateDecision = null;
+    }
     const created = new Date().toISOString();
     const task: TaskOut = {
       ...mockTask,
@@ -381,6 +423,30 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
     const message = isRecord(body) && typeof body.message === "string" ? body.message : "";
     const now = new Date().toISOString();
     const reply = "Noted — I'll keep that in mind for the analysis.";
+    // Task 044 Phase 5.5: while the scoping walk is parked on the baseline
+    // gate the turn route answers FROM the baseline — an `answer` turn with
+    // citations, not a planning reply.
+    // The mock's REST run row stays `running` while the stream parks (the
+    // pause is a stream state), so the gate is "open" from the walk's start
+    // until its decision lands.
+    const atGate =
+      mockTask.capability === "options_scoping" &&
+      currentRun !== null &&
+      currentRun.status === "running" &&
+      baselineGateDecision === null;
+    if (atGate && taskAgentTurns.every((turn) => turn.client_turn_id !== clientTurnId)) {
+      const answerTurn = mockScopingAnswerTurn(clientTurnId, message, nextTurnIndex, now);
+      taskAgentTurns.push(answerTurn);
+      nextTurnIndex += 1;
+      return json({
+        reply: answerTurn.reply,
+        suggestions: [],
+        capability: "options_scoping",
+        kind: "answer",
+        answer: answerTurn.answer,
+        scoping_plan: currentScopingPlan,
+      });
+    }
     const existing = taskAgentTurns.find((turn) => turn.client_turn_id === clientTurnId);
     if (existing !== undefined) {
       // Retry-in-place (finding 6): the same client_turn_id re-runs, never a
@@ -499,6 +565,12 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
 
   if (method === "GET" && path.endsWith(`/api/v1/tasks/${MOCK_TASK_ID}/check-ins`)) {
     const status = url.searchParams.get("status");
+    if (mockTask.capability === "options_scoping") {
+      const decided = baselineGateDecision !== null;
+      if (currentRun === null) return json(page([]));
+      if (status === "pending" && decided) return json(page([]));
+      return json(page([{ ...mockBaselineGateCheckIn, status: decided ? "decided" : "pending" }]));
+    }
     const rows = status === "pending" && checkInAnswered ? [] : [mockCheckIn];
     return json(page(rows));
   }
@@ -879,6 +951,12 @@ function createMockEventStream(scenario: MockScenario): ReadableStream<Uint8Arra
       await runStarted.promise;
       const emit = (frame: SseFrame) => controller.enqueue(encoder.encode(toSse(frame)));
 
+      if (mockTask.capability === "options_scoping") {
+        await scopingBaselineWalk(emit, nextSequence);
+        controller.close();
+        return;
+      }
+
       emit(runStatus("running", nextSequence()));
       emit(stageStarted("acquire", "Finding relevant sources", "Searching policy and research evidence", nextSequence()));
       emit(stageCompleted("acquire", "Finding relevant sources", { found: 128 }, nextSequence()));
@@ -967,10 +1045,45 @@ function createMockEventStream(scenario: MockScenario): ReadableStream<Uint8Arra
   });
 }
 
+/**
+ * The options-scoping baseline walk (task 044, Phase 5.5): three components,
+ * then a genuine park on the baseline gate. The walk holds there until the
+ * gate is answered — by the card or by a Task Agent decision turn — and ends
+ * the way that decision says: `succeeded` through to the longlist, or
+ * `aborted` back to an editable plan.
+ *
+ * Args:
+ *   emit: Frame sink for the open stream.
+ *   nextSequence: The stream's sequence counter.
+ */
+async function scopingBaselineWalk(emit: (frame: SseFrame) => void, nextSequence: () => number) {
+  emit(runStatus("running", nextSequence()));
+  emit(stageStarted("acquire", "Searching sources", "Queries out to academic and policy databases", nextSequence()));
+  emit(stageCompleted("acquire", "Searching sources", { found: 74 }, nextSequence()));
+  emit(stageStarted("screen", "Screening sources", "Checking relevance to the plan's scope", nextSequence()));
+  emit(stageCompleted("screen", "Screening sources", { relevant: 28, screened_out: 46 }, nextSequence()));
+  emit(stageStarted("synthesise", "Writing the baseline", "Setting out what happens if nothing changes", nextSequence()));
+  emit(stageCompleted("synthesise", "Writing the baseline", { sections: 4 }, nextSequence()));
+  emit(runStatus("paused", nextSequence()));
+  emit({ type: "checkin.pending", check_in: mockBaselineGateCheckIn, occurred_at: frameTime(), sequence: nextSequence() });
+
+  await baselineGateAnswer.promise;
+  const decision = baselineGateDecision ?? { optionId: "confirm_plan", label: "Confirm plan and build longlist" };
+  emit({
+    type: "checkin.resolved",
+    check_in_id: MOCK_BASELINE_CHECK_IN_ID,
+    response: { kind: "option", option_id: decision.optionId, params: null },
+    decided_by: "user",
+    occurred_at: frameTime(),
+    sequence: nextSequence(),
+  });
+  emit(runStatus(decision.optionId === "change_plan" ? "aborted" : "succeeded", nextSequence()));
+}
+
 /** Keep the REST-visible run/task state in step with the stream's
  *  terminal frame, so the landing card and nav badge stop claiming
  *  "Analysing…" once the scripted run has actually finished. */
-function finishRun(status: "succeeded" | "failed") {
+function finishRun(status: "succeeded" | "failed" | "aborted") {
   if (currentRun === null) return;
   const endedAt = new Date().toISOString();
   currentRun = { ...currentRun, status, ended_at: endedAt };
@@ -986,7 +1099,7 @@ function frameTime(): string {
   return new Date().toISOString();
 }
 
-function runStatus(status: "running" | "paused" | "succeeded" | "failed", sequence: number): SseFrame {
+function runStatus(status: "running" | "paused" | "succeeded" | "failed" | "aborted", sequence: number): SseFrame {
   return { type: "run.status", capability_run_id: MOCK_RUN_ID, status, occurred_at: frameTime(), sequence };
 }
 

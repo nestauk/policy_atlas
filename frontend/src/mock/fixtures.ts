@@ -738,3 +738,176 @@ export function seedTaskAgentTurns(): components["schemas"]["TaskAgentTranscript
     },
   ];
 }
+
+// --- The options-scoping baseline gate (task 044, Phase 5.5) -------------
+
+export const MOCK_BASELINE_CHECK_IN_ID = "4c1acbe7-c4a1-4e0b-8d5a-bb25ea2ef635";
+
+const MOCK_SCOPING_TURN_IDS = {
+  plan: "60000000-0000-4000-8000-000000000011",
+  answer: "60000000-0000-4000-8000-000000000012",
+  decision: "60000000-0000-4000-8000-000000000013",
+} as const;
+
+/** The gate's key assumption, quoted by the card and by the seeded answer. */
+const MOCK_KEY_ASSUMPTION =
+  "Careers advice reaches the young people already in school, not the ones who have already dropped out.";
+
+/**
+ * The baseline gate's check-in (`baseline_confirm`) — the one steer point on
+ * the scoping lattice. Its bundle carries what the card shows: the baseline's
+ * key assumption and the four plan settings the walk ran from.
+ */
+export const mockBaselineGateCheckIn: components["schemas"]["CheckInOut"] = {
+  check_in_id: MOCK_BASELINE_CHECK_IN_ID,
+  kind: "baseline_confirm",
+  boundary: "after_component",
+  component: "synthesise",
+  stage: "synthesise",
+  render: [
+    "Confirm the plan against the baseline",
+    `Key assumption: ${MOCK_KEY_ASSUMPTION}`,
+    "Settings",
+    "Target unit: 16-24 year-olds at risk of becoming NEET",
+    "Where: United Kingdom",
+    "Outcomes: NEET rate at 6 months; Sustained employment or training at 12 months",
+    "Depth: standard",
+  ].join("\n"),
+  options: [
+    {
+      id: "confirm_plan",
+      label: "Confirm plan and build longlist",
+      description: "Accept the plan as it stands and go on to the longlist.",
+      requires_user_input: false,
+      suggested: false,
+      why: null,
+      endorsement: null,
+    },
+    {
+      id: "change_plan",
+      label: "Change the plan",
+      description: "Stop here and edit the plan; the baseline you have read is kept.",
+      requires_user_input: false,
+      suggested: false,
+      why: null,
+      endorsement: null,
+    },
+  ],
+  triggers: [],
+  bundle: {
+    key_assumption: MOCK_KEY_ASSUMPTION,
+    settings: {
+      target_unit: "16-24 year-olds at risk of becoming NEET",
+      where: "United Kingdom",
+      outcomes: ["NEET rate at 6 months", "Sustained employment or training at 12 months"],
+      depth: "standard",
+    },
+  },
+  segment_reentry_allowed: false,
+  rerun_component: "synthesise",
+  status: "pending",
+  created_at: "2026-07-21T09:44:00Z",
+  sequence: 44,
+};
+
+/** The scoping task's own seed transcript: the one planning turn that made
+ *  the ready scoping plan. The answer and decision turns are not seeded —
+ *  the mock mints them from real requests at the gate (a question posted
+ *  while paused comes back an `answer` turn; the card's decision appends a
+ *  `decision` turn), so mock mode shows the projection the way the backend
+ *  produces it rather than as pre-baked history. */
+export function seedScopingTaskAgentTurns(): components["schemas"]["TaskAgentTranscriptTurnOut"][] {
+  return [
+    {
+      client_turn_id: MOCK_SCOPING_TURN_IDS.plan,
+      turn_index: 1,
+      user_message: "How can we reduce the number of young people not in education, employment or training?",
+      reply: "I've drafted a scoping plan. Review it, then build the baseline.",
+      suggestions: [],
+      part: null,
+      capability: "options_scoping",
+      kind: "reply",
+      status: "completed",
+      created_at: "2026-07-21T09:10:00Z",
+      completed_at: "2026-07-21T09:10:06Z",
+    },
+  ];
+}
+
+/** A grounded answer to a question asked at the gate: one claim, one
+ *  citation, rendered by the chat's own citation renderer. */
+export function mockScopingAnswerTurn(
+  clientTurnId: string,
+  message: string,
+  turnIndex: number,
+  createdAt: string,
+): components["schemas"]["TaskAgentTranscriptTurnOut"] {
+  const answer =
+    "The baseline holds one study of school-based careers advice; it does not cover young people who have already left education [1].";
+  return {
+    client_turn_id: clientTurnId,
+    turn_index: turnIndex,
+    user_message: message,
+    reply: answer,
+    suggestions: [],
+    part: null,
+    capability: "options_scoping",
+    kind: "answer",
+    answer: {
+      citations: [
+        {
+          n: 1,
+          id: MOCK_CHAT_CITATION_CHUNK_ID,
+          chunk_id: MOCK_CHAT_CITATION_CHUNK_ID,
+          source_id: mockEvidence[0].source_id,
+          source_title: mockEvidence[0].title,
+          quote: MOCK_CHAT_CITATION_QUOTE,
+        },
+      ],
+      claims: [
+        {
+          claim_id: MOCK_CHAT_CLAIM_ID,
+          text: "The baseline holds one study of school-based careers advice",
+          span: [0, 57],
+          citation_ns: [1],
+        },
+      ],
+      enrichment: null,
+      handoff: null,
+      warning_not_evidence_checked: false,
+      stopped_before_evidence_check: false,
+    },
+    status: "completed",
+    created_at: createdAt,
+    completed_at: createdAt,
+  };
+}
+
+/** The decision turn the gate's card decision leaves in the thread. */
+export function mockScopingDecisionTurn(
+  optionId: string,
+  label: string,
+  turnIndex: number,
+  createdAt: string,
+): components["schemas"]["TaskAgentTranscriptTurnOut"] {
+  return {
+    client_turn_id: MOCK_SCOPING_TURN_IDS.decision,
+    turn_index: turnIndex,
+    user_message: label,
+    reply: null,
+    suggestions: [],
+    part: null,
+    capability: "options_scoping",
+    kind: "decision",
+    decision: {
+      option_id: optionId,
+      label,
+      check_in_id: MOCK_BASELINE_CHECK_IN_ID,
+      capability_run_id: MOCK_RUN_ID,
+      plan_version: 1,
+    },
+    status: "completed",
+    created_at: createdAt,
+    completed_at: createdAt,
+  };
+}

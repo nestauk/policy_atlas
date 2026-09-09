@@ -11,6 +11,7 @@ import * as queries from "../../api/queries";
 import { createInitialRunStreamState } from "../../store";
 import type { TaskAgentThreadDecision, TaskAgentThreadRun, TaskAgentThreadTurn } from "../../store";
 import { ToastProvider } from "../../ui/radix/Toast";
+import { TooltipProvider } from "../../ui/radix/Tooltip";
 import { Composer, TaskAgentPane, taskAgentComposerPlaceholder, presentRunDecisions, threadInputs } from "./TaskAgentPane";
 
 type CheckInOut = components["schemas"]["CheckInOut"];
@@ -194,6 +195,17 @@ describe("taskAgentComposerPlaceholder", () => {
     );
   });
 
+  it("invites a question about the baseline while a scoping walk waits at the gate (task 044)", () => {
+    expect(taskAgentComposerPlaceholder("paused", true, true, true)).toBe("Question the baseline…");
+    // The fence stays wherever the gate is not open.
+    expect(taskAgentComposerPlaceholder("paused", true, true, false)).toBe(
+      "Replanning unlocks when this run finishes.",
+    );
+    expect(taskAgentComposerPlaceholder("paused", true, false, true)).toBe(
+      "Steering is limited to the task owner.",
+    );
+  });
+
   it("names the owner-only limit for a non-owner regardless of run state (task 033 phase 10c, rubric 37)", () => {
     expect(taskAgentComposerPlaceholder(undefined, false, false)).toBe(
       "Steering is limited to the task owner.",
@@ -325,5 +337,207 @@ describe("TaskAgentPane — non-owner read-only (task 033 phase 10c, contract §
     expect(screen.getByText("Waiting on your input")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Start search" })).toBeInTheDocument();
     expect(screen.getByLabelText("Message the Task Agent")).not.toBeDisabled();
+  });
+});
+
+/**
+ * Task 044 Phase 5.5: the Task Agent thread at the baseline gate. The gate's
+ * card sits IN the thread; the composer stays open; a turn comes back as a
+ * planning reply, a cited answer, or a recorded decision.
+ */
+describe("TaskAgentPane — the options-scoping baseline gate", () => {
+  const TASK_ID = "11111111-1111-1111-1111-111111111111";
+  const GATE_ID = "33333333-3333-3333-3333-333333333333";
+
+  function gateCheckIn(): CheckInOut {
+    return {
+      boundary: "after_component",
+      check_in_id: GATE_ID,
+      component: "synthesise",
+      created_at: "2026-07-28T10:10:00Z",
+      kind: "baseline_confirm",
+      options: [
+        { id: "confirm_plan", label: "Confirm plan and build longlist", description: "", requires_user_input: false, suggested: false, why: null, endorsement: null },
+        { id: "change_plan", label: "Change the plan", description: "", requires_user_input: false, suggested: false, why: null, endorsement: null },
+      ],
+      render: "Confirm the plan against the baseline",
+      rerun_component: null,
+      segment_reentry_allowed: false,
+      sequence: 40,
+      stage: "synthesise",
+      status: "pending",
+      triggers: [],
+      bundle: {
+        key_assumption: "Careers advice reaches those still in school.",
+        settings: { target_unit: "16-24 year-olds", where: "United Kingdom", outcomes: [], depth: "standard" },
+      },
+    };
+  }
+
+  function esCheckIn(): CheckInOut {
+    return { ...gateCheckIn(), check_in_id: "44444444-4444-4444-4444-444444444444", kind: "pause", options: [] };
+  }
+
+  function answerTurn(): TaskAgentThreadTurn {
+    return {
+      turn_index: 2,
+      client_turn_id: "00000000-0000-0000-0000-0000000000a2",
+      user_message: "Does the baseline cover young people who already left school?",
+      reply: "It does not — the one study in scope is school-based [1].",
+      suggestions: [],
+      part: null,
+      kind: "answer",
+      answer: {
+        citations: [{ n: 1, source_title: "Careers advice in secondary schools", quote: "school-based provision only" }],
+        claims: [],
+        enrichment: null,
+        handoff: null,
+        warning_not_evidence_checked: false,
+        stopped_before_evidence_check: false,
+      },
+      status: "completed",
+      created_at: "2026-07-28T10:12:00Z",
+      completed_at: "2026-07-28T10:12:04Z",
+    };
+  }
+
+  function decisionTurn(): TaskAgentThreadTurn {
+    return {
+      turn_index: 3,
+      client_turn_id: "00000000-0000-0000-0000-0000000000a3",
+      user_message: "Change the plan",
+      reply: null,
+      suggestions: [],
+      part: null,
+      kind: "decision",
+      decision: {
+        option_id: "change_plan",
+        label: "Change the plan",
+        check_in_id: GATE_ID,
+        capability_run_id: "run-1",
+        plan_version: 2,
+      },
+      status: "completed",
+      created_at: "2026-07-28T10:14:00Z",
+      completed_at: "2026-07-28T10:14:01Z",
+    };
+  }
+
+  function mockPane({
+    turns,
+    capability = "options_scoping",
+  }: {
+    turns: TaskAgentThreadTurn[];
+    capability?: string;
+  }) {
+    vi.mocked(queries.useTaskAgentTurns).mockReturnValue({
+      data: { data: turns },
+      isPending: false,
+      isError: false,
+      error: null,
+      refetch: vi.fn(),
+    } as unknown as ReturnType<typeof queries.useTaskAgentTurns>);
+    vi.mocked(queries.usePlan).mockReturnValue({
+      data:
+        capability === "options_scoping"
+          ? { capability, plan: null, scoping: { ready: true }, status: "approved", version: 2 }
+          : { capability, plan: { question: "Q", ready: true }, status: "approved", version: 2 },
+    } as unknown as ReturnType<typeof queries.usePlan>);
+    vi.mocked(queries.useRuns).mockReturnValue({ data: { data: [] } } as unknown as ReturnType<typeof queries.useRuns>);
+    vi.mocked(queries.useDecisions).mockReturnValue({ data: { data: [] } } as unknown as ReturnType<typeof queries.useDecisions>);
+    vi.mocked(queries.useCheckIns).mockReturnValue({ data: { data: [] } } as unknown as ReturnType<typeof queries.useCheckIns>);
+    vi.mocked(queries.useFunnel).mockReturnValue({ data: undefined } as unknown as ReturnType<typeof queries.useFunnel>);
+    vi.mocked(mutations.useTaskAgentTurn).mockReturnValue({
+      mutateAsync: vi.fn(),
+      isPending: false,
+    } as unknown as ReturnType<typeof mutations.useTaskAgentTurn>);
+    vi.mocked(mutations.useStartRun).mockReturnValue({ mutate: vi.fn(), isPending: false } as unknown as ReturnType<typeof mutations.useStartRun>);
+    vi.mocked(mutations.usePatchPlan).mockReturnValue({ mutate: vi.fn(), isPending: false } as unknown as ReturnType<typeof mutations.usePatchPlan>);
+    vi.mocked(mutations.useAnswerCheckIn).mockReturnValue({ mutate: vi.fn(), isPending: false } as unknown as ReturnType<typeof mutations.useAnswerCheckIn>);
+  }
+
+  function renderPane(overrides: Partial<ComponentProps<typeof TaskAgentPane>> = {}) {
+    // `AppShell` mounts the TooltipProvider in the app; the chat's citation
+    // renderer, reused here, needs it.
+    return render(
+      <MemoryRouter>
+        <ToastProvider>
+          <TooltipProvider>
+            <TaskAgentPane
+              taskId={TASK_ID}
+              runStatus="paused"
+              stream={{ ...createInitialRunStreamState(), pendingCheckIn: gateCheckIn() }}
+              isOwner
+              {...overrides}
+            />
+          </TooltipProvider>
+        </ToastProvider>
+      </MemoryRouter>,
+    );
+  }
+
+  it("shows the gate card, the cited answer and the recorded decision in that order", () => {
+    mockPane({ turns: [answerTurn(), decisionTurn()] });
+    const { container } = renderPane();
+
+    expect(screen.getByRole("heading", { name: "Confirm the plan against the baseline" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Confirm plan and build longlist" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Change the plan" })).toBeInTheDocument();
+    // The chat's own citation renderer, reused: the References footer and the
+    // `[n]` marker button come from `ChatAnswer`, not from a second copy.
+    expect(screen.getByText("References (1)")).toBeInTheDocument();
+    expect(screen.getByText("Change the plan", { selector: "span" })).toBeInTheDocument();
+    expect(screen.getByText(/plan version 2/)).toBeInTheDocument();
+
+    const text = container.textContent ?? "";
+    expect(text.indexOf("Confirm the plan against the baseline")).toBeLessThan(
+      text.indexOf("Does the baseline cover young people"),
+    );
+    expect(text.indexOf("Does the baseline cover young people")).toBeLessThan(text.indexOf("recorded"));
+  });
+
+  it("keeps the composer open at the gate, with the baseline question placeholder", () => {
+    mockPane({ turns: [] });
+    renderPane();
+
+    const textarea = screen.getByLabelText("Message the Task Agent");
+    expect(textarea).not.toBeDisabled();
+    expect(textarea).toHaveAttribute("placeholder", "Question the baseline…");
+  });
+
+  it("keeps the fence for an Evidence search task's paused walk", () => {
+    mockPane({ turns: [], capability: "evidence_search" });
+    renderPane({ stream: { ...createInitialRunStreamState(), pendingCheckIn: esCheckIn() } });
+
+    const textarea = screen.getByLabelText("Message the Task Agent");
+    expect(textarea).toBeDisabled();
+    expect(textarea).toHaveAttribute("placeholder", "Replanning unlocks when this run finishes.");
+  });
+
+  it("keeps the fence for a scoping walk that is still running, not parked at the gate", () => {
+    mockPane({ turns: [] });
+    renderPane({ runStatus: "running", stream: createInitialRunStreamState() });
+
+    expect(screen.getByLabelText("Message the Task Agent")).toBeDisabled();
+  });
+
+  it("renders an already-answered turn as an inline notice with a refresh, not a retry", async () => {
+    mockPane({ turns: [] });
+    const conflict = Object.assign(new Error("conflict"), { error: { code: "already_answered" } });
+    vi.mocked(mutations.useTaskAgentTurn).mockReturnValue({
+      mutateAsync: vi.fn().mockRejectedValue(conflict),
+      isPending: false,
+    } as unknown as ReturnType<typeof mutations.useTaskAgentTurn>);
+    const user = userEvent.setup();
+    renderPane();
+
+    await user.type(screen.getByLabelText("Message the Task Agent"), "Change the plan");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+
+    expect(
+      await screen.findByText("This check-in has already been answered. Refresh to see the recorded decision."),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Refresh conversation" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Retry" })).not.toBeInTheDocument();
   });
 });

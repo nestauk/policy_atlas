@@ -70,6 +70,7 @@ export function WorkspaceView() {
   // Undefined while `task` is still loading reads as "not the owner" —
   // fail closed, never grant the mutation surface before ownership is known.
   const isOwner = task.data?.is_owner === true;
+  const isScoping = task.data?.capability === "options_scoping";
   const openPlan = () => {
     setPlanPlacement("center");
     setPlanOpen(true);
@@ -82,7 +83,14 @@ export function WorkspaceView() {
       // The plan-start card (contract § 11 / rubric 37): folds `!isOwner`
       // into the same `readOnly` prop that already hides Edit/Start once a
       // run has consumed the plan — one mechanism, not a second gate.
-      readOnly={hasRun || !isOwner}
+      // Task 044 (deliverable 5): a scoping plan is NOT consumed by its
+      // baseline walk. "Change the plan" deliberately leaves it `approved`
+      // and editable, and the plan document's own start actions (Rebuild
+      // baseline · Confirm plan and build longlist) live behind this flag —
+      // the Evidence search rule would lock the plan the moment a walk had
+      // ever run, leaving that state unreachable. Only an ACTIVE walk locks
+      // a scoping plan; ownership still gates both.
+      readOnly={(isScoping ? runActive : hasRun) || !isOwner}
       onClose={() => setPlanOpen(false)}
       onDock={() => setPlanPlacement("side")}
       onStarted={() => {
