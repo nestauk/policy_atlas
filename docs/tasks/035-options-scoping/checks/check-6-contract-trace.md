@@ -1,6 +1,6 @@
 # Feasibility check 6 — contract trace
 
-Source: `feasibility-checks.md` § 6. Question: can the declared components compose without hidden changes to
+Source: `../feasibility-checks.md` § 6. Question: can the declared components compose without hidden changes to
 ownership, evidence eligibility, extraction profiles, context or output semantics?
 
 Method: two cases traced on paper through every component in

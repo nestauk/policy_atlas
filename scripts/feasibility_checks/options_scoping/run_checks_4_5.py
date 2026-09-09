@@ -1,7 +1,7 @@
 """Runner for feasibility checks 4 and 5 (options scoping, task 035).
 
     uv run --project backend --env-file backend/.env python \
-        docs/tasks/035-options-scoping/checks/check45.py <command> --data <dir>
+        scripts/feasibility_checks/options_scoping/run_checks_4_5.py <command> --data <dir>
 
 Commands:
     timings     whole-run and per-component latency from staging telemetry (no model calls)
@@ -21,9 +21,9 @@ from datetime import datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-import os_profiles as P  # noqa: E402
-import os_transfer as T  # noqa: E402
-from oscheck import RESIDUAL, call, load, save  # noqa: E402
+import draft_profiles as P  # noqa: E402
+import draft_transferability as T  # noqa: E402
+from run_checks_2_3 import RESIDUAL, call, load, save  # noqa: E402
 from pydantic import BaseModel, ConfigDict, Field  # noqa: E402
 
 # --------------------------------------------------------------------------- timings (check 5, the spine)

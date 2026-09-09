@@ -2,7 +2,7 @@
 
 Lead-authored (prompt-bearing). These are CHECK drafts, not product prompts: they run from
 the scratchpad against exported corpora and write nothing to the product schema. The field
-lists come from check 6 (`../check-6-contract-trace.md`, findings F2 and F4): the abstract
+lists come from check 6 (`docs/tasks/035-options-scoping/checks/check-6-contract-trace.md`, findings F2 and F4): the abstract
 profile is the shared source-named reference vocabulary at mention grain plus the
 "intervention as implemented" the reading-budget seam needs; the light profile is an IOF
 subset plus design features and a study identity for independence detection.

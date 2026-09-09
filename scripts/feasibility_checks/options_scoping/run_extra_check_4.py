@@ -11,7 +11,7 @@ an independent model judge scoring each filled row blind to the expected answer,
 model judge, not a person.
 
     uv run --project backend --env-file backend/.env python \
-        docs/tasks/035-options-scoping/checks/extra_transfer.py --data <dir>
+        scripts/feasibility_checks/options_scoping/run_extra_check_4.py --data <dir>
 """
 
 from __future__ import annotations
@@ -23,10 +23,10 @@ from pathlib import Path
 from typing import Literal
 
 sys.path.insert(0, str(Path(__file__).parent))
-import os_transfer as T  # noqa: E402
-from check45 import BUDGET_TARGETS  # noqa: E402
-from extra_runs import JUDGE_LABEL, judge_call  # noqa: E402
-from oscheck import MIN_FULLTEXT_CHARS, QUESTIONS, assign_to_targets, call, load, save, windows  # noqa: E402
+import draft_transferability as T  # noqa: E402
+from run_checks_4_5 import BUDGET_TARGETS  # noqa: E402
+from run_extra_checks import JUDGE_LABEL, judge_call  # noqa: E402
+from run_checks_2_3 import MIN_FULLTEXT_CHARS, QUESTIONS, assign_to_targets, call, load, save, windows  # noqa: E402
 from policy_atlas.evidence_search.clustering_engine import ClusterUnit  # noqa: E402
 from pydantic import BaseModel, ConfigDict, Field  # noqa: E402
 
@@ -148,7 +148,7 @@ class RowJudgesWire(BaseModel):
 
 def derive_dealbreakers_only(rows: list[dict]) -> dict:
     """D5 variant: the support leg is the weakest DEALBREAKER row; helpful factors do not cap."""
-    from os_transfer import STATUS_RANK, VERDICT_WORD
+    from draft_transferability import STATUS_RANK, VERDICT_WORD
     legs = {}
     for leg in ("worked_somewhere", "same_causal_role"):
         lr = [r for r in rows if r["leg"] == leg]

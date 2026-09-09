@@ -4,14 +4,14 @@ Source: `../feasibility-checks.md` § 2. Question: can the system distinguish a 
 support, documents from independent evidence, and inherited availability from compatibility?
 
 Method as run (2026-09-08): the abstract profile (`os_abstract_v0`) and the light full-text
-profile (`os_light_v0`), drafted from check 6's field lists in `os_profiles.py`, were run over
+profile (`os_light_v0`), drafted from check 6's field lists in `draft_profiles.py`, were run over
 real corpora exported read-only from staging: the "physical inactivity" deep Evidence search
 (351 screened-in documents, 128 deep IOF findings over 17 documents) and the "local
 unemployment" search (48 documents). A hand-built set of 21 documents was read in full by the
 light profile. Six target designs in each domain, including two parent–variant pairs, were
 used as fixed option lists; every mention, light finding and inherited deep finding was assigned
 to a target or to none, and the resulting rows were traced back to their documents and quotes.
-Runner: `oscheck.py` (commands `abstract`, `light`, `trace2`). Raw results are held outside the repository (they carry staging document text):
+Runner: `run_checks_2_3.py` (commands `abstract`, `light`, `trace2`). Raw results are held outside the repository (they carry staging document text):
 session scratchpad `staging/out/trace2.json` and `staging/out/light.json`; a zip is available from the owner on request.
 
 **Version note (after the pass-4 review, 2026-09-08).** The numbers in this report come from the
@@ -204,3 +204,61 @@ text is read (ruling 33).
   studies as two numbers, never one.
 - **Evidence search.** Two fixes want their own slice or ADR: the `text_basis` label (C2-7) and
   the cross-task field-grain memo (check 6 F3, confirmed here).
+
+## After review (2026-09-08 and 2026-09-09)
+
+Two independent Codex reviews (passes 4 and 5) checked this report against the raw results and found factual errors, corrected in place above and marked *Correction*. The reviews asked for extra runs; the owner ruled that no owner or analyst time was available, so every extra run is **agent-only**, and where the method asked for a human judge an independent model pass (`gpt-5.5`, a different and stronger model than the one that produced the outputs) stands in, labelled **model judge** wherever it appears. It is not human judgement. The runners are in `scripts/feasibility_checks/options_scoping/`; raw results stay outside the repository.
+
+### 0 — Pinning and the runner defects
+
+The review found the results bundle held a later light run than the check-2 report described, and
+three runner defects. All are fixed and the bundle is pinned.
+
+- **light_v2** is one complete run over all 36 read-set documents: 173 findings; anchors 125
+  exact · 60 normalised · **38 failed (17 percent)**; every document carries a wall time. The
+  check-2 trace was recomputed on it (**trace2_v2**). Both are the reference for everything below.
+- **True fan-out timing** (all of an option's documents extracted at once): T3, 10 documents,
+  **24.6 s** wall (sum of document times 76.7 s); T4, 12 documents, **16.0 s** (sum 65.2 s). The
+  earlier "parallel" column, which took the slowest recorded document, was within a second of
+  these where times existed.
+- Seat replacements are now counted as seats whose seated option changed, not as a symmetric
+  difference. "Contrary" is now judged against the outcome's desirable direction and only over
+  findings assigned to the design; the earlier flag counted any decrease.
+
+Recomputed check-2 table on the pinned run (compare the report's first-run table):
+
+| target | mentions any / evaluated | support documents | findings (distinct) | independent own-data studies | reviews | inherited |
+|---|---|---|---|---|---|---|
+| T3 whole-system | 39 / 7 | 6 | 34 (25) | 2 | 1 | 10 |
+| T4 community-wide | 24 / 12 | 8 | 21 (19) | 2 | 6 (five are copies of one Cochrane review) | 5 |
+| T1 free access with outreach | 3 / 3 | 2 | 4 | 1 | 1 | 6 |
+| T2 peer-led walking | 1 / 1 | 1 | 15 (12) | 1 | 0 | 2 |
+| T1v, T2v, Y variants | — | 0 | 0 | 0 | 0 | 0 |
+| A–D active labour market | 6–13 / 1–5 | 2–3 | 3–7 | 0 | 2–3 | 0 |
+
+The shape of the check-2 findings is unchanged: role separates mention from support; variants
+receive nothing from their parents; review-mediated support resolves to no independent study.
+Two counts moved enough to matter for the rows: T4's reviews went from 1 to 6 because the
+pinned run read all five snapshots of the Cochrane review (A8), and one independence key is a
+document id because a paper carried no programme name or registration (A3: identity is a clue,
+not proof — as the review said).
+
+### 1 — Run 5: independence cases, model-judged
+
+Real cases from the corpus, resolved by the light profile's `study_identity`:
+
+| case | documents | system resolution | model judge |
+|---|---|---|---|
+| one Cochrane review as five snapshots | `04940b89` `262fd5bf` `2de6988a` `792b2e60` `fa83c920` | none reports own data, so 0 studies (right); but the name-first key splits them into **three keys** ("community wide" / "community-wide" / none) | **wrong** as a document count: they must be one review record; identity needs normalisation (hyphen, case) and DOI |
+| one trial in four papers (JU:MP) | `a3a7243b` `d65ae6e0` `d745c2c8` `de29337d` | one key, 1 study | right |
+| protocols | `595fdaf1` `379f0041` | 0 findings, 0 studies | right |
+| alias: name vs registration | `9973f940` | one key (Walk with Me = ISRCTN23051918) | right |
+| two distinct studies sharing a programme name | — | not constructible from this corpus | untested |
+| an older-profile record (simulated: no setting, geography, basis, comparator) | Walk with Me IOF record | satisfies intervention, outcome, direction, population, design, estimate level | **partial reuse only**: lacks magnitude, comparator, period, setting, geography, identity; cannot be reused without mixing comparators or periods |
+
+Model-judged verdict table (V1–V10), judged from document excerpts and the pinned trace: right
+V2, V5, V7; wrong V1, V6, V8 — each because the statement's counts came from the first light run
+and the pinned run differs (support documents, review copies); cannot tell V3, V4, V9, V10 — the
+excerpts did not carry the cited result. This is a judge on the *statements as written*, not on
+the design; the statements should be regenerated from trace2_v2 before any human checks them.
+

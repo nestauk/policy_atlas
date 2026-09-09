@@ -106,6 +106,26 @@ small, time-boxed investigation that tests one design claim before a contract is
   comparisons omit the question the senior needs → change the comparison principle. Recipients lose
   qualifications → change the handoff before expanding output detail.
 
+## Results (2026-09-08 to 2026-09-09)
+
+Five of the six checks ran on 2026-09-08 and were reviewed twice by an independent Codex pass;
+their corrections and extra runs sit in each report's *After review* section. Everything is on one
+branch (`checks/035-feasibility`, PR #72). The runners are in
+`scripts/feasibility_checks/options_scoping/`; raw results carry staging document text and stay
+outside the repository. The spec changes the checks proposed are the rows of
+`checks/decision-sheet.md`; the owner decided the sixteen rows task 1 depends on, one at a time,
+on 2026-09-09, and the specs were edited to each ruling (see `docs/specs/log.md`). The other rows
+are decided in the task that owns them (table at the top of the sheet).
+
+| check | report | outcome in one line |
+|---|---|---|
+| 6 contract trace | `checks/check-6-contract-trace.md` | the components compose; six shared invariants were missing from the system contracts, now decided as sheet rows A6, A7, C1, C3, C4 and A4 |
+| 2 attribution | `checks/check-2-evidence-attribution.md` | mention and support are distinguishable through the mention's role; independence resolves only for own-data papers with a name or registration; inherited findings satisfy only part of the light profile; an unstated design feature must hold support back |
+| 3 option grain | `checks/check-3-option-grain.md` | mentions give class-grain options and findings give named designs, on equal inputs; seats are stable except where a lever type has only thin unevaluated options; no-document entrants survive as their own options |
+| 4 local conditions | `checks/check-4-local-condition.md` | the four context kinds are distinguished; the working is two steps; factor extraction drifts and needs pinning; the fill over-reads adjacent context; chat-to-context promotion works |
+| 5 reading budget | `checks/check-5-reading-budget.md` | writing, not reading, is where the time goes (a fresh rapid search: 11.3 minutes, 59 percent writing); a reading cap of 3 loses contrary evidence; no small cap, design targets not cut-offs |
+| 1 advice and commissioning | — | **deferred by the owner to post-build user testing**; ruling 27's four tests become the protocol |
+
 ## Order
 
 6 → (2 ∥ 3) → 4 → 5, with 1 running whenever live asks are available and landing before contracts.

@@ -17,7 +17,7 @@ Method as run (2026-09-08). Three measurements, all on staging data read-only:
    (one call over the cap-5 texts producing the cells directly); compatible finding reuse alone
    (the inherited deep findings, no calls).
 
-Runner: `check45.py timings | budget`. Raw results outside the repository: scratchpad
+Runner: `run_checks_4_5.py timings | budget`. Raw results outside the repository: scratchpad
 `staging/out/timings.json`, `staging/out/budget.json`. Cold starts were not run (no acquire on
 staging); the corpus supplies poor metadata and failed fetches naturally (65 percent of the
 inactivity corpus is abstract-only; several "full text" snapshots are failed parses, check 2 C2-7).
@@ -178,3 +178,69 @@ search's synthesise); the rapid one-option check end to end.
   compute from elapsed time (C5-5).
 - **Open question 3.** The rapid number can now be set from measurements: about 25 minutes of
   compute for a one-option sense-check on today's synthesise, before any synthesis tuning.
+
+## After review (2026-09-08 and 2026-09-09)
+
+Two independent Codex reviews (passes 4 and 5) checked this report against the raw results and found factual errors, corrected in place above and marked *Correction*. The reviews asked for extra runs; the owner ruled that no owner or analyst time was available, so every extra run is **agent-only**, and where the method asked for a human judge an independent model pass (`gpt-5.5`, a different and stronger model than the one that produced the outputs) stands in, labelled **model judge** wherever it appears. It is not human judgement. The runners are in `scripts/feasibility_checks/options_scoping/`; raw results stay outside the repository.
+
+### 4 — Run 6: contrary evidence, judged properly
+
+Contrary = a finding **assigned to the design** whose direction opposes the outcome's desirable
+direction (model-mapped per outcome family), or a null or mixed result. Selection strata now use
+the documents whose *evaluated mention was assigned to this design* (membership), with one review
+and one primary study reserved.
+
+| option | verified findings | eligible for the design | contrary | cap 3 kept / lost | cap 5 | cap 8 | all |
+|---|---|---|---|---|---|---|---|
+| T3 whole-system | 49 | 6 | **1** (a null result on physical activity in the nationwide place-based trial, `b7166ee9`) | 0 / 1 | 1 / 0 | 1 / 0 | 1 / 0 |
+| T4 community-wide | 59 | 16 | **14** (the Cochrane null result across five snapshots; a second review's mixed results) | 4 / 10 | 7 / 7 | 11 / 3 | 14 / 0 |
+
+Only 6 of T3's 49 verified findings belong to the design: most of what the read set carries is
+about other things. The cap-3 read set held zero eligible findings for T3. Five of T4's fourteen
+contrary findings are one review counted five times, so the dedup of A8 changes this table too.
+
+**Equal text, cap 5** (the first 60 000 characters of each document to both approaches): for T3
+extraction produced 4 attributable contrary findings; the single reading call's cells reported
+**one null result** in three documents for physical activity (and, for T4, two null and one
+mixed for physical activity, one null and one mixed for social participation). *Correction after
+the pass-5 review: an earlier version of this section said the reading call showed no contrary
+family; the runner's outcome-label matching failed (the reading's family names did not match the
+desired-direction map, spaces against underscores), so `contrary_families` came out empty while
+the tallies plainly carried the null results.* Reading alone did report the contrary evidence at
+cap 5. What it did not produce is a per-claim anchor or claim key; the case for extraction is
+verifiability, not detection, and this run does not show a detection difference either way.
+
+### 7 — Run 7 (approximation): one fresh rapid path, timed
+
+One complete rapid Evidence search on the NEET question, fresh acquisition, through the runtime
+agent CLI with a scripted console (two console turns: the ask, then "approve"), unattended
+steering, and the synthesis shaped at plan time into eight profile-like sections (mechanism and
+failure modes; what the interventions are made of; evidence for and against; variation in
+practice; case studies; what it would take; what was searched). It is an approximation:
+the Evidence search's synthesise stands in for `synthesise(profile)`, and there was no
+inherited-material twin to compare against (nothing to inherit exists yet).
+
+| stage | wall time | tokens | note |
+|---|---|---|---|
+| planning conversation to approval | 26 s | | one planner turn |
+| acquire | 28 s | | 100 documents; **78 already in the shared substrate** from other tasks |
+| screen | 27 s | 0.40 M | 59 screened in of 100 |
+| classify | 87 s | 0.17 M | |
+| appraise | 0.2 s | | deterministic |
+| ingest full text | 107 s | | 32 ingested; 25 fetches failed (20 blocked by host, 3 paywall) |
+| characterise | 10 s | 0.05 M | |
+| **synthesise** | **380 s** | **1.13 M** | 8 sections, 9 blocks |
+| whole path, end to end | **676 s** (11.3 min) | | no gate waits (unattended) |
+
+Synthesise was **59 percent** of the walk; the spine (acquire through ingest) about four
+minutes; the planning turn under half a minute. On a cold corpus the whole rapid path ran in
+under twelve minutes of compute, with a profile-shaped synthesis at Evidence search size. Two
+things this does not measure: a scoping baseline synthesis and a scoping profile synthesis of
+their own sizes, and the human wait at the two structural gates (median 17 minutes on staging).
+For the E16 row it means the "about 25 minutes of compute" projection is of the right order for
+two syntheses of this size, and remains a projection.
+
+### Pinned fan-out timing (from the pinning run)
+
+All of an option's documents extracted at once: T3, 10 documents, **24.6 s** wall (sum of document times 76.7 s); T4, 12 documents, **16.0 s** (sum 65.2 s). Every document in the pinned run carries a wall time; the earlier tables' "parallel" column, which took the slowest recorded document, was within a second of these where times existed.
+

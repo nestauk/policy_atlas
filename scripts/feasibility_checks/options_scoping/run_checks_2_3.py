@@ -4,7 +4,7 @@ Runs from exported corpora (JSON in a data directory) and writes JSON results be
 Nothing here touches the product schema. Invoke with the backend environment:
 
     uv run --project backend --env-file backend/.env python \
-        docs/tasks/035-options-scoping/checks/oscheck.py <command> [args] --data <dir>
+        scripts/feasibility_checks/options_scoping/run_checks_2_3.py <command> [args] --data <dir>
 
 Commands:
     abstract <slug>              abstract profile over every screened-in document
@@ -29,7 +29,7 @@ from pathlib import Path
 from typing import Any
 
 sys.path.insert(0, str(Path(__file__).parent))
-import os_profiles as P  # noqa: E402
+import draft_profiles as P  # noqa: E402
 from policy_atlas.core.openai_client import parse_structured, resolve_openai_client  # noqa: E402
 from policy_atlas.evidence_search.clustering_engine import (  # noqa: E402
     ClusterAssignment,

@@ -3,7 +3,7 @@
 Source: `../feasibility-checks.md` § 4. Question: can the weakest-leg verdict distinguish an
 applicable universal fact, an aggregate geography fact, a present user report and a commitment?
 
-Method as run (2026-09-08): a transferability-working prompt was drafted (`os_transfer.py`,
+Method as run (2026-09-08): a transferability-working prompt was drafted (`draft_transferability.py`,
 `os_transfer_v0.1`, lead-authored) for the column-grounded block declared in
 `provenance-grounding.md`, in two stages: **stage 1** extracts the factor list once from the
 evidence (the two evidence legs plus the support factors, moderators and dealbreakers, each with
@@ -14,7 +14,7 @@ model's statuses. Evidence: the Walk with Me peer-led walking trial from the sta
 corpus, 8 light-profile effect findings plus 59 implementation-context findings (barriers,
 enablers, fidelity, adaptations). Target: inactive adults aged 60 to 70 in Bradford district.
 Context entries are **constructed test fixtures, not facts about Bradford**; each pair varies one
-thing. Runner: `check45.py transfer`. Raw results outside the repository: scratchpad
+thing. Runner: `run_checks_4_5.py transfer`. Raw results outside the repository: scratchpad
 `staging/out/transfer.json`.
 
 A first single-stage draft (`os_transfer_v0`) failed in two ways that the two-stage form fixes:
@@ -156,3 +156,46 @@ test C4-3 directly. The owner judges the reasons in the table above.
 - **Spec.** trust.md § Transferability: make explicit that helpful factors do not cap (C4-2) and
   how a local aggregate is treated (C4-7). provenance-grounding.md § Column-grounded blocks: the
   two steps and the verify rules.
+
+## After review (2026-09-08 and 2026-09-09)
+
+Two independent Codex reviews (passes 4 and 5) checked this report against the raw results and found factual errors, corrected in place above and marked *Correction*. The reviews asked for extra runs; the owner ruled that no owner or analyst time was available, so every extra run is **agent-only**, and where the method asked for a human judge an independent model pass (`gpt-5.5`, a different and stronger model than the one that produced the outputs) stands in, labelled **model judge** wherever it appears. It is not human judgement. The runners are in `scripts/feasibility_checks/options_scoping/`; raw results stay outside the repository.
+
+### 5 — Run 4: a second option with a real blocker, model-judged
+
+Option: the whole-system, place-based approach. Evidence: 25 effect findings assigned to it plus
+**134 implementation-context claims extracted for the check** from four documents (labelled
+ICF-lite; 45 of them blockers, 14 barriers, 28 conditions). Target: children aged 5 to 15 in a
+deprived northern district.
+
+**Factor extraction drift, three runs:** 12, 13 and 13 rows; **one factor label shared by all
+three** (an exact lower-cased match, so a lower bound on shared meaning); dealbreakers flagged in
+one run of three (three factors), none in the other two — with 45 blocker claims in the evidence
+(themselves model labels, not quote-vetted). This is worse than the first option showed. A factor list cannot
+be re-derived per run; it has to be produced once, pinned to an evidence and design version, and
+probably built by clustering the context claims rather than by free extraction.
+
+**Fixtures drafted against the real factor list** (varying one thing each), status on the target
+factor:
+
+| case | expected | got | note |
+|---|---|---|---|
+| blocker present (stated) | met | met | |
+| blocker absent (stated) | not met | not met | all-rows verdict "does not transfer"; dealbreakers-only stays Unknown because no dealbreaker was flagged in the run used |
+| blocker planned | conditional | conditional | the fill set it conditional itself; the one code correction in this case restored an evidence-leg status, not a planned→met error *(corrected after pass 5)* |
+| blocker unstated (entry about a different factor) | unknown | **met** | over-read: an attendance spreadsheet set "place-based coordination" met; the model judge said unknown |
+| rule applies by nature | met | met | |
+| rule with a local exception | not met | **met** | **not a demonstrated failure**: the drafted exception excluded districts that had already received a comparable grant, and no entry said this target had, so the target was never inside the exception; the model judge agreed with met *(corrected after pass 5: the fixture, not the fill, was at fault)* |
+
+**Chat promotion** (plain messages to typed entries): all six typed as a person would — a budget
+bid and a funder's assurance became *planned*, a 2022 audit *retrieved*, a present partnership
+board and present officers *stated*, an opinion dropped. The C3 mechanism works at this scale.
+
+**Model judge** on 20 filled rows: agreed with 16; the four disagreements are the two over-reads
+above and two rows where the promoted partnership board was read as establishing deliverers and
+senior buy-in. In this run the code guard's two corrections both restored evidence-leg statuses;
+no planned→met error occurred to catch. The guard cannot catch over-reading. Whether an exception
+can defeat a rule remains **untested** across both options (the first option's rule matched no
+factor; this option's fixture never placed the target inside the exception). A rerun needs a
+fixture that does, and a judge that derives its answer before seeing the system's.
+

@@ -13,8 +13,8 @@ inherited IOF findings. Options were then typed against ruling 11's lever list
 run through a deterministic shortlist procedure (one place per primary lever type present;
 reason = only option of its type, else widest implementation record). Two perturbations:
 paraphrase every option's label and design and re-assign every mention; re-type levers with the
-taxonomy shuffled three times and once with labels but no definitions. Runner: `oscheck.py`
-(commands `options`, `stability`). Prompts: `os_profiles.py`. Raw results are held outside the repository (they carry staging document text): session scratchpad `staging/out/*.options.*.json`,
+taxonomy shuffled three times and once with labels but no definitions. Runner: `run_checks_2_3.py`
+(commands `options`, `stability`). Prompts: `draft_profiles.py`. Raw results are held outside the repository (they carry staging document text): session scratchpad `staging/out/*.options.*.json`,
 `staging/out/*.stability.json`; a zip is available from the owner on request.
 
 The method named NEET, industrial energy prices and regional disparities. Staging holds none of
@@ -217,3 +217,64 @@ themes: 3 calls. The longlist stage is cheap; nothing here threatens the rapid b
   options or a class option's named implementations, never a bare class.
 - **Spec.** Ruling 20 stands (coverage over lever types) with C3-2's guards added; ruling 11's
   list stands, with the split of "provide a service" recorded as a candidate for the eval slice.
+
+## After review (2026-09-08 and 2026-09-09)
+
+Two independent Codex reviews (passes 4 and 5) checked this report against the raw results and found factual errors, corrected in place above and marked *Correction*. The reviews asked for extra runs; the owner ruled that no owner or analyst time was available, so every extra run is **agent-only**, and where the method asked for a human judge an independent model pass (`gpt-5.5`, a different and stronger model than the one that produced the outputs) stands in, labelled **model judge** wherever it appears. It is not human judgement. The runners are in `scripts/feasibility_checks/options_scoping/`; raw results stay outside the repository.
+
+### 3 — Run 2 (machinery half): grain on equal inputs
+
+The same 22 documents (the T3 and T4 candidates), three unit sources, one clustering procedure,
+grain judged by the ordinary producer model (`gpt-5.4-mini`, not the stronger judge), paraphrase
+stability measured on each set:
+
+| unit source | units | options | residual | grain (model-judged) | mentions moved under paraphrase |
+|---|---|---|---|---|---|
+| abstract mentions | 55 | 14 | 23 | **8 class** · 4 specified design · 2 not an option | 2 of 55 |
+| inherited deep findings | 89 | 14 | 8 | **10 specified design** · 4 class | 0 of 89 |
+| reading two reviews | 6 | 6 | 0 | 5 specified design · 1 class | 0 of 6 |
+
+Cross-fit: 84 of 89 finding units and 6 of 6 review units fit into the mention-path options. The
+review's confound (295 versus 17 documents) is removed: **the grain difference is a property of
+the unit type**, not of document coverage. Findings-grain options are also the stable ones.
+Unchanged: whether either set is *meaningful* to an expert.
+
+### 2 — Run 3: no-document suggestions and a set-aside
+
+Injected into the unemployment corpus with an "OECD evidence only" evidence-scope constraint
+(five documents set aside by study geography): a user suggestion (youth guarantee **without**
+benefit sanctions, *variant of* the guarantee with obligation), a ministerial suggestion (free
+bus travel for jobseekers), a taxonomy-prompted suggestion (guaranteed-hours rights, lever type
+*regulate*), and a modified design (wage subsidies restricted to long-term-unemployed under-25s
+for twelve months). Discovery at the C3-3 ceiling (`clamp(ceil(N/4), 8, 40)` → 25) found 19
+options (residual 33 of 97 units).
+
+| check | result |
+|---|---|
+| every no-document entrant survives as its own option with its origin label | **yes**, all four; each became an option with zero documents (an honest empty coverage state) |
+| the variant survives as its own option and keeps its relation | yes; "Youth guarantee without benefit sanctions" is its own option, variant of the guarantee with obligation. **No distinctness screen was run** in this check, so ruling 36's "the distinct screen never excludes a variant" is not tested here |
+| a user-added place is kept through the proposal | **not exercised**: the check wrote the user's place as a separate output beside the proposal rather than running it through repeated proposals or a user edit |
+| scope-shaped constraints judge the specified design | yes: "guaranteed-hours rights" was **excluded** as needing primary legislation (correct for a local-authority constraint); benefit reform and area tax credits likewise; nine options came back **uncheckable** |
+| an option whose only source is set aside is kept marked "no in-scope evidence" | **not exercised**: every option with set-aside members also had in-scope members ("skills training": 8 in scope, 5 set aside) |
+| reason text when coverage is empty | a defect: "widest implementation record (0 countries recorded across 4 documents)" — the reason axis needs a floor when no geography is recorded |
+
+### 6 — Run 1 (machinery half): a real NEET corpus
+
+A fresh rapid Evidence search on the NEET question through the agent CLI (run 7 below) produced
+a real corpus: 100 documents acquired (78 already in the shared substrate from other tasks), 59
+screened in, 32 with full text, 20 fetches blocked by hosts; grey-literature heavy (20 commentary,
+12 policy syntheses, 12 observational, 3 reviews, 1 trial). The check-3 machinery on it:
+
+| measure | NEET |
+|---|---|
+| mentions → options | 126 mentions from 59 documents; 124 units → **20 options** at a ceiling of 21 (near, not binding) |
+| residual | 28 of 124 (23 percent); residual kinds as before: actors ("schools", "colleges"), events, out-of-question measures |
+| grain | class-grain again ("Youth Guarantee", 4 documents; "Government-led NEET policy") |
+| shortlist | 5 places; the "change who runs the system" seat went to a **one-document, unevaluated** option |
+| paraphrase | 14 of 124 mentions moved; 0 seats |
+| lever relabel | that one weak seat swapped in **3 of 4** runs; every other seat held |
+
+The pattern from the substitute corpora holds on the real question: seats are stable except where
+a lever type is represented only by thin, unevaluated options, and there the seat is decided by
+noise. The expert half (are these the right options for NEET) is untested.
+

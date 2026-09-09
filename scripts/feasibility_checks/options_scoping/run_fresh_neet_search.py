@@ -3,7 +3,7 @@ sanctioned live-check vehicle (the runtime agent CLI), with a scripted console, 
 path. Also gives check 3 a real NEET corpus (the machinery half of run 1).
 
     uv run --project backend --env-file backend/.env python \
-        docs/tasks/035-options-scoping/checks/run7_neet.py --data <dir>
+        scripts/feasibility_checks/options_scoping/run_fresh_neet_search.py --data <dir>
 
 Substrate discipline (docs/knowledge/run-component-driver-for-scoped-live-checks.md): the dev
 database only; DATABASE_URL is forced after the env file loads. This is an approximation of a
