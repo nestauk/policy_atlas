@@ -69,9 +69,11 @@ the adversarial findings A1–A18 and the terms are defined in
 9. [ ] **9 Tabs and views**: Result shows the baseline with the band and run
        state; Sources, Share and History unchanged.
 10. [ ] **10 System records**: exactly the schema changes named in the
-        contract § Constraints, in one reversible migration whose downgrade
-        reverses the stored values and refuses while any `task` or
-        `capability_run` row carries `options_scoping` (A5).
+        contract § Constraints, in two reversible revisions — the rename
+        revision (phase one) and the slice revision (phase two; owner ruling
+        2026-09-09) — whose downgrades reverse the stored values, the slice
+        one refusing while any `task` or `capability_run` row carries
+        `options_scoping` (A5).
 
 ## Cross-cutting
 
@@ -99,7 +101,7 @@ the adversarial findings A1–A18 and the terms are defined in
         `task_link.option_id` (task 2, D13) · scoping deep (D6) · the later
         latency levers (D7) · the Task Agent as the Evidence search's control
         surface and any chat carrying Task Agent turns (D9).
-17. [ ] The six spec changes in contract § Spec changes are applied with the
+17. [ ] The seven spec changes in contract § Spec changes are applied with the
         owner's words quoted and logged in `docs/specs/log.md`; sources
         untouched.
 18. [ ] ADR 0037 written and Accepted with sign-off date, with the rollback

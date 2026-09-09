@@ -25,8 +25,11 @@ against the baseline before any option is generated.
 > (A5), the complete rename list (A10), `evidence_scope.plan_id` (A16) —
 > reopened the 🛑 and were re-approved.
 > Plan approved (before implementation): _pending_ ·
-> ADR: **0037** (to be written at step 4 — task kind, `task_link`, the
-> baseline gate, the Task Agent rename, rollback).
+> ADR: **[0037](../../adr/0037-options-scoping-task-kind-links-and-baseline-gate.md)**
+> — Accepted 2026-09-09 (task kind, links, registry, the baseline gate, the
+> end-walk disposition, the Task Agent rename, two revisions, rollback).
+> **Plan approved 2026-09-09 · owner.** Design phase closed; the build runs in
+> a fresh conversation with `task-cycle-build`.
 >
 > **Branching:** `task/043-scoping-shell-baseline` from `feat/options-scoping`
 > at `7e31c373` (dev merged in after tasks 039–042; issue #74 fix included).
@@ -573,6 +576,11 @@ Applied to the specs with the owner's words quoted and a line in
    **version grain** (C16 ruling), and § Thoroughness: the writing-mode trial
    sentence replaced by sequential writing plus a feasibility check (C6
    ruling). Applied with this re-approval.
+7. web-api.md § Planning turns and § Check-ins: a sorted, non-approving Task
+   Agent turn is admitted while a scoping walk is **paused**; the approving
+   branch and `PATCH /plan` stay refused while a walk is running or paused
+   (owner ruling at the plan gate, 2026-09-09, quoting D9). Applied in the
+   build (plan Phase 5.6), logged in Phase 7.
 
 ## Adversarial findings (contract stage, 2026-09-09)
 
@@ -650,9 +658,12 @@ Hard gates this slice touches — approval is this contract's sign-off:
   `evidence_scope.purpose`, `evidence_scope.plan_id`; widened
   `ck_capr_capability`; the deliverable-2 renames (conversation kind values,
   `plan.created_by` values, `planning_transcript` → `task_agent_transcript`,
-  `planner_state` → `task_agent_state`, constraint and index names). One
-  migration, reversible (§ Rollback in ADR 0037), values reversed on
-  downgrade.
+  `planner_state` → `task_agent_state`, constraint and index names). **Two
+  revisions, one per phase** (owner ruling at the plan gate, 2026-09-09,
+  plan-review finding P1/X1): the rename revision lands with the fenced
+  phase one, the slice revision with phase two; each reversible, values
+  reversed on downgrade; rollback is two `downgrade -1` steps in reverse
+  order (§ Rollback in ADR 0037).
 - **Runtime egress:** a new walk kind reaches Overton, OpenAlex and the
   inference route with task data. Same backends, same transport, same
   `search` verb; no new host. Two new judgment-class call sites at the gate
@@ -887,15 +898,16 @@ verifier · `/code-review medium` · one security lane scoped to the new
 endpoints, the gate turn routing and `task_link` · `/simplify` · human deep
 review). The rename phase gets its own review pass before feature code lands.
 
-Rollback shape (ADR 0037 names the commands): quiesce the API; `alembic
-downgrade -1` refuses while any `task` or `capability_run` row carries
+Rollback shape (ADR 0037 names the commands): quiesce the API; the slice
+revision's `alembic downgrade -1` refuses while any `task` or `capability_run` row carries
 `options_scoping`, archived or not (A5 — archiving keeps the row, so it is
 not a remedy); the remedy is an operator script that hard-deletes those
 scoping tasks and their walks (pre-merge, staging-only data — the only rows
 the widened constraint would block), after which the downgrade drops
 `task_link`, the two `evidence_scope` columns and `task.capability`, narrows
-`ck_capr_capability`, and reverses the rename (tables, columns, constraint
-names, stored kind and `created_by` values); deploy the previous image.
+`ck_capr_capability`; a second `downgrade -1` reverses the rename revision
+(tables, columns, constraint names, stored kind and `created_by` values);
+deploy the previous image.
 
 Review focus: the ES planner prompt, chain and steering byte-for-byte
 unchanged; the rename diff contains nothing but the rename; the gate passes

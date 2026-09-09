@@ -15,8 +15,9 @@ by the lead in Phase 1.1). This plan cites them and adds nothing to scope.
 > folds X1–X16). **Two folds change the contract's wording and need the owner
 > at the plan gate:** P1/X1 (two migration revisions, one per phase, where
 > the contract says one) and P9 (a `web-api.md` revision for the Task Agent
-> turn at a pause). **Plan approved (before implementation):** _pending ·
-> owner_. **ADR 0037 is drafted in this design phase, after plan approval
+> turn at a pause) — **both ruled yes, 2026-09-09 · owner**; contract
+> § Constraints, § Spec changes item 7 and rubric 10 amended. **Plan approved
+> (before implementation): 2026-09-09 · owner.** **ADR 0037 is drafted in this design phase, after plan approval
 > and before any build phase** (X15; the task-cycle's step 4); Phase 7 only
 > adds evidence and the sign-off date.
 
@@ -360,7 +361,11 @@ compose sites through it (X3, X13 — the scoping entry arrives in 3.2);
 `TaskCreate`/`TaskOut` (`capability`, `project_ids`, `from_task_ids`);
 `assign_projects` extraction; `task_link` writes, read model and flag;
 `lib/capabilities.ts` key rename and `NewTaskView` capability switch;
-`useCreateTask` two requests. Tests: migration round-trip with the downgrade
+`useCreateTask` two requests; the operator script ADR 0037 names for the
+downgrade remedy (`scripts/ops_remove_scoping_tasks.py`: lists, then on
+`--apply` hard-deletes every `options_scoping` task with its links, walks,
+runs, scopes and result rows; refuses on a task with inbound links from an
+ES task), with a test on a seeded scoping task. Tests: migration round-trip with the downgrade
 refusal; registry routing for ES (every reader resolves through the
 registry; the no-direct-import test); ES steering tests unchanged; `task_link` rules (S7) and the ADR 0033-style
 no-access test; create atomicity (a failed link leaves no task row). Done
