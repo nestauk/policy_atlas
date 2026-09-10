@@ -48,7 +48,7 @@ from ground_truth import GroundTruth, normalize_doi, record_key
 # rather than reimplemented (they are private to acquire.py, and this is
 # dev-only tooling) precisely so this inspector reports the title/DOI the
 # pipeline actually saw. A local copy would drift and quietly lie to you.
-from policy_atlas.evidence_base.sourcing.acquire import _MAPPERS
+from policy_atlas.evidence_search.sourcing.acquire import _MAPPERS
 
 _QUERY_PREVIEW_CHARS = 60
 
@@ -187,7 +187,7 @@ def ground_truth_table(
         A DataFrame of key, space (doi/overton), title, year, ``in_openalex``.
     """
     if backend is None:
-        from policy_atlas.evidence_base.sourcing.search_live import live_search_backends
+        from policy_atlas.evidence_search.sourcing.search_live import live_search_backends
 
         backend = live_search_backends()[0]
 

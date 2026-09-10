@@ -274,37 +274,72 @@ committed copies, so choosing a backend is the whole choice — nothing is
 swapped at runtime. To try a different wording, edit the file for the arm you
 want to change.
 
-```
-uv run --project backend --env-file backend/.env \
-    python scripts/eval_ground_truth/sweep_record_cap.py \
-  --title "..." --doi "10.xxxx/yyyy" \
-  --generation-backends v1 v2 --repeats 1
-```
+The sweep is a Langfuse **experiment**: the reviews and their reference lists
+are a Langfuse dataset, every generation backend × cap × repeat cell is a
+dataset run, and recall is a score on each trace. Two steps.
 
-#### Sweeping several reviews at once
+#### 1. Upload the ground truth (once, and again whenever a CSV changes)
 
-`--reviews` takes a CSV instead of a single `--title`/`--doi`, sweeps every
-review in it, and adds mean and median recall across reviews to the summary:
+The recall target is two hand-curated CSVs under `input/`, mirrored into a
+Langfuse dataset (a saved set of test cases, one per review) by
+`ground_truth_dataset.py`:
 
-```
-uv run --project backend --env-file backend/.env \
-    python scripts/eval_ground_truth/sweep_record_cap.py \
-  --reviews scripts/eval_ground_truth/input/gt_reviews.csv --repeats 1
-```
-
-| column | required | meaning |
+| file | one row per | columns used |
 |---|---|---|
-| `title` | yes | cleaned into the search intent |
-| `doi` | one of doi/url | bare (`10.xxxx/yyyy`) or as `https://doi.org/...` |
-| `url` | one of doi/url | used only when `doi` is empty, for grey literature |
-| `published_before` | only for `url` rows | ISO `YYYY-MM-DD` search cutoff. Derived from OpenAlex for a `doi` row; there is nothing to derive it from for a URL, so it must be given |
-| `exclude` | no | any non-empty value skips the row |
+| `gt_reviews.csv` | review to search for | `title` (cleaned into the search intent), `doi` or `url` (the review's identifier), `published_before` (ISO `YYYY-MM-DD` search cutoff; when empty on a DOI row it is derived from OpenAlex as one month before publication and printed for you to paste in; a URL row must give it), `exclude` (any value skips the row) |
+| `references.csv` | work a review cites | `review_title` (must equal `title` above exactly), `ref_title`, `label` (only `content` rows count toward recall), and the scoring key: `doi` (bare or `https://doi.org/...`) or `overton_id` (for a policy document with no DOI) |
 
-Every row is checked before any network call, so a malformed sheet fails in a
-second rather than part-way through an expensive run. If a review's ground
-truth cannot be built (no OpenAlex record, an unreachable page), it is reported
-and skipped rather than killing the batch, and the skipped list is reprinted at
-the end so it cannot be missed.
+A `content` row with neither `doi` nor `overton_id` cannot be matched against
+anything the search returns, so it is counted as "unscorable" and left out of
+the target. A review with no scorable rows is skipped. Every row is checked
+before any network call, so a malformed sheet fails in a second.
+
+```
+uv run --project backend --env-file backend/.env \
+    python scripts/eval_ground_truth/ground_truth_dataset.py --dry-run   # check the join; uploads nothing
+uv run --project backend --env-file backend/.env \
+    python scripts/eval_ground_truth/ground_truth_dataset.py             # upsert into Langfuse
+```
+
+Items have stable ids, so re-running updates them in place and never creates
+duplicates.
+
+#### 2. Run the sweep
+
+```
+uv run --project backend --env-file backend/.env \
+    python scripts/eval_ground_truth/sweep_record_cap.py \
+  --generation-backends v1 v2 --caps 50 250 --repeats 1
+```
+
+Langfuse is required (`LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`,
+`LANGFUSE_HOST`): the sweep reads the dataset from Langfuse, not the CSVs, so
+each run is tied to the dataset version it saw. What lands in Langfuse:
+
+- **One dataset run per generation backend × cap × repeat**, named
+  `<label>/<backend>-cap<cap>-r<repeat>`. `--run-label` defaults to today's
+  date plus the short git commit. Do not reuse a label: Langfuse merges runs of
+  the same name, so a sweep repeated next week would be averaged into this one.
+- **One trace per review per run**, whose metadata carries the whole
+  configuration: `generation_backend`, `prompt_version`, `prompt_sha` (a hash
+  of the prompt file, so a wording edit without a rename still shows),
+  `record_cap_per_backend`, `result_cap_per_backend`, `depth`, `screening`,
+  `repeat`, `git_commit`. The trace list can be filtered on any of these, for
+  example `prompt_version` plus `record_cap_per_backend`. The git commit is
+  also the trace's `release`. Under the root sit the `search_queries` LLM
+  generations and one `openalex:search` / `overton:search` span per provider
+  call.
+- **Scores on every trace**: `search_recall`, `n_found`, `n_api_calls`,
+  `n_failed_calls`, `n_api_records`, `n_candidates_kept`. The dataset's
+  "Runs" view averages them per run — that is the cap × prompt comparison
+  table. LLM cost appears there too, provided the Langfuse instance has a price
+  for `gpt-5.4-mini` (Settings → Models; add one if the column is empty).
+- Experiment traces carry the environment `sdk-experiment`, which keeps them
+  apart from app traffic.
+
+A review whose search fails is dropped from that run (Langfuse prints the
+error to stderr); the sweep counts the losses and reprints them at the end so
+they cannot be missed.
 
 The console summary gives a cap × backend recall table per review, then a
 combined table with **mean and median side by side**. Read them together: the
@@ -315,14 +350,11 @@ result.
 Cost scales with the number of reviews. The defaults are 12 runs per review, so
 a 5-review CSV is 60 full searches — start with one `--caps` value.
 
-`--url` replaces `--doi` for a review with no DOI (grey literature — a
-government evidence review published as a web page, say). Its reference list is
-fetched, transcribed by an LLM, then resolved entry by entry: to a DOI where
-one exists, and otherwise to an Overton policy document by title lookup. That
-second pass is what puts Overton's own performance on the scoreboard, and it
-adds about 1.2 seconds per DOI-less citation to the one-off ground-truth build.
-`--published-before` is required in this mode, because no machine-readable
-publication date exists. See "Method" for how keys are scored.
+A review with no DOI (grey literature — a government evidence review published
+as a web page, say) works the same way: give it a `url` and a
+`published_before` in `gt_reviews.csv`, and key its DOI-less references by
+`overton_id` in `references.csv`. That is what puts Overton's own performance
+on the scoreboard. See "Method" for how keys are scored.
 
 It writes three CSVs into `results/`, all joinable on `run_id` and all carrying
 the review's identifier and title, so several reviews' sweeps concatenate into
@@ -330,9 +362,9 @@ one table:
 
 | file | one row per | holds |
 |---|---|---|
-| `record_cap_sweep_runs.csv` | run × backend | calls made, records returned, candidates kept, papers found, recall. Includes `generation_backend_variant`; a `backend=all` row per run gives the run's own de-duplicated totals |
-| `record_cap_sweep_queries.csv` | API call | the generated query text, its wire parameters, how many records came back, how many the review actually cited (`gt_hits`). Includes `generation_backend_variant` |
-| `record_cap_sweep_papers.csv` | run × reference-list entry | `key`, `space` (`doi` or `overton`), `returned_by_api` / `returned_by`, `reached_db` / `kept_from`. Includes `generation_backend_variant`. Filter to `reached_db` for the true positives each run found; group by `space` to score OpenAlex and Overton targets apart |
+| `record_cap_sweep_runs.csv` | run × backend | calls made, records returned, candidates kept, papers found, recall. Includes `generation_backend`; a `backend=all` row per run gives the run's own de-duplicated totals |
+| `record_cap_sweep_queries.csv` | API call | the generated query text, its wire parameters, how many records came back, how many the review actually cited (`gt_hits`). Includes `generation_backend` |
+| `record_cap_sweep_papers.csv` | run × reference-list entry | `key`, `space` (`doi` or `overton`), `returned_by_api` / `returned_by`, `reached_db` / `kept_from`. Includes `generation_backend`. Filter to `reached_db` for the true positives each run found; group by `space` to score OpenAlex and Overton targets apart |
 
 A paper both providers return is kept once, under whichever backend reached it
 first, so per-backend `n_found` never double-counts and the backend rows sum to
@@ -538,10 +570,16 @@ something intent-shaped into `intent`.
   partitions results against the ground-truth set, runs the judge, computes
   metrics, writes the report. `--corpus` runs this over every review in a
   `fetch_review_corpus.py` corpus and adds an aggregate-across-reviews report.
+- `ground_truth_dataset.py` — turns `input/gt_reviews.csv` and
+  `input/references.csv` into a Langfuse dataset (one item per review, with
+  the search intent, the cutoff date and the reference keys). `--dry-run`
+  checks the join without uploading.
 - `sweep_record_cap.py` — search-only sweep of `record_cap_per_backend` and of
-  the query-generation prompt, with the per-call fetch cap effectively removed
-  and screening off. Writes three joinable CSVs (runs, queries, papers). See
-  "Sweeping the keep cap and the prompt".
+  the query-generation prompt, run as a Langfuse experiment over that dataset:
+  one dataset run per backend × cap × repeat, configuration on every trace,
+  recall and efficiency counts as scores. Per-call fetch cap effectively
+  removed, screening off. Also writes three joinable CSVs (runs, queries,
+  papers). See "Sweeping the keep cap and generation backend".
 - `inspect_run.py` — per-stage diagnosis views over a finished run: titles and
   DOIs per API call, and a per-paper funnel showing where each cited paper was
   lost. Read-only, no network or DB of its own. See "Unpicking a run".

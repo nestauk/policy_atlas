@@ -23,8 +23,8 @@ from pydantic import BaseModel, ConfigDict, Field
 from policy_atlas.core import tracing
 from policy_atlas.core.openai_client import openai_kwargs, parse_structured, resolve_openai_client
 from policy_atlas.core.usage import usage_metadata
-from policy_atlas.evidence_base.sourcing.fetch_live import LiveDocumentFetcher
-from policy_atlas.evidence_base.sourcing.ingest_full_text import parse_and_segment
+from policy_atlas.evidence_search.sourcing.fetch_live import LiveDocumentFetcher
+from policy_atlas.evidence_search.sourcing.ingest_full_text import parse_and_segment
 
 OPENALEX_HOST = "https://api.openalex.org"
 OVERTON_HOST = "https://app.overton.io"

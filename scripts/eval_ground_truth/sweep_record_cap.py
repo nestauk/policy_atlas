@@ -1,5 +1,5 @@
-"""Search-only sweep: which query-generation method, and which
-``record_cap_per_backend``, buys recall?
+"""Search-only sweep, run as a Langfuse experiment: which query-generation
+method, and which ``record_cap_per_backend``, buys recall?
 
 The question this answers: the search stage fetches far more records than it
 keeps. ``record_cap_per_backend`` is the number it keeps per backend, and so the
@@ -8,7 +8,7 @@ improving — and does the way queries are generated change the answer?
 
 The setup, and how it differs from ``run_and_score.py``:
 
-* depth ``rapid`` — one search round, no reformulation loop (same as before).
+* depth ``rapid`` — one search round, no reformulation loop.
 * ``result_cap_per_backend`` set to 2,000 — 40x the pipeline's own value of
   50, so the number of records a single API call may return stops being the
   limiting factor and the *keep* cap is the only knob. 10,000 was tried first
@@ -27,45 +27,45 @@ Each combination is run ``--repeats`` times because query generation is an LLM
 call and gives slightly different queries each time; comparing single runs
 would confuse generation-method and cap effects with query luck.
 
+How it is organised in Langfuse:
+
+* The ground truth is a Langfuse **dataset**, one item per review, built from
+  the CSVs under ``input/`` by ``ground_truth_dataset.py``. The sweep reads the
+  dataset, never the CSVs, so a run is pinned to the dataset version it saw.
+* Each generation backend x cap x repeat combination is one **dataset run**,
+  named ``<label>/<backend>-cap<cap>-r<repeat>``. ``--run-label`` defaults to
+  today's date plus the short git commit, so a sweep repeated next week lands
+  in fresh runs instead of appending to these (Langfuse merges runs of the same
+  name).
+* Every trace carries the cell's configuration in its metadata — generation
+  backend, prompt version and hash, both caps, depth, repeat, git commit — so
+  the trace list can be filtered on any of them. The git commit also goes in
+  Langfuse's ``release`` field, its slot for "which version of the code".
+* Recall and the efficiency counts are numeric **scores** on each item trace,
+  so the dataset-run comparison view shows them side by side per run.
+* Langfuse labels every experiment trace with the environment
+  ``sdk-experiment``; filter on that to separate them from app traffic.
+
+Langfuse is therefore required (``LANGFUSE_PUBLIC_KEY`` / ``SECRET_KEY`` /
+``HOST``). ``run_and_score.py`` is the tool for a run without it.
+
 Cost warning: one repeat can pull thousands of records from OpenAlex and
 Overton — up to 10 pages per OpenAlex call and 40 per Overton call. Reviews x
 backends x caps x repeats multiplies that: the defaults are 2 x 6 = 12 runs per
-review, so a 5-review CSV is 60 runs. Start with ``--repeats 1``, one review,
-and a single ``--caps`` value.
+review. Start with ``--repeats 1`` and a single ``--caps`` value.
 
 Usage (same environment requirements as run_and_score.py — a real Postgres via
 DATABASE_URL, plus OPENAI_API_KEY / OPENALEX_API_KEY / OVERTON_API_KEY, which
-is what ``--env-file backend/.env`` supplies). One review:
+is what ``--env-file backend/.env`` supplies), after the dataset has been
+uploaded once:
 
     uv run --project backend --env-file backend/.env \\
-        python scripts/eval_ground_truth/sweep_record_cap.py \\
-        --title "..." --doi "10.xxxx/yyyy" --repeats 1
-
-Or a batch of reviews from a CSV, which also reports mean and median recall
-across them:
-
+        python scripts/eval_ground_truth/ground_truth_dataset.py
     uv run --project backend --env-file backend/.env \\
-        python scripts/eval_ground_truth/sweep_record_cap.py \\
-        --reviews scripts/eval_ground_truth/input/gt_reviews.csv --repeats 1
+        python scripts/eval_ground_truth/sweep_record_cap.py --repeats 1
 
-The CSV's columns are described in ``_load_reviews``: ``title`` plus one of
-``doi``/``url``, an optional ``published_before``, and an ``exclude`` flag.
-Every row is validated before any network call, so a malformed sheet fails in a
-second rather than part-way through an expensive run. A review whose ground
-truth cannot be built is reported and skipped, not fatal — the reviews already
-swept are still written out.
-
-``url`` replaces ``doi`` for grey literature with no DOI — a government
-evidence review published as a web page, say. There is no ``referenced_works``
-API for such a document, so its reference list is fetched, transcribed by an
-LLM and resolved citation by citation to DOIs; only the citations that resolve
-can be scored, and ``published_before`` must be given by hand because no
-machine-readable publication date exists. Expect a smaller, noisier recall
-target than the DOI path gives.
-
-Writes three CSVs into ``results/``, all joinable on ``run_id`` and all
-carrying the review's identifier and title so several reviews' sweeps can be
-concatenated:
+Besides the Langfuse runs, writes three CSVs into ``results/``, all joinable on
+``run_id`` and all carrying the review's identifier and title:
 
 * ``<name>_runs.csv`` — one row per run x backend, plus a ``backend=all`` row
   per run holding the run's own de-duplicated totals. The scoreboard.
@@ -88,33 +88,23 @@ changes what Overton keeps.
 from __future__ import annotations
 
 import argparse
-import csv
-from dataclasses import dataclass
+import hashlib
+import os
+import subprocess
+from datetime import date
 from pathlib import Path
 from typing import Any
 
 import pandas as pd
-from langfuse import Langfuse
-from ground_truth import (
-    GroundTruth,
-    build_ground_truth_from_doi,
-    build_ground_truth_from_url,
-    fetch_openalex_work,
-    record_key,
-)
-from inspect_run import call_table, ground_truth_table, records_table
+from ground_truth import GroundTruth, record_key
+from ground_truth_dataset import DEFAULT_DATASET
+from inspect_run import call_table, records_table
+from langfuse import Evaluation, propagate_attributes
+from run_and_score import GENERATION_BACKENDS, QueryResult, run_one_query
 
 from policy_atlas.core import tracing
 from policy_atlas.core.db import get_engine
-from policy_atlas.evidence_base.sourcing import search_loop
-from run_and_score import (
-    GENERATION_BACKENDS,
-    QueryResult,
-    _iso_date,
-    _months_earlier,
-    clean_review_title,
-    run_one_query,
-)
+from policy_atlas.evidence_search.sourcing import search_loop, search_prompts
 
 DEPTH = "rapid"
 RECORD_CAPS = [50, 100, 250, 500, 1000, 2000]
@@ -124,6 +114,25 @@ RECORD_CAPS = [50, 100, 250, 500, 1000, 2000]
 # records to the keep cap's door. 40x the pipeline's own value of 50 — high
 # enough not to bind, without the deep-paging trouble 10,000 caused.
 RESULT_CAP_PER_BACKEND = 2_000
+EXPERIMENT = "retrieval-cap-prompt-sweep"
+# The prompt file(s) each generation backend reads, so every run records the
+# wording it used (as a version name and a content hash) — not just "v1"/"v2".
+PROMPT_FILES: dict[str, list[Path]] = {
+    "v1": [search_prompts.SEARCH_QUERIES_PROMPT_FILE],
+    "v2": [
+        search_prompts.SEARCH_QUERIES_V2_OPENALEX_PROMPT_FILE,
+        search_prompts.SEARCH_QUERIES_V2_OVERTON_PROMPT_FILE,
+    ],
+}
+# The numbers each run's summary carries into Langfuse as scores.
+SCORE_KEYS = [
+    "search_recall",
+    "n_found",
+    "n_api_calls",
+    "n_failed_calls",
+    "n_api_records",
+    "n_candidates_kept",
+]
 
 
 def _apply_caps(record_cap: int) -> dict[str, Any]:
@@ -138,6 +147,28 @@ def _apply_caps(record_cap: int) -> dict[str, Any]:
         "record_cap_per_backend": record_cap,
     }
     return search_loop.DEPTH_CONSTANTS[DEPTH]
+
+
+def _prompt_identity(variant: str) -> tuple[str, str]:
+    """``(prompt_version, prompt_sha)`` for one generation backend.
+
+    The version is the prompt file name(s) minus ``_system`` (the same string
+    the generation spans record); the hash covers the files' bytes, so an edit
+    to the wording without a rename still shows up as a different prompt.
+    """
+    files = PROMPT_FILES[variant]
+    version = "+".join(f.stem.replace("_system", "") for f in files)
+    sha = hashlib.sha256(b"".join(f.read_bytes() for f in files)).hexdigest()[:12]
+    return version, sha
+
+
+def _git_commit() -> str:
+    try:
+        return subprocess.check_output(
+            ["git", "rev-parse", "HEAD"], cwd=Path(__file__).parent, text=True
+        ).strip()
+    except (OSError, subprocess.CalledProcessError):
+        return "unknown"
 
 
 def _kept_by_backend(result: QueryResult) -> dict[str, str]:
@@ -159,7 +190,7 @@ def _kept_by_backend(result: QueryResult) -> dict[str, str]:
 def _run_frames(
     result: QueryResult,
     ground_truth: GroundTruth,
-    gt_titles: pd.DataFrame,
+    titles: dict[str, str],
     meta: dict[str, Any],
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """One finished run -> its (runs, queries, papers) rows, all tagged with ``meta``.
@@ -167,16 +198,13 @@ def _run_frames(
     Args:
         result: The finished ``QueryResult``.
         ground_truth: The review's reference list (the recall target).
-        gt_titles: ``ground_truth_table()`` output — titles for the target keys.
+        titles: Key -> title for the target keys, from the dataset item.
         meta: Identity columns (run_id, review, generation backend, cap, repeat) written
             onto every row of every frame, so the three files join and several
             reviews' sweeps concatenate.
     """
     records = records_table(result.search_calls, ground_truth.keys)
     kept_by_key = _kept_by_backend(result)
-    title_by_key = dict(zip(gt_titles["key"], gt_titles["title"], strict=True))
-    space_by_key = dict(zip(gt_titles["key"], gt_titles["space"], strict=True))
-    in_openalex = dict(zip(gt_titles["key"], gt_titles["in_openalex"], strict=True))
 
     # Which backends' API calls returned each cited document, before any capping.
     returned_by: dict[str, set[str]] = {}
@@ -190,9 +218,8 @@ def _run_frames(
                 "key": key,
                 # "doi" or "overton": which half of the target this document is,
                 # so OpenAlex and Overton recall can be read separately.
-                "space": space_by_key.get(key),
-                "title": title_by_key.get(key),
-                "in_openalex": in_openalex.get(key),
+                "space": "doi" if key in ground_truth.dois else "overton",
+                "title": titles.get(key),
                 "returned_by_api": key in returned_by,
                 "returned_by": "+".join(sorted(returned_by.get(key, ()))) or None,
                 "reached_db": key in kept_by_key,
@@ -240,162 +267,158 @@ def _run_frames(
     return pd.DataFrame(runs_rows), queries, papers
 
 
-@dataclass
-class ReviewSpec:
-    """One review to sweep, from the CSV or from the single-review flags.
-
-    Exactly one of ``doi``/``url`` is set. ``published_before`` is the search
-    cutoff: optional for a DOI (derived from OpenAlex) and required for a URL,
-    where no machine-readable publication date exists.
-    """
-
-    title: str
-    doi: str | None = None
-    url: str | None = None
-    published_before: str | None = None
-
-    @property
-    def identifier(self) -> str:
-        return self.doi or self.url or ""
+def _summary(runs: pd.DataFrame) -> dict[str, Any]:
+    """The run's de-duplicated totals as plain numbers — the trace output."""
+    total = runs[runs["backend"] == "all"].iloc[0]
+    return {
+        **{key: float(total[key]) if key == "search_recall" else int(total[key]) for key in SCORE_KEYS},
+        "n_ground_truth": int(total["n_ground_truth"]),
+        "found_by_backend": {
+            row.backend: int(row.n_found) for row in runs[runs["backend"] != "all"].itertuples()
+        },
+    }
 
 
-def _load_reviews(path: Path) -> list[ReviewSpec]:
-    """Read the review list from a CSV, validating it before any network call.
-
-    Recognised columns (case-insensitive, extras ignored):
-
-    * ``title`` — required; cleaned into the search intent.
-    * ``doi`` — bare (``10.xxxx/yyyy``) or as a ``https://doi.org/...`` URL.
-    * ``url`` — used only when ``doi`` is empty, for grey literature.
-    * ``published_before`` — ISO ``YYYY-MM-DD``. Optional for a DOI row, and
-      REQUIRED for a URL row.
-    * ``exclude`` — any non-empty value skips the row.
-
-    Validation happens here, up front, so a bad row fails in a second rather
-    than after an hour of sweeping the rows before it.
-
-    Raises:
-        ValueError: With every problem found, one per line, so a broken sheet is
-            fixed in one pass instead of one row at a time.
-    """
-    with path.open(newline="", encoding="utf-8-sig") as handle:
-        rows = list(csv.DictReader(handle))
-    if not rows:
-        raise ValueError(f"{path} has no rows.")
-
-    reviews: list[ReviewSpec] = []
-    problems: list[str] = []
-    for line_no, raw in enumerate(rows, start=2):  # start=2: row 1 is the header
-        row = {(k or "").strip().lower(): (v or "").strip() for k, v in raw.items()}
-        if row.get("exclude"):
-            print(f"  row {line_no}: skipped (exclude={row['exclude']!r})")
-            continue
-        title, doi, url = row.get("title", ""), row.get("doi", ""), row.get("url", "")
-        published_before = row.get("published_before", "")
-        if not title:
-            problems.append(f"row {line_no}: no title")
-            continue
-        if not doi and not url:
-            problems.append(f"row {line_no} ({title[:50]}): neither doi nor url")
-            continue
-        if published_before:
-            try:
-                _iso_date(published_before)
-            except argparse.ArgumentTypeError as exc:
-                problems.append(f"row {line_no} ({title[:50]}): {exc}")
-                continue
-        elif not doi:
-            problems.append(
-                f"row {line_no} ({title[:50]}): a url row needs a published_before date "
-                "(ISO YYYY-MM-DD) — there is no machine-readable publication date to "
-                "derive one from. Add a 'published_before' column, or set 'exclude' to "
-                "skip this review."
-            )
-            continue
-        reviews.append(
-            ReviewSpec(
-                title=title,
-                # A DOI wins when both are present: its reference list comes
-                # straight from OpenAlex, rather than via LLM transcription.
-                doi=doi or None,
-                url=None if doi else (url or None),
-                published_before=published_before or None,
-            )
-        )
-
-    if problems:
-        raise ValueError(f"{path} has {len(problems)} unusable row(s):\n  " + "\n  ".join(problems))
-    if not reviews:
-        raise ValueError(f"{path} has no usable rows (every row excluded?).")
-    return reviews
+def score_summary(*, output: dict[str, Any], **_: Any) -> list[Evaluation]:
+    """The experiment evaluator: lift the task's summary numbers into Langfuse scores."""
+    return [Evaluation(name=key, value=output[key]) for key in SCORE_KEYS]
 
 
-def _build_ground_truth(
-    spec: ReviewSpec, langfuse_client: Langfuse | None
-) -> tuple[GroundTruth, str]:
-    """Build one review's recall target, and settle its search cutoff.
+def _ground_truth_from_item(item: Any) -> GroundTruth:
+    """Rebuild the recall target from a dataset item's ``expected_output``."""
+    keys = set(item.expected_output["keys"])
+    overton_ids = {key for key in keys if key.startswith("overton:")}
+    return GroundTruth(
+        dois=keys - overton_ids,
+        overton_ids=overton_ids,
+        resolvable_fraction=1.0,
+        source=item.metadata.get("source", "doi"),
+        titles=item.expected_output.get("titles", {}),
+    )
+
+
+def _run_cell(
+    engine: Any,
+    dataset: Any,
+    client: Any,
+    *,
+    variant: str,
+    record_cap: int,
+    repeat: int,
+    label: str,
+    git_commit: str,
+    sink: tuple[list[pd.DataFrame], list[pd.DataFrame], list[pd.DataFrame]],
+) -> Any:
+    """Run one generation backend x cap x repeat cell over every dataset item.
 
     Returns:
-        ``(ground_truth, published_before)``.
-
-    Raises:
-        ValueError: If a DOI has no OpenAlex publication date and the spec gives
-            no explicit cutoff.
+        The SDK's ``ExperimentResult``. The three pandas frames per item are
+        appended to ``sink`` rather than returned through Langfuse — anything the
+        task returns is serialised onto the trace, and these are far too big.
     """
-    if spec.doi:
-        work = fetch_openalex_work(spec.doi)
-        published_before = spec.published_before or (
-            _months_earlier(work["publication_date"], 1) if work.get("publication_date") else None
+    constants = _apply_caps(record_cap)
+    prompt_version, prompt_sha = _prompt_identity(variant)
+    # Flat and stringly: Langfuse coerces metadata values to strings anyway.
+    meta = {
+        key: str(value)
+        for key, value in {
+            "experiment": EXPERIMENT,
+            "generation_backend": variant,
+            "prompt_version": prompt_version,
+            "prompt_sha": prompt_sha,
+            "record_cap_per_backend": record_cap,
+            "result_cap_per_backend": constants["result_cap_per_backend"],
+            "depth": DEPTH,
+            "screening": False,
+            "repeat": repeat,
+            "git_commit": git_commit,
+        }.items()
+    }
+    run_name = f"{label}/{variant}-cap{record_cap}-r{repeat}"
+    print(f"\n=== {run_name} (call_budget={constants['call_budget']}) ===")
+
+    def task(*, item: Any, **_: Any) -> dict[str, Any]:
+        ground_truth = _ground_truth_from_item(item)
+        intent = item.input["intent"]
+        published_before = item.input["published_before"]
+        # propagate_attributes is what puts the cell's configuration on the
+        # trace itself (filterable in the trace list); run_experiment's own
+        # metadata= lands on the dataset run and the root observation.
+        with propagate_attributes(metadata=meta), engine.connect() as connection:
+            trans = connection.begin()
+            try:
+                result = run_one_query(
+                    connection,
+                    intent,
+                    ground_truth,
+                    published_before=published_before,
+                    depth=DEPTH,
+                    run_screen=False,
+                    langfuse_client=client,
+                    generation_backend_variant=variant,
+                )
+            finally:
+                # Rolled back, never committed — the database writes are
+                # scaffolding to drive the real search stage, not data to keep.
+                trans.rollback()
+
+        review_id = item.metadata["review_id"]
+        row_meta = {
+            # Carries the review too, so run_ids stay unique across reviews.
+            "run_id": f"{review_id}|{variant}-cap{record_cap}-r{repeat}",
+            "review_id": review_id,
+            "review_source": ground_truth.source,
+            "review_title": item.metadata.get("review_title"),
+            "intent": intent,
+            "generation_backend": variant,
+            "record_cap_per_backend": record_cap,
+            "repeat": repeat,
+        }
+        frames = _run_frames(result, ground_truth, ground_truth.titles, row_meta)
+        for bucket, frame in zip(sink, frames, strict=True):
+            bucket.append(frame)
+
+        summary = _summary(frames[0])
+        per_backend = ", ".join(f"{b} {n}" for b, n in summary["found_by_backend"].items())
+        failed = (
+            f", {summary['n_failed_calls']} CALLS FAILED — recall is an undercount"
+            if summary["n_failed_calls"]
+            else ""
         )
-        if not published_before:
-            raise ValueError(
-                f"OpenAlex has no publication_date for {spec.doi}; give this row an "
-                "explicit published_before date."
-            )
-        return build_ground_truth_from_doi(spec.doi, work=work), published_before
-    # Fetches the page, has an LLM transcribe its reference list, then resolves
-    # each citation to a DOI — the pipeline can only be scored on what OpenAlex
-    # and Overton can be asked for.
-    assert spec.url and spec.published_before  # guaranteed by _load_reviews
-    return (
-        build_ground_truth_from_url(spec.url, spec.title, langfuse_client),
-        spec.published_before,
+        print(
+            f"  {item.metadata.get('review_title', review_id)[:60]}: "
+            f"search_recall={summary['search_recall']:.0%} "
+            f"({summary['n_found']}/{summary['n_ground_truth']}; {per_backend}), "
+            f"{summary['n_candidates_kept']} candidates kept from "
+            f"{summary['n_api_records']} records over {summary['n_api_calls']} calls{failed}"
+        )
+        return summary
+
+    return dataset.run_experiment(
+        name=EXPERIMENT,
+        run_name=run_name,
+        task=task,
+        evaluators=[score_summary],
+        # Serial on purpose: _apply_caps mutates module-level constants, and
+        # the providers are rate-limited.
+        max_concurrency=1,
+        metadata=meta,
     )
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument(
-        "--title",
-        help="The review's title — cleaned into the search intent. Required with "
-        "--doi/--url; ignored with --reviews, which carries its own titles.",
-    )
-    source_group = parser.add_mutually_exclusive_group(required=True)
-    source_group.add_argument(
-        "--doi", help="The review's DOI — ground truth is its OpenAlex reference list."
-    )
-    source_group.add_argument(
-        "--url",
-        help="The review's URL (webpage or PDF) — for grey literature with no DOI. Ground "
-        "truth is its reference list transcribed from the fetched text by an LLM and "
-        "resolved to DOIs, so it is smaller and noisier than the --doi path. Requires "
-        "--published-before.",
-    )
-    source_group.add_argument(
-        "--reviews",
-        type=Path,
-        help="Path to a CSV of reviews to sweep together, with columns title, doi, url, "
-        "published_before and exclude (see _load_reviews). Every review is swept at "
-        "every cap and generation backend, and the summary adds mean and median "
-        "recall across reviews.",
+        "--dataset",
+        default=DEFAULT_DATASET,
+        help=f"Langfuse dataset holding the reviews and their reference lists (default "
+        f"{DEFAULT_DATASET}; upload it with ground_truth_dataset.py).",
     )
     parser.add_argument(
-        "--published-before",
-        type=_iso_date,
+        "--run-label",
         default=None,
-        help="ISO YYYY-MM-DD search cutoff. Derived from the review's own OpenAlex "
-        "publication date (one month earlier) in --doi mode when omitted; REQUIRED "
-        "with --url, where no machine-readable date exists.",
+        help="Prefix for every dataset run name this sweep creates (default: today's date "
+        "plus the short git commit). Reusing a label appends to the existing runs.",
     )
     parser.add_argument(
         "--repeats",
@@ -428,192 +451,62 @@ def main() -> None:
         "beside it (default results/record_cap_sweep).",
     )
     args = parser.parse_args()
-    if not args.reviews and not args.title:
-        parser.error("--title is required with --doi/--url.")
 
-    if args.reviews:
-        print(f"Reading reviews from {args.reviews}")
-        try:
-            reviews = _load_reviews(args.reviews)
-        except ValueError as exc:
-            parser.error(str(exc))
-        print(f"{len(reviews)} review(s) to sweep")
-    else:
-        if args.url and not args.published_before:
-            parser.error("--published-before is required with --url (no machine-readable date available).")
-        reviews = [
-            ReviewSpec(
-                title=args.title,
-                doi=args.doi,
-                url=args.url,
-                published_before=args.published_before,
-            )
-        ]
+    git_commit = _git_commit()
+    # Langfuse's ``release`` field is its slot for the code version; the SDK
+    # reads it from this variable when the client is built.
+    os.environ.setdefault("LANGFUSE_RELEASE", git_commit)
+    client = tracing.get_langfuse()
+    if client is None:
+        parser.error(
+            "this sweep records Langfuse experiment runs and needs LANGFUSE_PUBLIC_KEY, "
+            "LANGFUSE_SECRET_KEY and LANGFUSE_HOST (run_and_score.py works without them)."
+        )
+    dataset = client.get_dataset(args.dataset)
+    if not dataset.items:
+        parser.error(f"dataset {args.dataset!r} has no items — run ground_truth_dataset.py first.")
+    label = args.run_label or f"{date.today().isoformat()}-{git_commit[:7]}"
 
-    langfuse_client = tracing.get_langfuse()
-    print(f"Langfuse tracing: {'on' if langfuse_client is not None else 'off (no LANGFUSE_* env vars)'}")
+    print(f"Dataset: {args.dataset} ({len(dataset.items)} reviews); runs labelled {label}/...")
     print(
         f"Sweep: depth={DEPTH}, result_cap={RESULT_CAP_PER_BACKEND}, "
         f"generation_backends={args.generation_backends}, caps={args.caps}, "
-        f"repeats={args.repeats}, screening OFF"
+        f"repeats={args.repeats}, screening OFF, git_commit={git_commit[:7]}"
     )
 
     engine = get_engine()
-
-    all_runs: list[pd.DataFrame] = []
-    all_queries: list[pd.DataFrame] = []
-    all_papers: list[pd.DataFrame] = []
+    sink: tuple[list[pd.DataFrame], list[pd.DataFrame], list[pd.DataFrame]] = ([], [], [])
     skipped: list[str] = []
-    for review_index, spec in enumerate(reviews, start=1):
-        print(f"\n########## [{review_index}/{len(reviews)}] {spec.title} ##########")
-        print(f"Building ground truth from {spec.identifier}")
-        try:
-            ground_truth, published_before = _build_ground_truth(spec, langfuse_client)
-        except Exception as exc:
-            # One unreachable review must not throw away the hours already spent
-            # on the reviews before it. Note it and carry on; the skipped list is
-            # reprinted at the end so it cannot be missed.
-            print(f"  SKIPPED — could not build ground truth: {exc}")
-            skipped.append(f"{spec.title} ({spec.identifier}): {exc}")
-            continue
-        if not ground_truth.keys:
-            print("  SKIPPED — ground truth is empty, so recall is undefined")
-            skipped.append(f"{spec.title} ({spec.identifier}): empty ground truth")
-            continue
+    for variant in args.generation_backends:
+        for record_cap in args.caps:
+            for repeat in range(1, args.repeats + 1):
+                result = _run_cell(
+                    engine,
+                    dataset,
+                    client,
+                    variant=variant,
+                    record_cap=record_cap,
+                    repeat=repeat,
+                    label=label,
+                    git_commit=git_commit,
+                    sink=sink,
+                )
+                # The SDK isolates failures: a review whose search raised is
+                # logged to stderr and silently missing from item_results, and a
+                # broken evaluator yields a run with no scores at all.
+                dropped = len(dataset.items) - len(result.item_results)
+                if dropped:
+                    skipped.append(f"{result.run_name}: {dropped} review(s) failed — see the errors above")
+                if result.item_results and not result.item_results[0].evaluations:
+                    raise RuntimeError("no scores were recorded — the evaluator failed (see the errors above)")
+                print(f"  -> {result.dataset_run_url}")
 
-        intent = clean_review_title(spec.title)
-        print(
-            f"Ground truth: {len(ground_truth.keys)} scorable reference-list entries — "
-            f"{len(ground_truth.dois)} DOIs ({ground_truth.resolvable_fraction:.0%} "
-            f"OpenAlex-resolvable) + {len(ground_truth.overton_ids)} Overton policy "
-            f"documents; {len(ground_truth.unresolved)} citations resolved to neither "
-            "and are excluded from the target"
-        )
-        print(f"Intent: {intent}")
-        print(f"Search cutoff: published_before={published_before}")
-
-        runs, queries, papers = _sweep_review(
-            engine,
-            spec=spec,
-            intent=intent,
-            ground_truth=ground_truth,
-            published_before=published_before,
-            caps=args.caps,
-            generation_backends=args.generation_backends,
-            repeats=args.repeats,
-            langfuse_client=langfuse_client,
-        )
-        all_runs.extend(runs)
-        all_queries.extend(queries)
-        all_papers.extend(papers)
-
-    if not all_runs:
-        parser.error("no review produced any results — nothing to write.")
-
+    if not sink[0]:
+        parser.error("no run produced any results — nothing to write.")
     _write_and_summarise(
-        args.out or Path(__file__).parent / "results" / "record_cap_sweep",
-        all_runs,
-        all_queries,
-        all_papers,
-        skipped,
+        args.out or Path(__file__).parent / "results" / "record_cap_sweep", *sink, skipped
     )
-
-
-def _sweep_review(
-    engine: Any,
-    *,
-    spec: ReviewSpec,
-    intent: str,
-    ground_truth: GroundTruth,
-    published_before: str,
-    caps: list[int],
-    generation_backends: list[str],
-    repeats: int,
-    langfuse_client: Langfuse | None,
-) -> tuple[list[pd.DataFrame], list[pd.DataFrame], list[pd.DataFrame]]:
-    """Sweep one review over every generation backend x cap x repeat.
-
-    Returns:
-        ``(runs, queries, papers)`` frame lists, each row tagged with this
-        review's identity so several reviews concatenate into one table.
-    """
-    # Titles for the reference list: one batched OpenAlex call, reused by every
-    # run rather than re-fetched per run.
-    gt_titles = ground_truth_table(ground_truth)
-
-    all_runs: list[pd.DataFrame] = []
-    all_queries: list[pd.DataFrame] = []
-    all_papers: list[pd.DataFrame] = []
-    for generation_backend_variant in generation_backends:
-        for record_cap in caps:
-            constants = _apply_caps(record_cap)
-            print(
-                f"\n=== generation_backend={generation_backend_variant} "
-                f"record_cap_per_backend={record_cap} "
-                f"(http_budget={constants['http_budget']}) ==="
-            )
-            for repeat in range(1, repeats + 1):
-                with engine.connect() as connection:
-                    trans = connection.begin()
-                    try:
-                        result = run_one_query(
-                            connection,
-                            intent,
-                            ground_truth,
-                            published_before=published_before,
-                            depth=DEPTH,
-                            run_screen=False,
-                            langfuse_client=langfuse_client,
-                            generation_backend_variant=generation_backend_variant,
-                        )
-                    finally:
-                        # Rolled back, never committed — the database writes are
-                        # scaffolding to drive the real search stage, not data to keep.
-                        trans.rollback()
-
-                meta = {
-                    # Carries the review too, so run_ids stay unique when
-                    # several reviews land in one file.
-                    "run_id": (
-                        f"{spec.identifier}|{generation_backend_variant}"
-                        f"-cap{record_cap}-r{repeat}"
-                    ),
-                    # DOI or URL, whichever identified the review — with the
-                    # source beside it, since the two ground-truth paths differ
-                    # in how complete their reference lists are.
-                    "review_id": spec.identifier,
-                    "review_source": ground_truth.source,
-                    "review_title": spec.title,
-                    "intent": intent,
-                    "generation_backend_variant": generation_backend_variant,
-                    "record_cap_per_backend": record_cap,
-                    "repeat": repeat,
-                }
-                runs, queries, papers = _run_frames(result, ground_truth, gt_titles, meta)
-                all_runs.append(runs)
-                all_queries.append(queries)
-                all_papers.append(papers)
-                # The raw provider records are the memory hog (thousands per run
-                # at this fetch cap); the three frames have everything scored.
-                del result
-
-                total = runs[runs["backend"] == "all"].iloc[0]
-                per_backend = ", ".join(
-                    f"{r.backend} {r.n_found}" for r in runs[runs["backend"] != "all"].itertuples()
-                )
-                failed = (
-                    f", {total.n_failed_calls} CALLS FAILED — recall is an undercount"
-                    if total.n_failed_calls
-                    else ""
-                )
-                print(
-                    f"  repeat {repeat}: search_recall={total.search_recall:.0%} "
-                    f"({total.n_found}/{total.n_ground_truth}; {per_backend}), "
-                    f"{total.n_candidates_kept} candidates kept from "
-                    f"{total.n_api_records} records over {total.n_api_calls} calls{failed}"
-                )
-
-    return all_runs, all_queries, all_papers
+    tracing.flush(client)
 
 
 def _write_and_summarise(
@@ -647,7 +540,7 @@ def _write_and_summarise(
         print(f"  {review_id} — {group['n_ground_truth'].iloc[0]} scorable references")
         table = group.pivot_table(
             index="record_cap_per_backend",
-            columns="generation_backend_variant",
+            columns="generation_backend",
             values="search_recall",
             aggfunc="mean",
         )
@@ -662,7 +555,7 @@ def _write_and_summarise(
         print(
             totals.pivot_table(
                 index="record_cap_per_backend",
-                columns="generation_backend_variant",
+                columns="generation_backend",
                 values="search_recall",
                 aggfunc=["mean", "median"],
             ).to_string(float_format=pct)
@@ -676,7 +569,7 @@ def _write_and_summarise(
             "undercount — see the 'error' column in the queries CSV."
         )
     if skipped:
-        print(f"\nWARNING: {len(skipped)} review(s) skipped and NOT in these numbers:")
+        print(f"\nWARNING: {len(skipped)} run(s) lost reviews and are NOT complete in these numbers:")
         for line in skipped:
             print(f"  - {line}")
 

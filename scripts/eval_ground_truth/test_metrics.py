@@ -185,21 +185,9 @@ def _fake_run():
         ],
         screened_docs=[],
     )
-    gt_titles = pd.DataFrame(
-        [
-            {"key": "10.1/a", "space": "doi", "title": "Paper A", "year": 2020, "in_openalex": True},
-            {"key": "10.1/b", "space": "doi", "title": "Paper B", "year": 2019, "in_openalex": True},
-            {"key": "10.1/c", "space": "doi", "title": None, "year": None, "in_openalex": False},
-            {
-                "key": "overton:P9",
-                "space": "overton",
-                "title": "Loneliness statistics",
-                "year": None,
-                "in_openalex": None,
-            },
-        ]
-    )
-    return result, ground_truth, gt_titles
+    # Key -> title, as the dataset item carries it (10.1/c deliberately has none).
+    titles = {"10.1/a": "Paper A", "10.1/b": "Paper B", "overton:P9": "Loneliness statistics"}
+    return result, ground_truth, titles
 
 
 def test_recording_backend_records_failed_calls() -> None:
@@ -237,11 +225,11 @@ def test_recording_backend_records_failed_calls() -> None:
 
 
 def test_load_reviews_csv() -> None:
-    """The --reviews CSV loader: what it accepts, skips, and rejects."""
+    """The gt_reviews.csv loader: what it accepts, skips, and rejects."""
     import tempfile
     from pathlib import Path
 
-    from sweep_record_cap import _load_reviews
+    from ground_truth_dataset import load_reviews as _load_reviews
 
     def load(text: str):
         with tempfile.TemporaryDirectory() as tmp:
@@ -293,17 +281,23 @@ def test_sweep_cap_overrides() -> None:
 
 def test_generation_backend_arms() -> None:
     """The two arms compared: one shared prompt vs one prompt per provider."""
-    from policy_atlas.evidence_base.sourcing import search_prompts
-    from policy_atlas.evidence_base.sourcing.search_generation import (
+    from policy_atlas.evidence_search.sourcing import search_prompts
+    from policy_atlas.evidence_search.sourcing.search_generation import (
         OpenAISearchGenerationBackend,
         V2SearchGenerationBackend,
     )
     from run_and_score import GENERATION_BACKENDS
+    from sweep_record_cap import PROMPT_FILES, _prompt_identity
 
     assert GENERATION_BACKENDS == {
         "v1": OpenAISearchGenerationBackend,
         "v2": V2SearchGenerationBackend,
     }
+    # Every arm records which prompt file(s) it read, as a name and a hash.
+    assert PROMPT_FILES.keys() == GENERATION_BACKENDS.keys()
+    assert _prompt_identity("v1")[0] == "search_queries_v3"
+    assert _prompt_identity("v2")[0] == "search_queries_openalex_v2+search_queries_overton_v2"
+    assert len(_prompt_identity("v1")[1]) == 12
     # Each arm's prompt files, so a rename in search_prompts.py fails here
     # rather than silently changing what the eval compares.
     assert search_prompts.SEARCH_QUERIES_PROMPT_FILE.name == "search_queries_system_v3.txt"
@@ -323,13 +317,13 @@ def test_sweep_run_frames() -> None:
 
     from sweep_record_cap import _run_frames
 
-    result, ground_truth, gt_titles = _fake_run()
+    result, ground_truth, titles = _fake_run()
     meta = {
         "run_id": "v1-cap250-r1",
-        "generation_backend_variant": "v1",
+        "generation_backend": "v1",
         "record_cap_per_backend": 250,
     }
-    runs, queries, papers = _run_frames(result, ground_truth, gt_titles, meta)
+    runs, queries, papers = _run_frames(result, ground_truth, titles, meta)
 
     # Every frame carries the identity columns, so the three files join.
     for frame in (runs, queries, papers):
@@ -369,6 +363,58 @@ def test_sweep_run_frames() -> None:
     assert papers_by_doi.loc["overton:P9", "space"] == "overton"
     assert papers_by_doi.loc["overton:P9", "kept_from"] == "overton"
     assert bool(papers_by_doi.loc["overton:P9", "reached_db"])
+    assert papers_by_doi.loc["10.1/a", "title"] == "Paper A"
+
+    # The numbers that go to Langfuse: the run's de-duplicated totals as the
+    # trace output, and one numeric score per key.
+    from sweep_record_cap import SCORE_KEYS, _summary, score_summary
+
+    summary = _summary(runs)
+    assert summary["search_recall"] == 0.5 and summary["n_found"] == 2
+    assert summary["found_by_backend"] == {"openalex": 1, "overton": 1}
+    scores = score_summary(output=summary)
+    assert [s.name for s in scores] == SCORE_KEYS
+    assert all(isinstance(s.value, (int, float)) for s in scores)
+
+
+def test_load_references_and_items() -> None:
+    """references.csv -> per-review recall targets -> Langfuse dataset items."""
+    import tempfile
+    from pathlib import Path
+
+    from ground_truth_dataset import ReviewSpec, build_items, load_references
+
+    text = (
+        "review_title,ref_title,doi,overton_id,label\n"
+        "Review A: a systematic review,Paper one,https://doi.org/10.1/A,,content\n"
+        "Review A: a systematic review,Paper two,,P9,content\n"
+        "Review A: a systematic review,No key,,,content\n"
+        "Review A: a systematic review,Background,10.1/z,,other\n"
+        "Review B,Lonely,10.1/b,,content\n"
+    )
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "references.csv"
+        path.write_text(text, encoding="utf-8")
+        references = load_references(path)
+
+    target = references["Review A: a systematic review"]
+    # DOIs normalised, Overton ids prefixed; 'other' rows and keyless rows excluded.
+    assert target["titles"] == {"10.1/a": "Paper one", "overton:P9": "Paper two"}
+    assert target["n_unscorable"] == 1
+
+    reviews = [
+        ReviewSpec(title="Review A: a systematic review", doi="10.1/r", published_before="2023-01-01"),
+        ReviewSpec(title="Review C", url="https://example.org/c", published_before="2023-01-01"),
+    ]
+    items = build_items(reviews, references, "ds")
+    # Review C has no references: skipped, not uploaded with an empty target.
+    assert len(items) == 1
+    item = items[0]
+    assert item["id"].startswith("ds:") and len(item["id"]) == len("ds:") + 32
+    assert item["input"] == {"intent": "Review A", "published_before": "2023-01-01"}
+    assert item["expected_output"]["keys"] == ["10.1/a", "overton:P9"]
+    assert item["metadata"]["n_target"] == 2 and item["metadata"]["n_unscorable"] == 1
+    assert item["metadata"]["source"] == "doi" and item["metadata"]["review_id"] == "10.1/r"
 
 
 if __name__ == "__main__":
@@ -385,4 +431,5 @@ if __name__ == "__main__":
     test_sweep_cap_overrides()
     test_generation_backend_arms()
     test_sweep_run_frames()
+    test_load_references_and_items()
     print("ok")

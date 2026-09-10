@@ -38,7 +38,7 @@ Two separate caps bound how many candidates a run collects, and confusing them
 wastes a lot of time. Both are reported in every run's JSON:
 
 * ``result_cap_per_backend`` — records requested per HTTP call. With the depth's
-  ``http_budget`` (number of calls allowed), this bounds what a backend can be
+  ``call_budget`` (number of calls allowed), this bounds what a backend can be
   *asked* for.
 * ``record_cap_per_backend`` — candidates acquire *keeps* per backend, applied
   after dedup, before persisting. This is the ``acquire.capped`` log line, and
@@ -79,17 +79,17 @@ from relevance_judge import judge_relevance
 
 from policy_atlas.core import tracing
 from policy_atlas.core.db import get_engine
-from policy_atlas.core.schema import evidence_scope, project, project_source_snapshot, runs, source_snapshot
-from policy_atlas.evidence_base.assess.screen import ScreenContext, effective_screen_rows, screen_sources
-from policy_atlas.evidence_base.assess.screening_backend import OpenAIScreeningBackend
-from policy_atlas.evidence_base.sourcing import search_loop
-from policy_atlas.evidence_base.sourcing.acquire import AcquireContext
-from policy_atlas.evidence_base.sourcing.search_generation import (
+from policy_atlas.core.schema import evidence_scope, task, task_source_snapshot, runs, source_snapshot
+from policy_atlas.evidence_search.assess.screen import ScreenContext, effective_screen_rows, screen_sources
+from policy_atlas.evidence_search.assess.screening_backend import OpenAIScreeningBackend
+from policy_atlas.evidence_search.sourcing import search_loop
+from policy_atlas.evidence_search.sourcing.acquire import AcquireContext
+from policy_atlas.evidence_search.sourcing.search_generation import (
     OpenAISearchGenerationBackend,
     V2SearchGenerationBackend,
 )
-from policy_atlas.evidence_base.sourcing.search_live import live_search_backends
-from policy_atlas.evidence_base.sourcing.search_loop import run_search
+from policy_atlas.evidence_search.sourcing.search_live import live_search_backends
+from policy_atlas.evidence_search.sourcing.search_loop import run_search
 
 QUERY_COUNT = 3
 # How many candidates acquire keeps per backend, overriding the depth's own
@@ -149,25 +149,25 @@ def clean_review_title(title: str) -> str:
     return stripped or title
 
 
-def _seed_project_and_run(conn: Connection) -> tuple[uuid.UUID, uuid.UUID]:
+def _seed_task_and_run(conn: Connection) -> tuple[uuid.UUID, uuid.UUID]:
     now = datetime.now(UTC)
-    project_id = uuid.uuid4()
+    task_id = uuid.uuid4()
     conn.execute(
-        project.insert().values(
-            project_id=project_id, created_at=now, name="eval-pilot", status="active", updated_at=now
+        task.insert().values(
+            task_id=task_id, created_at=now, name="eval-pilot", status="active", updated_at=now
         )
     )
     run_id = uuid.uuid4()
-    conn.execute(runs.insert().values(run_id=run_id, project_id=project_id, status="running", started_at=now))
-    return project_id, run_id
+    conn.execute(runs.insert().values(run_id=run_id, task_id=task_id, status="running", started_at=now))
+    return task_id, run_id
 
 
-def _seed_scope(conn: Connection, project_id: uuid.UUID, intent: str) -> uuid.UUID:
+def _seed_scope(conn: Connection, task_id: uuid.UUID, intent: str) -> uuid.UUID:
     scope_id = uuid.uuid4()
     conn.execute(
         evidence_scope.insert().values(
             evidence_scope_id=scope_id,
-            project_id=project_id,
+            task_id=task_id,
             intent=intent,
             context={},
             created_at=datetime.now(UTC),
@@ -176,13 +176,13 @@ def _seed_scope(conn: Connection, project_id: uuid.UUID, intent: str) -> uuid.UU
     return scope_id
 
 
-def _search_candidate_docs(conn: Connection, project_id: uuid.UUID) -> list[dict[str, Any]]:
+def _search_candidate_docs(conn: Connection, task_id: uuid.UUID) -> list[dict[str, Any]]:
     """Metadata for every candidate that reached the database — i.e. what
     survived acquire's dedup and cap, not everything the APIs returned."""
     rows = conn.execute(
         select(source_snapshot.c.metadata)
-        .join(project_source_snapshot, project_source_snapshot.c.source_snapshot_id == source_snapshot.c.source_snapshot_id)
-        .where(project_source_snapshot.c.project_id == project_id)
+        .join(task_source_snapshot, task_source_snapshot.c.source_snapshot_id == source_snapshot.c.source_snapshot_id)
+        .where(task_source_snapshot.c.task_id == task_id)
     ).fetchall()
     return [metadata for (metadata,) in rows]
 
@@ -194,20 +194,20 @@ def _keys_of(docs: list[dict[str, Any]]) -> set[str]:
     return {key for d in docs if (key := record_key(d))}
 
 
-def _screened_relevant_docs(conn: Connection, project_id: uuid.UUID, scope_id: uuid.UUID) -> list[dict[str, Any]]:
+def _screened_relevant_docs(conn: Connection, task_id: uuid.UUID, scope_id: uuid.UUID) -> list[dict[str, Any]]:
     """Mirrors ``classify._load_relevant_docs``'s join shape over the effective screen rows."""
     effective = effective_screen_rows()
     rows = conn.execute(
         select(source_snapshot.c.metadata)
         .join(
             effective,
-            (effective.c.project_source_snapshot_id == project_source_snapshot.c.project_source_snapshot_id)
-            & (effective.c.project_id == project_source_snapshot.c.project_id),
+            (effective.c.task_source_snapshot_id == task_source_snapshot.c.task_source_snapshot_id)
+            & (effective.c.task_id == task_source_snapshot.c.task_id),
         )
-        .join(source_snapshot, project_source_snapshot.c.source_snapshot_id == source_snapshot.c.source_snapshot_id)
+        .join(source_snapshot, task_source_snapshot.c.source_snapshot_id == source_snapshot.c.source_snapshot_id)
         .where(effective.c.evidence_scope_id == scope_id)
         .where(effective.c.status == "relevant")
-        .where(project_source_snapshot.c.project_id == project_id)
+        .where(task_source_snapshot.c.task_id == task_id)
     ).fetchall()
     return [metadata for (metadata,) in rows]
 
@@ -252,9 +252,12 @@ class _RecordingBackend:
     methods), so it's transparent to the pipeline.
     """
 
-    def __init__(self, inner: Any, calls: list[dict[str, Any]]) -> None:
+    def __init__(
+        self, inner: Any, calls: list[dict[str, Any]], langfuse_client: Langfuse | None = None
+    ) -> None:
         self._inner = inner
         self._calls = calls
+        self._langfuse_client = langfuse_client
 
     @property
     def name(self) -> str:
@@ -287,7 +290,30 @@ class _RecordingBackend:
         this, a query that 500ed was invisible: it never reached the recorded
         call list, so the queries CSV silently omitted it and the run looked
         like it had simply found less.
+
+        With tracing on, each call is also one Langfuse span (``openalex:search``,
+        ``overton:search`` ...) carrying the query and the result count — never
+        the records — so a run's trace shows every provider call beside the LLM
+        generations. A failed call leaves an errored span.
         """
+        return tracing.traced_call(
+            self._langfuse_client,
+            name=f"{self._inner.name}:{method}",
+            as_type="span",
+            call=lambda: self._record_call(method, query, wire_params, call),
+            update=lambda span, records: span.update(
+                input={"query": query, "wire_params": wire_params},
+                output={"result_count": len(records)},
+            ),
+        )
+
+    def _record_call(
+        self,
+        method: str,
+        query: str,
+        wire_params: dict[str, str] | None,
+        call: Callable[[], list[dict[str, Any]]],
+    ) -> list[dict[str, Any]]:
         try:
             records = call()
         except Exception as exc:
@@ -401,8 +427,8 @@ def run_one_query(
             calls, no screening bill. Use it when the experiment is about search
             retrieval only; ``screen_recall`` comes back None.
     """
-    project_id, run_id = _seed_project_and_run(conn)
-    scope_id = _seed_scope(conn, project_id, query)
+    task_id, run_id = _seed_task_and_run(conn)
+    scope_id = _seed_scope(conn, task_id, query)
 
     search_context = {
         "search": {
@@ -414,10 +440,12 @@ def run_one_query(
         }
     }
     search_calls: list[dict[str, Any]] = []
-    recording_backends = [_RecordingBackend(b, search_calls) for b in live_search_backends()]
+    recording_backends = [
+        _RecordingBackend(b, search_calls, langfuse_client) for b in live_search_backends()
+    ]
     run_search(
         conn,
-        project_id=project_id,
+        task_id=task_id,
         run_id=run_id,
         context=AcquireContext(scope_id=scope_id, intent=query, context=search_context),
         backends=recording_backends,
@@ -425,18 +453,18 @@ def run_one_query(
             langfuse_client=langfuse_client
         ),
     )
-    search_docs = _search_candidate_docs(conn, project_id)
+    search_docs = _search_candidate_docs(conn, task_id)
     search_dois = _keys_of(search_docs)
 
     if run_screen:
         screen_sources(
             conn,
-            project_id=project_id,
+            task_id=task_id,
             run_id=run_id,
             context=ScreenContext(scope_id=scope_id, intent=query, context={}),
             screening_backend=OpenAIScreeningBackend(langfuse_client=langfuse_client),
         )
-        screened = _screened_relevant_docs(conn, project_id, scope_id)
+        screened = _screened_relevant_docs(conn, task_id, scope_id)
     else:
         screened = []
     screened_dois, in_ground_truth, unexplained = partition_screened(screened, ground_truth.keys)
@@ -561,7 +589,7 @@ def build_report(
             "only have found by time-traveling past the review is excluded up front.",
             f"result_cap_per_backend was {result_cap_per_backend} for this run — the "
             "number of records requested per HTTP call (search_loop trims each "
-            "response to it). With the depth's http_budget, this bounds how much a "
+            "response to it). With the depth's call_budget, this bounds how much a "
             "backend can be ASKED for.",
             f"record_cap_per_backend was {record_cap_per_backend} for this run — the "
             "number of search-arm candidates acquire KEEPS per backend, applied after "
@@ -718,7 +746,7 @@ def main() -> None:
         default=None,
         help="Override how many records are requested per HTTP call (default: the depth's own "
         "value, e.g. 50 for rapid — see search_loop.DEPTH_CONSTANTS). With the depth's "
-        "http_budget this bounds how much a backend can be ASKED for. Usually NOT the cap "
+        "call_budget this bounds how much a backend can be ASKED for. Usually NOT the cap "
         "you want: see --record-cap-per-backend.",
     )
     parser.add_argument(
