@@ -301,12 +301,24 @@ UUID item — `352ad7ca`); the S4 "inputs changed" sentence was not implemented
 and a baseline no longer counted as existing after an aborted walk
 (`a9404d23`); the successor Task Agent conversation after a finished walk was
 seeded through the ES-only path (500 — `8e17ed6a`); the gate card of record
-printed the depth key. **Frontend, from the screenshots:** the band said
+printed the depth key; a scoping walk continued past a triggered generic
+pause crashed at the next boundary in the agent watch, and `GET /events` 500d
+on a scoping plan (both `e063a69b`: a non-ES walk is routed past the agent
+watch with a recorded verdict; the `plan.updated` frame carries a scoping
+plan); the gate's check-in was written with the generic kind so the thread
+never opened the composer at the gate (`ed0fbde5`: the read model reports
+`baseline_confirm`). **Frontend, from the screenshots:** the band said
 "awaiting your confirmation" after Confirm — the confirm record is minted as
 a new version but stamped with the previous version number, so the "record
 names the current version" rule never held (fixed by stamping the minted
 version, below); the ES "Most relevant sources" block rendered on a baseline
 (hidden for the baseline template).
+
+**Screenshots** (scratchpad `live-evidence/shots*`): the Agent tab with the
+decision line, the appended sentence and the open composer at the gate; the
+Result with the band reading "plan confirmed · the longlist arrives with the
+next stage · built from plan version 3", the `scoping pass` eyebrow and the
+flat outline; Sources; History.
 
 **Observed, not a defect:** a failed turn between reservation and the
 planner call leaves a `pending` row that blocks new turns for ten minutes
@@ -348,7 +360,16 @@ and 453 s on the rich corpus, 259 s on the thin one — above the 3-to-4-minute
 aim that assumed parallel writing (check 7: sequential writing is 183 s of
 the NEET wall clock); the plan shows a coarse band and promises no number.
 
-_(The step-6 exit gate follows.)_
+### Step-6 exit gate — final tree (2026-09-10)
+
+| Command | Result | Notes |
+|---|---:|---|
+| `make verify` (full) | pass | backend 2802 passed (10:10); typecheck 335 files clean; lint clean; build OK; infra 46 passed; okf-validate 143/0; audit-paths, prompt-guard (16 modules), font-guard, `drift-check: OK`; frontend 715 tests / 82 files |
+| `cd frontend && pnpm e2e` | pass | 15/15 (mock mode) |
+
+Every plan checkpoint is committed on `task/044-scoping-shell-baseline`; the
+live check ran at the contract's pinned scope; this file is complete for the
+review conversation (`task-cycle-review`, fresh conversation).
 
 ## Checks beyond the build
 
@@ -539,4 +560,11 @@ stay in the local scratchpad and are not committed.
 
 ## Deferred work
 
-_(Phase 7: `docs/deferred.md` deltas)_
+`docs/deferred.md` § "Options scoping shell and baseline (task 044 seams)":
+per-field turn provenance (resolved at version grain) · Search further ·
+inherited document rows · `task_link.option_id` · scoping deep · the later
+latency levers (check 7's reading) · the Task Agent as the ES control surface
+· rebuild only the touched sections · the language evidence restriction ·
+the ES prompt's unattended default · the name-based prompt-hash guard · the
+`?chat=planning` token · the `agent_prompt.py` docstring. Spec log lines in
+`docs/specs/log.md` (2026-09-09).
