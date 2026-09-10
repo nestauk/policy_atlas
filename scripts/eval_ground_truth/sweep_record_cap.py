@@ -6,7 +6,7 @@ keeps. ``record_cap_per_backend`` is the number it keeps per backend, and so the
 ceiling on recall. How high does that cap have to go before recall stops
 improving — and does the way queries are generated change the answer?
 
-The setup, and how it differs from ``run_and_score.py``:
+The setup:
 
 * depth ``rapid`` — one search round, no reformulation loop.
 * ``result_cap_per_backend`` set to 2,000 — 40x the pipeline's own value of
@@ -16,12 +16,15 @@ The setup, and how it differs from ``run_and_score.py``:
   (OpenAlex requires page x per-page <= 10,000), and 1,000 rapid page requests
   per run is far more traffic than this pipeline normally sends.
 * ``record_cap_per_backend`` swept over 50, 100, 250, 500, 1000, 2000.
-* The generation backend swept over ``--generation-backends`` — ``v1`` (one
-  shared prompt) and ``v2`` (one prompt per provider). See
-  ``run_and_score.GENERATION_BACKENDS`` for which prompt files each one reads.
-  Every backend is run at every cap, so the two effects can be told apart.
-* Screening OFF. Retrieval is what is being measured here, and screening every
-  kept candidate is where the LLM bill is. ``screen_recall`` is not reported.
+* The generation backend swept over ``--generation-backends`` — ``shared``
+  (one prompt writes both providers' queries) and ``per-provider`` (one prompt
+  per provider). See ``search_eval.GENERATION_BACKENDS``; each class names the
+  prompt files it reads in ``prompt_files``. Every backend is run at every
+  cap, so the two effects can be told apart.
+* Screening OFF by default. Retrieval is what is usually being measured, and
+  screening every kept candidate is where the LLM bill is. Pass ``--screen`` to
+  run it too, which adds a ``screen_recall`` score; the gap between it and
+  ``search_recall`` is what screening lost.
 
 Each combination is run ``--repeats`` times because query generation is an LLM
 call and gives slightly different queries each time; comparing single runs
@@ -47,17 +50,16 @@ How it is organised in Langfuse:
   ``sdk-experiment``; filter on that to separate them from app traffic.
 
 Langfuse is therefore required (``LANGFUSE_PUBLIC_KEY`` / ``SECRET_KEY`` /
-``HOST``). ``run_and_score.py`` is the tool for a run without it.
+``HOST``).
 
 Cost warning: one repeat can pull thousands of records from OpenAlex and
 Overton — up to 10 pages per OpenAlex call and 40 per Overton call. Reviews x
 backends x caps x repeats multiplies that: the defaults are 2 x 6 = 12 runs per
 review. Start with ``--repeats 1`` and a single ``--caps`` value.
 
-Usage (same environment requirements as run_and_score.py — a real Postgres via
-DATABASE_URL, plus OPENAI_API_KEY / OPENALEX_API_KEY / OVERTON_API_KEY, which
-is what ``--env-file backend/.env`` supplies), after the dataset has been
-uploaded once:
+Usage (needs a real Postgres via DATABASE_URL, plus OPENAI_API_KEY /
+OPENALEX_API_KEY / OVERTON_API_KEY, which is what ``--env-file backend/.env``
+supplies), after the dataset has been uploaded once:
 
     uv run --project backend --env-file backend/.env \\
         python scripts/eval_ground_truth/ground_truth_dataset.py
@@ -73,10 +75,11 @@ Besides the Langfuse runs, writes three CSVs into ``results/``, all joinable on
   wire parameters it went out with, how many records came back and how many of
   those the review actually cited.
 * ``<name>_papers.csv`` — one row per run x reference-list paper: whether an
-  API returned it, whether it survived the cap into the candidate set, and
-  which backend did each. Filter to ``reached_db`` for the true positives; the
-  rows where ``returned_by_api`` is true and ``reached_db`` is false are the
-  papers the cap threw away after paying to fetch them.
+  API returned it, whether it survived the cap into the candidate set, which
+  backend did each, and (with ``--screen``) whether screening kept it. Filter
+  to ``reached_db`` for the true positives; the rows where ``returned_by_api``
+  is true and ``reached_db`` is false are the papers the cap threw away after
+  paying to fetch them.
 
 Cheaper alternative if API volume becomes a problem: acquire keeps the first N
 of a fixed candidate stream, so a single run at cap 2000 almost contains the
@@ -100,11 +103,11 @@ from ground_truth import GroundTruth, record_key
 from ground_truth_dataset import DEFAULT_DATASET
 from inspect_run import call_table, records_table
 from langfuse import Evaluation, propagate_attributes
-from run_and_score import GENERATION_BACKENDS, QueryResult, run_one_query
+from search_eval import GENERATION_BACKENDS, QueryResult, _keys_of, run_one_query
 
 from policy_atlas.core import tracing
 from policy_atlas.core.db import get_engine
-from policy_atlas.evidence_search.sourcing import search_loop, search_prompts
+from policy_atlas.evidence_search.sourcing import search_loop
 
 DEPTH = "rapid"
 RECORD_CAPS = [50, 100, 250, 500, 1000, 2000]
@@ -115,16 +118,8 @@ RECORD_CAPS = [50, 100, 250, 500, 1000, 2000]
 # enough not to bind, without the deep-paging trouble 10,000 caused.
 RESULT_CAP_PER_BACKEND = 2_000
 EXPERIMENT = "retrieval-cap-prompt-sweep"
-# The prompt file(s) each generation backend reads, so every run records the
-# wording it used (as a version name and a content hash) — not just "v1"/"v2".
-PROMPT_FILES: dict[str, list[Path]] = {
-    "v1": [search_prompts.SEARCH_QUERIES_PROMPT_FILE],
-    "v2": [
-        search_prompts.SEARCH_QUERIES_V2_OPENALEX_PROMPT_FILE,
-        search_prompts.SEARCH_QUERIES_V2_OVERTON_PROMPT_FILE,
-    ],
-}
-# The numbers each run's summary carries into Langfuse as scores.
+# The numbers each run's summary carries into Langfuse as scores. The two
+# screening ones are only present when the run screened (``--screen``).
 SCORE_KEYS = [
     "search_recall",
     "n_found",
@@ -132,6 +127,8 @@ SCORE_KEYS = [
     "n_failed_calls",
     "n_api_records",
     "n_candidates_kept",
+    "screen_recall",
+    "n_screened_in",
 ]
 
 
@@ -154,9 +151,11 @@ def _prompt_identity(variant: str) -> tuple[str, str]:
 
     The version is the prompt file name(s) minus ``_system`` (the same string
     the generation spans record); the hash covers the files' bytes, so an edit
-    to the wording without a rename still shows up as a different prompt.
+    to the wording without a rename still shows up as a different prompt. Both
+    are derived from the backend class's own ``prompt_files``, so the eval
+    cannot drift from what the pipeline actually reads.
     """
-    files = PROMPT_FILES[variant]
+    files = GENERATION_BACKENDS[variant].prompt_files
     version = "+".join(f.stem.replace("_system", "") for f in files)
     sha = hashlib.sha256(b"".join(f.read_bytes() for f in files)).hexdigest()[:12]
     return version, sha
@@ -205,6 +204,8 @@ def _run_frames(
     """
     records = records_table(result.search_calls, ground_truth.keys)
     kept_by_key = _kept_by_backend(result)
+    # None when the run did not screen: "not measured", not "nothing survived".
+    screened_keys = _keys_of(result.screened_docs) if result.screen_recall is not None else None
 
     # Which backends' API calls returned each cited document, before any capping.
     returned_by: dict[str, set[str]] = {}
@@ -224,6 +225,7 @@ def _run_frames(
                 "returned_by": "+".join(sorted(returned_by.get(key, ()))) or None,
                 "reached_db": key in kept_by_key,
                 "kept_from": kept_by_key.get(key),
+                "screened_in": None if screened_keys is None else key in screened_keys,
             }
             for key in sorted(ground_truth.keys)
         ]
@@ -247,6 +249,7 @@ def _run_frames(
             for doc in result.search_docs
             if backend == "all" or doc.get("backend") == backend
         ]
+        screened_here = None if screened_keys is None else screened_keys & found
         runs_rows.append(
             {
                 **meta,
@@ -262,16 +265,27 @@ def _run_frames(
                 "n_ground_truth": n_gt,
                 "n_found": len(found),
                 "search_recall": round(len(found) / n_gt, 4) if n_gt else 0.0,
+                "n_screened_in": None if screened_here is None else len(screened_here),
+                "screen_recall": (
+                    None if screened_here is None else round(len(screened_here) / n_gt, 4) if n_gt else 0.0
+                ),
             }
         )
     return pd.DataFrame(runs_rows), queries, papers
 
 
 def _summary(runs: pd.DataFrame) -> dict[str, Any]:
-    """The run's de-duplicated totals as plain numbers — the trace output."""
+    """The run's de-duplicated totals as plain numbers — the trace output.
+
+    Screening keys are left out when the run did not screen, so no score is
+    recorded for a stage that was never measured."""
     total = runs[runs["backend"] == "all"].iloc[0]
     return {
-        **{key: float(total[key]) if key == "search_recall" else int(total[key]) for key in SCORE_KEYS},
+        **{
+            key: float(total[key]) if key.endswith("_recall") else int(total[key])
+            for key in SCORE_KEYS
+            if pd.notna(total[key])
+        },
         "n_ground_truth": int(total["n_ground_truth"]),
         "found_by_backend": {
             row.backend: int(row.n_found) for row in runs[runs["backend"] != "all"].itertuples()
@@ -281,7 +295,7 @@ def _summary(runs: pd.DataFrame) -> dict[str, Any]:
 
 def score_summary(*, output: dict[str, Any], **_: Any) -> list[Evaluation]:
     """The experiment evaluator: lift the task's summary numbers into Langfuse scores."""
-    return [Evaluation(name=key, value=output[key]) for key in SCORE_KEYS]
+    return [Evaluation(name=key, value=output[key]) for key in SCORE_KEYS if key in output]
 
 
 def _ground_truth_from_item(item: Any) -> GroundTruth:
@@ -291,7 +305,6 @@ def _ground_truth_from_item(item: Any) -> GroundTruth:
     return GroundTruth(
         dois=keys - overton_ids,
         overton_ids=overton_ids,
-        resolvable_fraction=1.0,
         source=item.metadata.get("source", "doi"),
         titles=item.expected_output.get("titles", {}),
     )
@@ -307,6 +320,7 @@ def _run_cell(
     repeat: int,
     label: str,
     git_commit: str,
+    screen: bool,
     sink: tuple[list[pd.DataFrame], list[pd.DataFrame], list[pd.DataFrame]],
 ) -> Any:
     """Run one generation backend x cap x repeat cell over every dataset item.
@@ -329,7 +343,7 @@ def _run_cell(
             "record_cap_per_backend": record_cap,
             "result_cap_per_backend": constants["result_cap_per_backend"],
             "depth": DEPTH,
-            "screening": False,
+            "screening": screen,
             "repeat": repeat,
             "git_commit": git_commit,
         }.items()
@@ -353,7 +367,7 @@ def _run_cell(
                     ground_truth,
                     published_before=published_before,
                     depth=DEPTH,
-                    run_screen=False,
+                    run_screen=screen,
                     langfuse_client=client,
                     generation_backend_variant=variant,
                 )
@@ -385,10 +399,15 @@ def _run_cell(
             if summary["n_failed_calls"]
             else ""
         )
+        screened = (
+            f"screen_recall={summary['screen_recall']:.0%} ({summary['n_screened_in']} screened in) "
+            if "screen_recall" in summary
+            else ""
+        )
         print(
             f"  {item.metadata.get('review_title', review_id)[:60]}: "
             f"search_recall={summary['search_recall']:.0%} "
-            f"({summary['n_found']}/{summary['n_ground_truth']}; {per_backend}), "
+            f"({summary['n_found']}/{summary['n_ground_truth']}; {per_backend}), {screened}"
             f"{summary['n_candidates_kept']} candidates kept from "
             f"{summary['n_api_records']} records over {summary['n_api_calls']} calls{failed}"
         )
@@ -438,10 +457,15 @@ def main() -> None:
         nargs="+",
         choices=list(GENERATION_BACKENDS),
         default=list(GENERATION_BACKENDS),
-        help="Query-generation methodologies to compare: v1 = one shared prompt "
-        "(search_queries_system_v3.txt); v2 = one prompt per provider "
-        "(search_queries_openalex_system_v2.txt + "
-        "search_queries_overton_system_v2.txt). Default: both.",
+        help="Query-generation methodologies to compare: 'shared' = one prompt writes "
+        "both providers' queries; 'per-provider' = one prompt per provider. Each "
+        "class names its prompt files in prompt_files. Default: both.",
+    )
+    parser.add_argument(
+        "--screen",
+        action="store_true",
+        help="Also run the screening stage and score screen_recall. Every kept candidate "
+        "is an LLM call, so this multiplies the bill by the cap — start with one small cap.",
     )
     parser.add_argument(
         "--out",
@@ -460,7 +484,7 @@ def main() -> None:
     if client is None:
         parser.error(
             "this sweep records Langfuse experiment runs and needs LANGFUSE_PUBLIC_KEY, "
-            "LANGFUSE_SECRET_KEY and LANGFUSE_HOST (run_and_score.py works without them)."
+            "LANGFUSE_SECRET_KEY and LANGFUSE_HOST."
         )
     dataset = client.get_dataset(args.dataset)
     if not dataset.items:
@@ -471,7 +495,7 @@ def main() -> None:
     print(
         f"Sweep: depth={DEPTH}, result_cap={RESULT_CAP_PER_BACKEND}, "
         f"generation_backends={args.generation_backends}, caps={args.caps}, "
-        f"repeats={args.repeats}, screening OFF, git_commit={git_commit[:7]}"
+        f"repeats={args.repeats}, screening {'ON' if args.screen else 'OFF'}, git_commit={git_commit[:7]}"
     )
 
     engine = get_engine()
@@ -489,6 +513,7 @@ def main() -> None:
                     repeat=repeat,
                     label=label,
                     git_commit=git_commit,
+                    screen=args.screen,
                     sink=sink,
                 )
                 # The SDK isolates failures: a review whose search raised is
@@ -541,7 +566,7 @@ def _write_and_summarise(
         table = group.pivot_table(
             index="record_cap_per_backend",
             columns="generation_backend",
-            values="search_recall",
+            values=[c for c in ("search_recall", "screen_recall") if group[c].notna().any()],
             aggfunc="mean",
         )
         print("\n".join("  " + line for line in table.to_string(float_format=pct).splitlines()))

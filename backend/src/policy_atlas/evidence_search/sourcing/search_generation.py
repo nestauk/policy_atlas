@@ -7,6 +7,7 @@ full-I/O tracing, token-usage logging, and loud failures when parsing fails.
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any, Protocol, TypeVar
 
 from langfuse import Langfuse
@@ -21,8 +22,11 @@ from policy_atlas.evidence_search.sourcing.search_prompts import (
     N_QUERIES,
     SEARCH_GEN_MAX_OUTPUT_TOKENS,
     SEARCH_QUERIES_MODEL,
+    SEARCH_QUERIES_PROMPT_FILE,
     SEARCH_QUERIES_PROMPT_VERSION,
+    SEARCH_QUERIES_V2_OPENALEX_PROMPT_FILE,
     SEARCH_QUERIES_V2_OPENALEX_PROMPT_VERSION,
+    SEARCH_QUERIES_V2_OVERTON_PROMPT_FILE,
     SEARCH_QUERIES_V2_OVERTON_PROMPT_VERSION,
     SEARCH_REFORMULATE_MODEL,
     SEARCH_REFORMULATE_PROMPT_VERSION,
@@ -111,6 +115,9 @@ class OpenAISearchGenerationBackend:
     """
 
     mode = "live"
+    # The committed prompt file(s) round-1 query generation reads, so an eval
+    # can record exactly which wording produced a run.
+    prompt_files: tuple[Path, ...] = (SEARCH_QUERIES_PROMPT_FILE,)
 
     def __init__(
         self,
@@ -280,6 +287,8 @@ class V2SearchGenerationBackend(OpenAISearchGenerationBackend):
     it runs separate prompt calls for OpenAlex Boolean generation and Overton
     semantic generation, for both round-1 generation and reformulation.
     """
+
+    prompt_files = (SEARCH_QUERIES_V2_OPENALEX_PROMPT_FILE, SEARCH_QUERIES_V2_OVERTON_PROMPT_FILE)
 
     def _combine_usage(self, usages: list[TokenUsage | None]) -> TokenUsage | None:
         """Aggregate token usage from multiple internal prompt calls."""

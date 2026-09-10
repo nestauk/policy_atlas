@@ -1,10 +1,11 @@
-"""Self-check for the pure scoring functions (no network, no DB).
+"""Self-check for the eval's pure functions: scoring, CSV loading, the sweep's
+output tables, and the OpenAlex retry logic (no network, no DB).
 
 Run: uv run --project backend python scripts/eval_ground_truth/test_metrics.py
 """
 
-from ground_truth import normalize_doi
-from run_and_score import _months_earlier, _recall, clean_review_title, partition_screened
+from ground_truth import clean_review_title, months_earlier, normalize_doi
+from search_eval import _keys_of, _recall
 
 
 def test_normalize_doi() -> None:
@@ -29,36 +30,13 @@ def test_record_key() -> None:
     assert record_key(None) is None
 
 
-def test_overton_query_variants() -> None:
-    """Overton's keyword index treats punctuation literally, so a title is
-    asked for in more than one spelling — but only when that changes anything."""
-    from ground_truth import _match_form, _overton_query_variants
-
-    variants = _overton_query_variants("Children's experiences of loneliness: 2018")
-    # The colon is dropped (it is field-prefix syntax), and both apostrophe
-    # spellings are tried — the straight one alone finds nothing in Overton.
-    assert variants[0] == 'title:"Children\'s experiences of loneliness  2018"'
-    assert any("’" in v for v in variants)
-    assert all(":" not in v.split("title:", 1)[-1].replace('"', "") for v in variants)
-
-    # No apostrophe -> no extra spellings, so the common case stays at one
-    # precise query plus one bare fallback.
-    assert len(_overton_query_variants("Tackling loneliness evidence review")) == 2
-
-    # Matching folds the two apostrophes together, so the spelling Overton
-    # happens to use does not depress the similarity score.
-    assert _match_form("Children’s") == _match_form("Children's")
-
-
 def test_ground_truth_keys_union() -> None:
     from ground_truth import GroundTruth
 
-    gt = GroundTruth(
-        dois={"10.1/a"}, resolvable_fraction=1.0, source="url", overton_ids={"overton:P9"}
-    )
+    gt = GroundTruth(dois={"10.1/a"}, source="url", overton_ids={"overton:P9"})
     assert gt.keys == {"10.1/a", "overton:P9"}
     # A DOI-mode ground truth has no Overton half, so keys == dois exactly.
-    assert GroundTruth(dois={"10.1/a"}, resolvable_fraction=1.0, source="doi").keys == {"10.1/a"}
+    assert GroundTruth(dois={"10.1/a"}, source="doi").keys == {"10.1/a"}
 
 
 def test_recall() -> None:
@@ -67,18 +45,13 @@ def test_recall() -> None:
     assert _recall({"a"}, set()) == 0.0  # no ground truth -> undefined, treated as 0
 
 
-def test_partition_screened() -> None:
-    ground_truth_dois = {"10.1/a", "10.1/b"}
-    screened = [
-        {"doi": "10.1/a"},  # in ground truth
-        {"doi": "10.1/b"},  # in ground truth
-        {"doi": "10.1/c"},  # unexplained
-        {"doi": None},  # no doi -> unexplained (can't be confirmed against ground truth)
+def test_keys_of() -> None:
+    docs = [
+        {"doi": "https://doi.org/10.1/A"},
+        {"backend": "overton", "backend_record_id": "P9"},
+        {"doi": None},  # no key -> dropped, cannot be matched against ground truth
     ]
-    dois, in_ground_truth, unexplained = partition_screened(screened, ground_truth_dois)
-    assert dois == {"10.1/a", "10.1/b", "10.1/c"}
-    assert in_ground_truth == [{"doi": "10.1/a"}, {"doi": "10.1/b"}]
-    assert unexplained == [{"doi": "10.1/c"}, {"doi": None}]
+    assert _keys_of(docs) == {"10.1/a", "overton:P9"}
 
 
 def test_clean_review_title() -> None:
@@ -102,14 +75,54 @@ def test_clean_review_title() -> None:
     )
 
 
+def test_openalex_get_retries() -> None:
+    """``openalex_get`` retries 5xx and transport errors, and returns 4xx at once.
+
+    Never touches the network: ``httpx.get`` and ``time.sleep`` are swapped for
+    fakes, so only the retry decisions are tested.
+    """
+    from unittest.mock import patch
+
+    import httpx
+
+    import ground_truth
+
+    def responses(*status_codes):
+        codes = list(status_codes)
+        return lambda url, **_: httpx.Response(codes.pop(0), request=httpx.Request("GET", url))
+
+    with patch("time.sleep"):
+        # A 504 then a 200: the retry wins, the caller sees only the 200.
+        with patch("httpx.get", responses(504, 200)):
+            assert ground_truth.openalex_get("/works/W1").status_code == 200
+        # A genuine 404 is not transient: return it at once, do not retry.
+        with patch("httpx.get", responses(404, 200)):
+            assert ground_truth.openalex_get("/works/W1").status_code == 404
+        # Always 504: give up after 5 tries and hand back the last response.
+        with patch("httpx.get", responses(504, 504, 504, 504, 504)):
+            assert ground_truth.openalex_get("/works/W1").status_code == 504
+
+        # A connection error that later clears is also retried.
+        calls = {"n": 0}
+
+        def flaky_get(url, **_):
+            calls["n"] += 1
+            if calls["n"] == 1:
+                raise httpx.ConnectTimeout("boom")
+            return httpx.Response(200, request=httpx.Request("GET", url))
+
+        with patch("httpx.get", flaky_get):
+            assert ground_truth.openalex_get("/works/W1").status_code == 200
+
+
 def test_months_earlier() -> None:
-    assert _months_earlier("2023-01-01", 1) == "2022-12-01"  # year boundary
-    assert _months_earlier("2023-03-31", 1) == "2023-02-28"  # day-overflow clamp, non-leap
-    assert _months_earlier("2024-03-31", 1) == "2024-02-29"  # day-overflow clamp, leap year
-    assert _months_earlier("2023-06-15", 1) == "2023-05-15"  # ordinary case
+    assert months_earlier("2023-01-01", 1) == "2022-12-01"  # year boundary
+    assert months_earlier("2023-03-31", 1) == "2023-02-28"  # day-overflow clamp, non-leap
+    assert months_earlier("2024-03-31", 1) == "2024-02-29"  # day-overflow clamp, leap year
+    assert months_earlier("2023-06-15", 1) == "2023-05-15"  # ordinary case
 
 
-def _fake_run():
+def _fake_run(screened: bool = False):
     """One synthetic run: two API calls, one per backend, over a 3-paper review.
 
     10.1/a:     returned by both backends, kept (from OpenAlex — acquire keeps
@@ -118,15 +131,14 @@ def _fake_run():
     10.1/c:     never returned at all.
     overton:P9: a policy document with NO DOI — returned by Overton and kept.
                 Scored on its Overton id; a DOI-only measurement loses it.
-    """
-    import pandas as pd
 
+    With ``screened=True`` the run also screened, and kept only 10.1/a.
+    """
     from ground_truth import GroundTruth
-    from run_and_score import QueryResult
+    from search_eval import QueryResult
 
     ground_truth = GroundTruth(
         dois={"10.1/a", "10.1/b", "10.1/c"},
-        resolvable_fraction=1.0,
         source="url",
         overton_ids={"overton:P9"},
         titles={"overton:P9": "Loneliness statistics"},
@@ -149,16 +161,17 @@ def _fake_run():
             "document_url": "https://example.org/p9",
         },
     ]
+    search_docs = [
+        {"doi": "10.1/a", "backend": "openalex", "title": "Paper A"},
+        {"doi": "10.9/z", "backend": "openalex", "title": "Off-target"},
+        {"backend": "overton", "backend_record_id": "P9", "title": "Loneliness statistics"},
+    ]
     result = QueryResult(
         query="q",
         search_candidate_count=2,
-        screened_relevant_count=0,
+        screened_relevant_count=1 if screened else 0,
         search_recall=1 / 3,
-        screen_recall=None,
-        judge_calibration_rate=None,
-        judge_precision_proxy=None,
-        n_calibration_sampled=0,
-        n_precision_sampled=0,
+        screen_recall=1 / 4 if screened else None,
         search_calls=[
             {
                 "backend": "openalex",
@@ -178,12 +191,8 @@ def _fake_run():
             },
         ],
         # What survived the cap into the database, as acquire persists it.
-        search_docs=[
-            {"doi": "10.1/a", "backend": "openalex", "title": "Paper A"},
-            {"doi": "10.9/z", "backend": "openalex", "title": "Off-target"},
-            {"backend": "overton", "backend_record_id": "P9", "title": "Loneliness statistics"},
-        ],
-        screened_docs=[],
+        search_docs=search_docs,
+        screened_docs=search_docs[:1] if screened else [],
     )
     # Key -> title, as the dataset item carries it (10.1/c deliberately has none).
     titles = {"10.1/a": "Paper A", "10.1/b": "Paper B", "overton:P9": "Loneliness statistics"}
@@ -196,7 +205,7 @@ def test_recording_backend_records_failed_calls() -> None:
     Before this, a 500ed query vanished: the run's recall dropped with nothing
     in the output to say a query never ran.
     """
-    from run_and_score import _RecordingBackend
+    from search_eval import _RecordingBackend
 
     class _Boom:
         name = "openalex"
@@ -281,34 +290,24 @@ def test_sweep_cap_overrides() -> None:
 
 def test_generation_backend_arms() -> None:
     """The two arms compared: one shared prompt vs one prompt per provider."""
-    from policy_atlas.evidence_search.sourcing import search_prompts
     from policy_atlas.evidence_search.sourcing.search_generation import (
         OpenAISearchGenerationBackend,
         V2SearchGenerationBackend,
     )
-    from run_and_score import GENERATION_BACKENDS
-    from sweep_record_cap import PROMPT_FILES, _prompt_identity
+    from search_eval import GENERATION_BACKENDS
+    from sweep_record_cap import _prompt_identity
 
     assert GENERATION_BACKENDS == {
-        "v1": OpenAISearchGenerationBackend,
-        "v2": V2SearchGenerationBackend,
+        "shared": OpenAISearchGenerationBackend,
+        "per-provider": V2SearchGenerationBackend,
     }
-    # Every arm records which prompt file(s) it read, as a name and a hash.
-    assert PROMPT_FILES.keys() == GENERATION_BACKENDS.keys()
-    assert _prompt_identity("v1")[0] == "search_queries_v3"
-    assert _prompt_identity("v2")[0] == "search_queries_openalex_v2+search_queries_overton_v2"
-    assert len(_prompt_identity("v1")[1]) == 12
-    # Each arm's prompt files, so a rename in search_prompts.py fails here
-    # rather than silently changing what the eval compares.
-    assert search_prompts.SEARCH_QUERIES_PROMPT_FILE.name == "search_queries_system_v3.txt"
-    assert (
-        search_prompts.SEARCH_QUERIES_V2_OPENALEX_PROMPT_FILE.name
-        == "search_queries_openalex_system_v2.txt"
-    )
-    assert (
-        search_prompts.SEARCH_QUERIES_V2_OVERTON_PROMPT_FILE.name
-        == "search_queries_overton_system_v2.txt"
-    )
+    # Every arm records which prompt file(s) it read, as a name and a hash,
+    # taken from the class itself so the eval cannot drift from the pipeline.
+    for cls in GENERATION_BACKENDS.values():
+        assert cls.prompt_files and all(f.is_file() for f in cls.prompt_files)
+    assert _prompt_identity("shared")[0] == "search_queries_v3"
+    assert _prompt_identity("per-provider")[0] == "search_queries_openalex_v2+search_queries_overton_v2"
+    assert len(_prompt_identity("shared")[1]) == 12
 
 
 def test_sweep_run_frames() -> None:
@@ -319,8 +318,8 @@ def test_sweep_run_frames() -> None:
 
     result, ground_truth, titles = _fake_run()
     meta = {
-        "run_id": "v1-cap250-r1",
-        "generation_backend": "v1",
+        "run_id": "shared-cap250-r1",
+        "generation_backend": "shared",
         "record_cap_per_backend": 250,
     }
     runs, queries, papers = _run_frames(result, ground_truth, titles, meta)
@@ -328,7 +327,7 @@ def test_sweep_run_frames() -> None:
     # Every frame carries the identity columns, so the three files join.
     for frame in (runs, queries, papers):
         assert list(frame.columns)[: len(meta)] == list(meta)
-        assert (frame["run_id"] == "v1-cap250-r1").all()
+        assert (frame["run_id"] == "shared-cap250-r1").all()
 
     by_backend = runs.set_index("backend")
     assert by_backend.loc["openalex", "n_api_records"] == 3
@@ -372,9 +371,38 @@ def test_sweep_run_frames() -> None:
     summary = _summary(runs)
     assert summary["search_recall"] == 0.5 and summary["n_found"] == 2
     assert summary["found_by_backend"] == {"openalex": 1, "overton": 1}
+    # Screening was not run: no screening score is recorded, and the papers
+    # column reads "not measured", not "nothing survived".
+    assert "screen_recall" not in summary and "n_screened_in" not in summary
+    assert papers["screened_in"].isna().all()
     scores = score_summary(output=summary)
-    assert [s.name for s in scores] == SCORE_KEYS
+    assert [s.name for s in scores] == [k for k in SCORE_KEYS if not k.startswith(("screen", "n_screened"))]
     assert all(isinstance(s.value, (int, float)) for s in scores)
+
+
+def test_sweep_run_frames_with_screening() -> None:
+    """With --screen, the runs frame and scores carry screen_recall too."""
+    from sweep_record_cap import _run_frames, _summary, score_summary
+
+    result, ground_truth, titles = _fake_run(screened=True)
+    runs, _queries, papers = _run_frames(result, ground_truth, titles, {"run_id": "r"})
+
+    by_backend = runs.set_index("backend")
+    # Screening kept 10.1/a only: 1 of 4 targets overall, 1 of OpenAlex's 1, 0 of Overton's 1.
+    assert by_backend.loc["all", "n_screened_in"] == 1
+    assert by_backend.loc["all", "screen_recall"] == 0.25
+    assert by_backend.loc["openalex", "screen_recall"] == 0.25
+    assert by_backend.loc["overton", "n_screened_in"] == 0
+
+    papers_by_key = papers.set_index("key")
+    assert bool(papers_by_key.loc["10.1/a", "screened_in"])
+    assert not bool(papers_by_key.loc["overton:P9", "screened_in"])
+    # Never reached the database, so it cannot have been screened in either.
+    assert not bool(papers_by_key.loc["10.1/b", "screened_in"])
+
+    summary = _summary(runs)
+    assert summary["screen_recall"] == 0.25 and summary["n_screened_in"] == 1
+    assert {s.name for s in score_summary(output=summary)} >= {"search_recall", "screen_recall"}
 
 
 def test_load_references_and_items() -> None:
@@ -420,16 +448,17 @@ def test_load_references_and_items() -> None:
 if __name__ == "__main__":
     test_normalize_doi()
     test_record_key()
-    test_overton_query_variants()
     test_ground_truth_keys_union()
     test_recall()
-    test_partition_screened()
+    test_keys_of()
     test_clean_review_title()
+    test_openalex_get_retries()
     test_months_earlier()
     test_recording_backend_records_failed_calls()
     test_load_reviews_csv()
     test_sweep_cap_overrides()
     test_generation_backend_arms()
     test_sweep_run_frames()
+    test_sweep_run_frames_with_screening()
     test_load_references_and_items()
     print("ok")

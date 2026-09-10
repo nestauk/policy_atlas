@@ -44,8 +44,14 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from ground_truth import fetch_openalex_work, normalize_doi, overton_key
-from run_and_score import _iso_date, _months_earlier, clean_review_title
+from ground_truth import (
+    clean_review_title,
+    fetch_openalex_work,
+    iso_date,
+    months_earlier,
+    normalize_doi,
+    overton_key,
+)
 
 from policy_atlas.core import tracing
 
@@ -108,7 +114,7 @@ def load_reviews(path: Path) -> list[ReviewSpec]:
             continue
         if published_before:
             try:
-                _iso_date(published_before)
+                iso_date(published_before)
             except argparse.ArgumentTypeError as exc:
                 problems.append(f"row {line_no} ({title[:50]}): {exc}")
                 continue
@@ -187,7 +193,7 @@ def build_items(
                     f"OpenAlex has no publication_date for {spec.doi}; fill in "
                     "published_before for this row."
                 )
-            published_before = _months_earlier(work["publication_date"], 1)
+            published_before = months_earlier(work["publication_date"], 1)
             print(
                 f"  derived published_before={published_before} for {spec.title[:50]!r} "
                 "(paste it into gt_reviews.csv to pin it)"
