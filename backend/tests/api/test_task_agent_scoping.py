@@ -363,7 +363,7 @@ def test_confirming_writes_the_record_as_a_new_plan_version(
     assert body["version"] == 2
     assert body["scoping"]["baseline_confirmed"] == {
         "artefact_id": str(artefact_id),
-        "plan_version": 1,
+        "plan_version": 2,
     }
 
 

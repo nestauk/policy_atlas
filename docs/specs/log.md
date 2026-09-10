@@ -1,6 +1,31 @@
 # Spec update log
 
 ## 2026-09-09
+* **Update** (task 044, deliverable 2): the abbreviation **EB → ES** across the
+  living specs, `docs/tasks/_templates/`, `docs/agentic-ops/` and code comments
+  (the four "EB handoff" citations of the frozen source keep their name; ADRs,
+  merged task docs, frozen sources and this log's past entries untouched);
+  the Task Agent code names in [web-api.md](system/web-api.md) and
+  `docs/knowledge/` content (`planning` → `task_agent`, `/planning-turns` →
+  `/task-agent-turns`, `planning_transcript` → `task_agent_transcript`).
+* **Update** (task 044, contract § Spec changes 7; plan-review P9):
+  [web-api.md](system/web-api.md) § Task Agent turns and § Check-ins — a
+  sorted, non-approving Task Agent turn is admitted while an Options scoping
+  walk is **paused** (question → the answer core; decision → the check-in
+  response transaction); the approving branch and `PATCH /plan` stay 409
+  `run_active` while a walk is running or paused. Owner ruling D9
+  (2026-09-09): the gate is answered in the Task Agent chat; routing hangs on
+  the turn, not the conversation kind. New: check-in kind `baseline_confirm`,
+  `POST /tasks/{id}/plan/confirm-baseline`, `POST /tasks` with `capability`,
+  `project_ids` and `from_task_ids` in one transaction.
+* **Update** (task 044, owner ruling 2026-09-09 "option 2"):
+  [prompting.md](system/prompting.md) / ES components § 9 — the synthesis
+  section writer is **template-keyed**: one writer, a shared core plus a
+  preamble per output kind (report · baseline; profile and scoping report
+  arrive with tasks 3 and 5); the Evidence search assembly is byte-identical
+  and pinned by a test.
+
+## 2026-09-09
 * **Update** (owner rulings at the task 044 contract interview; applied with the owner's words
   quoted): [OS capability § Output structure](capabilities/options-scoping/capability.md) and
   [OS components § 11](capabilities/options-scoping/components.md) — the baseline's eight sections are

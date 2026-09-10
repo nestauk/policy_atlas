@@ -275,7 +275,48 @@ it from the Langfuse span `agent:gate_sort` (usage event
 | `make verify` (full) | pass | backend 2797 passed (8:25); typecheck, lint, build green; infra 46; audit-paths, prompt-guard, font-guard, drift-check green; frontend 715 tests / 82 files |
 | `cd frontend && pnpm e2e` | pass | 15/15 |
 
-_(Phase 7 rows are appended as each closes.)_
+### Phase 7 — live check (a)–(g), local app, real egress (2026-09-09/10)
+
+Driven through the local API with a dev-issuer token (the Chrome extension
+was not connected, so the drive is scripted; screenshots were taken
+afterwards with headless Playwright against the live frontend). Dev DB at
+`b5e1d7a4c026`. Evidence files (task and run ids, turn payloads, artefacts,
+check-ins, decisions, coverage, screenshots) are in the session scratchpad;
+`docs/tasks/*/evidence/` is gitignored, so they travel as the PR's evidence
+zip, as 027/028 did.
+
+| Step | What happened | Measured |
+|---|---|---|
+| (a) seed | The dev DB's completed NEET Evidence search (task `1e03e719…`, succeeded walk, one artefact) — given an owner and a project by two dev-DB rows so it is linkable (it had neither) | — |
+| (b) create | `POST /tasks` with `capability: options_scoping`, the project and `from_task_ids: [NEET]` → 201, one link pinned to the source walk, `flagged: false` | — |
+| (c) turns | Turn 1 proposed from the linked plan (Where "England" assumed from the linked task, three outcomes tagged), asked who should change with three options. Turn 2 (the Frame board's compound message) typed all four constraints — requirement (longlist), evidence restriction (retrieval, OECD members pinned), two preferences (assessment) — set depth standard and became ready; it did **not** ask the kind question because "Only evidence from OECD countries" is unambiguous. An ambiguous "Also: Nordic countries only." got the kind question verbatim plus the Where warning (D8). `GET /plan` showed every section with origin tags | turn latencies 13.7 s · 19.2 s · 13.6 s · 6.3 s |
+| (d) baseline 1 | `POST /runs` on plan v2 (the Nordic exchange had made v1 `plan_stale`; one closing turn re-approved). Acquire hit the baseline cap (25 per backend, 50 acquired, 22 s search). Paused on `baseline_confirm`. Result: "Do nothing: current policy and trajectory", `scoping pass`, seven required + **two proposed** sections after "What is contested" + code-rendered Sources ("32 sources from Overton and OpenAlex … Live official statistics and departmental pages were not searched … 18 grey literature and 14 academic articles. The profile leans on grey-literature sources."). Card: two options, key assumption, Settings | **389 s** from `POST /runs` to `paused` (15 s poll) |
+| (e) gate | Question "Is the rise in NEET real, or did the survey change?" → `kind: answer`, 4 citations, the two decisions offered back, walk still paused. Instruction "Change Where to the whole United Kingdom" → `kind: decision` (change_plan, bound to run · check-in · plan version 2), walk `aborted`, plan **v3** with Where = United Kingdom `from_your_question` — one row, two commits. Rebuild (`POST /runs` on v3) → paused on the gate again, 10 sections | answer turn 33.5 s (gate sort + answer); change turn 6.8 s; **rebuild 453 s** to `paused` |
+| (f) confirm | "Looks right. Confirm the plan and build the longlist." → `kind: decision` (confirm_plan, plan version 3), walk `succeeded`; `/decisions` lists both recorded steering decisions. A preference added afterwards → plan v5 with the code-authored sentence "This change does not touch what the baseline (built from plan version 3) was built from…"; `POST /plan/confirm-baseline` → v6 recording `{baseline artefact, plan_version 5}`, idempotent on repeat | confirm turn **2.3 s** (the gate sort is bounded by this: about one to two seconds) |
+| (g) ES smoke | New Evidence search task → two Task Agent turns → approved ES plan v1 (`search_effort standard`, `analysis_depth standard`) on the shared turn path | 19.6 s · 10.8 s |
+
+**Defects the live check found and fixed on the branch** (each with a test):
+`GET /plan` 500 on a linked scoping plan (strictness on the list, not the
+UUID item — `352ad7ca`); the S4 "inputs changed" sentence was not implemented
+and a baseline no longer counted as existing after an aborted walk
+(`a9404d23`); the successor Task Agent conversation after a finished walk was
+seeded through the ES-only path (500 — `8e17ed6a`); the gate card of record
+printed the depth key. **Frontend, from the screenshots:** the band said
+"awaiting your confirmation" after Confirm — the confirm record is minted as
+a new version but stamped with the previous version number, so the "record
+names the current version" rule never held (fixed by stamping the minted
+version, below); the ES "Most relevant sources" block rendered on a baseline
+(hidden for the baseline template).
+
+**Observed, not a defect:** a failed turn between reservation and the
+planner call leaves a `pending` row that blocks new turns for ten minutes
+(`task_agent_turn_in_progress`) — the pre-existing ES rule; the thread shows
+"This turn didn't complete." The thin-evidence walk in moderate mode paused
+generically after `appraise` on a structural trigger (a non-evidence document
+skipped) before reaching the gate — the ES structural floor applying to a
+scoping walk, as designed.
+
+_(The third baseline's qualitative note and the step-6 exit gate follow.)_
 
 ## Checks beyond the build
 

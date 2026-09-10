@@ -4097,7 +4097,26 @@
             "type": "string"
           },
           "plan": {
-            "$ref": "#/components/schemas/PlanDraft"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PlanDraft"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "scoping": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ScopingPlanDraft"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
           },
           "sequence": {
             "title": "Sequence",
@@ -4117,7 +4136,6 @@
           "sequence",
           "occurred_at",
           "type",
-          "plan",
           "version"
         ],
         "title": "PlanUpdatedFrame",
@@ -4576,7 +4594,8 @@
               {
                 "type": "null"
               }
-            ]
+            ],
+            "default": null
           },
           "kind": {
             "enum": [
@@ -4599,6 +4618,7 @@
                 "type": "null"
               }
             ],
+            "default": null,
             "title": "Languages"
           },
           "origin": {
@@ -4619,6 +4639,7 @@
                 "type": "null"
               }
             ],
+            "default": null,
             "title": "Published After"
           },
           "published_before": {
@@ -4630,6 +4651,7 @@
                 "type": "null"
               }
             ],
+            "default": null,
             "title": "Published Before"
           },
           "text": {
@@ -4661,6 +4683,7 @@
                 "type": "null"
               }
             ],
+            "default": null,
             "title": "Assumptions"
           },
           "baseline_confirmed": {
@@ -4671,7 +4694,8 @@
               {
                 "type": "null"
               }
-            ]
+            ],
+            "default": null
           },
           "constraints": {
             "anyOf": [
@@ -4685,6 +4709,7 @@
                 "type": "null"
               }
             ],
+            "default": null,
             "title": "Constraints"
           },
           "depth": {
@@ -4700,6 +4725,7 @@
                 "type": "null"
               }
             ],
+            "default": null,
             "title": "Depth"
           },
           "entry_branch": {
@@ -4712,6 +4738,7 @@
                 "type": "null"
               }
             ],
+            "default": null,
             "title": "Entry Branch"
           },
           "intended_change": {
@@ -4722,7 +4749,8 @@
               {
                 "type": "null"
               }
-            ]
+            ],
+            "default": null
           },
           "linked_task_ids": {
             "anyOf": [
@@ -4737,6 +4765,7 @@
                 "type": "null"
               }
             ],
+            "default": null,
             "title": "Linked Task Ids"
           },
           "outcomes": {
@@ -4751,6 +4780,7 @@
                 "type": "null"
               }
             ],
+            "default": null,
             "title": "Outcomes"
           },
           "question": {
@@ -4762,6 +4792,7 @@
                 "type": "null"
               }
             ],
+            "default": null,
             "title": "Question"
           },
           "ready": {
@@ -4781,6 +4812,7 @@
                 "type": "null"
               }
             ],
+            "default": null,
             "title": "Steer Point Defaults"
           },
           "steering_mode": {
@@ -4798,6 +4830,7 @@
                 "type": "null"
               }
             ],
+            "default": null,
             "title": "Steering Mode"
           },
           "steps": {
@@ -4815,7 +4848,8 @@
               {
                 "type": "null"
               }
-            ]
+            ],
+            "default": null
           },
           "time_band": {
             "anyOf": [
@@ -4826,6 +4860,7 @@
                 "type": "null"
               }
             ],
+            "default": null,
             "title": "Time Band"
           },
           "title": {
@@ -4837,6 +4872,7 @@
                 "type": "null"
               }
             ],
+            "default": null,
             "title": "Title"
           },
           "where": {
@@ -4847,7 +4883,8 @@
               {
                 "type": "null"
               }
-            ]
+            ],
+            "default": null
           },
           "your_context": {
             "anyOf": [
@@ -4861,6 +4898,7 @@
                 "type": "null"
               }
             ],
+            "default": null,
             "title": "Your Context"
           }
         },

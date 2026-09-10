@@ -1516,7 +1516,9 @@ export function ArtefactView() {
           id: sectionAnchor(section.title, index),
           title: sectionNavLabel(section, 28),
         })),
-        ...(topSources.length > 0 ? [{ id: "sources", title: "Most relevant sources" }] : []),
+        ...(topSources.length > 0 && !baseline
+          ? [{ id: "sources", title: "Most relevant sources" }]
+          : []),
         ...(bodySections.length > 0
           ? [{ kind: "part" as const, id: FULL_REPORT_ANCHOR, title: "Full report" }]
           : []),
@@ -1617,7 +1619,10 @@ export function ArtefactView() {
         ),
       )}
 
-      <MostRelevantSources sources={topSources} onOpenDossier={openDossier} />
+      {/* A baseline writes no most-relevant-source notes and cites few sources
+          per section, so the report's "cited most often" block would rank two
+          or three documents as if that were a finding. Report only (task 044). */}
+      {baseline ? null : <MostRelevantSources sources={topSources} onOpenDossier={openDossier} />}
 
       {/* Full report part */}
       {bodySections.length > 0 ? (

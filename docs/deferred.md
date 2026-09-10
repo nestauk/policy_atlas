@@ -2499,3 +2499,50 @@ deferred here — the owner ruled the font is fine for now.
   rule, a Yellow "Waiting on your input" chip and the Yellow glow; Orange means *paused*
   on `StatusDot`. If "waiting on you" is one state it should be one colour — owner call
   on which.
+
+## Options scoping shell and baseline (task 044 seams)
+
+- **Per-field turn provenance** — resolved by owner ruling (C16, 2026-09-09):
+  provenance is at **version grain** (`source_turn_index` per plan version;
+  `your_context[].turn_index` because the trust rules use it); per-field
+  turn references are not built. plan-as-object § Plan vs config revised.
+- **"Search further" at the gate** (D10) — the gate offers Confirm and Change
+  the plan; a request in words is refused honestly as not yet available.
+  Task 2 or later.
+- **Inherited document rows** (D4, task 2) — the linked task's screened
+  documents and its report's interventions enter with the longlist; in this
+  slice inherit gives the Task Agent the linked plan, report body and
+  coverage statement only.
+- **`task_link.option_id`** (D13) — lands with the option table in task 2.
+- **Scoping deep depth** (D6) — not shown anywhere until scoping deep
+  exists; the plan model admits `rapid | standard` only.
+- **Baseline latency levers not taken** (D7): starting the longlist's
+  retrieval while the user reads the baseline (task 2); a faster model tier
+  for the baseline sections when Bedrock lands, quality-tested first; a
+  parallel writing mode only by owner revision of the durability contract
+  ("never fan out the conclusion") — check 7's reading is in
+  `docs/tasks/044-scoping-shell-baseline/verification.md`; showing sections
+  as they finish is **taken** (the skeleton streams the actual list).
+- **The Task Agent as the Evidence search's control surface** (D9) — the ES
+  keeps card-based steering in this slice; the owner's direction is that
+  the Task Agent chat should be the surface a task is controlled from, and
+  that any chat should eventually plan, edit artefacts and answer with
+  citations (routing hangs on the turn, not the conversation kind).
+- **Rebuild only the touched baseline sections** (open question 7, deltas
+  not restarts) — "Rebuild baseline" is a supersede-by-rerun of the whole
+  walk in this slice.
+- **Language evidence restriction** (C8) — the ES `ScopeConstraints` model
+  has no language filter; a language restriction is stored on the scoping
+  plan and shown as "not yet applied at retrieval". An ES gap.
+- **ES Task Agent prompt default steering mode** — the ES prompt's own
+  default is unattended ("check-ins are requested, not offered") while the
+  execution contract names moderate; recorded, not fixed here (contract
+  second-round amendment 2).
+- **Prompt-hash guard is name-based** — `scripts/prompt_hash_guard.py` pins
+  `*prompt*` modules; the inline prompts in `synthesis_backend.py` and
+  `finding_vetter.py` are outside it. Add an explicit include list.
+- **`?chat=planning` URL token** — renamed to `task_agent` with no alias
+  (038 rule); a pre-deploy open tab shows a dead chat until the user clicks
+  the Task Agent.
+- **`agent_prompt.py` docstring** still cites `planner_prompt.py` /
+  `planner_v5` — hash-pinned; reword at the next `agent_v` edit.

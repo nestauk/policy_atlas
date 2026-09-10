@@ -645,15 +645,19 @@ def test_confirming_without_rebuilding_records_both_versions(
             confirmed = client.post(
                 f"/api/v1/tasks/{task_id}/plan/confirm-baseline",
                 headers=owner,
-                json={"artefact_id": artefact_id, "plan_version": 1},
+                # The user confirms the version on screen (2, the changed plan)
+                # against the baseline built from version 1.
+                json={"artefact_id": artefact_id, "plan_version": 2},
             )
 
         assert confirmed.status_code == 200, confirmed.text
         body = confirmed.json()
         assert body["version"] == 3
+        # The record is minted as version 3 and names it (044 live-check fix);
+        # the baseline's own version (1) is on the walk it points at.
         assert body["scoping"]["baseline_confirmed"] == {
             "artefact_id": artefact_id,
-            "plan_version": 1,
+            "plan_version": 3,
         }
         assert body["scoping"]["where"]["text"] == "England"
     finally:

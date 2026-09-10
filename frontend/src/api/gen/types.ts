@@ -2984,7 +2984,10 @@ export interface components {
              * Format: date-time
              */
             occurred_at: string;
-            plan: components["schemas"]["PlanDraft"];
+            /** @default null */
+            plan: components["schemas"]["PlanDraft"] | null;
+            /** @default null */
+            scoping: components["schemas"]["ScopingPlanDraft"] | null;
             /** Sequence */
             sequence: number;
             /**
@@ -3295,23 +3298,33 @@ export interface components {
              * @enum {string}
              */
             checked_at: "longlist" | "assessment" | "retrieval";
-            country_group?: components["schemas"]["CountryGroupDraft"] | null;
+            /** @default null */
+            country_group: components["schemas"]["CountryGroupDraft"] | null;
             /**
              * Kind
              * @enum {string}
              */
             kind: "requirement" | "preference" | "evidence_restriction";
-            /** Languages */
-            languages?: string[] | null;
+            /**
+             * Languages
+             * @default null
+             */
+            languages: string[] | null;
             /**
              * Origin
              * @enum {string}
              */
             origin: "from_your_question" | "assumed" | "your_call";
-            /** Published After */
-            published_after?: string | null;
-            /** Published Before */
-            published_before?: string | null;
+            /**
+             * Published After
+             * @default null
+             */
+            published_after: string | null;
+            /**
+             * Published Before
+             * @default null
+             */
+            published_before: string | null;
             /** Text */
             text: string;
         };
@@ -3343,41 +3356,81 @@ export interface components {
          *         ready: Whether the draft has validated into an executable plan.
          */
         ScopingPlanDraft: {
-            /** Assumptions */
-            assumptions?: string[] | null;
-            baseline_confirmed?: components["schemas"]["BaselineConfirmedOut"] | null;
-            /** Constraints */
-            constraints?: components["schemas"]["ScopingConstraintOut"][] | null;
-            /** Depth */
-            depth?: ("rapid" | "standard") | null;
-            /** Entry Branch */
-            entry_branch?: "explore" | null;
-            intended_change?: components["schemas"]["TaggedOut"] | null;
-            /** Linked Task Ids */
-            linked_task_ids?: string[] | null;
-            /** Outcomes */
-            outcomes?: components["schemas"]["TaggedOut"][] | null;
-            /** Question */
-            question?: string | null;
+            /**
+             * Assumptions
+             * @default null
+             */
+            assumptions: string[] | null;
+            /** @default null */
+            baseline_confirmed: components["schemas"]["BaselineConfirmedOut"] | null;
+            /**
+             * Constraints
+             * @default null
+             */
+            constraints: components["schemas"]["ScopingConstraintOut"][] | null;
+            /**
+             * Depth
+             * @default null
+             */
+            depth: ("rapid" | "standard") | null;
+            /**
+             * Entry Branch
+             * @default null
+             */
+            entry_branch: "explore" | null;
+            /** @default null */
+            intended_change: components["schemas"]["TaggedOut"] | null;
+            /**
+             * Linked Task Ids
+             * @default null
+             */
+            linked_task_ids: string[] | null;
+            /**
+             * Outcomes
+             * @default null
+             */
+            outcomes: components["schemas"]["TaggedOut"][] | null;
+            /**
+             * Question
+             * @default null
+             */
+            question: string | null;
             /**
              * Ready
              * @default false
              */
             ready: boolean;
-            /** Steer Point Defaults */
-            steer_point_defaults?: components["schemas"]["ScopingSteerPointDefaultOut"][] | null;
-            /** Steering Mode */
-            steering_mode?: ("frequent" | "moderate" | "minimal" | "unattended") | null;
+            /**
+             * Steer Point Defaults
+             * @default null
+             */
+            steer_point_defaults: components["schemas"]["ScopingSteerPointDefaultOut"][] | null;
+            /**
+             * Steering Mode
+             * @default null
+             */
+            steering_mode: ("frequent" | "moderate" | "minimal" | "unattended") | null;
             /** Steps */
             steps?: components["schemas"]["PlanStep"][];
-            target_unit?: components["schemas"]["TaggedOut"] | null;
-            /** Time Band */
-            time_band?: string | null;
-            /** Title */
-            title?: string | null;
-            where?: components["schemas"]["TaggedOut"] | null;
-            /** Your Context */
-            your_context?: components["schemas"]["YourContextOut"][] | null;
+            /** @default null */
+            target_unit: components["schemas"]["TaggedOut"] | null;
+            /**
+             * Time Band
+             * @default null
+             */
+            time_band: string | null;
+            /**
+             * Title
+             * @default null
+             */
+            title: string | null;
+            /** @default null */
+            where: components["schemas"]["TaggedOut"] | null;
+            /**
+             * Your Context
+             * @default null
+             */
+            your_context: components["schemas"]["YourContextOut"][] | null;
         };
         /**
          * ScopingPlanPatch

@@ -43,7 +43,7 @@ from policy_atlas.api.routers._access import (
     readable_task_exists,
     trace_admin_stream_read,
 )
-from policy_atlas.api.routers.task_agent import _draft_from_plan
+from policy_atlas.api.routers.task_agent import _draft_from_plan, _scoping_draft_from_plan
 from policy_atlas.api.settings import Settings
 
 # Shared with the check-in read model — one vocabulary, one leak surface.
@@ -65,6 +65,7 @@ from policy_atlas.runtime.capability_registry import (
     expect_task_plan,
     validate_plan,
 )
+from policy_atlas.runtime.scoping_plan import ScopingPlan
 
 log = structlog.get_logger()
 
@@ -535,9 +536,16 @@ def _plan_frame(
     ).mappings().one_or_none()
     if row is None or not isinstance(row["payload"], dict):
         return None
-    plan = _draft_from_plan(
-        expect_task_plan(validate_plan(capability_of_task(conn, task_id), row["payload"]))
-    )
+    validated = validate_plan(capability_of_task(conn, task_id), row["payload"])
+    if isinstance(validated, ScopingPlan):
+        # Task 044: a scoping plan travels on its own field; the ES draft is null.
+        return PlanUpdatedFrame(
+            type="plan.updated",
+            scoping=_scoping_draft_from_plan(validated),
+            version=version,
+            **persisted,
+        )
+    plan = _draft_from_plan(expect_task_plan(validated))
     return PlanUpdatedFrame(type="plan.updated", plan=plan, version=version, **persisted)
 
 

@@ -495,15 +495,19 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
     const body = await requestBody(request, init);
     const planVersion = isRecord(body) && typeof body.plan_version === "number" ? body.plan_version : 1;
     const artefactId = isRecord(body) && typeof body.artefact_id === "string" ? body.artefact_id : "";
+    // Mirrors the API: the record is minted as a NEW approved version and
+    // names that version, so "the record names the current version" holds
+    // until the next plan edit mints a version without it.
+    const minted = planVersion + 1;
     currentScopingPlan = {
       ...currentScopingPlan,
-      baseline_confirmed: { artefact_id: artefactId, plan_version: planVersion },
+      baseline_confirmed: { artefact_id: artefactId, plan_version: minted },
     };
     return json({
       capability: "options_scoping",
       plan: null,
       scoping: currentScopingPlan,
-      version: planVersion,
+      version: minted,
       status: "approved",
     });
   }

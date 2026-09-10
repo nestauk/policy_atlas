@@ -579,6 +579,17 @@ def _deterministic_discretion_floor(context: _DiscretionContext) -> _DiscretionO
     return _DiscretionOutcome(interpreted_action="proceed", rule=UNCONFIGURED_DEFAULT_RULE)
 
 
+
+def _section_budget(state: _SteeringState) -> int | None:
+    """The plan's ordinary-section budget, or ``None`` for a plan without one.
+
+    Only the Evidence search plan carries ``section_budget``; a scoping walk's
+    baseline has a fixed section list (task 044).
+    """
+    plan = state.plan
+    return plan.section_budget if isinstance(plan, TaskPlan) else None
+
+
 def _search_backend_scope(plan: AnyPlan) -> BackendScope:
     """Return the search backend scope a walk runs its components under.
 
@@ -2095,7 +2106,7 @@ def _pause_options_and_bundle(
             evidence_scope_id=evidence_scope_id,
             successful_runs=successful_runs,
             backends=backends,
-            section_budget=state.es_plan.section_budget,
+            section_budget=_section_budget(state),
             boundary_run_id=boundary_run_id,
         )
     )
@@ -2113,7 +2124,7 @@ def _pause_options_and_bundle(
             # review 028 M2). Clamp ONCE here — in the bundle the card displays
             # AND the as_proposed delta — so displayed == submitted == valid
             # == executed.
-            section_bound = state.es_plan.section_budget or SECTION_CAP
+            section_bound = _section_budget(state) or SECTION_CAP
             clamped = []
             for row in sections[:section_bound]:
                 if (
@@ -2624,7 +2635,7 @@ def _handle_free_text(
 
     fanout = compile_fanout(
         compile_result,
-        backend_scope=state.es_plan.backend_scope,
+        backend_scope=_search_backend_scope(state.plan),
         current_components=set(state.chain.components),
         completed_components=completed_components,
         rerun_surface=RerunSurface(
@@ -4155,7 +4166,7 @@ def _resolve_unattended_boundary(
             evidence_scope_id=evidence_scope_id,
             successful_runs=successful_runs,
             backends=backends,
-            section_budget=state.es_plan.section_budget,
+            section_budget=_section_budget(state),
             boundary_run_id=event_run_id,
         )
         outcome = discretion_hook(
@@ -4618,6 +4629,23 @@ def _watch_observe_boundary(
             reason="structurally resolved",
         )
         return _WatchObservation()
+    if not isinstance(state.plan, TaskPlan):
+        # The agent watch (triage, authored options, the router) is an Evidence
+        # search surface: it reads the ES plan's components and budget. A
+        # scoping walk's pauses are structural — the floor triggers and the
+        # baseline gate — so the watch is not consulted (task 044). Found live:
+        # a continued scoping walk crashed here on a triggered boundary.
+        _emit_judgement_routed(
+            engine,
+            task_id=task_id,
+            capability_run_id=capability_run_id,
+            state=state,
+            point=point,
+            run_id=event_run_id,
+            verdict="structural_only",
+            reason="no agent watch for this capability",
+        )
+        return _WatchObservation()
 
     header = _watch_header(state)
     digest = _watch_digest(engine, task_id=task_id, capability_run_id=capability_run_id)
@@ -4631,7 +4659,7 @@ def _watch_observe_boundary(
                 evidence_scope_id=evidence_scope_id,
                 successful_runs=successful_runs,
                 backends=backends,
-                section_budget=state.es_plan.section_budget,
+                section_budget=_section_budget(state),
                 boundary_run_id=event_run_id,
             )
             if steer_point_name is not None
@@ -4759,7 +4787,7 @@ def _validated_authored_options(
     if not authored:
         return None
     ctx = SteeringValidationCtx(
-        backend_scope=state.es_plan.backend_scope,
+        backend_scope=_search_backend_scope(state.plan),
         current_components=set(state.chain.components),
         completed_components=set(),
         rerun_surface=RerunSurface(replacement_component=None, segment_reentry_available=False),
@@ -4819,11 +4847,16 @@ def _validated_authored_options(
 
 def _watch_header(state: _SteeringState) -> dict[str, Any]:
     """The orienting header the watch decides against (data, never instructions)."""
-    plan = state.es_plan
+    # Every plan model carries question, steering_mode and steer_point_defaults;
+    # only the Evidence search plan has discretionary components (a scoping walk
+    # runs a fixed chain). Task 044: a scoping walk paused on the structural
+    # floor reaches this header when it is continued.
+    plan = state.plan
+    components = list(plan.components) if isinstance(plan, TaskPlan) else []
     return {
         "question": plan.question,
         "steering_mode": plan.steering_mode,
-        "components": list(plan.components),
+        "components": components,
         "standing_instructions": [
             {"steer_point": default.steer_point, "action": default.action}
             for default in plan.steer_point_defaults

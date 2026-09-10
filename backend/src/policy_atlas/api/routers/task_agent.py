@@ -1720,15 +1720,39 @@ def confirm_baseline(
         ).scalar_one_or_none()
         if is_baseline_artefact is None:
             raise HTTPException(status_code=404, detail="resource not found")
-        record = BaselineConfirmed(
-            artefact_id=payload.artefact_id, plan_version=payload.plan_version
-        )
-        if current.baseline_confirmed == record:
+        # The record is minted as a NEW approved version and names THAT version
+        # (its content is the confirmed version's), so "the record names the
+        # current version" holds until the next edit mints a version without
+        # it. Found by the 044 live check: stamping the previous number left the
+        # plan document and the Result band saying "awaiting your confirmation".
+        # A double-tap — the same body again, whether it still names the
+        # version it read or the one the first tap minted — returns the current
+        # version unchanged.
+        current_version = int(row["version"])
+        if (
+            current.baseline_confirmed is not None
+            and current.baseline_confirmed.artefact_id == payload.artefact_id
+            and current.baseline_confirmed.plan_version == current_version
+            and payload.plan_version in (current_version, current_version - 1)
+        ):
             return PlanOut(
                 scoping=_scoping_draft_from_plan(current),
                 capability=OPTIONS_SCOPING,
                 version=row["version"],
                 status=row["status"],
             )
+        if payload.plan_version != current_version:
+            raise ApiConflict(
+                "plan_stale",
+                "the plan moved on since you read it — review the current version, then confirm",
+            )
+        next_version = int(
+            conn.execute(
+                select(func.coalesce(func.max(task_plan.c.version), 0)).where(
+                    task_plan.c.task_id == task_id
+                )
+            ).scalar_one()
+        ) + 1
+        record = BaselineConfirmed(artefact_id=payload.artefact_id, plan_version=next_version)
         confirmed = current.model_copy(update={"baseline_confirmed": record})
         return _persist_new_scoping_version(conn, task_id, confirmed)

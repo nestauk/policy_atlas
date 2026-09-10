@@ -144,6 +144,26 @@ verify with the manifest queries in the task's `verification.md`.
 3. Deploy the previous image. Set `POLICY_ATLAS_PLANNER_MODEL` again if the
    deployment had renamed it.
 
+## Evidence (task 044 build, 2026-09-09/10)
+
+Recorded at the step-6 exit; details in
+`docs/tasks/044-scoping-shell-baseline/verification.md`.
+
+- Revisions `a7d3f1c8e2b5` (rename) and `b5e1d7a4c026` (slice), each with a
+  round-trip test; the slice downgrade's refusal and the operator script are
+  tested on a seeded scoping task.
+- The registry routes all ten validate and seven compose sites; the lattice
+  is capability-keyed; an ES walk never names `baseline_confirm` (tests).
+- Live, local, real egress: the baseline built in **389 s** (first) and
+  **453 s** (rebuild after a plan change) from `POST /runs` to the gate on
+  the NEET question — above the 3-to-4-minute aim that assumed parallel
+  writing; the writing-mode feasibility check measured sequential 183 s
+  against parallel 63 s for the writing alone, and sequential stays (owner
+  ruling C6). The gate answered a question with citations in 33.5 s, recorded
+  a decision in words in 2.3 s (the gate sort is within that), ended the walk
+  on "Change the plan" and rebuilt under the new version, and confirmed
+  without a rebuild through the plan-scoped record.
+
 ## Consequences
 
 - Tasks 2–5 build on these records: the option table hangs off the task kind
