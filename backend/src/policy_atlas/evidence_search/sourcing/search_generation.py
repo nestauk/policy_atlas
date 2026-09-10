@@ -167,6 +167,21 @@ class OpenAISearchGenerationBackend:
                     "prompt_version": prompt_version,
                     **usage_metadata(usage),
                 },
+                # Langfuse prices a generation from ``usage_details``, never from
+                # metadata — without this the cost column stays empty.
+                usage_details=(
+                    {
+                        key: value
+                        for key, value in {
+                            "input": usage.prompt,
+                            "output": usage.completion,
+                            "total": usage.total,
+                        }.items()
+                        if value is not None
+                    }
+                    if usage is not None
+                    else None
+                ),
             )
 
         wire, usage = tracing.traced_call(
