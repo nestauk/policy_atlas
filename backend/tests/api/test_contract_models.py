@@ -398,6 +398,7 @@ def test_plan_updated_frame_discriminates() -> None:
         }
     )
     assert isinstance(model, PlanUpdatedFrame)
+    assert model.plan is not None
     assert model.plan.title == "Draft title"
 
 

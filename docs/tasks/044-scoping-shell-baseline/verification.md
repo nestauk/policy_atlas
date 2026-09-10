@@ -316,7 +316,39 @@ generically after `appraise` on a structural trigger (a non-evidence document
 skipped) before reaching the gate — the ES structural floor applying to a
 scoping walk, as designed.
 
-_(The third baseline's qualitative note and the step-6 exit gate follow.)_
+**Third baseline — a thin-evidence structural question, no link** ("What could
+reduce the number of long-term empty homes in coastal towns in England?",
+rapid, Where England stated). The first two attempts ended `interrupted`: the
+walk paused generically after `appraise` on the ES structural floor (a
+non-evidence document skipped) and, on `continue`, crashed in the agent watch
+(`expect_task_plan`) — fixed in `e063a69b` (a non-ES walk is routed past the
+agent watch). The third attempt paused after `appraise`, was continued, and
+reached the gate; **259 s** from `POST /runs` to the gate including the
+structural pause. Ten sections (seven required, two proposed, Sources); 12
+sources, 2 references; six of eight model-written sections open with a gap
+claim ("No source found reports the current number or rate of long-term
+empty homes specifically in coastal towns…") — the not-found content state
+working as designed. Several sections carry `unspanned_assertion` flags
+(prose asserting without an anchored claim); the roll-up flags them, and the
+eval slice should read them.
+
+**Three-baseline qualitative note** (read against the trust rules; not a
+pass/fail gate). Rich corpus (NEET, twice): every empirical premise is a
+cited chunk claim; the key assumption and the contested points are tier-4
+reasoning labelled as such; both proposed sections were problem-specific
+("NEET status among 16 to 24 year olds in England", "Participation pathways
+and projected NEET trends"); the Sources section states the two databases,
+the not-searched line and the grey-literature skew (18 grey / 14 academic).
+Rebuild under the new Where (United Kingdom) produced a materially different
+Trend section (UK rate 13.0 % in April–June 2026 versus England figures).
+Thin corpus: gap claims dominate honestly, no hedging, no forecast; the
+writer still proposed two sections, both restating absence — a template
+refinement candidate (propose none when the corpus is thin). Compute: 389 s
+and 453 s on the rich corpus, 259 s on the thin one — above the 3-to-4-minute
+aim that assumed parallel writing (check 7: sequential writing is 183 s of
+the NEET wall clock); the plan shows a coarse band and promises no number.
+
+_(The step-6 exit gate follows.)_
 
 ## Checks beyond the build
 
@@ -434,9 +466,33 @@ _(step 7)_
 
 ## Intent & assumptions
 
+- The live check was driven through the API (the Chrome extension was not
+  connected); screenshots came from headless Playwright against the live
+  frontend afterwards. The behaviour checked is the contract's (a)–(g); the
+  screen surfaces were verified by screenshot rather than by hand-driving.
+- The seeded NEET task had no owner and no project in the dev DB; two dev-DB
+  rows (owner, project membership) made it linkable. Dev-only data.
+- `BASELINE_TIME_BAND` stays the coarse "A few minutes · then a check-in";
+  the measured 4.3 to 7.5 minutes are recorded here, not promised on screen.
+
 ## Known unverified items
 
+- Unattended mode's recorded standing-default decision at `baseline_confirm`
+  is pinned by tests, not driven live (the live plans were moderate).
+- The chat-versus-card decision race is pinned by the barrier test only.
+- Gate-sort latency is bounded by the whole confirm turn (2.3 s); the
+  Langfuse span `agent:gate_sort` gives the exact number when read.
+- The frontend's live thread at the gate was verified by screenshot of the
+  transcript after the fact, not by typing into the composer in a browser.
+
 ## Public safety
+
+Contract, plan, rubric, ADR and this file carry no secrets. Screenshots
+show the NEET question (the design reference), plan fields and baseline
+prose built from published sources; they are public-safe once the source
+quotes are checked against the sanitized-fixtures policy (they cite ONS and
+published reports by title). Raw turn payloads, the dev token and the API log
+stay in the local scratchpad and are not committed.
 
 ## Review handoff (step-7/8 inputs)
 

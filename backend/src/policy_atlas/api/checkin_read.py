@@ -59,9 +59,14 @@ def _check_in(row: dict[str, Any], *, decided: bool) -> CheckInOut:
     boundary = payload.get("boundary")
     if boundary not in {"after_component", "before_component"}:
         raise LookupError("check-in has malformed boundary")
+    # The baseline gate is its own check-in kind on the wire (web-api.md
+    # § Check-ins): the thread renders its card and opens the composer on it.
+    # Found live: the pause is written with the generic kind, so the frontend
+    # never recognised the gate.
+    is_gate = canonical_steer_point(payload.get("steer_point")) == BASELINE_CONFIRM
     return CheckInOut(
         check_in_id=row["event_id"],
-        kind=str(payload.get("kind") or "check_in"),
+        kind=BASELINE_CONFIRM if is_gate else str(payload.get("kind") or "check_in"),
         boundary=boundary,
         component=payload.get("component") if isinstance(payload.get("component"), str) else None,
         # The public presentation key, never the raw component name — the raw

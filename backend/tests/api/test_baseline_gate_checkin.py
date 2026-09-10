@@ -290,3 +290,35 @@ def test_the_plan_is_editable_once_the_walk_has_ended_by_change_plan(
         assert body["version"] == 2
     finally:
         _cleanup(engine, task_id)
+
+
+def test_the_gate_check_in_reports_its_own_kind_on_the_wire() -> None:
+    """web-api.md § Check-ins: kind ``baseline_confirm`` — the thread keys its
+    card and the open composer on it (044 live check: the pause is written with
+    the generic kind, so the read model must say so)."""
+    import uuid as _uuid
+
+    from policy_atlas.api.checkin_read import _check_in
+
+    payload = {
+        "kind": "steer_point",
+        "steer_point": "baseline_confirm",
+        "boundary": "after_component",
+        "component": "synthesise",
+        "options": [
+            {"id": "confirm_plan", "label": "Confirm"},
+            {"id": "change_plan", "label": "Change"},
+        ],
+        "bundle": {"key_assumption": None, "settings": {}},
+    }
+    from datetime import UTC, datetime
+
+    row = {
+        "event_id": _uuid.uuid4(),
+        "payload": payload,
+        "occurred_at": datetime.now(UTC),
+        "sequence": 1,
+    }
+    assert _check_in(row, decided=False).kind == "baseline_confirm"
+    generic = dict(payload, steer_point=None)
+    assert _check_in(dict(row, payload=generic), decided=False).kind == "steer_point"
