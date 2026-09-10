@@ -9,3 +9,5 @@ Use:
 - Hooks for rules that must be enforced.
 
 Do not duplicate long shared instructions here. Point to the shared docs instead.
+
+I am a Data Scientist, not a DevOps engineer. When documenting processes (docstrings, READMEs and so on) explain things in simple terms I can understand. Unpack acronyms.
