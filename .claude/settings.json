@@ -1,6 +1,11 @@
 {
-  "outputStyle": "Simple",
   "permissions": {
+    "allow": [
+      "Skill(langfuse)",
+      "Skill(langfuse:*)",
+      "Bash(make prompt-guard *)",
+      "Bash(git status *)"
+    ],
     "deny": [
       "Read(.env)",
       "Edit(.env)",
@@ -21,13 +26,23 @@
   },
   "extraKnownMarketplaces": {
     "addy-agent-skills": {
-      "source": { "source": "github", "repo": "addyosmani/agent-skills" }
+      "source": {
+        "source": "github",
+        "repo": "addyosmani/agent-skills"
+      }
     },
     "openai-codex": {
-      "source": { "source": "github", "repo": "openai/codex-plugin-cc" }
+      "source": {
+        "source": "github",
+        "repo": "openai/codex-plugin-cc"
+      }
     },
     "ponytail": {
-      "source": { "source": "github", "repo": "DietrichGebert/ponytail" }
+      "source": {
+        "source": "github",
+        "repo": "DietrichGebert/ponytail"
+      }
     }
-  }
+  },
+  "outputStyle": "Simple"
 }

@@ -3,6 +3,9 @@
 - **Status:** **Accepted — 2026-09-04** (owner, with the 038 plan approval).
   The contract it records was approved and re-approved after adversarial
   review the same day.
+- **Rider V9 amended** by [ADR 0037](0037-langfuse-observability-boundaries.md)
+  — 2026-09-11: chat turns and their enrichment group under the
+  conversation id, not the task id. Planning turns and runs keep the task id.
 - **Date:** 2026-09-04
 - **Task:** 038-vocabulary-alignment
 - **Supersedes:** [ADR 0031](0031-portfolio-layer-above-the-project.md)
