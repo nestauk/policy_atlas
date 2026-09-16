@@ -2119,3 +2119,18 @@ omissions.
 - **Portfolio surfaces in the mock API** — **discharged in 033**: mock
   `/api/v1/portfolios` plus membership on the project so Share and the
   projects list work under `VITE_MOCK=1`.
+
+## Metabase staging (task 034 seams)
+
+- **Owner-safe Policy Atlas source model and login** — the staging stack provides
+  private network reachability but deliberately creates no Policy Atlas database
+  credentials or grants. Direct table access would bypass the API's owner scoping.
+  A follow-up must approve curated analytics views (or equivalent row-level
+  controls), create a least-privilege read role, store it in Secrets Manager and
+  onboard that source in Metabase.
+- **Single sign-on and embedding** — Metabase uses its own accounts in this slice.
+  Cognito/OIDC integration, user lifecycle, embedding and any Policy Atlas UI
+  integration require a separate authentication and product decision.
+- **Production analytics** — `deploy_analytics` is fail-closed outside staging.
+  Production capacity, availability, backup/restore rehearsal, access controls and
+  operational ownership must be reviewed before a production config is added.

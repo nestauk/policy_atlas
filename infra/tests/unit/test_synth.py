@@ -1,4 +1,4 @@
-"""Synthesized-template assertions for task 026 infrastructure resources.
+"""Synthesized-template assertions for Policy Atlas infrastructure resources.
 
 The stacks are synthesized once at module import.  The harness deliberately
 disables CDK bundling and substitutes the pending backend image asset so these
@@ -23,6 +23,7 @@ from infra.components.nesta_ssm_endpoints import (
 from infra.database_stack import DatabaseStack
 from infra.cert_stack import PaV3CertStack
 from infra.cognito_auth import CognitoAuth
+from infra.analytics_stack import PaV3AnalyticsStack
 from infra.network_stack import NetworkStack
 from infra.policy_atlas_stack import PolicyAtlasStack
 
@@ -45,12 +46,21 @@ NAMESPACING_CASES = (
     ("Log group", "/policy_atlas_v3/application", ("app",)),
     ("Domain", "v3.policyatlas.uk", ("network", "app")),
     ("Hosted UI prefix", "policy-atlas-v3", ("app",)),
+    ("Metabase target group", "pa-v3-metabase-staging", ("analytics",)),
+    ("Metabase service", "policy-atlas-v3-metabase-staging", ("analytics",)),
+    ("Metabase log group", "/policy_atlas_v3/metabase/staging", ("analytics",)),
+    ("Metabase domain", "metabase.v3.policyatlas.uk", ("analytics",)),
 )
 
 
 def _load_config(filename: str) -> dict:
     with open(INFRA_ROOT / filename) as config_file:
         return json.load(config_file)[ENV_NAME]
+
+
+def _load_environments(filename: str) -> dict:
+    with open(INFRA_ROOT / filename) as config_file:
+        return json.load(config_file)
 
 
 def _resources(template: dict, resource_type: str) -> list[tuple[str, dict]]:
@@ -77,6 +87,7 @@ os.environ["JSII_SILENCE_WARNING_UNTESTED_NODE_VERSION"] = "1"
 NETWORK_CONFIG = _load_config("network_config.json")
 DB_CONFIG = _load_config("db_config.json")
 PA_CONFIG = _load_config("pa_config.json")
+METABASE_CONFIG = _load_config("metabase_config.json")
 APP = cdk.App(context={"aws:cdk:bundling-stacks": []})
 ENV = Environment(account=DUMMY_ACCOUNT, region=NETWORK_CONFIG["aws_region"])
 CERT_ENV = Environment(account=DUMMY_ACCOUNT, region="us-east-1")
@@ -116,6 +127,13 @@ with patch("aws_cdk.aws_ecs.ContainerImage.from_asset", return_value=DUMMY_IMAGE
         env_name=ENV_NAME,
         cross_region_references=True,
     )
+    ANALYTICS_STACK = PaV3AnalyticsStack(
+        APP,
+        "PaV3AnalyticsStack",
+        metabase_config=METABASE_CONFIG,
+        env=ENV,
+        env_name=ENV_NAME,
+    )
 
 ASSEMBLY = APP.synth()
 TEMPLATES = {
@@ -123,6 +141,7 @@ TEMPLATES = {
     "database": Template.from_stack(DATABASE_STACK).to_json(),
     "cert": Template.from_stack(CERT_STACK).to_json(),
     "app": Template.from_stack(APP_STACK).to_json(),
+    "analytics": Template.from_stack(ANALYTICS_STACK).to_json(),
 }
 RENDERED_TEMPLATES = {
     stack_name: json.dumps(template, sort_keys=True)
@@ -133,6 +152,12 @@ ALL_RENDERED_TEMPLATES = "\n".join(RENDERED_TEMPLATES.values())
 
 def test_all_stacks_synth_without_aws_calls():
     assert all(template["Resources"] for template in TEMPLATES.values())
+
+
+def test_analytics_enablement_is_staging_only_and_boolean():
+    environments = _load_environments("pa_config.json")
+    assert environments["staging"]["deploy_analytics"] is True
+    assert environments["prod"].get("deploy_analytics", False) is False
 
 
 def test_namespacing_table_is_rendered_in_its_designated_stacks():
@@ -208,6 +233,169 @@ def test_app_stack_deploy_invariant_values_are_template_pinned():
         TEMPLATES["app"], "AWS::ElasticLoadBalancingV2::TargetGroup"
     )[0]
     assert target_group["Properties"]["HealthCheckPath"] == "/readyz"
+
+
+def test_metabase_database_is_separate_encrypted_and_guarded():
+    analytics = TEMPLATES["analytics"]
+    assert not _resources(analytics, "AWS::RDS::DBCluster")
+    databases = _resources(analytics, "AWS::RDS::DBInstance")
+    assert len(databases) == 1
+    _, database = databases[0]
+    properties = database["Properties"]
+    assert properties["Engine"] == "postgres"
+    assert properties["DBName"] == "metabase"
+    assert properties["DBInstanceClass"] == "db.t4g.micro"
+    assert str(properties["AllocatedStorage"]) == "30"
+    assert properties["MaxAllocatedStorage"] == 100
+    assert properties["StorageEncrypted"] is True
+    assert properties["MultiAZ"] is False
+    assert properties["PubliclyAccessible"] is False
+    assert properties["DeletionProtection"] is True
+    assert properties["BackupRetentionPeriod"] == 7
+    assert properties["EngineLifecycleSupport"] == (
+        "open-source-rds-extended-support-disabled"
+    )
+    assert database["DeletionPolicy"] == "Snapshot"
+
+
+def test_metabase_task_uses_logs_and_secrets_without_plaintext_credentials():
+    analytics = TEMPLATES["analytics"]
+    _, task_definition = _resources(
+        analytics, "AWS::ECS::TaskDefinition"
+    )[0]
+    container = task_definition["Properties"]["ContainerDefinitions"][0]
+    environment = {item["Name"]: item["Value"] for item in container["Environment"]}
+    secrets = {item["Name"]: item["ValueFrom"] for item in container["Secrets"]}
+
+    assert container["Cpu"] == 1024
+    assert container["Memory"] == 2048
+    assert container["StopTimeout"] == 120
+    assert "metabase?sslmode=require" in json.dumps(
+        environment["MB_DB_CONNECTION_URI"]
+    )
+    assert environment["MB_SITE_URL"] == "https://metabase.v3.policyatlas.uk"
+    assert environment["MB_ANON_TRACKING_ENABLED"] == "false"
+    assert environment["MB_CHECK_FOR_UPDATES"] == "false"
+    assert environment["MB_LOAD_SAMPLE_CONTENT"] == "false"
+    assert set(secrets) == {
+        "MB_DB_PASS",
+        "MB_DB_USER",
+        "MB_ENCRYPTION_SECRET_KEY",
+    }
+    assert not set(secrets) & set(environment)
+    assert container["LogConfiguration"]["LogDriver"] == "awslogs"
+
+    encryption_secret = next(
+        resource
+        for logical_id, resource in _resources(
+            analytics, "AWS::SecretsManager::Secret"
+        )
+        if logical_id.startswith("MetabaseEncryptionSecret")
+    )
+    assert encryption_secret["DeletionPolicy"] == "Retain"
+    generator = encryption_secret["Properties"]["GenerateSecretString"]
+    assert generator["PasswordLength"] == 64
+    assert generator["ExcludePunctuation"] is True
+
+
+def test_metabase_service_is_private_and_avoids_overlapping_migrations():
+    analytics = TEMPLATES["analytics"]
+    _, service = _resources(analytics, "AWS::ECS::Service")[0]
+    properties = service["Properties"]
+    assert properties["DesiredCount"] == 1
+    assert properties["AvailabilityZoneRebalancing"] == "DISABLED"
+    assert properties["HealthCheckGracePeriodSeconds"] == 300
+    deployment = properties["DeploymentConfiguration"]
+    assert deployment["DeploymentCircuitBreaker"] == {
+        "Enable": True,
+        "Rollback": True,
+    }
+    assert deployment["MaximumPercent"] == 100
+    assert deployment["MinimumHealthyPercent"] == 0
+    networking = properties["NetworkConfiguration"]["AwsvpcConfiguration"]
+    assert networking["AssignPublicIp"] == "DISABLED"
+
+
+def test_metabase_network_rules_are_security_group_scoped():
+    analytics = TEMPLATES["analytics"]
+    metabase_security_group_id = next(
+        logical_id
+        for logical_id, _ in _resources(analytics, "AWS::EC2::SecurityGroup")
+        if logical_id.startswith("MetabaseSecurityGroup")
+    )
+    ingress = [
+        resource["Properties"]
+        for _, resource in _resources(
+            analytics, "AWS::EC2::SecurityGroupIngress"
+        )
+    ]
+    metabase_ingress = [rule for rule in ingress if rule["FromPort"] == 3000]
+    database_ingress = [rule for rule in ingress if rule["FromPort"] == 5432]
+    assert len(metabase_ingress) == 1
+    assert len(database_ingress) == 2
+    assert all("CidrIp" not in rule and "CidrIpv6" not in rule for rule in ingress)
+    assert all(
+        rule["SourceSecurityGroupId"]
+        == {"Fn::GetAtt": [metabase_security_group_id, "GroupId"]}
+        for rule in database_ingress
+    )
+
+
+def test_metabase_hostname_health_check_and_dns_are_pinned():
+    analytics = TEMPLATES["analytics"]
+    _, target_group = _resources(
+        analytics, "AWS::ElasticLoadBalancingV2::TargetGroup"
+    )[0]
+    target_properties = target_group["Properties"]
+    assert target_properties["HealthCheckPath"] == "/api/health"
+    assert target_properties["Matcher"]["HttpCode"] == "200"
+    assert target_properties["TargetType"] == "ip"
+
+    _, listener_rule = _resources(
+        analytics, "AWS::ElasticLoadBalancingV2::ListenerRule"
+    )[0]
+    listener_properties = listener_rule["Properties"]
+    assert listener_properties["Priority"] == 20
+    conditions = listener_properties["Conditions"]
+    assert conditions[0] == {
+        "Field": "host-header",
+        "HostHeaderConfig": {"Values": ["metabase.v3.policyatlas.uk"]},
+    }
+    assert conditions[1]["Field"] == "source-ip"
+    allowlist_reference = conditions[1]["SourceIpConfig"]["Values"]["Ref"]
+    allowlist_parameter = analytics["Parameters"][allowlist_reference]
+    assert allowlist_parameter == {
+        "Type": "AWS::SSM::Parameter::Value<List<String>>",
+        "Default": "/policy_atlas_v3/metabase/allowed_cidrs",
+    }
+
+    app_listener_rules = _resources(
+        TEMPLATES["app"], "AWS::ElasticLoadBalancingV2::ListenerRule"
+    )
+    assert app_listener_rules
+    assert all(
+        condition["Field"] != "source-ip"
+        for _, rule in app_listener_rules
+        for condition in rule["Properties"]["Conditions"]
+    )
+
+    _, record = _resources(analytics, "AWS::Route53::RecordSet")[0]
+    assert record["Properties"]["Name"] == "metabase.v3.policyatlas.uk."
+    assert record["Properties"]["Type"] == "A"
+    assert "AliasTarget" in record["Properties"]
+
+
+def test_metabase_has_bounded_log_retention_and_no_source_credentials():
+    analytics = TEMPLATES["analytics"]
+    _, log_group = _resources(analytics, "AWS::Logs::LogGroup")[0]
+    assert log_group["Properties"]["RetentionInDays"] == 30
+    rendered = RENDERED_TEMPLATES["analytics"]
+    assert "/policy_atlas_v3/db/secret_name" not in rendered
+    assert "DATABASE_URL" not in rendered
+    assert METABASE_CONFIG["container"]["image_tag"] == "v0.63.15.7"
+    assert METABASE_CONFIG["allowed_cidrs_parameter_name"] == (
+        "/policy_atlas_v3/metabase/allowed_cidrs"
+    )
 
 
 def test_aurora_security_group_has_only_expected_5432_ingress():

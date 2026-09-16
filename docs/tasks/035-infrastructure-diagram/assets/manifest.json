@@ -1,0 +1,66 @@
+{
+  "route53": {
+    "svg": "Architecture-Service-Icons_07312026/Arch_Networking-Content-Delivery/64/Arch_Amazon-Route-53_64.svg",
+    "png": "Architecture-Service-Icons_07312026/Arch_Networking-Content-Delivery/64/Arch_Amazon-Route-53_64@5x.png"
+  },
+  "cloudfront": {
+    "svg": "Architecture-Service-Icons_07312026/Arch_Networking-Content-Delivery/64/Arch_Amazon-CloudFront_64.svg",
+    "png": "Architecture-Service-Icons_07312026/Arch_Networking-Content-Delivery/64/Arch_Amazon-CloudFront_64@5x.png"
+  },
+  "s3": {
+    "svg": "Architecture-Service-Icons_07312026/Arch_Storage/64/Arch_Amazon-Simple-Storage-Service_64.svg",
+    "png": "Architecture-Service-Icons_07312026/Arch_Storage/64/Arch_Amazon-Simple-Storage-Service_64@5x.png"
+  },
+  "cognito": {
+    "svg": "Architecture-Service-Icons_07312026/Arch_Security-Identity/64/Arch_Amazon-Cognito_64.svg",
+    "png": "Architecture-Service-Icons_07312026/Arch_Security-Identity/64/Arch_Amazon-Cognito_64@5x.png"
+  },
+  "fargate": {
+    "svg": "Architecture-Service-Icons_07312026/Arch_Containers/64/Arch_AWS-Fargate_64.svg",
+    "png": "Architecture-Service-Icons_07312026/Arch_Containers/64/Arch_AWS-Fargate_64@5x.png"
+  },
+  "aurora": {
+    "svg": "Architecture-Service-Icons_07312026/Arch_Databases/64/Arch_Amazon-Aurora_64.svg",
+    "png": "Architecture-Service-Icons_07312026/Arch_Databases/64/Arch_Amazon-Aurora_64@5x.png"
+  },
+  "ec2": {
+    "svg": "Architecture-Service-Icons_07312026/Arch_Compute/64/Arch_Amazon-EC2_64.svg",
+    "png": "Architecture-Service-Icons_07312026/Arch_Compute/64/Arch_Amazon-EC2_64@5x.png"
+  },
+  "secrets": {
+    "svg": "Architecture-Service-Icons_07312026/Arch_Security-Identity/64/Arch_AWS-Secrets-Manager_64.svg",
+    "png": "Architecture-Service-Icons_07312026/Arch_Security-Identity/64/Arch_AWS-Secrets-Manager_64@5x.png"
+  },
+  "cloudwatch": {
+    "svg": "Architecture-Service-Icons_07312026/Arch_Management-Tools/64/Arch_Amazon-CloudWatch_64.svg",
+    "png": "Architecture-Service-Icons_07312026/Arch_Management-Tools/64/Arch_Amazon-CloudWatch_64@5x.png"
+  },
+  "iam": {
+    "svg": "Architecture-Service-Icons_07312026/Arch_Security-Identity/64/Arch_AWS-Identity-and-Access-Management_64.svg",
+    "png": "Architecture-Service-Icons_07312026/Arch_Security-Identity/64/Arch_AWS-Identity-and-Access-Management_64@5x.png"
+  },
+  "ssm": {
+    "svg": "Architecture-Service-Icons_07312026/Arch_Management-Tools/64/Arch_AWS-Systems-Manager_64.svg",
+    "png": "Architecture-Service-Icons_07312026/Arch_Management-Tools/64/Arch_AWS-Systems-Manager_64@5x.png"
+  },
+  "alb": {
+    "svg": "Resource-Icons_07312026/Res_Networking-Content-Delivery/Res_Elastic-Load-Balancing_Application-Load-Balancer_48.svg",
+    "png": "Resource-Icons_07312026/Res_Networking-Content-Delivery/Res_Elastic-Load-Balancing_Application-Load-Balancer_48.png"
+  },
+  "users": {
+    "svg": "Resource-Icons_07312026/Res_General-Icons/Res_48_Light/Res_Users_48_Light.svg",
+    "png": "Resource-Icons_07312026/Res_General-Icons/Res_48_Light/Res_Users_48_Light.png"
+  },
+  "cloud": {
+    "svg": "Architecture-Group-Icons_07312026/AWS-Cloud-logo_32.svg",
+    "png": "Architecture-Group-Icons_07312026/AWS-Cloud-logo_32.png"
+  },
+  "vpc": {
+    "svg": "Architecture-Group-Icons_07312026/Virtual-private-cloud-VPC_32.svg",
+    "png": "Architecture-Group-Icons_07312026/Virtual-private-cloud-VPC_32.png"
+  },
+  "bedrock": {
+    "svg": "Architecture-Service-Icons_07312026/Arch_Artificial-Intelligence/64/Arch_Amazon-Bedrock_64.svg",
+    "png": "Architecture-Service-Icons_07312026/Arch_Artificial-Intelligence/64/Arch_Amazon-Bedrock_64@5x.png"
+  }
+}

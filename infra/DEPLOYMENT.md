@@ -7,7 +7,7 @@ and recovery.
 
 ## 1. Overview
 
-Four CloudFormation stacks:
+Four core CloudFormation stacks, plus a staging-only analytics stack:
 
 | Stack | Region | Contents |
 | --- | --- | --- |
@@ -15,15 +15,17 @@ Four CloudFormation stacks:
 | `PaV3DatabaseStack` | `eu-west-2` | Aurora Postgres cluster, generated credentials secret, `load_secret` Lambda, SSM jumpbox |
 | `PaV3AppStack` | `eu-west-2` | ECS Fargate API service + migration task, Cognito, S3 + CloudFront frontend, font bucket |
 | `PaV3CertStack` | `us-east-1` | CloudFront's ACM certificate (AWS requires this region for CloudFront certs) |
+| `PaV3AnalyticsStack` (staging only) | `eu-west-2` | Metabase Fargate service, dedicated RDS PostgreSQL application database, secrets, shared-ALB route + DNS |
 
-All four synth from `infra/app.py`, driven by `-c env_name=<env>` and, on first
+The stacks synth from `infra/app.py`, driven by `-c env_name=<env>` and, on first
 deploy only, `-c stage=network|all`. `scripts/deploy.sh` wraps `cdk deploy` of the
-three eu-west-2 stacks plus `PaV3CertStack`, and owns the imperative steps
+eu-west-2 stacks plus `PaV3CertStack`, and owns the imperative steps
 CloudFormation can't: migration task invocation, frontend build/sync/invalidation,
 font injection.
 
 **Public/private boundary (repo is public, AGPL-3.0):** CDK code and the
-`*_config.json` files (`network_config.json`, `db_config.json`, `pa_config.json`)
+`*_config.json` files (`network_config.json`, `db_config.json`, `pa_config.json`,
+and `metabase_config.json`)
 are committed. The AWS account id is never committed — `app.py` reads it from
 `CDK_DEFAULT_ACCOUNT` at synth/deploy time. `infra/cdk.context.json` is gitignored
 (it caches `from_lookup` results, including the account id). Secrets live only in
@@ -190,6 +192,27 @@ session. Once gate B passes, GitHub Actions owns steady-state `deploy-update` ru
    export CDK_DEFAULT_ACCOUNT=<account-id>
    ```
 
+6. **Metabase UI allowlist provisioned in Parameter Store (staging only).**
+   Create `/policy_atlas_v3/metabase/allowed_cidrs` in `eu-west-2` as a standard
+   `StringList` before deploying the analytics stack:
+
+   ```bash
+   aws ssm put-parameter \
+     --region eu-west-2 \
+     --name /policy_atlas_v3/metabase/allowed_cidrs \
+     --type StringList \
+     --value '<cidr-1>,<cidr-2>' \
+     --overwrite
+   ```
+
+   Supply one to three canonical IPv4 and/or IPv6 CIDRs, separated by commas
+   with no spaces. Universal `/0` ranges are rejected because they do not form
+   an allowlist. The deployment validates the type and CIDRs without printing
+   their values. The ALB compares the address that connects directly to it, not
+   `X-Forwarded-For`; for users behind a VPN or proxy, allowlist its egress CIDR.
+   After changing the parameter, run the normal staging deployment so
+   CloudFormation resolves and applies the latest value.
+
 ## 3. First deploy (staged bootstrap)
 
 Bootstrap is staged, not circular: `Vpc.from_lookup` in the consumer stacks is a
@@ -250,6 +273,33 @@ synth-time context query and must not run before the VPC exists.
 
 6. **Frontend publish** — `vite build` (with `VITE_*` baked at build time) →
    `aws s3 sync` → CloudFront invalidation.
+
+### Staging Metabase first-admin setup
+
+`pa_config.json` enables `PaV3AnalyticsStack` only for staging. Its application
+database is deliberately separate from the Policy Atlas database. The service
+runs one task in private subnets and is exposed only through the shared ALB at
+`https://metabase.v3.policyatlas.uk`.
+
+That hostname's listener rule also requires a source match from the SSM-backed
+allowlist. This restriction applies only to the Metabase route; the Policy Atlas
+web application and API listener rules are unchanged. A non-matching address
+falls through to the shared listener's default response and is never forwarded
+to the Metabase target group.
+
+Treat the initial setup as an attended operation: open that address as soon as
+the analytics stack reports healthy and create the staging administrator. Until
+that account exists, Metabase's first-user setup surface is reachable through the
+public staging hostname. Do not leave a first deployment unattended.
+
+Do **not** add the Policy Atlas production/application database with its owner
+credentials. This stack creates network reachability only. Source onboarding
+requires a separately reviewed, least-privilege login restricted to curated
+owner-safe analytics views (or equivalent row-level controls), stored in Secrets
+Manager. Configure that connection with SSL after the data-access change is
+approved. The Metabase connection-details encryption key is retained in Secrets
+Manager because losing or replacing it makes stored source credentials
+unreadable.
 
 ## 4. Steady-state deploys + the deploy invariant
 
