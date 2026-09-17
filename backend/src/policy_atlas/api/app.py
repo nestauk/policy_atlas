@@ -47,9 +47,12 @@ _CONFLICT_CODES = {
     # Splash waitlist: the email is already on waitlist_entry.
     "already_registered",
     # Task 044 (C11, C12): a task can only start from a task it shares a
-    # project with, and only from one whose latest walk has finished.
+    # project with, and only from one whose latest walk has finished — and
+    # only from an Evidence search, whose report is what inheritance reads
+    # (S6, X4).
     "link_project_mismatch",
     "link_source_unfinished",
+    "link_source_capability",
 }
 
 _CAPACITY_CODES = {"chat_capacity"}

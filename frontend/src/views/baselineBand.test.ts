@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import type { components } from "../api/gen/types";
 import { scopingWalkStatus } from "./workspace/planStart";
 import {
   artefactDepthLabel,
@@ -7,19 +8,30 @@ import {
   isBaselineArtefact,
 } from "./baselineBand";
 
+type ArtefactOut = components["schemas"]["ArtefactOut"];
+
+/** A partial `ArtefactOut` — only the fields each test cares about. */
+function artefact(overrides: Partial<ArtefactOut>): ArtefactOut {
+  return overrides as ArtefactOut;
+}
+
 const PAUSED_AT_GATE = {
   status: "paused",
   started_at: "2026-09-09T10:00:00Z",
   plan_version: 1,
+  // Synthesise (and the artefact it writes) has already happened by the
+  // time a walk parks on the gate.
+  artefact_id: "artefact-1",
 };
 const FINISHED = {
   status: "succeeded",
   started_at: "2026-09-09T10:00:00Z",
   plan_version: 1,
+  artefact_id: "artefact-1",
 };
 
 function band(
-  runs: Array<{ status: string; started_at: string; plan_version: number }>,
+  runs: Array<{ status: string; started_at: string; plan_version: number; artefact_id: string | null }>,
   currentVersion: number | null,
   baselineConfirmed: { plan_version: number } | null = null,
 ) {
@@ -28,9 +40,9 @@ function band(
 
 describe("isBaselineArtefact", () => {
   it("reads the roll-up's template word, not the sections", () => {
-    expect(isBaselineArtefact({ template: "baseline" })).toBe(true);
-    expect(isBaselineArtefact({ template: null })).toBe(false);
-    expect(isBaselineArtefact({})).toBe(false);
+    expect(isBaselineArtefact(artefact({ template: "baseline" }))).toBe(true);
+    expect(isBaselineArtefact(artefact({ template: null }))).toBe(false);
+    expect(isBaselineArtefact(artefact({}))).toBe(false);
     expect(isBaselineArtefact(null)).toBe(false);
     expect(isBaselineArtefact(undefined)).toBe(false);
   });
@@ -38,8 +50,8 @@ describe("isBaselineArtefact", () => {
 
 describe("artefactDepthLabel", () => {
   it("passes the roll-up's own words through, and reports absence honestly", () => {
-    expect(artefactDepthLabel({ depth_label: "scoping pass" })).toBe("scoping pass");
-    expect(artefactDepthLabel({ depth_label: "" })).toBeNull();
+    expect(artefactDepthLabel(artefact({ depth_label: "scoping pass" }))).toBe("scoping pass");
+    expect(artefactDepthLabel(artefact({ depth_label: "" }))).toBeNull();
     expect(artefactDepthLabel(undefined)).toBeNull();
   });
 });
@@ -81,13 +93,39 @@ describe("baselineBand", () => {
   });
 
   it("reads the most recently started walk when several exist", () => {
-    const older = { status: "aborted", started_at: "2026-09-08T09:00:00Z", plan_version: 1 };
-    const newer = { status: "succeeded", started_at: "2026-09-09T09:00:00Z", plan_version: 2 };
+    const older = { status: "aborted", started_at: "2026-09-08T09:00:00Z", plan_version: 1, artefact_id: null };
+    const newer = {
+      status: "succeeded",
+      started_at: "2026-09-09T09:00:00Z",
+      plan_version: 2,
+      artefact_id: "artefact-2",
+    };
     expect(band([older, newer], 2).line).toContain("plan confirmed");
   });
 
   it("holds the awaiting wording with no walk loaded rather than claiming confirmation", () => {
     expect(band([], null).line).toContain("ready · awaiting your confirmation");
     expect(band([], null).planVersionMark).toBeNull();
+  });
+
+  // Task 044 review, C6: a rebuild that aborted before writing must not hide
+  // the earlier walk's baseline, and the mark names the baseline's own
+  // version — not the failed rebuild's.
+  it("names the baseline-writing walk's version, not a later rebuild that aborted with no artefact", () => {
+    const wroteBaseline = {
+      status: "succeeded",
+      started_at: "2026-09-01T00:00:00Z",
+      plan_version: 1,
+      artefact_id: "artefact-X",
+    };
+    const abortedRebuild = {
+      status: "aborted",
+      started_at: "2026-09-02T00:00:00Z",
+      plan_version: 2,
+      artefact_id: null,
+    };
+    const result = band([wroteBaseline, abortedRebuild], 2);
+    expect(result.planVersionMark).toBe("built from plan version 1");
+    expect(result.line).toContain("ready · awaiting your confirmation");
   });
 });

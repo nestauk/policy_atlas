@@ -270,11 +270,11 @@ class ScopingSteerPointDefaultOut(BaseModel):
 
     Args:
         steer_point: The check-in point the rule covers.
-        action: `proceed_flag` or `stop`.
+        action: `proceed_flag` — the only value; unattended records the gate and continues.
     """
 
     steer_point: str
-    action: Literal["proceed_flag", "stop"]
+    action: Literal["proceed_flag"]
 
 
 class BaselineConfirmedOut(BaseModel):

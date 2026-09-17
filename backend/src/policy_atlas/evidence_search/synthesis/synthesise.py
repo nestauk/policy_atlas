@@ -66,6 +66,7 @@ from policy_atlas.evidence_search.synthesis.baseline_prompt import (
     BASELINE_PROMPT_VERSION,
     BASELINE_PROPOSED_INSERT_AFTER,
     BASELINE_SECTION_TURN_CAP,
+    BASELINE_SECTIONS,
     BASELINE_TEMPLATE_KEY,
     SOURCES_LANGUAGE_NOT_APPLIED_LINE,
     SOURCES_NOT_SEARCHED_LINE,
@@ -156,6 +157,17 @@ CLAIM_TYPES: tuple[str, ...] = (
     "reasoning",
 )
 JUDGED_TYPES = {"finding", "chunk", "reasoning"}
+
+# The baseline sections whose focus instructs the writer to label a sentence as
+# its own reasoning ("What is contested" and "Key assumption"). Derived from the
+# template's own section table rather than re-typed here, so a focus rewrite
+# cannot leave this list stale. The label itself is prompt-only, so a section
+# that carries none is flagged, never repaired (ADR 0015: flag, do not drop).
+# ponytail: a focus-text match, because ``baseline_prompt`` is hash-pinned and
+# cannot gain a dedicated constant in this slice.
+BASELINE_REASONING_SECTION_TITLES: frozenset[str] = frozenset(
+    section.title for section in BASELINE_SECTIONS if "reasoning" in section.focus
+)
 ANNOTATION_BY_CLAIM_TYPE = {
     "finding": "citation",
     "chunk": "citation",
@@ -2185,7 +2197,18 @@ def _baseline_evidence_restrictions(
             continue
         if constraint.get("kind") != "evidence_restriction":
             continue
-        for key in ("country_group", "published_after", "published_before"):
+        # ``ScopingConstraint.country_group`` is a ``CountryGroup`` object
+        # (``{label, countries, authorship}``) once the plan has been through
+        # ``build_scoping_plan``; only the label belongs in the prose. The bare
+        # string branch stays for a payload that carries one.
+        group = constraint.get("country_group")
+        if isinstance(group, Mapping):
+            label = group.get("label")
+            if isinstance(label, str) and label:
+                found["country_group"] = label
+        elif isinstance(group, str) and group:
+            found["country_group"] = group
+        for key in ("published_after", "published_before"):
             value = constraint.get(key)
             if isinstance(value, str) and value:
                 found[key] = value
@@ -4668,11 +4691,21 @@ def _blocks_rollup(
     block_id: str,
     claims: Sequence[ClaimDraft],
     accounting: SectionAccounting,
+    baseline_mode: bool = False,
 ) -> dict[str, Any]:
     origin_counts = _citation_counts_by_origin(claims)
     unverified = sum(1 for claim in claims if "quote_unverified" in claim.flags)
     return {
         "title": section.title,
+        # X8: the "label that sentence as reasoning" instruction is prompt-only,
+        # so a baseline reasoning section can come back with no reasoning claim
+        # at all. Make the absence visible instead of inferring it from a zero
+        # in the tier distribution.
+        "reasoning_label_missing": (
+            baseline_mode
+            and section.title in BASELINE_REASONING_SECTION_TITLES
+            and not any(claim.claim_type == "reasoning" for claim in claims)
+        ),
         "focus": section.focus,
         "nav_label": section.nav_label,
         "role": section.role,
@@ -4799,6 +4832,8 @@ def _rollup_flags(
         flags["span_bind_failed"] = True
     if unspanned_assertions:
         flags["unspanned_assertions_present"] = True
+    if any(block.get("reasoning_label_missing") for block in section_blocks):
+        flags["reasoning_label_missing_present"] = True
     if turn_cap_hit:
         flags["turn_cap_hit"] = True
     if repair_path_taken:
@@ -6185,6 +6220,7 @@ def synthesise_scope(
                 block_id=block_id,
                 claims=claims,
                 accounting=accounting,
+                baseline_mode=baseline_mode,
             )
         )
         section_provenance.append(

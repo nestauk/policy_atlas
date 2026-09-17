@@ -252,6 +252,24 @@ def test_an_attended_plan_refuses_the_baseline_default() -> None:
         )
 
 
+def test_an_unattended_plan_cannot_declare_a_hard_stop_at_the_gate() -> None:
+    """D11/A9: unattended never pauses at the gate — it records, flags, CONTINUES.
+
+    ``stop`` is an Evidence search action; letting a scoping plan declare it
+    would make an unattended scoping run abort at the gate, which the contract
+    says it never does.
+    """
+    with pytest.raises(ValidationError, match="proceed_flag"):
+        build_scoping_plan(
+            _ready_draft(
+                steering_mode="unattended",
+                steer_point_defaults=[
+                    ScopingSteerPointDefaultDraft(steer_point=BASELINE_CONFIRM, action="stop")
+                ],
+            )
+        )
+
+
 def test_an_evidence_search_steer_point_is_not_a_scoping_one() -> None:
     with pytest.raises(ValidationError):
         build_scoping_plan(

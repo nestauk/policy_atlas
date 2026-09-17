@@ -25,14 +25,19 @@ from policy_atlas.runtime.steering import LATTICE_POINTS
 from policy_atlas.runtime.task_plan import STEER_POINTS, TaskPlan, compose
 from tests.helpers import now
 
-#: The only files allowed to name ``TaskPlan.model_validate`` or bare
-#: ``compose(``. Relative to ``backend/src/policy_atlas``.
+#: The only files allowed to name ``TaskPlan.model_validate``,
+#: ``ScopingPlan.model_validate`` or bare ``compose(``. Relative to
+#: ``backend/src/policy_atlas``.
 _ALLOWED_DIRECT_CALLERS = frozenset(
     {
         # The registry itself — it is the seam.
         "runtime/capability_registry.py",
         # The definitions.
         "runtime/task_plan.py",
+        # ``ScopingPlan``'s own module: ``build_scoping_plan`` is the plan's
+        # factory, so validating its own model there is the definition, not a
+        # reader deciding the capability for itself.
+        "runtime/scoping_plan.py",
     }
 )
 
@@ -146,8 +151,11 @@ def test_capability_of_task_raises_for_a_task_that_does_not_exist(conn: Connecti
 def _direct_calls(tree: ast.AST) -> set[str]:
     """Return the banned call spellings found in one module's AST.
 
-    ``TaskPlan.model_validate(...)`` and a bare ``compose(...)`` both mean
-    "this reader decided the capability itself".
+    ``TaskPlan.model_validate(...)``, ``ScopingPlan.model_validate(...)`` and a
+    bare ``compose(...)`` all mean "this reader decided the capability itself".
+    The seam guards **both** plan models, not only the Evidence search one (F8):
+    a scoping payload validated directly is the same mistake in the other
+    direction.
     """
     found: set[str] = set()
     for node in ast.walk(tree):
@@ -158,9 +166,9 @@ def _direct_calls(tree: ast.AST) -> set[str]:
             isinstance(func, ast.Attribute)
             and func.attr == "model_validate"
             and isinstance(func.value, ast.Name)
-            and func.value.id == "TaskPlan"
+            and func.value.id in ("TaskPlan", "ScopingPlan")
         ):
-            found.add("TaskPlan.model_validate")
+            found.add(f"{func.value.id}.model_validate")
         if isinstance(func, ast.Name) and func.id == "compose":
             found.add("compose")
     return found
@@ -187,6 +195,9 @@ def test_the_seam_test_would_notice_a_direct_call() -> None:
     # suite silently for the rest of the project's life.
     assert _direct_calls(ast.parse("TaskPlan.model_validate(payload)")) == {
         "TaskPlan.model_validate"
+    }
+    assert _direct_calls(ast.parse("ScopingPlan.model_validate(payload)")) == {
+        "ScopingPlan.model_validate"
     }
     assert _direct_calls(ast.parse("chain = compose(plan)")) == {"compose"}
     assert _direct_calls(ast.parse("chain = compose_plan(capability, plan)")) == set()

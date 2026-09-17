@@ -51,10 +51,11 @@ class TaskCreate(BaseModel):
             multi-organisation 409, the visibility derivation). Empty means
             unassigned, which is a normal state.
         from_task_ids: Tasks this one starts from — one `task_link` row each,
-            written in the same transaction. Refused 422 on an
-            `evidence_search` create: in this slice a Link is how a scoping
-            task inherits an Evidence search, and the reverse direction lands
-            with task 5.
+            written in the same transaction. At most three, because every
+            linked source is inherited into the Task Agent's context on every
+            turn. Refused 422 on an `evidence_search` create: in this slice a
+            Link is how a scoping task inherits an Evidence search, and the
+            reverse direction lands with task 5.
     """
 
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
@@ -63,7 +64,11 @@ class TaskCreate(BaseModel):
     question: str | None = None
     capability: Capability = "evidence_search"
     project_ids: list[uuid.UUID] = Field(default_factory=list)
-    from_task_ids: list[uuid.UUID] = Field(default_factory=list)
+    # ponytail: 3. Each linked source puts its plan, its report body and its
+    # coverage statement into the Task Agent's context on EVERY turn (up to
+    # ~60,000 characters apiece), so an unbounded list is an unbounded prompt.
+    # Raise the ceiling when a real need for a fourth source turns up.
+    from_task_ids: list[uuid.UUID] = Field(default_factory=list, max_length=3)
 
     @model_validator(mode="after")
     def reject_links_on_an_evidence_search(self) -> TaskCreate:
@@ -194,7 +199,11 @@ class TaskLinkOut(BaseModel):
         link_id: The link row's identity.
         source_task_id: The task this one starts from.
         source_task_name: That task's display name, so the plan document can
-            render the link without a second request per source.
+            render the link without a second request per source — `None` when
+            the reader holds no read grade on the source. A Link grants no
+            read (ADR 0037 decision 2), so a colleague reading a task whose
+            source has since become private sees the link, flagged, without
+            its name.
         source_capability_run_id: The **pinned** walk of the source (C11).
             What the target inherited cannot change under it when the source
             runs again.
@@ -207,7 +216,7 @@ class TaskLinkOut(BaseModel):
 
     link_id: uuid.UUID
     source_task_id: uuid.UUID
-    source_task_name: str
+    source_task_name: str | None
     source_capability_run_id: uuid.UUID
     flagged: bool
 

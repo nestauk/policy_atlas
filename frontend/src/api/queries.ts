@@ -161,10 +161,11 @@ const ACTIVE_RUN_STATUSES = new Set(["running", "paused"]);
  *  keeps showing "Analysing"/"Paused" after the run has actually moved on.
  *  `refetchIntervalInBackground` defaults to `false`, so this only polls
  *  while the tab is visible. */
-export function useTasks(query?: TasksQuery) {
+export function useTasks(query?: TasksQuery, options?: { enabled?: boolean }) {
   const client = useApiClient();
   return useQuery({
     queryKey: queryKeys.tasks(query),
+    enabled: options?.enabled,
     queryFn: async () => {
       const { data, error } = await client.GET("/api/v1/tasks", { params: { query } });
       if (error) throw error;

@@ -905,7 +905,7 @@ export function TaskAgentPane({
         {/* Suggestion chips send a task_agent turn (task 033 phase 10c,
             contract § 11 / rubric 37) — owner-only, hidden for a colleague
             rather than left clickable to a 403. */}
-        {isOwner && suggestions.length > 0 && !transcript.isSubmitting && !runActive && (
+        {isOwner && suggestions.length > 0 && !transcript.isSubmitting && !composerFenced && (
           <div className="flex flex-wrap gap-1.5">
             {suggestions.map((suggestion) => (
               <button

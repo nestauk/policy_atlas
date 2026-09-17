@@ -21,10 +21,13 @@ from sqlalchemy.engine import Connection
 
 from policy_atlas.core.embeddings import StubEmbeddingBackend
 from policy_atlas.core.schema import (
+    annotation,
     artefact,
     block,
+    evidence_scope,
     source_snapshot,
     synthesis_result,
+    task_plan,
     task_source_snapshot,
 )
 from policy_atlas.core.usage import UsageResult
@@ -35,6 +38,7 @@ from policy_atlas.evidence_search.synthesis.baseline_prompt import (
     BASELINE_SECTION_TURN_CAP,
     BASELINE_SECTIONS,
     SOURCES_NOT_SEARCHED_LINE,
+    SOURCES_RESTRICTION_TEMPLATE,
     SOURCES_SECTION_TITLE,
     required_titles,
 )
@@ -56,6 +60,7 @@ from policy_atlas.evidence_search.synthesis.synthesis_tools import (
     ToolExchange,
 )
 from policy_atlas.evidence_search.synthesis.synthesise import (
+    BASELINE_REASONING_SECTION_TITLES,
     CONCLUSIONS_TITLE,
     SynthesiseContext,
     _rollup_flags,
@@ -63,8 +68,17 @@ from policy_atlas.evidence_search.synthesis.synthesise import (
     synthesise_scope,
 )
 from policy_atlas.runtime.progress import ProgressEmitter
-from policy_atlas.runtime.scoping_plan import _baseline_section_directives
+from policy_atlas.runtime.scoping_plan import (
+    _baseline_section_directives,
+    build_scoping_plan,
+)
+from policy_atlas.runtime.task_agent_prompt import CountryGroupDraft
+from policy_atlas.runtime.task_agent_scoping_prompt import (
+    ScopingConstraintWire,
+    ScopingPlanDraftWire,
+)
 from tests.helpers import (
+    now,
     seed_ingested_full_text,
     seed_scope,
     seed_task_and_run,
@@ -580,6 +594,99 @@ def test_baseline_sources_block_counts_an_unrecorded_backend_as_undetermined(
     assert "leans on academic sources" in prose
 
 
+def _seed_approved_scoping_plan(
+    conn: Connection,
+    *,
+    task_id: uuid.UUID,
+    scope_id: uuid.UUID,
+    constraints: list[ScopingConstraintWire],
+) -> None:
+    """Point the scope at one approved scoping plan carrying ``constraints``.
+
+    Built through ``build_scoping_plan`` rather than hand-written, so the
+    payload the Sources reader sees is the shape the Task Agent actually
+    stores — a ``country_group`` is an object there, not a string.
+    """
+    plan = build_scoping_plan(
+        ScopingPlanDraftWire.model_validate(
+            {
+                "title": "Youth employment options",
+                "question": "What could reduce the number of young people not in work?",
+                "intended_change": {
+                    "text": "Reduce the number of young people not in work",
+                    "origin": "from_your_question",
+                },
+                "target_unit": {"text": "16 to 24 year olds", "origin": "your_call"},
+                "outcomes": [{"text": "the NEET rate", "origin": "assumed"}],
+                "depth": "standard",
+                "constraints": constraints,
+            }
+        )
+    )
+    plan_id = uuid.uuid4()
+    conn.execute(
+        task_plan.insert().values(
+            plan_id=plan_id,
+            task_id=task_id,
+            evidence_scope_id=scope_id,
+            version=1,
+            status="approved",
+            payload=plan.model_dump(mode="json"),
+            created_at=now(),
+            created_by="task_agent",
+            approved_at=now(),
+        )
+    )
+    conn.execute(
+        update(evidence_scope)
+        .where(evidence_scope.c.evidence_scope_id == scope_id)
+        .values(plan_id=plan_id)
+    )
+
+
+def test_baseline_sources_block_states_the_origin_restriction(conn: Connection) -> None:
+    """C4: the Sources sentence must name the origin group the search applied.
+
+    ``ScopingConstraint.country_group`` is stored as ``{label, countries,
+    authorship}``; a reader that accepted only a bare string dropped the
+    clause silently, so a restricted search read as an unrestricted one.
+    """
+    task_id, run_id = seed_task_and_run(conn)
+    scope_id = seed_scope(conn, task_id)
+    _seed_approved_scoping_plan(
+        conn,
+        task_id=task_id,
+        scope_id=scope_id,
+        constraints=[
+            ScopingConstraintWire(
+                text="OECD evidence only",
+                kind="evidence_restriction",
+                origin="your_call",
+                checked_at="retrieval",
+                country_group=CountryGroupDraft(label="OECD members", countries=None),
+            )
+        ],
+    )
+    _seed_baseline_corpus(conn, task_id=task_id, run_id=run_id, scope_id=scope_id)
+
+    _run_baseline(
+        conn,
+        task_id=task_id,
+        run_id=run_id,
+        scope_id=scope_id,
+        backend=_BaselineBackend(),
+    )
+
+    row = _rollup(conn, task_id)
+    sources = next(entry for entry in row.blocks if entry["title"] == SOURCES_SECTION_TITLE)
+    prose = conn.execute(
+        select(block.c.content).where(block.c.block_id == uuid.UUID(sources["block_id"]))
+    ).scalar_one()
+    assert SOURCES_RESTRICTION_TEMPLATE.format(restriction_text="sources from OECD members") in (
+        prose
+    )
+
+
 def test_a_claim_less_sources_block_is_not_an_uncited_section() -> None:
     """The grounding roll-up reads the code-rendered foot as structural."""
     cited = {"citations_verified": 1, "role": "standard"}
@@ -604,6 +711,112 @@ def test_a_claim_less_sources_block_is_not_an_uncited_section() -> None:
 
     assert "uncited_sections" not in _flags([cited, sources])
     assert _flags([cited, sources, uncited])["uncited_sections"] is True
+
+
+# --- The reasoning label the prompt asks for, and cannot guarantee ---
+
+
+class _UnlabelledKeyAssumptionBackend(_BaselineBackend):
+    """Writes "Key assumption" as a gap claim, so it carries no reasoning claim.
+
+    The template tells the writer to label that section's sentence as its own
+    reasoning; nothing enforces it. This is the model doing something else.
+    """
+
+    def section_turn(
+        self,
+        seed: dict[str, Any],
+        transcript: list[ToolExchange],
+        *,
+        force_emit: bool,
+    ) -> UsageResult[SectionTurn]:
+        if str(seed["section"]["title"]) != "Key assumption":
+            return super().section_turn(seed, transcript, force_emit=force_emit)
+        index = int(seed.get("section_index", 0))
+        self.turns_by_section[index] = self.turns_by_section.get(index, 0) + 1
+        return {
+            "tool_calls": [],
+            "claims": prose_section(
+                claims=[
+                    ClaimWire(
+                        claim_type="gap",
+                        text="No source states the assumption.",
+                        gap=GapPayloadWire(grade="inferred", coverage_base="screened"),
+                    )
+                ]
+            ),
+        }, None
+
+
+def test_an_unlabelled_reasoning_section_is_flagged_not_repaired(conn: Connection) -> None:
+    """X8: the reasoning label is prompt-only, so make its absence visible.
+
+    ADR 0015's discipline is flag-not-drop: the prose stands, and the roll-up
+    says which reasoning section came back without a reasoning claim.
+    """
+    task_id, run_id = seed_task_and_run(conn)
+    scope_id = seed_scope(conn, task_id)
+    _seed_baseline_corpus(conn, task_id=task_id, run_id=run_id, scope_id=scope_id)
+
+    _run_baseline(
+        conn,
+        task_id=task_id,
+        run_id=run_id,
+        scope_id=scope_id,
+        backend=_UnlabelledKeyAssumptionBackend(),
+    )
+
+    row = _rollup(conn, task_id)
+    by_title = {entry["title"]: entry for entry in row.blocks}
+    assert by_title["Key assumption"]["reasoning_label_missing"] is True
+    # The other reasoning section labelled its sentence, so it is not flagged,
+    # and an ordinary evidence section is never a candidate.
+    assert by_title[CONTESTED]["reasoning_label_missing"] is False
+    assert by_title["What is in place"]["reasoning_label_missing"] is False
+    assert row.flags["reasoning_label_missing_present"] is True
+
+
+def test_labelled_reasoning_sections_raise_no_flag_and_carry_the_tier_tag(
+    conn: Connection,
+) -> None:
+    """The clean case: no flag, and every reasoning claim is tagged tier 4.
+
+    F18: ``tier_label`` is what the reader groups reasoning by, and nothing
+    else asserted it — a rename would have gone unnoticed.
+    """
+    task_id, run_id = seed_task_and_run(conn)
+    scope_id = seed_scope(conn, task_id)
+    _seed_baseline_corpus(conn, task_id=task_id, run_id=run_id, scope_id=scope_id)
+
+    _run_baseline(
+        conn,
+        task_id=task_id,
+        run_id=run_id,
+        scope_id=scope_id,
+        backend=_BaselineBackend(),
+    )
+
+    row = _rollup(conn, task_id)
+    assert all(entry["reasoning_label_missing"] is False for entry in row.blocks)
+    assert "reasoning_label_missing_present" not in row.flags
+
+    block_ids = [uuid.UUID(entry["block_id"]) for entry in row.blocks]
+    payloads = [
+        payload
+        for (payload,) in conn.execute(
+            select(annotation.c.payload)
+            .where(annotation.c.block_id.in_(block_ids))
+            .where(annotation.c.annotation_type == "reasoning")
+        ).all()
+    ]
+    assert payloads
+    assert {payload["tier_label"] for payload in payloads} == {"tier_4_reasoning"}
+
+
+def test_the_reasoning_sections_are_read_off_the_template(conn: Connection) -> None:
+    """Pin the derived title set, so a focus rewrite cannot silently empty it."""
+    del conn
+    assert {CONTESTED, "Key assumption"} == BASELINE_REASONING_SECTION_TITLES
 
 
 # --- The roll-up and the skeleton ---

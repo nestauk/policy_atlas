@@ -340,7 +340,7 @@ class CountryGroup(BaseModel):
     """Named country group compiled into backend-specific search filters.
 
     Args:
-        label: Pinned Tier-1 label, or a user/task_agent label for an explicit
+        label: Pinned Tier-1 label, or a user/Task Agent label for an explicit
             Tier-2 country list.
         countries: Explicit ISO-3166 alpha-2 country list for Tier-2 groups.
             Must be ``None`` for pinned Tier-1 labels.
@@ -714,7 +714,7 @@ class TaskPlan(BaseModel):
         time_band: Deterministic wall-clock band derived from the two axes.
         section_budget: Optional future synthesis cap for ordinary sections.
         source_turn_index: Task Agent turn that approved this payload, when it
-            was created through the task_agent API.
+            was created through the Task Agent API.
     """
 
     model_config = ConfigDict(extra="forbid", strict=True)

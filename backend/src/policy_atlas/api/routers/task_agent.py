@@ -1,4 +1,4 @@
-"""Task-scoped task_agent turns backed by a durable transcript."""
+"""Task-scoped Task Agent turns backed by a durable transcript."""
 
 from __future__ import annotations
 
@@ -18,6 +18,7 @@ from sqlalchemy import func, select, update
 from sqlalchemy.engine import Connection, Engine, RowMapping
 
 from policy_atlas.api import continuation, gate_turns
+from policy_atlas.api.answer_core import apply_appraisal_labels
 from policy_atlas.api.app import ApiConflict
 from policy_atlas.api.auth import AuthenticatedUser
 from policy_atlas.api.contract import (
@@ -136,7 +137,7 @@ _TURN_LOCKS_MAX = 256
 
 
 def _turn_lock(task_id: uuid.UUID) -> threading.Lock:
-    """Return the process-local concurrency guard for one task's task_agent turn."""
+    """Return the process-local concurrency guard for one task's Task Agent turn."""
     with _turn_locks_guard:
         if task_id not in _turn_locks and len(_turn_locks) >= _TURN_LOCKS_MAX:
             for key in [k for k, v in _turn_locks.items() if not v.locked()]:
@@ -305,19 +306,33 @@ def _baseline_state(conn: Connection, task_id: uuid.UUID) -> str:
 def _baseline_built_from(conn: Connection, task_id: uuid.UUID) -> int | None:
     """Return the plan version the latest existing baseline was built from.
 
-    A baseline exists once its walk finished writing it: ``succeeded`` (the
-    gate confirmed), ``degraded``, or ``aborted`` by "Change the plan" — the
-    artefact stays on screen marked *built from plan version N* (C1), so a
-    later edit is still measured against it.
+    A baseline exists when a walk **wrote one**, which is what the artefact
+    row says (C5): ``succeeded`` (the gate confirmed), ``degraded``, or
+    ``aborted`` by "Change the plan" after synthesise — the artefact stays on
+    screen marked *built from plan version N* (C1), so a later edit is still
+    measured against it.
+
+    The status alone is not enough. A walk aborted at an earlier floor pause —
+    say after acquire — is also ``aborted`` and wrote nothing, and reading it
+    as a baseline told the Task Agent one existed and fired the S4 "this
+    changed what the baseline was built from" sentence about a document the
+    user has never seen. So the artefact is the evidence, and the status only
+    excludes the walk that is still going.
     """
     version = conn.execute(
         select(capability_run.c.plan_version)
+        .select_from(
+            capability_run.join(
+                artefact,
+                artefact.c.capability_run_id == capability_run.c.capability_run_id,
+            )
+        )
         .where(capability_run.c.task_id == task_id)
         .where(capability_run.c.capability == OPTIONS_SCOPING)
-        .where(capability_run.c.status.in_(("succeeded", "degraded", "aborted")))
+        .where(capability_run.c.status.notin_(("running", "paused")))
         .order_by(capability_run.c.started_at.desc())
         .limit(1)
-    ).scalar_one_or_none()
+    ).scalars().first()
     return int(version) if version is not None else None
 
 
@@ -424,12 +439,48 @@ def _apply_scoping_patch(plan: ScopingPlan, patch: Any) -> ScopingPlan:
     return validated
 
 
+def _labelled_answer(payload: AnswerPayloadOut | None) -> AnswerPayloadOut | None:
+    """Apply the read-time appraisal labels to one turn's citations (C2).
+
+    ``appraise`` pins its labels as read-time copy and never persists them —
+    a stored label could drift from its score — so a citation persists the
+    numeric ``appraisal_score`` and every read boundary derives
+    ``appraisal_label`` from it fresh, dropping the score. The chat route does
+    this at ``conversations.py``'s projection; a Task Agent answer carries the
+    same payload and owes the same boundary, or the raw score reaches the wire
+    and the chip has nothing to render.
+
+    Args:
+        payload: The turn's citation half, or ``None`` on a turn with no answer.
+
+    Returns:
+        A copy with labelled citations, or the argument unchanged when there
+        is no answer to label.
+    """
+    if payload is None:
+        return None
+    return payload.model_copy(
+        update={"citations": apply_appraisal_labels(payload.citations)}
+    )
+
+
+def _labelled(turn: TaskAgentTurnOut) -> TaskAgentTurnOut:
+    """Return one turn as the wire carries it: citations labelled, scores gone.
+
+    Applied to what is **returned**, never to what is stored: the durable row
+    keeps the score, which is what makes the label derivable at all.
+    """
+    if turn.answer is None:
+        return turn
+    return turn.model_copy(update={"answer": _labelled_answer(turn.answer)})
+
+
 def _response_from_row(row: RowMapping) -> TaskAgentTurnOut:
     """Return a completed turn's stored projected response without recomputing it."""
     response = row["response"]
     if response is None:
         raise RuntimeError("completed task_agent transcript row has no response")
-    return TaskAgentTurnOut.model_validate(response)
+    return _labelled(TaskAgentTurnOut.model_validate(response))
 
 
 #: Part ids each capability's Task Agent may propose. Closed per capability:
@@ -579,7 +630,10 @@ def _transcript_out(row: RowMapping, capability: str) -> TaskAgentTranscriptTurn
         created_at=row["created_at"],
         completed_at=row["completed_at"],
         kind=projected.kind if projected is not None else None,
-        answer=projected.answer if projected is not None else None,
+        # Read-time label mapping (C2), the same boundary the chat read model
+        # applies: the durable payload carries ``appraisal_score``, the wire
+        # carries ``appraisal_label``.
+        answer=_labelled_answer(projected.answer) if projected is not None else None,
         decision=projected.decision if projected is not None else None,
     )
 
@@ -593,10 +647,14 @@ class _Reserved:
         gate: The baseline gate this turn must be sorted against, when the
             task's scoping walk is paused on one; ``None`` for an ordinary
             planning turn.
+        retried: Whether this is a re-run of a row that was already reserved —
+            the only case in which the row may already carry a durable half
+            (X6), so the only case worth a query to look.
     """
 
     transcript_id: uuid.UUID
     gate: PausedGate | None
+    retried: bool = False
 
 
 def _paused_gate(
@@ -680,7 +738,7 @@ def _phase_one_turn(
         ).scalar_one()
         if latest_id != existing["id"]:
             raise ApiConflict("stale_turn", "only the latest Task Agent turn may be retried")
-        return _Reserved(cast(uuid.UUID, existing["id"]), gate)
+        return _Reserved(cast(uuid.UUID, existing["id"]), gate, retried=True)
 
     pending = conn.execute(
         select(task_agent_transcript.c.id)
@@ -790,6 +848,57 @@ def _complete_gate_turn(
             raise RuntimeError("task_agent transcript turn was not open at its gate commit")
 
 
+def _persist_half_turn(
+    engine: Engine,
+    *,
+    task_id: uuid.UUID,
+    transcript_id: uuid.UUID,
+    half: TaskAgentTurnOut,
+) -> None:
+    """Record the durable half of a turn that is only half over (X6).
+
+    A "change the plan" decision carrying an instruction commits the decision
+    and *then* calls the planner. If that call crashes, the decision is
+    already durable but the row is failed, and the retry sees no gate — the
+    walk is gone — so it completes as an ordinary planning reply and the
+    thread never shows the decision that ended the run.
+
+    So the decision is written onto the reserved row the moment it is durable,
+    with the row still ``pending``: a projection that is valid on its own (the
+    transcript renders it as the decision it is) and that phase two reads back
+    when it no longer has the decision in hand.
+    """
+    with engine.begin() as conn:
+        conn.execute(
+            update(task_agent_transcript)
+            .where(task_agent_transcript.c.id == transcript_id)
+            .where(task_agent_transcript.c.task_id == task_id)
+            .where(task_agent_transcript.c.status.in_(("pending", "failed")))
+            .values(response=half.model_dump(mode="json"))
+        )
+
+
+def _stored_decision(conn: Connection, transcript_id: uuid.UUID) -> TurnDecisionOut | None:
+    """Read back the decision a half-committed turn already recorded (X6).
+
+    Returns ``None`` when the row carries no projection, or one that is not a
+    decision — a retry of an ordinary planning turn, which is the common case.
+    """
+    stored = conn.execute(
+        select(task_agent_transcript.c.response).where(
+            task_agent_transcript.c.id == transcript_id
+        )
+    ).scalar_one_or_none()
+    if not isinstance(stored, dict):
+        return None
+    try:
+        projected = TaskAgentTurnOut.model_validate(stored)
+    except ValidationError:
+        log.warning("task_agent_stored_half_unreadable", transcript_id=str(transcript_id))
+        return None
+    return projected.decision if projected.kind == "decision" else None
+
+
 def _dispatch_gate_turn(
     engine: Engine,
     *,
@@ -848,6 +957,21 @@ def _dispatch_gate_turn(
                 trace_run_id=transcript_id,
                 conversation_id=conversation_id,
             )
+            if answer is None:
+                # The card resumed the walk while the sort was running (C7):
+                # there is no longer a paused walk to answer over. The turn is
+                # still the user's and still durable — it says what happened,
+                # the same way the loser of a decision race does.
+                lost = TaskAgentTurnOut(
+                    reply=gate_turns.ALREADY_ANSWERED_REPLY,
+                    kind="reply",
+                    capability=OPTIONS_SCOPING,
+                    conversation_id=conversation_id,
+                )
+                _complete_gate_turn(
+                    engine, task_id=task_id, transcript_id=transcript_id, result=lost
+                )
+                return lost
             result = TaskAgentTurnOut(
                 reply=answer.prose,
                 kind="answer",
@@ -861,7 +985,9 @@ def _dispatch_gate_turn(
             _complete_gate_turn(
                 engine, task_id=task_id, transcript_id=transcript_id, result=result
             )
-            return result
+            # Stored raw, returned labelled (C2): the score is the durable
+            # fact and the label is derived on every read.
+            return _labelled(result)
 
         if sort.kind == "decision":
             option_id = cast(str, sort.option_id)
@@ -871,6 +997,10 @@ def _dispatch_gate_turn(
                 gate=gate,
                 option_id=option_id,
                 carried_text=sort.carried_text,
+                # The utterance the carried instruction must be part of (S2):
+                # what the planner is told is the user's own words, never the
+                # sort's paraphrase of them.
+                utterance=utterance,
                 actor=user_id,
             )
             decision = TurnDecisionOut(
@@ -881,6 +1011,20 @@ def _dispatch_gate_turn(
                 plan_version=gate.plan_version,
             )
             if outcome.carried_text is not None:
+                # Durable now, because the planner call below can crash after
+                # it and the decision must not be lost with it (X6).
+                _persist_half_turn(
+                    engine,
+                    task_id=task_id,
+                    transcript_id=transcript_id,
+                    half=TaskAgentTurnOut(
+                        reply=outcome.reply,
+                        kind="decision",
+                        decision=decision,
+                        capability=OPTIONS_SCOPING,
+                        conversation_id=conversation_id,
+                    ),
+                )
                 return _ContinuedTurn(carried_text=outcome.carried_text, decision=decision)
             result = TaskAgentTurnOut(
                 reply=outcome.reply,
@@ -1039,6 +1183,14 @@ def create_task_agent_turn(
             # an ordinary planning turn on the user's own words (X6).
             planner_message = sorted_turn.carried_text
             carried_decision = sorted_turn.decision
+        elif phase_one.retried:
+            # A retry of the *second* half of such a turn: the walk is already
+            # gone, so there is no gate to sort against and the decision lives
+            # only on the row. Read it back, or the thread would render this
+            # turn as an ordinary reply and lose the decision that ended the
+            # run (X6).
+            with engine.connect() as conn:
+                carried_decision = _stored_decision(conn, transcript_id)
 
         with engine.connect() as conn:
             capability = capability_of_task(conn, task_id)
@@ -1224,7 +1376,7 @@ def list_task_agent_turns(
     grade — owner ∪ same-org colleague ∪ administrator — but
     :func:`_expire_stale_pending_turns` is a *write*, and contract § 3 makes
     the admin leg read-only: a support read that fails somebody else's pending
-    task_agent turn is a mutation nobody asked for and nothing records. So the
+    Task Agent turn is a mutation nobody asked for and nothing records. So the
     sweep runs only for the owner, whose own turn it is. Nothing is lost: the
     owner's own GET sweeps, and every mutating task_agent path sweeps under the
     write grade before it does anything.
@@ -1544,7 +1696,14 @@ def patch_plan(
 ) -> PlanOut:
     """Apply typed edits to the current plan and persist a new approved version."""
     with engine.begin() as conn:
-        accessible_task(conn, task_id=task_id, user_id=user.user_id, write=True)
+        # The task row lock, for the reason ``POST /runs`` and the turn route
+        # take it (X5): the "no running/paused walk" check below and the new
+        # version's insert must be one atomic decision, or two concurrent
+        # edits both read the same latest version and the loser surfaces
+        # ``uq_plan_task_version`` as a raw 500.
+        accessible_task(
+            conn, task_id=task_id, user_id=user.user_id, write=True, for_update=True
+        )
         _expire_stale_pending_turns(conn, task_id)
         run_active = (
             conn.execute(
@@ -1694,7 +1853,13 @@ def confirm_baseline(
     does not fill the plan's history with duplicates.
     """
     with engine.begin() as conn:
-        accessible_task(conn, task_id=task_id, user_id=user.user_id, write=True)
+        # Locked for the same reason :func:`patch_plan` locks (X5): the walk
+        # check and the new version's insert are one decision, and two
+        # simultaneous confirms must serialise rather than race the plan's
+        # version unique constraint into a 500.
+        accessible_task(
+            conn, task_id=task_id, user_id=user.user_id, write=True, for_update=True
+        )
         if capability_of_task(conn, task_id) != OPTIONS_SCOPING:
             raise HTTPException(
                 status_code=422,

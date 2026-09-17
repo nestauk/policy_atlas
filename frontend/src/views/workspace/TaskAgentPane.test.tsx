@@ -540,4 +540,28 @@ describe("TaskAgentPane — the options-scoping baseline gate", () => {
     expect(screen.getByRole("button", { name: "Refresh conversation" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Retry" })).not.toBeInTheDocument();
   });
+
+  // Task 044 review, C3: the walk is `paused` (so `runActive` is true) but
+  // the composer stays open at the gate — the suggestion chips must gate on
+  // that same fence, not on `runActive`, or an ask-back turn's suggestions
+  // never render while parked on the gate.
+  it("renders an ask-back turn's suggestions as chips at the gate", async () => {
+    mockPane({ turns: [] });
+    vi.mocked(mutations.useTaskAgentTurn).mockReturnValue({
+      mutateAsync: vi.fn().mockResolvedValue({ suggestions: ["Does this cover care leavers?"] }),
+      isPending: false,
+    } as unknown as ReturnType<typeof mutations.useTaskAgentTurn>);
+    const user = userEvent.setup();
+    renderPane();
+
+    await user.type(
+      screen.getByLabelText("Message the Task Agent"),
+      "Does the baseline cover care leavers?",
+    );
+    await user.click(screen.getByRole("button", { name: "Send" }));
+
+    expect(
+      await screen.findByRole("button", { name: "Does this cover care leavers?" }),
+    ).toBeInTheDocument();
+  });
 });

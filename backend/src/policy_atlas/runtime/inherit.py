@@ -28,6 +28,7 @@ from policy_atlas.core.schema import (
     artefact,
     block,
     capability_run,
+    runs,
     search_coverage_record,
     synthesis_result,
     task,
@@ -110,9 +111,11 @@ def _plan_payload(
 ) -> dict[str, object]:
     """The payload of the plan version the pinned walk ran.
 
-    Falls back to the source task's latest approved plan when the walk's own
-    plan row is gone (e.g. a future retention sweep), logging a warning —
-    a scoping plan should never silently start from nothing.
+    Fails closed: a walk whose own plan row is gone (a data fault, or a future
+    retention sweep) inherits nothing and logs a warning. Substituting the
+    source task's latest approved plan would put a plan the linked report was
+    never written against into the Task Agent's context, under the link's claim
+    that this is what that walk ran — worse than an empty fenced block.
     """
     plan_id = conn.execute(
         select(capability_run.c.plan_id).where(
@@ -131,19 +134,11 @@ def _plan_payload(
     )
     if payload is None:
         logger.warning(
-            "inherit.plan_missing_fallback_to_latest_approved",
+            "inherit.plan_row_missing",
             source_task_id=str(source_task_id),
             source_capability_run_id=str(run_id),
         )
-        payload = conn.execute(
-            select(task_plan.c.payload)
-            .where(
-                task_plan.c.task_id == source_task_id,
-                task_plan.c.status == "approved",
-            )
-            .order_by(task_plan.c.version.desc())
-            .limit(1)
-        ).scalar_one_or_none()
+        return {}
     return payload if isinstance(payload, dict) else {}
 
 
@@ -208,30 +203,33 @@ def _coverage_text(
 ) -> str:
     """The pinned walk's search coverage record, as one plain sentence.
 
-    Scoped to the walk's own evidence scope (``capability_run.evidence_scope_id``),
-    not the source task's current state, so a source task that searches
-    again under a later question cannot change what an earlier link
-    inherited. The sentence formula is the backend's own coverage
-    composition (``api.readmodels.repository.coverage_out``), ported here
-    scoped-by-record rather than latest-for-task; no frontend equivalent
-    exists to reuse instead.
+    Pinned to the walk itself, not to its evidence scope: a record is written
+    per acquire run (``search_coverage_record.acquired_by_run_id``), and a
+    rerun of the same approved plan writes a second record into the same
+    scope, so a scope-scoped read would silently hand the link a later walk's
+    verdict. The join through ``runs.capability_run_id`` keeps the read to the
+    acquire runs of the pinned walk, and a walk with no record of its own
+    inherits no coverage sentence rather than the newest one. Within one walk
+    (a deep run acquires more than once) the last record stands. The sentence
+    formula is the backend's own coverage composition
+    (``api.readmodels.repository.coverage_out``), ported here scoped-by-walk
+    rather than latest-for-task; no frontend equivalent exists to reuse.
     """
-    scope_id = conn.execute(
-        select(capability_run.c.evidence_scope_id).where(
-            capability_run.c.capability_run_id == run_id,
-            capability_run.c.task_id == source_task_id,
-        )
-    ).scalar_one_or_none()
-    if scope_id is None:
-        return ""
     row = conn.execute(
         select(
             search_coverage_record.c.stop_condition,
             search_coverage_record.c.adequacy_verdict,
         )
+        .select_from(
+            search_coverage_record.join(
+                runs,
+                (runs.c.run_id == search_coverage_record.c.acquired_by_run_id)
+                & (runs.c.task_id == search_coverage_record.c.task_id),
+            )
+        )
         .where(
             search_coverage_record.c.task_id == source_task_id,
-            search_coverage_record.c.evidence_scope_id == scope_id,
+            runs.c.capability_run_id == run_id,
         )
         .order_by(search_coverage_record.c.created_at.desc())
         .limit(1)

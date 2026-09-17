@@ -460,11 +460,11 @@ def own_conversation_leg(user_id: str) -> ColumnElement[bool]:
     **A NULL ``created_by`` is not only a legacy state.** The migration
     backfilled pre-033 rows from their task's owner, but
     ``runtime/conversation_lifecycle.ensure_active_task_agent_conversation``
-    still inserts every task_agent conversation without the column — they are
+    still inserts every Task Agent conversation without the column — they are
     minted by the runtime rather than by a request, so there is no acting
     subject to record. So this disjunct is the live rule for task_agent
     conversations (which is exactly how the owner reaches their own task's
-    task_agent lineage, and why no colleague ever can) and a legacy rule for
+    Task Agent lineage, and why no colleague ever can) and a legacy rule for
     chats, whose creator has been recorded since this slice.
     ``conversations.list_conversations`` states the same thing from the
     listing's side.
@@ -502,7 +502,7 @@ def own_chat_leg(user_id: str) -> ColumnElement[bool]:
 
     The library listing deliberately uses the *un*-narrowed
     :func:`own_conversation_leg` instead — it lists both kinds, and the owner
-    must keep seeing their task's task_agent conversation there.
+    must keep seeing their task's Task Agent conversation there.
 
     Args:
         user_id: The caller's token subject.
@@ -595,6 +595,34 @@ def may_read_task(
     # row made the predicate NULL, which arrived here as ``is None`` and closed
     # every administrator's stream on a task the same leg let them GET.
     return ReadCheck(allowed=True, via_admin=not own_leg)
+
+
+def readable_task_leg(user_id: str) -> ColumnElement[bool]:
+    """The read grade as a predicate over an **already-joined** ``task`` row.
+
+    :func:`readable_task_exists` answers the same question for one named task
+    id with its own ``EXISTS``; this is the correlated form, for a statement
+    that has already joined ``task`` and wants the grade decided per joined
+    row. The Links projection uses it (:func:`_common.links_for_tasks`): a
+    Link grants no read (ADR 0037 decision 2), so the source's *name* is
+    shown only to a caller who could have read that task anyway, and the
+    whole page's worth of sources is graded inside the join that fetches them.
+
+    It resolves through :func:`_read_legs`, the one seam, for the same reason
+    every other read does: a second tenancy predicate written out at the call
+    site is a copy free to drift.
+
+    **No status filter**, exactly as :func:`may_read_task` has none: this is
+    the tenancy grade, and an archived source's Link still names the task the
+    target inherited from.
+
+    Args:
+        user_id: The caller's token subject.
+
+    Returns:
+        A boolean predicate correlated to ``task``.
+    """
+    return _read_legs(task, user_id)
 
 
 def readable_task_exists(task_id: uuid.UUID, user_id: str) -> ColumnElement[bool]:

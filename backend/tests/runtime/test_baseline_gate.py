@@ -23,6 +23,7 @@ from sqlalchemy import update
 from sqlalchemy.engine import Engine
 
 from policy_atlas.core.schema import task, task_plan
+from policy_atlas.runtime import harness
 from policy_atlas.runtime.baseline_gate import (
     GATE_HEADING,
     KEY_ASSUMPTION_ABSENT,
@@ -33,7 +34,7 @@ from policy_atlas.runtime.capability_registry import (
     OPTIONS_SCOPING,
     lattice_for,
 )
-from policy_atlas.runtime.runner import RunPlanOutcome, run_plan
+from policy_atlas.runtime.runner import NullIO, RunPlanOutcome, run_plan
 from policy_atlas.runtime.scoping_plan import (
     BASELINE_CONFIRM,
     ScopingPlan,
@@ -256,6 +257,105 @@ def test_unattended_records_the_gate_instead_of_pausing(engine: Engine) -> None:
             }
         ]
         assert BASELINE_CONFIRM in outcome.collation_render
+    finally:
+        _cleanup(engine, task_id)
+
+
+def test_a_non_pausing_io_records_the_gate_instead_of_auto_confirming(
+    engine: Engine,
+) -> None:
+    """An attended walk whose IO cannot ask anybody must not read as confirmed.
+
+    ``NullIO`` answers every pause with ``Continue()`` itself, so an attended
+    scoping walk driven by it would end ``succeeded`` with a user-continue
+    decision at the gate — the frontend reads that as a confirmed plan. Record
+    it the way Unattended does instead, so the collation says nobody confirmed.
+    """
+    task_id: uuid.UUID | None = None
+    try:
+        task_id, scope_id = seed_scoping_task(engine)
+        outcome, _plan_id = run_scoping_walk(
+            engine,
+            task_id=task_id,
+            scope_id=scope_id,
+            plan=scoping_plan(steering_mode="moderate"),
+            io=NullIO(),
+        )
+        assert outcome.status == "succeeded"
+
+        from policy_atlas.core import events
+
+        with engine.connect() as conn:
+            decisions = [
+                entry["payload"]
+                for entry in events.read(conn, task_id)
+                if entry["event_type"] == "steering.decision"
+            ]
+        gate_decisions = [
+            payload
+            for payload in decisions
+            if payload.get("standing_rule", {}).get("steer_point") == BASELINE_CONFIRM
+        ]
+        assert len(gate_decisions) == 1
+        assert gate_decisions[0]["decided_by"] == "standing_default"
+        assert gate_decisions[0]["component"] == "synthesise"
+        # No decision at the gate claims a user took it.
+        assert not [
+            payload
+            for payload in decisions
+            if payload.get("component") == "synthesise"
+            and payload.get("decided_by") != "standing_default"
+        ]
+        assert [
+            flag for flag in outcome.flagged_events if flag.get("steer_point") == BASELINE_CONFIRM
+        ] == [
+            {
+                "component": "synthesise",
+                "status": "auto_resolved",
+                "steer_point": BASELINE_CONFIRM,
+                "rule": BASELINE_CONFIRM,
+                "action": "proceed_flag",
+            }
+        ]
+    finally:
+        _cleanup(engine, task_id)
+
+
+# --- a failed synthesise ----------------------------------------------------
+
+
+def test_the_gate_does_not_pause_over_a_failed_synthesise(
+    engine: Engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """C1: a baseline that was never written is nothing to confirm against.
+
+    A failed synthesise reaches the after-component boundary handler (as an
+    anomalous boundary) before the spine check ends the walk, so the gate would
+    otherwise render its card over an artefact with no sections.
+    """
+
+    def failing_synthesise_scope(*args: Any, **kwargs: Any) -> dict[str, Any]:
+        del args, kwargs
+        raise RuntimeError("forced persistent synthesise failure")
+
+    monkeypatch.setattr(harness, "synthesise_scope", failing_synthesise_scope)
+    task_id: uuid.UUID | None = None
+    try:
+        task_id, scope_id = seed_scoping_task(engine)
+        io = ScriptedIO()
+        outcome, _plan_id = run_scoping_walk(
+            engine,
+            task_id=task_id,
+            scope_id=scope_id,
+            plan=scoping_plan(steering_mode="frequent"),
+            io=io,
+        )
+        assert outcome.status == "failed"
+        assert _gate_pauses(io) == []
+        assert all(GATE_HEADING not in render for _point, render in io.pauses)
+        assert all(
+            flag.get("steer_point") != BASELINE_CONFIRM for flag in outcome.flagged_events
+        )
     finally:
         _cleanup(engine, task_id)
 

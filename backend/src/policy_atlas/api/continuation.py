@@ -78,6 +78,13 @@ class InvalidResponseError(ValueError):
     """Raised when a response is outside the pause's durable affordances."""
 
 
+#: What the options-scoping baseline gate says to anything but its own two
+#: options. It names them rather than describing the refusal (X3).
+_GATE_OPTIONS_ONLY = (
+    "this check-in offers Confirm plan and build longlist, or Change the plan"
+)
+
+
 @dataclass(frozen=True)
 class AnswerResult:
     """The durable result of answering a parked check-in.
@@ -202,16 +209,30 @@ def answer_check_in(
             raise InvalidResponseError("free text must be compiled before it is confirmed")
         if kind == "free_text_confirm":
             raise InvalidResponseError("free-text confirmation uses confirm_free_text")
+        # The baseline gate offers two **ends**, and both of them are written
+        # out: "Confirm plan and build longlist" finishes the walk, "Change
+        # the plan" ends it and leaves the plan ``approved`` so it can be
+        # edited. The generic ``abort`` is neither — it abandons the plan —
+        # and reaching it here would hand the user a plan they were invited to
+        # change and cannot (X3). So at this one pause the universal floor is
+        # closed and only the offered ids are answers.
+        at_baseline_gate = _is_baseline_gate(pause.payload)
         if kind == "abort":
+            if at_baseline_gate:
+                raise InvalidResponseError(_GATE_OPTIONS_ONLY)
             return _persist_abort(
                 conn, task_id=task_id, pause=pause, state=state, actor=actor
             )
         if kind != "option":
             raise InvalidResponseError("check-in response kind is not supported")
 
-        option = _offered_option(pause.payload, _require_str(response, "option_id"))
+        option = _offered_option(
+            pause.payload,
+            _require_str(response, "option_id"),
+            allow_floor=not at_baseline_gate,
+        )
         params = _field(response, "params")
-        if _is_baseline_gate(pause.payload):
+        if at_baseline_gate:
             # The gate's two options are ends, not amendments: the pause payload
             # names the steer point, so neither branch is keyed off the option
             # id alone.
@@ -234,7 +255,7 @@ def answer_check_in(
                 actor=actor,
                 decision_extra=(
                     _baseline_gate_decision(pause.payload, state)
-                    if _is_baseline_gate(pause.payload)
+                    if at_baseline_gate
                     else None
                 ),
             )
@@ -1190,21 +1211,33 @@ def _validate_offered_authored_delta(
         raise InvalidResponseError(f"authored option refused: {exc}") from exc
 
 
-def _offered_option(pause_payload: dict[str, Any], option_id: str) -> dict[str, Any]:
+def _offered_option(
+    pause_payload: dict[str, Any], option_id: str, *, allow_floor: bool = True
+) -> dict[str, Any]:
     """Return a durable offered option, including its presentation affordances.
 
     ``continue`` and ``abort`` are the universal floor at every pause (the
     in-process path accepts them regardless of the rendered option list, and
     a generic ``check_in`` pause may carry no explicit options at all) — they
     validate even when absent from the stored list.
+
+    Args:
+        pause_payload: The durable ``steering.pause`` payload.
+        option_id: The id being answered with.
+        allow_floor: Whether the ``continue``/``abort`` floor applies. The
+            options-scoping baseline gate passes ``False``: its two options
+            are ends, written out, and the floor's generic ``abort`` abandons
+            the plan the gate exists to let the user change (X3).
     """
     options = pause_payload.get("options") or []
     if not isinstance(options, list) or not all(isinstance(option, dict) for option in options):
         raise InvalidResponseError("check-in has malformed options")
     option = next((item for item in options if item.get("id") == option_id), None)
-    if option is None and option_id in ("continue", "abort"):
+    if option is None and allow_floor and option_id in ("continue", "abort"):
         option = {"id": option_id}
     if option is None:
+        if not allow_floor:
+            raise InvalidResponseError(_GATE_OPTIONS_ONLY)
         raise InvalidResponseError("option was not offered at this check-in")
     selected = dict(option)
     selected["_rerun_component"] = _optional_str(pause_payload.get("rerun_component"))

@@ -1,7 +1,7 @@
 import { useState } from "react";
 
 import { useConfirmBaseline, usePatchPlan, useStartRun } from "../../api/mutations";
-import { useArtefact, usePlan, useRuns } from "../../api/queries";
+import { usePlan, useRuns } from "../../api/queries";
 import { conflictSentences, isConflictCode } from "../../lib/errors";
 import { overlayIsDirty, overlayToPlanPatch, type PlanOverlay } from "./planOverlay";
 
@@ -121,9 +121,10 @@ export function usePlanStart({
 
 /**
  * The scoping plan document's start area (contract deliverable 5, owner
- * correction 2026-09-09). Five states off the latest walk and the current
- * plan version — never a "newer than" heuristic, because a walk's own
- * pause/finish state is definitive:
+ * correction 2026-09-09; reworked task 044 review C6). States off the latest
+ * walk, the latest walk that actually wrote a baseline (`baselineRun`, read
+ * off `artefact_id !== null` — never a status guess), and the current plan
+ * version:
  *
  *   - no walk yet → `build`: one primary action, with the time band.
  *   - latest walk `running` or `paused` → `none`: the gate's check-in card
@@ -131,18 +132,16 @@ export function usePlanStart({
  *     .../plan/confirm-baseline` is 409 `run_active` while a walk is running
  *     or paused, so this component must offer nothing to click.
  *   - `baseline_confirmed.plan_version === plan.version` → `confirmed`.
- *   - latest walk `succeeded` (or `degraded` — it still produced a baseline)
- *     and `plan.version === walk.plan_version` → also `confirmed`: a
- *     succeeded walk can only have finished through the gate's Confirm
- *     option or the unattended standing default, so the record already
- *     exists even before this task's own confirm-baseline call has fired.
- *   - latest walk finished (`succeeded`/`degraded`/`aborted`) and
- *     `plan.version > walk.plan_version` (edited since) → `rebuild_or_confirm`.
- *   - latest walk `aborted` and `plan.version === walk.plan_version` (the
- *     user chose Change the plan but has not changed it yet) → also
- *     `rebuild_or_confirm`.
- *   - anything else (a `failed`/`interrupted` walk with nothing usable to
- *     confirm or rebuild from) → `build`, the same fresh-start action.
+ *   - `baselineRun` exists, its status `succeeded`/`degraded`, and
+ *     `plan.version === baselineRun.plan_version` → also `confirmed`: it can
+ *     only have finished through the gate's Confirm option or the unattended
+ *     standing default, so the record already exists even before this task's
+ *     own confirm-baseline call has fired.
+ *   - `baselineRun` exists otherwise (the plan moved on since it wrote the
+ *     baseline, or it was aborted at the gate, or a later rebuild
+ *     aborted/failed before writing one of its own) → `rebuild_or_confirm`.
+ *   - no `baselineRun` (nothing has ever reached synthesise) → `build`, the
+ *     same fresh-start action.
  */
 /** The one sentence that says the plan is settled and what happens next.
  *  Shared by the plan document's start area and the Result band so the two
@@ -183,6 +182,10 @@ interface ScopingWalk {
   status: string;
   started_at: string;
   plan_version: number;
+  /** The artefact this walk wrote, or null/absent when it never reached
+   *  synthesise (or ended before it). A walk that carries one produced a
+   *  baseline, whatever its terminal status (task 044 review, C6). */
+  artefact_id?: string | null;
 }
 
 /**
@@ -200,7 +203,8 @@ interface ScopingWalk {
  *   baselineConfirmed: The plan's `baseline_confirmed` record, if any.
  *
  * Returns:
- *   The latest-started walk and the three version comparisons the rules use.
+ *   The latest-started walk, the latest-started walk that actually wrote a
+ *   baseline, and whether the plan is settled.
  */
 export function scopingWalkStatus({
   runs,
@@ -214,27 +218,34 @@ export function scopingWalkStatus({
   // The most recently STARTED walk, whatever its status — the gate's own
   // pause/finish state decides what these surfaces say, not just the walks
   // that happen to have produced a result.
-  const latestRun =
-    [...runs].sort((left, right) => right.started_at.localeCompare(left.started_at))[0] ?? null;
+  const sorted = [...runs].sort((left, right) => right.started_at.localeCompare(left.started_at));
+  const latestRun = sorted[0] ?? null;
+  // The latest-started walk that carries an artefact (task 044 review, C6) —
+  // whether a walk "produced a baseline" is this fact, not a status guess. A
+  // later walk that never reached synthesise (still running, or aborted at
+  // the gate before writing) must not hide an earlier baseline that is still
+  // the one worth confirming or rebuilding from.
+  const baselineRun = sorted.find((run) => run.artefact_id != null) ?? null;
   const confirmedForCurrentVersion =
     baselineConfirmed !== null &&
     currentVersion !== null &&
     baselineConfirmed.plan_version === currentVersion;
-  const sameVersionAsLatestWalk =
-    latestRun !== null && currentVersion !== null && currentVersion === latestRun.plan_version;
-  const newerVersionThanLatestWalk =
-    latestRun !== null && currentVersion !== null && currentVersion > latestRun.plan_version;
+  const baselineRunConfirmed =
+    baselineRun !== null &&
+    currentVersion !== null &&
+    baselineProduced(baselineRun.status) &&
+    currentVersion === baselineRun.plan_version;
   return {
     latestRun,
-    confirmedForCurrentVersion,
-    sameVersionAsLatestWalk,
-    newerVersionThanLatestWalk,
+    baselineRun,
     /** The plan is settled for the version on screen: either the record says
-     *  so, or a walk that produced a baseline finished on this very version
+     *  so, or the walk that wrote the baseline finished on this very version
      *  (it can only have finished through Confirm or the standing default). */
-    confirmed:
-      confirmedForCurrentVersion ||
-      (latestRun !== null && baselineProduced(latestRun.status) && sameVersionAsLatestWalk),
+    confirmed: confirmedForCurrentVersion || baselineRunConfirmed,
+    /** The plan has moved on since `baselineRun` wrote the baseline — the
+     *  Result band's "built from plan version N" mark (task 044, C18). */
+    newerVersionThanBaselineRun:
+      baselineRun !== null && currentVersion !== null && currentVersion > baselineRun.plan_version,
   };
 }
 
@@ -249,7 +260,6 @@ export function useScopingPlanStart({
 }): ScopingStartState {
   const planQuery = usePlan(taskId);
   const runsQuery = useRuns(taskId, { page_size: SCOPING_RUNS_PAGE_SIZE });
-  const artefactQuery = useArtefact(taskId);
   const startRun = useStartRun(taskId);
   const confirmBaseline = useConfirmBaseline(taskId);
   const [notice, setNotice] = useState<string | null>(null);
@@ -257,12 +267,7 @@ export function useScopingPlanStart({
   const planOut = planQuery.data;
   const scoping = planOut?.scoping ?? null;
   const currentVersion = planOut?.version ?? null;
-  const {
-    latestRun,
-    confirmedForCurrentVersion,
-    sameVersionAsLatestWalk,
-    newerVersionThanLatestWalk,
-  } = scopingWalkStatus({
+  const { latestRun, baselineRun, confirmed } = scopingWalkStatus({
     runs: runsQuery.data?.data ?? [],
     currentVersion,
     baselineConfirmed: scoping?.baseline_confirmed ?? null,
@@ -280,11 +285,10 @@ export function useScopingPlanStart({
   };
 
   const confirmAndBuildLonglist = () => {
-    const artefactId = artefactQuery.data?.artefact_id;
-    if (currentVersion === null || artefactId === undefined) return;
+    if (currentVersion === null || baselineRun === null || baselineRun.artefact_id == null) return;
     setNotice(null);
     confirmBaseline.mutate(
-      { artefact_id: artefactId, plan_version: currentVersion },
+      { artefact_id: baselineRun.artefact_id, plan_version: currentVersion },
       {
         onError: (error) => {
           const code = (error as { code?: string }).code;
@@ -315,23 +319,19 @@ export function useScopingPlanStart({
     confirm: {
       label: confirmBaseline.isPending ? "Confirming…" : "Confirm plan and build longlist",
       onConfirm: confirmAndBuildLonglist,
-      disabled: confirmBaseline.isPending || runActive || artefactQuery.data?.artefact_id === undefined,
+      disabled: confirmBaseline.isPending || runActive || baselineRun === null,
     },
     notice,
   });
 
   if (latestRun === null) return build();
   if (latestRun.status === "running" || latestRun.status === "paused") return { kind: "none" };
-  if (confirmedForCurrentVersion) return { kind: "confirmed" };
-  if (baselineProduced(latestRun.status) && sameVersionAsLatestWalk) return { kind: "confirmed" };
-  if (
-    (baselineProduced(latestRun.status) || latestRun.status === "aborted") &&
-    newerVersionThanLatestWalk
-  ) {
-    return rebuildOrConfirm();
-  }
-  if (latestRun.status === "aborted" && sameVersionAsLatestWalk) return rebuildOrConfirm();
-  // `failed` / `interrupted`: nothing usable was produced — the same
-  // fresh-start action as before any walk at all.
+  if (confirmed) return { kind: "confirmed" };
+  // A baseline exists but not for the version on screen — the plan moved on,
+  // or the walk that wrote it was aborted at the gate, or a later rebuild
+  // aborted/failed before writing one of its own.
+  if (baselineRun !== null) return rebuildOrConfirm();
+  // Nothing was ever produced (`failed`/`interrupted`, or aborted before
+  // synthesise) — the same fresh-start action as before any walk at all.
   return build();
 }

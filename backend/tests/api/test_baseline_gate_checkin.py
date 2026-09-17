@@ -20,6 +20,7 @@ from sqlalchemy.engine import Engine
 
 from policy_atlas.api.continuation import (
     AlreadyAnsweredError,
+    InvalidResponseError,
     answer_check_in,
     claim_continuation,
     execute_continuation,
@@ -197,6 +198,67 @@ def test_change_plan_ends_the_walk_and_leaves_the_plan_approved(engine: Engine) 
         decision = _decisions(engine, task_id)[-1]
         assert decision["response"] == "abort"
         assert decision["action"] == "change_plan"
+    finally:
+        _cleanup(engine, task_id)
+
+
+def test_the_gate_refuses_everything_but_its_own_two_options(engine: Engine) -> None:
+    """X3: the generic floor is closed here — ``abort`` would abandon the plan.
+
+    "Change the plan" ends the walk and leaves the plan ``approved`` so it can
+    be edited; the universal ``abort`` marks it ``abandoned``, which would hand
+    the user a plan they were invited to change and cannot. Neither the bare
+    ``abort`` kind nor the ``abort`` option id may reach it.
+    """
+    task_id: uuid.UUID | None = None
+    try:
+        task_id, capability_run_id, check_in_id, plan_id = _park_at_gate(engine)
+        for response in (
+            {"kind": "abort"},
+            _option("abort"),
+            _option("continue"),
+            _option("start_the_longlist"),
+        ):
+            with pytest.raises(InvalidResponseError):
+                answer_check_in(
+                    engine,
+                    task_id=task_id,
+                    check_in_id=check_in_id,
+                    response=response,
+                    actor="user-1",
+                )
+        with engine.connect() as conn:
+            assert (
+                conn.execute(
+                    select(task_plan.c.status).where(task_plan.c.plan_id == plan_id)
+                ).scalar_one()
+                == "approved"
+            )
+            assert (
+                conn.execute(
+                    select(capability_run.c.status).where(
+                        capability_run.c.capability_run_id == capability_run_id
+                    )
+                ).scalar_one()
+                == "paused"
+            )
+        # Nothing was decided *at the gate* (the walk's own earlier boundaries
+        # are its own).
+        assert [
+            payload
+            for payload in _decisions(engine, task_id)
+            if payload.get("component") == "synthesise"
+        ] == []
+
+        # The two real options are untouched.
+        answer_check_in(
+            engine,
+            task_id=task_id,
+            check_in_id=check_in_id,
+            response=_option("change_plan"),
+            actor="user-1",
+        )
+        assert _decisions(engine, task_id)[-1]["action"] == "change_plan"
     finally:
         _cleanup(engine, task_id)
 

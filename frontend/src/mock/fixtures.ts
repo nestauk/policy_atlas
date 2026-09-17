@@ -1,6 +1,5 @@
 import type { components } from "../api/gen/types";
 import { TASK } from "../lib/vocabulary";
-import type { ArtefactTemplateFields } from "../views/baselineBand";
 
 export const MOCK_TASK_ID = "0d91c2e7-9b9b-4f4d-bd20-1f6819fb3425";
 export const MOCK_RUN_ID = "7b40cc12-c3a7-4457-92fc-23d15a26d433";
@@ -355,8 +354,7 @@ export const mockArtefactSectionProse: Record<number, string> = {
  * (`api/readmodels/repository.py`). The section ORDER is what puts Sources
  * last, not its role.
  */
-export const mockBaselineArtefact: components["schemas"]["ArtefactOut"] &
-  ArtefactTemplateFields = {
+export const mockBaselineArtefact: components["schemas"]["ArtefactOut"] = {
   artefact_id: "00000000-0000-4000-8000-00000000b001",
   title: "Do nothing: current policy and trajectory",
   question:

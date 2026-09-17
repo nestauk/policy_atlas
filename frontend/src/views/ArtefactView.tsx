@@ -1516,7 +1516,7 @@ export function ArtefactView() {
           id: sectionAnchor(section.title, index),
           title: sectionNavLabel(section, 28),
         })),
-        ...(topSources.length > 0 && !baseline
+        ...(topSources.length > 0
           ? [{ id: "sources", title: "Most relevant sources" }]
           : []),
         ...(bodySections.length > 0

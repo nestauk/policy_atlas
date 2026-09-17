@@ -2080,6 +2080,16 @@ def _validate_directive_delta(
         # characterise precedent): validated through the synthesis grammar, and
         # exempt from the plan round-trip below.
         _require_keys(component, delta, {"synthesis"})
+        # ``template`` is in the synthesis grammar because the chain compiler
+        # sets it (``compose_scoping`` names the baseline template); it is not a
+        # steerable shape edit. A steering delta that carried it would switch a
+        # live Evidence search run's output kind to the options-scoping
+        # baseline, whose sections and gate the walk has no plan for.
+        if isinstance(delta["synthesis"], Mapping) and "template" in delta["synthesis"]:
+            raise SteeringAdjustmentError(
+                "the report template is set when the run is planned and cannot be "
+                "changed by a steering adjustment"
+            )
         try:
             # Answer-time validation has no grouping substrate; group_ids are
             # form-checked here and membership-checked at execution (028 M2).

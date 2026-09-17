@@ -122,13 +122,14 @@ class ScopingSteerPointDefaultDraft(BaseModel):
     Attributes:
         steer_point: The point this default covers. In this slice the only
             scoping point is ``baseline_confirm``.
-        action: ``proceed_flag`` (continue and flag) or ``stop``.
+        action: ``proceed_flag`` (continue and flag) — the only value; an
+            unattended walk records the gate and continues, it never stops there.
     """
 
     model_config = ConfigDict(extra="forbid")
 
     steer_point: str = Field(description="'baseline_confirm'.")
-    action: str = Field(description="'proceed_flag' or 'stop'.")
+    action: str = Field(description="'proceed_flag' (the only value).")
 
 
 class ScopingPlanDraftWire(BaseModel):
@@ -520,17 +521,31 @@ def render_linked_context(contexts: list[LinkedTaskContext]) -> str | None:
         blocks.append(
             LINKED_TASK_TEMPLATE.format(
                 index=index,
-                title=sanitize_prompt_field(ctx.title, max_chars=PLANNER_TURN_MAX),
-                plan_json=json.dumps(ctx.plan, ensure_ascii=False, sort_keys=True),
-                report_markdown=sanitize_prompt_field(
-                    ctx.report_markdown, max_chars=LINKED_CONTEXT_MAX
+                title=_fence_safe(sanitize_prompt_field(ctx.title, max_chars=PLANNER_TURN_MAX)),
+                # ``\/`` is a legal JSON escape for ``/``, so the dump stays
+                # valid JSON while no ``</plan>`` inside a field can close it.
+                plan_json=_fence_safe(json.dumps(ctx.plan, ensure_ascii=False, sort_keys=True)),
+                report_markdown=_fence_safe(
+                    sanitize_prompt_field(ctx.report_markdown, max_chars=LINKED_CONTEXT_MAX)
                 ),
-                coverage_text=sanitize_prompt_field(
-                    ctx.coverage_text, max_chars=PLANNER_TURN_MAX
+                coverage_text=_fence_safe(
+                    sanitize_prompt_field(ctx.coverage_text, max_chars=PLANNER_TURN_MAX)
                 ),
             )
         )
     return "\n\n".join(blocks)
+
+
+def _fence_safe(text: str) -> str:
+    """Stop fenced data from closing its own fence.
+
+    The linked-task block is data inside XML-shaped fences; a report body or a
+    plan field carrying ``</report>`` or ``</linked_task>`` would end the fence
+    early and leave the "data, not instructions" rule with nothing structural
+    to lean on (044 review stack, security lane S1). Every ``</`` becomes
+    ``<\\/`` — inert in Markdown and a legal escape inside a JSON string.
+    """
+    return text.replace("</", "<\\/")
 
 
 def build_scoping_messages(

@@ -25,7 +25,7 @@ from policy_atlas.api.deps import (
     get_settings,
 )
 from policy_atlas.api.routers._access import accessible_task
-from policy_atlas.api.routers._common import run_out
+from policy_atlas.api.routers._common import run_artefact_id_column, run_out
 from policy_atlas.api.run_io import ParkIO
 from policy_atlas.api.settings import Settings
 from policy_atlas.core.schema import capability_run, task_agent_transcript, task_plan
@@ -106,7 +106,7 @@ def _await_new_run(
     while time.monotonic() < deadline:
         with engine.connect() as conn:
             rows = conn.execute(
-                select(capability_run)
+                select(capability_run, run_artefact_id_column())
                 .where(capability_run.c.task_id == task_id)
                 .order_by(
                     capability_run.c.started_at.desc(),
@@ -218,7 +218,7 @@ def list_runs(
             .where(capability_run.c.task_id == task_id)
         ).scalar_one()
         rows = conn.execute(
-            select(capability_run)
+            select(capability_run, run_artefact_id_column())
             .where(capability_run.c.task_id == task_id)
             .order_by(capability_run.c.started_at.desc(), capability_run.c.capability_run_id.desc())
             .offset((page - 1) * page_size)
@@ -241,7 +241,7 @@ def get_run(
     with engine.connect() as conn:
         accessible_task(conn, task_id=task_id, user_id=user.user_id, write=False)
         row = conn.execute(
-            select(capability_run)
+            select(capability_run, run_artefact_id_column())
             .where(capability_run.c.task_id == task_id)
             .where(capability_run.c.capability_run_id == run_id)
         ).mappings().one_or_none()

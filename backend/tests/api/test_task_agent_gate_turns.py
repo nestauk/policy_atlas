@@ -42,6 +42,7 @@ from policy_atlas.api.deps import (
 from policy_atlas.api.routers import task_agent as task_agent_router
 from policy_atlas.core import events
 from policy_atlas.core.schema import (
+    artefact,
     capability_run,
     evidence_scope,
     task_agent_transcript,
@@ -347,6 +348,82 @@ def test_the_answer_turn_reloads_from_the_transcript_as_an_answer(
         _cleanup(engine, task_id)
 
 
+def test_a_gate_answer_carries_the_appraisal_label_not_the_score(
+    engine: Engine, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """C2: the score is the durable fact; the wire carries the derived label.
+
+    ``appraise`` pins its labels as read-time copy, so a citation persists the
+    numeric score and every read boundary derives the chip's label from it.
+    The chat route already does this; a Task Agent answer carries the same
+    payload and owes the same boundary — on the POST and on the transcript.
+    """
+    task_id: uuid.UUID | None = None
+    try:
+        task_id, _walk_id, _check_in_id, _plan_id = _park_at_gate(engine)
+        chunk_id, _title = _first_seeded_chunk(engine, task_id)
+        monkeypatch.setattr(gate_turns, "build_section_tools", _citing_tools(chunk_id))
+        with api_client(tmp_path, _overrides(agent=_sorts(_question()))) as (
+            client,
+            owner,
+            _other,
+        ):
+            _own(engine, task_id, owner)
+            posted = _turn(client, owner, task_id, "How good is that source?")
+            listed = client.get(
+                f"/api/v1/tasks/{task_id}/task-agent-turns", headers=owner
+            )
+
+        assert posted.status_code == 200, posted.text
+        stored = _rows(engine, task_id)[-1]["response"]["answer"]["citations"][0]
+        assert stored["appraisal_score"] is not None
+        assert "appraisal_label" not in stored
+        on_the_wire = (
+            posted.json()["answer"]["citations"][0],
+            listed.json()["data"][-1]["answer"]["citations"][0],
+        )
+        for citation in on_the_wire:
+            assert "appraisal_score" not in citation
+            assert citation["appraisal_label"]
+    finally:
+        _cleanup(engine, task_id)
+
+
+def test_a_question_that_loses_the_race_to_the_card_is_not_a_500(
+    engine: Engine, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """C7: the walk was resumed mid-sort, so there is nothing to answer over.
+
+    The turn is the user's and it is durable either way; what it must not be
+    is an internal error.
+    """
+    task_id: uuid.UUID | None = None
+    try:
+        task_id, walk_id, _check_in_id, _plan_id = _park_at_gate(engine)
+        monkeypatch.setattr(
+            gate_turns, "resolve_run_components", lambda *_args, **_kwargs: None
+        )
+        with api_client(tmp_path, _overrides(agent=_sorts(_question()))) as (
+            client,
+            owner,
+            _other,
+        ):
+            _own(engine, task_id, owner)
+            response = _turn(client, owner, task_id, "Is the rise real?")
+
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert body["kind"] == "reply"
+        assert body["reply"] == gate_turns.ALREADY_ANSWERED_REPLY
+        assert body["answer"] is None and body["decision"] is None
+        assert _rows(engine, task_id)[-1]["status"] == "completed"
+        # Nothing was applied: the walk is where the card left it.
+        assert _walk_status(engine, walk_id) == "paused"
+        assert _decision_events(engine, task_id) == []
+    finally:
+        _cleanup(engine, task_id)
+
+
 # --- a decision in words ----------------------------------------------------
 
 
@@ -502,6 +579,62 @@ def test_change_the_plan_with_an_instruction_ends_the_walk_and_replans(
         _cleanup(engine, task_id)
 
 
+def test_a_carried_instruction_the_user_never_typed_falls_back_to_the_utterance(
+    engine: Engine, tmp_path: Path
+) -> None:
+    """S2: the planner's message is the user's own words, not the sort's.
+
+    ``carried_text`` is the one piece of the sort's output treated as the user
+    speaking, so a paraphrase is refused and the whole utterance stands in.
+    """
+    task_id: uuid.UUID | None = None
+    try:
+        task_id, _walk_id, _check_in_id, _plan_id = _park_at_gate(engine)
+        agent = _ReadyScopingAgent()
+        utterance = "No — make it England only"
+        with api_client(
+            tmp_path,
+            _overrides(
+                # A paraphrase: nothing the user typed.
+                agent=_sorts(
+                    _decision("change_plan", "Restrict the geography to England")
+                ),
+                scoping_agent=agent,
+            ),
+        ) as (client, owner, _other):
+            _own(engine, task_id, owner)
+            response = _turn(client, owner, task_id, utterance)
+
+        assert response.status_code == 200, response.text
+        assert agent.messages == [utterance]
+    finally:
+        _cleanup(engine, task_id)
+
+
+def test_a_carried_instruction_is_kept_when_it_is_the_user_s_own_words() -> None:
+    """The accepting branch, including the spellings a quote legitimately changes."""
+    check_in_id = uuid.uuid4()
+    kept = gate_turns.verbatim_carried_text(
+        # Quoted across a line break and lowercased at the sentence start.
+        "change it\nto  England only",
+        utterance="No — Change it to England only",
+        check_in_id=check_in_id,
+    )
+    assert kept == "change it\nto  England only"
+    assert (
+        gate_turns.verbatim_carried_text(
+            None, utterance="No", check_in_id=check_in_id
+        )
+        is None
+    )
+    assert (
+        gate_turns.verbatim_carried_text(
+            "   ", utterance="No", check_in_id=check_in_id
+        )
+        is None
+    )
+
+
 def test_a_replayed_gate_turn_returns_its_stored_projection(
     engine: Engine, tmp_path: Path
 ) -> None:
@@ -543,7 +676,7 @@ def test_a_failure_after_the_decision_leaves_it_durable_and_the_retry_replans(
     """Partial failure, then a retry that re-runs only the planning half (X6)."""
     task_id: uuid.UUID | None = None
     try:
-        task_id, walk_id, _check_in_id, _plan_id = _park_at_gate(engine)
+        task_id, walk_id, check_in_id, _plan_id = _park_at_gate(engine)
         agent = _ReadyScopingAgent(fail_first=True)
         client_turn_id = uuid.uuid4()
         with api_client(
@@ -573,7 +706,18 @@ def test_a_failure_after_the_decision_leaves_it_durable_and_the_retry_replans(
         assert len(_decision_events(engine, task_id)) == 1
         assert len(_plans(engine, task_id)) == 2
         assert _rows(engine, task_id)[-1]["status"] == "completed"
-        assert retried.json()["kind"] is None
+        # And the completed turn still reports the decision that ended the
+        # walk, read back off the half this row recorded before the crash
+        # (X6) — not a bare planning reply that loses it.
+        body = retried.json()
+        assert body["kind"] == "decision"
+        assert body["decision"] == {
+            "option_id": "change_plan",
+            "label": "Change the plan",
+            "check_in_id": str(check_in_id),
+            "capability_run_id": str(walk_id),
+            "plan_version": 1,
+        }
     finally:
         _cleanup(engine, task_id)
 
@@ -868,6 +1012,61 @@ def test_a_decision_without_an_option_sorts_as_unsure() -> None:
 
 
 # --- the prompt's view of a paused walk -------------------------------------
+
+
+def test_an_aborted_walk_that_wrote_nothing_is_not_a_baseline(engine: Engine) -> None:
+    """C5: the artefact is the evidence a baseline exists, not the walk's status.
+
+    A walk aborted at a floor pause after acquire never wrote a baseline. Told
+    one existed, the Task Agent would announce an artefact the user has never
+    seen and the S4 sentence would fire about it.
+    """
+    from tests.runtime.test_baseline_gate import (
+        insert_scoping_plan_row,
+        scoping_plan,
+        seed_scoping_task,
+    )
+
+    task_id: uuid.UUID | None = None
+    try:
+        task_id, scope_id = seed_scoping_task(engine)
+        plan_id = insert_scoping_plan_row(
+            engine, task_id=task_id, scope_id=scope_id, plan=scoping_plan()
+        )
+        walk_id = uuid.uuid4()
+        with engine.begin() as conn:
+            conn.execute(
+                capability_run.insert().values(
+                    capability_run_id=walk_id,
+                    task_id=task_id,
+                    evidence_scope_id=scope_id,
+                    capability=OPTIONS_SCOPING,
+                    plan_id=plan_id,
+                    plan_version=1,
+                    status="aborted",
+                    started_at=now(),
+                    ended_at=now(),
+                )
+            )
+        with engine.connect() as conn:
+            assert task_agent_router._baseline_state(conn, task_id) == NO_BASELINE_STATE
+
+        # The same walk, once it has an artefact against its name.
+        with engine.begin() as conn:
+            conn.execute(
+                artefact.insert().values(
+                    artefact_id=uuid.uuid4(),
+                    task_id=task_id,
+                    capability_run_id=walk_id,
+                    title="Baseline",
+                    created_at=now(),
+                )
+            )
+        with engine.connect() as conn:
+            line = task_agent_router._baseline_state(conn, task_id)
+        assert line == "a baseline exists, built from plan version 1"
+    finally:
+        _cleanup(engine, task_id)
 
 
 def test_the_baseline_state_line_says_the_walk_is_paused(engine: Engine) -> None:

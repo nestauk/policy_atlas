@@ -400,7 +400,9 @@ function StartsFromSection({ links }: { links: TaskLinkOut[] }) {
       <ul className="mt-3 space-y-1.5 text-lead text-white">
         {links.map((link) => (
           <li key={link.link_id}>
-            {`Evidence search: ${scrub(link.source_task_name)} · linked`}
+            {link.source_task_name === null
+              ? "Evidence search: a task you can't open · linked"
+              : `Evidence search: ${scrub(link.source_task_name)} · linked`}
             {link.flagged && (
               <span className={panelHintClass}> · no longer shares a project</span>
             )}

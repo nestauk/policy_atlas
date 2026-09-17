@@ -15,7 +15,8 @@ type ConflictCode =
   | "chat_capacity"
   | "visibility_conflict"
   | "link_project_mismatch"
-  | "link_source_unfinished";
+  | "link_source_unfinished"
+  | "link_source_capability";
 
 /** Human-readable, trigger-local conflict copy — the one place this
  *  copy lives; call sites wire it in rather than inlining their own. */
@@ -37,6 +38,7 @@ export const conflictSentences: Record<ConflictCode, string> = {
   // Task 044 (C11, C12): the two rules a Link must satisfy when it is written.
   link_project_mismatch: `That Evidence search is in a different ${PROJECT.one}. Put both in the same ${PROJECT.one} first.`,
   link_source_unfinished: "That Evidence search has not finished a run yet. Wait for it, then try again.",
+  link_source_capability: "A task can only start from an Evidence search task.",
 };
 
 /**

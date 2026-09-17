@@ -5,7 +5,7 @@ import * as mutations from "../../api/mutations";
 import * as queries from "../../api/queries";
 import { usePlanStart, useScopingPlanStart } from "./planStart";
 
-vi.mock("../../api/queries", () => ({ usePlan: vi.fn(), useRuns: vi.fn(), useArtefact: vi.fn() }));
+vi.mock("../../api/queries", () => ({ usePlan: vi.fn(), useRuns: vi.fn() }));
 vi.mock("../../api/mutations", () => ({
   useStartRun: vi.fn(),
   usePatchPlan: vi.fn(),
@@ -183,18 +183,18 @@ describe("useScopingPlanStart — the five start states (task 044, contract deli
     >);
   }
 
-  function run(overrides: { status: string; plan_version: number; started_at?: string }) {
+  function run(overrides: {
+    status: string;
+    plan_version: number;
+    started_at?: string;
+    artefact_id?: string | null;
+  }) {
     return {
       capability_run_id: "run-1",
       started_at: overrides.started_at ?? "2026-09-01T00:00:00Z",
+      artefact_id: overrides.artefact_id ?? null,
       ...overrides,
     };
-  }
-
-  function mockArtefact(artefactId: string | null) {
-    vi.mocked(queries.useArtefact).mockReturnValue({
-      data: artefactId != null ? { artefact_id: artefactId } : null,
-    } as unknown as ReturnType<typeof queries.useArtefact>);
   }
 
   function mockScopingMutations(startRun: MutationStub = { mutate: vi.fn(), isPending: false }, confirmBaseline: MutationStub = { mutate: vi.fn(), isPending: false }) {
@@ -208,7 +208,6 @@ describe("useScopingPlanStart — the five start states (task 044, contract deli
   it("no baseline walk yet: one build action, with the time band", () => {
     mockScopingPlan({ timeBand: "10-15 minutes" });
     mockRuns([]);
-    mockArtefact(null);
     mockScopingMutations();
 
     const { result } = renderHook(() => useScopingPlanStart({ taskId: "t1", runActive: false }));
@@ -223,8 +222,10 @@ describe("useScopingPlanStart — the five start states (task 044, contract deli
     "the latest walk %s: no start actions — the gate's card and chat own the decision",
     (status) => {
       mockScopingPlan({ version: 1 });
-      mockRuns([run({ status, plan_version: 1 })]);
-      mockArtefact("artefact-1");
+      // Realistic per state: synthesise (and the artefact it writes) has
+      // already happened by the time the walk parks on the gate; it has not
+      // while still running.
+      mockRuns([run({ status, plan_version: 1, artefact_id: status === "paused" ? "artefact-1" : null })]);
       mockScopingMutations();
 
       const { result } = renderHook(() => useScopingPlanStart({ taskId: "t1", runActive: true }));
@@ -234,8 +235,7 @@ describe("useScopingPlanStart — the five start states (task 044, contract deli
 
   it("baseline_confirmed names the current plan version: confirmed", () => {
     mockScopingPlan({ version: 1, baselineConfirmed: { artefact_id: "artefact-1", plan_version: 1 } });
-    mockRuns([run({ status: "succeeded", plan_version: 1 })]);
-    mockArtefact("artefact-1");
+    mockRuns([run({ status: "succeeded", plan_version: 1, artefact_id: "artefact-1" })]);
     mockScopingMutations();
 
     const { result } = renderHook(() => useScopingPlanStart({ taskId: "t1", runActive: false }));
@@ -244,8 +244,7 @@ describe("useScopingPlanStart — the five start states (task 044, contract deli
 
   it("the latest walk succeeded and the plan hasn't moved since: confirmed, even with no baseline_confirmed record yet (it can only have finished through the gate's Confirm, or the unattended standing default)", () => {
     mockScopingPlan({ version: 1, baselineConfirmed: null });
-    mockRuns([run({ status: "succeeded", plan_version: 1 })]);
-    mockArtefact("artefact-1");
+    mockRuns([run({ status: "succeeded", plan_version: 1, artefact_id: "artefact-1" })]);
     mockScopingMutations();
 
     const { result } = renderHook(() => useScopingPlanStart({ taskId: "t1", runActive: false }));
@@ -254,8 +253,7 @@ describe("useScopingPlanStart — the five start states (task 044, contract deli
 
   it("a degraded walk still counts as having produced a baseline for the same-version confirm", () => {
     mockScopingPlan({ version: 1 });
-    mockRuns([run({ status: "degraded", plan_version: 1 })]);
-    mockArtefact("artefact-1");
+    mockRuns([run({ status: "degraded", plan_version: 1, artefact_id: "artefact-1" })]);
     mockScopingMutations();
 
     const { result } = renderHook(() => useScopingPlanStart({ taskId: "t1", runActive: false }));
@@ -264,8 +262,7 @@ describe("useScopingPlanStart — the five start states (task 044, contract deli
 
   it("the latest walk finished and the plan has since moved to a later version: rebuild or confirm", () => {
     mockScopingPlan({ version: 2 });
-    mockRuns([run({ status: "succeeded", plan_version: 1 })]);
-    mockArtefact("artefact-1");
+    mockRuns([run({ status: "succeeded", plan_version: 1, artefact_id: "artefact-1" })]);
     mockScopingMutations();
 
     const { result } = renderHook(() => useScopingPlanStart({ taskId: "t1", runActive: false }));
@@ -278,8 +275,7 @@ describe("useScopingPlanStart — the five start states (task 044, contract deli
 
   it("an aborted walk (Change the plan) plus a later plan version: also rebuild or confirm", () => {
     mockScopingPlan({ version: 2 });
-    mockRuns([run({ status: "aborted", plan_version: 1 })]);
-    mockArtefact("artefact-1");
+    mockRuns([run({ status: "aborted", plan_version: 1, artefact_id: "artefact-1" })]);
     mockScopingMutations();
 
     const { result } = renderHook(() => useScopingPlanStart({ taskId: "t1", runActive: false }));
@@ -288,8 +284,7 @@ describe("useScopingPlanStart — the five start states (task 044, contract deli
 
   it("an aborted walk (Change the plan) with the plan still at that version: also rebuild or confirm", () => {
     mockScopingPlan({ version: 1 });
-    mockRuns([run({ status: "aborted", plan_version: 1 })]);
-    mockArtefact("artefact-1");
+    mockRuns([run({ status: "aborted", plan_version: 1, artefact_id: "artefact-1" })]);
     mockScopingMutations();
 
     const { result } = renderHook(() => useScopingPlanStart({ taskId: "t1", runActive: false }));
@@ -301,8 +296,7 @@ describe("useScopingPlanStart — the five start states (task 044, contract deli
   // so both doors are open by name.
   it("offers Rebuild baseline and Confirm plan and build longlist after Change the plan", () => {
     mockScopingPlan({ version: 1 });
-    mockRuns([run({ status: "aborted", plan_version: 1 })]);
-    mockArtefact("artefact-1");
+    mockRuns([run({ status: "aborted", plan_version: 1, artefact_id: "artefact-1" })]);
     mockScopingMutations();
 
     const { result } = renderHook(() => useScopingPlanStart({ taskId: "t1", runActive: false }));
@@ -317,8 +311,7 @@ describe("useScopingPlanStart — the five start states (task 044, contract deli
 
   it("baseline_confirmed for a stale version does not suppress a fresh rebuild-or-confirm", () => {
     mockScopingPlan({ version: 2, baselineConfirmed: { artefact_id: "artefact-1", plan_version: 1 } });
-    mockRuns([run({ status: "succeeded", plan_version: 1 })]);
-    mockArtefact("artefact-1");
+    mockRuns([run({ status: "succeeded", plan_version: 1, artefact_id: "artefact-1" })]);
     mockScopingMutations();
 
     const { result } = renderHook(() => useScopingPlanStart({ taskId: "t1", runActive: false }));
@@ -329,8 +322,7 @@ describe("useScopingPlanStart — the five start states (task 044, contract deli
     "a %s walk produced nothing usable: falls back to the fresh build action",
     (status) => {
       mockScopingPlan({ version: 1 });
-      mockRuns([run({ status, plan_version: 1 })]);
-      mockArtefact(null);
+      mockRuns([run({ status, plan_version: 1, artefact_id: null })]);
       mockScopingMutations();
 
       const { result } = renderHook(() => useScopingPlanStart({ taskId: "t1", runActive: false }));
@@ -338,10 +330,31 @@ describe("useScopingPlanStart — the five start states (task 044, contract deli
     },
   );
 
+  // Task 044 review, C6: a rebuild that aborted before writing must not hide
+  // the earlier walk's baseline — it is still the one worth confirming.
+  it("a rebuild that aborted with no artefact of its own: rebuild or confirm off the earlier baseline, and the band names its version", () => {
+    mockScopingPlan({ version: 2 });
+    mockRuns([
+      run({ status: "succeeded", plan_version: 1, started_at: "2026-09-01T00:00:00Z", artefact_id: "artefact-X" }),
+      run({ status: "aborted", plan_version: 2, started_at: "2026-09-02T00:00:00Z", artefact_id: null }),
+    ]);
+    const { confirmBaseline } = mockScopingMutations();
+
+    const { result } = renderHook(() => useScopingPlanStart({ taskId: "t1", runActive: false }));
+    expect(result.current.kind).toBe("rebuild_or_confirm");
+    if (result.current.kind !== "rebuild_or_confirm") throw new Error("expected rebuild_or_confirm");
+    expect(result.current.confirm.disabled).toBe(false);
+    act(() => result.current.kind === "rebuild_or_confirm" && result.current.confirm.onConfirm());
+
+    expect(confirmBaseline.mutate).toHaveBeenCalledWith(
+      { artefact_id: "artefact-X", plan_version: 2 },
+      expect.anything(),
+    );
+  });
+
   it("confirm-and-build-longlist calls confirm-baseline with the artefact id and the current plan version", () => {
     mockScopingPlan({ version: 3 });
-    mockRuns([run({ status: "succeeded", plan_version: 2 })]);
-    mockArtefact("artefact-9");
+    mockRuns([run({ status: "succeeded", plan_version: 2, artefact_id: "artefact-9" })]);
     const { confirmBaseline } = mockScopingMutations();
 
     const { result } = renderHook(() => useScopingPlanStart({ taskId: "t1", runActive: false }));

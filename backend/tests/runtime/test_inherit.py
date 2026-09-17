@@ -64,23 +64,21 @@ def _seed_linked_source(
     stop_condition: str = "completed",
     adequacy_verdict: str = "adequate",
     link_created_at: object = None,
+    later_walk_adequacy: str | None = None,
+    orphan_plan: bool = False,
 ) -> uuid.UUID:
     """Seed one source task with a finished walk, artefact and coverage; link it to the target.
 
     ``block_specs`` is ``[(title, content), ...]``, written as artefact blocks in order.
     Returns the link's ``link_id``.
+
+    ``later_walk_adequacy`` seeds a SECOND finished walk on the same evidence
+    scope, with its own acquire run and coverage record carrying that verdict —
+    what a rerun of the same approved plan leaves behind. ``orphan_plan`` points
+    the pinned walk at a plan row that does not exist, leaving the task's own
+    approved plan row in place as the substitute a fallback would reach for.
     """
     source_task_id = _make_task(conn, name=name)
-    run_id = uuid.uuid4()
-    conn.execute(
-        runs.insert().values(
-            run_id=run_id,
-            task_id=source_task_id,
-            status="succeeded",
-            started_at=now(),
-            ended_at=now(),
-        )
-    )
     scope_id = uuid.uuid4()
     conn.execute(
         evidence_scope.insert().values(
@@ -110,8 +108,19 @@ def _seed_linked_source(
             task_id=source_task_id,
             evidence_scope_id=scope_id,
             capability="evidence_search",
-            plan_id=plan_id,
+            plan_id=uuid.uuid4() if orphan_plan else plan_id,
             plan_version=1,
+            status="succeeded",
+            started_at=now(),
+            ended_at=now(),
+        )
+    )
+    run_id = uuid.uuid4()
+    conn.execute(
+        runs.insert().values(
+            run_id=run_id,
+            task_id=source_task_id,
+            capability_run_id=capability_run_id,
             status="succeeded",
             started_at=now(),
             ended_at=now(),
@@ -168,6 +177,46 @@ def _seed_linked_source(
             created_at=now(),
         )
     )
+    if later_walk_adequacy is not None:
+        later_walk_id = uuid.uuid4()
+        conn.execute(
+            capability_run.insert().values(
+                capability_run_id=later_walk_id,
+                task_id=source_task_id,
+                evidence_scope_id=scope_id,
+                capability="evidence_search",
+                plan_id=plan_id,
+                plan_version=1,
+                status="succeeded",
+                started_at=now() + timedelta(seconds=10),
+                ended_at=now() + timedelta(seconds=20),
+            )
+        )
+        later_run_id = uuid.uuid4()
+        conn.execute(
+            runs.insert().values(
+                run_id=later_run_id,
+                task_id=source_task_id,
+                capability_run_id=later_walk_id,
+                status="succeeded",
+                started_at=now() + timedelta(seconds=10),
+                ended_at=now() + timedelta(seconds=20),
+            )
+        )
+        conn.execute(
+            search_coverage_record.insert().values(
+                search_coverage_record_id=uuid.uuid4(),
+                evidence_scope_id=scope_id,
+                task_id=source_task_id,
+                acquired_by_run_id=later_run_id,
+                backends=[{"backend": "openalex", "trust_class": "high", "mode": "live"}],
+                scope_filters={},
+                stop_condition="budget_exhausted",
+                adequacy_verdict=later_walk_adequacy,
+                verdict_origin="model",
+                created_at=now() + timedelta(seconds=20),
+            )
+        )
     link_id = uuid.uuid4()
     conn.execute(
         task_link.insert().values(
@@ -270,3 +319,50 @@ def test_a_walk_whose_artefact_has_no_blocks_renders_an_empty_report(conn: Conne
     [ctx] = linked_context(conn, target_id)
 
     assert ctx.report_markdown == ""
+
+
+def test_coverage_is_the_pinned_walks_not_the_scopes_latest(conn: Connection) -> None:
+    """A rerun of the same plan must not change what an earlier link inherited.
+
+    A coverage record is written per acquire run into the walk's evidence
+    scope, so a second walk on that scope leaves a newer record there. Reading
+    the scope's latest handed the link the rerun's verdict.
+    """
+    target_id = _make_task(conn, name="Scoping", capability="options_scoping")
+    _seed_linked_source(
+        conn,
+        target_id,
+        name="Rerun source",
+        plan_payload={"question": "What works?"},
+        block_specs=[("Body", "prose")],
+        adequacy_verdict="adequate",
+        later_walk_adequacy="inadequate",
+    )
+
+    [ctx] = linked_context(conn, target_id)
+
+    assert ctx.coverage_text == "Searching completed. Coverage was judged adequate."
+
+
+def test_a_missing_pinned_plan_row_inherits_nothing(conn: Connection) -> None:
+    """Fail closed: never substitute a plan the linked report was not written against.
+
+    The pinned walk's plan row is the only plan this link may claim. When it is
+    gone (a data fault), the fenced block is empty rather than quietly showing
+    the source task's current plan under the link's pinned-walk claim.
+    """
+    target_id = _make_task(conn, name="Scoping", capability="options_scoping")
+    _seed_linked_source(
+        conn,
+        target_id,
+        name="Orphaned plan",
+        plan_payload={"question": "A later approved plan the link must not show"},
+        block_specs=[("Body", "prose")],
+        orphan_plan=True,
+    )
+
+    [ctx] = linked_context(conn, target_id)
+
+    assert ctx.plan == {}
+    # Everything else the link pins still reads.
+    assert "## Body" in ctx.report_markdown

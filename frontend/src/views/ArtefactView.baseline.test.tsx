@@ -60,6 +60,9 @@ const GATE_WALK = {
   started_at: "2026-09-09T10:00:00Z",
   ended_at: null,
   plan_version: 1,
+  // Synthesise (and the artefact it writes) has already happened by the
+  // time the walk parks on the gate (task 044 review, C6).
+  artefact_id: mockBaselineArtefact.artefact_id,
 };
 
 function renderBaseline({

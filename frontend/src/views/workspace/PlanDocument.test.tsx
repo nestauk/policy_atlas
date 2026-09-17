@@ -211,6 +211,10 @@ function baselineRun(overrides: Partial<RunOut> = {}): RunOut {
     status: "succeeded",
     started_at: "2026-09-01T00:00:00Z",
     ended_at: "2026-09-01T00:20:00Z",
+    // The default status is `succeeded`, which can only have happened by
+    // reaching synthesise (task 044 review, C6) — carries an artefact unless
+    // a test overrides it.
+    artefact_id: "artefact-1",
     ...overrides,
   };
 }
@@ -572,6 +576,25 @@ describe("PlanDocument — options scoping (task 044)", () => {
       .find((item) => item.textContent?.includes("Evidence search:") === true);
     expect(linkItem?.textContent).toContain("Evidence search: Childhood obesity in Tower Hamlets · linked");
     expect(linkItem?.textContent).toContain("no longer shares a project");
+  });
+
+  it("names no source the reader cannot open", () => {
+    mockUsePlan({ data: scopingPlanOut() });
+    mockUseTask([
+      {
+        link_id: "link-2",
+        source_task_id: "source-2",
+        source_task_name: null,
+        source_capability_run_id: "run-2",
+        flagged: true,
+      },
+    ]);
+    renderPlan();
+    const linkItem = screen
+      .getAllByRole("listitem")
+      .find((item) => item.textContent?.includes("Evidence search:") === true);
+    expect(linkItem?.textContent).toContain("Evidence search: a task you can't open · linked");
+    expect(linkItem?.textContent).not.toContain("null");
   });
 
   it("shows the depth screen label, never the internal key", () => {

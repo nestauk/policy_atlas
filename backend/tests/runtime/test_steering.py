@@ -509,6 +509,28 @@ def test_every_directive_branch_maps_errors_to_refusal(
         _validate_directive_delta(component, delta, backend_scope="both")
 
 
+def test_a_synthesis_delta_cannot_switch_the_report_template() -> None:
+    """``template`` is a compile-time key, not a steerable shape edit (task 044).
+
+    The synthesis grammar gained ``template`` so ``compose_scoping`` can name
+    the options-scoping baseline. A P4 steering delta carrying it would switch
+    a live Evidence search run's output kind to a template whose sections and
+    confirmation gate that walk never planned for.
+    """
+    with pytest.raises(SteeringAdjustmentError, match="cannot be changed"):
+        _validate_directive_delta(
+            "synthesise",
+            {"synthesis": {"template": "baseline"}},
+            backend_scope="both",
+        )
+    # A sections-only edit is still the ordinary P4 adjustment.
+    _validate_directive_delta(
+        "synthesise",
+        {"synthesis": {"sections": [{"title": "Cost", "focus": "What it costs."}]}},
+        backend_scope="both",
+    )
+
+
 def test_pause_points_compile_pinned_for_all_modes() -> None:
     # deep depth: "select" must be present for the after-select pause points.
     plan = _base_plan(search_effort="standard", analysis_depth="deep")

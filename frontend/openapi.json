@@ -4383,8 +4383,20 @@
         "type": "object"
       },
       "RunOut": {
-        "description": "A capability run resource.\n\nArgs:\n    capability_run_id: The run's identity.\n    task_id: Owning task.\n    plan_id: Identity of the plan the run executes.\n    plan_version: Plan version current at run creation.\n    status: Current run status.\n    started_at: When the run started executing.\n    ended_at: When the run reached a terminal status, or `None` while\n        still running or paused.",
+        "description": "A capability run resource.\n\nArgs:\n    capability_run_id: The run's identity.\n    task_id: Owning task.\n    plan_id: Identity of the plan the run executes.\n    plan_version: Plan version current at run creation.\n    status: Current run status.\n    started_at: When the run started executing.\n    ended_at: When the run reached a terminal status, or `None` while\n        still running or paused.\n    artefact_id: The artefact this walk wrote, or `None` when it wrote\n        none (it has not reached synthesise, or ended before it). A\n        scoping walk that carries one produced a baseline, whatever its\n        terminal status (task 044 review, C5/C6).",
         "properties": {
+          "artefact_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Artefact Id"
+          },
           "capability_run_id": {
             "format": "uuid",
             "title": "Capability Run Id",
@@ -5046,13 +5058,10 @@
         "type": "object"
       },
       "ScopingSteerPointDefaultOut": {
-        "description": "One standing instruction on a scoping plan.\n\nArgs:\n    steer_point: The check-in point the rule covers.\n    action: `proceed_flag` or `stop`.",
+        "description": "One standing instruction on a scoping plan.\n\nArgs:\n    steer_point: The check-in point the rule covers.\n    action: `proceed_flag` \u2014 the only value; unattended records the gate and continues.",
         "properties": {
           "action": {
-            "enum": [
-              "proceed_flag",
-              "stop"
-            ],
+            "const": "proceed_flag",
             "title": "Action",
             "type": "string"
           },
@@ -6029,7 +6038,7 @@
       },
       "TaskCreate": {
         "additionalProperties": false,
-        "description": "Inbound body for `POST /api/v1/tasks`.\n\nEverything a task needs to exist arrives in **one** request (C10). Before\ntask 044 the frontend created the task and then patched its projects,\nwhich cannot be atomic: a failed patch left a real, unassigned task, and\n\"Starts from\" would have had the same shape with a worse failure \u2014 a\nscoping task linked to nothing.\n\nArgs:\n    name: Task display name, 1-200 characters. Outer whitespace is\n        stripped before the length constraint is applied\n        (`str_strip_whitespace`).\n    question: Optional initial evidence question.\n    capability: The kind of work. Defaults to `evidence_search`, so every\n        pre-044 caller is unchanged.\n    project_ids: Projects to assign the new task to, under exactly the\n        rules `PATCH` applies (dedupe, colleague-mutation grade, the\n        multi-organisation 409, the visibility derivation). Empty means\n        unassigned, which is a normal state.\n    from_task_ids: Tasks this one starts from \u2014 one `task_link` row each,\n        written in the same transaction. Refused 422 on an\n        `evidence_search` create: in this slice a Link is how a scoping\n        task inherits an Evidence search, and the reverse direction lands\n        with task 5.",
+        "description": "Inbound body for `POST /api/v1/tasks`.\n\nEverything a task needs to exist arrives in **one** request (C10). Before\ntask 044 the frontend created the task and then patched its projects,\nwhich cannot be atomic: a failed patch left a real, unassigned task, and\n\"Starts from\" would have had the same shape with a worse failure \u2014 a\nscoping task linked to nothing.\n\nArgs:\n    name: Task display name, 1-200 characters. Outer whitespace is\n        stripped before the length constraint is applied\n        (`str_strip_whitespace`).\n    question: Optional initial evidence question.\n    capability: The kind of work. Defaults to `evidence_search`, so every\n        pre-044 caller is unchanged.\n    project_ids: Projects to assign the new task to, under exactly the\n        rules `PATCH` applies (dedupe, colleague-mutation grade, the\n        multi-organisation 409, the visibility derivation). Empty means\n        unassigned, which is a normal state.\n    from_task_ids: Tasks this one starts from \u2014 one `task_link` row each,\n        written in the same transaction. At most three, because every\n        linked source is inherited into the Task Agent's context on every\n        turn. Refused 422 on an `evidence_search` create: in this slice a\n        Link is how a scoping task inherits an Evidence search, and the\n        reverse direction lands with task 5.",
         "properties": {
           "capability": {
             "default": "evidence_search",
@@ -6045,6 +6054,7 @@
               "format": "uuid",
               "type": "string"
             },
+            "maxItems": 3,
             "title": "From Task Ids",
             "type": "array"
           },
@@ -6081,7 +6091,7 @@
         "type": "object"
       },
       "TaskLinkOut": {
-        "description": "One Link, read from the target's side (\"Starts from\").\n\nArgs:\n    link_id: The link row's identity.\n    source_task_id: The task this one starts from.\n    source_task_name: That task's display name, so the plan document can\n        render the link without a second request per source.\n    source_capability_run_id: The **pinned** walk of the source (C11).\n        What the target inherited cannot change under it when the source\n        runs again.\n    flagged: Whether the two tasks currently share no project (C12).\n        Derived at read time, not stored: the link is never broken by a\n        membership change, only marked, because the inheritance already\n        happened and deleting it would silently rewrite the target's\n        provenance.",
+        "description": "One Link, read from the target's side (\"Starts from\").\n\nArgs:\n    link_id: The link row's identity.\n    source_task_id: The task this one starts from.\n    source_task_name: That task's display name, so the plan document can\n        render the link without a second request per source \u2014 `None` when\n        the reader holds no read grade on the source. A Link grants no\n        read (ADR 0037 decision 2), so a colleague reading a task whose\n        source has since become private sees the link, flagged, without\n        its name.\n    source_capability_run_id: The **pinned** walk of the source (C11).\n        What the target inherited cannot change under it when the source\n        runs again.\n    flagged: Whether the two tasks currently share no project (C12).\n        Derived at read time, not stored: the link is never broken by a\n        membership change, only marked, because the inheritance already\n        happened and deleting it would silently rewrite the target's\n        provenance.",
         "properties": {
           "flagged": {
             "title": "Flagged",
@@ -6103,8 +6113,15 @@
             "type": "string"
           },
           "source_task_name": {
-            "title": "Source Task Name",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Task Name"
           }
         },
         "required": [
@@ -7615,7 +7632,7 @@
         ]
       },
       "post": {
-        "description": "Create one active task owned by the authenticated subject.\n\nStamps the creator's organisation onto the row (contract \u00a7 7) \u2014 NULL when\nthe creator is unenrolled, which leaves the row reachable by its owner\nalone. `visibility` takes the column default `private` (owner amendment\n2026-08-26 \u2014 new work is unshared until its owner deliberately shares it).\n\nTask 044 (C10): projects and Links arrive in the **same** request and are\nwritten in the **same** transaction. The old create-then-patch flow could\nleave a real, unassigned task behind, and \"Starts from\" cannot be built on\na flow with that failure mode \u2014 a scoping task linked to nothing has lost\nthe thing it was created for. So any refusal below rolls the task row back\nwith it.\n\nRaises:\n    HTTPException: 404 when a named source task is not readable by the\n        caller.\n    ApiConflict: 409 ``visibility_conflict``, ``link_project_mismatch`` or\n        ``link_source_unfinished``.",
+        "description": "Create one active task owned by the authenticated subject.\n\nStamps the creator's organisation onto the row (contract \u00a7 7) \u2014 NULL when\nthe creator is unenrolled, which leaves the row reachable by its owner\nalone. `visibility` takes the column default `private` (owner amendment\n2026-08-26 \u2014 new work is unshared until its owner deliberately shares it).\n\nTask 044 (C10): projects and Links arrive in the **same** request and are\nwritten in the **same** transaction. The old create-then-patch flow could\nleave a real, unassigned task behind, and \"Starts from\" cannot be built on\na flow with that failure mode \u2014 a scoping task linked to nothing has lost\nthe thing it was created for. So any refusal below rolls the task row back\nwith it.\n\nRaises:\n    HTTPException: 404 when a named source task is not readable by the\n        caller.\n    ApiConflict: 409 ``visibility_conflict``, ``link_source_capability``,\n        ``link_project_mismatch`` or ``link_source_unfinished``.",
         "operationId": "create_task_api_v1_tasks_post",
         "requestBody": {
           "content": {
@@ -9539,7 +9556,7 @@
     },
     "/api/v1/tasks/{task_id}/task-agent-turns": {
       "get": {
-        "description": "Return the durable task_agent transcript in ascending conversation order.\n\n**Read-graded, and the sweep is owner-only.** The grade here is the read\ngrade \u2014 owner \u222a same-org colleague \u222a administrator \u2014 but\n:func:`_expire_stale_pending_turns` is a *write*, and contract \u00a7 3 makes\nthe admin leg read-only: a support read that fails somebody else's pending\ntask_agent turn is a mutation nobody asked for and nothing records. So the\nsweep runs only for the owner, whose own turn it is. Nothing is lost: the\nowner's own GET sweeps, and every mutating task_agent path sweeps under the\nwrite grade before it does anything.",
+        "description": "Return the durable task_agent transcript in ascending conversation order.\n\n**Read-graded, and the sweep is owner-only.** The grade here is the read\ngrade \u2014 owner \u222a same-org colleague \u222a administrator \u2014 but\n:func:`_expire_stale_pending_turns` is a *write*, and contract \u00a7 3 makes\nthe admin leg read-only: a support read that fails somebody else's pending\nTask Agent turn is a mutation nobody asked for and nothing records. So the\nsweep runs only for the owner, whose own turn it is. Nothing is lost: the\nowner's own GET sweeps, and every mutating task_agent path sweeps under the\nwrite grade before it does anything.",
         "operationId": "list_task_agent_turns_api_v1_tasks__task_id__task_agent_turns_get",
         "parameters": [
           {

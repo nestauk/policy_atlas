@@ -1589,6 +1589,13 @@ def _handle_after_component_boundary(
     if steer_point_name == FINDING_GROUPS and successful_runs.get("group") is None:
         steer_point_name = None
         triggers = None
+    # The baseline gate degrades the same way when synthesise produced nothing:
+    # a failed synthesise reaches this handler (anomalous) before the spine
+    # check ends the walk, and a gate card over a baseline that was never
+    # written would invite a user to confirm a plan against no evidence.
+    if steer_point_name == BASELINE_CONFIRM and successful_runs.get("synthesise") is None:
+        steer_point_name = None
+        triggers = None
     # Run-id attachment (plan pin, review M2): an after_component event attaches
     # to the run it is about; a skipped component has no run of its own, so it
     # falls back to the most-recent attempted run id.
@@ -1673,6 +1680,7 @@ def _handle_after_component_boundary(
         completed_components=completed_components,
         capability_run_id=capability_run_id,
         event_run_id=event_run_id,
+        flagged_events=flagged_events,
         steer_point_name=steer_point_name,
         options=options,
         bundle=bundle,
@@ -1852,6 +1860,7 @@ def _handle_before_component_boundary(
         completed_components=completed_components,
         capability_run_id=capability_run_id,
         event_run_id=most_recent_attempted_run_id,
+        flagged_events=flagged_events,
         steer_point_name=steer_point_name,
         options=options,
         bundle=bundle,
@@ -2272,6 +2281,7 @@ def _handle_pause(
     completed_components: set[str],
     capability_run_id: uuid.UUID,
     event_run_id: uuid.UUID | None,
+    flagged_events: list[dict[str, Any]],
     steer_point_name: str | None = None,
     options: list[dict[str, Any]] | None = None,
     bundle: dict[str, Any] | None = None,
@@ -2299,6 +2309,21 @@ def _handle_pause(
         boundary=point.boundary,
         component=point.component,
     )
+    # An IO that cannot put the pause to anybody would otherwise be read as a
+    # user Continue. At the baseline gate that ends the walk ``succeeded`` with
+    # nobody having confirmed the plan — the one failure this gate exists to
+    # prevent — so record it the way Unattended does instead of fabricating a
+    # decision. Every other steer point keeps today's behaviour.
+    if steer_point_name == BASELINE_CONFIRM and not _can_ask_a_human(io):
+        return _resolve_baseline_gate_unattended(
+            engine,
+            point=point,
+            state=state,
+            task_id=task_id,
+            flagged_events=flagged_events,
+            base=base,
+            event_run_id=event_run_id,
+        )
     # One pause event per presentation; the re-prompt loop below marks each
     # rejected retry with steering.rejected rather than a fresh pause.
     # The deterministic render rides the payload verbatim (task 025): it is the
@@ -2510,6 +2535,25 @@ def _pause_response(
     if isinstance(io, _PauseCapable):
         return io.pause(point, render)
     return Continue()
+
+
+def _can_ask_a_human(io: CheckInIO) -> bool:
+    """Whether this IO can actually put a pause to somebody.
+
+    Two shapes cannot, and both answer ``Continue()`` with nobody behind it:
+    an IO with no ``pause`` method at all (answered for it by
+    :func:`_pause_response`), and ``NullIO``, which declares ``pause`` and
+    returns ``Continue()`` itself. The baseline gate is the one point where
+    that difference is load-bearing (an unconfirmed plan must not read as a
+    confirmed one), so this predicate is consulted there and nowhere else.
+
+    Args:
+        io: The walk's check-in IO.
+
+    Returns:
+        ``True`` when a pause reaches a decision this IO did not invent.
+    """
+    return isinstance(io, _PauseCapable) and not isinstance(io, NullIO)
 
 
 def _confirm(io: CheckInIO, render: str) -> bool:
@@ -4244,13 +4288,19 @@ def _resolve_baseline_gate_unattended(
     base: dict[str, Any],
     event_run_id: uuid.UUID | None,
 ) -> _PauseApplied:
-    """Record the baseline gate under Unattended instead of pausing (D11, A9).
+    """Record the baseline gate without pausing (D11, A9).
 
     An unattended scoping plan must declare a ``baseline_confirm`` standing
     default (``ScopingPlan`` refuses to validate without one), so the rule is
     read, honoured and echoed onto the decision, and a flag rides
     ``flagged_events`` into the end-of-run collation — the run never stops, and
-    review still sees that nobody confirmed the plan.
+    review still sees that nobody confirmed the plan. The gate always continues
+    here: ``ScopingSteerPointDefault`` admits ``proceed_flag`` and nothing else,
+    so there is no declarable hard stop to honour.
+
+    Also the attended fallback when the IO cannot pause (see
+    :func:`_handle_pause`): an absent rule reads as ``proceed_flag``, so that
+    walk too ends with nobody recorded as having confirmed.
 
     Args:
         engine: Database engine.
@@ -4262,7 +4312,7 @@ def _resolve_baseline_gate_unattended(
         event_run_id: Run the decision attaches to.
 
     Returns:
-        The unchanged state; ``aborted`` when the declared rule is a hard stop.
+        The unchanged state.
     """
     rule = next(
         (
@@ -4274,22 +4324,6 @@ def _resolve_baseline_gate_unattended(
     )
     action = rule.action if rule is not None else "proceed_flag"
     echo = {"steer_point": BASELINE_CONFIRM, "action": action}
-    if action == "stop":
-        # A hard stop is always honoured, here as everywhere else.
-        _abort_and_record(
-            engine,
-            task_id=task_id,
-            state=state,
-            base=base,
-            event_run_id=event_run_id,
-            decided_by="standing_default",
-            authored_by="standing_default",
-            extra_payload={"standing_rule": echo},
-        )
-        flagged_events.append(
-            _standing_flag(point.component, BASELINE_CONFIRM, rule=BASELINE_CONFIRM, action="stop")
-        )
-        return _PauseApplied(state=state, aborted=True)
     _emit_standing_proceed_decision(
         engine,
         task_id=task_id,

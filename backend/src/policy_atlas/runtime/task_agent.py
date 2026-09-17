@@ -36,7 +36,7 @@ log = structlog.get_logger()
 # without a code change (the `SYNTHESIS_MODEL` pattern).
 TASK_AGENT_MODEL = os.environ.get("POLICY_ATLAS_TASK_AGENT_MODEL", "gpt-5.5")
 
-# The task_agent turn as emitted by any backend; the wire model IS the turn
+# The Task Agent turn as emitted by any backend; the wire model IS the turn
 # shape, code-side and model-side — no separate dataclass to keep in sync.
 TaskAgentTurn = PlannerTurnWire
 
@@ -71,7 +71,7 @@ class TaskAgentBackend(Protocol):
                 ``session_id`` groups by task.
 
         Returns:
-            One parsed task_agent turn.
+            One parsed Task Agent turn.
 
         Raises:
             RuntimeError: If the backend cannot produce a usable turn.
@@ -87,7 +87,7 @@ def _degrade_suggestions(turn: PlannerTurnWire) -> PlannerTurnWire:
     (2-5 non-empty entries, only ever alongside a question).
 
     Args:
-        turn: The candidate task_agent turn.
+        turn: The candidate Task Agent turn.
 
     Returns:
         The turn, with ``suggested_answers`` forced to ``None`` if it is
@@ -198,7 +198,7 @@ class OpenAITaskAgentBackend:
                 ``session_id`` groups by task.
 
         Returns:
-            One parsed task_agent turn, with suggestions degraded if malformed.
+            One parsed Task Agent turn, with suggestions degraded if malformed.
 
         Raises:
             RuntimeError: If the response cannot be parsed.
@@ -263,7 +263,7 @@ class StubTaskAgentBackend:
         session_id: uuid.UUID | None = None,
         conversation_id: uuid.UUID | None = None,
     ) -> PlannerTurnWire:
-        """Return a deterministic task_agent turn.
+        """Return a deterministic Task Agent turn.
 
         Args:
             turns: Conversation turns so far, oldest first. On the first turn
@@ -276,7 +276,7 @@ class StubTaskAgentBackend:
                 the stub.
 
         Returns:
-            A deterministic task_agent turn.
+            A deterministic Task Agent turn.
         """
         del previous_draft, session_id, conversation_id
         if len(turns) <= 1:

@@ -49,6 +49,7 @@ from policy_atlas.core.schema import (
     task,
     task_link,
 )
+from policy_atlas.runtime.capability_registry import EVIDENCE_SEARCH
 
 log = structlog.get_logger()
 
@@ -147,7 +148,7 @@ def list_tasks(
     )
     page_task_ids = [row["task_id"] for row in rows]
     memberships = memberships_for_tasks(conn, page_task_ids)
-    links = links_for_tasks(conn, page_task_ids)
+    links = links_for_tasks(conn, page_task_ids, user_id=user.user_id)
     return Page(
         data=[
             task_out(
@@ -299,18 +300,23 @@ def _write_task_links(
 ) -> None:
     """Write the new task's Links, or refuse the whole create (C10, C11, C12).
 
-    Three rules, checked in this order because that is the order that tells
+    Four rules, checked in this order because that is the order that tells
     the caller the truth without leaking anything:
 
     1.  **Readable.** Each source resolves under the ordinary read grade, so
         an unreadable task is the same 404 the tasks route gives. A Link never
         widens what a caller can see (ADR 0037 decision 2), and refusing here
         with anything more specific would make create an existence oracle.
-    2.  **Same project.** The source must share at least one project with the
+    2.  **An Evidence search.** A Link is how a scoping task inherits an
+        Evidence search, and inheritance reads an Evidence search report and
+        coverage statement. A scoping source has neither, so linking one
+        would build the Task Agent's context out of a document that does not
+        exist — refused rather than silently inherited empty (S6, X4).
+    3.  **Same project.** The source must share at least one project with the
         new task *as just assigned*. This is the create-time invariant; a pair
         that later stops sharing one is flagged on read, never broken
         (:func:`task_links_for`).
-    3.  **Finished walk.** The source's latest walk must be ``succeeded`` or
+    4.  **Finished walk.** The source's latest walk must be ``succeeded`` or
         ``degraded``, and its id is pinned onto the row. A running, paused or
         failed source has nothing stable to inherit.
 
@@ -326,13 +332,19 @@ def _write_task_links(
 
     Raises:
         HTTPException: 404 when a source is not readable by the caller.
-        ApiConflict: 409 ``link_project_mismatch`` when a source shares no
-            project with the new task; 409 ``link_source_unfinished`` when its
-            latest walk has not finished.
+        ApiConflict: 409 ``link_source_capability`` when a source is not an
+            Evidence search task; 409 ``link_project_mismatch`` when a source
+            shares no project with the new task; 409
+            ``link_source_unfinished`` when its latest walk has not finished.
     """
     shared = set(assigned_project_ids)
     for source_id in dict.fromkeys(source_task_ids):
-        accessible_task(conn, task_id=source_id, user_id=user_id)
+        source = accessible_task(conn, task_id=source_id, user_id=user_id)
+        if source.row["capability"] != EVIDENCE_SEARCH:
+            raise ApiConflict(
+                "link_source_capability",
+                "a task can only start from an Evidence search task",
+            )
         source_projects = {
             membership_row[0]
             for membership_row in conn.execute(
@@ -397,8 +409,8 @@ def create_task(
     Raises:
         HTTPException: 404 when a named source task is not readable by the
             caller.
-        ApiConflict: 409 ``visibility_conflict``, ``link_project_mismatch`` or
-            ``link_source_unfinished``.
+        ApiConflict: 409 ``visibility_conflict``, ``link_source_capability``,
+            ``link_project_mismatch`` or ``link_source_unfinished``.
     """
     now = datetime.now(UTC)
     task_id = uuid.uuid4()

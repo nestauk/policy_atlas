@@ -369,8 +369,8 @@ export interface paths {
          *     Raises:
          *         HTTPException: 404 when a named source task is not readable by the
          *             caller.
-         *         ApiConflict: 409 ``visibility_conflict``, ``link_project_mismatch`` or
-         *             ``link_source_unfinished``.
+         *         ApiConflict: 409 ``visibility_conflict``, ``link_source_capability``,
+         *             ``link_project_mismatch`` or ``link_source_unfinished``.
          */
         post: operations["create_task_api_v1_tasks_post"];
         delete?: never;
@@ -927,7 +927,7 @@ export interface paths {
          *     grade — owner ∪ same-org colleague ∪ administrator — but
          *     :func:`_expire_stale_pending_turns` is a *write*, and contract § 3 makes
          *     the admin leg read-only: a support read that fails somebody else's pending
-         *     task_agent turn is a mutation nobody asked for and nothing records. So the
+         *     Task Agent turn is a mutation nobody asked for and nothing records. So the
          *     sweep runs only for the owner, whose own turn it is. Nothing is lost: the
          *     owner's own GET sweeps, and every mutating task_agent path sweeps under the
          *     write grade before it does anything.
@@ -3174,8 +3174,14 @@ export interface components {
          *         started_at: When the run started executing.
          *         ended_at: When the run reached a terminal status, or `None` while
          *             still running or paused.
+         *         artefact_id: The artefact this walk wrote, or `None` when it wrote
+         *             none (it has not reached synthesise, or ended before it). A
+         *             scoping walk that carries one produced a baseline, whatever its
+         *             terminal status (task 044 review, C5/C6).
          */
         RunOut: {
+            /** Artefact Id */
+            artefact_id?: string | null;
             /**
              * Capability Run Id
              * Format: uuid
@@ -3476,14 +3482,14 @@ export interface components {
          *
          *     Args:
          *         steer_point: The check-in point the rule covers.
-         *         action: `proceed_flag` or `stop`.
+         *         action: `proceed_flag` — the only value; unattended records the gate and continues.
          */
         ScopingSteerPointDefaultOut: {
             /**
              * Action
-             * @enum {string}
+             * @constant
              */
-            action: "proceed_flag" | "stop";
+            action: "proceed_flag";
             /** Steer Point */
             steer_point: string;
         };
@@ -3862,10 +3868,11 @@ export interface components {
          *             multi-organisation 409, the visibility derivation). Empty means
          *             unassigned, which is a normal state.
          *         from_task_ids: Tasks this one starts from — one `task_link` row each,
-         *             written in the same transaction. Refused 422 on an
-         *             `evidence_search` create: in this slice a Link is how a scoping
-         *             task inherits an Evidence search, and the reverse direction lands
-         *             with task 5.
+         *             written in the same transaction. At most three, because every
+         *             linked source is inherited into the Task Agent's context on every
+         *             turn. Refused 422 on an `evidence_search` create: in this slice a
+         *             Link is how a scoping task inherits an Evidence search, and the
+         *             reverse direction lands with task 5.
          */
         TaskCreate: {
             /**
@@ -3891,7 +3898,11 @@ export interface components {
          *         link_id: The link row's identity.
          *         source_task_id: The task this one starts from.
          *         source_task_name: That task's display name, so the plan document can
-         *             render the link without a second request per source.
+         *             render the link without a second request per source — `None` when
+         *             the reader holds no read grade on the source. A Link grants no
+         *             read (ADR 0037 decision 2), so a colleague reading a task whose
+         *             source has since become private sees the link, flagged, without
+         *             its name.
          *         source_capability_run_id: The **pinned** walk of the source (C11).
          *             What the target inherited cannot change under it when the source
          *             runs again.
@@ -3920,7 +3931,7 @@ export interface components {
              */
             source_task_id: string;
             /** Source Task Name */
-            source_task_name: string;
+            source_task_name: string | null;
         };
         /**
          * TaskOut

@@ -156,8 +156,11 @@ function StartsFromPicker({
   selected: string[];
   onChange: (taskIds: string[]) => void;
 }) {
-  const tasksQuery = useTasks(projectId !== "" ? { project_id: projectId, status: "active" } : undefined);
   const disabled = projectId === "";
+  const tasksQuery = useTasks(
+    { project_id: projectId, status: "active" },
+    { enabled: !disabled },
+  );
   // The server has no capability filter (task 044 shipped the create-time
   // link rules, not a list query) — filtered here, over the one project's
   // rows the query already narrowed to.

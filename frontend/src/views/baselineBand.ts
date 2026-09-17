@@ -21,33 +21,26 @@ export const BASELINE_PURPOSE = "the situation these options would change";
 /** The artefact is written but the plan is not settled yet. */
 export const BASELINE_AWAITING_LINE = "ready · awaiting your confirmation";
 
-// ponytail: `template` and `depth_label` are new additive fields on
-// `ArtefactOut` (api/contract/read_models.py, task 044 phase 4.3). Until
-// `make openapi-sync` regenerates `src/api/gen/types.ts` this narrow local
-// type is how the view reads them; delete it and use `ArtefactOut` once the
-// sync lands.
-export interface ArtefactTemplateFields {
+/** The two fields these functions read off an artefact — narrower than the
+ *  full `ArtefactOut` (the same narrowing `artefactMarkdown` uses) because
+ *  `useArtefact`'s response type and the schema type disagree on
+ *  `coverage_snapshot.year_range`'s tuple-vs-array shape, for reasons that
+ *  have nothing to do with these two fields. */
+interface ArtefactTemplateFields {
   template?: string | null;
   depth_label?: string | null;
 }
 
-/** Read the two bridge fields off an artefact the generated types do not yet
- *  carry them on. Takes `object` so `ArtefactOut` is accepted as-is; delete
- *  it with `ArtefactTemplateFields` once the sync lands. */
-function templateFields(artefact: object | null | undefined): ArtefactTemplateFields {
-  return (artefact ?? {}) as ArtefactTemplateFields;
-}
-
 /** Whether this artefact is an options-scoping baseline. Reads the roll-up's
  *  own word — never inferred from the section titles or the task's kind. */
-export function isBaselineArtefact(artefact: object | null | undefined): boolean {
-  return templateFields(artefact).template === BASELINE_TEMPLATE;
+export function isBaselineArtefact(artefact: ArtefactTemplateFields | null | undefined): boolean {
+  return artefact?.template === BASELINE_TEMPLATE;
 }
 
 /** How deep the pass behind this artefact went, in the roll-up's own words
  *  (`"scoping pass"` for a baseline) — or null when it recorded none. */
-export function artefactDepthLabel(artefact: object | null | undefined): string | null {
-  const label = templateFields(artefact).depth_label;
+export function artefactDepthLabel(artefact: ArtefactTemplateFields | null | undefined): string | null {
+  const label = artefact?.depth_label;
   return typeof label === "string" && label !== "" ? label : null;
 }
 
@@ -84,8 +77,8 @@ export function baselineBand(status: ReturnType<typeof scopingWalkStatus>): Base
   return {
     line: `Baseline · ${BASELINE_PURPOSE} · ${state}`,
     planVersionMark:
-      status.newerVersionThanLatestWalk && status.latestRun !== null
-        ? `built from plan version ${status.latestRun.plan_version}`
+      status.newerVersionThanBaselineRun && status.baselineRun !== null
+        ? `built from plan version ${status.baselineRun.plan_version}`
         : null,
   };
 }

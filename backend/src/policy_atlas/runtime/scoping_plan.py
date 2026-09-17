@@ -313,13 +313,16 @@ class ScopingSteerPointDefault(BaseModel):
 
     Args:
         steer_point: The point the rule covers.
-        action: ``proceed_flag`` (continue and flag) or ``stop``.
+        action: ``proceed_flag`` — continue and flag. The scoping lattice's only
+            point is the baseline gate, and an unattended scoping run always
+            records, flags and CONTINUES there (D11, A9), so the hard ``stop``
+            the Evidence search table allows is not a declarable scoping action.
     """
 
     model_config = ConfigDict(extra="forbid", strict=True)
 
     steer_point: str
-    action: Literal["proceed_flag", "stop"]
+    action: Literal["proceed_flag"]
 
     @field_validator("steer_point")
     @classmethod

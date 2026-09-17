@@ -553,6 +553,7 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
       status: "running",
       started_at: now,
       ended_at: null,
+      artefact_id: null,
     };
     mockTask.latest_run = {
       capability_run_id: currentRun.capability_run_id,
@@ -1042,6 +1043,7 @@ function createMockEventStream(scenario: MockScenario): ReadableStream<Uint8Arra
         sequence: nextSequence(),
       });
       emit(stageCompleted("synthesise", "Writing the report", { cited: 12, sections: 2 }, nextSequence()));
+      setRunArtefact(mockArtefact.artefact_id);
       finishRun("succeeded");
       emit(runStatus("succeeded", nextSequence()));
       controller.close();
@@ -1068,6 +1070,7 @@ async function scopingBaselineWalk(emit: (frame: SseFrame) => void, nextSequence
   emit(stageCompleted("screen", "Screening sources", { relevant: 28, screened_out: 46 }, nextSequence()));
   emit(stageStarted("synthesise", "Writing the baseline", "Setting out what happens if nothing changes", nextSequence()));
   emit(stageCompleted("synthesise", "Writing the baseline", { sections: 4 }, nextSequence()));
+  setRunArtefact(mockBaselineArtefact.artefact_id);
   emit(runStatus("paused", nextSequence()));
   emit({ type: "checkin.pending", check_in: mockBaselineGateCheckIn, occurred_at: frameTime(), sequence: nextSequence() });
 
@@ -1082,6 +1085,14 @@ async function scopingBaselineWalk(emit: (frame: SseFrame) => void, nextSequence
     sequence: nextSequence(),
   });
   emit(runStatus(decision.optionId === "change_plan" ? "aborted" : "succeeded", nextSequence()));
+}
+
+/** Records the artefact this walk wrote, once synthesise completes — before
+ *  the walk necessarily reaches a terminal status (the baseline gate pauses
+ *  it first; task 044 review, C6). */
+function setRunArtefact(artefactId: string) {
+  if (currentRun === null) return;
+  currentRun = { ...currentRun, artefact_id: artefactId };
 }
 
 /** Keep the REST-visible run/task state in step with the stream's

@@ -220,7 +220,7 @@ def answer_at_gate(
     langfuse_client: Any,
     trace_run_id: uuid.UUID,
     conversation_id: uuid.UUID | None,
-) -> GateAnswer:
+) -> GateAnswer | None:
     """Answer one question over the paused walk's pinned evidence.
 
     Args:
@@ -236,14 +236,20 @@ def answer_at_gate(
         conversation_id: The owning Task Agent conversation.
 
     Returns:
-        The prose (with the offer sentence) and its citation payload.
-
-    Raises:
-        RuntimeError: If the paused walk's scope can no longer be resolved.
+        The prose (with the offer sentence) and its citation payload, or
+        ``None`` when the walk this question was admitted at no longer offers
+        a scope to answer over — the card resumed it while the sort was
+        running (C7). That is a race the user lost, not a server fault: the
+        caller completes the turn saying the check-in was already answered.
     """
     scope = resolve_run_components(engine, task_id, capability_run_id=gate.capability_run_id)
     if scope is None:
-        raise RuntimeError("the paused walk disappeared before its Task Agent turn answered")
+        log.info(
+            "gate_turn_answer_scope_gone",
+            task_id=str(task_id),
+            capability_run_id=str(gate.capability_run_id),
+        )
+        return None
     prose, payload = answer_over_scope(
         engine,
         task_id=task_id,
@@ -285,6 +291,50 @@ class DecisionOutcome:
     continue_walk: uuid.UUID | None = None
 
 
+def _collapsed(text: str) -> str:
+    """Return one text with its whitespace collapsed, for comparison only."""
+    return " ".join(text.split()).casefold()
+
+
+def verbatim_carried_text(
+    carried_text: str | None, *, utterance: str, check_in_id: uuid.UUID
+) -> str | None:
+    """Keep the sort's carried instruction only when the user actually said it (S2).
+
+    ``carried_text`` becomes the **planner's message** on a "change the plan"
+    turn, so it is the one piece of the sort's output that is treated as the
+    user speaking. Model output is not the user speaking: a sort that
+    paraphrased, expanded or invented an instruction would put words the user
+    never typed into the plan the next version is built from.
+
+    So it is accepted only when it appears verbatim inside the utterance
+    (whitespace collapsed, case-insensitively — the sort may quote across a
+    line break or lowercase a sentence start, and neither changes the words).
+    Anything else falls back to the **whole utterance**, which is always the
+    user's own words, at the cost of giving the planner a little more context
+    than the sort wanted to.
+
+    Args:
+        carried_text: The instruction the sort carried, if any.
+        utterance: The user's verbatim turn text.
+        check_in_id: The pause, for the warning line.
+
+    Returns:
+        The instruction to hand the planner, or ``None`` when the turn carried
+        no instruction at all (an ordinary decision, with no second half).
+    """
+    if carried_text is None or not carried_text.strip():
+        return None
+    if _collapsed(carried_text) in _collapsed(utterance):
+        return carried_text.strip()
+    log.warning(
+        "gate_sort_carried_text_not_verbatim",
+        check_in_id=str(check_in_id),
+        carried_chars=len(carried_text),
+    )
+    return utterance.strip() or None
+
+
 def commit_decision(
     engine: Engine,
     *,
@@ -292,6 +342,7 @@ def commit_decision(
     gate: PausedGate,
     option_id: str,
     carried_text: str | None,
+    utterance: str,
     actor: str,
 ) -> DecisionOutcome:
     """Commit one decision taken in words through the check-in transaction.
@@ -307,7 +358,10 @@ def commit_decision(
         task_id: Task owning the walk.
         gate: The pause being answered.
         option_id: The offered option the sort chose.
-        carried_text: The instruction a "change the plan" turn carried.
+        carried_text: The instruction a "change the plan" turn carried, kept
+            only when it is the user's own words
+            (:func:`verbatim_carried_text`).
+        utterance: The user's verbatim turn text, which that check is against.
         actor: Authenticated actor recorded in logs.
 
     Returns:
@@ -333,7 +387,9 @@ def commit_decision(
         return DecisionOutcome(
             recorded=True,
             reply=CHANGE_REPLY,
-            carried_text=carried_text.strip() if carried_text and carried_text.strip() else None,
+            carried_text=verbatim_carried_text(
+                carried_text, utterance=utterance, check_in_id=gate.check_in_id
+            ),
             continue_walk=continue_walk,
         )
     return DecisionOutcome(recorded=True, reply=CONFIRM_REPLY, continue_walk=continue_walk)

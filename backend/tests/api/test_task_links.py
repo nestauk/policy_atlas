@@ -87,7 +87,13 @@ def _make_project(conn: Connection, *, org_id: uuid.UUID, owner_user_id: str) ->
     return project_id
 
 
-def _finish_walk(conn: Connection, task_id: uuid.UUID, *, status: str = "succeeded") -> uuid.UUID:
+def _finish_walk(
+    conn: Connection,
+    task_id: uuid.UUID,
+    *,
+    status: str = "succeeded",
+    capability: str = "evidence_search",
+) -> uuid.UUID:
     """Give a task one walk in ``status``; return its ``capability_run_id``."""
     now = datetime.now(UTC)
     scope_id = uuid.uuid4()
@@ -118,7 +124,7 @@ def _finish_walk(conn: Connection, task_id: uuid.UUID, *, status: str = "succeed
             capability_run_id=run_id,
             task_id=task_id,
             evidence_scope_id=scope_id,
-            capability="evidence_search",
+            capability=capability,
             plan_id=plan_id,
             plan_version=1,
             status=status,
@@ -292,6 +298,58 @@ def test_a_link_to_a_source_with_no_finished_walk_is_refused(
         assert accepted.status_code == 201, accepted.text
 
 
+def test_a_scoping_task_cannot_start_from_another_scoping_task(
+    engine: Engine, tmp_path: Path
+) -> None:
+    """S6 / X4: inheritance reads an Evidence search report, which a scoping
+    task does not have — so the Link is refused rather than inherited empty."""
+    with tenancy_client(tmp_path, count=1) as (client, [owner]):
+        with seeded(engine) as conn:
+            org_id = make_org(conn)
+            ops_enrol(conn, user_id=owner.user_id, org_id=org_id)
+            project_id = _make_project(conn, org_id=org_id, owner_user_id=owner.user_id)
+        source = _create(
+            client,
+            owner.headers,
+            name="Scoping source",
+            capability="options_scoping",
+            project_ids=[str(project_id)],
+        )
+        assert source.status_code == 201, source.text
+        source_id = source.json()["task_id"]
+        with seeded(engine) as conn:
+            _finish_walk(conn, uuid.UUID(source_id), capability="options_scoping")
+
+        refused = _create(
+            client,
+            owner.headers,
+            name="Second hop",
+            capability="options_scoping",
+            project_ids=[str(project_id)],
+            from_task_ids=[source_id],
+        )
+        assert refused.status_code == 409, refused.text
+        assert refused.json()["error"]["code"] == "link_source_capability"
+        assert _task_count(engine, "Second hop") == 0
+
+
+def test_a_create_naming_more_than_three_sources_is_refused(
+    engine: Engine, tmp_path: Path
+) -> None:
+    """X11: every linked source rides the Task Agent's context on every turn."""
+    with tenancy_client(tmp_path, count=1) as (client, [owner]):
+        refused = _create(
+            client,
+            owner.headers,
+            name="Too many sources",
+            capability="options_scoping",
+            from_task_ids=[str(uuid.uuid4()) for _ in range(4)],
+        )
+        assert refused.status_code == 422, refused.text
+        assert refused.json()["error"]["code"] == "validation_error"
+        assert _task_count(engine, "Too many sources") == 0
+
+
 def test_a_link_never_widens_what_the_caller_can_read(
     engine: Engine, tmp_path: Path
 ) -> None:
@@ -377,6 +435,74 @@ def test_a_link_whose_tasks_stop_sharing_a_project_is_flagged_not_deleted(
                 )
                 == 0
             )
+
+
+def test_a_reader_who_cannot_open_the_source_is_not_told_its_name(
+    engine: Engine, tmp_path: Path
+) -> None:
+    """S3 / F11: a Link grants no read (ADR 0037 decision 2), so the name is graded.
+
+    Owner A's scoping task T starts from S, both in the shared project P. S
+    then leaves P and goes private. A same-org colleague B can still read T —
+    it is in an org-visible project — and must see the Link, flagged, with no
+    name. A keeps seeing the name, because A owns S.
+    """
+    with tenancy_client(tmp_path, count=2) as (client, principals):
+        owner, colleague = principals
+        with seeded(engine) as conn:
+            org_id = make_org(conn)
+            ops_enrol(conn, user_id=owner.user_id, org_id=org_id)
+            ops_enrol(conn, user_id=colleague.user_id, org_id=org_id)
+            project_id = _make_project(conn, org_id=org_id, owner_user_id=owner.user_id)
+        source = _create(
+            client, owner.headers, name="Private later", project_ids=[str(project_id)]
+        )
+        source_id = source.json()["task_id"]
+        with seeded(engine) as conn:
+            _finish_walk(conn, uuid.UUID(source_id))
+        created = _create(
+            client,
+            owner.headers,
+            name="Graded scoping",
+            capability="options_scoping",
+            project_ids=[str(project_id)],
+            from_task_ids=[source_id],
+        )
+        assert created.status_code == 201, created.text
+        target_id = created.json()["task_id"]
+        assert created.json()["links"][0]["source_task_name"] == "Private later"
+
+        # S leaves the shared project, then stops being org-visible.
+        left = client.patch(
+            f"/api/v1/tasks/{source_id}", headers=owner.headers, json={"project_ids": []}
+        )
+        assert left.status_code == 200, left.text
+        hidden = client.patch(
+            f"/api/v1/tasks/{source_id}",
+            headers=owner.headers,
+            json={"visibility": "private"},
+        )
+        assert hidden.status_code == 200, hidden.text
+        # The baseline: B cannot open S at all.
+        assert client.get(
+            f"/api/v1/tasks/{source_id}", headers=colleague.headers
+        ).status_code == 404
+
+        colleague_read = client.get(
+            f"/api/v1/tasks/{target_id}", headers=colleague.headers
+        )
+        assert colleague_read.status_code == 200, colleague_read.text
+        link = colleague_read.json()["links"][0]
+        assert link["source_task_id"] == source_id
+        assert link["flagged"] is True
+        assert link["source_task_name"] is None
+        # The listing says the same thing, through the batched path.
+        listed = client.get("/api/v1/tasks", headers=colleague.headers)
+        rows = {row["name"]: row for row in listed.json()["data"]}
+        assert rows["Graded scoping"]["links"][0]["source_task_name"] is None
+
+        owner_read = client.get(f"/api/v1/tasks/{target_id}", headers=owner.headers)
+        assert owner_read.json()["links"][0]["source_task_name"] == "Private later"
 
 
 def test_the_tasks_listing_carries_the_capability_and_the_links(
