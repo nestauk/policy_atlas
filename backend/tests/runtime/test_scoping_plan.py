@@ -350,7 +350,7 @@ def test_a_linked_plan_round_trips_through_its_stored_json_payload() -> None:
 
 
 def test_baseline_inputs_changed_names_only_the_inputs_that_moved() -> None:
-    """S4: the six baseline inputs are compared deterministically; a preference
+    """S4: the seven baseline inputs are compared deterministically; a preference
     is not one of them, Where is."""
     from policy_atlas.runtime.scoping_plan import (
         baseline_inputs_changed,
@@ -364,6 +364,11 @@ def test_baseline_inputs_changed_names_only_the_inputs_that_moved() -> None:
         deep=True, update={"where": base.where.model_copy(update={"text": "Scotland"})}
     )
     assert baseline_inputs_changed(base, moved) == ["Where"]
+    # Phase 8: depth shapes the baseline, so a depth change is an input change.
+    other_depth = base.model_copy(
+        deep=True, update={"depth": "rapid" if base.depth == "standard" else "standard"}
+    )
+    assert baseline_inputs_changed(base, other_depth) == ["the depth"]
     assert "touches what the baseline (built from plan version 2)" in baseline_inputs_sentence(
         ["Where"], 2
     )

@@ -36,6 +36,7 @@ from policy_atlas.evidence_search.synthesis.baseline_prompt import (
     BASELINE_SECTIONS,
     SOURCES_NOT_SEARCHED_LINE,
     SOURCES_SECTION_TITLE,
+    required_titles,
 )
 from policy_atlas.evidence_search.synthesis.grounding_judge import StubGroundingJudgeBackend
 from policy_atlas.evidence_search.synthesis.synthesis_backend import (
@@ -303,6 +304,29 @@ def test_baseline_supplies_its_sections_and_places_extras_after_contested(
     assert len(backend.proposal_calls) == 1
     assert backend.proposal_calls[0]["section_budget"] == BASELINE_PROPOSED_SECTIONS_MAX
     assert backend.proposal_calls[0]["rejection"] is None
+
+
+def test_rapid_writes_five_sections_and_never_calls_the_proposer(conn: Connection) -> None:
+    """Phase 8 (owner 2026-09-17): a rapid directive carries no section_budget, so
+    the writer lands the five supplied sections plus Sources and the proposer
+    is never asked."""
+    task_id, run_id = seed_task_and_run(conn)
+    scope_id = seed_scope(conn, task_id)
+    _seed_baseline_corpus(conn, task_id=task_id, run_id=run_id, scope_id=scope_id)
+    backend = _BaselineBackend(
+        proposal=SectionProposalWire(
+            sections=[SectionWire(title="Regional variation", focus="Across regions.")]
+        )
+    )
+    rapid = _baseline_context(sections=_baseline_section_directives("rapid"))
+    del rapid["synthesis"]["section_budget"]
+
+    _run_baseline(
+        conn, task_id=task_id, run_id=run_id, scope_id=scope_id, backend=backend, context=rapid
+    )
+
+    assert _block_titles(conn, task_id) == list(required_titles("rapid"))
+    assert backend.proposal_calls == []
 
 
 def test_baseline_repairs_a_forbidden_proposal_then_lands_zero_extras(
@@ -602,7 +626,7 @@ def test_baseline_rollup_carries_the_scoping_pass_depth_label(conn: Connection) 
     assert row.counts["depth_label"] == BASELINE_DEPTH_LABEL == "scoping pass"
     assert row.counts["template"] == "baseline"
     assert row.synthesis_provenance["directive"]["template"] == "baseline"
-    assert row.synthesis_provenance["prompt_versions"]["template"] == "baseline_template_v1"
+    assert row.synthesis_provenance["prompt_versions"]["template"] == "baseline_template_v2"
 
 
 def test_baseline_skeleton_is_the_section_list_with_no_key_findings(

@@ -168,14 +168,19 @@ class Timer:
         )
 
 
+# The depth whose section list the directive carries (task 044 phase 8 added the
+# rapid shape); set once from the CLI.
+DEPTH = "standard"
+
+
 def baseline_context(section_titles: list[str] | None = None) -> dict[str, Any]:
     """Return the scope context carrying the compiled baseline synthesis directive.
 
     Args:
         section_titles: When given, only these model-written sections are supplied (the
-            fan-out's one-section directives). ``None`` supplies all eight.
+            fan-out's one-section directives). ``None`` supplies the depth's whole list.
     """
-    sections = _baseline_section_directives()
+    sections = _baseline_section_directives(DEPTH)
     if section_titles is not None:
         keep = set(section_titles)
         sections = [
@@ -183,13 +188,12 @@ def baseline_context(section_titles: list[str] | None = None) -> dict[str, Any]:
             for s in sections
             if s["title"] in keep or s["title"] == SOURCES_SECTION_TITLE
         ]
-    return {
-        "synthesis": {
-            "template": BASELINE_TEMPLATE_KEY,
-            "sections": sections,
-            "section_budget": BASELINE_PROPOSED_SECTIONS_MAX,
-        }
-    }
+    synthesis: dict[str, Any] = {"template": BASELINE_TEMPLATE_KEY, "sections": sections}
+    if DEPTH == "standard":
+        # Proposed sections are a standard-depth allowance (phase 8): the product's
+        # rapid directive carries no budget and synthesise makes no proposal call.
+        synthesis["section_budget"] = BASELINE_PROPOSED_SECTIONS_MAX
+    return {"synthesis": synthesis}
 
 
 def run_one(
@@ -595,7 +599,10 @@ def main() -> None:
     ap.add_argument("cmd", choices=["sequential", "parallel", "compare"])
     ap.add_argument("corpus", choices=sorted(CORPORA))
     ap.add_argument("--data", required=True)
+    ap.add_argument("--depth", choices=["standard", "rapid"], default="standard")
     a = ap.parse_args()
+    global DEPTH
+    DEPTH = a.depth
     data = Path(a.data)
     {"sequential": cmd_sequential, "parallel": cmd_parallel, "compare": cmd_compare}[
         a.cmd

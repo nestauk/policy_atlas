@@ -1,5 +1,14 @@
 # Spec update log
 
+## 2026-09-17
+* **Update** (task 044, phase 8; owner ruling "Go with options 2 and 5, targets 20 and 10"): the
+  baseline is **shaped by depth** — [OS capability](capabilities/options-scoping/capability.md)
+  § Output structure, [OS components](capabilities/options-scoping/components.md) § 11 and
+  [plan-as-object](system/plan-as-object.md) § Thoroughness. Rapid: five required sections (in place +
+  already changing merged; trend + cost of inaction merged), no proposed sections, acquisition target
+  10. Standard: unchanged eight plus up to two proposed, target 20 (was one target of 25). Re-revises
+  the 2026-09-09 "one shape at every depth" line after the measured 4.3 to 7.5 minute baselines.
+
 ## 2026-09-09
 * **Update** (task 044, deliverable 2): the abbreviation **EB → ES** across the
   living specs, `docs/tasks/_templates/`, `docs/agentic-ops/` and code comments

@@ -366,10 +366,68 @@ the NEET wall clock); the plan shows a coarse band and promises no number.
 |---|---:|---|
 | `make verify` (full) | pass | backend 2802 passed (10:10); typecheck 335 files clean; lint clean; build OK; infra 46 passed; okf-validate 143/0; audit-paths, prompt-guard (16 modules), font-guard, `drift-check: OK`; frontend 715 tests / 82 files |
 | `cd frontend && pnpm e2e` | pass | 15/15 (mock mode) |
+| `make verify` (full, phase 8 gate, 2026-09-17) | pass | backend 2806 passed (8:39); typecheck clean; lint clean; build OK; infra 46 passed; prompt-hash-guard 16 unchanged (two re-pinned); openapi-sync + drift-check OK; frontend 715 passed (82 files). e2e not rerun: no frontend change in phase 8 |
 
 Every plan checkpoint is committed on `task/044-scoping-shell-baseline`; the
 live check ran at the contract's pinned scope; this file is complete for the
 review conversation (`task-cycle-review`, fresh conversation).
+
+### Phase 8 — latency levers before the review (2026-09-17, lead)
+
+Added after step 6 at the owner's request ("Add them to 044 as phase 8 before
+the review"). Owner rulings, from the latency reading of the three live
+baselines (389 s, 453 s, 259 s; synthesise 51–76 % of wall clock, classify
+42–86 s at 4 workers, ingest 47–89 s): "Go with options 2 and 5, targets 20
+and 10"; classify and ingest widening "easy wins". Ruled out: waves, a writer
+model change, fewer screen reps, turn cap or read window, stage overlap. The
+writer-side levers (emit payload, judge concurrency, quote bound, reasoning)
+are deferred to a synthesis optimisation task (`docs/deferred.md`
+§ Synthesis optimisation), with the owner's concern that claims still
+unsupported after the one repair stay in the prose.
+
+| Change | Where | Pinned by |
+|---|---|---|
+| Classify 4 → 12 workers (the screen's width; provider-bound threads) | `assess/classify.py` | comment names the ruling |
+| Ingest parse workers follow the cores: `max(4, min(8, cpu_count))` — 4 on the 2-vCPU staging task, 8 locally; fetch threads unchanged at 10 | `sourcing/ingest_full_text.py` | `test_fanout_determinism_workers_1_vs_4` still green |
+| Acquisition target by depth: `{standard: 20, rapid: 10}` (was one constant, 25) | `runtime/scoping_plan.py` | `test_acquire_carries_the_depths_acquisition_target` |
+| Rapid section list: five sections — in place + already changing merged, trend + cost of inaction merged; foci 505 / 481 chars (bound 600); Who is affected, What is contested, Key assumption carried as the standard objects | `baseline_prompt.py` (`BASELINE_RAPID_SECTIONS`, `BASELINE_SECTIONS_BY_DEPTH`, `required_titles(depth)`), `baseline_template_v2` | `test_rapid_writes_five_sections_merging_two_pairs` |
+| Proposed sections at standard only: the rapid synthesise directive carries no `section_budget`; synthesise makes no proposal call without one (the budget now travels in the directive, not the constant) | `scoping_plan.py`, `synthesise.py` | `test_rapid_supplies_five_sections_plus_sources_and_no_proposal_budget`, `test_rapid_writes_five_sections_and_never_calls_the_proposer` |
+| A depth change is a baseline input change (S4 sentence names "the depth") | `baseline_inputs_changed` | `test_baseline_inputs_changed_names_only_the_inputs_that_moved` |
+| Task Agent prompt says depth shapes the baseline; option subs reworded (`task_agent_scoping_v2`) | `task_agent_scoping_prompt.py` | prompt pins; both hashes re-pinned |
+| Specs applied with the ruling quoted: OS capability § Output structure, OS components § 11, plan-as-object § Thoroughness, log 2026-09-17; contract § Baseline + D7 + template bullet; rubric 7 and new 20; plan Phase 8 | docs | — |
+
+**Measured (check-7 driver, `--depth` flag added; the NEET corpus, 53 appraised
+documents, writing only, rolled back):**
+
+| Run | Sections written | Wall (s) | Section walls (s) | Calls | Tokens |
+|---|---|---:|---|---|---:|
+| standard, 2026-09-09 (check 7, proposer stubbed) | 7 | 183.0 | slowest 36.4 | 28 | 273,250 |
+| rapid, run 1 (machine under `make verify` load) | 5 | 168.1 | 39 · 47 · 39 · 25 · 14 | 18 (10 turns, 5 judge, 2 repair, 1 rejudge) | 187,524 |
+| rapid, run 2 (idle machine) | 5 | 189.3 | 25 · 32 · 53 · 57 · 20 | 20 (11 turns, 5 judge, 2 repair, 2 rejudge) | 222,923 |
+| standard, run 3 (same day, idle machine; the driver stubs the proposer) | 7 | 339.3 | 41 · 25 · 43 · **126** · 32 · 44 · 26 | 33 (14 turns, 7 judge, 6 repair, 6 rejudge) | 294,711 |
+
+**Lead reading, flagged for the owner.** Run-to-run variance dominates
+the comparison. Against the 2026-09-09 standard write (183 s) the rapid
+shape saved nothing (168 s, 189 s); against the same-day standard write
+(339 s) it saved about half. The same-day standard run carried six repair
+and six re-judge calls, and one section (What is already changing) took
+126 s of it — the judge-repair loop is the largest single source of
+variance in these runs, larger than the section count. Two things hold
+across all four runs: the write turn is set by output tokens (a merged
+section writes what two wrote; rapid tokens fell 18–31 % against the Sept 9
+standard and 24–36 % against today's), and each section not written saves
+its own read, write and judge calls plus any repairs. So the reliable rapid
+savings are the acquisition target of 10 (ingest, screen and classify shrink
+with the document count), no proposed sections (the live NEET standard
+baseline wrote two, about 25 s each), and two fewer judge-repair exposures;
+the merge itself is a cost lever more than a latency one. Recorded rather
+than reverted: the shape is the owner's ruling; the judge-repair variance is
+added to the synthesis optimisation note.
+
+No full walk was re-run through the API in this phase (the dev API was down;
+the walk-level effect of the target and the fan-out is arithmetic on the
+phase 7 component times: about 190 s → 70 s before synthesis on the NEET
+run). Cost of the three writes: about $2.5 (Langfuse).
 
 ## Checks beyond the build
 
@@ -407,6 +465,9 @@ _(filled per phase; flagged deviations listed here as they arise)_
    category is ordinary English. The pane's aria label "Planning conversation"
    became "Task Agent conversation".
 
+12. **Phase 8 measurement contradicts one of its own levers** (see Phase 8):
+    the rapid five-section merge saved no writing time on the NEET corpus in
+    two runs. Kept as ruled; flagged for the owner at review.
 6. **The frontend URL token `?chat=planning` became `?chat=task_agent` with
    no alias** (review finding on `conversationState.ts`): a tab opened before
    the deploy that still carries `?chat=planning` shows "This chat couldn't be
@@ -567,4 +628,7 @@ latency levers (check 7's reading) · the Task Agent as the ES control surface
 · rebuild only the touched sections · the language evidence restriction ·
 the ES prompt's unattended default · the name-based prompt-hash guard · the
 `?chat=planning` token · the `agent_prompt.py` docstring. Spec log lines in
-`docs/specs/log.md` (2026-09-09).
+`docs/specs/log.md` (2026-09-09). Phase 8 adds `docs/deferred.md`
+§ Synthesis optimisation (emit payload, judge concurrency, quote bound,
+reasoning on the writer, unsupported claims kept in prose) and the log line
+of 2026-09-17.

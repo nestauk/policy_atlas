@@ -1,4 +1,4 @@
-"""Pins for the ``task_agent_scoping_v1`` prompt surface (task 044, deliverable 6)."""
+"""Pins for the ``task_agent_scoping_v2`` prompt surface (task 044, deliverable 6)."""
 
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ from policy_atlas.runtime.task_agent_scoping_prompt import (
 
 
 def test_version_pinned() -> None:
-    assert TASK_AGENT_SCOPING_PROMPT_VERSION == "task_agent_scoping_v1"
+    assert TASK_AGENT_SCOPING_PROMPT_VERSION == "task_agent_scoping_v2"
 
 
 def test_depth_is_offered_as_two_screen_labels_never_the_keys() -> None:
@@ -25,6 +25,9 @@ def test_depth_is_offered_as_two_screen_labels_never_the_keys() -> None:
     assert 'label "Rapid scoping"' in prompt
     assert 'label "Standard scoping"' in prompt
     assert "NO primary option" in prompt
+    # Phase 8: depth shapes the baseline; the options say so in screen words.
+    assert "Depth shapes the baseline too" in prompt
+    assert "one shape at both" not in prompt
     assert DEPTH_OPTION_IDS == {"rapid_pass": "rapid", "standard_pass": "standard"}
     # The reply vocabulary rule bans the keys on screen.
     assert "rapid / standard / moderate" in prompt

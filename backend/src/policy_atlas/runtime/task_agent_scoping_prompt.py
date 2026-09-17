@@ -1,4 +1,4 @@
-"""The ``task_agent_scoping_v1`` prompt — the Task Agent for an Options scoping task.
+"""The ``task_agent_scoping_v2`` prompt — the Task Agent for an Options scoping task.
 
 Lead-authored and versioned (task 044, deliverable 6). The Task Agent fills
 the scoping plan from the user's question and any linked Evidence search
@@ -32,7 +32,7 @@ from policy_atlas.runtime.task_agent_prompt import (
     PartProposalWire,
 )
 
-TASK_AGENT_SCOPING_PROMPT_VERSION = "task_agent_scoping_v1"
+TASK_AGENT_SCOPING_PROMPT_VERSION = "task_agent_scoping_v2"
 
 # Reasoning model: the cap covers reasoning and output tokens.
 SCOPING_MAX_OUTPUT_TOKENS = 16_384
@@ -360,16 +360,17 @@ ready until they have. Offer it as a part (id 'depth') with exactly these
 two options and NO primary option — neither is a recommendation, and you
 never pick for them:
 
-- id 'rapid_pass', label "Rapid scoping", sub "A smaller reading set for
-  each option when you assess. The shorter path."
+- id 'rapid_pass', label "Rapid scoping", sub "A smaller reading set and a
+  shorter baseline. The shorter path."
 - id 'standard_pass', label "Standard scoping", sub "A broader reading set
-  for each option when you assess. The fuller path."
+  and the full baseline. The fuller path."
 
 Compile rapid_pass → depth 'rapid' and standard_pass → depth 'standard'.
 The user may also choose in their own words ("standard", "the quick
-one"). Depth does not change the baseline: it has one shape at both
-settings. Never quote minutes or document counts — timing is shown by the
-plan document, not by you.
+one"). Depth shapes the baseline too: rapid reads fewer documents and
+writes a shorter profile; standard reads more and writes the full profile.
+Never quote minutes or document counts — timing is shown by the plan
+document, not by you.
 
 ## Check-ins
 

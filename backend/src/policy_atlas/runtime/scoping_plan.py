@@ -34,7 +34,7 @@ from policy_atlas.api.contract.task_agent import PlanStep
 from policy_atlas.evidence_search.sourcing.country_filters import TIER1_GROUPS
 from policy_atlas.evidence_search.synthesis.baseline_prompt import (
     BASELINE_PROPOSED_SECTIONS_MAX,
-    BASELINE_SECTIONS,
+    BASELINE_SECTIONS_BY_DEPTH,
     BASELINE_TEMPLATE_KEY,
     SOURCES_SECTION_NAV_LABEL,
     SOURCES_SECTION_TITLE,
@@ -80,11 +80,12 @@ SCOPING_STEER_POINTS: frozenset[str] = frozenset({"baseline_confirm"})
 #: The one steer point this slice's chain carries.
 BASELINE_CONFIRM = "baseline_confirm"
 
-#: The baseline's per-backend acquisition target (contract § Plan object:
-#: execution-bearing, not a plan field). A narrow question about the status
-#: quo, not a broad search — the latency lever D7 names first. Phase 7 measures
-#: it; the number is revised there, not guessed here.
-BASELINE_ACQUISITION_TARGET = 25
+#: The baseline's per-backend acquisition target by depth (contract § Plan
+#: object: execution-bearing, not a plan field). A narrow question about the
+#: status quo, not a broad search — the latency lever D7 names first. Phase 7
+#: measured one target of 25 (baselines of 4.3 to 7.5 minutes); phase 8 keys it
+#: on depth (owner, 2026-09-17: "targets 20 and 10").
+BASELINE_ACQUISITION_TARGETS: dict[str, int] = {"standard": 20, "rapid": 10}
 
 #: The coarse band the plan document shows. Replaced by the lead after the
 #: Phase 7 measurement; never a promise of a number.
@@ -371,8 +372,9 @@ class ScopingPlan(BaseModel):
         target_unit: Who or what should change.
         where: The jurisdiction the policy would apply to.
         outcomes: The outcomes evidence is read against; at least one.
-        depth: ``rapid`` or ``standard`` (D6). The baseline has one shape at
-            both (D7); depth is read by tasks 2 and 3.
+        depth: ``rapid`` or ``standard`` (D6). Depth shapes the baseline (D7
+            as revised 2026-09-17): the acquisition target and the section
+            list; tasks 2 and 3 read it too.
         constraints: Typed constraints and preferences.
         your_context: The user's own situation, verbatim.
         entry_branch: ``explore`` is the only branch in this slice.
@@ -556,6 +558,7 @@ BASELINE_INPUT_NAMES: dict[str, str] = {
     "where": "Where",
     "outcomes": "the outcomes",
     "evidence_restrictions": "an evidence restriction",
+    "depth": "the depth",
 }
 
 
@@ -590,6 +593,7 @@ def baseline_inputs_changed(previous: ScopingPlan, current: ScopingPlan) -> list
         "where": (previous.where.text, current.where.text),
         "outcomes": ([o.text for o in previous.outcomes], [o.text for o in current.outcomes]),
         "evidence_restrictions": (restrictions(previous), restrictions(current)),
+        "depth": (previous.depth, current.depth),
     }
     return [BASELINE_INPUT_NAMES[k] for k, (a, b) in probes.items() if a != b]
 
@@ -780,8 +784,11 @@ def scope_constraints_for(plan: ScopingPlan) -> ScopeConstraints:
     return ScopeConstraints.model_validate(values)
 
 
-def _baseline_section_directives() -> list[dict[str, Any]]:
-    """Return the supplied baseline section specs, in the ruled order.
+def _baseline_section_directives(depth: str = "standard") -> list[dict[str, Any]]:
+    """Return the supplied baseline section specs for a depth, in the ruled order.
+
+    Args:
+        depth: ``standard`` (seven model-written sections) or ``rapid`` (five).
 
     Returns:
         One ``{title, focus, nav_label, turn_cap}`` object per model-written
@@ -796,7 +803,7 @@ def _baseline_section_directives() -> list[dict[str, Any]]:
             "nav_label": s.nav_label,
             "turn_cap": s.turn_cap,
         }
-        for s in BASELINE_SECTIONS
+        for s in BASELINE_SECTIONS_BY_DEPTH[depth]
     ]
     sections.append(
         {
@@ -839,7 +846,7 @@ def _scoping_directive_delta(component: str, plan: ScopingPlan) -> dict[str, Any
     if component == "acquire":
         search: dict[str, Any] = {
             "depth": "rapid",
-            "record_cap": BASELINE_ACQUISITION_TARGET,
+            "record_cap": BASELINE_ACQUISITION_TARGETS[plan.depth],
         }
         filters = scope_constraints_for(plan).to_filters()
         if filters:
@@ -848,13 +855,15 @@ def _scoping_directive_delta(component: str, plan: ScopingPlan) -> dict[str, Any
     if component == "screen_abstract":
         return {"screening": {"criteria": _screening_criteria(plan)}}
     if component == "synthesise":
-        return {
-            "synthesis": {
-                "template": BASELINE_TEMPLATE_KEY,
-                "sections": _baseline_section_directives(),
-                "section_budget": BASELINE_PROPOSED_SECTIONS_MAX,
-            }
+        synthesis: dict[str, Any] = {
+            "template": BASELINE_TEMPLATE_KEY,
+            "sections": _baseline_section_directives(plan.depth),
         }
+        # Proposed sections are a standard-depth allowance; a rapid directive
+        # carries no budget and synthesise makes no proposal call (phase 8).
+        if plan.depth == "standard":
+            synthesis["section_budget"] = BASELINE_PROPOSED_SECTIONS_MAX
+        return {"synthesis": synthesis}
     return {}
 
 
@@ -867,8 +876,9 @@ def compose_scoping(plan: ScopingPlan) -> ComposedChain:
     Returns:
         The six-step chain ``acquire → screen_abstract → classify → appraise →
         ingest_full_text → synthesise`` and nothing else. There are no
-        discretionary components: the baseline's shape does not vary, and
-        depth (D7) changes nothing about it.
+        discretionary components. Depth (D7, revised 2026-09-17) changes the
+        acquire target and the section list inside the directives, never the
+        chain.
     """
     return ComposedChain(
         steps=[

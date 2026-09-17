@@ -2546,3 +2546,60 @@ deferred here — the owner ruled the font is fine for now.
   the Task Agent.
 - **`agent_prompt.py` docstring** still cites `planner_prompt.py` /
   `planner_v5` — hash-pinned; reword at the next `agent_v` edit.
+
+## Synthesis optimisation (deferred 2026-09-17; owner intends a task after options scoping lands)
+
+Cost, latency and quality together. Measured on the task 044 NEET baseline
+(Langfuse trace `run:synthesise:3baa5bc1`, 9 sections, 180 s wall clock, 170 s
+in model calls): write turns 110 s, grounding judge 30 s, read turns 22 s,
+proposal and two repairs 7 s. Every section used two turns (one batched read
+turn of 3 to 6 tool calls, one write turn); the write turn is set by output
+tokens, and only about 30% of the emitted output is prose. The rest is the
+claims structure: each claim repeats its sentence verbatim as `text`, and each
+chunk citation carries a verbatim quote of about 250 characters (first section:
+2,250 prose characters against 7,100 of structure).
+
+- **Slim the emit payload** — claims anchored by prose position instead of a
+  repeated sentence; chunk citations by record id plus a short anchor the code
+  verifies against the frozen chunk. Halves the write turn (110 s → about 50 s
+  on the run above). Changes the grounding contract the Evidence search report
+  shares (ADR 0015 §4 span binding; the judge's verbatim-quote check). Owner:
+  "seems like something that would make a material difference".
+- **Judge-repair variance** — in the phase 8 same-day writes on the NEET
+  corpus one standard section took 126 s (six repair and six re-judge calls
+  across the run, against two in the rapid runs); the loop, not the section
+  count, was the largest source of run-to-run variance (183 s vs 339 s for the
+  same seven sections). Bounding repair cost (fewer failing claims at first
+  write, or a cheaper repair route) belongs with the emit-payload work.
+- **Judge concurrent with the next section** — the mini judge runs after each
+  section in sequence (3 s each); judging section N while N+1 reads saves about
+  25 s per baseline without a user-visible stage change. Repairs land when the
+  judge returns.
+- **Citation quote length bound** (about 120 characters) — about a fifth of
+  output, roughly 20 s, if the payload stays as is.
+- **Reasoning on the writer** — `reasoning_effort="none"` is a provider
+  constraint on tool-bearing chat-completions calls to gpt-5.6-terra (029 H3
+  knowledge note), so today neither the ES report nor the baseline reasons
+  before writing; the design leans on read-then-write plus the judge. Untested:
+  whether the Responses endpoint lifts it. Reasoning tokens are output tokens,
+  so this trades latency for quality and needs its own measurement.
+- **Ruled out for the scoping latency slice** (owner, 2026-09-17): parallel or
+  wave section writing (coherence), a writer model change (terra is the mid
+  tier), fewer screen reps (stays 3), turn cap 4 → 3 and a smaller read window
+  (quality), stage overlap (discrete steps are clearer to the user). Taken
+  instead in task 044 phase 8: classify 12 wide, ingest parse workers by core
+  count, acquisition targets 20 · 10 by depth, rapid = five sections and no
+  proposed sections.
+- **Unsupported claims after the one repair pass stay in the prose** (owner
+  concern, 2026-09-17: "keeping unvalidated claims in the output isn't the best
+  for user trust"). Today, after judge → one repair → re-judge, a claim the
+  judge still marks `unsupported_mis_cited` is kept in the section and flagged
+  (ADR 0015 §5/§6 flag-not-drop; artefact flag `unsupported_claims_present`;
+  chat enrichment ranks it lowest), and a repaired claim that fails the
+  validators keeps its prose without a citation. `REPAIR_ROUND_CAP` is 1.
+  Options to weigh in the synthesis optimisation task: a second bounded repair
+  round for still-failing claims; hedge-or-delete as the default for a claim the
+  re-judge fails (the repair wire already supports both); a visible marker in
+  the rendered prose rather than a flag only in the annotation layer. Each is a
+  grounding-contract change shared with the ES report (ADR 0015, 013
+  invariants) and needs a quality read against a set of judged sections.

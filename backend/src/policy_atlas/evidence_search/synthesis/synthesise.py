@@ -65,7 +65,6 @@ from policy_atlas.evidence_search.synthesis.baseline_prompt import (
     BASELINE_DEPTH_LABEL,
     BASELINE_PROMPT_VERSION,
     BASELINE_PROPOSED_INSERT_AFTER,
-    BASELINE_PROPOSED_SECTIONS_MAX,
     BASELINE_SECTION_TURN_CAP,
     BASELINE_TEMPLATE_KEY,
     SOURCES_LANGUAGE_NOT_APPLIED_LINE,
@@ -1977,11 +1976,13 @@ def _baseline_extra_sections(
     grouping_group_ids: set[str] | None,
     call_counts: dict[str, int],
     usage_totals: UsageAccumulator,
+    section_budget: int,
 ) -> tuple[list[SectionSpec], list[str]]:
-    """Propose the baseline's at-most-two problem-specific extra sections.
+    """Propose the baseline's problem-specific extra sections, under a budget.
 
     The baseline's required sections are supplied, never proposed; the proposer
-    runs only for the extras, under ``BASELINE_PROPOSED_SECTIONS_MAX``. Invalid
+    runs only for the extras, under ``section_budget`` (the directive's; the
+    standard depth carries ``BASELINE_PROPOSED_SECTIONS_MAX``). Invalid
     extras drive the one bounded repair call the Evidence search path already
     owns; extras that are still invalid after it degrade to **none** rather
     than failing the run — the baseline's deliverable is its required sections,
@@ -1996,10 +1997,11 @@ def _baseline_extra_sections(
         grouping_group_ids: Valid grouping ids, or ``None``.
         call_counts: Mutated generation-call ledger.
         usage_totals: Mutated provider-usage accumulator.
+        section_budget: The most extras the directive allows (>= 1).
 
     Returns:
         ``(extras, notes)`` — the admissible extras (at most
-        ``BASELINE_PROPOSED_SECTIONS_MAX``) and the deterministic notes to
+        ``section_budget``) and the deterministic notes to
         record in ``section_set.proposal_normalisations``.
     """
     required_titles = [section.title for section in required]
@@ -2013,7 +2015,7 @@ def _baseline_extra_sections(
                 intent=intent,
                 substrate=summaries,
                 rejection=rejection,
-                section_budget=BASELINE_PROPOSED_SECTIONS_MAX,
+                section_budget=section_budget,
             )
         except RuntimeError as exc:
             # The extras are optional by construction: a provider failure on
@@ -2037,7 +2039,7 @@ def _baseline_extra_sections(
         sections, reasons, normalisations = _validate_sections(
             proposal,
             grouping_group_ids=grouping_group_ids,
-            section_budget=BASELINE_PROPOSED_SECTIONS_MAX,
+            section_budget=section_budget,
         )
         notes.extend(normalisations)
         return sections, reasons + _baseline_rejections(
@@ -2057,7 +2059,7 @@ def _baseline_extra_sections(
             log.warning("synthesise.baseline_extras_rejected", reasons=reasons[:5])
             notes.append("baseline_extras_dropped: " + "; ".join(reasons)[:400])
             return [], notes
-    return list(extras[:BASELINE_PROPOSED_SECTIONS_MAX]), notes
+    return list(extras[:section_budget]), notes
 
 
 def _baseline_section_order(
@@ -5878,18 +5880,24 @@ def synthesise_scope(
                     role="sources",
                 ),
             )
-            extras, baseline_notes = _baseline_extra_sections(
-                intent=context.intent,
-                summaries=summaries,
-                required=required,
-                synthesis_backend=synthesis_backend,
-                grouping_group_ids=(
-                    substrate.grouping_group_ids if substrate.grouping else None
-                ),
-                call_counts=call_counts,
-                usage_totals=usage_totals,
-            )
-            proposal_normalisations.extend(baseline_notes)
+            # The directive's section_budget is the proposed-section
+            # allowance; a directive without one (the rapid depth, task 044
+            # phase 8) writes the supplied list and makes no proposal call.
+            extras: list[SectionSpec] = []
+            if directive.section_budget is not None:
+                extras, baseline_notes = _baseline_extra_sections(
+                    intent=context.intent,
+                    summaries=summaries,
+                    required=required,
+                    synthesis_backend=synthesis_backend,
+                    grouping_group_ids=(
+                        substrate.grouping_group_ids if substrate.grouping else None
+                    ),
+                    call_counts=call_counts,
+                    usage_totals=usage_totals,
+                    section_budget=directive.section_budget,
+                )
+                proposal_normalisations.extend(baseline_notes)
             sections = _baseline_section_order(required, extras)
         else:
             sections = supplied

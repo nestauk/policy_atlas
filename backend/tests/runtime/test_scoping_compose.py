@@ -23,6 +23,7 @@ from policy_atlas.evidence_search.synthesis.baseline_prompt import (
     BASELINE_SECTION_TURN_CAP,
     BASELINE_SECTIONS,
     SOURCES_SECTION_TITLE,
+    required_titles,
 )
 from policy_atlas.evidence_search.synthesis.synthesis_tools import (
     SECTION_CAP,
@@ -31,7 +32,7 @@ from policy_atlas.evidence_search.synthesis.synthesis_tools import (
 )
 from policy_atlas.runtime.capability_registry import OPTIONS_SCOPING, compose_plan
 from policy_atlas.runtime.scoping_plan import (
-    BASELINE_ACQUISITION_TARGET,
+    BASELINE_ACQUISITION_TARGETS,
     SCOPING_SPINE,
     ScopingPlan,
     build_scoping_plan,
@@ -76,11 +77,29 @@ def test_the_chain_is_exactly_the_six_components() -> None:
     assert compose_scoping(_plan()).components == list(SCOPING_SPINE)
 
 
-def test_depth_does_not_change_the_chain() -> None:
-    """D7: the baseline has one shape at both settings."""
+def test_depth_changes_the_directives_never_the_chain() -> None:
+    """D7 (revised 2026-09-17): depth shapes the target and the section list."""
     rapid = compose_scoping(_plan(depth="rapid"))
     standard = compose_scoping(_plan(depth="standard"))
-    assert rapid == standard
+    assert rapid.components == standard.components
+    assert rapid != standard
+
+
+# --- synthesise -------------------------------------------------------------
+
+
+def test_standard_supplies_seven_sections_plus_sources_and_allows_two_proposals() -> None:
+    synthesis = _delta(_plan(depth="standard"), "synthesise")["synthesis"]
+    assert [s["title"] for s in synthesis["sections"]] == list(required_titles("standard"))
+    assert len(synthesis["sections"]) == 8
+    assert synthesis["section_budget"] == BASELINE_PROPOSED_SECTIONS_MAX
+
+
+def test_rapid_supplies_five_sections_plus_sources_and_no_proposal_budget() -> None:
+    synthesis = _delta(_plan(depth="rapid"), "synthesise")["synthesis"]
+    assert [s["title"] for s in synthesis["sections"]] == list(required_titles("rapid"))
+    assert len(synthesis["sections"]) == 6
+    assert "section_budget" not in synthesis
 
 
 def test_the_registry_composes_the_scoping_chain_not_the_evidence_search_one() -> None:
@@ -91,9 +110,11 @@ def test_the_registry_composes_the_scoping_chain_not_the_evidence_search_one() -
 # --- acquire ----------------------------------------------------------------
 
 
-def test_acquire_carries_the_baseline_acquisition_target() -> None:
-    search = _delta(_plan(), "acquire")["search"]
-    assert search["record_cap"] == BASELINE_ACQUISITION_TARGET
+def test_acquire_carries_the_depths_acquisition_target() -> None:
+    assert BASELINE_ACQUISITION_TARGETS == {"standard": 20, "rapid": 10}
+    for depth, target in BASELINE_ACQUISITION_TARGETS.items():
+        search = _delta(_plan(depth=depth), "acquire")["search"]
+        assert search["record_cap"] == target
 
 
 def test_the_acquire_directive_parses_under_the_search_grammar() -> None:
@@ -101,7 +122,7 @@ def test_the_acquire_directive_parses_under_the_search_grammar() -> None:
     depth, filters, guidance = parse_search_directive(context)
     assert depth == "rapid"
     assert guidance is None
-    assert parse_record_cap(context) == BASELINE_ACQUISITION_TARGET
+    assert parse_record_cap(context) == BASELINE_ACQUISITION_TARGETS["standard"]
     assert filters is None
 
 

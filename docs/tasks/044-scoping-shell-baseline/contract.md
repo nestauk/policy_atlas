@@ -277,7 +277,7 @@ and the decisions below quoted where they are applied.
 | **intent record** | An `evidence_scope` row: the question a run is answering plus its settings; every result row points at one. Decision C4: several per plan. |
 | **Link** | A `task_link` row: source task, target task, pinned source run ids, created by/at. Declared in `data-model.md` § Links between tasks (decision A6). |
 | **inherit** | The shared component that reads across a Link. Its task-1 part seeds the Task Agent and pins the source runs. Its document part lands in task 2. |
-| **baseline** | The profile of "Do nothing": eight required sections plus up to two the writer proposes (§ Baseline). The Result of this slice. |
+| **baseline** | The profile of "Do nothing": at standard depth eight required sections plus up to two the writer proposes; at rapid depth five required sections and none proposed (§ Baseline, phase 8). The Result of this slice. |
 | **the gate** | The pause after the baseline where the user confirms the plan. Steer point `baseline_confirm`; the first of the two structural gates (OS capability § Pipeline and gates). |
 | **steer point** | A named pause on the steering lattice (`runtime/steering.py` `LATTICE_POINTS`). ES has five; this slice adds one and gives the lattice a **capability dimension** (A2): a point belongs to a capability's chain, so `baseline_confirm` never names an ES pause after synthesise. |
 | **gate sort** | The mini-class prompt surface that sorts a Task Agent turn at a pause into question · decision (A4, C1); an instruction is the decision "Change the plan" carrying its text. Lead-authored, hash-pinned. Fails safe: an unsortable turn is asked back, never applied. The ES's boundary triage (`WatchTriageWire`, a notable-or-not verdict) is a different call and is reused unchanged. |
@@ -336,7 +336,7 @@ the Frame board):
 | `target_unit` | who or what should change (people, firms, places, organisations, systems) | yes | intent context; screen prompt input |
 | `where` | the jurisdiction the policy applies to; default "United Kingdom" tagged *assumed* | yes | intent context; screen prompt input |
 | `outcomes[]` | the outcomes evidence is read against | yes | intent context |
-| `depth` | rapid \| standard (D6), chosen from the Task Agent's offered options | *your call* | stored; tasks 2–3 read it; the baseline has one shape at both (D7) |
+| `depth` | rapid \| standard (D6), chosen from the Task Agent's offered options | *your call* | stored; tasks 2–3 read it; shapes the baseline's acquisition target (20 · 10) and section list (D7 as re-revised in phase 8) |
 | `constraints[]` | `{text, kind, origin, checked_at}`; kind ∈ requirement \| preference \| evidence_restriction; checked_at ∈ longlist \| assessment \| retrieval | yes | evidence restrictions → the ES `ScopeConstraints` on every acquire, the baseline's included (D8) — **country group and publication years only**: the ES model has no language filter (C8), so a language restriction is stored, shown as *not yet applied at retrieval* and recorded as an ES gap; the other kinds are stored for tasks 2–3. Evidence restrictions sit in the plan's Constraints table, not in Settings — the placement the spec kept when it rejected "evidence restrictions as plan Settings" |
 | `your_context[]` | `{text verbatim, type: present_fact \| commitment, turn_index, test_as_condition}` | — | stored; read by task 3 |
 | `entry_branch` | `explore` (only value in this slice) | — | — |
@@ -377,6 +377,20 @@ E12's rapid subset): dropping two sections saves about 95 s of a roughly
 380 s sequential write (measured proxy, check 5) against a retrieval spine of
 about 4.6 min that does not change with depth — not a difference a user
 feels, so the section count is not the latency lever.
+
+**Re-revised in phase 8** (owner ruling 2026-09-17, task 044 phase 8: "Go with options 2 and 5, targets 20 and 10"), after the
+three live baselines measured 389 s, 453 s and 259 s: the baseline is shaped
+by depth. **Standard** keeps the shape above, against an acquisition target
+of 20 documents. **Rapid** writes five required sections — what is in place
+and already changing · trend and cost if nothing changes · who is affected ·
+what is contested · key assumption — plus the code-rendered Sources, allows
+no proposed sections, and acquires 10 documents. Each merged focus is the two
+standard foci said once. Classify runs 12 wide (the screen's width) and
+ingest's parse workers follow the cores. A depth change counts as a baseline
+input change (S4). Ruled out by the owner for this slice: wave or parallel
+section writing, a writer model change, fewer screen replicates, a lower turn
+cap or read window, and stage overlap; the writer-side levers are deferred to
+a synthesis optimisation task (`docs/deferred.md` § Synthesis optimisation).
 
 **Latency (D7).** The owner's expectation is a whole rapid path of about 15 to
 20 minutes, so a baseline near 10 minutes is too long for its first step. The
@@ -494,7 +508,9 @@ Rows marked **keep** must not change behaviour. File paths are as built at
   offer until scoping deep exists. Deferred seam.
 - **D7 — the baseline's depth grading. Replaced (owner):** one shape at both
   depths (§ Baseline); a small acquisition target and a per-section cap; a
-  measured compute target reported honestly; later levers recorded. The
+  measured compute target reported honestly; later levers recorded.
+  **Re-revised in phase 8 (owner, 2026-09-17):** depth shapes the baseline —
+  targets 20 · 10, rapid writes five sections and no proposed ones (§ Baseline). The
   writing mode is sequential (C6); the sequential-versus-parallel comparison
   the interview agreed runs as a development-time feasibility check, not as
   product code (owner, 2026-09-09).
@@ -562,9 +578,11 @@ Applied to the specs with the owner's words quoted and a line in
 `docs/specs/log.md`; sources stay frozen (ADR 0002):
 
 1. OS capability § Output structure (baseline profile) and OS components § 11:
-   eight required sections plus up to two writer-proposed sections.
+   eight required sections plus up to two writer-proposed sections (phase 8:
+   at standard; rapid writes five and proposes none).
 2. plan-as-object § Thoroughness and OS capability § Depths: the baseline is
-   not graded by depth (revises E12's baseline part); one measured target;
+   not graded by depth (revises E12's baseline part); one measured target
+   (phase 8 re-revises both: shaped by depth, a target per depth);
    the latency levers.
 3. OS capability § Pipeline and gates and § Check-in points: the structural
    gates pass on standing defaults in unattended mode; unattended is never
@@ -725,7 +743,8 @@ source quotes are checked against the fixtures policy.
 OpenAI under the approved controls, behind the existing routing seam (the
 Bedrock migration is untouched). Prompt-bearing, lead-authored:
 
-- `task_agent_scoping_v1` — the Task Agent for a scoping task (deliverable 6).
+- `task_agent_scoping_v1` — the Task Agent for a scoping task (deliverable 6);
+  `task_agent_scoping_v2` from phase 8 (depth shapes the baseline).
 - The gate sort — question · decision on a Task Agent turn at a pause
   (deliverable 8, A4, C1). Mini-class, one narrow job, constrained output,
   asks back when unsure.
@@ -819,8 +838,9 @@ turn/token budget is spent.
     record carries `purpose=baseline` and the `plan_id` of the approved
     version, and `plan.evidence_scope_id` points back at it; evidence
     restrictions land on acquire as `ScopeConstraints`.
-  - template: the eight required sections are always present at both depths
-    and are supplied, not proposed; at most two proposed sections, placed
+  - template: the required sections are always present and are supplied,
+    not proposed — eight at standard, six at rapid (phase 8); at most two
+    proposed sections at standard and none at rapid, placed
     after "what is contested"; a section with no support renders the
     not-found state; the key assumption and what is contested carry the
     tier-4 label; the baseline's claims are chunk, reasoning or gap only

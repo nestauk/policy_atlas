@@ -43,8 +43,9 @@ the adversarial findings A1–A18 and the terms are defined in
        Where defaults to the United Kingdom tagged assumed; the constraint-
        kind question and the Where warning (D8) behave; steering mode is not
        asked and defaults to moderate.
-7. [ ] **7 Baseline run**: the eight required sections are supplied and
-       always present; at most two proposed sections; every section can
+7. [ ] **7 Baseline run**: the required sections are supplied and always
+       present (eight at standard, six at rapid — phase 8); at most two
+       proposed sections at standard and none at rapid; every section can
        render the not-found state; the key assumption and what is contested
        carry the reasoning label; claims are chunk, reasoning or gap only
        (A7); the baseline's own Sources section names what was not searched
@@ -114,3 +115,15 @@ the adversarial findings A1–A18 and the terms are defined in
         plan and code · `/simplify` · human deep review), or a step was
         skipped with the owner's written ruling — findings and dispositions
         in [verification.md](verification.md).
+
+## Phase 8 — latency levers (owner ruling 2026-09-17)
+
+20. [ ] **Depth shapes the baseline**: `compose_scoping` carries `record_cap`
+        20 at standard and 10 at rapid; the rapid synthesise directive lists
+        the five rapid sections plus Sources and carries no `section_budget`;
+        synthesise makes no proposal call without one; a depth change is a
+        baseline input change (S4 sentence). Classify runs 12 wide; ingest's
+        parse workers follow the cores (4 to 8). The scoping prompt says depth
+        shapes the baseline (`task_agent_scoping_v2`); the template is
+        `baseline_template_v2`; both hashes re-pinned. Tests pin each.
+

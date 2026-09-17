@@ -1,4 +1,4 @@
-"""Task Agent backend seam for the ``task_agent_scoping_v1`` planning call.
+"""Task Agent backend seam for the ``task_agent_scoping_v2`` planning call.
 
 The Evidence search seam (``task_agent.py``) one capability over. Same three
 pieces: a Protocol, a live OpenAI structured-output backend with tracing inside

@@ -100,7 +100,10 @@ FETCH_BYTE_CAP = 100 * 1024 * 1024  # generous guard, never a scissor (decision 
 PARSE_TIMEOUT_SECONDS = 120.0  # hard per-document parse timeout; worker is terminated
 # (120s: user-set 2026-07-05 — generous for a 200+-page report; fan-out absorbs the tail)
 THIN_TEXT_MIN_CHARS = 200  # below this, parsed text is a failure, never "ok" (decision 7)
-DEFAULT_MAX_WORKERS = 4
+# Parse workers are spawned processes doing CPU-bound work, so the width follows
+# the cores: 4 on the 2-vCPU staging task, up to 8 on a developer machine
+# (task 044 phase 8, owner 2026-09-17). Fetch threads are LIVE_FETCH_WORKERS.
+DEFAULT_MAX_WORKERS = max(4, min(8, os.cpu_count() or 4))
 # LiveDocumentFetcher has the actual global/per-host semaphores; this pool only supplies threads.
 LIVE_FETCH_WORKERS = 10
 

@@ -437,7 +437,7 @@ departmental pages not searched; the source-tier skew line). Re-pin.
 4.2 **Baseline mode — `deep-reasoner`.** S3 exactly: `SectionSpec` fields,
 the merge of supplied and proposed sections, the three guards, per-section
 turn caps, `depth_label`, the baseline forbidden-title rule. Tests: eight
-required always present at both depths; ≤2 proposals after "what is
+required always present at both depths (phase 8 re-shapes rapid); ≤2 proposals after "what is
 contested"; the three passes do not run; claim set `{chunk, reasoning, gap}`;
 a section with no support is gap claims.
 
@@ -534,6 +534,31 @@ ADR are adjudication-adjacent.
 
 Gate: **full `make verify`**. Commit. **Stop.** Review runs in a fresh
 conversation with `task-cycle-review`.
+
+## Phase 8 — Latency levers before the review (owner ruling 2026-09-17) — `lead`
+
+Added after step 6 at the owner's request ("Add them to 044 as phase 8 before
+the review"), from the latency reading of the three live baselines (389 s,
+453 s, 259 s; synthesise 51–76 % of wall clock). Decisions: "Go with options 2
+and 5, targets 20 and 10"; classify and ingest widening are "easy wins".
+
+1. `MAX_CONCURRENT_CLASSIFY` 4 → 12; ingest `DEFAULT_MAX_WORKERS` follows the
+   cores (4 on the 2-vCPU staging task, up to 8 locally).
+2. `BASELINE_ACQUISITION_TARGETS = {standard: 20, rapid: 10}` on the acquire
+   directive; a depth change is a baseline input change (S4).
+3. `baseline_template_v2`: `BASELINE_RAPID_SECTIONS` (five; in place + already
+   changing, trend + cost merged, each focus ≤ 600 chars); the synthesise
+   directive lists sections by depth and carries `section_budget` only at
+   standard; synthesise skips the proposer without one.
+4. `task_agent_scoping_v2`: the depth options say depth shapes the baseline.
+5. Specs applied with the ruling quoted (OS capability, OS components,
+   plan-as-object, log); contract § Baseline and D7, rubric 7 and 20.
+6. Tests: compose by depth, rapid run makes no proposal call, prompt pins,
+   inputs-changed with depth. Gate: full `make verify`; one live rapid
+   baseline if the dev stack is up, recorded in `verification.md`.
+
+Ruled out (owner): waves, writer model change, screen reps, turn cap / read
+window, stage overlap. Deferred: `docs/deferred.md` § Synthesis optimisation.
 
 ## Plan-review folds (2026-09-09, fallback lane)
 
