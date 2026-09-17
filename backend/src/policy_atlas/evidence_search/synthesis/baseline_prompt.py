@@ -1,4 +1,4 @@
-"""The baseline template (``baseline_template_v2``) — synthesise's baseline mode.
+"""The baseline template (``baseline_template_v1``) — synthesise's baseline mode.
 
 Lead-authored and versioned (task 044, deliverable 7; contract § Baseline,
 findings A7, A14, C7, C18). The baseline is a profile of "Do nothing": eight
@@ -27,7 +27,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-BASELINE_PROMPT_VERSION = "baseline_template_v2"
+BASELINE_PROMPT_VERSION = "baseline_template_v1"
 
 # Execution-bearing constants (contract § Plan object, C8).
 BASELINE_PROPOSED_SECTIONS_MAX = 2
@@ -174,50 +174,7 @@ BASELINE_SECTIONS: tuple[BaselineSection, ...] = (
     ),
 )
 
-# The rapid depth writes five sections (owner ruling 2026-09-17, task 044 phase
-# 8: "Go with options 2 and 5"): the standard list with two pairs merged — what
-# is in place with what is already changing, and the trend with the cost of
-# inaction — and no writer-proposed sections. Each merged focus is the two
-# standard foci said once; nothing is asked of the writer that the standard
-# sections do not ask.
-BASELINE_RAPID_SECTIONS: tuple[BaselineSection, ...] = (
-    BaselineSection(
-        title="What is in place and already changing",
-        nav_label="In place",
-        focus="What is currently in place for this group in this place — the "
-        "existing policies, programmes, entitlements and services the "
-        "documents describe, who runs them and whom they reach — and what is "
-        "already changing without a new decision: announced reforms, pilots, "
-        "funding changes, programmes ending or starting, and external shifts "
-        "the sources report as under way. Dates as given. State what is "
-        "absent when a source says so. Name programmes as the sources name "
-        "them. Do not judge whether the changes will work.",
-    ),
-    BaselineSection(
-        title="Trend and cost if nothing changes",
-        nav_label="Trend and cost",
-        focus="The recent trend and the current level of the outcomes the plan "
-        "names, as the sources report them, with their dates and measures, "
-        "and the cost of inaction as the sources report it: fiscal, economic "
-        "and human costs, each with its basis, unit, period and who bears it, "
-        "quoted as reported and never converted or summed across sources. "
-        "Report any projection a source makes as that source's projection. If "
-        "no source projects forward, or none costs the status quo, say so as "
-        "a gap claim.",
-    ),
-    BASELINE_SECTIONS[2],  # Who is affected
-    BASELINE_SECTIONS[4],  # What is contested
-    BASELINE_SECTIONS[6],  # Key assumption
-)
-
-#: The model-written section list per depth. Standard keeps the ruled seven
-#: and allows proposed sections; rapid writes five and allows none.
-BASELINE_SECTIONS_BY_DEPTH: dict[str, tuple[BaselineSection, ...]] = {
-    "standard": BASELINE_SECTIONS,
-    "rapid": BASELINE_RAPID_SECTIONS,
-}
-
-# The last required section is rendered by code, not written by the model.
+# The eighth required section is rendered by code, not written by the model.
 SOURCES_SECTION_TITLE = "Sources"
 SOURCES_SECTION_NAV_LABEL = "Sources"
 
@@ -256,14 +213,9 @@ BASELINE_BAND = "the situation these options would change"
 BASELINE_DEPTH_LABEL = "scoping pass"
 
 
-def required_titles(depth: str = "standard") -> tuple[str, ...]:
-    """Return the required section titles in order for a depth, Sources last.
-
-    Args:
-        depth: ``standard`` (eight titles) or ``rapid`` (six).
-    """
-    sections = BASELINE_SECTIONS_BY_DEPTH[depth]
-    return tuple(section.title for section in sections) + (SOURCES_SECTION_TITLE,)
+def required_titles() -> tuple[str, ...]:
+    """Return the eight required section titles in order."""
+    return tuple(section.title for section in BASELINE_SECTIONS) + (SOURCES_SECTION_TITLE,)
 
 
 def is_forbidden_proposed_title(title: str) -> bool:
@@ -275,11 +227,7 @@ def is_forbidden_proposed_title(title: str) -> bool:
     key = " ".join(title.lower().split())
     if key in BASELINE_FORBIDDEN_PROPOSED_TITLES:
         return True
-    return any(
-        key == required.lower()
-        for depth in BASELINE_SECTIONS_BY_DEPTH
-        for required in required_titles(depth)
-    )
+    return any(key == required.lower() for required in required_titles())
 
 
 def compile_intent(

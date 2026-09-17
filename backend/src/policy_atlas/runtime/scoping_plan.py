@@ -34,7 +34,7 @@ from policy_atlas.api.contract.task_agent import PlanStep
 from policy_atlas.evidence_search.sourcing.country_filters import TIER1_GROUPS
 from policy_atlas.evidence_search.synthesis.baseline_prompt import (
     BASELINE_PROPOSED_SECTIONS_MAX,
-    BASELINE_SECTIONS_BY_DEPTH,
+    BASELINE_SECTIONS,
     BASELINE_TEMPLATE_KEY,
     SOURCES_SECTION_NAV_LABEL,
     SOURCES_SECTION_TITLE,
@@ -372,9 +372,10 @@ class ScopingPlan(BaseModel):
         target_unit: Who or what should change.
         where: The jurisdiction the policy would apply to.
         outcomes: The outcomes evidence is read against; at least one.
-        depth: ``rapid`` or ``standard`` (D6). Depth shapes the baseline (D7
-            as revised 2026-09-17): the acquisition target and the section
-            list; tasks 2 and 3 read it too.
+        depth: ``rapid`` or ``standard`` (D6). Depth sets the baseline's
+            acquisition target and whether proposed sections are allowed (D7
+            as revised 2026-09-17); the seven sections are the same at both.
+            Tasks 2 and 3 read it too.
         constraints: Typed constraints and preferences.
         your_context: The user's own situation, verbatim.
         entry_branch: ``explore`` is the only branch in this slice.
@@ -784,11 +785,8 @@ def scope_constraints_for(plan: ScopingPlan) -> ScopeConstraints:
     return ScopeConstraints.model_validate(values)
 
 
-def _baseline_section_directives(depth: str = "standard") -> list[dict[str, Any]]:
-    """Return the supplied baseline section specs for a depth, in the ruled order.
-
-    Args:
-        depth: ``standard`` (seven model-written sections) or ``rapid`` (five).
+def _baseline_section_directives() -> list[dict[str, Any]]:
+    """Return the supplied baseline section specs, in the ruled order.
 
     Returns:
         One ``{title, focus, nav_label, turn_cap}`` object per model-written
@@ -803,7 +801,7 @@ def _baseline_section_directives(depth: str = "standard") -> list[dict[str, Any]
             "nav_label": s.nav_label,
             "turn_cap": s.turn_cap,
         }
-        for s in BASELINE_SECTIONS_BY_DEPTH[depth]
+        for s in BASELINE_SECTIONS
     ]
     sections.append(
         {
@@ -857,7 +855,7 @@ def _scoping_directive_delta(component: str, plan: ScopingPlan) -> dict[str, Any
     if component == "synthesise":
         synthesis: dict[str, Any] = {
             "template": BASELINE_TEMPLATE_KEY,
-            "sections": _baseline_section_directives(plan.depth),
+            "sections": _baseline_section_directives(),
         }
         # Proposed sections are a standard-depth allowance; a rapid directive
         # carries no budget and synthesise makes no proposal call (phase 8).
@@ -877,8 +875,8 @@ def compose_scoping(plan: ScopingPlan) -> ComposedChain:
         The six-step chain ``acquire → screen_abstract → classify → appraise →
         ingest_full_text → synthesise`` and nothing else. There are no
         discretionary components. Depth (D7, revised 2026-09-17) changes the
-        acquire target and the section list inside the directives, never the
-        chain.
+        acquire target and the proposed-section allowance inside the
+        directives, never the chain or the section list.
     """
     return ComposedChain(
         steps=[

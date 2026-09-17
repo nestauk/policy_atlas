@@ -28,12 +28,11 @@ import argparse
 import json
 import os
 import re
-
 import time
 import uuid
-from datetime import UTC, datetime
 from collections import Counter, defaultdict
 from concurrent.futures import ThreadPoolExecutor
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -41,7 +40,8 @@ os.environ["DATABASE_URL"] = (
     "postgresql+psycopg://policy_atlas:policy_atlas@localhost:5432/policy_atlas"
 )
 
-from sqlalchemy import create_engine, select as sa_select  # noqa: E402
+from sqlalchemy import create_engine  # noqa: E402
+from sqlalchemy import select as sa_select
 
 from policy_atlas.core.embeddings import OpenAIEmbeddingBackend  # noqa: E402
 from policy_atlas.core.schema import block, runs, synthesis_result  # noqa: E402
@@ -168,8 +168,8 @@ class Timer:
         )
 
 
-# The depth whose section list the directive carries (task 044 phase 8 added the
-# rapid shape); set once from the CLI.
+# The depth the directive is compiled for (task 044 phase 8: rapid carries no
+# proposed-section budget; the seven sections are the same); set from the CLI.
 DEPTH = "standard"
 
 
@@ -178,9 +178,9 @@ def baseline_context(section_titles: list[str] | None = None) -> dict[str, Any]:
 
     Args:
         section_titles: When given, only these model-written sections are supplied (the
-            fan-out's one-section directives). ``None`` supplies the depth's whole list.
+            fan-out's one-section directives). ``None`` supplies all eight.
     """
-    sections = _baseline_section_directives(DEPTH)
+    sections = _baseline_section_directives()
     if section_titles is not None:
         keep = set(section_titles)
         sections = [

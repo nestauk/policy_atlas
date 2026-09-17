@@ -118,12 +118,12 @@ referent). Instead:
   development, never by run-time cut-offs**. *(Revised by the owner on 2026-09-09 at the task 044
   contract: the baseline is **not graded by depth** — dropping two of eight sections saved about
   95 s of a roughly 380 s sequential write against a retrieval spine of about 4.6 min, "not a
-  difference the user feels", so the section count is not the lever. *Re-revised (owner ruling 2026-09-17, task 044 phase 8: "Go with options 2 and 5, targets 20 and 10"): the measured
-  standard baselines ran 4.3 to 7.5 minutes, so the baseline is shaped by depth — rapid writes five
-  sections with no proposed sections against an acquisition target of 10 documents; standard writes
-  the eight plus up to two proposed against 20 — and the wider classify and ingest fan-out is the
-  other lever taken.* The baseline has **one measured compute target** per depth, verified
-  on the NEET question during the build. The levers are a small acquisition target, a per-section
+  difference the user feels", so the section count is not the lever. *Re-revised (owner ruling 2026-09-17, task 044 phase 8: "Go with options 2 and 5, targets 20 and 10"; the rapid section merge was measured, then reverted the same day: "Revert the merge, seven sections at both depths"): the measured
+  standard baselines ran 4.3 to 7.5 minutes, so depth now sets the acquisition target (20 · 10) and
+  the proposed-section allowance (two · none); the eight sections stay the same at both depths — a
+  five-section rapid merge was measured at 168 s and 189 s against 183 s for seven and dropped — and
+  the wider classify and ingest fan-out is the other lever taken.* The baseline has **one measured
+  compute target** per depth, verified on the NEET question during the build. The levers are a small acquisition target, a per-section
   tool-call cap; writing is **sequential**, as the Evidence search writes today — the durability
   contract's "never fan out the conclusion" holds — and a development-time **feasibility check**
   compares it with a parallel version before the baseline is finalised (owner, 2026-09-09: "let's go

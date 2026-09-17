@@ -366,7 +366,7 @@ the NEET wall clock); the plan shows a coarse band and promises no number.
 |---|---:|---|
 | `make verify` (full) | pass | backend 2802 passed (10:10); typecheck 335 files clean; lint clean; build OK; infra 46 passed; okf-validate 143/0; audit-paths, prompt-guard (16 modules), font-guard, `drift-check: OK`; frontend 715 tests / 82 files |
 | `cd frontend && pnpm e2e` | pass | 15/15 (mock mode) |
-| `make verify` (full, phase 8 gate, 2026-09-17) | pass | backend 2806 passed (8:39); typecheck clean; lint clean; build OK; infra 46 passed; prompt-hash-guard 16 unchanged (two re-pinned); openapi-sync + drift-check OK; frontend 715 passed (82 files). e2e not rerun: no frontend change in phase 8 |
+| `make verify` (full, phase 8 gate, 2026-09-17; rerun green after the merge revert, `backend 2806 passed`) | pass | backend 2806 passed (8:39); typecheck clean; lint clean; build OK; infra 46 passed; prompt-hash-guard 16 unchanged (two re-pinned); openapi-sync + drift-check OK; frontend 715 passed (82 files). e2e not rerun: no frontend change in phase 8 |
 
 Every plan checkpoint is committed on `task/044-scoping-shell-baseline`; the
 live check ran at the contract's pinned scope; this file is complete for the
@@ -390,14 +390,15 @@ unsupported after the one repair stay in the prose.
 | Classify 4 → 12 workers (the screen's width; provider-bound threads) | `assess/classify.py` | comment names the ruling |
 | Ingest parse workers follow the cores: `max(4, min(8, cpu_count))` — 4 on the 2-vCPU staging task, 8 locally; fetch threads unchanged at 10 | `sourcing/ingest_full_text.py` | `test_fanout_determinism_workers_1_vs_4` still green |
 | Acquisition target by depth: `{standard: 20, rapid: 10}` (was one constant, 25) | `runtime/scoping_plan.py` | `test_acquire_carries_the_depths_acquisition_target` |
-| Rapid section list: five sections — in place + already changing merged, trend + cost of inaction merged; foci 505 / 481 chars (bound 600); Who is affected, What is contested, Key assumption carried as the standard objects | `baseline_prompt.py` (`BASELINE_RAPID_SECTIONS`, `BASELINE_SECTIONS_BY_DEPTH`, `required_titles(depth)`), `baseline_template_v2` | `test_rapid_writes_five_sections_merging_two_pairs` |
-| Proposed sections at standard only: the rapid synthesise directive carries no `section_budget`; synthesise makes no proposal call without one (the budget now travels in the directive, not the constant) | `scoping_plan.py`, `synthesise.py` | `test_rapid_supplies_five_sections_plus_sources_and_no_proposal_budget`, `test_rapid_writes_five_sections_and_never_calls_the_proposer` |
+| Rapid section list — **built, measured, reverted the same day** (owner: "Revert the merge, seven sections at both depths"): a five-section merge (`baseline_template_v2`, commit `6db623ce`) wrote no faster than seven (below); the template is back to `baseline_template_v1`, byte-identical to the phase 4 module, and both depths write the same eight sections | `baseline_prompt.py` unchanged from `3966b0fd` | `test_rapid_supplies_the_same_seven_sections_and_no_proposal_budget`, `test_rapid_writes_the_seven_sections_and_never_calls_the_proposer` |
+| Proposed sections at standard only: the rapid synthesise directive carries no `section_budget`; synthesise makes no proposal call without one (the budget now travels in the directive, not the constant) | `scoping_plan.py`, `synthesise.py` | the two tests above |
 | A depth change is a baseline input change (S4 sentence names "the depth") | `baseline_inputs_changed` | `test_baseline_inputs_changed_names_only_the_inputs_that_moved` |
-| Task Agent prompt says depth shapes the baseline; option subs reworded (`task_agent_scoping_v2`) | `task_agent_scoping_prompt.py` | prompt pins; both hashes re-pinned |
+| Task Agent prompt says depth shapes the baseline (reading set and proposed sections); option subs reworded (`task_agent_scoping_v2`) | `task_agent_scoping_prompt.py` | prompt pins; hash re-pinned |
 | Specs applied with the ruling quoted: OS capability § Output structure, OS components § 11, plan-as-object § Thoroughness, log 2026-09-17; contract § Baseline + D7 + template bullet; rubric 7 and new 20; plan Phase 8 | docs | — |
 
 **Measured (check-7 driver, `--depth` flag added; the NEET corpus, 53 appraised
-documents, writing only, rolled back):**
+documents, writing only, rolled back). The rapid rows are the five-section
+merge as built at `6db623ce`, before the revert:**
 
 | Run | Sections written | Wall (s) | Section walls (s) | Calls | Tokens |
 |---|---|---:|---|---|---:|
@@ -426,9 +427,13 @@ standard baseline wrote two, about 25 s each with their judge calls), and two
 fewer judge exposures. The grounding judge on gpt-5.4-mini takes 4 to 12 s a
 call on 5–13k prompt tokens and a repair 3 to 24 s; judge plus repair was
 19 % of the Sept 9 write and 37 % of the rapid run 2 write — the second
-bucket after the write turns, not the first. Recorded rather than reverted:
-the shape is the owner's ruling; whether rapid keeps the merge or returns to
-the seven sections with no proposals is an owner call for the review.
+bucket after the write turns, not the first. On this reading the owner
+reverted the merge the same day ("if it makes not much of a difference, then
+is there much of a point in having a difference in sections"): both depths
+write the seven sections; rapid differs by its target of 10 and no proposed
+sections. The writer-side lever that would make rapid faster is a length
+bound per section (fewer claims, so fewer output tokens), deferred to the
+synthesis optimisation task with the judge levers.
 
 No full walk was re-run through the API in this phase (the dev API was down;
 the walk-level effect of the target and the fan-out is arithmetic on the
@@ -471,10 +476,11 @@ _(filled per phase; flagged deviations listed here as they arise)_
    category is ordinary English. The pane's aria label "Planning conversation"
    became "Task Agent conversation".
 
-12. **Phase 8 measurement contradicts one of its own levers** (see Phase 8):
+12. **Phase 8 measurement contradicted one of its own levers** (see Phase 8):
     the rapid five-section merge saved no writing time on the NEET corpus in
     two clean runs (a third, same-day standard run is void: the machine
-    slept). Kept as ruled; flagged for the owner at review.
+    slept). The owner reverted the merge the same day; seven sections at both
+    depths.
 6. **The frontend URL token `?chat=planning` became `?chat=task_agent` with
    no alias** (review finding on `conversationState.ts`): a tab opened before
    the deploy that still carries `?chat=planning` shows "This chat couldn't be

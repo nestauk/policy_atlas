@@ -1,4 +1,4 @@
-"""Pins for the ``baseline_template_v2`` surface (task 044, deliverable 7; A7, A14, C7, C18)."""
+"""Pins for the ``baseline_template_v1`` surface (task 044, deliverable 7; A7, A14, C7, C18)."""
 
 from __future__ import annotations
 
@@ -8,10 +8,8 @@ from policy_atlas.evidence_search.synthesis.baseline_prompt import (
     BASELINE_PROMPT_VERSION,
     BASELINE_PROPOSED_INSERT_AFTER,
     BASELINE_PROPOSED_SECTIONS_MAX,
-    BASELINE_RAPID_SECTIONS,
     BASELINE_SECTION_PREAMBLE,
     BASELINE_SECTIONS,
-    BASELINE_SECTIONS_BY_DEPTH,
     SOURCES_NOT_SEARCHED_LINE,
     SOURCES_SECTION_TITLE,
     compile_intent,
@@ -21,7 +19,7 @@ from policy_atlas.evidence_search.synthesis.baseline_prompt import (
 
 
 def test_version_and_constants_pinned() -> None:
-    assert BASELINE_PROMPT_VERSION == "baseline_template_v2"
+    assert BASELINE_PROMPT_VERSION == "baseline_template_v1"
     assert BASELINE_PROPOSED_SECTIONS_MAX == 2
     assert BASELINE_PROPOSED_INSERT_AFTER == "What is contested"
     assert BASELINE_BAND == "the situation these options would change"
@@ -39,40 +37,8 @@ def test_eight_required_sections_in_the_ruled_order() -> None:
         "Key assumption",
         SOURCES_SECTION_TITLE,
     )
-    assert required_titles("standard") == required_titles()
     assert len(BASELINE_SECTIONS) == 7  # the eighth, Sources, is rendered by code
     assert all(section.turn_cap >= 1 for section in BASELINE_SECTIONS)
-
-
-def test_rapid_writes_five_sections_merging_two_pairs() -> None:
-    """Owner ruling 2026-09-17 (phase 8): in place + already changing, trend + cost."""
-    assert required_titles("rapid") == (
-        "What is in place and already changing",
-        "Trend and cost if nothing changes",
-        "Who is affected",
-        "What is contested",
-        "Key assumption",
-        SOURCES_SECTION_TITLE,
-    )
-    assert len(BASELINE_RAPID_SECTIONS) == 5
-    assert BASELINE_SECTIONS_BY_DEPTH == {
-        "standard": BASELINE_SECTIONS,
-        "rapid": BASELINE_RAPID_SECTIONS,
-    }
-    by_title = {section.title: section.focus for section in BASELINE_RAPID_SECTIONS}
-    merged_in_place = by_title["What is in place and already changing"]
-    assert "policies, programmes, entitlements and services" in merged_in_place
-    assert "announced reforms, pilots, funding changes" in merged_in_place
-    merged_trend = by_title["Trend and cost if nothing changes"]
-    assert "never converted or summed across sources" in merged_trend
-    assert "gap claim" in merged_trend
-    # The three carried sections are the standard objects, not copies.
-    assert BASELINE_RAPID_SECTIONS[2:] == (
-        BASELINE_SECTIONS[2],
-        BASELINE_SECTIONS[4],
-        BASELINE_SECTIONS[6],
-    )
-    assert all(len(section.focus) <= 600 for section in BASELINE_RAPID_SECTIONS)
 
 
 def test_reasoning_sections_are_labelled_and_not_found_is_a_gap() -> None:
@@ -94,7 +60,6 @@ def test_forbidden_proposed_titles() -> None:
     assert is_forbidden_proposed_title("Conclusions")
     assert is_forbidden_proposed_title("key findings")
     assert is_forbidden_proposed_title("Who is affected")
-    assert is_forbidden_proposed_title("Trend and cost if nothing changes")  # a rapid title
     assert not is_forbidden_proposed_title("How this varies by place")
 
 

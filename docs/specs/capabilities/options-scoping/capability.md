@@ -328,12 +328,12 @@ plan ──confirm──▶ baseline ══PAUSE: confirm plan against baseline�
   cost of inaction · key assumption · sources. *(Owner ruling 2026-09-09, task 044 contract: these
   eight are **required**; the writer may **add up to two problem-specific sections**, labelled and
   placed after "what is contested" — "a fixed list may miss what a domain needs, while the eight are
-  questions any status quo can answer". Revised (owner ruling 2026-09-17, task 044 phase 8: "Go with options 2 and 5, targets 20 and 10"): the baseline is **shaped by depth**. Standard
-  writes the eight required sections plus up to two proposed; rapid writes five required sections —
-  what is in place *and already changing* · trend *and cost* if nothing changes · who is affected ·
-  what is contested · key assumption — plus sources, and no proposed sections. The acquisition
-  target is 20 documents at standard and 10 at rapid. This re-revises the 2026-09-09 "one shape at
-  every depth" ruling after the measured baselines ran 4.3 to 7.5 minutes.)* Empirical premises sourced; the key assumption
+  questions any status quo can answer". The **eight required sections are the same at both depths**;
+  depth sets two things (owner ruling 2026-09-17, task 044 phase 8: "Go with options 2 and 5, targets 20 and 10"; the rapid section merge was measured, then reverted the same day: "Revert the merge, seven sections at both depths"): the acquisition target — 20 documents at standard, 10 at rapid — and
+  whether the writer may add proposed sections — up to two at standard, none at rapid. This
+  re-revises the 2026-09-09 "one shape at every depth" line after the measured baselines ran 4.3 to
+  7.5 minutes; merging sections was measured not to shorten the write, because the write turn is
+  set by output tokens, not by the number of headings.)* Empirical premises sourced; the key assumption
   and what is contested are labelled reasoning (ruling 40); the tool does not forecast. In v1 the
   baseline searches Overton and OpenAlex only, and its coverage statement names live official
   statistics and departmental pages as not searched; the user may supply them as stated facts

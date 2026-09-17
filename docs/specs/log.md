@@ -2,12 +2,14 @@
 
 ## 2026-09-17
 * **Update** (task 044, phase 8; owner ruling "Go with options 2 and 5, targets 20 and 10"): the
-  baseline is **shaped by depth** — [OS capability](capabilities/options-scoping/capability.md)
-  § Output structure, [OS components](capabilities/options-scoping/components.md) § 11 and
-  [plan-as-object](system/plan-as-object.md) § Thoroughness. Rapid: five required sections (in place +
-  already changing merged; trend + cost of inaction merged), no proposed sections, acquisition target
-  10. Standard: unchanged eight plus up to two proposed, target 20 (was one target of 25). Re-revises
-  the 2026-09-09 "one shape at every depth" line after the measured 4.3 to 7.5 minute baselines.
+  depth sets the baseline's acquisition target and proposed-section allowance —
+  [OS capability](capabilities/options-scoping/capability.md) § Output structure,
+  [OS components](capabilities/options-scoping/components.md) § 11 and
+  [plan-as-object](system/plan-as-object.md) § Thoroughness. Rapid: the same eight required sections,
+  no proposed sections, acquisition target 10. Standard: eight plus up to two proposed, target 20
+  (was one target of 25). A five-section rapid merge was built, measured (no shorter write: 168 s and
+  189 s against 183 s for seven) and reverted the same day on the owner's ruling. Re-revises the
+  2026-09-09 "one shape at every depth" line after the measured 4.3 to 7.5 minute baselines.
 
 ## 2026-09-09
 * **Update** (task 044, deliverable 2): the abbreviation **EB → ES** across the

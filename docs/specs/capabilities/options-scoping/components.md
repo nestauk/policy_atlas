@@ -304,8 +304,8 @@ output is still called *the proposal* — the proposed shortlist the user adds t
   inside a question). Not user-editable in v1 (ruling 14). ✅ **synthesise(baseline)** writes the
   "Do nothing" profile (what is in place · trend if nothing changes · who is affected · what is
   already changing · what is contested · cost of inaction · key assumption · sources — the eight
-  required sections — **plus up to two writer-proposed problem-specific sections** at standard depth;
-  at rapid depth five required sections with two pairs merged and no proposed sections, (owner ruling 2026-09-17, task 044 phase 8: "Go with options 2 and 5, targets 20 and 10")), empirical
+  required sections at both depths — **plus up to two writer-proposed problem-specific sections** at
+  standard depth and none at rapid, (owner ruling 2026-09-17, task 044 phase 8: "Go with options 2 and 5, targets 20 and 10"; the rapid section merge was measured, then reverted the same day: "Revert the merge, seven sections at both depths")), empirical
   premises sourced and interpretations labelled reasoning (ruling 40), every statement
   provenance-carrying, "not found" stated as such; the run **pauses** after it and the
   pause is a place to question it in chat (rulings 2, 24). ❓ Baseline sourcing mechanics (open

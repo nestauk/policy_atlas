@@ -90,15 +90,17 @@ def test_depth_changes_the_directives_never_the_chain() -> None:
 
 def test_standard_supplies_seven_sections_plus_sources_and_allows_two_proposals() -> None:
     synthesis = _delta(_plan(depth="standard"), "synthesise")["synthesis"]
-    assert [s["title"] for s in synthesis["sections"]] == list(required_titles("standard"))
+    assert [s["title"] for s in synthesis["sections"]] == list(required_titles())
     assert len(synthesis["sections"]) == 8
     assert synthesis["section_budget"] == BASELINE_PROPOSED_SECTIONS_MAX
 
 
-def test_rapid_supplies_five_sections_plus_sources_and_no_proposal_budget() -> None:
+def test_rapid_supplies_the_same_seven_sections_and_no_proposal_budget() -> None:
+    """Owner ruling 2026-09-17: seven sections at both depths; rapid proposes none."""
     synthesis = _delta(_plan(depth="rapid"), "synthesise")["synthesis"]
-    assert [s["title"] for s in synthesis["sections"]] == list(required_titles("rapid"))
-    assert len(synthesis["sections"]) == 6
+    standard = _delta(_plan(depth="standard"), "synthesise")["synthesis"]
+    assert synthesis["sections"] == standard["sections"]
+    assert len(synthesis["sections"]) == 8
     assert "section_budget" not in synthesis
 
 

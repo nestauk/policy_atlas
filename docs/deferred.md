@@ -2589,8 +2589,8 @@ chunk citation carries a verbatim quote of about 250 characters (first section:
   tier), fewer screen reps (stays 3), turn cap 4 → 3 and a smaller read window
   (quality), stage overlap (discrete steps are clearer to the user). Taken
   instead in task 044 phase 8: classify 12 wide, ingest parse workers by core
-  count, acquisition targets 20 · 10 by depth, rapid = five sections and no
-  proposed sections.
+  count, acquisition targets 20 · 10 by depth, no proposed sections at rapid
+  (a five-section rapid merge was measured — no shorter write — and reverted).
 - **Unsupported claims after the one repair pass stay in the prose** (owner
   concern, 2026-09-17: "keeping unvalidated claims in the output isn't the best
   for user trust"). Today, after judge → one repair → re-judge, a claim the
