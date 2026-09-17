@@ -2565,12 +2565,13 @@ chunk citation carries a verbatim quote of about 250 characters (first section:
   on the run above). Changes the grounding contract the Evidence search report
   shares (ADR 0015 §4 span binding; the judge's verbatim-quote check). Owner:
   "seems like something that would make a material difference".
-- **Judge-repair variance** — in the phase 8 same-day writes on the NEET
-  corpus one standard section took 126 s (six repair and six re-judge calls
-  across the run, against two in the rapid runs); the loop, not the section
-  count, was the largest source of run-to-run variance (183 s vs 339 s for the
-  same seven sections). Bounding repair cost (fewer failing claims at first
-  write, or a cheaper repair route) belongs with the emit-payload work.
+- **Judge and repair share** — per call the gpt-5.4-mini judge takes 4 to
+  12 s on 5–13k prompt tokens and a repair 3 to 24 s (phase 8 log timelines);
+  judge plus repair was 19 % of the Sept 9 live write and 37 % of a five-section
+  rapid write. The second bucket after the write turns. A smaller judge
+  envelope (chunks the claim cites, not the section's whole read set) and the
+  concurrency below are the levers; fewer failing claims at first write cuts
+  the repairs.
 - **Judge concurrent with the next section** — the mini judge runs after each
   section in sequence (3 s each); judging section N while N+1 reads saves about
   25 s per baseline without a user-visible stage change. Repairs land when the

@@ -404,30 +404,36 @@ documents, writing only, rolled back):**
 | standard, 2026-09-09 (check 7, proposer stubbed) | 7 | 183.0 | slowest 36.4 | 28 | 273,250 |
 | rapid, run 1 (machine under `make verify` load) | 5 | 168.1 | 39 · 47 · 39 · 25 · 14 | 18 (10 turns, 5 judge, 2 repair, 1 rejudge) | 187,524 |
 | rapid, run 2 (idle machine) | 5 | 189.3 | 25 · 32 · 53 · 57 · 20 | 20 (11 turns, 5 judge, 2 repair, 2 rejudge) | 222,923 |
-| standard, run 3 (same day, idle machine; the driver stubs the proposer) | 7 | 339.3 | 41 · 25 · 43 · **126** · 32 · 44 · 26 | 33 (14 turns, 7 judge, 6 repair, 6 rejudge) | 294,711 |
+| standard, run 3 (same day) — **void**: the laptop slept with the lid closed (power log: 377 s + 32 s, on battery) mid-run; the monotonic timer under-reported 339 s against a 926 s log span | 7 | — | — | 33 (14 turns, 7 judge, 6 repair, 6 rejudge) | 294,711 |
 
-**Lead reading, flagged for the owner.** Run-to-run variance dominates
-the comparison. Against the 2026-09-09 standard write (183 s) the rapid
-shape saved nothing (168 s, 189 s); against the same-day standard write
-(339 s) it saved about half. The same-day standard run carried six repair
-and six re-judge calls, and one section (What is already changing) took
-126 s of it — the judge-repair loop is the largest single source of
-variance in these runs, larger than the section count. Two things hold
-across all four runs: the write turn is set by output tokens (a merged
-section writes what two wrote; rapid tokens fell 18–31 % against the Sept 9
-standard and 24–36 % against today's), and each section not written saves
-its own read, write and judge calls plus any repairs. So the reliable rapid
-savings are the acquisition target of 10 (ingest, screen and classify shrink
-with the document count), no proposed sections (the live NEET standard
-baseline wrote two, about 25 s each), and two fewer judge-repair exposures;
-the merge itself is a cost lever more than a latency one. Recorded rather
-than reverted: the shape is the owner's ruling; the judge-repair variance is
-added to the synthesis optimisation note.
+**Where the writing time goes** (per call, from the log timelines; the
+Sept 9 row is the live NEET baseline's Langfuse trace, 9 sections):
+
+| Run | Write turns | Judge + re-judge | Repair | Read turns | Total |
+|---|---:|---:|---:|---:|---:|
+| live standard, 2026-09-09 (9 sections) | 110 s / 9 | 30 s / 10 | 5 s / 2 | 22 s / 9 | 180 s |
+| rapid, run 2 (5 sections) | 97 s / 5 | 38 s / 7 | 29 s / 2 | 17 s / 6 | 182 s |
+
+**Lead reading, flagged for the owner.** Two clean data points say the
+five-section merge did **not** shorten the write on this corpus: 168 s and
+189 s against the seven-section 183 s of 2026-09-09. The write turn is set
+by output tokens and a merged section writes what two sections wrote (rapid
+write turns averaged 19 s against 12 s for a standard section), so the merge
+is a cost lever (tokens down 18–31 %) more than a latency one. The reliable
+rapid savings are the acquisition target of 10 (ingest, screen and classify
+shrink with the document count), no proposed sections (the live NEET
+standard baseline wrote two, about 25 s each with their judge calls), and two
+fewer judge exposures. The grounding judge on gpt-5.4-mini takes 4 to 12 s a
+call on 5–13k prompt tokens and a repair 3 to 24 s; judge plus repair was
+19 % of the Sept 9 write and 37 % of the rapid run 2 write — the second
+bucket after the write turns, not the first. Recorded rather than reverted:
+the shape is the owner's ruling; whether rapid keeps the merge or returns to
+the seven sections with no proposals is an owner call for the review.
 
 No full walk was re-run through the API in this phase (the dev API was down;
 the walk-level effect of the target and the fan-out is arithmetic on the
 phase 7 component times: about 190 s → 70 s before synthesis on the NEET
-run). Cost of the three writes: about $2.5 (Langfuse).
+run). Cost of the three writes: about $2.5.
 
 ## Checks beyond the build
 
@@ -467,7 +473,8 @@ _(filled per phase; flagged deviations listed here as they arise)_
 
 12. **Phase 8 measurement contradicts one of its own levers** (see Phase 8):
     the rapid five-section merge saved no writing time on the NEET corpus in
-    two runs. Kept as ruled; flagged for the owner at review.
+    two clean runs (a third, same-day standard run is void: the machine
+    slept). Kept as ruled; flagged for the owner at review.
 6. **The frontend URL token `?chat=planning` became `?chat=task_agent` with
    no alias** (review finding on `conversationState.ts`): a tab opened before
    the deploy that still carries `?chat=planning` shows "This chat couldn't be
