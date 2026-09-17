@@ -57,9 +57,11 @@ folds record each.
 3. **One capability registry.** `runtime/capability_registry.py` says, per
    capability, which plan model validates a payload, which chain composes,
    which prompt is the Task Agent's, and which steer points exist. Every
-   reader of a plan goes through it (ten validate sites, seven compose
-   sites). The steering lattice is keyed by capability, so a scoping point
-   never names an Evidence search boundary.
+   reader of a plan goes through it (fourteen validate sites and seven
+   compose sites as built — the plan gate said ten; phases 3, 5.2, 5.4 and
+   the live-check fixes added four, all routed; corrected at the review
+   stack, 2026-09-17). The steering lattice is keyed by capability, so a
+   scoping point never names an Evidence search boundary.
 
    *Rejected:* capability conditionals in each reader (scattered, and the
    flat lattice would have made a scoping pause fire on Evidence search walks
@@ -109,7 +111,11 @@ folds record each.
    redirect; `PlanningTurn*` → `TaskAgentTurn*`; the runtime module, backend
    classes and `POLICY_ATLAS_PLANNER_MODEL` → `POLICY_ATLAS_TASK_AGENT_MODEL`
    (the code default is unchanged, so an old-only deployment behaves as
-   before); the constraint and index names that carry the word; stored
+   before); the constraint and index names that carry the word (eight by
+   `ALTER TABLE … RENAME CONSTRAINT`; the two whose definition embeds the kind
+   value — the one-active-conversation unique constraint and
+   `ck_conversation_kind` — are dropped and recreated, same net effect,
+   reversible); stored
    values `conversation.kind` and `plan.created_by` rewritten and reversed
    on downgrade. **Kept as they are:** the prompt module's interior (moved
    byte-identical so its hash does not change), the version string
@@ -162,7 +168,16 @@ Recorded at the step-6 exit; details in
   ruling C6). The gate answered a question with citations in 33.5 s, recorded
   a decision in words in 2.3 s (the gate sort is within that), ended the walk
   on "Change the plan" and rebuilt under the new version, and confirmed
-  without a rebuild through the plan-scoped record.
+  without a rebuild through the plan-scoped record. The gate sort itself
+  measured 0.8 to 1.4 s a call on the three live gate turns (Langfuse
+  `agent:gate_sort`, read at the review stack).
+- Review stack (2026-09-17; contract verifier · security lane · Codex
+  adversarial · `/code-review medium` · live-trace lane): one blocker and
+  eleven majors from Codex, ten findings from `/code-review`, five minors
+  from the security lane, eighteen from the verifier; the code fixes and the
+  dispositions are in the task's `verification.md` § Review findings, and the
+  gate's as-built invariants in
+  `docs/knowledge/baseline-gate-invariants-as-built.md`.
 
 ## Consequences
 

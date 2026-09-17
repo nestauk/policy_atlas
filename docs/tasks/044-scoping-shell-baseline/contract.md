@@ -358,7 +358,12 @@ the ruling quoted (§ Spec changes). `your_context` entries keep their own
 **Execution-bearing baseline parameters that are not plan fields** (C8) are
 compile constants in the baseline template, named here so nothing hides: the
 acquisition target per backend, the per-section turn cap, the proposed-section
-limit (two), and the section order. Depth does not change them in this slice.
+limit (two), and the section order. ~~Depth does not change them in this
+slice.~~ *Re-revised in phase 8 (owner ruling 2026-09-17, "Go with options 2
+and 5, targets 20 and 10"): depth sets the acquisition target (20 · 10 per
+backend) and the proposed-section allowance (two · none); the turn cap and
+the section order stay constants. § Baseline and D7 carry the ruling; this
+paragraph was folded at the review stack (verifier F2).*
 
 ## Baseline
 

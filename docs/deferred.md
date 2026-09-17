@@ -1672,6 +1672,10 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   relevance per backend. Fix is in acquire: stamp acquired sources with the surfacing
   query/queries (a set — multi-query dedupe means one source can arrive via several).
   Pays off for search-loop tuning and for the demo/web-app search cards.
+- **Repo-root `scripts/*.py` are outside mypy** — `backend/pyproject.toml` `files = ["src",
+  "tests"]`, so `scripts/ops_remove_scoping_tasks.py` (destructive, `--apply`-guarded) and the
+  rename tooling are tested but never typechecked. Add `scripts/` to the mypy files or move
+  long-lived scripts under `backend/src/policy_atlas/ops` (044 review stack, two lanes).
 
 ## Steering surface (task 024 seams)
 
@@ -2546,6 +2550,39 @@ deferred here — the owner ruled the font is fine for now.
   the Task Agent.
 - **`agent_prompt.py` docstring** still cites `planner_prompt.py` /
   `planner_v5` — hash-pinned; reword at the next `agent_v` edit.
+- **Review-stack seams (2026-09-17, task 044 step 7).** Recorded, not fixed in the slice:
+  - *Per-run fan-out has no cross-run bound* — classify runs 12 provider threads and ingest 4 to
+    8 parse workers per walk; the only gate across walks is `RUN_EXECUTOR_MAX` (default 2), so a
+    2-vCPU staging task can carry 24 classify calls and 16 parse processes at once. A shared
+    provider 429 storm or memory pressure is the failure. Owner-tunable; size a cross-run
+    semaphore when a second concurrent walk is routine (security lane S5).
+  - *A 422 on a plan patch echoes the pydantic error* — `detail=str(exc)` on a `ValidationError`
+    carries the caller's own values, the model names and the pydantic docs URL. The ES patch has
+    done this since 029; the scoping branch copies it. Replace with the contract's plain
+    `validation_error` shape when the patch routes are next touched (security lane S7).
+  - *One baseline intent record per plan version* — every approved scoping plan version writes
+    an `evidence_scope` row with `purpose = baseline` (C3), including versions that only add a
+    preference or record `baseline_confirmed`; the NEET task carries seven for two walks. By
+    design (one answer per version to "which plan was this built from"), but the unrun rows are
+    orphans a retention rule will have to know about (trace lane T3).
+  - *"A mixed turn answers first" is prompt-borne* — the gate sort has kinds question · decision
+    · unsure and no "mixed" flag; a turn that asks and decides at once is folded into `question`
+    by instruction, and the code offers the two decisions after every answer. Deterministic in
+    the code (a decision only commits when the sort names an offered option), not in the model.
+    The eval slice reads mixed utterances against the sort (Codex X12; verifier).
+  - *The reasoning label is pinned at claim grain* — "What is contested" carries its tier-4
+    reasoning as labelled claims, not as a visible "Reasoning:" sentence the way "Key
+    assumption" does; the writer's choice of sentence is prompt-borne. The slice flags a
+    reasoning section that carries no reasoning claim (`reasoning_label_missing`); whether the
+    label should also be visible in the prose is a template question for the eval slice (trace
+    lane T1; Codex X8).
+  - *Linked context is capped at three sources per create* (`TaskCreate.from_task_ids`
+    `max_length=3`, Codex X11) — each linked report may add up to 60,000 characters to every
+    Task Agent turn; raise the cap when a real need appears, with the prompt size measured.
+  - *Acquisition target wording* — `search.record_cap` applies **per backend** (20 · 10 per
+    backend = about 40 · 20 documents over Overton + OpenAlex); the contract § Baseline, the OS
+    capability spec § Output structure and the spec log of 2026-09-17 read as totals. Owner
+    decision item at the 044 PR (verifier F4).
 
 ## Synthesis optimisation (deferred 2026-09-17; owner intends a task after options scoping lands)
 
@@ -2604,3 +2641,40 @@ chunk citation carries a verbatim quote of about 250 characters (first section:
   the rendered prose rather than a flag only in the annotation layer. Each is a
   grounding-contract change shared with the ES report (ADR 0015, 013
   invariants) and needs a quality read against a set of judged sections.
+- **Source coverage: reports cite a small share of the relevant documents**
+  (investigated 2026-09-17 from the dev database and Langfuse; owner asked
+  why). Measured funnel on the task 1e03e719 report run of 2026-09-08 (eight
+  sections, landscape depth): 100 candidates → 59 screened relevant → 53
+  appraised → 17 documents ever returned to the writer in any section → 12
+  cited. The other nine stored runs cite 7 to 12 documents whatever the corpus
+  (36 to 81 relevant), so the ceiling is structural. The writer cited 12 of the
+  17 it saw; the loss is upstream of the writer. Three caps in
+  `synthesis_tools.py` bind together:
+  1. `search_chunks` returns the top 8 chunks by fused score with no
+     per-document spread — one document filled 5 or 6 of a section's 11 slots.
+  2. `SYNTH_CHUNK_CHAR_BUDGET` (24,000 per section) is spent on the first read
+     turn: every section's read turn returned 10 to 13 chunks totalling 22,600
+     to 23,900 characters from 5 to 8 documents; later matches come back
+     `skipped_over_budget` (up to 13 in one section) and are not citable.
+  3. The writer takes one read turn (2 to 4 `search_chunks` plus two lookups)
+     and then emits — `force_emit: false` on all 16 `synthesise:section_turn`
+     generations, so it chose to stop at 2 of its 6 turns. The prompt says
+     "stop when saturated", and the budget makes it saturated at once.
+  Sections retrieve overlapping documents, so the run-wide union stays near 17.
+  Select (the shortlist) is NOT the cause: it runs only at analysis depth
+  standard/deep (`ANALYSIS_DEPTH_TABLE`, budgets 15/25), never at landscape or
+  in the scoping baseline chain, and none of the ten measured runs had it. Where
+  it did run (five standard-depth reports, July–Aug 2026) the 2.0 prior steered
+  7 to 13 of 8 to 21 cited documents into the shortlist without lowering the
+  total; it is a score multiplier, not a filter. Also: no stored run had
+  extraction, so every citation is a chunk claim and finding claims are zero.
+  Levers to weigh, none a bug fix (the caps are plan-pinned and working as
+  designed): a per-document cap or diversity rule in `search()`; a larger or
+  per-turn character budget; a prompt change that asks the writer to read again
+  after the first turn; surfacing `skipped_over_budget` counts to the user as a
+  coverage signal. Each trades against the write-turn latency above and needs
+  a quality read. Query recipe: `synthesis_result.blocks[].block_id → block →
+  annotation → citation → chunk → task_source_snapshot` (join on
+  `source_snapshot_id` OR `full_text_snapshot_id`); Langfuse v3 REST
+  `/api/public/observations` by run window (the CLI refuses both the legacy and
+  v2 endpoints on this project).

@@ -1,5 +1,25 @@
 # Knowledge update log
 
+## 2026-09-17 (task 044 step 8)
+* **Creation**: Added [baseline-gate-invariants-as-built](baseline-gate-invariants-as-built.md) —
+  the five gate properties the review stack pinned (failed synthesise, non-pausing IO, unattended
+  `proceed_flag` only, no `abort` floor, baseline = artefact written); five findings, three lanes.
+* **Creation**: Added [capability-registry-one-plan-reader](capability-registry-one-plan-reader.md) —
+  the registry as the one plan reader, 14 + 7 sites, the two-direction AST seam, the import-cycle
+  reason per-capability validators keep their own steer-point sets (044 build handoff + verifier F1/F8).
+* **Creation**: Added [evidence-scope-row-lock-serialises-synthesise](evidence-scope-row-lock-serialises-synthesise.md) —
+  check 7's summed "parallel" arms (044 build handoff).
+* **Creation**: Added [gitignore-needs-dockerignore-mirror](gitignore-needs-dockerignore-mirror.md)
+  (044 build-open red base) and [repo-root-scripts-not-typechecked](repo-root-scripts-not-typechecked.md)
+  (044 build handoff; security lane S8, verifier N2).
+* **Update**: [two-step-rename-needs-ledger-and-anchored-exemptions](two-step-rename-needs-ledger-and-anchored-exemptions.md)
+  gains the one-to-two joiner rule; [rename-sweep-inverts-screen-sense-words](rename-sweep-inverts-screen-sense-words.md)
+  gains stored enum literals; [testing-database](testing-database.md) gains the idle-in-transaction
+  lock and the downgrade-refusal cleanup; [prompt-hash-guard-hashes-whole-module](prompt-hash-guard-hashes-whole-module.md)
+  gains the name-based pin and the whole-module sweep exclusion (all from the 044 build handoff's
+  knowledge candidates). Declined: the "coverage statement port" candidate (a deviation record, not
+  durable knowledge).
+
 ## 2026-09-08 (task 040 step 8)
 * **Creation**: Added
   [additive-max-md-variants-prove-desktop-invariant](additive-max-md-variants-prove-desktop-invariant.md) —

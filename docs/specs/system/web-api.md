@@ -168,7 +168,11 @@ Splash-page **Request access** intake. Public — no bearer token.
   `from_task_ids[]`, applied in **one transaction** (C10): the same-project
   rule is checked when a link is written (409 `link_project_mismatch`), the
   pinned source walk must be `succeeded | degraded` (409
-  `link_source_unfinished`), and a failed request leaves no task row.
+  `link_source_unfinished`), the source must be an Evidence search task (409
+  `link_source_capability`; review stack 2026-09-17), at most three
+  `from_task_ids` per create (422), and a failed request leaves no task row.
+  A link never widens what the reader can see: `source_task_name` is `null`
+  for a source the reader cannot open (ADR 0037 decision 2).
   `TaskOut` carries `capability` and `links[]` (`source_task_id`,
   `source_task_name`, `source_capability_run_id`, `flagged` — true when the
   two tasks no longer share a project; a link is never deleted).

@@ -66,13 +66,13 @@ again.
 Revision `b5e1d7a4c026` (revises `a7d3f1c8e2b5`): `task.capability` +
 `ck_task_capability`; `ck_capr_capability` widened; `uq_plan_id_task`;
 `evidence_scope.purpose` + `ck_scope_purpose`; `evidence_scope.plan_id` +
-composite `fk_scope_plan_task`; `task_link` with `fk_task_link_source_run_task`,
+composite `fk_scope_plan_task`; `task_link` with its primary key, the two plain FKs to `task` (source, target), `fk_task_link_source_run_task`,
 `uq_task_link_pair`, `ck_task_link_distinct`, `ix_task_link_target_task_id`.
 Downgrade refuses while any `task` or `capability_run` row carries
 `options_scoping`, naming `scripts/ops_remove_scoping_tasks.py` (A5); the
 round-trip test proves the refusal and the operator script's FK order.
 
-**Registry (S1):** all ten validate sites and seven compose sites route through
+**Registry (S1):** all validate sites (ten at this phase; fourteen by the step-6 exit — phases 3, 5.2, 5.4 and the live-check fixes added four, all routed; the AST seam test is what makes the count safe) and seven compose sites route through
 `runtime/capability_registry.py`; `_open_capability_run` writes the task's
 capability; `pause_points` / `lattice_name_for` / `lattice_policy` take the
 capability's lattice (`lattice_policy` returns `off` for a name outside the
@@ -109,7 +109,7 @@ commits a scoping task must clean it up.
 | `tests/runtime/test_inherit.py` | pass | 5 tests, rolled-back fixtures |
 
 **Flagged deviations (3.2):**
-7. **`PlanOut.plan` and `TaskAgentTurnOut.plan` became nullable** — a scoping
+7. **`PlanOut.plan`, `TaskAgentTurnOut.plan` and (found at the review stack, verifier F6) the SSE `PlanUpdatedFrame.plan` became nullable** — a scoping
    plan has no Evidence search payload. The contract asked for additive
    fields only; nullability of an existing field is a type widening the
    frontend must null-check (done in 3.4). Everything else in the diff is
@@ -121,7 +121,7 @@ commits a scoping task must clean it up.
    it): the grammar had no per-backend cap key (caps came from
    `DEPTH_CONSTANTS`); fail-closed integer `1..200`, absent = today's
    behaviour; `BASELINE_ACQUISITION_TARGET = 25` per backend (measured in
-   Phase 7).
+   Phase 7; **superseded in phase 8** by `BASELINE_ACQUISITION_TARGETS` 20 · 10 per backend by depth).
 9. **`synthesis_tools` grammar widened for template mode only:** `nav_label`
    accepted on supplied sections (it was read but unreachable); `section_budget`
    no longer caps the supplied list when `template` is present (P14: it means
@@ -290,7 +290,7 @@ zip, as 027/028 did.
 | (a) seed | The dev DB's completed NEET Evidence search (task `1e03e719…`, succeeded walk, one artefact) — given an owner and a project by two dev-DB rows so it is linkable (it had neither) | — |
 | (b) create | `POST /tasks` with `capability: options_scoping`, the project and `from_task_ids: [NEET]` → 201, one link pinned to the source walk, `flagged: false` | — |
 | (c) turns | Turn 1 proposed from the linked plan (Where "England" assumed from the linked task, three outcomes tagged), asked who should change with three options. Turn 2 (the Frame board's compound message) typed all four constraints — requirement (longlist), evidence restriction (retrieval, OECD members pinned), two preferences (assessment) — set depth standard and became ready; it did **not** ask the kind question because "Only evidence from OECD countries" is unambiguous. An ambiguous "Also: Nordic countries only." got the kind question verbatim plus the Where warning (D8). `GET /plan` showed every section with origin tags | turn latencies 13.7 s · 19.2 s · 13.6 s · 6.3 s |
-| (d) baseline 1 | `POST /runs` on plan v2 (the Nordic exchange had made v1 `plan_stale`; one closing turn re-approved). Acquire hit the baseline cap (25 per backend, 50 acquired, 22 s search). Paused on `baseline_confirm`. Result: "Do nothing: current policy and trajectory", `scoping pass`, seven required + **two proposed** sections after "What is contested" + code-rendered Sources ("32 sources from Overton and OpenAlex … Live official statistics and departmental pages were not searched … 18 grey literature and 14 academic articles. The profile leans on grey-literature sources."). Card: two options, key assumption, Settings | **389 s** from `POST /runs` to `paused` (15 s poll) |
+| (d) baseline 1 | `POST /runs` on plan v2 (the Nordic exchange had made v1 `plan_stale`; one closing turn re-approved). Acquire hit the baseline cap (25 per backend, 50 acquired, 22 s search; phase 8 lowered the cap to 20 · 10 per backend by depth). Paused on `baseline_confirm`. Result: "Do nothing: current policy and trajectory", `scoping pass`, seven required + **two proposed** sections after "What is contested" + code-rendered Sources ("32 sources from Overton and OpenAlex … Live official statistics and departmental pages were not searched … 18 grey literature and 14 academic articles. The profile leans on grey-literature sources."). Card: two options, key assumption, Settings | **389 s** from `POST /runs` to `paused` (15 s poll) |
 | (e) gate | Question "Is the rise in NEET real, or did the survey change?" → `kind: answer`, 4 citations, the two decisions offered back, walk still paused. Instruction "Change Where to the whole United Kingdom" → `kind: decision` (change_plan, bound to run · check-in · plan version 2), walk `aborted`, plan **v3** with Where = United Kingdom `from_your_question` — one row, two commits. Rebuild (`POST /runs` on v3) → paused on the gate again, 10 sections | answer turn 33.5 s (gate sort + answer); change turn 6.8 s; **rebuild 453 s** to `paused` |
 | (f) confirm | "Looks right. Confirm the plan and build the longlist." → `kind: decision` (confirm_plan, plan version 3), walk `succeeded`; `/decisions` lists both recorded steering decisions. A preference added afterwards → plan v5 with the code-authored sentence "This change does not touch what the baseline (built from plan version 3) was built from…"; `POST /plan/confirm-baseline` → v6 recording `{baseline artefact, plan_version 5}`, idempotent on repeat | confirm turn **2.3 s** (the gate sort is bounded by this: about one to two seconds) |
 | (g) ES smoke | New Evidence search task → two Task Agent turns → approved ES plan v1 (`search_effort standard`, `analysis_depth standard`) on the shared turn path | 19.6 s · 10.8 s |
@@ -366,11 +366,22 @@ the NEET wall clock); the plan shows a coarse band and promises no number.
 |---|---:|---|
 | `make verify` (full) | pass | backend 2802 passed (10:10); typecheck 335 files clean; lint clean; build OK; infra 46 passed; okf-validate 143/0; audit-paths, prompt-guard (16 modules), font-guard, `drift-check: OK`; frontend 715 tests / 82 files |
 | `cd frontend && pnpm e2e` | pass | 15/15 (mock mode) |
-| `make verify` (full, phase 8 gate, 2026-09-17; rerun green after the merge revert, `backend 2806 passed`) | pass | backend 2806 passed (8:39); typecheck clean; lint clean; build OK; infra 46 passed; prompt-hash-guard 16 unchanged (two re-pinned); openapi-sync + drift-check OK; frontend 715 passed (82 files). e2e not rerun: no frontend change in phase 8 |
+| `make verify` (full, phase 8 gate, 2026-09-17; rerun green after the merge revert) | pass | backend 2805 passed (8:39; the first write of this row said 2806 — the suite collects 2805, corrected at the review stack); typecheck clean; lint clean; build OK; infra 46 passed; prompt-hash-guard 16 unchanged (two re-pinned); openapi-sync + drift-check OK; frontend 715 passed (82 files). e2e not rerun: no frontend change in phase 8 |
 
 Every plan checkpoint is committed on `task/044-scoping-shell-baseline`; the
 live check ran at the contract's pinned scope; this file is complete for the
 review conversation (`task-cycle-review`, fresh conversation).
+
+### Step-7 gates — review conversation (2026-09-17)
+
+| Command | Result | Notes |
+|---|---|---|
+| `make verify` (full) on the entry tree, before any lane ran | pass | okf 143/0; backend 2805 passed (8:54); infra 46; audit-paths, prompt-guard 16, font-guard, `drift-check: OK`; frontend 715 tests / 82 files |
+| `cd frontend && pnpm e2e` (entry tree; not rerun in phase 8) | pass | 15/15 |
+| `make verify` (full) after the review fixes, first run | fail at `drift-check` | okf 148/0; backend **2826 passed** (8:58); infra 46; prompt-guard 16 unchanged (one re-pin); `drift-check` red because the lead narrowed a wire model after the API fixer's `make openapi-sync` — re-synced (`drift-check: OK`), then `make frontend-verify` 719 tests / 82 files, font-guard and audit-paths green individually |
+| `make verify` (full) after the re-sync, one run | pass | okf 148/0; backend **2826 passed** (8:38); infra 46; audit-paths, prompt-guard 16 unchanged, font-guard, `drift-check: OK`; frontend **719 tests / 82 files**; build OK |
+| `cd frontend && pnpm e2e` after the fixes | pass | 15/15 |
+| `make prompt-guard` after the re-pin | pass | 16 unchanged; `task_agent_scoping_prompt.py` re-pinned once — code-only (`_fence_safe`) plus the dead `stop` value removed from the wire description; version string `task_agent_scoping_v2` unchanged, no behavioural instruction changed (038 R1 words-only ruling) |
 
 ### Phase 8 — latency levers before the review (2026-09-17, lead)
 
@@ -476,17 +487,37 @@ _(filled per phase; flagged deviations listed here as they arise)_
    category is ordinary English. The pane's aria label "Planning conversation"
    became "Task Agent conversation".
 
-12. **Phase 8 measurement contradicted one of its own levers** (see Phase 8):
-    the rapid five-section merge saved no writing time on the NEET corpus in
-    two clean runs (a third, same-day standard run is void: the machine
-    slept). The owner reverted the merge the same day; seven sections at both
-    depths.
 6. **The frontend URL token `?chat=planning` became `?chat=task_agent` with
    no alias** (review finding on `conversationState.ts`): a tab opened before
    the deploy that still carries `?chat=planning` shows "This chat couldn't be
    opened." until the user clicks the Task Agent. The token is transient view
    state, not a durable link, and the 038 rule (no redirect, no fallback code)
    applies to it as to the route. Recorded as a deliberate break.
+12. **Phase 8 measurement contradicted one of its own levers** (see Phase 8):
+    the rapid five-section merge saved no writing time on the NEET corpus in
+    two clean runs (a third, same-day standard run is void: the machine
+    slept). The owner reverted the merge the same day; seven sections at both
+    depths.
+13. **`frontend/src/views/workspace/PlanningPane.test.tsx` (329 lines) was
+    deleted, not renamed** (review stack, verifier F5): its successor is
+    `TaskAgentPane.test.tsx` (543 lines), which covers the same pane under the
+    new name plus the gate thread; git pairs the two only as delete + add
+    because more than half the file changed. No assertion was dropped —
+    rubric 14's justification, recorded here.
+14. **The Task Agent rename keeps two live symbols with the old word**
+    (verifier F7): `PlannerTurnWire` and `PLANNER_SYSTEM_PROMPT` in
+    `runtime/task_agent_prompt.py` (byte-identical, hash-pinned — C14 forbids
+    the edit) and the alias `TaskAgentTurn = PlannerTurnWire` in
+    `runtime/task_agent.py` that names it. The sweep test's allow-list covers
+    the prompt module's symbols; this line names them.
+15. **"Steps and check-ins" is the one plan section without an Edit action**
+    (verifier F9): Evidence search parity — that section is compiled, not
+    edited; `PlanDocument.test.tsx` asserts `sections − 1` Edit buttons.
+16. **`scripts/rename_038.py` was refactored onto the new
+    `scripts/rename_engine.py`** (verifier F12): outside the contract's In
+    list; done because the 038 tool was the engine 044's sweep needed and
+    phase-1 review finding 8 required the 038 behaviour carried as table
+    fields. Covered by `tests/scripts/test_rename_044.py` and the 038 tests.
 
 ### Phase 1 review pass (`/code-review medium` on e4128528, 2026-09-09)
 
@@ -553,11 +584,114 @@ candidate and a deferred item (add the inline-prompt modules to the guard).
 
 ## Review findings
 
-_(step 7)_
+Step 7 ran on 2026-09-17 in a fresh conversation (`task-cycle-review`), on
+`git diff feat/options-scoping...HEAD` with the generated files, the task
+docs and the three declared non-slice commits (`5854676a`, `b4b1e93b`,
+`27a41a2b` — read once by the adjudicator, each is what it claims) excluded
+from the reviewer lanes. `make verify` was green on the entry tree (backend
+2805 · infra 46 · frontend 715 / 82 files · prompt-guard 16 unchanged ·
+drift-check OK) and `pnpm e2e` 15/15 before any lane ran. The whole product
+diff is Claude-written (no phase was marked `codex`), so Codex anchored the
+adversarial pass over the whole diff and `/code-review medium` was the Claude
+half of the pair.
+
+**Lanes and cost.** Contract verifier (`contract-verifier`, Opus, 213K) ·
+security (`agent-skills:security-auditor`, 174K) · Codex adversarial
+(`codex-rescue`, read-only brief, job `task-mu5pgjaw-k2thzs`) ·
+`/code-review medium` (474K) · live-trace content lane (lead, dev DB +
+Langfuse — the build's scratchpad evidence was gone, so the traces and rows
+were read at source) · `make okf-validate` (in the gate) · `/simplify` (see
+below). Reasoning-class spend was 387K against the ≤250K guide; recorded,
+not excused — a 31K-line Tier-4 diff with three review dimensions (rename ·
+schema · gate) cost what it cost, and the two costliest lanes each found
+things the others did not.
+
+### Convergent findings (two or more lanes)
+
+| Finding | Lanes | Disposition |
+|---|---|---|
+| A scoping task may start from a scoping task — `_write_task_links` never checked the source's capability | security S6 · Codex X4 | **fixed** (B1): 409 `link_source_capability` (registered in `app.py`'s closed conflict list, copy in `frontend/src/lib/errors.ts`, wire doc line); `test_a_scoping_task_cannot_start_from_another_scoping_task` |
+| A Link names a source the reader cannot open — `links_for_tasks` joined `task.name` with no read grade (ADR 0037 d2 "grants no read") | security S3 · verifier F11 | **fixed** (B2): `readable_task_leg(user_id)` decides the name inside the existing join (no extra query); `source_task_name` null for an unreadable source; the plan document says "a task you can't open"; `test_a_reader_who_cannot_open_the_source_is_not_told_its_name` (ADR 0033 style) + PlanDocument test |
+| `confirm-baseline` and the scoping `PATCH /plan` wrote a plan version without the task row lock — a walk could start from N while N+1 is minted; two concurrent confirms surfaced `uq_plan_task_version` as a 500 | security S4 · Codex X5 | **fixed** (B3): `for_update=True` on both; existing idempotency tests green (a thread-barrier test was judged not worth its cost) |
+| "A baseline exists" was a status guess — any `aborted` walk counted (backend S4 sentence, frontend Confirm posting the task's latest artefact against a rebuild that aborted before writing) | `/code-review` C5 + C6 | **fixed** (B5, C-b): `RunOut.artefact_id` (scalar subquery, additive); `_baseline_built_from` joins `artefact` (`test_an_aborted_walk_that_wrote_nothing_is_not_a_baseline`); the frontend's `scopingWalkStatus` gains `baselineRun` (latest walk with an artefact), Confirm posts its artefact, the band's mark reads its plan version — regression "a rebuild that aborted with no artefact of its own" in planStart and baselineBand tests; mock runs carry `artefact_id` |
+| The reasoning label is prompt-borne: no test asserts `tier_label`, no output invariant on the two reasoning sections | verifier F18 · Codex X8 · trace lane T1 | **fixed** (A6): `reasoning_label_missing` section flag + `reasoning_label_missing_present` roll-up flag (flag, not drop); the two section titles are derived from `BASELINE_SECTIONS` by focus text (the prompt module is hash-pinned, `# ponytail:`) and pinned by test; `tier_label == "tier_4_reasoning"` asserted on every reasoning claim; the visible-label question goes to the eval slice (deferred.md) |
+| "A mixed turn answers first" rests on the sort prompt; the code only guarantees "never infers a decision" | verifier · Codex X12 | **recorded** (deferred.md; contract "No AI eval in this slice") |
+| Repo-root `scripts/` (incl. the destructive operator script) are outside mypy | security S8 · verifier N2 | **recorded** (knowledge concept + deferred.md § Codebase health) |
+
+### Unique to one lane
+
+**Codex adversarial** (the heterogeneous reviewer; 1 blocker, 11 majors):
+- X1 **blocker** — an attended `baseline_confirm` was silently treated as Continue whenever the IO could not pause (`NullIO`, the CLI): the walk ended `succeeded` with no human and the frontend read it as confirmed. **Fixed** (A2): at the gate an IO that cannot ask a human — no `pause` method, or `NullIO`, whose own `pause` returns Continue (the brief's premise was corrected by the fixer: `NullIO` *is* `_PauseCapable`) — records a `standing_default` decision and the auto-resolved flag before any pause event, the unattended shape, never a fabricated user Continue (`_can_ask_a_human`; `test_a_non_pausing_io_records_the_gate_instead_of_auto_confirming`). No production path used `NullIO` (the web dispatcher passes `ParkIO`, the CLI its own IO), so this closed a latent seam rather than a live defect.
+- X2 — an unattended plan could declare `baseline_confirm: stop`, aborting at the gate against D11/A9. **Fixed** (A3): `ScopingSteerPointDefault.action` is `Literal["proceed_flag"]` (the Out model too); the dead `stop` branch in `_resolve_baseline_gate_unattended` deleted; the scoping prompt's wire description no longer offers `stop` (words-only re-pin); `test_an_unattended_plan_cannot_declare_a_hard_stop_at_the_gate`.
+- X3 — the gate's two options could be bypassed with the generic `abort` response or the universal `continue`/`abort` option ids, marking the plan `abandoned`. **Fixed** (B9): at a baseline-gate pause `kind == "abort"` and any option id outside the stored two are refused (`_offered_option(allow_floor=False)`); `test_the_gate_refuses_everything_but_its_own_two_options`.
+- X6 — a change-plan-with-text decision was lost if the planner call then crashed (retry saw no gate and completed a plain reply). **Fixed** (B7): a complete `TaskAgentTurnOut` projection (`kind="decision"`, the decision, `CHANGE_REPLY`) is persisted on the reserved row while it stays `pending`, before the planner runs; a retry reads it back (`_Reserved.retried`) — `test_a_failure_after_the_decision_leaves_it_durable_and_the_retry_replans` now asserts the decision survives (it previously asserted `kind is None`, which was the bug).
+- X7 — the widened synthesis grammar let an ES steering delta select `template: "baseline"`, silencing the report passes on an Evidence search walk. **Fixed** (A4): `template` refused in a steering delta at the validation site with a plain sentence (compile-only key; `section_budget` was steerable before 044 and stays); `test_a_synthesis_delta_cannot_switch_the_report_template`.
+- X9 — inherited coverage was read latest-per-scope, not per pinned walk. **Fixed** (A7): `search_coverage_record` joined to `runs` on `acquired_by_run_id` and filtered by the pinned `capability_run_id`; `""` when none matches; `test_coverage_is_the_pinned_walks_not_the_scopes_latest`.
+- X10 — inherit fell back to the source's latest approved plan when the pinned plan row was missing. **Fixed** (A8): fail closed — `{}` and `inherit.plan_row_missing` logged, the fallback query deleted; `test_a_missing_pinned_plan_row_inherits_nothing`. (0 of 25 walks in the dev DB lack a `plan_id`, so the fallback only ever fired on a data fault.)
+- X11 — no aggregate bound on linked context (60,000 chars per link per turn). **Fixed** (B10): `TaskCreate.from_task_ids` `max_length=3` (422 above); deferred.md notes the ceiling; `test_a_create_naming_more_than_three_sources_is_refused`.
+- Could not break: ES composition and `planner_v11` unchanged (R100 move), the ES section-writer assembly byte-identical, fences while running/paused, the chat-versus-card race lock, `POST /tasks` one transaction, `record_cap` 1..200 per backend, classify order under 12 workers, `cpu_count() is None`, the operator script's FK order, both downgrade refusals, the frontend nullable-plan consumers, no weakened tests.
+
+**`/code-review medium`** (10):
+- C1 — the gate paused over a **failed** synthesise (no `successful_runs["synthesise"]` guard, unlike the two ES points). **Fixed** (A1): the same degradation to a generic pause; `test_the_gate_does_not_pause_over_a_failed_synthesise` (synthesise raises → walk `failed`, no card).
+- C2 — gate answers put the raw `appraisal_score` on the wire and never the label. **Fixed** (B4): stored raw; `apply_appraisal_labels` at the read boundary on the fresh turn, the transcript projection and the replay path; `test_a_gate_answer_carries_the_appraisal_label_not_the_score` (verified red without the fix).
+- C3 — suggestion chips gated on `!runActive`, so the gate's quick replies never rendered while paused. **Fixed** (C-a): `!composerFenced`; TaskAgentPane test "renders an ask-back turn's suggestions as chips at the gate".
+- C4 — the Sources section never stated the origin restriction (`country_group` read as `str`, stored as a dict). **Fixed** (A5): `country_group` read as a Mapping (`label`); `test_baseline_sources_block_states_the_origin_restriction` seeds the plan through the real `build_scoping_plan` and asserts ", limited to sources from OECD members".
+- C7 — a question racing a card click became a 500. **Fixed** (B6): `answer_at_gate` returns `None` and the turn completes with `ALREADY_ANSWERED_REPLY`, `kind="reply"`, walk still paused; `test_a_question_that_loses_the_race_to_the_card_is_not_a_500`.
+- C8 dead type bridge · C9 the disabled Starts-from picker fetched and polled the whole task list · C10 dead `!baseline` guard. **Fixed** (C-c, C-d, C-e).
+
+**Security lane** (5 minors, 4 notes; no blocker):
+- S1 — the inherit fence was not escape-safe (`</report>` inside a report body closes the fence). **Fixed** (lead): `_fence_safe` in `task_agent_scoping_prompt.py::render_linked_context` turns every `</` in the fenced title, plan JSON, report and coverage into `<\/` — inert in Markdown and a legal JSON escape, so the plan stays parseable; `test_fenced_data_cannot_close_its_own_fence`. Code-only diff in a hash-pinned module, re-pinned as a words-only change together with the dead `stop` value's removal from the wire description (below); no version bump — no behavioural instruction changed.
+- S2 — the sort's `carried_text` (model output) became the planner's message unvalidated. **Fixed** (B8): verbatim-substring check, else the whole utterance.
+- S5 per-run fan-out has no cross-run bound · S7 422 bodies echo the pydantic error (pre-existing pattern) · S9 the rename downgrade rewrites post-upgrade rows (lossless). **Recorded** (deferred.md / this file).
+- Clean bill: `POST /tasks` (closed `capability`, links refused on an ES create, read grade + same-project + server-side run pin in one transaction, cross-org link unconstructible); gate turns owner-only; the decision barrier is `SELECT … FOR UPDATE` plus the undecided check in one transaction; SSE grade unchanged; no secret, token or raw trace in the diff or the task docs.
+
+**Contract verifier** (rubric 1–10, 12, 13, 16, 17, 18, 20 pass; 11 partial → resolved; 14 pass with one unrecorded deletion → recorded; 15, 19 this phase):
+- F1 ADR "ten validate sites" is fourteen · F2 contract § Plan object still said "depth does not change them" · F4 the acquisition target is per backend and three documents read as totals · F5 `PlanningPane.test.tsx` deletion unrecorded · F6 `PlanUpdatedFrame.plan` nullable undeclared · F7 two kept `Planner*` symbols · F9 one plan section without Edit · F12 038 tool refactor beyond the In list · F13 lowercase `task_agent <noun>` prose residue · F14 a new test with a retired name · F15 superseded "25 per backend" without a pointer · F16 the constraint list read as exhaustive · F17 two constraints are drop+recreate. **All folded**: ADR 0037 (F1, F17), contract (F2), this file (F5, F6, F7, F9, F12, F15, F16, deviations 13–16), code (F8 the AST seam now guards `ScopingPlan.model_validate` too — `test_capability_registry.py`; F13 the eight runtime lines by the lead, the six API lines by the API fixer; F14 renamed). **F4 is the owner's decision item** (see § Owner decision items).
+- F3 gate-sort latency unmeasured → measured by the trace lane (below). F10 the D8 warning and the kind question are pinned as prompt strings only → the live check (c) is the behavioural evidence; eval slice.
+
+**Live-trace content lane** (lead; dev DB rows + Langfuse session of the NEET task, 22 traces):
+- Gate sort: three `agent:gate_sort` spans, 0.82 / 1.13 / 1.35 s, kinds correct (`question`; `decision change_plan` carrying "Change Where to the whole United Kingdom, not just England."; `decision confirm_plan`), no `unsure`. **Known unverified item 3 closed.**
+- Inherit: turn 1 and turn 3 prompts carry the linked block as message [1] (user role), 21,321 chars, **byte-identical** (`sha256 9a1f6db1…`) across turns; turn 1 tagged England `assumed` and asked who should change — rubric 4 holds live, not only by test.
+- Baselines: all five `synthesis_result` rows are `template: baseline`, 10 sections (7 required + 2 proposed after "What is contested" + Sources), claim types chunk / reasoning / gap only (A7 holds on every live artefact). "Key assumption" opens "Reasoning: …"; "What is contested" carries its reasoning at claim grain (T1, above). The judge's `unspanned_assertions` (3, 3, 3, 0, 8) are absence statements written as prose without a gap claim — correct judge behaviour, a writer habit on thin corpora; eval-slice material.
+- The gate answer traces as `run:chat_v1:<id>` (31 s) — the lifted core still carries `component="chat_v1"` (5.3 said 5.4 may relabel; it did not). Recorded, harmless.
+- Seven `evidence_scope` baseline rows for seven NEET plan versions, two of which ran (T3) — by design (C3), noted in deferred.md.
+- Historical rows show the pre-fix states the live check reported (the card printing `Depth: standard`; two `interrupted` empty-homes walks that crashed at the gate boundary after a full synthesise) — consistent with the fixes `e063a69b` recorded.
+
+### Fake-done check on the phase-7 fixes
+No test relaxed, skipped or deleted (verifier: zero `skip`/`xfail`/`todo` in the diff; one true deletion, recorded as deviation 13). Every code fix above lands with a test that fails without it; the post-fix gate is in § Commands run.
+
+### `/simplify`
+`/code-review medium` ran the reuse · simplification · efficiency · altitude angles (C8, C9, C10 are its cleanup findings) and their fixes are applied; a separate same-family `/simplify` pass would read the same diff a third time — recorded as satisfied, not re-run (task-cycle-review § Step 7).
+
+### Owner decision items (from the stack; nothing applied without a ruling)
+1. **Acquisition target wording** (verifier F4): `search.record_cap` applies **per backend**, so standard acquires up to 20 from Overton **and** 20 from OpenAlex (about 40 documents; the live check acquired 50 at 25). The contract § Baseline, the OS capability spec § Output structure, plan-as-object § Thoroughness and the spec log of 2026-09-17 say "20 documents" / "10 documents". Either (a) keep the code and add "per backend" to the four documents, or (b) halve the per-backend cap so the totals read as written. The lead recommends (a): the measured baselines and the phase-8 arithmetic are per-backend numbers.
+2. **Linked sources capped at three per create** (Codex X11) — a bound the contract did not name; raise or lift on request.
+3. **Inherit fence** (security S1) — accepted as defence in depth for this slice; escape-neutralising the fenced body is a one-line change if the owner wants it now rather than at task 2.
 
 ## Rubric status
 
-_(step 7)_
+| # | Holds | Evidence |
+|---|---|---|
+| 1 | ✅ | contract/tasks.py `TaskCreate.capability`, no `capability` on `TaskUpdate` (immutable by construction); `TaskListRow.test.tsx` no depth; `AppShell.test.tsx` header |
+| 2 | ✅ | `test_rename_044_sweep.py` (code, docs, schema, 404, `planner_v11`); one commit `e4128528` before feature code; EB→ES grep reproduced (four kept "EB handoff" hits); deviations 14 (kept symbols) |
+| 3 | ✅ | `NewTaskView.test.tsx` (no depth/job control; same-project ES tasks only; one request); `test_task_links.py` task count 0 after a 409; + B1 source capability |
+| 4 | ✅ | `test_migration_044_slice.py` link constraints; `test_task_links.py` (finished walk, flagged not deleted, no read widening; + B2 unreadable source unnamed); `test_inherit.py` (plan + coverage, no markers, byte-stable; + A7 pinned coverage, A8 fail-closed plan); live: block byte-identical across turns |
+| 5 | ✅ | `test_scoping_plan.py` (depth, deep, Where default, kinds, `checked_at`, Your context, cross-capability rejection, moderate default, `source_turn_index`, language); `test_capability_registry.py` AST seam (both models after B11); `PlanDocument.test.tsx` Edit actions (deviation 15) |
+| 6 | ✅ | `test_task_agent_scoping_prompt.py` (labels, no primary), `test_task_agent_scoping.py` (no recommendation); D8 warning + kind question: prompt pin + live check (c) (verifier F10) |
+| 7 | ✅ | `test_scoping_compose.py` (chain, 7+Sources at both depths, proposals 2 · 0); `test_synthesise_baseline.py` (order, gap state, claim types, no ES passes, Sources block + A5 restriction clause, `scoping pass`, + A6 label flag / `tier_label`); check 7 ships nothing; compute 389 / 453 / 259 s |
+| 8 | ✅ | `test_baseline_gate.py` (lattice, modes, unattended, ES generic pause, label; + A1 failed synthesise, A2 non-pausing IO, A3 `proceed_flag` only); `test_baseline_gate_checkin.py` (confirm, change_plan, second answer refused, plan editable; + B9 no `abort` floor); `test_task_agent_gate_turns.py` (answer, race, change+replan, rebuild, confirm both versions, ask-back, fences; + B4 labels, B6 race reply, B7 durable decision, B8 carried text) |
+| 9 | ✅ | `ArtefactView.baseline.test.tsx`; `baselineBand` tests (+ C-b artefact-based rule); Sources/Share unchanged (empty diff); History hook rename only |
+| 10 | ✅ | `b5e1d7a4c026` exactly the named objects (deviation list completed, F16); `a7d3f1c8e2b5` rewrites + reverses; round-trips, refusals (task or `capability_run`), operator FK order tested |
+| 11 | ✅ | `make verify` green at entry and after fixes (§ Commands run); deterministic list located item by item (verifier); live check (a)–(g) with times; gate-sort latency 0.82–1.35 s (trace lane) |
+| 12 | ✅ | structural JSON comparison: four renamed schemas + one path removed, `/plan/confirm-baseline` added; nullable widenings declared (deviation 7 incl. `PlanUpdatedFrame.plan`); + `RunOut.artefact_id`, `source_task_name` nullable, `from_task_ids` max 3 — additive, via `make openapi-sync`, `drift-check: OK` |
+| 13 | ✅ | three new keys; `planner_prompt.py` → `task_agent_prompt.py` hash unchanged (R100); `task_agent_scoping_v2` re-pinned; `baseline_prompt.py` byte-identical to `3966b0fd`; `synthesis_backend.py` unpinned by the name-based guard, byte-identity test is the pin; ES compose comment-only diff |
+| 14 | ✅ | zero skip/xfail/todo added; one true deletion justified (deviation 13); phase-7 fixes add tests only |
+| 15 | ✅ | this file: three-baseline note, compute times, deviations 1–16, review lanes and dispositions |
+| 16 | ✅ | deferred.md § task 044 seams (seven required seams + the review-stack seams) · § Synthesis optimisation · § Codebase health (scripts typecheck) |
+| 17 | ✅ | seven spec changes logged (2026-09-09 ×3, 2026-09-17); `docs/specs/sources/` diff empty |
+| 18 | ✅ | ADR 0037 Accepted 2026-09-09; rollback verified against the code (list default, `--apply`, ES-link refusal, FK order, both refusals); counts corrected at the stack (F1, F17) |
+| 19 | ✅ | contract verifier · `/code-review medium` · security lane · adversarial at contract, plan and code (Codex) · `/simplify` (satisfied by the cleanup angles, recorded) · human deep review = step 9 |
+| 20 | ✅ | `test_scoping_compose.py` (20 · 10 `record_cap`; rapid no `section_budget`); `test_synthesise_baseline.py` rapid never calls the proposer; depth in `baseline_inputs_changed`; classify 12; ingest `max(4, min(8, cpu_count or 4))`; `task_agent_scoping_v2`; `baseline_template_v1` |
 
 ## Intent & assumptions
 
@@ -575,8 +709,11 @@ _(step 7)_
 - Unattended mode's recorded standing-default decision at `baseline_confirm`
   is pinned by tests, not driven live (the live plans were moderate).
 - The chat-versus-card decision race is pinned by the barrier test only.
-- Gate-sort latency is bounded by the whole confirm turn (2.3 s); the
-  Langfuse span `agent:gate_sort` gives the exact number when read.
+- ~~Gate-sort latency is bounded by the whole confirm turn (2.3 s); the
+  Langfuse span `agent:gate_sort` gives the exact number when read.~~ **Read at
+  the review stack:** 0.82 s (question), 1.13 s (change_plan), 1.35 s
+  (confirm_plan) on gpt-5.4-mini — the three live gate turns' `agent:gate_sort`
+  spans.
 - The frontend's live thread at the gate was verified by screenshot of the
   transcript after the fact, not by typing into the composer in a browser.
 
