@@ -329,7 +329,7 @@ plan ──confirm──▶ baseline ══PAUSE: confirm plan against baseline�
   eight are **required**; the writer may **add up to two problem-specific sections**, labelled and
   placed after "what is contested" — "a fixed list may miss what a domain needs, while the eight are
   questions any status quo can answer". The **eight required sections are the same at both depths**;
-  depth sets two things (owner ruling 2026-09-17, task 044 phase 8: "Go with options 2 and 5, targets 20 and 10"; the rapid section merge was measured, then reverted the same day: "Revert the merge, seven sections at both depths"): the acquisition target — 20 documents at standard, 10 at rapid — and
+  depth sets two things (owner ruling 2026-09-17, task 044 phase 8: "Go with options 2 and 5, targets 20 and 10"; the rapid section merge was measured, then reverted the same day: "Revert the merge, seven sections at both depths"): the acquisition target — 20 documents **per search backend** at standard, 10 at rapid (Overton and OpenAlex each; owner ruling 2026-09-18, "Add per backend to the docs") — and
   whether the writer may add proposed sections — up to two at standard, none at rapid. This
   re-revises the 2026-09-09 "one shape at every depth" line after the measured baselines ran 4.3 to
   7.5 minutes; merging sections was measured not to shorten the write, because the write turn is

@@ -336,7 +336,7 @@ the Frame board):
 | `target_unit` | who or what should change (people, firms, places, organisations, systems) | yes | intent context; screen prompt input |
 | `where` | the jurisdiction the policy applies to; default "United Kingdom" tagged *assumed* | yes | intent context; screen prompt input |
 | `outcomes[]` | the outcomes evidence is read against | yes | intent context |
-| `depth` | rapid \| standard (D6), chosen from the Task Agent's offered options | *your call* | stored; tasks 2–3 read it; sets the baseline's acquisition target (20 · 10) and proposed-section allowance (two · none) (D7 as re-revised in phase 8) |
+| `depth` | rapid \| standard (D6), chosen from the Task Agent's offered options | *your call* | stored; tasks 2–3 read it; sets the baseline's acquisition target (20 · 10 per backend) and proposed-section allowance (two · none) (D7 as re-revised in phase 8) |
 | `constraints[]` | `{text, kind, origin, checked_at}`; kind ∈ requirement \| preference \| evidence_restriction; checked_at ∈ longlist \| assessment \| retrieval | yes | evidence restrictions → the ES `ScopeConstraints` on every acquire, the baseline's included (D8) — **country group and publication years only**: the ES model has no language filter (C8), so a language restriction is stored, shown as *not yet applied at retrieval* and recorded as an ES gap; the other kinds are stored for tasks 2–3. Evidence restrictions sit in the plan's Constraints table, not in Settings — the placement the spec kept when it rejected "evidence restrictions as plan Settings" |
 | `your_context[]` | `{text verbatim, type: present_fact \| commitment, turn_index, test_as_condition}` | — | stored; read by task 3 |
 | `entry_branch` | `explore` (only value in this slice) | — | — |
@@ -386,8 +386,8 @@ feels, so the section count is not the latency lever.
 **Re-revised in phase 8** (owner ruling 2026-09-17, task 044 phase 8: "Go with options 2 and 5, targets 20 and 10"), after the
 three live baselines measured 389 s, 453 s and 259 s: depth sets two
 execution values. **Standard** keeps the shape above, against an acquisition
-target of 20 documents. **Rapid** writes the same eight sections, allows no
-proposed sections, and acquires 10 documents. A five-section rapid merge (in
+target of 20 documents per search backend (Overton and OpenAlex each). **Rapid** writes the same eight sections, allows no
+proposed sections, and acquires 10 documents per backend (owner, 2026-09-18: "Add per backend to the docs"). A five-section rapid merge (in
 place + already changing; trend + cost of inaction) was built and measured
 in this phase — 168 s and 189 s of writing against 183 s for the seven
 sections, because the write turn is set by output tokens and a merged section
@@ -517,7 +517,7 @@ Rows marked **keep** must not change behaviour. File paths are as built at
   depths (§ Baseline); a small acquisition target and a per-section cap; a
   measured compute target reported honestly; later levers recorded.
   **Re-revised in phase 8 (owner, 2026-09-17):** depth sets the target
-  (20 · 10) and the proposed-section allowance (two · none); the eight
+  (20 · 10 per backend) and the proposed-section allowance (two · none); the eight
   sections are the same at both depths (§ Baseline). The
   writing mode is sequential (C6); the sequential-versus-parallel comparison
   the interview agreed runs as a development-time feasibility check, not as

@@ -2581,8 +2581,9 @@ deferred here — the owner ruled the font is fine for now.
     Task Agent turn; raise the cap when a real need appears, with the prompt size measured.
   - *Acquisition target wording* — `search.record_cap` applies **per backend** (20 · 10 per
     backend = about 40 · 20 documents over Overton + OpenAlex); the contract § Baseline, the OS
-    capability spec § Output structure and the spec log of 2026-09-17 read as totals. Owner
-    decision item at the 044 PR (verifier F4).
+    capability spec § Output structure and the spec log of 2026-09-17 read as totals. **Resolved
+    2026-09-18** (owner: "Add per backend to the docs") — the four documents now say per backend;
+    the code is unchanged.
 
 ## Synthesis optimisation (deferred 2026-09-17; owner intends a task after options scoping lands)
 

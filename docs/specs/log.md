@@ -6,8 +6,9 @@
   [OS capability](capabilities/options-scoping/capability.md) § Output structure,
   [OS components](capabilities/options-scoping/components.md) § 11 and
   [plan-as-object](system/plan-as-object.md) § Thoroughness. Rapid: the same eight required sections,
-  no proposed sections, acquisition target 10. Standard: eight plus up to two proposed, target 20
-  (was one target of 25). A five-section rapid merge was built, measured (no shorter write: 168 s and
+  no proposed sections, acquisition target 10 per search backend. Standard: eight plus up to two proposed, target 20
+  per backend (was one target of 25 per backend; "per backend" made explicit on 2026-09-18 — owner:
+  "Add per backend to the docs", after the 044 review stack found the four documents read as totals). A five-section rapid merge was built, measured (no shorter write: 168 s and
   189 s against 183 s for seven) and reverted the same day on the owner's ruling. Re-revises the
   2026-09-09 "one shape at every depth" line after the measured 4.3 to 7.5 minute baselines.
 
