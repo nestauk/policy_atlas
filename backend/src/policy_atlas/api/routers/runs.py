@@ -28,6 +28,7 @@ from policy_atlas.api.routers._access import accessible_task
 from policy_atlas.api.routers._common import run_artefact_id_column, run_out
 from policy_atlas.api.run_io import ParkIO
 from policy_atlas.api.settings import Settings
+from policy_atlas.core import tracing
 from policy_atlas.core.schema import capability_run, task_agent_transcript, task_plan
 from policy_atlas.runtime.capability_registry import validate_plan
 from policy_atlas.runtime.runner import RunnerBackends, run_plan
@@ -64,26 +65,30 @@ def _dispatch_run(
     capability: str,
     plan_row: dict[str, object],
     backends: RunnerBackends,
+    user_id: str,
 ) -> None:
     """Run one approved walk on an executor worker and release its reservation."""
     try:
-        run_plan(
-            engine,
-            task_id=task_id,
-            evidence_scope_id=plan_row["evidence_scope_id"],  # type: ignore[arg-type]
-            # The task row's capability, read on the request path and carried
-            # here rather than re-queried: it decides which model reads the
-            # payload (C9). Whatever that model is, the runner takes it —
-            # narrowing to the Evidence search plan here made a scoping walk
-            # impossible to start (task 044).
-            plan=validate_plan(capability, plan_row["payload"]),
-            plan_id=plan_row["plan_id"],  # type: ignore[arg-type]
-            plan_version=plan_row["version"],  # type: ignore[arg-type]
-            plan_row_id=plan_row["plan_id"],  # type: ignore[arg-type]
-            backends=backends,
-            io=ParkIO(),
-            session_id=task_id,
-        )
+        # Opened inside the executor worker: contextvars do not cross a plain
+        # executor.submit. run_plan opens its own session scope per component.
+        with tracing.trace_scope(user_id=user_id):
+            run_plan(
+                engine,
+                task_id=task_id,
+                evidence_scope_id=plan_row["evidence_scope_id"],  # type: ignore[arg-type]
+                # The task row's capability, read on the request path and carried
+                # here rather than re-queried: it decides which model reads the
+                # payload (C9). Whatever that model is, the runner takes it —
+                # narrowing to the Evidence search plan here made a scoping walk
+                # impossible to start (task 044).
+                plan=validate_plan(capability, plan_row["payload"]),
+                plan_id=plan_row["plan_id"],  # type: ignore[arg-type]
+                plan_version=plan_row["version"],  # type: ignore[arg-type]
+                plan_row_id=plan_row["plan_id"],  # type: ignore[arg-type]
+                backends=backends,
+                io=ParkIO(),
+                session_id=task_id,
+            )
     except Exception:
         log.exception("api.run_dispatch_failed", task_id=str(task_id))
     finally:
@@ -192,6 +197,7 @@ def create_run(
             capability=access.row["capability"],
             plan_row=dict(plan_row),
             backends=backends,
+            user_id=user.user_id,
         )
     created = _await_new_run(engine, task_id=task_id, existing_ids=existing_ids)
     # Once the runtime row exists, the database's ``running`` count owns

@@ -1047,6 +1047,7 @@ def _dispatch_gate_turn(
                     executor=executor,
                     runner_backends=runner_backends,
                     agent=agent,
+                    user_id=user_id,
                 )
             return result
 
@@ -1077,6 +1078,7 @@ def _resume_walk(
     executor: ThreadPoolExecutor,
     runner_backends: RunnerBackends,
     agent: AgentBackend,
+    user_id: str,
 ) -> None:
     """Claim and dispatch the walk a gate decision asked to continue.
 
@@ -1096,6 +1098,7 @@ def _resume_walk(
         capability_run_id=claim.capability_run_id,
         backends=runner_backends,
         agent=agent,
+        user_id=user_id,
     )
 
 
@@ -1162,20 +1165,22 @@ def create_task_agent_turn(
         planner_message = payload.message
         carried_decision: TurnDecisionOut | None = None
         if phase_one.gate is not None:
-            sorted_turn = _dispatch_gate_turn(
-                engine,
-                task_id=task_id,
-                transcript_id=transcript_id,
-                conversation_id=conversation_id,
-                gate=phase_one.gate,
-                utterance=payload.message,
-                user_id=user.user_id,
-                agent=agent,
-                chat_backend=chat_backend,
-                embedding_backend=embedding_backend,
-                executor=executor,
-                runner_backends=runner_backends,
-            )
+            # The gate sort and the answer core trace under the user too.
+            with tracing.trace_scope(user_id=user.user_id):
+                sorted_turn = _dispatch_gate_turn(
+                    engine,
+                    task_id=task_id,
+                    transcript_id=transcript_id,
+                    conversation_id=conversation_id,
+                    gate=phase_one.gate,
+                    utterance=payload.message,
+                    user_id=user.user_id,
+                    agent=agent,
+                    chat_backend=chat_backend,
+                    embedding_backend=embedding_backend,
+                    executor=executor,
+                    runner_backends=runner_backends,
+                )
             if isinstance(sorted_turn, TaskAgentTurnOut):
                 return sorted_turn
             # "Change the plan" with an instruction: the decision is already
@@ -1201,20 +1206,24 @@ def create_task_agent_turn(
             baseline_state = _baseline_state(conn, task_id) if scoping else NO_BASELINE_STATE
         turns.append({"role": "user", "text": planner_message})
         try:
-            turn = (
-                scoping_agent.scope_turn(
-                    turns,
-                    previous_draft,
-                    linked_context=contexts,
-                    baseline_state=baseline_state,
-                    session_id=task_id,
-                    conversation_id=conversation_id,
+            # The Task Agent's own session scope nests under this user scope
+            # (ADR 0038; ported from the pre-rename planning router at the
+            # dev merge of 2026-09-18).
+            with tracing.trace_scope(user_id=user.user_id):
+                turn = (
+                    scoping_agent.scope_turn(
+                        turns,
+                        previous_draft,
+                        linked_context=contexts,
+                        baseline_state=baseline_state,
+                        session_id=task_id,
+                        conversation_id=conversation_id,
+                    )
+                    if scoping
+                    else task_agent.plan_turn(
+                        turns, previous_draft, session_id=task_id, conversation_id=conversation_id
+                    )
                 )
-                if scoping
-                else task_agent.plan_turn(
-                    turns, previous_draft, session_id=task_id, conversation_id=conversation_id
-                )
-            )
         except Exception:
             with engine.begin() as conn:
                 conn.execute(

@@ -266,6 +266,9 @@ def answer_at_gate(
             tools_builder=build_section_tools,
         ),
         trace_run_id=trace_run_id,
+        # A Task Agent turn keeps the task's session, like every planning
+        # turn and run (ADR 0038); only the chat route keys on its conversation.
+        trace_session_id=task_id,
         conversation_id=conversation_id,
     )
     return GateAnswer(prose=f"{prose}\n\n{OFFER_SENTENCE}", payload=payload)

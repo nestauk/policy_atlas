@@ -454,6 +454,7 @@ def answer_over_scope(
     question: str,
     backends: AnswerBackends,
     trace_run_id: uuid.UUID,
+    trace_session_id: uuid.UUID | None,
     conversation_id: uuid.UUID | None = None,
     on_delta: Callable[[str], None] | None = None,
     on_progress: Callable[[str], None] | None = None,
@@ -480,6 +481,8 @@ def answer_over_scope(
         backends: Chat, embedding and tracing seams, plus the tool builder.
         trace_run_id: Identity this answer is traced under (the caller's turn
             id) — it names a span, never a durable ``runs`` row.
+        trace_session_id: The Langfuse session this trace joins (the chat
+            route's conversation id; a Task Agent turn's task id), or ``None``.
         conversation_id: Optional owning conversation, recorded in trace
             metadata so one conversation stays filterable.
         on_delta: Optional provider-neutral final-prose callback. When the
@@ -592,7 +595,10 @@ def answer_over_scope(
         run_id=trace_run_id,
         task_id=task_id,
         component="chat_v1",
-        session_id=task_id,
+        # The caller names the Langfuse session (ADR 0038): the chat route
+        # passes its conversation id; a Task Agent turn at the gate passes the
+        # task id, as every planning turn and run does.
+        session_id=trace_session_id,
         conversation_id=conversation_id,
     ) as root_span:
         loop = run_tool_loop(

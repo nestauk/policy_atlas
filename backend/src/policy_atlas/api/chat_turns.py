@@ -531,6 +531,9 @@ def run_chat_turn(
             prose, answer = answer_over_scope(
                 engine,
                 task_id=task_id,
+                # Chat sessions key on the conversation, not the task: a
+                # conversation can open long after the task ran (ADR 0038).
+                trace_session_id=conversation_id,
                 scope=scope,
                 entry_artefact_id=entry_artefact_id,
                 window=prior_turns,

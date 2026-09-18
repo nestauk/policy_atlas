@@ -156,6 +156,7 @@ def test_answers_over_a_paused_walk_without_writing_a_row(engine: Engine) -> Non
         prose, payload = answer_over_scope(
             engine,
             task_id=task_id,
+            trace_session_id=task_id,
             scope=scope,
             entry_artefact_id=None,
             window=[],
