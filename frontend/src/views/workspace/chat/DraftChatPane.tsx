@@ -5,7 +5,7 @@ import { useComposerDraft } from "../../../store";
 import { Chip } from "../../../ui/brand/Chip";
 import { cn } from "../../../ui/brand/cn";
 import { LIFECYCLE_PAGE_CLASS } from "../../listPageChrome";
-import { Composer } from "../PlanningPane";
+import { Composer } from "../TaskAgentPane";
 import { ChatEmptyState, starterQuestions } from "./ChatEmptyState";
 import { DRAFT_CHAT_ID, stashFirstMessage, useConversationMutations } from "./conversationState";
 

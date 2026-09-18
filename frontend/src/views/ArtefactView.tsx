@@ -28,6 +28,7 @@ import { scrub } from "../lib/scrub";
 import { useDocumentTitle } from "../lib/title";
 import { COPY } from "../lib/vocabulary";
 import { hasResult } from "./lifecycle";
+import { isBaselineArtefact } from "./baselineBand";
 import { hasTerminalPartialLiveArtefact, useRunStream } from "../store";
 import type { LiveSection, RunStreamState } from "../store";
 import { Card } from "../ui/brand/Card";
@@ -1059,12 +1060,14 @@ export function SourceDossier({
       <SheetContent
         title={scrub(byId ? (dossier.data?.title ?? source?.title ?? "Source") : sourceRef)}
       >
-        {evidence.isPending && (
+        {/* isLoading, not isPending: while the title→id lookup has not
+         *  resolved, the dossier query is disabled and pending forever —
+         *  isPending would render a stuck (and duplicate) loading line. */}
+        {((!byId && evidence.isPending) || dossier.isLoading) && (
           <p role="status" className="animate-pulse text-body text-grey">
             Loading the dossier…
           </p>
         )}
-        {dossier.isPending && <p role="status" className="animate-pulse text-body text-grey">Loading the dossier…</p>}
         {dossier.isError && <p role="alert" className="text-body text-navy">This source dossier couldn't be loaded.</p>}
         {dossier.data && <SourceDossierBody source={dossier.data} findings={findings.data?.data} findingsPending={findings.isPending} />}
         {!byId && evidence.data !== undefined && source === undefined && (
@@ -1254,7 +1257,9 @@ function MostRelevantSources({
   onOpenDossier,
 }: {
   sources: TopSource[];
-  onOpenDossier: (title: string) => void;
+  /* Opens by source id: the citation-time title snapshot can drift from the
+   * evidence row's title in deployed data, so a title-keyed lookup misses. */
+  onOpenDossier: (sourceId: string) => void;
 }) {
   useScrollWhenNavigated("sources");
   if (sources.length === 0) return null;
@@ -1267,7 +1272,7 @@ function MostRelevantSources({
           <li key={source.sourceId} className="border border-line p-4">
             <button
               type="button"
-              onClick={() => onOpenDossier(source.title)}
+              onClick={() => onOpenDossier(source.sourceId)}
               className={`cursor-pointer text-left ${REPORT_BODY_CLASS} font-bold hover:underline`}
             >
               {scrub(source.title)}
@@ -1320,7 +1325,12 @@ export function ArtefactView() {
   const [searchParams, setSearchParams] = useSearchParams();
   const dossierSource = searchParams.get("source");
   const [detailClaim, setDetailClaim] = useState<ClaimLike | null>(null);
-  useDocumentTitle(task.data?.name, "Report");
+  // Task 044 (deliverable 9): an options-scoping task's Result is the
+  // baseline, not a report. It is headed "Baseline" and nothing else; the
+  // walk's state lives on the plan document (owner ruling 2026-09-18 — the
+  // band under the title came off).
+  const baseline = isBaselineArtefact(artefact.data);
+  useDocumentTitle(task.data?.name, baseline ? "Baseline" : "Report");
 
   const openDossier = (title: string) => {
     setSearchParams((current) => {
@@ -1486,23 +1496,37 @@ export function ArtefactView() {
 
   const roadmapText = fullReportIntro(bodySections.length, data.full_report_intro);
 
-  const outlineEntries: SidebarEntry[] = [
-    { kind: "part", id: EXECUTIVE_SUMMARY_ANCHOR, title: "Executive summary" },
-    ...frontSections.map(({ section, index }) => ({
-      id: sectionAnchor(section.title, index),
-      title: sectionNavLabel(section, 28),
-    })),
-    ...(topSources.length > 0 ? [{ id: "sources", title: "Most relevant sources" }] : []),
-    ...(bodySections.length > 0
-      ? [{ kind: "part" as const, id: FULL_REPORT_ANCHOR, title: "Full report" }]
-      : []),
-    ...bodySections.map(({ section, index }) => ({
-      id: sectionAnchor(section.title, index),
-      title: sectionNavLabel(section, 28),
-    })),
-    ...((data.references ?? []).length > 0 ? [{ id: "references", title: "References" }] : []),
-    { id: "gathered", title: "Method" },
-  ];
+  // A baseline is one linear profile, not a summary over a full report: the
+  // two part headings would frame an empty half (it mints no key findings and
+  // no case studies), so the outline lists its sections flat.
+  const outlineEntries: SidebarEntry[] = baseline
+    ? [
+        ...sections.map((section, index) => ({
+          id: sectionAnchor(section.title, index),
+          title: sectionNavLabel(section, 28),
+        })),
+        ...((data.references ?? []).length > 0 ? [{ id: "references", title: "References" }] : []),
+        { id: "gathered", title: "Method" },
+      ]
+    : [
+        { kind: "part", id: EXECUTIVE_SUMMARY_ANCHOR, title: "Executive summary" },
+        ...frontSections.map(({ section, index }) => ({
+          id: sectionAnchor(section.title, index),
+          title: sectionNavLabel(section, 28),
+        })),
+        ...(topSources.length > 0
+          ? [{ id: "sources", title: "Most relevant sources" }]
+          : []),
+        ...(bodySections.length > 0
+          ? [{ kind: "part" as const, id: FULL_REPORT_ANCHOR, title: "Full report" }]
+          : []),
+        ...bodySections.map(({ section, index }) => ({
+          id: sectionAnchor(section.title, index),
+          title: sectionNavLabel(section, 28),
+        })),
+        ...((data.references ?? []).length > 0 ? [{ id: "references", title: "References" }] : []),
+        { id: "gathered", title: "Method" },
+      ];
 
   return (
     <div className="mx-auto flex w-full flex-col justify-center gap-6 px-6 max-md:gap-0 max-md:px-0 md:flex-row">
@@ -1511,7 +1535,11 @@ export function ArtefactView() {
       <header id="answer" className="mb-8">
         <div className="flex items-center justify-between gap-4">
           <p className="text-meta font-extrabold uppercase tracking-[0.06em] text-grey">
-            Report
+            {/* The kind-of-artefact slot. The roll-up's depth label
+                ("scoping pass") stays on the wire for the later per-row
+                surfaces; the Result's heading says what the reader is looking
+                at (owner ruling 2026-09-18). */}
+            {baseline ? "Baseline" : "Report"}
           </p>
           <ArtefactDownload artefact={data} />
         </div>
@@ -1558,10 +1586,13 @@ export function ArtefactView() {
             surfaces where it matters — inside each gap claim's detail. */}
       </header>
 
-      {/* Executive summary part — In brief hidden (034 owner steer: overlaps key findings). */}
-      <h2 id={EXECUTIVE_SUMMARY_ANCHOR} className={`mb-6 ${REPORT_PART_HEADING_CLASS}`}>
-        Executive summary
-      </h2>
+      {/* Executive summary part — In brief hidden (034 owner steer: overlaps key findings).
+          A baseline has no summary half to head (see the outline above). */}
+      {!baseline && (
+        <h2 id={EXECUTIVE_SUMMARY_ANCHOR} className={`mb-6 ${REPORT_PART_HEADING_CLASS}`}>
+          Executive summary
+        </h2>
+      )}
 
       {frontSections.map(({ section, index }) =>
         section.role === "case_studies" ? (
@@ -1581,20 +1612,31 @@ export function ArtefactView() {
         ),
       )}
 
-      <MostRelevantSources sources={topSources} onOpenDossier={openDossier} />
+      {/* A baseline writes no most-relevant-source notes and cites few sources
+          per section, so the report's "cited most often" block would rank two
+          or three documents as if that were a finding. Report only (task 044). */}
+      {baseline ? null : <MostRelevantSources sources={topSources} onOpenDossier={openDossier} />}
 
       {/* Full report part */}
       {bodySections.length > 0 ? (
         <FullReportExpandProvider key={data.artefact_id}>
-          <div id={FULL_REPORT_ANCHOR} className="mb-6 mt-10 border-t border-line pt-4">
-            <div className="flex items-baseline gap-2">
-              <h2 className={`flex-1 ${REPORT_PART_HEADING_CLASS}`}>Full report</h2>
+          {baseline ? (
+            // The baseline's sections ARE the document — no "Full report"
+            // part to open, just the one control that opens them all.
+            <div className="mb-6 flex justify-end">
               <FullReportExpandAllButton />
             </div>
-            {roadmapText !== null && (
-              <p className={`mt-1.5 max-w-prose-measure ${REPORT_BODY_CLASS}`}>{scrub(roadmapText)}</p>
-            )}
-          </div>
+          ) : (
+            <div id={FULL_REPORT_ANCHOR} className="mb-6 mt-10 border-t border-line pt-4">
+              <div className="flex items-baseline gap-2">
+                <h2 className={`flex-1 ${REPORT_PART_HEADING_CLASS}`}>Full report</h2>
+                <FullReportExpandAllButton />
+              </div>
+              {roadmapText !== null && (
+                <p className={`mt-1.5 max-w-prose-measure ${REPORT_BODY_CLASS}`}>{scrub(roadmapText)}</p>
+              )}
+            </div>
+          )}
 
           {bodySections.map(({ section, index }) => (
             <SectionDisclosure

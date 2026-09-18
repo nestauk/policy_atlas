@@ -38,7 +38,10 @@ from policy_atlas.evidence_search.assess.screen import effective_screen_rows
 
 log = structlog.get_logger()
 
-MAX_CONCURRENT_CLASSIFY = 4
+# 12: the screen's stage-1 width; classify is provider-bound threads, not CPU
+# (task 044 phase 8, owner 2026-09-17: 4 workers put ~25 documents through
+# 6-7 rounds, 42-86 s measured).
+MAX_CONCURRENT_CLASSIFY = 12
 CLASSIFY_RETRY_CAP = 1
 
 

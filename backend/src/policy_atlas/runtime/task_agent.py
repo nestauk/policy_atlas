@@ -1,8 +1,8 @@
-"""Planner backend seam for the ``planner_v1`` planning call.
+"""Task Agent backend seam for the ``planner_v1`` planning call.
 
 Mirrors the ``screening_backend.py`` / ``classification_backend.py`` pattern:
 a live OpenAI structured-output backend with tracing inside the backend, and a
-deterministic zero-egress stub for tests and the CLI. The planner completes
+deterministic zero-egress stub for tests and the CLI. The task_agent completes
 before acquire begins — this seam is never invoked mid-run (contract
 decision 5, sequencing invariant).
 """
@@ -22,7 +22,7 @@ from policy_atlas.core.openai_client import parse_structured, resolve_openai_cli
 from policy_atlas.core.prompt_fields import scrub_nul
 from policy_atlas.core.usage import UsageResult, usage_metadata
 from policy_atlas.evidence_search.extract.extract import _scrub_nul
-from policy_atlas.runtime.planner_prompt import (
+from policy_atlas.runtime.task_agent_prompt import (
     PLANNER_MAX_OUTPUT_TOKENS,
     PLANNER_PROMPT_VERSION,
     PlanDraftWire,
@@ -34,15 +34,15 @@ log = structlog.get_logger()
 
 # Judgment-class model; env-overridable so ops can pin a different model
 # without a code change (the `SYNTHESIS_MODEL` pattern).
-PLANNER_MODEL = os.environ.get("POLICY_ATLAS_PLANNER_MODEL", "gpt-5.5")
+TASK_AGENT_MODEL = os.environ.get("POLICY_ATLAS_TASK_AGENT_MODEL", "gpt-5.5")
 
-# The planner turn as emitted by any backend; the wire model IS the turn
+# The Task Agent turn as emitted by any backend; the wire model IS the turn
 # shape, code-side and model-side — no separate dataclass to keep in sync.
-PlannerTurn = PlannerTurnWire
+TaskAgentTurn = PlannerTurnWire
 
 
-class PlannerBackend(Protocol):
-    """The planner seam for one conversation turn.
+class TaskAgentBackend(Protocol):
+    """The task_agent seam for one conversation turn.
 
     Backends return one structurally parsed turn per call; transport, parse,
     and code-side validation failures raise so the caller can apply retry
@@ -57,7 +57,7 @@ class PlannerBackend(Protocol):
         session_id: uuid.UUID | None = None,
         conversation_id: uuid.UUID | None = None,
     ) -> PlannerTurnWire:
-        """Advance the planning conversation by one turn.
+        """Advance the task_agent conversation by one turn.
 
         Args:
             turns: Conversation turns so far, oldest first, as
@@ -66,12 +66,12 @@ class PlannerBackend(Protocol):
                 the first turn.
             session_id: Optional Langfuse session id shared by the Task's
                 traces (task 038, V9: no longer the conversation id).
-            conversation_id: Optional planning-conversation id recorded in
+            conversation_id: Optional task_agent-conversation id recorded in
                 trace metadata, so one chat is still filterable now that
                 ``session_id`` groups by task.
 
         Returns:
-            One parsed planner turn.
+            One parsed Task Agent turn.
 
         Raises:
             RuntimeError: If the backend cannot produce a usable turn.
@@ -87,7 +87,7 @@ def _degrade_suggestions(turn: PlannerTurnWire) -> PlannerTurnWire:
     (2-5 non-empty entries, only ever alongside a question).
 
     Args:
-        turn: The candidate planner turn.
+        turn: The candidate Task Agent turn.
 
     Returns:
         The turn, with ``suggested_answers`` forced to ``None`` if it is
@@ -96,7 +96,7 @@ def _degrade_suggestions(turn: PlannerTurnWire) -> PlannerTurnWire:
     if turn.question is None:
         if turn.suggested_answers is not None:
             log.warning(
-                "planner.suggestions_degraded",
+                "task_agent.suggestions_degraded",
                 reason="suggestions_without_question",
                 suggestion_count=len(turn.suggested_answers),
             )
@@ -114,7 +114,7 @@ def _degrade_suggestions(turn: PlannerTurnWire) -> PlannerTurnWire:
     )
     if invalid:
         log.warning(
-            "planner.suggestions_degraded",
+            "task_agent.suggestions_degraded",
             reason="shape_contract_violated",
             suggestion_count=len(suggestions),
         )
@@ -135,8 +135,8 @@ def _scrub_turn(turn: PlannerTurnWire) -> PlannerTurnWire:
     return turn.model_copy(update=updates)
 
 
-class OpenAIPlannerBackend:
-    """Live OpenAI implementation of the planner seam.
+class OpenAITaskAgentBackend:
+    """Live OpenAI implementation of the task_agent seam.
 
     Args:
         api_key: Optional OpenAI API key. If omitted, ``OPENAI_API_KEY`` is read
@@ -155,7 +155,7 @@ class OpenAIPlannerBackend:
     ) -> None:
         self._client = resolve_openai_client(
             api_key,
-            backend_name="OpenAIPlannerBackend",
+            backend_name="OpenAITaskAgentBackend",
             timeout=180.0,
             max_retries=2,
         )
@@ -169,9 +169,9 @@ class OpenAIPlannerBackend:
             self._client,
             messages=messages,
             response_format=PlannerTurnWire,
-            usage_event="planner.turn.usage",
-            label="planner",
-            model=PLANNER_MODEL,
+            usage_event="task_agent.turn.usage",
+            label="task_agent",
+            model=TASK_AGENT_MODEL,
             max_completion_tokens=PLANNER_MAX_OUTPUT_TOKENS,
         )
         return _scrub_turn(parsed), usage
@@ -184,7 +184,7 @@ class OpenAIPlannerBackend:
         session_id: uuid.UUID | None = None,
         conversation_id: uuid.UUID | None = None,
     ) -> PlannerTurnWire:
-        """Advance the planning conversation through structured OpenAI output.
+        """Advance the task_agent conversation through structured OpenAI output.
 
         Args:
             turns: Conversation turns so far, oldest first, as
@@ -193,12 +193,12 @@ class OpenAIPlannerBackend:
                 the first turn.
             session_id: Optional Langfuse session id shared by the Task's
                 traces (task 038, V9: no longer the conversation id).
-            conversation_id: Optional planning-conversation id recorded in
+            conversation_id: Optional task_agent-conversation id recorded in
                 trace metadata, so one chat is still filterable now that
                 ``session_id`` groups by task.
 
         Returns:
-            One parsed planner turn, with suggestions degraded if malformed.
+            One parsed Task Agent turn, with suggestions degraded if malformed.
 
         Raises:
             RuntimeError: If the response cannot be parsed.
@@ -216,7 +216,7 @@ class OpenAIPlannerBackend:
             span.update(
                 input={"messages": messages},
                 output=turn.model_dump(),
-                model=PLANNER_MODEL,
+                model=TASK_AGENT_MODEL,
                 metadata={
                     "prompt_version": PLANNER_PROMPT_VERSION,
                     "conversation_id": conversation_id_str,
@@ -226,7 +226,7 @@ class OpenAIPlannerBackend:
 
         turn, _usage = tracing.traced_call(
             langfuse_client,
-            name=f"planner:turn{turn_number}",
+            name=f"task_agent:turn{turn_number}",
             as_type="generation",
             call=lambda: self._parse_once(messages),
             session_id=session_id,
@@ -242,7 +242,7 @@ _STUB_SUGGESTED_ANSWERS: tuple[str, ...] = (
     "A comparison of intervention options",
 )
 _STUB_LANDSCAPE_SENTINEL = "landscape only"
-_STUB_ASSUMPTIONS: tuple[str, ...] = ("Stub planner: deterministic fixture proposal.",)
+_STUB_ASSUMPTIONS: tuple[str, ...] = ("Stub task_agent: deterministic fixture proposal.",)
 _STUB_COMPONENT_RATIONALE: dict[str, str] = {
     "characterise": "Maps the corpus landscape before deeper analysis.",
     "screen_full": "Full-text re-screen improves precision once documents are fetched.",
@@ -252,8 +252,8 @@ _STUB_COMPONENT_RATIONALE: dict[str, str] = {
 }
 
 
-class StubPlannerBackend:
-    """Deterministic zero-egress planner backend for tests and the CLI."""
+class StubTaskAgentBackend:
+    """Deterministic zero-egress task_agent backend for tests and the CLI."""
 
     def plan_turn(
         self,
@@ -263,7 +263,7 @@ class StubPlannerBackend:
         session_id: uuid.UUID | None = None,
         conversation_id: uuid.UUID | None = None,
     ) -> PlannerTurnWire:
-        """Return a deterministic planner turn.
+        """Return a deterministic Task Agent turn.
 
         Args:
             turns: Conversation turns so far, oldest first. On the first turn
@@ -276,14 +276,14 @@ class StubPlannerBackend:
                 the stub.
 
         Returns:
-            A deterministic planner turn.
+            A deterministic Task Agent turn.
         """
         del previous_draft, session_id, conversation_id
         if len(turns) <= 1:
             intent = turns[0]["text"] if turns else ""
             return PlannerTurnWire(
                 reply=(
-                    "Deterministic stub planner: before proposing a plan, I need "
+                    "Deterministic stub Task Agent: before proposing a plan, I need "
                     "to know what decision this evidence review should inform."
                 ),
                 plan_draft=PlanDraftWire(question=intent, backend_scope="both"),
@@ -296,7 +296,7 @@ class StubPlannerBackend:
         latest_text = turns[-1]["text"]
         if _STUB_LANDSCAPE_SENTINEL in latest_text:
             return PlannerTurnWire(
-                reply="Deterministic stub planner: landscape-only draft proposed.",
+                reply="Deterministic stub Task Agent: landscape-only draft proposed.",
                 plan_draft=PlanDraftWire(
                     title="Evidence review",
                     question=first_text,
@@ -316,7 +316,7 @@ class StubPlannerBackend:
 
         components = ["characterise", "screen_full", "select", "extract", "group"]
         return PlannerTurnWire(
-            reply="Deterministic stub planner: complete draft proposed.",
+            reply="Deterministic stub Task Agent: complete draft proposed.",
             plan_draft=PlanDraftWire(
                 title="Evidence review",
                 question=first_text,

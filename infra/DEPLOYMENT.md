@@ -418,13 +418,19 @@ omitted from the deployed task.
 | `POLICY_ATLAS_FIXTURE_CORPUS` | omitted (development/test fixture override) | `evidence_search/sourcing/ingest_full_text.py` |
 | `POLICY_ATLAS_AGENT_MODEL` | omitted (development tuning; application default) | `runtime/agent_backend.py` |
 | `POLICY_ATLAS_AGENT_TRIAGE_MODEL` | omitted (development tuning; application default) | `runtime/agent_backend.py` |
-| `POLICY_ATLAS_PLANNER_MODEL` | omitted (development tuning; application default) | `runtime/planner.py` |
+| `POLICY_ATLAS_TASK_AGENT_MODEL` | omitted (development tuning; application default) | `runtime/task_agent.py` |
 | `POLICY_ATLAS_RELEVANCE_MODEL` | omitted (development tuning; application default) | `evidence_search/extract/relevance_annotator.py` |
 | `POLICY_ATLAS_SEARCH_CACHE_TTL_S` | omitted (development tuning; application default) | `evidence_search/sourcing/search_live.py` |
 | `POLICY_ATLAS_SYNTHESIS_MODEL` | omitted (development tuning; application default `gpt-5.6-terra`) | `evidence_search/synthesis/synthesis_backend.py` |
 | `RUN_EXECUTOR_MAX` | config value: `backend.run_executor_max` | `api/settings.py` |
 | `SSE_HEARTBEAT_SECONDS` | omitted (application default: 15) | `api/settings.py` |
 | `SSE_POLL_INTERVAL_SECONDS` | omitted (application default: 0.4) | `api/settings.py` |
+
+**Renamed in task 044:** `POLICY_ATLAS_PLANNER_MODEL` became
+`POLICY_ATLAS_TASK_AGENT_MODEL`. No fallback read of the old name was added, and
+the application default is unchanged, so a deployment that still sets only the
+old name behaves exactly as before — the variable is simply ignored and the
+built-in default applies.
 
 **Capacity values** (sized together for a 10-concurrent-run ceiling):
 `RUN_EXECUTOR_MAX=10`, `DB_POOL_SIZE=15`, `DB_MAX_OVERFLOW=10`, task 2 vCPU /

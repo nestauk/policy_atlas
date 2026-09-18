@@ -21,6 +21,6 @@ no framework, a plain reducer:
   their own connections.
 
 See `src/store/reducer.test.ts` for the replay-idempotence, pending→resolved,
-and tick-transience proofs. `transcript.ts` owns the durable planning-turn
+and tick-transience proofs. `transcript.ts` owns the durable task_agent-turn
 query's local optimistic composer state; `thread.ts` is the pure,
-run-phase-anchored planning-thread composition model.
+run-phase-anchored task_agent-thread composition model.

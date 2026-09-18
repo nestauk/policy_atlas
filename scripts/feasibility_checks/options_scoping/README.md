@@ -15,6 +15,7 @@ prompts the checks used (lead-authored); tasks 2 and 3 build the product version
 | `run_extra_checks.py` | after the pass-4 review: pinned light run, independence cases, no-document suggestions, grain on equal inputs, contrary evidence |
 | `run_extra_check_4.py` | after the pass-4 review: a second transferability option with a real blocker, chat-to-context promotion |
 | `run_fresh_neet_search.py` | a fresh rapid Evidence search on the NEET question through the agent CLI, timed end to end |
+| `run_check_7_writing_mode.py` | task 044 check 7: the baseline written sequentially through `synthesise_scope` versus a naive parallel fan-out (one section per thread, empty ledger), side by side with a repetition list. Runs against dev-database scopes, in transactions that are rolled back |
 
 Run with the backend environment, for example:
 

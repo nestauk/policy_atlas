@@ -62,10 +62,10 @@ const DECISION_CATEGORY: Record<string, { label: string; tone: HistoryRow["tone"
  *
  * The decision log alone starts at plan approval, which omits the two things
  * a reader most wants when auditing — the question that started it and the
- * negotiation that shaped the plan. Merging the planning turns in by time
+ * negotiation that shaped the plan. Merging the Task Agent turns in by time
  * puts those first, where they happened.
  *
- * Ordering is by timestamp, with the planning turn's own index and the
+ * Ordering is by timestamp, with the Task Agent turn's own index and the
  * decision's sequence breaking ties, so two records written in the same
  * instant keep the order they were actually recorded in.
  */
@@ -93,7 +93,7 @@ export function mergeHistory(
           : `You asked: "${turn.user_message}"`,
       details:
         turn.reply != null && turn.reply !== ""
-          ? [{ label: "The planner replied", value: turn.reply }]
+          ? [{ label: "The Task Agent replied", value: turn.reply }]
           : undefined,
       },
     });

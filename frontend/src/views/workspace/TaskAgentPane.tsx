@@ -5,13 +5,20 @@ import { useCheckIns, useDecisions, useFunnel, usePlan, useRuns } from "../../ap
 import { useComposerSeed } from "../../lib/composerSeed";
 import { scrub } from "../../lib/scrub";
 import { COPY, TASK } from "../../lib/vocabulary";
-import { composePlanningThread, usePlanningTranscript } from "../../store";
+import {
+  composeTaskAgentThread,
+  taskAgentAnswerRow,
+  taskAgentTurnKind,
+  useTaskAgentTranscript,
+} from "../../store";
 import type {
-  OptimisticPlanningTurn,
-  PlanningThreadDecision,
-  PlanningThreadItem,
-  PlanningThreadRun,
-  PlanningThreadTurn,
+  GateThreadInput,
+  OptimisticTaskAgentTurn,
+  TaskAgentThreadCheckIn,
+  TaskAgentThreadDecision,
+  TaskAgentThreadItem,
+  TaskAgentThreadRun,
+  TaskAgentThreadTurn,
   ResolvedDecision,
   RunStatus,
   RunStreamState,
@@ -25,11 +32,14 @@ import { conflictSentences, errorCode, isConflictCode } from "../../lib/errors";
 import { ReauthRedirect } from "../../ui/feedback";
 import { groupSearchDecisions } from "../decisionsPresentation";
 import { LIFECYCLE_PAGE_CLASS } from "../listPageChrome";
+import { ChatAnswer } from "./chat/ChatMessages";
 import { JumpToEnd } from "./chat/JumpToEnd";
 import { useFooterReveal } from "./chat/useFooterReveal";
 import { usePinToBottom } from "./chat/usePinToBottom";
+import { sessionAnsweredCheckIn } from "../../store/thread";
 import { AnsweredCheckIn } from "./AnsweredCheckIn";
 import { CheckInCard } from "./CheckInCard";
+import { BASELINE_GATE_KIND } from "./checkInPresentation";
 import { PartCard, type PartState, confirmTarget, derivePartStates } from "./PartCard";
 import { PlanCard } from "./PlanCard";
 import type { PlanOverlay } from "./planOverlay";
@@ -42,20 +52,31 @@ import {
   runFinishedSignpost,
 } from "./runProgress";
 
-/** The server page-size cap; one planning conversation fits comfortably. */
+/** The server page-size cap; one task_agent conversation fits comfortably. */
 const TRANSCRIPT_PAGE_SIZE = 200;
 
+/** The composer's invitation while a scoping walk is parked on the baseline
+ *  gate (task 044 Phase 5.5, the Baseline board). */
+const SCOPING_GATE_PLACEHOLDER = "Question the baseline…";
+
+/** A decision turn's one line: the option as it was labelled, that it is on
+ *  the record, and the plan version it was taken against. */
+const DECISION_RECORDED = "recorded";
+
+/** The prefix before a decision's plan version. */
+const DECISION_PLAN_VERSION = "plan version";
+
 /**
- * Assign each run its turn boundary and each decision its run block. Planning
+ * Assign each run its turn boundary and each decision its run block. TaskAgent
  * turns are 409-fenced while a run executes or parks, so a turn's receipt
  * time genuinely falls outside every run window — comparing it to run starts
  * only ANCHORS blocks; ordering within lists stays `turn_index` (turns) and
  * event-log `sequence` (decisions), never timestamps.
  */
 export function threadInputs(
-  turns: PlanningThreadTurn[],
-  runs: PlanningThreadRun[],
-  decisions: PlanningThreadDecision[],
+  turns: TaskAgentThreadTurn[],
+  runs: TaskAgentThreadRun[],
+  decisions: TaskAgentThreadDecision[],
 ): { boundaries: RunThreadBoundary[]; runDecisions: RunThreadDecision[] } {
   const boundaries = runs.map((run) => {
     const before = turns.filter((turn) => turn.created_at <= run.started_at);
@@ -79,7 +100,58 @@ export function threadInputs(
   return { boundaries, runDecisions };
 }
 
-/** Placeholder for the planning composer — planning/replanning, not follow-up Q&A.
+/**
+ * The baseline gate's thread input: its card and any decision the CARD
+ * endpoint recorded (task 044 Phase 5.5, D12).
+ *
+ * The live stream is preferred for the pending card — it arrives with the
+ * pause — and the check-ins read supplies it after a reload. The decision is
+ * read off `checkin.resolved` and labelled from the check-in's own options,
+ * so the line shows the option exactly as it was offered; the client never
+ * invents an option or a label.
+ *
+ * Args:
+ *   stream: The run stream's current state.
+ *   checkIns: The task's check-ins, pending and decided.
+ *   planVersion: The plan's current version, shown on a card-endpoint
+ *     decision (a `decision` TURN carries its own).
+ *
+ * Returns:
+ *   The gate input, or null when this task has no baseline gate.
+ */
+export function baselineGateInput(
+  stream: RunStreamState,
+  checkIns: TaskAgentThreadCheckIn[],
+  planVersion: number | null,
+): GateThreadInput | null {
+  const pending =
+    stream.pendingCheckIn?.kind === BASELINE_GATE_KIND ? stream.pendingCheckIn : null;
+  const checkIn = pending ?? checkIns.find((row) => row.kind === BASELINE_GATE_KIND) ?? null;
+  if (checkIn === null) return null;
+  const resolved = stream.decisions.find((entry) => entry.checkInId === checkIn.check_in_id) ?? null;
+  if (resolved === null) return { checkIn, decision: null };
+  const optionId = resolved.response["option_id"];
+  const label =
+    (checkIn.options ?? []).find((option) => option.id === optionId)?.label ??
+    sessionAnsweredCheckIn(checkIn.check_in_id)?.chosenOptionLabel ??
+    null;
+  return {
+    // A resolved decision is definitive: the read model may still be showing
+    // the pre-decision row until its refetch lands.
+    checkIn: { ...checkIn, status: "decided" },
+    decision:
+      label === null
+        ? null
+        : {
+            checkInId: checkIn.check_in_id,
+            label,
+            planVersion,
+            occurredAt: resolved.occurredAt,
+          },
+  };
+}
+
+/** Placeholder for the task_agent composer — task_agent/replanning, not follow-up Q&A.
  *
  * Args:
  *   runStatus: The task's current run status, or undefined before any run.
@@ -92,13 +164,20 @@ export function threadInputs(
  * Returns:
  *   Copy that matches the run and plan state.
  */
-export function planningComposerPlaceholder(
+export function taskAgentComposerPlaceholder(
   runStatus: RunStatus | undefined,
   planReady = false,
   isOwner = true,
+  atScopingGate = false,
 ): string {
   if (!isOwner) {
     return `Steering is limited to the ${TASK.lower} owner.`;
+  }
+  // Task 044 Phase 5.5: the scoping walk's one gate keeps the thread open —
+  // a question about the baseline is exactly what this pause is for, so the
+  // composer invites one instead of fencing it off.
+  if (atScopingGate) {
+    return SCOPING_GATE_PLACEHOLDER;
   }
   if (runStatus === "running" || runStatus === "paused") {
     return "Replanning unlocks when this run finishes.";
@@ -118,7 +197,7 @@ export function planningComposerPlaceholder(
 /**
  * The message composer: a bounded auto-growing textarea (Enter sends,
  * Shift+Enter inserts a newline) plus its keybinding hint. Split out from
- * `PlanningPane` so the Enter/Shift+Enter/disabled behaviour is unit-testable
+ * `TaskAgentPane` so the Enter/Shift+Enter/disabled behaviour is unit-testable
  * without the transcript/run/decision store wiring.
  */
 export function Composer({
@@ -128,7 +207,7 @@ export function Composer({
   placeholder,
   disabled,
   sendDisabled,
-  id = "planning-message",
+  id = "task_agent-message",
   label = COPY.messageTaskAgent,
 }: {
   value: string;
@@ -207,9 +286,9 @@ function UserBubble({ text }: { text: string }) {
   );
 }
 
-/** Planner replies are plain text — no box (binding record: planning-stage
- *  `.planner`); only part cards and the plan card are bordered. */
-function PlannerBubble({ text }: { text: string }) {
+/** TaskAgent replies are plain text — no box (binding record: task_agent-stage
+ *  `.task_agent`); only part cards and the plan card are bordered. */
+function TaskAgentBubble({ text }: { text: string }) {
   return (
     <div className="anim-rise mr-8">
       <p className="max-w-prose-measure whitespace-pre-wrap text-lead text-ink">{scrub(text)}</p>
@@ -217,9 +296,37 @@ function PlannerBubble({ text }: { text: string }) {
   );
 }
 
-/** A durable turn: user bubble, then the planner reply — or an honest
- *  incomplete row (pending spinner copy / failed with retry). */
+/** One recorded gate decision, as a quiet line rather than a card: the
+ *  option's own label, that it is on the record, and the plan version it was
+ *  taken against. Shared by a `decision` turn and by a decision the card
+ *  endpoint recorded, so the two can never word the same fact differently. */
+export function DecisionLine({
+  label,
+  planVersion,
+}: {
+  label: string;
+  planVersion: number | null;
+}) {
+  return (
+    <div className="mr-8 border-l-2 border-l-green bg-paper-2 px-3 py-2">
+      <p className="text-body text-ink">
+        <span className="font-semibold">{scrub(label)}</span> · {DECISION_RECORDED}
+        {planVersion !== null && ` · ${DECISION_PLAN_VERSION} ${planVersion}`}
+      </p>
+    </div>
+  );
+}
+
+/** A durable turn: user bubble, then the task_agent reply — or an honest
+ *  incomplete row (pending spinner copy / failed with retry).
+ *
+ *  Task 044 Phase 5.5: a turn is one of three things (`kind`). A `reply`
+ *  renders as it always has. An `answer` renders its grounded prose through
+ *  the CHAT's own citation renderer (`ChatAnswer`) — one renderer, two
+ *  surfaces. A `decision` renders the gate decision it recorded. `kind` is
+ *  absent on every pre-044 turn, which reads as `reply`. */
 function DurableTurn({
+  taskId,
   turn,
   isLatest,
   onRetry,
@@ -228,7 +335,8 @@ function DurableTurn({
   onSend,
   onPrefill,
 }: {
-  turn: PlanningThreadTurn;
+  taskId: string;
+  turn: TaskAgentThreadTurn;
   isLatest: boolean;
   onRetry: (input: { message: string; clientTurnId: string }) => void;
   retryDisabled: boolean;
@@ -237,15 +345,39 @@ function DurableTurn({
   onPrefill: (message: string) => void;
 }) {
   // A button-confirm turn's record is the ✓ on its part card — the canned
-  // marker bubble would only duplicate it (binding record: planning-stage).
+  // marker bubble would only duplicate it (binding record: task_agent-stage).
   const isConfirmTurn = confirmTarget(turn.user_message) !== null;
-  const plannerText = [turn.reply, turn.part?.body]
+  const kind = taskAgentTurnKind(turn);
+  const taskAgentText = [turn.reply, turn.part?.body]
     .filter((piece): piece is string => piece != null && piece !== "")
     .join("\n\n");
+  if (kind === "answer") {
+    return (
+      <div className="space-y-6">
+        <UserBubble text={turn.user_message} />
+        <ChatAnswer
+          taskId={taskId}
+          turn={taskAgentAnswerRow(turn)}
+          // The reader is already in the Task Agent: the chat's "open the
+          // Task Agent" hand-off has nowhere to go from here.
+          onOpenTaskAgent={() => {}}
+          onRetry={() => onRetry({ message: turn.user_message, clientTurnId: turn.client_turn_id })}
+        />
+      </div>
+    );
+  }
+  if (kind === "decision" && turn.decision != null) {
+    return (
+      <div className="space-y-6">
+        {!isConfirmTurn && <UserBubble text={turn.user_message} />}
+        <DecisionLine label={turn.decision.label} planVersion={turn.decision.plan_version} />
+      </div>
+    );
+  }
   return (
     <div className="space-y-6">
       {!isConfirmTurn && <UserBubble text={turn.user_message} />}
-      {turn.status === "completed" && plannerText !== "" && <PlannerBubble text={plannerText} />}
+      {turn.status === "completed" && taskAgentText !== "" && <TaskAgentBubble text={taskAgentText} />}
       {turn.part != null && partState !== undefined && (
         <PartCard
           part={turn.part}
@@ -292,7 +424,7 @@ interface PresentedRunDecision {
  * Search grouping delegates to the shared decision presentation helper; the
  * remaining adjacent duplicate collapse is limited to this compact rail. */
 export function presentRunDecisions(
-  decisions: PlanningThreadDecision[],
+  decisions: TaskAgentThreadDecision[],
   stages: StageEntry[],
 ): PresentedRunDecision[] {
   const labelled = decisions.flatMap((decision) => {
@@ -314,7 +446,7 @@ export function presentRunDecisions(
   for (let index = 0; index < labelled.length; index += 1) {
     const entry = labelled[index];
     if (entry.kind !== "search.executed" || labelled[index - 1]?.kind === "search.executed") continue;
-    const consecutive: PlanningThreadDecision[] = [];
+    const consecutive: TaskAgentThreadDecision[] = [];
     for (let cursor = index; labelled[cursor]?.kind === "search.executed"; cursor += 1) {
       consecutive.push(labelled[cursor]);
     }
@@ -390,8 +522,8 @@ function RunBlock({
   checkIns,
 }: {
   taskId: string;
-  run: PlanningThreadRun;
-  decisions: PlanningThreadDecision[];
+  run: TaskAgentThreadRun;
+  decisions: TaskAgentThreadDecision[];
   stages: StageEntry[];
   answered: ResolvedDecision[];
   checkIns: ReturnType<typeof useCheckIns>["data"];
@@ -424,13 +556,13 @@ function RunBlock({
 }
 
 /**
- * The planning conversation, rendered from the durable transcript (strand 12):
+ * The task_agent conversation, rendered from the durable transcript (strand 12):
  * it survives navigation and restarts. Message bubbles, the thinking row,
  * tappable suggestion chips, run blocks with their steering-decision echoes,
  * and the composer — which disables honestly while a run executes or parks
- * (planning turns 409 then; check-ins are the sanctioned steering channel).
+ * (task_agent turns 409 then; check-ins are the sanctioned steering channel).
  */
-export function PlanningPane({
+export function TaskAgentPane({
   taskId,
   runStatus,
   stream,
@@ -461,10 +593,14 @@ export function PlanningPane({
    *  Agent tab reveals the footer under both columns accordingly. */
   onAtBottomChange?: (atBottom: boolean) => void;
 }) {
-  const transcript = usePlanningTranscript(taskId, { page_size: TRANSCRIPT_PAGE_SIZE });
+  const transcript = useTaskAgentTranscript(taskId, { page_size: TRANSCRIPT_PAGE_SIZE });
   const planQuery = usePlan(taskId);
+  // `PlanOut.plan` is null on a scoping task (task 044) — `scoping` carries
+  // its own `ready` flag instead. Only one of the two is ever non-null for a
+  // given task, so reading both costs nothing on the branch that doesn't apply.
   const planReady =
-    planQuery.data?.status === "approved" && planQuery.data.plan.ready === true;
+    planQuery.data?.status === "approved" &&
+    (planQuery.data.plan?.ready === true || planQuery.data.scoping?.ready === true);
   const runsQuery = useRuns(taskId, { page_size: TRANSCRIPT_PAGE_SIZE });
   const decisionsQuery = useDecisions(taskId, { page_size: TRANSCRIPT_PAGE_SIZE });
   const checkInsQuery = useCheckIns(taskId, "all");
@@ -476,23 +612,47 @@ export function PlanningPane({
   const [nowMs, setNowMs] = useState(() => Date.now());
   useComposerSeed(setMessage);
 
-  const durableTurns = (transcript.data?.data ?? []) as PlanningThreadTurn[];
+  const durableTurns = (transcript.data?.data ?? []) as TaskAgentThreadTurn[];
   const { boundaries, runDecisions } = threadInputs(
     durableTurns,
     runsQuery.data?.data ?? [],
     decisionsQuery.data?.data ?? [],
   );
-  const thread: PlanningThreadItem[] = composePlanningThread(durableTurns, boundaries, runDecisions);
+  // Task 044 Phase 5.5: the options-scoping baseline gate is the one check-in
+  // that sits INSIDE the thread, in chronological order with the turns it
+  // paused for. Every Evidence search check-in keeps its placement at the
+  // thread's end, below, exactly as before.
+  const gate = baselineGateInput(stream, checkInsQuery.data?.data ?? [], planQuery.data?.version ?? null);
+  const thread: TaskAgentThreadItem[] = composeTaskAgentThread(
+    durableTurns,
+    boundaries,
+    runDecisions,
+    gate,
+  );
+  // The gate's own decision renders once, as a thread item; the run block's
+  // answered-check-in echoes must not repeat it.
+  const streamDecisions = stream.decisions.filter(
+    (decision) => decision.checkInId !== gate?.checkIn.check_in_id,
+  );
   const latestTurnIndex =
     durableTurns.length > 0 ? Math.max(...durableTurns.map((turn) => turn.turn_index)) : null;
   const partStates = derivePartStates(durableTurns);
 
   const runActive = runStatus === "running" || runStatus === "paused";
+  // Task 044 Phase 5.5: a scoping walk parked on the baseline gate keeps the
+  // thread open — the turn route accepts a question or a decision at exactly
+  // this pause. The fence stays for every Evidence search check-in and for a
+  // scoping walk that is still running.
+  const atScopingGate =
+    planQuery.data?.capability === "options_scoping" &&
+    runStatus === "paused" &&
+    stream.pendingCheckIn?.kind === BASELINE_GATE_KIND;
+  const composerFenced = runActive && !atScopingGate;
   // `!isOwner` folds into the same `composerDisabled` flag that already
   // disables the composer, DurableTurn's retry button and PartCard's options
   // during an active run (task 033 phase 10c, contract § 11 / rubric 37) —
   // one mechanism, not a second parallel disabled path.
-  const composerDisabled = runActive || transcript.isSubmitting || !isOwner;
+  const composerDisabled = composerFenced || transcript.isSubmitting || !isOwner;
 
   // Chat scroll: pinned to the bottom (newest messages) unless the user has
   // scrolled up to read history; new content re-pins only when near-bottom.
@@ -510,9 +670,9 @@ export function PlanningPane({
   const pin = usePinToBottom(scrollRef, contentRef, taskId);
 
   // The plan card sits at its chronological position: right after the last
-  // planning turn (approval always comes from a turn; turns are 409-fenced
+  // task_agent turn (approval always comes from a turn; turns are 409-fenced
   // during runs), so a started run's block renders BELOW it, not above.
-  const lastTurnAt = thread.findLastIndex((item) => item.type === "planning_turn");
+  const lastTurnAt = thread.findLastIndex((item) => item.type === "task_agent_turn");
   const planCardAt = lastTurnAt === -1 ? thread.length : lastTurnAt + 1;
   const planStarted = thread.slice(planCardAt).some((item) => item.type === "run_block");
   const liveRunId = stream.run?.id;
@@ -592,7 +752,7 @@ export function PlanningPane({
     transcript.data !== undefined && thread.length === 0 && transcript.optimisticTurns.length === 0;
 
   return (
-    <section aria-label="Planning conversation" className="flex h-full min-h-0 flex-col">
+    <section aria-label="Task Agent conversation" className="flex h-full min-h-0 flex-col">
       {/* The scroll region spans the whole pane so its scrollbar sits at the
           pane's edge like every other tab's; the reading column is inside. */}
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
@@ -615,7 +775,7 @@ export function PlanningPane({
         <div ref={contentRef} className={cn("space-y-6", LIFECYCLE_PAGE_CLASS)}>
         {transcript.isPending && (
           <div role="status" className="anim-breathe text-body text-grey">
-            Loading your planning conversation…
+            Loading your task_agent conversation…
           </div>
         )}
         {transcript.isError &&
@@ -623,7 +783,7 @@ export function PlanningPane({
             <ReauthRedirect />
           ) : (
             <div role="status" className="text-body text-grey">
-              <p>Your planning conversation couldn't be loaded.</p>
+              <p>Your Task Agent conversation couldn't be loaded.</p>
               <Button
                 size="sm"
                 variant="secondary"
@@ -642,9 +802,24 @@ export function PlanningPane({
 
         {thread.flatMap((item, index) => {
           const rendered =
-            item.type === "planning_turn" ? (
+            item.type === "gate_check_in" ? (
+              <CheckInCard
+                key={`gate-${item.checkIn.check_in_id}`}
+                taskId={taskId}
+                checkIn={item.checkIn}
+                stages={stream.stages}
+                isOwner={isOwner}
+              />
+            ) : item.type === "gate_decision" ? (
+              <DecisionLine
+                key={`gate-decision-${item.decision.checkInId}`}
+                label={item.decision.label}
+                planVersion={item.decision.planVersion}
+              />
+            ) : item.type === "task_agent_turn" ? (
               <DurableTurn
                 key={`turn-${item.turn.turn_index}`}
+                taskId={taskId}
                 turn={item.turn}
                 isLatest={item.turn.turn_index === latestTurnIndex}
                 onRetry={send}
@@ -656,7 +831,7 @@ export function PlanningPane({
             ) : item.run.capability_run_id === liveRunId && liveCard !== null ? (
               <div key="live-run-block" className="space-y-6">
                 {liveCard}
-                <AnsweredCheckIns answered={stream.decisions} checkIns={checkInsQuery.data} />
+                <AnsweredCheckIns answered={streamDecisions} checkIns={checkInsQuery.data} />
                 {signpostBubbles}
                 <RunFinishedNotice taskId={taskId} status={stream.run?.status} />
               </div>
@@ -668,7 +843,7 @@ export function PlanningPane({
                 decisions={item.decisions}
                 stages={stream.stages}
                 answered={
-                  item.run.capability_run_id === stream.run?.id ? stream.decisions : []
+                  item.run.capability_run_id === stream.run?.id ? streamDecisions : []
                 }
                 checkIns={checkInsQuery.data}
               />
@@ -678,7 +853,7 @@ export function PlanningPane({
             : [rendered];
         })}
 
-        {transcript.optimisticTurns.map((turn: OptimisticPlanningTurn) => (
+        {transcript.optimisticTurns.map((turn: OptimisticTaskAgentTurn) => (
           <div key={turn.clientTurnId} className="space-y-6">
             {/* Button-confirm turns never show a bubble — durable turns hide
                 them too; the ✓ on the part card is the record. */}
@@ -690,9 +865,12 @@ export function PlanningPane({
                     ? conflictSentences[turn.errorCode]
                     : "That turn couldn't be processed. Your draft so far is unchanged."}
                 </p>
-                {turn.errorCode === "stale_turn" ? (
+                {turn.errorCode === "stale_turn" || turn.errorCode === "already_answered" ? (
                   // Retrying the same client_turn_id can never clear a
-                  // stale_turn conflict — offer the refresh instead.
+                  // stale_turn conflict, and an already-answered check-in
+                  // will not un-answer itself — offer the refresh instead.
+                  // Both render inline, right where the message was typed;
+                  // neither becomes a toast.
                   <Button
                     size="sm"
                     variant="secondary"
@@ -720,14 +898,14 @@ export function PlanningPane({
         {transcript.isSubmitting && (
           <div role="status" className="anim-breathe mr-8 flex items-center gap-2 px-3.5 text-body text-grey">
             <span aria-hidden="true" className="h-2 w-2 bg-blue" />
-            Planning…
+            TaskAgent…
           </div>
         )}
 
-        {/* Suggestion chips send a planning turn (task 033 phase 10c,
+        {/* Suggestion chips send a task_agent turn (task 033 phase 10c,
             contract § 11 / rubric 37) — owner-only, hidden for a colleague
             rather than left clickable to a 403. */}
-        {isOwner && suggestions.length > 0 && !transcript.isSubmitting && !runActive && (
+        {isOwner && suggestions.length > 0 && !transcript.isSubmitting && !composerFenced && (
           <div className="flex flex-wrap gap-1.5">
             {suggestions.map((suggestion) => (
               <button
@@ -742,7 +920,7 @@ export function PlanningPane({
           </div>
         )}
 
-        {stream.pendingCheckIn !== null && (
+        {stream.pendingCheckIn !== null && stream.pendingCheckIn.kind !== BASELINE_GATE_KIND && (
           <CheckInCard
             key={stream.pendingCheckIn.check_in_id}
             taskId={taskId}
@@ -754,7 +932,7 @@ export function PlanningPane({
         {liveCard !== null && !threadHasLiveRun && (
           <div key="live-run-fallback" className="space-y-6">
             {liveCard}
-            <AnsweredCheckIns answered={stream.decisions} checkIns={checkInsQuery.data} />
+            <AnsweredCheckIns answered={streamDecisions} checkIns={checkInsQuery.data} />
             {signpostBubbles}
             <RunFinishedNotice taskId={taskId} status={stream.run?.status} />
           </div>
@@ -783,8 +961,8 @@ export function PlanningPane({
           value={message}
           onChange={setMessage}
           onSubmit={() => send({ message, clientTurnId: crypto.randomUUID() })}
-          placeholder={planningComposerPlaceholder(runStatus, planReady, isOwner)}
-          disabled={runActive || !isOwner}
+          placeholder={taskAgentComposerPlaceholder(runStatus, planReady, isOwner, atScopingGate)}
+          disabled={composerFenced || !isOwner}
           sendDisabled={composerDisabled}
         />
         </div>

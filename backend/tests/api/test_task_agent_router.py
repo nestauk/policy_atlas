@@ -1,4 +1,4 @@
-"""HTTP coverage for durable planner-turn persistence and retry rules."""
+"""HTTP coverage for durable task_agent-turn persistence and retry rules."""
 
 from __future__ import annotations
 
@@ -13,24 +13,24 @@ from sqlalchemy import select
 from sqlalchemy.engine import Engine
 
 from policy_atlas.api.contract import RunOut
-from policy_atlas.api.deps import get_planner_backend
-from policy_atlas.api.routers import planning
+from policy_atlas.api.deps import get_task_agent_backend
 from policy_atlas.api.routers import runs as runs_router
+from policy_atlas.api.routers import task_agent
 from policy_atlas.api.stage_vocabulary import stage_for_payload
 from policy_atlas.core.schema import (
     capability_run,
     conversation,
     evidence_scope,
-    planning_transcript,
+    task_agent_transcript,
     task_plan,
 )
 from policy_atlas.runtime.conversation_lifecycle import (
-    close_planning_conversation,
-    ensure_active_planning_conversation,
+    close_task_agent_conversation,
+    ensure_active_task_agent_conversation,
     seed_draft_from_executed_plan,
 )
-from policy_atlas.runtime.planner import StubPlannerBackend
-from policy_atlas.runtime.planner_prompt import (
+from policy_atlas.runtime.task_agent import StubTaskAgentBackend
+from policy_atlas.runtime.task_agent_prompt import (
     PartChipWire,
     PartOptionWire,
     PartProposalWire,
@@ -41,8 +41,8 @@ from policy_atlas.runtime.task_plan import TIME_BANDS, TaskPlan, compose
 from tests.api.resource_support import api_client, create_task
 
 
-class CountingPlanner(StubPlannerBackend):
-    """Stub planner that records the durable rehydration call composition."""
+class CountingTaskAgent(StubTaskAgentBackend):
+    """Stub task_agent that records the durable rehydration call composition."""
 
     def __init__(self) -> None:
         self.calls: list[tuple[list[dict[str, str]], dict[str, object] | None]] = []
@@ -56,15 +56,15 @@ class CountingPlanner(StubPlannerBackend):
         session_id: uuid.UUID | None = None,
         conversation_id: uuid.UUID | None = None,
     ) -> PlannerTurnWire:
-        """Record and delegate the deterministic planner turn."""
+        """Record and delegate the deterministic task_agent turn."""
         del conversation_id
         self.calls.append((turns, previous_draft))
         self.session_ids.append(session_id)
         return super().plan_turn(turns, previous_draft)
 
 
-class FailOncePlanner(CountingPlanner):
-    """Planner double that leaves a durable failed transcript row once."""
+class FailOnceTaskAgent(CountingTaskAgent):
+    """Task Agent double that leaves a durable failed transcript row once."""
 
     def plan_turn(
         self,
@@ -83,8 +83,8 @@ class FailOncePlanner(CountingPlanner):
         )
 
 
-class PartPlanner(CountingPlanner):
-    """Planner double that attaches a controlled part proposal to each turn."""
+class PartTaskAgent(CountingTaskAgent):
+    """Task Agent double that attaches a controlled part proposal to each turn."""
 
     def __init__(self, part: PartProposalWire) -> None:
         super().__init__()
@@ -107,8 +107,8 @@ class PartPlanner(CountingPlanner):
 
 def _reset_turn_locks() -> None:
     """Reset process-local guards to model an API restart in route tests."""
-    with planning._turn_locks_guard:
-        planning._turn_locks.clear()
+    with task_agent._turn_locks_guard:
+        task_agent._turn_locks.clear()
 
 
 def _pending_values(
@@ -130,7 +130,7 @@ def _pending_values(
         "turn_index": turn_index,
         "user_message": message,
         "reply": None,
-        "planner_state": None,
+        "task_agent_state": None,
         "response": None,
         "suggestions": [],
         "status": status,
@@ -140,16 +140,16 @@ def _pending_values(
 
 
 def test_draft_from_wire_normalises_loose_publisher_source() -> None:
-    """A sloppy planner value must degrade the draft, never 500 the turn."""
-    spelled = planning._draft_from_wire(
+    """A sloppy task_agent value must degrade the draft, never 500 the turn."""
+    spelled = task_agent._draft_from_wire(
         PlanDraftWire(publisher_source=" Australian Policy Online "), ready=False
     )
     assert spelled.scope_constraints is not None
     assert spelled.scope_constraints.publisher_source == "apo"
-    upper = planning._draft_from_wire(PlanDraftWire(publisher_source="APO"), ready=False)
+    upper = task_agent._draft_from_wire(PlanDraftWire(publisher_source="APO"), ready=False)
     assert upper.scope_constraints is not None
     assert upper.scope_constraints.publisher_source == "apo"
-    unsupported = planning._draft_from_wire(
+    unsupported = task_agent._draft_from_wire(
         PlanDraftWire(publisher_source="worldbank"), ready=False
     )
     assert (
@@ -160,7 +160,7 @@ def test_draft_from_wire_normalises_loose_publisher_source() -> None:
 
 def test_draft_projection_derives_time_band_and_deduplicates_public_stages() -> None:
     """Drafts gain an honest time band; approved steps use presentation vocabulary."""
-    draft = planning._draft_from_wire(
+    draft = task_agent._draft_from_wire(
         PlanDraftWire(search_effort="rapid", analysis_depth="standard"), ready=False
     )
     assert draft.time_band == TIME_BANDS[("rapid", "standard")]
@@ -181,7 +181,7 @@ def test_draft_projection_derives_time_band_and_deduplicates_public_stages() -> 
         grouping_facets=["intervention"],
         steering_mode="moderate",
     )
-    projected = planning._draft_from_plan(plan)
+    projected = task_agent._draft_from_plan(plan)
     assert [step.stage for step in projected.steps].count("acquire") == 1
     assert [step.stage for step in projected.steps].count("screen") == 1
     assert projected.steps[0].label == "Searching sources"
@@ -200,23 +200,23 @@ def test_draft_projection_derives_time_band_and_deduplicates_public_stages() -> 
     )
 
 
-def test_planning_turn_is_durable_idempotent_and_ready_turn_persists_plan(
+def test_task_agent_turn_is_durable_idempotent_and_ready_turn_persists_plan(
     engine: Engine, tmp_path: Path
 ) -> None:
     """Persist both response representations and replay a completed id verbatim."""
     _reset_turn_locks()
-    stub = CountingPlanner()
-    with api_client(tmp_path, {get_planner_backend: lambda: stub}) as (client, owner, _):
+    stub = CountingTaskAgent()
+    with api_client(tmp_path, {get_task_agent_backend: lambda: stub}) as (client, owner, _):
         task_id = create_task(client, owner)
         turn_id = str(uuid.uuid4())
         first = client.post(
-            f"/api/v1/tasks/{task_id}/planning-turns",
+            f"/api/v1/tasks/{task_id}/task-agent-turns",
             headers=owner,
             json={"message": "How can cities reduce heat risk?", "client_turn_id": turn_id},
         )
         _reset_turn_locks()
         duplicate = client.post(
-            f"/api/v1/tasks/{task_id}/planning-turns",
+            f"/api/v1/tasks/{task_id}/task-agent-turns",
             headers=owner,
             json={"message": "How can cities reduce heat risk?", "client_turn_id": turn_id},
         )
@@ -224,7 +224,7 @@ def test_planning_turn_is_durable_idempotent_and_ready_turn_persists_plan(
         assert first.json() == duplicate.json()
         assert len(stub.calls) == 1
 
-        transcript = client.get(f"/api/v1/tasks/{task_id}/planning-turns", headers=owner)
+        transcript = client.get(f"/api/v1/tasks/{task_id}/task-agent-turns", headers=owner)
         assert transcript.status_code == 200
         assert transcript.json()["pagination"] == {"page": 1, "page_size": 50, "total_items": 1}
         assert transcript.json()["data"][0]["turn_index"] == 0
@@ -233,7 +233,7 @@ def test_planning_turn_is_durable_idempotent_and_ready_turn_persists_plan(
         assert transcript.json()["data"][0]["conversation_id"] == conversation_id
 
         ready = client.post(
-            f"/api/v1/tasks/{task_id}/planning-turns",
+            f"/api/v1/tasks/{task_id}/task-agent-turns",
             headers=owner,
             json={
                 "message": "A comparison of intervention options",
@@ -243,7 +243,7 @@ def test_planning_turn_is_durable_idempotent_and_ready_turn_persists_plan(
         assert ready.status_code == 200
         assert ready.json()["plan"]["ready"] is True
         assert ready.json()["conversation_id"] == conversation_id
-        # task 038, V9: session_id groups by task, not by planning conversation.
+        # task 038, V9: session_id groups by task, not by task_agent conversation.
         assert stub.session_ids == [uuid.UUID(task_id), uuid.UUID(task_id)]
         persisted = client.get(f"/api/v1/tasks/{task_id}/plan", headers=owner)
         assert persisted.status_code == 200
@@ -251,15 +251,15 @@ def test_planning_turn_is_durable_idempotent_and_ready_turn_persists_plan(
     with engine.connect() as conn:
         rows = (
             conn.execute(
-                select(planning_transcript)
-                .where(planning_transcript.c.task_id == uuid.UUID(task_id))
-                .order_by(planning_transcript.c.turn_index)
+                select(task_agent_transcript)
+                .where(task_agent_transcript.c.task_id == uuid.UUID(task_id))
+                .order_by(task_agent_transcript.c.turn_index)
             )
             .mappings()
             .all()
         )
         assert [row["turn_index"] for row in rows] == [0, 1]
-        assert rows[0]["planner_state"] != rows[0]["response"]["plan"]
+        assert rows[0]["task_agent_state"] != rows[0]["response"]["plan"]
         assert rows[1]["status"] == "completed"
         assert rows[1]["completed_at"] is not None
         assert (
@@ -271,16 +271,18 @@ def test_planning_turn_is_durable_idempotent_and_ready_turn_persists_plan(
             .conversation_id
             == uuid.UUID(conversation_id)
         )
-        planning_conversation = conn.execute(
+        task_agent_conversation = conn.execute(
             select(conversation.c.title, conversation.c.status).where(
                 conversation.c.id == uuid.UUID(conversation_id)
             )
         ).one()
-        assert planning_conversation.title == ready.json()["plan"]["title"]
-        assert planning_conversation.status == "active"
+        assert task_agent_conversation.title == ready.json()["plan"]["title"]
+        assert task_agent_conversation.status == "active"
 
 
-def test_planning_part_round_trips_and_replays_idempotently(engine: Engine, tmp_path: Path) -> None:
+def test_task_agent_part_round_trips_and_replays_idempotently(
+    engine: Engine, tmp_path: Path
+) -> None:
     """Persist a valid card verbatim in both transcript and replay response shapes."""
     _reset_turn_locks()
     part = PartProposalWire(
@@ -301,35 +303,35 @@ def test_planning_part_round_trips_and_replays_idempotently(engine: Engine, tmp_
             PartOptionWire(id="refine", label="Refine it", primary=False),
         ],
     )
-    stub = PartPlanner(part)
-    with api_client(tmp_path, {get_planner_backend: lambda: stub}) as (client, owner, _):
+    stub = PartTaskAgent(part)
+    with api_client(tmp_path, {get_task_agent_backend: lambda: stub}) as (client, owner, _):
         task_id = create_task(client, owner)
         turn_id = str(uuid.uuid4())
         first = client.post(
-            f"/api/v1/tasks/{task_id}/planning-turns",
+            f"/api/v1/tasks/{task_id}/task-agent-turns",
             headers=owner,
             json={"message": "How can cities reduce heat risk?", "client_turn_id": turn_id},
         )
         replay = client.post(
-            f"/api/v1/tasks/{task_id}/planning-turns",
+            f"/api/v1/tasks/{task_id}/task-agent-turns",
             headers=owner,
             json={"message": "How can cities reduce heat risk?", "client_turn_id": turn_id},
         )
-        transcript = client.get(f"/api/v1/tasks/{task_id}/planning-turns", headers=owner)
+        transcript = client.get(f"/api/v1/tasks/{task_id}/task-agent-turns", headers=owner)
     assert first.status_code == replay.status_code == transcript.status_code == 200
     assert replay.json()["part"] == first.json()["part"]
     assert transcript.json()["data"][0]["part"] == first.json()["part"]
     with engine.connect() as conn:
         stored = conn.execute(
-            select(planning_transcript.c.part, planning_transcript.c.response).where(
-                planning_transcript.c.task_id == uuid.UUID(task_id)
+            select(task_agent_transcript.c.part, task_agent_transcript.c.response).where(
+                task_agent_transcript.c.task_id == uuid.UUID(task_id)
             )
         ).mappings().one()
     assert stored["part"] == first.json()["part"]
     assert stored["response"]["part"] == first.json()["part"]
 
 
-def test_planning_part_with_snake_case_option_id_is_kept(tmp_path: Path) -> None:
+def test_task_agent_part_with_snake_case_option_id_is_kept(tmp_path: Path) -> None:
     """A card whose option id is valid snake_case survives validation intact."""
     _reset_turn_locks()
     part = PartProposalWire(
@@ -341,14 +343,14 @@ def test_planning_part_with_snake_case_option_id_is_kept(tmp_path: Path) -> None
             PartOptionWire(id="deep_dive", label="Deep dive", primary=False),
         ],
     )
-    with api_client(tmp_path, {get_planner_backend: lambda: PartPlanner(part)}) as (
+    with api_client(tmp_path, {get_task_agent_backend: lambda: PartTaskAgent(part)}) as (
         client,
         owner,
         _,
     ):
         task_id = create_task(client, owner)
         response = client.post(
-            f"/api/v1/tasks/{task_id}/planning-turns",
+            f"/api/v1/tasks/{task_id}/task-agent-turns",
             headers=owner,
             json={
                 "message": "How can cities reduce heat risk?",
@@ -417,25 +419,25 @@ def test_planning_part_with_snake_case_option_id_is_kept(tmp_path: Path) -> None
         ),
     ],
 )
-def test_malformed_planning_part_degrades_to_prose_and_logs_once(
+def test_malformed_task_agent_part_degrades_to_prose_and_logs_once(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, part: PartProposalWire, reason: str
 ) -> None:
-    """Drop invalid cards without failing their otherwise valid planner turn."""
+    """Drop invalid cards without failing their otherwise valid task_agent turn."""
     _reset_turn_locks()
     warnings: list[tuple[tuple[object, ...], dict[str, object]]] = []
     monkeypatch.setattr(
-        planning.log,
+        task_agent.log,
         "warning",
         lambda *args, **kwargs: warnings.append((args, kwargs)),
     )
-    with api_client(tmp_path, {get_planner_backend: lambda: PartPlanner(part)}) as (
+    with api_client(tmp_path, {get_task_agent_backend: lambda: PartTaskAgent(part)}) as (
         client,
         owner,
         _,
     ):
         task_id = create_task(client, owner)
         response = client.post(
-            f"/api/v1/tasks/{task_id}/planning-turns",
+            f"/api/v1/tasks/{task_id}/task-agent-turns",
             headers=owner,
             json={
                 "message": "How can cities reduce heat risk?",
@@ -444,19 +446,19 @@ def test_malformed_planning_part_degrades_to_prose_and_logs_once(
         )
     assert response.status_code == 200
     assert response.json()["part"] is None
-    assert warnings == [(("planning_part_dropped",), {"reason": reason})]
+    assert warnings == [(("task_agent_part_dropped",), {"reason": reason})]
 
 
 def test_newer_turn_demotes_approved_plan_and_reapproval_clears_start_fence(
     engine: Engine, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Fence dispatch when a completed planning turn supersedes approval."""
+    """Fence dispatch when a completed task_agent turn supersedes approval."""
     _reset_turn_locks()
-    stub = CountingPlanner()
-    with api_client(tmp_path, {get_planner_backend: lambda: stub}) as (client, owner, _):
+    stub = CountingTaskAgent()
+    with api_client(tmp_path, {get_task_agent_backend: lambda: stub}) as (client, owner, _):
         task_id = create_task(client, owner)
         first = client.post(
-            f"/api/v1/tasks/{task_id}/planning-turns",
+            f"/api/v1/tasks/{task_id}/task-agent-turns",
             headers=owner,
             json={
                 "message": "How can cities reduce heat risk?",
@@ -464,21 +466,21 @@ def test_newer_turn_demotes_approved_plan_and_reapproval_clears_start_fence(
             },
         )
         approved = client.post(
-            f"/api/v1/tasks/{task_id}/planning-turns",
+            f"/api/v1/tasks/{task_id}/task-agent-turns",
             headers=owner,
             json={"message": "Compare intervention options", "client_turn_id": str(uuid.uuid4())},
         )
         assert first.status_code == approved.status_code == 200
         with engine.begin() as conn:
             conn.execute(
-                planning_transcript.insert().values(
+                task_agent_transcript.insert().values(
                     id=uuid.uuid4(),
                     task_id=uuid.UUID(task_id),
                     client_turn_id=uuid.uuid4(),
                     turn_index=2,
-                    user_message="One more planning detail",
+                    user_message="One more task_agent detail",
                     reply="A legacy completed reply.",
-                    planner_state=first.json()["plan"],
+                    task_agent_state=first.json()["plan"],
                     response=first.json(),
                     suggestions=[],
                     status="completed",
@@ -494,11 +496,13 @@ def test_newer_turn_demotes_approved_plan_and_reapproval_clears_start_fence(
         assert approved_payload["source_turn_index"] == 1
 
         plan_after_newer_turn = client.get(f"/api/v1/tasks/{task_id}/plan", headers=owner)
-        transcript = client.get(f"/api/v1/tasks/{task_id}/planning-turns", headers=owner)
+        transcript = client.get(f"/api/v1/tasks/{task_id}/task-agent-turns", headers=owner)
         stale_start = client.post(f"/api/v1/tasks/{task_id}/runs", headers=owner, json={})
         assert plan_after_newer_turn.status_code == transcript.status_code == 200
         assert plan_after_newer_turn.json() == {
             "plan": first.json()["plan"],
+            "scoping": None,
+            "capability": "evidence_search",
             "version": 0,
             "status": "draft",
         }
@@ -506,11 +510,11 @@ def test_newer_turn_demotes_approved_plan_and_reapproval_clears_start_fence(
         assert stale_start.status_code == 409
         assert stale_start.json()["error"] == {
             "code": "plan_stale",
-            "message": "the plan predates your latest planning message — review it, then start",
+            "message": "the plan predates your latest Task Agent message — review it, then start",
         }
 
         reapproved = client.post(
-            f"/api/v1/tasks/{task_id}/planning-turns",
+            f"/api/v1/tasks/{task_id}/task-agent-turns",
             headers=owner,
             json={"message": "Ready to proceed", "client_turn_id": str(uuid.uuid4())},
         )
@@ -547,11 +551,11 @@ def test_legacy_approved_plan_without_a_source_turn_index_stays_startable(
 ) -> None:
     """The stale-plan fence is additive: pre-028 approved payloads retain their behaviour."""
     _reset_turn_locks()
-    stub = CountingPlanner()
-    with api_client(tmp_path, {get_planner_backend: lambda: stub}) as (client, owner, _):
+    stub = CountingTaskAgent()
+    with api_client(tmp_path, {get_task_agent_backend: lambda: stub}) as (client, owner, _):
         task_id = create_task(client, owner)
         first = client.post(
-            f"/api/v1/tasks/{task_id}/planning-turns",
+            f"/api/v1/tasks/{task_id}/task-agent-turns",
             headers=owner,
             json={
                 "message": "How can cities reduce heat risk?",
@@ -559,7 +563,7 @@ def test_legacy_approved_plan_without_a_source_turn_index_stays_startable(
             },
         )
         approved = client.post(
-            f"/api/v1/tasks/{task_id}/planning-turns",
+            f"/api/v1/tasks/{task_id}/task-agent-turns",
             headers=owner,
             json={"message": "Compare intervention options", "client_turn_id": str(uuid.uuid4())},
         )
@@ -578,14 +582,14 @@ def test_legacy_approved_plan_without_a_source_turn_index_stays_startable(
                 .values(payload=payload)
             )
             conn.execute(
-                planning_transcript.insert().values(
+                task_agent_transcript.insert().values(
                     id=uuid.uuid4(),
                     task_id=uuid.UUID(task_id),
                     client_turn_id=uuid.uuid4(),
                     turn_index=2,
                     user_message="A newer completed legacy turn",
                     reply="A legacy reply.",
-                    planner_state=first.json()["plan"],
+                    task_agent_state=first.json()["plan"],
                     response=first.json(),
                     suggestions=[],
                     status="completed",
@@ -612,16 +616,16 @@ def test_legacy_approved_plan_without_a_source_turn_index_stays_startable(
         assert started.status_code == 201
 
 
-def test_planning_rehydrates_after_restart_and_get_plan_reads_stored_draft(
+def test_task_agent_rehydrates_after_restart_and_get_plan_reads_stored_draft(
     engine: Engine, tmp_path: Path
 ) -> None:
-    """Use only completed durable rows for planner parity and draft reads."""
+    """Use only completed durable rows for task_agent parity and draft reads."""
     _reset_turn_locks()
-    stub = CountingPlanner()
-    with api_client(tmp_path, {get_planner_backend: lambda: stub}) as (client, owner, _):
+    stub = CountingTaskAgent()
+    with api_client(tmp_path, {get_task_agent_backend: lambda: stub}) as (client, owner, _):
         task_id = create_task(client, owner)
         first = client.post(
-            f"/api/v1/tasks/{task_id}/planning-turns",
+            f"/api/v1/tasks/{task_id}/task-agent-turns",
             headers=owner,
             json={
                 "message": "How can cities reduce heat risk?",
@@ -634,13 +638,15 @@ def test_planning_rehydrates_after_restart_and_get_plan_reads_stored_draft(
         assert draft_after_restart.status_code == 200
         assert draft_after_restart.json() == {
             "plan": first.json()["plan"],
+            "scoping": None,
+            "capability": "evidence_search",
             "version": 0,
             "status": "draft",
         }
 
         second_message = "A comparison of intervention options"
         second = client.post(
-            f"/api/v1/tasks/{task_id}/planning-turns",
+            f"/api/v1/tasks/{task_id}/task-agent-turns",
             headers=owner,
             json={"message": second_message, "client_turn_id": str(uuid.uuid4())},
         )
@@ -648,9 +654,9 @@ def test_planning_rehydrates_after_restart_and_get_plan_reads_stored_draft(
     with engine.connect() as conn:
         first_row = (
             conn.execute(
-                select(planning_transcript)
-                .where(planning_transcript.c.task_id == uuid.UUID(task_id))
-                .where(planning_transcript.c.turn_index == 0)
+                select(task_agent_transcript)
+                .where(task_agent_transcript.c.task_id == uuid.UUID(task_id))
+                .where(task_agent_transcript.c.turn_index == 0)
             )
             .mappings()
             .one()
@@ -660,48 +666,54 @@ def test_planning_rehydrates_after_restart_and_get_plan_reads_stored_draft(
         {"role": "planner", "text": first.json()["reply"]},
         {"role": "user", "text": second_message},
     ]
-    assert stub.calls[1][1] == first_row["planner_state"]
+    assert stub.calls[1][1] == first_row["task_agent_state"]
     assert stub.calls[1][1] != first_row["response"]["plan"]
 
 
 def test_failed_turn_retries_in_place_and_stale_rules_are_honest(
     engine: Engine, tmp_path: Path
 ) -> None:
-    """Keep the phase-one row on planner failure and enforce retry boundaries."""
+    """Keep the phase-one row on task_agent failure and enforce retry boundaries."""
     _reset_turn_locks()
-    stub = FailOncePlanner()
-    with api_client(tmp_path, {get_planner_backend: lambda: stub}) as (client, owner, _):
+    stub = FailOnceTaskAgent()
+    with api_client(tmp_path, {get_task_agent_backend: lambda: stub}) as (client, owner, _):
         task_id = create_task(client, owner)
         turn_id = str(uuid.uuid4())
         failed = client.post(
-            f"/api/v1/tasks/{task_id}/planning-turns",
+            f"/api/v1/tasks/{task_id}/task-agent-turns",
             headers=owner,
-            json={"message": "Recoverable planner failure", "client_turn_id": turn_id},
+            json={"message": "Recoverable task_agent failure", "client_turn_id": turn_id},
         )
         assert failed.status_code == 500
-        listed = client.get(f"/api/v1/tasks/{task_id}/planning-turns", headers=owner)
+        listed = client.get(f"/api/v1/tasks/{task_id}/task-agent-turns", headers=owner)
         assert listed.json()["data"] == [
             {
                 "turn_index": 0,
                 "conversation_id": listed.json()["data"][0]["conversation_id"],
                 "client_turn_id": turn_id,
-                "user_message": "Recoverable planner failure",
+                "user_message": "Recoverable task_agent failure",
                 "reply": None,
                 "suggestions": [],
                 "part": None,
+                "capability": "evidence_search",
                 "status": "failed",
                 "created_at": listed.json()["data"][0]["created_at"],
                 "completed_at": listed.json()["data"][0]["completed_at"],
+                # Task 044's additive turn projection: a planning turn carries
+                # none of the three, and says so rather than omitting them.
+                "kind": None,
+                "answer": None,
+                "decision": None,
             }
         ]
         retried = client.post(
-            f"/api/v1/tasks/{task_id}/planning-turns",
+            f"/api/v1/tasks/{task_id}/task-agent-turns",
             headers=owner,
-            json={"message": "Recoverable planner failure", "client_turn_id": turn_id},
+            json={"message": "Recoverable task_agent failure", "client_turn_id": turn_id},
         )
         assert retried.status_code == 200
         mismatch = client.post(
-            f"/api/v1/tasks/{task_id}/planning-turns",
+            f"/api/v1/tasks/{task_id}/task-agent-turns",
             headers=owner,
             json={"message": "Different message", "client_turn_id": turn_id},
         )
@@ -711,7 +723,7 @@ def test_failed_turn_retries_in_place_and_stale_rules_are_honest(
         old_id, latest_id = uuid.uuid4(), uuid.uuid4()
         with engine.begin() as conn:
             conn.execute(
-                planning_transcript.insert(),
+                task_agent_transcript.insert(),
                 [
                     _pending_values(
                         task_id,
@@ -732,7 +744,7 @@ def test_failed_turn_retries_in_place_and_stale_rules_are_honest(
                 ],
             )
         stale = client.post(
-            f"/api/v1/tasks/{task_id}/planning-turns",
+            f"/api/v1/tasks/{task_id}/task-agent-turns",
             headers=owner,
             json={"message": "old failed", "client_turn_id": str(old_id)},
         )
@@ -745,16 +757,16 @@ def test_pending_staleness_fresh_pending_and_transcript_ownership(
 ) -> None:
     """Fail old pending rows on read, block fresh ones, and preserve owner 404s."""
     _reset_turn_locks()
-    stub = CountingPlanner()
-    with api_client(tmp_path, {get_planner_backend: lambda: stub}) as (client, owner, other):
+    stub = CountingTaskAgent()
+    with api_client(tmp_path, {get_task_agent_backend: lambda: stub}) as (client, owner, other):
         task_id = create_task(client, owner)
         old_id = uuid.uuid4()
         with engine.begin() as conn:
-            conversation_id = ensure_active_planning_conversation(
+            conversation_id = ensure_active_task_agent_conversation(
                 conn, task_id=uuid.UUID(task_id), now=datetime.now(UTC)
             )
             conn.execute(
-                planning_transcript.insert().values(
+                task_agent_transcript.insert().values(
                     **_pending_values(
                         task_id,
                         client_turn_id=old_id,
@@ -765,18 +777,18 @@ def test_pending_staleness_fresh_pending_and_transcript_ownership(
                     )
                 )
             )
-        old_read = client.get(f"/api/v1/tasks/{task_id}/planning-turns", headers=owner)
+        old_read = client.get(f"/api/v1/tasks/{task_id}/task-agent-turns", headers=owner)
         assert old_read.status_code == 200
         assert old_read.json()["data"][0]["status"] == "failed"
         assert old_read.json()["data"][0]["conversation_id"] == str(conversation_id)
         assert old_read.json()["data"][0]["completed_at"] is not None
-        other_read = client.get(f"/api/v1/tasks/{task_id}/planning-turns", headers=other)
+        other_read = client.get(f"/api/v1/tasks/{task_id}/task-agent-turns", headers=other)
         assert other_read.status_code == 404
 
         fresh_id = uuid.uuid4()
         with engine.begin() as conn:
             conn.execute(
-                planning_transcript.insert().values(
+                task_agent_transcript.insert().values(
                     **_pending_values(
                         task_id,
                         client_turn_id=fresh_id,
@@ -788,16 +800,16 @@ def test_pending_staleness_fresh_pending_and_transcript_ownership(
                 )
             )
         blocked = client.post(
-            f"/api/v1/tasks/{task_id}/planning-turns",
+            f"/api/v1/tasks/{task_id}/task-agent-turns",
             headers=owner,
             json={"message": "a distinct new turn", "client_turn_id": str(uuid.uuid4())},
         )
         assert blocked.status_code == 409
-        assert blocked.json()["error"]["code"] == "planning_turn_in_progress"
+        assert blocked.json()["error"]["code"] == "task_agent_turn_in_progress"
 
         # A fresh (in-window) pending row lists honestly as pending — the
         # crash-between-phases incomplete-turn render depends on it.
-        fresh_read = client.get(f"/api/v1/tasks/{task_id}/planning-turns", headers=owner)
+        fresh_read = client.get(f"/api/v1/tasks/{task_id}/task-agent-turns", headers=owner)
         assert fresh_read.status_code == 200
         fresh_row = fresh_read.json()["data"][1]
         assert fresh_row["status"] == "pending"
@@ -805,11 +817,11 @@ def test_pending_staleness_fresh_pending_and_transcript_ownership(
         assert fresh_row["completed_at"] is None
 
 
-def test_planning_turn_409s_while_walk_active_or_parked(engine: Engine, tmp_path: Path) -> None:
+def test_task_agent_turn_409s_while_walk_active_or_parked(engine: Engine, tmp_path: Path) -> None:
     """409 `run_active` fences replanning while a walk is running or parked."""
     _reset_turn_locks()
-    stub = CountingPlanner()
-    with api_client(tmp_path, {get_planner_backend: lambda: stub}) as (client, owner, _other):
+    stub = CountingTaskAgent()
+    with api_client(tmp_path, {get_task_agent_backend: lambda: stub}) as (client, owner, _other):
         task_id = create_task(client, owner)
         run_id = uuid.uuid4()
         scope_id = uuid.uuid4()
@@ -818,7 +830,7 @@ def test_planning_turn_409s_while_walk_active_or_parked(engine: Engine, tmp_path
                 evidence_scope.insert().values(
                     evidence_scope_id=scope_id,
                     task_id=uuid.UUID(task_id),
-                    intent="planning-router fence sweep",
+                    intent="task_agent-router fence sweep",
                     context={},
                     created_at=datetime.now(UTC),
                 )
@@ -839,7 +851,7 @@ def test_planning_turn_409s_while_walk_active_or_parked(engine: Engine, tmp_path
             )
         try:
             paused = client.post(
-                f"/api/v1/tasks/{task_id}/planning-turns",
+                f"/api/v1/tasks/{task_id}/task-agent-turns",
                 headers=owner,
                 json={"message": "Steer this walk", "client_turn_id": str(uuid.uuid4())},
             )
@@ -853,7 +865,7 @@ def test_planning_turn_409s_while_walk_active_or_parked(engine: Engine, tmp_path
                     .values(status="running")
                 )
             running = client.post(
-                f"/api/v1/tasks/{task_id}/planning-turns",
+                f"/api/v1/tasks/{task_id}/task-agent-turns",
                 headers=owner,
                 json={"message": "Steer this walk again", "client_turn_id": str(uuid.uuid4())},
             )
@@ -867,7 +879,7 @@ def test_planning_turn_409s_while_walk_active_or_parked(engine: Engine, tmp_path
                     .values(status="succeeded", ended_at=datetime.now(UTC))
                 )
             succeeded = client.post(
-                f"/api/v1/tasks/{task_id}/planning-turns",
+                f"/api/v1/tasks/{task_id}/task-agent-turns",
                 headers=owner,
                 json={"message": "Replan now", "client_turn_id": str(uuid.uuid4())},
             )
@@ -881,14 +893,14 @@ def test_planning_turn_409s_while_walk_active_or_parked(engine: Engine, tmp_path
                 )
 
 
-def test_run_starting_mid_planner_call_fails_turn_and_persists_no_plan(
+def test_run_starting_mid_task_agent_call_fails_turn_and_persists_no_plan(
     engine: Engine, tmp_path: Path
 ) -> None:
     """Phase two re-checks the run fence: a plan never lands under a live walk."""
     _reset_turn_locks()
 
-    class RunStartsMidPlanner(CountingPlanner):
-        """Planner double that models a run starting during the LLM call."""
+    class RunStartsMidTaskAgent(CountingTaskAgent):
+        """Task Agent double that models a run starting during the LLM call."""
 
         task_id: str | None = None
 
@@ -931,12 +943,12 @@ def test_run_starting_mid_planner_call_fails_turn_and_persists_no_plan(
                     )
             return wire
 
-    stub = RunStartsMidPlanner()
-    with api_client(tmp_path, {get_planner_backend: lambda: stub}) as (client, owner, _):
+    stub = RunStartsMidTaskAgent()
+    with api_client(tmp_path, {get_task_agent_backend: lambda: stub}) as (client, owner, _):
         task_id = create_task(client, owner)
         stub.task_id = task_id
         first = client.post(
-            f"/api/v1/tasks/{task_id}/planning-turns",
+            f"/api/v1/tasks/{task_id}/task-agent-turns",
             headers=owner,
             json={
                 "message": "How can cities reduce heat risk?",
@@ -946,7 +958,7 @@ def test_run_starting_mid_planner_call_fails_turn_and_persists_no_plan(
         assert first.status_code == 200
 
         conflicted = client.post(
-            f"/api/v1/tasks/{task_id}/planning-turns",
+            f"/api/v1/tasks/{task_id}/task-agent-turns",
             headers=owner,
             json={"message": "Proceed with the full review.", "client_turn_id": str(uuid.uuid4())},
         )
@@ -961,24 +973,24 @@ def test_run_starting_mid_planner_call_fails_turn_and_persists_no_plan(
             ).all()
             assert plans == []
             last_status = conn.execute(
-                select(planning_transcript.c.status)
-                .where(planning_transcript.c.task_id == uuid.UUID(task_id))
-                .order_by(planning_transcript.c.turn_index.desc())
+                select(task_agent_transcript.c.status)
+                .where(task_agent_transcript.c.task_id == uuid.UUID(task_id))
+                .order_by(task_agent_transcript.c.turn_index.desc())
                 .limit(1)
             ).scalar_one()
         assert last_status == "failed"
 
 
-def test_closed_planning_conversation_creates_seeded_successor(
+def test_closed_task_agent_conversation_creates_seeded_successor(
     engine: Engine, tmp_path: Path
 ) -> None:
     """A successor starts from the approved plan, never the closed transcript."""
     _reset_turn_locks()
-    stub = CountingPlanner()
-    with api_client(tmp_path, {get_planner_backend: lambda: stub}) as (client, owner, _):
+    stub = CountingTaskAgent()
+    with api_client(tmp_path, {get_task_agent_backend: lambda: stub}) as (client, owner, _):
         task_id = create_task(client, owner)
         first = client.post(
-            f"/api/v1/tasks/{task_id}/planning-turns",
+            f"/api/v1/tasks/{task_id}/task-agent-turns",
             headers=owner,
             json={
                 "message": "How can cities reduce heat risk?",
@@ -986,7 +998,7 @@ def test_closed_planning_conversation_creates_seeded_successor(
             },
         )
         approved = client.post(
-            f"/api/v1/tasks/{task_id}/planning-turns",
+            f"/api/v1/tasks/{task_id}/task-agent-turns",
             headers=owner,
             json={"message": "Compare intervention options", "client_turn_id": str(uuid.uuid4())},
         )
@@ -998,12 +1010,12 @@ def test_closed_planning_conversation_creates_seeded_successor(
                 .where(task_plan.c.task_id == uuid.UUID(task_id))
                 .where(task_plan.c.status == "approved")
             ).scalar_one()
-            close_planning_conversation(
+            close_task_agent_conversation(
                 conn, task_id=uuid.UUID(task_id), closed_at=datetime.now(UTC)
             )
 
         successor = client.post(
-            f"/api/v1/tasks/{task_id}/planning-turns",
+            f"/api/v1/tasks/{task_id}/task-agent-turns",
             headers=owner,
             json={
                 "message": "Run it again with a narrower scope",
@@ -1019,11 +1031,11 @@ def test_closed_planning_conversation_creates_seeded_successor(
         assert stub.calls[-1][1] == seed_draft_from_executed_plan(
             TaskPlan.model_validate(plan_payload)
         ).model_dump(mode="json")
-        # task 038, V9: session_id groups by task, not by planning conversation.
+        # task 038, V9: session_id groups by task, not by task_agent conversation.
         assert stub.session_ids[-1] == uuid.UUID(task_id)
 
         follow_up = client.post(
-            f"/api/v1/tasks/{task_id}/planning-turns",
+            f"/api/v1/tasks/{task_id}/task-agent-turns",
             headers=owner,
             json={
                 "message": "Keep the same evidence question",
@@ -1036,21 +1048,21 @@ def test_closed_planning_conversation_creates_seeded_successor(
             {"role": "planner", "text": successor.json()["reply"]},
             {"role": "user", "text": "Keep the same evidence question"},
         ]
-        # task 038, V9: session_id groups by task, not by planning conversation.
+        # task 038, V9: session_id groups by task, not by task_agent conversation.
         assert stub.session_ids[-1] == uuid.UUID(task_id)
 
 
 def _approve_stub_plan(client: TestClient, owner: dict[str, str]) -> str:
-    """Drive the stub planner to a ready approved plan and return the task id."""
+    """Drive the stub task_agent to a ready approved plan and return the task id."""
     task_id = create_task(client, owner)
     first = client.post(
-        f"/api/v1/tasks/{task_id}/planning-turns",
+        f"/api/v1/tasks/{task_id}/task-agent-turns",
         headers=owner,
         json={"message": "How can cities reduce heat risk?", "client_turn_id": str(uuid.uuid4())},
     )
     assert first.status_code == 200
     ready = client.post(
-        f"/api/v1/tasks/{task_id}/planning-turns",
+        f"/api/v1/tasks/{task_id}/task-agent-turns",
         headers=owner,
         json={
             "message": "A comparison of intervention options",
@@ -1063,9 +1075,9 @@ def _approve_stub_plan(client: TestClient, owner: dict[str, str]) -> str:
 
 
 def test_patch_plan_persists_academic_only_scope(engine: Engine, tmp_path: Path) -> None:
-    """Document edits must land on the approved payload, not as a planner turn."""
+    """Document edits must land on the approved payload, not as a task_agent turn."""
     _reset_turn_locks()
-    with api_client(tmp_path, {get_planner_backend: lambda: StubPlannerBackend()}) as (
+    with api_client(tmp_path, {get_task_agent_backend: lambda: StubTaskAgentBackend()}) as (
         client,
         owner,
         other,
@@ -1119,7 +1131,7 @@ def test_patch_plan_404s_without_a_plan(tmp_path: Path) -> None:
 
 def test_patch_plan_422s_unknown_geography(tmp_path: Path) -> None:
     _reset_turn_locks()
-    with api_client(tmp_path, {get_planner_backend: lambda: StubPlannerBackend()}) as (
+    with api_client(tmp_path, {get_task_agent_backend: lambda: StubTaskAgentBackend()}) as (
         client,
         owner,
         _,
@@ -1138,7 +1150,7 @@ def test_patch_plan_apo_geography_token_sets_publisher_source(tmp_path: Path) ->
     publisher_source; the alternate casing/spelled-out form resolves the same
     way."""
     _reset_turn_locks()
-    with api_client(tmp_path, {get_planner_backend: lambda: StubPlannerBackend()}) as (
+    with api_client(tmp_path, {get_task_agent_backend: lambda: StubTaskAgentBackend()}) as (
         client,
         owner,
         _,
@@ -1159,7 +1171,7 @@ def test_patch_plan_apo_geography_token_accepts_spelled_out_mixed_case(
     tmp_path: Path,
 ) -> None:
     _reset_turn_locks()
-    with api_client(tmp_path, {get_planner_backend: lambda: StubPlannerBackend()}) as (
+    with api_client(tmp_path, {get_task_agent_backend: lambda: StubTaskAgentBackend()}) as (
         client,
         owner,
         _,
@@ -1183,7 +1195,7 @@ def test_patch_plan_apo_geography_token_422s_without_grey_lit_only_scope(
     tmp_path: Path,
 ) -> None:
     _reset_turn_locks()
-    with api_client(tmp_path, {get_planner_backend: lambda: StubPlannerBackend()}) as (
+    with api_client(tmp_path, {get_task_agent_backend: lambda: StubTaskAgentBackend()}) as (
         client,
         owner,
         _,
@@ -1199,7 +1211,7 @@ def test_patch_plan_apo_geography_token_422s_without_grey_lit_only_scope(
 
 def test_patch_plan_apo_cleared_by_later_country_geography_edit(tmp_path: Path) -> None:
     _reset_turn_locks()
-    with api_client(tmp_path, {get_planner_backend: lambda: StubPlannerBackend()}) as (
+    with api_client(tmp_path, {get_task_agent_backend: lambda: StubTaskAgentBackend()}) as (
         client,
         owner,
         _,
@@ -1221,7 +1233,7 @@ def test_patch_plan_apo_cleared_by_later_country_geography_edit(tmp_path: Path) 
 
 def test_patch_plan_apo_cleared_by_later_backend_scope_edit(tmp_path: Path) -> None:
     _reset_turn_locks()
-    with api_client(tmp_path, {get_planner_backend: lambda: StubPlannerBackend()}) as (
+    with api_client(tmp_path, {get_task_agent_backend: lambda: StubTaskAgentBackend()}) as (
         client,
         owner,
         _,

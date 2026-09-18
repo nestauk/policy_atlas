@@ -2,29 +2,32 @@ import { PROJECT, TASK } from "./vocabulary";
 
 /** Machine-readable conflict conditions surfaced by the API (the real
  *  `ApiConflict` codes raised by the backend — see `runs.py`,
- *  `planning.py`, `check_ins.py`). */
+ *  `task_agent.py`, `check_ins.py`). */
 type ConflictCode =
   | "run_active"
   | "capacity"
-  | "planning_turn_in_progress"
+  | "task_agent_turn_in_progress"
   | "stale_turn"
   | "already_answered"
   | "plan_stale"
   | "no_completed_run"
   | "chat_turn_in_progress"
   | "chat_capacity"
-  | "visibility_conflict";
+  | "visibility_conflict"
+  | "link_project_mismatch"
+  | "link_source_unfinished"
+  | "link_source_capability";
 
 /** Human-readable, trigger-local conflict copy — the one place this
  *  copy lives; call sites wire it in rather than inlining their own. */
 export const conflictSentences: Record<ConflictCode, string> = {
   run_active: `A run is already active for this ${TASK.lower}. Refresh to see its current progress.`,
   capacity: "This run cannot start yet because the workspace is at capacity. Try again shortly.",
-  planning_turn_in_progress: "That planning turn is still being prepared. Refresh to see the completed turn.",
-  stale_turn: "That planning turn is no longer the latest one. Refresh the planning conversation and try again.",
+  task_agent_turn_in_progress: "That Task Agent turn is still being prepared. Refresh to see the completed turn.",
+  stale_turn: "That Task Agent turn is no longer the latest one. Refresh the Task Agent conversation and try again.",
   already_answered: "This check-in has already been answered. Refresh to see the recorded decision.",
   plan_stale:
-    "The plan predates your latest planning message. Review the updated plan, then start.",
+    "The plan predates your latest Task Agent message. Review the updated plan, then start.",
   no_completed_run: `This ${TASK.lower} needs a completed run before you can chat about the evidence.`,
   chat_turn_in_progress: "A chat turn is already running. Refresh to see it finish.",
   chat_capacity: "Chat is at capacity right now. Try again shortly.",
@@ -32,6 +35,10 @@ export const conflictSentences: Record<ConflictCode, string> = {
   // visibility can't diverge from the Project it belongs to.
   visibility_conflict:
     `This ${TASK.one} is in a ${PROJECT.one}. Change the ${PROJECT.one}'s visibility, or leave the ${TASK.one} out of the ${PROJECT.one}.`,
+  // Task 044 (C11, C12): the two rules a Link must satisfy when it is written.
+  link_project_mismatch: `That Evidence search is in a different ${PROJECT.one}. Put both in the same ${PROJECT.one} first.`,
+  link_source_unfinished: "That Evidence search has not finished a run yet. Wait for it, then try again.",
+  link_source_capability: "A task can only start from an Evidence search task.",
 };
 
 /**

@@ -25,12 +25,12 @@ from policy_atlas.api.deps import (
     get_settings,
 )
 from policy_atlas.api.routers._access import accessible_task
-from policy_atlas.api.routers._common import run_out
+from policy_atlas.api.routers._common import run_artefact_id_column, run_out
 from policy_atlas.api.run_io import ParkIO
 from policy_atlas.api.settings import Settings
-from policy_atlas.core.schema import capability_run, planning_transcript, task_plan
+from policy_atlas.core.schema import capability_run, task_agent_transcript, task_plan
+from policy_atlas.runtime.capability_registry import validate_plan
 from policy_atlas.runtime.runner import RunnerBackends, run_plan
-from policy_atlas.runtime.task_plan import TaskPlan
 
 log = structlog.get_logger()
 
@@ -61,6 +61,7 @@ def _dispatch_run(
     engine: Engine,
     *,
     task_id: uuid.UUID,
+    capability: str,
     plan_row: dict[str, object],
     backends: RunnerBackends,
 ) -> None:
@@ -70,7 +71,12 @@ def _dispatch_run(
             engine,
             task_id=task_id,
             evidence_scope_id=plan_row["evidence_scope_id"],  # type: ignore[arg-type]
-            plan=TaskPlan.model_validate(plan_row["payload"]),
+            # The task row's capability, read on the request path and carried
+            # here rather than re-queried: it decides which model reads the
+            # payload (C9). Whatever that model is, the runner takes it —
+            # narrowing to the Evidence search plan here made a scoping walk
+            # impossible to start (task 044).
+            plan=validate_plan(capability, plan_row["payload"]),
             plan_id=plan_row["plan_id"],  # type: ignore[arg-type]
             plan_version=plan_row["version"],  # type: ignore[arg-type]
             plan_row_id=plan_row["plan_id"],  # type: ignore[arg-type]
@@ -100,7 +106,7 @@ def _await_new_run(
     while time.monotonic() < deadline:
         with engine.connect() as conn:
             rows = conn.execute(
-                select(capability_run)
+                select(capability_run, run_artefact_id_column())
                 .where(capability_run.c.task_id == task_id)
                 .order_by(
                     capability_run.c.started_at.desc(),
@@ -127,7 +133,7 @@ def create_run(
     """Dispatch an approved plan off the request path and return its walk row."""
     with _dispatch_lock:
         with engine.begin() as conn:
-            accessible_task(
+            access = accessible_task(
                 conn, task_id=task_id, user_id=user.user_id, write=True, for_update=True
             )
             active = conn.execute(
@@ -153,11 +159,13 @@ def create_run(
             ).mappings().one_or_none()
             if plan_row is None:
                 raise HTTPException(status_code=400, detail="no approved plan")
-            approved_plan = TaskPlan.model_validate(plan_row["payload"])
+            # Only ``source_turn_index`` is read here, and both plan models
+            # carry it; the staleness rule is capability-neutral.
+            approved_plan = validate_plan(access.row["capability"], plan_row["payload"])
             latest_completed_turn = conn.execute(
-                select(func.max(planning_transcript.c.turn_index))
-                .where(planning_transcript.c.task_id == task_id)
-                .where(planning_transcript.c.status == "completed")
+                select(func.max(task_agent_transcript.c.turn_index))
+                .where(task_agent_transcript.c.task_id == task_id)
+                .where(task_agent_transcript.c.status == "completed")
             ).scalar_one()
             if (
                 approved_plan.source_turn_index is not None
@@ -166,7 +174,7 @@ def create_run(
             ):
                 raise ApiConflict(
                     "plan_stale",
-                    "the plan predates your latest planning message — review it, then start",
+                    "the plan predates your latest Task Agent message — review it, then start",
                 )
             existing_ids = {
                 row[0]
@@ -181,6 +189,7 @@ def create_run(
             _dispatch_run,
             engine,
             task_id=task_id,
+            capability=access.row["capability"],
             plan_row=dict(plan_row),
             backends=backends,
         )
@@ -209,7 +218,7 @@ def list_runs(
             .where(capability_run.c.task_id == task_id)
         ).scalar_one()
         rows = conn.execute(
-            select(capability_run)
+            select(capability_run, run_artefact_id_column())
             .where(capability_run.c.task_id == task_id)
             .order_by(capability_run.c.started_at.desc(), capability_run.c.capability_run_id.desc())
             .offset((page - 1) * page_size)
@@ -232,7 +241,7 @@ def get_run(
     with engine.connect() as conn:
         accessible_task(conn, task_id=task_id, user_id=user.user_id, write=False)
         row = conn.execute(
-            select(capability_run)
+            select(capability_run, run_artefact_id_column())
             .where(capability_run.c.task_id == task_id)
             .where(capability_run.c.capability_run_id == run_id)
         ).mappings().one_or_none()

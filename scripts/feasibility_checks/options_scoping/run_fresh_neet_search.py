@@ -35,7 +35,7 @@ INTENT = (
 
 
 class ScriptedConsole:
-    """Answers the planning conversation deterministically and records every exchange with timestamps."""
+    """Answers the task_agent conversation deterministically and records every exchange with timestamps."""
 
     def __init__(self, log: list[dict]):
         self.log = log; self.turns = 0

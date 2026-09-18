@@ -11,12 +11,20 @@ from __future__ import annotations
 import uuid
 from typing import Any, Literal, cast
 
-from sqlalchemy import func, select
+from sqlalchemy import case, func, select
 from sqlalchemy.engine import Connection, RowMapping
 
-from policy_atlas.api.contract import LatestRun, RunOut, TaskOut
+from policy_atlas.api.contract import LatestRun, RunOut, TaskLinkOut, TaskOut
 from policy_atlas.api.identity import owner_display_for
-from policy_atlas.core.schema import app_user, capability_run, project_membership
+from policy_atlas.api.routers._access import readable_task_leg
+from policy_atlas.core.schema import (
+    app_user,
+    artefact,
+    capability_run,
+    project_membership,
+    task,
+    task_link,
+)
 from policy_atlas.evidence_search.assess.screen import effective_screen_rows
 
 #: Sentinel for "resolve the owner's display name yourself". Distinct from
@@ -49,8 +57,29 @@ def resolve_owner_display(conn: Connection, owner_user_id: str | None) -> str | 
     return owner_display_for(owner_user_id, display_name)
 
 
+def run_artefact_id_column() -> Any:
+    """The artefact a capability-run row wrote, as a labelled scalar subquery.
+
+    Selected beside ``capability_run`` so :func:`run_out` can say whether the
+    walk produced anything — the fact the scoping start states and the
+    baseline band read, instead of guessing from the walk's status.
+    """
+    return (
+        select(artefact.c.artefact_id)
+        .where(artefact.c.capability_run_id == capability_run.c.capability_run_id)
+        .order_by(artefact.c.created_at.desc())
+        .limit(1)
+        .scalar_subquery()
+        .label("artefact_id")
+    )
+
+
 def run_out(row: RowMapping | dict[str, Any]) -> RunOut:
-    """Project one capability-run row into its public contract shape."""
+    """Project one capability-run row into its public contract shape.
+
+    ``artefact_id`` is read when the row was selected with
+    :func:`run_artefact_id_column`; a bare ``capability_run`` row reports none.
+    """
     return RunOut(
         capability_run_id=row["capability_run_id"],
         task_id=row["task_id"],
@@ -59,6 +88,7 @@ def run_out(row: RowMapping | dict[str, Any]) -> RunOut:
         status=row["status"],
         started_at=row["started_at"],
         ended_at=row["ended_at"],
+        artefact_id=row.get("artefact_id"),
     )
 
 
@@ -77,6 +107,104 @@ def memberships_for_tasks(
     for task_id, project_id in rows:
         grouped[task_id].append(project_id)
     return grouped
+
+
+def links_for_tasks(
+    conn: Connection, target_task_ids: list[uuid.UUID], *, user_id: str
+) -> dict[uuid.UUID, list[TaskLinkOut]]:
+    """Read several tasks' "Starts from" Links at once, oldest link first.
+
+    Three queries for the whole page, not three per row: the tasks list is the
+    app's main screen and ``task_out`` runs once per row on it.
+
+    **A Link grants no read** (ADR 0037 decision 2), so the source's *name* is
+    graded: it is shown only to a caller who holds a read leg on that source
+    anyway, and a reader who does not sees ``source_task_name=None``. The
+    link's own facts — that this task starts from *that* id, on that pinned
+    walk, currently flagged or not — are the target's provenance and stay
+    visible, because they are properties of the row the caller is reading.
+    The grade is decided inside the join that already fetches the source
+    (:func:`_access.readable_task_leg`), so this costs no extra query.
+
+    ``flagged`` is derived here rather than stored (C12): a Link whose two
+    tasks stop sharing a project is **marked, not broken**. The inheritance
+    already happened — the target's plan and its Task Agent context were built
+    from that source — so deleting the row would rewrite the target's
+    provenance to make a membership change look tidy. Marking it says what is
+    true: this came from over there, and over there is no longer alongside.
+
+    Args:
+        conn: Open database connection.
+        target_task_ids: The tasks whose sources are wanted.
+        user_id: The calling subject, whose read grade decides whether each
+            source's name is disclosed.
+
+    Returns:
+        One list per requested task id, empty where the task starts from
+        nothing.
+    """
+    grouped: dict[uuid.UUID, list[TaskLinkOut]] = {
+        target_id: [] for target_id in target_task_ids
+    }
+    if not target_task_ids:
+        return grouped
+    rows = conn.execute(
+        select(
+            task_link.c.link_id,
+            task_link.c.source_task_id,
+            task_link.c.target_task_id,
+            task_link.c.source_capability_run_id,
+            case((readable_task_leg(user_id), task.c.name), else_=None).label(
+                "source_task_name"
+            ),
+        )
+        .select_from(task_link.join(task, task.c.task_id == task_link.c.source_task_id))
+        .where(task_link.c.target_task_id.in_(target_task_ids))
+        .order_by(task_link.c.created_at, task_link.c.link_id)
+    ).mappings().all()
+    if not rows:
+        return grouped
+    # Both sides' memberships in one query, keyed by task.
+    wanted = set(target_task_ids) | {row["source_task_id"] for row in rows}
+    memberships: dict[uuid.UUID, set[uuid.UUID]] = {task_id: set() for task_id in wanted}
+    for member_task_id, project_id in conn.execute(
+        select(project_membership.c.task_id, project_membership.c.project_id).where(
+            project_membership.c.task_id.in_(list(wanted))
+        )
+    ).all():
+        memberships[member_task_id].add(project_id)
+    for row in rows:
+        target_id = row["target_task_id"]
+        grouped[target_id].append(
+            TaskLinkOut(
+                link_id=row["link_id"],
+                source_task_id=row["source_task_id"],
+                source_task_name=row["source_task_name"],
+                source_capability_run_id=row["source_capability_run_id"],
+                flagged=not (
+                    memberships[target_id] & memberships[row["source_task_id"]]
+                ),
+            )
+        )
+    return grouped
+
+
+def task_links_for(
+    conn: Connection, target_task_id: uuid.UUID, *, user_id: str
+) -> list[TaskLinkOut]:
+    """Read one task's "Starts from" Links. The single-row form of
+    :func:`links_for_tasks`.
+
+    Args:
+        conn: Open database connection.
+        target_task_id: The task whose sources are wanted.
+        user_id: The calling subject, whose read grade decides whether each
+            source's name is disclosed.
+
+    Returns:
+        One :class:`TaskLinkOut` per link, oldest link first.
+    """
+    return links_for_tasks(conn, [target_task_id], user_id=user_id)[target_task_id]
 
 
 def included_source_count(conn: Connection, task_id: uuid.UUID) -> int:
@@ -102,6 +230,7 @@ def task_out(
     user_id: str,
     owner_display: str | None | object = _RESOLVE,
     project_ids: list[uuid.UUID] | None = None,
+    links: list[TaskLinkOut] | None = None,
     access: Literal["full", "public"] = "full",
 ) -> TaskOut:
     """Project a task row with its derived read models, for one caller.
@@ -123,6 +252,10 @@ def task_out(
         project_ids: The task's project memberships when the caller
             already batch-loaded them (listings do). Left unset, this
             resolves them with one lookup — correct for single-row routes,
+            an N+1 in a listing.
+        links: The task's "Starts from" Links when the caller already
+            batch-loaded them with :func:`links_for_tasks` (listings do).
+            Left unset, this resolves them — again, correct for a single row,
             an N+1 in a listing.
         access: ``"public"`` when this read was served by the public leg
             (task 037) — the returned shape is then redacted
@@ -153,13 +286,20 @@ def task_out(
         # question has not been asked, which is not the same as a run that
         # found nothing Included.
         source_count = included_source_count(conn, row["task_id"])
+    # The Links are a property of the row, but each source's *name* is graded
+    # against this caller (a link grants no read — ADR 0037 decision 2), which
+    # is why ``links_for_tasks`` takes the subject. The public leg still omits
+    # them entirely: the redacted shape carries nothing relational.
     if access == "public":
         # Redacted shape (D5): no owner display, no project membership —
         # skip the membership lookup entirely rather than compute and discard.
         project_ids = []
         display = None
         is_owner = False
+        links = []
     else:
+        if links is None:
+            links = task_links_for(conn, row["task_id"], user_id=user_id)
         if project_ids is None:
             project_ids = memberships_for_tasks(conn, [row["task_id"]])[row["task_id"]]
         display = (
@@ -186,4 +326,7 @@ def task_out(
         owner_display=display,
         is_public=row["is_public"],
         access=access,
+        capability=row["capability"],
+        from_task_ids=[link.source_task_id for link in links],
+        links=links,
     )

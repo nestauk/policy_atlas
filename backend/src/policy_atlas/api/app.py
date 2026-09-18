@@ -33,10 +33,10 @@ _CONFLICT_CODES = {
     "run_active",
     "already_answered",
     "capacity",
-    "planning_turn_in_progress",
+    "task_agent_turn_in_progress",
     "chat_turn_in_progress",
     "stale_turn",
-    # 028 strand 3: the approved plan predates the newest completed planning
+    # 028 strand 3: the approved plan predates the newest completed task_agent
     # turn — review the demoted draft, re-approve, then start.
     "plan_stale",
     # Task 033 § 6 (i.5): a task in a project carries that project's
@@ -46,6 +46,13 @@ _CONFLICT_CODES = {
     "visibility_conflict",
     # Splash waitlist: the email is already on waitlist_entry.
     "already_registered",
+    # Task 044 (C11, C12): a task can only start from a task it shares a
+    # project with, and only from one whose latest walk has finished — and
+    # only from an Evidence search, whose report is what inheritance reads
+    # (S6, X4).
+    "link_project_mismatch",
+    "link_source_unfinished",
+    "link_source_capability",
 }
 
 _CAPACITY_CODES = {"chat_capacity"}
@@ -207,11 +214,11 @@ def create_app(*, settings: Settings | None = None, routers: Iterable[APIRouter]
         task_router as task_conversations_router,
     )
     from policy_atlas.api.routers.me import router as me_router
-    from policy_atlas.api.routers.planning import router as planning_router
     from policy_atlas.api.routers.projects import router as projects_router
     from policy_atlas.api.routers.read_models import router as read_models_router
     from policy_atlas.api.routers.runs import router as runs_router
     from policy_atlas.api.routers.sse import router as sse_router
+    from policy_atlas.api.routers.task_agent import router as task_agent_router
     from policy_atlas.api.routers.tasks import (
         public_read_router as tasks_public_read_router,
     )
@@ -224,7 +231,7 @@ def create_app(*, settings: Settings | None = None, routers: Iterable[APIRouter]
         tasks_public_read_router,
         projects_router,
         task_conversations_router,
-        planning_router,
+        task_agent_router,
         runs_router,
         check_ins_router,
         conversations_router,

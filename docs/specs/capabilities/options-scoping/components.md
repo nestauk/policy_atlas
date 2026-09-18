@@ -8,28 +8,28 @@ timestamp: 2026-09-07
 
 # Options Scoping — component skeleton
 
-The components, their origin in the Evidence search (EB), their declared I/O, realisation and
+The components, their origin in the Evidence search (ES), their declared I/O, realisation and
 gating. Distilled from
 [options-scoping-concept.md](../../sources/options-scoping/options-scoping-concept.md) (§ Shape,
 § Architecture stance, rulings 2–6, 9, 11, 12, 14, the review-round rulings 15–44). Shared tools
 and the findings schema are owned by
 [../../system/execution-orchestration.md](../../system/execution-orchestration.md) and
-[../../system/data-model.md](../../system/data-model.md); the EB components referenced below are
+[../../system/data-model.md](../../system/data-model.md); the ES components referenced below are
 specified in [../evidence-search/components.md](../evidence-search/components.md).
 
 **Reuse rule (owner, 2026-09-07).** Components are discrete so they can be shared across
 capabilities and combined into gradations of one
-([vocabulary.md § Components](../../vocabulary.md)). Every OS component is marked **is EB** (an
-Evidence search component, possibly parameterised), **EB modified** (a variation: a new object,
-template or field set) or **new**, and every "new" is justified. The EB's mandatory spine —
+([vocabulary.md § Components](../../vocabulary.md)). Every OS component is marked **is ES** (an
+Evidence search component, possibly parameterised), **ES modified** (a variation: a new object,
+template or field set) or **new**, and every "new" is justified. The ES's mandatory spine —
 acquire, screen, classify, appraise, ingest — runs **as is** at longlist depth; OS adds three
 variations (plan slots, `longlist`, `constrain`) and two new components (`inherit`, `shortlist`); `inherit` is now **shared**, the Evidence search having adopted it for the reverse direction (ruling 48).
 The three depths of ruling 3 are **compositions** of these components, not components themselves.
 Honesty about what "reuse" means (pass-3 review): by the execution contract's I/O test, `longlist`
-and `constrain` are OS components in their own right, **built on the shared EB engines** (the
+and `constrain` are OS components in their own right, **built on the shared ES engines** (the
 two-stage grouping engine and deterministic coverage utilities; the per-item judgment fan-out) —
 nothing is mirrored, but their I/O is new. Reuse of the spine also asks three **declared changes to
-EB interfaces** (ruling 43): `extract` registers two new profiles (an **abstract profile** run over
+ES interfaces** (ruling 43): `extract` registers two new profiles (an **abstract profile** run over
 every screened-in document, and a **light full-text profile**) and `select` gains a scoping
 read-set strategy; `synthesise` gains the report, profile and baseline templates; the provenance
 contract declares one new block kind (the transferability working). The **screen is unchanged**: it
@@ -39,23 +39,25 @@ across capabilities (ruling 40).
 ```
 [0 inherit] ─▶ 1 plan ──▶ ⟨baseline⟩ ══gate: confirm plan against baseline══▶
    2 acquire ─▶ 3 screen ─▶ 4 classify ─▶ 5 appraise ─▶ (ingest) ─▶ 10 extract(abstract) ─▶ 6 longlist ─▶ 7 constrain ─▶ 8 shortlist
-                                       (the EB spine as is, then the longlist; runs over every option)
+                                       (the ES spine as is, then the longlist; runs over every option)
    ══gate: "Assess these N"══▶ ⟨assess⟩ per shortlisted option ─▶ 11 synthesise(report, assessed) ─▶ export (Share seam)
-                                     └──▶ ⟨full run⟩ per option = the whole EB chain as a child task (user-triggered)
+                                     └──▶ ⟨full run⟩ per option = the whole ES chain as a child task (user-triggered)
 ```
 
 - ✅ **Two gates are structural, not discretionary.** Nothing after the baseline runs until the
   user confirms the plan against it; nothing after `shortlist` runs until the user says assess
-  (rulings 2, 3). Re-runs after a plan change apply deltas (❓ granularity, concept open
+  (rulings 2, 3). *(Owner ruling 2026-09-09, task 044: structural in every attended mode; under
+  **unattended** both gates pass on standing defaults, recorded and flagged, and unattended is
+  never the default — [capability.md § Check-in points](capability.md).)* Re-runs after a plan change apply deltas (❓ granularity, concept open
   question 7).
 - ✅ **The spine runs over every option; ⟨assess⟩ runs over the shortlist only.** This is the cost
-  model: everything before the second gate is the EB's cheap per-document envelope work plus
+  model: everything before the second gate is the ES's cheap per-document envelope work plus
   clustering; everything after it is per-option full-text reading, paid for only on options the
   user kept.
 - ✅ **Classify and appraise run at longlist depth** (owner, 2026-09-07), so every option carries
   a **source-quality profile** of its mentioning documents before assessment — never called "how
   sure" (ruling 33). Full text is fetched and ingested for the
-  whole screened-in set, as in the EB, each source carrying `text_basis` (full text | abstract
+  whole screened-in set, as in the ES, each source carrying `text_basis` (full text | abstract
   only) — the label ruling 16 needs.
 
 ## Components
@@ -66,17 +68,17 @@ across capabilities (ruling 40).
 | # | Component | Origin | What OS uses it for | Realisation | Gating |
 |---|---|---|---|---|---|
 | 0 | inherit | **shared** — new in OS, adopted by the Evidence search (ruling 48); a thin procedure over Links, authored once, what crosses depends on the source task's kind | seed the plan, the pool, the longlist and — from a deep search — the extracted findings, from a linked Evidence search task | procedure | optional; user chooses the task |
-| 1 | plan | system plan-as-object instance (the EB plan UI), OS slots | the scaffolded planning conversation → plan object: target unit, three constraint kinds, entry branch, depth asked every time | agent (lead-authored prompt) | mandatory; gate: confirm |
-| 2 | acquire | is EB (incl. ingest) | `search` with intent = the plan, an option or a variant; source policy for the baseline; seed corpus from `inherit` | procedure | mandatory |
-| 3 | screen | is EB, stage 1 only, **unchanged** | title-and-abstract consensus screen for relevance, plan as intent (compiled to carry the target unit and place explicitly); an **evidence restriction** (ruling 23) is the search directive's country-group, year and language filters applied at retrieval — never here (owner ruling on decision-sheet row C1, 2026-09-09) | per-doc fan-out | mandatory; **no stage 2 in OS** |
-| 4 | classify | is EB | primary evidence type + open tags per screened-in document; Unknown and Non-evidence shown as their own buckets in an option's source-quality profile (a non-evidence document counts as a mention, never as evidence); Unknown is not resolved within scoping (ruling 43) | per-doc fan-out | mandatory |
-| 5 | appraise | is EB | quality tier per document under the versioned rubric; the per-option roll-up happens in `longlist` | per-doc fan-out | mandatory |
-| 6 | longlist | EB characterise, **modified** — unit = intervention mention (or finding), many-to-many | both characterise machines at option grain: cluster **intervention mentions** (or extracted findings where a deep search was inherited) into options — a document may support several options — then options into themes; per-option coverage/patterns (counts, types, tiers, countries, populations, outcomes); entrants without documents; option schema (specified design, primary + secondary lever type, ambition tag, relations) | procedure + agent | mandatory; 🟡 unproven at option grain — check before the longlist contract |
-| 7 | constrain | EB screen, **modified** — object = option, criteria = the plan's constraints | scope-shaped screens on metadata and the specified design; reasoned guesses for after-assessment constraints | per-option fan-out (LLM judgment, checkable, cited when corpus-based) | mandatory; every exclusion carries its constraint |
-| 8 | shortlist | **new** — coverage over primary lever types has no EB analogue | one place per primary lever type present, one named reason each; gap messages; warnings; the unassessed list | procedure + agent | mandatory; user adds/removes on top |
-| 9 | select | is EB (new strategy) | the capped **read set** for one shortlisted option: stratify by implementation and outcome family, reserve the counter-case, cap per option, record omissions (ruling 38) | procedure (+ optional bounded rerank) | inside ⟨assess⟩ only |
-| 10 | extract | is EB, **two new profiles** | **abstract profile** over every screened-in document at longlist depth (interventions named, setting country, population, outcome family, design hint; reused by memo) — the source of intervention mentions (ruling 43); 🟡 **light full-text profile** over the selected read set inside ⟨assess⟩ (proposed: direction, outcome family, magnitude with comparator and period, design, setting; a trial/registration identifier only if independence detection needs it); inherited findings reused at finding grain (ruling 35) | per-source fan-out | abstract profile mandatory; light profile inside ⟨assess⟩; field sets and independence method are check 2 |
-| 11 | synthesise | is EB, templates | `produce-grounded-block` over the run's substrate with a template: **report** (written from the assessment, rewritten by a full run — ruling 50; the sense-check's questions are its closing section) · **profile** · **baseline** | agent-loop | per composition |
+| 1 | plan | system plan-as-object instance (the ES plan UI), OS slots | the scaffolded Task Agent conversation → plan object: target unit, three constraint kinds, entry branch, depth asked every time | agent (lead-authored prompt) | mandatory; gate: confirm |
+| 2 | acquire | is ES (incl. ingest) | `search` with intent = the plan, an option or a variant; source policy for the baseline; seed corpus from `inherit` | procedure | mandatory |
+| 3 | screen | is ES, stage 1 only, **unchanged** | title-and-abstract consensus screen for relevance, plan as intent (compiled to carry the target unit and place explicitly); an **evidence restriction** (ruling 23) is the search directive's country-group, year and language filters applied at retrieval — never here (owner ruling on decision-sheet row C1, 2026-09-09) | per-doc fan-out | mandatory; **no stage 2 in OS** |
+| 4 | classify | is ES | primary evidence type + open tags per screened-in document; Unknown and Non-evidence shown as their own buckets in an option's source-quality profile (a non-evidence document counts as a mention, never as evidence); Unknown is not resolved within scoping (ruling 43) | per-doc fan-out | mandatory |
+| 5 | appraise | is ES | quality tier per document under the versioned rubric; the per-option roll-up happens in `longlist` | per-doc fan-out | mandatory |
+| 6 | longlist | ES characterise, **modified** — unit = intervention mention (or finding), many-to-many | both characterise machines at option grain: cluster **intervention mentions** (or extracted findings where a deep search was inherited) into options — a document may support several options — then options into themes; per-option coverage/patterns (counts, types, tiers, countries, populations, outcomes); entrants without documents; option schema (specified design, primary + secondary lever type, ambition tag, relations) | procedure + agent | mandatory; 🟡 unproven at option grain — check before the longlist contract |
+| 7 | constrain | ES screen, **modified** — object = option, criteria = the plan's constraints | scope-shaped screens on metadata and the specified design; reasoned guesses for after-assessment constraints | per-option fan-out (LLM judgment, checkable, cited when corpus-based) | mandatory; every exclusion carries its constraint |
+| 8 | shortlist | **new** — coverage over primary lever types has no ES analogue | one place per primary lever type present, one named reason each; gap messages; warnings; the unassessed list | procedure + agent | mandatory; user adds/removes on top |
+| 9 | select | is ES (new strategy) | the capped **read set** for one shortlisted option: stratify by implementation and outcome family, reserve the counter-case, cap per option, record omissions (ruling 38) | procedure (+ optional bounded rerank) | inside ⟨assess⟩ only |
+| 10 | extract | is ES, **two new profiles** | **abstract profile** over every screened-in document at longlist depth (interventions named, setting country, population, outcome family, design hint; reused by memo) — the source of intervention mentions (ruling 43); 🟡 **light full-text profile** over the selected read set inside ⟨assess⟩ (proposed: direction, outcome family, magnitude with comparator and period, design, setting; a trial/registration identifier only if independence detection needs it); inherited findings reused at finding grain (ruling 35) | per-source fan-out | abstract profile mandatory; light profile inside ⟨assess⟩; field sets and independence method are check 2 |
+| 11 | synthesise | is ES, templates | `produce-grounded-block` over the run's substrate with a template: **report** (written from the assessment, rewritten by a full run — ruling 50; the sense-check's questions are its closing section) · **profile** · **baseline** | agent-loop | per composition |
 
 **Named compositions** (the three depths, ruling 3; not components):
 
@@ -85,7 +87,7 @@ across capabilities (ruling 40).
 | ⟨baseline⟩ | acquire (Overton and OpenAlex only in v1, grey-literature-weighted source policy; the coverage statement names live official statistics and departmental pages as not searched — ruling 43) → screen → classify → appraise → ingest → synthesise(**baseline**) | once, after plan confirmation; the run pauses after it |
 | ⟨longlist depth⟩ | acquire → screen → classify → appraise → ingest → extract(**abstract**) → longlist → constrain → shortlist | over every option; the Result is the longlist until assessment (ruling 50) |
 | ⟨assess⟩ | [acquire with the option as intent, if its document set is thin → screen → classify → appraise → ingest → extract(abstract)] → **select** (the scoping read-set strategy: stratify by implementation and outcome family, reserve the counter-case, cap per option, record omissions — rulings 38, 43) → extract(**light**) over the selected set (inherited findings reused at finding grain — ruling 35) → synthesise(**profile**); then synthesise(**report**, assessed). "How sure" = confidence in the specified claim from relevant evidence, documents counted until independence is known (ruling 33) | per shortlisted option, on "Assess these N" |
-| ⟨full run⟩ | the whole EB chain (incl. classify, select, stage-2, full extract, group) as a **child Evidence search task**, opened by the child's `inherit` from the scoping task (the option's design, documents, light findings, user context and evidence scope — ruling 48) with the profile template; its report **is** the option profile, shown in place in the scoping task (ruling 47) | per option, user-triggered (ruling 9) |
+| ⟨full run⟩ | the whole ES chain (incl. classify, select, stage-2, full extract, group) as a **child Evidence search task**, opened by the child's `inherit` from the scoping task (the option's design, documents, light findings, user context and evidence scope — ruling 48) with the profile template; its report **is** the option profile, shown in place in the scoping task (ruling 47) | per option, user-triggered (ruling 9) |
 | export | the Share/export seam (arch §10; no contract yet), not a component | user-triggered |
 
 ## 0 — inherit (optional; ruling 22; shared, ruling 48)
@@ -138,10 +140,10 @@ Evidence search direction (from a scoping task, the child full run's normal case
   the agent infers problem, target unit, outcome and place for the user to confirm). Depth (rapid /
   standard) is orthogonal to the branch. ✅ A plan object in the system sense
   ([plan-as-object](../../system/plan-as-object.md)), compiled to the run configuration; ❓ the
-  scaffolding chat as a shared component with EB (open question 8). ✅ Prompt-bearing:
+  scaffolding chat as a shared component with ES (open question 8). ✅ Prompt-bearing:
   lead-authored under [prompting.md](../../system/prompting.md).
 
-## 2 — acquire · 3 — screen · 4 — classify · 5 — appraise (the EB spine, as is) · extract(abstract)
+## 2 — acquire · 3 — screen · 4 — classify · 5 — appraise (the ES spine, as is) · extract(abstract)
 
 - **In:** the plan (or an option / variant as intent; or the baseline's source policy). **Out:**
   the screened-in document set with, per document: evidence type and tags (classify), quality tier
@@ -150,8 +152,8 @@ Evidence search direction (from a scoping task, the child full run's normal case
   population, outcome family and a design hint, so scope-shaped screens in `constrain` run on
   abstracts and `longlist` clusters mentions. Study geography is read from the abstract text,
   never inferred from publication metadata.
-- ✅ `acquire` is EB acquire with `search` as the only egress verb; full text is fetched and
-  ingested for the whole screened-in set. ✅ `screen` is EB stage 1 with the plan as the id-keyed
+- ✅ `acquire` is ES acquire with `search` as the only egress verb; full text is fetched and
+  ingested for the whole screened-in set. ✅ `screen` is ES stage 1 with the plan as the id-keyed
   intent record; **no stage-2 full-text confirmation in OS** (ruling 3). ✅ An **evidence restriction**
   (ruling 23; "evidence-scope constraint" in the frozen source) is the Evidence search's search
   directive — country group, years, languages — applied at retrieval, never on options and never
@@ -172,7 +174,7 @@ Evidence search direction (from a scoping task, the child full run's normal case
   coverage** (study count by evidence type and quality tier, countries, populations, outcomes
   measured) — the longlist metadata, shown as a **source-quality profile**, never as "how sure"
   (ruling 33).
-- ✅ **Same two machines as EB characterise, at option grain**: the bounded two-stage LLM grouping
+- ✅ **Same two machines as ES characterise, at option grain**: the bounded two-stage LLM grouping
   (discover, then assign, code-enforced exhaustiveness, an explicit unclustered bucket) discovers
   *options* rather than landscape themes and then groups options into themes; the deterministic
   coverage/patterns run per option instead of per run. **Different, and why it will not work off
@@ -210,7 +212,7 @@ Evidence search direction (from a scoping task, the child full run's normal case
   (ruling 36). After assessment, a failed or uncheckable effect/cost constraint is shown on the
   option ("breaks: low cost (assessed)" / "unresolved: cost not comparable"); the option stays and
   the user decides (ruling 40).
-- ✅ The EB screen's per-item judgment with the object changed: an option judged against
+- ✅ The ES screen's per-item judgment with the object changed: an option judged against
   constraints instead of a document against an intent. Runs on coverage and the specified design
   as options complete; never on analysis. ✅ Thin evidence is noted, never a reason to exclude.
   ✅ Screens judge the **specified design**; a finding about the parent's typical implementations
@@ -247,7 +249,7 @@ output is still called *the proposal* — the proposed shortlist the user adds t
   question 10). ✅ "Most promising"
   only after assessment, as per-axis sorts on comparable axes and conditional recommendations on
   those axes; before assessment `shortlist` describes coverage and gaps only.
-- **Why new:** nothing in the EB selects a representative set over a fixed taxonomy; EB `select`
+- **Why new:** nothing in the ES selects a representative set over a fixed taxonomy; ES `select`
   picks documents for extraction by strategy, not options for coverage.
 
 ## 9 — select · 10 — extract (light profile) · 11 — synthesise (templates): inside ⟨assess⟩
@@ -258,7 +260,7 @@ output is still called *the proposal* — the proposed shortlist the user adds t
   structure in [capability.md](capability.md)).
 - ✅ **select, scoping read-set strategy** (ruling 43): from the option's screened documents,
   stratify by implementation and outcome family, reserve places for the counter-case, cap per
-  option, and record what was left out and why — the EB's own `select` tool with a second strategy
+  option, and record what was left out and why — the ES's own `select` tool with a second strategy
   beside its coverage-aware-stratified-over-clusters one. The omissions record feeds the report's
   "what was not read".
 - ✅ **extract, light field set** for the countable cells over the selected set: direction (one vote per independent
@@ -301,13 +303,15 @@ output is still called *the proposal* — the proposed shortlist the user adds t
   (ruling 25), bounded by ruling 39 (structure unlabelled; no unsupported proposition, even
   inside a question). Not user-editable in v1 (ruling 14). ✅ **synthesise(baseline)** writes the
   "Do nothing" profile (what is in place · trend if nothing changes · who is affected · what is
-  already changing · what is contested · cost of inaction · key assumption · sources), empirical
+  already changing · what is contested · cost of inaction · key assumption · sources — the eight
+  required sections at both depths — **plus up to two writer-proposed problem-specific sections** at
+  standard depth and none at rapid, (owner ruling 2026-09-17, task 044 phase 8: "Go with options 2 and 5, targets 20 and 10"; the rapid section merge was measured, then reverted the same day: "Revert the merge, seven sections at both depths")), empirical
   premises sourced and interpretations labelled reasoning (ruling 40), every statement
   provenance-carrying, "not found" stated as such; the run **pauses** after it and the
   pause is a place to question it in chat (rulings 2, 24). ❓ Baseline sourcing mechanics (open
   question 6).
 
-## ⟨full run⟩ — the boundary with EB (ruling 9)
+## ⟨full run⟩ — the boundary with ES (ruling 9)
 
 - **In:** one shortlisted option and the scoping task's user context. **Out:** a new Evidence
   search task whose `inherit` (ruling 48) takes from the scoping task the option's specified design
@@ -323,7 +327,7 @@ output is still called *the proposal* — the proposed shortlist the user adds t
   input, so a transferability cap caused by unstated context survives the full run until the plan
   says otherwise. ✅ Stage-2 full-text confirmation, `select` and full extraction happen here, not
   in scoping. ✅ This is the one place the Evidence search's evidence-descriptive boundary is
-  widened, and only for the profile-template case (see the EB capability spec § Scope boundaries).
+  widened, and only for the profile-template case (see the ES capability spec § Scope boundaries).
 
 ## Interface rulings (owner, 2026-09-07; concept ruling 43)
 
@@ -337,7 +341,7 @@ The six open interfaces the third review pass raised, ruled:
    not resolved within scoping.
 3. **The read set** is built by `select` with a scoping strategy (ruling 38's discipline); `extract`
    keeps taking a selected set.
-4. **Claim kinds:** membership and countable aggregates are EB pattern claims; relations are
+4. **Claim kinds:** membership and countable aggregates are ES pattern claims; relations are
    reasoning claims or user actions; constraint states are records; the **transferability
    working** is a new grounded-block kind with per-column grounding, declared in
    [../../system/provenance-grounding.md](../../system/provenance-grounding.md).

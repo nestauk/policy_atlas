@@ -56,6 +56,32 @@ describe("lifecycle tab locking", () => {
       expect(isTabOpen("agent", status)).toBe(true);
     }
   });
+
+  // Task 044 (A17): a scoping baseline outlives the walk that wrote it, so
+  // Result opens on the baseline whatever the walk's ending.
+  it("opens Result on a scoping baseline at every run state, and locks nothing else open", () => {
+    for (const { status } of LOCKING_TABLE) {
+      expect(isTabOpen("result", status, { hasBaseline: true })).toBe(true);
+    }
+    expect(isTabOpen("result", null, { hasBaseline: true })).toBe(true);
+    // The baseline unlocks Result and nothing more: Sources and History stay
+    // shut on a task that has never run.
+    expect(isTabOpen("sources", null, { hasBaseline: true })).toBe(false);
+    expect(isTabOpen("history", null, { hasBaseline: true })).toBe(false);
+  });
+
+  it("keeps the tab order when the baseline unlocks Result", () => {
+    expect(
+      lifecycleTabs("/tasks/p1", "failed", { hasBaseline: true })
+        .filter((entry) => !entry.locked)
+        .map((entry) => entry.tab),
+    ).toEqual(["agent", "result", "sources", "share", "history"]);
+  });
+
+  it("leaves an Evidence search untouched — no baseline, no extra tab", () => {
+    expect(isTabOpen("result", "failed", { hasBaseline: false })).toBe(false);
+    expect(isTabOpen("result", "failed")).toBe(false);
+  });
 });
 
 describe("lifecycleTabs", () => {

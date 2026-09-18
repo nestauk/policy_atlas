@@ -1,6 +1,8 @@
 import { useState } from "react";
 
-import { usePlan } from "../../api/queries";
+import type { components } from "../../api/gen/types";
+import { usePlan, useTask } from "../../api/queries";
+import { seedComposer } from "../../lib/composerSeed";
 import { scrub } from "../../lib/scrub";
 import { COPY } from "../../lib/vocabulary";
 import { Button } from "../../ui/brand/Button";
@@ -19,27 +21,39 @@ import {
   screeningOverlayError,
   type PlanOverlay,
 } from "./planOverlay";
-import { START_SEARCH_CLASS, usePlanStart } from "./planStart";
+import { SCOPING_CONFIRMED_LINE, START_SEARCH_CLASS, usePlanStart, useScopingPlanStart } from "./planStart";
 import {
   ANALYSIS_DEPTH_LABEL,
   ANALYSIS_QUESTION,
   ANALYSIS_TITLE,
   axesForResearchApproach,
+  CONSTRAINT_CHECKED_AT_LABEL,
+  constraintEffectLines,
   RESEARCH_APPROACH_CUSTOM,
   RESEARCH_APPROACH_HINT,
   RESEARCH_APPROACH_PRESET_LABEL,
   RESEARCH_APPROACH_TITLE,
   researchApproachId,
   researchApproachLabel,
+  SCOPING_DEPTH_LABEL,
+  SCOPING_STEERING_MODE_LABEL,
   SEARCH_EFFORT_LABEL,
   SEARCH_SCOPE_HINT,
   SEARCH_SCOPE_TITLE,
   SOURCES_LABEL,
   STEERING_MODE_LABEL,
   stepsForAnalysisDepth,
+  TAG_ORIGIN_LABEL,
   timeBandFor,
   vocabLabel,
+  YOUR_CONTEXT_TYPE_LABEL,
 } from "./planVocabulary";
+
+type ScopingPlanDraft = components["schemas"]["ScopingPlanDraft"];
+type TaggedOut = components["schemas"]["TaggedOut"];
+type ScopingConstraintOut = components["schemas"]["ScopingConstraintOut"];
+type YourContextOut = components["schemas"]["YourContextOut"];
+type TaskLinkOut = components["schemas"]["TaskLinkOut"];
 
 const panelLabelClass = "text-lead font-bold text-white";
 const panelEditButtonClass =
@@ -248,11 +262,13 @@ function PlanChrome({
   showDock,
   onDock,
   onClose,
+  closeLabel = "Close the search plan",
   className,
 }: {
   showDock: boolean;
   onDock?: () => void;
   onClose: () => void;
+  closeLabel?: string;
   className?: string;
 }) {
   const controlClass =
@@ -272,7 +288,7 @@ function PlanChrome({
           </PlanChromeIcon>
         </button>
       )}
-      <button type="button" aria-label="Close the search plan" onClick={onClose} className={controlClass}>
+      <button type="button" aria-label={closeLabel} onClick={onClose} className={controlClass}>
         <PlanChromeIcon>
           <path d="M6 6 18 18" />
           <path d="M18 6 6 18" />
@@ -282,9 +298,407 @@ function PlanChrome({
   );
 }
 
+// --- Scoping plan sections (task 044, contract deliverable 5, C18) --------
+//
+// The scoping plan has no inline field editor of its own: its fields are
+// Task Agent-negotiated (provenance-tagged), not raw strings a form can
+// safely overwrite. Edit seeds the Task Agent composer instead — the same
+// "put it in the conversation" idiom `PartCard`'s own Change control uses,
+// carried over the DOM event `lib/composerSeed.ts` exists for (its docstring
+// names exactly this cross-subtree case).
+
+/** A field's origin tag, rendered as the fixed screen words (never the raw
+ *  enum). Omitted for an unknown or absent origin — the same fail-soft rule
+ *  every lookup on this page follows. */
+function OriginTag({ origin }: { origin?: TaggedOut["origin"] | null }) {
+  const label = origin != null ? TAG_ORIGIN_LABEL[origin] : null;
+  if (label == null) return null;
+  return <span className={cn("ml-2 italic", panelHintClass)}>({label})</span>;
+}
+
+/** One scoping section's frame: the same label/border chrome as the ES's
+ *  `PanelSection`, but Edit seeds the composer rather than opening an inline
+ *  form — there is nothing here to edit in place. */
+function ScopingSection({
+  label,
+  onEdit,
+  readOnly,
+  children,
+}: {
+  label: string;
+  /** Omitted entirely for a section the ES pattern also leaves un-editable
+   *  (Starts from, Steps and check-ins). */
+  onEdit?: () => void;
+  readOnly: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="border-b border-white/15 pb-6 last:border-b-0">
+      <div className="flex items-start justify-between gap-3">
+        <h3 className={panelLabelClass}>{label}</h3>
+        {!readOnly && onEdit !== undefined && (
+          <button type="button" className={panelEditButtonClass} onClick={onEdit}>
+            Edit
+          </button>
+        )}
+      </div>
+      <div className="mt-3">{children}</div>
+    </section>
+  );
+}
+
+/** One provenance-tagged field, rendered with its origin words. */
+function TaggedField({ label, tagged }: { label: string; tagged?: TaggedOut | null }) {
+  return (
+    <div>
+      <dt className={panelHintClass}>{label}</dt>
+      <dd className={panelValueClass}>
+        {tagged != null ? (
+          <>
+            {scrub(tagged.text)}
+            <OriginTag origin={tagged.origin} />
+          </>
+        ) : (
+          <span className="text-[#97a8bc] italic">{COPY.notDecided}</span>
+        )}
+      </dd>
+    </div>
+  );
+}
+
+/** A list of provenance-tagged fields (Outcomes: zero, one or several). */
+function TaggedListField({ label, items }: { label: string; items?: TaggedOut[] | null }) {
+  const list = items ?? [];
+  return (
+    <div>
+      <dt className={panelHintClass}>{label}</dt>
+      <dd className={panelValueClass}>
+        {list.length === 0 ? (
+          <span className="text-[#97a8bc] italic">{COPY.notDecided}</span>
+        ) : (
+          <ul className="space-y-1">
+            {list.map((item, index) => (
+              <li key={`${item.origin}-${item.text}-${index}`}>
+                {scrub(item.text)}
+                <OriginTag origin={item.origin} />
+              </li>
+            ))}
+          </ul>
+        )}
+      </dd>
+    </div>
+  );
+}
+
+/** "Starts from": one line per Link (C18), hidden entirely with none. Not
+ *  editable — a Link is fixed at task creation (contract deliverable 4). */
+function StartsFromSection({ links }: { links: TaskLinkOut[] }) {
+  if (links.length === 0) return null;
+  return (
+    <section className="border-b border-white/15 pb-6 last:border-b-0">
+      <h3 className={panelLabelClass}>Starts from</h3>
+      <ul className="mt-3 space-y-1.5 text-lead text-white">
+        {links.map((link) => (
+          <li key={link.link_id}>
+            {link.source_task_name === null
+              ? "Evidence search: a task you can't open · linked"
+              : `Evidence search: ${scrub(link.source_task_name)} · linked`}
+            {link.flagged && (
+              <span className={panelHintClass}> · no longer shares a project</span>
+            )}
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+/** "Question and intended change": the user's ask, plain, then what we are
+ *  trying to change, tagged. */
+function QuestionAndChangeSection({
+  scoping,
+  onEdit,
+  readOnly,
+}: {
+  scoping: ScopingPlanDraft;
+  onEdit: () => void;
+  readOnly: boolean;
+}) {
+  return (
+    <ScopingSection label="Question and intended change" onEdit={onEdit} readOnly={readOnly}>
+      <div className="space-y-3">
+        <p className="text-lead text-white">
+          {scoping.question != null && scoping.question !== "" ? scrub(scoping.question) : COPY.notDecided}
+        </p>
+        <dl>
+          <TaggedField label="What we are trying to change" tagged={scoping.intended_change} />
+        </dl>
+      </div>
+    </ScopingSection>
+  );
+}
+
+/** "Settings": who or what should change, where, outcomes, depth and
+ *  check-ins — the same five-row shape the ES's own Settings section has. */
+function ScopingSettingsSection({
+  scoping,
+  onEdit,
+  readOnly,
+}: {
+  scoping: ScopingPlanDraft;
+  onEdit: () => void;
+  readOnly: boolean;
+}) {
+  const depthLabel = scoping.depth != null ? (SCOPING_DEPTH_LABEL[scoping.depth] ?? null) : null;
+  const checkInsLabel =
+    scoping.steering_mode != null ? (SCOPING_STEERING_MODE_LABEL[scoping.steering_mode] ?? null) : null;
+  return (
+    <ScopingSection label="Settings" onEdit={onEdit} readOnly={readOnly}>
+      <dl className="space-y-3">
+        <TaggedField label="Who or what should change" tagged={scoping.target_unit} />
+        <TaggedField label="Where" tagged={scoping.where} />
+        <TaggedListField label="Outcomes" items={scoping.outcomes} />
+        <div>
+          <dt className={panelHintClass}>Depth</dt>
+          <dd className={panelValueClass}>
+            {depthLabel ?? <span className="text-[#97a8bc] italic">{COPY.notDecided}</span>}
+          </dd>
+        </div>
+        <div>
+          <dt className={panelHintClass}>Check-ins</dt>
+          <dd className={panelValueClass}>
+            {checkInsLabel ?? <span className="text-[#97a8bc] italic">{COPY.notDecided}</span>}
+          </dd>
+        </div>
+      </dl>
+    </ScopingSection>
+  );
+}
+
+/** "Constraints and preferences": what was asked for, the fixed effect
+ *  sentence for its kind, and when it is checked. */
+function ConstraintsSection({
+  constraints,
+  onEdit,
+  readOnly,
+}: {
+  constraints: ScopingConstraintOut[];
+  onEdit: () => void;
+  readOnly: boolean;
+}) {
+  return (
+    <ScopingSection label="Constraints and preferences" onEdit={onEdit} readOnly={readOnly}>
+      {constraints.length === 0 ? (
+        <p className="text-lead text-[#97a8bc] italic">{COPY.notDecided}</p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-lead text-white">
+            <thead>
+              <tr className={cn("text-body font-normal", panelHintClass)}>
+                <th className="pb-2 pr-3 font-normal">What you asked for</th>
+                <th className="pb-2 pr-3 font-normal">What happens</th>
+                <th className="pb-2 font-normal">Checked at</th>
+              </tr>
+            </thead>
+            <tbody>
+              {constraints.map((constraint, index) => (
+                <tr
+                  key={`${constraint.kind}-${constraint.text}-${index}`}
+                  className="border-t border-white/10 align-top"
+                >
+                  <td className="py-2 pr-3">{scrub(constraint.text)}</td>
+                  <td className="py-2 pr-3 text-[#e8edf2]">
+                    {constraintEffectLines(constraint).map((line) => (
+                      <span key={line} className="block">
+                        {line}
+                      </span>
+                    ))}
+                  </td>
+                  <td className="py-2">
+                    {CONSTRAINT_CHECKED_AT_LABEL[constraint.checked_at] ?? constraint.checked_at}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </ScopingSection>
+  );
+}
+
+/** "Your context": verbatim entries, hidden entirely with none. */
+function YourContextSection({
+  entries,
+  onEdit,
+  readOnly,
+}: {
+  entries: YourContextOut[];
+  onEdit: () => void;
+  readOnly: boolean;
+}) {
+  if (entries.length === 0) return null;
+  return (
+    <ScopingSection label="Your context" onEdit={onEdit} readOnly={readOnly}>
+      <ul className="space-y-2 text-lead text-white">
+        {entries.map((entry, index) => (
+          <li key={`${entry.turn_index}-${index}`}>
+            {scrub(entry.text)}
+            <span className={cn("ml-2 italic", panelHintClass)}>
+              (
+              {YOUR_CONTEXT_TYPE_LABEL[entry.type] ?? entry.type}
+              {entry.test_as_condition ? ", test as a condition" : ""}
+              )
+            </span>
+          </li>
+        ))}
+      </ul>
+    </ScopingSection>
+  );
+}
+
+/** "Steps and check-ins": the three display steps, un-editable like the
+ *  ES's own Plan steps section. */
+function ScopingStepsSection({ steps }: { steps: ScopingPlanDraft["steps"] }) {
+  const list = steps ?? [];
+  if (list.length === 0) return null;
+  return (
+    <section className="border-b border-white/15 pb-6 last:border-b-0">
+      <h3 className={panelLabelClass}>Steps and check-ins</h3>
+      <ol className="mt-3 list-none space-y-2 pl-1 text-lead text-[#e8edf2]">
+        {list.map((step, index) => (
+          <li key={step.stage} className="flex gap-1.5">
+            <span aria-hidden="true" className="w-4 shrink-0 tabular-nums">
+              {index + 1}.
+            </span>
+            <div className="min-w-0 flex-1">
+              {step.label}
+              <span className={cn("block", panelHintClass)}>{step.blurb}</span>
+            </div>
+          </li>
+        ))}
+      </ol>
+    </section>
+  );
+}
+
+/** The scoping plan's start area, in its three states (contract deliverable
+ *  5); `useScopingPlanStart` carries the state logic. */
+function ScopingStartActions({
+  taskId,
+  runActive,
+  onStarted,
+}: {
+  taskId: string;
+  runActive: boolean;
+  onStarted?: () => void;
+}) {
+  const state = useScopingPlanStart({ taskId, runActive, onStarted });
+
+  // The walk is running or paused: the gate's own check-in card and the
+  // Task Agent chat own the decision here, not this card — confirm-baseline
+  // is 409 `run_active` while it's live, so there is nothing safe to offer.
+  if (state.kind === "none") {
+    return null;
+  }
+
+  if (state.kind === "confirmed") {
+    return <p className="text-lead text-white">{SCOPING_CONFIRMED_LINE}</p>;
+  }
+
+  if (state.kind === "build") {
+    return (
+      <div>
+        <Button className={cn(START_SEARCH_CLASS)} disabled={state.disabled} onClick={state.onStart}>
+          {state.label}
+        </Button>
+        {state.timeBand != null && state.timeBand !== "" && (
+          <p className="mt-2 text-body text-[#97a8bc]">{scrub(state.timeBand)}</p>
+        )}
+        {state.notice != null && (
+          <p role="alert" className="mt-2 text-body text-red-tint">
+            {state.notice}
+          </p>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-wrap items-center gap-3">
+      <Button className={cn(START_SEARCH_CLASS)} disabled={state.rebuild.disabled} onClick={state.rebuild.onStart}>
+        {state.rebuild.label}
+      </Button>
+      <Button variant="secondary" disabled={state.confirm.disabled} onClick={state.confirm.onConfirm}>
+        {state.confirm.label}
+      </Button>
+      {state.notice != null && (
+        <p role="alert" className="w-full text-body text-red-tint">
+          {state.notice}
+        </p>
+      )}
+    </div>
+  );
+}
+
+/** The scoping plan's sections, in the contract's fixed order (deliverable
+ *  5). Isolated from the ES render path so an Evidence search plan never
+ *  pays for `useTask`/`useRuns`/`useArtefact` it has no use for. */
+function ScopingPlanSections({
+  taskId,
+  scoping,
+  readOnly,
+  runActive,
+  onStarted,
+}: {
+  taskId: string;
+  scoping: ScopingPlanDraft;
+  readOnly: boolean;
+  runActive: boolean;
+  onStarted?: () => void;
+}) {
+  const taskQuery = useTask(taskId);
+  const links = taskQuery.data?.links ?? [];
+
+  return (
+    <>
+      <div className="space-y-6">
+        <StartsFromSection links={links} />
+        <QuestionAndChangeSection
+          scoping={scoping}
+          onEdit={() => seedComposer("Change the question or intended change: ")}
+          readOnly={readOnly}
+        />
+        <ScopingSettingsSection
+          scoping={scoping}
+          onEdit={() => seedComposer("Change a setting: ")}
+          readOnly={readOnly}
+        />
+        <ConstraintsSection
+          constraints={scoping.constraints ?? []}
+          onEdit={() => seedComposer("Change a constraint or preference: ")}
+          readOnly={readOnly}
+        />
+        <YourContextSection
+          entries={scoping.your_context ?? []}
+          onEdit={() => seedComposer("Add to your context: ")}
+          readOnly={readOnly}
+        />
+        <ScopingStepsSection steps={scoping.steps} />
+      </div>
+
+      {!readOnly && (
+        <div className="pt-8">
+          <ScopingStartActions taskId={taskId} runActive={runActive} onStarted={onStarted} />
+        </div>
+      )}
+    </>
+  );
+}
+
 /**
  * The search plan, edited in place. Saves stay local until Start search —
- * a planner round-trip on every field would rewrite the whole plan.
+ * a task_agent round-trip on every field would rewrite the whole plan.
  */
 export function PlanDocument({
   taskId,
@@ -310,7 +724,13 @@ export function PlanDocument({
   onOverlayChange: (overlay: PlanOverlay) => void;
 }) {
   const planQuery = usePlan(taskId);
-  const draft = planQuery.data?.plan;
+  // A scoping task's `PlanOut.plan` is null (task 044) — its fields live on
+  // `scoping` instead, rendered by a wholly separate section set below. This
+  // normalizes `draft` to `undefined` for a scoping task so every existing
+  // `draft !== undefined` check below stays an honest "no ES plan to show",
+  // never a null slipping through as a truthy-looking draft object.
+  const isScoping = planQuery.data?.capability === "options_scoping";
+  const draft = isScoping ? undefined : (planQuery.data?.plan ?? undefined);
   const {
     start,
     discardAndStart,
@@ -411,7 +831,7 @@ export function PlanDocument({
     <aside
       role="dialog"
       aria-modal={placement === "center"}
-      aria-label="Search plan"
+      aria-label={isScoping ? "Scoping plan" : "Search plan"}
       className={cn(
         "relative flex h-full min-h-0 flex-col overflow-hidden bg-navy text-white",
         placement === "side"
@@ -426,6 +846,7 @@ export function PlanDocument({
               showDock
               onDock={onDock}
               onClose={onClose}
+              closeLabel={isScoping ? "Close the scoping plan" : "Close the search plan"}
               className="pointer-events-auto absolute top-0 right-0 translate-x-[calc(100%+0.5rem)] max-[52rem]:translate-x-0"
             />
           </div>
@@ -436,15 +857,22 @@ export function PlanDocument({
         <div className={cn("mx-auto w-full px-5 py-8", READING_COLUMN_MAX_W)}>
           <div className="mb-6 flex items-start justify-between gap-3 border-b border-white/15 pb-6">
             <header className="min-w-0 flex-1">
-              <h2 className="text-heading font-extrabold text-white">Search plan</h2>
-              {expectedRunTime != null && expectedRunTime !== "" && (
+              <h2 className="text-heading font-extrabold text-white">
+                {isScoping ? "Scoping plan" : "Search plan"}
+              </h2>
+              {!isScoping && expectedRunTime != null && expectedRunTime !== "" && (
                 <p className="mt-1 text-body text-[#97a8bc]">
                   Expected run time: {scrub(expectedRunTime)}
                 </p>
               )}
             </header>
             {placement === "side" && (
-              <PlanChrome showDock={false} onClose={onClose} className="shrink-0" />
+              <PlanChrome
+                showDock={false}
+                onClose={onClose}
+                closeLabel={isScoping ? "Close the scoping plan" : "Close the search plan"}
+                className="shrink-0"
+              />
             )}
           </div>
 
@@ -455,7 +883,17 @@ export function PlanDocument({
             </p>
           )}
 
-          {draft !== undefined && (
+          {isScoping && planQuery.data?.scoping != null && (
+            <ScopingPlanSections
+              taskId={taskId}
+              scoping={planQuery.data.scoping}
+              readOnly={readOnly}
+              runActive={runActive}
+              onStarted={onStarted}
+            />
+          )}
+
+          {!isScoping && draft !== undefined && (
             <div className="space-y-6">
             <PanelSection
               readOnly={readOnly}
@@ -755,7 +1193,7 @@ export function PlanDocument({
           </div>
           )}
 
-          {!readOnly && (
+          {!isScoping && !readOnly && (
           <div className="pt-8">
             <Button className={cn(START_SEARCH_CLASS)} disabled={startDisabled} onClick={start}>
               {startLabel}

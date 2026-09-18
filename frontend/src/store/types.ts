@@ -40,7 +40,9 @@ export interface ResolvedDecision {
 /** The current plan row, as surfaced by `plan.updated`. */
 interface PlanState {
   version: number;
-  plan: PlanDraft;
+  /** Null for an Options scoping task: its plan travels on `scoping` and the
+   *  plan document reads it from the plan query, not the stream (task 044). */
+  plan: PlanDraft | null;
 }
 
 /** Project lifecycle fields as surfaced by `task.updated` audit events.

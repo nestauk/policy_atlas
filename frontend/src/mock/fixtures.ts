@@ -5,7 +5,7 @@ export const MOCK_TASK_ID = "0d91c2e7-9b9b-4f4d-bd20-1f6819fb3425";
 export const MOCK_RUN_ID = "7b40cc12-c3a7-4457-92fc-23d15a26d433";
 export const MOCK_CHECK_IN_ID = "4c1acbe7-c4a1-4e0b-8d5a-bb25ea2ef634";
 export const MOCK_PLAN_ID = "80000000-0000-4000-8000-000000000001";
-export const MOCK_PLANNING_CONVERSATION_ID = "50000000-0000-4000-8000-000000000001";
+export const MOCK_TASK_AGENT_CONVERSATION_ID = "50000000-0000-4000-8000-000000000001";
 export const MOCK_PROJECT_ID = "60000000-0000-4000-8000-000000000001";
 const MOCK_ORGANISATION_ID = "90000000-0000-4000-8000-000000000001";
 
@@ -37,6 +37,11 @@ export const mockTask: components["schemas"]["TaskOut"] = {
   // Assigned to `mockProject` below so `GET /tasks?project_id=` has a
   // real member to return (task 033 phase 10a; membership is a list, ADR 0032).
   project_ids: [MOCK_PROJECT_ID],
+  // Task 044: the kind of work. The mock's task is an Evidence search; a
+  // scoping task is created through the mock's `POST /tasks`.
+  capability: "evidence_search",
+  from_task_ids: [],
+  links: [],
 };
 
 /** Task 033 phase 10a: the one project the mock serves. `task_count`
@@ -337,6 +342,134 @@ export const mockArtefactSectionProse: Record<number, string> = {
   1: "Pair school food action with safer active-travel routes and practical family support, while monitoring local reach.",
 };
 
+/**
+ * The options-scoping baseline (task 044, deliverable 9) the mock serves as
+ * the scoping task's Result: the seven written sections in their fixed order,
+ * one proposed section inserted after "What is contested", and the
+ * code-rendered Sources section last. No key findings, no conclusions, no
+ * case studies — a baseline mints none of them.
+ *
+ * `role` is `"standard"` throughout because that is what the read model
+ * returns: the Sources block is written with role `"sources"` and coerced
+ * (`api/readmodels/repository.py`). The section ORDER is what puts Sources
+ * last, not its role.
+ */
+export const mockBaselineArtefact: components["schemas"]["ArtefactOut"] = {
+  artefact_id: "00000000-0000-4000-8000-00000000b001",
+  title: "Do nothing: current policy and trajectory",
+  question:
+    "How can we reduce the number of young people not in education, employment or training?",
+  template: "baseline",
+  depth_label: "scoping pass",
+  coverage_snapshot: {
+    source_count: 18,
+    included: 18,
+    screened_out: 24,
+    study_types: { "policy report": 11, analysis: 5, evaluation: 2 },
+    year_range: [2020, 2026],
+  },
+  sections: [
+    {
+      title: "What is in place",
+      nav_label: "In place",
+      role: "standard",
+      blocks: [{
+        block_id: "31000000-0000-4000-8000-000000000001",
+        prose: "The borough runs a youth employment hub, a supported-internship offer through the further education college, and the national Youth Offer through Jobcentre Plus. Careers advice reaches school leavers through the schools themselves; there is no single referral route for young people who have already left.",
+        claims: [],
+      }],
+    },
+    {
+      title: "Trend if nothing changes",
+      nav_label: "Trend",
+      role: "standard",
+      blocks: [{
+        block_id: "31000000-0000-4000-8000-000000000002",
+        prose: "The NEET and not-known rate for 16-17 year-olds has moved little across the last four years, sitting a little above the London average. No source in the set projects the rate forward beyond the current academic year.",
+        claims: [],
+      }],
+    },
+    {
+      title: "Who is affected",
+      nav_label: "Who",
+      role: "standard",
+      blocks: [{
+        block_id: "31000000-0000-4000-8000-000000000003",
+        prose: "Young people with a recorded special educational need, those known to children's social care, and those who left school without a level 2 qualification are over-represented. The plan names 16-24 year-olds; the published figures measure 16-17 year-olds, so the older half of the group is not described by this data.",
+        claims: [],
+      }],
+    },
+    {
+      title: "What is already changing",
+      nav_label: "Changing",
+      role: "standard",
+      blocks: [{
+        block_id: "31000000-0000-4000-8000-000000000004",
+        prose: "A devolved adult-skills settlement takes effect from the next financial year, and the college's supported-internship places are due to expand. One employer-partnership programme closes at the end of the current cohort.",
+        claims: [],
+      }],
+    },
+    {
+      title: "What is contested",
+      nav_label: "Contested",
+      role: "standard",
+      blocks: [{
+        block_id: "31000000-0000-4000-8000-000000000005",
+        prose: "Sources disagree about whether the binding constraint is the supply of entry-level jobs or the transition support around them. They also disagree about the not-known cohort: one reading treats it as measurement error, another as unrecorded disengagement.",
+        claims: [],
+      }],
+    },
+    {
+      title: "How the transition is tracked",
+      nav_label: "Tracking",
+      role: "standard",
+      blocks: [{
+        block_id: "31000000-0000-4000-8000-000000000006",
+        prose: "Destination data is collected at two points in the year and reconciled against school records. Two sources describe the reconciliation as incomplete for young people who move borough.",
+        claims: [],
+      }],
+    },
+    {
+      title: "Cost of inaction",
+      nav_label: "Cost of inaction",
+      role: "standard",
+      blocks: [{
+        block_id: "31000000-0000-4000-8000-000000000007",
+        prose: "One national estimate puts the lifetime public-finance cost of a sustained NEET spell in the tens of thousands of pounds per person, at 2021 prices. No source in this set costs the status quo for this borough.",
+        claims: [{
+          claim_id: "41000000-0000-4000-8000-000000000001",
+          claim_type: "gap",
+          text: "No source in this set costs the status quo for this borough.",
+          span: [138, 195],
+          citations: [],
+          gap: { grade: "corpus_absence", caveat: null },
+        }],
+      }],
+    },
+    {
+      title: "Key assumption",
+      nav_label: "Key assumption",
+      role: "standard",
+      blocks: [{
+        block_id: "31000000-0000-4000-8000-000000000008",
+        prose: "The assumption most worth checking is that the current offer does not reach the young people driving the trend, rather than reaching them and failing. This rests on the absence of a referral route for those who have already left, and on the incomplete destination reconciliation reported above.",
+        claims: [],
+      }],
+    },
+    {
+      title: "Sources",
+      nav_label: "Sources",
+      role: "standard",
+      blocks: [{
+        block_id: "31000000-0000-4000-8000-000000000009",
+        prose: "18 sources from Overton and OpenAlex, searched for the situation and trend this plan describes, limited to the United Kingdom and other high-income countries.\nLive official statistics and departmental pages were not searched; figures come from the documents above, as at their publication dates.\nSource mix: 13 grey literature (policy reports, official and organisational publications) and 5 academic articles. The profile leans on grey sources.\nA language restriction is recorded in the plan and not yet applied at retrieval.",
+        claims: [],
+      }],
+    },
+  ],
+  references: [],
+};
+
 export const mockCoverage: components["schemas"]["CoverageOut"] = {
   sentence: "Coverage is adequate for school-food and family-support approaches (46 screened-in sources, 2019-2024), while local active-travel evaluation evidence remains thin.",
   base: { screened_in: 46, years: [2019, 2024] },
@@ -370,7 +503,7 @@ export const mockCoverage: components["schemas"]["CoverageOut"] = {
 //
 // The chat citation carries a durable chunk id (not the artefact citation
 // table's id) — a distinct fixture id in the same 8-4-4-4-12 style, one
-// prefix on from the planning-turn ids above.
+// prefix on from the task_agent-turn ids above.
 export const MOCK_CHAT_CITATION_CHUNK_ID = "70000000-0000-4000-8000-000000000001";
 export const MOCK_CHAT_CLAIM_ID = "70000000-0000-4000-8000-000000000002";
 
@@ -403,8 +536,8 @@ export const MOCK_CHAT_PROGRESS_LABEL = "Searching the evidence…";
 
 /**
  * A ready plan draft (contract 027 F.2 fixture item 1b): the mock task
- * represents a resumed session — the planning conversation already
- * happened, and its transcript persisted (`seedPlanningTurns`), so the
+ * represents a resumed session — the task_agent conversation already
+ * happened, and its transcript persisted (`seedTaskAgentTurns`), so the
  * plan pane renders ready immediately. Demonstrates `time_band`,
  * `scope_constraints.country_group` and labelled `steps`.
  */
@@ -444,23 +577,109 @@ export const mockPlanReady: components["schemas"]["PlanDraft"] = {
   ready: true,
 };
 
-const MOCK_PLANNING_TURN_IDS = {
+export const MOCK_LINK_ID = "70000000-0000-4000-8000-000000000001";
+export const MOCK_LINK_SOURCE_RUN_ID = "70000000-0000-4000-8000-000000000002";
+
+/**
+ * A ready options-scoping plan (task 044, contract deliverable 5), one link
+ * and one of each constraint kind so every plan-document section has
+ * something to render. Mirrors `mockPlanReady`'s role for the ES fixture:
+ * the mock's task_agent turn transcript is scripted as already having
+ * reached this shape, so mock mode and the e2e journey can show the
+ * finished plan document without scripting every intermediate turn.
+ */
+export const mockScopingPlanReady: components["schemas"]["ScopingPlanDraft"] = {
+  title: "Cutting NEET numbers in Tower Hamlets",
+  question: "How can we reduce the number of young people not in education, employment or training?",
+  intended_change: {
+    text: "Fewer 16-24 year-olds are NEET six months after leaving school.",
+    origin: "from_your_question",
+  },
+  target_unit: { text: "16-24 year-olds at risk of becoming NEET", origin: "assumed" },
+  where: { text: "United Kingdom", origin: "assumed" },
+  outcomes: [
+    { text: "NEET rate at 6 months", origin: "from_your_question" },
+    { text: "Sustained employment or training at 12 months", origin: "assumed" },
+  ],
+  depth: "standard",
+  constraints: [
+    {
+      text: "Only include options a local authority can fund directly",
+      kind: "requirement",
+      origin: "your_call",
+      checked_at: "longlist",
+      country_group: null,
+      published_after: null,
+      published_before: null,
+      languages: null,
+    },
+    {
+      text: "Prefer options with a lower cost per participant",
+      kind: "preference",
+      origin: "your_call",
+      checked_at: "assessment",
+      country_group: null,
+      published_after: null,
+      published_before: null,
+      languages: null,
+    },
+    {
+      text: "Evidence from the UK and other high-income countries only",
+      kind: "evidence_restriction",
+      origin: "assumed",
+      checked_at: "retrieval",
+      country_group: { label: "United Kingdom", countries: ["GB"], authorship: "planner-proposed" },
+      published_after: null,
+      published_before: null,
+      languages: ["English"],
+    },
+  ],
+  your_context: [
+    {
+      text: "We already run a careers-advice service in every secondary school.",
+      type: "present_fact",
+      turn_index: 1,
+      test_as_condition: false,
+    },
+    {
+      text: "We plan to expand apprenticeship places next year.",
+      type: "commitment",
+      turn_index: 2,
+      test_as_condition: true,
+    },
+  ],
+  entry_branch: "explore",
+  linked_task_ids: [],
+  steering_mode: "moderate",
+  steer_point_defaults: [],
+  assumptions: ["The United Kingdom is the right jurisdiction unless you say otherwise."],
+  steps: [
+    { stage: "acquire", label: "Searching sources", blurb: "Queries out to academic and policy databases." },
+    { stage: "screen", label: "Screening sources", blurb: "Checking relevance to the plan's scope." },
+    { stage: "synthesise", label: "Writing the baseline", blurb: "Setting out what happens if nothing changes." },
+  ],
+  time_band: "10-15 minutes",
+  baseline_confirmed: null,
+  ready: true,
+};
+
+const MOCK_TASK_AGENT_TURN_IDS = {
   first: "60000000-0000-4000-8000-000000000001",
   second: "60000000-0000-4000-8000-000000000002",
   failed: "60000000-0000-4000-8000-000000000003",
 } as const;
 
 /**
- * The durable planning transcript (contract 027 F.2 fixture item 1a): two
+ * The durable task_agent transcript (contract 027 F.2 fixture item 1a): two
  * completed turns that formed the ready plan above, plus one FAILED row —
  * the honest incomplete-turn render — deliberately the latest turn so it
  * carries a Retry control. Returns a fresh array each call so
  * `resetMockScenario` can restore pristine seed state.
  */
-export function seedPlanningTurns(): components["schemas"]["PlanningTranscriptTurnOut"][] {
+export function seedTaskAgentTurns(): components["schemas"]["TaskAgentTranscriptTurnOut"][] {
   return [
     {
-      client_turn_id: MOCK_PLANNING_TURN_IDS.first,
+      client_turn_id: MOCK_TASK_AGENT_TURN_IDS.first,
       turn_index: 1,
       user_message: "Which local policy approaches reduce childhood obesity for primary-school children?",
       reply: "Here's how I've read your question.",
@@ -481,7 +700,7 @@ export function seedPlanningTurns(): components["schemas"]["PlanningTranscriptTu
       completed_at: "2026-07-18T09:02:04Z",
     },
     {
-      client_turn_id: MOCK_PLANNING_TURN_IDS.second,
+      client_turn_id: MOCK_TASK_AGENT_TURN_IDS.second,
       turn_index: 2,
       user_message: "That's my question\n\n[confirm part=question option=confirm]",
       reply: "What counts as in-scope? Edit any chip directly. I'll search from 2016 onward. UK as the primary setting is judged from each document.",
@@ -505,7 +724,7 @@ export function seedPlanningTurns(): components["schemas"]["PlanningTranscriptTu
       completed_at: "2026-07-18T09:03:16Z",
     },
     {
-      client_turn_id: MOCK_PLANNING_TURN_IDS.failed,
+      client_turn_id: MOCK_TASK_AGENT_TURN_IDS.failed,
       turn_index: 3,
       user_message: "Also fold in whether family-support programmes should be a separate lever.",
       reply: null,
@@ -516,4 +735,177 @@ export function seedPlanningTurns(): components["schemas"]["PlanningTranscriptTu
       completed_at: "2026-07-21T08:58:03Z",
     },
   ];
+}
+
+// --- The options-scoping baseline gate (task 044, Phase 5.5) -------------
+
+export const MOCK_BASELINE_CHECK_IN_ID = "4c1acbe7-c4a1-4e0b-8d5a-bb25ea2ef635";
+
+const MOCK_SCOPING_TURN_IDS = {
+  plan: "60000000-0000-4000-8000-000000000011",
+  answer: "60000000-0000-4000-8000-000000000012",
+  decision: "60000000-0000-4000-8000-000000000013",
+} as const;
+
+/** The gate's key assumption, quoted by the card and by the seeded answer. */
+const MOCK_KEY_ASSUMPTION =
+  "Careers advice reaches the young people already in school, not the ones who have already dropped out.";
+
+/**
+ * The baseline gate's check-in (`baseline_confirm`) — the one steer point on
+ * the scoping lattice. Its bundle carries what the card shows: the baseline's
+ * key assumption and the four plan settings the walk ran from.
+ */
+export const mockBaselineGateCheckIn: components["schemas"]["CheckInOut"] = {
+  check_in_id: MOCK_BASELINE_CHECK_IN_ID,
+  kind: "baseline_confirm",
+  boundary: "after_component",
+  component: "synthesise",
+  stage: "synthesise",
+  render: [
+    "Confirm the plan against the baseline",
+    `Key assumption: ${MOCK_KEY_ASSUMPTION}`,
+    "Settings",
+    "Target unit: 16-24 year-olds at risk of becoming NEET",
+    "Where: United Kingdom",
+    "Outcomes: NEET rate at 6 months; Sustained employment or training at 12 months",
+    "Depth: standard",
+  ].join("\n"),
+  options: [
+    {
+      id: "confirm_plan",
+      label: "Confirm plan and build longlist",
+      description: "Accept the plan as it stands and go on to the longlist.",
+      requires_user_input: false,
+      suggested: false,
+      why: null,
+      endorsement: null,
+    },
+    {
+      id: "change_plan",
+      label: "Change the plan",
+      description: "Stop here and edit the plan; the baseline you have read is kept.",
+      requires_user_input: false,
+      suggested: false,
+      why: null,
+      endorsement: null,
+    },
+  ],
+  triggers: [],
+  bundle: {
+    key_assumption: MOCK_KEY_ASSUMPTION,
+    settings: {
+      target_unit: "16-24 year-olds at risk of becoming NEET",
+      where: "United Kingdom",
+      outcomes: ["NEET rate at 6 months", "Sustained employment or training at 12 months"],
+      depth: "standard",
+    },
+  },
+  segment_reentry_allowed: false,
+  rerun_component: "synthesise",
+  status: "pending",
+  created_at: "2026-07-21T09:44:00Z",
+  sequence: 44,
+};
+
+/** The scoping task's own seed transcript: the one planning turn that made
+ *  the ready scoping plan. The answer and decision turns are not seeded —
+ *  the mock mints them from real requests at the gate (a question posted
+ *  while paused comes back an `answer` turn; the card's decision appends a
+ *  `decision` turn), so mock mode shows the projection the way the backend
+ *  produces it rather than as pre-baked history. */
+export function seedScopingTaskAgentTurns(): components["schemas"]["TaskAgentTranscriptTurnOut"][] {
+  return [
+    {
+      client_turn_id: MOCK_SCOPING_TURN_IDS.plan,
+      turn_index: 1,
+      user_message: "How can we reduce the number of young people not in education, employment or training?",
+      reply: "I've drafted a scoping plan. Review it, then build the baseline.",
+      suggestions: [],
+      part: null,
+      capability: "options_scoping",
+      kind: "reply",
+      status: "completed",
+      created_at: "2026-07-21T09:10:00Z",
+      completed_at: "2026-07-21T09:10:06Z",
+    },
+  ];
+}
+
+/** A grounded answer to a question asked at the gate: one claim, one
+ *  citation, rendered by the chat's own citation renderer. */
+export function mockScopingAnswerTurn(
+  clientTurnId: string,
+  message: string,
+  turnIndex: number,
+  createdAt: string,
+): components["schemas"]["TaskAgentTranscriptTurnOut"] {
+  const answer =
+    "The baseline holds one study of school-based careers advice; it does not cover young people who have already left education [1].";
+  return {
+    client_turn_id: clientTurnId,
+    turn_index: turnIndex,
+    user_message: message,
+    reply: answer,
+    suggestions: [],
+    part: null,
+    capability: "options_scoping",
+    kind: "answer",
+    answer: {
+      citations: [
+        {
+          n: 1,
+          id: MOCK_CHAT_CITATION_CHUNK_ID,
+          chunk_id: MOCK_CHAT_CITATION_CHUNK_ID,
+          source_id: mockEvidence[0].source_id,
+          source_title: mockEvidence[0].title,
+          quote: MOCK_CHAT_CITATION_QUOTE,
+        },
+      ],
+      claims: [
+        {
+          claim_id: MOCK_CHAT_CLAIM_ID,
+          text: "The baseline holds one study of school-based careers advice",
+          span: [0, 57],
+          citation_ns: [1],
+        },
+      ],
+      enrichment: null,
+      handoff: null,
+      warning_not_evidence_checked: false,
+      stopped_before_evidence_check: false,
+    },
+    status: "completed",
+    created_at: createdAt,
+    completed_at: createdAt,
+  };
+}
+
+/** The decision turn the gate's card decision leaves in the thread. */
+export function mockScopingDecisionTurn(
+  optionId: string,
+  label: string,
+  turnIndex: number,
+  createdAt: string,
+): components["schemas"]["TaskAgentTranscriptTurnOut"] {
+  return {
+    client_turn_id: MOCK_SCOPING_TURN_IDS.decision,
+    turn_index: turnIndex,
+    user_message: label,
+    reply: null,
+    suggestions: [],
+    part: null,
+    capability: "options_scoping",
+    kind: "decision",
+    decision: {
+      option_id: optionId,
+      label,
+      check_in_id: MOCK_BASELINE_CHECK_IN_ID,
+      capability_run_id: MOCK_RUN_ID,
+      plan_version: 1,
+    },
+    status: "completed",
+    created_at: createdAt,
+    completed_at: createdAt,
+  };
 }

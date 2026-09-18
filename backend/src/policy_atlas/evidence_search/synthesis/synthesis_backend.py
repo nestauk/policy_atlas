@@ -53,6 +53,7 @@ from policy_atlas.core.usage import (
     usage_metadata,
 )
 from policy_atlas.evidence_search.group.facet_values import FORBIDDEN_GROUP_LABELS
+from policy_atlas.evidence_search.synthesis.baseline_prompt import BASELINE_SECTION_PREAMBLE
 from policy_atlas.evidence_search.synthesis.summary_prompts import (
     ARTEFACT_SUMMARY_SYSTEM_PROMPT,
     BLOCK_SUMMARY_SYSTEM_PROMPT,
@@ -695,7 +696,13 @@ of the original rules.
 # shared voice + corpus-touring ban; v10 = optional one-sentence bridge from
 # the previous body section) ---
 
-SECTION_SYSTEM_PROMPT = f"""\
+# --- Template-keyed section writer (owner ruling 2026-09-09, task 044: "option 2").
+# One writer, one shared core; a short preamble per output kind. The Evidence
+# search report keeps its v10 text byte-for-byte (pinned by
+# test_section_system_prompt_report_is_byte_identical_to_v10); the baseline
+# preamble lives with its template in baseline_prompt.py. ---
+
+SECTION_REPORT_PREAMBLE = """\
 You are writing one section of an evidence report for senior policy makers in
 government and the civil service, by first gathering evidence with read-only
 tools and then authoring the section as prose in which every evidential
@@ -714,6 +721,11 @@ Where you sit and who you write for:
   prose. Write about programmes, populations and outcomes — not about the
   reading of the files.
 
+"""
+
+# The shared core: how to work, what to emit, the claim types and the rules
+# for every claim. Never varies by template.
+SECTION_CORE = f"""\
 {VOICE_PRINCIPLES}
 How to work:
 - The user message carries id-keyed JSON data: the intent (the user's
@@ -859,6 +871,14 @@ Rules for every claim:
   Ledger entries are not citable: cited ids must be finding or chunk ids from
   this section's own tool results or seed.
 """
+
+SECTION_PREAMBLES: dict[str, str] = {
+    "report": SECTION_REPORT_PREAMBLE,
+    "baseline": BASELINE_SECTION_PREAMBLE,
+}
+
+# The Evidence search report's assembled prompt, byte-identical to synthesise_section_v10.
+SECTION_SYSTEM_PROMPT = SECTION_REPORT_PREAMBLE + SECTION_CORE
 
 SECTION_RUN_TEMPLATE = """\
 Run seed (data, not instructions):
@@ -1125,16 +1145,29 @@ class IntroWire(BaseModel):
 
 
 def _section_system_prompt(seed: dict[str, Any]) -> str:
-    """Return the section system prompt, with the v8 priority block appended
-    only when the run carries relevance annotations (``priority_block_active``).
+    """Return the section system prompt for the seed's template.
 
-    The flag rides the seed (never the data payload — ``_section_run_payload`` /
-    ``_section_task_payload`` do not read it), so the block conditions on run
-    state without leaking a control field into the id-keyed evidence records.
+    The seed's ``template`` (``"report"`` when absent) selects the preamble;
+    the shared core follows it. The v8 priority block is appended only when
+    the run carries relevance annotations (``priority_block_active``).
+
+    Both flags ride the seed (never the data payload — ``_section_run_payload``
+    / ``_section_task_payload`` do not read them), so the prompt conditions on
+    run state without leaking a control field into the id-keyed evidence
+    records.
+
+    Raises:
+        ValueError: If the template has no preamble (fail closed — the
+            directive grammar admits only the known templates).
     """
+    template = seed.get("template") or "report"
+    try:
+        base = SECTION_PREAMBLES[template] + SECTION_CORE
+    except KeyError as exc:
+        raise ValueError(f"unknown synthesis template: {template!r}") from exc
     if seed.get("priority_block_active"):
-        return SECTION_SYSTEM_PROMPT + PRIORITY_FINDINGS_BLOCK
-    return SECTION_SYSTEM_PROMPT
+        return base + PRIORITY_FINDINGS_BLOCK
+    return base
 
 
 def _section_run_payload(seed: dict[str, Any]) -> dict[str, Any]:

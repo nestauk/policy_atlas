@@ -10,7 +10,7 @@ timestamp: 2026-07-12
 
 When a prompt gains a capability line (a new surface the model may use), audit the
 **existing** rules for one that legitimately routes asks *away* from it. The model can
-be principled-but-inconsistent: in 019's round 1, the planner correctly reasoned that
+be principled-but-inconsistent: in 019's round 1, the Task Agent correctly reasoned that
 an author-affiliation filter drops foreign-authored studies ABOUT a region — an honesty
 rule — and so fired the new `country_group` filter on only 1/5 group phrasings. The fix
 is not to weaken the honesty rule but to state the routing explicitly: which *reading*
@@ -40,5 +40,5 @@ interact as a system; a new rule's failure mode is usually an old rule's success
 
 - [019 verification.md § Planner replay](../tasks/019-folding-pass/verification.md)
   (two rounds, 15 probes; round-1 routing conflict, round-2 clean)
-- `src/policy_atlas/planner_prompt.py` (planner_v3 setting-vs-origin routing text)
+- `src/policy_atlas/task_agent_prompt.py` (planner_v3 setting-vs-origin routing text)
 - [prompting.md](../specs/system/prompting.md) (refine-replay loop method)

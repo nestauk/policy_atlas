@@ -17,8 +17,8 @@ from typing import Annotated, Any, Literal
 from pydantic import BaseModel, Field
 
 from .check_ins import CheckInOut
-from .planning import PlanDraft
 from .runs import RunStatus
+from .task_agent import PlanDraft, ScopingPlanDraft
 from .tasks import TaskStatus
 
 #: The pinned stable component-vocabulary stage keys (spec § SSE).
@@ -151,7 +151,8 @@ class PlanUpdatedFrame(_PersistedFrameBase):
     """A plan row supersession (new draft turn, or approval)."""
 
     type: Literal["plan.updated"]
-    plan: PlanDraft
+    plan: PlanDraft | None = None
+    scoping: ScopingPlanDraft | None = None
     version: int
 
 

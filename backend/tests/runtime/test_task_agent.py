@@ -1,4 +1,4 @@
-"""Tests for the planner backend seam."""
+"""Tests for the task_agent backend seam."""
 
 from __future__ import annotations
 
@@ -12,13 +12,13 @@ import pytest
 
 from policy_atlas.core import tracing
 from policy_atlas.evidence_search.extract.extract import KNOWN_PROFILE_IDS
-from policy_atlas.runtime.planner import (
-    OpenAIPlannerBackend,
-    PlannerBackend,
-    StubPlannerBackend,
+from policy_atlas.runtime.task_agent import (
+    OpenAITaskAgentBackend,
+    StubTaskAgentBackend,
+    TaskAgentBackend,
     _degrade_suggestions,
 )
-from policy_atlas.runtime.planner_prompt import (
+from policy_atlas.runtime.task_agent_prompt import (
     OECD_SETTING_CRITERION,
     PLANNER_PROMPT_VERSION,
     PLANNER_SYSTEM_PROMPT,
@@ -47,12 +47,12 @@ def _plan_from_draft(draft: PlanDraftWire) -> TaskPlan:
 # --- Stub turn shapes -------------------------------------------------------
 
 
-def test_planner_prompt_version_pinned() -> None:
+def test_task_agent_prompt_version_pinned() -> None:
     # planner_v11: APO source-collection restriction + 1000-char screening cap.
     assert PLANNER_PROMPT_VERSION == "planner_v11"
 
 
-def test_planner_prompt_teaches_apo_source_restriction() -> None:
+def test_task_agent_prompt_teaches_apo_source_restriction() -> None:
     assert 'publisher_source: "apo"' in PLANNER_SYSTEM_PROMPT
     assert "Australian Policy Online" in PLANNER_SYSTEM_PROMPT
     assert "backend_scope: grey_lit_only" in PLANNER_SYSTEM_PROMPT
@@ -60,12 +60,12 @@ def test_planner_prompt_teaches_apo_source_restriction() -> None:
     assert "Never invent other collection values" in PLANNER_SYSTEM_PROMPT
 
 
-def test_planner_prompt_screening_cap_wording() -> None:
+def test_task_agent_prompt_screening_cap_wording() -> None:
     assert "at most 1000 characters" in PLANNER_SYSTEM_PROMPT
     assert "under 200 characters" not in PLANNER_SYSTEM_PROMPT
 
 
-def test_planner_prompt_defaults_source_origin_to_oecd_members() -> None:
+def test_task_agent_prompt_defaults_source_origin_to_oecd_members() -> None:
     assert 'set country_group to the pinned label "OECD members"' in PLANNER_SYSTEM_PROMPT
     assert "publisher / author-affiliation" in PLANNER_SYSTEM_PROMPT
     assert "not study setting" in PLANNER_SYSTEM_PROMPT
@@ -76,14 +76,14 @@ def test_planner_prompt_defaults_source_origin_to_oecd_members() -> None:
     )
 
 
-def test_planner_prompt_plain_language_and_ready_update() -> None:
+def test_task_agent_prompt_plain_language_and_ready_update() -> None:
     assert "## How to talk" in PLANNER_SYSTEM_PROMPT
     assert "Never name internals" in PLANNER_SYSTEM_PROMPT
     assert 'Never say "nothing runs until you start it"' in PLANNER_SYSTEM_PROMPT
     assert "on an update" in PLANNER_SYSTEM_PROMPT
 
 
-def test_planner_prompt_thoroughness_screen_words_and_caps() -> None:
+def test_task_agent_prompt_thoroughness_screen_words_and_caps() -> None:
     assert 'label "Standard report"' in PLANNER_SYSTEM_PROMPT
     assert 'label "Detailed report"' in PLANNER_SYSTEM_PROMPT
     assert "up to 50 relevant results per database" in PLANNER_SYSTEM_PROMPT
@@ -95,7 +95,7 @@ def test_planner_prompt_thoroughness_screen_words_and_caps() -> None:
 
 
 def test_stub_first_turn_asks_shape_question_with_three_suggestions() -> None:
-    backend = StubPlannerBackend()
+    backend = StubTaskAgentBackend()
     turn = backend.plan_turn([_turn("Do school meals improve attainment?")], None)
 
     assert turn.ready is False
@@ -107,7 +107,7 @@ def test_stub_first_turn_asks_shape_question_with_three_suggestions() -> None:
 
 
 def test_stub_second_turn_returns_complete_ready_draft() -> None:
-    backend = StubPlannerBackend()
+    backend = StubTaskAgentBackend()
     turns = [
         _turn("Do school meals improve attainment?"),
         _turn("A one-off briefing", role="planner"),
@@ -127,11 +127,11 @@ def test_stub_second_turn_returns_complete_ready_draft() -> None:
     assert set(draft.component_rationale) == set(draft.components)
     assert draft.steering_mode == "unattended"
     assert draft.grouping_facets == ["outcome"]
-    assert draft.assumptions == ["Stub planner: deterministic fixture proposal."]
+    assert draft.assumptions == ["Stub task_agent: deterministic fixture proposal."]
 
 
 def test_stub_landscape_sentinel_yields_landscape_draft() -> None:
-    backend = StubPlannerBackend()
+    backend = StubTaskAgentBackend()
     turns = [
         _turn("Map the evidence base on school meals."),
         _turn("landscape only", role="user"),
@@ -146,7 +146,7 @@ def test_stub_landscape_sentinel_yields_landscape_draft() -> None:
 
 
 def test_stub_is_deterministic() -> None:
-    backend = StubPlannerBackend()
+    backend = StubTaskAgentBackend()
     turns = [_turn("Do school meals improve attainment?")]
 
     first = backend.plan_turn(turns, None)
@@ -156,15 +156,15 @@ def test_stub_is_deterministic() -> None:
 
 
 def test_stub_satisfies_protocol() -> None:
-    backend: PlannerBackend = StubPlannerBackend()
-    assert isinstance(backend, StubPlannerBackend)
+    backend: TaskAgentBackend = StubTaskAgentBackend()
+    assert isinstance(backend, StubTaskAgentBackend)
 
 
 # --- Stub draft round-trips into a valid TaskPlan -----------------
 
 
 def test_stub_ready_draft_round_trips_into_task_plan() -> None:
-    backend = StubPlannerBackend()
+    backend = StubTaskAgentBackend()
     turns = [
         _turn("Do school meals improve attainment?"),
         _turn("A one-off briefing", role="planner"),
@@ -180,7 +180,7 @@ def test_stub_ready_draft_round_trips_into_task_plan() -> None:
 
 
 def test_stub_landscape_draft_round_trips_into_task_plan() -> None:
-    backend = StubPlannerBackend()
+    backend = StubTaskAgentBackend()
     turns = [
         _turn("Map the evidence base on school meals."),
         _turn("landscape only", role="user"),
@@ -194,8 +194,8 @@ def test_stub_landscape_draft_round_trips_into_task_plan() -> None:
     assert plan.grouping_facets is None
 
 
-def test_planner_draft_with_select_at_standard_round_trips_into_task_plan() -> None:
-    """019 select-at-standard regrade: a planner draft may compose select at
+def test_task_agent_draft_with_select_at_standard_round_trips_into_task_plan() -> None:
+    """019 select-at-standard regrade: a task_agent draft may compose select at
     standard depth (without the findings chain) and still validate.
     """
     draft = PlanDraftWire(
@@ -220,7 +220,7 @@ def test_planner_draft_with_select_at_standard_round_trips_into_task_plan() -> N
     assert "group" not in plan.components
 
 
-def test_planner_draft_extract_profiles_round_trips_into_task_plan() -> None:
+def test_task_agent_draft_extract_profiles_round_trips_into_task_plan() -> None:
     draft = PlanDraftWire(
         title="Evidence review",
         question="Do school meals improve attainment?",
@@ -306,17 +306,17 @@ def test_degrade_no_question_forces_suggestions_none() -> None:
 # --- OpenAI backend key resolution (no network) -----------------------------
 
 
-def test_openai_planner_backend_satisfies_protocol(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_openai_task_agent_backend_satisfies_protocol(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-    backend: PlannerBackend = OpenAIPlannerBackend(api_key="sk-test")
-    assert isinstance(backend, OpenAIPlannerBackend)
+    backend: TaskAgentBackend = OpenAITaskAgentBackend(api_key="sk-test")
+    assert isinstance(backend, OpenAITaskAgentBackend)
 
 
-def test_openai_planner_backend_requires_api_key(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_openai_task_agent_backend_requires_api_key(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
 
     with pytest.raises(RuntimeError, match="OPENAI_API_KEY"):
-        OpenAIPlannerBackend()
+        OpenAITaskAgentBackend()
 
 
 class _FakeSpan:
@@ -344,7 +344,7 @@ class _FakeLangfuse:
         return _FakeObservation()
 
 
-def test_openai_planner_turn_propagates_session_before_opening_the_span(
+def test_openai_task_agent_turn_propagates_session_before_opening_the_span(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """The installed SDK (4.13.0) has no ``update_current_trace`` — the real seam is
@@ -368,7 +368,7 @@ def test_openai_planner_turn_propagates_session_before_opening_the_span(
         suggested_answers=None,
         ready=False,
     )
-    backend: OpenAIPlannerBackend = object.__new__(OpenAIPlannerBackend)
+    backend: OpenAITaskAgentBackend = object.__new__(OpenAITaskAgentBackend)
     fake_langfuse = _FakeLangfuse()
     original_start = fake_langfuse.start_as_current_observation
 
@@ -390,8 +390,8 @@ def test_openai_planner_turn_propagates_session_before_opening_the_span(
 
 
 def test_scrub_turn_removes_nul_from_nested_plan_draft() -> None:
-    from policy_atlas.runtime.planner import _scrub_turn
-    from policy_atlas.runtime.planner_prompt import PlanDraftWire, PlannerTurnWire
+    from policy_atlas.runtime.task_agent import _scrub_turn
+    from policy_atlas.runtime.task_agent_prompt import PlanDraftWire, PlannerTurnWire
 
     turn = PlannerTurnWire(
         reply="ok\x00",
@@ -414,8 +414,8 @@ def test_scrub_turn_removes_nul_from_nested_plan_draft() -> None:
 def test_scrub_turn_removes_nul_from_part() -> None:
     import json
 
-    from policy_atlas.runtime.planner import _scrub_turn
-    from policy_atlas.runtime.planner_prompt import (
+    from policy_atlas.runtime.task_agent import _scrub_turn
+    from policy_atlas.runtime.task_agent_prompt import (
         PartChipWire,
         PartOptionWire,
         PartProposalWire,

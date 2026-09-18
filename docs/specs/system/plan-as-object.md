@@ -31,9 +31,13 @@ may be refined as implementation lands.
   capability agent's just-in-time selection is the **commit** (the execution-bearing layer that
   compiles, by construction). Two tiers, staged compilation: the plan spine's
   sequence/wiring compiles up front; each commit compiles **just-in-time** once its inputs exist.
-- **Plan-field ↔ chat-turn provenance** — each compiled field back-references the conversation
-  turn(s) that produced it (raw prose retained behind the structured field), so the plan carries
-  its own "why" into the decision log without coupling compilation to free text.
+- **Plan ↔ chat-turn provenance at version grain** *(owner ruling 2026-09-09, task 044 contract,
+  revising the 2026-06 field-grain wording)* — each plan **version** records the conversation turn
+  that produced it (`source_turn_index`), the transcript is durable and ordered, and Your-context
+  entries carry their own turn; so "when did the user set X" is answerable between two versions
+  without a per-field reference. Owner: "do we even really need that?" — nothing in the product
+  reads a per-field reference and neither plan carries one. Field grain stays open as a refinement
+  if a reader asks for it.
 
 ## What a plan contains 🟡 *(candidate, per §5)*
 
@@ -111,9 +115,23 @@ referent). Instead:
   reads every document whose evaluated mention belongs to the option; a high safety ceiling (a
   plan setting decided in task 3, of the order of 25 documents) applies stratified selection only
   above it, with omissions listed. Time is managed by **design targets verified during
-  development, never by run-time cut-offs**: the baseline's section list is graded by depth as the
-  Evidence search's reports are — a named subset of its ruled sections at **rapid, within about two
-  minutes of compute**; all eight at **standard, within about five** — and the option profile's
+  development, never by run-time cut-offs**. *(Revised by the owner on 2026-09-09 at the task 044
+  contract: the baseline is **not graded by depth** — dropping two of eight sections saved about
+  95 s of a roughly 380 s sequential write against a retrieval spine of about 4.6 min, "not a
+  difference the user feels", so the section count is not the lever. *Re-revised (owner ruling 2026-09-17, task 044 phase 8: "Go with options 2 and 5, targets 20 and 10"; the rapid section merge was measured, then reverted the same day: "Revert the merge, seven sections at both depths"): the measured
+  standard baselines ran 4.3 to 7.5 minutes, so depth now sets the acquisition target (20 · 10 **per search backend**; owner ruling 2026-09-18) and
+  the proposed-section allowance (two · none); the eight sections stay the same at both depths — a
+  five-section rapid merge was measured at 168 s and 189 s against 183 s for seven and dropped — and
+  the wider classify and ingest fan-out is the other lever taken.* The baseline has **one measured
+  compute target** per depth, verified on the NEET question during the build. The levers are a small acquisition target, a per-section
+  tool-call cap; writing is **sequential**, as the Evidence search writes today — the durability
+  contract's "never fan out the conclusion" holds — and a development-time **feasibility check**
+  compares it with a parallel version before the baseline is finalised (owner, 2026-09-09: "let's go
+  with sequential, but we should also do some sort of test comparing it to a parallel version
+  before finalising"); a parallel mode in the product would be a revision of that contract. Later levers, recorded in `docs/deferred.md`: showing
+  sections as they finish; starting the longlist's retrieval while the user reads the baseline;
+  a faster model tier for the sections when Bedrock lands, quality-tested first. The owner's
+  expectation for a whole rapid path is about 15 to 20 minutes.)* The option profile's
   targets are set in task 3. A section is never left incomplete for time; "not found" is a content
   state (OS ruling 40). No rapid number is promised until the real path is timed; the plan shows a
   coarse time band (OS open question 3 stays open).

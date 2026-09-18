@@ -298,7 +298,7 @@ task already extracted is a separate Evidence search change, not needed by optio
   `not_selected` (doc-level — screened-in but not chosen) · `not_extracted` (field-level) ·
   `unclear` · `extraction_failed`. A source that **reports** a null is a **finding**; a source
   that **doesn't mention** an outcome is **coverage**. (Consumed by the gap-provenance rule in
-  [provenance-grounding.md](provenance-grounding.md) and the EB
+  [provenance-grounding.md](provenance-grounding.md) and the ES
   [provenance.md](../capabilities/evidence-search/provenance.md).)
 - **Hybrid-queryable dimensions**: ⏸ **deferred behind the dimension-promotion gate for ALL
   dimensions, `intervention`/`outcome` included** (owner adjudication at the task-022
@@ -318,7 +318,7 @@ land. arch §3.5–§3.6.)*
 
 ### The option entity (declared 2026-09-07 for options scoping; OS ruling 44)
 
-EB clusters are persisted per run (`characterisation_result` holds each run's themes and
+ES clusters are persisted per run (`characterisation_result` holds each run's themes and
 memberships as JSON; `source_tag` rows carry the theme label per document) but are deliberately
 **never promoted to canonical, queryable state**: there is no theme table, memberships belong to the
 run that computed them, and a re-run replaces rather than matches them, so a cluster has no identity
@@ -346,7 +346,7 @@ direction; scoping → search with an option is a full-run child; without one, a
 a scoping task); there is **no purpose column** until two links between the same kinds of task mean
 different things. Links are **many-to-many**: a task may read from several linked tasks and be read
 by several. Where several tasks feed one, the plan takes the **user's own ask** and the linked
-tasks' questions are offered to the planning conversation as context; the pool is the union; each
+tasks' questions are offered to the Task Agent conversation as context; the pool is the union; each
 suggestion carries the task it came from *(owner amendment 2026-09-09)*. Two tasks may be linked
 only while they **share a project**, so they share visibility and organisation; a link that stops
 satisfying this is flagged, not broken.

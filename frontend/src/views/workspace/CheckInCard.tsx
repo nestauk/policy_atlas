@@ -10,7 +10,16 @@ import { Card } from "../../ui/brand/Card";
 import { Chip } from "../../ui/brand/Chip";
 import { useToast } from "../../ui/radix/Toast";
 import { CheckInBundle, type SectionRow, type ThemeRename } from "./CheckInBundle";
-import { presentCheckInRender, triggerCopy } from "./checkInPresentation";
+import {
+  BASELINE_GATE_HEADING,
+  BASELINE_GATE_KIND,
+  BASELINE_KEY_ASSUMPTION_ABSENT,
+  BASELINE_KEY_ASSUMPTION_LABEL,
+  BASELINE_SETTINGS_HEADING,
+  baselineGateCard,
+  presentCheckInRender,
+  triggerCopy,
+} from "./checkInPresentation";
 import { STEERING_MODE_LABEL, vocabLabel } from "./planVocabulary";
 
 interface CompiledSteer {
@@ -182,6 +191,78 @@ export function CheckInCard({
     );
   }
 
+  const bundleRecord =
+    checkIn.bundle !== null && typeof checkIn.bundle === "object" && !Array.isArray(checkIn.bundle)
+      ? (checkIn.bundle as Record<string, unknown>)
+      : null;
+
+  // The options-scoping baseline gate (task 044, D12) is a decision, not a
+  // steer: two server-supplied options end the walk one way or the other,
+  // neither carries a delta, and there is nothing here to compile free text
+  // into. Its card is therefore the gate's own quiet read — the baseline's
+  // key assumption and the settings the walk ran from — over the same
+  // `sendOption` path every other option uses. Questions about the baseline
+  // go to the Task Agent composer, which stays open at this pause.
+  if (checkIn.kind === BASELINE_GATE_KIND) {
+    const card = baselineGateCard(bundleRecord);
+    return (
+      <Card aria-live="polite" className="anim-glow border-l-2 border-l-orange p-5">
+        <h3 className="font-display text-lead font-bold text-navy">{BASELINE_GATE_HEADING}</h3>
+        {card.keyAssumption === null ? (
+          <p className="mt-3 text-body text-grey">{BASELINE_KEY_ASSUMPTION_ABSENT}</p>
+        ) : (
+          <>
+            <p className="mt-3 text-meta font-bold uppercase tracking-[0.06em] text-grey">
+              {BASELINE_KEY_ASSUMPTION_LABEL}
+            </p>
+            <blockquote className="mt-1 max-w-prose-measure border-l-2 border-l-line pl-2.5 text-body italic text-ink">
+              {scrub(card.keyAssumption)}
+            </blockquote>
+          </>
+        )}
+        {card.settings.length > 0 && (
+          <>
+            <p className="mt-4 text-meta font-bold uppercase tracking-[0.06em] text-grey">
+              {BASELINE_SETTINGS_HEADING}
+            </p>
+            <dl className="mt-1 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5">
+              {card.settings.map(({ label, value }) => (
+                <div key={label} className="contents">
+                  <dt className="text-caption text-grey">{label}</dt>
+                  <dd className="text-body text-ink">{scrub(value)}</dd>
+                </div>
+              ))}
+            </dl>
+          </>
+        )}
+        <div className="mt-4 flex flex-col gap-2">
+          {(checkIn.options ?? []).map((option, index) => (
+            <div key={option.id} className="flex flex-col gap-1">
+              <div>
+                <Button
+                  variant={index === 0 ? "primary" : "secondary"}
+                  size="sm"
+                  disabled={answer.isPending}
+                  onClick={() => sendOption(option.id)}
+                >
+                  {scrub(option.label)}
+                </Button>
+              </div>
+              {option.description.length > 0 && (
+                <p className="text-body leading-relaxed text-grey">{scrub(option.description)}</p>
+              )}
+            </div>
+          ))}
+        </div>
+        {notice !== null && (
+          <p role="alert" className="mt-3 text-body text-red">
+            {notice}
+          </p>
+        )}
+      </Card>
+    );
+  }
+
   const triggerLines = triggerCopy(checkIn.triggers);
   // Suggested options (authored from this run's results) get their own block;
   // the edit_sections channel renders as the bundle's inline row editing, not
@@ -193,11 +274,6 @@ export function CheckInCard({
   const suggestedOptions = allOptions.filter((option) => option.suggested);
   const editChannel = allOptions.find((option) => option.id === "edit_sections");
   const sectionsEdited = editedSections !== null && editChannel !== undefined;
-
-  const bundleRecord =
-    checkIn.bundle !== null && typeof checkIn.bundle === "object" && !Array.isArray(checkIn.bundle)
-      ? (checkIn.bundle as Record<string, unknown>)
-      : null;
 
   return (
     <Card aria-live="polite" className="anim-glow border-l-2 border-l-orange p-5">

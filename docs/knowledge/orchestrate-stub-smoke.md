@@ -31,7 +31,7 @@ printf 'What works to reduce childhood obesity?\n1\napprove\n1\n1\n' \
     uv run python -m policy_atlas.runtime.agent
 ```
 
-- No `OPENAI_API_KEY` ⇒ stub mode: `StubPlannerBackend` + empty search backends (the
+- No `OPENAI_API_KEY` ⇒ stub mode: `StubTaskAgentBackend` + empty search backends (the
   harness default — acquire adds nothing) + the seeded synthetic stub corpus. Zero
   egress. Success = exit 0, `Run status: succeeded`, `Artefact minted: True`. The
   sanitized provider-record fixtures live test-side (`tests/provider_fixtures.py` +

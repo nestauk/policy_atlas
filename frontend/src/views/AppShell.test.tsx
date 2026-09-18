@@ -27,7 +27,12 @@ const meState = vi.hoisted(() => ({
     is_admin: false,
   },
 }));
-const taskState = vi.hoisted(() => ({ isOwner: true, access: "full", pending: false }));
+const taskState = vi.hoisted(() => ({
+  isOwner: true,
+  access: "full",
+  pending: false,
+  capability: "evidence_search" as string | undefined,
+}));
 
 // Both mocked as spies (task 037 review fix) so a describe block below can
 // assert neither is invoked while the task query is pending — a real
@@ -46,6 +51,7 @@ vi.mock("../api/queries", () => ({
           visibility: "org",
           is_owner: taskState.isOwner,
           access: taskState.access,
+          capability: taskState.capability,
         }
       : undefined,
   }),
@@ -110,6 +116,7 @@ describe("AppShell — pending check-in nav badge (027 strand 14)", () => {
   beforeEach(() => {
     authState.signOut.mockClear();
     taskState.isOwner = true;
+    taskState.capability = "evidence_search";
   });
 
   it("shows the Workspace nav badge when a check-in is pending outside the workspace", () => {
@@ -239,6 +246,19 @@ describe("AppShell — global chrome", () => {
     expect(taskNav).toHaveTextContent("Result");
   });
 
+  it("shows the task's capability word in the header (task 044, X12)", () => {
+    renderShell(`/tasks/${TASK_ID}/sources`);
+    const taskNav = screen.getByRole("navigation", { name: "Task" });
+    expect(taskNav).toHaveTextContent("Evidence search");
+  });
+
+  it("shows Options scoping for a scoping task", () => {
+    taskState.capability = "options_scoping";
+    renderShell(`/tasks/${TASK_ID}/sources`);
+    const taskNav = screen.getByRole("navigation", { name: "Task" });
+    expect(taskNav).toHaveTextContent("Options scoping");
+  });
+
   it("hides the task bar on workspace-level pages", () => {
     renderShell("/projects");
     expect(screen.queryByRole("navigation", { name: "Task" })).not.toBeInTheDocument();
@@ -256,7 +276,7 @@ describe("AppShell — global chrome", () => {
   it("does not pin the site footer under the Plan tab (it scrolls with the chat)", () => {
     renderShell(`/tasks/${TASK_ID}`);
     // AppShell stubs the Plan outlet — the real footer mounts inside
-    // PlanningPane's transcript scroll, not as a shell chrome strip.
+    // TaskAgentPane's transcript scroll, not as a shell chrome strip.
     expect(screen.queryByRole("contentinfo")).not.toBeInTheDocument();
   });
 

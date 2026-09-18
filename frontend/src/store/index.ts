@@ -1,6 +1,6 @@
 export { hasTerminalPartialLiveArtefact } from "./reducer";
-export { usePlanningTranscript } from "./transcript";
-export { composePlanningThread } from "./thread";
+export { useTaskAgentTranscript } from "./transcript";
+export { composeTaskAgentThread, taskAgentAnswerRow, taskAgentTurnKind } from "./thread";
 export { useChatConversation, useComposerDraft } from "./conversations";
 export { RunStreamProvider, useRunStream } from "./useRunStream";
 export { createInitialRunStreamState } from "./types";
@@ -13,17 +13,20 @@ export type {
   StageEntry,
   StageStatus,
 } from "./types";
-export type { OptimisticPlanningTurn } from "./transcript";
+export type { OptimisticTaskAgentTurn } from "./transcript";
 export type {
   ChatConversationRow,
   ChatTurn,
   OptimisticChatTurn,
 } from "./conversations";
 export type {
-  PlanningThreadDecision,
-  PlanningThreadItem,
-  PlanningThreadRun,
-  PlanningThreadTurn,
+  GateThreadDecision,
+  GateThreadInput,
+  TaskAgentThreadCheckIn,
+  TaskAgentThreadDecision,
+  TaskAgentThreadItem,
+  TaskAgentThreadRun,
+  TaskAgentThreadTurn,
   RunThreadBoundary,
   RunThreadDecision,
 } from "./thread";

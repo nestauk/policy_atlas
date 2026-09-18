@@ -12,9 +12,9 @@ import { hasResult } from "./lifecycle";
 import { ChatPane } from "./workspace/chat/ChatPane";
 import { DraftChatPane } from "./workspace/chat/DraftChatPane";
 import { ConversationSidebar } from "./workspace/chat/ConversationSidebar";
-import { DRAFT_CHAT_ID, isPlanningConversation, taskAgentConversationId, useActiveConversation } from "./workspace/chat/conversationState";
+import { DRAFT_CHAT_ID, isTaskAgentConversation, taskAgentConversationId, useActiveConversation } from "./workspace/chat/conversationState";
 import { PlanDocument } from "./workspace/PlanDocument";
-import { PlanningPane } from "./workspace/PlanningPane";
+import { TaskAgentPane } from "./workspace/TaskAgentPane";
 import type { PlanOverlay } from "./workspace/planOverlay";
 
 /**
@@ -22,7 +22,7 @@ import type { PlanOverlay } from "./workspace/planOverlay";
  * the main column (owner ruling 2026-09-05, contract 038 § V8).
  *
  * The Task Agent is the default and carries no `?chat=`; it keeps this tab's
- * original layout, the planning pane with its plan-document rail. Any other
+ * original layout, the task_agent pane with its plan-document rail. Any other
  * chat takes the main column instead, and the rail — which belongs to the
  * plan, not to a chat — stays shut. The overlay (`ChatSidePanel`) is not
  * mounted here: this sidebar is what it would have been.
@@ -35,10 +35,10 @@ export function WorkspaceView() {
   const conversations = useConversations(taskId, { status: "active" });
   const rows = conversations.data?.data ?? [];
   const artefact = useArtefact(taskId);
-  // A planning id in the URL (a deep link, or the overlay's own selection
+  // A task_agent id in the URL (a deep link, or the overlay's own selection
   // carried over) reads as the Task Agent: the pane renders the Task's
-  // planning thread, never one lineage on its own.
-  const onTaskAgent = activeConversationId === null || isPlanningConversation(activeConversationId, rows);
+  // task_agent thread, never one lineage on its own.
+  const onTaskAgent = activeConversationId === null || isTaskAgentConversation(activeConversationId, rows);
   const chatId = onTaskAgent ? null : activeConversationId;
   const sectionTitles = (artefact.data?.sections ?? []).map((section) => section.title);
   // Chats need a result to ask about. Either source may be behind: the task
@@ -70,6 +70,7 @@ export function WorkspaceView() {
   // Undefined while `task` is still loading reads as "not the owner" —
   // fail closed, never grant the mutation surface before ownership is known.
   const isOwner = task.data?.is_owner === true;
+  const isScoping = task.data?.capability === "options_scoping";
   const openPlan = () => {
     setPlanPlacement("center");
     setPlanOpen(true);
@@ -82,7 +83,14 @@ export function WorkspaceView() {
       // The plan-start card (contract § 11 / rubric 37): folds `!isOwner`
       // into the same `readOnly` prop that already hides Edit/Start once a
       // run has consumed the plan — one mechanism, not a second gate.
-      readOnly={hasRun || !isOwner}
+      // Task 044 (deliverable 5): a scoping plan is NOT consumed by its
+      // baseline walk. "Change the plan" deliberately leaves it `approved`
+      // and editable, and the plan document's own start actions (Rebuild
+      // baseline · Confirm plan and build longlist) live behind this flag —
+      // the Evidence search rule would lock the plan the moment a walk had
+      // ever run, leaving that state unreachable. Only an ACTIVE walk locks
+      // a scoping plan; ownership still gates both.
+      readOnly={(isScoping ? runActive : hasRun) || !isOwner}
       onClose={() => setPlanOpen(false)}
       onDock={() => setPlanPlacement("side")}
       onStarted={() => {
@@ -125,7 +133,7 @@ export function WorkspaceView() {
             inert={railOpen && planPlacement === "center" ? true : undefined}
           >
             {chatId === null ? (
-              <PlanningPane
+              <TaskAgentPane
                 taskId={taskId}
                 runStatus={stream.run?.status}
                 stream={stream}
@@ -149,7 +157,7 @@ export function WorkspaceView() {
                 taskId={taskId}
                 conversationId={chatId}
                 sectionTitles={sectionTitles}
-                onOpenPlanning={() => setActiveConversation(null)}
+                onOpenTaskAgent={() => setActiveConversation(null)}
                 wide
                 onAtBottomChange={setFooterOpen}
               />

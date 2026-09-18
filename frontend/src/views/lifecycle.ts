@@ -32,7 +32,29 @@ const TAB_PATHS: Record<LifecycleTab, string> = {
  * That is the flag-don't-drop discipline, not a special case. Results stays
  * locked after a failed run — a partial write-up is still on Plan.
  */
-function openTabs(status: RunStatus | null | undefined): readonly LifecycleTab[] {
+function openTabs(
+  status: RunStatus | null | undefined,
+  options?: TabOptions,
+): readonly LifecycleTab[] {
+  const open = baseTabs(status);
+  // Task 044 (A17): an options-scoping task's Result is its baseline, and the
+  // baseline outlives the walk that wrote it — a walk aborted at the gate
+  // ("Change the plan") still leaves a readable profile behind. So Result
+  // opens as soon as a baseline exists, whatever the walk's ending. Task 2
+  // replaces the baseline here with the longlist.
+  if (options?.hasBaseline === true && !open.includes("result")) {
+    return LIFECYCLE_TABS.filter((tab) => tab === "result" || open.includes(tab));
+  }
+  return open;
+}
+
+/** Availability that run state alone cannot decide. */
+export interface TabOptions {
+  /** An options-scoping task with a baseline artefact written (task 044). */
+  hasBaseline?: boolean;
+}
+
+function baseTabs(status: RunStatus | null | undefined): readonly LifecycleTab[] {
   if (status === null || status === undefined) return ["agent", "share"];
   switch (status) {
     case "running":
@@ -55,13 +77,21 @@ export function hasResult(status: RunStatus | null | undefined): boolean {
 }
 
 /** Whether one lifecycle tab can be opened at this run state. */
-export function isTabOpen(tab: LifecycleTab, status: RunStatus | null | undefined): boolean {
-  return openTabs(status).includes(tab);
+export function isTabOpen(
+  tab: LifecycleTab,
+  status: RunStatus | null | undefined,
+  options?: TabOptions,
+): boolean {
+  return openTabs(status, options).includes(tab);
 }
 
 /** The five tabs with their label, path and availability at this run state. */
-export function lifecycleTabs(base: string, status: RunStatus | null | undefined) {
-  const open = openTabs(status);
+export function lifecycleTabs(
+  base: string,
+  status: RunStatus | null | undefined,
+  options?: TabOptions,
+) {
+  const open = openTabs(status, options);
   return LIFECYCLE_TABS.map((tab) => ({
     tab,
     label: LIFECYCLE_LABELS[tab],

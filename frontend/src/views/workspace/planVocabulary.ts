@@ -2,6 +2,7 @@ import type { components } from "../../api/gen/types";
 
 type PlanDraft = components["schemas"]["PlanDraft"];
 type ScopeConstraints = NonNullable<PlanDraft["scope_constraints"]>;
+type ScopingConstraint = components["schemas"]["ScopingConstraintOut"];
 
 /**
  * The locked plan vocabulary (RETRO §2; contract strand 2). Labels render
@@ -114,7 +115,7 @@ export const STEERING_MODE_LABEL: Record<string, string> = {
 /**
  * Display bands seeded from the runtime `TIME_BANDS` table — search effort
  * × analysis depth. Kept here so the plan panel can update the estimate
- * without a planner round-trip.
+ * without a task_agent round-trip.
  */
 const TIME_BANDS: Record<string, Record<string, string>> = {
   rapid: {
@@ -202,7 +203,7 @@ export function timeBandFor(effort: string, depth: string): string | null {
   return TIME_BANDS[effort]?.[depth] ?? null;
 }
 
-/** Run-block status labels for the planning thread's run divider ("Analysis
+/** Run-block status labels for the task_agent thread's run divider ("Analysis
  *  run — running/paused/completed/…"). Unknown status → the caller omits. */
 export const RUN_BLOCK_STATUS: Record<string, string> = {
   running: "running",
@@ -262,4 +263,69 @@ export function scopeChips(constraints?: ScopeConstraints | null): string[] {
           ].join(", ");
   if (geography) chips.push(`Geography: ${geography}`);
   return chips;
+}
+
+// --- Options-scoping plan vocabulary (task 044, D5/D6/A8/C18) -------------
+//
+// The scoping plan document mirrors the ES document's shape (§ Plan
+// document, contract deliverable 5) but every one of these words is new —
+// there is no ES precedent to reuse, so they are pinned here rather than
+// left to drift between the fixture, the tests and the component.
+
+/** Screen words for a plan field's origin tag — every scoping field carries
+ *  one (contract § Terms, "origin tag"). Unknown origin → omitted, the same
+ *  fail-soft rule `vocabLabel` uses elsewhere on this page. */
+export const TAG_ORIGIN_LABEL: Record<string, string> = {
+  from_your_question: "from your question",
+  assumed: "assumed, please check",
+  your_call: "your choice",
+};
+
+/** Depth screen labels — never the internal `rapid | standard` key (A8). */
+export const SCOPING_DEPTH_LABEL: Record<string, string> = {
+  rapid: "Rapid scoping",
+  standard: "Standard scoping",
+};
+
+/** Check-ins (steering mode) screen words for a scoping plan — its own
+ *  wording, distinct from the ES's `STEERING_MODE_LABEL` above. */
+export const SCOPING_STEERING_MODE_LABEL: Record<string, string> = {
+  frequent: "Walk me through it",
+  moderate: "At the key decisions",
+  minimal: "Only when something needs my judgment",
+  unattended: "Run through without asking",
+};
+
+/** "Your context" entry-type screen words. */
+export const YOUR_CONTEXT_TYPE_LABEL: Record<string, string> = {
+  present_fact: "present fact",
+  commitment: "commitment",
+};
+
+/** Checked-at screen words for the constraints table's third column. */
+export const CONSTRAINT_CHECKED_AT_LABEL: Record<string, string> = {
+  longlist: "Longlist",
+  assessment: "Assessment",
+  retrieval: "Retrieval",
+};
+
+/** The fixed "What happens" sentence per constraint kind (contract § Terms,
+ *  "constraint kind"). One sentence per kind, never composed from parts, so
+ *  it reads the same on every plan. */
+const CONSTRAINT_KIND_EFFECT: Record<ScopingConstraint["kind"], string> = {
+  requirement: "Options that conflict are excluded, with the reason shown. You can include them again.",
+  preference:
+    "Checked after assessment where costs or effects are comparable. Until then, a labelled guess that sorts and never excludes.",
+  evidence_restriction:
+    'Other documents are set aside and counted. Known options stay, marked "no in-scope evidence" if none of their evidence is in scope.',
+};
+
+/** One constraint row's "What happens" text, plus the not-yet-applied
+ *  language rider when the constraint names languages (C8). */
+export function constraintEffectLines(constraint: ScopingConstraint): string[] {
+  const lines = [CONSTRAINT_KIND_EFFECT[constraint.kind]];
+  if (constraint.languages != null && constraint.languages.length > 0) {
+    lines.push("Language: not yet applied at retrieval");
+  }
+  return lines;
 }
