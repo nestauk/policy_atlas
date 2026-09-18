@@ -333,17 +333,18 @@ def test_a_scoping_task_cannot_start_from_another_scoping_task(
         assert _task_count(engine, "Second hop") == 0
 
 
-def test_a_create_naming_more_than_three_sources_is_refused(
+def test_a_create_naming_more_than_ten_sources_is_refused(
     engine: Engine, tmp_path: Path
 ) -> None:
-    """X11: every linked source rides the Task Agent's context on every turn."""
+    """X11: every linked source rides the Task Agent's context on every turn;
+    ten is an accident guard, not a design limit (owner, 2026-09-18)."""
     with tenancy_client(tmp_path, count=1) as (client, [owner]):
         refused = _create(
             client,
             owner.headers,
             name="Too many sources",
             capability="options_scoping",
-            from_task_ids=[str(uuid.uuid4()) for _ in range(4)],
+            from_task_ids=[str(uuid.uuid4()) for _ in range(11)],
         )
         assert refused.status_code == 422, refused.text
         assert refused.json()["error"]["code"] == "validation_error"

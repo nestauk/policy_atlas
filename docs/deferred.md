@@ -2589,8 +2589,9 @@ deferred here — the owner ruled the font is fine for now.
     reasoning section that carries no reasoning claim (`reasoning_label_missing`); whether the
     label should also be visible in the prose is a template question for the eval slice (trace
     lane T1; Codex X8).
-  - *Linked context is capped at three sources per create* (`TaskCreate.from_task_ids`
-    `max_length=3`, Codex X11) — each linked report may add up to 60,000 characters to every
+  - *Linked context is capped at ten sources per create* (`TaskCreate.from_task_ids`
+    `max_length=10`, Codex X11; three at the review stack, raised to ten on the owner's ruling
+    2026-09-18 as an accident guard, not a design limit) — each linked report may add up to 60,000 characters to every
     Task Agent turn; raise the cap when a real need appears, with the prompt size measured.
     **Owner reading 2026-09-18:** the models in use have very large context windows, so the
     token count is not the concern at today's sizes; and the live traces show OpenAI's

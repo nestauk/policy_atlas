@@ -6038,7 +6038,7 @@
       },
       "TaskCreate": {
         "additionalProperties": false,
-        "description": "Inbound body for `POST /api/v1/tasks`.\n\nEverything a task needs to exist arrives in **one** request (C10). Before\ntask 044 the frontend created the task and then patched its projects,\nwhich cannot be atomic: a failed patch left a real, unassigned task, and\n\"Starts from\" would have had the same shape with a worse failure \u2014 a\nscoping task linked to nothing.\n\nArgs:\n    name: Task display name, 1-200 characters. Outer whitespace is\n        stripped before the length constraint is applied\n        (`str_strip_whitespace`).\n    question: Optional initial evidence question.\n    capability: The kind of work. Defaults to `evidence_search`, so every\n        pre-044 caller is unchanged.\n    project_ids: Projects to assign the new task to, under exactly the\n        rules `PATCH` applies (dedupe, colleague-mutation grade, the\n        multi-organisation 409, the visibility derivation). Empty means\n        unassigned, which is a normal state.\n    from_task_ids: Tasks this one starts from \u2014 one `task_link` row each,\n        written in the same transaction. At most three, because every\n        linked source is inherited into the Task Agent's context on every\n        turn. Refused 422 on an `evidence_search` create: in this slice a\n        Link is how a scoping task inherits an Evidence search, and the\n        reverse direction lands with task 5.",
+        "description": "Inbound body for `POST /api/v1/tasks`.\n\nEverything a task needs to exist arrives in **one** request (C10). Before\ntask 044 the frontend created the task and then patched its projects,\nwhich cannot be atomic: a failed patch left a real, unassigned task, and\n\"Starts from\" would have had the same shape with a worse failure \u2014 a\nscoping task linked to nothing.\n\nArgs:\n    name: Task display name, 1-200 characters. Outer whitespace is\n        stripped before the length constraint is applied\n        (`str_strip_whitespace`).\n    question: Optional initial evidence question.\n    capability: The kind of work. Defaults to `evidence_search`, so every\n        pre-044 caller is unchanged.\n    project_ids: Projects to assign the new task to, under exactly the\n        rules `PATCH` applies (dedupe, colleague-mutation grade, the\n        multi-organisation 409, the visibility derivation). Empty means\n        unassigned, which is a normal state.\n    from_task_ids: Tasks this one starts from \u2014 one `task_link` row each,\n        written in the same transaction. At most ten \u2014 a guard against an\n        accidental flood, not a design limit (owner, 2026-09-18): every\n        linked source is inherited into the Task Agent's context on every\n        turn, and the models' context windows carry that comfortably at\n        today's sizes. Refused 422 on an `evidence_search` create: in this slice a\n        Link is how a scoping task inherits an Evidence search, and the\n        reverse direction lands with task 5.",
         "properties": {
           "capability": {
             "default": "evidence_search",
@@ -6054,7 +6054,7 @@
               "format": "uuid",
               "type": "string"
             },
-            "maxItems": 3,
+            "maxItems": 10,
             "title": "From Task Ids",
             "type": "array"
           },

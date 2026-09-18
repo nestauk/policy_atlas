@@ -51,9 +51,11 @@ class TaskCreate(BaseModel):
             multi-organisation 409, the visibility derivation). Empty means
             unassigned, which is a normal state.
         from_task_ids: Tasks this one starts from — one `task_link` row each,
-            written in the same transaction. At most three, because every
+            written in the same transaction. At most ten — a guard against an
+            accidental flood, not a design limit (owner, 2026-09-18): every
             linked source is inherited into the Task Agent's context on every
-            turn. Refused 422 on an `evidence_search` create: in this slice a
+            turn, and the models' context windows carry that comfortably at
+            today's sizes. Refused 422 on an `evidence_search` create: in this slice a
             Link is how a scoping task inherits an Evidence search, and the
             reverse direction lands with task 5.
     """
@@ -64,11 +66,13 @@ class TaskCreate(BaseModel):
     question: str | None = None
     capability: Capability = "evidence_search"
     project_ids: list[uuid.UUID] = Field(default_factory=list)
-    # ponytail: 3. Each linked source puts its plan, its report body and its
-    # coverage statement into the Task Agent's context on EVERY turn (up to
-    # ~60,000 characters apiece), so an unbounded list is an unbounded prompt.
-    # Raise the ceiling when a real need for a fourth source turns up.
-    from_task_ids: list[uuid.UUID] = Field(default_factory=list, max_length=3)
+    # ponytail: 10, an accident guard only (owner ruling 2026-09-18). Each
+    # linked source puts its plan, its report body and its coverage statement
+    # into the Task Agent's context on every turn (up to ~60,000 characters
+    # apiece); the prefix is prompt-cached after the first turns and the
+    # window is not the constraint at these sizes. Retrieval-shaped inherit is
+    # the path if links ever grow past this (docs/deferred.md § task 044 seams).
+    from_task_ids: list[uuid.UUID] = Field(default_factory=list, max_length=10)
 
     @model_validator(mode="after")
     def reject_links_on_an_evidence_search(self) -> TaskCreate:

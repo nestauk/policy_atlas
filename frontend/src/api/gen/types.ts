@@ -3868,9 +3868,11 @@ export interface components {
          *             multi-organisation 409, the visibility derivation). Empty means
          *             unassigned, which is a normal state.
          *         from_task_ids: Tasks this one starts from — one `task_link` row each,
-         *             written in the same transaction. At most three, because every
+         *             written in the same transaction. At most ten — a guard against an
+         *             accidental flood, not a design limit (owner, 2026-09-18): every
          *             linked source is inherited into the Task Agent's context on every
-         *             turn. Refused 422 on an `evidence_search` create: in this slice a
+         *             turn, and the models' context windows carry that comfortably at
+         *             today's sizes. Refused 422 on an `evidence_search` create: in this slice a
          *             Link is how a scoping task inherits an Evidence search, and the
          *             reverse direction lands with task 5.
          */
