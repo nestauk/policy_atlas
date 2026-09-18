@@ -34,7 +34,7 @@ from pydantic import BaseModel, ConfigDict
 from policy_atlas.core import tracing
 from policy_atlas.core.openai_client import parse_structured, resolve_openai_client
 from policy_atlas.core.prompt_fields import splice_guidance
-from policy_atlas.core.usage import UsageResult, usage_metadata
+from policy_atlas.core.usage import UsageResult, usage_details, usage_metadata
 from policy_atlas.evidence_search.clustering_engine import (
     ClusterAssignment,
     ClusteringBackend,
@@ -420,6 +420,7 @@ class _OpenAIGroupFacetBackend:
         def _update(span: Any, parsed: UsageResult[BaseModel]) -> None:
             result, usage = parsed
             span.update(
+                usage_details=usage_details(usage),
                 input={"messages": messages},
                 output=result.model_dump(),
                 model=GROUP_CLUSTERING_MODEL,

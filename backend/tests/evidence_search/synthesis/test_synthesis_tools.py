@@ -2550,3 +2550,45 @@ def test_make_findings_reader_caps_per_kind(conn: Connection) -> None:
     assert result["iof_truncated"] is True
     assert len(result["icf_findings"]) == 3
     assert result["icf_truncated"] is False
+
+
+def test_loop_runner_traces_each_executed_tool_as_a_tool_observation() -> None:
+    class _Span:
+        def __init__(self) -> None:
+            self.updates: list[dict[str, Any]] = []
+
+        def update(self, **payload: Any) -> None:
+            self.updates.append(payload)
+
+    class _Observation:
+        def __init__(self, span: _Span) -> None:
+            self.span = span
+
+        def __enter__(self) -> _Span:
+            return self.span
+
+        def __exit__(self, *exc: Any) -> None:
+            return None
+
+    class _Client:
+        def __init__(self) -> None:
+            self.opened: list[tuple[str, str, _Span]] = []
+
+        def start_as_current_observation(self, *, name: str, as_type: str) -> _Observation:
+            span = _Span()
+            self.opened.append((name, as_type, span))
+            return _Observation(span)
+
+    client = _Client()
+    backend = ScriptedBackend([
+        {"tool_calls": [{"tool": "lookup", "arguments": {"id": "x"}}], "claims": None},
+        {"tool_calls": [], "claims": _claims()},
+    ])
+    run_section_loop(
+        backend,
+        seed={},
+        tools={"lookup": lambda args: {"found": args["id"]}},
+        langfuse_client=client,
+    )
+    assert [(name, kind) for name, kind, _ in client.opened] == [("tool:lookup", "tool")]
+    assert client.opened[0][2].updates == [{"input": {"id": "x"}, "output": {"found": "x"}}]

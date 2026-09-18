@@ -40,7 +40,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from policy_atlas.core import tracing
 from policy_atlas.core.openai_client import openai_kwargs, parse_structured, resolve_openai_client
 from policy_atlas.core.prompt_fields import scrub_nul
-from policy_atlas.core.usage import UsageResult, usage_metadata
+from policy_atlas.core.usage import UsageResult, usage_details, usage_metadata
 
 # --- IOF (intervention-outcome) vetter surface --------------------------------
 
@@ -472,6 +472,7 @@ def _judge_via_openai[T: (FindingVetterResponse, ICFFindingVetterResponse)](
     def _update(span: Any, result: UsageResult[T]) -> None:
         response, usage = result
         span.update(
+            usage_details=usage_details(usage),
             input={"messages": messages},
             output=response.model_dump(),
             model=model,
@@ -546,7 +547,7 @@ class OpenAIFindingVetterBackend:
             prompt_version=FINDING_VETTER_PROMPT_VERSION,
             usage_event="finding_vetter.judge.usage",
             parse_label="finding vetter",
-            trace_name="finding_vetter:judge",
+            trace_name="extract:vet_iof_findings",
         )
 
 
@@ -636,7 +637,7 @@ class OpenAIICFFindingVetterBackend:
             prompt_version=ICF_FINDING_VETTER_PROMPT_VERSION,
             usage_event="icf_finding_vetter.judge.usage",
             parse_label="ICF finding vetter",
-            trace_name="icf_finding_vetter:judge",
+            trace_name="extract:vet_icf_findings",
         )
 
 

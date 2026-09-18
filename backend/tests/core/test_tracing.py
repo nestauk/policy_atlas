@@ -513,3 +513,63 @@ def test_select_rerank_fanout_propagates_context() -> None:
         _WORKER_CONTEXT.reset(token)
 
     assert backend.seen == ["select-context"]
+
+
+def test_traced_embedding_backend_records_provider_prompt_tokens_as_usage() -> None:
+    from policy_atlas.core import embeddings
+
+    class _Span:
+        def __init__(self) -> None:
+            self.updates: list[dict[str, Any]] = []
+
+        def update(self, **payload: Any) -> None:
+            self.updates.append(payload)
+
+    class _Observation:
+        def __init__(self, span: _Span) -> None:
+            self.span = span
+
+        def __enter__(self) -> _Span:
+            return self.span
+
+        def __exit__(self, *exc: Any) -> None:
+            return None
+
+    class _Client:
+        def __init__(self) -> None:
+            self.spans: list[_Span] = []
+
+        def start_as_current_observation(self, *, name: str, as_type: str) -> _Observation:
+            assert (name, as_type) == ("embed:batch", "embedding")
+            span = _Span()
+            self.spans.append(span)
+            return _Observation(span)
+
+    class _LiveLike:
+        mode = "live"
+
+        def embed_texts(self, texts: list[str]) -> list[list[float]]:
+            embeddings._last_usage.prompt_tokens = 7  # what the OpenAI backend parks
+            return [[0.0] * embeddings.EMBEDDING_DIMENSIONS for _ in texts]
+
+    client = _Client()
+    traced = tracing.TracedEmbeddingBackend(cast(Any, _LiveLike()), cast(Any, client))
+    traced.embed_texts(["a", "b"])
+    update = client.spans[0].updates[0]
+    assert update["usage_details"] == {"input": 7, "total": 7}
+    assert update["model"] == embeddings.EMBEDDING_MODEL
+    assert update["metadata"]["batch_index"] == 1
+    assert embeddings.take_last_prompt_tokens() is None  # consumed, not re-read
+
+
+def test_trace_root_sets_trace_level_input_and_output_when_the_span_supports_it() -> None:
+    calls: list[tuple[str, dict[str, Any]]] = []
+    span = SimpleNamespace(
+        update=lambda **kw: calls.append(("update", kw)),
+        set_trace_io=lambda **kw: calls.append(("set_trace_io", kw)),
+    )
+    tracing._trace_root(span, input={"component": "x"}, output={"n": 1})
+    assert calls == [
+        ("update", {"input": {"component": "x"}, "output": {"n": 1}}),
+        ("set_trace_io", {"input": {"component": "x"}, "output": {"n": 1}}),
+    ]

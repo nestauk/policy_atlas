@@ -5603,6 +5603,7 @@ def synthesise_scope(
                 seed=seed,
                 tools=tools,
                 retriever=retriever,
+                langfuse_client=getattr(synthesis_backend, "langfuse_client", None),
             )
             usage_totals.add_payload(loop_result["usage_totals"])
         except RuntimeError as exc:

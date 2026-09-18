@@ -4,6 +4,7 @@ from policy_atlas.core.usage import (
     TokenUsage,
     UsageAccumulator,
     token_usage_from_provider,
+    usage_details,
     usage_metadata,
 )
 
@@ -94,3 +95,21 @@ def test_token_usage_from_provider_rejects_boolean_fields() -> None:
     assert usage is not None
     assert usage.prompt is None
     assert usage.completion == 10
+
+
+def test_usage_details_uses_openai_shape_with_cached_detail() -> None:
+    assert usage_details(TokenUsage(prompt=100, completion=20, total=120, cached=7)) == {
+        "prompt_tokens": 100,
+        "completion_tokens": 20,
+        "total_tokens": 120,
+        "prompt_tokens_details": {"cached_tokens": 7},
+    }
+
+
+def test_usage_details_omits_cached_detail_when_absent_and_none_for_no_usage() -> None:
+    assert usage_details(TokenUsage(prompt=5, completion=1, total=6)) == {
+        "prompt_tokens": 5,
+        "completion_tokens": 1,
+        "total_tokens": 6,
+    }
+    assert usage_details(None) is None
