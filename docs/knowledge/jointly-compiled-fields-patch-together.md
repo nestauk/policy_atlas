@@ -41,7 +41,7 @@ coupling.
 
 # Citations
 
-- `backend/src/policy_atlas/api/routers/planning.py` (`_geography_constraints`, `_drop_scope_incompatible_geo`)
+- `backend/src/policy_atlas/api/routers/task_agent.py` (`_geography_constraints`, `_drop_scope_incompatible_geo`)
 - `frontend/src/views/workspace/planOverlay.ts` (`overlayToPlanPatch`) and
   `planOverlay.test.ts` ("re-sends the displayed geography whenever the patch changes backend_scope")
 - [docs/tasks/039-apo-mod/verification.md](../tasks/039-apo-mod/verification.md) § Review findings

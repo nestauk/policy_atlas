@@ -1,7 +1,8 @@
 import type { ReactNode } from "react";
 import { Navigate, useLocation, useParams } from "react-router";
 
-import { useTask } from "../api/queries";
+import { useArtefact, useTask } from "../api/queries";
+import { isBaselineArtefact } from "./baselineBand";
 import { PUBLIC_TABS, isTabOpen } from "./lifecycle";
 import type { LifecycleTab } from "./lifecycle";
 
@@ -19,6 +20,12 @@ import type { LifecycleTab } from "./lifecycle";
 export function LifecycleRoute({ tab, children }: { tab: LifecycleTab; children: ReactNode }) {
   const { taskId } = useParams();
   const task = useTask(taskId ?? "");
+  // Task 044 (A17): only a scoping task's lock depends on a baseline
+  // existing, so only a scoping task pays for the read (an empty task id
+  // disables the query).
+  const artefact = useArtefact(
+    task.data?.capability === "options_scoping" ? (taskId ?? "") : "",
+  );
 
   if (task.isPending || task.data === undefined) return null;
   // Public-leg access (task 037): a signed-in outsider reading a public Task
@@ -30,7 +37,15 @@ export function LifecycleRoute({ tab, children }: { tab: LifecycleTab; children:
     if (PUBLIC_TABS.includes(tab)) return <>{children}</>;
     return <Navigate to={`/tasks/${taskId}/result`} replace />;
   }
-  if (!isTabOpen(tab, task.data.latest_run?.status)) {
+  // Same discipline as the task query above: while a scoping task's artefact
+  // read is in flight the baseline's existence is unknown, and treating
+  // unknown as "no baseline" would bounce every Result deep link to Plan.
+  if (task.data.capability === "options_scoping" && artefact.isLoading) return null;
+  if (
+    !isTabOpen(tab, task.data.latest_run?.status, {
+      hasBaseline: isBaselineArtefact(artefact.data),
+    })
+  ) {
     return <Navigate to={`/tasks/${taskId}`} replace />;
   }
   return <>{children}</>;

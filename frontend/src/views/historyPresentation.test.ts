@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { mergeHistory } from "./historyPresentation";
 
 describe("mergeHistory", () => {
-  it("merges planning turns and decisions into one list ordered by time, question and plan first", () => {
+  it("merges task_agent turns and decisions into one list ordered by time, question and plan first", () => {
     const turns = [
       { turn_index: 0, created_at: "2026-07-28T09:00:00Z", user_message: "What is the policy landscape?", status: "completed" as const },
       { turn_index: 1, created_at: "2026-07-28T09:05:00Z", user_message: "Focus on the UK only.", status: "completed" as const },
@@ -39,7 +39,7 @@ describe("mergeHistory", () => {
     ]);
   });
 
-  it("gives turn_index 0 the Question category and later turns Planning", () => {
+  it('gives turn_index 0 the Question category and later turns "Planning"', () => {
     const turns = [
       { turn_index: 0, created_at: "2026-07-28T09:00:00Z", user_message: "Start", status: "completed" as const },
       { turn_index: 1, created_at: "2026-07-28T09:05:00Z", user_message: "Refine", status: "completed" as const },
@@ -80,7 +80,7 @@ describe("mergeHistory", () => {
       { turn_index: 1, created_at: "2026-07-28T09:05:00Z", user_message: "Refine", status: "completed" as const },
     ];
     const result = mergeHistory([], turns);
-    expect(result[0].details).toEqual([{ label: "The planner replied", value: "Here is the plan." }]);
+    expect(result[0].details).toEqual([{ label: "The Task Agent replied", value: "Here is the plan." }]);
     expect(result[1].details).toBeUndefined();
   });
 

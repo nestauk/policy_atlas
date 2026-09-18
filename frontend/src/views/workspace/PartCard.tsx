@@ -8,7 +8,7 @@ import { cn } from "../../ui/brand/cn";
 type PartProposal = components["schemas"]["PartProposalOut"];
 type PartChip = components["schemas"]["PartChipOut"];
 type PartOption = components["schemas"]["PartOptionOut"];
-export type PlanningTurn = components["schemas"]["PlanningTranscriptTurnOut"];
+export type TaskAgentTurn = components["schemas"]["TaskAgentTranscriptTurnOut"];
 
 /** The canned confirm marker a part button appends as the message's final
  *  line. The backend treats it as an ordinary turn; the thread derives ✓
@@ -40,7 +40,7 @@ export interface PartState {
  * marker binds to the newest proposal of its part id at the time it was sent;
  * a confirm referencing a superseded proposal never mis-binds.
  */
-export function derivePartStates(turns: PlanningTurn[]): Map<number, PartState> {
+export function derivePartStates(turns: TaskAgentTurn[]): Map<number, PartState> {
   const ordered = [...turns].sort((a, b) => a.turn_index - b.turn_index);
   const newestProposal = new Map<string, number>();
   for (const turn of ordered) {
@@ -70,14 +70,14 @@ export function derivePartStates(turns: PlanningTurn[]): Map<number, PartState> 
   return states;
 }
 
-/** Chip edit staged on the scope card, batched into one planning turn. */
+/** Chip edit staged on the scope card, batched into one task_agent turn. */
 interface ChipEdit {
   kind: "change" | "remove" | "add";
   label: string;
   detail?: string;
 }
 
-/** Compose the single batched planning-turn message for staged chip edits. */
+/** Compose the single batched task_agent-turn message for staged chip edits. */
 export function chipEditMessage(edits: ChipEdit[]): string {
   const lines = edits.map((edit) => {
     if (edit.kind === "remove") return `- Remove "${edit.label}".`;
@@ -226,8 +226,8 @@ function EditableChip({
 }
 
 /**
- * One structured part proposal in the planning thread (028 fork A; binding
- * record: mockup/planning-stage.html). Renders ONLY what the reply carries —
+ * One structured part proposal in the task_agent thread (028 fork A; binding
+ * record: mockup/task_agent-stage.html). Renders ONLY what the reply carries —
  * server-supplied labels, never enum keys. Superseded proposals stay in the
  * history but render inert; the ✓ state derives from later confirm turns.
  */
@@ -242,7 +242,7 @@ export function PartCard({
   state: PartState;
   /** True while the composer is disabled (run active / turn in flight). */
   disabled: boolean;
-  /** Send a canned message as an ordinary planning turn. */
+  /** Send a canned message as an ordinary task_agent turn. */
   onSend: (message: string) => void;
   /** Put text in the composer for the user to finish. */
   onPrefill: (message: string) => void;

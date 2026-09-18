@@ -13,6 +13,9 @@ type LatestRun = components["schemas"]["TaskOut"]["latest_run"];
 type TaskListRowProps = {
   to: string;
   name: string;
+  /** The row's `TaskOut.capability` (task 044). Left undefined only by a
+   *  caller with no task row to hand; `capabilityLabel` falls back. No depth
+   *  is shown beside it (owner ruling, C17). */
   capabilityKey?: string | null;
   projectName?: string | null;
   showProjectPrefix?: boolean;

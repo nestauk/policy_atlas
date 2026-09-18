@@ -71,7 +71,7 @@ the field, never as proven absence (we searched our corpus, not the whole litera
 
 ## The coverage base — what licenses an absence claim
 
-Framework-level (arch §4, EB-prompted). The gap *tier* above grades how far an absence travels;
+Framework-level (arch §4, ES-prompted). The gap *tier* above grades how far an absence travels;
 the **coverage base** grades what it rests on — orthogonal, both required.
 
 - **Every gap / absence claim carries its coverage base** as a required structural field — the
@@ -94,7 +94,7 @@ the **coverage base** grades what it rests on — orthogonal, both required.
   (→ `search` governance events) and scope filters. **Fail closed:** absent a non-`inadequate`
   record, an absence degrades to "not found in extracted / selected material," never corpus-level.
 
-The EB instance (and where this rule is most acute) is
+The ES instance (and where this rule is most acute) is
 [../capabilities/evidence-search/provenance.md](../capabilities/evidence-search/provenance.md).
 
 ## Patterns — the third assertion type
@@ -127,6 +127,11 @@ unit by its nature), **stated by you** (a present fact the user gave) or **plann
 commitment, which can only ever be a named condition); the *Basis* cell names which; and a
 **verdict word** is derived deterministically from the rows (the weakest leg decides, no factor
 fractions). Verify checks each cell against its own rule, and the derivation against the rows.
+*(Owner ruling on OS decision-sheet row D3, 2026-09-09, folded into C3.)* The *retrieved* cell
+reads the cited source's own date and the finding's own `study_geography` and `period`; the
+*stated by you* and *planned by you* cells carry the turn's time and the plan's **Where**
+([plan-as-object](plan-as-object.md) § What a plan contains). No further fields; applicability
+and currency are judged per row and checked by verify.
 Declared here so the block kind is shared; the row semantics are the capability's
 ([../capabilities/options-scoping/trust.md](../capabilities/options-scoping/trust.md)).
 

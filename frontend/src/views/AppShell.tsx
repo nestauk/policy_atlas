@@ -2,8 +2,9 @@ import { useLayoutEffect, useState } from "react";
 import { Outlet, useLocation, useParams } from "react-router";
 
 import { useArchiveTask, useUpdateTask } from "../api/mutations";
-import { useCheckIns, useMe, useTask, useTasks } from "../api/queries";
+import { useArtefact, useCheckIns, useMe, useTask, useTasks } from "../api/queries";
 import { useAuth } from "../auth";
+import { capabilityLabel } from "../lib/capabilities";
 import { TitleMarkerProvider } from "../lib/title";
 import { scrub } from "../lib/scrub";
 import { Button } from "../ui/brand/Button";
@@ -12,6 +13,7 @@ import { cn } from "../ui/brand/cn";
 import { LifecycleBar, LifecycleBottomBar } from "../ui/brand/LifecycleBar";
 import { NavBar, NavHomeLink, NavItem } from "../ui/brand/Nav";
 import { COPY, PROJECT, TASK, TENANCY_COPY } from "../lib/vocabulary";
+import { isBaselineArtefact } from "./baselineBand";
 import { lifecycleTabs, publicLifecycleTabs, withChat } from "./lifecycle";
 import { PublicViewProvider } from "./publicView";
 import { ErrorBoundary } from "../ui/feedback/ErrorBoundary";
@@ -311,7 +313,7 @@ export function AppShell() {
   const chatParam = new URLSearchParams(location.search).get("chat") || null;
   const chatOpen = showChatPanel && chatParam !== null;
   // Non-Plan task tabs: footer rides the shell scroll pane. Plan keeps its
-  // own inner chat scroll, so the footer mounts there (PlanningPane) instead
+  // own inner chat scroll, so the footer mounts there (TaskAgentPane) instead
   // of sticking under the composer.
   const footerInScrollPane = base !== null && !inWorkspace;
 
@@ -328,6 +330,12 @@ export function AppShell() {
   // honest rule: don't even ask) and, transitively through `hasPendingCheckIn`
   // below, the nav badge, the lifecycle-tab marker and the cross-tab banner.
   const isOwner = task.data?.is_owner === true;
+  // Task 044 (A17): a scoping task's Result tab unlocks on its baseline, not
+  // on the walk's ending. Only a scoping task pays for the read — the empty
+  // task id disables the query (and `ArtefactView` shares its cache entry).
+  const baselineArtefact = useArtefact(
+    task.data?.capability === "options_scoping" ? (taskId ?? "") : "",
+  );
   const pendingCheckIns = useCheckIns(taskId ?? "", "pending", {
     enabled: base !== null && !inWorkspace && isOwner,
     refetchInterval: 15_000,
@@ -351,7 +359,9 @@ export function AppShell() {
       : withChat(
           publicAccess
             ? publicLifecycleTabs(base)
-            : lifecycleTabs(base, task.data?.latest_run?.status),
+            : lifecycleTabs(base, task.data?.latest_run?.status, {
+                hasBaseline: isBaselineArtefact(baselineArtefact.data),
+              }),
           chatParam,
         ).map((item) =>
           item.tab === "agent" && hasPendingCheckIn
@@ -409,6 +419,13 @@ export function AppShell() {
               <>
                 <span className="truncate text-lead font-semibold text-navy">
                   {scrub(task.data.name)}
+                </span>
+                {/* The kind of work this task is (task 044, X12; Frame board):
+                    "Options scoping" or "Evidence search", read straight off
+                    the row so a colleague never has to open the plan to tell
+                    the two kinds apart. */}
+                <span className="shrink-0 text-caption font-semibold uppercase tracking-[0.06em] text-grey">
+                  {capabilityLabel(task.data.capability)}
                 </span>
                 <TaskSettingsMenu
                   taskId={task.data.task_id}

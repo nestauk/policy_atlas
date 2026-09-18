@@ -1,9 +1,9 @@
 """Agent backend seam (task 024, decision 3) — router + watch moments.
 
-Mirrors :mod:`policy_atlas.runtime.planner`: a live OpenAI structured-output
+Mirrors :mod:`policy_atlas.runtime.task_agent`: a live OpenAI structured-output
 backend with tracing inside the backend, and a deterministic zero-egress stub for
-tests and the CLI. One backend, three moments (contract decision 3): the planning
-moment lives in the planner seam; this module owns the two mid-run moments —
+tests and the CLI. One backend, three moments (contract decision 3): the task_agent
+moment lives in the task_agent seam; this module owns the two mid-run moments —
 
 - **route**: compiles a user's free-text steering prose at a pause into a fan-out
   plan of bounded directive deltas (Task 15 wires its APPLY path; Task 14 only
@@ -12,7 +12,10 @@ moment lives in the planner seam; this module owns the two mid-run moments —
   boundary (push-only, no tools);
 - **decide**: the judgment-class in-loco-user decision at a delegated decision
   point, and — with ``framing="authoring"`` — the authored-options composition
-  that rides an attended pause alongside the canonical floor.
+  that rides an attended pause alongside the canonical floor;
+- **sort_gate_turn**: the mini-class question · decision · unsure sort of a Task
+  Agent turn taken while an options-scoping walk is paused on its baseline gate
+  (task 044, A4). It applies nothing; the caller dispatches the verdict.
 
 This module also owns the **structurally-gated invocation** classifier, the
 **single-shot decide + bounded fallback deliberation loop** (contract decision 3's
@@ -55,6 +58,12 @@ from policy_atlas.runtime.agent_prompt import (
     build_router_messages,
     build_watch_messages,
 )
+from policy_atlas.runtime.gate_sort_prompt import (
+    GATE_SORT_MAX_OUTPUT_TOKENS,
+    GATE_SORT_PROMPT_VERSION,
+    GateSortWire,
+    build_gate_sort_messages,
+)
 
 if TYPE_CHECKING:
     from policy_atlas.runtime.runner import _DiscretionContext, _DiscretionOutcome
@@ -62,9 +71,9 @@ if TYPE_CHECKING:
 log = structlog.get_logger()
 
 # Model routing by moment (contract decision 3 — cost tiering, not agent identity).
-# route/decide are judgment-class (the planner's default judgment model); triage is
+# route/decide are judgment-class (the task_agent's default judgment model); triage is
 # mini-class (the screen/vetter mini default). Both env-overridable so ops can pin a
-# different model without a code change (the SYNTHESIS_MODEL/PLANNER_MODEL pattern).
+# different model without a code change (the SYNTHESIS_MODEL/TASK_AGENT_MODEL pattern).
 AGENT_MODEL = os.environ.get("POLICY_ATLAS_AGENT_MODEL", "gpt-5.5")
 AGENT_TRIAGE_MODEL = os.environ.get(
     "POLICY_ATLAS_AGENT_TRIAGE_MODEL", SCREEN_MODEL
@@ -101,10 +110,11 @@ WATCH_FALLBACK_TOOL_CALLS = 2
 WATCH_READ_TOOLS: tuple[str, ...] = ("lookup", "query_findings")
 
 # The wire models ARE the moment shapes, code-side and model-side — no separate
-# dataclass to keep in sync (the planner pattern).
+# dataclass to keep in sync (the task_agent pattern).
 RouterCompile = RouterCompileWire
 WatchTriage = WatchTriageWire
 WatchDecision = WatchDecisionWire
+GateSort = GateSortWire
 
 
 # --- The backend protocol --------------------------------------------------
@@ -202,6 +212,34 @@ class AgentBackend(Protocol):
         """
         ...
 
+    def sort_gate_turn(
+        self,
+        utterance: str,
+        offered_options: list[dict[str, str]],
+        *,
+        session_id: uuid.UUID | None = None,
+    ) -> GateSortWire:
+        """Sort one Task Agent turn taken at a paused gate (task 044, A4).
+
+        The mini-class third moment: while an options-scoping walk is paused
+        on its baseline gate the user's turn is either a question about the
+        baseline or one of the offered decisions, and only the caller may act
+        on the verdict — this call applies nothing.
+
+        Args:
+            utterance: The user's verbatim turn text.
+            offered_options: The check-in card's options as ``{"id", "label"}``
+                dicts, in card order.
+            session_id: Optional Langfuse session id shared by the task.
+
+        Returns:
+            One parsed sort verdict.
+
+        Raises:
+            RuntimeError: If the backend cannot produce a usable verdict.
+        """
+        ...
+
 
 # --- Live OpenAI implementation --------------------------------------------
 
@@ -227,6 +265,15 @@ def _scrub_router(compile_result: RouterCompileWire) -> RouterCompileWire:
 
 def _scrub_triage(triage: WatchTriageWire) -> WatchTriageWire:
     return triage.model_copy(update={"reason": scrub_nul(triage.reason)})
+
+
+def _scrub_gate_sort(sort: GateSortWire) -> GateSortWire:
+    updates: dict[str, Any] = {"kind": scrub_nul(sort.kind), "reason": scrub_nul(sort.reason)}
+    if sort.option_id is not None:
+        updates["option_id"] = scrub_nul(sort.option_id)
+    if sort.carried_text is not None:
+        updates["carried_text"] = scrub_nul(sort.carried_text)
+    return sort.model_copy(update=updates)
 
 
 def _scrub_decision(decision: WatchDecisionWire) -> WatchDecisionWire:
@@ -344,6 +391,28 @@ class OpenAIAgentBackend:
         )
         return _scrub_decision(parsed.to_wire())
 
+    def sort_gate_turn(
+        self,
+        utterance: str,
+        offered_options: list[dict[str, str]],
+        *,
+        session_id: uuid.UUID | None = None,
+    ) -> GateSortWire:
+        """Sort a gate turn through structured OpenAI output (mini-class)."""
+        messages = build_gate_sort_messages(utterance, offered_options)
+        parsed = self._parse(
+            messages,
+            response_format=GateSortWire,
+            model=AGENT_TRIAGE_MODEL,
+            max_output_tokens=GATE_SORT_MAX_OUTPUT_TOKENS,
+            usage_event="agent.gate_sort.usage",
+            label="agent-gate-sort",
+            prompt_version=GATE_SORT_PROMPT_VERSION,
+            name="agent:gate_sort",
+            session_id=session_id,
+        )
+        return _scrub_gate_sort(parsed)
+
     def _parse[T: BaseModel](
         self,
         messages: list[ChatCompletionMessageParam],
@@ -417,6 +486,11 @@ def _proceed() -> WatchDecisionWire:
     )
 
 
+def _unsorted() -> GateSortWire:
+    """The stub default: unsure, so the product asks back and applies nothing."""
+    return GateSortWire(kind="unsure", reason="Deterministic stub gate sort: unsure.")
+
+
 class StubAgentBackend:
     """Deterministic, zero-egress, scriptable agent backend for tests/CLI.
 
@@ -431,6 +505,7 @@ class StubAgentBackend:
         route_responses: Canned :class:`RouterCompileWire` value(s), or ``None``.
         triage_responses: Canned :class:`WatchTriageWire` value(s), or ``None``.
         decide_responses: Canned :class:`WatchDecisionWire` value(s), or ``None``.
+        gate_sort_responses: Canned :class:`GateSortWire` value(s), or ``None``.
     """
 
     def __init__(
@@ -439,13 +514,16 @@ class StubAgentBackend:
         route_responses: RouterCompileWire | list[RouterCompileWire] | None = None,
         triage_responses: WatchTriageWire | list[WatchTriageWire] | None = None,
         decide_responses: WatchDecisionWire | list[WatchDecisionWire] | None = None,
+        gate_sort_responses: GateSortWire | list[GateSortWire] | None = None,
     ) -> None:
         self._route_queue = _as_queue(route_responses)
         self._triage_queue = _as_queue(triage_responses)
         self._decide_queue = _as_queue(decide_responses)
+        self._gate_sort_queue = _as_queue(gate_sort_responses)
         self.route_calls = 0
         self.triage_calls = 0
         self.decide_calls = 0
+        self.gate_sort_calls = 0
 
     def route(
         self,
@@ -484,6 +562,17 @@ class StubAgentBackend:
         del request, header, payload, digest, framing, session_id
         self.decide_calls += 1
         return _next(self._decide_queue, _proceed)
+
+    def sort_gate_turn(
+        self,
+        utterance: str,
+        offered_options: list[dict[str, str]],
+        *,
+        session_id: uuid.UUID | None = None,
+    ) -> GateSortWire:
+        del utterance, offered_options, session_id
+        self.gate_sort_calls += 1
+        return _next(self._gate_sort_queue, _unsorted)
 
 
 def _as_queue[T](value: T | list[T] | None) -> list[T]:

@@ -57,7 +57,7 @@ Each Task should (more or less) feature similar "Lifecycle Tabs" (**Tabs**):
 
 **Chats**: conversations with the Agent. They are still called **chats**. There is a distinction between the primary chat for a Task and the other question-type chats:
 
-- **Task Agent**: the primary chat for a Task (what was called the plan chat). It is the pinned first chat in the Agent tab and has a visual distinction to show it is a different type of chat.
+- **Task Agent**: the primary chat for a Task (what was called the plan chat). It is the pinned first chat in the Agent tab and has a visual distinction to show it is a different type of chat. *(Code names after task 044, owner ruling 2026-09-09: conversation kind `task_agent`, table `task_agent_transcript`, route `/task-agent-turns` — replacing `planning`, `planning_transcript`, `/planning-turns`. Not `agent`, which already names the Agent tab and the 038 model persona. Direction, not yet in scope: any chat should eventually plan, edit artefacts and answer with citations; the kind then becomes a "pinned first" flag.)*
 - The other chats are just named **chats**.
 
 (An earlier draft named three Agent modes — Planning, Agent, Questions. Withdrawn 2026-09-04: the modes are not surfaced as words.)

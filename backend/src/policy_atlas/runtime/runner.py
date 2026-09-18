@@ -1,4 +1,4 @@
-"""EB capability-runner for executing approved task plans.
+"""ES capability-runner for executing approved task plans.
 
 The runner is the deterministic sub-agent boundary for task 017: it walks a
 composed task plan, owns per-component commits, applies component
@@ -75,12 +75,26 @@ from policy_atlas.runtime.agent_backend import (
     run_watch_decision,
 )
 from policy_atlas.runtime.agent_prompt import WATCH_AUTHORING_PROMPT_VERSION
+from policy_atlas.runtime.baseline_gate import (
+    build_baseline_bundle,
+    render_baseline_gate,
+)
+from policy_atlas.runtime.capability_registry import (
+    EVIDENCE_SEARCH,
+    AnyPlan,
+    capability_of_task,
+    compose_plan,
+    expect_task_plan,
+    lattice_for,
+)
 from policy_atlas.runtime.continuation_state import ContinuationState, ResumeDecision
-from policy_atlas.runtime.conversation_lifecycle import close_planning_conversation
+from policy_atlas.runtime.conversation_lifecycle import close_task_agent_conversation
 from policy_atlas.runtime.harness import run_harness
 from policy_atlas.runtime.progress import ProgressEmitter
 from policy_atlas.runtime.run_spec import Plan, compile
+from policy_atlas.runtime.scoping_plan import ScopingPlan
 from policy_atlas.runtime.steering import (
+    BASELINE_CONFIRM,
     DEEPENING_SELECTION,
     EVIDENCE_SEARCH_COVERAGE,
     FINDING_GROUPS,
@@ -103,6 +117,7 @@ from policy_atlas.runtime.steering import (
     apply_adjustment,
     apply_replacement_rerun,
     apply_segment_reentry,
+    baseline_confirm_options,
     build_steer_point_options,
     commit_layer_overlay,
     compile_fanout,
@@ -135,10 +150,10 @@ from policy_atlas.runtime.steering_triggers import (
 )
 from policy_atlas.runtime.task_plan import (
     SPINE,
+    BackendScope,
     ComponentStep,
     ComposedChain,
     TaskPlan,
-    compose,
     registry_component_for,
 )
 
@@ -385,7 +400,7 @@ class _AttemptOutcome:
 
 @dataclass
 class _SteeringState:
-    plan: TaskPlan
+    plan: AnyPlan
     plan_id: uuid.UUID
     plan_version: int
     plan_row_id: uuid.UUID | None
@@ -397,6 +412,33 @@ class _SteeringState:
     # over the component's composed directive when it executes so the run
     # actually consumes it; carried forward across plan-version transitions.
     pending_overlays: dict[str, dict[str, Any]] = field(default_factory=dict)
+    # The walk's capability (task 044). Carried on the state because the
+    # boundary code needs the task's LATTICE, not just its chain: without it
+    # every ``lattice_name_for``/``lattice_policy`` call in the loop falls back
+    # to the Evidence search table and a scoping walk never reaches its gate.
+    # Every production construction passes it explicitly (from
+    # ``_open_capability_run``, the resumed state, or the state being amended);
+    # the default keeps the Evidence search test constructions unchanged.
+    capability: str = EVIDENCE_SEARCH
+
+    @property
+    def es_plan(self) -> TaskPlan:
+        """The plan, narrowed to the Evidence search model.
+
+        Returns:
+            The same plan object, typed.
+
+        Raises:
+            TypeError: If this walk is not an Evidence search walk — the caller
+                is an Evidence search-only path and must not be reached with a
+                scoping plan.
+        """
+        return expect_task_plan(self.plan)
+
+    @property
+    def lattice(self) -> dict[str, PausePoint]:
+        """The steering lattice belonging to this walk's capability (A2)."""
+        return lattice_for(self.capability)
 
 
 @dataclass(frozen=True)
@@ -537,14 +579,40 @@ def _deterministic_discretion_floor(context: _DiscretionContext) -> _DiscretionO
     return _DiscretionOutcome(interpreted_action="proceed", rule=UNCONFIGURED_DEFAULT_RULE)
 
 
+
+def _section_budget(state: _SteeringState) -> int | None:
+    """The plan's ordinary-section budget, or ``None`` for a plan without one.
+
+    Only the Evidence search plan carries ``section_budget``; a scoping walk's
+    baseline has a fixed section list (task 044).
+    """
+    plan = state.plan
+    return plan.section_budget if isinstance(plan, TaskPlan) else None
+
+
+def _search_backend_scope(plan: AnyPlan) -> BackendScope:
+    """Return the search backend scope a walk runs its components under.
+
+    Args:
+        plan: The walk's approved plan.
+
+    Returns:
+        The Evidence search plan's own dial, or — for options scoping, which has
+        no such dial — ``"both"``: the baseline searches Overton and OpenAlex.
+    """
+    if isinstance(plan, TaskPlan):
+        return plan.backend_scope
+    return "both"
+
+
 def leg_directive(
-    plan: TaskPlan,
+    plan: AnyPlan,
     step: ComponentStep,
     upstream_state: dict[str, Any],
 ) -> dict[str, Any]:
     """Return the directive delta for the next component.
 
-    This is the named directive-authoring seam for a future EB-expert agent:
+    This is the named directive-authoring seam for a future ES-expert agent:
     given the approved task plan, the next component step and the
     successful upstream state, that agent can author the component's context
     delta. V1 is intentionally deterministic and returns the composer-emitted
@@ -595,7 +663,7 @@ def _run_plan_impl(
     *,
     task_id: uuid.UUID,
     evidence_scope_id: uuid.UUID,
-    plan: TaskPlan,
+    plan: AnyPlan,
     plan_id: uuid.UUID,
     plan_version: int,
     plan_row_id: uuid.UUID | None = None,
@@ -623,7 +691,7 @@ def _run_plan_impl(
             makes abort a run-local stop only.
         backends: Optional backend seam bundle. ``None`` uses harness defaults.
         io: Optional agent IO seam. ``None`` uses ``NullIO``.
-        session_id: Optional Langfuse session id shared by the planner and all
+        session_id: Optional Langfuse session id shared by the task_agent and all
             component attempts for one agent conversation.
         discretion_hook: Optional Unattended-mode discretion hook consulted only
             at a lattice boundary with NO pinned standing rule (the Phase-5 watch
@@ -652,7 +720,7 @@ def _run_plan_impl(
         discretion = _deterministic_discretion_floor
     if resume_from is None:
         capability_run_id = uuid.uuid4()
-        _open_capability_run(
+        capability = _open_capability_run(
             engine,
             capability_run_id=capability_run_id,
             task_id=task_id,
@@ -661,14 +729,17 @@ def _run_plan_impl(
             plan_version=plan_version,
             session_id=session_id,
         )
-        initial_chain = compose(plan)
+        initial_chain = compose_plan(capability, plan)
         steering_state = _SteeringState(
             plan=plan,
+            capability=capability,
             plan_id=plan_id,
             plan_version=plan_version,
             plan_row_id=plan_row_id,
             chain=initial_chain,
-            pause_points=pause_points(plan.steering_mode, initial_chain),
+            pause_points=pause_points(
+                plan.steering_mode, initial_chain, lattice_for(capability)
+            ),
         )
         remaining_steps = list(initial_chain.steps)
         step_outcomes: list[RunStepOutcome] = []
@@ -684,6 +755,7 @@ def _run_plan_impl(
         session_id = resume_from.session_id
         steering_state = _SteeringState(
             plan=resume_from.plan,
+            capability=resume_from.capability,
             plan_id=resume_from.plan_id,
             plan_version=resume_from.plan_version,
             plan_row_id=resume_from.plan_row_id,
@@ -838,6 +910,9 @@ def _run_plan_impl(
         # walk re-derives everything from coverage rows and screen provenance.
         if (
             step.component == "classify"
+            # Multi-round search is an Evidence search dial: the scoping
+            # baseline acquires once, at a fixed cap (task 044).
+            and isinstance(steering_state.plan, TaskPlan)
             and steering_state.plan.search_effort in ("standard", "deep")
             and "screen_abstract" in completed_components
             and _search_round_continues(
@@ -1276,7 +1351,7 @@ def run_plan(
     *,
     task_id: uuid.UUID,
     evidence_scope_id: uuid.UUID,
-    plan: TaskPlan,
+    plan: AnyPlan,
     plan_id: uuid.UUID,
     plan_version: int,
     plan_row_id: uuid.UUID | None = None,
@@ -1469,7 +1544,7 @@ def _handle_after_component_boundary(
     # (Task 12). Reuses the lattice detection; select's P3 replacement re-run and
     # additive segment re-entry are applied through the same machinery a pause
     # would use.
-    name = lattice_name_for(point)
+    name = lattice_name_for(point, state.lattice)
     if state.plan.steering_mode == "unattended" and name is not None:
         return _resolve_unattended_boundary(
             engine,
@@ -1512,6 +1587,13 @@ def _handle_after_component_boundary(
         steer_point_name = None
         triggers = None
     if steer_point_name == FINDING_GROUPS and successful_runs.get("group") is None:
+        steer_point_name = None
+        triggers = None
+    # The baseline gate degrades the same way when synthesise produced nothing:
+    # a failed synthesise reaches this handler (anomalous) before the spine
+    # check ends the walk, and a gate card over a baseline that was never
+    # written would invite a user to confirm a plan against no evidence.
+    if steer_point_name == BASELINE_CONFIRM and successful_runs.get("synthesise") is None:
         steer_point_name = None
         triggers = None
     # Run-id attachment (plan pin, review M2): an after_component event attaches
@@ -1570,6 +1652,11 @@ def _handle_after_component_boundary(
         prebuilt_bundle=observation.bundle,
         boundary_run_id=boundary_run_id,
     )
+    if steer_point_name == BASELINE_CONFIRM and bundle is not None:
+        # The gate's card IS the render (the check-in content of record): the
+        # component line "synthesise: succeeded" says nothing a user can decide
+        # against, and the decision here is about the baseline, not the step.
+        render = render_baseline_gate(bundle)
     # The P3 select and FG group steer points wire a replacement re-run from
     # their pause (their floors offer re-run options at an after-boundary);
     # P2/P4 sit at before-boundaries and get theirs from
@@ -1593,6 +1680,7 @@ def _handle_after_component_boundary(
         completed_components=completed_components,
         capability_run_id=capability_run_id,
         event_run_id=event_run_id,
+        flagged_events=flagged_events,
         steer_point_name=steer_point_name,
         options=options,
         bundle=bundle,
@@ -1690,7 +1778,7 @@ def _handle_before_component_boundary(
     floor_run_ids = (
         attempted_runs if attempted_runs is not None else _registry_run_ids(successful_runs)
     )
-    name = lattice_name_for(point)
+    name = lattice_name_for(point, state.lattice)
     rerun_component, segment_reentry_allowed = _before_boundary_surface(
         state, completed_components, allow_segment_reentry=allow_segment_reentry
     )
@@ -1772,6 +1860,7 @@ def _handle_before_component_boundary(
         completed_components=completed_components,
         capability_run_id=capability_run_id,
         event_run_id=most_recent_attempted_run_id,
+        flagged_events=flagged_events,
         steer_point_name=steer_point_name,
         options=options,
         bundle=bundle,
@@ -1846,9 +1935,9 @@ def _evaluate_boundary(
     (Unattended), with no steer point. A boundary that fires nothing pauses only
     when it is a Frequent generic pause (present in the static pause set).
     """
-    name = lattice_name_for(point)
+    name = lattice_name_for(point, state.lattice)
     if name is not None:
-        policy = lattice_policy(state.plan.steering_mode, name)
+        policy = lattice_policy(state.plan.steering_mode, name, state.lattice)
         if policy == "off":
             return (False, None, None)
         triggers = _lattice_triggers(
@@ -1918,7 +2007,7 @@ def _lattice_triggers(
                 conn,
                 task_id=task_id,
                 selection_run_id=selection_run_id,
-                plan=state.plan,
+                plan=state.es_plan,
             )
         if name == FINDING_GROUPS:
             group_run_id = successful_runs.get("group")
@@ -1926,6 +2015,39 @@ def _lattice_triggers(
                 return []
             return grouping_flag_triggers(conn, task_id=task_id, group_run_id=group_run_id)
     return []
+
+
+def _baseline_gate_bundle(
+    engine: Engine,
+    *,
+    task_id: uuid.UUID,
+    state: _SteeringState,
+    synthesise_run_id: uuid.UUID | None,
+) -> dict[str, Any] | None:
+    """Build the baseline gate's deterministic bundle, fail-safe to ``None``.
+
+    Args:
+        engine: Database engine.
+        task_id: The scoping task.
+        state: Current steering state (source of the approved scoping plan).
+        synthesise_run_id: The synthesise run the boundary fired for.
+
+    Returns:
+        The gate bundle, or ``None`` when this walk is not a scoping walk or the
+        read fails — the pause still happens with its two options, exactly as a
+        failed Evidence search bundle degrades.
+    """
+    plan = state.plan
+    if not isinstance(plan, ScopingPlan):
+        return None
+    try:
+        with engine.connect() as conn:
+            return build_baseline_bundle(
+                conn, task_id=task_id, plan=plan, synthesise_run_id=synthesise_run_id
+            )
+    except Exception as exc:  # noqa: BLE001 - fail-safe, the pause must still happen
+        log.warning("baseline_gate.bundle_failed", task_id=str(task_id), error=str(exc))
+        return None
 
 
 def _pause_options_and_bundle(
@@ -1951,10 +2073,29 @@ def _pause_options_and_bundle(
     FIX 2b: when the watch already built this boundary's bundle for authoring, it
     is threaded in as ``prebuilt_bundle`` and reused — the P2/P3/P4 bundle is built
     once per decision point, not once for authoring and again for the pause.
+
+    The options-scoping baseline gate is answered before either of those: its
+    two options and its bundle are read straight off the plan and the baseline
+    artefact, so no Evidence search reader (which would want a ``TaskPlan``)
+    and no model is involved.
     """
     if steer_point_name is None:
         return generic_floor_options(), None
-    options = build_steer_point_options(plan=state.plan, point=steer_point_name)
+    if steer_point_name == BASELINE_CONFIRM:
+        return (
+            baseline_confirm_options(),
+            _baseline_gate_bundle(
+                engine,
+                task_id=task_id,
+                state=state,
+                synthesise_run_id=(
+                    boundary_run_id
+                    if boundary_run_id is not None
+                    else successful_runs.get("synthesise")
+                ),
+            ),
+        )
+    options = build_steer_point_options(plan=state.es_plan, point=steer_point_name)
     if steer_point_name == SEARCH_EXCEPTION and triggers:
         for option in options:
             if option.get("id") == "deepen_search":
@@ -1974,7 +2115,7 @@ def _pause_options_and_bundle(
             evidence_scope_id=evidence_scope_id,
             successful_runs=successful_runs,
             backends=backends,
-            section_budget=state.plan.section_budget,
+            section_budget=_section_budget(state),
             boundary_run_id=boundary_run_id,
         )
     )
@@ -1992,7 +2133,7 @@ def _pause_options_and_bundle(
             # review 028 M2). Clamp ONCE here — in the bundle the card displays
             # AND the as_proposed delta — so displayed == submitted == valid
             # == executed.
-            section_bound = state.plan.section_budget or SECTION_CAP
+            section_bound = _section_budget(state) or SECTION_CAP
             clamped = []
             for row in sections[:section_bound]:
                 if (
@@ -2140,6 +2281,7 @@ def _handle_pause(
     completed_components: set[str],
     capability_run_id: uuid.UUID,
     event_run_id: uuid.UUID | None,
+    flagged_events: list[dict[str, Any]],
     steer_point_name: str | None = None,
     options: list[dict[str, Any]] | None = None,
     bundle: dict[str, Any] | None = None,
@@ -2167,6 +2309,21 @@ def _handle_pause(
         boundary=point.boundary,
         component=point.component,
     )
+    # An IO that cannot put the pause to anybody would otherwise be read as a
+    # user Continue. At the baseline gate that ends the walk ``succeeded`` with
+    # nobody having confirmed the plan — the one failure this gate exists to
+    # prevent — so record it the way Unattended does instead of fabricating a
+    # decision. Every other steer point keeps today's behaviour.
+    if steer_point_name == BASELINE_CONFIRM and not _can_ask_a_human(io):
+        return _resolve_baseline_gate_unattended(
+            engine,
+            point=point,
+            state=state,
+            task_id=task_id,
+            flagged_events=flagged_events,
+            base=base,
+            event_run_id=event_run_id,
+        )
     # One pause event per presentation; the re-prompt loop below marks each
     # rejected retry with steering.rejected rather than a fresh pause.
     # The deterministic render rides the payload verbatim (task 025): it is the
@@ -2380,6 +2537,25 @@ def _pause_response(
     return Continue()
 
 
+def _can_ask_a_human(io: CheckInIO) -> bool:
+    """Whether this IO can actually put a pause to somebody.
+
+    Two shapes cannot, and both answer ``Continue()`` with nobody behind it:
+    an IO with no ``pause`` method at all (answered for it by
+    :func:`_pause_response`), and ``NullIO``, which declares ``pause`` and
+    returns ``Continue()`` itself. The baseline gate is the one point where
+    that difference is load-bearing (an unconfirmed plan must not read as a
+    confirmed one), so this predicate is consulted there and nowhere else.
+
+    Args:
+        io: The walk's check-in IO.
+
+    Returns:
+        ``True`` when a pause reaches a decision this IO did not invent.
+    """
+    return isinstance(io, _PauseCapable) and not isinstance(io, NullIO)
+
+
 def _confirm(io: CheckInIO, render: str) -> bool:
     """Ask a confirm-capable IO to gate the fan-out; default/NullIO is False.
 
@@ -2503,7 +2679,7 @@ def _handle_free_text(
 
     fanout = compile_fanout(
         compile_result,
-        backend_scope=state.plan.backend_scope,
+        backend_scope=_search_backend_scope(state.plan),
         current_components=set(state.chain.components),
         completed_components=completed_components,
         rerun_surface=RerunSurface(
@@ -3121,7 +3297,7 @@ def _apply_runner_adjustment(
             conn,
             task_id=task_id,
             plan_row=plan_row,
-            plan=state.plan,
+            plan=state.es_plan,
             adjustment=adjustment,
             completed_components=completed_components,
         )
@@ -3152,7 +3328,9 @@ def _apply_runner_adjustment(
             event_type=steering_events.STEERING_DECISION,
             payload=decision,
         )
-    amended_chain = compose(amended_plan)
+    # Constant capability: this is the Evidence search steering router's own
+    # amendment path, typed on ``TaskPlan`` and untouched by task 044 (C1).
+    amended_chain = compose_plan(EVIDENCE_SEARCH, amended_plan)
     # Commit-layer deltas for not-yet-run components have no plan-field mapping
     # (validated + recorded above, but the payload carries them forward
     # unchanged): stash them as a pending overlay so the component actually
@@ -3160,11 +3338,14 @@ def _apply_runner_adjustment(
     new_overlays = _extend_overlays(state.pending_overlays, adjustment.directive_deltas)
     return _SteeringState(
         plan=amended_plan,
+        capability=state.capability,
         plan_id=amended_plan_id,
         plan_version=amended_version,
         plan_row_id=amended_plan_id,
         chain=amended_chain,
-        pause_points=pause_points(amended_plan.steering_mode, amended_chain),
+        pause_points=pause_points(
+            amended_plan.steering_mode, amended_chain, lattice_for(state.capability)
+        ),
         pending_overlays=new_overlays,
     )
 
@@ -3218,7 +3399,7 @@ def _apply_replacement_rerun(
             conn,
             task_id=task_id,
             plan_row=plan_row,
-            plan=state.plan,
+            plan=state.es_plan,
             component=component,
             directive=merged_directive,
         )
@@ -3245,6 +3426,7 @@ def _apply_replacement_rerun(
         )
     rerun_state = _SteeringState(
         plan=state.plan,
+        capability=state.capability,
         plan_id=new_plan_id,
         plan_version=new_version,
         plan_row_id=new_plan_id,
@@ -3463,7 +3645,7 @@ def _apply_segment_reentry(
             conn,
             task_id=task_id,
             plan_row=plan_row,
-            plan=state.plan,
+            plan=state.es_plan,
             segment_start=response.segment_start,
             directive_deltas=response.directive_deltas,
         )
@@ -3488,6 +3670,7 @@ def _apply_segment_reentry(
         )
     return _SteeringState(
         plan=state.plan,
+        capability=state.capability,
         plan_id=new_plan_id,
         plan_version=new_version,
         plan_row_id=new_plan_id,
@@ -3997,6 +4180,19 @@ def _resolve_unattended_boundary(
         boundary=point.boundary,
         component=point.component,
     )
+    if name == BASELINE_CONFIRM:
+        # The scoping gate is decided by its own declared rule and nothing else:
+        # its standing default carries no option and no delta, so none of the
+        # Evidence search apply machinery below can read it (D11, A9).
+        return _resolve_baseline_gate_unattended(
+            engine,
+            point=point,
+            state=state,
+            task_id=task_id,
+            flagged_events=flagged_events,
+            base=base,
+            event_run_id=event_run_id,
+        )
     rule = next(
         (default for default in state.plan.steer_point_defaults if default.steer_point == name),
         None,
@@ -4014,7 +4210,7 @@ def _resolve_unattended_boundary(
             evidence_scope_id=evidence_scope_id,
             successful_runs=successful_runs,
             backends=backends,
-            section_budget=state.plan.section_budget,
+            section_budget=_section_budget(state),
             boundary_run_id=event_run_id,
         )
         outcome = discretion_hook(
@@ -4023,7 +4219,7 @@ def _resolve_unattended_boundary(
                 boundary=point.boundary,
                 component=point.component,
                 triggers=triggers,
-                plan=state.plan,
+                plan=state.es_plan,
                 bundle=bundle,
                 header=_watch_header(state),
                 digest=_watch_digest(
@@ -4082,6 +4278,69 @@ def _resolve_unattended_boundary(
     )
 
 
+def _resolve_baseline_gate_unattended(
+    engine: Engine,
+    *,
+    point: PausePoint,
+    state: _SteeringState,
+    task_id: uuid.UUID,
+    flagged_events: list[dict[str, Any]],
+    base: dict[str, Any],
+    event_run_id: uuid.UUID | None,
+) -> _PauseApplied:
+    """Record the baseline gate without pausing (D11, A9).
+
+    An unattended scoping plan must declare a ``baseline_confirm`` standing
+    default (``ScopingPlan`` refuses to validate without one), so the rule is
+    read, honoured and echoed onto the decision, and a flag rides
+    ``flagged_events`` into the end-of-run collation — the run never stops, and
+    review still sees that nobody confirmed the plan. The gate always continues
+    here: ``ScopingSteerPointDefault`` admits ``proceed_flag`` and nothing else,
+    so there is no declarable hard stop to honour.
+
+    Also the attended fallback when the IO cannot pause (see
+    :func:`_handle_pause`): an absent rule reads as ``proceed_flag``, so that
+    walk too ends with nobody recorded as having confirmed.
+
+    Args:
+        engine: Database engine.
+        point: The boundary (after synthesise).
+        state: Current steering state.
+        task_id: The scoping task.
+        flagged_events: The walk's collation flags, appended in place.
+        base: Prebuilt steering-event base payload.
+        event_run_id: Run the decision attaches to.
+
+    Returns:
+        The unchanged state.
+    """
+    rule = next(
+        (
+            default
+            for default in state.plan.steer_point_defaults
+            if default.steer_point == BASELINE_CONFIRM
+        ),
+        None,
+    )
+    action = rule.action if rule is not None else "proceed_flag"
+    echo = {"steer_point": BASELINE_CONFIRM, "action": action}
+    _emit_standing_proceed_decision(
+        engine,
+        task_id=task_id,
+        run_id=event_run_id,
+        base=base,
+        interpreted_action=None,
+        standing_rule=echo,
+        triggers=[],
+    )
+    flagged_events.append(
+        _standing_flag(
+            point.component, BASELINE_CONFIRM, rule=BASELINE_CONFIRM, action="proceed_flag"
+        )
+    )
+    return _PauseApplied(state=state)
+
+
 def _match_replacement_delta(
     rerun_component: str | None, effective: dict[str, Any]
 ) -> dict[str, dict[str, Any]] | None:
@@ -4138,7 +4397,7 @@ def _apply_standing_proceed(
     """
     effective = rule.delta
     if effective is None and rule.option_id is not None:
-        options = build_steer_point_options(plan=state.plan, point=name)
+        options = build_steer_point_options(plan=state.es_plan, point=name)
         template = next((o["delta"] for o in options if o["id"] == rule.option_id), None)
         effective = template
     effective = effective or {}
@@ -4404,6 +4663,23 @@ def _watch_observe_boundary(
             reason="structurally resolved",
         )
         return _WatchObservation()
+    if not isinstance(state.plan, TaskPlan):
+        # The agent watch (triage, authored options, the router) is an Evidence
+        # search surface: it reads the ES plan's components and budget. A
+        # scoping walk's pauses are structural — the floor triggers and the
+        # baseline gate — so the watch is not consulted (task 044). Found live:
+        # a continued scoping walk crashed here on a triggered boundary.
+        _emit_judgement_routed(
+            engine,
+            task_id=task_id,
+            capability_run_id=capability_run_id,
+            state=state,
+            point=point,
+            run_id=event_run_id,
+            verdict="structural_only",
+            reason="no agent watch for this capability",
+        )
+        return _WatchObservation()
 
     header = _watch_header(state)
     digest = _watch_digest(engine, task_id=task_id, capability_run_id=capability_run_id)
@@ -4417,7 +4693,7 @@ def _watch_observe_boundary(
                 evidence_scope_id=evidence_scope_id,
                 successful_runs=successful_runs,
                 backends=backends,
-                section_budget=state.plan.section_budget,
+                section_budget=_section_budget(state),
                 boundary_run_id=event_run_id,
             )
             if steer_point_name is not None
@@ -4545,7 +4821,7 @@ def _validated_authored_options(
     if not authored:
         return None
     ctx = SteeringValidationCtx(
-        backend_scope=state.plan.backend_scope,
+        backend_scope=_search_backend_scope(state.plan),
         current_components=set(state.chain.components),
         completed_components=set(),
         rerun_surface=RerunSurface(replacement_component=None, segment_reentry_available=False),
@@ -4605,11 +4881,16 @@ def _validated_authored_options(
 
 def _watch_header(state: _SteeringState) -> dict[str, Any]:
     """The orienting header the watch decides against (data, never instructions)."""
+    # Every plan model carries question, steering_mode and steer_point_defaults;
+    # only the Evidence search plan has discretionary components (a scoping walk
+    # runs a fixed chain). Task 044: a scoping walk paused on the structural
+    # floor reaches this header when it is continued.
     plan = state.plan
+    components = list(plan.components) if isinstance(plan, TaskPlan) else []
     return {
         "question": plan.question,
         "steering_mode": plan.steering_mode,
-        "components": list(plan.components),
+        "components": components,
         "standing_instructions": [
             {"steer_point": default.steer_point, "action": default.action}
             for default in plan.steer_point_defaults
@@ -5024,15 +5305,23 @@ def _open_capability_run(
     plan_id: uuid.UUID,
     plan_version: int,
     session_id: uuid.UUID | None,
-) -> None:
-    """Open the walk-identity row before the step loop (contract decision 2)."""
+) -> str:
+    """Open the walk-identity row before the step loop (contract decision 2).
+
+    Returns:
+        The task's capability, read from the task row in the same transaction
+        that writes the walk (task 044): the walk is a walk *of* the task's
+        kind, so the two can never disagree, and the caller needs the value
+        anyway to compose the chain.
+    """
     with engine.begin() as conn:
+        capability = capability_of_task(conn, task_id)
         conn.execute(
             capability_run.insert().values(
                 capability_run_id=capability_run_id,
                 task_id=task_id,
                 evidence_scope_id=evidence_scope_id,
-                capability="evidence_search",
+                capability=capability,
                 plan_id=plan_id,
                 plan_version=plan_version,
                 status="running",
@@ -5051,6 +5340,7 @@ def _open_capability_run(
                 "plan_version": plan_version,
             },
         )
+    return capability
 
 
 def _finish_run(
@@ -5077,11 +5367,11 @@ def _finish_run(
             event_type="run.finished",
             payload={"capability_run_id": str(capability_run_id), "status": status},
         )
-        # A completed run closes its planning conversation atomically with the
+        # A completed run closes its task_agent conversation atomically with the
         # terminal status + run.finished event (029 strand 2): a crash can
-        # never leave a succeeded run with an active planning conversation.
+        # never leave a succeeded run with an active task_agent conversation.
         if status in ("succeeded", "degraded"):
-            close_planning_conversation(conn, task_id=task_id, closed_at=ended_at)
+            close_task_agent_conversation(conn, task_id=task_id, closed_at=ended_at)
     collation = render_collation(flagged_events)
     log.info("runner.collation", render=collation)
     _log_run_summary(outcomes, status=status)
@@ -5192,7 +5482,7 @@ def _run_step_attempt(
     *,
     task_id: uuid.UUID,
     evidence_scope_id: uuid.UUID,
-    plan: TaskPlan,
+    plan: AnyPlan,
     plan_id: uuid.UUID,
     plan_version: int,
     step: ComponentStep,
@@ -5281,7 +5571,7 @@ def _run_step_attempt(
             config = compile(
                 Plan(
                     component=registry_component,
-                    search_backend_scope=plan.backend_scope,
+                    search_backend_scope=_search_backend_scope(plan),
                     evidence_scope_id=evidence_scope_id,
                     **reference_kwargs,
                 )

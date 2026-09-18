@@ -31,9 +31,13 @@ may be refined as implementation lands.
   capability agent's just-in-time selection is the **commit** (the execution-bearing layer that
   compiles, by construction). Two tiers, staged compilation: the plan spine's
   sequence/wiring compiles up front; each commit compiles **just-in-time** once its inputs exist.
-- **Plan-field ↔ chat-turn provenance** — each compiled field back-references the conversation
-  turn(s) that produced it (raw prose retained behind the structured field), so the plan carries
-  its own "why" into the decision log without coupling compilation to free text.
+- **Plan ↔ chat-turn provenance at version grain** *(owner ruling 2026-09-09, task 044 contract,
+  revising the 2026-06 field-grain wording)* — each plan **version** records the conversation turn
+  that produced it (`source_turn_index`), the transcript is durable and ordered, and Your-context
+  entries carry their own turn; so "when did the user set X" is answerable between two versions
+  without a per-field reference. Owner: "do we even really need that?" — nothing in the product
+  reads a per-field reference and neither plan carries one. Field grain stays open as a refinement
+  if a reader asks for it.
 
 ## What a plan contains 🟡 *(candidate, per §5)*
 
@@ -49,6 +53,33 @@ may be refined as implementation lands.
 - **Depth per section** — the thoroughness gradation + compile target (see below).
 - **Steering & check-ins** — mode + expected pauses, including mandatory gates.
 - **Assumptions & boundaries** — surfaced so the user corrects cheaply before the run.
+- **Your context** *(owner ruling on OS decision-sheet row C3, 2026-09-09)* — the user's context for
+  transferability: entries typed **present fact** or **commitment**, each with the user's words
+  verbatim and the conversation turn that produced it, like every plan field. No new record and no
+  annotation: the type alone decides whether an entry can lift a transferability cap (a commitment
+  never can); the date is the turn's time and the place is the plan's target place; anything more
+  specific stays in the user's words. A user's account of a source they have not supplied is a
+  *present fact* naming a source, not a retrieved fact; *retrieved* context is an ordinary grounded
+  claim cited to its source, with the source's own date and the finding's own study geography.
+  Entries can be added mid-run through the planning chat or a check-in and are versioned with the
+  plan; a child task reads them through the Link as input (OS ruling 41). **Attribution is by user
+  id** through the turn's conversation, never a literal "you": every user-originated label ("stated
+  by you", "planned by you", "added by you") is rendered from the id — "you" when it is the
+  viewer, the person's name otherwise. *(Owner ruling on OS decision-sheet row E13, 2026-09-09.)*
+  An entry may be flagged **"test this as a condition"**: the transferability working then gives
+  it a factor row of its own, its evidence cell reading "not addressed by the evidence" when the
+  evidence does not name it, its context cell carrying the entry under its own type. How the
+  evidence's own blockers are found, quote-vetted and judged necessary is task 3's, not the plan's.
+- **Several intent records per plan** *(owner ruling on OS decision-sheet row C4, 2026-09-09)*. An
+  intent record (`evidence_scope` in the code) is the row a compiled plan creates to hold the
+  question a run is answering, plus its settings; every result row points at one. A plan may
+  compile to **more than one**: options scoping runs a baseline record (the problem and its trend
+  in the plan's Where), a longlist record (interventions for the plan's outcomes), one per
+  user-minted variant (its specified design as intent, OS ruling 15) and one per thin option's
+  targeted acquire, all in one task. A document has one row per task however many intent records
+  it was screened under, so counts of documents per option never double-count, and an option's
+  membership points at the document row, not at any one screening verdict. Each intent record
+  carries the plan version that created it.
 - **Source / evidence policy** — the evidentiary standard (see below).
 
 ## Thoroughness as a relative nudge, not an absolute level
@@ -74,18 +105,54 @@ referent). Instead:
   nudge survives as the *edit* path beside the chosen level. Options scoping uses the **same
   three words** (owner ruling 2026-09-07), so this is one vocabulary across capabilities, not an
   exception. Reconcile this section when the plan contract is next revised.
+- **Time, reading and depth for options scoping** *(owner ruling on OS decision-sheet rows B3, C5,
+  E12 and E16, 2026-09-09)*. Measured on staging (2026-09-08): a standard Evidence search walk is a
+  median 15 minutes of compute, 72 percent of it writing the report; a fresh rapid walk 11.3
+  minutes, 59 percent; reading all of an option's 10 to 12 documents 16 to 25 seconds in parallel.
+  **Writing, not reading, is where the time goes.** Time to a result is stated as **compute time**
+  and, separately, **waiting time at pauses** (median 17 minutes, up to two hours, on staging);
+  depth is asked every time (OS ruling 25). **Reading is not capped for focus**: the assessment
+  reads every document whose evaluated mention belongs to the option; a high safety ceiling (a
+  plan setting decided in task 3, of the order of 25 documents) applies stratified selection only
+  above it, with omissions listed. Time is managed by **design targets verified during
+  development, never by run-time cut-offs**. *(Revised by the owner on 2026-09-09 at the task 044
+  contract: the baseline is **not graded by depth** — dropping two of eight sections saved about
+  95 s of a roughly 380 s sequential write against a retrieval spine of about 4.6 min, "not a
+  difference the user feels", so the section count is not the lever. *Re-revised (owner ruling 2026-09-17, task 044 phase 8: "Go with options 2 and 5, targets 20 and 10"; the rapid section merge was measured, then reverted the same day: "Revert the merge, seven sections at both depths"): the measured
+  standard baselines ran 4.3 to 7.5 minutes, so depth now sets the acquisition target (20 · 10 **per search backend**; owner ruling 2026-09-18) and
+  the proposed-section allowance (two · none); the eight sections stay the same at both depths — a
+  five-section rapid merge was measured at 168 s and 189 s against 183 s for seven and dropped — and
+  the wider classify and ingest fan-out is the other lever taken.* The baseline has **one measured
+  compute target** per depth, verified on the NEET question during the build. The levers are a small acquisition target, a per-section
+  tool-call cap; writing is **sequential**, as the Evidence search writes today — the durability
+  contract's "never fan out the conclusion" holds — and a development-time **feasibility check**
+  compares it with a parallel version before the baseline is finalised (owner, 2026-09-09: "let's go
+  with sequential, but we should also do some sort of test comparing it to a parallel version
+  before finalising"); a parallel mode in the product would be a revision of that contract. Later levers, recorded in `docs/deferred.md`: showing
+  sections as they finish; starting the longlist's retrieval while the user reads the baseline;
+  a faster model tier for the sections when Bedrock lands, quality-tested first. The owner's
+  expectation for a whole rapid path is about 15 to 20 minutes.)* The option profile's
+  targets are set in task 3. A section is never left incomplete for time; "not found" is a content
+  state (OS ruling 40). No rapid number is promised until the real path is timed; the plan shows a
+  coarse time band (OS open question 3 stays open).
 
 ## Source / evidence policy
 
 A plan-level declared constraint expressing the **evidentiary standard** (e.g. "official
-statistics and peer-reviewed evaluations only"). Two faces:
-- **Acquisition face — already covered**: which backends / **trust classes** may be searched
-  (existing `search` machinery; open-web behind its seam). Bundles an existing capability, no new
-  mechanism. *(Options scoping adds a third, distinct thing — an **evidence-scope constraint**
-  such as "OECD evidence only", checked at retrieval and screening — which is neither the
-  acquisition face nor the citable-quality policy and must never be compiled into either; OS
-  ruling 23, seam recorded 2026-09-07.)*
-- **Use face — the new bit: a grounding standard, not a retrieval boundary**. The agent may
+statistics and peer-reviewed evaluations only"). Two parts *("face" retired, owner 2026-09-09)*:
+- **Where we search — already covered**: which backends / **trust classes** may be searched
+  (existing `search` machinery; open-web behind its seam), and the search directive's filters —
+  **country group** (pinned groups such as "OECD members", G7, EU27, or a custom list), publisher
+  country, years, languages — applied at retrieval on both backends and echoed onto the coverage
+  record. *(Owner ruling on OS decision-sheet rows C1 and C2, 2026-09-09: OS ruling 23's third kind
+  of constraint — an **evidence restriction** such as "OECD evidence only" — is realised by these
+  existing filters, reused unchanged in the scoping plan; it never touches options (OS ruling 36);
+  the Sources statement says the filter acts on where a source was published or produced, not
+  where a study was done, and filtering by stated study geography is a **known gap** for after
+  user testing; inherited documents from a linked search run under a different restriction are
+  labelled as such on Sources, not re-filtered; no new constraint object, so no code name. The
+  earlier seam note of 2026-09-07 is closed.)*
+- **What may be cited as support — the new bit: a grounding standard, not a retrieval boundary**. The agent may
   still **retrieve and read** any in-corpus source (never penned in), but the policy sets the
   **appraisal tier** (source *quality*, **not** the grounding/inference tier) a source must meet
   to be cited as **grounding support**, enforced at the `produce-grounded-block` verify boundary.

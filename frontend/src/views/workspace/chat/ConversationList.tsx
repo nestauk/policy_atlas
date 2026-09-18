@@ -6,7 +6,7 @@ import { scrub } from "../../../lib/scrub";
 import { COPY } from "../../../lib/vocabulary";
 import { cn } from "../../../ui/brand/cn";
 import { FoldMarkIcon } from "../../../ui/brand/FoldMarkIcon";
-import { DRAFT_CHAT_ID, PLANNING_TAB_ID, taskAgentConversationId, useConversationMutations } from "./conversationState";
+import { DRAFT_CHAT_ID, TASK_AGENT_TAB_ID, taskAgentConversationId, useConversationMutations } from "./conversationState";
 import { ArchiveIcon, ChevronIcon, PencilIcon, RestoreIcon } from "./icons";
 
 export type ConversationRow = components["schemas"]["ConversationListItemOut"];
@@ -54,23 +54,23 @@ export function ConversationList({
   };
   const cancelRename = () => setEditing(null);
 
-  // A planning row never archives (no control fires it), but guard the
-  // restore-and-open path anyway so a synthetically-archived planning row
+  // A task_agent row never archives (no control fires it), but guard the
+  // restore-and-open path anyway so a synthetically-archived task_agent row
   // isn't routed through the chat-only unarchive+open flow.
   const openArchivedRow = (row: ConversationRow) =>
-    row.kind === "planning" ? onOpen(row) : void unarchive(row.id).then(() => onOpen(row));
+    row.kind === "task_agent" ? onOpen(row) : void unarchive(row.id).then(() => onOpen(row));
 
   // The Task Agent is pinned above the date groups rather than sorted to the
   // front of them: it is usually a Task's OLDEST conversation, so sorting it
   // first would drag its "Earlier" heading above "Today".
   const activeRows = active.data?.data ?? [];
   const taskAgentId = taskAgentConversationId(activeRows);
-  // The Task Agent is always listed: a run closes the planning lineage, and
-  // the active listing then carries no planning row at all — the row here is
-  // the planning thread itself (`PLANNING_TAB_ID`), which every consumer
+  // The Task Agent is always listed: a run closes the task_agent lineage, and
+  // the active listing then carries no task_agent row at all — the row here is
+  // the task_agent thread itself (`TASK_AGENT_TAB_ID`), which every consumer
   // resolves to the Task Agent (038 V8 build finding on completed tasks).
   const pinned: ConversationRow =
-    activeRows.find((row) => row.id === taskAgentId) ?? syntheticRow(PLANNING_TAB_ID, "planning", COPY.taskAgent);
+    activeRows.find((row) => row.id === taskAgentId) ?? syntheticRow(TASK_AGENT_TAB_ID, "task_agent", COPY.taskAgent);
   const rest = activeRows.filter((row) => row.id !== pinned.id);
   // A draft chat (`?chat=new`) shows as a selected "New chat" row until its
   // first message creates the real row.
@@ -145,11 +145,11 @@ const ACTION_CLASS =
   "pressable flex h-7 w-7 items-center justify-center text-grey hover:text-navy focus-visible:outline-2 focus-visible:outline-blue";
 
 function ListRow({ row, taskAgentId, selectedId, onOpen, editing, title, setTitle, onRename, onCommit, onCancel, onArchive, archived = false }: RowProps & { row: ConversationRow }) {
-  const isPlanning = row.kind === "planning";
-  // A planning row is named by its label, never by the stored title (the
+  const isTaskAgent = row.kind === "task_agent";
+  // A task_agent row is named by its label, never by the stored title (the
   // runtime writes "Planning" there): exactly one is the Task Agent, and any
   // older lineage reads "Earlier plan" (contract § V8, invariant I8 / A10).
-  const label = isPlanning ? (row.id === taskAgentId ? COPY.taskAgent : COPY.earlierPlan) : scrub(row.title);
+  const label = isTaskAgent ? (row.id === taskAgentId ? COPY.taskAgent : COPY.earlierPlan) : scrub(row.title);
   const selected = row.id === selectedId;
   const cancelled = useRef(false);
 
@@ -197,10 +197,10 @@ function ListRow({ row, taskAgentId, selectedId, onOpen, editing, title, setTitl
           selected && "font-semibold",
         )}
       >
-        {isPlanning && <FoldMarkIcon size={10} className="text-blue" />}
+        {isTaskAgent && <FoldMarkIcon size={10} className="text-blue" />}
         <span className="truncate">{label}</span>
       </button>
-      {!isPlanning && row.id !== DRAFT_CHAT_ID && (
+      {!isTaskAgent && row.id !== DRAFT_CHAT_ID && (
         <div className="flex shrink-0 items-center opacity-0 transition-opacity duration-150 group-hover/row:opacity-100 group-focus-within/row:opacity-100">
           {!archived && (
             <button type="button" aria-label={`Rename ${row.title}`} title="Rename" onClick={() => onRename(row)} className={ACTION_CLASS}>
@@ -223,9 +223,9 @@ function ListRow({ row, taskAgentId, selectedId, onOpen, editing, title, setTitl
 }
 
 /** A row the listing does not carry but the list must show: the Task Agent
- *  once a run has closed the planning lineage, or a draft chat. Only the
+ *  once a run has closed the task_agent lineage, or a draft chat. Only the
  *  fields the rows read are meaningful; the rest satisfy the wire shape. */
-function syntheticRow(id: string, kind: "planning" | "chat", title: string): ConversationRow {
+function syntheticRow(id: string, kind: "task_agent" | "chat", title: string): ConversationRow {
   return {
     id,
     kind,

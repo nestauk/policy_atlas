@@ -27,7 +27,7 @@ supported sentence, and the sentence is what gets copied into advice.
   evidence-derived options. This is how structural and thin-evidence options get in at all.
 - ✅ **Interpretation is labelled.** Mechanism sentences, failure modes, assumptions and the
   **ambition tag** (assigned at longlist depth before any evidence is read; a tier-4 reasoning
-  claim, shown "as described, not measured", ruling 20) reuse the EB's claim-type and
+  claim, shown "as described, not measured", ruling 20) reuse the ES's claim-type and
   grounding-tier machinery rather than a new scheme: tier-2/3 inferences
   where the literature supports them; capped, visibly labelled *reasoning* claims (tier 4,
   "reasoning, not evidence", which must not smuggle findings) where they are the model's own
@@ -62,7 +62,7 @@ supported sentence, and the sentence is what gets copied into advice.
 ## Provenance labels every surface carries
 
 - ✅ **Depth label per row and per profile:** *scoping pass* (screened on titles and abstracts;
-  full text read for the documents cited; document set not confirmed) or *full run* (the EB
+  full text read for the documents cited; document set not confirmed) or *full run* (the ES
   task's confirmed document set). The label describes the work done; it does not stand in for
   claim-specific support, which each claim carries itself (ruling 16).
 - ✅ **Source tier per case study:** academic · Overton grey literature · verified web. A web
@@ -126,7 +126,11 @@ supported sentence, and the sentence is what gets copied into advice.
   rules, entitlements, duties, universal provisions — while aggregates, averages and
   implementation observations are shown as context with their level and date and the factor
   stays Unknown; ruling 34), **stated by you** (a fact about the present) or **planned by you** (a
-  commitment). Never inferred. Unknown stays unknown. Only the first two can lift a cap; a
+  commitment). Never inferred. *(Owner ruling on decision-sheet row C3, 2026-09-09: stated and
+  planned entries are the plan's **Your context** section, typed present fact or commitment with
+  the user's verbatim words and turn provenance — [plan-as-object](../../system/plan-as-object.md);
+  retrieved context is an ordinary grounded claim; "you" is rendered from the user id.)* Unknown
+  stays unknown. Only the first two can lift a cap; a
   commitment becomes a named condition of a conditional verdict ("Conditional on: local
   delivery funded"). A stated intention never acquires the force of verified capacity.
 - ✅ **Ceiling rule: the weakest leg decides.** The verdict word is set by the weakest of the

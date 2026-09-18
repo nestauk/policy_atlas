@@ -125,6 +125,13 @@ SEARCH_QUERY_MAX_LENGTH = 1000
 LOOKUP_ROW_CAP = 100
 # Bounds shared with the directive grammar (contract rev 8 M5).
 DIRECTIVE_SECTION_TEXT_MAX = 200
+# A template's section instructions are code, not model output: the baseline's
+# eight foci (``baseline_prompt.BASELINE_SECTIONS``) are lead-authored, versioned
+# with the template and 250-450 characters each. The 200-character bound above
+# exists to fence *untrusted* directive text — a steering delta, a proposal —
+# so it still governs every title, every nav label and every focus outside
+# template mode (task 044, plan S2).
+DIRECTIVE_TEMPLATE_FOCUS_MAX = 600
 DIRECTIVE_LIST_MAX = 200
 
 # The closed lookup query vocabulary v1 (plan rev 2). Unknown kind → tool-level
@@ -311,6 +318,11 @@ class SynthesisDirective:
 
     sections: list[dict[str, Any]] | None = None  # validated section specs
     section_budget: int | None = None
+    #: Output kind. ``None`` is the Evidence search report — today's behaviour,
+    #: unchanged. ``"baseline"`` is **parsed** as of task 044 phase 3.2 and its
+    #: behaviour lands in phase 4.2; until then ``synthesise_scope`` accepts it
+    #: and does nothing beyond the supplied-sections path it already has.
+    template: str | None = None
     column_boosts: dict[str, dict[str, float]] = field(default_factory=dict)
     tag_boosts: dict[str, float] = field(default_factory=dict)
     appraisal_tier_boosts: dict[str, float] = field(default_factory=dict)
@@ -323,6 +335,9 @@ class SynthesisDirective:
         return {
             "sections_source": "scope_context" if self.sections is not None else "proposal",
             "section_budget": self.section_budget,
+            # The output kind the run executed (task 044): ``None`` is the
+            # Evidence search report. Recorded so replay never has to infer it.
+            "template": self.template,
             "retrieval_boosts": {
                 "columns": self.column_boosts,
                 "tags": self.tag_boosts,
@@ -473,9 +488,24 @@ class ToolLoopResult(TypedDict):
 TurnFn = Callable[..., UsageResult[LoopTurn]]
 
 
-_DIRECTIVE_KEYS = {"sections", "retrieval_boosts", "section_budget"}
+_DIRECTIVE_KEYS = {"sections", "retrieval_boosts", "section_budget", "template"}
+
+#: The output kinds ``template`` may name. Fail-closed: an unrecognised
+#: template would otherwise silently fall back to the Evidence search report
+#: while the plan row claims a baseline was written (task 044, plan S2).
+TEMPLATE_KEYS = frozenset({"baseline"})
+
 _SECTION_KEYS_REQUIRED = {"title", "focus"}
 _SECTION_KEYS_WITH_GROUPS = {"title", "focus", "group_ids"}
+#: ``nav_label`` is an optional extra on any section spec. ``SectionSpec`` and
+#: ``_sections_from_directive`` have always read it; before task 044 the key
+#: set below rejected it first, so a supplied section could never carry one.
+#: ``turn_cap`` joined it in phase 4.2: a template's sections carry their own
+#: generation-loop bound (the baseline's is
+#: ``baseline_prompt.BASELINE_SECTION_TURN_CAP``), and a supplied section that
+#: omits it falls back to the template default / ``SECTION_TURN_CAP``.
+_SECTION_KEYS_OPTIONAL: set[str] = {"nav_label", "turn_cap"}
+_SECTION_KEYS_ALLOWED: set[str] = _SECTION_KEYS_WITH_GROUPS | _SECTION_KEYS_OPTIONAL
 _BOOST_KEYS = {"columns", "tags", "appraisal_tier", "screen_confidence"}
 _TOKEN_RE = re.compile(r"[0-9A-Za-z]+")
 GROUP_ID_EXPECTED_FORM = "<facet>:gNN"
@@ -517,15 +547,17 @@ def facet_of_group_id(group_id: str) -> str:
     return group_id.split(":", 1)[0]
 
 
-def _bounded_string(value: Any, *, field: str) -> str:
+def _bounded_string(
+    value: Any, *, field: str, max_length: int = DIRECTIVE_SECTION_TEXT_MAX
+) -> str:
     if not isinstance(value, str):
         _directive_fail(f"synthesis directive {field} must be a string")
     text = cast("str", value)
     if not text:
         _directive_fail(f"synthesis directive {field} must be non-empty")
-    if len(text) > DIRECTIVE_SECTION_TEXT_MAX:
+    if len(text) > max_length:
         _directive_fail(
-            f"synthesis directive {field} exceeds {DIRECTIVE_SECTION_TEXT_MAX} characters"
+            f"synthesis directive {field} exceeds {max_length} characters"
         )
     if has_control_character(text):
         _directive_fail(
@@ -792,6 +824,7 @@ def _parse_sections(
     grouping_group_ids: set[str] | None,
     section_budget: int | None = None,
     defer_group_membership: bool = False,
+    focus_max: int = DIRECTIVE_SECTION_TEXT_MAX,
 ) -> list[dict[str, Any]]:
     if not isinstance(value, list):
         _directive_fail("synthesis directive sections must be a list")
@@ -807,15 +840,23 @@ def _parse_sections(
         if not isinstance(item, dict):
             _directive_fail(f"synthesis directive sections[{index}] must be an object")
         keys = set(item)
-        if keys not in (_SECTION_KEYS_REQUIRED, _SECTION_KEYS_WITH_GROUPS):
+        if not _SECTION_KEYS_REQUIRED <= keys <= _SECTION_KEYS_ALLOWED:
             _directive_fail(f"synthesis directive sections[{index}] has invalid keys")
         title = _bounded_string(item["title"], field=f"sections[{index}].title")
         if title.casefold() in forbidden:
             _directive_fail(f"synthesis directive sections[{index}].title is forbidden")
         section: dict[str, Any] = {
             "title": title,
-            "focus": _bounded_string(item["focus"], field=f"sections[{index}].focus"),
+            "focus": _bounded_string(
+                item["focus"], field=f"sections[{index}].focus", max_length=focus_max
+            ),
         }
+        if "nav_label" in item:
+            section["nav_label"] = _bounded_string(
+                item["nav_label"], field=f"sections[{index}].nav_label"
+            )
+        if "turn_cap" in item:
+            section["turn_cap"] = _parse_section_turn_cap(item["turn_cap"], index)
         if "group_ids" in item:
             if grouping_group_ids is None and not defer_group_membership:
                 _directive_fail("synthesis directive group_ids require grouping")
@@ -848,6 +889,31 @@ def _parse_sections(
             section["group_ids"] = group_ids
         parsed.append(section)
     return parsed
+
+
+def _parse_section_turn_cap(value: Any, index: int) -> int:
+    """Validate one supplied section's generation-loop turn cap.
+
+    Args:
+        value: Candidate JSON directive value.
+        index: Position of the section in the supplied list, for the message.
+
+    Returns:
+        The validated 1..``SECTION_TURN_CAP`` turn cap.
+
+    Raises:
+        SynthesisDirectiveError: If it is not an integer in range. Fail-closed
+            rather than clamped: a cap is execution-bearing (it bounds provider
+            calls), so a malformed one must not silently become a larger one.
+    """
+    if isinstance(value, bool) or not isinstance(value, int):
+        _directive_fail(f"synthesis directive sections[{index}].turn_cap must be an integer")
+    if not 1 <= int(value) <= SECTION_TURN_CAP:
+        _directive_fail(
+            f"synthesis directive sections[{index}].turn_cap must be between 1 "
+            f"and {SECTION_TURN_CAP}"
+        )
+    return int(value)
 
 
 def _parse_retrieval_boosts(
@@ -929,17 +995,30 @@ def parse_synthesis_directive(
     if unknown:
         _directive_fail("synthesis directive has invalid top-level keys")
 
+    template = _parse_template(raw["template"]) if "template" in raw else None
     section_budget = (
         _parse_section_budget(raw["section_budget"])
         if "section_budget" in raw
         else None
     )
+    # In template mode ``section_budget`` means "proposals allowed on top of
+    # the supplied list" (task 044, plan S2/P14), not "ceiling on the whole
+    # report" — the baseline supplies eight required sections and allows two
+    # proposals, so capping the supplied list at two would refuse the very
+    # directive the template exists to carry. Outside template mode the
+    # Evidence search meaning is untouched.
+    supplied_cap = None if template is not None else section_budget
     sections = (
         _parse_sections(
             raw["sections"],
             grouping_group_ids=grouping_group_ids,
-            section_budget=section_budget,
+            section_budget=supplied_cap,
             defer_group_membership=defer_group_membership,
+            focus_max=(
+                DIRECTIVE_TEMPLATE_FOCUS_MAX
+                if template is not None
+                else DIRECTIVE_SECTION_TEXT_MAX
+            ),
         )
         if "sections" in raw
         else None
@@ -958,11 +1037,31 @@ def parse_synthesis_directive(
     return SynthesisDirective(
         sections=sections,
         section_budget=section_budget,
+        template=template,
         column_boosts=column_boosts,
         tag_boosts=tag_boosts,
         appraisal_tier_boosts=appraisal_tier_boosts,
         screen_confidence=screen_confidence,
     )
+
+
+def _parse_template(value: Any) -> str:
+    """Validate the optional output-template key.
+
+    Args:
+        value: Candidate JSON directive value.
+
+    Returns:
+        The validated template key.
+
+    Raises:
+        SynthesisDirectiveError: If it is not a known template.
+    """
+    if not isinstance(value, str) or value not in TEMPLATE_KEYS:
+        _directive_fail(
+            f"synthesis directive template must be one of {sorted(TEMPLATE_KEYS)}"
+        )
+    return str(value)
 
 
 def _parse_section_budget(value: Any) -> int:

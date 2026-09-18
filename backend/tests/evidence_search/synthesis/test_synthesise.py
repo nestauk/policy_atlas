@@ -1082,7 +1082,7 @@ def test_artefact_records_walkable_conversation_plan_run_lineage(conn: Connectio
         conversation.insert().values(
             id=conversation_id,
             task_id=task_id,
-            kind="planning",
+            kind="task_agent",
             title="Planning",
             entry_artefact_id=None,
             status="active",

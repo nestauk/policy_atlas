@@ -189,7 +189,7 @@ def test_segment_reentry_happy_path_re_walks_segment_and_reenters_once(
                 .order_by(task_plan.c.version)
             ).all()
         assert [(r.version, r.status, r.created_by) for r in plan_rows] == [
-            (1, "superseded", "planner"),
+            (1, "superseded", "task_agent"),
             (2, "approved", "user"),
         ]
 

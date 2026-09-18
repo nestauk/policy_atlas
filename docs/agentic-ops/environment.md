@@ -1,7 +1,7 @@
 # Environment
 
 How to bring up a working local environment and the gotchas that bite. Reflects the repo as it
-stands (tasks 001–040; 040 is frontend-only and changes no env; 039 adds the APO test-mod (`publisher_source`,
+stands (tasks 001–040 on `dev`; 044 on `feat/options-scoping` adds two reversible migrations (`a7d3f1c8e2b5` Task Agent rename, `b5e1d7a4c026` options-scoping records) — run `alembic upgrade head` against the dev DB after pulling that branch, rename any local `POLICY_ATLAS_PLANNER_MODEL` to `POLICY_ATLAS_TASK_AGENT_MODEL` (the code default is unchanged, so an old-only setting still works), and note the slice downgrade refuses while any `options_scoping` task or walk exists (`scripts/ops_remove_scoping_tasks.py` is the remedy, ADR 0037 § Rollback); 040 is frontend-only and changes no env; 039 adds the APO test-mod (`publisher_source`,
 Overton `source=apo`) plus planning/artefact bug fixes — no migration; when
 another checkout of this repo may be running tests, isolate the gate with a
 per-checkout `TEST_DATABASE_URL` `*_test` override; 038 renames the catalog (`project`→`task`,

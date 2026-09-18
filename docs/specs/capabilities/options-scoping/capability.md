@@ -70,9 +70,9 @@ Status legend: ✅ settled · 🟡 leaning · ❓ open · ⏸ deferred.
   longlist as labelled suggestions, and — when the search ran the deep chain — its **extracted
   findings** are inherited too, so clustering works at finding grain and assessment skips the
   light extraction for those documents (ruling 31); the run still retrieves beyond the inherited set and the
-  Sources tab states inherited versus added. Otherwise OS assembles its own pool with the EB's
-  acquire and screen components inside its own pipeline; it never orchestrates full EB runs per
-  option (concept § Architecture stance). Downstream: a shortlisted option can **spawn an EB
+  Sources tab states inherited versus added. Otherwise OS assembles its own pool with the ES's
+  acquire and screen components inside its own pipeline; it never orchestrates full ES runs per
+  option (concept § Architecture stance). Downstream: a shortlisted option can **spawn an ES
   task** (the full evidence search, ruling 9) and can seed a Theory-of-Change session (⏸, a
   dotted-line consumer). ⏸ Meta-analysis across several corpora stays deferred.
 
@@ -91,7 +91,7 @@ Status legend: ✅ settled · 🟡 leaning · ❓ open · ⏸ deferred.
   assessment (reported distributional effects only); composite scores or rankings;
   collaborative rating (single-user v1; the data model anticipates multiple raters);
   organisation-level institutional memory (workspace-level v1); a visual Theory-of-Change
-  editor; deep mode; meta-analysis over EB corpora; meeting-speed latency; free-text editing of
+  editor; deep mode; meta-analysis over ES corpora; meeting-speed latency; free-text editing of
   the summary (ruling 14); a whole-longlist "Assess all kept options" action (ruling 19,
   inference cost); an orientation / domain-primer capability for newcomers (ruling 24; see
   `docs/deferred.md`).
@@ -105,7 +105,7 @@ Status legend: ✅ settled · 🟡 leaning · ❓ open · ⏸ deferred.
 
 - ✅ **Three depths of evidence work, one gate between the cheap and the expensive**
   (concept ruling 3):
-  1. *Longlist depth* — the EB's mandatory spine as is (acquire, title-and-abstract screen,
+  1. *Longlist depth* — the ES's mandatory spine as is (acquire, title-and-abstract screen,
      classify, appraise, full-text ingest) once at the plan level, then clustering into options
      with per-option coverage: study count by evidence type and **quality tier**, countries,
      populations, outcomes measured (owner, 2026-09-07: classify and appraise always run on
@@ -120,25 +120,25 @@ Status legend: ✅ settled · 🟡 leaning · ❓ open · ⏸ deferred.
      its document set is thin, a light extraction for the countable cells, and synthesise with
      the profile template. Fills the verdict strip and the option profile. Every cell is labelled
      *scoping pass*.
-  3. *Full evidence search* — the complete EB pipeline for **one option**, user-triggered, which
-     mints its own EB task (ruling 9).
+  3. *Full evidence search* — the complete ES pipeline for **one option**, user-triggered, which
+     mints its own ES task (ruling 9).
 - ✅ **Claim depth follows reading depth** (ruling 16). Screening stays title-and-abstract; no
   stage-2 confirmation in scoping (that is one of the things "full run" buys). Every claim
   carries the depth of what was read; a section may not assert what the read material does not
   support; abstracts are quotable anywhere; a document with no obtainable full text supports
   abstract-level claims and is labelled so. "Scoping pass" = screened on titles and abstracts,
   full text read for the documents cited, document set not confirmed.
-- 🟡 **Assessment shape to spike** (concept open question 2, owner 2026-09-07). The countable
+- 🟡 **Assessment shape to check** (concept open question 2, owner 2026-09-07). The countable
   cells (direction per study, magnitude with its comparator and period, study design, setting)
-  come from a **light per-document extraction** — a small field set, not the EB's full schema —
+  come from a **light per-document extraction** — a small field set, not the ES's full schema —
   run as a parallel fan-out over the capped set so latency is close to one document's, not the
   sum. The narrative sections (mechanism, case studies, what it would take, moderator quotes)
   come from **retrieval-augmented reading** over the read texts. The stage-1 screen's structured
   fields give an abstract-level strip before any full text is read. The per-option document cap
-  is the latency lever; the **read set under the cap is chosen by the EB's `select` with a scoping
+  is the latency lever; the **read set under the cap is chosen by the ES's `select` with a scoping
   strategy so that distinct implementations, the required outcomes and the counter-case
   survive**, omissions are represented, and a budget-limited result may be explicitly incomplete
-  (rulings 38, 43); the spike measures **whole-run** time to a usable result, not extraction alone.
+  (rulings 38, 43); the check measures **whole-run** time to a usable result, not extraction alone.
   Mentions and the abstract-level fields come from `extract`'s abstract profile over every
   screened-in document; the screen is unchanged (ruling 43). ❓ How "one vote per independent study" detects
   several papers on one trial is open (a trial or registration identifier in the light
@@ -161,14 +161,25 @@ Stage order (concept § Shape 1–6, rulings 2–6, 14):
 plan ──confirm──▶ baseline ══PAUSE: confirm plan against baseline══▶ longlist
      ──▶ [screens + coverage proposal, as options complete] ──▶ shortlist (user adds/removes)
      ══GATE: "Assess these N"══▶ assessment ──▶ summary ──▶ export
-                                     └──per option──▶ full evidence search (EB task)
+                                     └──per option──▶ full evidence search (ES task)
 ```
 
 - ✅ **Plan.** A scaffolded conversation fills the plan: the question · what we are trying to
   change · **who or what should change** (the target unit — people, firms, places,
   organisations, systems; PICO's "population" is the special case) · where · outcomes · depth ·
   constraints, each tagged *from your question* / *assumed* / *your call*. Presented exactly like
-  the EB search plan (ruling 1; see § Product surface). Non-linear: the user revises the plan
+  the ES search plan (ruling 1; see § Product surface). *(Owner ruling 2026-09-09, with
+  decision-sheet row D3.)* **Where** is the jurisdiction the policy would apply to — country, UK
+  nation, region or local authority — and **defaults to the United Kingdom**; the user narrows or
+  changes it, and the agent asks when the question implies a nation or place. **Setting** is where
+  the **target unit** experiences the intervention — the delivery point or channel: schools,
+  workplaces, primary care, an employer's payroll, the planning system — generalised from the
+  finding field's people-centric wording as target unit was from population. It is **not a
+  mandatory slot**: a user with a preference states it as a scope-shaped constraint (ruling 12),
+  which the Task Agent conversation offers and which is checked against the specified design;
+  without one the longlist spans settings and shows setting as a facet. Where and setting are
+  never conflated. The UK default is a candidate for the Evidence search's planning chat, not
+  applied there in this ruling. Non-linear: the user revises the plan
   after seeing evidence and re-runs apply **deltas, not restarts** (concept § Shape 1; ❓ delta
   granularity and working-set versioning are open question 7).
 - ✅ **Baseline, and it pauses** (rulings 2, 24). Confirming the plan builds the baseline only. The
@@ -192,7 +203,7 @@ plan ──confirm──▶ baseline ══PAUSE: confirm plan against baseline�
   and a specified design, never to a document (ruling 36); packages and ingredients are linked
   part of and shown together. ❓ Minting mechanics — clustering, overlap and dedup,
   target longlist size — are open question 4; 🟡 clustering at option grain is unproven and is
-  spiked before the longlist contract (ruling 31).
+  checked before the longlist contract (ruling 31).
 - ✅ **Screening is a pipeline stage, not a user step** (ruling 4). Screens run on longlist
   metadata as options complete. Hard screens = the user's session constraints of the
   scope-shaped kind plus three defaults (relevant to stated outcomes, distinct, within scope).
@@ -203,8 +214,11 @@ plan ──confirm──▶ baseline ══PAUSE: confirm plan against baseline�
   against the option's specified design. *Effect- and cost-shaped* constraints ("low cost", "at
   least moderate evidence") are checked after assessment; the plan says so; until then each
   option carries a labelled **reasoned guess** that is a flag and a user-requested sort only
-  (see [trust.md](trust.md)). *Evidence-scope* constraints ("OECD evidence only") act on
-  retrieval and screening and **can never exclude a known option**; an option whose only example
+  (see [trust.md](trust.md)). *Evidence restrictions* ("OECD evidence only"; "evidence-scope
+  constraints" in the frozen rulings) are the Evidence search's search-directive filters —
+  country group, years, languages — applied at retrieval (owner ruling on decision-sheet row C1,
+  2026-09-09; the Sources statement says they filter by where a source was published, not where a
+  study was done) and **can never exclude a known option**; an option whose only example
   is out of scope stays, marked "no in-scope evidence" (an evidence-scope constraint can prevent
   an option from ever being discovered, so the breadth claim is bounded by the authorised scope,
   ruling 36). The agent asks when a sentence is ambiguous between the kinds. Screen findings
@@ -257,7 +271,7 @@ plan ──confirm──▶ baseline ══PAUSE: confirm plan against baseline�
   **shortlist assembly record** (each place, its reason, who filled it) and the Sources statement
   of what was searched; it claims breadth, never exhaustiveness. The author's own steer is
   written outside Atlas.
-- ✅ **The full evidence search mints its own EB task** (rulings 9, 41): seeded from the option,
+- ✅ **The full evidence search mints its own ES task** (rulings 9, 41): seeded from the option,
   synthesis template = the option-profile sections, listed under the parent scoping task and
   linked both ways, sharing its project and visibility. The child report, written with that
   template and given the scoping task's user context as input, **computes the profile's
@@ -311,7 +325,15 @@ plan ──confirm──▶ baseline ══PAUSE: confirm plan against baseline�
   option's because the question is different: what is in place · trend if nothing changes · who
   is affected (where the target unit is checked against the data) · what is already changing ·
   **what is contested** (rival explanations of the problem; disagreements between sources) ·
-  cost of inaction · key assumption · sources. Empirical premises sourced; the key assumption
+  cost of inaction · key assumption · sources. *(Owner ruling 2026-09-09, task 044 contract: these
+  eight are **required**; the writer may **add up to two problem-specific sections**, labelled and
+  placed after "what is contested" — "a fixed list may miss what a domain needs, while the eight are
+  questions any status quo can answer". The **eight required sections are the same at both depths**;
+  depth sets two things (owner ruling 2026-09-17, task 044 phase 8: "Go with options 2 and 5, targets 20 and 10"; the rapid section merge was measured, then reverted the same day: "Revert the merge, seven sections at both depths"): the acquisition target — 20 documents **per search backend** at standard, 10 at rapid (Overton and OpenAlex each; owner ruling 2026-09-18, "Add per backend to the docs") — and
+  whether the writer may add proposed sections — up to two at standard, none at rapid. This
+  re-revises the 2026-09-09 "one shape at every depth" line after the measured baselines ran 4.3 to
+  7.5 minutes; merging sections was measured not to shorten the write, because the write turn is
+  set by output tokens, not by the number of headings.)* Empirical premises sourced; the key assumption
   and what is contested are labelled reasoning (ruling 40); the tool does not forecast. In v1 the
   baseline searches Overton and OpenAlex only, and its coverage statement names live official
   statistics and departmental pages as not searched; the user may supply them as stated facts
@@ -399,11 +421,11 @@ Settled by the owner on the wireframes (rulings 1, 13; source
   rows are the fixed lever types (ruling 20). The boards were redrawn to rulings 15–44 on
   2026-09-07 and refined to rulings 45–50 on 2026-09-08; where a board and a ruling still differ,
   the ruling wins (source README).
-- ✅ **The plan is presented exactly like the EB search plan**, in the Agent tab: the navy plan
-  document beside the planning conversation, with Question · What we are trying to change · Settings · Constraints
+- ✅ **The plan is presented exactly like the ES search plan**, in the Agent tab: the navy plan
+  document beside the Task Agent conversation, with Question · What we are trying to change · Settings · Constraints
   (each with when it is checked) · Plan steps · Check-ins, an Edit action per section, and one
   start action.
-- ✅ **Design language follows the EB report**: one body size, grey for secondary text, small
+- ✅ **Design language follows the ES report**: one body size, grey for secondary text, small
   uppercase labels only where necessary, as few chips and colours as possible (blue for links,
   the primary action and shortlist state; states written as words), no jargon. Outputs (baseline,
   profile) read as **linear text** with a side contents outline and collapsible sections;
@@ -422,6 +444,14 @@ Settled by the owner on the wireframes (rulings 1, 13; source
 - ✅ **"Assess these N"** — the second gate, the only point after the longlist where the user
   commits real time and money on options other than those they chose to keep.
 - ✅ **Full evidence search** — per option, always the user's call.
+- ✅ **The two gates and the steering mode** *(owner ruling 2026-09-09, task 044 contract)*: the
+  gates pause in every attended mode. In **unattended** the run passes them on standing defaults —
+  the plan confirmed against the baseline as it stands, "Assess these N" with the proposed
+  shortlist as it stands — each recorded as `decided_by: standing_default` and flagged in the
+  end-of-run review. Owner: "allow the user to have an unattended mode where it goes all the way to
+  the assessed shortlist and report without input, however this shouldn't be the default." The
+  default mode is "At the key decisions". Substance is never silent: the mode moves the decider,
+  never the visibility.
 - ✅ Everything else is iteration on living artefacts, not a gate: add or remove from the
   shortlist, exclude or include again, revise the plan (deltas), ask for a per-axis sort or a
   conditional recommendation.
@@ -450,20 +480,20 @@ contracts:
 - **Screening-reason quality**; **transferability-judgment calibration** (the transferability
   cell is a first-class eval axis); **effect-cell fidelity** against the studies;
   **guess-versus-evidence agreement** for the reasoned guesses (ruling 12).
-- ✅ **Spikes before any contract, in order** (ruling 42): 1 advice and commissioning on live asks ·
+- ✅ **Feasibility checks before any contract, in order** (ruling 42, which calls them spikes): 1 advice and commissioning on live asks ·
   2 evidence attribution and confidence · 3 option-grain construction and selection stability ·
   4 local-condition adjudication · 5 balanced reading within a real budget · 6 a
   specification-level contract trace of one inherited question and one edited variant. Each names
   the question it answers and the result that would change the design (`pass3-answer.md` § 5 in
   the review pack).
 - ✅ This spec carries **no build-order guidance** (ruling 28): slicing into tasks is a
-  contract-time decision and the initial build is expected to be several tasks. A spike order is
+  contract-time decision and the initial build is expected to be several tasks. A check order is
   not a build order.
 
 ## Open decisions and deferred seams
 
 ❓ Open (carried from concept § Open questions, updated by the rulings): 2 mini-search cost
-envelope and the light-extraction-plus-reading shape to spike (reading rule settled, ruling 16;
+envelope and the light-extraction-plus-reading shape to check (reading rule settled, ruling 16;
 read-set discipline stated, ruling 38; study-independence detection open) · 3 rapid latency budget · 4 option-minting mechanics · 5 taxonomy storage (curated asset 🟡 vs prompt-internal)
 · 6 baseline generation and grey-literature sourcing · 7 iteration mechanics and versioning ·
 8 the entry point from the product's front door (the rest of the product surface is settled) ·

@@ -506,7 +506,7 @@ def test_reselect_decision_stamps_replacement_and_pairs_with_plan_version(
                 .order_by(task_plan.c.version)
             ).all()
         assert [(r.version, r.created_by) for r in versions] == [
-            (1, "planner"),
+            (1, "task_agent"),
             (2, "user"),
         ]
 

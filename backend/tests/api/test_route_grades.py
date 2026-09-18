@@ -42,7 +42,7 @@ from policy_atlas.core.schema import (
     chat_turn,
     conversation,
     evidence_scope,
-    planning_transcript,
+    task_agent_transcript,
     task_plan,
 )
 from policy_atlas.core.schema import task as task_table
@@ -115,7 +115,7 @@ def _seed_approved_plan(conn: Connection, *, task_id: uuid.UUID) -> None:
             status="approved",
             payload=plan.model_dump(mode="json"),
             created_at=now(),
-            created_by="planner",
+            created_by="task_agent",
             approved_at=now(),
         )
     )
@@ -226,7 +226,7 @@ def test_runs_read_grade_lets_a_colleague_list_and_get(engine: Engine, tmp_path:
         assert fetched.json()["capability_run_id"] == str(run_id)
 
 
-def test_check_ins_and_planning_turns_read_grade_let_a_colleague_list(
+def test_check_ins_and_task_agent_turns_read_grade_let_a_colleague_list(
     engine: Engine, tmp_path: Path
 ) -> None:
     with tenancy_client(tmp_path, count=2) as (client, (owner, colleague)):
@@ -241,12 +241,12 @@ def test_check_ins_and_planning_turns_read_grade_let_a_colleague_list(
         check_ins = client.get(
             f"/api/v1/tasks/{task_id}/check-ins", headers=colleague.headers
         )
-        planning_turns = client.get(
-            f"/api/v1/tasks/{task_id}/planning-turns", headers=colleague.headers
+        task_agent_turns = client.get(
+            f"/api/v1/tasks/{task_id}/task-agent-turns", headers=colleague.headers
         )
 
         assert check_ins.status_code == 200
-        assert planning_turns.status_code == 200
+        assert task_agent_turns.status_code == 200
 
 
 def test_get_plan_read_grade_lets_a_colleague_read(engine: Engine, tmp_path: Path) -> None:
@@ -267,10 +267,10 @@ def test_get_plan_read_grade_lets_a_colleague_read(engine: Engine, tmp_path: Pat
 
 
 def _stale_pending_turn(conn: Connection, *, task_id: uuid.UUID) -> uuid.UUID:
-    """Insert one planning turn old enough for the sweeper to fail, and return its id."""
+    """Insert one task_agent turn old enough for the sweeper to fail, and return its id."""
     turn_id = uuid.uuid4()
     conn.execute(
-        planning_transcript.insert().values(
+        task_agent_transcript.insert().values(
             id=turn_id,
             task_id=task_id,
             conversation_id=None,
@@ -278,7 +278,7 @@ def _stale_pending_turn(conn: Connection, *, task_id: uuid.UUID) -> uuid.UUID:
             turn_index=0,
             user_message="a turn whose process died",
             reply=None,
-            planner_state=None,
+            task_agent_state=None,
             response=None,
             suggestions=[],
             status="pending",
@@ -290,27 +290,27 @@ def _stale_pending_turn(conn: Connection, *, task_id: uuid.UUID) -> uuid.UUID:
 
 
 def _turn_status(engine: Engine, turn_id: uuid.UUID) -> str:
-    """Read one planning transcript row's status."""
+    """Read one task_agent transcript row's status."""
     with engine.connect() as conn:
         return str(
             conn.execute(
-                select(planning_transcript.c.status).where(
-                    planning_transcript.c.id == turn_id
+                select(task_agent_transcript.c.status).where(
+                    task_agent_transcript.c.id == turn_id
                 )
             ).scalar_one()
         )
 
 
-def test_a_read_graded_planning_get_by_anyone_but_the_owner_writes_nothing(
+def test_a_read_graded_task_agent_get_by_anyone_but_the_owner_writes_nothing(
     engine: Engine, tmp_path: Path
 ) -> None:
     """The stale-turn sweeper is a write, so it belongs to the owner alone.
 
-    `GET .../planning-turns` and `GET .../plan` carry the **read** grade —
+    `GET .../task-agent-turns` and `GET .../plan` carry the **read** grade —
     owner, same-org colleague, administrator — and both used to run
     `_expire_stale_pending_turns` unconditionally. That made a colleague's page
     load, and an administrator's support read, fail the owner's in-flight
-    planning turn: a mutation on a read grade, and for the admin leg a
+    task_agent turn: a mutation on a read grade, and for the admin leg a
     mutation the contract's read-only guarantee forbids outright.
 
     Both non-owner callers are exercised against the same row, and the row is
@@ -340,7 +340,7 @@ def test_a_read_graded_planning_get_by_anyone_but_the_owner_writes_nothing(
             turn_id = _stale_pending_turn(conn, task_id=task_id)
 
         for caller in (colleague, admin):
-            for path in ("planning-turns", "plan"):
+            for path in ("task-agent-turns", "plan"):
                 response = client.get(
                     f"/api/v1/tasks/{task_id}/{path}", headers=caller.headers
                 )
@@ -348,7 +348,7 @@ def test_a_read_graded_planning_get_by_anyone_but_the_owner_writes_nothing(
                 assert _turn_status(engine, turn_id) == "pending"
 
         owner_read = client.get(
-            f"/api/v1/tasks/{task_id}/planning-turns", headers=owner.headers
+            f"/api/v1/tasks/{task_id}/task-agent-turns", headers=owner.headers
         )
         assert owner_read.status_code == 200
         assert _turn_status(engine, turn_id) == "failed"
@@ -543,7 +543,7 @@ def test_respond_to_check_in_write_grade_colleague_403_outsider_404(
         assert missing.status_code == 404
 
 
-def test_create_planning_turn_write_grade_colleague_403_outsider_404(
+def test_create_task_agent_turn_write_grade_colleague_403_outsider_404(
     engine: Engine, tmp_path: Path
 ) -> None:
     with tenancy_client(tmp_path, count=3) as (client, (owner, colleague, outsider)):
@@ -557,10 +557,10 @@ def test_create_planning_turn_write_grade_colleague_403_outsider_404(
 
         body = {"message": "Hello", "client_turn_id": str(uuid.uuid4())}
         forbidden = client.post(
-            f"/api/v1/tasks/{task_id}/planning-turns", headers=colleague.headers, json=body
+            f"/api/v1/tasks/{task_id}/task-agent-turns", headers=colleague.headers, json=body
         )
         missing = client.post(
-            f"/api/v1/tasks/{task_id}/planning-turns",
+            f"/api/v1/tasks/{task_id}/task-agent-turns",
             headers=outsider.headers,
             json={**body, "client_turn_id": str(uuid.uuid4())},
         )
@@ -683,10 +683,10 @@ def test_conversation_id_router_closes_the_deep_link_leak_for_a_colleague(
         assert owner_turns.status_code == 200
 
 
-def test_planning_conversation_get_is_404_for_a_colleague(
+def test_task_agent_conversation_get_is_404_for_a_colleague(
     engine: Engine, tmp_path: Path
 ) -> None:
-    """Planning conversations stay owner-only, whoever else can read the task."""
+    """Task Agent conversations stay owner-only, whoever else can read the task."""
     with tenancy_client(tmp_path, count=2) as (client, (owner, colleague)):
         with seeded(engine) as conn:
             org_id = make_org(conn)
@@ -700,7 +700,7 @@ def test_planning_conversation_get_is_404_for_a_colleague(
                 conn,
                 conversation_id=conversation_id,
                 task_id=task_id,
-                kind="planning",
+                kind="task_agent",
                 created_by=None,
             )
 
@@ -914,17 +914,17 @@ def test_create_conversation_read_grade_lets_a_colleague_start_their_own_chat(
         )
 
 
-def test_create_conversation_can_never_mint_a_planning_conversation(
+def test_create_conversation_can_never_mint_a_task_agent_conversation(
     engine: Engine, tmp_path: Path
 ) -> None:
-    """A planning conversation can only ever be created by the task owner.
+    """A task_agent conversation can only ever be created by the task owner.
 
     Enforced by the *shape of the request body*, not by a branch: this route
     writes the literal `kind="chat"`, and `ConversationCreate` forbids extras,
-    so a caller asking for a planning conversation is rejected **422** before
+    so a caller asking for a task_agent conversation is rejected **422** before
     the route function runs. Owner and colleague are refused identically —
-    the owner's planning conversations are minted by the runtime under
-    `planning.py`'s owner-graded lock, never through this route.
+    the owner's task_agent conversations are minted by the runtime under
+    `task_agent.py`'s owner-graded lock, never through this route.
     """
     with tenancy_client(tmp_path, count=2) as (client, (owner, colleague)):
         with seeded(engine) as conn:
@@ -939,7 +939,7 @@ def test_create_conversation_can_never_mint_a_planning_conversation(
             asked = client.post(
                 f"/api/v1/tasks/{task_id}/conversations",
                 headers=principal.headers,
-                json={"kind": "planning"},
+                json={"kind": "task_agent"},
             )
             assert asked.status_code == 422, asked.text
 

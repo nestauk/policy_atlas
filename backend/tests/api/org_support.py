@@ -202,7 +202,7 @@ def make_conversation(
     Args:
         conn: Open database connection.
         task_id: The task the conversation belongs to.
-        kind: `chat` or `planning`.
+        kind: `chat` or `task_agent`.
         created_by: The authoring subject, or `None` for a legacy row.
         status: `active`, `closed` or `archived`.
         title: The conversation's title.

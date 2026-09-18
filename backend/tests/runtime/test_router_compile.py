@@ -212,7 +212,7 @@ def test_free_text_fanout_applies_confirmed_adjustment_and_rerun(engine: Engine)
         # New user-attributed plan versions record the fan-out (adjustment + rerun).
         rows = _plan_rows(engine, task_id)
         created_by = [r.created_by for r in rows]
-        assert created_by[0] == "planner"
+        assert created_by[0] == "task_agent"
         assert created_by.count("user") == 2
 
         # A confirmed decision carries the verbatim utterance.
@@ -341,7 +341,7 @@ def test_free_text_unconfirmed_applies_nothing_but_events_the_offer(engine: Engi
         # Nothing applied: one select run, no user plan versions, group unchanged.
         assert _count_select_runs(engine, task_id) == 1
         rows = _plan_rows(engine, task_id)
-        assert [r.created_by for r in rows] == ["planner"]
+        assert [r.created_by for r in rows] == ["task_agent"]
         with engine.connect() as conn:
             facets = conn.execute(
                 select(grouping_result.c.grouping_provenance).where(
@@ -439,6 +439,9 @@ class _RaisingRouteBackend:
     def decide(self, *args: Any, **kwargs: Any) -> Any:
         return self._stub.decide(*args, **kwargs)
 
+    def sort_gate_turn(self, *args: Any, **kwargs: Any) -> Any:
+        return self._stub.sort_gate_turn(*args, **kwargs)
+
 
 def test_free_text_backend_error_re_presents_menu_and_completes(engine: Engine) -> None:
     """A route backend error degrades to the canonical menu (watch_error evented);
@@ -466,7 +469,7 @@ def test_free_text_backend_error_re_presents_menu_and_completes(engine: Engine) 
 
         # Nothing applied.
         assert _count_select_runs(engine, task_id) == 1
-        assert [r.created_by for r in _plan_rows(engine, task_id)] == ["planner"]
+        assert [r.created_by for r in _plan_rows(engine, task_id)] == ["task_agent"]
 
         # A watch_error-style degrade is on the record.
         routed = _read_events(engine, task_id, steering_events.AGENT_JUDGEMENT_ROUTED)
@@ -519,7 +522,7 @@ def test_free_text_all_refused_events_refusals_and_changes_nothing(engine: Engin
         # No confirmed fan-out decision, no confirm gate reached, nothing applied.
         assert io.confirm_renders == []
         assert _count_select_runs(engine, task_id) == 1
-        assert [r.created_by for r in _plan_rows(engine, task_id)] == ["planner"]
+        assert [r.created_by for r in _plan_rows(engine, task_id)] == ["task_agent"]
     finally:
         _cleanup_task(engine, task_id)
 
@@ -736,7 +739,7 @@ def test_free_text_p4_section_edit_applies_as_plan_adjustment(engine: Engine) ->
 
         # A user plan version records the section-edit adjustment.
         rows = _plan_rows(engine, task_id)
-        assert [r.created_by for r in rows] == ["planner", "user"]
+        assert [r.created_by for r in rows] == ["task_agent", "user"]
 
         # The confirmed decision carries the fan-out (with the synthesis fragment).
         confirmed = [
