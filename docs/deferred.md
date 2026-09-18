@@ -1551,6 +1551,19 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
 
 ## Execution / collaboration / ops
 
+- **Langfuse costs ignore prompt-cache hits (found 2026-09-18 reading the 044 scoping
+  turns).** `costDetails.input` charges every prompt token at the full input rate: the NEET
+  scoping turns 5, 7 and 11 each carried 8,960 cached tokens of about 10,700 (OpenAI's
+  automatic prefix cache, reported in the observation metadata as `cached_tokens` by
+  `core/usage.py`) and Langfuse still priced them at about 5.8 cents each, the same as the
+  uncached turns 1 and 3. Every per-run and per-turn cost read from Langfuse (including the
+  time-window method in `docs/knowledge/langfuse-cost-by-time-window.md` and the 044 phase-8
+  "about $2.5") overstates the real spend wherever a prefix repeats — Task Agent turns, the
+  gate sort, the answer core, and the synthesise section writer's shared preamble. Fix
+  options: send `input_cached_tokens` as a separate usage type so Langfuse's model pricing
+  applies the cached rate (Langfuse supports per-usage-type prices), or compute cost in
+  `core/usage.py` from the provider's own totals. Until then treat Langfuse `totalCost` as an
+  upper bound.
 - **Per-lane test-DB partition (018 B2/C)** — concurrent `make verify` runs against the
   one shared test DB flake (migration round-trip + steering tests, psycopg INERROR);
   seen from worker lanes (B2/B4) and from a review-lane agent (step 7). Convention today:
@@ -2579,6 +2592,38 @@ deferred here — the owner ruled the font is fine for now.
   - *Linked context is capped at three sources per create* (`TaskCreate.from_task_ids`
     `max_length=3`, Codex X11) — each linked report may add up to 60,000 characters to every
     Task Agent turn; raise the cap when a real need appears, with the prompt size measured.
+    **Owner reading 2026-09-18:** the models in use have very large context windows, so the
+    token count is not the concern at today's sizes; and the live traces show OpenAI's
+    automatic prompt cache serving the fixed prefix (system prompt + linked block) from the
+    third turn on — 8,960 of about 10,700 prompt tokens cached on turns 5, 7 and 11 of the
+    NEET scoping task (turns 1 and 3 paid in full). The cap guards cold turns and accidents,
+    not every turn.
+  - **Inheriting many linked searches: inline block vs retrieval (owner question 2026-09-18).**
+    Today `inherit` puts each linked task's whole plan, report body and coverage statement
+    inline, fenced, on every Task Agent turn (owner ruling 2026-09-09: no size cap — best
+    comprehension at planning time; turn 1 of the NEET task proposed Where and the outcomes
+    from the linked plan). The owner expects few links per task for now but wants the larger
+    case considered so the architecture does not corner itself. Options, none built:
+    1. *Inline, as now* — full comprehension; cost grows linearly with links, paid on cold
+       turns; the scoping Task Agent has no tool loop, so a turn stays one call.
+    2. *Hybrid digest + tool read* — inline the linked plan, coverage statement and the
+       report's key findings; give the Task Agent a `read_linked_report(task, section)` /
+       `search_linked_reports(query)` tool for detail. Scales to many links; adds a read turn
+       (the planner turns are 5 to 19 s today); the model sees what it asks for, so a
+       comprehension trade-off — it can miss context it did not think to read.
+    3. *Retrieval over the linked tasks' evidence* — the linked tasks' chunks and report
+       blocks already exist as rows (`chunk`, `block`); the answer core's `search_chunks` tool
+       set already scopes by task, so pointing it at a linked task's scope is cheap. This is
+       the shape task 2 needs for inherited documents (D4: screened documents and
+       interventions enter with the longlist — many rows, never inline) and the shape a
+       future meta-analysis capability needs natively (reading across many reports).
+    The seam is one function: `runtime/inherit.py::linked_context` returns
+    `LinkedTaskContext` objects and the prompt module renders them. Nothing downstream
+    depends on the block being inline, so moving to 2 or 3 changes the context assembly and
+    the prompt's tool section, not the link records or the plan. Recommendation recorded:
+    keep 1 for task 1 (small N, one-call turns, best comprehension), build 3 for documents
+    in task 2, and revisit 2 for reports when meta-analysis is contracted or when a real task
+    links more than a handful of searches. Quality reading needed before any switch.
   - *Acquisition target wording* — `search.record_cap` applies **per backend** (20 · 10 per
     backend = about 40 · 20 documents over Overton + OpenAlex); the contract § Baseline, the OS
     capability spec § Output structure and the spec log of 2026-09-17 read as totals. **Resolved
