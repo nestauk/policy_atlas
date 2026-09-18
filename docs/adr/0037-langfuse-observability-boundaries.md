@@ -54,6 +54,20 @@ should carry.
    drains, so queued spans flush inside the ECS 10 s stop window. A detached
    chat thread mid-turn at shutdown can still lose its tail spans. Accepted.
 
+6. **Observation names are static and read `actor:action`.** A name identifies
+   an operation, never one execution of it, so it carries no ids, indices or
+   retry counters; those live in metadata (`run_id`, `tss_id`, `window_index`,
+   `rep_index`, `turn_index`, `batch_index`, `round_index`, `call_index`).
+   Root spans are `run:{component}` for the registry components plus
+   `run:chat` (one chat turn). The synthesise run span opens before the
+   component transaction and closes after the post-commit summary pass, so a
+   run's sections, judgements and navigation summaries share one trace. Generations use the component that runs them as the actor
+   (`screen:abstract`, `extract:iof_findings`, `synthesise:section_turn`), the
+   spec tool name when several components share the call (`search:*`,
+   `judge:grounding`), or the surface (`planner:turn`, `agent:route`,
+   `chat:call`). Langfuse dashboards, saved views and evaluators target names,
+   so a rename is a breaking change and needs a note in the PR.
+
 ## Consequences
 
 - The Sessions tab shows one session per task for planning and runs, and one

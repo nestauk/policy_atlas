@@ -50,6 +50,7 @@ from policy_atlas.core.usage import (
     UsageResult,
     log_usage,
     token_usage_from_provider,
+    usage_details,
     usage_metadata,
 )
 from policy_atlas.evidence_search.group.facet_values import FORBIDDEN_GROUP_LABELS
@@ -1864,6 +1865,11 @@ class OpenAISynthesisBackend:
         self._turn_count = 0
         self._lock = Lock()
 
+    @property
+    def langfuse_client(self) -> Langfuse | None:
+        """Tracing client shared with the section read loop (``tool:*`` spans)."""
+        return self._langfuse_client
+
     def _section_messages(
         self,
         seed: dict[str, Any],
@@ -1949,6 +1955,7 @@ class OpenAISynthesisBackend:
         ) -> None:
             proposal, usage = result
             span.update(
+                usage_details=usage_details(usage),
                 input={"messages": messages},
                 output=proposal.model_dump(),
                 model=SYNTHESIS_MODEL,
@@ -1960,7 +1967,7 @@ class OpenAISynthesisBackend:
 
         proposal, usage = tracing.traced_call(
             self._langfuse_client,
-            name="synthesise:proposal",
+            name="synthesise:propose_sections",
             as_type="generation",
             call=lambda: self._parse_proposal_once(messages),
             update=_update,
@@ -1998,6 +2005,7 @@ class OpenAISynthesisBackend:
         def _update(span: Any, result: UsageResult[SummaryWire]) -> None:
             summary, usage = result
             span.update(
+                usage_details=usage_details(usage),
                 input={"messages": messages},
                 output=summary.model_dump(),
                 model=SYNTHESIS_MODEL,
@@ -2007,9 +2015,9 @@ class OpenAISynthesisBackend:
         return tracing.traced_call(
             self._langfuse_client,
             name=(
-                "synthesise:artefact_summary"
+                "synthesise:write_artefact_summary"
                 if seed.get("kind") == "artefact"
-                else "synthesise:block_summary"
+                else "synthesise:write_block_summary"
             ),
             as_type="generation",
             call=lambda: self._write_summary_once(messages),
@@ -2044,6 +2052,7 @@ class OpenAISynthesisBackend:
         def _update(span: Any, result: UsageResult[SummaryJudgeWire]) -> None:
             verdict, usage = result
             span.update(
+                usage_details=usage_details(usage),
                 input={"messages": messages},
                 output=verdict.model_dump(),
                 model=SYNTHESIS_MODEL,
@@ -2052,7 +2061,7 @@ class OpenAISynthesisBackend:
 
         return tracing.traced_call(
             self._langfuse_client,
-            name="synthesise:summary_judge",
+            name="synthesise:judge_summary",
             as_type="generation",
             call=_call,
             update=_update,
@@ -2174,6 +2183,7 @@ class OpenAISynthesisBackend:
         def _update(span: Any, result: UsageResult[SectionTurn]) -> None:
             turn, usage = result
             span.update(
+                usage_details=usage_details(usage),
                 input={"messages": messages},
                 output=_turn_output(turn),
                 model=SYNTHESIS_MODEL,
@@ -2181,13 +2191,14 @@ class OpenAISynthesisBackend:
                     "prompt_version": self._section_prompt_version,
                     "force_emit": force_emit,
                     "transcript_length": len(transcript),
+                    "turn_index": turn_index,
                     **usage_metadata(usage),
                 },
             )
 
         turn, usage = tracing.traced_call(
             self._langfuse_client,
-            name=f"synthesise:section_turn{turn_index}",
+            name="synthesise:section_turn",
             as_type="generation",
             call=lambda: self._create_section_turn_once(messages, force_emit=force_emit),
             update=_update,
@@ -2248,6 +2259,7 @@ class OpenAISynthesisBackend:
         ) -> None:
             repairs, usage = result
             span.update(
+                usage_details=usage_details(usage),
                 input={"messages": messages},
                 output=repairs.model_dump(),
                 model=SYNTHESIS_MODEL,
@@ -2260,7 +2272,7 @@ class OpenAISynthesisBackend:
 
         repairs, usage = tracing.traced_call(
             self._langfuse_client,
-            name="synthesise:repair",
+            name="synthesise:repair_claims",
             as_type="generation",
             call=lambda: self._repair_once(messages),
             update=_update,
@@ -2318,6 +2330,7 @@ class OpenAISynthesisBackend:
         def _update(span: Any, result: UsageResult[SectionProseWire]) -> None:
             section, usage = result
             span.update(
+                usage_details=usage_details(usage),
                 input={"messages": messages},
                 output=section.model_dump(),
                 model=SYNTHESIS_MODEL,
@@ -2329,7 +2342,7 @@ class OpenAISynthesisBackend:
 
         section, usage = tracing.traced_call(
             self._langfuse_client,
-            name="synthesise:key_findings",
+            name="synthesise:write_key_findings",
             as_type="generation",
             call=lambda: self._write_key_findings_once(messages),
             update=_update,
@@ -2369,6 +2382,7 @@ class OpenAISynthesisBackend:
         def _update(span: Any, result: UsageResult[CaseStudyWire]) -> None:
             wire, usage = result
             span.update(
+                usage_details=usage_details(usage),
                 input={"messages": messages},
                 output=wire.model_dump(),
                 model=CASE_STUDIES_MODEL,
@@ -2380,7 +2394,7 @@ class OpenAISynthesisBackend:
 
         wire, usage = tracing.traced_call(
             self._langfuse_client,
-            name="synthesise:case_studies",
+            name="synthesise:write_case_studies",
             as_type="generation",
             call=lambda: self._write_case_studies_once(messages),
             update=_update,
@@ -2428,6 +2442,7 @@ class OpenAISynthesisBackend:
         def _update(span: Any, result: UsageResult[NoteWire]) -> None:
             wire, usage = result
             span.update(
+                usage_details=usage_details(usage),
                 input={"messages": messages},
                 output=wire.model_dump(),
                 model=MRS_NOTE_MODEL,
@@ -2439,7 +2454,7 @@ class OpenAISynthesisBackend:
 
         wire, usage = tracing.traced_call(
             self._langfuse_client,
-            name="synthesise:mrs_note",
+            name="synthesise:write_source_note",
             as_type="generation",
             call=_call,
             update=_update,
@@ -2487,6 +2502,7 @@ class OpenAISynthesisBackend:
         def _update(span: Any, result: UsageResult[IntroWire]) -> None:
             wire, usage = result
             span.update(
+                usage_details=usage_details(usage),
                 input={"messages": messages},
                 output=wire.model_dump(),
                 model=FULL_REPORT_INTRO_MODEL,
@@ -2498,7 +2514,7 @@ class OpenAISynthesisBackend:
 
         wire, usage = tracing.traced_call(
             self._langfuse_client,
-            name="synthesise:full_report_intro",
+            name="synthesise:write_intro",
             as_type="generation",
             call=_call,
             update=_update,

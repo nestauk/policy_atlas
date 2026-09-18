@@ -20,7 +20,7 @@ from openai.types.chat import ChatCompletionMessageParam
 from policy_atlas.core import tracing
 from policy_atlas.core.openai_client import parse_structured, resolve_openai_client
 from policy_atlas.core.prompt_fields import scrub_nul
-from policy_atlas.core.usage import UsageResult, usage_metadata
+from policy_atlas.core.usage import UsageResult, usage_details, usage_metadata
 from policy_atlas.evidence_search.extract.extract import _scrub_nul
 from policy_atlas.runtime.planner_prompt import (
     PLANNER_MAX_OUTPUT_TOKENS,
@@ -214,19 +214,21 @@ class OpenAIPlannerBackend:
             turn, usage = result
             conversation_id_str = str(conversation_id) if conversation_id is not None else None
             span.update(
+                usage_details=usage_details(usage),
                 input={"messages": messages},
                 output=turn.model_dump(),
                 model=PLANNER_MODEL,
                 metadata={
                     "prompt_version": PLANNER_PROMPT_VERSION,
                     "conversation_id": conversation_id_str,
+                    "turn_number": turn_number,
                     **usage_metadata(usage),
                 },
             )
 
         turn, _usage = tracing.traced_call(
             langfuse_client,
-            name=f"planner:turn{turn_number}",
+            name="planner:turn",
             as_type="generation",
             call=lambda: self._parse_once(messages),
             session_id=session_id,

@@ -14,7 +14,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from policy_atlas.core import tracing
 from policy_atlas.core.openai_client import parse_structured, resolve_openai_client
 from policy_atlas.core.tags import has_control_character
-from policy_atlas.core.usage import UsageResult, usage_metadata
+from policy_atlas.core.usage import UsageResult, usage_details, usage_metadata
 from policy_atlas.evidence_search.corpus.theme_grouping import GroupingDoc, records_json
 
 log = structlog.get_logger()
@@ -284,6 +284,7 @@ class OpenAIRankingBackend:
         ) -> None:
             scores, usage = result
             span.update(
+                usage_details=usage_details(usage),
                 input={"intent": intent, "records": list(batch)},
                 output={"scores": scores},
                 model=RERANK_MODEL,
@@ -311,7 +312,7 @@ class OpenAIRankingBackend:
 
         scores, usage = tracing.traced_call(
             langfuse_client,
-            name=f"rank:batch{batch_index}",
+            name="select:rerank",
             as_type="generation",
             call=lambda: self._rank_once(batch, intent=intent),
             update=_update,

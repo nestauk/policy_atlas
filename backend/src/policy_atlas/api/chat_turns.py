@@ -19,7 +19,7 @@ from policy_atlas.api.routers._access import own_chat_leg
 from policy_atlas.core import tracing
 from policy_atlas.core.embeddings import EmbeddingBackend
 from policy_atlas.core.schema import capability_run, chat_turn, conversation, task
-from policy_atlas.core.usage import usage_metadata
+from policy_atlas.core.usage import usage_details, usage_metadata
 from policy_atlas.evidence_search.extract.quote_verify import (
     BasisText,
     build_basis,
@@ -877,6 +877,7 @@ def run_chat_turn(
                 def _record(span: Any, result: tuple[dict[str, Any], Any]) -> None:
                     response, usage = result
                     span.update(
+                        usage_details=usage_details(usage),
                         input={
                             "messages": messages,
                             "tool_exchanges": len(transcript),
@@ -885,6 +886,7 @@ def run_chat_turn(
                         output=response,
                         metadata={
                             "prompt_version": CHAT_PROMPT_VERSION,
+                            "call_index": call_count,
                             **usage_metadata(usage),
                         },
                         model=CHAT_MODEL,
@@ -896,7 +898,7 @@ def run_chat_turn(
                 # live-trace lane).
                 response, usage = tracing.traced_call(
                     langfuse_client,
-                    name=f"chat:call{call_count}",
+                    name="chat:call",
                     as_type="generation",
                     call=_call,
                     update=_record,
@@ -923,7 +925,7 @@ def run_chat_turn(
                 langfuse_client,
                 run_id=turn_id,
                 task_id=task_id,
-                component="chat_v1",
+                component="chat",
                 # Chat sessions key on the conversation, not the task: a
                 # conversation can open long after the task ran (ADR 0037).
                 session_id=conversation_id,
@@ -936,6 +938,7 @@ def run_chat_turn(
                     retriever=retriever,
                     emit_label="emit_answer",
                     on_tool_start=_on_tool_start,
+                    langfuse_client=langfuse_client,
                 )
                 _check_cancelled()
                 emission = loop["emission"]

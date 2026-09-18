@@ -15,7 +15,7 @@ from pydantic import BaseModel
 
 from policy_atlas.core import tracing
 from policy_atlas.core.openai_client import parse_structured, resolve_openai_client
-from policy_atlas.core.usage import UsageResult, usage_metadata
+from policy_atlas.core.usage import UsageResult, usage_details, usage_metadata
 from policy_atlas.evidence_search.sourcing.search_prompts import (
     SEARCH_GEN_MAX_OUTPUT_TOKENS,
     SEARCH_QUERIES_MODEL,
@@ -145,17 +145,20 @@ class OpenAISearchGenerationBackend:
         usage_event: str,
         trace_name: str,
         label: str,
+        metadata: dict[str, Any] | None = None,
     ) -> UsageResult[WireT]:
         langfuse_client = self._langfuse_client
 
         def _update(span: Any, result: UsageResult[WireT]) -> None:
             wire, usage = result
             span.update(
+                usage_details=usage_details(usage),
                 input={"messages": messages},
                 output=wire.model_dump(),
                 model=model,
                 metadata={
                     "prompt_version": prompt_version,
+                    **(metadata or {}),
                     **usage_metadata(usage),
                 },
             )
@@ -193,7 +196,7 @@ class OpenAISearchGenerationBackend:
             response_format=SearchQueriesWire,
             prompt_version=SEARCH_QUERIES_PROMPT_VERSION,
             usage_event="search_generation.queries.usage",
-            trace_name="search_queries",
+            trace_name="search:generate_queries",
             label="search query-generation",
         )
 
@@ -215,8 +218,9 @@ class OpenAISearchGenerationBackend:
             response_format=SearchQueriesWire,
             prompt_version=SEARCH_REFORMULATE_PROMPT_VERSION,
             usage_event="search_generation.reformulate.usage",
-            trace_name=f"search_reformulate:r{payload.round_index}",
+            trace_name="search:reformulate",
             label="search reformulation",
+            metadata={"round_index": payload.round_index},
         )
 
     def suggest(self, payload: SuggestPayload) -> UsageResult[SearchSuggestWire]:
@@ -237,7 +241,7 @@ class OpenAISearchGenerationBackend:
             response_format=SearchSuggestWire,
             prompt_version=SEARCH_SUGGEST_PROMPT_VERSION,
             usage_event="search_generation.suggest.usage",
-            trace_name="search_suggest",
+            trace_name="search:suggest",
             label="search suggestion",
         )
 

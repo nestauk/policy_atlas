@@ -29,6 +29,7 @@ from policy_atlas.core.usage import (
     UsageResult,
     log_usage,
     token_usage_from_provider,
+    usage_details,
     usage_metadata,
 )
 
@@ -351,6 +352,7 @@ class OpenAIGroundingJudgeBackend:
         def _update(span: Any, result: UsageResult[JudgeResponseWire]) -> None:
             verdicts, usage = result
             span.update(
+                usage_details=usage_details(usage),
                 input={"messages": messages},
                 output=verdicts.model_dump(),
                 model=JUDGE_MODEL,
@@ -362,7 +364,7 @@ class OpenAIGroundingJudgeBackend:
 
         verdicts, usage = tracing.traced_call(
             self._langfuse_client,
-            name="synthesise:judge",
+            name="judge:grounding",
             as_type="generation",
             call=lambda: self._judge_once(messages),
             update=_update,
