@@ -513,6 +513,18 @@ _(filled per phase; flagged deviations listed here as they arise)_
 15. **"Steps and check-ins" is the one plan section without an Edit action**
     (verifier F9): Evidence search parity — that section is compiled, not
     edited; `PlanDocument.test.tsx` asserts `sections − 1` Edit buttons.
+17. **The Result's baseline band came off and its eyebrow reads "Baseline"**
+    (owner ruling 2026-09-18, after seeing the live Result: remove "Baseline ·
+    the situation these options would change · plan confirmed · … · built from
+    plan version N" under the title, and replace the "scoping pass" eyebrow
+    with "Baseline"). Supersedes the Result half of contract A17/C18 and the
+    rubric-9 wording "Result shows the baseline with the band and run state":
+    the walk's state and the "built from plan version N" mark live on the plan
+    document (`useScopingPlanStart`, `SCOPING_CONFIRMED_LINE`), which keeps the
+    same rule. The roll-up's `depth_label` ("scoping pass") stays on the wire
+    for the later per-row surfaces the trust rules name; the Result no longer
+    shows it. `baselineBand.ts` shrinks to `isBaselineArtefact`; the band
+    tests go, the plan-document tests keep the walk-status regression.
 16. **`scripts/rename_038.py` was refactored onto the new
     `scripts/rename_engine.py`** (verifier F12): outside the contract's In
     list; done because the 038 tool was the engine 044's sweep needed and
@@ -680,7 +692,7 @@ No test relaxed, skipped or deleted (verifier: zero `skip`/`xfail`/`todo` in the
 | 6 | ✅ | `test_task_agent_scoping_prompt.py` (labels, no primary), `test_task_agent_scoping.py` (no recommendation); D8 warning + kind question: prompt pin + live check (c) (verifier F10) |
 | 7 | ✅ | `test_scoping_compose.py` (chain, 7+Sources at both depths, proposals 2 · 0); `test_synthesise_baseline.py` (order, gap state, claim types, no ES passes, Sources block + A5 restriction clause, `scoping pass`, + A6 label flag / `tier_label`); check 7 ships nothing; compute 389 / 453 / 259 s |
 | 8 | ✅ | `test_baseline_gate.py` (lattice, modes, unattended, ES generic pause, label; + A1 failed synthesise, A2 non-pausing IO, A3 `proceed_flag` only); `test_baseline_gate_checkin.py` (confirm, change_plan, second answer refused, plan editable; + B9 no `abort` floor); `test_task_agent_gate_turns.py` (answer, race, change+replan, rebuild, confirm both versions, ask-back, fences; + B4 labels, B6 race reply, B7 durable decision, B8 carried text) |
-| 9 | ✅ | `ArtefactView.baseline.test.tsx`; `baselineBand` tests (+ C-b artefact-based rule); Sources/Share unchanged (empty diff); History hook rename only |
+| 9 | ✅ | `ArtefactView.baseline.test.tsx` (headed "Baseline", no band — owner ruling 2026-09-18, deviation 17; the walk-status rule lives in `planStart.test.ts`); Sources/Share unchanged (empty diff); History hook rename only |
 | 10 | ✅ | `b5e1d7a4c026` exactly the named objects (deviation list completed, F16); `a7d3f1c8e2b5` rewrites + reverses; round-trips, refusals (task or `capability_run`), operator FK order tested |
 | 11 | ✅ | `make verify` green at entry and after fixes (§ Commands run); deterministic list located item by item (verifier); live check (a)–(g) with times; gate-sort latency 0.82–1.35 s (trace lane) |
 | 12 | ✅ | structural JSON comparison: four renamed schemas + one path removed, `/plan/confirm-baseline` added; nullable widenings declared (deviation 7 incl. `PlanUpdatedFrame.plan`); + `RunOut.artefact_id`, `source_task_name` nullable, `from_task_ids` max 3 — additive, via `make openapi-sync`, `drift-check: OK` |

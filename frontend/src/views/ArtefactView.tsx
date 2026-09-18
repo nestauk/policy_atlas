@@ -28,7 +28,7 @@ import { scrub } from "../lib/scrub";
 import { useDocumentTitle } from "../lib/title";
 import { COPY } from "../lib/vocabulary";
 import { hasResult } from "./lifecycle";
-import { artefactDepthLabel, isBaselineArtefact, useBaselineBand } from "./baselineBand";
+import { isBaselineArtefact } from "./baselineBand";
 import { hasTerminalPartialLiveArtefact, useRunStream } from "../store";
 import type { LiveSection, RunStreamState } from "../store";
 import { Card } from "../ui/brand/Card";
@@ -1326,12 +1326,10 @@ export function ArtefactView() {
   const dossierSource = searchParams.get("source");
   const [detailClaim, setDetailClaim] = useState<ClaimLike | null>(null);
   // Task 044 (deliverable 9): an options-scoping task's Result is the
-  // baseline, not a report. The band's walk-state words cost a plan + runs
-  // read, so an Evidence search never pays for them (the empty task id
-  // disables both queries).
-  const isScopingTask = task.data?.capability === "options_scoping";
+  // baseline, not a report. It is headed "Baseline" and nothing else; the
+  // walk's state lives on the plan document (owner ruling 2026-09-18 — the
+  // band under the title came off).
   const baseline = isBaselineArtefact(artefact.data);
-  const band = useBaselineBand(isScopingTask ? taskId : "");
   useDocumentTitle(task.data?.name, baseline ? "Baseline" : "Report");
 
   const openDossier = (title: string) => {
@@ -1537,22 +1535,17 @@ export function ArtefactView() {
       <header id="answer" className="mb-8">
         <div className="flex items-center justify-between gap-4">
           <p className="text-meta font-extrabold uppercase tracking-[0.06em] text-grey">
-            {/* The kind-of-artefact slot. A baseline puts the roll-up's own
-                depth label here ("scoping pass") — the words are the
-                server's, never derived from the sections (C18). */}
-            {baseline ? (artefactDepthLabel(data) ?? "Baseline") : "Report"}
+            {/* The kind-of-artefact slot. The roll-up's depth label
+                ("scoping pass") stays on the wire for the later per-row
+                surfaces; the Result's heading says what the reader is looking
+                at (owner ruling 2026-09-18). */}
+            {baseline ? "Baseline" : "Report"}
           </p>
           <ArtefactDownload artefact={data} />
         </div>
         <h1 className="mt-1 text-display font-extrabold leading-tight tracking-[-0.5px] text-navy max-md:text-title">
           {scrub(data.title)}
         </h1>
-        {baseline && (
-          <p className="mt-2 border-t border-line pt-2 text-body text-grey">
-            {band.line}
-            {band.planVersionMark !== null && ` · ${band.planVersionMark}`}
-          </p>
-        )}
         {snapshotCells.length > 0 && (
           <div className="mt-4 grid grid-cols-2 border border-line sm:grid-cols-4">
             {snapshotCells.map(([label, value, href]) => {

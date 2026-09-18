@@ -129,43 +129,24 @@ describe("ArtefactView — the options-scoping baseline", () => {
     vi.clearAllMocks();
   });
 
-  it("heads the profile with the baseline's own title and the roll-up's depth label", () => {
+  it("heads the profile with the baseline's own title under the word Baseline", () => {
     renderBaseline();
     expect(
       screen.getByRole("heading", { name: "Do nothing: current policy and trajectory" }),
     ).toBeInTheDocument();
-    expect(screen.getByText("scoping pass")).toBeInTheDocument();
+    expect(screen.getByText("Baseline")).toBeInTheDocument();
+    expect(screen.queryByText("scoping pass")).not.toBeInTheDocument();
     expect(screen.queryByText("Report")).not.toBeInTheDocument();
   });
 
-  it("bands the profile with what it is, what it is for, and the walk's state in words", () => {
-    renderBaseline();
-    expect(
-      screen.getByText(
-        "Baseline · the situation these options would change · ready · awaiting your confirmation",
-      ),
-    ).toBeInTheDocument();
-  });
-
-  it("switches the state word once the plan is confirmed", () => {
+  it("carries no band under the title — the plan document owns the walk's state (owner, 2026-09-18)", () => {
     renderBaseline({
       baselineConfirmed: { artefact_id: mockBaselineArtefact.artefact_id, plan_version: 1 },
+      planVersion: 4,
     });
-    expect(
-      screen.getByText(
-        "Baseline · the situation these options would change · plan confirmed · the longlist arrives with the next stage",
-      ),
-    ).toBeInTheDocument();
-  });
-
-  it("marks the plan version only after the plan has changed since the walk", () => {
-    renderBaseline();
+    expect(screen.queryByText(/the situation these options would change/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/awaiting your confirmation/)).not.toBeInTheDocument();
     expect(screen.queryByText(/built from plan version/)).not.toBeInTheDocument();
-
-    renderBaseline({ planVersion: 4 });
-    expect(
-      screen.getByText(/· built from plan version 1$/),
-    ).toBeInTheDocument();
   });
 
   it("outlines the required sections in order with the proposed one in place and Sources last", () => {

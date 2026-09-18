@@ -62,7 +62,7 @@ test.describe("mock options-scoping journey", () => {
    * new task has no run yet — A17's unlock is the baseline's existence, not
    * the walk's ending.
    */
-  test("the scoping task's Result shows the baseline under its band", async ({ page }) => {
+  test("the scoping task's Result shows the baseline, headed Baseline", async ({ page }) => {
     await page.goto("/new");
     await page.getByRole("button", { name: "Options scoping" }).click();
     await page
@@ -76,12 +76,9 @@ test.describe("mock options-scoping journey", () => {
     await expect(
       page.getByRole("heading", { name: "Do nothing: current policy and trajectory" }),
     ).toBeVisible();
-    await expect(
-      page.getByText(
-        "Baseline · the situation these options would change · ready · awaiting your confirmation",
-      ),
-    ).toBeVisible();
-    await expect(page.getByText("scoping pass")).toBeVisible();
+    await expect(page.getByText("Baseline", { exact: true })).toBeVisible();
+    await expect(page.getByText("scoping pass")).toHaveCount(0);
+    await expect(page.getByText(/the situation these options would change/)).toHaveCount(0);
     // A baseline has no Key findings and no Executive summary / Full report
     // parts framing it.
     await expect(page.getByRole("heading", { name: "Executive summary" })).toHaveCount(0);
