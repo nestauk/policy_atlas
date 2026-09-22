@@ -14,9 +14,9 @@ edit them.
 > spec). The decision-sheet rows scheduled for task 2 (A1, A2, A9, A10, A11,
 > E1, E2, E4, F2, F3; `docs/tasks/035-options-scoping/checks/decision-sheet.md`
 > line 15) are folded into those rulings; rows E5, E6 and F13 wait for task 3
-> (D17). **Owner review of the folded contract: _pending_.**
-> Contract approved (before planning): _pending · owner_ ·
-> Contract-stage adversarial review: _pending (after approval, owner's go)_ ·
+> (D17). **Approved as folded 2026-09-22 · owner.**
+> Contract approved (before planning): **2026-09-22 · owner** ·
+> Contract-stage adversarial review: _running (Codex, read-only, owner's go 2026-09-22)_ ·
 > Plan approved (before implementation): _pending_ ·
 > ADR: _0039 (drafted at step 4)_.
 >
