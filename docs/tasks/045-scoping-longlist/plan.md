@@ -17,8 +17,8 @@ nothing to scope. It was written against the as-built code at `19776b65`
 > per-step directive key ("Yes, amend row 3"); P16a — the check-in card
 > route stays `204` ("Yes, card route stays 204"); P16b — `inherit` is
 > non-spine ("Yes, inherit non-spine, fold the rest"). The seven lead calls
-> in § Open at the plan gate stand as folded. Plan approved (before
-> implementation): _pending · owner_. **ADR 0039 is drafted at step 4 of
+> in § Open at the plan gate stand as folded. **Plan approved (before
+> implementation): 2026-09-22 · owner.** **ADR 0039 is drafted at step 4 of
 > this design phase, after plan approval and before any build phase** (044
 > X15); Phase 8 adds evidence and the sign-off date.
 

@@ -29,8 +29,14 @@ views (list, reduced grid, option card) with the chat verbs that edit them.
 > non-spine), deliverables 10 and 11 (existence and activity, not a latest
 > run; `active_run`, `has_longlist`; the card route stays `204`), and
 > § Constraints (the per-component semaphores).
-> Plan approved (before implementation): _pending_ ·
-> ADR: _0039 (drafted at step 4)_.
+> **Plan approved 2026-09-22 · owner.** ·
+> ADR: **[0039](../../adr/0039-options-scoping-longlist-option-searches-and-option-records.md)**
+> — Accepted 2026-09-22 (the second walk, option searches as child walks,
+> compose by purpose, the spine flag, existence and activity, the
+> intervention profile, the option records, seeded clustering, the label
+> resolver, Where out of retrieval, the two-turn verbs, rollback).
+> **Design phase closed 2026-09-22; the build runs in a fresh conversation
+> with `task-cycle-build`.**
 >
 > **Branching:** `task/045-scoping-longlist` from `feat/options-scoping` at
 > `6c19a1e1` (dev merged in: PR #81, Langfuse cost accuracy, 2026-09-22). PR
