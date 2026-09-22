@@ -22,5 +22,5 @@
   "backend/src/policy_atlas/runtime/longlist_verbs_prompt.py": "df6bbff96ecf87b185da7f1e782fbe1881f22c253850ff8eda84da4e1236391c",
   "backend/src/policy_atlas/runtime/option_design_prompt.py": "270e355d69d8f4d87257aec79ba9daf65890318682365fe4f8125de7ff22bd91",
   "backend/src/policy_atlas/runtime/task_agent_prompt.py": "4e85172f12953082a65daf40b9e3d456020271abe4c60138b8246b29e0538ce2",
-  "backend/src/policy_atlas/runtime/task_agent_scoping_prompt.py": "e11e4e5a9453a16623db595ce55598172da07d1dd32df9c57de0ec9923e2f139"
+  "backend/src/policy_atlas/runtime/task_agent_scoping_prompt.py": "29add261f98820ddf898cd45f4664a16ace2f5563fa8f0347f9d8ff596053adf"
 }

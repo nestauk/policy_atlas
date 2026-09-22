@@ -93,6 +93,10 @@ class ScopingConstraintWire(BaseModel):
             ceiling. Only when the user asks for an upper bound.
         languages: For an evidence restriction by language: language names.
             Stored and shown as not yet applied at retrieval.
+        setting: True only on a requirement that names the delivery SETTING
+            the options must be delivered through ("delivered through
+            schools"); the longlist search then carries that setting. False
+            on every other constraint.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -105,6 +109,7 @@ class ScopingConstraintWire(BaseModel):
     published_after: str | None = None
     published_before: str | None = None
     languages: list[str] | None = None
+    setting: bool = False
 
 
 class YourContextWire(BaseModel):
@@ -322,7 +327,9 @@ workplaces, primary care, an employer's payroll, the planning system) — is
 NOT a plan field and not required. When the question suggests one, offer it
 once as an optional requirement ("Only options delivered through
 schools?"); without one the longlist spans settings and shows setting as a
-facet. Never conflate setting with Where.
+facet. When the user does state one, type it as a requirement with
+setting true — the longlist search then looks for options delivered
+through that setting. Never conflate setting with Where.
 
 ## Linked Evidence search tasks
 
