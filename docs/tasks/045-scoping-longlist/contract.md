@@ -23,7 +23,12 @@ views (list, reduced grid, option card) with the chat verbs that edit them.
 > E4, F2, F3; `docs/tasks/035-options-scoping/checks/decision-sheet.md` line
 > 15) are folded into the rulings; rows E5, E6 and F13 wait for task 3 (D17).
 > **Re-approved as folded 2026-09-22 · owner** (after D1 and D6 changed
-> materially and D26 was added).
+> materially and D26 was added). **Amended at the plan gate 2026-09-22
+> (plan-review findings P4, P5, P10, P16a, P16b, owner-ruled):** surface-map
+> row 3 (the skip is a per-step directive key), deliverable 3 (`inherit`
+> non-spine), deliverables 10 and 11 (existence and activity, not a latest
+> run; `active_run`, `has_longlist`; the card route stays `204`), and
+> § Constraints (the per-component semaphores).
 > Plan approved (before implementation): _pending_ ·
 > ADR: _0039 (drafted at step 4)_.
 >
@@ -107,9 +112,12 @@ the ADR:
    **option searches** (D6, child walks, deliverable 4) in parallel with the
    **broad search** (acquire → screen → classify → appraise → ingest) →
    **intervention profile** over every screened-in document → **longlist**
-   (seeded clustering) → **constrain**. Spine membership (A6): the broad
-   chain, the profile, `longlist` and `constrain` are spine (a failure ends
-   the walk `failed`); `suggest` and each option search are not (a failure
+   (seeded clustering) → **constrain**. Spine membership (A6, P16b): the
+   broad chain, the profile, `longlist` and `constrain` are spine (a
+   failure ends the walk `failed`); `inherit` (owner at the plan gate:
+   "inherit non-spine" — an unreadable link degrades the walk, which
+   continues without the linked documents, the missing link named on the
+   longlist), `suggest` and each option search are not (a failure
    degrades). The broad search's pool is the union of the baseline walk's
    documents, the **inherited documents** of every linked Evidence search
    task (the document part of `inherit`, deferred from 044 D4: a
@@ -323,10 +331,13 @@ the ADR:
     `option_design_v1` proposes back (A14) and calls `run_option_search`
     (a child walk with no parent); *exclude* takes the user's reason; each
     applied verb writes the same state the buttons write and a History
-    event as the user's turn. The ordinary task chat resolves the latest
-    succeeded or degraded walk, so after this slice it answers over the
-    longlist walk's scopes rather than the baseline's; intended, and stated
-    on the surface map (A8). The plan step *Longlist* loses "Not in this
+    event as the user's turn. The ordinary task chat answers over the
+    longlist walk and its children's scopes once a longlist exists, and
+    over the baseline walk before (A8; at the plan gate the "latest walk"
+    reading was replaced — P4, owner: "scoping readers see what exists and
+    what is active": a scoping task's readers key on which artefacts exist
+    and whether any walk, children included, is active, never on a single
+    latest run; `latest_run` stays as it is for the Evidence search). The plan step *Longlist* loses "Not in this
     release" and gains its blurb; the plan document's state machine gains
     `longlist_built` and `rebuild_or_keep` ahead of `confirmed`, and the
     shared line "Plan confirmed · the longlist arrives with the next stage"
@@ -345,8 +356,12 @@ the ADR:
     same handler as the chat verb), `POST .../options/{option_id}/exclude`
     and `/include` (with the user's reason), the longlist walk's and its
     children's progress on the existing run stream; the confirm-baseline
-    route and the gate option return the opened walk in an **optional**
-    field of the shared plan model (A23); `your_options` and the default
+    route returns the opened walk in an **optional** field of the shared
+    plan model and the chat's gate decision carries it on the decision
+    (A23); **the check-in card route stays `204`** (P16a, owner: "card
+    route stays 204") — the thread learns of the walk from the run stream;
+    `TaskOut` gains `active_run` (any running or paused walk, children
+    included) and `has_longlist` (P4); `your_options` and the default
     preference on the plan read and patch bodies. All additive; OpenAPI
     regenerated.
 
@@ -488,7 +503,7 @@ Rows marked **keep** must not change behaviour. File paths as built at
 | 3 | `compose_scoping` | one chain, baseline | chains chosen by the intent record's purpose: baseline (as today), longlist, targeted (the option search); the registry keeps one `compose` per capability and the purpose is a compose argument | `runtime/scoping_plan.py`, `runtime/capability_registry.py` |
 | 3 | inherit, document part | `linked_context` seeds the Task Agent only | + `inherit_documents(conn, task_id)`: one `task_source_snapshot` row per linked document, origin unchanged, created by the inherit step (A3); the linked report's body handed to `suggest` (A15) | `runtime/inherit.py` |
 | 3 | Inherited labels | none | the **label resolver** (D23) and its three readers: longlist coverage, Sources read model, answer-core citation labels; the rubric-version rule | new `options_scoping/labels.py`; `api/readmodels/repository.py`; `api/answer_core.py` (`apply_appraisal_labels`) |
-| 3 | acquire · screen · classify · appraise · ingest | **keep** (ES components, parameterised) | unchanged code; the longlist and targeted scopes' directives only; classify and appraise skip rows the resolver answers — a filter in the scoping compose, before the component runs, because classify reads no directive and appraise's parser is fail-closed (A4) | `evidence_search/sourcing/*`, `assess/*` |
+| 3 | acquire · screen · classify · appraise · ingest | **keep** (ES components, parameterised) | unchanged behaviour; the longlist and targeted scopes' directives only. *Amended at the plan gate (P10; owner: "amend row 3"):* classify and appraise skip rows the resolver answers through **one optional, fail-closed directive key each** (`skip_task_source_snapshot_ids`), computed per step by the runner's directive-authoring seam (`leg_directive`) after the inherit step has run — a compose-time filter is impossible, because the directive is the only channel into these components and the inherited rows do not exist at compose time. Behaviour-preserving when the key is absent. Classify's and ingest's fan-outs also take the shared per-component semaphores (P5) | `evidence_search/sourcing/*`, `assess/*` |
 | 4 | suggest | does not exist | new step: one judgment-model call over the plan, the baseline and the linked report → entrants | new `options_scoping/suggest/` (`suggest.py`, `suggest_prompt.py`) |
 | 4 | Option search tool and child walks | does not exist | `run_option_search(design)`; child `capability_run` rows with `parent_capability_run_id`; a fan-out step in the longlist walk that dispatches and waits; the cross-walk bound | `runtime/runner.py`, `runtime/option_search.py` (new), `core/schema.py` (`capability_run`), `api/routers/runs.py` (the executor bound) |
 | 5 | extract | requires a `selection_run_id`; refuses an extraction without IOF | + the selection-free path; the interventions profile; the IOF rule lifted; registry, harness graph and plan-mapping entries for `extract_interventions` | `evidence_search/extract/extract.py`, new `interventions_profile.py`, `extract_interventions_prompt.py`, `interventions_records.py`; `runtime/run_spec.py`, `runtime/harness.py`, `runtime/task_plan.py` |
@@ -789,12 +804,18 @@ Hard gates this slice touches — approval is this contract's sign-off:
   search, up to 15 option searches, the intervention profile over every
   screened-in document on the mini model (about 3,000 prompt tokens each),
   the suggest, clustering, theme, typing and constrain calls; the chat verb
-  *add* opens one child walk. No new host. The cross-walk bound (width 4)
-  and the executor cap govern concurrency.
+  *add* opens one child walk. No new host. The option-search pool (width
+  4), the per-component semaphores around classify's and ingest's fan-outs
+  (P5, closing the 044 seam as stated) and the executor cap govern
+  concurrency; database connections are measured in the live check and
+  the pool size is not changed (production config).
 - **Public interface:** the routes in deliverable 11; the confirm-baseline
-  response and the gate decision carry the opened walk in an optional
-  field; `your_options` and the default preference on the plan bodies;
-  `PlanStep` blurbs; child walks on the run stream. Everything additive.
+  response and the chat gate decision carry the opened walk in an optional
+  field (the card route stays `204`); `TaskOut.active_run` and
+  `has_longlist`; `your_options` and the default preference on the plan
+  bodies; `PlanStep` blurbs; the six new stage keys on the run stream
+  (additive Literal widening); child walks on the run stream. Everything
+  additive.
 - **Prompts:** eight new lead-authored surfaces, hash-pinned, every module
   named `*_prompt.py`: the intervention profile
   (`extract_interventions_v1`), suggest (`longlist_suggest_v1`), option
