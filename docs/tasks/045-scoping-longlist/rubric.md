@@ -1,0 +1,108 @@
+# Rubric: 045-scoping-longlist
+
+The task is **done only if every box holds** — otherwise it is in progress,
+not done. Terms and deliverable numbers are defined in
+[contract.md](contract.md); this file does not restate them.
+
+## Deliverables (one box each)
+
+1. [ ] **Start the longlist.** `confirm_plan` at the gate and
+   `POST .../plan/confirm-baseline` both record the decision and open a
+   longlist walk (a new `capability_run`, intent record `purpose = longlist`,
+   `plan_id` = the confirmed version); the walk does not pause and ends
+   `succeeded` or `degraded`; unattended continues in one walk with the
+   standing default recorded and flagged; "Search further" in words is
+   refused honestly; an ES task has no longlist chain.
+2. [ ] **The pool and the chain.** The chain is acquire → screen → classify
+   → appraise → ingest → extract(abstract) → longlist → constrain, composed
+   by purpose through the registry; inherited `task_source_snapshot` rows
+   (origin `inherited`) exist once per linked document; inherited, baseline
+   and new documents are screened under the longlist scope in one
+   generation; inherited classification and appraisal are read across, never
+   inserted; the acquire uses the compiled intervention intent with the
+   evidence restrictions as `ScopeConstraints`; coverage counts by DOI where
+   present; the three progress beats appear in the thread.
+3. [ ] **The abstract profile.** `extract` runs the abstract profile over
+   every screened-in document of the scope with no selection run;
+   `intervention_mention` rows carry role, design features, bundle and
+   components, the quote anchor, and the document-level country, population,
+   outcome family, design hint and names-no-intervention; Non-evidence
+   documents are profiled; records are memoised per (snapshot, version); the
+   IOF/ICF path is unchanged (existing tests pass untouched).
+4. [ ] **The longlist component.** Every mention (or inherited finding) is
+   assigned, many-to-many, or counted unclustered; options carry name,
+   description, specified design v1, outcomes served, one primary lever type
+   from the versioned constant list, secondary types, and an ambition tag
+   with a justification stored as a tier-4 claim; a bundle becomes a package
+   with *part of* rows; themes are generated with a one-line "what it does";
+   coverage is the source-quality profile with Unknown and Non-evidence as
+   their own buckets and the role funnel; entrants (*from your evidence
+   search*, *added by you*) enter through assign mode and survive with zero
+   members; the ceiling is `clamp(ceil(N/4), 8, 40)`; membership rows carry
+   an assignment reason and the `design_feature_not_stated` flag;
+   characterise and group outputs are unchanged.
+5. [ ] **Constrain.** Requirement constraints and the three default screens
+   are judged per option on the specified design and coverage; every
+   exclusion names its constraint; *distinct* never excludes a *part of*
+   row; thin evidence never excludes; every preference yields one capped
+   reasoned guess per option that never changes state; "no in-scope
+   evidence" is computed from publication country and years against the
+   plan's restriction and leaves the option included.
+6. [ ] **Option records.** `option`, `option_membership`, `option_relation`,
+   `longlist_result`, `intervention_mention` and `task_link.option_id` exist
+   in one reversible alembic revision; judgements and guesses are keyed by
+   `(option_id, design_version)`; a rebuild keeps option ids and user states
+   and never deletes an option; the downgrade refuses while a longlist walk
+   row exists and the operator remedy is documented in ADR 0039.
+7. [ ] **The longlist views.** After a longlist walk the Result opens on the
+   list view with the view switch (Baseline · Longlist · Report unavailable),
+   the counts header, the Show filter, collapsible theme sections, option
+   rows with origin, state, exclusion reason and relation, the Do nothing
+   sentence with its link, and no sort; the option card renders What it is ·
+   What it is for · What the evidence base holds so far · Constraints and
+   guesses · Where it came from, with Show the documents, and the words "how
+   sure" appear nowhere; Exclude (with a reason), Include again and Add an
+   option work and each writes a History event as the user's turn; Sources,
+   Share and History are otherwise unchanged.
+8. [ ] **The Task Agent around the longlist.** The plan step blurb no longer
+   says "Not in this release"; the plan document shows "Longlist built · N
+   options", and after a plan change *built from plan version N* with
+   **Rebuild longlist**; questions in the thread while no walk is active are
+   answered over the longlist scope with citations.
+9. [ ] **System records and API.** The four longlist routes exist with
+   org-scoped reads (a link grants no read of options); the confirm surfaces
+   return the opened walk; the OpenAPI diff is additive and regenerated by
+   `make openapi-sync`.
+10. [ ] **Depth.** The acquisition target per backend follows depth (the
+    numbers the owner set under D2); nothing else in the chain reads depth;
+    compute times at both depths are recorded.
+
+## Cross-cutting
+
+11. [ ] `make verify` passes (okf-validate · test · typecheck · lint · build ·
+    drift-check · prompt-guard); the declared live check (a)–(f) ran and is
+    recorded with screenshots.
+12. [ ] Five new prompt-hash entries (`extract_abstract_v1`,
+    `longlist_cluster_v1`, `longlist_theme_v1`, `lever_typing_v1`,
+    `constrain_v1`), every existing entry unchanged; every new prompt module
+    is named `*_prompt.py`.
+13. [ ] No approval-gated change beyond the contract's § Constraints — no
+    second migration, no new host, no non-additive API change, no dependency,
+    CI, auth or production config change.
+14. [ ] No generated files or secrets edited by hand.
+15. [ ] No tests deleted, skipped or weakened without written justification.
+16. [ ] Verification evidence recorded in [verification.md](verification.md):
+    the funnel counts and compute times of the three live longlists, the
+    abstract profile's per-document token cost, the migration round-trip,
+    the OpenAPI and prompt-hash diffs, known gaps.
+17. [ ] Known gaps and deferred seams listed in `docs/deferred.md` (D6, D7,
+    D12, D13, D18; the per-run fan-out bound; open questions 4 and 7 as
+    bounded).
+18. [ ] The spec changes in contract § Spec changes are applied with the
+    owner's words quoted, the decision-sheet columns filled, and one line
+    per change in `docs/specs/log.md`.
+19. [ ] ADR 0039 written, Accepted, with the rollback commands.
+20. [ ] The Tier-4 review stack ran (contract verifier · `/code-review
+    medium` · one security lane · `/simplify` · adversarial at contract and
+    plan · human deep review), findings adjudicated in
+    [verification.md](verification.md).
