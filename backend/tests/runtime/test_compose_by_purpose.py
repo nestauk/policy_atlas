@@ -6,10 +6,10 @@ fresh path and on both resume paths; ``ComponentStep.spine`` lets a chain
 declare which steps fail the walk, and ``None`` keeps the Evidence search's
 global spine set so every Evidence search chain is unchanged.
 
-The five options-scoping components are registered with stub handlers until
-their phases land, which makes a longlist walk in this phase a real spine
-test: ``inherit`` and ``suggest`` raise and degrade the walk; the spine step
-``extract_interventions`` raises and fails it.
+The five options-scoping components are registered; four keep stub handlers
+until their phases land (``extract_interventions`` is real from Phase 2),
+which makes a longlist walk a real spine test: ``inherit`` and ``suggest``
+raise and degrade the walk; the spine step ``longlist`` raises and fails it.
 """
 
 from __future__ import annotations
@@ -199,7 +199,8 @@ def test_the_evidence_search_ignores_the_purpose() -> None:
 
 def test_the_five_components_are_registered_and_the_graph_builds() -> None:
     names = {"inherit", "suggest", "extract_interventions", "longlist", "constrain"}
-    assert set(OPTIONS_SCOPING_STUBS) == names
+    # Phase 2 built the intervention profile's handler; four stubs remain.
+    assert set(OPTIONS_SCOPING_STUBS) == names - {"extract_interventions"}
     for name in names:
         assert COMPONENT_REGISTRY[name] == {"requires": ["evidence_scope_id"]}
         assert registry_component_for(name) == name
@@ -298,8 +299,8 @@ def test_a_walk_under_a_longlist_intent_record_runs_the_longlist_chain(
     """The fresh path reads the purpose; ``spine=False`` degrades, spine fails.
 
     ``inherit`` and ``suggest`` raise (non-spine) and the walk carries on
-    through the broad search; ``extract_interventions`` raises (spine) and the
-    walk ends ``failed`` — nothing after it runs.
+    through the broad search and the intervention profile; ``longlist``
+    raises (spine) and the walk ends ``failed`` — nothing after it runs.
     """
     task_id: uuid.UUID | None = None
     try:
@@ -327,7 +328,8 @@ def test_a_walk_under_a_longlist_intent_record_runs_the_longlist_chain(
             ("classify", "succeeded"),
             ("appraise", "succeeded"),
             ("ingest_full_text", "succeeded"),
-            ("extract_interventions", "failed"),
+            ("extract_interventions", "succeeded"),
+            ("longlist", "failed"),
         ]
         assert outcome.status == "failed"
     finally:

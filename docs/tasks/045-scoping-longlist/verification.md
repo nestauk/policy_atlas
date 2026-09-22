@@ -118,3 +118,50 @@ vocabulary (`do_minimum · incremental · structural`, `AMBITION_BANDS`);
 `constrain_v1` takes the three default screens as data ids (`relevant ·
 distinct · in_scope`, `DEFAULT_SCREENS`) beside the requirement ids, and the
 transferability preference is removed from its input by the caller.
+
+### Phase 2 — the intervention profile on a selection-free path (2026-09-22; 2.1 `lead`, 2.2 `deep-reasoner`)
+
+| Command | Result | Notes |
+|---|---:|---|
+| `make verify-fast` (shared gate with Phase 3) | pass | backend 2969 passed (11:44); mypy 364 files clean; ruff clean |
+| `make prompt-guard` | pass | 24 modules unchanged (the lead's pins from `c89c1d36` / `e093ce34`) |
+| `tests/evidence_search/extract/test_extract_interventions.py` | pass | 26 tests |
+
+`extract_interventions` is a real harness node (the other four stubs stay);
+`extract_scope(profiles=(os_interventions_base_v1,), selection_run_id=None)`
+runs over the scope's screened-in set (`characterise.screened_sources`
+projected to `{tss_id, text_basis: abstract_only}`), never loads chunks, and
+writes the roll-up with a null selection. Bundle: `interventions_profile.py`
+(fingerprint · grounding · writer · window adapter), the stored model and
+rules in `interventions_records.py` below the lead's wire models (untouched).
+Backend seam `InterventionsBackend` / `OpenAIInterventionsBackend` /
+`StubInterventionsBackend` threaded as `RunnerBackends.interventions`; a
+requested profile with no backend is an `ExtractError`. Memo through
+`source_extraction_record` on (task, envelope snapshot, fingerprint) — the
+fingerprint has no window knob and no scope intent, so one profile serves
+every scope (A21). `extract_interventions` joined `LLM_BEARING_COMPONENTS`.
+
+**Flagged deviations (2.2):**
+1. `KNOWN_PROFILE_IDS` unchanged; `ALL_PROFILE_IDS = (*KNOWN_PROFILE_IDS,
+   os_interventions_base_v1)` drives `_selected_profiles`. `KNOWN_PROFILE_IDS`
+   is the ES directive grammar (`task_plan.EXTRACT_PROFILE_IDS` asserts on it
+   at import); widening it is what P9 rejected. An ES directive naming the
+   profile is refused (test).
+2. The fingerprint lives in `interventions_profile.py`, not
+   `interventions_records.py` (the prompt module imports the records module;
+   the other way is a cycle).
+3. Grounding locates the quote in the abstract, then the title, then both
+   joined (title and abstract often repeat the name, so the joined basis
+   alone reads as ambiguous). A failed grounding keeps the record with
+   `spans: []` and counts in `quote_unverified`.
+4. "Covers no intervention" is the `source_extraction_record` status
+   `no_findings` with no rows; the per-row column carries the model's flag.
+5. A title-only document is profiled from its title; a document with
+   neither fails `empty_basis`.
+
+**For Phase 5:** records for a walk = `intervention_profile_record` ⋈
+`source_extraction_record` filtered by the scope's screened-in snapshot ids
+(or the roll-up's `docs[].profiles[...].extraction_record_id`); the creating
+run may be another scope's (memo); exclude `role = comparator` in the
+component; `grounding` is a one-element qv_v1 array with `segment:
+title|abstract` spans; `text_basis` rides the parent record (`abstract_only`).

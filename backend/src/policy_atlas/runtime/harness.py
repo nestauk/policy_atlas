@@ -53,12 +53,17 @@ from policy_atlas.evidence_search.extract.extract import (
 )
 from policy_atlas.evidence_search.extract.extraction_backend import (
     ExtractionBackend,
+    InterventionsBackend,
     StubExtractionBackend,
     StubICFExtractionBackend,
+    StubInterventionsBackend,
 )
 from policy_atlas.evidence_search.extract.finding_vetter import (
     FindingVetterBackend,
     ICFFindingVetterBackend,
+)
+from policy_atlas.evidence_search.extract.interventions_records import (
+    PROFILE_ID as INTERVENTIONS_PROFILE_ID,
 )
 from policy_atlas.evidence_search.extract.relevance_annotator import (
     RelevanceAnnotatorBackend,
@@ -123,6 +128,7 @@ class HarnessState(TypedDict):
     finding_vetter_backend: FindingVetterBackend | None
     icf_extraction_backend: Any
     icf_finding_vetter_backend: ICFFindingVetterBackend | None
+    interventions_backend: InterventionsBackend
     relevance_annotator_backend: RelevanceAnnotatorBackend | None
     group_clustering_backend: GroupClusteringBackendFactory
     synthesis_backend: SynthesisBackend
@@ -298,6 +304,24 @@ def _run_extract(state: HarnessState) -> HarnessState:
         icf_extraction_backend=state["icf_extraction_backend"],
         icf_finding_vetter_backend=state["icf_finding_vetter_backend"],
         relevance_annotator_backend=state["relevance_annotator_backend"],
+    )
+    return _run_scope_component(state, context_cls, sources_fn)
+
+
+def _run_extract_interventions(state: HarnessState) -> HarnessState:
+    """The intervention profile node (task 045, ADR 0039 decision 6).
+
+    The selection-free path: ``extract_scope`` over every screened-in document
+    of the scope, with the intervention profile named through the
+    ``profiles`` kwarg — never the scope's extraction directive, whose
+    IOF-mandatory rule stands (plan P9). No select run is referenced.
+    """
+    context_cls = functools.partial(ExtractContext, selection_run_id=None)
+    sources_fn = functools.partial(
+        extract_scope,
+        extraction_backend=state["extraction_backend"],
+        interventions_backend=state["interventions_backend"],
+        profiles=(INTERVENTIONS_PROFILE_ID,),
     )
     return _run_scope_component(state, context_cls, sources_fn)
 
@@ -486,12 +510,12 @@ class _NotBuiltYet:
         )
 
 
-#: The five options-scoping components (task 045) and the phase that builds
-#: each handler. Registered in ``run_spec.COMPONENT_REGISTRY`` beside the rest.
+#: The options-scoping components (task 045) whose handlers a later phase
+#: builds, and that phase. Registered in ``run_spec.COMPONENT_REGISTRY``
+#: beside the rest; ``extract_interventions`` (Phase 2) has its real node.
 OPTIONS_SCOPING_STUBS: dict[str, str] = {
     "inherit": "task 045 Phase 4",
     "suggest": "task 045 Phase 4",
-    "extract_interventions": "task 045 Phase 2",
     "longlist": "task 045 Phase 5",
     "constrain": "task 045 Phase 5",
 }
@@ -549,6 +573,7 @@ def build_graph() -> Any:
     g.add_node("characterise", _run_characterise)
     g.add_node("select", _run_select)
     g.add_node("extract", _run_extract)
+    g.add_node("extract_interventions", _run_extract_interventions)
     g.add_node("group", _run_group)
     g.add_node("synthesise", _run_synthesise)
     for component, phase in OPTIONS_SCOPING_STUBS.items():
@@ -568,6 +593,7 @@ def build_graph() -> Any:
             "characterise": "characterise",
             "select": "select",
             "extract": "extract",
+            "extract_interventions": "extract_interventions",
             "group": "group",
             "synthesise": "synthesise",
             **{component: component for component in OPTIONS_SCOPING_STUBS},
@@ -581,6 +607,7 @@ def build_graph() -> Any:
     g.add_edge("characterise", "finish")
     g.add_edge("select", "finish")
     g.add_edge("extract", "finish")
+    g.add_edge("extract_interventions", "finish")
     g.add_edge("group", "finish")
     g.add_edge("synthesise", "finish")
     for component in OPTIONS_SCOPING_STUBS:
@@ -654,6 +681,7 @@ def run_harness(
     finding_vetter_backend: FindingVetterBackend | None = None,
     icf_extraction_backend: Any | None = None,
     icf_finding_vetter_backend: ICFFindingVetterBackend | None = None,
+    interventions_backend: InterventionsBackend | None = None,
     relevance_annotator_backend: RelevanceAnnotatorBackend | None = None,
     group_clustering_backend: GroupClusteringBackendFactory | None = None,
     synthesis_backend: SynthesisBackend | None = None,
@@ -708,6 +736,9 @@ def run_harness(
             defaults to ``StubICFExtractionBackend()`` — no default egress.
         icf_finding_vetter_backend: Post-extract ICF finding vetter. ``None``
             means judging is off for ICF.
+        interventions_backend: Intervention profile backend for the
+            extract_interventions component (task 045); defaults to
+            ``StubInterventionsBackend()`` — no default egress.
         relevance_annotator_backend: B2′ relevance annotator for the extract
             component (024). Like the finding vetter it stays ``None`` by
             default with NO stub substitution — ``None`` (or absent
@@ -793,6 +824,11 @@ def run_harness(
             else StubICFExtractionBackend()
         ),
         "icf_finding_vetter_backend": icf_finding_vetter_backend,
+        "interventions_backend": (
+            interventions_backend
+            if interventions_backend is not None
+            else StubInterventionsBackend()
+        ),
         # No stub substitution (the finding-vetter pattern): None means the
         # annotator pass is OFF, so extract_scope's own None default is reachable.
         "relevance_annotator_backend": relevance_annotator_backend,

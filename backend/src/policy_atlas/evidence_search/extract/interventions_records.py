@@ -13,12 +13,14 @@ fingerprint and the writer are the profile bundle's (Phase 2.2).
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Literal, get_args
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from policy_atlas.core.schema import INTERVENTION_ROLES
 from policy_atlas.evidence_search.extract.finding_references import render_field_sections
+from policy_atlas.evidence_search.extract.quote_verify import NULL_LIKE_STRINGS
 
 PROFILE_ID = "os_interventions_base_v1"
 SCHEMA_VERSION = "interventions_v1"
@@ -158,3 +160,199 @@ def render_interventions_field_docs() -> str:
             ("Response fields", InterventionsResponse),
         ]
     )
+
+
+# --- The profile bundle's stored shape (task 045 Phase 2.2) ------------------
+#
+# Everything below the wire models is pipeline code, not prompt text: the
+# record carried through the shared extract pipeline, the stored record, the
+# field rules and the dedup key. The fingerprint and the table writer live in
+# ``interventions_profile`` (it imports the prompt module, which imports this
+# one).
+
+#: The field-rule set the validator below applies; a fingerprint component.
+INTERVENTIONS_FIELD_RULES_VERSION = "interventions_rules_v1"
+
+_NULLABLE_TEXT_FIELDS = ("outcome", "population", "setting", "study_geography", "study_design")
+
+
+class InterventionsRecordCarrier(InterventionsRecordWire):
+    """One wire record with its document's ``covers_no_intervention`` attached.
+
+    Pipeline-internal, never a model-facing schema: the shared extract
+    pipeline handles records one by one, so the document-level flag rides on
+    each record to reach the table, which carries it per row.
+    """
+
+    covers_no_intervention: bool
+
+
+class InterventionsRecord(BaseModel):
+    """One stored intervention profile record — a coverage fact, not an effect."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    intervention: str = Field(min_length=1)
+    role: InterventionRole
+    design_features: list[str]
+    is_bundle: bool
+    components: list[str]
+    outcome: str | None
+    population: str | None
+    setting: str | None
+    study_geography: str | None
+    study_design: str | None
+    quote: str
+    covers_no_intervention: bool
+
+
+@dataclass
+class ValidatedInterventionsRecord:
+    """The outcome of validating one carried record.
+
+    Attributes:
+        record: The stored record, or ``None`` when the grain is invalid.
+        field_coverage: Per-field coverage markers; a present field is absent
+            from the map, an absent or null-like one is ``not_extracted``.
+        coerced_null_fields: Fields whose null-like value was coerced to None.
+        grain_invalid: True when the intervention names nothing.
+    """
+
+    record: InterventionsRecord | None
+    field_coverage: dict[str, str]
+    coerced_null_fields: list[str]
+    grain_invalid: bool
+
+
+def _coerce(value: str | None) -> str | None:
+    """Return ``value`` stripped, or ``None`` when it is absent or null-like."""
+    if value is None:
+        return None
+    stripped = value.strip()
+    if stripped.casefold() in NULL_LIKE_STRINGS:
+        return None
+    return stripped
+
+
+def _clean_list(values: list[str]) -> list[str]:
+    """Strip each phrase and drop the empty or null-like ones, keeping order."""
+    cleaned: list[str] = []
+    for value in values:
+        coerced = _coerce(value)
+        if coerced is not None:
+            cleaned.append(coerced)
+    return cleaned
+
+
+def validate_interventions_record(
+    wire: InterventionsRecordCarrier,
+) -> ValidatedInterventionsRecord:
+    """Validate one carried record under ``interventions_rules_v1``.
+
+    Rules: null-like free text is coerced to ``None`` and marked
+    ``not_extracted`` (the ICF rule); the design-feature and component lists
+    lose blank entries; the grain is the intervention alone — a record whose
+    intervention names nothing is invalid. The quote is kept verbatim, even
+    when empty: a quote that does not locate earns a failed grounding, never a
+    dropped record.
+
+    Args:
+        wire: The carried wire record, after NUL scrubbing.
+
+    Returns:
+        The validated record (``None`` when grain-invalid) plus coverage.
+    """
+    coverage: dict[str, str] = {}
+    coerced: list[str] = []
+    text_values: dict[str, str | None] = {}
+    for field_name in _NULLABLE_TEXT_FIELDS:
+        raw = getattr(wire, field_name)
+        value = _coerce(raw)
+        if value is None:
+            coverage[field_name] = "not_extracted"
+            if raw is not None:
+                coerced.append(field_name)
+        text_values[field_name] = value
+
+    intervention = _coerce(wire.intervention)
+    if intervention is None:
+        return ValidatedInterventionsRecord(
+            record=None,
+            field_coverage=coverage,
+            coerced_null_fields=coerced,
+            grain_invalid=True,
+        )
+
+    design_features = _clean_list(wire.design_features)
+    if not design_features:
+        coverage["design_features"] = "not_extracted"
+    record = InterventionsRecord(
+        intervention=intervention,
+        role=wire.role,
+        design_features=design_features,
+        is_bundle=wire.is_bundle,
+        components=_clean_list(wire.components),
+        outcome=text_values["outcome"],
+        population=text_values["population"],
+        setting=text_values["setting"],
+        study_geography=text_values["study_geography"],
+        study_design=text_values["study_design"],
+        quote=wire.quote,
+        covers_no_intervention=wire.covers_no_intervention,
+    )
+    return ValidatedInterventionsRecord(
+        record=record,
+        field_coverage=coverage,
+        coerced_null_fields=coerced,
+        grain_invalid=False,
+    )
+
+
+def _canonical(text: str) -> str:
+    """Whitespace-normalise and casefold one key component."""
+    return " ".join(text.split()).casefold()
+
+
+def interventions_claim_key(record: InterventionsRecord) -> tuple[object, ...]:
+    """The dedup key: one record per (intervention, role, stated design).
+
+    Args:
+        record: A stored intervention profile record.
+
+    Returns:
+        A hashable key over the canonical intervention, the role and the
+        sorted canonical design features — two records naming one
+        intervention with different stated designs stay two records.
+    """
+    return (
+        _canonical(record.intervention),
+        record.role,
+        tuple(sorted(_canonical(feature) for feature in record.design_features)),
+    )
+
+
+def dedup_interventions_records(
+    records: list[InterventionsRecord],
+) -> tuple[list[InterventionsRecord], int]:
+    """Collapse records with the same key; the first occurrence wins whole.
+
+    A record carries one quote, so nothing merges: a later duplicate is
+    absorbed and counted.
+
+    Args:
+        records: Stored records in emission order.
+
+    Returns:
+        ``(survivors, collapsed_count)``, survivors in first-occurrence order.
+    """
+    seen: set[tuple[object, ...]] = set()
+    survivors: list[InterventionsRecord] = []
+    collapsed = 0
+    for record in records:
+        key = interventions_claim_key(record)
+        if key in seen:
+            collapsed += 1
+            continue
+        seen.add(key)
+        survivors.append(record.model_copy(deep=True))
+    return survivors, collapsed

@@ -35,7 +35,10 @@ from policy_atlas.evidence_search.assess.classification_backend import Classific
 from policy_atlas.evidence_search.assess.screening_backend import ScreeningBackend
 from policy_atlas.evidence_search.corpus.ranking import RankingBackend
 from policy_atlas.evidence_search.corpus.theme_grouping import ThemeGroupingBackend
-from policy_atlas.evidence_search.extract.extraction_backend import ExtractionBackend
+from policy_atlas.evidence_search.extract.extraction_backend import (
+    ExtractionBackend,
+    InterventionsBackend,
+)
 from policy_atlas.evidence_search.extract.finding_vetter import (
     FindingVetterBackend,
     ICFFindingVetterBackend,
@@ -170,6 +173,7 @@ LLM_BEARING_COMPONENTS = frozenset(
         "characterise",
         "select",
         "extract",
+        "extract_interventions",
         "group",
         "synthesise",
     }
@@ -265,6 +269,7 @@ class RunnerBackends:
         finding_vetter: Optional post-extract finding vetter (``None`` = off).
         icf_extraction: Optional ICF extraction backend.
         icf_finding_vetter: Optional ICF post-extract finding vetter.
+        interventions: Optional intervention profile backend (task 045).
         group_clustering: Optional group clustering backend factory.
         synthesis: Optional synthesis backend.
         grounding_judge: Optional grounding-judge backend.
@@ -283,6 +288,7 @@ class RunnerBackends:
     finding_vetter: FindingVetterBackend | None = None
     icf_extraction: Any | None = None
     icf_finding_vetter: ICFFindingVetterBackend | None = None
+    interventions: InterventionsBackend | None = None
     group_clustering: GroupClusteringBackendFactory | None = None
     synthesis: SynthesisBackend | None = None
     grounding_judge: GroundingJudgeBackend | None = None
@@ -5616,6 +5622,7 @@ def _run_step_attempt(
                     finding_vetter_backend=backends.finding_vetter,
                     icf_extraction_backend=backends.icf_extraction,
                     icf_finding_vetter_backend=backends.icf_finding_vetter,
+                    interventions_backend=backends.interventions,
                     group_clustering_backend=backends.group_clustering,
                     synthesis_backend=backends.synthesis,
                     grounding_judge_backend=backends.grounding_judge,

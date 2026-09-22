@@ -46,6 +46,7 @@ from policy_atlas.evidence_search.corpus.theme_grouping import (
 from policy_atlas.evidence_search.extract.extraction_backend import (
     OpenAIExtractionBackend,
     OpenAIICFExtractionBackend,
+    OpenAIInterventionsBackend,
 )
 from policy_atlas.evidence_search.extract.finding_vetter import (
     OpenAIFindingVetterBackend,
@@ -819,6 +820,7 @@ def live_task_agent_and_backends(
         extraction=OpenAIExtractionBackend(langfuse_client=langfuse_client),
         finding_vetter=OpenAIFindingVetterBackend(langfuse_client=langfuse_client),
         icf_extraction=OpenAIICFExtractionBackend(langfuse_client=langfuse_client),
+        interventions=OpenAIInterventionsBackend(langfuse_client=langfuse_client),
         icf_finding_vetter=OpenAIICFFindingVetterBackend(
             langfuse_client=langfuse_client
         ),
