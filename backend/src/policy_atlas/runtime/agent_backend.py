@@ -19,6 +19,11 @@ moment lives in the task_agent seam; this module owns the two mid-run moments â€
 - **propose_option_design**: the judgment-class ``option_design_v1`` call that
   proposes a specified design back from an option the user named in their own
   words (task 045, D19). It applies nothing; the caller stores the design.
+- **suggest_options**: the judgment-class ``longlist_suggest_v1`` call â€” the
+  longlist walk's ``suggest`` step (task 045, D7, A15). It applies nothing;
+  the ``suggest`` component mints the option rows. Typed at the harness as the
+  narrow :class:`~policy_atlas.options_scoping.suggest.suggest.SuggestBackend`
+  seam, which both backends here satisfy.
 
 This module also owns the **structurally-gated invocation** classifier, the
 **single-shot decide + bounded fallback deliberation loop** (contract decision 3's
@@ -47,6 +52,16 @@ from policy_atlas.core.openai_client import parse_structured, resolve_openai_cli
 from policy_atlas.core.prompt_fields import scrub_nul
 from policy_atlas.core.usage import UsageResult, usage_details, usage_metadata
 from policy_atlas.evidence_search.assess.screen_prompt import SCREEN_MODEL
+from policy_atlas.options_scoping.suggest.suggest_prompt import (
+    SUGGEST_BOUND,
+    SUGGEST_MAX_OUTPUT_TOKENS,
+    SUGGEST_PROMPT_VERSION,
+    LinkedReportContext,
+    SuggestedOptionWire,
+    SuggestPlanContext,
+    SuggestResponse,
+    build_suggest_messages,
+)
 from policy_atlas.runtime.agent_prompt import (
     ROUTER_MAX_OUTPUT_TOKENS,
     ROUTER_PROMPT_VERSION,
@@ -477,6 +492,34 @@ class OpenAIAgentBackend:
             session_id=session_id,
         )
 
+    def suggest_options(
+        self,
+        *,
+        plan: SuggestPlanContext,
+        baseline_sections: list[tuple[str, str]],
+        linked_reports: list[LinkedReportContext],
+        bound: int = SUGGEST_BOUND,
+        session_id: uuid.UUID | None = None,
+    ) -> SuggestResponse:
+        """Suggest options through structured OpenAI output (judgment-class)."""
+        messages = build_suggest_messages(
+            plan=plan,
+            baseline_sections=baseline_sections,
+            linked_reports=linked_reports,
+            bound=bound,
+        )
+        return self._parse(
+            messages,
+            response_format=SuggestResponse,
+            model=AGENT_MODEL,
+            max_output_tokens=SUGGEST_MAX_OUTPUT_TOKENS,
+            usage_event="agent.suggest.usage",
+            label="agent-suggest",
+            prompt_version=SUGGEST_PROMPT_VERSION,
+            name="agent:suggest",
+            session_id=session_id,
+        )
+
     def _parse[T: BaseModel](
         self,
         messages: list[ChatCompletionMessageParam],
@@ -577,6 +620,52 @@ def _design_from_words(words: str, outcomes: list[str]) -> OptionDesignWire:
     )
 
 
+def _first_heading(markdown: str) -> str | None:
+    for line in markdown.splitlines():
+        if line.startswith("## ") and line[3:].strip():
+            return line[3:].strip()
+    return None
+
+
+def _suggest_from_plan(
+    plan: SuggestPlanContext, linked_reports: list[LinkedReportContext], bound: int
+) -> SuggestResponse:
+    """The stub default: one suggestion from the plan, one per linked report.
+
+    Deterministic and labelled like the live output, so a stub walk mints
+    both kinds of entrant: a ``model`` option named from the plan's intended
+    change, and a ``linked_report`` option per report, drawn from its first
+    section heading.
+    """
+    outcomes = list(plan.outcomes[:1])
+    change = " ".join(plan.intended_change.split()) or "the intended change"
+    options = [
+        SuggestedOptionWire(
+            name=f"Stub suggestion: {change}"[:80],
+            description=f"A deterministic stub option aimed at {change}."[:240],
+            design_features=[f"Aimed at {plan.target_unit}"[:240]],
+            outcomes_served=outcomes,
+            source="model",
+            report_section=None,
+        )
+    ]
+    for index, report in enumerate(linked_reports, start=1):
+        heading = _first_heading(report.report_markdown)
+        if heading is None:
+            continue
+        options.append(
+            SuggestedOptionWire(
+                name=f"Stub report option {index}: {heading}"[:80],
+                description=f"A deterministic stub option drawn from {heading}."[:240],
+                design_features=[f"As described under {heading}"[:240]],
+                outcomes_served=outcomes,
+                source="linked_report",
+                report_section=heading,
+            )
+        )
+    return SuggestResponse(options=options[:bound])
+
+
 class StubAgentBackend:
     """Deterministic, zero-egress, scriptable agent backend for tests/CLI.
 
@@ -594,6 +683,9 @@ class StubAgentBackend:
         gate_sort_responses: Canned :class:`GateSortWire` value(s), or ``None``.
         option_design_responses: Canned :class:`OptionDesignWire` value(s), or
             ``None`` (the default reads the design from the words).
+        suggest_responses: Canned :class:`SuggestResponse` value(s), or
+            ``None`` (the default suggests one option from the plan and one
+            per linked report).
     """
 
     def __init__(
@@ -604,18 +696,22 @@ class StubAgentBackend:
         decide_responses: WatchDecisionWire | list[WatchDecisionWire] | None = None,
         gate_sort_responses: GateSortWire | list[GateSortWire] | None = None,
         option_design_responses: OptionDesignWire | list[OptionDesignWire] | None = None,
+        suggest_responses: SuggestResponse | list[SuggestResponse] | None = None,
     ) -> None:
         self._route_queue = _as_queue(route_responses)
         self._triage_queue = _as_queue(triage_responses)
         self._decide_queue = _as_queue(decide_responses)
         self._gate_sort_queue = _as_queue(gate_sort_responses)
         self._option_design_queue = _as_queue(option_design_responses)
+        self._suggest_queue = _as_queue(suggest_responses)
         self.route_calls = 0
         self.triage_calls = 0
         self.decide_calls = 0
         self.gate_sort_calls = 0
         self.option_design_calls = 0
         self.option_design_words: list[str] = []
+        self.suggest_calls = 0
+        self.suggest_inputs: list[dict[str, Any]] = []
 
     def route(
         self,
@@ -679,6 +775,29 @@ class StubAgentBackend:
         self.option_design_calls += 1
         self.option_design_words.append(words)
         return _next(self._option_design_queue, lambda: _design_from_words(words, outcomes))
+
+    def suggest_options(
+        self,
+        *,
+        plan: SuggestPlanContext,
+        baseline_sections: list[tuple[str, str]],
+        linked_reports: list[LinkedReportContext],
+        bound: int = SUGGEST_BOUND,
+        session_id: uuid.UUID | None = None,
+    ) -> SuggestResponse:
+        del session_id
+        self.suggest_calls += 1
+        self.suggest_inputs.append(
+            {
+                "plan": plan,
+                "baseline_sections": list(baseline_sections),
+                "linked_reports": list(linked_reports),
+                "bound": bound,
+            }
+        )
+        return _next(
+            self._suggest_queue, lambda: _suggest_from_plan(plan, linked_reports, bound)
+        )
 
 
 def _as_queue[T](value: T | list[T] | None) -> list[T]:

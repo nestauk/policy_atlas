@@ -505,6 +505,7 @@ def test_newer_turn_demotes_approved_plan_and_reapproval_clears_start_fence(
             "capability": "evidence_search",
             "version": 0,
             "status": "draft",
+            "opened_run": None,
         }
         assert transcript.json()["data"][-1]["part"] is None
         assert stale_start.status_code == 409
@@ -642,6 +643,7 @@ def test_task_agent_rehydrates_after_restart_and_get_plan_reads_stored_draft(
             "capability": "evidence_search",
             "version": 0,
             "status": "draft",
+            "opened_run": None,
         }
 
         second_message = "A comparison of intervention options"

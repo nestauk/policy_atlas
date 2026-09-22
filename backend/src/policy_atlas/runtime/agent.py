@@ -60,6 +60,7 @@ from policy_atlas.evidence_search.sourcing.fetch_live import LiveDocumentFetcher
 from policy_atlas.evidence_search.sourcing.ingest_upload import ingest_upload
 from policy_atlas.evidence_search.synthesis.grounding_judge import OpenAIGroundingJudgeBackend
 from policy_atlas.evidence_search.synthesis.synthesis_backend import OpenAISynthesisBackend
+from policy_atlas.options_scoping.longlist.longlist_backend import OpenAILonglistBackend
 from policy_atlas.runtime.agent_backend import (
     AgentBackend,
     OpenAIAgentBackend,
@@ -835,6 +836,10 @@ def live_task_agent_and_backends(
         ),
         document_fetcher=fetcher,
         langfuse_client=langfuse_client,
+        # The options-scoping suggest step's judgment call (task 045, S10).
+        suggest=OpenAIAgentBackend(langfuse_client=langfuse_client),
+        # The options-scoping longlist step's calls (task 045, S8).
+        longlist=OpenAILonglistBackend(langfuse_client=langfuse_client),
     )
     task_agent = OpenAITaskAgentBackend(langfuse_client=langfuse_client)
     return task_agent, backends

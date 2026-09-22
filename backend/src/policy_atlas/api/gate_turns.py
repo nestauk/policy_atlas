@@ -45,7 +45,7 @@ CHANGE_PLAN = "change_plan"
 #: What the turn says once each decision is durable. Code-authored: a recorded
 #: decision must read the same however it was taken, so it is never a model's
 #: sentence.
-CONFIRM_REPLY = "Plan confirmed against the baseline; the longlist arrives with the next stage."
+CONFIRM_REPLY = "Plan confirmed. Building the longlist now."
 CHANGE_REPLY = "The run has stopped so you can change the plan."
 
 #: The loser of a decision race. The decision is durable — the other surface
@@ -286,12 +286,15 @@ class DecisionOutcome:
             carried, when it had one — the second half of the same turn.
         continue_walk: The walk to resume, when the decision asked for one; the
             caller dispatches it after its own turn row is durable.
+        follow_on: The walk the caller opens after the commit, or ``None``
+            (task 045): ``"longlist"`` for "Confirm plan and build longlist".
     """
 
     recorded: bool
     reply: str
     carried_text: str | None = None
     continue_walk: uuid.UUID | None = None
+    follow_on: str | None = None
 
 
 def _collapsed(text: str) -> str:
@@ -395,4 +398,9 @@ def commit_decision(
             ),
             continue_walk=continue_walk,
         )
-    return DecisionOutcome(recorded=True, reply=CONFIRM_REPLY, continue_walk=continue_walk)
+    return DecisionOutcome(
+        recorded=True,
+        reply=CONFIRM_REPLY,
+        continue_walk=continue_walk,
+        follow_on=result.follow_on,
+    )

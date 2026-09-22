@@ -36,7 +36,9 @@ from policy_atlas.api.settings import Settings
 from policy_atlas.core import tracing
 from policy_atlas.core.schema import capability_run, task_agent_transcript, task_plan
 from policy_atlas.runtime.capability_registry import validate_plan
+from policy_atlas.runtime.option_search import unattended_plan
 from policy_atlas.runtime.runner import RunnerBackends, run_plan
+from policy_atlas.runtime.scoping_plan import LONGLIST_PURPOSE
 
 log = structlog.get_logger()
 
@@ -71,29 +73,66 @@ def _dispatch_run(
     plan_row: dict[str, object],
     backends: RunnerBackends,
     user_id: str,
+    evidence_scope_id: uuid.UUID | None = None,
+    capability_run_id: uuid.UUID | None = None,
 ) -> None:
-    """Run one approved walk on an executor worker and release its reservation."""
+    """Run one approved walk on an executor worker and release its reservation.
+
+    Args:
+        engine: Database engine.
+        task_id: The task.
+        capability: The task's capability (decides the plan model).
+        plan_row: The approved plan row the walk runs.
+        backends: The runner backend bundle.
+        user_id: The user traces are attributed to.
+        evidence_scope_id: The intent record to run under, when it is not the
+            plan row's own (task 045: a longlist walk runs under the longlist
+            record the start surface minted). ``None`` uses the plan row's.
+        capability_run_id: The walk's identity when the start surface minted
+            it (task 045); ``None`` lets the runner mint one.
+    """
     try:
         # Opened inside the executor worker: contextvars do not cross a plain
         # executor.submit. run_plan opens its own session scope per component.
         with tracing.trace_scope(user_id=user_id):
-            run_plan(
+            outcome = run_plan(
                 engine,
                 task_id=task_id,
-                evidence_scope_id=plan_row["evidence_scope_id"],  # type: ignore[arg-type]
+                evidence_scope_id=(
+                    evidence_scope_id
+                    if evidence_scope_id is not None
+                    else plan_row["evidence_scope_id"]  # type: ignore[arg-type]
+                ),
                 # The task row's capability, read on the request path and carried
                 # here rather than re-queried: it decides which model reads the
                 # payload (C9). Whatever that model is, the runner takes it —
                 # narrowing to the Evidence search plan here made a scoping walk
-                # impossible to start (task 044).
-                plan=validate_plan(capability, plan_row["payload"]),
+                # impossible to start (task 044). A longlist walk (its own
+                # intent record passed in) runs unattended: it does not pause
+                # (task 045, D1).
+                plan=(
+                    unattended_plan(plan_row["payload"])  # type: ignore[arg-type]
+                    if evidence_scope_id is not None
+                    else validate_plan(capability, plan_row["payload"])
+                ),
                 plan_id=plan_row["plan_id"],  # type: ignore[arg-type]
                 plan_version=plan_row["version"],  # type: ignore[arg-type]
                 plan_row_id=plan_row["plan_id"],  # type: ignore[arg-type]
                 backends=backends,
                 io=ParkIO(),
                 session_id=task_id,
+                capability_run_id=capability_run_id,
             )
+            if outcome.follow_on == LONGLIST_PURPOSE:
+                # Unattended (task 045, A2): the baseline recorded its standing
+                # default at the gate, so the longlist walk opens here, inline
+                # on this worker, the moment the baseline has ended.
+                _run_follow_on_longlist(
+                    engine,
+                    task_id=task_id,
+                    capability=capability,
+                    backends=backends,
+                )
     except Exception:
         log.exception("api.run_dispatch_failed", task_id=str(task_id))
     finally:
@@ -101,13 +140,93 @@ def _dispatch_run(
             _dispatching_tasks.discard(task_id)
 
 
+def _run_follow_on_longlist(
+    engine: Engine,
+    *,
+    task_id: uuid.UUID,
+    capability: str,
+    backends: RunnerBackends,
+) -> None:
+    """Open and run the unattended follow-on longlist walk on this worker.
+
+    The opener's mint-and-run without its capacity gate: this worker is the
+    capacity the baseline already held. The admission still stands — a walk
+    another surface started in the gap wins, and this one is not opened.
+    """
+    # Imported here: the opener imports this module.
+    from policy_atlas.api.longlist_start import LonglistRefused, admit_and_mint
+
+    try:
+        admitted = admit_and_mint(engine, task_id=task_id, check_capacity=False)
+    except LonglistRefused as exc:
+        log.warning(
+            "api.follow_on_longlist_refused", task_id=str(task_id), reason=exc.reason
+        )
+        return
+    release_when_open(
+        engine, task_id=task_id, capability_run_id=admitted.capability_run_id
+    )
+    run_plan(
+        engine,
+        task_id=task_id,
+        evidence_scope_id=admitted.evidence_scope_id,
+        # The longlist walk does not pause (task 045, D1).
+        plan=unattended_plan(admitted.plan_row["payload"]),
+        plan_id=admitted.plan_row["plan_id"],
+        plan_version=admitted.plan_row["version"],
+        plan_row_id=admitted.plan_row["plan_id"],
+        backends=backends,
+        io=ParkIO(),
+        session_id=task_id,
+        capability_run_id=admitted.capability_run_id,
+    )
+
+
+def release_when_open(
+    engine: Engine, *, task_id: uuid.UUID, capability_run_id: uuid.UUID
+) -> None:
+    """Release a task's launch reservation once its walk row exists.
+
+    The start paths that do not wait for the row (the check-in card, the
+    unattended follow-on) still hold the reservation across the pre-insert
+    window; a short daemon thread gives it back as soon as the runner has
+    written the row, which then owns capacity accounting — the same hand-over
+    ``create_run`` makes after ``_await_new_run``. Bounded like that wait.
+
+    Args:
+        engine: Database engine.
+        task_id: The reserved task.
+        capability_run_id: The walk whose row ends the window.
+    """
+
+    def wait_then_release() -> None:
+        try:
+            _await_new_run(
+                engine, task_id=task_id, existing_ids=set(), capability_run_id=capability_run_id
+            )
+        except Exception:  # noqa: BLE001 - the release below is the point
+            log.warning("api.reservation_release_unobserved", task_id=str(task_id))
+        finally:
+            with _dispatch_lock:
+                _dispatching_tasks.discard(task_id)
+
+    threading.Thread(
+        target=wait_then_release, name="policy-atlas-reservation", daemon=True
+    ).start()
+
+
 def _await_new_run(
     engine: Engine,
     *,
     task_id: uuid.UUID,
     existing_ids: set[uuid.UUID],
+    capability_run_id: uuid.UUID | None = None,
 ) -> RunOut:
-    """Wait briefly for the executor's runtime-owned capability-run insertion."""
+    """Wait briefly for the executor's runtime-owned capability-run insertion.
+
+    With ``capability_run_id`` (a walk whose identity the caller minted, task
+    045) it waits for that row; otherwise for any row not in ``existing_ids``.
+    """
     # 10s, not 2s: with both executor workers momentarily busy the submitted
     # dispatch can queue past 2s, turning a successful launch into a client 500
     # (review finding I3, 2026-07-21). The walk still starts either way; the
@@ -124,7 +243,10 @@ def _await_new_run(
                 )
             ).mappings().all()
         for row in rows:
-            if row["capability_run_id"] not in existing_ids:
+            if capability_run_id is not None:
+                if row["capability_run_id"] == capability_run_id:
+                    return run_out(row)
+            elif row["capability_run_id"] not in existing_ids:
                 return run_out(row)
         time.sleep(0.01)
     raise RuntimeError("executor did not create a capability run")

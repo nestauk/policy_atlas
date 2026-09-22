@@ -224,3 +224,179 @@ its rider "checked at assessment · assumed" and a **Remove** control.
 Lead copy pass: "Design not proposed yet" → "No design yet"; the rest of the
 delegate's copy kept (rider, "Proposed design", "assumed", the Edit seed, the
 criteria wording the screen model reads as data).
+
+### Phase 4 — the walk: inherit, suggest, option searches, the start surfaces, progress (2026-09-22; 4.1 `lead`, 4.2 `deep-reasoner`, 4.3 `deep-reasoner`, 4.4 `fast-worker` plumbing + `lead` words)
+
+| Command | Result | Notes |
+|---|---:|---|
+| `make verify` (full, the phase gate) | pass after one fix | first run: 2 failures in `test_task_agent_router.py` — two full-object expectations of `PlanOut` lacked the new optional `opened_run: None` (additive field, expectations extended); rerun: backend 3079 passed (13:08); okf 148/0; mypy 380 files clean; ruff clean; build OK; infra 46; prompt-guard 24 unchanged; `drift-check: OK`; frontend 83 files / 722 tests |
+| `cd frontend && pnpm e2e` | pass | 15 passed |
+| `make openapi-sync` + `make drift-check` | pass | additive: `TurnDecisionOut.opened_run`, `PlanOut.opened_run`; the five `stage` enums widened by the six keys |
+
+**4.2 — inherit and suggest** (new tests: `test_inherit_documents.py` 8,
+`options_scoping/test_suggest.py` 12, `test_skip_directive.py` 20;
+`test_compose_by_purpose` updated — the stub walk now runs inherit and
+suggest and fails at `longlist`). `inherit_documents` inserts one
+`task_source_snapshot` row per linked document the task lacks (origin copied
+from the source row — A3; `run_id` = the inherit run; full-text link and
+status copied), `ON CONFLICT DO NOTHING` on `uq_task_source_snapshot`; each
+link in its own savepoint, an unreadable link rolled back and named in the
+summary (`failed_link_ids`, `failed_reasons`), the step completes with
+`degrades_walk: true` and the runner ends the walk `degraded` (a new
+completed-step flag, `DEGRADES_WALK_KEY`). `suggest_options` reads the plan,
+the latest baseline `synthesis_result`'s sections and the linked reports'
+bodies, calls `longlist_suggest_v1` through `AgentBackend.suggest_options`
+(a narrow `SuggestBackend` protocol; stub queue), mints `suggested` /
+`from_evidence_search` rows (the report section recorded in the run's
+`component.completed` payload — the `option` table has no provenance
+column) and the plan's own options as `added_by_you` (minted before the
+model call, so a failed call still leaves them). `leg_directive(plan, step,
+upstream_state, *, engine, task_id, evidence_scope_id)` reads the scope's
+purpose at `classify` and `appraise` of a longlist walk and writes the
+`skip_task_source_snapshot_ids` keys from the resolver; classify gains a
+fail-closed parser; both selection queries add `NOT IN`.
+
+**Flagged deviations (4.2):**
+11. Classify's skip is narrower than S6's words: a document is skipped at
+    classify only when its label is inherited, its type resolved **and**
+    appraise has nothing left to do (tier resolved, or the type outside the
+    rubric) — appraise reads this scope's classification rows, so skipping
+    classify for a stale-rubric inherited document would leave it with no
+    tier. Cost: one classify call per stale-rubric document.
+12. `suggest_options` is not on the `AgentBackend` protocol (test doubles
+    implement it); the harness types against `SuggestBackend`.
+13. An own option with no design (a failed `option_design_v1` proposal)
+    still becomes an entrant, on a design read from the user's words
+    (`own_without_design` counted); `ensure_option_designs` is not called
+    inside the component's transaction.
+14. Rebuild matching is `(origin, name)`; an own option that first entered
+    on its words and later gains a proposed design with a different name
+    would mint a second row. Known gap (edge: only after a failed proposal).
+15. Provider `source_tag` rows are not copied to inherited rows, so
+    classify's priors are missing on an inherited document it does classify.
+
+**4.4 — stage keys and beats** (`test_stage_vocabulary.py` 4;
+`runProgress.test.ts` new): six keys `inherit · suggest · option_searches ·
+extract_interventions · longlist · constrain` on `StageKey`, `STAGE_KEYS`,
+`PlanStageKey`, `STAGE_PRESENTATION` (the lead's labels and blurbs) and
+`STAGE_BY_REGISTRY`; OpenAPI additive (the five `stage` enums widened);
+`beatSentence(stage, summary)` composes the six beats client-side from
+`StageCompletedFrame.summary` and rides `stageDetailLines`.
+
+**4.3 — the option search tool, child walks, the barriers, the pool and
+semaphores, the two start surfaces, the unattended follow-on, the
+conversation lineage** (new tests: `test_option_search.py` 12 + 1,
+`api/test_longlist_start.py` 14 + 1; gate-turn, check-in, scoping and
+existence tests updated with a recording executor). `run_option_search`
+(`runtime/option_search.py`) mints the child's `capability_run_id`, inserts
+the targeted intent record (`intent = design.as_intent()`, `context.option_id`)
+and submits `run_plan(capability_run_id=…, parent_capability_run_id=…)` to
+the option-search pool (`runtime/walk_pool.py`, width 4, separate from the
+walk executor); `CLASSIFY_SLOTS` / `INGEST_SLOTS` semaphores around
+classify's provider calls and ingest's parse jobs. The barriers sit at the top
+of the step loop for a `longlist` walk: fan-out on the first step after
+`suggest` (cap 15, the user's and the report's entrants first; only entrants
+without a prior search on a rebuild; durable as its own event so a resumed
+walk never dispatches twice), join when `longlist` is popped (outside any
+transaction, polling child statuses; `OPTION_SEARCH_JOIN_TIMEOUT = 1800 s`;
+stragglers `interrupted`; a failed child adds a synthetic `skipped`
+`option_searches` outcome so the parent ends `degraded`). The `option_searches`
+frames ride `run.started` / `component.completed` events with `run_id = None`
+(inert for every existing reader; `sse._map_rows` maps them). The opener
+`api/longlist_start.py::open_longlist_walk` (admission under `_dispatch_lock`,
+`compose_longlist_screen_intent` → 422 before any mint, the longlist intent
+record with the PICO text, the reservation released by a small daemon thread
+on the non-waiting paths); callers: `_persist_confirm_plan` (ends the baseline
+walk `reason: confirm_plan`, closes the conversation, `follow_on="longlist"`
+→ `DecisionOutcome.follow_on` → `_dispatch_gate_turn` → `TurnDecisionOut.opened_run`),
+the card route (204, `await_run=False`), `confirm_baseline` (commit, re-read,
+open; `PlanOut.opened_run`; the idempotent path reopens a missing walk; a
+newer version opens a rebuild), and the unattended follow-on inline in
+`_dispatch_run` after the baseline returns (`RunPlanOutcome.follow_on`, set
+only when a declared standing default was honoured). `_finish_run` skips the
+conversation closure for a child. Peak connections on the stub walk with 6
+entrants at width 4: 5 (the parent plus four children; the parent holds none
+at the join).
+
+**Flagged deviations (4.3):**
+16. **`core/events.py` `APPEND_ATTEMPTS = 32`** (was 5). The event log has one
+    sequence per task and assumed one writer per task (ADR 0001 § 6); a
+    parent and four children exhausted five retries on the stub walk. Ordering
+    is unchanged (a collision waits for the other writer's commit and
+    retries). The real cost stands: acquire, screen, classify and appraise
+    append events inside long component transactions, so concurrent children
+    on one task wait on each other's uncommitted rows — Phase 8 measures the
+    effective concurrency; it may be well below 4. Not in the plan; accepted
+    by the lead; a review item and a knowledge candidate.
+17. **The longlist walk and its children run under the unattended plan**
+    (`option_search.unattended_plan`: the confirmed plan with
+    `steering_mode = unattended` and the gate's standing default; the plan
+    row is untouched). Under the parent's attended mode a rule-fired check-in
+    (a `classification_type_mix_collapse` on a small search) parked every
+    child, and then the parent too, which D1 forbids ("the walk does not
+    pause"). Resolved within the contract's vocabulary: the longlist chain
+    has no lattice point, so nothing is ever put to the user; rule-fired
+    boundaries are recorded as `triggers_fired` collation flags. Test:
+    `test_a_longlist_walk_never_parks_even_under_frequent`. The baseline walk
+    is unchanged.
+18. Ingest slots are more than a plain `with`: a walk waits for a slot only
+    when none of its own parse jobs is in flight, else it drains its own
+    first (avoids a deadlock between walks); every exit path returns the
+    slots; a single walk behaves as before.
+19. `open_longlist_walk` returns the minted UUID (never `None`); on the chat
+    and card paths a refusal (capacity, plan too long) is logged, the decision
+    stays durable and `opened_run` is null — the plan document's confirm
+    reopens the walk later.
+20. `_persist_confirm_plan` ends the baseline walk `degraded` rather than
+    `succeeded` when the baseline had a failed or skipped step (`_finish_run`'s
+    own rule).
+21. If a spine step fails before `longlist`, the parent ends `failed` without
+    joining and its children finish on their own.
+22. `CONFIRM_REPLY` → "Plan confirmed. Building the longlist now." (lead copy).
+23. **For Phase 7:** a parentless *add* child would close the Task Agent
+    conversation in `_finish_run` (the skip keys on the parent column); Phase
+    7 must also skip the closure for `purpose = targeted` walks.
+
+### Phase 5.2 — the longlist component (2026-09-22; 5.1 `lead`, 5.2 `deep-reasoner`; gated with Phase 4)
+
+New tests: `options_scoping/test_longlist.py` (20), `test_where_tried.py`
+(19); `test_compose_by_purpose` updated (the stub walk runs through
+`longlist` and fails at `constrain`). `clustering_engine.py` has no diff;
+characterise, engine and group tests pass unchanged.
+`options_scoping/longlist/longlist.py` (units → seeded clustering → option
+rows and memberships → themes → typing → coverage → `longlist_result`),
+`longlist_backend.py` (`LonglistBackend` protocol; OpenAI: judgment model for
+discovery, themes and typing, mini model for assignment; stub), `coverage.py`,
+`where_tried.py`; `RunnerBackends.longlist`; `longlist` in
+`LLM_BEARING_COMPONENTS`. Seeds pass through the engine as labels returned
+first by the backend's `discover` (`max_new = max_labels − seeds`, no call
+when 0; a restated seed dropped and counted); `not an option` and the
+prompt's `ungroupable` both go to the engine as its residual label, the
+backend remembers each unit's raw answer, reason and flag on the side, and
+the component splits the residual into the two counted buckets afterwards;
+`forbidden_label_reason` rejects a discovered label named like either bucket.
+Exhaustiveness (units = memberships + unclustered + not an option) is
+enforced in code; every model call happens before the first write. Theme
+ceiling `clamp(ceil(options/3), 3, 12)`, `min_labels = 0` for both runs.
+`COUNTRY_GROUPS`: lower-case country names and adjectives → ISO alpha-2 (the
+UK and its nations, the 38 OECD members, ~30 common others; longest match
+first; case-sensitive `ABBREVIATIONS` for UK/US/USA so the pronoun "us" never
+matches; `OECD_MARKERS` sends "12 OECD countries" to *comparable*; ambiguous
+adjectives left to *unknown*).
+
+**Flagged deviations (5.2):**
+24. Seeds are every option row of the task (added_by_you → from_evidence_search
+    → suggested → clustered), not suggest's `entrants` event — on a first
+    build these coincide; `max_labels = max(ceiling, seeds)` so a rebuild with
+    more options than the ceiling passes engine validation.
+25. Every discovered label is minted, even one ending with zero members
+    (coverage shows zero); a discovered option with no stated features gets
+    `[description]` as its one feature (`OptionDesign` needs one).
+26. The DOI is normalised locally (`coverage.normalise_doi`) rather than by
+    importing the API layer's `_metadata_text`.
+27. Linked findings get a role for the funnel: IOF counts as `evaluated`, ICF
+    as `described`; both are also counted under `coverage.findings`.
+28. Units are read through each scope's newest extraction roll-up carrying
+    the profile, not through `screened_sources`.
+29. An invalid typing leaves `ambition` NULL and records `lever_none_fits_reason
+    = "typing invalid"`, counted in `counts.typing_invalid`.

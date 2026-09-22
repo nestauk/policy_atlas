@@ -32,6 +32,12 @@ StageKey = Literal[
     "extract",
     "group",
     "synthesise",
+    "inherit",
+    "suggest",
+    "option_searches",
+    "extract_interventions",
+    "longlist",
+    "constrain",
 ]
 
 #: `StageKey`'s members as a plain tuple, for runtime membership checks.
@@ -45,6 +51,12 @@ STAGE_KEYS: tuple[StageKey, ...] = (
     "extract",
     "group",
     "synthesise",
+    "inherit",
+    "suggest",
+    "option_searches",
+    "extract_interventions",
+    "longlist",
+    "constrain",
 )
 
 #: Who decided a resolved check-in. Mirrors `steering_events.DecidedBy`.

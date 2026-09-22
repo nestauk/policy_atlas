@@ -22,7 +22,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.engine import Engine
 
-from policy_atlas.api.deps import get_scoping_task_agent_backend
+from policy_atlas.api.deps import get_executor, get_scoping_task_agent_backend
 from policy_atlas.core.schema import (
     artefact,
     capability_run,
@@ -35,6 +35,7 @@ from policy_atlas.core.schema import (
 )
 from policy_atlas.runtime.task_agent_scoping import StubScopingTaskAgentBackend
 from tests.api.resource_support import api_client, create_task
+from tests.api.test_longlist_start import RecordingExecutor
 from tests.helpers import delete_task_data
 
 
@@ -57,7 +58,14 @@ def _all_task_ids(engine: Engine) -> set[uuid.UUID]:
 
 
 def _overrides() -> dict[Callable[..., object], Callable[..., object]]:
-    return {get_scoping_task_agent_backend: lambda: StubScopingTaskAgentBackend()}
+    # A confirm opens the longlist walk (task 045, S3); these tests are about
+    # the plan versions, so the walk executor opens the walk's row and runs
+    # nothing.
+    executor = RecordingExecutor(status="succeeded")
+    return {
+        get_scoping_task_agent_backend: lambda: StubScopingTaskAgentBackend(),
+        get_executor: lambda: executor,
+    }
 
 
 def _scoping_task(client: TestClient, headers: dict[str, str]) -> str:

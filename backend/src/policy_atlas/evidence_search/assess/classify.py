@@ -44,6 +44,71 @@ log = structlog.get_logger()
 MAX_CONCURRENT_CLASSIFY = 12
 CLASSIFY_RETRY_CAP = 1
 
+#: The one key of classify's directive (``context["classify"]``) and of
+#: appraise's (task 045, S6; ADR 0039 decision 9): documents whose label the
+#: label resolver already answers from a linked task, which the step leaves
+#: alone. Written per step by the runner's ``leg_directive`` for a longlist
+#: walk; absent everywhere else, and a no-op when absent.
+SKIP_TSS_KEY = "skip_task_source_snapshot_ids"
+
+
+class ClassifyDirectiveError(Exception):
+    """Malformed classify directive; classify fails closed."""
+
+
+def parse_skip_ids(raw: Any, error_cls: type[Exception]) -> frozenset[uuid.UUID]:
+    """Parse a ``skip_task_source_snapshot_ids`` value, fail-closed.
+
+    Args:
+        raw: The key's value: a list of ``task_source_snapshot`` id strings.
+        error_cls: The owning component's directive error.
+
+    Returns:
+        The ids (possibly empty).
+
+    Raises:
+        Exception: ``error_cls`` if the value is not a list of UUID strings.
+    """
+    if not isinstance(raw, list):
+        raise error_cls(f"{SKIP_TSS_KEY} must be a list")
+    ids: set[uuid.UUID] = set()
+    for item in raw:
+        if not isinstance(item, str):
+            raise error_cls(f"{SKIP_TSS_KEY} must hold id strings")
+        try:
+            ids.add(uuid.UUID(item))
+        except ValueError:
+            raise error_cls(f"{SKIP_TSS_KEY} holds a malformed id") from None
+    return frozenset(ids)
+
+
+def _parse_classify_directive(raw: Any) -> frozenset[uuid.UUID]:
+    """Parse the scope-context classify directive (``context["classify"]``).
+
+    Grammar: ``{skip_task_source_snapshot_ids?: [tss_id, ...]}``. Unknown keys
+    reject; a malformed id list rejects. Absent or empty means no directive:
+    classify behaves exactly as before the key existed.
+
+    Args:
+        raw: The ``context["classify"]`` object, or ``None``.
+
+    Returns:
+        The documents to leave unclassified (empty when there is none).
+
+    Raises:
+        ClassifyDirectiveError: On any malformed shape.
+    """
+    if raw is None:
+        return frozenset()
+    if not isinstance(raw, dict):
+        raise ClassifyDirectiveError("classify directive must be an object")
+    unknown = set(raw) - {SKIP_TSS_KEY}
+    if unknown:
+        raise ClassifyDirectiveError("classify directive contains unknown keys")
+    if SKIP_TSS_KEY not in raw:
+        return frozenset()
+    return parse_skip_ids(raw[SKIP_TSS_KEY], ClassifyDirectiveError)
+
 
 @dataclass
 class ClassifyContext:
@@ -115,9 +180,10 @@ def _load_relevant_docs(
     *,
     task_id: uuid.UUID,
     scope_id: uuid.UUID,
+    skip: frozenset[uuid.UUID] = frozenset(),
 ) -> list[_ClassifyDoc]:
     effective = effective_screen_rows()
-    rows = conn.execute(
+    query = (
         select(
             task_source_snapshot.c.task_source_snapshot_id,
             source_snapshot.c.source_snapshot_id,
@@ -144,7 +210,10 @@ def _load_relevant_docs(
             )
         )
         .order_by(task_source_snapshot.c.task_source_snapshot_id)
-    ).fetchall()
+    )
+    if skip:
+        query = query.where(task_source_snapshot.c.task_source_snapshot_id.not_in(skip))
+    rows = conn.execute(query).fetchall()
 
     tss_ids = [tss_id for tss_id, _, _ in rows]
     label_rows_by_tss = _label_rows_by_tss(conn, task_id=task_id, tss_ids=tss_ids)
@@ -161,6 +230,34 @@ def _load_relevant_docs(
             )
         )
     return docs
+
+
+def _count_unclassified_in(
+    conn: Connection,
+    *,
+    task_id: uuid.UUID,
+    scope_id: uuid.UUID,
+    ids: frozenset[uuid.UUID],
+) -> int:
+    """Count effective-relevant, not-yet-classified documents among ``ids``."""
+    effective = effective_screen_rows()
+    return int(
+        conn.execute(
+            select(func.count())
+            .select_from(effective)
+            .where(effective.c.evidence_scope_id == scope_id)
+            .where(effective.c.task_id == task_id)
+            .where(effective.c.status == "relevant")
+            .where(effective.c.task_source_snapshot_id.in_(ids))
+            .where(
+                ~exists().where(
+                    (source_classification_result.c.evidence_scope_id == scope_id)
+                    & (source_classification_result.c.task_source_snapshot_id
+                       == effective.c.task_source_snapshot_id)
+                )
+            )
+        ).scalar_one()
+    )
 
 
 def _count_effective_relevant(
@@ -239,6 +336,16 @@ def _run_classification_calls(
     maximum = baseline * (1 + CLASSIFY_RETRY_CAP)
     log.info("classify.call_budget", baseline=baseline, maximum=maximum)
 
+    # The process-wide classify slots (task 045, S2): every walk in the
+    # process shares one budget of provider calls, so a longlist walk and its
+    # option searches do not each take twelve. Imported here, not at module
+    # level: the slots module sizes itself from this module's constant.
+    from policy_atlas.runtime.walk_pool import CLASSIFY_SLOTS
+
+    def classify_in_slot(payload: ClassifyEnvelopePayload) -> Any:
+        with CLASSIFY_SLOTS:
+            return classification_backend.classify(payload)
+
     results: dict[int, ClassifyWire] = {}
     errors: dict[int, Exception] = {}
     usage_totals = UsageAccumulator()
@@ -246,9 +353,7 @@ def _run_classification_calls(
         submitted: list[tuple[int, Future[Any]]] = [
             (
                 doc_index,
-                tracing.submit_with_context(
-                    executor, classification_backend.classify, doc.payload
-                ),
+                tracing.submit_with_context(executor, classify_in_slot, doc.payload),
             )
             for doc_index, doc in enumerate(docs)
         ]
@@ -265,7 +370,7 @@ def _run_classification_calls(
     for doc_index in list(errors):
         retries += 1
         try:
-            wire, usage = classification_backend.classify(docs[doc_index].payload)
+            wire, usage = classify_in_slot(docs[doc_index].payload)
             results[doc_index] = wire
             usage_totals.add(usage)
         except Exception as exc:  # noqa: BLE001
@@ -315,6 +420,12 @@ def classify_sources(
     ``source.classified`` event per successful row. Backend failures leave no
     row, so the same source is retried by the next run.
 
+    Task 045: ``context.context["classify"]`` may carry
+    ``{"skip_task_source_snapshot_ids": [...]}`` (parsed fail-closed by
+    ``_parse_classify_directive``) — documents whose type the label resolver
+    already answers from a linked task. They are left unclassified and
+    counted as ``resolved_elsewhere``; with no directive nothing changes.
+
     Args:
         conn: Open database connection; all writes use its active transaction.
         task_id: Owning task.
@@ -325,16 +436,25 @@ def classify_sources(
 
     Returns:
         Component summary payload for ``component.completed``.
+
+    Raises:
+        ClassifyDirectiveError: If ``context.context["classify"]`` is malformed.
     """
     if classification_backend is None:
         classification_backend = StubClassificationBackend()
 
-    docs = _load_relevant_docs(conn, task_id=task_id, scope_id=context.scope_id)
+    skip = _parse_classify_directive(context.context.get("classify"))
+    docs = _load_relevant_docs(conn, task_id=task_id, scope_id=context.scope_id, skip=skip)
     skipped = _count_effective_skipped(conn, task_id=task_id, scope_id=context.scope_id)
     total_relevant = _count_effective_relevant(
         conn, task_id=task_id, scope_id=context.scope_id
     )
-    already_classified = total_relevant - len(docs)
+    resolved_elsewhere = (
+        _count_unclassified_in(conn, task_id=task_id, scope_id=context.scope_id, ids=skip)
+        if skip
+        else 0
+    )
+    already_classified = total_relevant - len(docs) - resolved_elsewhere
 
     by_type: dict[str, int] = {}
     classified = 0
@@ -420,7 +540,7 @@ def classify_sources(
         tags_rejected += rejected
         by_type[evidence_type] = by_type.get(evidence_type, 0) + 1
 
-    return {
+    summary: dict[str, Any] = {
         "classified": classified,
         "by_type": by_type,
         "skipped": skipped,
@@ -431,3 +551,7 @@ def classify_sources(
         "retries": retries,
         "usage_totals": usage_totals,
     }
+    if SKIP_TSS_KEY in (context.context.get("classify") or {}):
+        # Present only under the directive, so every other summary is unchanged.
+        summary["resolved_elsewhere"] = resolved_elsewhere
+    return summary

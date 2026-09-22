@@ -226,12 +226,102 @@ function currentStepLabel(rows: StageRow[]): string | null {
   return completed?.label ?? rows[0]?.label ?? null;
 }
 
+/** Read a finite number out of a stage summary, else `null`. */
+function num(summary: StageEntry["summary"] | undefined, key: string): number | null {
+  const value = summary?.[key];
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+/** Pluralise a count: `1 option` / `2 options`. */
+function count(n: number, singular: string, plural: string): string {
+  return `${n} ${n === 1 ? singular : plural}`;
+}
+
+/**
+ * One code-authored beat sentence for a completed stage, read from the
+ * frame's `summary` counts. `null` for stages with no beat (including every
+ * Evidence search stage) or when the gating count is absent. No full stop;
+ * never a percentage.
+ */
+export function beatSentence(
+  stage: string,
+  summary: StageEntry["summary"] | undefined,
+): string | null {
+  switch (stage) {
+    case "suggest": {
+      const suggested = num(summary, "suggested");
+      if (suggested === null) return null;
+      const fromReport = num(summary, "from_report") ?? 0;
+      let out = `Suggested ${count(suggested, "option", "options")}`;
+      if (fromReport > 0) out += ` · ${fromReport} from your evidence search`;
+      return out;
+    }
+    case "option_searches": {
+      const total = num(summary, "total");
+      if (total === null) return null;
+      if (total === 0) return "No option searches to run";
+      const finished = num(summary, "finished") ?? 0;
+      const failed = num(summary, "failed") ?? 0;
+      let out = `Searched for ${finished} of ${count(total, "option", "options")}`;
+      if (failed > 0) out += ` · ${failed} failed`;
+      return out;
+    }
+    case "inherit": {
+      const documents = num(summary, "documents");
+      if (documents === null) return null;
+      const links = num(summary, "links") ?? 0;
+      const failedLinks = num(summary, "failed_links") ?? 0;
+      let out = `${count(documents, "document", "documents")} from ${count(links, "linked task", "linked tasks")}`;
+      if (failedLinks > 0) out += ` · ${failedLinks} could not be read`;
+      return out;
+    }
+    case "extract_interventions": {
+      const documents = num(summary, "documents");
+      const records = num(summary, "records");
+      if (documents === null && records === null) return null;
+      const parts: string[] = [];
+      if (documents !== null) parts.push(`Read ${count(documents, "abstract", "abstracts")}`);
+      if (records !== null) parts.push(`${count(records, "intervention", "interventions")} covered`);
+      return parts.join(" · ");
+    }
+    case "longlist": {
+      const options = num(summary, "options");
+      if (options === null) return null;
+      const themes = num(summary, "themes");
+      const unclustered = num(summary, "unclustered");
+      const notAnOption = num(summary, "not_an_option");
+      const parts: string[] = [
+        themes !== null
+          ? `${count(options, "option", "options")} in ${count(themes, "theme", "themes")}`
+          : count(options, "option", "options"),
+      ];
+      if (unclustered !== null) parts.push(`${count(unclustered, "record", "records")} unclustered`);
+      if (notAnOption !== null) parts.push(`${notAnOption} not an option`);
+      return parts.join(" · ");
+    }
+    case "constrain": {
+      const excluded = num(summary, "excluded");
+      const noInScope = num(summary, "no_in_scope");
+      if (excluded === null && noInScope === null) return null;
+      const parts: string[] = [];
+      if (excluded !== null) parts.push(`${excluded} excluded`);
+      if (noInScope !== null) parts.push(`${noInScope} with no in-scope evidence`);
+      return parts.join(" · ");
+    }
+    default:
+      return null;
+  }
+}
+
 /** Extra lines shown when a completed step is expanded. */
 export function stageDetailLines(row: StageRow): string[] {
   const lines: string[] = [];
   if (row.blurb !== undefined && row.blurb !== "") lines.push(row.blurb);
   const counts = timelineSummary(row);
-  if (counts.length > 0) lines.push(counts.join(" · "));
+  const countsLine = counts.length > 0 ? counts.join(" · ") : null;
+  if (countsLine !== null) lines.push(countsLine);
+  const beat = beatSentence(row.stage, row.summary);
+  if (beat !== null && beat !== countsLine) lines.push(beat);
   if (row.status === "completed" && typeof row.seconds === "number") {
     lines.push(`Took ${formatElapsed(row.seconds)}`);
   }

@@ -102,6 +102,18 @@ from policy_atlas.evidence_search.synthesis.synthesise import (
     SynthesiseFailure,
     synthesise_scope,
 )
+from policy_atlas.options_scoping.longlist.longlist import LonglistContext, longlist_scope
+from policy_atlas.options_scoping.longlist.longlist_backend import (
+    LonglistBackend,
+    StubLonglistBackend,
+)
+from policy_atlas.options_scoping.suggest.suggest import (
+    SuggestBackend,
+    SuggestContext,
+    suggest_options,
+)
+from policy_atlas.runtime.agent_backend import StubAgentBackend
+from policy_atlas.runtime.inherit import inherit_documents
 from policy_atlas.runtime.progress import ProgressEmitter
 from policy_atlas.runtime.run_spec import Config
 
@@ -133,6 +145,8 @@ class HarnessState(TypedDict):
     group_clustering_backend: GroupClusteringBackendFactory
     synthesis_backend: SynthesisBackend
     grounding_judge_backend: GroundingJudgeBackend
+    suggest_backend: SuggestBackend
+    longlist_backend: LonglistBackend
     summary: dict[str, Any] | None
     progress_emitter: ProgressEmitter | None
     error: str | None
@@ -326,6 +340,39 @@ def _run_extract_interventions(state: HarnessState) -> HarnessState:
     return _run_scope_component(state, context_cls, sources_fn)
 
 
+def _inherit_sources(
+    conn: Connection,
+    *,
+    task_id: uuid.UUID,
+    run_id: uuid.UUID,
+    context: SuggestContext,
+) -> dict[str, Any]:
+    del context  # inherit reads the task's links, not the scope
+    return inherit_documents(conn, task_id=task_id, run_id=run_id).as_summary()
+
+
+def _run_inherit(state: HarnessState) -> HarnessState:
+    """The document part of inherit (task 045, S6): the longlist walk's first step.
+
+    Completes even when a link cannot be read — the readable links' documents
+    are kept and the unreadable ones named in the summary, whose
+    ``degrades_walk`` flag the runner turns into a ``degraded`` walk.
+    """
+    return _run_scope_component(state, SuggestContext, _inherit_sources)
+
+
+def _run_suggest(state: HarnessState) -> HarnessState:
+    """The suggest step (task 045, S10): one judgment call, the entrants minted."""
+    sources_fn = functools.partial(suggest_options, backend=state["suggest_backend"])
+    return _run_scope_component(state, SuggestContext, sources_fn)
+
+
+def _run_longlist(state: HarnessState) -> HarnessState:
+    """The longlist step (task 045, S8): records clustered into options, themes, typing."""
+    sources_fn = functools.partial(longlist_scope, backend=state["longlist_backend"])
+    return _run_scope_component(state, LonglistContext, sources_fn)
+
+
 def _run_group(state: HarnessState) -> HarnessState:
     config = state["config"]
     assert config.extraction_run_id is not None  # registry-enforced at compile
@@ -512,11 +559,9 @@ class _NotBuiltYet:
 
 #: The options-scoping components (task 045) whose handlers a later phase
 #: builds, and that phase. Registered in ``run_spec.COMPONENT_REGISTRY``
-#: beside the rest; ``extract_interventions`` (Phase 2) has its real node.
+#: beside the rest; ``extract_interventions`` (Phase 2), ``inherit`` and
+#: ``suggest`` (Phase 4) and ``longlist`` (Phase 5.2) have their real nodes.
 OPTIONS_SCOPING_STUBS: dict[str, str] = {
-    "inherit": "task 045 Phase 4",
-    "suggest": "task 045 Phase 4",
-    "longlist": "task 045 Phase 5",
     "constrain": "task 045 Phase 5",
 }
 
@@ -574,6 +619,9 @@ def build_graph() -> Any:
     g.add_node("select", _run_select)
     g.add_node("extract", _run_extract)
     g.add_node("extract_interventions", _run_extract_interventions)
+    g.add_node("inherit", _run_inherit)
+    g.add_node("suggest", _run_suggest)
+    g.add_node("longlist", _run_longlist)
     g.add_node("group", _run_group)
     g.add_node("synthesise", _run_synthesise)
     for component, phase in OPTIONS_SCOPING_STUBS.items():
@@ -594,6 +642,9 @@ def build_graph() -> Any:
             "select": "select",
             "extract": "extract",
             "extract_interventions": "extract_interventions",
+            "inherit": "inherit",
+            "suggest": "suggest",
+            "longlist": "longlist",
             "group": "group",
             "synthesise": "synthesise",
             **{component: component for component in OPTIONS_SCOPING_STUBS},
@@ -608,6 +659,9 @@ def build_graph() -> Any:
     g.add_edge("select", "finish")
     g.add_edge("extract", "finish")
     g.add_edge("extract_interventions", "finish")
+    g.add_edge("inherit", "finish")
+    g.add_edge("suggest", "finish")
+    g.add_edge("longlist", "finish")
     g.add_edge("group", "finish")
     g.add_edge("synthesise", "finish")
     for component in OPTIONS_SCOPING_STUBS:
@@ -686,6 +740,8 @@ def run_harness(
     group_clustering_backend: GroupClusteringBackendFactory | None = None,
     synthesis_backend: SynthesisBackend | None = None,
     grounding_judge_backend: GroundingJudgeBackend | None = None,
+    suggest_backend: SuggestBackend | None = None,
+    longlist_backend: LonglistBackend | None = None,
     progress_emitter: ProgressEmitter | None = None,
 ) -> dict[str, Any]:
     """Run the compiled harness graph for one run, persisting its output.
@@ -751,6 +807,10 @@ def run_harness(
             defaults to ``StubSynthesisBackend()`` — no default egress.
         grounding_judge_backend: Grounding judge backend for the synthesise component;
             defaults to ``StubGroundingJudgeBackend()`` — no default egress.
+        suggest_backend: Judgment-model seam for the suggest component (task
+            045); defaults to ``StubAgentBackend()`` — no default egress.
+        longlist_backend: Model seam for the longlist component (task 045);
+            defaults to ``StubLonglistBackend()`` — no default egress.
 
     Returns:
         Harness outcome with ``summary`` populated only after successful
@@ -844,6 +904,12 @@ def run_harness(
             grounding_judge_backend
             if grounding_judge_backend is not None
             else StubGroundingJudgeBackend()
+        ),
+        "suggest_backend": (
+            suggest_backend if suggest_backend is not None else StubAgentBackend()
+        ),
+        "longlist_backend": (
+            longlist_backend if longlist_backend is not None else StubLonglistBackend()
         ),
         "summary": None,
         "progress_emitter": progress_emitter,

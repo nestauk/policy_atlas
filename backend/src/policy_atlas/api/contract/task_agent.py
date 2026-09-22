@@ -22,6 +22,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from .chat import AnswerPayloadOut
+from .tasks import LatestRun
 
 #: Search backend scope. Mirrors `task_plan.BackendScope`.
 TASK_AGENT_MESSAGE_MAX = 10_000
@@ -72,6 +73,12 @@ PlanStageKey = Literal[
     "extract",
     "group",
     "synthesise",
+    "inherit",
+    "suggest",
+    "option_searches",
+    "extract_interventions",
+    "longlist",
+    "constrain",
 ]
 
 #: Country-group membership provenance. Mirrors
@@ -530,6 +537,8 @@ class TurnDecisionOut(BaseModel):
         check_in_id: The check-in the decision answered.
         capability_run_id: The walk the check-in belongs to.
         plan_version: The plan version the decision was taken against.
+        opened_run: The longlist walk "Confirm plan and build longlist" opened,
+            when this decision opened one. Absent on every other decision.
     """
 
     option_id: str
@@ -537,6 +546,7 @@ class TurnDecisionOut(BaseModel):
     check_in_id: uuid.UUID
     capability_run_id: uuid.UUID
     plan_version: int
+    opened_run: LatestRun | None = None
 
 
 class TaskAgentTurnOut(BaseModel):
@@ -627,6 +637,8 @@ class PlanOut(BaseModel):
             infer it from which field is null.
         version: Plan row version.
         status: Plan status (e.g. `draft`, `approved`).
+        opened_run: The longlist walk `POST .../plan/confirm-baseline` opened,
+            on that route's response. Absent on every other plan read.
     """
 
     plan: PlanDraft | None = None
@@ -634,6 +646,7 @@ class PlanOut(BaseModel):
     capability: str = "evidence_search"
     version: int
     status: str
+    opened_run: LatestRun | None = None
 
 
 class PlanPatchIn(BaseModel):

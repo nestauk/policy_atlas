@@ -39,6 +39,7 @@ from policy_atlas.api.contract import (
     TaskAgentTurnOut,
     TurnDecisionOut,
 )
+from policy_atlas.api.contract.tasks import LatestRun
 from policy_atlas.api.deps import (
     get_agent_backend,
     get_chat_backend,
@@ -51,6 +52,13 @@ from policy_atlas.api.deps import (
     get_task_agent_backend,
 )
 from policy_atlas.api.gate_turns import PausedGate, read_paused_gate
+from policy_atlas.api.longlist_start import (
+    LonglistRefused,
+    http_error,
+    longlist_walk_exists,
+    open_longlist_walk,
+    opened_run,
+)
 from policy_atlas.api.routers._access import accessible_task
 from policy_atlas.api.routers._common import ACTIVE_WALK_STATUSES, parentless_walk
 from policy_atlas.api.routers.check_ins import execute_claimed
@@ -102,6 +110,7 @@ from policy_atlas.runtime.scoping_plan import (
     baseline_inputs_changed,
     baseline_inputs_sentence,
     build_scoping_plan,
+    compose_longlist_screen_intent,
     default_preference_for,
     ensure_option_designs,
     merge_your_options,
@@ -1128,6 +1137,17 @@ def _dispatch_gate_turn(
                 check_in_id=gate.check_in_id,
                 capability_run_id=gate.capability_run_id,
                 plan_version=gate.plan_version,
+                opened_run=(
+                    _open_follow_on_longlist(
+                        engine,
+                        task_id=task_id,
+                        executor=executor,
+                        runner_backends=runner_backends,
+                        user_id=user_id,
+                    )
+                    if outcome.recorded and outcome.follow_on == LONGLIST_PURPOSE
+                    else None
+                ),
             )
             if outcome.carried_text is not None:
                 # Durable now, because the planner call below can crash after
@@ -1187,6 +1207,40 @@ def _dispatch_gate_turn(
         # because the fence then sees no active walk (X6).
         _fail_turn(engine, task_id=task_id, transcript_id=transcript_id)
         raise
+
+
+def _open_follow_on_longlist(
+    engine: Engine,
+    *,
+    task_id: uuid.UUID,
+    executor: ThreadPoolExecutor,
+    runner_backends: RunnerBackends,
+    user_id: str,
+) -> LatestRun | None:
+    """Open the longlist walk a gate decision asked for (task 045, S3; P7).
+
+    After the decision's commit and outside any transaction. A refusal (the
+    executor at capacity, a plan too long to screen against) does not undo
+    the decision, which is durable, nor fail the turn: the turn records the
+    decision without an opened walk, and the plan document's confirm action
+    opens the walk later ("confirmed but no walk" is resolved there).
+
+    Returns:
+        The opened walk, or ``None`` when the opener refused.
+    """
+    try:
+        run_id = open_longlist_walk(
+            engine,
+            task_id=task_id,
+            plan_row=None,
+            backends=runner_backends,
+            executor=executor,
+            user_id=user_id,
+        )
+    except LonglistRefused as exc:
+        log.warning("gate_turn_longlist_refused", task_id=str(task_id), reason=exc.reason)
+        return None
+    return opened_run(engine, task_id=task_id, capability_run_id=run_id)
 
 
 def _resume_walk(
@@ -2043,8 +2097,10 @@ def confirm_baseline(
     payload: ConfirmBaselineIn,
     user: Annotated[AuthenticatedUser, Depends(get_current_user)],
     engine: Annotated[Engine, Depends(get_engine)],
+    executor: Annotated[ThreadPoolExecutor, Depends(get_executor)],
+    backends: Annotated[RunnerBackends, Depends(get_runner_backends)],
 ) -> PlanOut:
-    """Record that a plan version was confirmed against its baseline.
+    """Record that a plan version was confirmed, and open the longlist walk.
 
     "Confirm plan and build longlist" cannot be a steering event: by the time
     the user presses it the walk has ended, and a steering event needs a
@@ -2057,7 +2113,18 @@ def confirm_baseline(
     plan_version)`` pair that the current version already records returns that
     version unchanged rather than minting an identical one, so a double-tap
     does not fill the plan's history with duplicates.
+
+    **The longlist walk** (task 045, S3): once the confirmed version has
+    committed, the route re-reads it and opens the longlist walk on it outside
+    any transaction (P6: the task-row transaction is closed before the opener
+    takes the dispatch lock, the order ``create_run`` uses), returning the walk
+    in ``opened_run``. On the idempotent path a version already confirmed but
+    without a longlist walk — the opener refused, or the process died between
+    the two — opens one now rather than returning unchanged. A confirm on a
+    newer version than the last longlist's is a **rebuild** (D14): it opens a
+    longlist walk too, whose fan-out searches only entrants without a search.
     """
+    idempotent = False
     with engine.begin() as conn:
         # Locked for the same reason :func:`patch_plan` locks (X5): the walk
         # check and the new version's insert are one decision, and two
@@ -2108,24 +2175,94 @@ def confirm_baseline(
             and current.baseline_confirmed.plan_version == current_version
             and payload.plan_version in (current_version, current_version - 1)
         ):
-            return PlanOut(
+            idempotent = True
+            out = PlanOut(
                 scoping=_scoping_draft_from_plan(current),
                 capability=OPTIONS_SCOPING,
                 version=row["version"],
                 status=row["status"],
             )
-        if payload.plan_version != current_version:
-            raise ApiConflict(
-                "plan_stale",
-                "the plan moved on since you read it — review the current version, then confirm",
-            )
-        next_version = int(
-            conn.execute(
-                select(func.coalesce(func.max(task_plan.c.version), 0)).where(
-                    task_plan.c.task_id == task_id
+        else:
+            if payload.plan_version != current_version:
+                raise ApiConflict(
+                    "plan_stale",
+                    "the plan moved on since you read it — review the current version, "
+                    "then confirm",
                 )
-            ).scalar_one()
-        ) + 1
-        record = BaselineConfirmed(artefact_id=payload.artefact_id, plan_version=next_version)
-        confirmed = current.model_copy(update={"baseline_confirmed": record})
-        return _persist_new_scoping_version(conn, task_id, confirmed)
+            try:
+                # Refused before a version is minted: a plan the longlist
+                # cannot screen against must not read as confirmed.
+                compose_longlist_screen_intent(current)
+            except ValueError as exc:
+                raise HTTPException(
+                    status_code=422,
+                    detail=(
+                        "the plan's outcomes and requirements are too long to screen a "
+                        f"longlist against — shorten them, then confirm ({exc})"
+                    ),
+                ) from exc
+            next_version = int(
+                conn.execute(
+                    select(func.coalesce(func.max(task_plan.c.version), 0)).where(
+                        task_plan.c.task_id == task_id
+                    )
+                ).scalar_one()
+            ) + 1
+            record = BaselineConfirmed(
+                artefact_id=payload.artefact_id, plan_version=next_version
+            )
+            confirmed = current.model_copy(update={"baseline_confirmed": record})
+            out = _persist_new_scoping_version(conn, task_id, confirmed)
+    # Committed. The opener takes the dispatch lock and the task row itself.
+    if idempotent and longlist_walk_exists(engine, task_id=task_id, plan_id=row["plan_id"]):
+        return out
+    return _open_confirmed_longlist(
+        engine, task_id=task_id, out=out, executor=executor, backends=backends, user=user
+    )
+
+
+def _open_confirmed_longlist(
+    engine: Engine,
+    *,
+    task_id: uuid.UUID,
+    out: PlanOut,
+    executor: ThreadPoolExecutor,
+    backends: RunnerBackends,
+    user: AuthenticatedUser,
+) -> PlanOut:
+    """Open the longlist walk on the committed confirmed version (P6).
+
+    Re-reads the version the route committed and hands it to the opener,
+    which refuses if another version has been minted since. Called outside
+    any transaction.
+
+    Returns:
+        ``out`` with ``opened_run`` set.
+
+    Raises:
+        ApiConflict: The opener's ``run_active``, ``capacity`` or
+            ``plan_stale``.
+        HTTPException: 422 when the plan cannot be screened against.
+    """
+    with engine.connect() as conn:
+        plan_row = conn.execute(
+            select(task_plan)
+            .where(task_plan.c.task_id == task_id)
+            .where(task_plan.c.status == "approved")
+            .order_by(task_plan.c.version.desc())
+            .limit(1)
+        ).mappings().one()
+    try:
+        run_id = open_longlist_walk(
+            engine,
+            task_id=task_id,
+            plan_row=dict(plan_row),
+            backends=backends,
+            executor=executor,
+            user_id=user.user_id,
+        )
+    except LonglistRefused as exc:
+        raise http_error(exc) from None
+    return out.model_copy(
+        update={"opened_run": opened_run(engine, task_id=task_id, capability_run_id=run_id)}
+    )

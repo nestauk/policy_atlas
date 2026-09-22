@@ -827,7 +827,7 @@ export interface paths {
         put?: never;
         /**
          * Confirm Baseline
-         * @description Record that a plan version was confirmed against its baseline.
+         * @description Record that a plan version was confirmed, and open the longlist walk.
          *
          *     "Confirm plan and build longlist" cannot be a steering event: by the time
          *     the user presses it the walk has ended, and a steering event needs a
@@ -840,6 +840,16 @@ export interface paths {
          *     plan_version)`` pair that the current version already records returns that
          *     version unchanged rather than minting an identical one, so a double-tap
          *     does not fill the plan's history with duplicates.
+         *
+         *     **The longlist walk** (task 045, S3): once the confirmed version has
+         *     committed, the route re-reads it and opens the longlist walk on it outside
+         *     any transaction (P6: the task-row transaction is closed before the opener
+         *     takes the dispatch lock, the order ``create_run`` uses), returning the walk
+         *     in ``opened_run``. On the idempotent path a version already confirmed but
+         *     without a longlist walk — the opener refused, or the process died between
+         *     the two — opens one now rather than returning unchanged. A confirm on a
+         *     newer version than the last longlist's is a **rebuild** (D14): it opens a
+         *     longlist walk too, whose fan-out searches only entrants without a search.
          */
         post: operations["confirm_baseline_api_v1_tasks__task_id__plan_confirm_baseline_post"];
         delete?: never;
@@ -2923,6 +2933,8 @@ export interface components {
          *             infer it from which field is null.
          *         version: Plan row version.
          *         status: Plan status (e.g. `draft`, `approved`).
+         *         opened_run: The longlist walk `POST .../plan/confirm-baseline` opened,
+         *             on that route's response. Absent on every other plan read.
          */
         PlanOut: {
             /**
@@ -2930,6 +2942,7 @@ export interface components {
              * @default evidence_search
              */
             capability: string;
+            opened_run?: components["schemas"]["LatestRun"] | null;
             plan?: components["schemas"]["PlanDraft"] | null;
             scoping?: components["schemas"]["ScopingPlanDraft"] | null;
             /** Status */
@@ -3002,7 +3015,7 @@ export interface components {
              * Stage
              * @enum {string}
              */
-            stage: "acquire" | "screen" | "classify" | "appraise" | "characterise" | "select" | "extract" | "group" | "synthesise";
+            stage: "acquire" | "screen" | "classify" | "appraise" | "characterise" | "select" | "extract" | "group" | "synthesise" | "inherit" | "suggest" | "option_searches" | "extract_interventions" | "longlist" | "constrain";
         };
         /**
          * PlanUpdatedFrame
@@ -3699,7 +3712,7 @@ export interface components {
              * Stage
              * @enum {string}
              */
-            stage: "acquire" | "screen" | "classify" | "appraise" | "characterise" | "select" | "extract" | "group" | "synthesise";
+            stage: "acquire" | "screen" | "classify" | "appraise" | "characterise" | "select" | "extract" | "group" | "synthesise" | "inherit" | "suggest" | "option_searches" | "extract_interventions" | "longlist" | "constrain";
             /** Summary */
             summary?: {
                 [key: string]: number | string;
@@ -3732,7 +3745,7 @@ export interface components {
              * Stage
              * @enum {string}
              */
-            stage: "acquire" | "screen" | "classify" | "appraise" | "characterise" | "select" | "extract" | "group" | "synthesise";
+            stage: "acquire" | "screen" | "classify" | "appraise" | "characterise" | "select" | "extract" | "group" | "synthesise" | "inherit" | "suggest" | "option_searches" | "extract_interventions" | "longlist" | "constrain";
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -3759,7 +3772,7 @@ export interface components {
              * Stage
              * @enum {string}
              */
-            stage: "acquire" | "screen" | "classify" | "appraise" | "characterise" | "select" | "extract" | "group" | "synthesise";
+            stage: "acquire" | "screen" | "classify" | "appraise" | "characterise" | "select" | "extract" | "group" | "synthesise" | "inherit" | "suggest" | "option_searches" | "extract_interventions" | "longlist" | "constrain";
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -4288,7 +4301,7 @@ export interface components {
              * Stage
              * @default null
              */
-            stage: ("acquire" | "screen" | "classify" | "appraise" | "characterise" | "select" | "extract" | "group" | "synthesise") | null;
+            stage: ("acquire" | "screen" | "classify" | "appraise" | "characterise" | "select" | "extract" | "group" | "synthesise" | "inherit" | "suggest" | "option_searches" | "extract_interventions" | "longlist" | "constrain") | null;
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -4305,6 +4318,8 @@ export interface components {
          *         check_in_id: The check-in the decision answered.
          *         capability_run_id: The walk the check-in belongs to.
          *         plan_version: The plan version the decision was taken against.
+         *         opened_run: The longlist walk "Confirm plan and build longlist" opened,
+         *             when this decision opened one. Absent on every other decision.
          */
         TurnDecisionOut: {
             /**
@@ -4319,6 +4334,7 @@ export interface components {
             check_in_id: string;
             /** Label */
             label: string;
+            opened_run?: components["schemas"]["LatestRun"] | null;
             /** Option Id */
             option_id: string;
             /** Plan Version */

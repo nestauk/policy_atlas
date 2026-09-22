@@ -3914,12 +3914,22 @@
         "type": "object"
       },
       "PlanOut": {
-        "description": "Response body for `GET`/`PATCH /api/v1/tasks/{id}/plan`.\n\nArgs:\n    plan: The current Evidence search plan, or null on a scoping task.\n    scoping: The current options-scoping plan, or null on an Evidence\n        search task.\n    capability: Which of the two the task is, so a reader never has to\n        infer it from which field is null.\n    version: Plan row version.\n    status: Plan status (e.g. `draft`, `approved`).",
+        "description": "Response body for `GET`/`PATCH /api/v1/tasks/{id}/plan`.\n\nArgs:\n    plan: The current Evidence search plan, or null on a scoping task.\n    scoping: The current options-scoping plan, or null on an Evidence\n        search task.\n    capability: Which of the two the task is, so a reader never has to\n        infer it from which field is null.\n    version: Plan row version.\n    status: Plan status (e.g. `draft`, `approved`).\n    opened_run: The longlist walk `POST .../plan/confirm-baseline` opened,\n        on that route's response. Absent on every other plan read.",
         "properties": {
           "capability": {
             "default": "evidence_search",
             "title": "Capability",
             "type": "string"
+          },
+          "opened_run": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LatestRun"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "plan": {
             "anyOf": [
@@ -4120,7 +4130,13 @@
               "select",
               "extract",
               "group",
-              "synthesise"
+              "synthesise",
+              "inherit",
+              "suggest",
+              "option_searches",
+              "extract_interventions",
+              "longlist",
+              "constrain"
             ],
             "title": "Stage",
             "type": "string"
@@ -5683,7 +5699,13 @@
               "select",
               "extract",
               "group",
-              "synthesise"
+              "synthesise",
+              "inherit",
+              "suggest",
+              "option_searches",
+              "extract_interventions",
+              "longlist",
+              "constrain"
             ],
             "title": "Stage",
             "type": "string"
@@ -5755,7 +5777,13 @@
               "select",
               "extract",
               "group",
-              "synthesise"
+              "synthesise",
+              "inherit",
+              "suggest",
+              "option_searches",
+              "extract_interventions",
+              "longlist",
+              "constrain"
             ],
             "title": "Stage",
             "type": "string"
@@ -5808,7 +5836,13 @@
               "select",
               "extract",
               "group",
-              "synthesise"
+              "synthesise",
+              "inherit",
+              "suggest",
+              "option_searches",
+              "extract_interventions",
+              "longlist",
+              "constrain"
             ],
             "title": "Stage",
             "type": "string"
@@ -6722,7 +6756,13 @@
                   "select",
                   "extract",
                   "group",
-                  "synthesise"
+                  "synthesise",
+                  "inherit",
+                  "suggest",
+                  "option_searches",
+                  "extract_interventions",
+                  "longlist",
+                  "constrain"
                 ],
                 "type": "string"
               },
@@ -6748,7 +6788,7 @@
         "type": "object"
       },
       "TurnDecisionOut": {
-        "description": "The recorded decision a gate turn resolved a paused walk with.\n\nArgs:\n    option_id: The check-in option the user chose.\n    label: That option's user-visible label, as offered.\n    check_in_id: The check-in the decision answered.\n    capability_run_id: The walk the check-in belongs to.\n    plan_version: The plan version the decision was taken against.",
+        "description": "The recorded decision a gate turn resolved a paused walk with.\n\nArgs:\n    option_id: The check-in option the user chose.\n    label: That option's user-visible label, as offered.\n    check_in_id: The check-in the decision answered.\n    capability_run_id: The walk the check-in belongs to.\n    plan_version: The plan version the decision was taken against.\n    opened_run: The longlist walk \"Confirm plan and build longlist\" opened,\n        when this decision opened one. Absent on every other decision.",
         "properties": {
           "capability_run_id": {
             "format": "uuid",
@@ -6763,6 +6803,16 @@
           "label": {
             "title": "Label",
             "type": "string"
+          },
+          "opened_run": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LatestRun"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "option_id": {
             "title": "Option Id",
@@ -9412,7 +9462,7 @@
     },
     "/api/v1/tasks/{task_id}/plan/confirm-baseline": {
       "post": {
-        "description": "Record that a plan version was confirmed against its baseline.\n\n\"Confirm plan and build longlist\" cannot be a steering event: by the time\nthe user presses it the walk has ended, and a steering event needs a\n``capability_run`` to hang on (S4, X5). So the confirmation is\n**plan-scoped** \u2014 a new approved plan version carrying\n``baseline_confirmed`` \u2014 which History already renders and which task 2's\nlonglist walk will read as its opening decision.\n\nIdempotent by construction: confirming the same ``(artefact_id,\nplan_version)`` pair that the current version already records returns that\nversion unchanged rather than minting an identical one, so a double-tap\ndoes not fill the plan's history with duplicates.",
+        "description": "Record that a plan version was confirmed, and open the longlist walk.\n\n\"Confirm plan and build longlist\" cannot be a steering event: by the time\nthe user presses it the walk has ended, and a steering event needs a\n``capability_run`` to hang on (S4, X5). So the confirmation is\n**plan-scoped** \u2014 a new approved plan version carrying\n``baseline_confirmed`` \u2014 which History already renders and which task 2's\nlonglist walk will read as its opening decision.\n\nIdempotent by construction: confirming the same ``(artefact_id,\nplan_version)`` pair that the current version already records returns that\nversion unchanged rather than minting an identical one, so a double-tap\ndoes not fill the plan's history with duplicates.\n\n**The longlist walk** (task 045, S3): once the confirmed version has\ncommitted, the route re-reads it and opens the longlist walk on it outside\nany transaction (P6: the task-row transaction is closed before the opener\ntakes the dispatch lock, the order ``create_run`` uses), returning the walk\nin ``opened_run``. On the idempotent path a version already confirmed but\nwithout a longlist walk \u2014 the opener refused, or the process died between\nthe two \u2014 opens one now rather than returning unchanged. A confirm on a\nnewer version than the last longlist's is a **rebuild** (D14): it opens a\nlonglist walk too, whose fan-out searches only entrants without a search.",
         "operationId": "confirm_baseline_api_v1_tasks__task_id__plan_confirm_baseline_post",
         "parameters": [
           {

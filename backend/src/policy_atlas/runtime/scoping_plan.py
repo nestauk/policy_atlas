@@ -59,6 +59,9 @@ from policy_atlas.options_scoping.longlist_intent import (
     compile_longlist_intent,
     longlist_screening_criteria,
 )
+from policy_atlas.options_scoping.suggest.suggest_prompt import (
+    SUGGEST_BOUND as _PROMPT_SUGGEST_BOUND,
+)
 from policy_atlas.runtime.task_agent_scoping_prompt import (
     ScopingConstraintWire,
     ScopingPlanDraftWire,
@@ -128,7 +131,9 @@ OPTION_SEARCH_CAP = 15
 OPTION_SEARCH_WIDTH = 4
 
 #: The suggest step proposes at most this many options (D7), within the cap.
-SUGGEST_BOUND = 10
+#: The prompt module's constant is the value; re-exported here beside the
+#: other compile constants.
+SUGGEST_BOUND = _PROMPT_SUGGEST_BOUND
 
 #: The coarse band the plan document shows. Replaced by the lead after the
 #: Phase 7 measurement; never a promise of a number.

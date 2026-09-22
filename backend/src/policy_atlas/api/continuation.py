@@ -35,7 +35,9 @@ from policy_atlas.runtime.capability_registry import (
     purpose_of_walk,
 )
 from policy_atlas.runtime.continuation_state import ResumeDecision, build
+from policy_atlas.runtime.conversation_lifecycle import close_task_agent_conversation
 from policy_atlas.runtime.runner import RunPlanOutcome, run_plan
+from policy_atlas.runtime.scoping_plan import LONGLIST_PURPOSE
 from policy_atlas.runtime.steering import (
     BASELINE_CONFIRM,
     Adjust,
@@ -94,11 +96,15 @@ class AnswerResult:
         capability_run_id: Parked walk that received the answer.
         decision_event_id: Appended steering-decision event identity.
         continuation_requested: Whether a worker should be dispatched.
+        follow_on: The walk the caller opens once this answer has committed,
+            or ``None`` (task 045): ``"longlist"`` for "Confirm plan and build
+            longlist" at the baseline gate.
     """
 
     capability_run_id: uuid.UUID
     decision_event_id: uuid.UUID
     continuation_requested: bool
+    follow_on: str | None = None
 
 
 @dataclass(frozen=True)
@@ -241,6 +247,10 @@ def answer_check_in(
                 raise InvalidResponseError("the baseline gate does not accept parameters")
             if option.get("id") == "change_plan":
                 return _persist_change_plan(
+                    conn, task_id=task_id, pause=pause, state=state, actor=actor
+                )
+            if option.get("id") == "confirm_plan":
+                return _persist_confirm_plan(
                     conn, task_id=task_id, pause=pause, state=state, actor=actor
                 )
         _validate_offered_authored_delta(option, state=state, pause_payload=pause.payload)
@@ -995,6 +1005,77 @@ def _persist_change_plan(
     )
     log.info("continuation.change_plan", task_id=str(task_id), actor=actor)
     return AnswerResult(pause.capability_run_id, decision_id, False)
+
+
+def _persist_confirm_plan(
+    conn: Connection,
+    *,
+    task_id: uuid.UUID,
+    pause: _Pause,
+    state: Any,
+    actor: str,
+) -> AnswerResult:
+    """End the baseline walk at the gate and ask for the longlist (task 045, S3).
+
+    "Confirm plan and build longlist" no longer resumes the walk to let it run
+    out: it records the decision (``continue``, with the gate's record), ends
+    the walk here — ``run.finished`` with the reason on it — and hands the
+    caller the follow-on, which opens the **second walk** after this
+    transaction commits. The walk's status is what the walk would have ended
+    with had it run out: ``succeeded``, or ``degraded`` when a step failed or
+    a flag says so (the runner's own end-of-walk rule).
+
+    This path bypasses ``_finish_run``, so it keeps that function's 029
+    invariant itself: the Task Agent conversation closes with the walk, in the
+    same transaction (P3). The next Task Agent turn opens a fresh lineage
+    seeded from the approved plan, as after 044's post-baseline plan change.
+
+    Args:
+        conn: Open connection whose transaction this joins.
+        task_id: Task owning the parked walk.
+        pause: The pending gate pause.
+        state: Continuation state for the parked walk.
+        actor: Authenticated actor recorded in logs.
+
+    Returns:
+        The committed answer result: no continuation, ``follow_on="longlist"``.
+    """
+    decision_id = _append_decision(
+        conn,
+        task_id=task_id,
+        pause=pause,
+        state=state,
+        response="continue",
+        action=None,
+        extra={"action": "confirm_plan", **_baseline_gate_decision(pause.payload, state)},
+    )
+    status = (
+        "degraded"
+        if any(outcome.status in {"failed", "skipped"} for outcome in state.step_outcomes)
+        or any(flag.get("status") == "degraded" for flag in state.flagged_events)
+        else "succeeded"
+    )
+    ended_at = datetime.now(UTC)
+    conn.execute(
+        update(capability_run)
+        .where(capability_run.c.task_id == task_id)
+        .where(capability_run.c.capability_run_id == pause.capability_run_id)
+        .values(status=status, ended_at=ended_at)
+    )
+    events.append(
+        conn,
+        task_id=task_id,
+        run_id=pause.run_id,
+        event_type="run.finished",
+        payload={
+            "capability_run_id": str(pause.capability_run_id),
+            "status": status,
+            "reason": "confirm_plan",
+        },
+    )
+    close_task_agent_conversation(conn, task_id=task_id, closed_at=ended_at)
+    log.info("continuation.confirm_plan", task_id=str(task_id), actor=actor)
+    return AnswerResult(pause.capability_run_id, decision_id, False, follow_on=LONGLIST_PURPOSE)
 
 
 def _persist_abort(
