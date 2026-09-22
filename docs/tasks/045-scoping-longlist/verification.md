@@ -72,3 +72,49 @@ walk's `plan_id` (pre-existing; check once longlist walks can park).
 `ContinuationState` requires since 027 — the fan-out path with plan
 adjustments would raise `TypeError`; not fixed here (out of scope), listed
 under known gaps.
+
+### Lead prompt surfaces — 2.1, 3.1, 4.1, 5.1, 7.1 landed together (2026-09-22, `lead`)
+
+| Command | Result | Notes |
+|---|---:|---|
+| `ruff check` + `mypy` on the nine modules | pass | 16 source files clean |
+| `uv run pytest tests/api/test_task_agent_scoping.py tests/runtime/test_task_agent_scoping_prompt.py tests/runtime/test_scoping_plan.py tests/runtime/test_gate_sort_prompt.py` | pass | 57 passed |
+| `python3 scripts/prompt_hash_guard.py --update` | 24 entries | **8 added**: `extract/extract_interventions_prompt.py`, `options_scoping/suggest/suggest_prompt.py`, `options_scoping/longlist/longlist_cluster_prompt.py`, `…/longlist_theme_prompt.py`, `…/lever_typing_prompt.py`, `options_scoping/constrain/constrain_prompt.py`, `runtime/longlist_verbs_prompt.py`, `runtime/option_design_prompt.py`; **1 changed**: `runtime/task_agent_scoping_prompt.py` (v2 → v3); 0 removed; every other entry unchanged (the ES search prompts, screen, classify, IOF, ICF, gate sort included) |
+
+All prompt-bearing work was authored by the lead before any delegate built
+against it (plan: "prompt-bearing work is `lead` and always the first
+sub-phase of its phase"). Every new module is named `*_prompt.py`, so the
+guard pins it. `lever_types.py` (the versioned taxonomy, `lever_types_v1`,
+ten types with definitions the typing prompt renders as data) and
+`interventions_records.py` (the wire model whose field descriptions the
+profile prompt renders) are lead-authored too; they are not prompt modules
+by the guard's name rule and are pinned through the prompts that import
+them.
+
+**`task_agent_scoping_v3` diff (words only, rules otherwise byte-identical to
+v2):** the plan's section list gains *Options you already have in mind* and
+the run description gains the longlist sentence; a `YourOptionWire{text}`
+and `ScopingPlanDraftWire.your_options`; a new section "Options you already
+have in mind" (asked once as the part `your_options` with two options
+`none_yet` (primary) · `i_have_some`, the user's words verbatim, the design
+proposed back by code, never re-asked); the default transferability
+preference explained once and never authored by the Task Agent (code mints
+it, following Where; Edit removes it); a rule for edits after a longlist
+exists (confirm, say the plan document offers Rebuild longlist, never say
+the longlist updates itself); `your_options` added to the banned-keys list
+and "assessing an option" to the not-yet-available list; the
+`baseline_state` docstring names the longlist states.
+
+**Design notes the delegates build against:** the cluster assignment wire
+carries `reason` and `design_feature_not_stated` beside the engine's
+`unit_id → label` pair (the component's backend keeps them on the side, the
+engine sees only the pair — A9); the assignment may answer the component's
+own label `not an option` (`NOT_AN_OPTION_LABEL`) beside the engine's
+`ungroupable`; the verbs sort carries `assents_to_pending` so a confirming
+turn is read explicitly rather than inferred from a sorted `other` (S11's
+"a sorted `other` the prompt reads as assent", made a field — lead call,
+flagged for the review); the typing wire's `ambition` Literal is the
+vocabulary (`do_minimum · incremental · structural`, `AMBITION_BANDS`);
+`constrain_v1` takes the three default screens as data ids (`relevant ·
+distinct · in_scope`, `DEFAULT_SCREENS`) beside the requirement ids, and the
+transferability preference is removed from its input by the caller.
