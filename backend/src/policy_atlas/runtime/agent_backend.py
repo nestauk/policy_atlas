@@ -16,6 +16,9 @@ moment lives in the task_agent seam; this module owns the two mid-run moments �
 - **sort_gate_turn**: the mini-class question · decision · unsure sort of a Task
   Agent turn taken while an options-scoping walk is paused on its baseline gate
   (task 044, A4). It applies nothing; the caller dispatches the verdict.
+- **propose_option_design**: the judgment-class ``option_design_v1`` call that
+  proposes a specified design back from an option the user named in their own
+  words (task 045, D19). It applies nothing; the caller stores the design.
 
 This module also owns the **structurally-gated invocation** classifier, the
 **single-shot decide + bounded fallback deliberation loop** (contract decision 3's
@@ -63,6 +66,12 @@ from policy_atlas.runtime.gate_sort_prompt import (
     GATE_SORT_PROMPT_VERSION,
     GateSortWire,
     build_gate_sort_messages,
+)
+from policy_atlas.runtime.option_design_prompt import (
+    OPTION_DESIGN_MAX_OUTPUT_TOKENS,
+    OPTION_DESIGN_PROMPT_VERSION,
+    OptionDesignWire,
+    build_option_design_messages,
 )
 
 if TYPE_CHECKING:
@@ -240,6 +249,35 @@ class AgentBackend(Protocol):
         """
         ...
 
+    def propose_option_design(
+        self,
+        words: str,
+        *,
+        question: str,
+        target_unit: str,
+        outcomes: list[str],
+        session_id: uuid.UUID | None = None,
+    ) -> OptionDesignWire:
+        """Propose a specified design back from the user's words (task 045, D19).
+
+        The judgment-class ``option_design_v1`` call. The user's words are
+        never edited; the design is Policy Atlas's reading of them.
+
+        Args:
+            words: The user's option, verbatim.
+            question: The plan's question.
+            target_unit: The plan's target unit.
+            outcomes: The plan's outcomes, in order.
+            session_id: Optional Langfuse session id shared by the task.
+
+        Returns:
+            One parsed design proposal.
+
+        Raises:
+            RuntimeError: If the backend cannot produce a usable design.
+        """
+        ...
+
 
 # --- Live OpenAI implementation --------------------------------------------
 
@@ -414,6 +452,31 @@ class OpenAIAgentBackend:
         )
         return _scrub_gate_sort(parsed)
 
+    def propose_option_design(
+        self,
+        words: str,
+        *,
+        question: str,
+        target_unit: str,
+        outcomes: list[str],
+        session_id: uuid.UUID | None = None,
+    ) -> OptionDesignWire:
+        """Propose a design through structured OpenAI output (judgment-class)."""
+        messages = build_option_design_messages(
+            words=words, question=question, target_unit=target_unit, outcomes=outcomes
+        )
+        return self._parse(
+            messages,
+            response_format=OptionDesignWire,
+            model=AGENT_MODEL,
+            max_output_tokens=OPTION_DESIGN_MAX_OUTPUT_TOKENS,
+            usage_event="agent.option_design.usage",
+            label="agent-option-design",
+            prompt_version=OPTION_DESIGN_PROMPT_VERSION,
+            name="agent:option_design",
+            session_id=session_id,
+        )
+
     def _parse[T: BaseModel](
         self,
         messages: list[ChatCompletionMessageParam],
@@ -498,6 +561,22 @@ def _unsorted() -> GateSortWire:
     return GateSortWire(kind="unsure", reason="Deterministic stub gate sort: unsure.")
 
 
+def _design_from_words(words: str, outcomes: list[str]) -> OptionDesignWire:
+    """The stub default: a design read straight from the user's words.
+
+    Deterministic and honest: the words are the one stated feature, nothing
+    is supplied, so nothing is marked assumed.
+    """
+    text = " ".join(words.split()) or "An option"
+    return OptionDesignWire(
+        name=text[:80],
+        description=text[:240],
+        design_features=[text[:240]],
+        outcomes_served=list(outcomes),
+        assumed=[],
+    )
+
+
 class StubAgentBackend:
     """Deterministic, zero-egress, scriptable agent backend for tests/CLI.
 
@@ -513,6 +592,8 @@ class StubAgentBackend:
         triage_responses: Canned :class:`WatchTriageWire` value(s), or ``None``.
         decide_responses: Canned :class:`WatchDecisionWire` value(s), or ``None``.
         gate_sort_responses: Canned :class:`GateSortWire` value(s), or ``None``.
+        option_design_responses: Canned :class:`OptionDesignWire` value(s), or
+            ``None`` (the default reads the design from the words).
     """
 
     def __init__(
@@ -522,15 +603,19 @@ class StubAgentBackend:
         triage_responses: WatchTriageWire | list[WatchTriageWire] | None = None,
         decide_responses: WatchDecisionWire | list[WatchDecisionWire] | None = None,
         gate_sort_responses: GateSortWire | list[GateSortWire] | None = None,
+        option_design_responses: OptionDesignWire | list[OptionDesignWire] | None = None,
     ) -> None:
         self._route_queue = _as_queue(route_responses)
         self._triage_queue = _as_queue(triage_responses)
         self._decide_queue = _as_queue(decide_responses)
         self._gate_sort_queue = _as_queue(gate_sort_responses)
+        self._option_design_queue = _as_queue(option_design_responses)
         self.route_calls = 0
         self.triage_calls = 0
         self.decide_calls = 0
         self.gate_sort_calls = 0
+        self.option_design_calls = 0
+        self.option_design_words: list[str] = []
 
     def route(
         self,
@@ -580,6 +665,20 @@ class StubAgentBackend:
         del utterance, offered_options, session_id
         self.gate_sort_calls += 1
         return _next(self._gate_sort_queue, _unsorted)
+
+    def propose_option_design(
+        self,
+        words: str,
+        *,
+        question: str,
+        target_unit: str,
+        outcomes: list[str],
+        session_id: uuid.UUID | None = None,
+    ) -> OptionDesignWire:
+        del question, target_unit, session_id
+        self.option_design_calls += 1
+        self.option_design_words.append(words)
+        return _next(self._option_design_queue, lambda: _design_from_words(words, outcomes))
 
 
 def _as_queue[T](value: T | list[T] | None) -> list[T]:

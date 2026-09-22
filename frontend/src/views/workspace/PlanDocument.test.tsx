@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -18,9 +18,11 @@ vi.mock("../../api/queries", () => ({
   useArtefact: vi.fn(),
 }));
 
+const { patchMutate } = vi.hoisted(() => ({ patchMutate: vi.fn() }));
+
 vi.mock("../../api/mutations", () => ({
   useStartRun: () => ({ mutate: vi.fn(), isPending: false }),
-  usePatchPlan: () => ({ mutate: vi.fn(), isPending: false }),
+  usePatchPlan: () => ({ mutate: patchMutate, isPending: false }),
   useConfirmBaseline: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 
@@ -108,6 +110,7 @@ function renderPlan(onOverlayChange = vi.fn(), overlay = {}) {
 // --- Options scoping fixtures (task 044) ----------------------------------
 
 type ScopingPlanDraft = components["schemas"]["ScopingPlanDraft"];
+type ScopingConstraintOut = components["schemas"]["ScopingConstraintOut"];
 type TaskLinkOut = components["schemas"]["TaskLinkOut"];
 type RunOut = components["schemas"]["RunOut"];
 
@@ -130,6 +133,8 @@ function fullScopingPlan(overrides: Partial<ScopingPlanDraft> = {}): ScopingPlan
         published_after: null,
         published_before: null,
         languages: null,
+        setting: false,
+        default: null,
       },
       {
         text: "Prefer a lower cost per participant",
@@ -140,6 +145,8 @@ function fullScopingPlan(overrides: Partial<ScopingPlanDraft> = {}): ScopingPlan
         published_after: null,
         published_before: null,
         languages: null,
+        setting: false,
+        default: null,
       },
       {
         text: "UK evidence only",
@@ -150,12 +157,15 @@ function fullScopingPlan(overrides: Partial<ScopingPlanDraft> = {}): ScopingPlan
         published_after: null,
         published_before: null,
         languages: ["English"],
+        setting: false,
+        default: null,
       },
     ],
     your_context: [
       { text: "We already run a careers service in every school.", type: "present_fact", turn_index: 1, test_as_condition: false },
       { text: "We plan to expand apprenticeships next year.", type: "commitment", turn_index: 2, test_as_condition: true },
     ],
+    your_options: null,
     entry_branch: "explore",
     linked_task_ids: [],
     steering_mode: "moderate",
@@ -732,5 +742,119 @@ describe("PlanDocument — options scoping (task 044)", () => {
     expect(screen.queryByRole("button", { name: "Edit" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Confirm and build baseline" })).toBeNull();
     expect(screen.getByRole("heading", { name: "Question and intended change" })).toBeInTheDocument();
+  });
+});
+
+describe("PlanDocument — options scoping, task 045 slots", () => {
+  const transferability: ScopingConstraintOut = {
+    text: "Transferable to United Kingdom",
+    kind: "preference",
+    origin: "assumed",
+    checked_at: "assessment",
+    country_group: null,
+    published_after: null,
+    published_before: null,
+    languages: null,
+    setting: false,
+    default: "transferability",
+  };
+
+  function withSlots(overrides: Partial<ScopingPlanDraft> = {}): PlanOut {
+    const base = fullScopingPlan();
+    return scopingPlanOut({
+      constraints: [...(base.constraints ?? []), transferability],
+      your_options: [
+        {
+          text: "A youth guarantee, like Finland's",
+          design: {
+            name: "Youth guarantee",
+            description: "Every young person out of work is offered a job, training or education.",
+            design_features: ["an offer within four months", "delivered through Jobcentre Plus"],
+            outcomes_served: ["NEET rate at 6 months"],
+            assumed: ["delivered through Jobcentre Plus"],
+            version: 1,
+          },
+          turn_index: 3,
+        },
+        { text: "wage subsidies", design: null, turn_index: 3 },
+      ],
+      ...overrides,
+    });
+  }
+
+  beforeEach(() => {
+    patchMutate.mockClear();
+  });
+
+  it("shows the user's words and the proposed design, assumed features marked", () => {
+    mockUsePlan({ data: withSlots() });
+    renderPlan();
+    expect(screen.getByRole("heading", { name: "Options you already have in mind" })).toBeInTheDocument();
+    const [first, second] = screen.getAllByTestId("your-option");
+    expect(first).toHaveTextContent("A youth guarantee, like Finland's");
+    expect(first).toHaveTextContent("Proposed design: Youth guarantee");
+    const features = Array.from(first.querySelectorAll("li")).map((item) => item.textContent);
+    expect(features).toEqual(["an offer within four months", "delivered through Jobcentre Plus(assumed)"]);
+    expect(second).toHaveTextContent("wage subsidies");
+    expect(second).toHaveTextContent("No design yet");
+  });
+
+  it("the options section's Edit seeds the composer", async () => {
+    mockUsePlan({ data: withSlots() });
+    const user = userEvent.setup();
+    const seeded: string[] = [];
+    window.addEventListener("policy-atlas:seed-composer", (event) => {
+      seeded.push((event as CustomEvent<string>).detail);
+    });
+    renderPlan();
+    const section = screen
+      .getByRole("heading", { name: "Options you already have in mind" })
+      .closest("section");
+    expect(section).not.toBeNull();
+    await user.click(within(section as HTMLElement).getByRole("button", { name: "Edit" }));
+    expect(seeded).toContain("Change the options I have in mind: ");
+  });
+
+  it("an empty list reads None; a slot not yet asked is hidden", () => {
+    mockUsePlan({ data: withSlots({ your_options: [] }) });
+    const { unmount } = renderPlan();
+    expect(screen.getByRole("heading", { name: "Options you already have in mind" })).toBeInTheDocument();
+    expect(screen.getByText("None")).toBeInTheDocument();
+    unmount();
+
+    mockUsePlan({ data: withSlots({ your_options: null }) });
+    renderPlan();
+    expect(screen.queryByRole("heading", { name: "Options you already have in mind" })).toBeNull();
+  });
+
+  it("shows the default preference as checked at assessment and assumed, with no guess", () => {
+    mockUsePlan({ data: withSlots() });
+    renderPlan();
+    const row = screen.getByText("Transferable to United Kingdom").closest("tr");
+    expect(row).not.toBeNull();
+    expect(row).toHaveTextContent("checked at assessment · assumed");
+    expect(row).toHaveTextContent("No guess before then.");
+    expect(row).not.toHaveTextContent("labelled guess");
+  });
+
+  it("Remove drops the default preference by a direct plan edit", async () => {
+    mockUsePlan({ data: withSlots() });
+    const user = userEvent.setup();
+    renderPlan();
+    await user.click(screen.getByRole("button", { name: "Remove" }));
+    expect(patchMutate).toHaveBeenCalledTimes(1);
+    const body = patchMutate.mock.calls[0][0] as { scoping: { constraints: ScopingConstraintOut[] } };
+    expect(body.scoping.constraints.map((c) => c.default)).toEqual([null, null, null]);
+  });
+
+  it("offers no Remove on a read-only plan", () => {
+    mockUsePlan({ data: withSlots() });
+    render(
+      <TooltipProvider delayDuration={0}>
+        <PlanDocument taskId={TASK_ID} readOnly onClose={vi.fn()} overlay={{}} onOverlayChange={vi.fn()} />
+      </TooltipProvider>,
+    );
+    expect(screen.queryByRole("button", { name: "Remove" })).toBeNull();
+    expect(screen.getByText("checked at assessment · assumed")).toBeInTheDocument();
   });
 });

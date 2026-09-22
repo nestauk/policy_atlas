@@ -615,6 +615,8 @@ export const mockScopingPlanReady: components["schemas"]["ScopingPlanDraft"] = {
       published_after: null,
       published_before: null,
       languages: null,
+      setting: false,
+      default: null,
     },
     {
       text: "Prefer options with a lower cost per participant",
@@ -625,6 +627,8 @@ export const mockScopingPlanReady: components["schemas"]["ScopingPlanDraft"] = {
       published_after: null,
       published_before: null,
       languages: null,
+      setting: false,
+      default: null,
     },
     {
       text: "Evidence from the UK and other high-income countries only",
@@ -635,6 +639,38 @@ export const mockScopingPlanReady: components["schemas"]["ScopingPlanDraft"] = {
       published_after: null,
       published_before: null,
       languages: ["English"],
+      setting: false,
+      default: null,
+    },
+    {
+      text: "Transferable to United Kingdom",
+      kind: "preference",
+      origin: "assumed",
+      checked_at: "assessment",
+      country_group: null,
+      published_after: null,
+      published_before: null,
+      languages: null,
+      setting: false,
+      default: "transferability",
+    },
+  ],
+  your_options: [
+    {
+      text: "A youth guarantee, like the one Finland runs",
+      design: {
+        name: "Youth guarantee",
+        description: "Every young person out of work for four months is offered a job, training or education.",
+        design_features: [
+          "an offer within four months of leaving work or education",
+          "a job, apprenticeship, training or education place",
+          "delivered through Jobcentre Plus",
+        ],
+        outcomes_served: ["NEET rate at 6 months"],
+        assumed: ["delivered through Jobcentre Plus"],
+        version: 1,
+      },
+      turn_index: 2,
     },
   ],
   your_context: [
@@ -657,9 +693,23 @@ export const mockScopingPlanReady: components["schemas"]["ScopingPlanDraft"] = {
   steer_point_defaults: [],
   assumptions: ["The United Kingdom is the right jurisdiction unless you say otherwise."],
   steps: [
-    { stage: "acquire", label: "Searching sources", blurb: "Queries out to academic and policy databases." },
-    { stage: "screen", label: "Screening sources", blurb: "Checking relevance to the plan's scope." },
-    { stage: "synthesise", label: "Writing the baseline", blurb: "Setting out what happens if nothing changes." },
+    {
+      stage: "synthesise",
+      label: "Baseline",
+      blurb:
+        "What is in place, the trend, who is affected and what is contested, from Overton and OpenAlex. The run pauses for you to question it and confirm the plan.",
+    },
+    {
+      stage: "acquire",
+      label: "Longlist",
+      blurb:
+        "Suggest options, search widely, read every abstract for the interventions it covers, cluster them into options, apply your constraints.",
+    },
+    {
+      stage: "select",
+      label: "Shortlist and assessment",
+      blurb: "Review the proposed reading set. Assessment runs only when you say so. Not in this release.",
+    },
   ],
   time_band: "10-15 minutes",
   baseline_confirmed: null,

@@ -3168,6 +3168,52 @@
         "title": "MostRelevantNoteOut",
         "type": "object"
       },
+      "OptionDesignOut": {
+        "description": "A specified design Policy Atlas proposed back from an option's words.\n\nArgs:\n    name: A short option name.\n    description: One sentence: what is done, by whom, for whom.\n    design_features: The features that define the option.\n    outcomes_served: Which of the plan's outcomes the option is for.\n    assumed: The features Policy Atlas supplied rather than the user\n        stated; shown as assumed.\n    version: The design's version.",
+        "properties": {
+          "assumed": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Assumed",
+            "type": "array"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "design_features": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Design Features",
+            "type": "array"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "outcomes_served": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Outcomes Served",
+            "type": "array"
+          },
+          "version": {
+            "default": 1,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "name",
+          "description",
+          "design_features"
+        ],
+        "title": "OptionDesignOut",
+        "type": "object"
+      },
       "OptionResponse": {
         "additionalProperties": false,
         "description": "Response picking a canonical or authored option.\n\nArgs:\n    kind: Discriminator.\n    option_id: The picked option's id.\n    params: Fill-in for `requires_user_input` options. The spec does\n        not name per-option param shapes, so this stays a constrained\n        free-form mapping rather than a per-option union.",
@@ -4587,7 +4633,7 @@
         "type": "object"
       },
       "ScopingConstraintOut": {
-        "description": "One typed constraint or preference on a scoping plan.\n\nArgs:\n    text: The user's ask.\n    kind: What the constraint is about.\n    origin: Where it came from.\n    checked_at: When it bites; fixed by `kind`.\n    country_group: Source-origin restriction, when there is one.\n    published_after: ISO date floor, when there is one.\n    published_before: ISO date ceiling, when there is one.\n    languages: Language names. Stored and shown as not yet applied at\n        retrieval \u2014 the search grammar has no language filter.",
+        "description": "One typed constraint or preference on a scoping plan.\n\nArgs:\n    text: The user's ask.\n    kind: What the constraint is about.\n    origin: Where it came from.\n    checked_at: When it bites; fixed by `kind`.\n    country_group: Source-origin restriction, when there is one.\n    published_after: ISO date floor, when there is one.\n    published_before: ISO date ceiling, when there is one.\n    languages: Language names. Stored and shown as not yet applied at\n        retrieval \u2014 the search grammar has no language filter.\n    setting: True on a requirement naming the delivery setting the\n        options must be delivered through; the longlist search carries it.\n    default: `transferability` on the default transferability preference\n        every scoping plan carries (checked at assessment, assumed, follows\n        Where until edited); `null` on a constraint the user asked for.\n        Omitting the default from a patch removes it.",
         "properties": {
           "checked_at": {
             "enum": [
@@ -4608,6 +4654,19 @@
               }
             ],
             "default": null
+          },
+          "default": {
+            "anyOf": [
+              {
+                "const": "transferability",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Default"
           },
           "kind": {
             "enum": [
@@ -4666,6 +4725,11 @@
             "default": null,
             "title": "Published Before"
           },
+          "setting": {
+            "default": false,
+            "title": "Setting",
+            "type": "boolean"
+          },
           "text": {
             "title": "Text",
             "type": "string"
@@ -4681,7 +4745,7 @@
         "type": "object"
       },
       "ScopingPlanDraft": {
-        "description": "Draft or approved options-scoping plan, as surfaced to the client.\n\nMirrors the runtime `ScopingPlan` field-by-field. Every field except\n`steps`/`ready` may be `None`/absent while drafting.\n\nArgs:\n    title: Short user-visible name for the task.\n    question: The user's ask.\n    intended_change: What we are trying to change.\n    target_unit: Who or what should change.\n    where: The jurisdiction the policy would apply to.\n    outcomes: The outcomes evidence is read against.\n    depth: The scoping depth the user chose.\n    constraints: Typed constraints and preferences.\n    your_context: The user's own situation, verbatim.\n    entry_branch: `explore` is the only branch in this release.\n    linked_task_ids: The tasks this plan starts from.\n    steering_mode: Check-in cadence for the run.\n    steer_point_defaults: Standing instructions.\n    assumptions: Every guess the plan is making.\n    steps: The three display steps, in order.\n    time_band: The coarse compute band for the baseline.\n    baseline_confirmed: The confirm-baseline record, once written.\n    ready: Whether the draft has validated into an executable plan.",
+        "description": "Draft or approved options-scoping plan, as surfaced to the client.\n\nMirrors the runtime `ScopingPlan` field-by-field. Every field except\n`steps`/`ready` may be `None`/absent while drafting.\n\nArgs:\n    title: Short user-visible name for the task.\n    question: The user's ask.\n    intended_change: What we are trying to change.\n    target_unit: Who or what should change.\n    where: The jurisdiction the policy would apply to.\n    outcomes: The outcomes evidence is read against.\n    depth: The scoping depth the user chose.\n    constraints: Typed constraints and preferences, including the default\n        transferability preference (marked by `default`).\n    your_context: The user's own situation, verbatim.\n    your_options: Options the user already has in mind, each with its\n        proposed design.\n    entry_branch: `explore` is the only branch in this release.\n    linked_task_ids: The tasks this plan starts from.\n    steering_mode: Check-in cadence for the run.\n    steer_point_defaults: Standing instructions.\n    assumptions: Every guess the plan is making.\n    steps: The three display steps, in order.\n    time_band: The coarse compute band for the baseline.\n    baseline_confirmed: The confirm-baseline record, once written.\n    ready: Whether the draft has validated into an executable plan.",
         "properties": {
           "assumptions": {
             "anyOf": [
@@ -4912,6 +4976,21 @@
             ],
             "default": null,
             "title": "Your Context"
+          },
+          "your_options": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/YourOptionOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Your Options"
           }
         },
         "title": "ScopingPlanDraft",
@@ -4919,7 +4998,7 @@
       },
       "ScopingPlanPatch": {
         "additionalProperties": false,
-        "description": "Typed replace-field edits for a scoping plan.\n\nOmitted fields stay as they are; a supplied field replaces its counterpart\noutright. The merged result must still be a valid executable scoping plan.\n\nArgs:\n    intended_change: Replacement intended change.\n    target_unit: Replacement target unit.\n    where: Replacement jurisdiction.\n    outcomes: Replacement outcome list.\n    depth: Replacement depth.\n    constraints: Replacement constraint list.\n    your_context: Replacement Your context list.\n    steering_mode: Replacement check-in cadence.\n    steer_point_defaults: Replacement standing instructions.\n    assumptions: Replacement assumptions.",
+        "description": "Typed replace-field edits for a scoping plan.\n\nOmitted fields stay as they are; a supplied field replaces its counterpart\noutright. The merged result must still be a valid executable scoping plan.\n\nArgs:\n    intended_change: Replacement intended change.\n    target_unit: Replacement target unit.\n    where: Replacement jurisdiction.\n    outcomes: Replacement outcome list.\n    depth: Replacement depth.\n    constraints: Replacement constraint list. Omitting the default\n        transferability preference removes it for good.\n    your_context: Replacement Your context list.\n    your_options: Replacement options list, by the user's words.\n    steering_mode: Replacement check-in cadence.\n    steer_point_defaults: Replacement standing instructions.\n    assumptions: Replacement assumptions.",
         "properties": {
           "assumptions": {
             "anyOf": [
@@ -5052,6 +5131,20 @@
               }
             ],
             "title": "Your Context"
+          },
+          "your_options": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/YourOptionIn"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Your Options"
           }
         },
         "title": "ScopingPlanPatch",
@@ -6843,6 +6936,60 @@
           "turn_index"
         ],
         "title": "YourContextOut",
+        "type": "object"
+      },
+      "YourOptionIn": {
+        "additionalProperties": false,
+        "description": "One option in a scoping plan edit: the user's words only.\n\nArgs:\n    text: The user's words, verbatim. Unchanged words keep their design;\n        new or changed words get a design proposed back.",
+        "properties": {
+          "text": {
+            "maxLength": 10000,
+            "minLength": 1,
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "title": "YourOptionIn",
+        "type": "object"
+      },
+      "YourOptionOut": {
+        "description": "One option the user already has in mind.\n\nArgs:\n    text: The user's words, verbatim.\n    design: The proposed design; `null` until proposed.\n    turn_index: The Task Agent turn it came from; `null` on a draft not\n        yet approved.",
+        "properties": {
+          "design": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OptionDesignOut"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          },
+          "turn_index": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Turn Index"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "title": "YourOptionOut",
         "type": "object"
       }
     },

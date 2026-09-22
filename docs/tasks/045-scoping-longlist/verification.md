@@ -165,3 +165,62 @@ every scope (A21). `extract_interventions` joined `LLM_BEARING_COMPONENTS`.
 run may be another scope's (memo); exclude `role = comparator` in the
 component; `grounding` is a one-element qv_v1 array with `segment:
 title|abstract` spans; `text_basis` rides the parent record (`abstract_only`).
+
+### Phase 3 — plan slots, the longlist intent, the scoping Task Agent v3 (2026-09-22; 3.1 `lead`, 3.2 `deep-reasoner`, plan-document copy pass `lead`)
+
+| Command | Result | Notes |
+|---|---:|---|
+| `make verify-fast` (shared gate with Phase 2) | pass | as above |
+| `make prompt-guard` · `make openapi-sync` · `make drift-check` | pass | 24 unchanged; `drift-check: OK` |
+| `make frontend-verify` | pass | 82 files / 714 tests (6 new on the plan document); one pre-existing lint warning (`SplashField.tsx`) |
+| `cd frontend && pnpm e2e` | pass | 15 passed |
+| new backend tests | pass | `test_scoping_plan_options.py` (22), `options_scoping/test_design.py` (7), `test_longlist_intent.py` (7), `api/test_task_agent_scoping_options.py` (10) |
+
+`OptionDesign` (`options_scoping/design.py`: name · description ·
+design_features · outcomes_served · assumed · version; `as_intent()` =
+"{name}. {description} Design features: f1; f2; …" — deterministic, the
+targeted intent record's text in Phase 4). `ScopingPlan.your_options[]`
+(`YourOption{text verbatim, design | None, turn_index}`); designs proposed
+at plan approval outside any transaction through
+`AgentBackend.propose_option_design` (`option_design_v1`, judgment model;
+stub queue in `StubAgentBackend`), only for new or reworded options, a
+failed proposal logged and left `None` (the approval never fails on it).
+The default transferability preference: `ScopingConstraint.default =
+"transferability"`, minted by `build_scoping_plan`, re-texted when Where
+changes unless the user edited its text, removable by a patch that omits it
+(`ScopingPlan.removed_defaults` carries the removal forward; never
+re-minted); never authored by the Task Agent (a draft preference starting
+"Transferable to" is dropped and logged). `compile_longlist_intent`
+(PICO-shaped, no Where) and `longlist_screening_criteria` (no place; the
+setting only when a `setting=True` requirement exists) in
+`options_scoping/longlist_intent.py`; the criteria wired into the longlist
+and targeted chains' `screen_abstract` deltas. `SCOPING_STEPS` Longlist
+blurb replaced. API: `OptionDesignOut`, `YourOptionOut`, `YourOptionIn`;
+`ScopingConstraintOut.setting` and `.default`; `ScopingPlanDraft.your_options`;
+`ScopingPlanPatch.your_options` — additive. `_baseline_state` gains "a
+longlist exists, built from plan version N" and "a longlist is being built".
+Plan document: the *Options you already have in mind* section (words, the
+proposed design with assumed features marked, Edit), the preference row with
+its rider "checked at assessment · assumed" and a **Remove** control.
+
+**Flagged deviations (3.2):**
+6. The screen's 2,000-character ceiling is checked by
+   `scoping_plan.compose_longlist_screen_intent(plan)` (raises `ValueError`,
+   never truncates), not inside compose — raising in compose would leave a
+   `capability_run` row open in the runner. Phase 4's opener calls it before
+   opening a walk and answers 422.
+7. The PICO intent is the longlist intent record's text (Phase 4 writes it),
+   not a directive; only the criteria ride the delta.
+8. A **Remove** control on the default preference row (the contract says
+   "removable"; the section's Edit seeds the chat, and the Task Agent is told
+   never to author the default, so chat could not remove it). Shown only
+   when the plan is approved, editable and no walk is active.
+9. `your_context` entries now record the real approving turn index (was 0):
+   the turn route passes `source_turn_index`. Behaviour-preserving otherwise.
+10. `ScopingConstraintWire.setting: bool` added to the v3 prompt by the lead
+    (`e093ce34`) so code can find a setting requirement (D21) — a wire
+    addition, not a plan-object change beyond the contract's table.
+
+Lead copy pass: "Design not proposed yet" → "No design yet"; the rest of the
+delegate's copy kept (rider, "Proposed design", "assumed", the Edit seed, the
+criteria wording the screen model reads as data).

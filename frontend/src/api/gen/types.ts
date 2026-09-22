@@ -2566,6 +2566,36 @@ export interface components {
             source_id: string;
         };
         /**
+         * OptionDesignOut
+         * @description A specified design Policy Atlas proposed back from an option's words.
+         *
+         *     Args:
+         *         name: A short option name.
+         *         description: One sentence: what is done, by whom, for whom.
+         *         design_features: The features that define the option.
+         *         outcomes_served: Which of the plan's outcomes the option is for.
+         *         assumed: The features Policy Atlas supplied rather than the user
+         *             stated; shown as assumed.
+         *         version: The design's version.
+         */
+        OptionDesignOut: {
+            /** Assumed */
+            assumed?: string[];
+            /** Description */
+            description: string;
+            /** Design Features */
+            design_features: string[];
+            /** Name */
+            name: string;
+            /** Outcomes Served */
+            outcomes_served?: string[];
+            /**
+             * Version
+             * @default 1
+             */
+            version: number;
+        };
+        /**
          * OptionResponse
          * @description Response picking a canonical or authored option.
          *
@@ -3297,6 +3327,12 @@ export interface components {
          *         published_before: ISO date ceiling, when there is one.
          *         languages: Language names. Stored and shown as not yet applied at
          *             retrieval — the search grammar has no language filter.
+         *         setting: True on a requirement naming the delivery setting the
+         *             options must be delivered through; the longlist search carries it.
+         *         default: `transferability` on the default transferability preference
+         *             every scoping plan carries (checked at assessment, assumed, follows
+         *             Where until edited); `null` on a constraint the user asked for.
+         *             Omitting the default from a patch removes it.
          */
         ScopingConstraintOut: {
             /**
@@ -3306,6 +3342,11 @@ export interface components {
             checked_at: "longlist" | "assessment" | "retrieval";
             /** @default null */
             country_group: components["schemas"]["CountryGroupDraft"] | null;
+            /**
+             * Default
+             * @default null
+             */
+            default: "transferability" | null;
             /**
              * Kind
              * @enum {string}
@@ -3331,6 +3372,11 @@ export interface components {
              * @default null
              */
             published_before: string | null;
+            /**
+             * Setting
+             * @default false
+             */
+            setting: boolean;
             /** Text */
             text: string;
         };
@@ -3349,8 +3395,11 @@ export interface components {
          *         where: The jurisdiction the policy would apply to.
          *         outcomes: The outcomes evidence is read against.
          *         depth: The scoping depth the user chose.
-         *         constraints: Typed constraints and preferences.
+         *         constraints: Typed constraints and preferences, including the default
+         *             transferability preference (marked by `default`).
          *         your_context: The user's own situation, verbatim.
+         *         your_options: Options the user already has in mind, each with its
+         *             proposed design.
          *         entry_branch: `explore` is the only branch in this release.
          *         linked_task_ids: The tasks this plan starts from.
          *         steering_mode: Check-in cadence for the run.
@@ -3437,6 +3486,11 @@ export interface components {
              * @default null
              */
             your_context: components["schemas"]["YourContextOut"][] | null;
+            /**
+             * Your Options
+             * @default null
+             */
+            your_options: components["schemas"]["YourOptionOut"][] | null;
         };
         /**
          * ScopingPlanPatch
@@ -3451,8 +3505,10 @@ export interface components {
          *         where: Replacement jurisdiction.
          *         outcomes: Replacement outcome list.
          *         depth: Replacement depth.
-         *         constraints: Replacement constraint list.
+         *         constraints: Replacement constraint list. Omitting the default
+         *             transferability preference removes it for good.
          *         your_context: Replacement Your context list.
+         *         your_options: Replacement options list, by the user's words.
          *         steering_mode: Replacement check-in cadence.
          *         steer_point_defaults: Replacement standing instructions.
          *         assumptions: Replacement assumptions.
@@ -3475,6 +3531,8 @@ export interface components {
             where?: components["schemas"]["TaggedOut"] | null;
             /** Your Context */
             your_context?: components["schemas"]["YourContextOut"][] | null;
+            /** Your Options */
+            your_options?: components["schemas"]["YourOptionIn"][] | null;
         };
         /**
          * ScopingSteerPointDefaultOut
@@ -4355,6 +4413,39 @@ export interface components {
              * @enum {string}
              */
             type: "present_fact" | "commitment";
+        };
+        /**
+         * YourOptionIn
+         * @description One option in a scoping plan edit: the user's words only.
+         *
+         *     Args:
+         *         text: The user's words, verbatim. Unchanged words keep their design;
+         *             new or changed words get a design proposed back.
+         */
+        YourOptionIn: {
+            /** Text */
+            text: string;
+        };
+        /**
+         * YourOptionOut
+         * @description One option the user already has in mind.
+         *
+         *     Args:
+         *         text: The user's words, verbatim.
+         *         design: The proposed design; `null` until proposed.
+         *         turn_index: The Task Agent turn it came from; `null` on a draft not
+         *             yet approved.
+         */
+        YourOptionOut: {
+            /** @default null */
+            design: components["schemas"]["OptionDesignOut"] | null;
+            /** Text */
+            text: string;
+            /**
+             * Turn Index
+             * @default null
+             */
+            turn_index: number | null;
         };
     };
     responses: never;

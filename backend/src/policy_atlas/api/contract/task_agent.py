@@ -211,6 +211,9 @@ ScopingDepth = Literal["rapid", "standard"]
 #: One entry's kind in Your context. Mirrors `scoping_plan.YourContextEntry`.
 YourContextType = Literal["present_fact", "commitment"]
 
+#: A code-minted default constraint's marker. Mirrors `scoping_plan.DefaultPreference`.
+DefaultPreference = Literal["transferability"]
+
 
 class TaggedOut(BaseModel):
     """One scoping plan field with the origin tag the user sees.
@@ -237,6 +240,12 @@ class ScopingConstraintOut(BaseModel):
         published_before: ISO date ceiling, when there is one.
         languages: Language names. Stored and shown as not yet applied at
             retrieval — the search grammar has no language filter.
+        setting: True on a requirement naming the delivery setting the
+            options must be delivered through; the longlist search carries it.
+        default: `transferability` on the default transferability preference
+            every scoping plan carries (checked at assessment, assumed, follows
+            Where until edited); `null` on a constraint the user asked for.
+            Omitting the default from a patch removes it.
     """
 
     text: str
@@ -247,6 +256,8 @@ class ScopingConstraintOut(BaseModel):
     published_after: str | None = None
     published_before: str | None = None
     languages: list[str] | None = None
+    setting: bool = False
+    default: DefaultPreference | None = None
 
 
 class YourContextOut(BaseModel):
@@ -263,6 +274,55 @@ class YourContextOut(BaseModel):
     type: YourContextType
     turn_index: int
     test_as_condition: bool = False
+
+
+class OptionDesignOut(BaseModel):
+    """A specified design Policy Atlas proposed back from an option's words.
+
+    Args:
+        name: A short option name.
+        description: One sentence: what is done, by whom, for whom.
+        design_features: The features that define the option.
+        outcomes_served: Which of the plan's outcomes the option is for.
+        assumed: The features Policy Atlas supplied rather than the user
+            stated; shown as assumed.
+        version: The design's version.
+    """
+
+    name: str
+    description: str
+    design_features: list[str]
+    outcomes_served: list[str] = Field(default_factory=list)
+    assumed: list[str] = Field(default_factory=list)
+    version: int = 1
+
+
+class YourOptionOut(BaseModel):
+    """One option the user already has in mind.
+
+    Args:
+        text: The user's words, verbatim.
+        design: The proposed design; `null` until proposed.
+        turn_index: The Task Agent turn it came from; `null` on a draft not
+            yet approved.
+    """
+
+    text: str
+    design: OptionDesignOut | None = None
+    turn_index: int | None = None
+
+
+class YourOptionIn(BaseModel):
+    """One option in a scoping plan edit: the user's words only.
+
+    Args:
+        text: The user's words, verbatim. Unchanged words keep their design;
+            new or changed words get a design proposed back.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    text: str = Field(min_length=1, max_length=TASK_AGENT_MESSAGE_MAX)
 
 
 class ScopingSteerPointDefaultOut(BaseModel):
@@ -303,8 +363,11 @@ class ScopingPlanDraft(BaseModel):
         where: The jurisdiction the policy would apply to.
         outcomes: The outcomes evidence is read against.
         depth: The scoping depth the user chose.
-        constraints: Typed constraints and preferences.
+        constraints: Typed constraints and preferences, including the default
+            transferability preference (marked by `default`).
         your_context: The user's own situation, verbatim.
+        your_options: Options the user already has in mind, each with its
+            proposed design.
         entry_branch: `explore` is the only branch in this release.
         linked_task_ids: The tasks this plan starts from.
         steering_mode: Check-in cadence for the run.
@@ -325,6 +388,7 @@ class ScopingPlanDraft(BaseModel):
     depth: ScopingDepth | None = None
     constraints: list[ScopingConstraintOut] | None = None
     your_context: list[YourContextOut] | None = None
+    your_options: list[YourOptionOut] | None = None
     entry_branch: Literal["explore"] | None = None
     linked_task_ids: list[uuid.UUID] | None = None
     steering_mode: SteeringMode | None = None
@@ -348,8 +412,10 @@ class ScopingPlanPatch(BaseModel):
         where: Replacement jurisdiction.
         outcomes: Replacement outcome list.
         depth: Replacement depth.
-        constraints: Replacement constraint list.
+        constraints: Replacement constraint list. Omitting the default
+            transferability preference removes it for good.
         your_context: Replacement Your context list.
+        your_options: Replacement options list, by the user's words.
         steering_mode: Replacement check-in cadence.
         steer_point_defaults: Replacement standing instructions.
         assumptions: Replacement assumptions.
@@ -364,6 +430,7 @@ class ScopingPlanPatch(BaseModel):
     depth: ScopingDepth | None = None
     constraints: list[ScopingConstraintOut] | None = None
     your_context: list[YourContextOut] | None = None
+    your_options: list[YourOptionIn] | None = None
     steering_mode: SteeringMode | None = None
     steer_point_defaults: list[ScopingSteerPointDefaultOut] | None = None
     assumptions: list[str] | None = None

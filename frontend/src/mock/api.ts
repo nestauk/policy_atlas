@@ -513,6 +513,29 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
   }
   if (method === "PATCH" && path.endsWith(`/api/v1/tasks/${MOCK_TASK_ID}/plan`)) {
     const body = await requestBody(request, init);
+    // Task 045: a scoping plan's direct edits — the constraint list (removing
+    // the default transferability preference) and the options by their words
+    // (unchanged words keep their design; the mock proposes none for new ones).
+    if (mockTask.capability === "options_scoping" && isRecord(body) && isRecord(body.scoping)) {
+      const edits = body.scoping;
+      if (Array.isArray(edits.constraints)) {
+        currentScopingPlan = {
+          ...currentScopingPlan,
+          constraints: edits.constraints as NonNullable<typeof currentScopingPlan.constraints>,
+        };
+      }
+      if (Array.isArray(edits.your_options)) {
+        const previous = currentScopingPlan.your_options ?? [];
+        currentScopingPlan = {
+          ...currentScopingPlan,
+          your_options: edits.your_options.filter(isRecord).map((option) => {
+            const text = typeof option.text === "string" ? option.text : "";
+            return previous.find((kept) => kept.text === text) ?? { text, design: null, turn_index: null };
+          }),
+        };
+      }
+      return json({ capability: "options_scoping", plan: null, scoping: currentScopingPlan, version: 2, status: "approved" });
+    }
     if (isRecord(body)) {
       if (typeof body.question === "string") currentPlan = { ...currentPlan, question: body.question };
       if (typeof body.backend_scope === "string") {
