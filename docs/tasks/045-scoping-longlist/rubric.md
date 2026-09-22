@@ -46,7 +46,7 @@ not done. Terms and deliverable numbers are defined in
    a specified design, labelled *suggested by Policy Atlas* or *from your
    evidence search* (report section named); no profile record is created
    from the report; the plan's own options are entrants labelled *added by
-   you*; `run_option_search(design)` exists with two callers; every entrant
+   you*; `run_option_search(design)` exists with two callers and takes the design as its only input (a `guidance` argument only if the build's NEET option searches showed the need, recorded either way — D26); every entrant
    runs one child walk under its own targeted scope with
    `parent_capability_run_id` set, at the option-search target per backend,
    in parallel at width 4 under the cross-walk bound, at most 15 per

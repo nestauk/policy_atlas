@@ -9,7 +9,8 @@ records into options and themes; the constraint checks; and the longlist
 views (list, reduced grid, option card) with the chat verbs that edit them.
 
 > **Status:** **drafted 2026-09-22 · lead; rulings D1–D21 taken by the owner
-> in an interview the same day; approved as folded 2026-09-22 · owner.**
+> in an interview the same day; approved as folded 2026-09-22 · owner;
+> D22–D26 ruled at the review's adjudication.**
 > **Contract-stage adversarial review ran 2026-09-22:** the Codex lane
 > (`codex-rescue`, read-only) failed after 13 min 38 s on the workspace spend
 > cap with no findings; the fallback lane (`deep-reasoner`, read-only, same
@@ -163,7 +164,15 @@ the ADR:
    longlist walk by `capability_run.parent_capability_run_id`, running
    acquire (10 per backend, D2) → screen → classify → appraise → ingest →
    intervention profile; its records join the pool and the entrant is a
-   seed in the clustering. Option searches run **in parallel at width 4**
+   seed in the clustering. **The design is the tool's only input** (D26):
+   the queries are written inside the walk by the acquire component's own
+   search generation, as the Evidence search does; the Task Agent decides
+   what to search for, not how. A `guidance` argument (the search
+   directive's existing steering channel) is a recorded seam, tested during
+   the build on the NEET option searches and added in this slice only if
+   the queries miss what the design meant (owner: "Let's test it during
+   implementation, though, and add it if needed"). Option searches run **in
+   parallel at width 4**
    under a **cross-walk bound** built in this slice (the 044 seam: per-run
    fan-out had no bound across walks); at most **15 option searches per
    longlist walk** (A16): the user's own options and the report-derived
@@ -651,6 +660,15 @@ Rows marked **keep** must not change behaviour. File paths as built at
   go with option search"): the spec's "mini evidence search" is assessment
   depth, so the entrant's chain needed its own name; "entrant search" was
   rejected.
+- **D26 — the option search takes the design, not queries. Ruled at
+  review** (owner, on whether the Task Agent gets to define its own
+  searches: "keep the design as input, guidance as a seam. Let's test it
+  during implementation, though, and add it if needed"): the queries are
+  generated inside the walk from the design, as the ES generates them from
+  its intent; a `guidance` argument through the search directive's existing
+  steering channel needs no prompt change and is added in this slice only
+  if the build's NEET option searches show the queries missing what the
+  design meant; otherwise it stays a recorded seam.
 
 ## Adversarial findings (contract stage, 2026-09-22)
 
@@ -845,7 +863,8 @@ bound), the chat readers (several scopes).
   the ES spine, the walk as the unit of durable execution, the 044
   turn-sort pattern.
 - Deferred seams go to `docs/deferred.md`: the on-demand summary; D18; the
-  cross-task profile memo; the old unguarded prompt modules; sheet row A9;
+  cross-task profile memo; the option search's `guidance` argument (D26,
+  unless added in the build); the old unguarded prompt modules; sheet row A9;
   the `task_link` uniqueness note for task 5. The 044 per-run fan-out seam
   is **closed** by the cross-walk bound.
 
