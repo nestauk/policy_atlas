@@ -1,4 +1,4 @@
-.PHONY: setup dev dev-seed test test-fast typecheck lint build verify verify-fast okf-validate audit audit-paths prompt-guard frontend-install openapi-sync drift-check font-guard frontend-verify fe-api-smoke deploy-build-guard-test infra-setup deploy-check deploy-update deploy-bootstrap
+.PHONY: setup dev dev-seed test test-fast typecheck lint build verify verify-fast okf-validate audit audit-paths prompt-guard production-recall frontend-install openapi-sync drift-check font-guard frontend-verify fe-api-smoke deploy-build-guard-test infra-setup deploy-check deploy-update deploy-bootstrap
 
 # Root Makefile (025 A.2 monorepo hoist): the Python project lives in
 # backend/; this Makefile owns the shared db service + the root-level gates
@@ -131,6 +131,15 @@ audit-paths:
 # surfaces change only as named, deliberate slice work.
 prompt-guard:
 	uv run --project backend python scripts/prompt_hash_guard.py
+
+# Search + screening recall against the golden dataset at production depth
+# settings, recorded as Langfuse dataset runs (scripts/eval_ground_truth/README.md).
+# Runs on every merge to dev via .github/workflows/production-recall.yml. Needs
+# the live API keys and Langfuse keys in backend/.env (or the environment).
+# Records only — it does not pass or fail on the numbers.
+# Example: make production-recall ARGS="--depths rapid"
+production-recall:
+	uv run --project backend --env-file backend/.env python scripts/eval_ground_truth/production_recall.py $(ARGS)
 
 # Installs frontend dependencies from the committed lockfile (task 025 F.1).
 # A prerequisite for drift-check (and any other frontend gate) in CI, where

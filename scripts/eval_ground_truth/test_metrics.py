@@ -445,6 +445,56 @@ def test_load_references_and_items() -> None:
     assert item["metadata"]["source"] == "doi" and item["metadata"]["review_id"] == "10.1/r"
 
 
+def test_multi_round_depth_needs_screening() -> None:
+    """standard/deep are search-screen-search loops; without screening the
+    later rounds have nothing to seed from, so the eval refuses up front
+    (before it touches the database — hence conn=None here)."""
+    from ground_truth import GroundTruth
+    from search_eval import run_one_query
+
+    gt = GroundTruth(dois={"10.1/a"}, source="doi")
+    for depth in ("standard", "deep"):
+        try:
+            run_one_query(None, "q", gt, published_before="2020-01-01", depth=depth, run_screen=False)
+            raise AssertionError(f"{depth} without screening must be refused")
+        except ValueError as exc:
+            assert "run_screen=True" in str(exc)
+
+
+def test_production_recall_scores() -> None:
+    """Per-review scores the production experiment records: the sweep's plus rounds_run."""
+    from production_recall import _mean, item_scores
+
+    output = {"search_recall": 0.5, "n_found": 2, "n_ground_truth": 4, "n_failed_calls": 0,
+              "n_screened_in": 1, "screen_recall": 0.25, "rounds_run": 2}
+    names = {e.name for e in item_scores(output=output)}
+    assert {"search_recall", "screen_recall", "n_found", "n_failed_calls", "rounds_run"} <= names
+    # The console summary averages like Langfuse's table does; "not measured" stays None.
+    assert _mean([0.5, 0.25]) == 0.375 and _mean([]) is None
+
+
+def test_select_items() -> None:
+    """--reviews narrows the run by item id, review id or title; no match is an error."""
+    from types import SimpleNamespace
+
+    from production_recall import select_items
+
+    items = [
+        SimpleNamespace(id="ds:922c2d87", metadata={"review_id": "10.1016/s2468", "review_title": "Parental leave"}),
+        SimpleNamespace(id="ds:abcd", metadata={"review_id": "https://gov.uk/x", "review_title": "Loneliness"}),
+    ]
+    assert select_items(items, None) == items
+    assert select_items(items, ["922c2d87"]) == items[:1]  # by item id
+    assert select_items(items, ["parental LEAVE"]) == items[:1]  # by title, case-insensitive
+    assert select_items(items, ["gov.uk"]) == items[1:]  # by review id
+    assert select_items(items, ["parental", "lonel"]) == items  # any of several
+    try:
+        select_items(items, ["nothing"])
+        raise AssertionError("no match must be an error")
+    except ValueError as exc:
+        assert "Parental leave" in str(exc)  # lists what was available
+
+
 if __name__ == "__main__":
     test_normalize_doi()
     test_record_key()
@@ -461,4 +511,7 @@ if __name__ == "__main__":
     test_sweep_run_frames()
     test_sweep_run_frames_with_screening()
     test_load_references_and_items()
+    test_multi_round_depth_needs_screening()
+    test_production_recall_scores()
+    test_select_items()
     print("ok")

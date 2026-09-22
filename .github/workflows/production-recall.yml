@@ -1,0 +1,49 @@
+# Search and screening recall against the golden dataset at production depth
+# settings, recorded as Langfuse dataset runs on every merge to dev
+# (scripts/eval_ground_truth/README.md § Production recall).
+#
+# This job MEASURES; it does not gate. A red run means "could not measure"
+# (a provider or Langfuse was unreachable, a review's run crashed), never
+# "recall fell". It is deliberately separate from `verify`: it needs live API
+# keys, calls three external services, and its numbers move with LLM noise.
+name: production recall
+
+on:
+  push:
+    branches: [dev]
+  workflow_dispatch:
+    inputs:
+      depths:
+        description: "Depths to measure (space-separated: rapid standard deep)"
+        required: false
+        default: "rapid standard deep"
+
+permissions:
+  contents: read
+
+jobs:
+  production-recall:
+    runs-on: ubuntu-latest
+    # standard and deep screen every kept candidate each round: a few hundred
+    # LLM calls per review per depth, serially (providers are rate-limited).
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      # .env.example holds empty keys; `uv run --env-file` does not override
+      # variables already set in the environment, so the secrets below win.
+      - run: cp backend/.env.example backend/.env
+      # Compose Postgres + migrations, the same as the verify gate. The eval
+      # runs the real search stage inside a transaction it rolls back.
+      - run: make setup
+      - name: Measure recall and record it in Langfuse
+        env:
+          LANGFUSE_HOST: ${{ secrets.LANGFUSE_HOST }}
+          LANGFUSE_PUBLIC_KEY: ${{ secrets.LANGFUSE_PUBLIC_KEY }}
+          LANGFUSE_SECRET_KEY: ${{ secrets.LANGFUSE_SECRET_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENALEX_API_KEY: ${{ secrets.OPENALEX_API_KEY }}
+          OPENALEX_EMAIL: ${{ secrets.OPENALEX_EMAIL }}
+          OVERTON_API_KEY: ${{ secrets.OVERTON_API_KEY }}
+        run: |
+          make production-recall ARGS="--run-label dev-${GITHUB_SHA::7} --depths ${{ inputs.depths || 'rapid standard deep' }}"
