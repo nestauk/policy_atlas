@@ -10,6 +10,7 @@ import {
   elapsedSeconds,
   formatElapsed,
   resultsSignpost,
+  walkKind,
   RUNNING_CARD_RULE_CLASS,
   RUNNING_CARD_SHELL_CLASS,
   runningCardCopy,
@@ -120,10 +121,13 @@ export function RunningCard({
   minimised,
   onMinimisedChange,
   onSeePlan,
+  capability,
 }: {
   taskId: string;
   status: RunStatus | undefined;
   stages: StageEntry[];
+  /** The task's capability — the card's words follow the walk kind (task 045). */
+  capability?: string | null;
   plan: PlanDraft | null | undefined;
   startedAt?: string;
   endedAt?: string;
@@ -132,12 +136,13 @@ export function RunningCard({
   onMinimisedChange: (minimised: boolean) => void;
   onSeePlan?: () => void;
 }) {
-  const { eyebrow, title, tone } = runningCardCopy(status);
+  const kind = walkKind(capability, stages);
+  const { eyebrow, title, tone } = runningCardCopy(status, kind);
   const rows = stageRows(stages, plan);
   const ticking = status === "running" || status === "paused";
   const elapsed = useElapsedSeconds(startedAt, endedAt, ticking);
   const elapsedLabel = formatElapsed(elapsed);
-  const results = resultsSignpost(taskId, status);
+  const results = resultsSignpost(taskId, status, kind);
   const [expandedStage, setExpandedStage] = useState<string | null>(null);
 
   if (minimised) {

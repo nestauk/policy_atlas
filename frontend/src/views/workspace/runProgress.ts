@@ -37,8 +37,60 @@ export const SEE_PLAN_CTA_CLASS =
 export const RUN_FINISHED_MESSAGE =
   `Evidence search is finished. You can read the report in the ${LIFECYCLE_LABELS.result} tab.`;
 
+/** What kind of walk a run card describes (task 045): an Evidence search, a
+ *  scoping task's baseline walk, or its longlist walk. The words on the card
+ *  and the finished notice follow it — "the evidence base is ready" is wrong
+ *  for a longlist. */
+export type WalkKind = "evidence_search" | "baseline" | "longlist";
+
+const LONGLIST_STAGES = new Set([
+  "inherit",
+  "suggest",
+  "option_searches",
+  "extract_interventions",
+  "longlist",
+  "constrain",
+]);
+
+/** Decide the walk kind from the task's capability and the run's stages. */
+export function walkKind(
+  capability: string | null | undefined,
+  stages: StageEntry[],
+): WalkKind {
+  if (capability !== "options_scoping") return "evidence_search";
+  return stages.some((entry) => LONGLIST_STAGES.has(entry.stage)) ? "longlist" : "baseline";
+}
+
+const DONE_TITLE: Record<WalkKind, string> = {
+  evidence_search: "The evidence base is ready",
+  baseline: "The baseline is ready",
+  longlist: "The longlist is ready",
+};
+
+const RESULTS_LABEL: Record<WalkKind, string> = {
+  evidence_search: "Read the report",
+  baseline: "Read the baseline",
+  longlist: "Read the longlist",
+};
+
+/** The finished notice, split around the Result-tab link it carries. */
+export const FINISHED_NOTICE: Record<WalkKind, { before: string; after: string }> = {
+  evidence_search: { before: "Evidence search is finished. You can read the report in the", after: "tab." },
+  baseline: { before: "The baseline is written. Read it in the", after: "tab." },
+  longlist: { before: "The longlist is built. Open it in the", after: "tab." },
+};
+
+function resultHref(taskId: string, kind: WalkKind): string {
+  if (kind === "longlist") return `/tasks/${taskId}/result?view=longlist`;
+  if (kind === "baseline") return `/tasks/${taskId}/result?view=baseline`;
+  return `/tasks/${taskId}/result`;
+}
+
 /** Eyebrow and title for the in-thread running card. */
-export function runningCardCopy(status: RunStatus | undefined): {
+export function runningCardCopy(
+  status: RunStatus | undefined,
+  kind: WalkKind = "evidence_search",
+): {
   tone: RunningCardTone;
   eyebrow: string;
   title: string;
@@ -47,7 +99,7 @@ export function runningCardCopy(status: RunStatus | undefined): {
     return { tone: "paused", eyebrow: "PAUSED", title: "Paused — waiting on you" };
   }
   if (status === "succeeded" || status === "degraded") {
-    return { tone: "done", eyebrow: "DONE", title: "The evidence base is ready" };
+    return { tone: "done", eyebrow: "DONE", title: DONE_TITLE[kind] };
   }
   if (status === "failed" || status === "aborted" || status === "interrupted") {
     return { tone: "stopped", eyebrow: "STOPPED", title: "Analysis stopped" };
@@ -364,12 +416,14 @@ export function signpostForStage(
 export function runFinishedSignpost(
   taskId: string,
   status: RunStatus | undefined,
+  kind: WalkKind = "evidence_search",
 ): StageSignpost | null {
   if (status === "succeeded" || status === "degraded") {
+    const notice = FINISHED_NOTICE[kind];
     return {
-      href: `/tasks/${taskId}/result`,
+      href: resultHref(taskId, kind),
       label: LIFECYCLE_LABELS.result,
-      message: RUN_FINISHED_MESSAGE,
+      message: `${notice.before} ${LIFECYCLE_LABELS.result} ${notice.after}`,
     };
   }
   return null;
@@ -397,12 +451,14 @@ export function completedSignposts(
 export function resultsSignpost(
   taskId: string,
   status: RunStatus | undefined,
+  kind: WalkKind = "evidence_search",
 ): StageSignpost | null {
   if (status === "succeeded" || status === "degraded") {
+    const notice = FINISHED_NOTICE[kind];
     return {
-      href: `/tasks/${taskId}/result`,
-      label: "Read the report",
-      message: RUN_FINISHED_MESSAGE,
+      href: resultHref(taskId, kind),
+      label: RESULTS_LABEL[kind],
+      message: `${notice.before} ${LIFECYCLE_LABELS.result} ${notice.after}`,
     };
   }
   return null;

@@ -573,3 +573,25 @@ only); `planStart` finds the baseline walk in the first 200 runs, which now
 include option searches (about eight rebuilds of 25 options could push it
 off the page); the stream reducer was not checked against child-walk frames
 (the mock streams none; the live check does).
+
+### Lead taste pass on the longlist surfaces and the thread (2026-09-23, `lead`)
+
+| Command | Result | Notes |
+|---|---:|---|
+| `make frontend-verify` | pass | 86 files / 782 tests (2 new: the walk kinds and their words) |
+| `cd frontend && pnpm e2e` | pass | 18 passed |
+
+Screenshots of the mock surfaces (the session scratchpad; public-safe, mock
+data) drove the pass. Changes: the list's filter row gains the group labels
+**Show · Setting · Where tried** so the three facets read as three things;
+the "Do nothing" sentence keeps only *the baseline* as the link; the add
+control is a compact field ("An option of your own, in a few words") beside a
+secondary button; the thread's run card and finished notice follow the walk
+kind (`runProgress.walkKind(capability, stages)`): a longlist walk ends "The
+longlist is ready" · **Read the longlist** · "The longlist is built. Open it
+in the Result tab."; a baseline walk "The baseline is ready" · **Read the
+baseline**; the Evidence search's words are unchanged; the composer's
+placeholder while a longlist exists and nothing runs reads "Ask about the
+longlist, or add, exclude or include an option." The grid and the card stayed
+as built (the card's sections and templated evidence sentences read
+correctly; the grid's empty rows are the contract's words).

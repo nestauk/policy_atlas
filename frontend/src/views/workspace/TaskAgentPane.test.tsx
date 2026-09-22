@@ -31,6 +31,7 @@ vi.mock("../../api/queries", async (importOriginal) => {
     useDecisions: vi.fn(),
     useCheckIns: vi.fn(),
     useFunnel: vi.fn(),
+    useTask: vi.fn(),
   };
 });
 vi.mock("../../api/mutations", async (importOriginal) => {
@@ -181,6 +182,12 @@ describe("taskAgentComposerPlaceholder", () => {
     expect(taskAgentComposerPlaceholder(undefined, true)).toBe(
       "Suggest changes here, or edit directly in the plan.",
     );
+    expect(taskAgentComposerPlaceholder("succeeded", true, true, false, true)).toBe(
+      "Ask about the longlist, or add, exclude or include an option.",
+    );
+    expect(taskAgentComposerPlaceholder("running", true, true, false, true)).toBe(
+      "Replanning unlocks when this run finishes.",
+    );
     expect(taskAgentComposerPlaceholder("running")).toBe(
       "Replanning unlocks when this run finishes.",
     );
@@ -277,6 +284,9 @@ describe("TaskAgentPane — non-owner read-only (task 033 phase 10c, contract §
     >);
     vi.mocked(queries.useFunnel).mockReturnValue({ data: undefined } as unknown as ReturnType<
       typeof queries.useFunnel
+    >);
+    vi.mocked(queries.useTask).mockReturnValue({ data: undefined } as unknown as ReturnType<
+      typeof queries.useTask
     >);
     vi.mocked(mutations.useTaskAgentTurn).mockReturnValue({
       mutateAsync: vi.fn(),

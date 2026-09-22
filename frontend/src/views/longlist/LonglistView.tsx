@@ -11,7 +11,9 @@ import { cn } from "../../ui/brand/cn";
 import { isRunActive } from "../scopingActivity";
 import { LonglistGrid } from "./LonglistGrid";
 import {
-  DO_NOTHING_SENTENCE,
+  DO_NOTHING_AFTER,
+  DO_NOTHING_BEFORE,
+  DO_NOTHING_LINK,
   SCOPING_PASS_SENTENCE,
   originLabel,
   relationLabel,
@@ -224,8 +226,9 @@ export function LonglistView({ taskId, longlist }: { taskId: string; longlist: L
       </header>
 
       <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
-        <div className="flex flex-wrap gap-3">
-          <div role="group" aria-label="Show" className="flex flex-wrap gap-1.5">
+        <div className="flex flex-wrap gap-x-5 gap-y-2">
+          <div role="group" aria-label="Show" className="flex flex-wrap items-center gap-1.5">
+            <span className="mr-1 text-caption font-semibold uppercase tracking-wide text-grey">Show</span>
             {SHOW_FILTERS.map((filter) => (
               <button
                 key={filter.key}
@@ -239,7 +242,8 @@ export function LonglistView({ taskId, longlist }: { taskId: string; longlist: L
             ))}
           </div>
           {allSettings.length > 0 && (
-            <div role="group" aria-label="Setting" className="flex flex-wrap gap-1.5">
+            <div role="group" aria-label="Setting" className="flex flex-wrap items-center gap-1.5">
+              <span className="mr-1 text-caption font-semibold uppercase tracking-wide text-grey">Setting</span>
               {allSettings.map((setting) => (
                 <button
                   key={setting}
@@ -253,7 +257,8 @@ export function LonglistView({ taskId, longlist }: { taskId: string; longlist: L
               ))}
             </div>
           )}
-          <div role="group" aria-label="Where tried" className="flex flex-wrap gap-1.5">
+          <div role="group" aria-label="Where tried" className="flex flex-wrap items-center gap-1.5">
+            <span className="mr-1 text-caption font-semibold uppercase tracking-wide text-grey">Where tried</span>
             {whereChips.map((chip) => (
               <button
                 key={chip.group}
@@ -287,13 +292,15 @@ export function LonglistView({ taskId, longlist }: { taskId: string; longlist: L
         </div>
       </div>
 
-      <p className="mb-5 text-body text-grey">
+      <p className="mb-5 text-body text-ink">
+        {DO_NOTHING_BEFORE}
         <Link to={`/tasks/${taskId}/result?view=baseline`} className="font-semibold text-blue hover:underline">
-          {DO_NOTHING_SENTENCE}
+          {DO_NOTHING_LINK}
         </Link>
+        {DO_NOTHING_AFTER}
       </p>
 
-      <form onSubmit={handleAddOption} className="mb-5 flex flex-wrap items-center gap-2">
+      <form onSubmit={handleAddOption} className="mb-6 flex flex-wrap items-center gap-2">
         <label htmlFor="longlist-add-option" className="sr-only">
           Add an option
         </label>
@@ -301,11 +308,11 @@ export function LonglistView({ taskId, longlist }: { taskId: string; longlist: L
           id="longlist-add-option"
           value={addText}
           onChange={(event) => setAddText(event.target.value)}
-          placeholder="Add an option"
+          placeholder="An option of your own, in a few words"
           disabled={walkActive}
-          className="flex-1 border border-line-2 bg-paper px-3 py-2 text-body focus-visible:outline-2 focus-visible:outline-blue disabled:bg-paper-2"
+          className="w-full max-w-md border border-line-2 bg-paper px-3 py-1.5 text-body focus-visible:outline-2 focus-visible:outline-blue disabled:bg-paper-2"
         />
-        <Button type="submit" size="sm" disabled={addText.trim() === "" || addOption.isPending || walkActive}>
+        <Button type="submit" variant="secondary" size="sm" disabled={addText.trim() === "" || addOption.isPending || walkActive}>
           Add an option
         </Button>
       </form>

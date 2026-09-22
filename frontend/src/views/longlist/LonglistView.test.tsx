@@ -126,9 +126,7 @@ describe("LonglistView", () => {
 
   it("links Do nothing to the baseline", () => {
     renderLonglist();
-    const link = screen.getByRole("link", {
-      name: "Do nothing — the baseline describes the situation these options would change.",
-    });
+    const link = screen.getByRole("link", { name: "the baseline" });
     expect(link).toHaveAttribute("href", `/tasks/${TASK_ID}/result?view=baseline`);
   });
 
@@ -159,7 +157,7 @@ describe("LonglistView", () => {
   it("Add an option posts once and is disabled while a walk is active", async () => {
     const user = userEvent.setup();
     renderLonglist();
-    const input = screen.getByPlaceholderText("Add an option");
+    const input = screen.getByLabelText("Add an option");
     await user.type(input, "A new option");
     await user.click(screen.getByRole("button", { name: "Add an option" }));
     expect(addMutate).toHaveBeenCalledTimes(1);
@@ -168,7 +166,7 @@ describe("LonglistView", () => {
 
   it("disables Add an option while a walk is active", () => {
     renderLonglist({ active_run: { capability_run_id: "run-1", status: "running", started_at: "now" } });
-    expect(screen.getByPlaceholderText("Add an option")).toBeDisabled();
+    expect(screen.getByLabelText("Add an option")).toBeDisabled();
     expect(screen.getByRole("button", { name: "Add an option" })).toBeDisabled();
   });
 

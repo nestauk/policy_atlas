@@ -124,5 +124,9 @@ export const SCOPING_PASS_SENTENCE =
 
 export const DO_NOTHING_SENTENCE =
   "Do nothing — the baseline describes the situation these options would change.";
+/** The same sentence split around its link: only "the baseline" is the link. */
+export const DO_NOTHING_BEFORE = "Do nothing — ";
+export const DO_NOTHING_LINK = "the baseline";
+export const DO_NOTHING_AFTER = " describes the situation these options would change.";
 
 export const MENTION_NOT_SUPPORT = "A mention is not support.";

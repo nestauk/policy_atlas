@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router";
 
-import { useCheckIns, useDecisions, useFunnel, usePlan, useRuns } from "../../api/queries";
+import { useCheckIns, useDecisions, useFunnel, usePlan, useRuns, useTask } from "../../api/queries";
 import { useComposerSeed } from "../../lib/composerSeed";
 import { scrub } from "../../lib/scrub";
 import { COPY, TASK } from "../../lib/vocabulary";
@@ -50,6 +50,9 @@ import {
   elapsedSeconds,
   formatElapsed,
   runFinishedSignpost,
+  FINISHED_NOTICE,
+  walkKind,
+  type WalkKind,
 } from "./runProgress";
 
 /** The server page-size cap; one task_agent conversation fits comfortably. */
@@ -58,6 +61,9 @@ const TRANSCRIPT_PAGE_SIZE = 200;
 /** The composer's invitation while a scoping walk is parked on the baseline
  *  gate (task 044 Phase 5.5, the Baseline board). */
 const SCOPING_GATE_PLACEHOLDER = "Question the baseline…";
+/** Task 045: while a longlist exists and nothing runs, the thread takes the
+ *  longlist verbs as well as questions. */
+const LONGLIST_PLACEHOLDER = "Ask about the longlist, or add, exclude or include an option.";
 
 /** A decision turn's one line: the option as it was labelled, that it is on
  *  the record, and the plan version it was taken against. */
@@ -169,6 +175,7 @@ export function taskAgentComposerPlaceholder(
   planReady = false,
   isOwner = true,
   atScopingGate = false,
+  hasLonglist = false,
 ): string {
   if (!isOwner) {
     return `Steering is limited to the ${TASK.lower} owner.`;
@@ -181,6 +188,9 @@ export function taskAgentComposerPlaceholder(
   }
   if (runStatus === "running" || runStatus === "paused") {
     return "Replanning unlocks when this run finishes.";
+  }
+  if (hasLonglist) {
+    return LONGLIST_PLACEHOLDER;
   }
   if (runStatus === "succeeded" || runStatus === "degraded") {
     return "Describe a change to the plan to run again.";
@@ -522,20 +532,23 @@ function AnsweredCheckIns({
 function RunFinishedNotice({
   taskId,
   status,
+  kind = "evidence_search",
 }: {
   taskId: string;
   status: RunStatus | undefined;
+  kind?: WalkKind;
 }) {
-  const notice = runFinishedSignpost(taskId, status);
+  const notice = runFinishedSignpost(taskId, status, kind);
   if (notice === null) return null;
+  const words = FINISHED_NOTICE[kind];
   return (
     <div className="anim-rise mr-8 border-2 border-[#17A88D] bg-[#DDF2EE] px-4 py-3">
       <p className="max-w-prose-measure text-lead text-navy">
-        Evidence search is finished. You can read the report in the{" "}
+        {words.before}{" "}
         <Link to={notice.href} className="font-semibold text-blue underline">
           {notice.label}
         </Link>{" "}
-        tab.
+        {words.after}
       </p>
     </div>
   );
@@ -548,11 +561,13 @@ function RunBlock({
   stages,
   answered,
   checkIns,
+  capability,
 }: {
   taskId: string;
   run: TaskAgentThreadRun;
   decisions: TaskAgentThreadDecision[];
   stages: StageEntry[];
+  capability?: string | null;
   answered: ResolvedDecision[];
   checkIns: ReturnType<typeof useCheckIns>["data"];
 }) {
@@ -578,7 +593,7 @@ function RunBlock({
       <AnsweredCheckIns answered={answered} checkIns={checkIns} />
       {/* The chat's own destination once the run lands (owner, 2026-08-05):
           a completed run's last word shouldn't be a quiet stage echo. */}
-      <RunFinishedNotice taskId={taskId} status={run.status} />
+      <RunFinishedNotice taskId={taskId} status={run.status} kind={walkKind(capability, stages)} />
     </div>
   );
 }
@@ -623,6 +638,7 @@ export function TaskAgentPane({
 }) {
   const transcript = useTaskAgentTranscript(taskId, { page_size: TRANSCRIPT_PAGE_SIZE });
   const planQuery = usePlan(taskId);
+  const taskQuery = useTask(taskId);
   // `PlanOut.plan` is null on a scoping task (task 044) — `scoping` carries
   // its own `ready` flag instead. Only one of the two is ever non-null for a
   // given task, so reading both costs nothing on the branch that doesn't apply.
@@ -748,6 +764,7 @@ export function TaskAgentPane({
           minimised={runMinimised}
           onMinimisedChange={setRunMinimised}
           onSeePlan={onReviewPlan}
+          capability={planQuery.data?.capability}
         />
       </div>
     );
@@ -861,13 +878,14 @@ export function TaskAgentPane({
                 {liveCard}
                 <AnsweredCheckIns answered={streamDecisions} checkIns={checkInsQuery.data} />
                 {signpostBubbles}
-                <RunFinishedNotice taskId={taskId} status={stream.run?.status} />
+                <RunFinishedNotice taskId={taskId} status={stream.run?.status} kind={walkKind(planQuery.data?.capability, stream.stages)} />
               </div>
             ) : (
               <RunBlock
                 key={`run-${item.run.capability_run_id}`}
                 taskId={taskId}
                 run={item.run}
+                capability={planQuery.data?.capability}
                 decisions={item.decisions}
                 stages={stream.stages}
                 answered={
@@ -962,7 +980,7 @@ export function TaskAgentPane({
             {liveCard}
             <AnsweredCheckIns answered={streamDecisions} checkIns={checkInsQuery.data} />
             {signpostBubbles}
-            <RunFinishedNotice taskId={taskId} status={stream.run?.status} />
+            <RunFinishedNotice taskId={taskId} status={stream.run?.status} kind={walkKind(planQuery.data?.capability, stream.stages)} />
           </div>
         )}
         </div>
@@ -989,7 +1007,7 @@ export function TaskAgentPane({
           value={message}
           onChange={setMessage}
           onSubmit={() => send({ message, clientTurnId: crypto.randomUUID() })}
-          placeholder={taskAgentComposerPlaceholder(runStatus, planReady, isOwner, atScopingGate)}
+          placeholder={taskAgentComposerPlaceholder(runStatus, planReady, isOwner, atScopingGate, taskQuery.data?.has_longlist === true)}
           disabled={composerFenced || !isOwner}
           sendDisabled={composerDisabled}
         />

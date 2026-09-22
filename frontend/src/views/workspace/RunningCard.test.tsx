@@ -14,6 +14,7 @@ import {
   resultsSignpost,
   RUN_FINISHED_MESSAGE,
   runFinishedSignpost,
+  walkKind,
   RUNNING_CARD_SHELL_CLASS,
   runningCardCopy,
   SEE_PLAN_CTA_CLASS,
@@ -448,5 +449,27 @@ describe("RunningCard — a longlist walk's beats (task 045)", () => {
       await user.click(screen.getByRole("button", { name: label }));
       expect(screen.getByText(beat)).toBeInTheDocument();
     }
+  });
+});
+
+describe("walk kinds (task 045)", () => {
+  it("reads the walk kind from the capability and the stages", () => {
+    expect(walkKind("evidence_search", [])).toBe("evidence_search");
+    expect(walkKind("options_scoping", [])).toBe("baseline");
+    expect(walkKind("options_scoping", [{ stage: "suggest", label: "Suggesting options", status: "completed" } as never])).toBe("longlist");
+  });
+
+  it("words the done card and the notice for the walk kind", () => {
+    expect(runningCardCopy("succeeded", "longlist").title).toBe("The longlist is ready");
+    expect(runningCardCopy("succeeded", "baseline").title).toBe("The baseline is ready");
+    expect(runningCardCopy("succeeded").title).toBe("The evidence base is ready");
+    expect(resultsSignpost(TASK_ID, "succeeded", "longlist")).toMatchObject({
+      href: `/tasks/${TASK_ID}/result?view=longlist`,
+      label: "Read the longlist",
+    });
+    expect(runFinishedSignpost(TASK_ID, "degraded", "longlist")?.message).toBe(
+      "The longlist is built. Open it in the Result tab.",
+    );
+    expect(runFinishedSignpost(TASK_ID, "succeeded")?.message).toBe(RUN_FINISHED_MESSAGE);
   });
 });
