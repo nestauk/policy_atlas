@@ -6,11 +6,10 @@ fresh path and on both resume paths; ``ComponentStep.spine`` lets a chain
 declare which steps fail the walk, and ``None`` keeps the Evidence search's
 global spine set so every Evidence search chain is unchanged.
 
-The five options-scoping components are registered; ``constrain`` keeps a
-stub handler until Phase 5.3 (``extract_interventions`` is real from Phase 2,
-``inherit`` and ``suggest`` from Phase 4.2, ``longlist`` from Phase 5.2), so a
-longlist walk on the stub backends runs through ``longlist`` for real and the
-spine step ``constrain`` raises and fails it.
+The five options-scoping components are registered and all have real
+handlers (``extract_interventions`` from Phase 2, ``inherit`` and ``suggest``
+from Phase 4.2, ``longlist`` from Phase 5.2, ``constrain`` from Phase 5.3), so
+a longlist walk on the stub backends runs end to end and succeeds.
 """
 
 from __future__ import annotations
@@ -19,12 +18,12 @@ import uuid
 from typing import Any, cast
 
 import pytest
-from sqlalchemy import update
+from sqlalchemy import select, update
 from sqlalchemy.engine import Engine
 
 from policy_atlas.api.continuation import _with_plan
 from policy_atlas.api.run_io import ParkIO
-from policy_atlas.core.schema import capability_run, evidence_scope
+from policy_atlas.core.schema import capability_run, evidence_scope, longlist_result
 from policy_atlas.evidence_search.sourcing.search_loop import parse_search_directive
 from policy_atlas.runtime import runner
 from policy_atlas.runtime.capability_registry import (
@@ -34,7 +33,7 @@ from policy_atlas.runtime.capability_registry import (
     purpose_of_walk,
 )
 from policy_atlas.runtime.continuation_state import build
-from policy_atlas.runtime.harness import OPTIONS_SCOPING_STUBS, build_graph
+from policy_atlas.runtime.harness import build_graph
 from policy_atlas.runtime.run_spec import COMPONENT_REGISTRY, Plan, compile
 from policy_atlas.runtime.runner import (
     NullIO,
@@ -200,9 +199,6 @@ def test_the_evidence_search_ignores_the_purpose() -> None:
 
 def test_the_five_components_are_registered_and_the_graph_builds() -> None:
     names = {"inherit", "suggest", "extract_interventions", "longlist", "constrain"}
-    # Phase 2 built the intervention profile's handler, Phase 4 inherit and
-    # suggest, Phase 5.2 longlist; one stub remains.
-    assert set(OPTIONS_SCOPING_STUBS) == {"constrain"}
     for name in names:
         assert COMPONENT_REGISTRY[name] == {"requires": ["evidence_scope_id"]}
         assert registry_component_for(name) == name
@@ -298,13 +294,13 @@ def _set_purpose(engine: Engine, scope_id: uuid.UUID, purpose: str) -> None:
 def test_a_walk_under_a_longlist_intent_record_runs_the_longlist_chain(
     engine: Engine,
 ) -> None:
-    """The fresh path reads the purpose; the spine step fails the walk.
+    """The fresh path reads the purpose; the walk runs end to end.
 
     ``inherit`` (no links: nothing to inherit) and ``suggest`` (the stub
     backend's suggestion) run for real, the walk carries on through the broad
     search, the intervention profile and ``longlist`` (the stub backend: the
-    suggestion survives as a seed with no member); ``constrain`` raises
-    (spine, still a stub until Phase 5.3) and the walk ends ``failed``.
+    suggestion survives as a seed with no member) to ``constrain`` (the stub
+    backend passes every requirement and screen), and ends ``succeeded``.
     """
     task_id: uuid.UUID | None = None
     try:
@@ -334,9 +330,16 @@ def test_a_walk_under_a_longlist_intent_record_runs_the_longlist_chain(
             ("ingest_full_text", "succeeded"),
             ("extract_interventions", "succeeded"),
             ("longlist", "succeeded"),
-            ("constrain", "failed"),
+            ("constrain", "succeeded"),
         ]
-        assert outcome.status == "failed"
+        assert outcome.status == "succeeded"
+        with engine.connect() as conn:
+            result = conn.execute(
+                select(longlist_result).where(longlist_result.c.task_id == task_id)
+            ).one()
+        # constrain judged the suggestion (the walk's only option) on the walk's row.
+        assert len(result.judgements) == result.counts["options"] == 1
+        assert result.counts["excluded"] == 0
     finally:
         _cleanup(engine, task_id)
 

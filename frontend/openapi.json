@@ -17,6 +17,25 @@
         "title": "AbortResponse",
         "type": "object"
       },
+      "AmbitionBandOut": {
+        "description": "One ambition band, a column of the reduced grid.\n\nArgs:\n    key: The stored value.\n    label: The display label.",
+        "properties": {
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "label"
+        ],
+        "title": "AmbitionBandOut",
+        "type": "object"
+      },
       "AnswerPayloadOut": {
         "description": "The cited half of one grounded answer, shared by every turn that has one.\n\nThese are the citation fields ``ChatTurnOut`` has always carried, named\nonce so a Task Agent turn that answers from the evidence (task 044) can\ncarry the same shape instead of a second, drifting copy. Every field keeps\nits chat default, so a turn with no answer serialises exactly as before.\n\nArgs:\n    claims: Structured claims backing the prose.\n    citations: Resolved citations, each with its read-time source facts.\n    enrichment: Downstream enrichment status for those citations.\n    warning_not_evidence_checked: Whether the evidence check could not run.\n    handoff: The handoff hint, when the answer held no evidence.\n    stopped_before_evidence_check: Whether the answer was stopped early.",
         "properties": {
@@ -2030,6 +2049,109 @@
         "title": "EvidenceItemOut",
         "type": "object"
       },
+      "EvidenceProfileOut": {
+        "description": "An option's source-quality profile \u2014 what the evidence base holds so far.\n\nEvery count is of documents, DOI-collapsed. Display only; never a verdict.\n\nArgs:\n    documents: Its documents.\n    by_evidence_type: Documents per evidence type; \"Unknown\" and\n        non-evidence documents are their own keys, \"not rated\" when unclassified.\n    by_tier: Documents per quality tier label, \"not rated\" when unappraised.\n    by_role: Documents per role.\n    where_tried: Documents per where-tried group.\n    populations: Populations its documents name, most frequent first.\n    settings: Settings its documents name, most frequent first.\n    outcomes: Outcomes its documents measure, most frequent first.\n    flagged_not_stated: Documents that cover the intervention without\n        stating the feature that defines this option.\n    inherited_labels: Documents whose type and tier were read from a\n        linked task.\n    abstract_only: Documents read from an abstract only.",
+        "properties": {
+          "abstract_only": {
+            "default": 0,
+            "title": "Abstract Only",
+            "type": "integer"
+          },
+          "by_evidence_type": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "By Evidence Type",
+            "type": "object"
+          },
+          "by_role": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "By Role",
+            "type": "object"
+          },
+          "by_tier": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "By Tier",
+            "type": "object"
+          },
+          "documents": {
+            "default": 0,
+            "title": "Documents",
+            "type": "integer"
+          },
+          "flagged_not_stated": {
+            "default": 0,
+            "title": "Flagged Not Stated",
+            "type": "integer"
+          },
+          "inherited_labels": {
+            "default": 0,
+            "title": "Inherited Labels",
+            "type": "integer"
+          },
+          "outcomes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Outcomes",
+            "type": "array"
+          },
+          "populations": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Populations",
+            "type": "array"
+          },
+          "settings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Settings",
+            "type": "array"
+          },
+          "where_tried": {
+            "$ref": "#/components/schemas/WhereTriedOut"
+          }
+        },
+        "required": [
+          "where_tried"
+        ],
+        "title": "EvidenceProfileOut",
+        "type": "object"
+      },
+      "ExclusionOut": {
+        "description": "Why an option is excluded.\n\nArgs:\n    constraint: The constraint it breaks, or \"your decision\".\n    reason: The reason, in words.\n    by: Who excluded it.",
+        "properties": {
+          "by": {
+            "enum": [
+              "constrain",
+              "user"
+            ],
+            "title": "By",
+            "type": "string"
+          },
+          "constraint": {
+            "title": "Constraint",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "constraint",
+          "reason",
+          "by"
+        ],
+        "title": "ExclusionOut",
+        "type": "object"
+      },
       "FacetGroupsOut": {
         "description": "Groups produced for one grouping facet.\n\nArgs:\n    facet: Grouping facet name.\n    groups: Groups within the facet.\n    ungrouped: Number of members not placed in any group.",
         "properties": {
@@ -2396,6 +2518,40 @@
         "title": "GroupsOut",
         "type": "object"
       },
+      "GuessOut": {
+        "description": "One reasoned guess on a preference: Policy Atlas's reasoning, not evidence.\n\nArgs:\n    constraint_id: The preference's id (`pref-N`).\n    constraint_text: The preference, in words.\n    guess: The guess, in words.\n    leaning: Which way it leans.",
+        "properties": {
+          "constraint_id": {
+            "title": "Constraint Id",
+            "type": "string"
+          },
+          "constraint_text": {
+            "title": "Constraint Text",
+            "type": "string"
+          },
+          "guess": {
+            "title": "Guess",
+            "type": "string"
+          },
+          "leaning": {
+            "enum": [
+              "likely_meets",
+              "likely_falls_short",
+              "cannot_say"
+            ],
+            "title": "Leaning",
+            "type": "string"
+          }
+        },
+        "required": [
+          "constraint_id",
+          "constraint_text",
+          "guess",
+          "leaning"
+        ],
+        "title": "GuessOut",
+        "type": "object"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -2636,6 +2792,30 @@
           "intervention"
         ],
         "title": "IcfFindingOut",
+        "type": "object"
+      },
+      "InScopeOut": {
+        "description": "The in-scope check against the plan's evidence restriction.\n\nArgs:\n    restriction: The restriction, in words.\n    in_scope_documents: Its documents that pass the restriction.\n    documents: Its documents.",
+        "properties": {
+          "documents": {
+            "title": "Documents",
+            "type": "integer"
+          },
+          "in_scope_documents": {
+            "title": "In Scope Documents",
+            "type": "integer"
+          },
+          "restriction": {
+            "title": "Restriction",
+            "type": "string"
+          }
+        },
+        "required": [
+          "restriction",
+          "in_scope_documents",
+          "documents"
+        ],
+        "title": "InScopeOut",
         "type": "object"
       },
       "IofFindingOut": {
@@ -2976,6 +3156,40 @@
         "title": "IofStatisticsOut",
         "type": "object"
       },
+      "JudgementOut": {
+        "description": "One constraint judgement on the option's current design version.\n\nArgs:\n    constraint_id: The constraint's id (`req-N`, or a default screen:\n        `relevant` \u00b7 `distinct` \u00b7 `in_scope`).\n    constraint_text: The constraint, in words.\n    verdict: Passes, breaks or cannot be checked.\n    reason: Why.",
+        "properties": {
+          "constraint_id": {
+            "title": "Constraint Id",
+            "type": "string"
+          },
+          "constraint_text": {
+            "title": "Constraint Text",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "verdict": {
+            "enum": [
+              "passes",
+              "breaks",
+              "cannot_check"
+            ],
+            "title": "Verdict",
+            "type": "string"
+          }
+        },
+        "required": [
+          "constraint_id",
+          "constraint_text",
+          "verdict",
+          "reason"
+        ],
+        "title": "JudgementOut",
+        "type": "object"
+      },
       "LandscapeOut": {
         "description": "Distributions over the screened-in set only (never the found count).\n\nArgs:\n    evidence_types: Counts by evidence type label.\n    years: Counts by publication year.\n    themes: Landscape themes.\n    geographies: Optional counts by geography label.",
         "properties": {
@@ -3104,6 +3318,198 @@
         "title": "LatestTurnPreviewOut",
         "type": "object"
       },
+      "LonglistCountsOut": {
+        "description": "The list view's header counts.\n\n``options``, ``included``, ``excluded`` and ``no_in_scope`` are read from\nthe option rows as they stand (a user exclusion counts at once);\n``themes``, ``unclustered`` and ``not_an_option`` are the longlist run's.\n\nArgs:\n    options: Options on the longlist.\n    themes: Themes.\n    included: Options included.\n    excluded: Options excluded.\n    no_in_scope: Included options with no in-scope evidence.\n    unclustered: Records assigned to no option.\n    not_an_option: Records judged not to describe an actionable option.\n    none_fits: Options no lever type fits.",
+        "properties": {
+          "excluded": {
+            "title": "Excluded",
+            "type": "integer"
+          },
+          "included": {
+            "title": "Included",
+            "type": "integer"
+          },
+          "no_in_scope": {
+            "title": "No In Scope",
+            "type": "integer"
+          },
+          "none_fits": {
+            "title": "None Fits",
+            "type": "integer"
+          },
+          "not_an_option": {
+            "title": "Not An Option",
+            "type": "integer"
+          },
+          "options": {
+            "title": "Options",
+            "type": "integer"
+          },
+          "themes": {
+            "title": "Themes",
+            "type": "integer"
+          },
+          "unclustered": {
+            "title": "Unclustered",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "options",
+          "themes",
+          "included",
+          "excluded",
+          "no_in_scope",
+          "unclustered",
+          "not_an_option",
+          "none_fits"
+        ],
+        "title": "LonglistCountsOut",
+        "type": "object"
+      },
+      "LonglistOut": {
+        "description": "The `longlist` read model: the options grouped by theme, with their states.\n\nArgs:\n    run_id: The longlist component run the longlist came from.\n    capability_run_id: The longlist walk that run belonged to.\n    plan_version: The plan version the longlist was built from.\n    built_from_plan_version: The same number, named for the plan\n        document's \"built from plan version N\".\n    current_plan_version: The task's current approved plan version.\n    counts: The header counts.\n    themes: The themes, in display order.\n    unthemed_option_ids: Options in no theme (including options added\n        since the build).\n    options: Every option of the task, themed ones first in theme order.\n    where_label: The words the `where` group is shown under (the plan's\n        Where).\n    lever_types: The lever-type list the options were typed against, in\n        order (the grid's rows).\n    ambition_bands: The ambition bands, in order (the grid's columns).\n    taxonomy_version: The lever-type list version.\n    depth_label: The depth label every longlist surface carries.",
+        "properties": {
+          "ambition_bands": {
+            "items": {
+              "$ref": "#/components/schemas/AmbitionBandOut"
+            },
+            "title": "Ambition Bands",
+            "type": "array"
+          },
+          "built_from_plan_version": {
+            "title": "Built From Plan Version",
+            "type": "integer"
+          },
+          "capability_run_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Capability Run Id"
+          },
+          "counts": {
+            "$ref": "#/components/schemas/LonglistCountsOut"
+          },
+          "current_plan_version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Plan Version"
+          },
+          "depth_label": {
+            "const": "scoping pass",
+            "default": "scoping pass",
+            "title": "Depth Label",
+            "type": "string"
+          },
+          "lever_types": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Lever Types",
+            "type": "array"
+          },
+          "options": {
+            "items": {
+              "$ref": "#/components/schemas/OptionSummaryOut"
+            },
+            "title": "Options",
+            "type": "array"
+          },
+          "plan_version": {
+            "title": "Plan Version",
+            "type": "integer"
+          },
+          "run_id": {
+            "format": "uuid",
+            "title": "Run Id",
+            "type": "string"
+          },
+          "taxonomy_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Taxonomy Version"
+          },
+          "themes": {
+            "items": {
+              "$ref": "#/components/schemas/LonglistThemeOut"
+            },
+            "title": "Themes",
+            "type": "array"
+          },
+          "unthemed_option_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Unthemed Option Ids",
+            "type": "array"
+          },
+          "where_label": {
+            "title": "Where Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "run_id",
+          "plan_version",
+          "built_from_plan_version",
+          "counts",
+          "where_label"
+        ],
+        "title": "LonglistOut",
+        "type": "object"
+      },
+      "LonglistThemeOut": {
+        "description": "One theme: a generated grouping of options in the problem's own words.\n\nArgs:\n    theme_id: Stable theme identity.\n    name: Theme name.\n    description: One-line description.\n    option_ids: The theme's options, in display order.",
+        "properties": {
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "option_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Option Ids",
+            "type": "array"
+          },
+          "theme_id": {
+            "format": "uuid",
+            "title": "Theme Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "theme_id",
+          "name",
+          "description"
+        ],
+        "title": "LonglistThemeOut",
+        "type": "object"
+      },
       "MeOut": {
         "description": "The authenticated caller's own identity row.\n\nReturned by `GET /api/v1/me`, which also provisions the row on first call\n(contract \u00a7 2). The frontend keys the whole tenancy UI off this shape: a\n`null` organisation hides the scope switcher entirely, which is what makes\nthe slice a dark launch for anyone not yet enrolled.\n\nArgs:\n    user_id: The caller's token subject \u2014 the identity the API keys on.\n    display_name: How the caller is named on screen. Never an address:\n        the ops-set name, or a rendering derived from `user_id` for a\n        caller provisioned by their first `/me` call.\n    email: The caller's own address once ops has resolved it, else\n        `None`. Ops- and admin-facing; never another person's.\n    organisation: The caller's organisation, or `None` when unenrolled.\n    is_admin: Whether the caller holds the read-across-organisations\n        support role. Read-only in every sense: no route and no request\n        body can set it, and no write path consults it.",
         "properties": {
@@ -3168,6 +3574,40 @@
         "title": "MostRelevantNoteOut",
         "type": "object"
       },
+      "OptionAddIn": {
+        "additionalProperties": false,
+        "description": "Add an option by hand: the user's words (the button's path, D13).\n\nArgs:\n    text: The option, in the user's words.",
+        "properties": {
+          "text": {
+            "maxLength": 1000,
+            "minLength": 1,
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "title": "OptionAddIn",
+        "type": "object"
+      },
+      "OptionAddedOut": {
+        "description": "An option added by hand, and the option search it opened.\n\nArgs:\n    option: The new option's card.\n    opened_run: The option search (a walk with no parent) it opened.",
+        "properties": {
+          "opened_run": {
+            "$ref": "#/components/schemas/LatestRun"
+          },
+          "option": {
+            "$ref": "#/components/schemas/OptionOut"
+          }
+        },
+        "required": [
+          "option",
+          "opened_run"
+        ],
+        "title": "OptionAddedOut",
+        "type": "object"
+      },
       "OptionDesignOut": {
         "description": "A specified design Policy Atlas proposed back from an option's words.\n\nArgs:\n    name: A short option name.\n    description: One sentence: what is done, by whom, for whom.\n    design_features: The features that define the option.\n    outcomes_served: Which of the plan's outcomes the option is for.\n    assumed: The features Policy Atlas supplied rather than the user\n        stated; shown as assumed.\n    version: The design's version.",
         "properties": {
@@ -3214,6 +3654,417 @@
         "title": "OptionDesignOut",
         "type": "object"
       },
+      "OptionDocumentOut": {
+        "description": "One document behind an option (\"Show the documents\"), one per membership row.\n\nArgs:\n    task_source_snapshot_id: This task's document row, when the task holds one.\n    title: The document's title.\n    role: What the document does with the intervention.\n    evidence_type: Its evidence type, when classified.\n    tier: Its quality tier label, when appraised.\n    design_feature_not_stated: It covers the intervention without stating\n        the feature that defines this option.\n    where_tried_group: Where it was studied, grouped against Where.\n    source_task_id: The linked task the document or its labels came from,\n        when inherited.",
+        "properties": {
+          "design_feature_not_stated": {
+            "default": false,
+            "title": "Design Feature Not Stated",
+            "type": "boolean"
+          },
+          "evidence_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evidence Type"
+          },
+          "role": {
+            "enum": [
+              "evaluated",
+              "described",
+              "recommended",
+              "mentioned"
+            ],
+            "title": "Role",
+            "type": "string"
+          },
+          "source_task_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Task Id"
+          },
+          "task_source_snapshot_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Task Source Snapshot Id"
+          },
+          "tier": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tier"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "where_tried_group": {
+            "enum": [
+              "where",
+              "comparable",
+              "other",
+              "unknown"
+            ],
+            "title": "Where Tried Group",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "role",
+          "where_tried_group"
+        ],
+        "title": "OptionDocumentOut",
+        "type": "object"
+      },
+      "OptionExcludeIn": {
+        "additionalProperties": false,
+        "description": "Exclude an option, with the user's reason.\n\nArgs:\n    reason: Why, in the user's words.",
+        "properties": {
+          "reason": {
+            "maxLength": 1000,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason"
+        ],
+        "title": "OptionExcludeIn",
+        "type": "object"
+      },
+      "OptionIncludeIn": {
+        "additionalProperties": false,
+        "description": "Include an option again, optionally with the user's reason.\n\nArgs:\n    reason: Why, in the user's words.",
+        "properties": {
+          "reason": {
+            "anyOf": [
+              {
+                "maxLength": 1000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "title": "OptionIncludeIn",
+        "type": "object"
+      },
+      "OptionOut": {
+        "description": "The `option` read model: the option card, assembled (D15).\n\nArgs:\n    design: The specified design.\n    design_features: The design's defining features.\n    evidence: The source-quality profile.\n    judgements: The constraint judgements on the current design version.\n    guesses: The reasoned guesses on the current design version.\n    transferability: \"checked at assessment\" when the plan carries the\n        default transferability preference; `null` otherwise.\n    in_scope: The in-scope check, when the plan restricts the evidence.\n    documents: The documents behind it, one per membership row.\n    run_id: The longlist component run its coverage came from; `null`\n        before a longlist is built.\n    capability_run_id: The longlist walk that run belonged to.\n    plan_version: The plan version that longlist was built from.\n    where_label: The words the `where` group is shown under.\n    depth_label: The depth label every longlist surface carries.",
+        "properties": {
+          "abstract_only": {
+            "default": false,
+            "title": "Abstract Only",
+            "type": "boolean"
+          },
+          "ambition": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ambition"
+          },
+          "ambition_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ambition Reason"
+          },
+          "capability_run_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Capability Run Id"
+          },
+          "depth_label": {
+            "const": "scoping pass",
+            "default": "scoping pass",
+            "title": "Depth Label",
+            "type": "string"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "design": {
+            "$ref": "#/components/schemas/OptionDesignOut"
+          },
+          "design_features": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Design Features",
+            "type": "array"
+          },
+          "design_version": {
+            "title": "Design Version",
+            "type": "integer"
+          },
+          "document_count": {
+            "default": 0,
+            "title": "Document Count",
+            "type": "integer"
+          },
+          "documents": {
+            "items": {
+              "$ref": "#/components/schemas/OptionDocumentOut"
+            },
+            "title": "Documents",
+            "type": "array"
+          },
+          "evaluated_count": {
+            "default": 0,
+            "title": "Evaluated Count",
+            "type": "integer"
+          },
+          "evidence": {
+            "$ref": "#/components/schemas/EvidenceProfileOut"
+          },
+          "exclusion": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ExclusionOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "guesses": {
+            "items": {
+              "$ref": "#/components/schemas/GuessOut"
+            },
+            "title": "Guesses",
+            "type": "array"
+          },
+          "in_scope": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/InScopeOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "is_entrant_with_no_documents": {
+            "default": false,
+            "title": "Is Entrant With No Documents",
+            "type": "boolean"
+          },
+          "judgements": {
+            "items": {
+              "$ref": "#/components/schemas/JudgementOut"
+            },
+            "title": "Judgements",
+            "type": "array"
+          },
+          "lever_none_fits_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lever None Fits Reason"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "no_in_scope_evidence": {
+            "default": false,
+            "title": "No In Scope Evidence",
+            "type": "boolean"
+          },
+          "option_id": {
+            "format": "uuid",
+            "title": "Option Id",
+            "type": "string"
+          },
+          "origin": {
+            "enum": [
+              "clustered",
+              "suggested",
+              "from_evidence_search",
+              "added_by_you"
+            ],
+            "title": "Origin",
+            "type": "string"
+          },
+          "outcomes_served": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Outcomes Served",
+            "type": "array"
+          },
+          "plan_version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Plan Version"
+          },
+          "primary_lever_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Primary Lever Type"
+          },
+          "relations": {
+            "items": {
+              "$ref": "#/components/schemas/RelationOut"
+            },
+            "title": "Relations",
+            "type": "array"
+          },
+          "restriction_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Restriction Text"
+          },
+          "run_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Run Id"
+          },
+          "secondary_lever_types": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Secondary Lever Types",
+            "type": "array"
+          },
+          "settings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Settings",
+            "type": "array"
+          },
+          "state": {
+            "enum": [
+              "included",
+              "excluded"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "taxonomy_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Taxonomy Version"
+          },
+          "transferability": {
+            "anyOf": [
+              {
+                "const": "checked at assessment",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Transferability"
+          },
+          "where_label": {
+            "title": "Where Label",
+            "type": "string"
+          },
+          "where_tried": {
+            "$ref": "#/components/schemas/WhereTriedOut"
+          }
+        },
+        "required": [
+          "option_id",
+          "name",
+          "description",
+          "origin",
+          "state",
+          "design_version",
+          "where_tried",
+          "design",
+          "evidence",
+          "where_label"
+        ],
+        "title": "OptionOut",
+        "type": "object"
+      },
       "OptionResponse": {
         "additionalProperties": false,
         "description": "Response picking a canonical or authored option.\n\nArgs:\n    kind: Discriminator.\n    option_id: The picked option's id.\n    params: Fill-in for `requires_user_input` options. The spec does\n        not name per-option param shapes, so this stays a constrained\n        free-form mapping rather than a per-option union.",
@@ -3246,6 +4097,189 @@
           "option_id"
         ],
         "title": "OptionResponse",
+        "type": "object"
+      },
+      "OptionSummaryOut": {
+        "description": "One option as the list view and the grid show it.\n\nArgs:\n    option_id: Stable option identity.\n    name: Option name.\n    description: One-sentence description.\n    outcomes_served: The plan's outcomes the option serves.\n    origin: Where it came from.\n    state: Included or excluded.\n    exclusion: Why it is excluded; `null` when included.\n    no_in_scope_evidence: Included, but none of its documents passes the\n        plan's evidence restriction.\n    restriction_text: The restriction none of its documents passes, when\n        `no_in_scope_evidence`.\n    primary_lever_type: The primary lever type; `null` when none fits or\n        the option is not typed yet.\n    lever_none_fits_reason: Why no lever type fits.\n    secondary_lever_types: The other lever types it also touches.\n    ambition: `do_minimum` \u00b7 `incremental` \u00b7 `structural`, as described,\n        not measured.\n    ambition_reason: The one-line justification.\n    taxonomy_version: The lever-type list version it was typed under.\n    design_version: The specified design's version.\n    document_count: Its documents (DOI-collapsed).\n    evaluated_count: Documents that evaluate it.\n    settings: The settings its documents name, most frequent first.\n    where_tried: Documents per where-tried group.\n    relations: Its relations to other options.\n    abstract_only: Every one of its documents was read from an abstract only.\n    is_entrant_with_no_documents: Suggested, drawn from the Evidence\n        search or added by the user, and no document has joined it.",
+        "properties": {
+          "abstract_only": {
+            "default": false,
+            "title": "Abstract Only",
+            "type": "boolean"
+          },
+          "ambition": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ambition"
+          },
+          "ambition_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ambition Reason"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "design_version": {
+            "title": "Design Version",
+            "type": "integer"
+          },
+          "document_count": {
+            "default": 0,
+            "title": "Document Count",
+            "type": "integer"
+          },
+          "evaluated_count": {
+            "default": 0,
+            "title": "Evaluated Count",
+            "type": "integer"
+          },
+          "exclusion": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ExclusionOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "is_entrant_with_no_documents": {
+            "default": false,
+            "title": "Is Entrant With No Documents",
+            "type": "boolean"
+          },
+          "lever_none_fits_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lever None Fits Reason"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "no_in_scope_evidence": {
+            "default": false,
+            "title": "No In Scope Evidence",
+            "type": "boolean"
+          },
+          "option_id": {
+            "format": "uuid",
+            "title": "Option Id",
+            "type": "string"
+          },
+          "origin": {
+            "enum": [
+              "clustered",
+              "suggested",
+              "from_evidence_search",
+              "added_by_you"
+            ],
+            "title": "Origin",
+            "type": "string"
+          },
+          "outcomes_served": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Outcomes Served",
+            "type": "array"
+          },
+          "primary_lever_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Primary Lever Type"
+          },
+          "relations": {
+            "items": {
+              "$ref": "#/components/schemas/RelationOut"
+            },
+            "title": "Relations",
+            "type": "array"
+          },
+          "restriction_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Restriction Text"
+          },
+          "secondary_lever_types": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Secondary Lever Types",
+            "type": "array"
+          },
+          "settings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Settings",
+            "type": "array"
+          },
+          "state": {
+            "enum": [
+              "included",
+              "excluded"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "taxonomy_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Taxonomy Version"
+          },
+          "where_tried": {
+            "$ref": "#/components/schemas/WhereTriedOut"
+          }
+        },
+        "required": [
+          "option_id",
+          "name",
+          "description",
+          "origin",
+          "state",
+          "design_version",
+          "where_tried"
+        ],
+        "title": "OptionSummaryOut",
         "type": "object"
       },
       "OrganisationRef": {
@@ -4435,6 +5469,35 @@
           "title"
         ],
         "title": "ReferenceOut",
+        "type": "object"
+      },
+      "RelationOut": {
+        "description": "A relation between two options, read from this option's side.\n\nArgs:\n    kind: ``part_of`` (this option is part of the other) or ``has_part``\n        (the other is part of this one).\n    other_option_id: The other option.\n    other_name: The other option's name.",
+        "properties": {
+          "kind": {
+            "enum": [
+              "part_of",
+              "has_part"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "other_name": {
+            "title": "Other Name",
+            "type": "string"
+          },
+          "other_option_id": {
+            "format": "uuid",
+            "title": "Other Option Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "other_option_id",
+          "other_name"
+        ],
+        "title": "RelationOut",
         "type": "object"
       },
       "RunCreate": {
@@ -6955,6 +8018,33 @@
         "title": "WaitlistSignupOut",
         "type": "object"
       },
+      "WhereTriedOut": {
+        "description": "Documents per where-tried group (DOI-collapsed).\n\nArgs:\n    where: Studied in the plan's Where.\n    comparable: Studied in a comparable system (OECD).\n    other: Studied in another named country.\n    unknown: No recognisable geography.",
+        "properties": {
+          "comparable": {
+            "default": 0,
+            "title": "Comparable",
+            "type": "integer"
+          },
+          "other": {
+            "default": 0,
+            "title": "Other",
+            "type": "integer"
+          },
+          "unknown": {
+            "default": 0,
+            "title": "Unknown",
+            "type": "integer"
+          },
+          "where": {
+            "default": 0,
+            "title": "Where",
+            "type": "integer"
+          }
+        },
+        "title": "WhereTriedOut",
+        "type": "object"
+      },
       "YourContextOut": {
         "description": "One entry of the user's own context, verbatim.\n\nArgs:\n    text: The user's words, exactly as written.\n    type: Something true now, or something they plan or promise.\n    turn_index: The Task Agent turn the entry came from.\n    test_as_condition: Whether they asked for it to be tested.",
         "properties": {
@@ -9351,6 +10441,318 @@
         "summary": "Landscape",
         "tags": [
           "read-models"
+        ]
+      }
+    },
+    "/api/v1/tasks/{task_id}/longlist": {
+      "get": {
+        "description": "Return the task's longlist, or 404 before the first build.",
+        "operationId": "get_longlist_api_v1_tasks__task_id__longlist_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Task Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LonglistOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Longlist",
+        "tags": [
+          "longlist"
+        ]
+      }
+    },
+    "/api/v1/tasks/{task_id}/options": {
+      "post": {
+        "description": "Add an option by hand: propose its design, mint it, open its option search.\n\nThe design is proposed back from the user's words (``option_design_v1``)\noutside any transaction; the option is minted *added by you* and its\noption search opened as a walk with no parent (:func:`add_option`). The\nfence is read twice: before the model call, so a refused add costs no\ncall, and again under the lock.",
+        "operationId": "post_option_api_v1_tasks__task_id__options_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Task Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OptionAddIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OptionAddedOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Post Option",
+        "tags": [
+          "longlist"
+        ]
+      }
+    },
+    "/api/v1/tasks/{task_id}/options/{option_id}": {
+      "get": {
+        "description": "Return one option's card, or an indistinguishable 404.",
+        "operationId": "get_option_api_v1_tasks__task_id__options__option_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Task Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "option_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Option Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OptionOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Option",
+        "tags": [
+          "longlist"
+        ]
+      }
+    },
+    "/api/v1/tasks/{task_id}/options/{option_id}/exclude": {
+      "post": {
+        "description": "Exclude an option with the user's reason; include again reverses it.",
+        "operationId": "post_exclude_api_v1_tasks__task_id__options__option_id__exclude_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Task Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "option_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Option Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OptionExcludeIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OptionOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Post Exclude",
+        "tags": [
+          "longlist"
+        ]
+      }
+    },
+    "/api/v1/tasks/{task_id}/options/{option_id}/include": {
+      "post": {
+        "description": "Include an option again; a rebuild's constrain will not exclude it.",
+        "operationId": "post_include_api_v1_tasks__task_id__options__option_id__include_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Task Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "option_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Option Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/OptionIncludeIn"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Payload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OptionOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Post Include",
+        "tags": [
+          "longlist"
         ]
       }
     },

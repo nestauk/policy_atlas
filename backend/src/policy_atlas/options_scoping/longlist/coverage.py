@@ -134,6 +134,32 @@ def _sorted(counts: dict[str, int]) -> dict[str, int]:
     return dict(sorted(counts.items(), key=lambda item: (-item[1], item[0])))
 
 
+def _pick_label(candidates: list[DocumentLabels]) -> DocumentLabels | None:
+    """The label a DOI-collapsed document counts under.
+
+    The twin whose label is resolved (an evidence type or a tier) wins, own
+    before inherited, then the one with a tier; the first twin (id order)
+    only when none is resolved. Deterministic whatever the ids' order.
+    """
+    resolved = [
+        label
+        for label in candidates
+        if label.provenance != "absent"
+        and (label.evidence_type is not None or label.quality_score is not None)
+    ]
+    if not resolved:
+        return candidates[0] if candidates else None
+    return min(
+        enumerate(resolved),
+        key=lambda item: (
+            item[1].provenance != "own",
+            item[1].quality_score is None,
+            item[1].evidence_type is None,
+            item[0],
+        ),
+    )[1]
+
+
 def empty_coverage() -> dict[str, Any]:
     """The coverage of an option with no member (a seed nothing was assigned to).
 
@@ -188,9 +214,9 @@ def option_coverage(
 
     for key in sorted(by_doc):
         doc_members = by_doc[key]
-        # The first labelled row of the (DOI-collapsed) document decides its labels.
+        # A DOI-collapsed document takes its best-resolved twin's labels.
         tss_ids = sorted({m.tss_id for m in doc_members if m.tss_id is not None}, key=str)
-        label = next((labels[t] for t in tss_ids if t in labels), None)
+        label = _pick_label([labels[t] for t in tss_ids if t in labels])
         if label is None or label.provenance == "absent":
             _add(evidence_type, NOT_RATED)
             _add(tier, NOT_RATED)

@@ -789,6 +789,112 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/tasks/{task_id}/longlist": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Longlist
+         * @description Return the task's longlist, or 404 before the first build.
+         */
+        get: operations["get_longlist_api_v1_tasks__task_id__longlist_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tasks/{task_id}/options": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Post Option
+         * @description Add an option by hand: propose its design, mint it, open its option search.
+         *
+         *     The design is proposed back from the user's words (``option_design_v1``)
+         *     outside any transaction; the option is minted *added by you* and its
+         *     option search opened as a walk with no parent (:func:`add_option`). The
+         *     fence is read twice: before the model call, so a refused add costs no
+         *     call, and again under the lock.
+         */
+        post: operations["post_option_api_v1_tasks__task_id__options_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tasks/{task_id}/options/{option_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Option
+         * @description Return one option's card, or an indistinguishable 404.
+         */
+        get: operations["get_option_api_v1_tasks__task_id__options__option_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tasks/{task_id}/options/{option_id}/exclude": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Post Exclude
+         * @description Exclude an option with the user's reason; include again reverses it.
+         */
+        post: operations["post_exclude_api_v1_tasks__task_id__options__option_id__exclude_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tasks/{task_id}/options/{option_id}/include": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Post Include
+         * @description Include an option again; a rebuild's constrain will not exclude it.
+         */
+        post: operations["post_include_api_v1_tasks__task_id__options__option_id__include_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/tasks/{task_id}/plan": {
         parameters: {
             query?: never;
@@ -1055,6 +1161,20 @@ export interface components {
              * @enum {string}
              */
             kind: "abort";
+        };
+        /**
+         * AmbitionBandOut
+         * @description One ambition band, a column of the reduced grid.
+         *
+         *     Args:
+         *         key: The stored value.
+         *         label: The display label.
+         */
+        AmbitionBandOut: {
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
         };
         /**
          * AnswerPayloadOut
@@ -2109,6 +2229,89 @@ export interface components {
             year?: number | null;
         };
         /**
+         * EvidenceProfileOut
+         * @description An option's source-quality profile — what the evidence base holds so far.
+         *
+         *     Every count is of documents, DOI-collapsed. Display only; never a verdict.
+         *
+         *     Args:
+         *         documents: Its documents.
+         *         by_evidence_type: Documents per evidence type; "Unknown" and
+         *             non-evidence documents are their own keys, "not rated" when unclassified.
+         *         by_tier: Documents per quality tier label, "not rated" when unappraised.
+         *         by_role: Documents per role.
+         *         where_tried: Documents per where-tried group.
+         *         populations: Populations its documents name, most frequent first.
+         *         settings: Settings its documents name, most frequent first.
+         *         outcomes: Outcomes its documents measure, most frequent first.
+         *         flagged_not_stated: Documents that cover the intervention without
+         *             stating the feature that defines this option.
+         *         inherited_labels: Documents whose type and tier were read from a
+         *             linked task.
+         *         abstract_only: Documents read from an abstract only.
+         */
+        EvidenceProfileOut: {
+            /**
+             * Abstract Only
+             * @default 0
+             */
+            abstract_only: number;
+            /** By Evidence Type */
+            by_evidence_type?: {
+                [key: string]: number;
+            };
+            /** By Role */
+            by_role?: {
+                [key: string]: number;
+            };
+            /** By Tier */
+            by_tier?: {
+                [key: string]: number;
+            };
+            /**
+             * Documents
+             * @default 0
+             */
+            documents: number;
+            /**
+             * Flagged Not Stated
+             * @default 0
+             */
+            flagged_not_stated: number;
+            /**
+             * Inherited Labels
+             * @default 0
+             */
+            inherited_labels: number;
+            /** Outcomes */
+            outcomes?: string[];
+            /** Populations */
+            populations?: string[];
+            /** Settings */
+            settings?: string[];
+            where_tried: components["schemas"]["WhereTriedOut"];
+        };
+        /**
+         * ExclusionOut
+         * @description Why an option is excluded.
+         *
+         *     Args:
+         *         constraint: The constraint it breaks, or "your decision".
+         *         reason: The reason, in words.
+         *         by: Who excluded it.
+         */
+        ExclusionOut: {
+            /**
+             * By
+             * @enum {string}
+             */
+            by: "constrain" | "user";
+            /** Constraint */
+            constraint: string;
+            /** Reason */
+            reason: string;
+        };
+        /**
          * FacetGroupsOut
          * @description Groups produced for one grouping facet.
          *
@@ -2294,6 +2497,29 @@ export interface components {
             /** Facets */
             facets?: components["schemas"]["FacetGroupsOut"][];
         };
+        /**
+         * GuessOut
+         * @description One reasoned guess on a preference: Policy Atlas's reasoning, not evidence.
+         *
+         *     Args:
+         *         constraint_id: The preference's id (`pref-N`).
+         *         constraint_text: The preference, in words.
+         *         guess: The guess, in words.
+         *         leaning: Which way it leans.
+         */
+        GuessOut: {
+            /** Constraint Id */
+            constraint_id: string;
+            /** Constraint Text */
+            constraint_text: string;
+            /** Guess */
+            guess: string;
+            /**
+             * Leaning
+             * @enum {string}
+             */
+            leaning: "likely_meets" | "likely_falls_short" | "cannot_say";
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -2363,6 +2589,23 @@ export interface components {
             study_geography?: string | null;
             /** Workforce Requirements */
             workforce_requirements?: string | null;
+        };
+        /**
+         * InScopeOut
+         * @description The in-scope check against the plan's evidence restriction.
+         *
+         *     Args:
+         *         restriction: The restriction, in words.
+         *         in_scope_documents: Its documents that pass the restriction.
+         *         documents: Its documents.
+         */
+        InScopeOut: {
+            /** Documents */
+            documents: number;
+            /** In Scope Documents */
+            in_scope_documents: number;
+            /** Restriction */
+            restriction: string;
         };
         /**
          * IofFindingOut
@@ -2457,6 +2700,30 @@ export interface components {
             tau2?: number | null;
         };
         /**
+         * JudgementOut
+         * @description One constraint judgement on the option's current design version.
+         *
+         *     Args:
+         *         constraint_id: The constraint's id (`req-N`, or a default screen:
+         *             `relevant` · `distinct` · `in_scope`).
+         *         constraint_text: The constraint, in words.
+         *         verdict: Passes, breaks or cannot be checked.
+         *         reason: Why.
+         */
+        JudgementOut: {
+            /** Constraint Id */
+            constraint_id: string;
+            /** Constraint Text */
+            constraint_text: string;
+            /** Reason */
+            reason: string;
+            /**
+             * Verdict
+             * @enum {string}
+             */
+            verdict: "passes" | "breaks" | "cannot_check";
+        };
+        /**
          * LandscapeOut
          * @description Distributions over the screened-in set only (never the found count).
          *
@@ -2530,6 +2797,125 @@ export interface components {
             user_message: string;
         };
         /**
+         * LonglistCountsOut
+         * @description The list view's header counts.
+         *
+         *     ``options``, ``included``, ``excluded`` and ``no_in_scope`` are read from
+         *     the option rows as they stand (a user exclusion counts at once);
+         *     ``themes``, ``unclustered`` and ``not_an_option`` are the longlist run's.
+         *
+         *     Args:
+         *         options: Options on the longlist.
+         *         themes: Themes.
+         *         included: Options included.
+         *         excluded: Options excluded.
+         *         no_in_scope: Included options with no in-scope evidence.
+         *         unclustered: Records assigned to no option.
+         *         not_an_option: Records judged not to describe an actionable option.
+         *         none_fits: Options no lever type fits.
+         */
+        LonglistCountsOut: {
+            /** Excluded */
+            excluded: number;
+            /** Included */
+            included: number;
+            /** No In Scope */
+            no_in_scope: number;
+            /** None Fits */
+            none_fits: number;
+            /** Not An Option */
+            not_an_option: number;
+            /** Options */
+            options: number;
+            /** Themes */
+            themes: number;
+            /** Unclustered */
+            unclustered: number;
+        };
+        /**
+         * LonglistOut
+         * @description The `longlist` read model: the options grouped by theme, with their states.
+         *
+         *     Args:
+         *         run_id: The longlist component run the longlist came from.
+         *         capability_run_id: The longlist walk that run belonged to.
+         *         plan_version: The plan version the longlist was built from.
+         *         built_from_plan_version: The same number, named for the plan
+         *             document's "built from plan version N".
+         *         current_plan_version: The task's current approved plan version.
+         *         counts: The header counts.
+         *         themes: The themes, in display order.
+         *         unthemed_option_ids: Options in no theme (including options added
+         *             since the build).
+         *         options: Every option of the task, themed ones first in theme order.
+         *         where_label: The words the `where` group is shown under (the plan's
+         *             Where).
+         *         lever_types: The lever-type list the options were typed against, in
+         *             order (the grid's rows).
+         *         ambition_bands: The ambition bands, in order (the grid's columns).
+         *         taxonomy_version: The lever-type list version.
+         *         depth_label: The depth label every longlist surface carries.
+         */
+        LonglistOut: {
+            /** Ambition Bands */
+            ambition_bands?: components["schemas"]["AmbitionBandOut"][];
+            /** Built From Plan Version */
+            built_from_plan_version: number;
+            /** Capability Run Id */
+            capability_run_id?: string | null;
+            counts: components["schemas"]["LonglistCountsOut"];
+            /** Current Plan Version */
+            current_plan_version?: number | null;
+            /**
+             * Depth Label
+             * @default scoping pass
+             * @constant
+             */
+            depth_label: "scoping pass";
+            /** Lever Types */
+            lever_types?: string[];
+            /** Options */
+            options?: components["schemas"]["OptionSummaryOut"][];
+            /** Plan Version */
+            plan_version: number;
+            /**
+             * Run Id
+             * Format: uuid
+             */
+            run_id: string;
+            /** Taxonomy Version */
+            taxonomy_version?: string | null;
+            /** Themes */
+            themes?: components["schemas"]["LonglistThemeOut"][];
+            /** Unthemed Option Ids */
+            unthemed_option_ids?: string[];
+            /** Where Label */
+            where_label: string;
+        };
+        /**
+         * LonglistThemeOut
+         * @description One theme: a generated grouping of options in the problem's own words.
+         *
+         *     Args:
+         *         theme_id: Stable theme identity.
+         *         name: Theme name.
+         *         description: One-line description.
+         *         option_ids: The theme's options, in display order.
+         */
+        LonglistThemeOut: {
+            /** Description */
+            description: string;
+            /** Name */
+            name: string;
+            /** Option Ids */
+            option_ids?: string[];
+            /**
+             * Theme Id
+             * Format: uuid
+             */
+            theme_id: string;
+        };
+        /**
          * MeOut
          * @description The authenticated caller's own identity row.
          *
@@ -2576,6 +2962,29 @@ export interface components {
             source_id: string;
         };
         /**
+         * OptionAddIn
+         * @description Add an option by hand: the user's words (the button's path, D13).
+         *
+         *     Args:
+         *         text: The option, in the user's words.
+         */
+        OptionAddIn: {
+            /** Text */
+            text: string;
+        };
+        /**
+         * OptionAddedOut
+         * @description An option added by hand, and the option search it opened.
+         *
+         *     Args:
+         *         option: The new option's card.
+         *         opened_run: The option search (a walk with no parent) it opened.
+         */
+        OptionAddedOut: {
+            opened_run: components["schemas"]["LatestRun"];
+            option: components["schemas"]["OptionOut"];
+        };
+        /**
          * OptionDesignOut
          * @description A specified design Policy Atlas proposed back from an option's words.
          *
@@ -2606,6 +3015,189 @@ export interface components {
             version: number;
         };
         /**
+         * OptionDocumentOut
+         * @description One document behind an option ("Show the documents"), one per membership row.
+         *
+         *     Args:
+         *         task_source_snapshot_id: This task's document row, when the task holds one.
+         *         title: The document's title.
+         *         role: What the document does with the intervention.
+         *         evidence_type: Its evidence type, when classified.
+         *         tier: Its quality tier label, when appraised.
+         *         design_feature_not_stated: It covers the intervention without stating
+         *             the feature that defines this option.
+         *         where_tried_group: Where it was studied, grouped against Where.
+         *         source_task_id: The linked task the document or its labels came from,
+         *             when inherited.
+         */
+        OptionDocumentOut: {
+            /**
+             * Design Feature Not Stated
+             * @default false
+             */
+            design_feature_not_stated: boolean;
+            /** Evidence Type */
+            evidence_type?: string | null;
+            /**
+             * Role
+             * @enum {string}
+             */
+            role: "evaluated" | "described" | "recommended" | "mentioned";
+            /** Source Task Id */
+            source_task_id?: string | null;
+            /** Task Source Snapshot Id */
+            task_source_snapshot_id?: string | null;
+            /** Tier */
+            tier?: string | null;
+            /** Title */
+            title: string;
+            /**
+             * Where Tried Group
+             * @enum {string}
+             */
+            where_tried_group: "where" | "comparable" | "other" | "unknown";
+        };
+        /**
+         * OptionExcludeIn
+         * @description Exclude an option, with the user's reason.
+         *
+         *     Args:
+         *         reason: Why, in the user's words.
+         */
+        OptionExcludeIn: {
+            /** Reason */
+            reason: string;
+        };
+        /**
+         * OptionIncludeIn
+         * @description Include an option again, optionally with the user's reason.
+         *
+         *     Args:
+         *         reason: Why, in the user's words.
+         */
+        OptionIncludeIn: {
+            /** Reason */
+            reason?: string | null;
+        };
+        /**
+         * OptionOut
+         * @description The `option` read model: the option card, assembled (D15).
+         *
+         *     Args:
+         *         design: The specified design.
+         *         design_features: The design's defining features.
+         *         evidence: The source-quality profile.
+         *         judgements: The constraint judgements on the current design version.
+         *         guesses: The reasoned guesses on the current design version.
+         *         transferability: "checked at assessment" when the plan carries the
+         *             default transferability preference; `null` otherwise.
+         *         in_scope: The in-scope check, when the plan restricts the evidence.
+         *         documents: The documents behind it, one per membership row.
+         *         run_id: The longlist component run its coverage came from; `null`
+         *             before a longlist is built.
+         *         capability_run_id: The longlist walk that run belonged to.
+         *         plan_version: The plan version that longlist was built from.
+         *         where_label: The words the `where` group is shown under.
+         *         depth_label: The depth label every longlist surface carries.
+         */
+        OptionOut: {
+            /**
+             * Abstract Only
+             * @default false
+             */
+            abstract_only: boolean;
+            /** Ambition */
+            ambition?: string | null;
+            /** Ambition Reason */
+            ambition_reason?: string | null;
+            /** Capability Run Id */
+            capability_run_id?: string | null;
+            /**
+             * Depth Label
+             * @default scoping pass
+             * @constant
+             */
+            depth_label: "scoping pass";
+            /** Description */
+            description: string;
+            design: components["schemas"]["OptionDesignOut"];
+            /** Design Features */
+            design_features?: string[];
+            /** Design Version */
+            design_version: number;
+            /**
+             * Document Count
+             * @default 0
+             */
+            document_count: number;
+            /** Documents */
+            documents?: components["schemas"]["OptionDocumentOut"][];
+            /**
+             * Evaluated Count
+             * @default 0
+             */
+            evaluated_count: number;
+            evidence: components["schemas"]["EvidenceProfileOut"];
+            exclusion?: components["schemas"]["ExclusionOut"] | null;
+            /** Guesses */
+            guesses?: components["schemas"]["GuessOut"][];
+            in_scope?: components["schemas"]["InScopeOut"] | null;
+            /**
+             * Is Entrant With No Documents
+             * @default false
+             */
+            is_entrant_with_no_documents: boolean;
+            /** Judgements */
+            judgements?: components["schemas"]["JudgementOut"][];
+            /** Lever None Fits Reason */
+            lever_none_fits_reason?: string | null;
+            /** Name */
+            name: string;
+            /**
+             * No In Scope Evidence
+             * @default false
+             */
+            no_in_scope_evidence: boolean;
+            /**
+             * Option Id
+             * Format: uuid
+             */
+            option_id: string;
+            /**
+             * Origin
+             * @enum {string}
+             */
+            origin: "clustered" | "suggested" | "from_evidence_search" | "added_by_you";
+            /** Outcomes Served */
+            outcomes_served?: string[];
+            /** Plan Version */
+            plan_version?: number | null;
+            /** Primary Lever Type */
+            primary_lever_type?: string | null;
+            /** Relations */
+            relations?: components["schemas"]["RelationOut"][];
+            /** Restriction Text */
+            restriction_text?: string | null;
+            /** Run Id */
+            run_id?: string | null;
+            /** Secondary Lever Types */
+            secondary_lever_types?: string[];
+            /** Settings */
+            settings?: string[];
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "included" | "excluded";
+            /** Taxonomy Version */
+            taxonomy_version?: string | null;
+            /** Transferability */
+            transferability?: "checked at assessment" | null;
+            /** Where Label */
+            where_label: string;
+            where_tried: components["schemas"]["WhereTriedOut"];
+        };
+        /**
          * OptionResponse
          * @description Response picking a canonical or authored option.
          *
@@ -2631,6 +3223,110 @@ export interface components {
             params: {
                 [key: string]: unknown;
             } | null;
+        };
+        /**
+         * OptionSummaryOut
+         * @description One option as the list view and the grid show it.
+         *
+         *     Args:
+         *         option_id: Stable option identity.
+         *         name: Option name.
+         *         description: One-sentence description.
+         *         outcomes_served: The plan's outcomes the option serves.
+         *         origin: Where it came from.
+         *         state: Included or excluded.
+         *         exclusion: Why it is excluded; `null` when included.
+         *         no_in_scope_evidence: Included, but none of its documents passes the
+         *             plan's evidence restriction.
+         *         restriction_text: The restriction none of its documents passes, when
+         *             `no_in_scope_evidence`.
+         *         primary_lever_type: The primary lever type; `null` when none fits or
+         *             the option is not typed yet.
+         *         lever_none_fits_reason: Why no lever type fits.
+         *         secondary_lever_types: The other lever types it also touches.
+         *         ambition: `do_minimum` · `incremental` · `structural`, as described,
+         *             not measured.
+         *         ambition_reason: The one-line justification.
+         *         taxonomy_version: The lever-type list version it was typed under.
+         *         design_version: The specified design's version.
+         *         document_count: Its documents (DOI-collapsed).
+         *         evaluated_count: Documents that evaluate it.
+         *         settings: The settings its documents name, most frequent first.
+         *         where_tried: Documents per where-tried group.
+         *         relations: Its relations to other options.
+         *         abstract_only: Every one of its documents was read from an abstract only.
+         *         is_entrant_with_no_documents: Suggested, drawn from the Evidence
+         *             search or added by the user, and no document has joined it.
+         */
+        OptionSummaryOut: {
+            /**
+             * Abstract Only
+             * @default false
+             */
+            abstract_only: boolean;
+            /** Ambition */
+            ambition?: string | null;
+            /** Ambition Reason */
+            ambition_reason?: string | null;
+            /** Description */
+            description: string;
+            /** Design Version */
+            design_version: number;
+            /**
+             * Document Count
+             * @default 0
+             */
+            document_count: number;
+            /**
+             * Evaluated Count
+             * @default 0
+             */
+            evaluated_count: number;
+            exclusion?: components["schemas"]["ExclusionOut"] | null;
+            /**
+             * Is Entrant With No Documents
+             * @default false
+             */
+            is_entrant_with_no_documents: boolean;
+            /** Lever None Fits Reason */
+            lever_none_fits_reason?: string | null;
+            /** Name */
+            name: string;
+            /**
+             * No In Scope Evidence
+             * @default false
+             */
+            no_in_scope_evidence: boolean;
+            /**
+             * Option Id
+             * Format: uuid
+             */
+            option_id: string;
+            /**
+             * Origin
+             * @enum {string}
+             */
+            origin: "clustered" | "suggested" | "from_evidence_search" | "added_by_you";
+            /** Outcomes Served */
+            outcomes_served?: string[];
+            /** Primary Lever Type */
+            primary_lever_type?: string | null;
+            /** Relations */
+            relations?: components["schemas"]["RelationOut"][];
+            /** Restriction Text */
+            restriction_text?: string | null;
+            /** Secondary Lever Types */
+            secondary_lever_types?: string[];
+            /** Settings */
+            settings?: string[];
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "included" | "excluded";
+            /** Taxonomy Version */
+            taxonomy_version?: string | null;
+            where_tried: components["schemas"]["WhereTriedOut"];
         };
         /**
          * OrganisationRef
@@ -3194,6 +3890,30 @@ export interface components {
             venue?: string | null;
             /** Year */
             year?: number | null;
+        };
+        /**
+         * RelationOut
+         * @description A relation between two options, read from this option's side.
+         *
+         *     Args:
+         *         kind: ``part_of`` (this option is part of the other) or ``has_part``
+         *             (the other is part of this one).
+         *         other_option_id: The other option.
+         *         other_name: The other option's name.
+         */
+        RelationOut: {
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "part_of" | "has_part";
+            /** Other Name */
+            other_name: string;
+            /**
+             * Other Option Id
+             * Format: uuid
+             */
+            other_option_id: string;
         };
         /**
          * RunCreate
@@ -4405,6 +5125,38 @@ export interface components {
             entry_id: string;
         };
         /**
+         * WhereTriedOut
+         * @description Documents per where-tried group (DOI-collapsed).
+         *
+         *     Args:
+         *         where: Studied in the plan's Where.
+         *         comparable: Studied in a comparable system (OECD).
+         *         other: Studied in another named country.
+         *         unknown: No recognisable geography.
+         */
+        WhereTriedOut: {
+            /**
+             * Comparable
+             * @default 0
+             */
+            comparable: number;
+            /**
+             * Other
+             * @default 0
+             */
+            other: number;
+            /**
+             * Unknown
+             * @default 0
+             */
+            unknown: number;
+            /**
+             * Where
+             * @default 0
+             */
+            where: number;
+        };
+        /**
          * YourContextOut
          * @description One entry of the user's own context, verbatim.
          *
@@ -5522,6 +6274,176 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["LandscapeOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_longlist_api_v1_tasks__task_id__longlist_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LonglistOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_option_api_v1_tasks__task_id__options_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OptionAddIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OptionAddedOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_option_api_v1_tasks__task_id__options__option_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+                option_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OptionOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_exclude_api_v1_tasks__task_id__options__option_id__exclude_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+                option_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OptionExcludeIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OptionOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_include_api_v1_tasks__task_id__options__option_id__include_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+                option_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["OptionIncludeIn"] | null;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OptionOut"];
                 };
             };
             /** @description Validation Error */

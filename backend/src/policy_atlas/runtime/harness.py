@@ -102,6 +102,7 @@ from policy_atlas.evidence_search.synthesis.synthesise import (
     SynthesiseFailure,
     synthesise_scope,
 )
+from policy_atlas.options_scoping.constrain.constrain import ConstrainContext, constrain_scope
 from policy_atlas.options_scoping.longlist.longlist import LonglistContext, longlist_scope
 from policy_atlas.options_scoping.longlist.longlist_backend import (
     LonglistBackend,
@@ -373,6 +374,15 @@ def _run_longlist(state: HarnessState) -> HarnessState:
     return _run_scope_component(state, LonglistContext, sources_fn)
 
 
+def _run_constrain(state: HarnessState) -> HarnessState:
+    """The constrain step (task 045, S9): judgements, guesses, the in-scope check.
+
+    Rides the longlist backend's ``constrain`` call (the same seam).
+    """
+    sources_fn = functools.partial(constrain_scope, backend=state["longlist_backend"])
+    return _run_scope_component(state, ConstrainContext, sources_fn)
+
+
 def _run_group(state: HarnessState) -> HarnessState:
     config = state["config"]
     assert config.extraction_run_id is not None  # registry-enforced at compile
@@ -528,44 +538,6 @@ def _run_synthesise(state: HarnessState) -> HarnessState:
     return {**state, "summary": summary}
 
 
-class _NotBuiltYet:
-    """A stub node for an options-scoping component a later phase builds.
-
-    Task 045 Phase 1 registers the five names so the graph builds and a
-    longlist chain composes; each raises until its phase lands. The runner's
-    failure backstop records the raise as the component's failure, so a
-    ``spine=False`` step degrades the walk and a spine step fails it.
-
-    Args:
-        phase: Where the handler lands, for the error message.
-    """
-
-    def __init__(self, phase: str) -> None:
-        self.phase = phase
-
-    def __call__(self, state: HarnessState) -> HarnessState:
-        """Refuse to run.
-
-        Args:
-            state: The harness state.
-
-        Raises:
-            NotImplementedError: Always.
-        """
-        raise NotImplementedError(
-            f"component {state['config'].component!r} is not built yet ({self.phase})"
-        )
-
-
-#: The options-scoping components (task 045) whose handlers a later phase
-#: builds, and that phase. Registered in ``run_spec.COMPONENT_REGISTRY``
-#: beside the rest; ``extract_interventions`` (Phase 2), ``inherit`` and
-#: ``suggest`` (Phase 4) and ``longlist`` (Phase 5.2) have their real nodes.
-OPTIONS_SCOPING_STUBS: dict[str, str] = {
-    "constrain": "task 045 Phase 5",
-}
-
-
 def _dispatch(state: HarnessState) -> str:
     return state["config"].component
 
@@ -622,10 +594,9 @@ def build_graph() -> Any:
     g.add_node("inherit", _run_inherit)
     g.add_node("suggest", _run_suggest)
     g.add_node("longlist", _run_longlist)
+    g.add_node("constrain", _run_constrain)
     g.add_node("group", _run_group)
     g.add_node("synthesise", _run_synthesise)
-    for component, phase in OPTIONS_SCOPING_STUBS.items():
-        g.add_node(component, _NotBuiltYet(phase))
     g.add_node("finish", _finish)
 
     g.set_entry_point("dispatch")
@@ -645,9 +616,9 @@ def build_graph() -> Any:
             "inherit": "inherit",
             "suggest": "suggest",
             "longlist": "longlist",
+            "constrain": "constrain",
             "group": "group",
             "synthesise": "synthesise",
-            **{component: component for component in OPTIONS_SCOPING_STUBS},
         },
     )
     g.add_edge("acquire", "finish")
@@ -662,10 +633,9 @@ def build_graph() -> Any:
     g.add_edge("inherit", "finish")
     g.add_edge("suggest", "finish")
     g.add_edge("longlist", "finish")
+    g.add_edge("constrain", "finish")
     g.add_edge("group", "finish")
     g.add_edge("synthesise", "finish")
-    for component in OPTIONS_SCOPING_STUBS:
-        g.add_edge(component, "finish")
     g.add_edge("finish", END)
     return g.compile()
 
@@ -809,8 +779,9 @@ def run_harness(
             defaults to ``StubGroundingJudgeBackend()`` — no default egress.
         suggest_backend: Judgment-model seam for the suggest component (task
             045); defaults to ``StubAgentBackend()`` — no default egress.
-        longlist_backend: Model seam for the longlist component (task 045);
-            defaults to ``StubLonglistBackend()`` — no default egress.
+        longlist_backend: Model seam for the longlist and constrain
+            components (task 045); defaults to ``StubLonglistBackend()`` — no
+            default egress.
 
     Returns:
         Harness outcome with ``summary`` populated only after successful

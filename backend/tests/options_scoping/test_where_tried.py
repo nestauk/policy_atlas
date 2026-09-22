@@ -65,3 +65,45 @@ def test_the_labels_name_where_in_its_own_words() -> None:
 )
 def test_the_doi_is_normalised_for_counting(metadata: dict[str, str], doi: str | None) -> None:
     assert normalise_doi(metadata) == doi
+
+
+@pytest.mark.parametrize("rated_first", [True, False])
+def test_doi_twins_take_the_rated_twin_s_labels_in_either_id_order(rated_first: bool) -> None:
+    import uuid
+
+    from policy_atlas.options_scoping.labels import DocumentLabels
+    from policy_atlas.options_scoping.longlist.coverage import CoverageMember, option_coverage
+
+    low, high = sorted([uuid.uuid4(), uuid.uuid4()], key=str)
+    rated, unrated = (low, high) if rated_first else (high, low)
+    labels = {
+        rated: DocumentLabels(
+            evidence_type="RCTs and Quasi-Experimental Studies",
+            quality_score=4,
+            rubric_version="v",
+            provenance="own",
+        ),
+        unrated: DocumentLabels(
+            evidence_type=None, quality_score=None, rubric_version=None, provenance="absent"
+        ),
+    }
+    members = [
+        CoverageMember(
+            unit_kind="interventions",
+            doc_key="doi:10.1/abc",
+            tss_id=tss,
+            role=role,
+            basis="abstract_only",
+            flagged=False,
+            population=None,
+            setting=None,
+            outcome=None,
+            study_geography=None,
+        )
+        for tss, role in ((rated, "evaluated"), (unrated, "mentioned"))
+    ]
+    coverage = option_coverage(members, labels=labels, home=frozenset())
+    assert coverage["documents"] == 1
+    assert coverage["evidence_type"] == {"RCTs and Quasi-Experimental Studies": 1}
+    assert coverage["tier"] == {"4": 1}
+    assert coverage["role"]["evaluated"] == 1 and coverage["role"]["mentioned"] == 1

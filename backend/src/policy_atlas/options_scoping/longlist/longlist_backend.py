@@ -9,7 +9,10 @@ Five calls, each one lead-authored prompt builder
 - ``assign`` — one assignment batch (mini model);
 - ``discover_themes`` / ``assign_themes`` — themes over the options
   (judgment model; the contract's model route puts theme grouping there);
-- ``type_options`` — one lever-typing batch (judgment model).
+- ``type_options`` — one lever-typing batch (judgment model);
+- ``constrain`` — one constraint-judgement batch (judgment model), the
+  walk's ``constrain`` step (S9) on the same seam
+  (:mod:`~policy_atlas.options_scoping.constrain.constrain_prompt`).
 
 Backends parse structurally and return the wire; the component and the shared
 clustering engine own every semantic check. :class:`StubLonglistBackend` is
@@ -19,6 +22,7 @@ deterministic and makes no call.
 from __future__ import annotations
 
 import uuid
+from collections.abc import Callable
 from typing import Any, Protocol
 
 from langfuse import Langfuse
@@ -29,6 +33,15 @@ from policy_atlas.core import tracing
 from policy_atlas.core.openai_client import parse_structured, resolve_openai_client
 from policy_atlas.core.usage import UsageResult, usage_details, usage_metadata
 from policy_atlas.evidence_search.assess.screen_prompt import SCREEN_MODEL
+from policy_atlas.options_scoping.constrain.constrain_prompt import (
+    CONSTRAIN_MAX_OUTPUT_TOKENS,
+    CONSTRAIN_PROMPT_VERSION,
+    ConstrainResponse,
+    ConstraintJudgementWire,
+    OptionConstrainWire,
+    ReasonedGuessWire,
+    build_constrain_messages,
+)
 from policy_atlas.options_scoping.longlist.lever_typing_prompt import (
     LEVER_TYPING_MAX_OUTPUT_TOKENS,
     LEVER_TYPING_PROMPT_VERSION,
@@ -147,6 +160,27 @@ class LonglistBackend(Protocol):
 
         Returns:
             The parsed typings and token usage.
+        """
+        ...
+
+    def constrain(
+        self,
+        *,
+        plan: dict[str, object],
+        requirements: list[dict[str, str]],
+        preferences: list[dict[str, str]],
+        options: list[dict[str, object]],
+    ) -> UsageResult[ConstrainResponse]:
+        """Judge one batch of options against the constraints (S9).
+
+        Args:
+            plan: The plan fields as data.
+            requirements: The requirement constraints, then the default screens.
+            preferences: The preferences, the transferability preference removed.
+            options: The batch's options as data, keyed by ``option_id``.
+
+        Returns:
+            The parsed judgements and guesses and token usage.
         """
         ...
 
@@ -288,6 +322,26 @@ class OpenAILonglistBackend:
             prompt_version=LEVER_TYPING_PROMPT_VERSION,
         )
 
+    def constrain(
+        self,
+        *,
+        plan: dict[str, object],
+        requirements: list[dict[str, str]],
+        preferences: list[dict[str, str]],
+        options: list[dict[str, object]],
+    ) -> UsageResult[ConstrainResponse]:
+        """One constrain batch on the judgment model (see :class:`LonglistBackend`)."""
+        return self._call(
+            build_constrain_messages(
+                plan=plan, requirements=requirements, preferences=preferences, options=options
+            ),
+            response_format=ConstrainResponse,
+            model=LONGLIST_JUDGMENT_MODEL,
+            max_output_tokens=CONSTRAIN_MAX_OUTPUT_TOKENS,
+            name="longlist:constrain",
+            prompt_version=CONSTRAIN_PROMPT_VERSION,
+        )
+
 
 #: The stub's one discovered option.
 STUB_DISCOVERED_LABEL = "Stub discovered option"
@@ -312,9 +366,31 @@ class StubLonglistBackend:
       ``assign_themes`` puts every option in it.
     - ``type_options`` types every option ``provide a service`` /
       ``incremental``.
+    - ``constrain`` answers from a FIFO queue of canned responses (the last
+      one repeats once the queue drains, the ``StubAgentBackend`` pattern);
+      with none, every option passes every requirement and screen and every
+      guess is ``cannot_say``. Its calls and inputs are recorded.
+
+    Args:
+        constrain_responses: Canned :class:`ConstrainResponse` value(s), or
+            ``None`` for the deterministic default.
     """
 
     mode = "stub"
+
+    def __init__(
+        self,
+        *,
+        constrain_responses: ConstrainResponse | list[ConstrainResponse] | None = None,
+    ) -> None:
+        if constrain_responses is None:
+            self._constrain_queue: list[ConstrainResponse] = []
+        elif isinstance(constrain_responses, list):
+            self._constrain_queue = list(constrain_responses)
+        else:
+            self._constrain_queue = [constrain_responses]
+        self.constrain_calls = 0
+        self.constrain_inputs: list[dict[str, Any]] = []
 
     def discover(
         self,
@@ -413,3 +489,65 @@ class StubLonglistBackend:
             ),
             None,
         )
+
+    def constrain(
+        self,
+        *,
+        plan: dict[str, object],
+        requirements: list[dict[str, str]],
+        preferences: list[dict[str, str]],
+        options: list[dict[str, object]],
+    ) -> UsageResult[ConstrainResponse]:
+        """Answer from the queue, else pass everything and guess ``cannot_say``."""
+        self.constrain_calls += 1
+        self.constrain_inputs.append(
+            {
+                "plan": plan,
+                "requirements": list(requirements),
+                "preferences": list(preferences),
+                "options": list(options),
+            }
+        )
+        return _next_response(
+            self._constrain_queue,
+            lambda: _pass_everything(requirements, preferences, options),
+        ), None
+
+
+def _next_response(
+    queue: list[ConstrainResponse], default: Callable[[], ConstrainResponse]
+) -> ConstrainResponse:
+    if not queue:
+        return default()
+    if len(queue) == 1:
+        return queue[0]
+    return queue.pop(0)
+
+
+def _pass_everything(
+    requirements: list[dict[str, str]],
+    preferences: list[dict[str, str]],
+    options: list[dict[str, object]],
+) -> ConstrainResponse:
+    return ConstrainResponse(
+        options=[
+            OptionConstrainWire(
+                option_id=str(o["option_id"]),
+                judgements=[
+                    ConstraintJudgementWire(
+                        constraint_id=r["id"], verdict="passes", reason="Stub: passes."
+                    )
+                    for r in requirements
+                ],
+                guesses=[
+                    ReasonedGuessWire(
+                        constraint_id=p["id"],
+                        guess="May or may not meet it, a guess rather than evidence.",
+                        leaning="cannot_say",
+                    )
+                    for p in preferences
+                ],
+            )
+            for o in options
+        ]
+    )

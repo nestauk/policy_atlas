@@ -400,3 +400,99 @@ adjectives left to *unknown*).
     the profile, not through `screened_sources`.
 29. An invalid typing leaves `ambition` NULL and records `lever_none_fits_reason
     = "typing invalid"`, counted in `counts.typing_invalid`.
+
+### Phase 5.3 — constrain (2026-09-22; 5.1 `lead`, 5.3 `deep-reasoner`; gated with Phase 6)
+
+New tests: `options_scoping/test_constrain.py` (20); `test_compose_by_purpose`
+updated — **a longlist walk on the stub backends now runs end to end and ends
+`succeeded`**, with its `longlist_result` judged. `options_scoping/constrain/
+constrain.py` (`constrain_scope`, `ConstrainBackend`, `user_holds_state`),
+`in_scope.py`; `constrain` rides the `LonglistBackend` seam
+(`OpenAILonglistBackend.constrain` on the judgment model; the stub's FIFO
+queue passes everything and guesses `cannot_say`); the last harness stub is
+gone (`_NotBuiltYet` / `OPTIONS_SCOPING_STUBS` removed); `constrain` in
+`LLM_BEARING_COMPONENTS`. Verdicts: the first `breaks` (requirements before
+screens) excludes with `{constraint, reason, by: "constrain"}`; a user-held
+row (`exclusion.by == "user"`, whatever its state — an *include again* keeps
+the record) is never touched; `distinct` is forced to `passes` for any option
+with a `part_of` relation at either end; thin evidence never excludes.
+Judgements keyed `judgements[option_id][str(design_version)]` with ids
+`req-N`, `relevant`, `distinct`, `in_scope`; guesses `pref-N` (the
+transferability default removed before the call — asserted on the stub's
+recorded inputs); the in-scope record under `in_scope_evidence`.
+
+**Flagged deviations (5.3):**
+30. The in-scope check reads the **OpenAlex authorship countries** beside the
+    publication country (Overton display names mapped back to ISO through
+    `OVERTON_COUNTRY_DISPLAY`): the OpenAlex search filters a country group
+    on `authorships.countries`, and D9 says "the same fields retrieval
+    filtered on" — without it a UK-restricted OpenAlex article published by
+    a Dutch publisher would read as out of scope (A12). Lead: accepted.
+31. A document with no country or no year in its metadata **passes** that
+    part of the check (the check marks only what the metadata proves);
+    documents counted once per DOI. Lead: accepted (honest absence).
+32. The in-scope record's key is `in_scope_evidence` (the plan's `in_scope`
+    collides with the *within scope* screen id); `counts.no_in_scope_evidence`
+    (5.2's reserved key) is filled rather than a second `no_in_scope`.
+33. The three default screens always need one call per batch, so "the
+    in-scope check makes no backend call" is tested on `in_scope_evidence`
+    directly and on a walk whose backend always fails (two calls: the batch
+    and its retry; the mark still correct).
+34. `provenance["constrain"]` added (run id, model, batches, retries,
+    usage). Layering: `in_scope.py` imports `publication_country` from the
+    API read-model module (no cycle today; move the helper to a neutral
+    module if one appears).
+
+### Phase 6.1 — read models, routes and the apply functions (2026-09-22, `deep-reasoner`; gated with Phase 5.3)
+
+| Command | Result | Notes |
+|---|---:|---|
+| `make verify-fast` (5.3 + 6.1 + the coverage fix) | pass | backend 3122 passed (15:03); mypy 386 files clean; ruff clean |
+| `make prompt-guard` · `make openapi-sync` · `make drift-check` | pass | 24 unchanged; `drift-check: OK` |
+| `tests/api/test_longlist_routes.py` | pass | 14 tests: org-scoped and public reads like the artefact; a link grants no read of the target's options; 404 without a longlist; the list matches the rows; the card carries every section and never "how sure" (serialised JSON); exclude records the reason and include reverses it, one History event each; user state survives a rebuild's constrain; add proposes a design, mints `added_by_you` and opens a parentless stub child; 409 `run_active` only for a parentless walk; 422 on an ES task |
+
+`api/contract/read_models.py`: `LonglistOut`, `OptionSummaryOut`, `OptionOut`,
+`LonglistThemeOut`, `LonglistCountsOut`, `WhereTriedOut{where, comparable,
+other, unknown}` + `where_label`, `RelationOut{kind: part_of | has_part}`,
+`ExclusionOut`, `EvidenceProfileOut`, `JudgementOut`, `GuessOut`, `InScopeOut`,
+`OptionDocumentOut`, `AmbitionBandOut`, `OptionAddIn`, `OptionExcludeIn`,
+`OptionIncludeIn`, `OptionAddedOut` (18 schemas; 5 paths; additive).
+`repository.longlist_out` / `option_out` (latest `longlist_result` by
+`created_at DESC`; 404 when absent); `api/longlist_actions.py` (`add_option`,
+`exclude_option`, `include_option`, `propose_design`, the fence
+`admit_longlist_action`) — the buttons and Phase 7's verbs share them;
+`api/routers/longlist.py` (two GETs on `_readable`, three POSTs on
+`accessible_task(write=True)`). **History**: no 044 precedent fitted (a button
+has no walk to hang on), so each action appends a task-level `event_log` row
+(`option.added` / `option.excluded` / `option.included`, `run_id = None`,
+actor in the payload — the rename/share audit pattern); `GET /decisions`
+renders them `decided_by = "user"`; `historyPresentation.ts` gains the
+category in 6.3.
+
+**Flagged deviations (6.1):**
+35. `WhereTriedOut` is `{where, comparable, other, unknown}` with `where_label`
+    (the first group is the plan's Where, not always the UK); `ThemeOut` is
+    named `LonglistThemeOut` (the name existed for the landscape).
+36. Extra fields: `LonglistOut.capability_run_id`, `lever_types`,
+    `ambition_bands`, `taxonomy_version`, `where_label`; `OptionOut` the same
+    two. `options`, `included`, `excluded`, `no_in_scope`, `none_fits` are
+    counted live from the option rows (a user exclusion shows at once);
+    `themes`, `unclustered`, `not_an_option` from the stored result.
+37. Include takes an optional body `{reason?}` (deliverable 11 says "with the
+    user's reason" for both); include writes the `by: "user"` marker on an
+    included row (5.3's rule) and the read model hides `exclusion` unless
+    excluded.
+38. Errors added: add with no approved plan 422; a failed design proposal
+    503 `unavailable` (nothing minted); a blank reason 422.
+39. Lock order: exclude/include read the dispatch reservation set without
+    `_dispatch_lock` (they hold the task row lock; the openers take the lock
+    then the row). **`archive_task_route` takes them in the reverse order
+    today — a latent deadlock risk, pre-existing, listed under known gaps.**
+40. Coverage bug found and fixed (5.2, `coverage._pick_label`): DOI twins took
+    the label of the first id even when unrated; now the rated twin's label
+    wins (own before inherited, a tier before none), tested in both id
+    orders.
+41. `test_longlist_routes` builds its fixture without the link for the add
+    test: a shared snapshot between a linked task and the scoping task needs
+    custom teardown (`delete_task_data` deletes snapshots the other task
+    still references) — a test-helper gap for the review.

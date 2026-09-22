@@ -185,6 +185,7 @@ LLM_BEARING_COMPONENTS = frozenset(
         # Task 045: suggest makes one judgment-model call; inherit makes none.
         "suggest",
         "longlist",
+        "constrain",
     }
 )
 SPINE_COMPONENTS = frozenset(SPINE)

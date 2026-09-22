@@ -12,10 +12,14 @@ import uuid
 from datetime import datetime
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from .sse import DecidedBy
-from .task_agent import ExtractProfile
+from .task_agent import ExtractProfile, OptionDesignOut
+from .tasks import LatestRun
+
+#: The longest user text an option route accepts (the option's words, a reason).
+OPTION_TEXT_MAX = 1_000
 
 #: Evidence acquisition/screening origin. Mirrors the acquisition backends.
 EvidenceOrigin = Literal["OpenAlex", "Overton", "Uploaded"]
@@ -694,3 +698,432 @@ class ChunkContextOut(BaseModel):
     year: int | None = None
     venue: str | None = None
     authorships: list[AuthorshipOut] = Field(default_factory=list)
+
+
+# --- The options-scoping longlist (task 045, S12; contract deliverables 9, 11) ---
+#
+# Assembled from the longlist walk's records, never written by a model (D15):
+# the option rows, the run-keyed ``longlist_result`` (themes, coverage,
+# judgements, guesses, counts) and the membership rows. Names on the wire are
+# the product's; nothing here ever says "how sure" (ruling 33).
+
+#: Where an option came from: clustered from documents, suggested by Policy
+#: Atlas, drawn from the linked Evidence search's report, or added by the user.
+OptionOrigin = Literal["clustered", "suggested", "from_evidence_search", "added_by_you"]
+
+#: An option's state. "No in-scope evidence" is a condition, not a state.
+OptionState = Literal["included", "excluded"]
+
+#: Who excluded an option: the constrain step, or the user.
+ExclusionBy = Literal["constrain", "user"]
+
+#: What a document does with an option's intervention (comparators never
+#: count as membership, so they have no value here).
+OptionDocumentRole = Literal["evaluated", "described", "recommended", "mentioned"]
+
+#: A document's study geography grouped against the plan's Where: ``where``
+#: (in Where, shown under ``where_label``) · ``comparable`` (comparable
+#: systems, OECD) · ``other`` · ``unknown``.
+WhereTriedGroup = Literal["where", "comparable", "other", "unknown"]
+
+#: A constraint judgement's verdict.
+JudgementVerdict = Literal["passes", "breaks", "cannot_check"]
+
+#: A reasoned guess's leaning.
+GuessLeaning = Literal["likely_meets", "likely_falls_short", "cannot_say"]
+
+#: A relation from this option's side: ``part_of`` (this option is a part of
+#: the other, a package) or ``has_part`` (this option is the package).
+OptionRelationKind = Literal["part_of", "has_part"]
+
+
+class LonglistCountsOut(BaseModel):
+    """The list view's header counts.
+
+    ``options``, ``included``, ``excluded`` and ``no_in_scope`` are read from
+    the option rows as they stand (a user exclusion counts at once);
+    ``themes``, ``unclustered`` and ``not_an_option`` are the longlist run's.
+
+    Args:
+        options: Options on the longlist.
+        themes: Themes.
+        included: Options included.
+        excluded: Options excluded.
+        no_in_scope: Included options with no in-scope evidence.
+        unclustered: Records assigned to no option.
+        not_an_option: Records judged not to describe an actionable option.
+        none_fits: Options no lever type fits.
+    """
+
+    options: int
+    themes: int
+    included: int
+    excluded: int
+    no_in_scope: int
+    unclustered: int
+    not_an_option: int
+    none_fits: int
+
+
+class LonglistThemeOut(BaseModel):
+    """One theme: a generated grouping of options in the problem's own words.
+
+    Args:
+        theme_id: Stable theme identity.
+        name: Theme name.
+        description: One-line description.
+        option_ids: The theme's options, in display order.
+    """
+
+    theme_id: uuid.UUID
+    name: str
+    description: str
+    option_ids: list[uuid.UUID] = Field(default_factory=list)
+
+
+class ExclusionOut(BaseModel):
+    """Why an option is excluded.
+
+    Args:
+        constraint: The constraint it breaks, or "your decision".
+        reason: The reason, in words.
+        by: Who excluded it.
+    """
+
+    constraint: str
+    reason: str
+    by: ExclusionBy
+
+
+class WhereTriedOut(BaseModel):
+    """Documents per where-tried group (DOI-collapsed).
+
+    Args:
+        where: Studied in the plan's Where.
+        comparable: Studied in a comparable system (OECD).
+        other: Studied in another named country.
+        unknown: No recognisable geography.
+    """
+
+    where: int = 0
+    comparable: int = 0
+    other: int = 0
+    unknown: int = 0
+
+
+class RelationOut(BaseModel):
+    """A relation between two options, read from this option's side.
+
+    Args:
+        kind: ``part_of`` (this option is part of the other) or ``has_part``
+            (the other is part of this one).
+        other_option_id: The other option.
+        other_name: The other option's name.
+    """
+
+    kind: OptionRelationKind
+    other_option_id: uuid.UUID
+    other_name: str
+
+
+class OptionSummaryOut(BaseModel):
+    """One option as the list view and the grid show it.
+
+    Args:
+        option_id: Stable option identity.
+        name: Option name.
+        description: One-sentence description.
+        outcomes_served: The plan's outcomes the option serves.
+        origin: Where it came from.
+        state: Included or excluded.
+        exclusion: Why it is excluded; `null` when included.
+        no_in_scope_evidence: Included, but none of its documents passes the
+            plan's evidence restriction.
+        restriction_text: The restriction none of its documents passes, when
+            `no_in_scope_evidence`.
+        primary_lever_type: The primary lever type; `null` when none fits or
+            the option is not typed yet.
+        lever_none_fits_reason: Why no lever type fits.
+        secondary_lever_types: The other lever types it also touches.
+        ambition: `do_minimum` · `incremental` · `structural`, as described,
+            not measured.
+        ambition_reason: The one-line justification.
+        taxonomy_version: The lever-type list version it was typed under.
+        design_version: The specified design's version.
+        document_count: Its documents (DOI-collapsed).
+        evaluated_count: Documents that evaluate it.
+        settings: The settings its documents name, most frequent first.
+        where_tried: Documents per where-tried group.
+        relations: Its relations to other options.
+        abstract_only: Every one of its documents was read from an abstract only.
+        is_entrant_with_no_documents: Suggested, drawn from the Evidence
+            search or added by the user, and no document has joined it.
+    """
+
+    option_id: uuid.UUID
+    name: str
+    description: str
+    outcomes_served: list[str] = Field(default_factory=list)
+    origin: OptionOrigin
+    state: OptionState
+    exclusion: ExclusionOut | None = None
+    no_in_scope_evidence: bool = False
+    restriction_text: str | None = None
+    primary_lever_type: str | None = None
+    lever_none_fits_reason: str | None = None
+    secondary_lever_types: list[str] = Field(default_factory=list)
+    ambition: str | None = None
+    ambition_reason: str | None = None
+    taxonomy_version: str | None = None
+    design_version: int
+    document_count: int = 0
+    evaluated_count: int = 0
+    settings: list[str] = Field(default_factory=list)
+    where_tried: WhereTriedOut
+    relations: list[RelationOut] = Field(default_factory=list)
+    abstract_only: bool = False
+    is_entrant_with_no_documents: bool = False
+
+
+class AmbitionBandOut(BaseModel):
+    """One ambition band, a column of the reduced grid.
+
+    Args:
+        key: The stored value.
+        label: The display label.
+    """
+
+    key: str
+    label: str
+
+
+class LonglistOut(BaseModel):
+    """The `longlist` read model: the options grouped by theme, with their states.
+
+    Args:
+        run_id: The longlist component run the longlist came from.
+        capability_run_id: The longlist walk that run belonged to.
+        plan_version: The plan version the longlist was built from.
+        built_from_plan_version: The same number, named for the plan
+            document's "built from plan version N".
+        current_plan_version: The task's current approved plan version.
+        counts: The header counts.
+        themes: The themes, in display order.
+        unthemed_option_ids: Options in no theme (including options added
+            since the build).
+        options: Every option of the task, themed ones first in theme order.
+        where_label: The words the `where` group is shown under (the plan's
+            Where).
+        lever_types: The lever-type list the options were typed against, in
+            order (the grid's rows).
+        ambition_bands: The ambition bands, in order (the grid's columns).
+        taxonomy_version: The lever-type list version.
+        depth_label: The depth label every longlist surface carries.
+    """
+
+    run_id: uuid.UUID
+    capability_run_id: uuid.UUID | None = None
+    plan_version: int
+    built_from_plan_version: int
+    current_plan_version: int | None = None
+    counts: LonglistCountsOut
+    themes: list[LonglistThemeOut] = Field(default_factory=list)
+    unthemed_option_ids: list[uuid.UUID] = Field(default_factory=list)
+    options: list[OptionSummaryOut] = Field(default_factory=list)
+    where_label: str
+    lever_types: list[str] = Field(default_factory=list)
+    ambition_bands: list[AmbitionBandOut] = Field(default_factory=list)
+    taxonomy_version: str | None = None
+    depth_label: Literal["scoping pass"] = "scoping pass"
+
+
+class EvidenceProfileOut(BaseModel):
+    """An option's source-quality profile — what the evidence base holds so far.
+
+    Every count is of documents, DOI-collapsed. Display only; never a verdict.
+
+    Args:
+        documents: Its documents.
+        by_evidence_type: Documents per evidence type; "Unknown" and
+            non-evidence documents are their own keys, "not rated" when unclassified.
+        by_tier: Documents per quality tier label, "not rated" when unappraised.
+        by_role: Documents per role.
+        where_tried: Documents per where-tried group.
+        populations: Populations its documents name, most frequent first.
+        settings: Settings its documents name, most frequent first.
+        outcomes: Outcomes its documents measure, most frequent first.
+        flagged_not_stated: Documents that cover the intervention without
+            stating the feature that defines this option.
+        inherited_labels: Documents whose type and tier were read from a
+            linked task.
+        abstract_only: Documents read from an abstract only.
+    """
+
+    documents: int = 0
+    by_evidence_type: dict[str, int] = Field(default_factory=dict)
+    by_tier: dict[str, int] = Field(default_factory=dict)
+    by_role: dict[str, int] = Field(default_factory=dict)
+    where_tried: WhereTriedOut
+    populations: list[str] = Field(default_factory=list)
+    settings: list[str] = Field(default_factory=list)
+    outcomes: list[str] = Field(default_factory=list)
+    flagged_not_stated: int = 0
+    inherited_labels: int = 0
+    abstract_only: int = 0
+
+
+class JudgementOut(BaseModel):
+    """One constraint judgement on the option's current design version.
+
+    Args:
+        constraint_id: The constraint's id (`req-N`, or a default screen:
+            `relevant` · `distinct` · `in_scope`).
+        constraint_text: The constraint, in words.
+        verdict: Passes, breaks or cannot be checked.
+        reason: Why.
+    """
+
+    constraint_id: str
+    constraint_text: str
+    verdict: JudgementVerdict
+    reason: str
+
+
+class GuessOut(BaseModel):
+    """One reasoned guess on a preference: Policy Atlas's reasoning, not evidence.
+
+    Args:
+        constraint_id: The preference's id (`pref-N`).
+        constraint_text: The preference, in words.
+        guess: The guess, in words.
+        leaning: Which way it leans.
+    """
+
+    constraint_id: str
+    constraint_text: str
+    guess: str
+    leaning: GuessLeaning
+
+
+class InScopeOut(BaseModel):
+    """The in-scope check against the plan's evidence restriction.
+
+    Args:
+        restriction: The restriction, in words.
+        in_scope_documents: Its documents that pass the restriction.
+        documents: Its documents.
+    """
+
+    restriction: str
+    in_scope_documents: int
+    documents: int
+
+
+class OptionDocumentOut(BaseModel):
+    """One document behind an option ("Show the documents"), one per membership row.
+
+    Args:
+        task_source_snapshot_id: This task's document row, when the task holds one.
+        title: The document's title.
+        role: What the document does with the intervention.
+        evidence_type: Its evidence type, when classified.
+        tier: Its quality tier label, when appraised.
+        design_feature_not_stated: It covers the intervention without stating
+            the feature that defines this option.
+        where_tried_group: Where it was studied, grouped against Where.
+        source_task_id: The linked task the document or its labels came from,
+            when inherited.
+    """
+
+    task_source_snapshot_id: uuid.UUID | None = None
+    title: str
+    role: OptionDocumentRole
+    evidence_type: str | None = None
+    tier: str | None = None
+    design_feature_not_stated: bool = False
+    where_tried_group: WhereTriedGroup
+    source_task_id: uuid.UUID | None = None
+
+
+class OptionOut(OptionSummaryOut):
+    """The `option` read model: the option card, assembled (D15).
+
+    Args:
+        design: The specified design.
+        design_features: The design's defining features.
+        evidence: The source-quality profile.
+        judgements: The constraint judgements on the current design version.
+        guesses: The reasoned guesses on the current design version.
+        transferability: "checked at assessment" when the plan carries the
+            default transferability preference; `null` otherwise.
+        in_scope: The in-scope check, when the plan restricts the evidence.
+        documents: The documents behind it, one per membership row.
+        run_id: The longlist component run its coverage came from; `null`
+            before a longlist is built.
+        capability_run_id: The longlist walk that run belonged to.
+        plan_version: The plan version that longlist was built from.
+        where_label: The words the `where` group is shown under.
+        depth_label: The depth label every longlist surface carries.
+    """
+
+    design: OptionDesignOut
+    design_features: list[str] = Field(default_factory=list)
+    evidence: EvidenceProfileOut
+    judgements: list[JudgementOut] = Field(default_factory=list)
+    guesses: list[GuessOut] = Field(default_factory=list)
+    transferability: Literal["checked at assessment"] | None = None
+    in_scope: InScopeOut | None = None
+    documents: list[OptionDocumentOut] = Field(default_factory=list)
+    run_id: uuid.UUID | None = None
+    capability_run_id: uuid.UUID | None = None
+    plan_version: int | None = None
+    where_label: str
+    depth_label: Literal["scoping pass"] = "scoping pass"
+
+
+class OptionAddIn(BaseModel):
+    """Add an option by hand: the user's words (the button's path, D13).
+
+    Args:
+        text: The option, in the user's words.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    text: str = Field(min_length=1, max_length=OPTION_TEXT_MAX)
+
+
+class OptionExcludeIn(BaseModel):
+    """Exclude an option, with the user's reason.
+
+    Args:
+        reason: Why, in the user's words.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    reason: str = Field(min_length=1, max_length=OPTION_TEXT_MAX)
+
+
+class OptionIncludeIn(BaseModel):
+    """Include an option again, optionally with the user's reason.
+
+    Args:
+        reason: Why, in the user's words.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    reason: str | None = Field(default=None, max_length=OPTION_TEXT_MAX)
+
+
+class OptionAddedOut(BaseModel):
+    """An option added by hand, and the option search it opened.
+
+    Args:
+        option: The new option's card.
+        opened_run: The option search (a walk with no parent) it opened.
+    """
+
+    option: OptionOut
+    opened_run: LatestRun

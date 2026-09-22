@@ -1067,12 +1067,11 @@ def test_the_stub_backend_matches_seeds_by_name_and_discovers_one(conn: Connecti
 
 
 def test_the_harness_runs_longlist_on_the_stub_backends(conn: Connection) -> None:
-    """The ``longlist`` node is real; ``constrain`` is the one stub left."""
+    """The ``longlist`` node is real."""
     from policy_atlas.core.inference import StubEchoProvider
-    from policy_atlas.runtime.harness import OPTIONS_SCOPING_STUBS, run_harness
+    from policy_atlas.runtime.harness import run_harness
     from policy_atlas.runtime.run_spec import Plan, compile
 
-    assert set(OPTIONS_SCOPING_STUBS) == {"constrain"}
     walk = _Walk(conn)
     seed_id = walk.option("Youth guarantee")
     run_id = walk.run()
