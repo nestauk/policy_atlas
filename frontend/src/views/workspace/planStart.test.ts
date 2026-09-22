@@ -3,9 +3,14 @@ import { describe, expect, it, vi } from "vitest";
 
 import * as mutations from "../../api/mutations";
 import * as queries from "../../api/queries";
-import { usePlanStart, useScopingPlanStart } from "./planStart";
+import { scopingStatusLine, usePlanStart, useScopingPlanStart } from "./planStart";
 
-vi.mock("../../api/queries", () => ({ usePlan: vi.fn(), useRuns: vi.fn() }));
+vi.mock("../../api/queries", () => ({
+  usePlan: vi.fn(),
+  useRuns: vi.fn(),
+  useTask: vi.fn(() => ({ data: undefined })),
+  useLonglist: vi.fn(() => ({ data: undefined })),
+}));
 vi.mock("../../api/mutations", () => ({
   useStartRun: vi.fn(),
   usePatchPlan: vi.fn(),
@@ -229,7 +234,7 @@ describe("useScopingPlanStart — the five start states (task 044, contract deli
       mockScopingMutations();
 
       const { result } = renderHook(() => useScopingPlanStart({ taskId: "t1", runActive: true }));
-      expect(result.current).toEqual({ kind: "none" });
+      expect(result.current).toEqual({ kind: "none", buildingLonglist: false });
     },
   );
 
@@ -239,7 +244,7 @@ describe("useScopingPlanStart — the five start states (task 044, contract deli
     mockScopingMutations();
 
     const { result } = renderHook(() => useScopingPlanStart({ taskId: "t1", runActive: false }));
-    expect(result.current).toEqual({ kind: "confirmed" });
+    expect(result.current.kind).toBe("confirmed");
   });
 
   it("the latest walk succeeded and the plan hasn't moved since: confirmed, even with no baseline_confirmed record yet (it can only have finished through the gate's Confirm, or the unattended standing default)", () => {
@@ -248,7 +253,7 @@ describe("useScopingPlanStart — the five start states (task 044, contract deli
     mockScopingMutations();
 
     const { result } = renderHook(() => useScopingPlanStart({ taskId: "t1", runActive: false }));
-    expect(result.current).toEqual({ kind: "confirmed" });
+    expect(result.current.kind).toBe("confirmed");
   });
 
   it("a degraded walk still counts as having produced a baseline for the same-version confirm", () => {
@@ -257,7 +262,7 @@ describe("useScopingPlanStart — the five start states (task 044, contract deli
     mockScopingMutations();
 
     const { result } = renderHook(() => useScopingPlanStart({ taskId: "t1", runActive: false }));
-    expect(result.current).toEqual({ kind: "confirmed" });
+    expect(result.current.kind).toBe("confirmed");
   });
 
   it("the latest walk finished and the plan has since moved to a later version: rebuild or confirm", () => {
@@ -365,5 +370,159 @@ describe("useScopingPlanStart — the five start states (task 044, contract deli
       { artefact_id: "artefact-9", plan_version: 3 },
       expect.anything(),
     );
+  });
+});
+
+describe("useScopingPlanStart — the longlist's states (task 045, S13/S15)", () => {
+  const confirmedAt = (version: number) => ({ artefact_id: "artefact-1", plan_version: version });
+
+  function setup({
+    version,
+    baselineConfirmed = null,
+    runs,
+    task = {},
+    longlist = null,
+    confirmBaseline = { mutate: vi.fn(), isPending: false },
+  }: {
+    version: number;
+    baselineConfirmed?: { artefact_id: string; plan_version: number } | null;
+    runs: unknown[];
+    task?: { has_longlist?: boolean; active_run?: unknown };
+    longlist?: { plan_version: number; options: number } | null;
+    confirmBaseline?: MutationStub;
+  }) {
+    vi.mocked(queries.usePlan).mockReturnValue({
+      data: {
+        capability: "options_scoping",
+        plan: null,
+        scoping: { ready: true, time_band: null, baseline_confirmed: baselineConfirmed, steps: [] },
+        status: "approved",
+        version,
+      },
+    } as unknown as ReturnType<typeof queries.usePlan>);
+    vi.mocked(queries.useRuns).mockReturnValue({ data: { data: runs } } as unknown as ReturnType<
+      typeof queries.useRuns
+    >);
+    vi.mocked(queries.useTask).mockReturnValue({
+      data: { capability: "options_scoping", has_longlist: false, active_run: null, ...task },
+    } as unknown as ReturnType<typeof queries.useTask>);
+    vi.mocked(queries.useLonglist).mockReturnValue({
+      data:
+        longlist === null ? null : { plan_version: longlist.plan_version, counts: { options: longlist.options } },
+    } as unknown as ReturnType<typeof queries.useLonglist>);
+    vi.mocked(mutations.useStartRun).mockReturnValue({ mutate: vi.fn(), isPending: false } as unknown as ReturnType<
+      typeof mutations.useStartRun
+    >);
+    vi.mocked(mutations.useConfirmBaseline).mockReturnValue(
+      confirmBaseline as unknown as ReturnType<typeof mutations.useConfirmBaseline>,
+    );
+    return renderHook(() => useScopingPlanStart({ taskId: "t1", runActive: false }));
+  }
+
+  const baseline = {
+    capability_run_id: "run-baseline",
+    status: "succeeded",
+    plan_version: 1,
+    started_at: "2026-09-01T00:00:00Z",
+    artefact_id: "artefact-1",
+  };
+  const longlistWalk = {
+    capability_run_id: "run-longlist",
+    status: "succeeded",
+    plan_version: 2,
+    started_at: "2026-09-02T00:00:00Z",
+    artefact_id: null,
+  };
+  const child = {
+    capability_run_id: "run-child",
+    status: "running",
+    plan_version: 2,
+    started_at: "2026-09-03T00:00:00Z",
+    artefact_id: null,
+  };
+
+  it("longlist_built is dispatched before confirmed: a longlist for the version on screen", () => {
+    const { result } = setup({
+      version: 2,
+      baselineConfirmed: confirmedAt(2),
+      runs: [longlistWalk, baseline],
+      task: { has_longlist: true },
+      longlist: { plan_version: 2, options: 14 },
+    });
+    expect(result.current).toEqual({ kind: "longlist_built", options: 14 });
+    expect(scopingStatusLine(result.current)).toBe("Longlist built · 14 options");
+  });
+
+  it("rebuild_longlist is dispatched before confirmed and rebuild_or_confirm: the plan moved on since the longlist", () => {
+    const confirmBaseline = { mutate: vi.fn(), isPending: false };
+    const { result } = setup({
+      version: 3,
+      baselineConfirmed: confirmedAt(2),
+      runs: [longlistWalk, baseline],
+      task: { has_longlist: true },
+      longlist: { plan_version: 2, options: 14 },
+      confirmBaseline,
+    });
+    if (result.current.kind !== "rebuild_longlist") throw new Error(`got ${result.current.kind}`);
+    expect(result.current.builtFrom).toBe(2);
+    expect(result.current.rebuild.label).toBe("Rebuild longlist");
+    expect(scopingStatusLine(result.current)).toBe(
+      "Longlist built from plan version 2 · the plan has changed",
+    );
+    // Rebuild longlist posts to confirm-baseline on the NEW version (P12).
+    act(() => result.current.kind === "rebuild_longlist" && result.current.rebuild.onConfirm());
+    expect(confirmBaseline.mutate).toHaveBeenCalledWith(
+      { artefact_id: "artefact-1", plan_version: 3 },
+      expect.anything(),
+    );
+  });
+
+  it("confirmed with no longlist and nothing running (a refused or failed open): Build longlist", () => {
+    const { result } = setup({
+      version: 2,
+      baselineConfirmed: confirmedAt(2),
+      runs: [{ ...longlistWalk, status: "failed" }, baseline],
+    });
+    if (result.current.kind !== "confirmed") throw new Error(`got ${result.current.kind}`);
+    expect(result.current.build.label).toBe("Build longlist");
+    expect(scopingStatusLine(result.current)).toBe("Plan confirmed · no longlist yet");
+  });
+
+  it("the longlist walk running (active_run): none, saying the longlist is being built", () => {
+    const { result } = setup({
+      version: 2,
+      baselineConfirmed: confirmedAt(2),
+      runs: [{ ...longlistWalk, status: "running" }, baseline],
+      task: { active_run: { ...longlistWalk, status: "running" } },
+    });
+    expect(result.current).toEqual({ kind: "none", buildingLonglist: true });
+    expect(scopingStatusLine(result.current)).toBe("Building the longlist");
+  });
+
+  it("a running child walk disables the start actions even when the plan moved on", () => {
+    const { result } = setup({
+      version: 3,
+      baselineConfirmed: confirmedAt(2),
+      runs: [child, longlistWalk, baseline],
+      task: { has_longlist: true, active_run: child },
+      longlist: { plan_version: 2, options: 14 },
+    });
+    expect(result.current.kind).toBe("none");
+  });
+
+  it("the baseline walk running before any confirm: none, and says nothing (the gate owns it)", () => {
+    const running = { ...baseline, status: "running", artefact_id: null };
+    const { result } = setup({ version: 1, runs: [running], task: { active_run: running } });
+    expect(result.current).toEqual({ kind: "none", buildingLonglist: false });
+    expect(scopingStatusLine(result.current)).toBeNull();
+  });
+
+  it("post-baseline, pre-longlist after a plan change stays rebuild_or_confirm", () => {
+    const { result } = setup({ version: 2, runs: [baseline] });
+    expect(result.current.kind).toBe("rebuild_or_confirm");
+  });
+
+  it("the line counts one option in the singular", () => {
+    expect(scopingStatusLine({ kind: "longlist_built", options: 1 })).toBe("Longlist built · 1 option");
   });
 });

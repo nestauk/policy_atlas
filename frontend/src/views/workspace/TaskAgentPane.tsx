@@ -317,14 +317,30 @@ export function DecisionLine({
   );
 }
 
+/** The recorded line for an applied longlist verb: the verb, then the
+ *  option's name (task 045). An unknown verb shows the name alone. */
+export function actionLine(action: { verb: string; label: string }): string {
+  switch (action.verb) {
+    case "add":
+      return `Added ${action.label}`;
+    case "exclude":
+      return `Excluded ${action.label}`;
+    case "include_again":
+      return `Included ${action.label} again`;
+    default:
+      return action.label;
+  }
+}
+
 /** A durable turn: user bubble, then the task_agent reply — or an honest
  *  incomplete row (pending spinner copy / failed with retry).
  *
  *  Task 044 Phase 5.5: a turn is one of three things (`kind`). A `reply`
  *  renders as it always has. An `answer` renders its grounded prose through
  *  the CHAT's own citation renderer (`ChatAnswer`) — one renderer, two
- *  surfaces. A `decision` renders the gate decision it recorded. `kind` is
- *  absent on every pre-044 turn, which reads as `reply`. */
+ *  surfaces. A `decision` renders the gate decision it recorded, and an
+ *  `action` (task 045) the longlist verb it applied. `kind` is absent on
+ *  every pre-044 turn, which reads as `reply`. */
 function DurableTurn({
   taskId,
   turn,
@@ -371,6 +387,18 @@ function DurableTurn({
       <div className="space-y-6">
         {!isConfirmTurn && <UserBubble text={turn.user_message} />}
         <DecisionLine label={turn.decision.label} planVersion={turn.decision.plan_version} />
+      </div>
+    );
+  }
+  // Task 045: a confirmed longlist verb (add · exclude · include again) is
+  // the user's recorded action — the same quiet line as a gate decision,
+  // under the reply that confirmed it.
+  if (kind === "action" && turn.action != null) {
+    return (
+      <div className="space-y-6">
+        <UserBubble text={turn.user_message} />
+        {turn.status === "completed" && taskAgentText !== "" && <TaskAgentBubble text={taskAgentText} />}
+        <DecisionLine label={actionLine(turn.action)} planVersion={null} />
       </div>
     );
   }

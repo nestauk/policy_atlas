@@ -4537,8 +4537,10 @@ export interface components {
          *             which are all replies.
          *         answer: The cited answer, on an `answer` turn.
          *         decision: The recorded gate decision, on a `decision` turn.
+         *         action: The applied longlist verb, on an `action` turn.
          */
         TaskAgentTranscriptTurnOut: {
+            action?: components["schemas"]["TurnActionOut"] | null;
             answer?: components["schemas"]["AnswerPayloadOut"] | null;
             /** Capability */
             capability?: string | null;
@@ -4558,7 +4560,7 @@ export interface components {
             created_at: string;
             decision?: components["schemas"]["TurnDecisionOut"] | null;
             /** Kind */
-            kind?: ("reply" | "answer" | "decision") | null;
+            kind?: ("reply" | "answer" | "decision" | "action") | null;
             part?: components["schemas"]["PartProposalOut"] | null;
             /** Reply */
             reply: string | null;
@@ -4597,11 +4599,12 @@ export interface components {
          * TaskAgentTurnOut
          * @description Response body for one task_agent turn.
          *
-         *     A turn is one of three things, named by ``kind``: a planning ``reply``, a
-         *     grounded ``answer`` from the paused walk's evidence, or a recorded
-         *     ``decision`` at a gate. The three are additive optional fields rather than
-         *     a discriminated union, so every existing reader keeps working and a turn
-         *     stored before task 044 stays valid with ``kind`` absent.
+         *     A turn is one of four things, named by ``kind``: a planning ``reply``, a
+         *     grounded ``answer`` from the paused walk's evidence (or the longlist's), a
+         *     recorded ``decision`` at a gate, or an applied longlist ``action`` (task
+         *     045). They are additive optional fields rather than a discriminated union,
+         *     so every existing reader keeps working and a turn stored before task 044
+         *     stays valid with ``kind`` absent.
          *
          *     Args:
          *         reply: The task_agent's conversational reply for this turn.
@@ -4619,8 +4622,10 @@ export interface components {
          *             which are all replies.
          *         answer: The cited answer, on an `answer` turn.
          *         decision: The recorded gate decision, on a `decision` turn.
+         *         action: The applied longlist verb, on an `action` turn.
          */
         TaskAgentTurnOut: {
+            action?: components["schemas"]["TurnActionOut"] | null;
             answer?: components["schemas"]["AnswerPayloadOut"] | null;
             /** Capability */
             capability?: string | null;
@@ -4628,7 +4633,7 @@ export interface components {
             conversation_id?: string | null;
             decision?: components["schemas"]["TurnDecisionOut"] | null;
             /** Kind */
-            kind?: ("reply" | "answer" | "decision") | null;
+            kind?: ("reply" | "answer" | "decision" | "action") | null;
             part?: components["schemas"]["PartProposalOut"] | null;
             plan?: components["schemas"]["PlanDraft"] | null;
             /** Reply */
@@ -5027,6 +5032,33 @@ export interface components {
              * @enum {string}
              */
             type: "tick";
+        };
+        /**
+         * TurnActionOut
+         * @description The longlist verb a Task Agent turn applied, once the user confirmed it.
+         *
+         *     Args:
+         *         verb: ``add``, ``exclude`` or ``include_again``.
+         *         option_id: The option the verb applied to (the new option, for ``add``).
+         *         label: That option's name.
+         *         capability_run_id: The option search ``add`` opened (a walk with no
+         *             parent), so the thread can follow it. Absent for the other verbs.
+         */
+        TurnActionOut: {
+            /** Capability Run Id */
+            capability_run_id?: string | null;
+            /** Label */
+            label: string;
+            /**
+             * Option Id
+             * Format: uuid
+             */
+            option_id: string;
+            /**
+             * Verb
+             * @enum {string}
+             */
+            verb: "add" | "exclude" | "include_again";
         };
         /**
          * TurnDecisionOut

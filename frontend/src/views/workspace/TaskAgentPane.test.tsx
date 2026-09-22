@@ -496,6 +496,36 @@ describe("TaskAgentPane — the options-scoping baseline gate", () => {
     expect(text.indexOf("Does the baseline cover young people")).toBeLessThan(text.indexOf("recorded"));
   });
 
+  // Task 045 (deliverable 10): a confirmed longlist verb is an `action` turn,
+  // rendered as the same quiet recorded line as a gate decision.
+  it("renders an action turn as the user's words, the confirming reply and a recorded line", () => {
+    const action: TaskAgentThreadTurn = {
+      turn_index: 4,
+      client_turn_id: "00000000-0000-0000-0000-0000000000a4",
+      user_message: "Yes, exclude it",
+      reply: "Done — Mentoring schemes is excluded.",
+      suggestions: [],
+      part: null,
+      kind: "action",
+      action: {
+        verb: "exclude",
+        option_id: "55555555-5555-5555-5555-555555555555",
+        label: "Mentoring schemes",
+        capability_run_id: null,
+      },
+      status: "completed",
+      created_at: "2026-09-22T10:14:00Z",
+      completed_at: "2026-09-22T10:14:01Z",
+    };
+    mockPane({ turns: [action] });
+    renderPane({ runStatus: "succeeded", stream: createInitialRunStreamState() });
+    expect(screen.getByText("Yes, exclude it")).toBeInTheDocument();
+    expect(screen.getByText("Done — Mentoring schemes is excluded.")).toBeInTheDocument();
+    expect(screen.getByText("Excluded Mentoring schemes", { selector: "span" })).toBeInTheDocument();
+    expect(screen.getByText(/recorded/)).toBeInTheDocument();
+    expect(screen.queryByText(/plan version/)).not.toBeInTheDocument();
+  });
+
   it("keeps the composer open at the gate, with the baseline question placeholder", () => {
     mockPane({ turns: [] });
     renderPane();

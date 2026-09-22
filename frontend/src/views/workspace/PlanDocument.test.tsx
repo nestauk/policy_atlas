@@ -16,14 +16,18 @@ vi.mock("../../api/queries", () => ({
   useTask: vi.fn(),
   useRuns: vi.fn(),
   useArtefact: vi.fn(),
+  useLonglist: vi.fn(),
 }));
 
-const { patchMutate } = vi.hoisted(() => ({ patchMutate: vi.fn() }));
+const { patchMutate, confirmMutate } = vi.hoisted(() => ({
+  patchMutate: vi.fn(),
+  confirmMutate: vi.fn(),
+}));
 
 vi.mock("../../api/mutations", () => ({
   useStartRun: () => ({ mutate: vi.fn(), isPending: false }),
   usePatchPlan: () => ({ mutate: patchMutate, isPending: false }),
-  useConfirmBaseline: () => ({ mutate: vi.fn(), isPending: false }),
+  useConfirmBaseline: () => ({ mutate: confirmMutate, isPending: false }),
 }));
 
 const TASK_ID = "11111111-1111-1111-1111-111111111111";
@@ -192,9 +196,25 @@ function scopingPlanOut(overrides: Partial<ScopingPlanDraft> = {}, version = 1):
   };
 }
 
-function mockUseTask(links: TaskLinkOut[] = []) {
+function mockUseTask(
+  links: TaskLinkOut[] = [],
+  activity: { has_longlist?: boolean; active_run?: RunOut | null } = {},
+) {
   vi.mocked(queries.useTask).mockReturnValue(
-    { data: { links } } as unknown as ReturnType<typeof queries.useTask>,
+    {
+      data: { links, capability: "options_scoping", has_longlist: false, active_run: null, ...activity },
+    } as unknown as ReturnType<typeof queries.useTask>,
+  );
+}
+
+function mockUseLonglist(longlist: { plan_version: number; options: number } | null) {
+  vi.mocked(queries.useLonglist).mockReturnValue(
+    {
+      data:
+        longlist === null
+          ? null
+          : { plan_version: longlist.plan_version, counts: { options: longlist.options } },
+    } as unknown as ReturnType<typeof queries.useLonglist>,
   );
 }
 
@@ -234,6 +254,8 @@ beforeEach(() => {
   mockUseTask([]);
   mockUseRuns([]);
   mockUseArtefact(null);
+  mockUseLonglist(null);
+  confirmMutate.mockReset();
 });
 
 describe("PlanDocument", () => {
@@ -707,18 +729,21 @@ describe("PlanDocument — options scoping (task 044)", () => {
       expect(screen.getByRole("button", { name: "Confirm plan and build longlist" })).toBeInTheDocument();
     });
 
-    it("once baseline_confirmed names the current version: no button", () => {
+    it("confirmed for this version but no longlist and nothing running: says so, and Build longlist asks again", async () => {
       mockUsePlan({
         data: scopingPlanOut({ baseline_confirmed: { artefact_id: "artefact-1", plan_version: 1 } }, 1),
       });
       mockUseRuns([baselineRun({ plan_version: 1 })]);
       mockUseArtefact("artefact-1");
       renderPlan();
-      expect(
-        screen.getByText("Plan confirmed · the longlist arrives with the next stage"),
-      ).toBeInTheDocument();
+      expect(screen.getByText("Plan confirmed · no longlist yet")).toBeInTheDocument();
       expect(screen.queryByRole("button", { name: "Rebuild baseline" })).toBeNull();
       expect(screen.queryByRole("button", { name: "Confirm and build baseline" })).toBeNull();
+      await userEvent.click(screen.getByRole("button", { name: "Build longlist" }));
+      expect(confirmMutate).toHaveBeenCalledWith(
+        { artefact_id: "artefact-1", plan_version: 1 },
+        expect.anything(),
+      );
     });
 
     it("the latest walk succeeded and the plan hasn't moved since: confirmed, even with no baseline_confirmed record yet", () => {
@@ -726,9 +751,75 @@ describe("PlanDocument — options scoping (task 044)", () => {
       mockUseRuns([baselineRun({ plan_version: 1 })]);
       mockUseArtefact("artefact-1");
       renderPlan();
+      expect(screen.getByText("Plan confirmed · no longlist yet")).toBeInTheDocument();
+    });
+  });
+
+  describe("the longlist's states (task 045, S13)", () => {
+    const confirmedV2 = { baseline_confirmed: { artefact_id: "artefact-1", plan_version: 2 } };
+    const longlistWalk = baselineRun({
+      capability_run_id: "run-longlist",
+      plan_version: 2,
+      started_at: "2026-09-02T00:00:00Z",
+      artefact_id: null,
+    });
+    const runningChild = {
+      capability_run_id: "run-child",
+      task_id: TASK_ID,
+      plan_id: "plan-1",
+      plan_version: 2,
+      status: "running" as const,
+      started_at: "2026-09-03T00:00:00Z",
+      ended_at: null,
+    };
+
+    it("a longlist built from the plan on screen: Longlist built · N options, nothing to click", () => {
+      mockUsePlan({ data: scopingPlanOut(confirmedV2, 2) });
+      mockUseRuns([longlistWalk, baselineRun({ plan_version: 1 })]);
+      mockUseTask([], { has_longlist: true });
+      mockUseLonglist({ plan_version: 2, options: 14 });
+      renderPlan();
+      expect(screen.getByText("Longlist built · 14 options")).toBeInTheDocument();
+      expect(screen.queryByText("Plan confirmed · no longlist yet")).toBeNull();
+      expect(screen.queryByRole("button", { name: "Build longlist" })).toBeNull();
+      expect(screen.queryByRole("button", { name: "Rebuild longlist" })).toBeNull();
+      expect(screen.queryByRole("button", { name: "Rebuild baseline" })).toBeNull();
+    });
+
+    it("the plan changed after the longlist: built from plan version N, and Rebuild longlist confirms the new version", async () => {
+      mockUsePlan({ data: scopingPlanOut(confirmedV2, 3) });
+      mockUseRuns([longlistWalk, baselineRun({ plan_version: 1 })]);
+      mockUseTask([], { has_longlist: true });
+      mockUseLonglist({ plan_version: 2, options: 14 });
+      renderPlan();
       expect(
-        screen.getByText("Plan confirmed · the longlist arrives with the next stage"),
+        screen.getByText("Longlist built from plan version 2 · the plan has changed"),
       ).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Rebuild baseline" })).toBeNull();
+      await userEvent.click(screen.getByRole("button", { name: "Rebuild longlist" }));
+      expect(confirmMutate).toHaveBeenCalledWith(
+        { artefact_id: "artefact-1", plan_version: 3 },
+        expect.anything(),
+      );
+    });
+
+    it("the longlist walk running after the confirm: Building the longlist, nothing to click", () => {
+      mockUsePlan({ data: scopingPlanOut(confirmedV2, 2) });
+      mockUseRuns([{ ...longlistWalk, status: "running", ended_at: null }, baselineRun({ plan_version: 1 })]);
+      mockUseTask([], { active_run: { ...longlistWalk, status: "running", ended_at: null } });
+      renderPlan();
+      expect(screen.getByText("Building the longlist")).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Build longlist" })).toBeNull();
+    });
+
+    it("a running option search (a child walk) disables the start actions, even after a plan change", () => {
+      mockUsePlan({ data: scopingPlanOut(confirmedV2, 3) });
+      mockUseRuns([runningChild, longlistWalk, baselineRun({ plan_version: 1 })]);
+      mockUseTask([], { has_longlist: true, active_run: runningChild });
+      mockUseLonglist({ plan_version: 2, options: 14 });
+      renderPlan();
+      expect(screen.getByText("Building the longlist")).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Rebuild longlist" })).toBeNull();
     });
   });
 

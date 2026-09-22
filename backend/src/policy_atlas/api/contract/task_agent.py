@@ -86,9 +86,14 @@ PlanStageKey = Literal[
 CountryGroupAuthorship = Literal["pinned-table", "planner-proposed", "user-amended"]
 
 #: What one Task Agent turn is. A `reply` plans; an `answer` answers from the
-#: paused walk's evidence; a `decision` records the option a gate turn chose.
-#: Absent on turns stored before task 044, which are all replies.
-TaskAgentTurnKind = Literal["reply", "answer", "decision"]
+#: paused walk's evidence (or, once a longlist exists, the longlist's and its
+#: option searches'); a `decision` records the option a gate turn chose; an
+#: `action` records a longlist verb the user confirmed (task 045). Absent on
+#: turns stored before task 044, which are all replies.
+TaskAgentTurnKind = Literal["reply", "answer", "decision", "action"]
+
+#: The longlist verbs a confirmed turn applies (task 045, D13).
+LonglistVerb = Literal["add", "exclude", "include_again"]
 
 
 class CountryGroupDraft(BaseModel):
@@ -549,14 +554,32 @@ class TurnDecisionOut(BaseModel):
     opened_run: LatestRun | None = None
 
 
+class TurnActionOut(BaseModel):
+    """The longlist verb a Task Agent turn applied, once the user confirmed it.
+
+    Args:
+        verb: ``add``, ``exclude`` or ``include_again``.
+        option_id: The option the verb applied to (the new option, for ``add``).
+        label: That option's name.
+        capability_run_id: The option search ``add`` opened (a walk with no
+            parent), so the thread can follow it. Absent for the other verbs.
+    """
+
+    verb: LonglistVerb
+    option_id: uuid.UUID
+    label: str
+    capability_run_id: uuid.UUID | None = None
+
+
 class TaskAgentTurnOut(BaseModel):
     """Response body for one task_agent turn.
 
-    A turn is one of three things, named by ``kind``: a planning ``reply``, a
-    grounded ``answer`` from the paused walk's evidence, or a recorded
-    ``decision`` at a gate. The three are additive optional fields rather than
-    a discriminated union, so every existing reader keeps working and a turn
-    stored before task 044 stays valid with ``kind`` absent.
+    A turn is one of four things, named by ``kind``: a planning ``reply``, a
+    grounded ``answer`` from the paused walk's evidence (or the longlist's), a
+    recorded ``decision`` at a gate, or an applied longlist ``action`` (task
+    045). They are additive optional fields rather than a discriminated union,
+    so every existing reader keeps working and a turn stored before task 044
+    stays valid with ``kind`` absent.
 
     Args:
         reply: The task_agent's conversational reply for this turn.
@@ -574,6 +597,7 @@ class TaskAgentTurnOut(BaseModel):
             which are all replies.
         answer: The cited answer, on an `answer` turn.
         decision: The recorded gate decision, on a `decision` turn.
+        action: The applied longlist verb, on an `action` turn.
     """
 
     reply: str
@@ -586,6 +610,7 @@ class TaskAgentTurnOut(BaseModel):
     kind: TaskAgentTurnKind | None = None
     answer: AnswerPayloadOut | None = None
     decision: TurnDecisionOut | None = None
+    action: TurnActionOut | None = None
 
 
 class TaskAgentTranscriptTurnOut(BaseModel):
@@ -608,6 +633,7 @@ class TaskAgentTranscriptTurnOut(BaseModel):
             which are all replies.
         answer: The cited answer, on an `answer` turn.
         decision: The recorded gate decision, on a `decision` turn.
+        action: The applied longlist verb, on an `action` turn.
     """
 
     turn_index: int
@@ -624,6 +650,7 @@ class TaskAgentTranscriptTurnOut(BaseModel):
     kind: TaskAgentTurnKind | None = None
     answer: AnswerPayloadOut | None = None
     decision: TurnDecisionOut | None = None
+    action: TurnActionOut | None = None
 
 
 class PlanOut(BaseModel):

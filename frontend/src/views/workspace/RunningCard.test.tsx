@@ -409,3 +409,44 @@ describe("RunningCard", () => {
     );
   });
 });
+
+// Task 045 (S13): a longlist walk's completed steps carry their beat
+// sentences in the run card's step list, read off each frame's counts.
+describe("RunningCard — a longlist walk's beats (task 045)", () => {
+  it("shows each completed stage's beat sentence when it is opened", async () => {
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter>
+        <RunningCard
+          taskId={TASK_ID}
+          status="running"
+          stages={[
+            stage({ stage: "inherit", label: "Reading your evidence search", status: "completed", summary: { documents: 42, links: 1 } }),
+            stage({ stage: "suggest", label: "Suggesting options", status: "completed", summary: { suggested: 6, from_report: 2 } }),
+            stage({ stage: "option_searches", label: "Searching for each option", status: "completed", summary: { total: 8, finished: 7, failed: 1 } }),
+            stage({ stage: "extract_interventions", label: "Reading the abstracts", status: "completed", summary: { documents: 120, records: 64 } }),
+            stage({ stage: "longlist", label: "Building the longlist", status: "completed", summary: { options: 14, themes: 4, unclustered: 3 } }),
+            stage({ stage: "constrain", label: "Checking the constraints", status: "started" }),
+          ]}
+          plan={null}
+          startedAt="2026-09-22T10:00:00Z"
+          hasFindings={false}
+          minimised={false}
+          onMinimisedChange={() => {}}
+        />
+      </MemoryRouter>,
+    );
+
+    const beats: Array<[string, string]> = [
+      ["Reading your evidence search", "42 documents from 1 linked task"],
+      ["Suggesting options", "Suggested 6 options · 2 from your evidence search"],
+      ["Searching for each option", "Searched for 7 of 8 options · 1 failed"],
+      ["Reading the abstracts", "Read 120 abstracts · 64 interventions covered"],
+      ["Building the longlist", "14 options in 4 themes · 3 records unclustered"],
+    ];
+    for (const [label, beat] of beats) {
+      await user.click(screen.getByRole("button", { name: label }));
+      expect(screen.getByText(beat)).toBeInTheDocument();
+    }
+  });
+});

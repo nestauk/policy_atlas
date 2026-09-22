@@ -22,7 +22,7 @@ import {
   screeningOverlayError,
   type PlanOverlay,
 } from "./planOverlay";
-import { SCOPING_CONFIRMED_LINE, START_SEARCH_CLASS, usePlanStart, useScopingPlanStart } from "./planStart";
+import { START_SEARCH_CLASS, scopingStatusLine, usePlanStart, useScopingPlanStart } from "./planStart";
 import {
   ANALYSIS_DEPTH_LABEL,
   ANALYSIS_QUESTION,
@@ -663,8 +663,9 @@ function ScopingStepsSection({ steps }: { steps: ScopingPlanDraft["steps"] }) {
   );
 }
 
-/** The scoping plan's start area, in its three states (contract deliverable
- *  5); `useScopingPlanStart` carries the state logic. */
+/** The scoping plan's start area, in its states (contract deliverable 5;
+ *  task 045 adds the longlist's); `useScopingPlanStart` carries the state
+ *  logic and `scopingStatusLine` the one sentence each state says. */
 function ScopingStartActions({
   taskId,
   runActive,
@@ -675,16 +676,32 @@ function ScopingStartActions({
   onStarted?: () => void;
 }) {
   const state = useScopingPlanStart({ taskId, runActive, onStarted });
+  const line = scopingStatusLine(state);
+  const lineElement = line !== null && <p className="text-lead text-white">{line}</p>;
 
-  // The walk is running or paused: the gate's own check-in card and the
-  // Task Agent chat own the decision here, not this card — confirm-baseline
-  // is 409 `run_active` while it's live, so there is nothing safe to offer.
-  if (state.kind === "none") {
-    return null;
+  // A walk is running or paused. Before the plan is confirmed the gate's own
+  // check-in card and the Task Agent chat own the decision; after it the line
+  // says the longlist is being built. Either way confirm-baseline is 409
+  // `run_active` while it's live, so there is nothing safe to offer.
+  if (state.kind === "none" || state.kind === "longlist_built") {
+    return lineElement || null;
   }
 
-  if (state.kind === "confirmed") {
-    return <p className="text-lead text-white">{SCOPING_CONFIRMED_LINE}</p>;
+  if (state.kind === "confirmed" || state.kind === "rebuild_longlist") {
+    const action = state.kind === "confirmed" ? state.build : state.rebuild;
+    return (
+      <div className="space-y-3">
+        {lineElement}
+        <Button className={cn(START_SEARCH_CLASS)} disabled={action.disabled} onClick={action.onConfirm}>
+          {action.label}
+        </Button>
+        {state.notice != null && (
+          <p role="alert" className="text-body text-red-tint">
+            {state.notice}
+          </p>
+        )}
+      </div>
+    );
   }
 
   if (state.kind === "build") {
@@ -784,7 +801,10 @@ function ScopingPlanSections({
         <ScopingStepsSection steps={scoping.steps} />
       </div>
 
-      {!readOnly && (
+      {/* A live walk makes the plan read-only, but the start area still says
+          where things stand ("Building the longlist") — it offers nothing to
+          click while a walk runs (task 045). */}
+      {(!readOnly || runActive) && (
         <div className="pt-8">
           <ScopingStartActions taskId={taskId} runActive={runActive} onStarted={onStarted} />
         </div>

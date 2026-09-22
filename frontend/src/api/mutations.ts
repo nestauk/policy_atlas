@@ -265,6 +265,78 @@ export function useConfirmBaseline(taskId: string) {
   });
 }
 
+// --- Longlist (task 045 phase 6.2) --------------------------------------
+
+/** Invalidate the longlist, every option card and the task itself — shared
+ *  by the three longlist mutations below (each writes the longlist's
+ *  header counts, an option's card, and can change `TaskOut.active_run`). */
+function invalidateLonglist(queryClient: ReturnType<typeof useQueryClient>, taskId: string) {
+  queryClient.invalidateQueries({ queryKey: [...queryKeys.taskRoot(taskId), "longlist"] });
+  queryClient.invalidateQueries({ queryKey: [...queryKeys.taskRoot(taskId), "options"] });
+  queryClient.invalidateQueries({ queryKey: queryKeys.task(taskId) });
+}
+
+/** `POST .../options` — add an option by hand (the button's path, same
+ *  handler as the chat verb *add*): mints it *added by you* and opens its
+ *  option search. */
+export function useAddOption(taskId: string) {
+  const client = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (body: components["schemas"]["OptionAddIn"]) => {
+      const { data, error, response } = await client.POST("/api/v1/tasks/{task_id}/options", {
+        params: { path: { task_id: taskId } },
+        body,
+      });
+      if (data === undefined) raise(error, response.status);
+      return data;
+    },
+    onSuccess: () => invalidateLonglist(queryClient, taskId),
+  });
+}
+
+/** `POST .../options/{option_id}/exclude` — exclude an option with the
+ *  user's reason. */
+export function useExcludeOption(taskId: string) {
+  const client = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: { optionId: string; reason: string }) => {
+      const { data, error, response } = await client.POST(
+        "/api/v1/tasks/{task_id}/options/{option_id}/exclude",
+        {
+          params: { path: { task_id: taskId, option_id: input.optionId } },
+          body: { reason: input.reason },
+        },
+      );
+      if (data === undefined) raise(error, response.status);
+      return data;
+    },
+    onSuccess: () => invalidateLonglist(queryClient, taskId),
+  });
+}
+
+/** `POST .../options/{option_id}/include` — include an option again; a
+ *  rebuild's constrain will not exclude it. */
+export function useIncludeOption(taskId: string) {
+  const client = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: { optionId: string; reason?: string }) => {
+      const { data, error, response } = await client.POST(
+        "/api/v1/tasks/{task_id}/options/{option_id}/include",
+        {
+          params: { path: { task_id: taskId, option_id: input.optionId } },
+          body: input.reason !== undefined ? { reason: input.reason } : null,
+        },
+      );
+      if (data === undefined) raise(error, response.status);
+      return data;
+    },
+    onSuccess: () => invalidateLonglist(queryClient, taskId),
+  });
+}
+
 /** `POST .../check-ins/{id}/response` — option/abort answers and the free-text
  *  compile→confirm ladder (202 carries the compiled render + confirm token). */
 export function useAnswerCheckIn(taskId: string) {

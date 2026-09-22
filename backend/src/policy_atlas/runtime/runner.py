@@ -102,7 +102,7 @@ from policy_atlas.runtime.conversation_lifecycle import close_task_agent_convers
 from policy_atlas.runtime.harness import run_harness
 from policy_atlas.runtime.progress import ProgressEmitter
 from policy_atlas.runtime.run_spec import Plan, compile
-from policy_atlas.runtime.scoping_plan import LONGLIST_PURPOSE, ScopingPlan
+from policy_atlas.runtime.scoping_plan import LONGLIST_PURPOSE, TARGETED_PURPOSE, ScopingPlan
 from policy_atlas.runtime.steering import (
     BASELINE_CONFIRM,
     DEEPENING_SELECTION,
@@ -5626,11 +5626,26 @@ def _finish_run(
     with engine.begin() as conn:
         ended_at = datetime.now(UTC)
         walk = conn.execute(
-            select(capability_run.c.parent_capability_run_id, capability_run.c.status)
+            select(
+                capability_run.c.parent_capability_run_id,
+                capability_run.c.status,
+                evidence_scope.c.purpose,
+            )
+            .select_from(
+                capability_run.outerjoin(
+                    evidence_scope,
+                    (evidence_scope.c.evidence_scope_id == capability_run.c.evidence_scope_id)
+                    & (evidence_scope.c.task_id == capability_run.c.task_id),
+                )
+            )
             .where(capability_run.c.capability_run_id == capability_run_id)
             .where(capability_run.c.task_id == task_id)
         ).one_or_none()
         is_child = walk is not None and walk.parent_capability_run_id is not None
+        # The verb *add*'s option search has no parent by design (task 045,
+        # S11) but is still an option search: the thread the user is watching
+        # is the longlist's, and its end must not close it either (P3).
+        is_option_search = walk is not None and walk.purpose == TARGETED_PURPOSE
         if is_child and walk is not None and walk.status == "interrupted":
             # The parent's join cut this child off at its timeout and counted
             # it failed (task 045, S2); its late finish keeps that record.
@@ -5657,8 +5672,8 @@ def _finish_run(
         # terminal status + run.finished event (029 strand 2): a crash can
         # never leave a succeeded run with an active task_agent conversation.
         # A child walk never does (task 045, P3): the thread the user is
-        # watching belongs to its parent.
-        if status in ("succeeded", "degraded") and not is_child:
+        # watching belongs to its parent. Nor does any option search.
+        if status in ("succeeded", "degraded") and not is_child and not is_option_search:
             close_task_agent_conversation(conn, task_id=task_id, closed_at=ended_at)
     collation = render_collation(flagged_events)
     log.info("runner.collation", render=collation)

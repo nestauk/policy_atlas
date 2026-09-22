@@ -43,6 +43,10 @@ import {
   MOCK_RUN_ID,
   mockAuthorships,
   mockBaselineArtefact,
+  buildMockAddedOption,
+  mockLonglist,
+  mockLonglistExtraOptionIds,
+  mockLonglistOptionCards,
 } from "./fixtures";
 
 type MeOut = components["schemas"]["MeOut"];
@@ -221,6 +225,7 @@ export function resetMockScenario() {
   currentScopingPlan = { ...mockScopingPlanReady };
   currentMe = { ...mockMeUnenrolled };
   mockProjects = [{ ...mockProject }];
+  resetMockLonglistWalks();
 }
 
 function currentMockScenario(requestUrl: URL): MockScenario {
@@ -282,6 +287,9 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
     // The walk ends in the same request the decision lands in, so the runs
     // read is already terminal when the answer's invalidation refetches it.
     finishRun(optionId === "change_plan" ? "aborted" : "succeeded");
+    // Task 045 (6.3): the gate's Confirm opens the longlist walk, as the
+    // turn route and the card do.
+    if (optionId !== "change_plan") requestMockLonglistWalk(mockScopingPlanVersion);
     baselineGateAnswer.resolve();
     return json({ accepted: true });
   }
@@ -367,6 +375,7 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
     taskAgentTurns = [];
     nextTurnIndex = 1;
     currentRun = null;
+    resetMockLonglistWalks();
     chatConversations = seedConversations();
     chatTurnsByConversation = new Map();
     chatTurnEnrichmentReads = new Map();
@@ -485,7 +494,9 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
         capability: "options_scoping",
         plan: null,
         scoping: currentScopingPlan,
-        version: 1,
+        // Task 045 (6.3): the version moves with each edit and confirm, so
+        // the plan document can tell a longlist built from an older version.
+        version: mockScopingPlanVersion,
         status: "approved",
       });
     }
@@ -503,12 +514,17 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
       ...currentScopingPlan,
       baseline_confirmed: { artefact_id: artefactId, plan_version: minted },
     };
+    // Task 045 (6.3): the confirm opens the longlist walk on the version it
+    // minted (a rebuild when a longlist already exists — D14, P12).
+    mockScopingPlanVersion = minted;
+    const openedRun = requestMockLonglistWalk(minted);
     return json({
       capability: "options_scoping",
       plan: null,
       scoping: currentScopingPlan,
       version: minted,
       status: "approved",
+      opened_run: openedRun,
     });
   }
   if (method === "PATCH" && path.endsWith(`/api/v1/tasks/${MOCK_TASK_ID}/plan`)) {
@@ -534,7 +550,14 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
           }),
         };
       }
-      return json({ capability: "options_scoping", plan: null, scoping: currentScopingPlan, version: 2, status: "approved" });
+      mockScopingPlanVersion += 1;
+      return json({
+        capability: "options_scoping",
+        plan: null,
+        scoping: currentScopingPlan,
+        version: mockScopingPlanVersion,
+        status: "approved",
+      });
     }
     if (isRecord(body)) {
       if (typeof body.question === "string") currentPlan = { ...currentPlan, question: body.question };
@@ -588,7 +611,9 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
     return json(currentRun, 201);
   }
   if (method === "GET" && path.endsWith(`/api/v1/tasks/${MOCK_TASK_ID}/runs`)) {
-    return json(page(currentRun ? [currentRun] : []));
+    // Newest first, as the API lists them: the longlist walks (task 045)
+    // were all opened after the baseline walk.
+    return json(page([...mockLonglistWalks, ...(currentRun ? [currentRun] : [])]));
   }
 
   if (method === "GET" && path.endsWith(`/api/v1/tasks/${MOCK_TASK_ID}/check-ins`)) {
@@ -820,6 +845,60 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
     }
   }
 
+  // task 045 (6.2) — the longlist's three surfaces: list view, reduced
+  // grid and option card. The two GETs and the three POSTs `pnpm e2e`
+  // drives them through; the POSTs mutate `mockLonglistOptionCards` in
+  // place (the same fixture `GET /longlist`'s summaries project from) so a
+  // refetch after a mutation shows the flipped state.
+  if (method === "GET" && path.endsWith(`/api/v1/tasks/${MOCK_TASK_ID}/longlist`)) {
+    return json(mockLonglist());
+  }
+  const optionExcludeMatch = new RegExp(`^/api/v1/tasks/${MOCK_TASK_ID}/options/([^/]+)/exclude$`).exec(path);
+  if (method === "POST" && optionExcludeMatch) {
+    const option = mockLonglistOptionCards[optionExcludeMatch[1]];
+    if (option === undefined) return json({ detail: "resource not found" }, 404);
+    const body = await requestBody(request, init);
+    const reason = isRecord(body) && typeof body.reason === "string" ? body.reason : "";
+    option.state = "excluded";
+    option.exclusion = { by: "user", constraint: "your decision", reason };
+    return json(option);
+  }
+  const optionIncludeMatch = new RegExp(`^/api/v1/tasks/${MOCK_TASK_ID}/options/([^/]+)/include$`).exec(path);
+  if (method === "POST" && optionIncludeMatch) {
+    const option = mockLonglistOptionCards[optionIncludeMatch[1]];
+    if (option === undefined) return json({ detail: "resource not found" }, 404);
+    const body = await requestBody(request, init);
+    void body; // OptionIncludeIn's optional reason isn't rendered anywhere yet
+    option.state = "included";
+    option.exclusion = null;
+    return json(option);
+  }
+  if (method === "POST" && path.endsWith(`/api/v1/tasks/${MOCK_TASK_ID}/options`)) {
+    const body = await requestBody(request, init);
+    const text = isRecord(body) && typeof body.text === "string" ? body.text : "";
+    const option = buildMockAddedOption(text);
+    mockLonglistOptionCards[option.option_id] = option;
+    mockLonglistExtraOptionIds.push(option.option_id);
+    return json(
+      {
+        option,
+        opened_run: {
+          capability_run_id: crypto.randomUUID(),
+          started_at: new Date().toISOString(),
+          ended_at: null,
+          status: "running",
+        },
+      },
+      201,
+    );
+  }
+  const optionCardMatch = new RegExp(`^/api/v1/tasks/${MOCK_TASK_ID}/options/([^/]+)$`).exec(path);
+  if (method === "GET" && optionCardMatch) {
+    const option = mockLonglistOptionCards[optionCardMatch[1]];
+    if (option === undefined) return json({ detail: "resource not found" }, 404);
+    return json(option);
+  }
+
   return json({ detail: "Mock endpoint not found" }, 404);
 }
 
@@ -981,7 +1060,9 @@ function createMockEventStream(scenario: MockScenario): ReadableStream<Uint8Arra
 
       if (mockTask.capability === "options_scoping") {
         await scopingBaselineWalk(emit, nextSequence);
-        controller.close();
+        // Task 045 (6.3): the stream stays open for the longlist walks the
+        // gate and the plan document's confirm open.
+        await mockLonglistWalkLoop(emit, nextSequence);
         return;
       }
 
@@ -1192,4 +1273,122 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// --- task 045 (6.3): the longlist walk, what exists and what is active ---
+
+/** The scoping plan's current version; edits and confirms move it. */
+let mockScopingPlanVersion = 1;
+/** The longlist walks opened so far, newest first. */
+let mockLonglistWalks: RunOut[] = [];
+/** Walks opened but not yet streamed. */
+let mockLonglistPending: string[] = [];
+let mockLonglistWake = createDeferred();
+
+function resetMockLonglistWalks() {
+  mockScopingPlanVersion = 1;
+  mockLonglistWalks = [];
+  mockLonglistPending = [];
+  mockLonglistWake = createDeferred();
+  mockTask.active_run = null;
+  mockTask.has_longlist = false;
+}
+
+function latestRunOf(run: RunOut): components["schemas"]["LatestRun"] {
+  return {
+    capability_run_id: run.capability_run_id,
+    status: run.status,
+    started_at: run.started_at,
+    ended_at: run.ended_at,
+  };
+}
+
+/**
+ * Open a longlist walk the way the API does: at once, in the read models
+ * (`active_run`, the walk list, `latest_run` — a longlist walk is parentless
+ * and untargeted), with its frames following on the open stream.
+ *
+ * Returns:
+ *   The opened walk, as the confirm route's `opened_run`.
+ */
+function requestMockLonglistWalk(planVersion: number): components["schemas"]["LatestRun"] {
+  const walk: RunOut = {
+    capability_run_id: crypto.randomUUID(),
+    task_id: MOCK_TASK_ID,
+    plan_id: MOCK_PLAN_ID,
+    plan_version: planVersion,
+    status: "running",
+    started_at: new Date().toISOString(),
+    ended_at: null,
+    artefact_id: null,
+  };
+  mockLonglistWalks = [walk, ...mockLonglistWalks];
+  mockTask.active_run = latestRunOf(walk);
+  mockTask.latest_run = latestRunOf(walk);
+  mockLonglistPending.push(walk.capability_run_id);
+  mockLonglistWake.resolve();
+  return latestRunOf(walk);
+}
+
+/** Stream every longlist walk as it is opened, for as long as the stream
+ *  stays connected. */
+async function mockLonglistWalkLoop(emit: (frame: SseFrame) => void, nextSequence: () => number) {
+  for (;;) {
+    await mockLonglistWake.promise;
+    mockLonglistWake = createDeferred();
+    while (mockLonglistPending.length > 0) {
+      const walkId = mockLonglistPending.shift();
+      if (walkId !== undefined) await mockLonglistWalk(walkId, emit, nextSequence);
+    }
+  }
+}
+
+/**
+ * One longlist walk's frames: the six stage keys with the counts their beat
+ * sentences read, then the longlist exists and nothing is active. Held
+ * briefly at the start so "Building the longlist" is observable.
+ */
+async function mockLonglistWalk(
+  walkId: string,
+  emit: (frame: SseFrame) => void,
+  nextSequence: () => number,
+) {
+  const status = (value: "running" | "succeeded"): SseFrame => ({
+    type: "run.status",
+    capability_run_id: walkId,
+    status: value,
+    occurred_at: frameTime(),
+    sequence: nextSequence(),
+  });
+  const counts = mockLonglist().counts;
+  const stages: Array<{
+    stage: "inherit" | "suggest" | "option_searches" | "extract_interventions" | "longlist" | "constrain";
+    label: string;
+    blurb: string;
+    summary: Record<string, number>;
+  }> = [
+    { stage: "inherit", label: "Reading the linked search", blurb: "Its documents and report join this task.", summary: { documents: 42, links: 1 } },
+    { stage: "suggest", label: "Suggesting options", blurb: "From the plan, the baseline and any linked report.", summary: { suggested: 6, from_report: 2 } },
+    { stage: "option_searches", label: "Searching for each option", blurb: "One search per suggestion and per option of yours.", summary: { total: 7, finished: 7, failed: 0 } },
+    { stage: "extract_interventions", label: "Reading the abstracts", blurb: "Which interventions each one covers, and how.", summary: { documents: 118, records: 64 } },
+    { stage: "longlist", label: "Clustering into options", blurb: "Records grouped into options, options into themes.", summary: { options: counts.options, themes: counts.themes, unclustered: counts.unclustered, not_an_option: counts.not_an_option } },
+    { stage: "constrain", label: "Applying your constraints", blurb: "Every option checked against the plan's requirements.", summary: { excluded: counts.excluded, no_in_scope: counts.no_in_scope } },
+  ];
+
+  emit(status("running"));
+  await sleep(1200);
+  for (const entry of stages) {
+    emit({ type: "stage.started", stage: entry.stage, label: entry.label, blurb: entry.blurb, occurred_at: frameTime(), sequence: nextSequence() });
+    await sleep(150);
+    emit({ type: "stage.completed", stage: entry.stage, label: entry.label, summary: entry.summary, seconds: 3, occurred_at: frameTime(), sequence: nextSequence() });
+  }
+  const endedAt = new Date().toISOString();
+  mockLonglistWalks = mockLonglistWalks.map((walk) =>
+    walk.capability_run_id === walkId ? { ...walk, status: "succeeded", ended_at: endedAt } : walk,
+  );
+  const finished = mockLonglistWalks.find((walk) => walk.capability_run_id === walkId);
+  if (finished !== undefined) mockTask.latest_run = latestRunOf(finished);
+  mockTask.active_run = null;
+  mockTask.has_longlist = true;
+  emit(status("succeeded"));
 }

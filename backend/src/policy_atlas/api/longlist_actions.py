@@ -190,8 +190,9 @@ def exclude_option(
     *,
     task_id: uuid.UUID,
     option_id: uuid.UUID,
-    reason: str,
+    reason: str | None,
     actor: str,
+    require_reason: bool = True,
 ) -> None:
     """Exclude an option with the user's reason, and log it as the user's turn.
 
@@ -205,23 +206,27 @@ def exclude_option(
         option_id: The option.
         reason: Why, in the user's words.
         actor: The user (token subject) the History event names.
+        require_reason: ``False`` for the Task Agent's verb *exclude*, whose
+            proposal the user confirmed with "Reason: none given" showing —
+            the reason is then recorded empty (the shape *include again*
+            writes), never invented. The button always requires one.
 
     Raises:
         LonglistActionRefused: ``not_scoping`` or ``run_active``.
         OptionNotFound: If the task holds no such option.
-        ValueError: If the reason is blank.
+        ValueError: If the reason is blank and one is required.
     """
     admit_longlist_action(conn, task_id=task_id)
     row = _locked_option(conn, task_id=task_id, option_id=option_id)
     text = _clean_reason(reason)
-    if text is None:
+    if text is None and require_reason:
         raise ValueError("an exclusion needs a reason")
     conn.execute(
         option.update()
         .where(option.c.task_id == task_id, option.c.option_id == option_id)
         .values(
             state="excluded",
-            exclusion={"constraint": USER_DECISION, "reason": text, "by": "user"},
+            exclusion={"constraint": USER_DECISION, "reason": text or "", "by": "user"},
             updated_at=datetime.now(UTC),
         )
     )

@@ -59,6 +59,12 @@ from policy_atlas.api.longlist_start import (
     open_longlist_walk,
     opened_run,
 )
+from policy_atlas.api.longlist_turns import (
+    LonglistSurface,
+    dispatch_longlist_turn,
+    is_longlist_state,
+    read_longlist_surface,
+)
 from policy_atlas.api.routers._access import accessible_task
 from policy_atlas.api.routers._common import ACTIVE_WALK_STATUSES, parentless_walk
 from policy_atlas.api.routers.check_ins import execute_claimed
@@ -698,8 +704,9 @@ def _task_agent_inputs(
         # A gate turn — an answer, an ask-back, a recorded decision — is part
         # of the conversation but carries no plan draft (task 044), so it adds
         # its exchange and leaves the draft where the last planning turn left
-        # it. Only a row missing its *reply* is incomplete.
-        if task_agent_state is not None:
+        # it. Only a row missing its *reply* is incomplete. A longlist turn's
+        # state is its pending action (task 045), never a draft either.
+        if task_agent_state is not None and not is_longlist_state(task_agent_state):
             previous_draft = cast("dict[str, object]", task_agent_state)
     if turns:
         return turns, previous_draft
@@ -760,6 +767,7 @@ def _transcript_out(row: RowMapping, capability: str) -> TaskAgentTranscriptTurn
         # carries ``appraisal_label``.
         answer=_labelled_answer(projected.answer) if projected is not None else None,
         decision=projected.decision if projected is not None else None,
+        action=projected.action if projected is not None else None,
     )
 
 
@@ -775,11 +783,15 @@ class _Reserved:
         retried: Whether this is a re-run of a row that was already reserved —
             the only case in which the row may already carry a durable half
             (X6), so the only case worth a query to look.
+        longlist: The longlist this turn is sorted against, when the task is
+            an options-scoping task with a longlist and no parentless walk is
+            active (task 045, S11); ``None`` for every other turn.
     """
 
     transcript_id: uuid.UUID
     gate: PausedGate | None
     retried: bool = False
+    longlist: LonglistSurface | None = None
 
 
 def _paused_gate(
@@ -856,6 +868,9 @@ def _phase_one_turn(
             "finish or stop the current run before replanning; "
             "use the run's check-ins to steer it",
         )
+    # With no walk active, a scoping task that has a longlist sorts the turn
+    # into the longlist verbs (task 045, S11), read under the same row lock.
+    longlist = read_longlist_surface(conn, task_id=task_id) if active is None else None
 
     if existing is not None:
         latest_id = conn.execute(
@@ -866,7 +881,7 @@ def _phase_one_turn(
         ).scalar_one()
         if latest_id != existing["id"]:
             raise ApiConflict("stale_turn", "only the latest Task Agent turn may be retried")
-        return _Reserved(cast(uuid.UUID, existing["id"]), gate, retried=True)
+        return _Reserved(cast(uuid.UUID, existing["id"]), gate, retried=True, longlist=longlist)
 
     pending = conn.execute(
         select(task_agent_transcript.c.id)
@@ -901,7 +916,7 @@ def _phase_one_turn(
             completed_at=None,
         )
     )
-    return _Reserved(transcript_id, gate)
+    return _Reserved(transcript_id, gate, longlist=longlist)
 
 
 @dataclass(frozen=True)
@@ -1362,6 +1377,27 @@ def create_task_agent_turn(
             # an ordinary planning turn on the user's own words (X6).
             planner_message = sorted_turn.carried_text
             carried_decision = sorted_turn.decision
+        elif phase_one.longlist is not None:
+            # While a longlist exists and no walk is active, the turn is
+            # sorted into the longlist verbs and never reaches the planner:
+            # a verb is proposed back and applied on a confirming turn
+            # (task 045, S11). Stored raw, returned labelled (C2).
+            with tracing.trace_scope(user_id=user.user_id):
+                return _labelled(
+                    dispatch_longlist_turn(
+                        engine,
+                        task_id=task_id,
+                        transcript_id=transcript_id,
+                        conversation_id=conversation_id,
+                        surface=phase_one.longlist,
+                        utterance=payload.message,
+                        user_id=user.user_id,
+                        agent=agent,
+                        chat_backend=chat_backend,
+                        embedding_backend=embedding_backend,
+                        runner_backends=runner_backends,
+                    )
+                )
         elif phase_one.retried:
             # A retry of the *second* half of such a turn: the walk is already
             # gone, so there is no gate to sort against and the decision lives

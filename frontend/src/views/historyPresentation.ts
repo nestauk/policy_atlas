@@ -52,6 +52,11 @@ const DECISION_CATEGORY: Record<string, { label: string; tone: HistoryRow["tone"
     ),
   ),
   "plan.approved": { label: "Plan", tone: "green" },
+  // Task 045: the user's own changes to the longlist, by button or by chat
+  // verb. The sentence is the server's summary, as given.
+  "option.added": { label: "Longlist", tone: "blue" },
+  "option.excluded": { label: "Longlist", tone: "blue" },
+  "option.included": { label: "Longlist", tone: "blue" },
   "component.completed": { label: "Completed", tone: "green" },
   "component.failed": { label: "Failed", tone: "red" },
   "component.skipped": { label: "Skipped", tone: "yellow" },

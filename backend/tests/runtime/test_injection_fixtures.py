@@ -196,6 +196,9 @@ class _PayloadCapturingAgent:
     def sort_gate_turn(self, *args: Any, **kwargs: Any) -> Any:
         raise NotImplementedError("decide-only capture stub")
 
+    def sort_longlist_turn(self, *args: Any, **kwargs: Any) -> Any:
+        raise NotImplementedError("decide-only capture stub")
+
     def decide(
         self,
         request: str,

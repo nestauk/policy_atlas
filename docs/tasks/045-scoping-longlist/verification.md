@@ -496,3 +496,80 @@ category in 6.3.
     test: a shared snapshot between a linked task and the scoping task needs
     custom teardown (`delete_task_data` deletes snapshots the other task
     still references) — a test-helper gap for the review.
+
+### Phase 6 + 7 — the longlist views, lifecycle and plan states, the longlist verbs (2026-09-23; 6.2 `fast-worker` structure, 6.3 `deep-reasoner`, 7.1 `lead`, 7.2 `deep-reasoner`)
+
+| Command | Result | Notes |
+|---|---:|---|
+| `make verify` (full, the Phase 7 gate over 6.2 + 6.3 + 7.2) | pass | backend 3138 passed (11:56); mypy 388 files clean; ruff clean; build OK; infra 46; prompt-guard 24 unchanged; `drift-check: OK`; frontend 86 files / 780 tests |
+| `cd frontend && pnpm e2e` | pass | 18 passed (3 new: building → built → Result on Longlist with Report disabled; the beats in the thread; a plan edit → "built from plan version 1" → Rebuild longlist → "Building the longlist") |
+| `make openapi-sync` + `make drift-check` | pass | additive: `TurnActionOut`, `action` on `TaskAgentTurnOut` and `TaskAgentTranscriptTurnOut`, `kind` widened with `action` |
+
+**6.2 — list, grid, card** (`views/longlist/LonglistView.tsx`, `LonglistGrid.tsx`,
+`OptionCard.tsx`, `longlistPresentation.ts`; `useOption`, `useAddOption`,
+`useExcludeOption`, `useIncludeOption`; the card route; mock fixtures with
+four full option cards and the five handlers; 25 vitest). The facets filter
+the list only (the grid's axes are orthogonal). Judgement `leaning` and
+document dedup are not rendered (no template calls for them).
+
+**6.3 — lifecycle, readers, plan states, thread** (`views/scopingActivity.ts`:
+`isScoping · activeRun · isRunActive · statusRun · tabRunStatus · hasLonglist ·
+hasTaskResult`; nine readers moved — `LifecycleRoute`, `AppShell` (running
+indicator and tabs), `ArtefactView` (`hasResult`, `showLiveArtefact`, the
+Baseline · Longlist · Report switch on `?view=`), `TaskListPanel`,
+`ChatSidePanel`, `planStart`, `WorkspaceView.chatsEnabled`; `useTask`/`useTasks`
+poll while a scoping task's `active_run` is set; `planStart` gains
+`longlist_built`, `rebuild_longlist`, `none{buildingLonglist}`, and `confirmed`
+carries **Build longlist**; `scopingStatusLine(state)`; the thread's `action`
+turn via `DecisionLine` (`actionLine`); History category **Longlist**; the
+mock streams a longlist walk with the six beats; 33 vitest, 3 e2e).
+
+**7.2 — the longlist verbs** (`api/longlist_turns.py`; `_Reserved.longlist`;
+the dispatch arm; `AgentBackend.sort_longlist_turn` on `AGENT_TRIAGE_MODEL`;
+the pending action in `task_agent_state.pending` with a one-option confirm
+part `longlist_action`; confirm by the button marker or by sorted assent;
+`exclude_option(require_reason=False)` on the verb path (the copy allows
+"Reason: none given"); the scope set = every targeted scope on the task
+(children of any longlist walk plus every parentless option search — a
+rebuild skips entrants that already have a search, so older children still
+hold their documents); `build_retrieval_scope(..., extra_scope_ids=())` and
+`make_lookup_reader` with the P13 precedence (the longlist scope's row, then
+the latest screen); a label fallback through the resolver in `chat_scope`
+for inherited documents (the citation floor refused them as unappraised
+otherwise); `_finish_run` also skips the conversation closure for
+`purpose = targeted` walks; 16 tests).
+
+**Flagged deviations (6.2, 6.3, 7.2):**
+42. `LifecycleRoute` / `AppShell` read `TaskOut.has_longlist` and do not
+    fetch the longlist (the flag rides the task payload); `ArtefactView` and
+    `planStart` fetch it because they need its data.
+43. The tabs key on `latest_run` for both task kinds (a pure `active_run`
+    read would lock Sources and History whenever nothing runs; the server
+    keeps a scoping task's `latest_run` parentless and non-targeted, so a
+    child never opens or locks a tab).
+44. `scopingStatusLine(state)` takes the state alone (the count and the
+    "built from" version live on it); `none` carries `buildingLonglist`.
+45. The 044 e2e gate helper no longer clicks "Close the scoping plan" after
+    the baseline start; with the start area kept mounted during a walk,
+    `WorkspaceView.onStarted` closes the plan as designed (the old test
+    passed on an unmount race).
+46. The 7.2 pending-action rule as ruled by the lead: a non-assenting
+    `other` **keeps** the pending action and replies "Still waiting: …";
+    only an applied action, a replacing verb or an explicit confirmation
+    clears it. Verbs keep the exclusion reason and add wording only when
+    they appear verbatim in the utterance.
+47. `build_retrieval_scope` / `make_lookup_reader` keep `scope_id` as the
+    primary and take `extra_scope_ids=()` (the plan said `scope_ids`): the
+    primary encodes the precedence rule and synthesis calls stay
+    byte-compatible.
+48. Question turns pass `entry_artefact_id=None`. If the process fails after
+    `add_option` commits but before the turn completes, a retry would add
+    the option again (the button route has the same property; `add_option`
+    owns its transactions).
+
+**Open risks recorded for the review:** the mock `mockLonglist()` hard-codes
+`plan_version: 1` (a mock rebuild stops at "Building the longlist" — mock
+only); `planStart` finds the baseline walk in the first 200 runs, which now
+include option searches (about eight rebuilds of 25 options could push it
+off the page); the stream reducer was not checked against child-walk frames
+(the mock streams none; the live check does).

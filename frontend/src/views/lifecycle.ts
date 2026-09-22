@@ -40,9 +40,11 @@ function openTabs(
   // Task 044 (A17): an options-scoping task's Result is its baseline, and the
   // baseline outlives the walk that wrote it — a walk aborted at the gate
   // ("Change the plan") still leaves a readable profile behind. So Result
-  // opens as soon as a baseline exists, whatever the walk's ending. Task 2
-  // replaces the baseline here with the longlist.
-  if (options?.hasBaseline === true && !open.includes("result")) {
+  // opens as soon as a baseline exists, whatever the walk's ending. Task 045
+  // (A7): a longlist opens it the same way — the Result then opens on the
+  // longlist.
+  const hasScopingResult = options?.hasBaseline === true || options?.hasLonglist === true;
+  if (hasScopingResult && !open.includes("result")) {
     return LIFECYCLE_TABS.filter((tab) => tab === "result" || open.includes(tab));
   }
   return open;
@@ -52,6 +54,8 @@ function openTabs(
 export interface TabOptions {
   /** An options-scoping task with a baseline artefact written (task 044). */
   hasBaseline?: boolean;
+  /** An options-scoping task with a longlist (task 045, `TaskOut.has_longlist`). */
+  hasLonglist?: boolean;
 }
 
 function baseTabs(status: RunStatus | null | undefined): readonly LifecycleTab[] {
@@ -143,7 +147,54 @@ export function publicLifecycleTabs(base: string) {
  * opens what the reader came for, and everything else opens the plan, which
  * is the only stage guaranteed to have something in it.
  */
-export function taskDestination(taskId: string, status: RunStatus | null | undefined): string {
+export function taskDestination(
+  taskId: string,
+  status: RunStatus | null | undefined,
+  options?: { hasLonglist?: boolean },
+): string {
   const base = `/tasks/${taskId}`;
-  return status === "succeeded" ? `${base}/result` : base;
+  // Task 045: a scoping task with a longlist opens on it, whatever its
+  // latest walk is doing.
+  return status === "succeeded" || options?.hasLonglist === true ? `${base}/result` : base;
+}
+
+/** The views the Result tab switches between for an options-scoping task
+ *  (task 045, deliverable 9). */
+export type ResultViewKey = "baseline" | "longlist" | "report";
+
+/** One entry of the Result's view switch. */
+export interface ResultViewOption {
+  key: ResultViewKey;
+  label: string;
+  /** False for a view that is on the switch but cannot be opened yet. */
+  available: boolean;
+  /** Why an unavailable view is unavailable. */
+  note?: string;
+}
+
+/**
+ * The Result's view switch: **Baseline · Longlist · Report**, Report shown
+ * but not openable until assessment (task 045, deliverable 9). `null` when
+ * there is nothing to switch between — an Evidence search, or a scoping task
+ * before its longlist exists (the Result is then the baseline alone).
+ */
+export function resultViews(options?: TabOptions): readonly ResultViewOption[] | null {
+  if (options?.hasLonglist !== true) return null;
+  return [
+    { key: "baseline", label: "Baseline", available: true },
+    { key: "longlist", label: "Longlist", available: true },
+    { key: "report", label: "Report", available: false, note: "available after assessment" },
+  ];
+}
+
+/**
+ * Which view the Result opens on: the longlist once one exists, the baseline
+ * before (ruling 50; task 045, A7). A requested view is honoured only when
+ * the switch offers it and it can be opened.
+ */
+export function resultView(requested: string | null, options?: TabOptions): "baseline" | "longlist" {
+  const views = resultViews(options);
+  if (views === null) return "baseline";
+  const match = views.find((view) => view.key === requested && view.available);
+  return match?.key === "baseline" ? "baseline" : "longlist";
 }

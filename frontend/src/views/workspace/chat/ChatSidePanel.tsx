@@ -7,6 +7,8 @@ import { createInitialRunStreamState, useRunStream } from "../../../store";
 import { cn } from "../../../ui/brand/cn";
 import { FoldMarkIcon } from "../../../ui/brand/FoldMarkIcon";
 import { hasResult } from "../../lifecycle";
+import { hasTaskResult } from "../../scopingActivity";
+import { isBaselineArtefact } from "../../baselineBand";
 import { TaskAgentPane } from "../TaskAgentPane";
 import { ChatPane } from "./ChatPane";
 import { ChatsIcon } from "./ChatsIcon";
@@ -117,7 +119,11 @@ export function ChatSidePanel({ taskId, isOwner }: { taskId: string; isOwner: bo
   const stream = useRunStream(taskId);
   const task = useTask(taskId);
   // Either source may be behind (see `WorkspaceView`).
-  const chatsEnabled = hasResult(task.data?.latest_run?.status) || hasResult(stream.run?.status);
+  // Task 045 (S15): a scoping task has a result once a baseline or a
+  // longlist exists; an Evidence search reads its latest run, as before.
+  const chatsEnabled =
+    hasTaskResult(task.data, { hasBaseline: isBaselineArtefact(artefact.data) }) ||
+    hasResult(stream.run?.status);
   const openLatestOrTaskAgent = () => {
     // The launcher's decision needs the chats list resolved first — before
     // then "no chats" is read off `undefined` data.

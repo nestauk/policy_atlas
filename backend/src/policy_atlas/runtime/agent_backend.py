@@ -16,6 +16,10 @@ moment lives in the task_agent seam; this module owns the two mid-run moments 鈥
 - **sort_gate_turn**: the mini-class question 路 decision 路 unsure sort of a Task
   Agent turn taken while an options-scoping walk is paused on its baseline gate
   (task 044, A4). It applies nothing; the caller dispatches the verdict.
+- **sort_longlist_turn**: the mini-class ``longlist_verbs_v1`` sort of a Task
+  Agent turn taken while a longlist exists and no walk is active (task 045,
+  D13): question 路 add 路 exclude 路 include again 路 other. It applies nothing;
+  the caller proposes a verb back and applies it only on a confirming turn.
 - **propose_option_design**: the judgment-class ``option_design_v1`` call that
   proposes a specified design back from an option the user named in their own
   words (task 045, D19). It applies nothing; the caller stores the design.
@@ -81,6 +85,12 @@ from policy_atlas.runtime.gate_sort_prompt import (
     GATE_SORT_PROMPT_VERSION,
     GateSortWire,
     build_gate_sort_messages,
+)
+from policy_atlas.runtime.longlist_verbs_prompt import (
+    LONGLIST_VERBS_MAX_OUTPUT_TOKENS,
+    LONGLIST_VERBS_PROMPT_VERSION,
+    LonglistVerbWire,
+    build_longlist_verbs_messages,
 )
 from policy_atlas.runtime.option_design_prompt import (
     OPTION_DESIGN_MAX_OUTPUT_TOKENS,
@@ -264,6 +274,34 @@ class AgentBackend(Protocol):
         """
         ...
 
+    def sort_longlist_turn(
+        self,
+        utterance: str,
+        options: list[dict[str, str]],
+        *,
+        pending: dict[str, str] | None = None,
+        session_id: uuid.UUID | None = None,
+    ) -> LonglistVerbWire:
+        """Sort one Task Agent turn taken while a longlist exists (task 045, D13).
+
+        The mini-class ``longlist_verbs_v1`` call. It applies nothing: the
+        caller proposes a verb back and applies it only on a confirming turn.
+
+        Args:
+            utterance: The user's verbatim turn text.
+            options: The longlist's options as ``{"id", "name", "state"}`` dicts.
+            pending: The action awaiting confirmation as ``{"verb", "label"}``,
+                or ``None``.
+            session_id: Optional Langfuse session id shared by the task.
+
+        Returns:
+            One parsed sort verdict.
+
+        Raises:
+            RuntimeError: If the backend cannot produce a usable verdict.
+        """
+        ...
+
     def propose_option_design(
         self,
         words: str,
@@ -326,6 +364,18 @@ def _scrub_gate_sort(sort: GateSortWire) -> GateSortWire:
         updates["option_id"] = scrub_nul(sort.option_id)
     if sort.carried_text is not None:
         updates["carried_text"] = scrub_nul(sort.carried_text)
+    return sort.model_copy(update=updates)
+
+
+def _scrub_longlist_sort(sort: LonglistVerbWire) -> LonglistVerbWire:
+    updates: dict[str, Any] = {
+        "kind": scrub_nul(sort.kind),
+        "sort_reason": scrub_nul(sort.sort_reason),
+    }
+    for name in ("option_id", "reason", "design_words"):
+        value = getattr(sort, name)
+        if value is not None:
+            updates[name] = scrub_nul(value)
     return sort.model_copy(update=updates)
 
 
@@ -467,6 +517,29 @@ class OpenAIAgentBackend:
         )
         return _scrub_gate_sort(parsed)
 
+    def sort_longlist_turn(
+        self,
+        utterance: str,
+        options: list[dict[str, str]],
+        *,
+        pending: dict[str, str] | None = None,
+        session_id: uuid.UUID | None = None,
+    ) -> LonglistVerbWire:
+        """Sort a longlist turn through structured OpenAI output (mini-class)."""
+        messages = build_longlist_verbs_messages(utterance, options, pending=pending)
+        parsed = self._parse(
+            messages,
+            response_format=LonglistVerbWire,
+            model=AGENT_TRIAGE_MODEL,
+            max_output_tokens=LONGLIST_VERBS_MAX_OUTPUT_TOKENS,
+            usage_event="agent.longlist_sort.usage",
+            label="agent-longlist-sort",
+            prompt_version=LONGLIST_VERBS_PROMPT_VERSION,
+            name="agent:longlist_sort",
+            session_id=session_id,
+        )
+        return _scrub_longlist_sort(parsed)
+
     def propose_option_design(
         self,
         words: str,
@@ -604,6 +677,11 @@ def _unsorted() -> GateSortWire:
     return GateSortWire(kind="unsure", reason="Deterministic stub gate sort: unsure.")
 
 
+def _longlist_other() -> LonglistVerbWire:
+    """The stub default: other, so the product says what it can do and applies nothing."""
+    return LonglistVerbWire(kind="other", sort_reason="Deterministic stub longlist sort: other.")
+
+
 def _design_from_words(words: str, outcomes: list[str]) -> OptionDesignWire:
     """The stub default: a design read straight from the user's words.
 
@@ -681,6 +759,8 @@ class StubAgentBackend:
         triage_responses: Canned :class:`WatchTriageWire` value(s), or ``None``.
         decide_responses: Canned :class:`WatchDecisionWire` value(s), or ``None``.
         gate_sort_responses: Canned :class:`GateSortWire` value(s), or ``None``.
+        longlist_sort_responses: Canned :class:`LonglistVerbWire` value(s), or
+            ``None`` (the default sorts every turn as ``other``).
         option_design_responses: Canned :class:`OptionDesignWire` value(s), or
             ``None`` (the default reads the design from the words).
         suggest_responses: Canned :class:`SuggestResponse` value(s), or
@@ -695,6 +775,7 @@ class StubAgentBackend:
         triage_responses: WatchTriageWire | list[WatchTriageWire] | None = None,
         decide_responses: WatchDecisionWire | list[WatchDecisionWire] | None = None,
         gate_sort_responses: GateSortWire | list[GateSortWire] | None = None,
+        longlist_sort_responses: LonglistVerbWire | list[LonglistVerbWire] | None = None,
         option_design_responses: OptionDesignWire | list[OptionDesignWire] | None = None,
         suggest_responses: SuggestResponse | list[SuggestResponse] | None = None,
     ) -> None:
@@ -702,12 +783,15 @@ class StubAgentBackend:
         self._triage_queue = _as_queue(triage_responses)
         self._decide_queue = _as_queue(decide_responses)
         self._gate_sort_queue = _as_queue(gate_sort_responses)
+        self._longlist_sort_queue = _as_queue(longlist_sort_responses)
         self._option_design_queue = _as_queue(option_design_responses)
         self._suggest_queue = _as_queue(suggest_responses)
         self.route_calls = 0
         self.triage_calls = 0
         self.decide_calls = 0
         self.gate_sort_calls = 0
+        self.longlist_sort_calls = 0
+        self.longlist_sort_inputs: list[dict[str, Any]] = []
         self.option_design_calls = 0
         self.option_design_words: list[str] = []
         self.suggest_calls = 0
@@ -761,6 +845,21 @@ class StubAgentBackend:
         del utterance, offered_options, session_id
         self.gate_sort_calls += 1
         return _next(self._gate_sort_queue, _unsorted)
+
+    def sort_longlist_turn(
+        self,
+        utterance: str,
+        options: list[dict[str, str]],
+        *,
+        pending: dict[str, str] | None = None,
+        session_id: uuid.UUID | None = None,
+    ) -> LonglistVerbWire:
+        del session_id
+        self.longlist_sort_calls += 1
+        self.longlist_sort_inputs.append(
+            {"utterance": utterance, "options": list(options), "pending": pending}
+        )
+        return _next(self._longlist_sort_queue, _longlist_other)
 
     def propose_option_design(
         self,

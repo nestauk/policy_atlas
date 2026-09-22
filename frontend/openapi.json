@@ -6952,8 +6952,18 @@
         "type": "object"
       },
       "TaskAgentTranscriptTurnOut": {
-        "description": "One durable task_agent-transcript turn shown in chronological order.\n\nArgs:\n    turn_index: Monotonic per-task conversation coordinate.\n    conversation_id: Owning task_agent conversation, absent only on legacy rows.\n    client_turn_id: The caller's idempotency key for this turn \u2014 returned\n        so a reloaded client can retry its own incomplete latest turn.\n    user_message: Submitted user message.\n    reply: Task Agent reply, absent until a pending turn completes.\n    suggestions: Task Agent quick-reply suggestions, if the turn completed.\n    part: Structured sequential-task_agent proposal, absent for legacy turns.\n    capability: The owning task's capability, absent on legacy turns.\n    status: Durable execution state for this turn.\n    created_at: Receipt timestamp, retained as display metadata.\n    completed_at: Terminal timestamp, absent while still pending.\n    kind: What this turn is. Absent on turns stored before task 044,\n        which are all replies.\n    answer: The cited answer, on an `answer` turn.\n    decision: The recorded gate decision, on a `decision` turn.",
+        "description": "One durable task_agent-transcript turn shown in chronological order.\n\nArgs:\n    turn_index: Monotonic per-task conversation coordinate.\n    conversation_id: Owning task_agent conversation, absent only on legacy rows.\n    client_turn_id: The caller's idempotency key for this turn \u2014 returned\n        so a reloaded client can retry its own incomplete latest turn.\n    user_message: Submitted user message.\n    reply: Task Agent reply, absent until a pending turn completes.\n    suggestions: Task Agent quick-reply suggestions, if the turn completed.\n    part: Structured sequential-task_agent proposal, absent for legacy turns.\n    capability: The owning task's capability, absent on legacy turns.\n    status: Durable execution state for this turn.\n    created_at: Receipt timestamp, retained as display metadata.\n    completed_at: Terminal timestamp, absent while still pending.\n    kind: What this turn is. Absent on turns stored before task 044,\n        which are all replies.\n    answer: The cited answer, on an `answer` turn.\n    decision: The recorded gate decision, on a `decision` turn.\n    action: The applied longlist verb, on an `action` turn.",
         "properties": {
+          "action": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TurnActionOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "answer": {
             "anyOf": [
               {
@@ -7025,7 +7035,8 @@
                 "enum": [
                   "reply",
                   "answer",
-                  "decision"
+                  "decision",
+                  "action"
                 ],
                 "type": "string"
               },
@@ -7117,8 +7128,18 @@
         "type": "object"
       },
       "TaskAgentTurnOut": {
-        "description": "Response body for one task_agent turn.\n\nA turn is one of three things, named by ``kind``: a planning ``reply``, a\ngrounded ``answer`` from the paused walk's evidence, or a recorded\n``decision`` at a gate. The three are additive optional fields rather than\na discriminated union, so every existing reader keeps working and a turn\nstored before task 044 stays valid with ``kind`` absent.\n\nArgs:\n    reply: The task_agent's conversational reply for this turn.\n    plan: The full current draft plan.\n    suggestions: The task_agent's suggested answers to its clarifying\n        question, rendered as tappable quick replies. Empty when none.\n    part: Structured sequential-task_agent proposal, when this turn carries one.\n    conversation_id: Task Agent conversation that produced this turn.\n    capability: The owning task's capability, when known. Absent on turns\n        stored before task 044.\n    scoping_plan: The full current scoping draft, on an options-scoping\n        turn. `plan` is null for those turns, and this is null for\n        Evidence search turns.\n    kind: What this turn is. Absent on turns stored before task 044,\n        which are all replies.\n    answer: The cited answer, on an `answer` turn.\n    decision: The recorded gate decision, on a `decision` turn.",
+        "description": "Response body for one task_agent turn.\n\nA turn is one of four things, named by ``kind``: a planning ``reply``, a\ngrounded ``answer`` from the paused walk's evidence (or the longlist's), a\nrecorded ``decision`` at a gate, or an applied longlist ``action`` (task\n045). They are additive optional fields rather than a discriminated union,\nso every existing reader keeps working and a turn stored before task 044\nstays valid with ``kind`` absent.\n\nArgs:\n    reply: The task_agent's conversational reply for this turn.\n    plan: The full current draft plan.\n    suggestions: The task_agent's suggested answers to its clarifying\n        question, rendered as tappable quick replies. Empty when none.\n    part: Structured sequential-task_agent proposal, when this turn carries one.\n    conversation_id: Task Agent conversation that produced this turn.\n    capability: The owning task's capability, when known. Absent on turns\n        stored before task 044.\n    scoping_plan: The full current scoping draft, on an options-scoping\n        turn. `plan` is null for those turns, and this is null for\n        Evidence search turns.\n    kind: What this turn is. Absent on turns stored before task 044,\n        which are all replies.\n    answer: The cited answer, on an `answer` turn.\n    decision: The recorded gate decision, on a `decision` turn.\n    action: The applied longlist verb, on an `action` turn.",
         "properties": {
+          "action": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TurnActionOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "answer": {
             "anyOf": [
               {
@@ -7168,7 +7189,8 @@
                 "enum": [
                   "reply",
                   "answer",
-                  "decision"
+                  "decision",
+                  "action"
                 ],
                 "type": "string"
               },
@@ -7848,6 +7870,48 @@
           "occurred_at"
         ],
         "title": "TickFrame",
+        "type": "object"
+      },
+      "TurnActionOut": {
+        "description": "The longlist verb a Task Agent turn applied, once the user confirmed it.\n\nArgs:\n    verb: ``add``, ``exclude`` or ``include_again``.\n    option_id: The option the verb applied to (the new option, for ``add``).\n    label: That option's name.\n    capability_run_id: The option search ``add`` opened (a walk with no\n        parent), so the thread can follow it. Absent for the other verbs.",
+        "properties": {
+          "capability_run_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Capability Run Id"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "option_id": {
+            "format": "uuid",
+            "title": "Option Id",
+            "type": "string"
+          },
+          "verb": {
+            "enum": [
+              "add",
+              "exclude",
+              "include_again"
+            ],
+            "title": "Verb",
+            "type": "string"
+          }
+        },
+        "required": [
+          "verb",
+          "option_id",
+          "label"
+        ],
+        "title": "TurnActionOut",
         "type": "object"
       },
       "TurnDecisionOut": {

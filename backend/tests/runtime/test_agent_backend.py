@@ -275,6 +275,9 @@ def test_hook_degrades_to_floor_on_backend_error() -> None:
         def sort_gate_turn(self, *a: Any, **k: Any) -> Any:
             raise RuntimeError("boom")
 
+        def sort_longlist_turn(self, *a: Any, **k: Any) -> Any:
+            raise RuntimeError("boom")
+
     outcome = build_watch_discretion_hook(_Raises())(_ctx())
     assert outcome == _DiscretionOutcome(
         interpreted_action="proceed", rule=runner_module.UNCONFIGURED_DEFAULT_RULE
@@ -341,6 +344,10 @@ class _SteerPointAgent:
         raise NotImplementedError("not an options-scoping plan call")
 
     def sort_gate_turn(self, *args: Any, **kwargs: Any) -> Any:
+        """Not a gate walk: the seam is satisfied, never exercised here."""
+        raise NotImplementedError("watch-moment stub")
+
+    def sort_longlist_turn(self, *args: Any, **kwargs: Any) -> Any:
         """Not a gate walk: the seam is satisfied, never exercised here."""
         raise NotImplementedError("watch-moment stub")
 
@@ -983,6 +990,9 @@ def test_backend_error_degrades_to_deterministic_floor(engine: Engine) -> None:
             raise NotImplementedError("not an options-scoping plan call")
 
         def sort_gate_turn(self, *a: Any, **k: Any) -> Any:
+            raise RuntimeError("boom")
+
+        def sort_longlist_turn(self, *a: Any, **k: Any) -> Any:
             raise RuntimeError("boom")
 
     task_id: uuid.UUID | None = None

@@ -445,6 +445,9 @@ class _RaisingRouteBackend:
     def sort_gate_turn(self, *args: Any, **kwargs: Any) -> Any:
         return self._stub.sort_gate_turn(*args, **kwargs)
 
+    def sort_longlist_turn(self, *args: Any, **kwargs: Any) -> Any:
+        return self._stub.sort_longlist_turn(*args, **kwargs)
+
 
 def test_free_text_backend_error_re_presents_menu_and_completes(engine: Engine) -> None:
     """A route backend error degrades to the canonical menu (watch_error evented);
