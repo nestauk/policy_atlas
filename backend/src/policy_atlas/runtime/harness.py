@@ -457,6 +457,46 @@ def _run_synthesise(state: HarnessState) -> HarnessState:
     return {**state, "summary": summary}
 
 
+class _NotBuiltYet:
+    """A stub node for an options-scoping component a later phase builds.
+
+    Task 045 Phase 1 registers the five names so the graph builds and a
+    longlist chain composes; each raises until its phase lands. The runner's
+    failure backstop records the raise as the component's failure, so a
+    ``spine=False`` step degrades the walk and a spine step fails it.
+
+    Args:
+        phase: Where the handler lands, for the error message.
+    """
+
+    def __init__(self, phase: str) -> None:
+        self.phase = phase
+
+    def __call__(self, state: HarnessState) -> HarnessState:
+        """Refuse to run.
+
+        Args:
+            state: The harness state.
+
+        Raises:
+            NotImplementedError: Always.
+        """
+        raise NotImplementedError(
+            f"component {state['config'].component!r} is not built yet ({self.phase})"
+        )
+
+
+#: The five options-scoping components (task 045) and the phase that builds
+#: each handler. Registered in ``run_spec.COMPONENT_REGISTRY`` beside the rest.
+OPTIONS_SCOPING_STUBS: dict[str, str] = {
+    "inherit": "task 045 Phase 4",
+    "suggest": "task 045 Phase 4",
+    "extract_interventions": "task 045 Phase 2",
+    "longlist": "task 045 Phase 5",
+    "constrain": "task 045 Phase 5",
+}
+
+
 def _dispatch(state: HarnessState) -> str:
     return state["config"].component
 
@@ -511,6 +551,8 @@ def build_graph() -> Any:
     g.add_node("extract", _run_extract)
     g.add_node("group", _run_group)
     g.add_node("synthesise", _run_synthesise)
+    for component, phase in OPTIONS_SCOPING_STUBS.items():
+        g.add_node(component, _NotBuiltYet(phase))
     g.add_node("finish", _finish)
 
     g.set_entry_point("dispatch")
@@ -528,6 +570,7 @@ def build_graph() -> Any:
             "extract": "extract",
             "group": "group",
             "synthesise": "synthesise",
+            **{component: component for component in OPTIONS_SCOPING_STUBS},
         },
     )
     g.add_edge("acquire", "finish")
@@ -540,6 +583,8 @@ def build_graph() -> Any:
     g.add_edge("extract", "finish")
     g.add_edge("group", "finish")
     g.add_edge("synthesise", "finish")
+    for component in OPTIONS_SCOPING_STUBS:
+        g.add_edge(component, "finish")
     g.add_edge("finish", END)
     return g.compile()
 

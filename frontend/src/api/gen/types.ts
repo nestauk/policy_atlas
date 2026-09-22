@@ -3954,7 +3954,16 @@ export interface components {
          *         updated_at: When the task row was last written.
          *         archived_at: When the task was archived, or `None` if active.
          *         latest_run: The derived latest-run read model, or `None` before any
-         *             run has been created.
+         *             run has been created. For an options-scoping task it is the
+         *             latest walk that is neither an option search (a `targeted` walk)
+         *             nor a child walk; scoping readers should key on `active_run` and
+         *             the existence flags instead (task 045).
+         *         active_run: Any running or paused walk of the task, option searches
+         *             and child walks included, or `None` when nothing is running —
+         *             "is anything active", not "what ran last" (task 045).
+         *         has_longlist: Whether a longlist exists for this task: a longlist
+         *             walk has written its result (task 045). Always `false` for an
+         *             Evidence search task.
          *         project_ids: Projects this task belongs to. Empty means
          *             unassigned, which is a normal state, not an error.
          *         source_count: How many Included sources this task has (funnel
@@ -3986,6 +3995,7 @@ export interface components {
              * @enum {string}
              */
             access: "full" | "public";
+            active_run?: components["schemas"]["LatestRun"] | null;
             /** Archived At */
             archived_at?: string | null;
             /**
@@ -4001,6 +4011,11 @@ export interface components {
             created_at: string;
             /** From Task Ids */
             from_task_ids?: string[];
+            /**
+             * Has Longlist
+             * @default false
+             */
+            has_longlist: boolean;
             /** Is Owner */
             is_owner: boolean;
             /** Is Public */

@@ -86,6 +86,7 @@ from policy_atlas.runtime.capability_registry import (
     compose_plan,
     expect_task_plan,
     lattice_for,
+    purpose_of_scope,
 )
 from policy_atlas.runtime.continuation_state import ContinuationState, ResumeDecision
 from policy_atlas.runtime.conversation_lifecycle import close_task_agent_conversation
@@ -720,7 +721,7 @@ def _run_plan_impl(
         discretion = _deterministic_discretion_floor
     if resume_from is None:
         capability_run_id = uuid.uuid4()
-        capability = _open_capability_run(
+        capability, purpose = _open_capability_run(
             engine,
             capability_run_id=capability_run_id,
             task_id=task_id,
@@ -729,7 +730,9 @@ def _run_plan_impl(
             plan_version=plan_version,
             session_id=session_id,
         )
-        initial_chain = compose_plan(capability, plan)
+        # The intent record's purpose picks the chain (task 045): a scoping
+        # walk under a longlist or targeted record composes that chain.
+        initial_chain = compose_plan(capability, plan, purpose=purpose)
         steering_state = _SteeringState(
             plan=plan,
             capability=capability,
@@ -1319,7 +1322,9 @@ def _run_plan_impl(
             completed_components=completed_components,
         )
 
-        if step.component in SPINE_COMPONENTS:
+        # The step's own spine flag when its chain declares one (task 045);
+        # the Evidence search spine set otherwise, so ES chains are unchanged.
+        if step.is_spine:
             summary_status: RunPlanStatus = "failed"
             return _finish_run(
                 engine,
@@ -3834,8 +3839,9 @@ def _run_segment_reentry(
         last_check_in_payload = _check_in(
             io, outcome, headline_counts=final_attempt.headline_counts
         )
-        if component in SPINE_COMPONENTS:
-            # Spine failure ends the run (run_plan's spine-failure semantics).
+        if step.is_spine:
+            # Spine failure ends the run (run_plan's spine-failure semantics);
+            # the same per-step rule as the main loop (task 045).
             return _SegmentReentryResult(
                 last_check_in_payload=last_check_in_payload,
                 most_recent_attempted_run_id=most_recent_attempted_run_id,
@@ -5305,17 +5311,22 @@ def _open_capability_run(
     plan_id: uuid.UUID,
     plan_version: int,
     session_id: uuid.UUID | None,
-) -> str:
+) -> tuple[str, str | None]:
     """Open the walk-identity row before the step loop (contract decision 2).
 
     Returns:
         The task's capability, read from the task row in the same transaction
         that writes the walk (task 044): the walk is a walk *of* the task's
         kind, so the two can never disagree, and the caller needs the value
-        anyway to compose the chain.
+        anyway to compose the chain. Beside it, the purpose of the intent
+        record the walk runs under (task 045, S1), read in the same
+        transaction because it too selects the chain.
     """
     with engine.begin() as conn:
         capability = capability_of_task(conn, task_id)
+        purpose = purpose_of_scope(
+            conn, task_id=task_id, evidence_scope_id=evidence_scope_id
+        )
         conn.execute(
             capability_run.insert().values(
                 capability_run_id=capability_run_id,
@@ -5340,7 +5351,7 @@ def _open_capability_run(
                 "plan_version": plan_version,
             },
         )
-    return capability
+    return capability, purpose
 
 
 def _finish_run(
@@ -5402,6 +5413,11 @@ def _reference_kwargs(
         return {"characterisation_run_id": successful_runs["characterise"]}
     if component == "extract":
         return {"selection_run_id": successful_runs["select"]}
+    if component == "extract_interventions":
+        # The selection-free path (task 045, D24): the intervention profile
+        # reads the scope's whole screened-in set, so no select run is looked
+        # up — the reason it is a component and not a directive on extract.
+        return {}
     if component == "group":
         return {"extraction_run_id": successful_runs["extract"]}
     if component == "synthesise":

@@ -6135,7 +6135,7 @@
         "type": "object"
       },
       "TaskOut": {
-        "description": "A task resource.\n\nArgs:\n    capability: The kind of work this task does. Every pre-044 row reads\n        `evidence_search`.\n    from_task_ids: The tasks this one starts from, oldest link first \u2014\n        the source ids of `links`, for callers that need nothing else.\n    links: The same Links in full, including each source's name and\n        whether it is currently flagged.\n    task_id: The task's identity.\n    name: Current display name.\n    question: Current evidence question, or `None` if not yet set.\n    status: Lifecycle status (`active` unless archived; no hard delete).\n    created_at: When the task was created.\n    updated_at: When the task row was last written.\n    archived_at: When the task was archived, or `None` if active.\n    latest_run: The derived latest-run read model, or `None` before any\n        run has been created.\n    project_ids: Projects this task belongs to. Empty means\n        unassigned, which is a normal state, not an error.\n    source_count: How many Included sources this task has (funnel\n        `relevant`), or `None` when no run has started. `None` and `0`\n        differ: `None` means the question has not been asked yet, `0`\n        means a run asked and none are Included.\n    visibility: How widely the row is shared (task 033). `org` where the\n        organisation may read it, `private` where only its owner may.\n    is_owner: Whether the *calling* user owns this row. Per-caller, not a\n        property of the row: the same task is `true` for its owner and\n        `false` for a colleague reading it. Every read-only affordance on\n        screen keys off this.\n    owner_display: How to name the row's owner \u2014 the owner's display\n        name, or a rendering derived from their subject when they have no\n        identity row yet. **Never an email** (contract \u00a7 3b). `None` when\n        the row has no owner at all (the CLI-created rows), leaving the\n        placeholder glyph to the frontend.\n    is_public: Whether the owner has turned public sharing on for this\n        row (task 037). A property of the row, not the caller.\n    access: **Caller-relative**, not a property of the row: `\"public\"`\n        means this read was served by the public leg and the shape is\n        redacted (`owner_display = None`, `project_ids = []`,\n        `is_owner = False`); a graded read (owner, colleague or admin)\n        always says `\"full\"`.",
+        "description": "A task resource.\n\nArgs:\n    capability: The kind of work this task does. Every pre-044 row reads\n        `evidence_search`.\n    from_task_ids: The tasks this one starts from, oldest link first \u2014\n        the source ids of `links`, for callers that need nothing else.\n    links: The same Links in full, including each source's name and\n        whether it is currently flagged.\n    task_id: The task's identity.\n    name: Current display name.\n    question: Current evidence question, or `None` if not yet set.\n    status: Lifecycle status (`active` unless archived; no hard delete).\n    created_at: When the task was created.\n    updated_at: When the task row was last written.\n    archived_at: When the task was archived, or `None` if active.\n    latest_run: The derived latest-run read model, or `None` before any\n        run has been created. For an options-scoping task it is the\n        latest walk that is neither an option search (a `targeted` walk)\n        nor a child walk; scoping readers should key on `active_run` and\n        the existence flags instead (task 045).\n    active_run: Any running or paused walk of the task, option searches\n        and child walks included, or `None` when nothing is running \u2014\n        \"is anything active\", not \"what ran last\" (task 045).\n    has_longlist: Whether a longlist exists for this task: a longlist\n        walk has written its result (task 045). Always `false` for an\n        Evidence search task.\n    project_ids: Projects this task belongs to. Empty means\n        unassigned, which is a normal state, not an error.\n    source_count: How many Included sources this task has (funnel\n        `relevant`), or `None` when no run has started. `None` and `0`\n        differ: `None` means the question has not been asked yet, `0`\n        means a run asked and none are Included.\n    visibility: How widely the row is shared (task 033). `org` where the\n        organisation may read it, `private` where only its owner may.\n    is_owner: Whether the *calling* user owns this row. Per-caller, not a\n        property of the row: the same task is `true` for its owner and\n        `false` for a colleague reading it. Every read-only affordance on\n        screen keys off this.\n    owner_display: How to name the row's owner \u2014 the owner's display\n        name, or a rendering derived from their subject when they have no\n        identity row yet. **Never an email** (contract \u00a7 3b). `None` when\n        the row has no owner at all (the CLI-created rows), leaving the\n        placeholder glyph to the frontend.\n    is_public: Whether the owner has turned public sharing on for this\n        row (task 037). A property of the row, not the caller.\n    access: **Caller-relative**, not a property of the row: `\"public\"`\n        means this read was served by the public leg and the shape is\n        redacted (`owner_display = None`, `project_ids = []`,\n        `is_owner = False`); a graded read (owner, colleague or admin)\n        always says `\"full\"`.",
         "properties": {
           "access": {
             "enum": [
@@ -6144,6 +6144,16 @@
             ],
             "title": "Access",
             "type": "string"
+          },
+          "active_run": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LatestRun"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "archived_at": {
             "anyOf": [
@@ -6178,6 +6188,11 @@
             },
             "title": "From Task Ids",
             "type": "array"
+          },
+          "has_longlist": {
+            "default": false,
+            "title": "Has Longlist",
+            "type": "boolean"
           },
           "is_owner": {
             "title": "Is Owner",

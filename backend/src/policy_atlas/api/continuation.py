@@ -32,6 +32,7 @@ from policy_atlas.runtime.capability_registry import (
     compose_plan,
     expect_task_plan,
     lattice_for,
+    purpose_of_walk,
 )
 from policy_atlas.runtime.continuation_state import ResumeDecision, build
 from policy_atlas.runtime.runner import RunPlanOutcome, run_plan
@@ -1077,7 +1078,16 @@ def _persist_fanout(
             user_text=user_text,
         )
         current_state = _with_plan(
-            current_state, amended, plan_id, version, capability_of_task(conn, task_id)
+            current_state,
+            amended,
+            plan_id,
+            version,
+            capability_of_task(conn, task_id),
+            # The parked walk's intent record picks its chain (task 045, S1);
+            # _with_plan holds no connection, so the purpose is read here.
+            purpose=purpose_of_walk(
+                conn, task_id=task_id, capability_run_id=pause.capability_run_id
+            ),
         )
     rerun = fanout.rerun
     if rerun is not None:
@@ -1426,7 +1436,13 @@ def _current_plan_row(conn: Connection, *, task_id: uuid.UUID, state: Any) -> An
 
 
 def _with_plan(
-    state: Any, plan: Any, plan_id: uuid.UUID, version: int, capability: str
+    state: Any,
+    plan: Any,
+    plan_id: uuid.UUID,
+    version: int,
+    capability: str,
+    *,
+    purpose: str | None = None,
 ) -> Any:
     """Return minimal continuation state with the just-persisted plan identity.
 
@@ -1437,8 +1453,10 @@ def _with_plan(
         version: Its version number.
         capability: The owning task's capability — it decides which chain the
             plan composes to and which lattice its pauses come from (C9, A2).
+        purpose: The parked walk's intent-record purpose (task 045, S1), read
+            by the caller, which holds the connection.
     """
-    chain = compose_plan(capability, plan)
+    chain = compose_plan(capability, plan, purpose=purpose)
     return type(state)(
         capability_run_id=state.capability_run_id,
         capability=capability,

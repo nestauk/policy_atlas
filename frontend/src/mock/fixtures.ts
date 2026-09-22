@@ -42,6 +42,9 @@ export const mockTask: components["schemas"]["TaskOut"] = {
   capability: "evidence_search",
   from_task_ids: [],
   links: [],
+  // Task 045: what exists and what is active. No walk, no longlist yet.
+  active_run: null,
+  has_longlist: false,
 };
 
 /** Task 033 phase 10a: the one project the mock serves. `task_count`

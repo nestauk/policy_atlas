@@ -52,6 +52,7 @@ from policy_atlas.api.deps import (
 )
 from policy_atlas.api.gate_turns import PausedGate, read_paused_gate
 from policy_atlas.api.routers._access import accessible_task
+from policy_atlas.api.routers._common import ACTIVE_WALK_STATUSES, parentless_walk
 from policy_atlas.api.routers.check_ins import execute_claimed
 from policy_atlas.api.stage_vocabulary import STAGE_BY_REGISTRY, STAGE_PRESENTATION
 from policy_atlas.core import tracing
@@ -708,6 +709,8 @@ def _phase_one_turn(
         if existing["status"] == "completed":
             return _response_from_row(existing)
 
+    # Parentless walks only (task 045, S15): a longlist walk's option searches
+    # never fence the thread; their parent does.
     active = conn.execute(
         select(
             capability_run.c.capability_run_id,
@@ -715,7 +718,8 @@ def _phase_one_turn(
             capability_run.c.plan_version,
         )
         .where(capability_run.c.task_id == task_id)
-        .where(capability_run.c.status.in_(("running", "paused")))
+        .where(capability_run.c.status.in_(ACTIVE_WALK_STATUSES))
+        .where(parentless_walk())
         .limit(1)
     ).mappings().one_or_none()
     # The Task Agent chat is open at the baseline gate (D9): a turn taken while
@@ -1317,7 +1321,9 @@ def create_task_agent_turn(
                     conn.execute(
                         select(capability_run.c.status)
                         .where(capability_run.c.task_id == task_id)
-                        .where(capability_run.c.status.in_(("running", "paused")))
+                        .where(capability_run.c.status.in_(ACTIVE_WALK_STATUSES))
+                        # The same parentless fence as phase one (task 045).
+                        .where(parentless_walk())
                         .limit(1)
                     ).scalar_one_or_none()
                     is not None
@@ -1874,10 +1880,12 @@ def confirm_baseline(
                 status_code=422,
                 detail="confirm-baseline applies to options-scoping tasks only",
             )
+        # Parentless walks only (task 045, S15).
         active = conn.execute(
             select(capability_run.c.status)
             .where(capability_run.c.task_id == task_id)
-            .where(capability_run.c.status.in_(("running", "paused")))
+            .where(capability_run.c.status.in_(ACTIVE_WALK_STATUSES))
+            .where(parentless_walk())
             .limit(1)
         ).scalar_one_or_none()
         if active is not None:

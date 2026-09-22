@@ -79,6 +79,7 @@ from policy_atlas.core.schema import (
 from policy_atlas.evidence_search.assess.appraise import SCORE_LABELS
 from policy_atlas.evidence_search.assess.screen import effective_screen_rows
 from policy_atlas.evidence_search.extract.quote_verify import build_basis, locate_unique_span
+from policy_atlas.options_scoping.labels import labels_for_snapshots
 from policy_atlas.runtime.steering_events import canonical_actor
 from policy_atlas.runtime.steering_history import steering_history
 
@@ -464,25 +465,17 @@ def landscape_out(
         )
         .where(task_source_snapshot.c.task_source_snapshot_id.in_(relevant_ids))
     ).all()
-    classifications = latest_row_by_id(
-        conn.execute(
-            select(
-                source_classification_result.c.task_source_snapshot_id,
-                source_classification_result.c.primary_evidence_type,
-                source_classification_result.c.classified_at,
-            ).where(source_classification_result.c.task_id == task_id)
-        ).all(),
-        "task_source_snapshot_id",
-        "classified_at",
+    labels = labels_for_snapshots(
+        conn, task_id=task_id, tss_ids=[row.task_source_snapshot_id for row in base_rows]
     )
     types: Counter[str] = Counter()
     years: Counter[str] = Counter()
     geographies: Counter[str] = Counter()
     for row in base_rows:
         metadata = row.metadata if isinstance(row.metadata, Mapping) else {}
-        classification = classifications.get(row.task_source_snapshot_id)
-        if classification is not None:
-            types[classification.primary_evidence_type] += 1
+        label = labels.get(row.task_source_snapshot_id)
+        if label is not None and label.evidence_type is not None:
+            types[label.evidence_type] += 1
         year = _year(metadata)
         if year is not None:
             years[str(year)] += 1
@@ -702,27 +695,10 @@ def evidence_page(
     ).all()
     screens = _effective_screens(conn, task_id)
     screen_reasons, classification_reasons = _source_reason_maps(conn, task_id)
-    classifications = latest_row_by_id(
-        conn.execute(
-            select(
-                source_classification_result.c.task_source_snapshot_id,
-                source_classification_result.c.primary_evidence_type,
-                source_classification_result.c.classified_at,
-            ).where(source_classification_result.c.task_id == task_id)
-        ).all(),
-        "task_source_snapshot_id",
-        "classified_at",
-    )
-    appraisals = latest_row_by_id(
-        conn.execute(
-            select(
-                source_appraisal_result.c.task_source_snapshot_id,
-                source_appraisal_result.c.quality_score,
-                source_appraisal_result.c.appraised_at,
-            ).where(source_appraisal_result.c.task_id == task_id)
-        ).all(),
-        "task_source_snapshot_id",
-        "appraised_at",
+    # One resolver for every label reader (task 045, S5): own rows, then a
+    # linked task's pinned walk for an inherited document, else absent.
+    labels = labels_for_snapshots(
+        conn, task_id=task_id, tss_ids=[row.task_source_snapshot_id for row in rows]
     )
     extracted = set(
         conn.execute(
@@ -789,11 +765,11 @@ def evidence_page(
             continue
         if themed_sources is not None and row.task_source_snapshot_id not in themed_sources:
             continue
-        classification = classifications.get(row.task_source_snapshot_id)
-        appraisal = appraisals.get(row.task_source_snapshot_id)
+        label = labels.get(row.task_source_snapshot_id)
+        quality_score = label.quality_score if label is not None else None
         item_origin = _origin(row.origin, metadata)
-        evidence_type_value = classification.primary_evidence_type if classification else None
-        tier = SCORE_LABELS.get(appraisal.quality_score) if appraisal else None
+        evidence_type_value = label.evidence_type if label is not None else None
+        tier = SCORE_LABELS.get(quality_score) if quality_score is not None else None
         year_value = _year(metadata)
         if origin is not None and item_origin != origin:
             continue
@@ -839,7 +815,7 @@ def evidence_page(
                     abstract=abstract,
                     abstract_source=abstract_source,
                 ),
-                appraisal.quality_score if appraisal is not None else None,
+                quality_score,
             )
         )
     if sort is not None:
@@ -1392,29 +1368,12 @@ def artefact_out(conn: Connection, task_id: uuid.UUID) -> ArtefactOut | None:
         if envelope_ids
         else {}
     )
-    appraisal = latest_row_by_id(
-        conn.execute(
-            select(
-                source_appraisal_result.c.task_source_snapshot_id,
-                source_appraisal_result.c.quality_score,
-                source_appraisal_result.c.appraised_at,
-            ).where(source_appraisal_result.c.task_id == task_id)
-        ).all(),
-        "task_source_snapshot_id",
-        "appraised_at",
-    )
-    # The classified evidence type is the appraisal rubric's scoring input —
-    # surfaced with the label so the UI can say WHY a citation carries a band.
-    citation_classifications = latest_row_by_id(
-        conn.execute(
-            select(
-                source_classification_result.c.task_source_snapshot_id,
-                source_classification_result.c.primary_evidence_type,
-                source_classification_result.c.classified_at,
-            ).where(source_classification_result.c.task_id == task_id)
-        ).all(),
-        "task_source_snapshot_id",
-        "classified_at",
+    # The appraisal tier and the classified evidence type (the rubric's
+    # scoring input, surfaced with the label so the UI can say WHY a citation
+    # carries a band) — both through the label resolver (task 045, S5), over
+    # the documents the citations can resolve to.
+    citation_labels = labels_for_snapshots(
+        conn, task_id=task_id, tss_ids=set(tss_to_envelope)
     )
     citations_by_annotation: dict[uuid.UUID, list[Any]] = {}
     for row in citation_rows:
@@ -1441,7 +1400,7 @@ def artefact_out(conn: Connection, task_id: uuid.UUID) -> ArtefactOut | None:
                 refs[doc_key] = len(refs) + 1
                 reference_order.append(doc_key)
             source_meta, locator_text = meta.get(_envelope_id(snapshot_id), ({}, "Unknown source"))
-            score_row = appraisal.get(tss_id) if tss_id is not None else None
+            label = citation_labels.get(tss_id) if tss_id is not None else None
             payload = row_payload
             claim_citations.append(
                 CitationOut(
@@ -1456,15 +1415,10 @@ def artefact_out(conn: Connection, task_id: uuid.UUID) -> ArtefactOut | None:
                     grounding_rationale=cast(str, payload.get("rationale"))
                     if isinstance(payload.get("rationale"), str)
                     else None,
-                    appraisal_label=SCORE_LABELS.get(score_row.quality_score)
-                    if score_row
+                    appraisal_label=SCORE_LABELS.get(label.quality_score)
+                    if label is not None and label.quality_score is not None
                     else None,
-                    evidence_type=(
-                        classification_row.primary_evidence_type
-                        if tss_id is not None
-                        and (classification_row := citation_classifications.get(tss_id)) is not None
-                        else None
-                    ),
+                    evidence_type=label.evidence_type if label is not None else None,
                 )
             )
         claim_type = (
@@ -2343,34 +2297,7 @@ def source_dossier_out(
         status, reason = "screened_out", screen.screen_basis
     else:
         status, reason = "found", None
-    classification = latest_row_by_id(
-        conn.execute(
-            select(
-                source_classification_result.c.task_source_snapshot_id,
-                source_classification_result.c.primary_evidence_type,
-                source_classification_result.c.classified_at,
-            ).where(
-                source_classification_result.c.task_id == task_id,
-                source_classification_result.c.task_source_snapshot_id == source_id,
-            )
-        ).all(),
-        "task_source_snapshot_id",
-        "classified_at",
-    ).get(source_id)
-    appraisal = latest_row_by_id(
-        conn.execute(
-            select(
-                source_appraisal_result.c.task_source_snapshot_id,
-                source_appraisal_result.c.quality_score,
-                source_appraisal_result.c.appraised_at,
-            ).where(
-                source_appraisal_result.c.task_id == task_id,
-                source_appraisal_result.c.task_source_snapshot_id == source_id,
-            )
-        ).all(),
-        "task_source_snapshot_id",
-        "appraised_at",
-    ).get(source_id)
+    label = labels_for_snapshots(conn, task_id=task_id, tss_ids=[source_id]).get(source_id)
     provider_value = metadata.get("provider_fields")
     provider: Mapping[str, Any] = provider_value if isinstance(provider_value, Mapping) else {}
     abstract, abstract_source = _abstract_fields(metadata)
@@ -2393,8 +2320,10 @@ def source_dossier_out(
         origin=_origin(row["origin"], metadata),
         status=cast(Any, status),
         status_reason=reason,
-        evidence_type=classification.primary_evidence_type if classification else None,
-        appraisal_tier=SCORE_LABELS.get(appraisal.quality_score) if appraisal else None,
+        evidence_type=label.evidence_type if label is not None else None,
+        appraisal_tier=SCORE_LABELS.get(label.quality_score)
+        if label is not None and label.quality_score is not None
+        else None,
         cited=cited,
         url=_url(metadata, row["source_locator"]),
         screen_confidence=screen.screen_decision_confidence if screen else None,

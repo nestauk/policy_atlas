@@ -11,10 +11,20 @@ what should change, where, and against which outcomes — each tagged with where
 it came from, so a thin-context plan stays honest (a guess shown as a guess is
 a fine plan; a guess shown as a fact is not).
 
-The chain it compiles to is fixed: ``acquire → screen_abstract → classify →
-appraise → ingest_full_text → synthesise``, with synthesise in baseline mode.
-Only the baseline runs in this slice; the longlist and the shortlist are
-described in :data:`SCOPING_STEPS` and not composed.
+The chain it compiles to is chosen by the intent record's ``purpose`` (task
+045, ADR 0039 decision 2) and is otherwise fixed:
+
+- ``baseline`` (or no purpose): ``acquire → screen_abstract → classify →
+  appraise → ingest_full_text → synthesise``, with synthesise in baseline mode;
+- ``longlist``: ``inherit → suggest → acquire → screen_abstract → classify →
+  appraise → ingest_full_text → extract_interventions → longlist →
+  constrain`` — the option searches are dispatched and joined by the runner,
+  not by a component;
+- ``targeted`` (one option search, a child walk): ``acquire →
+  screen_abstract → classify → appraise → ingest_full_text →
+  extract_interventions``.
+
+The shortlist is described in :data:`SCOPING_STEPS` and not composed.
 
 This module deliberately does **not** import the capability registry (the
 registry imports the plan models, so the dependency runs one way only). The
@@ -87,6 +97,24 @@ BASELINE_CONFIRM = "baseline_confirm"
 #: on depth (owner, 2026-09-17: "targets 20 and 10").
 BASELINE_ACQUISITION_TARGETS: dict[str, int] = {"standard": 20, "rapid": 10}
 
+#: The broad search's per-backend acquisition target by depth (contract §
+#: Plan object "Compile constants", D2). Measured in the build; the numbers
+#: are the owner's after measurement.
+LONGLIST_ACQUISITION_TARGETS: dict[str, int] = {"standard": 50, "rapid": 25}
+
+#: One option search's per-backend acquisition target (D2), at either depth.
+OPTION_SEARCH_TARGET = 10
+
+#: At most this many option searches per longlist walk (A16): the user's own
+#: options and the report-derived ones always run, suggestions fill the rest.
+OPTION_SEARCH_CAP = 15
+
+#: How many option searches run at once (the cross-walk bound's width).
+OPTION_SEARCH_WIDTH = 4
+
+#: The suggest step proposes at most this many options (D7), within the cap.
+SUGGEST_BOUND = 10
+
 #: The coarse band the plan document shows. Replaced by the lead after the
 #: Phase 7 measurement; never a promise of a number.
 BASELINE_TIME_BAND = "A few minutes · then a check-in"
@@ -94,7 +122,13 @@ BASELINE_TIME_BAND = "A few minutes · then a check-in"
 #: The default jurisdiction, tagged ``assumed`` so the user is asked to check it.
 DEFAULT_WHERE_TEXT = "United Kingdom"
 
-#: The six components a scoping walk runs in this slice.
+#: The intent-record purposes that select a chain. ``variant`` (admitted by
+#: ``ck_scope_purpose``) is task 3's and composes nothing yet.
+BASELINE_PURPOSE = "baseline"
+LONGLIST_PURPOSE = "longlist"
+TARGETED_PURPOSE = "targeted"
+
+#: The six components a scoping baseline walk runs.
 SCOPING_SPINE: tuple[str, ...] = (
     "acquire",
     "screen_abstract",
@@ -102,6 +136,33 @@ SCOPING_SPINE: tuple[str, ...] = (
     "appraise",
     "ingest_full_text",
     "synthesise",
+)
+
+#: The longlist walk's chain, with each step's spine flag (A6, P16b; owner:
+#: "inherit non-spine"). ``inherit`` and ``suggest`` degrade the walk when they
+#: fail; every other step fails it.
+LONGLIST_CHAIN: tuple[tuple[str, bool], ...] = (
+    ("inherit", False),
+    ("suggest", False),
+    ("acquire", True),
+    ("screen_abstract", True),
+    ("classify", True),
+    ("appraise", True),
+    ("ingest_full_text", True),
+    ("extract_interventions", True),
+    ("longlist", True),
+    ("constrain", True),
+)
+
+#: One option search's chain (a child walk). Every step is spine *for the
+#: child*; the child's failure only degrades its parent (the runner's join).
+TARGETED_CHAIN: tuple[str, ...] = (
+    "acquire",
+    "screen_abstract",
+    "classify",
+    "appraise",
+    "ingest_full_text",
+    "extract_interventions",
 )
 
 #: The three steps the plan document shows. Code-supplied, never authored by
@@ -845,14 +906,7 @@ def _screening_criteria(plan: ScopingPlan) -> list[str]:
 
 def _scoping_directive_delta(component: str, plan: ScopingPlan) -> dict[str, Any]:
     if component == "acquire":
-        search: dict[str, Any] = {
-            "depth": "rapid",
-            "record_cap": BASELINE_ACQUISITION_TARGETS[plan.depth],
-        }
-        filters = scope_constraints_for(plan).to_filters()
-        if filters:
-            search["filters"] = filters
-        return {"search": search}
+        return {"search": _search_directive(plan, BASELINE_ACQUISITION_TARGETS[plan.depth])}
     if component == "screen_abstract":
         return {"screening": {"criteria": _screening_criteria(plan)}}
     if component == "synthesise":
@@ -868,28 +922,102 @@ def _scoping_directive_delta(component: str, plan: ScopingPlan) -> dict[str, Any
     return {}
 
 
-def compose_scoping(plan: ScopingPlan) -> ComposedChain:
-    """Compose an approved scoping plan into the fixed baseline chain.
+def _search_directive(plan: ScopingPlan, record_cap: int) -> dict[str, Any]:
+    """Return one acquire directive: the per-backend target and the restrictions.
+
+    The shape the baseline has always used (``search_loop`` admits only
+    ``depth · filters · guidance · record_cap``): one round at ``rapid`` —
+    multi-round search is an Evidence search dial — capped per backend, with
+    the plan's evidence restrictions as ``filters``.
+    """
+    search: dict[str, Any] = {"depth": "rapid", "record_cap": record_cap}
+    filters = scope_constraints_for(plan).to_filters()
+    if filters:
+        search["filters"] = filters
+    return search
+
+
+def _longlist_directive_delta(component: str, plan: ScopingPlan) -> dict[str, Any]:
+    """Return one longlist-chain step's directive delta.
+
+    The acquire carries the broad search's depth target and the evidence
+    restrictions. The longlist screening criteria (target unit, outcomes,
+    setting when required, no place) and the PICO-shaped intent are compiled
+    by ``compile_longlist_intent`` in task 045 Phase 3; until then the screen
+    step carries no criteria of its own and the other steps' components read
+    no directive.
+    """
+    if component == "acquire":
+        return {"search": _search_directive(plan, LONGLIST_ACQUISITION_TARGETS[plan.depth])}
+    return {}
+
+
+def _targeted_directive_delta(component: str, plan: ScopingPlan) -> dict[str, Any]:
+    """Return one option search step's directive delta.
+
+    The acquire carries the option search target at either depth and the
+    evidence restrictions; the intent (the entrant's specified design) is the
+    targeted intent record's own, written by the option search tool.
+    """
+    if component == "acquire":
+        return {"search": _search_directive(plan, OPTION_SEARCH_TARGET)}
+    return {}
+
+
+def compose_scoping(plan: ScopingPlan, purpose: str | None = None) -> ComposedChain:
+    """Compose an approved scoping plan into the chain its intent record names.
 
     Args:
         plan: The validated scoping plan.
+        purpose: The intent record's ``purpose``. ``None`` or ``"baseline"``
+            compose the baseline; ``"longlist"`` and ``"targeted"`` compose
+            the longlist walk's chain and one option search's chain.
 
     Returns:
-        The six-step chain ``acquire → screen_abstract → classify → appraise →
-        ingest_full_text → synthesise`` and nothing else. There are no
-        discretionary components. Depth (D7, revised 2026-09-17) changes the
-        acquire target and the proposed-section allowance inside the
-        directives, never the chain or the section list.
+        The composed chain. The baseline is the six-step chain ``acquire →
+        screen_abstract → classify → appraise → ingest_full_text →
+        synthesise``, unchanged, with no spine flags (the Evidence search
+        spine set applies). The longlist and targeted chains set ``spine`` on
+        every step. There are no discretionary components. Depth changes the
+        acquire targets and the proposed-section allowance inside the
+        directives, never a chain.
+
+    Raises:
+        ValueError: If the purpose names no chain this build composes.
     """
-    return ComposedChain(
-        steps=[
-            ComponentStep(
-                component=component,
-                directive_delta=_scoping_directive_delta(component, plan),
-                reference_rule=(
-                    "deepest_successful_reference" if component == "synthesise" else None
-                ),
-            )
-            for component in SCOPING_SPINE
-        ]
-    )
+    if purpose is None or purpose == BASELINE_PURPOSE:
+        return ComposedChain(
+            steps=[
+                ComponentStep(
+                    component=component,
+                    directive_delta=_scoping_directive_delta(component, plan),
+                    reference_rule=(
+                        "deepest_successful_reference" if component == "synthesise" else None
+                    ),
+                )
+                for component in SCOPING_SPINE
+            ]
+        )
+    if purpose == LONGLIST_PURPOSE:
+        return ComposedChain(
+            steps=[
+                ComponentStep(
+                    component=component,
+                    directive_delta=_longlist_directive_delta(component, plan),
+                    spine=spine,
+                )
+                for component, spine in LONGLIST_CHAIN
+            ]
+        )
+    if purpose == TARGETED_PURPOSE:
+        return ComposedChain(
+            steps=[
+                ComponentStep(
+                    component=component,
+                    directive_delta=_targeted_directive_delta(component, plan),
+                    spine=True,
+                )
+                for component in TARGETED_CHAIN
+            ]
+        )
+    raise ValueError(f"no options-scoping chain for intent-record purpose {purpose!r}")

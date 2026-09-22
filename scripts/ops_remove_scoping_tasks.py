@@ -1,13 +1,23 @@
 #!/usr/bin/env python3
-"""Hard-delete every ``options_scoping`` task so revision ``b5e1d7a4c026`` can downgrade.
+"""Hard-delete every ``options_scoping`` task so its revisions can downgrade.
 
-That revision's ``downgrade()`` refuses while any ``task`` or ``capability_run``
-row still carries ``capability = 'options_scoping'`` — dropping
-``task.capability`` and narrowing ``ck_capr_capability`` would silently
-reclassify those rows as Evidence searches. ADR 0037 § Rollback names the
-remedy this script is: "archiving keeps the row, so it is not a remedy". This
-is pre-merge, staging-only data; there is no production options-scoping data
-to protect yet.
+Two revisions refuse while options-scoping data exists, and this script is the
+remedy both name:
+
+- ``b5e1d7a4c026`` (task 044) refuses while any ``task`` or ``capability_run``
+  row still carries ``capability = 'options_scoping'`` — dropping
+  ``task.capability`` and narrowing ``ck_capr_capability`` would silently
+  reclassify those rows as Evidence searches. ADR 0037 § Rollback: "archiving
+  keeps the row, so it is not a remedy".
+- ``c7e2a9f4b1d8`` (task 045) refuses while any walk runs under a
+  ``longlist`` or ``targeted`` intent record (the longlist walk and its option
+  searches), or an ``extraction_result`` has no ``selection_run_id``. Those
+  walks exist only on options-scoping tasks, so removing the tasks removes
+  them, with their option, membership, relation, ``longlist_result`` and
+  intervention-profile rows (ADR 0039 § Rollback).
+
+This is pre-merge, staging-only data; there is no production options-scoping
+data to protect yet.
 
 Default (no flags) LISTS every options-scoping task and its row counts across
 the tables ``--apply`` would touch, and changes nothing. ``--apply``
@@ -44,6 +54,11 @@ _DEV_URL = "postgresql+psycopg://policy_atlas:policy_atlas@localhost:5432/policy
 #: The result tables a scoping task can carry rows in — summed for the
 #: operator-facing listing's "results" count.
 RESULT_TABLES: tuple[str, ...] = (
+    "option",
+    "option_membership",
+    "option_relation",
+    "longlist_result",
+    "intervention_profile_record",
     "source_screening_result",
     "source_classification_result",
     "source_appraisal_result",
@@ -80,12 +95,24 @@ RESULT_TABLES: tuple[str, ...] = (
 #: - ``event_log`` FKs to ``runs``, so it precedes ``runs``, not follows it.
 #: - ``runs`` FKs to ``capability_run`` (``runs.capability_run_id``), and
 #:   ``artefact`` also FKs to ``capability_run`` — both precede it.
-#: - ``capability_run`` FKs to ``evidence_scope``, so it precedes it.
+#: - ``capability_run`` FKs to ``evidence_scope``, so it precedes it. Its
+#:   self-FK (``parent_capability_run_id``, task 045) is satisfied inside one
+#:   statement: a parent and its children always share a ``task_id``.
+#: - The task 045 option records lead: ``option_membership`` and
+#:   ``option_relation`` FK to ``option``; ``option`` FKs to ``runs`` (and is
+#:   named by ``task_link.option_id``, whose rows are already gone);
+#:   ``longlist_result`` FKs to ``runs`` and ``evidence_scope``;
+#:   ``intervention_profile_record`` FKs to ``source_extraction_record``.
 #:
 #: Never touched — corpus-level, shared between tasks: ``source_snapshot``,
 #: ``chunk``, ``chunk_embedding``. ``finding_reference_union`` is a VIEW, not
 #: a table: never deleted from.
 TASK_ID_TABLES: tuple[str, ...] = (
+    "option_membership",
+    "option_relation",
+    "option",
+    "longlist_result",
+    "intervention_profile_record",
     "synthesis_result",
     "grouping_result",
     "extraction_result",

@@ -25,7 +25,12 @@ from policy_atlas.api.deps import (
     get_settings,
 )
 from policy_atlas.api.routers._access import accessible_task
-from policy_atlas.api.routers._common import run_artefact_id_column, run_out
+from policy_atlas.api.routers._common import (
+    ACTIVE_WALK_STATUSES,
+    parentless_walk,
+    run_artefact_id_column,
+    run_out,
+)
 from policy_atlas.api.run_io import ParkIO
 from policy_atlas.api.settings import Settings
 from policy_atlas.core import tracing
@@ -141,10 +146,15 @@ def create_run(
             access = accessible_task(
                 conn, task_id=task_id, user_id=user.user_id, write=True, for_update=True
             )
+            # Parentless walks only (task 045, S15): a longlist walk's option
+            # searches never fence a user action — their parent does — and
+            # they never count against the executor, whose workers they do
+            # not occupy (they run on the option-search pool).
             active = conn.execute(
                 select(capability_run.c.capability_run_id)
                 .where(capability_run.c.task_id == task_id)
-                .where(capability_run.c.status.in_(("running", "paused")))
+                .where(capability_run.c.status.in_(ACTIVE_WALK_STATUSES))
+                .where(parentless_walk())
                 .limit(1)
             ).scalar_one_or_none()
             if active is not None or task_id in _dispatching_tasks:
@@ -152,6 +162,7 @@ def create_run(
             running = conn.execute(
                 select(capability_run.c.capability_run_id)
                 .where(capability_run.c.status == "running")
+                .where(parentless_walk())
             ).all()
             if len(running) + len(_dispatching_tasks) >= settings.run_executor_max:
                 raise ApiConflict("capacity", "the walk executor is at capacity")
