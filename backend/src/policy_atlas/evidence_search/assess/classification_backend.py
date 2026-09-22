@@ -10,7 +10,7 @@ from openai.types.chat import ChatCompletionMessageParam
 from policy_atlas.core import tracing
 from policy_atlas.core.openai_client import openai_kwargs, parse_structured, resolve_openai_client
 from policy_atlas.core.prompt_fields import confidence_is_valid, scrub_nul
-from policy_atlas.core.usage import UsageResult, usage_metadata
+from policy_atlas.core.usage import UsageResult, usage_details, usage_metadata
 from policy_atlas.evidence_search.assess.classify_prompt import (
     CLASSIFY_MAX_OUTPUT_TOKENS,
     CLASSIFY_MODEL,
@@ -124,6 +124,7 @@ class OpenAIClassificationBackend:
         ) -> None:
             wire, usage = result
             span.update(
+                usage_details=usage_details(usage),
                 input={"messages": messages},
                 output=wire.model_dump(),
                 model=CLASSIFY_MODEL,
@@ -156,7 +157,7 @@ class OpenAIClassificationBackend:
 
         wire, usage = tracing.traced_call(
             langfuse_client,
-            name=f"classify:{payload.tss_id[:8]}",
+            name="classify:document",
             as_type="generation",
             call=lambda: self._classify_once(messages),
             update=_update,

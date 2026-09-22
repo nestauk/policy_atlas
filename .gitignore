@@ -51,6 +51,9 @@ docs/tasks/*/evidence/
 # Claude worktrees
 .claude/worktrees
 
+# Data generally
+*.csv
+
 # Cursor plans
 .cursor/plans
 

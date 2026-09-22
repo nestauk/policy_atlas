@@ -32,7 +32,7 @@ from langfuse import Langfuse
 
 from policy_atlas.core import tracing
 from policy_atlas.core.openai_client import openai_kwargs, parse_structured, resolve_openai_client
-from policy_atlas.core.usage import UsageResult, usage_metadata
+from policy_atlas.core.usage import UsageResult, usage_details, usage_metadata
 from policy_atlas.evidence_search.extract.relevance_prompt import (
     FINDING_RELEVANCE_PROMPT_VERSION,
     FindingRelevanceWire,
@@ -171,6 +171,7 @@ class OpenAIRelevanceAnnotatorBackend:
         def _update(span: Any, result: UsageResult[RelevanceAnnotationWire]) -> None:
             response, usage = result
             span.update(
+                usage_details=usage_details(usage),
                 input={"messages": messages},
                 output=response.model_dump(),
                 model=RELEVANCE_ANNOTATOR_MODEL,
@@ -183,7 +184,7 @@ class OpenAIRelevanceAnnotatorBackend:
 
         return tracing.traced_call(
             self._langfuse_client,
-            name="relevance_annotator:annotate",
+            name="extract:annotate_relevance",
             as_type="generation",
             call=_annotate_once,
             update=_update,

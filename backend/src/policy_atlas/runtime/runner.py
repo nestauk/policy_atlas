@@ -5127,6 +5127,66 @@ def _reference_kwargs(
     return {}
 
 
+# Map each pipeline component → Langfuse trace scorer
+_TRACE_SCORERS: dict[str, Any] = {
+    "extract": tracing.extraction_score_summary,
+    "group": tracing.grouping_score_summary,
+    "synthesise": tracing.synthesis_score_summary,
+    "screen": tracing.screening_score_summary,
+    "classify": tracing.classification_score_summary,
+}
+
+
+def _attach_trace_scores(
+    client: Any,
+    conn: Connection,
+    *,
+    registry_component: str,
+    evidence_scope_id: uuid.UUID,
+    summary: dict[str, Any],
+    root_span: Any,
+) -> None:
+    """Attach trace-level input/output and quality scores to the open run span.
+
+    Restores the skeleton-era wiring that task 023's skeleton retirement
+    dropped: the ``*_score_summary`` functions are the only code that fills a
+    ``run:{component}:{run_id}`` trace's input/output, and they had no caller
+    between task 023 and this fix. Components without a dedicated scorer still
+    get the summary as trace output. Best-effort by design — telemetry must
+    never fail a committed component, so a scorer error is logged and dropped.
+
+    Args:
+        client: Langfuse client, or ``None`` for no-op tracing.
+        conn: Open connection used to read the characterise intent.
+        registry_component: ``COMPONENT_REGISTRY`` key of the finished step.
+        evidence_scope_id: Scope the component executed over.
+        summary: The component summary — becomes the trace output.
+        root_span: The open ``run:{component}:{run_id}`` root span.
+    """
+    if client is None:
+        return
+    try:
+        if registry_component == "characterise":
+            intent = conn.execute(
+                select(evidence_scope.c.intent).where(
+                    evidence_scope.c.evidence_scope_id == evidence_scope_id
+                )
+            ).scalar_one_or_none()
+            tracing.score_summary(client, summary, intent=intent, root_span=root_span)
+            return
+        scorer = _TRACE_SCORERS.get(registry_component)
+        if scorer is not None:
+            scorer(client, summary, root_span=root_span)
+        elif root_span is not None:
+            root_span.update(input={"component": registry_component}, output=summary)
+    except Exception:
+        log.warning(
+            "trace_score_attach_failed",
+            component=registry_component,
+            exc_info=True,
+        )
+
+
 def _run_step_attempt(
     engine: Engine,
     *,
@@ -5211,28 +5271,30 @@ def _run_step_attempt(
     started = time.monotonic()
     component_summary: dict[str, Any] | None = None
     try:
-        with engine.begin() as conn:
-            _apply_directive(
-                conn,
-                task_id=task_id,
-                evidence_scope_id=evidence_scope_id,
-                directive_delta=directive_delta,
-            )
-            config = compile(
-                Plan(
-                    component=registry_component,
-                    search_backend_scope=plan.backend_scope,
+        # One trace per run: the span opens before the component transaction
+        # and closes after the post-commit summary pass.
+        with tracing.component_span(
+            backends.langfuse_client,
+            run_id=run_id,
+            task_id=task_id,
+            component=step.component,
+            session_id=session_id,
+        ) as run_span:
+            with engine.begin() as conn:
+                _apply_directive(
+                    conn,
+                    task_id=task_id,
                     evidence_scope_id=evidence_scope_id,
-                    **reference_kwargs,
+                    directive_delta=directive_delta,
                 )
-            )
-            with tracing.component_span(
-                backends.langfuse_client,
-                run_id=run_id,
-                task_id=task_id,
-                component=step.component,
-                session_id=session_id,
-            ):
+                config = compile(
+                    Plan(
+                        component=registry_component,
+                        search_backend_scope=plan.backend_scope,
+                        evidence_scope_id=evidence_scope_id,
+                        **reference_kwargs,
+                    )
+                )
                 harness_outcome = run_harness(
                     conn,
                     config=config,
@@ -5262,36 +5324,52 @@ def _run_step_attempt(
                 )
                 summary = harness_outcome.get("summary")
                 component_summary = summary if isinstance(summary, dict) else None
-        if registry_component == "synthesise" and component_summary is not None:
-            try:
-                summary_accounting = write_summaries_after_commit(
-                    engine,
-                    task_id=task_id,
-                    run_id=run_id,
-                    synthesis_backend=(
-                        backends.synthesis
-                        if backends.synthesis is not None
-                        else StubSynthesisBackend()
-                    ),
-                )
-                component_usage = component_summary.get("usage_totals")
-                if isinstance(component_usage, dict):
-                    merged_usage = UsageAccumulator()
-                    merged_usage.add_payload(component_usage)
-                    summary_usage = summary_accounting.get("usage_totals")
-                    if isinstance(summary_usage, dict):
-                        merged_usage.add_payload(summary_usage)
-                    component_summary["usage_totals"] = merged_usage.payload()
-                component_summary["summary_usage_totals"] = summary_accounting.get(
-                    "usage_totals", UsageAccumulator().payload()
-                )
-            except Exception as exc:  # noqa: BLE001 - summaries never fail a component
-                log.warning(
-                    "runner.summaries_degraded",
-                    task_id=str(task_id),
-                    run_id=str(run_id),
-                    error=_bounded_error(exc),
-                )
+                if component_summary is not None:
+                    # Must run while the run span is still the active context:
+                    # score_current_trace and the root-span update both target
+                    # the open trace.
+                    _attach_trace_scores(
+                        backends.langfuse_client,
+                        conn,
+                        registry_component=registry_component,
+                        evidence_scope_id=evidence_scope_id,
+                        summary=component_summary,
+                        root_span=run_span,
+                    )
+            if registry_component == "synthesise" and component_summary is not None:
+                try:
+                    # Deliberately outside the component transaction (a summary
+                    # failure must not fail the run) but inside its run span, so
+                    # the summaries trace as the tail of the run, not as root
+                    # traces of their own.
+                    summary_accounting = write_summaries_after_commit(
+                        engine,
+                        task_id=task_id,
+                        run_id=run_id,
+                        synthesis_backend=(
+                            backends.synthesis
+                            if backends.synthesis is not None
+                            else StubSynthesisBackend()
+                        ),
+                    )
+                    component_usage = component_summary.get("usage_totals")
+                    if isinstance(component_usage, dict):
+                        merged_usage = UsageAccumulator()
+                        merged_usage.add_payload(component_usage)
+                        summary_usage = summary_accounting.get("usage_totals")
+                        if isinstance(summary_usage, dict):
+                            merged_usage.add_payload(summary_usage)
+                        component_summary["usage_totals"] = merged_usage.payload()
+                    component_summary["summary_usage_totals"] = summary_accounting.get(
+                        "usage_totals", UsageAccumulator().payload()
+                    )
+                except Exception as exc:  # noqa: BLE001 - summaries never fail a component
+                    log.warning(
+                        "runner.summaries_degraded",
+                        task_id=str(task_id),
+                        run_id=str(run_id),
+                        error=_bounded_error(exc),
+                    )
         # A successful harness result has committed with the component work;
         # append its terminal lifecycle event separately so the payload remains
         # byte-identical to the former node-level append.

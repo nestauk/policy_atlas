@@ -671,10 +671,32 @@ def _decode(body: bytes) -> str:
     return body.decode("utf-8", errors="replace")
 
 
+# Bot walls that answer a full-text fetch with a short "enable JavaScript" page
+# (issue #74: 6 of 21 "read in full" documents were this page). A real article
+# that merely mentions JavaScript is far longer than the wall, hence the length cap.
+_STUB_PAGE_MARKERS = (
+    "javascript is disabled",
+    "enable javascript",
+    "just a moment...",
+    "checking your browser",
+)
+_STUB_PAGE_MAX_CHARS = 1500
+
+
+def _is_stub_page(extracted: str) -> bool:
+    if len(extracted) > _STUB_PAGE_MAX_CHARS:
+        return False
+    lowered = extracted.lower()
+    return any(marker in lowered for marker in _STUB_PAGE_MARKERS)
+
+
 def _parse_html(body: bytes) -> dict[str, Any]:
     extracted = trafilatura.extract(body, include_comments=False, include_tables=True)
     if not extracted or not extracted.strip():
         return {"status": "error", "reason": "empty"}
+    if _is_stub_page(extracted):
+        # Spec: a bot block is `blocked_by_host`, never full text (components.md § ingest).
+        return {"status": "error", "reason": "blocked_by_host"}
     chunks = [
         {"content": para, "locator": {"paragraph": i}}
         for i, para in enumerate((p.strip() for p in extracted.splitlines()), start=1)

@@ -728,7 +728,7 @@ def test_component_span_opens_the_root_span_inside_the_session_scope(
     observation_indexes = [i for i, event in enumerate(events) if event.startswith("observation:")]
     assert observation_indexes
     assert all(enter_index < index < exit_index for index in observation_indexes)
-    assert fake_client.spans[0][0].startswith("run:synthesise:")
+    assert fake_client.spans[0][0] == "run:synthesise"
     assert [span[1] for span in fake_client.spans] == ["span", "span"]
     assert fake_client.spans[1][0] == "component:synthesise"
 

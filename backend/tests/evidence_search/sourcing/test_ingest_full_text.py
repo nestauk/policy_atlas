@@ -1656,3 +1656,28 @@ def test_downstream_unchanged(conn: Connection) -> None:
 
     assert before_classify == after_classify
     assert before_appraise == after_appraise
+
+
+def test_javascript_wall_page_is_blocked_by_host_not_full_text() -> None:
+    """Issue #74: a 284-character "JavaScript is disabled" page cleared the thin-text
+    floor and was stored as the document's full text."""
+    wall = (
+        b"<html><body><div><p>JavaScript is disabled in your browser. Please enable "
+        b"JavaScript to proceed. A required part of this site couldn't load. This may "
+        b"be due to a browser extension, network issues, or browser settings. Please "
+        b"check your connection, disable any ad blockers, or try using a different "
+        b"browser.</p></div></body></html>"
+    )
+    assert parse_and_segment(wall, "text/html", thin_min=200) == {
+        "status": "error",
+        "reason": "blocked_by_host",
+    }
+
+    article = (
+        b"<html><body><article><p>This evaluation of youth employment programmes "
+        b"notes that the survey tool required participants to enable JavaScript, which "
+        b"excluded some respondents.</p>"
+        + b"<p>Further findings on programme outcomes across regions and cohorts.</p>" * 40
+        + b"</article></body></html>"
+    )
+    assert parse_and_segment(article, "text/html", thin_min=200)["status"] == "ok"

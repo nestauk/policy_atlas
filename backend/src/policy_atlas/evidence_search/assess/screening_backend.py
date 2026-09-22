@@ -10,7 +10,7 @@ from openai.types.chat import ChatCompletionMessageParam
 from policy_atlas.core import tracing
 from policy_atlas.core.openai_client import parse_structured, resolve_openai_client
 from policy_atlas.core.prompt_fields import confidence_is_valid, scrub_nul
-from policy_atlas.core.usage import UsageResult, usage_metadata
+from policy_atlas.core.usage import UsageResult, usage_details, usage_metadata
 from policy_atlas.evidence_search.assess.screen_prompt import (
     SCREEN_FULLTEXT_PROMPT_VERSION,
     SCREEN_MAX_OUTPUT_TOKENS,
@@ -150,6 +150,7 @@ class OpenAIScreeningBackend:
         ) -> None:
             rep, usage = result
             span.update(
+                usage_details=usage_details(usage),
                 input={"messages": messages},
                 output=rep.model_dump(),
                 model=SCREEN_MODEL,
@@ -182,7 +183,7 @@ class OpenAIScreeningBackend:
 
         rep, usage = tracing.traced_call(
             langfuse_client,
-            name=f"screen:{payload.tss_id[:8]}:r{rep_index}",
+            name="screen:abstract",
             as_type="generation",
             call=lambda: self._parse_once(
                 messages=messages,
@@ -221,6 +222,7 @@ class OpenAIScreeningBackend:
         ) -> None:
             rep, usage = result
             span.update(
+                usage_details=usage_details(usage),
                 input={"messages": messages},
                 output=rep.model_dump(),
                 model=SCREEN_MODEL,
@@ -253,7 +255,7 @@ class OpenAIScreeningBackend:
 
         rep, usage = tracing.traced_call(
             langfuse_client,
-            name=f"screen_fulltext:{payload.tss_id[:8]}",
+            name="screen:full",
             as_type="generation",
             call=lambda: self._parse_once(
                 messages=messages,

@@ -28,6 +28,7 @@ from policy_atlas.api.routers._access import accessible_task
 from policy_atlas.api.routers._common import run_out
 from policy_atlas.api.run_io import ParkIO
 from policy_atlas.api.settings import Settings
+from policy_atlas.core import tracing
 from policy_atlas.core.schema import capability_run, planning_transcript, task_plan
 from policy_atlas.runtime.runner import RunnerBackends, run_plan
 from policy_atlas.runtime.task_plan import TaskPlan
@@ -63,21 +64,25 @@ def _dispatch_run(
     task_id: uuid.UUID,
     plan_row: dict[str, object],
     backends: RunnerBackends,
+    user_id: str,
 ) -> None:
     """Run one approved walk on an executor worker and release its reservation."""
     try:
-        run_plan(
-            engine,
-            task_id=task_id,
-            evidence_scope_id=plan_row["evidence_scope_id"],  # type: ignore[arg-type]
-            plan=TaskPlan.model_validate(plan_row["payload"]),
-            plan_id=plan_row["plan_id"],  # type: ignore[arg-type]
-            plan_version=plan_row["version"],  # type: ignore[arg-type]
-            plan_row_id=plan_row["plan_id"],  # type: ignore[arg-type]
-            backends=backends,
-            io=ParkIO(),
-            session_id=task_id,
-        )
+        # Opened inside the executor worker: contextvars do not cross a plain
+        # executor.submit. run_plan opens its own session scope per component.
+        with tracing.trace_scope(user_id=user_id):
+            run_plan(
+                engine,
+                task_id=task_id,
+                evidence_scope_id=plan_row["evidence_scope_id"],  # type: ignore[arg-type]
+                plan=TaskPlan.model_validate(plan_row["payload"]),
+                plan_id=plan_row["plan_id"],  # type: ignore[arg-type]
+                plan_version=plan_row["version"],  # type: ignore[arg-type]
+                plan_row_id=plan_row["plan_id"],  # type: ignore[arg-type]
+                backends=backends,
+                io=ParkIO(),
+                session_id=task_id,
+            )
     except Exception:
         log.exception("api.run_dispatch_failed", task_id=str(task_id))
     finally:
@@ -183,6 +188,7 @@ def create_run(
             task_id=task_id,
             plan_row=dict(plan_row),
             backends=backends,
+            user_id=user.user_id,
         )
     created = _await_new_run(engine, task_id=task_id, existing_ids=existing_ids)
     # Once the runtime row exists, the database's ``running`` count owns

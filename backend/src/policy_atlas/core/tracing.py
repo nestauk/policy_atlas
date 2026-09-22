@@ -13,7 +13,7 @@ import os
 import uuid
 from collections.abc import Callable, Iterator
 from concurrent.futures import Executor, Future
-from contextlib import contextmanager
+from contextlib import AbstractContextManager, contextmanager
 from threading import Lock
 from typing import Any, Literal
 
@@ -21,7 +21,7 @@ from langfuse import Langfuse, propagate_attributes
 
 from policy_atlas.core import embeddings
 from policy_atlas.core.embeddings import EmbeddingBackend
-from policy_atlas.core.usage import UsageResult, usage_metadata
+from policy_atlas.core.usage import UsageResult, usage_details, usage_metadata
 from policy_atlas.evidence_search.corpus import theme_grouping
 from policy_atlas.evidence_search.corpus.theme_grouping import (
     GroupingDoc,
@@ -31,7 +31,7 @@ from policy_atlas.evidence_search.corpus.theme_grouping import (
 from policy_atlas.evidence_search.extract.icf_records import PROFILE_ID as ICF_PROFILE_ID
 from policy_atlas.evidence_search.extract.iof_records import PROFILE_ID as IOF_PROFILE_ID
 
-_ObservationType = Literal["embedding", "generation", "span"]
+_ObservationType = Literal["embedding", "generation", "span", "tool"]
 
 
 def submit_with_context[T](
@@ -157,24 +157,41 @@ def traced_call[T](
 
 
 @contextmanager
-def _session_scope(session_id: uuid.UUID | None) -> Iterator[None]:
-    """Propagate a Langfuse session id to every observation opened inside the scope.
+def trace_scope(
+    session_id: uuid.UUID | None = None, user_id: str | None = None
+) -> Iterator[None]:
+    """Propagate session/user ids to every observation opened inside the scope.
 
     SDK 4.13 has no ``update_current_trace`` (the pre-fix code silently no-opped
     on every trace, chat and planning alike — confirmed live, sessionId null
     since 2026-08-09): the v4 seam is ``propagate_attributes``, which only
     reaches observations OPENED while its context is active. Callers must
     therefore wrap the WHOLE observation-creation call in this scope, never
-    update a session after the observation already opened.
+    update a session after the observation already opened. Scopes nest:
+    ``propagate_attributes`` only sets the keys it is given, so an inner
+    session-only scope preserves an outer scope's user id.
 
     Args:
-        session_id: Conversation/session id to attach, or ``None`` for a no-op.
+        session_id: Conversation/session id to attach, or ``None`` to leave the
+            session unset.
+        user_id: Authenticated user id to attach, or ``None`` to leave the user
+            unset. No-op when both ids are ``None``.
     """
-    if session_id is None:
+    attributes: dict[str, Any] = {}
+    if session_id is not None:
+        attributes["session_id"] = str(session_id)
+    if user_id is not None:
+        attributes["user_id"] = user_id
+    if not attributes:
         yield
         return
-    with propagate_attributes(session_id=str(session_id)):
+    with propagate_attributes(**attributes):
         yield
+
+
+def _session_scope(session_id: uuid.UUID | None) -> AbstractContextManager[None]:
+    """Session-only alias for ``trace_scope``, kept for the internal callers."""
+    return trace_scope(session_id=session_id)
 
 
 class TracedEmbeddingBackend:
@@ -213,11 +230,17 @@ class TracedEmbeddingBackend:
         batch_index = self._next_batch_index()
         with _observation(
             self._client,
-            name=f"embed:batch{batch_index}",
+            name="embed:batch",
             as_type="embedding",
         ) as span:
             vectors = self._backend.embed_texts(texts)
+            prompt_tokens = embeddings.take_last_prompt_tokens()
             span.update(
+                usage_details=(
+                    {"input": prompt_tokens, "total": prompt_tokens}
+                    if prompt_tokens is not None
+                    else None
+                ),
                 input={"texts": texts},
                 output={
                     "vector_count": len(vectors),
@@ -228,7 +251,9 @@ class TracedEmbeddingBackend:
                     "unit_policy": embeddings.UNIT_POLICY,
                     "model": embeddings.EMBEDDING_MODEL,
                     "text_count": len(texts),
+                    "batch_index": batch_index,
                 },
+                model=embeddings.EMBEDDING_MODEL,
             )
             return vectors
 
@@ -279,7 +304,7 @@ class TracedThemeGroupingBackend:
         Returns:
             Themes and token usage returned by the wrapped backend.
         """
-        with _observation(self._client, name="discover", as_type="generation") as span:
+        with _observation(self._client, name="characterise:discover", as_type="generation") as span:
             themes, usage = self._backend.discover(
                 docs,
                 intent=intent,
@@ -288,6 +313,7 @@ class TracedThemeGroupingBackend:
                 guidance=guidance,
             )
             span.update(
+                usage_details=usage_details(usage),
                 input={"intent": intent, "records": list(docs)},
                 output={"themes": themes},
                 metadata={
@@ -316,16 +342,18 @@ class TracedThemeGroupingBackend:
         assign_index = self._next_assign_index()
         with _observation(
             self._client,
-            name=f"assign:call{assign_index}",
+            name="characterise:assign",
             as_type="generation",
         ) as span:
             assignments, usage = self._backend.assign(batch, themes=themes)
             span.update(
+                usage_details=usage_details(usage),
                 input={"themes": list(themes), "records": list(batch)},
                 output={"assignments": assignments},
                 metadata={
                     "prompt_version": theme_grouping.PROMPT_VERSION,
                     "batch_size": len(batch),
+                    "batch_index": assign_index,
                     **usage_metadata(usage),
                 },
                 model=theme_grouping.ASSIGNMENT_MODEL,
@@ -368,7 +396,7 @@ def component_span(
 
     with (
         _session_scope(session_id),
-        _observation(client, name=f"run:{component}:{run_id}", as_type="span") as run_span,
+        _observation(client, name=f"run:{component}", as_type="span") as run_span,
     ):
         metadata = {"task_id": str(task_id), "run_id": str(run_id)}
         if conversation_id is not None:
@@ -397,6 +425,13 @@ def _trace_root(root_span: Any, *, input: dict[str, Any], output: Any) -> None:
     """
     if root_span is not None:
         root_span.update(input=input, output=output)
+        # The v3 server reads trace-level I/O from separate attributes, which
+        # only ``set_trace_io`` writes; v4 derives them from the root observation,
+        # which the ``update`` above already covers. ``set_trace_io`` is
+        # deprecated for that reason and can go once the server runs v4.
+        set_trace_io = getattr(root_span, "set_trace_io", None)
+        if set_trace_io is not None:
+            set_trace_io(input=input, output=output)
 
 
 def score_summary(

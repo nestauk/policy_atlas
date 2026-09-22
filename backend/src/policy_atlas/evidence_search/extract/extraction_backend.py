@@ -12,7 +12,7 @@ from langfuse import Langfuse
 
 from policy_atlas.core import tracing
 from policy_atlas.core.openai_client import parse_structured, resolve_openai_client
-from policy_atlas.core.usage import UsageResult, usage_metadata
+from policy_atlas.core.usage import UsageResult, usage_details, usage_metadata
 from policy_atlas.evidence_search.extract.icf_prompt import (
     ICF_EXTRACT_MAX_OUTPUT_TOKENS,
     ICF_EXTRACTION_MODEL,
@@ -151,6 +151,7 @@ class OpenAIExtractionBackend:
         ) -> None:
             response, usage = result
             span.update(
+                usage_details=usage_details(usage),
                 input={"messages": build_extract_messages(payload)},
                 output={"findings": [f.model_dump() for f in response.findings]},
                 model=EXTRACTION_MODEL,
@@ -166,7 +167,7 @@ class OpenAIExtractionBackend:
 
         response, usage = tracing.traced_call(
             self._langfuse_client,
-            name=f"extract:{payload.tss_id[:8]}:w{payload.window_index}",
+            name="extract:iof_findings",
             as_type="generation",
             call=lambda: self._extract_once(payload),
             update=_update,
@@ -238,6 +239,7 @@ class OpenAIICFExtractionBackend:
         ) -> None:
             response, usage = result
             span.update(
+                usage_details=usage_details(usage),
                 input={"messages": messages},
                 output={"findings": [f.model_dump() for f in response.findings]},
                 model=ICF_EXTRACTION_MODEL,
@@ -253,7 +255,7 @@ class OpenAIICFExtractionBackend:
 
         response, usage = tracing.traced_call(
             self._langfuse_client,
-            name=f"extract_icf:{payload.tss_id[:8]}:w{payload.window_index}",
+            name="extract:icf_findings",
             as_type="generation",
             call=lambda: self._extract_once(payload),
             update=_update,
