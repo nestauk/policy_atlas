@@ -142,6 +142,7 @@ _STUB_PAGE_MARKERS = (
     "cookies are disabled",
     "enable cookies",
     "checking your browser",
+    "just a moment...",
     "verify you are a human",
 )
 

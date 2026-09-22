@@ -23,7 +23,7 @@ from sqlalchemy.engine import Engine
 from policy_atlas.api.chat_scope import ResolvedRunScope, build_chat_readers
 from policy_atlas.core import tracing
 from policy_atlas.core.embeddings import EmbeddingBackend
-from policy_atlas.core.usage import usage_metadata
+from policy_atlas.core.usage import usage_details, usage_metadata
 from policy_atlas.evidence_search.extract.quote_verify import (
     BasisText,
     build_basis,
@@ -552,6 +552,7 @@ def answer_over_scope(
         def _record(span: Any, result: tuple[dict[str, Any], Any]) -> None:
             response, usage = result
             span.update(
+                usage_details=usage_details(usage),
                 input={
                     "messages": messages,
                     "tool_exchanges": len(transcript),
@@ -560,6 +561,7 @@ def answer_over_scope(
                 output=response,
                 metadata={
                     "prompt_version": CHAT_PROMPT_VERSION,
+                    "call_index": call_count,
                     **usage_metadata(usage),
                 },
                 model=CHAT_MODEL,
@@ -571,7 +573,7 @@ def answer_over_scope(
         # live-trace lane).
         response, usage = tracing.traced_call(
             backends.langfuse,
-            name=f"chat:call{call_count}",
+            name="chat:call",
             as_type="generation",
             call=_call,
             update=_record,
@@ -594,7 +596,7 @@ def answer_over_scope(
         backends.langfuse,
         run_id=trace_run_id,
         task_id=task_id,
-        component="chat_v1",
+        component="chat",
         # The caller names the Langfuse session (ADR 0038): the chat route
         # passes its conversation id; a Task Agent turn at the gate passes the
         # task id, as every planning turn and run does.
@@ -608,6 +610,7 @@ def answer_over_scope(
             retriever=retriever,
             emit_label="emit_answer",
             on_tool_start=_on_tool_start,
+            langfuse_client=backends.langfuse,
         )
         _stop()
         emission = loop["emission"]

@@ -12,6 +12,7 @@ import hashlib
 import math
 import random
 import re
+import threading
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -80,6 +81,21 @@ class _ChunkState:
     vectors: dict[int, list[float]] = field(default_factory=dict)
     failed: bool = False
     inserted: bool = False
+
+
+_last_usage = threading.local()
+
+
+def take_last_prompt_tokens() -> int | None:
+    """Return and clear the prompt-token count of this thread's last live embed call.
+
+    ``embed_texts`` returns vectors only, so the live backend parks the provider's
+    usage here for the tracing wrapper that runs on the same thread. ``None`` when
+    the last call was a stub or the provider omitted usage.
+    """
+    tokens = getattr(_last_usage, "prompt_tokens", None)
+    _last_usage.prompt_tokens = None
+    return tokens if isinstance(tokens, int) else None
 
 
 class EmbeddingBackend(Protocol):
@@ -173,6 +189,7 @@ class OpenAIEmbeddingBackend:
 
         log.info("embedding.openai.request", text_count=len(texts))
         response = self._create_embeddings_with_backoff(texts)
+        _last_usage.prompt_tokens = getattr(getattr(response, "usage", None), "prompt_tokens", None)
         items = sorted(response.data, key=lambda item: item.index)
         vectors = [list(item.embedding) for item in items]
         log.info("embedding.openai.response", text_count=len(texts), vector_count=len(vectors))

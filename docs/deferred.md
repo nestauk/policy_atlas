@@ -722,7 +722,10 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   conversation id kept as trace metadata `conversation_id`. Bounded telemetry rider; the
   capability-run entity (§ Select) — **DISCHARGED task 024** — is now the
   structural home; the trace-grouping work itself (turn-span consolidation)
-  remains open.
+  remains open — **settled 2026-09-18 (ADR 0037 decision 6):** one trace per
+  planning turn, chat turn or component run with the session as the grouping is
+  exactly the shape Langfuse's own guidance asks for, so no consolidation is
+  planned. The synthesise run span now also covers the post-commit summary pass.
 
 - **EB artefact composition — LANDED with revised ownership (task 013, ADRs 0009 + 0010).**
   Synthesise (not the agent) composes the one EB artefact at the run terminus —
@@ -814,7 +817,8 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   promotion, and **two detached-trace warts** (span content complete in both; verified
   against the live instance, 2026-07-06): (a) OTel context does not propagate into
   `ThreadPoolExecutor` workers, so the first concurrent `assign` call surfaces as a
-  detached trace — fix is context capture/attach at submit; (b) the **upload-ingest embed
+  detached trace — fix is context capture/attach at submit — **DISCHARGED (task 019,
+  `submit_with_context` on every fan-out incl. select's rerank batches)**; (b) the **upload-ingest embed
   pass** runs outside any `component_span` (`ingest_upload` is app-boundary, not a run
   component), so its `embed:batchN` observations mint their own root traces — resolves
   with the upload audit-event seam below, which gives uploads their own observability
@@ -844,7 +848,9 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   structured log line `ingest_upload.embed_counts`) — an app-boundary event, not a run
   component (user Q&A at the 009 plan gate). Its tracing rides along: a live upload's
   embed batches currently surface as detached root traces (no surrounding span — wart (b)
-  in the Langfuse entry above); the seam wraps them in an upload-scoped span.
+  in the Langfuse entry above); the seam wraps them in an upload-scoped span. As of
+  2026-09-18 `ingest_upload` is reached only from the dev CLI (`runtime/agent.py`), so
+  the wart has no live surface yet; the span lands with the upload surface.
 
 ## Select (task 010 seams)
 
@@ -900,7 +906,8 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   artefact back-refs (derivable), turn tables (still 025). The recorded Langfuse
   detached-trace warts (009's executor threads; 010's `rank:batch` generation
   spans) are unaffected by this entity alone — those need actual trace-grouping
-  work (§ Characterise, "Langfuse trace grouping").
+  work (§ Characterise, "Langfuse trace grouping") — both since closed by
+  `submit_with_context` (task 019); the rerank spans read `select:rerank` from 2026-09-18.
 - **Policy soft-prior tilt** — integration shape recorded, not deferred-blind: when the
   source/evidence policy object lands, it **compiles into directive boosts**
   (provenance-stamped as policy-sourced), becoming one more directive author beside the
@@ -1482,7 +1489,10 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   runner-visible single-line usage aggregate needs a usage-return refactor —
   arrives with that refactor or the component-progress protocol (contract
   decision 11, rev 2.6). **Scheduled: 018 Phase A telemetry sweep** (usage-return
-  refactor + durable per-component wall-clock/counts).
+  refactor + durable per-component wall-clock/counts) — **DISCHARGED:** every component
+  summary carries `usage_totals` (prompt/completion/total/cached) and synthesise adds
+  `summary_usage_totals`; the `component.completed` event is the runner-visible aggregate.
+  Since 2026-09-18 the same counts reach Langfuse as `usage_details`, so the two agree.
 - **Component-name rename `screen`→`screen_abstract` / `screen_stage2`→`screen_full`
   — DISCHARGED (task 019).** Renamed, with a one-time data migration
   `b7f3d9a2c5e1` (owner decision 3); no read-side alias.
@@ -1644,7 +1654,9 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
 - **`core/tracing.py` EB-domain score renderers** — tracing imports
   `evidence_search.corpus.theme_grouping` + finding PROFILE_IDs for its `*_score_summary`
   functions; a core→capability edge the regroup made visible. Relocate renderers into
-  their phase modules (or invert via injection) in a slice that touches tracing.
+  their phase modules (or invert via injection) in a slice that touches tracing. The
+  2026-09-18 tracing chore deliberately left this alone (28 files already; the move is
+  ~400 lines of `*_score_summary` plus `TracedThemeGroupingBackend`) — next tracing slice.
 - **Per-lane test-DB partition — RECURRENCE (023)** — the 018 entry above fired twice in
   023's build: parallel lane done-checks and the agent smoke both left committed
   rows that break migration-roundtrip downgrades across sessions. 023's mitigations:
@@ -2361,7 +2373,9 @@ deliberately left, each with its reason:
 - **Metabase saved questions** on staging Aurora query `project`/`portfolio` by name and
   break on migration; **Langfuse saved filters** on `orchestrator:*` spans and
   `project_id` metadata stop matching new traces (`agent:*`, `task_id`). Owner action after
-  merge; the PR names both.
+  merge; the PR names both. The 2026-09-18 tracing chore renamed every observation again
+  (ADR 0037 decision 6: static `actor:action` names, ids in metadata), so any view saved
+  against `run:{component}:{run_id}` or the `screen:{tss}:r{n}` family also needs recreating.
 - **"Untitled project"** — the 025 migration backfilled planless Tasks with that literal
   name. It is user-editable data, not one of the five reversible stored values, so 038
   did not rewrite it; such a Task reads "Untitled project" on screen until renamed.

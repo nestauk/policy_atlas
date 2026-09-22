@@ -42,7 +42,7 @@ from pydantic import BaseModel
 from policy_atlas.core import tracing
 from policy_atlas.core.openai_client import parse_structured, resolve_openai_client
 from policy_atlas.core.prompt_fields import scrub_nul
-from policy_atlas.core.usage import UsageResult, usage_metadata
+from policy_atlas.core.usage import UsageResult, usage_details, usage_metadata
 from policy_atlas.evidence_search.assess.screen_prompt import SCREEN_MODEL
 from policy_atlas.runtime.agent_prompt import (
     ROUTER_MAX_OUTPUT_TOKENS,
@@ -386,8 +386,9 @@ class OpenAIAgentBackend:
             usage_event="agent.decide.usage",
             label="agent-decide",
             prompt_version=WATCH_PROMPT_VERSION,
-            name=f"agent:{framing}",
+            name="agent:decide",
             session_id=session_id,
+            metadata={"framing": framing},
         )
         return _scrub_decision(parsed.to_wire())
 
@@ -425,6 +426,7 @@ class OpenAIAgentBackend:
         prompt_version: str,
         name: str,
         session_id: uuid.UUID | None,
+        metadata: dict[str, Any] | None = None,
     ) -> T:
         def _call() -> UsageResult[T]:
             return parse_structured(
@@ -440,10 +442,15 @@ class OpenAIAgentBackend:
         def _update(span: Any, result: UsageResult[T]) -> None:
             parsed, usage = result
             span.update(
+                usage_details=usage_details(usage),
                 input={"messages": messages},
                 output=parsed.model_dump(),
                 model=model,
-                metadata={"prompt_version": prompt_version, **usage_metadata(usage)},
+                metadata={
+                    "prompt_version": prompt_version,
+                    **(metadata or {}),
+                    **usage_metadata(usage),
+                },
             )
 
         parsed, _usage = tracing.traced_call(

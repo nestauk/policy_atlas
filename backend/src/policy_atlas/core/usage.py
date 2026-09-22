@@ -138,6 +138,32 @@ def usage_metadata(usage: CompletionUsage | TokenUsage | None) -> dict[str, int 
     return _token_usage_metadata(token_usage_from_provider(usage))
 
 
+def usage_details(usage: TokenUsage | None) -> dict[str, Any] | None:
+    """Token usage in the OpenAI shape Langfuse prices from (``usage_details``).
+
+    Langfuse maps ``prompt_tokens``/``completion_tokens``/``total_tokens`` to
+    ``input``/``output``/``total`` and nets ``prompt_tokens_details.cached_tokens``
+    out of ``input`` so cached tokens get the cache price. Without this block the
+    server re-tokenises the span I/O, which misses reasoning tokens and cache hits.
+
+    Args:
+        usage: Provider-neutral token usage, or ``None``.
+
+    Returns:
+        The ``usage_details`` payload, or ``None`` when the API omitted usage.
+    """
+    if usage is None:
+        return None
+    details: dict[str, Any] = {
+        "prompt_tokens": usage.prompt or 0,
+        "completion_tokens": usage.completion or 0,
+        "total_tokens": usage.total or 0,
+    }
+    if usage.cached:
+        details["prompt_tokens_details"] = {"cached_tokens": usage.cached}
+    return details
+
+
 def log_usage(event: str, usage: CompletionUsage | None) -> None:
     """Log one model call's token usage (``None``-safe).
 

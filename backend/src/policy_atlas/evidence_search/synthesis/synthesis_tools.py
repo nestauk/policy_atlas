@@ -31,6 +31,7 @@ from sqlalchemy import ColumnElement, case, func, true
 from sqlalchemy import select as sa_select
 from sqlalchemy.engine import Connection
 
+from policy_atlas.core import tracing
 from policy_atlas.core.embeddings import (
     EMBEDDING_PROFILE,
     UNIT_CHAR_BUDGET,
@@ -3040,6 +3041,23 @@ def _turn_search_queries(tool_calls: Sequence[Mapping[str, Any]]) -> list[str]:
     return queries
 
 
+def _execute_traced_tool(
+    langfuse_client: Any | None,
+    *,
+    name: str,
+    tool: Callable[[dict[str, Any]], dict[str, Any]],
+    arguments: dict[str, Any],
+) -> dict[str, Any]:
+    """Run one read tool under a ``tool:{name}`` observation carrying its I/O."""
+    return tracing.traced_call(
+        langfuse_client,
+        name=f"tool:{name}",
+        as_type="tool",
+        call=lambda: tool(arguments),
+        update=lambda span, result: span.update(input=arguments, output=result),
+    )
+
+
 def run_tool_loop(
     turn_fn: TurnFn,
     *,
@@ -3048,6 +3066,7 @@ def run_tool_loop(
     retriever: ChunkRetriever | None = None,
     emit_label: str = "emit_section",
     on_tool_start: Callable[[str, dict[str, Any]], None] | None = None,
+    langfuse_client: Any | None = None,
 ) -> ToolLoopResult:
     """Run the shared bounded read-tool loop with an adapter-owned terminal emission.
 
@@ -3058,6 +3077,8 @@ def run_tool_loop(
         retriever: Optional chunk retriever used for per-turn query warm-up.
         emit_label: Terminal-emitter label recorded on a malformed retry.
         on_tool_start: Optional progress hook invoked before a valid tool call.
+        langfuse_client: Optional Langfuse client; each executed read tool then
+            traces as a ``tool:{name}`` observation beside the turn's generation.
 
     Returns:
         Terminal emission, transcript, and bounded-loop accounting.
@@ -3145,7 +3166,12 @@ def run_tool_loop(
             try:
                 if on_tool_start is not None:
                     on_tool_start(tool_name, cast("dict[str, Any]", arguments))
-                tool_result = tools[tool_name](cast("dict[str, Any]", arguments))
+                tool_result = _execute_traced_tool(
+                    langfuse_client,
+                    name=tool_name,
+                    tool=tools[tool_name],
+                    arguments=cast("dict[str, Any]", arguments),
+                )
             except ToolValidationError as exc:
                 transcript.append({
                     "tool": tool_name,
@@ -3172,6 +3198,7 @@ def run_section_loop(
     tools: Mapping[str, Callable[[dict[str, Any]], dict[str, Any]]],
     turn_cap: int = SECTION_TURN_CAP,
     retriever: ChunkRetriever | None = None,
+    langfuse_client: Any | None = None,
 ) -> SectionLoopResult:
     """Run one bounded section loop against the closed read-only tool set.
 
@@ -3206,6 +3233,7 @@ def run_section_loop(
         tools=tools,
         turn_cap=turn_cap,
         retriever=retriever,
+        langfuse_client=langfuse_client,
     )
     return {
         "claims": cast("SectionProseWire | None", result["emission"]),
