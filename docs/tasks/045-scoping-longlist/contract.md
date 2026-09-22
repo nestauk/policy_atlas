@@ -22,8 +22,8 @@ views (list, reduced grid, option card) with the chat verbs that edit them.
 > The decision-sheet rows scheduled for task 2 (A1, A2, A9, A10, A11, E1, E2,
 > E4, F2, F3; `docs/tasks/035-options-scoping/checks/decision-sheet.md` line
 > 15) are folded into the rulings; rows E5, E6 and F13 wait for task 3 (D17).
-> **Re-approval of the folded contract: _pending · owner_** (D1 and D6 changed
-> materially).
+> **Re-approved as folded 2026-09-22 · owner** (after D1 and D6 changed
+> materially and D26 was added).
 > Plan approved (before implementation): _pending_ ·
 > ADR: _0039 (drafted at step 4)_.
 >
