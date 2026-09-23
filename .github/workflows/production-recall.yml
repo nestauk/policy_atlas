@@ -1,16 +1,18 @@
 # Search and screening recall against the golden dataset at production depth
-# settings, recorded as Langfuse dataset runs on every merge to dev
+# settings, recorded as Langfuse dataset runs
 # (scripts/eval_ground_truth/README.md § Production recall).
 #
 # This job MEASURES; it does not gate. A red run means "could not measure"
 # (a provider or Langfuse was unreachable, a review's run crashed), never
-# "recall fell". It is deliberately separate from `verify`: it needs live API
-# keys, calls three external services, and its numbers move with LLM noise.
+# "recall fell".
+#
+# Manual only: start it from the Actions tab ("Run workflow"), picking the
+# branch to measure and which depths. It calls live providers and screens
+# with an LLM at standard/deep, so it is not attached to pushes or merges.
+# Runs are labelled <branch>-<short sha>/<depth> in Langfuse.
 name: production recall
 
 on:
-  push:
-    branches: [dev]
   workflow_dispatch:
     inputs:
       depths:
@@ -46,4 +48,4 @@ jobs:
           OPENALEX_EMAIL: ${{ secrets.OPENALEX_EMAIL }}
           OVERTON_API_KEY: ${{ secrets.OVERTON_API_KEY }}
         run: |
-          make production-recall ARGS="--run-label dev-${GITHUB_SHA::7} --depths ${{ inputs.depths || 'rapid standard deep' }}"
+          make production-recall ARGS="--run-label ${GITHUB_REF_NAME}-${GITHUB_SHA::7} --depths ${{ inputs.depths || 'rapid standard deep' }}"

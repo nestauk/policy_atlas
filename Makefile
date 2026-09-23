@@ -134,7 +134,7 @@ prompt-guard:
 
 # Search + screening recall against the golden dataset at production depth
 # settings, recorded as Langfuse dataset runs (scripts/eval_ground_truth/README.md).
-# Runs on every merge to dev via .github/workflows/production-recall.yml. Needs
+# Also runnable by hand in GitHub Actions (.github/workflows/production-recall.yml). Needs
 # the live API keys and Langfuse keys in backend/.env (or the environment).
 # Records only — it does not pass or fail on the numbers.
 # Example: make production-recall ARGS="--depths rapid"

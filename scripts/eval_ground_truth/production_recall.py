@@ -4,9 +4,10 @@ depth constants, one Langfuse dataset run per depth.
 The sweep (``sweep_record_cap.py``) asks a research question by pushing the
 caps far above production. This script asks the operational one: with the
 pipeline exactly as deployed, how much of each review's reference list does a
-``rapid``, ``standard`` or ``deep`` search find? It is meant to run on every
-merge to ``dev`` (``.github/workflows/production-recall.yml``) so the answer
-builds up into a history. It records numbers; it does not pass or fail on them.
+``rapid``, ``standard`` or ``deep`` search find? Run it by hand, locally or
+from the Actions tab (``.github/workflows/production-recall.yml``), so the
+answer builds up into a history. It records numbers; it does not pass or fail
+on them.
 
 How a depth is run (mirrors ``runtime/runner.py``'s round loop, see
 ``search_eval.run_one_query``):
