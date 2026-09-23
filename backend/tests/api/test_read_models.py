@@ -1044,6 +1044,15 @@ def _seed_evidence_filter_fixture(engine: Engine, task_id: uuid.UUID) -> uuid.UU
         seed_screening_result(
             conn, task_id, run_id, scope_id, screened_out_tss, status="not_relevant"
         )
+        # Read in full, then demoted at stage 2: the effective screen is
+        # not_relevant, so the ladder must say screened_out — never
+        # read_in_full (Results vs Sources "included" count mismatch).
+        _, demoted_tss = seed_source(conn, task_id, {"title": "Demoted after full text"})
+        seed_screening_result(conn, task_id, run_id, scope_id, demoted_tss, status="relevant")
+        seed_screening_result(
+            conn, task_id, run_id, scope_id, demoted_tss, status="not_relevant", screen_stage=2
+        )
+        seed_ingested_full_text(conn, tss_id=demoted_tss, chunks=["Demoted body."])
         _, selected_tss = seed_source(conn, task_id, {"title": "Selected"})
         seed_screening_result(conn, task_id, run_id, scope_id, selected_tss, status="relevant")
         _, not_selected_tss = seed_source(conn, task_id, {"title": "Not selected"})
@@ -1081,7 +1090,7 @@ def test_evidence_status_filter_collection_true_counts(tmp_path: Path, engine: E
             assert found.status_code == 200
             body = found.json()
             # Collection-true: total reflects the filtered collection (3), not the
-            # page length (2) and not the unfiltered task total (6).
+            # page length (2) and not the unfiltered task total (7).
             assert body["pagination"] == {"page": 1, "page_size": 2, "total_items": 3}
             assert len(body["data"]) == 2
             assert {row["status"] for row in body["data"]} == {"found"}
@@ -1089,8 +1098,9 @@ def test_evidence_status_filter_collection_true_counts(tmp_path: Path, engine: E
             screened_out = client.get(
                 f"/api/v1/tasks/{task_id}/evidence?status=screened_out", headers=owner
             ).json()
-            assert screened_out["pagination"]["total_items"] == 1
-            assert screened_out["data"][0]["status"] == "screened_out"
+            # Two: the stage-1 reject and the stage-2 demotion with full text.
+            assert screened_out["pagination"]["total_items"] == 2
+            assert {row["status"] for row in screened_out["data"]} == {"screened_out"}
 
             # `Included` = the 7 in-ladder positions, i.e. everything but
             # found/screened_out — here, selected + not_selected.
@@ -1104,7 +1114,7 @@ def test_evidence_status_filter_collection_true_counts(tmp_path: Path, engine: E
                 f"/api/v1/tasks/{task_id}/evidence?status=found&status=screened_out",
                 headers=owner,
             ).json()
-            assert combined["pagination"]["total_items"] == 4
+            assert combined["pagination"]["total_items"] == 5
             assert {row["status"] for row in combined["data"]} == {"found", "screened_out"}
 
             invalid = client.get(
@@ -2192,7 +2202,7 @@ def test_evidence_facet_filters_reasons_and_read_depth(tmp_path: Path, engine: E
             uploaded = client.get(
                 f"/api/v1/tasks/{task_id}/evidence?origin=Uploaded", headers=owner
             ).json()
-            assert uploaded["pagination"]["total_items"] == 6
+            assert uploaded["pagination"]["total_items"] == 7
             openalex = client.get(
                 f"/api/v1/tasks/{task_id}/evidence?origin=OpenAlex", headers=owner
             ).json()
@@ -2226,9 +2236,9 @@ def test_evidence_facet_filters_reasons_and_read_depth(tmp_path: Path, engine: E
                 f"/api/v1/tasks/{task_id}/evidence?sort=relevance", headers=owner
             ).json()
             ranks = [row["screen_status"] for row in spectrum["data"]]
-            assert ranks[:3].count("relevant") == 2
-            assert ranks[2] == "not_relevant"
-            assert all(status is None for status in ranks[3:])
+            assert ranks[:2] == ["relevant", "relevant"]
+            assert ranks[2:4] == ["not_relevant", "not_relevant"]
+            assert all(status is None for status in ranks[4:])
 
             # Year bounds are collection-true and drop unknown-year rows.
             with engine.begin() as conn:
