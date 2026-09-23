@@ -826,7 +826,94 @@ and abstracts' derived fields and stay in the evidence zip, not the repo.
 No credentials, prompts with secrets, or raw full text anywhere in the
 evidence.
 
+## Taste pass addendum (2026-09-23, after step 6)
+
+The longlist surfaces were reworked with the owner (contract D27–D34;
+rubric 9 amended to match). Evidence:
+
+- `make frontend-verify` green after each round (last: 86 files, 788
+  tests); `make drift-check` OK after `make openapi-sync` (D34);
+  backend `ruff` and `mypy` clean on the four touched files;
+  `tests/api/test_longlist_routes.py` + `tests/options_scoping/test_longlist.py`
+  35 passed.
+- Screenshots of the three live NEET longlists (list by theme, lever type
+  and ambition; grid; excluded and clustered option cards; the Evidence
+  search report unchanged) at 1440 and 390 wide, taken with Playwright
+  against the running dev app (a fresh dev token injected per request;
+  tall viewport, because the shell scrolls an inner region).
+- Tests changed for the new copy and structure: `LonglistView.test.tsx`,
+  `LonglistGrid.test.tsx`, `OptionCard.test.tsx` (the card renders inside
+  `TooltipProvider` for the appraisal chip); the mock longlist carries the
+  taxonomy definitions.
+- Known data seam surfaced by the card: the option read model repeats a
+  document once per mention (issue #75); the card de-duplicates by snapshot
+  id for display only.
+
 ## Review handoff (step-7/8 inputs)
+
+### Pre-commit review findings on the build (2026-09-23, for step 7)
+
+A `/code-review medium` run before the taste-pass commit read the whole
+branch, not only the working tree. Its two working-tree findings are fixed
+in that commit (ambition keys rendered raw as "Do_minimum"; "1 passe" in
+the constraints summary). The thirteen below sit in the committed build
+and are handed to the review phase unadjudicated, most severe first:
+
+1. **Rebuild drops earlier option-search documents** — `longlist.py`
+   `_child_scopes` reads only this walk's children while
+   `entrants_for_search` skips options already searched (previous build's
+   children, parentless add searches); membership is rebuilt from the
+   reduced unit set, and once `coverage` has a key per option
+   `_needs_search_read` stops reading the old search. Chat scope reads all
+   targeted scopes, so chat and longlist disagree.
+2. **Orphaned child searches on spine failure or abort** — `runner.py`
+   joins children only before `longlist`; every other `_finish_run` path
+   leaves up to 15 children running on an ended walk, admission ignores
+   them, a Rebuild treats a running search as done.
+3. **Child stage frames land on the parent's timeline** — stage frames
+   carry no `capability_run_id` (`api/contract/sse.py`), the SSE router
+   applies no parent filter, the reducer guard covers `run.status` only;
+   the longlist card shows the children's "Searching" and "Skipped" rows.
+4. **Add can fail after commit and duplicate on retry** —
+   `longlist_actions.add_option` commits the row and event, then
+   `_await_new_run` can time out (pool busy) → 500 → a retry mints a second
+   option and search.
+5. **A shared extraction record is credited to one scope** —
+   `repository.py` `scope_of` keeps one scope per record though records are
+   shared across scopes via the memo; one of two added options undercounts.
+6. **`_finish_run` check-then-write race** with the join's `_end_child`:
+   a late child overwrites `interrupted` with `succeeded` and appends a
+   second terminal event.
+7. **A parentless add search reads as a baseline walk** — `walkKind`
+   defaults to "baseline"; the live card says "The baseline is ready".
+8. **Historical `RunBlock`s take the live stream's stages**, so their
+   kind and notice follow the live run, not their own purpose.
+9. **The reducer's child guard** makes one lost terminal frame (an old
+   walk left `running`) hide every later walk from `state.run`.
+10. **`_open_confirmed_longlist` re-reads the latest approved plan** after
+    the confirm commit instead of using `out.version`; a PATCH in between
+    opens the walk on a never-confirmed version.
+11. **A pool job past `future.cancel()` but before `_open_capability_run`**
+    is abandoned in name only: it opens its row after the join and runs a
+    full walk for a parent that moved on.
+12. **Capacity counts parentless add searches** as executor walks
+    (`runs.py`, `longlist_start.py`) though they run on the option-search
+    pool; two idle tasks can refuse every new run.
+13. **`baselineRun` is looked up in the first 200 `/runs`**, which now
+    include every child; after enough rebuilds "Rebuild longlist" is
+    silently disabled.
+
+Lower-confidence items the review listed without ranking: `where_tried.py`
+maps "korea" to KR so "North Korea" counts as comparable; `labels.py`
+`_inherited_rows` picks an arbitrary pair when a source scope holds several;
+`runner.py` `resolved_skip_ids` treats a partly inherited label as fully
+inherited; `settle_patched_defaults` restore path unreachable (422 first);
+`option_search.py` fan-out not idempotent before its marker event;
+`planStart.ts` start area stuck when `has_longlist` but the longlist GET
+fails; `extract.py` `_write_docs` savepoint misses deadlock
+`OperationalError` between sibling walks. Prompt hashes and the alembic
+migration were checked clean.
+
 
 - **Adjudication items** — the 48 numbered deviations above plus Phase 8's
   four live-check fixes; in particular: the event-log retry cap (16), the

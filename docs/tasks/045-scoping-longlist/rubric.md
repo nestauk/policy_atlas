@@ -113,22 +113,35 @@ not done. Terms and deliverable numbers are defined in
    longlist or targeted walk row exists and the operator remedy is
    documented in ADR 0039; the ADR declares the walk's claim kinds with
    `option_membership` as the membership set.
-9. [ ] **The longlist views.** When a `longlist_result` exists the Result
-   opens on the list view with the view switch (Baseline · Longlist ·
-   Report unavailable), the *scoping pass* label, the counts header, the
-   Show filter, the setting facet and the where-tried facet, collapsible
-   theme sections, option rows with origin, state, exclusion reason and
-   relation, the Do nothing sentence with its link, and no sort; the
-   reduced grid lays tiles by lever type and ambition, shows states, and
-   has no shortlist actions, gap messages or footer; the option card is
-   assembled (no writer call) with What it is · What it is for · Where
-   tried · What the evidence base holds so far · Constraints and guesses
+9. [ ] **The longlist views** (as amended by D27–D34, 2026-09-23). When a
+   `longlist_result` exists the Result opens on the list view with the
+   view switch (Baseline · Longlist · Report unavailable), on the report's
+   page chrome (sidebar, kind row, section disclosure shared with the
+   report); the kind row carries the *scoping pass* chip with the
+   screening sentence as its tooltip; the title is the plan's question and
+   one line gives the counts; the setting facet, the where-tried facet
+   and Group by (Theme · Lever type · Ambition) work; theme sections open
+   collapsed with the description as the collapsed line and "N options ·
+   {instruments}" in the heading, and lever and ambition groups carry the
+   taxonomy definition and "N options · M themes"; option rows show
+   "{Lever type} · {Ambition}", the document count, the origin when not
+   clustered, the state chips, the exclusion reason and relations, and no
+   *abstract only* or outcomes; excluded options sit in one collapsed
+   Excluded options section outside Expand all; no sort. The reduced grid
+   lays tiles by lever type and ambition, hides excluded options behind
+   Show excluded, folds a cell beyond six options, leaves an empty row
+   empty, and has no shortlist actions, gap messages or footer. The option
+   card is assembled (no writer call) on the report's chrome with What it
+   is · What it is for · What the evidence base holds so far (the
+   documents as source cards, one per document) · Constraints and guesses
    (the transferability row as "checked at assessment") · Where it came
-   from, Show the documents, *abstract only* where it applies, and the
-   words "how sure" nowhere; Exclude (with a reason), Include again and Add
-   an option work and each writes a History event as the user's turn;
-   Sources, Share and History are otherwise unchanged and Sources reads
-   inherited labels through the resolver.
+   from and what it relates to, "All N were read from the abstract only."
+   where it applies, and the words "how sure" nowhere; `LonglistOut`
+   serves `lever_type_definitions` and `ambition_bands[].definition`;
+   Exclude (with a reason), Include again and Add an option work and each
+   writes a History event as the user's turn; Sources, Share and History
+   are otherwise unchanged and Sources reads inherited labels through the
+   resolver.
 10. [ ] **The Task Agent around the longlist.** While the longlist exists
     and no walk is active a turn is sorted by `longlist_verbs_v1` into
     question · add · exclude · include again · other; a question is answered

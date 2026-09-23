@@ -1230,7 +1230,7 @@ export const mockLonglistOptionCards: Record<string, OptionOutFixture> = {
     primary_lever_type: "regulate",
     lever_none_fits_reason: null,
     secondary_lever_types: ["provide a service"],
-    ambition: "do minimum",
+    ambition: "do_minimum",
     ambition_reason: "Reorganises the existing offer into one application rather than adding anything new.",
     taxonomy_version: "lever-types-v1",
     document_count: 9,
@@ -1437,10 +1437,16 @@ export function mockLonglist(): components["schemas"]["LonglistOut"] {
       "invest in infrastructure",
       "convene",
     ],
+    // Mirrors backend lever_types.py (LEVER_TYPES, AMBITION_DEFINITIONS);
+    // update alongside it.
+    lever_type_definitions: [
+      { key: "regulate", definition: "set or change rules, standards, bans, licensing or planning requirements" },
+      { key: "provide a service", definition: "deliver or fund a service or programme directly to people" },
+    ],
     ambition_bands: [
-      { key: "do minimum", label: "Do minimum" },
-      { key: "incremental", label: "Incremental" },
-      { key: "structural", label: "Structural" },
+      { key: "do_minimum", label: "Do minimum", definition: "adjusts, extends, enforces or better funds what already exists; the arrangement stays" },
+      { key: "incremental", label: "Incremental", definition: "adds a new scheme, service, rule, charge or offer inside the present structure" },
+      { key: "structural", label: "Structural", definition: "changes the structure itself: who is entitled, who runs it, how it is funded, or what the system is" },
     ],
     taxonomy_version: "lever-types-v1",
     depth_label: "scoping pass",

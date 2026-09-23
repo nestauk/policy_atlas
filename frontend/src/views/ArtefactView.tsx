@@ -39,9 +39,9 @@ import { Chip, type ChipProps } from "../ui/brand/Chip";
 import { ReauthRedirect } from "../ui/feedback";
 import { Sheet, SheetContent } from "../ui/radix/Sheet";
 import { LIFECYCLE_PAGE_CLASS, READING_COLUMN_MAX_W } from "./listPageChrome";
+import { REPORT_TITLE_CLASS, ReportKindRow, ReportPage, SnapshotCells, type SnapshotCell } from "./reportPage";
 import { usePublicView } from "./publicView";
 import {
-  ContentsSidebar,
   FullReportExpandAllButton,
   FullReportExpandProvider,
   GatheredSection,
@@ -1534,7 +1534,7 @@ function ArtefactReport() {
   // Sources links into the sources view, filtered to the cited set
   // (028 F.5): there is no `status=cited` value, so the cited count routes
   // through the boolean `cited=true` param.
-  const snapshotCells: Array<[string, string, string | null]> = [];
+  const snapshotCells: SnapshotCell[] = [];
   if (typeof snapshot?.source_count === "number" && typeof snapshot?.included === "number") {
     // Transcription trap 3: `source_count` is the cited/reference count —
     // never "found".
@@ -1608,48 +1608,17 @@ function ArtefactReport() {
       ];
 
   return (
-    <div className="mx-auto flex w-full flex-col justify-center gap-6 px-6 max-md:gap-0 max-md:px-0 md:flex-row">
-      <ContentsSidebar entries={outlineEntries} />
-      <main className={`artefact-page anim-rise my-8 min-w-0 ${READING_COLUMN_MAX_W} flex-1 bg-paper px-10 py-9 shadow-sm ring-1 ring-line max-md:my-0 max-md:px-4 max-md:py-6 max-md:shadow-none max-md:ring-0`}>
+    <ReportPage entries={outlineEntries}>
       <header id="answer" className="mb-8">
-        <div className="flex items-center justify-between gap-4">
-          <p className="text-meta font-extrabold uppercase tracking-[0.06em] text-grey">
-            {/* The kind-of-artefact slot. The roll-up's depth label
-                ("scoping pass") stays on the wire for the later per-row
-                surfaces; the Result's heading says what the reader is looking
-                at (owner ruling 2026-09-18). */}
-            {baseline ? "Baseline" : "Report"}
-          </p>
+        <ReportKindRow kind={baseline ? "Baseline" : "Report"}>
+          {/* The kind-of-artefact slot. The roll-up's depth label
+              ("scoping pass") stays on the wire for the later per-row
+              surfaces; the Result's heading says what the reader is looking
+              at (owner ruling 2026-09-18). */}
           <ArtefactDownload artefact={data} />
-        </div>
-        <h1 className="mt-1 text-display font-extrabold leading-tight tracking-[-0.5px] text-navy max-md:text-title">
-          {scrub(data.title)}
-        </h1>
-        {snapshotCells.length > 0 && (
-          <div className="mt-4 grid grid-cols-2 border border-line sm:grid-cols-4">
-            {snapshotCells.map(([label, value, href]) => {
-              const content = (
-                <>
-                  <p className="text-meta font-bold uppercase tracking-[0.06em] text-grey">{label}</p>
-                  <p className="mt-1 text-body font-medium leading-snug text-navy">{scrub(value)}</p>
-                </>
-              );
-              return href !== null ? (
-                <Link
-                  key={label}
-                  to={href}
-                  className="border-r border-line p-3 last:border-r-0 hover:underline"
-                >
-                  {content}
-                </Link>
-              ) : (
-                <div key={label} className="border-r border-line p-3 last:border-r-0">
-                  {content}
-                </div>
-              );
-            })}
-          </div>
-        )}
+        </ReportKindRow>
+        <h1 className={REPORT_TITLE_CLASS}>{scrub(data.title)}</h1>
+        <SnapshotCells cells={snapshotCells} />
         {!isPublicView && (
           <button
             type="button"
@@ -1765,8 +1734,7 @@ function ArtefactReport() {
       {dossierSource !== null && (
         <SourceDossier taskId={taskId} sourceRef={dossierSource} onClose={closeDossier} />
       )}
-      </main>
-    </div>
+    </ReportPage>
   );
 }
 

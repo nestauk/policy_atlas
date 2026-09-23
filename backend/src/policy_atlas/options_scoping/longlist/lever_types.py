@@ -32,6 +32,12 @@ class LeverType:
     definition: str
 
 
+# Frontend coupling: the keys below are mirrored by hand in
+# frontend/src/views/longlist/longlistPresentation.ts (`leverNoun`, the noun
+# a theme heading uses per lever type) and in frontend/src/mock/fixtures.ts
+# (`mockLonglist`). The definitions reach the page through the longlist read
+# model (`lever_type_definitions`), so only the keys need a matching edit
+# there when this list changes.
 LEVER_TYPES: tuple[LeverType, ...] = (
     LeverType(
         "regulate",
@@ -87,6 +93,22 @@ AMBITION_LABELS: dict[str, str] = {
     "do_minimum": "Do minimum",
     "incremental": "Incremental",
     "structural": "Structural",
+}
+
+# One line per band, the typing prompt's own words, for the longlist's
+# group-by-ambition headings. Served through the longlist read model
+# (`ambition_bands[].definition`); the frontend mock in
+# frontend/src/mock/fixtures.ts (`mockLonglist`) carries a copy of the
+# bands, labels and definitions, so update it when these change.
+AMBITION_DEFINITIONS: dict[str, str] = {
+    "do_minimum": (
+        "adjusts, extends, enforces or better funds what already exists; the arrangement stays"
+    ),
+    "incremental": "adds a new scheme, service, rule, charge or offer inside the present structure",
+    "structural": (
+        "changes the structure itself: who is entitled, who runs it, how it is funded, "
+        "or what the system is"
+    ),
 }
 
 

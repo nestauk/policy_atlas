@@ -44,6 +44,7 @@ from policy_atlas.api.contract import (
     IofStatisticsOut,
     JudgementOut,
     LandscapeOut,
+    LeverTypeOut,
     LonglistCountsOut,
     LonglistOut,
     LonglistThemeOut,
@@ -118,8 +119,10 @@ from policy_atlas.options_scoping.longlist.coverage import (
 )
 from policy_atlas.options_scoping.longlist.lever_types import (
     AMBITION_BANDS,
+    AMBITION_DEFINITIONS,
     AMBITION_LABELS,
     LEVER_TYPE_KEYS,
+    LEVER_TYPES,
     TAXONOMY_VERSION,
 )
 from policy_atlas.options_scoping.longlist.where_tried import where_codes, where_group
@@ -3329,8 +3332,14 @@ def longlist_out(conn: Connection, task_id: uuid.UUID) -> LonglistOut | None:
         options=options,
         where_label=_where_label(result, built_from[1] if built_from else None),
         lever_types=list(LEVER_TYPE_KEYS),
+        lever_type_definitions=[
+            LeverTypeOut(key=lever.key, definition=lever.definition) for lever in LEVER_TYPES
+        ],
         ambition_bands=[
-            AmbitionBandOut(key=band, label=AMBITION_LABELS[band]) for band in AMBITION_BANDS
+            AmbitionBandOut(
+                key=band, label=AMBITION_LABELS[band], definition=AMBITION_DEFINITIONS.get(band)
+            )
+            for band in AMBITION_BANDS
         ],
         taxonomy_version=taxonomy if isinstance(taxonomy, str) else TAXONOMY_VERSION,
     )

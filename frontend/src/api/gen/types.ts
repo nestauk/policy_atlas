@@ -1169,8 +1169,11 @@ export interface components {
          *     Args:
          *         key: The stored value.
          *         label: The display label.
+         *         definition: One line saying what the band means, for a group heading.
          */
         AmbitionBandOut: {
+            /** Definition */
+            definition?: string | null;
             /** Key */
             key: string;
             /** Label */
@@ -2797,6 +2800,20 @@ export interface components {
             user_message: string;
         };
         /**
+         * LeverTypeOut
+         * @description One lever type of the taxonomy the options were typed against.
+         *
+         *     Args:
+         *         key: The stored value and display label.
+         *         definition: One line saying how the state acts under this type.
+         */
+        LeverTypeOut: {
+            /** Definition */
+            definition: string;
+            /** Key */
+            key: string;
+        };
+        /**
          * LonglistCountsOut
          * @description The list view's header counts.
          *
@@ -2852,6 +2869,8 @@ export interface components {
          *             Where).
          *         lever_types: The lever-type list the options were typed against, in
          *             order (the grid's rows).
+         *         lever_type_definitions: The same list with each type's one-line
+         *             definition (the list view's group headings).
          *         ambition_bands: The ambition bands, in order (the grid's columns).
          *         taxonomy_version: The lever-type list version.
          *         depth_label: The depth label every longlist surface carries.
@@ -2872,6 +2891,8 @@ export interface components {
              * @constant
              */
             depth_label: "scoping pass";
+            /** Lever Type Definitions */
+            lever_type_definitions?: components["schemas"]["LeverTypeOut"][];
             /** Lever Types */
             lever_types?: string[];
             /** Options */

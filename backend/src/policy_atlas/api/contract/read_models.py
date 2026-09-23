@@ -894,10 +894,24 @@ class AmbitionBandOut(BaseModel):
     Args:
         key: The stored value.
         label: The display label.
+        definition: One line saying what the band means, for a group heading.
     """
 
     key: str
     label: str
+    definition: str | None = None
+
+
+class LeverTypeOut(BaseModel):
+    """One lever type of the taxonomy the options were typed against.
+
+    Args:
+        key: The stored value and display label.
+        definition: One line saying how the state acts under this type.
+    """
+
+    key: str
+    definition: str
 
 
 class LonglistOut(BaseModel):
@@ -919,6 +933,8 @@ class LonglistOut(BaseModel):
             Where).
         lever_types: The lever-type list the options were typed against, in
             order (the grid's rows).
+        lever_type_definitions: The same list with each type's one-line
+            definition (the list view's group headings).
         ambition_bands: The ambition bands, in order (the grid's columns).
         taxonomy_version: The lever-type list version.
         depth_label: The depth label every longlist surface carries.
@@ -935,6 +951,7 @@ class LonglistOut(BaseModel):
     options: list[OptionSummaryOut] = Field(default_factory=list)
     where_label: str
     lever_types: list[str] = Field(default_factory=list)
+    lever_type_definitions: list[LeverTypeOut] = Field(default_factory=list)
     ambition_bands: list[AmbitionBandOut] = Field(default_factory=list)
     taxonomy_version: str | None = None
     depth_label: Literal["scoping pass"] = "scoping pass"

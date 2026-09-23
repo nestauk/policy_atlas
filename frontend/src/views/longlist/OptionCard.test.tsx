@@ -4,6 +4,7 @@ import { MemoryRouter, Route, Routes } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { MOCK_OPTION_ID_EXCLUDED, MOCK_OPTION_ID_NO_IN_SCOPE, mockLonglistOptionCards } from "../../mock/fixtures";
+import { TooltipProvider } from "../../ui/radix/Tooltip";
 import { OptionCard } from "./OptionCard";
 import * as queries from "../../api/queries";
 import * as mutations from "../../api/mutations";
@@ -41,11 +42,13 @@ function renderCard(optionId: string) {
     { mutate: includeMutate, isPending: false } as unknown as ReturnType<typeof mutations.useIncludeOption>,
   );
   return render(
-    <MemoryRouter initialEntries={[`/tasks/${TASK_ID}/options/${optionId}`]}>
-      <Routes>
-        <Route path="/tasks/:taskId/options/:optionId" element={<OptionCard />} />
-      </Routes>
-    </MemoryRouter>,
+    <TooltipProvider>
+      <MemoryRouter initialEntries={[`/tasks/${TASK_ID}/options/${optionId}`]}>
+        <Routes>
+          <Route path="/tasks/:taskId/options/:optionId" element={<OptionCard />} />
+        </Routes>
+      </MemoryRouter>
+    </TooltipProvider>,
   );
 }
 
@@ -63,27 +66,30 @@ describe("OptionCard", () => {
     );
     expect(screen.getByRole("heading", { name: "National sanctions regime" })).toBeInTheDocument();
     expect(screen.getByText("scoping pass")).toBeInTheDocument();
-    expect(screen.getByText("a duty to withdraw benefits on refusal of an offer")).toBeInTheDocument();
-    expect(screen.getByText("Lever: Enforce existing powers · also touches: Regulate")).toBeInTheDocument();
+    expect(screen.getByText("A duty to withdraw benefits on refusal of an offer")).toBeInTheDocument();
+    expect(screen.getByText("Primary lever type: Enforce existing powers; it also touches Regulate.")).toBeInTheDocument();
     expect(
-      screen.getByText("Ambition: Structural — Changes who is entitled to a national benefit, not just how it is delivered."),
+      screen.getByText("Ambition: Structural. Changes who is entitled to a national benefit, not just how it is delivered."),
     ).toBeInTheDocument();
-    expect(screen.getByText("as described, not measured · Policy Atlas's reasoning")).toBeInTheDocument();
   });
 
-  it("renders Where tried, the evidence-base sentences and the closing line", () => {
+  it("renders the evidence-base sentences, where tried, and the documents as source cards", () => {
     renderCard(MOCK_OPTION_ID_EXCLUDED);
-    expect(screen.getByRole("heading", { name: "Where tried" })).toBeInTheDocument();
-    expect(screen.getByText("United Kingdom 4 · comparable systems (OECD) 2 · other 0 · unknown 0")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "What the evidence base holds so far" })).toBeInTheDocument();
+    expect(screen.getByText("6 documents: 4 from United Kingdom, 2 from comparable systems (OECD).")).toBeInTheDocument();
     expect(
-      screen.getByText("6 documents name this option; 3 evaluated it, 2 described it, 0 recommended it, 1 mentioned it."),
-    ).toBeInTheDocument();
-    expect(screen.getByText("A mention is not support.")).toBeInTheDocument();
+      screen.getAllByText("6 documents name this option: 3 evaluated it, 2 described it and 1 mentioned it.").length,
+    ).toBeGreaterThan(0);
+    expect(screen.getByText("2 of the 6 were read from the abstract only.")).toBeInTheDocument();
+    expect(screen.getByText("Benefit sanctions for young jobseekers: a systematic review")).toBeInTheDocument();
+    expect(screen.getAllByText("Evaluated it").length).toBe(2);
+    expect(screen.queryByText("A mention is not support.")).not.toBeInTheDocument();
   });
 
   it("renders the transferability row and the no-in-scope-evidence row where they apply", () => {
     renderCard(MOCK_OPTION_ID_NO_IN_SCOPE);
-    expect(screen.getByText("Transferable to your Where: checked at assessment")).toBeInTheDocument();
+    expect(screen.getByText("Transferable to United Kingdom:")).toBeInTheDocument();
+    expect(screen.getByText("checked at assessment.")).toBeInTheDocument();
     expect(
       screen.getByText(
         "No in-scope evidence: none of the 4 documents pass Evidence from the UK and other high-income countries only.",
@@ -91,10 +97,8 @@ describe("OptionCard", () => {
     ).toBeInTheDocument();
   });
 
-  it("shows the documents behind an option, including an inherited one", async () => {
-    const user = userEvent.setup();
+  it("shows the documents behind an option, including an inherited one", () => {
     renderCard(MOCK_OPTION_ID_EXCLUDED);
-    await user.click(screen.getByText("Show the documents"));
     expect(screen.getByText("National activation policy briefing")).toBeInTheDocument();
     expect(screen.getByText(/inherited from a linked task/)).toBeInTheDocument();
     expect(screen.getByText(/feature not stated/)).toBeInTheDocument();

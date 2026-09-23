@@ -290,7 +290,9 @@ the ADR:
    grade), and tier-4 reasoning (the ambition tag and the guesses); it
    produces no chunk claims and no artefact blocks. Declared once, in the
    ADR, for tasks 3–5.
-9. **The longlist views.** The Result tab opens on the **longlist** once a
+9. **The longlist views.** *Amended by the owner at the taste pass,
+   2026-09-23: D27–D34 supersede the surface details below.* The Result
+   tab opens on the **longlist** once a
    `longlist_result` exists (ruling 50; the existence signal is on the
    longlist route and the task read model — A7); a view switch offers
    **Baseline · Longlist**, and **Report** marked *available after
@@ -518,8 +520,8 @@ Rows marked **keep** must not change behaviour. File paths as built at
 | 7 | constrain | does not exist | new component: per-option fan-out judgement; the deterministic in-scope check; writes judgements and guesses into `longlist_result` and the option state | new `options_scoping/constrain/` (`constrain.py`, `constrain_prompt.py`, `in_scope.py`) |
 | 8 | Schema | `task_link` has no `option_id`; no option tables; `extraction_result.selection_run_id` NOT NULL; the union view names two tables; `capability_run` has no parent | `option`, `option_membership`, `option_relation`, `longlist_result`, `intervention_profile_record`; `task_link.option_id` (nullable FK); `capability_run.parent_capability_run_id` (nullable self-FK); `extraction_result.selection_run_id` nullable; `finding_reference_union` recreated with a third branch (A5) | `core/schema.py`; one alembic revision |
 | 8 | Component names | Python registries | `suggest`, `extract_interventions`, `longlist`, `constrain` registered (no `runs` column exists — A5) | `runtime/run_spec.py`, `runtime/harness.py`, `runtime/task_plan.py` |
-| 9 | Result tab | baseline artefact when `template = baseline` | the longlist when a `longlist_result` exists; view switch Baseline · Longlist · Report (unavailable); list · grid; the scoping pass label | `frontend/src/views/ArtefactView.tsx`, `views/lifecycle.ts` (`hasBaseline` → `resultView` with the longlist existence signal), `views/LifecycleRoute.tsx`, `views/AppShell.tsx`, new `views/longlist/*` (`LonglistView.tsx`, `LonglistGrid.tsx`) |
-| 9 | Option card | does not exist | `/tasks/{id}/options/{option_id}` route in the app; assembled sections | new `views/longlist/OptionCard.tsx` |
+| 9 | Result tab | baseline artefact when `template = baseline` | the longlist when a `longlist_result` exists; view switch Baseline · Longlist · Report (unavailable); list · grid; the scoping pass label. *Taste pass (D27–D32):* on the report's page chrome; Group by Theme · Lever type · Ambition; the Excluded options section; Show excluded on the grid | `frontend/src/views/ArtefactView.tsx`, `views/lifecycle.ts` (`hasBaseline` → `resultView` with the longlist existence signal), `views/LifecycleRoute.tsx`, `views/AppShell.tsx`, new `views/longlist/*` (`LonglistView.tsx`, `LonglistGrid.tsx`, `longlistPresentation.ts`), new `views/reportPage.tsx` (the chrome shared with the report), `views/ArtefactOutline.tsx` (`SectionDisclosure` gains `meta`) |
+| 9 | Option card | does not exist | `/tasks/{id}/options/{option_id}` route in the app; assembled sections. *Taste pass (D33):* on the report's page chrome, five sections, documents as source cards | new `views/longlist/OptionCard.tsx` |
 | 9 | Sources · Share · History | **keep** | unchanged code paths; Sources lists the scopes' documents like any run's and reads inherited labels through the resolver; History shows the walk, its children and the user's actions | — |
 | 10 | Task Agent thread | gate turns; progress for the baseline | + the longlist verbs surface while no walk is active; the progress beats; the answer core over the union of scopes (A8) | `api/routers/task_agent.py` (`_dispatch_gate_turn` pattern), new `api/longlist_turns.py`, new `runtime/longlist_verbs_prompt.py`, new `runtime/option_design_prompt.py`, `runtime/agent_backend.py`, `api/chat_scope.py` (`build_chat_readers` over several scopes) |
 | 10 | Ordinary task chat | resolves the latest succeeded/degraded walk | re-points to the longlist walk after it runs (intended; A8) | `api/chat_scope.py` `resolve_terminal_run_components` |
@@ -527,7 +529,7 @@ Rows marked **keep** must not change behaviour. File paths as built at
 | 11 | API | — | the routes in deliverable 11; `OptionOut`, `LonglistOut` contracts; `your_options` and the default preference on the plan bodies | `api/routers/longlist.py` (new), `api/contract/longlist.py` (new), `api/contract/task_agent.py` |
 | — | ES chain, ES extract profiles, ES characterise, group, ES search prompts | **keep** | byte-identical prompts and outputs | — |
 | — | Prompt guard | name-based; `group_clustering.py` unguarded | every new prompt module is named `*_prompt.py` so the guard pins it; the guard's name rule is unchanged (the recorded 044 gap stays a gap for the old modules) | `scripts/prompt_hashes.json` |
-| — | Generated | via `make openapi-sync` only | additive | `frontend/openapi.json`, `frontend/src/api/gen/types.ts` |
+| — | Generated | via `make openapi-sync` only | additive (+ D34: `lever_type_definitions`, `ambition_bands[].definition`) | `frontend/openapi.json`, `frontend/src/api/gen/types.ts` |
 
 ## Decisions (ruled by the owner, 2026-09-22)
 
@@ -690,6 +692,73 @@ Rows marked **keep** must not change behaviour. File paths as built at
   steering channel needs no prompt change and is added in this slice only
   if the build's NEET option searches show the queries missing what the
   design meant; otherwise it stays a recorded seam.
+
+## Decisions at the taste pass (ruled by the owner, 2026-09-23)
+
+The build's longlist surfaces were reworked with the owner in the chair
+(the impeccable pass after step 6). Each ruling below supersedes the
+matching words in deliverable 9 and the surface map; the deliverable's
+text is kept as written and points here.
+
+- **D27 — the longlist surfaces use the report's page chrome.** The list,
+  the grid and the option card render on the Evidence search report's
+  paper: the contents sidebar, the kind row ("Longlist", "Option") with
+  the page's one control, the display title, and the report's section
+  disclosure ("Expand +" / "Collapse −", the mobile twin, Expand all).
+  The chrome is extracted from the report view into
+  `frontend/src/views/reportPage.tsx` and the report uses it too
+  (EB-modified, not mirrored). Owner: "more consistency in option scoping
+  with the evidence search".
+- **D28 — the list header.** The title is the plan's question (then its
+  title, then the task name); one line under it carries "N options in M
+  themes · K excluded" and "with no in-scope evidence" only when it is not
+  zero. The included count and the unclustered record count are no longer
+  shown. The *scoping pass* chip sits in the kind row and carries the
+  screening sentence as its tooltip; the sentence is not page text. The
+  "Do nothing" sentence is dropped (the Baseline tab is the link).
+- **D29 — themes and groups.** Theme sections open collapsed, with the
+  description as the collapsed line and a heading meta of "N options ·
+  {instruments}" (the lever types present, as nouns: "services, subsidies
+  and procurement" / "services only"). A **Group by** control (Theme ·
+  Lever type · Ambition) regroups the list; lever and ambition groups
+  carry the taxonomy's own one-line definition and "N options · M
+  themes". Rows within a theme are ordered by lever type in taxonomy
+  order. A Setting or Where tried filter opens the sections it narrowed.
+- **D30 — rows.** Name with the action, description, then one grey line:
+  "{Lever type} · {Ambition}" first, the theme when the grouping is not by
+  theme, the document count ("N documents"; "no documents found yet";
+  "searching for its evidence…"), the origin only when it is not
+  clustered, and relations. Rows do not show *abstract only* (it stays on
+  the card as "All N were read from the abstract only.") nor the outcomes
+  served (the card's *What it is for*). The two states keep their chips.
+- **D31 — excluded options.** Excluded options leave their theme for one
+  collapsed **Excluded options** section at the end, outside Expand all,
+  with the reason chip and Include again. The Show filter is removed. The
+  grid hides excluded options unless **Show excluded** is on.
+- **D32 — the grid.** Sentence-case headers, equal column widths, a cell
+  folds beyond six options behind "+N more", and an empty lever row stays
+  empty (no "no option of this type on the longlist" line).
+- **D33 — the option card.** Kind row with the action; title, description;
+  snapshot cells (Documents · Evaluated · Tried in {Where} · Origin); the
+  state callout only when excluded, out of scope or still searching. Five
+  sections: *What it is* (features capitalised; "Primary lever type: X;
+  it also touches Y."; "Ambition: Z. {reason}" — no "as described" and no
+  "Policy Atlas's reasoning" line), *What it is for*, *What the evidence
+  base holds so far* (the documents sentence with zero roles dropped and
+  "None evaluated it." when so; the where-tried sentence with zero groups
+  dropped; the documents as the report's source cards with appraisal,
+  type, role and place chips, one card per document; populations,
+  settings, outcomes measured; the abstract-only line), *Constraints and
+  guesses* (constraint text as a label with its own full stop trimmed;
+  "Transferable to {Where}: checked at assessment."), *Where it came from
+  and what it relates to* (origin and relations only). *Where tried* is
+  not a separate section; "A mention is not support." is dropped.
+- **D34 — the taxonomy definitions reach the page.** `LonglistOut` gains
+  `lever_type_definitions` and `ambition_bands[].definition` (additive;
+  OpenAPI regenerated). The ambition definitions are a constant beside
+  the lever types, in the typing prompt's words; the prompt is untouched.
+  The taxonomy module and the frontend noun map cross-reference each
+  other in comments.
 
 ## Adversarial findings (contract stage, 2026-09-22)
 

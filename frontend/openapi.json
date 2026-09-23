@@ -18,8 +18,19 @@
         "type": "object"
       },
       "AmbitionBandOut": {
-        "description": "One ambition band, a column of the reduced grid.\n\nArgs:\n    key: The stored value.\n    label: The display label.",
+        "description": "One ambition band, a column of the reduced grid.\n\nArgs:\n    key: The stored value.\n    label: The display label.\n    definition: One line saying what the band means, for a group heading.",
         "properties": {
+          "definition": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Definition"
+          },
           "key": {
             "title": "Key",
             "type": "string"
@@ -3318,6 +3329,25 @@
         "title": "LatestTurnPreviewOut",
         "type": "object"
       },
+      "LeverTypeOut": {
+        "description": "One lever type of the taxonomy the options were typed against.\n\nArgs:\n    key: The stored value and display label.\n    definition: One line saying how the state acts under this type.",
+        "properties": {
+          "definition": {
+            "title": "Definition",
+            "type": "string"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "definition"
+        ],
+        "title": "LeverTypeOut",
+        "type": "object"
+      },
       "LonglistCountsOut": {
         "description": "The list view's header counts.\n\n``options``, ``included``, ``excluded`` and ``no_in_scope`` are read from\nthe option rows as they stand (a user exclusion counts at once);\n``themes``, ``unclustered`` and ``not_an_option`` are the longlist run's.\n\nArgs:\n    options: Options on the longlist.\n    themes: Themes.\n    included: Options included.\n    excluded: Options excluded.\n    no_in_scope: Included options with no in-scope evidence.\n    unclustered: Records assigned to no option.\n    not_an_option: Records judged not to describe an actionable option.\n    none_fits: Options no lever type fits.",
         "properties": {
@@ -3368,7 +3398,7 @@
         "type": "object"
       },
       "LonglistOut": {
-        "description": "The `longlist` read model: the options grouped by theme, with their states.\n\nArgs:\n    run_id: The longlist component run the longlist came from.\n    capability_run_id: The longlist walk that run belonged to.\n    plan_version: The plan version the longlist was built from.\n    built_from_plan_version: The same number, named for the plan\n        document's \"built from plan version N\".\n    current_plan_version: The task's current approved plan version.\n    counts: The header counts.\n    themes: The themes, in display order.\n    unthemed_option_ids: Options in no theme (including options added\n        since the build).\n    options: Every option of the task, themed ones first in theme order.\n    where_label: The words the `where` group is shown under (the plan's\n        Where).\n    lever_types: The lever-type list the options were typed against, in\n        order (the grid's rows).\n    ambition_bands: The ambition bands, in order (the grid's columns).\n    taxonomy_version: The lever-type list version.\n    depth_label: The depth label every longlist surface carries.",
+        "description": "The `longlist` read model: the options grouped by theme, with their states.\n\nArgs:\n    run_id: The longlist component run the longlist came from.\n    capability_run_id: The longlist walk that run belonged to.\n    plan_version: The plan version the longlist was built from.\n    built_from_plan_version: The same number, named for the plan\n        document's \"built from plan version N\".\n    current_plan_version: The task's current approved plan version.\n    counts: The header counts.\n    themes: The themes, in display order.\n    unthemed_option_ids: Options in no theme (including options added\n        since the build).\n    options: Every option of the task, themed ones first in theme order.\n    where_label: The words the `where` group is shown under (the plan's\n        Where).\n    lever_types: The lever-type list the options were typed against, in\n        order (the grid's rows).\n    lever_type_definitions: The same list with each type's one-line\n        definition (the list view's group headings).\n    ambition_bands: The ambition bands, in order (the grid's columns).\n    taxonomy_version: The lever-type list version.\n    depth_label: The depth label every longlist surface carries.",
         "properties": {
           "ambition_bands": {
             "items": {
@@ -3412,6 +3442,13 @@
             "default": "scoping pass",
             "title": "Depth Label",
             "type": "string"
+          },
+          "lever_type_definitions": {
+            "items": {
+              "$ref": "#/components/schemas/LeverTypeOut"
+            },
+            "title": "Lever Type Definitions",
+            "type": "array"
           },
           "lever_types": {
             "items": {
