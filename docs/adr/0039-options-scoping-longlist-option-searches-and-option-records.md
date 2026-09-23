@@ -233,11 +233,61 @@ re-pin revert with the image.
 
 ## Evidence
 
-_Added in the build's Phase 8: the migration round-trip, the three live
-longlists' funnel counts and stage-split times at both depths, the peak
-database connections with four children, the profile's per-document cost,
-the option search's per-entrant cost, the semaphores' measured effect, and
-the D26 reading of the queries._
+Build phase 8, 2026-09-23 (`docs/tasks/045-scoping-longlist/verification.md`
+§ Phase 8 holds the tables; every figure below is read back from the saved
+responses and the event log of the local dev database).
+
+- **The migration round-trip** (`tests/core/test_migration_045_slice.py`,
+  12 tests): upgrade → downgrade → upgrade on `c7e2a9f4b1d8`; the downgrade
+  refuses while a longlist or targeted walk exists and while an
+  `extraction_result` row has a null selection; the remedy script clears a
+  longlist walk with its option, membership, relation, `longlist_result` and
+  profile rows, after which the downgrade runs; the union view carries three
+  branches after upgrade and two after downgrade.
+- **Three live longlists on the NEET question**, local app, real egress
+  (OpenAlex, Overton, the inference route):
+  - linked, rapid, one own option: baseline 301 s; longlist walk **24.1 min**
+    (suggest 46 s · broad search to profile 8.5 min · 11 option searches
+    15.7 min at width 4 in three waves · clustering 4.2 min · constrain
+    3.5 min); 185 screened → 151 in → 295 documents in the pool → 395
+    profile records → 40 options in 12 themes, 168 unclustered, 94 not an
+    option, 4 excluded (one by the plan's requirement); the rebuild after a
+    plan change 40.2 min (contended: it shared the option-search pool with
+    the standard walk and, before the suggest fix, re-searched eight
+    re-proposed report options) — every option id and the user's states
+    survived, the added option gained ten memberships;
+  - unlinked, standard: baseline 13.3 min; longlist walk **28.7 min**; 189
+    screened → 137 in → 294 documents → 344 records → 40 options in 11
+    themes, 113 unclustered, 79 not an option, 4 excluded; 10 option searches
+    (177–831 s, the long ones contended);
+  - unlinked, rapid: baseline 316 s; longlist walk **26.8 min**; 125 screened → 88 in → 217 documents → 305 records → 40 options in 12 themes, 68 unclustered, 73 not an option, 3 excluded; 10 option searches (108–775 s).
+- **The profile's cost:** about 3.5 K prompt tokens per fresh document
+  (166 K prompt for 48 documents on the linked rapid walk, 135 K of it
+  cached); memo reuse served 103 of 151 documents on that walk and 117 of
+  137 on the standard one.
+- **An option search's cost:** 0.55–1.55 M prompt tokens per entrant (the
+  screen dominates: 89–295 candidates screened per search), 3–6 minutes
+  uncontended.
+- **Concurrency:** width 4 held on one walk and across two walks (four
+  children in total); peak active database connections 6 (the parent, four
+  children, the poll) against a pool of 5 + 10; the classify and ingest
+  semaphores returned every slot (tests) — the production pool is untouched.
+  The per-task event-log sequence is the contention point: the append retry
+  cap rose from 5 to 32; one child failed a component on a memo-row race
+  hidden behind an aborted transaction, fixed with a savepoint per document
+  (a knowledge candidate, not a design change).
+- **D26, the `guidance` seam:** the designs alone produced searches that
+  screened in 72–175 documents each; no `guidance` argument was added; the
+  seam stays recorded in `docs/deferred.md`.
+- **Where tried (D20):** on abstracts the study geography is mostly absent
+  (*unknown* on most cards); where stated, England/UK and OECD countries
+  appear (a procurement-clauses option: 4 comparable systems), so the
+  international evidence the owner wanted reachable is reached and shown.
+- **The rebuild (D14):** ids kept (41 of 41), user exclusion and re-inclusion
+  kept, the new requirement excluded ten options, the added option's
+  records clustered; the re-run suggest re-proposed the report's options
+  under new names until the prompt was shown the existing options (fixed;
+  repeated suggestions are seeds, not entrants).
 
 ## Consequences
 

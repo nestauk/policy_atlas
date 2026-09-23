@@ -185,7 +185,19 @@ Splash-page **Request access** intake. Public — no bearer token.
   artefact is not a baseline of this task. The plan-scoped record "Confirm
   plan and build longlist" writes after a plan change without a rebuild (a
   steering event needs a walk); task 2 replaces it with the longlist walk's
-  opening decision.
+  opening decision. *([task 045 contract](../tasks/045-scoping-longlist/contract.md), D1, D14, A23.)* The route now also **opens
+  the longlist walk** on the confirmed version — a new `capability_run`
+  under its own `purpose = longlist` intent record — taking the run
+  dispatch lock and pre-insert reservation `POST /runs` holds, and returns
+  the opened walk in an **optional** field of `PlanOut`. After a plan
+  change the plan document's **Rebuild longlist** posts here on the new
+  version; the rebuild is seeded with the existing options, so option ids,
+  exclusions and additions survive (owner: "build it now, ids kept").
+  `TaskOut` gains `active_run` (any running or paused walk, children
+  included) and `has_longlist` (a `longlist_result` row exists): a scoping
+  task's readers key on what exists and what is active, never on a single
+  latest run; `latest_run` stays as it is for the Evidence search (owner,
+  plan review P4: "scoping readers see what exists and what is active").
 - `GET /api/v1/tasks/{id}` → task (read grade, or the public leg —
   § Auth boundary). A public-leg read returns the **redacted shape**:
   `access = "public"`, `is_owner = false`, `owner_display = null`,
@@ -340,6 +352,17 @@ is wanted (`docs/deferred.md` § Task lifecycle IA).
   `run_active` while a walk is running **or paused**: no plan version lands
   under a live walk, so the fence still guarantees the latest-approved plan
   is the active walk's own lineage (review adjudication, 2026-07-21).
+  **Longlist verbs** *([task 045 contract](../tasks/045-scoping-longlist/contract.md), D13; owner: "chat verbs in task 2,
+  buttons as the second way")*: while a longlist exists and no walk is
+  active, a Task Agent turn on a scoping task is sorted
+  (`longlist_verbs_v1`) into **question · add an option · exclude · include
+  again · other**. A question goes to the answer core over the union of the
+  longlist scope and the option searches' scopes; a verb is confirmed in
+  the thread before it is applied, never inferred; *add* mints the option
+  *added by you* with a design proposed back (`option_design_v1`) and starts
+  its option search (a child walk with no parent); *exclude* takes the
+  user's reason. Each applied verb writes the same state the buttons write
+  and a History event as the user's turn.
   `TaskAgentTurnOut` / `TaskAgentTranscriptTurnOut` carry the optional
   additive fields `kind` (`reply | answer | decision`), `answer` (the chat's
   citation payload) and `decision` (`option_id`, `label`, `check_in_id`,
@@ -367,7 +390,10 @@ is wanted (`docs/deferred.md` § Task lifecycle IA).
   the latest completed Task Agent turn so `POST /runs` is not `plan_stale`.
   409 `run_active` while a walk is running or paused; 404 when there is no
   plan to edit; 422 when the merged plan is not executable. This is the
-  document-edit path — it does not go through the Task Agent.
+  document-edit path — it does not go through the Task Agent. On a scoping
+  task the plan read and patch bodies also carry `your_options` (*Options
+  you already have in mind*, D19) and the default preference "Transferable
+  to *Where*" (D22) — task 045.
 - `GET /api/v1/tasks/{id}/task-agent-turns` → the owner-scoped durable
   transcript in ascending `turn_index`, paginated in the standard
   `{data, pagination}` envelope. Each row exposes `turn_index`,
@@ -506,6 +532,11 @@ archived conversations are the same 404.
   standard `{data, pagination}` envelope — runs accumulate);
   `GET .../runs/{run_id}` → one. Status ∈ `running | paused | succeeded |
   degraded | failed | aborted | interrupted`.
+- **Child walks** *([task 045 contract](../tasks/045-scoping-longlist/contract.md), D6 and finding A1)*: an option search
+  is a `capability_run` whose `parent_capability_run_id` names the longlist
+  walk that asked for it; the parent waits for its children, and a child's
+  failure degrades the parent. The longlist walk's and its children's
+  progress arrive on the existing run stream (§ SSE).
 
 ### Check-ins (steering)
 
@@ -542,11 +573,16 @@ archived conversations are the same 404.
   the baseline's key assumption and the plan's Settings; `options[]` are
   `confirm_plan` ("Confirm plan and build longlist" → the walk finishes
   `succeeded`; the decision payload records `plan_version` and the baseline
-  `artefact_id`) and `change_plan` ("Change the plan" → response `abort`
+  `artefact_id`; since task 045 (D1) the decision also opens the **longlist
+  walk** on the confirmed version under the dispatch lock and reservation,
+  and a chat decision carries the opened walk on the decision; the card
+  route stays `204` and the thread learns of the walk from the run stream —
+  owner, plan review P16a: "card route stays 204") and `change_plan` ("Change the plan" → response `abort`
   with `action: "change_plan"`: the walk ends `aborted`, the plan stays
   `approved` and editable). In unattended mode the point does not pause:
   the runner records `decided_by: standing_default` and flags it for the
-  end-of-run review. A decision may also arrive as a Task Agent turn
+  end-of-run review, and opens the longlist walk the same way (task 045,
+  finding A2). A decision may also arrive as a Task Agent turn
   (§ Task Agent turns); both land in the same transaction.
   The answer and its `continuation.requested` event commit in one
   transaction; the parked run's **boundary continuation walk** dispatches
@@ -595,6 +631,14 @@ render honest absence: missing stages are `null`/absent, never faked.
   their resolved member `sources` (`source_id`, `title`) when member identities
   are available. Stale or unresolvable references and member sources are
   omitted, and an empty theme resolution is `null`.
+
+**Longlist routes** *([task 045 contract](../tasks/045-scoping-longlist/contract.md), deliverable 11; Options scoping only)*:
+`GET /api/v1/tasks/{id}/longlist` (themes, options, counts, states, the run it
+came from) · `GET /api/v1/tasks/{id}/options/{option_id}` (the option card) ·
+`POST /api/v1/tasks/{id}/options` (add by hand — the button's path, the same
+handler as the chat verb) · `POST .../options/{option_id}/exclude` and
+`.../include` (with the user's reason). Each write is logged as the user's
+turn in History (OS ruling 1). All additive.
 
 The C.1 additions enrich these records additively: coverage exposes public
 backend names and post-run query detail; evidence exposes effective-screen

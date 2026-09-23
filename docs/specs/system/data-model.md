@@ -144,6 +144,15 @@ tool-governance level instead (see [security/egress — not yet drafted]; arch �
   rows as they already do and are not surfaced to the user. A re-run in the receiving task is a
   plan setting or a user action, after which the receiving task's own rows take over for those
   documents. Re-screening against the receiving plan is mandatory (OS ruling 22).
+  *([task 045 contract](../tasks/045-scoping-longlist/contract.md), finding A3 and D23.)* The inherit step writes one `task_source_snapshot` row per
+  linked document, pointing at the same content-addressed snapshot, **origin unchanged** (owner:
+  "origin stays the original source; inherited = created by the inherit step"). Classification and
+  appraisal are **read across through one resolver** — per document, the evidence type and quality
+  tier with their provenance (this task's own scope, or a linked task's pinned run through
+  `task_link` and the shared snapshot id) and an explicit *absent*; a tier under a different rubric
+  version is re-appraised rather than mixed. Owner: "I think it would make sense to have documents
+  be able to be read across tasks rather than just copying them over … laying the groundwork for [a
+  meta-analysis capability]". No general cross-task reading layer is built.
 - **Origin drives classification richness & default priority, not appraisal** — an uploaded
   SR is appraised the same as an acquired one; priority is handled by **scoping** (soft prior),
   not a hidden re-weight. Uploaded docs get an **inferred `function`** (never user-entered;
@@ -281,6 +290,15 @@ task already extracted is a separate Evidence search change, not needed by optio
   the six shared reference columns, reference-columns-only); its first reader is group's
   value-facet loader. Kind-scoped payloads (ICF `claim`/`context_type`) stay direct table
   reads — a kind-scoped facet gets a kind-scoped read, honestly.
+- **Third record kind: `intervention_profile_record`** (options scoping, [task 045 contract](../tasks/045-scoping-longlist/contract.md), D3 —
+  owner naming 2026-09-22, replacing "intervention mention" and "abstract profile"). One row per
+  intervention a screened-in document's abstract covers, with its **role** (evaluated · described ·
+  recommended · comparator · mentioned), its stated design features, whether it is a bundle and of
+  what, a quote anchor and the shared reference columns; per document, whether it covers no
+  intervention. On the findings pattern beside the two finding tables, but **not a finding of
+  effect** and not a subset of either: it lacks the effect (IOF) and the typed claim (ICF). Its own
+  fingerprint domain, memoised through `source_extraction_record` per task; the union view gains a
+  third branch for it.
 - **ICF is its own fingerprint domain** (own extraction profile/call `eb_icf_base_v1`, own
   `SCHEMA_VERSION` `icf_v2` since task 022's `context_label` rider, hanging off
   `source_extraction_record` via the same composite FK
@@ -329,11 +347,20 @@ shortlist choice, a variant's link to its parent or a child task's dependency ac
 - typed relations **variant of** / **part of** between option ids;
 - **state records** against the id: included · excluded (with the constraint) · on the shortlist
   (proposed by Policy Atlas / added by you) · assessed (scoping pass / full run);
-- **membership records** against the id and a design version: the intervention mentions and the
+- **membership records** against the id and a design version: the intervention profile records and the
   findings that belong to it (also the validated set behind its pattern claims);
 - a link to the child Evidence search task a full run mints (one row of `task_link`, below).
 Matching a regenerated option to an existing id after a plan change (deltas, not restarts) is
 **open** — OS open question 7 — and is a labelled judgement or a user confirmation, never silent.
+
+*([task 045 contract](../tasks/045-scoping-longlist/contract.md).)* Built as the tables `option`, `option_membership` (each row carrying its
+assignment reason and the `design_feature_not_stated` flag, D11) and `option_relation`, with the
+run-keyed `longlist_result` (themes, per-option coverage, constraint judgements, guesses and the
+counted buckets — the characterise pattern). Option-level judgements are keyed `(option_id,
+design_version)`, so a changed design cannot inherit them (D10). `task_link` gains the nullable
+`option_id`. An option search is a **child walk**: `capability_run.parent_capability_run_id` names
+the longlist walk that asked for it (finding A1); a walk the Task Agent starts to add an option has
+no parent.
 
 ### Links between tasks (declared 2026-09-09; owner ruling on decision-sheet row A6)
 
@@ -356,7 +383,8 @@ shown as inherited; the receiving task writes only its own document rows and its
 (OS ruling 22). A task with inbound links is archived, never hard-deleted. A link changes no one's
 access. *(Owner, 2026-09-09: kept generic — a task-to-task record — as the foundation later
 capabilities such as meta-analysis will build on; the option id is optional so the full run's
-child link can name its option.)*
+child link can name its option.)* `task_link` is unique per task pair — noted for options scoping's task 5,
+the full run (task 045, finding A21).
 
 - **Three grains:** **block** = capture grain (own version chain; summary co-versions);
   **artefact** = snapshot grain (lock-on-advance freezes a named immutable binding of block

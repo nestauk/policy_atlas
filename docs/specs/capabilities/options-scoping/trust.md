@@ -147,7 +147,10 @@ supported sentence, and the sentence is what gets copied into advice.
 
 - ✅ For constraints that can only be checked after assessment (cost, effect, evidence
   strength), each option carries a **reasoned guess** — a capped reasoning claim ("cost: likely
-  low, a guess rather than evidence") — so the user can sort by it if they choose.
+  low, a guess rather than evidence") — so the user can sort by it if they choose. The default
+  preference **"Transferable to *Where*"** is the exception: no guess before assessment, its row
+  reading "checked at assessment" (task 045, D22; owner: "Should be a default preference"; an
+  argument-only transferability cell was rejected, ruling 29).
 - ✅ Guard rails: capped wording ("likely", never "is"); visibly labelled on every surface; a
   flag and a **user-requested** sort, **never a screen, never an exclusion, never an input to
   the shortlist proposal or to any pre-assessment recommendation** (ruling 19: guesses must not
