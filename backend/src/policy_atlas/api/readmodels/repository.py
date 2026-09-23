@@ -769,7 +769,11 @@ def evidence_page(
             status, reason = "findings_extracted", None
         elif row.task_source_snapshot_id in selected:
             status, reason = "selected", None
-        elif row.full_text_status == "ingested":
+        elif (
+            screen is not None
+            and screen.status == "relevant"
+            and row.full_text_status == "ingested"
+        ):
             status, reason = "read_in_full", None
         elif (
             screen is not None
@@ -2321,7 +2325,11 @@ def source_dossier_out(
         status, reason = "findings_extracted", None
     elif source_id in selected:
         status, reason = "selected", None
-    elif row["full_text_status"] == "ingested":
+    elif (
+        screen is not None
+        and screen.status == "relevant"
+        and row["full_text_status"] == "ingested"
+    ):
         status, reason = "read_in_full", None
     elif (
         screen is not None
