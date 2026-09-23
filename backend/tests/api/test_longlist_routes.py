@@ -944,3 +944,98 @@ def test_the_buttons_are_422_on_an_evidence_search_task(engine: Engine, tmp_path
         ):
             assert response.status_code == 422, response.text
         assert agent.option_design_calls == 0
+
+
+def test_an_added_option_reads_its_own_search_until_the_next_build(conn: Connection) -> None:
+    """Live-check finding: an option added since the build reads its option search's records.
+
+    While the add's walk runs, ``search_pending`` is set and the counts are
+    zero; once it has ended, its scope's profile records (comparators left
+    out) are the option's documents, DOI-collapsed for the counts.
+    """
+    walk = _Walk(conn)
+    walk.option("Youth guarantee", origin="added_by_you")
+    walk.build(_Scripted())
+    added = walk.option("Wage subsidy", origin="added_by_you")
+    scope_id = uuid.uuid4()
+    conn.execute(
+        evidence_scope.insert().values(
+            evidence_scope_id=scope_id,
+            task_id=walk.task_id,
+            intent="Wage subsidy.",
+            context={"capability": "options_scoping", "option_id": str(added)},
+            created_at=now(),
+            purpose="targeted",
+            plan_id=walk.plan_id,
+        )
+    )
+    search_walk = uuid.uuid4()
+    conn.execute(
+        capability_run.insert().values(
+            capability_run_id=search_walk,
+            task_id=walk.task_id,
+            evidence_scope_id=scope_id,
+            capability="options_scoping",
+            plan_id=walk.plan_id,
+            plan_version=2,
+            status="running",
+            started_at=now(),
+            parent_capability_run_id=None,
+        )
+    )
+
+    card = repository.option_out(conn, walk.task_id, added)
+    assert card is not None
+    assert card.search_pending is True
+    assert card.document_count == 0 and card.documents == []
+    listed = repository.longlist_out(conn, walk.task_id)
+    assert listed is not None
+    summary = next(o for o in listed.options if o.option_id == added)
+    assert summary.search_pending is True and summary.document_count == 0
+
+    # The search screened in and profiled three documents; two share a DOI.
+    first = walk.doc({"title": "Wage subsidy trial", "doi": "10.9/ws"})
+    twin = walk.doc({"title": "Wage subsidy trial (preprint)", "doi": "https://doi.org/10.9/WS"})
+    other = walk.doc({"title": "A Danish wage subsidy"})
+    walk.classify(first, RCT, 4)
+    walk.classify(twin, RCT, 4)
+    walk.record(first, "wage subsidy", study_geography="England", setting="Employers")
+    walk.record(twin, "wage subsidy", study_geography="United Kingdom")
+    walk.record(other, "wage subsidy", role="described", study_geography="Denmark")
+    walk.record(other, "unemployment benefit", role="comparator")
+    walk.rollup(scope_id, [first, twin, other])
+    conn.execute(
+        capability_run.update()
+        .where(capability_run.c.capability_run_id == search_walk)
+        .values(status="succeeded", ended_at=now())
+    )
+
+    card = repository.option_out(conn, walk.task_id, added)
+    assert card is not None
+    assert card.search_pending is False
+    assert card.is_entrant_with_no_documents is False
+    assert card.document_count == 2  # the DOI twins count once
+    assert card.evaluated_count == 1
+    assert card.where_tried.model_dump() == {
+        "where": 1,
+        "comparable": 1,
+        "other": 0,
+        "unknown": 0,
+    }
+    assert card.evidence.by_tier == {"Strong": 1, "not rated": 1}
+    assert card.settings == ["Employers"]
+    # One per record, never collapsed; the comparator is not a document.
+    assert sorted(d.title for d in card.documents) == [
+        "A Danish wage subsidy",
+        "Wage subsidy trial",
+        "Wage subsidy trial (preprint)",
+    ]
+    trial = next(d for d in card.documents if d.title == "Wage subsidy trial")
+    assert trial.tier == "Strong" and trial.where_tried_group == "where"
+    listed = repository.longlist_out(conn, walk.task_id)
+    assert listed is not None
+    summary = next(o for o in listed.options if o.option_id == added)
+    assert summary.document_count == 2 and summary.search_pending is False
+    # A build-assigned option is untouched by the rule.
+    seeded = next(o for o in listed.options if o.name == "Youth guarantee")
+    assert seeded.search_pending is False

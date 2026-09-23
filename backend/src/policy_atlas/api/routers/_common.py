@@ -138,11 +138,30 @@ def run_artefact_id_column() -> Any:
     )
 
 
+def run_purpose_column() -> Any:
+    """The walk's intent-record purpose, as a labelled scalar subquery.
+
+    Selected beside ``capability_run`` so :func:`run_out` can say what kind of
+    walk it is (task 045): the thread keeps option searches out of its run
+    blocks. ``None`` for a walk whose scope carries no purpose (an Evidence
+    search).
+    """
+    return (
+        select(evidence_scope.c.purpose)
+        .where(evidence_scope.c.evidence_scope_id == capability_run.c.evidence_scope_id)
+        .where(evidence_scope.c.task_id == capability_run.c.task_id)
+        .limit(1)
+        .scalar_subquery()
+        .label("purpose")
+    )
+
+
 def run_out(row: RowMapping | dict[str, Any]) -> RunOut:
     """Project one capability-run row into its public contract shape.
 
-    ``artefact_id`` is read when the row was selected with
-    :func:`run_artefact_id_column`; a bare ``capability_run`` row reports none.
+    ``artefact_id`` and ``purpose`` are read when the row was selected with
+    :func:`run_artefact_id_column` / :func:`run_purpose_column`; a bare
+    ``capability_run`` row reports none.
     """
     return RunOut(
         capability_run_id=row["capability_run_id"],
@@ -153,6 +172,8 @@ def run_out(row: RowMapping | dict[str, Any]) -> RunOut:
         started_at=row["started_at"],
         ended_at=row["ended_at"],
         artefact_id=row.get("artefact_id"),
+        parent_capability_run_id=row.get("parent_capability_run_id"),
+        purpose=row.get("purpose"),
     )
 
 

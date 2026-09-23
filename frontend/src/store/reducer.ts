@@ -55,6 +55,18 @@ export function reduceRunStreamFrame(state: RunStreamState, frame: SseFrame): Ru
       // currently tracks is a fresh walk — its timeline must not inherit
       // the previous (possibly interrupted) run's stage entries or liveness.
       const current = base.run;
+      // Task 045 (S12): a longlist walk's option searches are child walks on
+      // the same task stream. A different run's frame while the tracked walk
+      // is still running or paused can only be such a child (the admission
+      // fences never open a second parentless walk beside a live one), so it
+      // is recorded but never becomes the live run.
+      if (
+        current !== null &&
+        current.id !== frame.capability_run_id &&
+        (current.status === "running" || current.status === "paused")
+      ) {
+        return { ...base, runs: { ...base.runs, [frame.capability_run_id]: frame.status } };
+      }
       const isNewRun = frame.status === "running" && frame.capability_run_id !== current?.id;
       const sameRun = current !== null && current.id === frame.capability_run_id;
       const isTerminal =

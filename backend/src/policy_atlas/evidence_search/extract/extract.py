@@ -29,6 +29,7 @@ from typing import Any, NamedTuple, cast
 import structlog
 from sqlalchemy import select as sa_select
 from sqlalchemy.engine import Connection
+from sqlalchemy.exc import IntegrityError
 
 from policy_atlas.core import tracing
 from policy_atlas.core.openai_client import CallBudget
@@ -1311,45 +1312,133 @@ def _write_docs(
             still exists, so writing under the same fingerprint would
             collide with ``uq_ser_memo`` (task_id, source_snapshot_id,
             extraction_fingerprint).
+
+    Each document's writes run in a savepoint. When a concurrent walk on the
+    same task wrote the same memo key first (two option-search child walks
+    profiling one document; task 045), the insert violates ``uq_ser_memo``:
+    only that document's savepoint rolls back, and the document becomes
+    ``reused`` of the sibling's row — never ``failed``, and never an aborted
+    component transaction.
     """
     for doc in docs:
         if doc.reused:
             continue
-        record_id = uuid.uuid4()
-        doc.extraction_record_id = record_id
         doc_fingerprint = (
             refresh_fingerprint
             if doc.refreshed and refresh_fingerprint is not None
             else fingerprint
         )
-        conn.execute(
-            source_extraction_record.insert().values(
-                extraction_record_id=record_id,
-                task_id=task_id,
-                source_snapshot_id=doc.record_snapshot_id,
-                task_source_snapshot_id=doc.tss_id,
-                extraction_fingerprint=doc_fingerprint,
-                status=doc.status,
-                basis=doc.basis,
-                primary_evidence_type=doc.sent_evidence_type,
-                error=doc.error,
-                finding_count=doc.finding_count,
-                run_id=run_id,
-                created_at=created_at,
-            )
+        try:
+            with conn.begin_nested():
+                _write_doc(
+                    conn,
+                    task_id=task_id,
+                    run_id=run_id,
+                    fingerprint=doc_fingerprint,
+                    doc=doc,
+                    created_at=created_at,
+                    profile=profile,
+                )
+        except IntegrityError as exc:
+            if not _is_memo_conflict(exc):
+                raise
+            _reuse_sibling_row(conn, task_id=task_id, fingerprint=doc_fingerprint, doc=doc)
+
+
+def _is_memo_conflict(exc: IntegrityError) -> bool:
+    """Whether ``exc`` is a ``uq_ser_memo`` unique violation."""
+    diag = getattr(exc.orig, "diag", None)
+    return getattr(diag, "constraint_name", None) == "uq_ser_memo"
+
+
+def _reuse_sibling_row(
+    conn: Connection, *, task_id: uuid.UUID, fingerprint: str, doc: _Doc
+) -> None:
+    """Point a document at the memo row a concurrent walk wrote first.
+
+    Args:
+        conn: Open database connection (its savepoint already rolled back).
+        task_id: Owning task.
+        fingerprint: The fingerprint the document was written under.
+        doc: The document whose write lost the race.
+
+    Raises:
+        ExtractError: If the conflicting row cannot be read back.
+    """
+    row = conn.execute(
+        sa_select(
+            source_extraction_record.c.extraction_record_id,
+            source_extraction_record.c.status,
+            source_extraction_record.c.basis,
+            source_extraction_record.c.finding_count,
         )
-        for record, grounding, coverage in zip(
-            doc.survivors, doc.groundings, doc.coverage_by_survivor, strict=True
-        ):
-            profile.write_finding(
-                conn,
-                task_id,
-                record_id,
-                record,
-                grounding,
-                coverage,
-                created_at,
-            )
+        .where(source_extraction_record.c.task_id == task_id)
+        .where(source_extraction_record.c.extraction_fingerprint == fingerprint)
+        .where(source_extraction_record.c.status.in_(MEMO_STATUSES))
+        .where(source_extraction_record.c.source_snapshot_id == doc.record_snapshot_id)
+        .order_by(source_extraction_record.c.created_at.desc())
+    ).first()
+    if row is None:
+        raise ExtractError(f"memo conflict for tss {doc.tss_id} but no memo row to reuse")
+    log.info(
+        "extract.memo_conflict_reused",
+        tss_id=str(doc.tss_id),
+        extraction_record_id=str(row.extraction_record_id),
+    )
+    doc.reused = True
+    doc.extraction_record_id = row.extraction_record_id
+    doc.status = row.status
+    doc.basis = row.basis
+    doc.finding_count = int(row.finding_count)
+    doc.error = None
+    doc.survivors = []
+    doc.groundings = []
+    doc.coverage_by_survivor = []
+    doc.vetted_out_count = 0
+    doc.vetted_out_records = []
+
+
+def _write_doc(
+    conn: Connection,
+    *,
+    task_id: uuid.UUID,
+    run_id: uuid.UUID,
+    fingerprint: str,
+    doc: _Doc,
+    created_at: datetime,
+    profile: ExtractionProfileBundle,
+) -> None:
+    """Write one document's memo record and its findings."""
+    record_id = uuid.uuid4()
+    doc.extraction_record_id = record_id
+    conn.execute(
+        source_extraction_record.insert().values(
+            extraction_record_id=record_id,
+            task_id=task_id,
+            source_snapshot_id=doc.record_snapshot_id,
+            task_source_snapshot_id=doc.tss_id,
+            extraction_fingerprint=fingerprint,
+            status=doc.status,
+            basis=doc.basis,
+            primary_evidence_type=doc.sent_evidence_type,
+            error=doc.error,
+            finding_count=doc.finding_count,
+            run_id=run_id,
+            created_at=created_at,
+        )
+    )
+    for record, grounding, coverage in zip(
+        doc.survivors, doc.groundings, doc.coverage_by_survivor, strict=True
+    ):
+        profile.write_finding(
+            conn,
+            task_id,
+            record_id,
+            record,
+            grounding,
+            coverage,
+            created_at,
+        )
 
 
 # --- Summary / invariants ---------------------------------------------------

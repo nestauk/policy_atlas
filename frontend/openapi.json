@@ -3997,6 +3997,11 @@
             ],
             "title": "Run Id"
           },
+          "search_pending": {
+            "default": false,
+            "title": "Search Pending",
+            "type": "boolean"
+          },
           "secondary_lever_types": {
             "items": {
               "type": "string"
@@ -4100,7 +4105,7 @@
         "type": "object"
       },
       "OptionSummaryOut": {
-        "description": "One option as the list view and the grid show it.\n\nArgs:\n    option_id: Stable option identity.\n    name: Option name.\n    description: One-sentence description.\n    outcomes_served: The plan's outcomes the option serves.\n    origin: Where it came from.\n    state: Included or excluded.\n    exclusion: Why it is excluded; `null` when included.\n    no_in_scope_evidence: Included, but none of its documents passes the\n        plan's evidence restriction.\n    restriction_text: The restriction none of its documents passes, when\n        `no_in_scope_evidence`.\n    primary_lever_type: The primary lever type; `null` when none fits or\n        the option is not typed yet.\n    lever_none_fits_reason: Why no lever type fits.\n    secondary_lever_types: The other lever types it also touches.\n    ambition: `do_minimum` \u00b7 `incremental` \u00b7 `structural`, as described,\n        not measured.\n    ambition_reason: The one-line justification.\n    taxonomy_version: The lever-type list version it was typed under.\n    design_version: The specified design's version.\n    document_count: Its documents (DOI-collapsed).\n    evaluated_count: Documents that evaluate it.\n    settings: The settings its documents name, most frequent first.\n    where_tried: Documents per where-tried group.\n    relations: Its relations to other options.\n    abstract_only: Every one of its documents was read from an abstract only.\n    is_entrant_with_no_documents: Suggested, drawn from the Evidence\n        search or added by the user, and no document has joined it.",
+        "description": "One option as the list view and the grid show it.\n\nArgs:\n    option_id: Stable option identity.\n    name: Option name.\n    description: One-sentence description.\n    outcomes_served: The plan's outcomes the option serves.\n    origin: Where it came from.\n    state: Included or excluded.\n    exclusion: Why it is excluded; `null` when included.\n    no_in_scope_evidence: Included, but none of its documents passes the\n        plan's evidence restriction.\n    restriction_text: The restriction none of its documents passes, when\n        `no_in_scope_evidence`.\n    primary_lever_type: The primary lever type; `null` when none fits or\n        the option is not typed yet.\n    lever_none_fits_reason: Why no lever type fits.\n    secondary_lever_types: The other lever types it also touches.\n    ambition: `do_minimum` \u00b7 `incremental` \u00b7 `structural`, as described,\n        not measured.\n    ambition_reason: The one-line justification.\n    taxonomy_version: The lever-type list version it was typed under.\n    design_version: The specified design's version.\n    document_count: Its documents (DOI-collapsed).\n    evaluated_count: Documents that evaluate it.\n    settings: The settings its documents name, most frequent first.\n    where_tried: Documents per where-tried group.\n    relations: Its relations to other options.\n    abstract_only: Every one of its documents was read from an abstract only.\n    is_entrant_with_no_documents: Suggested, drawn from the Evidence\n        search or added by the user, and no document has joined it.\n    search_pending: An option added since the build whose own option\n        search is still running or paused; its counts read zero until it ends.",
         "properties": {
           "abstract_only": {
             "default": false,
@@ -4232,6 +4237,11 @@
               }
             ],
             "title": "Restriction Text"
+          },
+          "search_pending": {
+            "default": false,
+            "title": "Search Pending",
+            "type": "boolean"
           },
           "secondary_lever_types": {
             "items": {
@@ -5508,7 +5518,7 @@
         "type": "object"
       },
       "RunOut": {
-        "description": "A capability run resource.\n\nArgs:\n    capability_run_id: The run's identity.\n    task_id: Owning task.\n    plan_id: Identity of the plan the run executes.\n    plan_version: Plan version current at run creation.\n    status: Current run status.\n    started_at: When the run started executing.\n    ended_at: When the run reached a terminal status, or `None` while\n        still running or paused.\n    artefact_id: The artefact this walk wrote, or `None` when it wrote\n        none (it has not reached synthesise, or ended before it). A\n        scoping walk that carries one produced a baseline, whatever its\n        terminal status (task 044 review, C5/C6).",
+        "description": "A capability run resource.\n\nArgs:\n    capability_run_id: The run's identity.\n    task_id: Owning task.\n    plan_id: Identity of the plan the run executes.\n    plan_version: Plan version current at run creation.\n    status: Current run status.\n    started_at: When the run started executing.\n    ended_at: When the run reached a terminal status, or `None` while\n        still running or paused.\n    artefact_id: The artefact this walk wrote, or `None` when it wrote\n        none (it has not reached synthesise, or ended before it). A\n        scoping walk that carries one produced a baseline, whatever its\n        terminal status (task 044 review, C5/C6).\n    parent_capability_run_id: The walk that dispatched this one (a longlist\n        walk's option search), or `None` for a parentless walk (task 045).\n    purpose: The walk's intent-record purpose (`baseline`, `longlist`,\n        `targeted`, ...), or `None` for an Evidence search walk.",
         "properties": {
           "artefact_id": {
             "anyOf": [
@@ -5539,6 +5549,18 @@
             ],
             "title": "Ended At"
           },
+          "parent_capability_run_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Capability Run Id"
+          },
           "plan_id": {
             "format": "uuid",
             "title": "Plan Id",
@@ -5547,6 +5569,17 @@
           "plan_version": {
             "title": "Plan Version",
             "type": "integer"
+          },
+          "purpose": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Purpose"
           },
           "started_at": {
             "format": "date-time",

@@ -221,6 +221,20 @@ test.describe("mock options-scoping longlist states (task 045)", () => {
     await expect(thread.getByText("Suggested 6 options · 2 from your evidence search")).toBeVisible();
   });
 
+  test("an option search (a child walk) gets no block of its own in the thread", async ({ page }) => {
+    await buildLonglist(page);
+    const thread = page.getByRole("region", { name: "Task Agent conversation" });
+    // The walk has finished, so /runs now lists the child beside its parent.
+    await openPlan(page);
+    const plan = page.getByRole("dialog", { name: "Scoping plan" });
+    await expect(plan.getByText(/^Longlist built · \d+ options$/)).toBeVisible({ timeout: 10_000 });
+    await plan.getByRole("button", { name: "Close the scoping plan" }).click();
+    await expect(thread.getByText(/^Option search/)).toHaveCount(0);
+    // The baseline's block only: the longlist walk is the stream's live run
+    // (its run card), and the child adds nothing.
+    await expect(thread.getByText(/^Analysis run —/)).toHaveCount(1);
+  });
+
   test("a plan edit after the longlist offers Rebuild longlist, which starts the walk again", async ({
     page,
   }) => {

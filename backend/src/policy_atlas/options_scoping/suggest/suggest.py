@@ -16,9 +16,14 @@ The report is context for the model, never a source of records: nothing
 here writes a profile record, a membership or anything else from report
 text (owner: "the source would be the AI written synthesis").
 
-**Rebuild** (D14): an option with the same ``(origin, name)`` already on the
-task is kept — its id, state and design survive — and is an entrant again;
-no duplicate is minted.
+**Rebuild** (D14): the model is shown every option already on the task
+(``existing_options``) and told not to propose one again; in code, a
+suggestion whose name or description matches an existing option's
+(case-insensitive, whitespace collapsed) is dropped, so a rebuild mints only
+genuinely new suggestions — the existing options stay as they are (ids,
+state, design) and reach the longlist as its seeds. The plan's own options
+are matched by ``(origin, name)``: an existing row is kept and is an entrant
+again; no duplicate is minted.
 
 **Where the report section lives.** The ``option`` table has no provenance
 column, and the design column holds a strict :class:`OptionDesign`; the
@@ -178,16 +183,21 @@ def walk_plan(
     return plan
 
 
-def suggest_plan_context(plan: ScopingPlan) -> SuggestPlanContext:
+def suggest_plan_context(
+    plan: ScopingPlan, existing_options: list[dict[str, str]] | None = None
+) -> SuggestPlanContext:
     """Project the plan onto the fields the suggest prompt reads.
 
     Args:
         plan: The scoping plan.
+        existing_options: The task's option rows already on the longlist
+            (``{"name", "description"}`` each), which the model must not
+            propose again; empty on a first build.
 
     Returns:
         The question, intended change, target unit, outcomes, the requirement
-        constraints' texts, Your context's texts and the user's own options
-        as ``{text, design}`` data.
+        constraints' texts, Your context's texts, the user's own options as
+        ``{text, design}`` data and the existing options.
     """
     return SuggestPlanContext(
         question=plan.question,
@@ -203,6 +213,7 @@ def suggest_plan_context(plan: ScopingPlan) -> SuggestPlanContext:
             }
             for own in plan.your_options
         ],
+        existing_options=list(existing_options or []),
     )
 
 
@@ -367,15 +378,23 @@ def suggest_options(
         heading the model named but no linked report carries is ``None``).
     """
     plan = walk_plan(conn, task_id=task_id, run_id=run_id, scope_id=context.scope_id)
+    # Every option already on the task, every origin, in creation order: on a
+    # rebuild the model is shown them and must not propose one again; a
+    # suggestion repeating one by name or description is dropped in code too.
+    prior_rows = conn.execute(
+        select(option.c.option_id, option.c.origin, option.c.name, option.c.description)
+        .where(option.c.task_id == task_id)
+        .order_by(option.c.created_at, option.c.option_id)
+    ).all()
     existing: dict[tuple[str, str], uuid.UUID] = {
         (row.origin, row.name): row.option_id
-        for row in conn.execute(
-            select(option.c.option_id, option.c.origin, option.c.name)
-            .where(option.c.task_id == task_id)
-            .where(option.c.origin.in_(ENTRANT_ORDER))
-            .order_by(option.c.created_at, option.c.option_id)
-        )
+        for row in prior_rows
+        if row.origin in ENTRANT_ORDER
     }
+    existing_options = [
+        {"name": row.name, "description": row.description} for row in prior_rows
+    ]
+    prior_descriptions = {_norm(row.description) for row in prior_rows}
     counts = dict.fromkeys(ENTRANT_ORDER, 0)
     minted = 0
     minted_ids: dict[EntrantOrigin, list[str]] = {origin: [] for origin in ENTRANT_ORDER}
@@ -392,12 +411,14 @@ def suggest_options(
         if entrant.origin == "from_evidence_search":
             report_sections[str(option_id)] = entrant.report_section
 
-    taken: set[str] = set()
+    taken: set[str] = {_norm(row.name) for row in prior_rows}
+    own_taken: set[str] = set()
     fallback_designs = 0
     for own in plan.your_options:
         design, fell_back = _own_option_design(own)
-        if _norm(design.name) in taken:
+        if _norm(design.name) in own_taken:
             continue
+        own_taken.add(_norm(design.name))
         taken.add(_norm(design.name))
         fallback_designs += int(fell_back)
         _enter(_Entrant(origin="added_by_you", design=design))
@@ -409,7 +430,7 @@ def suggest_options(
         for title, markdown in linked_reports(conn, task_id)
     ]
     response = backend.suggest_options(
-        plan=suggest_plan_context(plan),
+        plan=suggest_plan_context(plan, existing_options),
         baseline_sections=baseline_sections(conn, task_id),
         linked_reports=reports,
         bound=SUGGEST_BOUND,
@@ -420,10 +441,15 @@ def suggest_options(
     dropped = max(len(response.options) - SUGGEST_BOUND, 0)
     for wire in response.options[:SUGGEST_BOUND]:
         entrant = _suggested_entrant(wire, headings=headings, has_reports=bool(reports))
-        if entrant is None or _norm(entrant.design.name) in taken:
+        if (
+            entrant is None
+            or _norm(entrant.design.name) in taken
+            or _norm(entrant.design.description) in prior_descriptions
+        ):
             dropped += 1
             continue
         taken.add(_norm(entrant.design.name))
+        prior_descriptions.add(_norm(entrant.design.description))
         _enter(entrant)
 
     log.info(

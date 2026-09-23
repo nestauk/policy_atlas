@@ -858,6 +858,8 @@ class OptionSummaryOut(BaseModel):
         abstract_only: Every one of its documents was read from an abstract only.
         is_entrant_with_no_documents: Suggested, drawn from the Evidence
             search or added by the user, and no document has joined it.
+        search_pending: An option added since the build whose own option
+            search is still running or paused; its counts read zero until it ends.
     """
 
     option_id: uuid.UUID
@@ -883,6 +885,7 @@ class OptionSummaryOut(BaseModel):
     relations: list[RelationOut] = Field(default_factory=list)
     abstract_only: bool = False
     is_entrant_with_no_documents: bool = False
+    search_pending: bool = False
 
 
 class AmbitionBandOut(BaseModel):

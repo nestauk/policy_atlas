@@ -136,6 +136,12 @@ What to propose:
 - The user's own options (Options you already have in mind) are listed in
   the data. Do not propose them again, and do not propose a trivial
   variant of one; propose beside them.
+- On a rebuild, the options already on the longlist are listed in the data
+  (name and one sentence each). Never propose one of them again under a
+  new name, and never a trivial variant of one: a longlist that carries the
+  same option twice wastes the user's attention and a search. Propose only
+  what the longlist still lacks; an empty list is the right answer when it
+  lacks nothing.
 - Vary ambition: a longlist that only contains structural reforms, or only
   small changes, serves the user badly. Include options of different
   scale where the question admits them.
@@ -196,6 +202,9 @@ class SuggestPlanContext(BaseModel):
         requirements: The plan's requirement constraints, in words.
         your_context: The user's own context entries, verbatim.
         your_options: The user's own options: name and design features.
+        existing_options: On a rebuild, the options already on the longlist
+            (``{"name", "description"}`` each), which the model must not
+            propose again. Empty on a first build.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -207,6 +216,7 @@ class SuggestPlanContext(BaseModel):
     requirements: list[str]
     your_context: list[str]
     your_options: list[dict[str, object]]
+    existing_options: list[dict[str, str]] = []
 
 
 class LinkedReportContext(BaseModel):
@@ -227,6 +237,15 @@ class LinkedReportContext(BaseModel):
 def _fence_safe(text: str) -> str:
     """Stop fenced data from closing its own fence (``</`` becomes ``<\\/``)."""
     return text.replace("</", "<\\/")
+
+
+def _existing_option_data(option: dict[str, str]) -> dict[str, str]:
+    return {
+        "name": sanitize_prompt_field(str(option.get("name", "")), max_chars=SUGGEST_FIELD_MAX),
+        "description": sanitize_prompt_field(
+            str(option.get("description", "")), max_chars=SUGGEST_FIELD_MAX
+        ),
+    }
 
 
 def _section_block(title: str, body: str) -> str:
@@ -272,6 +291,7 @@ def build_suggest_messages(
                 sanitize_prompt_field(c, max_chars=SUGGEST_FIELD_MAX) for c in plan.your_context
             ],
             "your_options": plan.your_options,
+            "existing_options": [_existing_option_data(o) for o in plan.existing_options],
         },
         ensure_ascii=False,
     )

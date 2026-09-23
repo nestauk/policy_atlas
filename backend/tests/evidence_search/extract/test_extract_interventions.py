@@ -728,3 +728,70 @@ def test_the_live_backend_needs_a_key(monkeypatch: pytest.MonkeyPatch) -> None:
     with pytest.raises(RuntimeError):
         OpenAIInterventionsBackend()
     assert OpenAIInterventionsBackend(api_key="sk-test").mode == "live"
+
+
+# --- concurrency: a sibling walk wins the memo key ------------------------------
+
+
+def test_a_sibling_walk_s_memo_row_is_reused_not_a_failed_transaction(
+    conn: Connection, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Live-check defect (045): two option-search child walks profile one document.
+
+    The sibling's memo row lands after this walk's memo lookup and before its
+    write, so the insert violates ``uq_ser_memo``. Only that document's
+    savepoint rolls back: it reads ``reused`` of the sibling's row, one memo
+    row exists, and the component (and its event appends) completes.
+    """
+    from policy_atlas.evidence_search.extract import extract as extract_module
+
+    task_id, run_id = seed_task_and_run(conn)
+    scope_id = seed_scope(conn, task_id)
+    raced = _seed_doc(conn, task_id, run_id, scope_id,
+                      stub=[_wire("peer-led walking programme", "peer-led walking programme")])
+    other = _seed_doc(conn, task_id, run_id, scope_id, title="Swimming",
+                      stub=[_wire("free swimming", "free swimming")],
+                      abstract="We describe free swimming for older adults.")
+    envelope = conn.execute(
+        select(task_source_snapshot.c.source_snapshot_id)
+        .where(task_source_snapshot.c.task_source_snapshot_id == raced)
+    ).scalar_one()
+    sibling_run = seed_run(conn, task_id)
+    sibling_record = uuid.uuid4()
+    fingerprint = interventions_fingerprint("stub", retry_cap=1)[0]
+    original_apply_memo = extract_module._apply_memo
+
+    def _apply_memo_then_sibling_writes(*args: Any, **kwargs: Any) -> None:
+        original_apply_memo(*args, **kwargs)
+        conn.execute(source_extraction_record.insert().values(
+            extraction_record_id=sibling_record, task_id=task_id,
+            source_snapshot_id=envelope, task_source_snapshot_id=raced,
+            extraction_fingerprint=fingerprint, status="extracted", basis="abstract_only",
+            primary_evidence_type=None, error=None, finding_count=1,
+            run_id=sibling_run, created_at=now(),
+        ))
+
+    monkeypatch.setattr(extract_module, "_apply_memo", _apply_memo_then_sibling_writes)
+    config = compile(Plan(component="extract_interventions", evidence_scope_id=scope_id))
+
+    outcome = run_harness(
+        conn, config=config, task_id=task_id, run_id=seed_run(conn, task_id),
+        provider=StubEchoProvider(),
+    )
+
+    assert outcome["error"] is None
+    summary = outcome["summary"]
+    by_tss = {
+        doc["tss_id"]: doc["profiles"][INTERVENTIONS_PROFILE_ID] for doc in summary["docs"]
+    }
+    assert by_tss[str(raced)]["reused"] is True
+    assert by_tss[str(raced)]["status"] == "extracted"
+    assert by_tss[str(raced)]["extraction_record_id"] == str(sibling_record)
+    assert by_tss[str(other)]["reused"] is False
+    assert _counts(summary)["failed"] == 0 and _counts(summary)["reused"] == 1
+    assert conn.execute(
+        select(func.count()).select_from(source_extraction_record)
+        .where(source_extraction_record.c.task_source_snapshot_id == raced)
+    ).scalar_one() == 1
+    # The losing write's records rolled back with its savepoint.
+    assert [row.intervention for row in _records(conn, task_id)] == ["free swimming"]

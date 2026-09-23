@@ -655,3 +655,40 @@ describe("reduceRunStreamFrame — task.updated partial merge", () => {
     });
   });
 });
+
+// Task 045 (S12): a longlist walk's option searches publish on the same task
+// stream; they never become the live run.
+describe("reduceRunStreamFrame — child walks", () => {
+  it("records a child's status without switching the live run or its stages", () => {
+    const CHILD_ID = "44444444-4444-4444-4444-444444444444";
+    let state = createInitialRunStreamState();
+    state = reduceRunStreamFrame(state, {
+      type: "run.status",
+      capability_run_id: TASK_RUN_ID,
+      status: "running",
+      occurred_at: "2026-09-22T10:00:00Z",
+      sequence: 1,
+    });
+    state = reduceRunStreamFrame(state, {
+      type: "stage.started",
+      stage: "suggest",
+      label: "Suggesting options",
+      blurb: "",
+      occurred_at: "2026-09-22T10:00:01Z",
+      sequence: 2,
+    });
+    for (const [status, sequence] of [["running", 3], ["succeeded", 4]] as const) {
+      state = reduceRunStreamFrame(state, {
+        type: "run.status",
+        capability_run_id: CHILD_ID,
+        status,
+        occurred_at: "2026-09-22T10:00:02Z",
+        sequence,
+      });
+    }
+    expect(state.run?.id).toBe(TASK_RUN_ID);
+    expect(state.run?.status).toBe("running");
+    expect(state.stages).toHaveLength(1);
+    expect(state.runs[CHILD_ID]).toBe("succeeded");
+  });
+});

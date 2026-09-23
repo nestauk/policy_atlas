@@ -97,6 +97,23 @@ describe("threadInputs", () => {
     const { boundaries } = threadInputs([turn(0, "2026-07-28T10:00:00Z")], runs, []);
     expect(boundaries[0].afterTurnIndex).toBeNull();
   });
+
+  // Task 045 (S12): option searches are not shown in the parent's thread.
+  it("gives a child walk no block, and its raw lines go nowhere", () => {
+    const parent = { ...run("longlist", "2026-09-22T10:00:00Z", "2026-09-22T10:30:00Z"), purpose: "longlist" };
+    const child = {
+      ...run("child", "2026-09-22T10:05:00Z", "2026-09-22T10:10:00Z"),
+      purpose: "targeted",
+      parent_capability_run_id: "longlist",
+    };
+    const decisions = [
+      { ...decision(1, "2026-09-22T10:02:00Z"), kind: "component.completed" },
+      { ...decision(2, "2026-09-22T10:06:00Z"), kind: "search.executed" },
+    ];
+    const { boundaries, runDecisions } = threadInputs([], [child, parent], decisions);
+    expect(boundaries.map((boundary) => boundary.run.capability_run_id)).toEqual(["longlist"]);
+    expect(runDecisions).toEqual([{ decision: decisions[0], capabilityRunId: "longlist" }]);
+  });
 });
 
 describe("presentRunDecisions", () => {

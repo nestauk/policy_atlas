@@ -84,7 +84,13 @@ export function threadInputs(
   runs: TaskAgentThreadRun[],
   decisions: TaskAgentThreadDecision[],
 ): { boundaries: RunThreadBoundary[]; runDecisions: RunThreadDecision[] } {
-  const boundaries = runs.map((run) => {
+  // Task 045 (S12): a child walk (a longlist walk's option search) gets no
+  // block of its own; it still claims the decisions logged in its window so
+  // its raw lines never land in the parent's block.
+  const childIds = new Set(
+    runs.filter((run) => run.parent_capability_run_id != null).map((run) => run.capability_run_id),
+  );
+  const boundaries = runs.filter((run) => !childIds.has(run.capability_run_id)).map((run) => {
     const before = turns.filter((turn) => turn.created_at <= run.started_at);
     return {
       run,
@@ -99,7 +105,7 @@ export function threadInputs(
         run.started_at <= decision.occurred_at &&
         (run.ended_at === null || run.ended_at === undefined || decision.occurred_at <= run.ended_at),
     );
-    if (owner !== undefined) {
+    if (owner !== undefined && !childIds.has(owner.capability_run_id)) {
       runDecisions.push({ decision, capabilityRunId: owner.capability_run_id });
     }
   }
@@ -572,12 +578,21 @@ function RunBlock({
   checkIns: ReturnType<typeof useCheckIns>["data"];
 }) {
   const status = RUN_BLOCK_STATUS[run.status] ?? null;
-  const presentedDecisions = presentRunDecisions(decisions, stages);
+  // Task 045: a parentless option search (the chat verb *add*'s own search)
+  // keeps a block, headed as what it is, with its stage rows only.
+  const optionSearch = run.purpose === "targeted";
+  const presentedDecisions = presentRunDecisions(
+    optionSearch ? decisions.filter((decision) => decision.kind === "component.completed") : decisions,
+    stages,
+  );
   return (
     <div className="space-y-2">
       <div className="flex items-center gap-2 text-caption text-grey">
         <span aria-hidden="true" className="h-px flex-1 bg-line" />
-        <span>Analysis run{status !== null ? ` — ${status}` : ""}</span>
+        <span>
+          {optionSearch ? "Option search" : "Analysis run"}
+          {status !== null ? ` — ${status}` : ""}
+        </span>
         <span aria-hidden="true" className="h-px flex-1 bg-line" />
       </div>
       {presentedDecisions.map((decision) => (
@@ -593,7 +608,9 @@ function RunBlock({
       <AnsweredCheckIns answered={answered} checkIns={checkIns} />
       {/* The chat's own destination once the run lands (owner, 2026-08-05):
           a completed run's last word shouldn't be a quiet stage echo. */}
-      <RunFinishedNotice taskId={taskId} status={run.status} kind={walkKind(capability, stages)} />
+      {!optionSearch && (
+        <RunFinishedNotice taskId={taskId} status={run.status} kind={walkKind(capability, stages)} />
+      )}
     </div>
   );
 }

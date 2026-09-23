@@ -1035,6 +1035,7 @@ export const mockLonglistOptionCards: Record<string, OptionOutFixture> = {
     relations: [{ kind: "part_of", other_option_id: MOCK_OPTION_ID_PACKAGE, other_name: "Universal youth offer bundle" }],
     abstract_only: false,
     is_entrant_with_no_documents: false,
+    search_pending: false,
     run_id: MOCK_LONGLIST_RUN_ID,
     capability_run_id: MOCK_LONGLIST_WALK_ID,
     plan_version: 1,
@@ -1103,6 +1104,7 @@ export const mockLonglistOptionCards: Record<string, OptionOutFixture> = {
     relations: [],
     abstract_only: true,
     is_entrant_with_no_documents: false,
+    search_pending: false,
     run_id: MOCK_LONGLIST_RUN_ID,
     capability_run_id: MOCK_LONGLIST_WALK_ID,
     plan_version: 1,
@@ -1180,6 +1182,7 @@ export const mockLonglistOptionCards: Record<string, OptionOutFixture> = {
     relations: [],
     abstract_only: false,
     is_entrant_with_no_documents: true,
+    search_pending: false,
     run_id: MOCK_LONGLIST_RUN_ID,
     capability_run_id: MOCK_LONGLIST_WALK_ID,
     plan_version: 1,
@@ -1237,6 +1240,7 @@ export const mockLonglistOptionCards: Record<string, OptionOutFixture> = {
     relations: [{ kind: "has_part", other_option_id: MOCK_OPTION_ID_EXCLUDED, other_name: "National sanctions regime" }],
     abstract_only: false,
     is_entrant_with_no_documents: false,
+    search_pending: false,
     run_id: MOCK_LONGLIST_RUN_ID,
     capability_run_id: MOCK_LONGLIST_WALK_ID,
     plan_version: 1,
@@ -1301,6 +1305,7 @@ function toLonglistOptionSummary(option: OptionOutFixture): OptionSummaryOutFixt
     relations: option.relations,
     abstract_only: option.abstract_only,
     is_entrant_with_no_documents: option.is_entrant_with_no_documents,
+    search_pending: option.search_pending,
   };
 }
 
@@ -1347,6 +1352,7 @@ export function buildMockAddedOption(text: string): OptionOutFixture {
     relations: [],
     abstract_only: false,
     is_entrant_with_no_documents: true,
+    search_pending: false,
     run_id: MOCK_LONGLIST_RUN_ID,
     capability_run_id: MOCK_LONGLIST_WALK_ID,
     plan_version: 1,

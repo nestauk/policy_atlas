@@ -15,7 +15,7 @@
   "backend/src/policy_atlas/options_scoping/longlist/lever_typing_prompt.py": "8aa4215d8744e271aaf34f5acab0ca0c7ddf53d450c5dead27c272d51475fc55",
   "backend/src/policy_atlas/options_scoping/longlist/longlist_cluster_prompt.py": "fd68830ff2e1844f2e1c3d71f077ede00ccc3aac1faa2cd67bca12c5e87dc35e",
   "backend/src/policy_atlas/options_scoping/longlist/longlist_theme_prompt.py": "a34d67871e325d91b997f4687cc6c9c55ea2c999b99b478f538506dcaee277be",
-  "backend/src/policy_atlas/options_scoping/suggest/suggest_prompt.py": "72573768e25b2c2429cf5b99738a615b58382af6a5c786c540d0b9dccbb8590c",
+  "backend/src/policy_atlas/options_scoping/suggest/suggest_prompt.py": "466a356592591df1e16549a8d4caabdb6d0baa26b9570966da6cc5a898a408eb",
   "backend/src/policy_atlas/runtime/agent_prompt.py": "cf10d2a1663be8ab7eccbc636e2e60b9170d5ce8ce4efeda6956040ecb32a403",
   "backend/src/policy_atlas/runtime/chat_prompt.py": "7e063d8f327f592774e08220221ed3e67d06365fe644d01e9472c224e91c28a9",
   "backend/src/policy_atlas/runtime/gate_sort_prompt.py": "d554013d8f8ec3c64ed0aa1da64a5c6cbd41e2721ffa96d2f77b149eaa5432da",

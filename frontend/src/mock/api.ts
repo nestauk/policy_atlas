@@ -1321,6 +1321,8 @@ function requestMockLonglistWalk(planVersion: number): components["schemas"]["La
     started_at: new Date().toISOString(),
     ended_at: null,
     artefact_id: null,
+    parent_capability_run_id: null,
+    purpose: "longlist",
   };
   mockLonglistWalks = [walk, ...mockLonglistWalks];
   mockTask.active_run = latestRunOf(walk);
@@ -1377,6 +1379,24 @@ async function mockLonglistWalk(
 
   emit(status("running"));
   await sleep(1200);
+  // One option search, a child walk (S12): listed by `/runs` with its
+  // parent, never a block of its own in the thread.
+  const childStarted = new Date().toISOString();
+  mockLonglistWalks = [
+    {
+      capability_run_id: crypto.randomUUID(),
+      task_id: MOCK_TASK_ID,
+      plan_id: MOCK_PLAN_ID,
+      plan_version: mockLonglistWalks.find((walk) => walk.capability_run_id === walkId)?.plan_version ?? 1,
+      status: "succeeded",
+      started_at: childStarted,
+      ended_at: childStarted,
+      artefact_id: null,
+      parent_capability_run_id: walkId,
+      purpose: "targeted",
+    },
+    ...mockLonglistWalks,
+  ];
   for (const entry of stages) {
     emit({ type: "stage.started", stage: entry.stage, label: entry.label, blurb: entry.blurb, occurred_at: frameTime(), sequence: nextSequence() });
     await sleep(150);

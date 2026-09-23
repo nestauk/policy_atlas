@@ -3180,6 +3180,11 @@ export interface components {
             restriction_text?: string | null;
             /** Run Id */
             run_id?: string | null;
+            /**
+             * Search Pending
+             * @default false
+             */
+            search_pending: boolean;
             /** Secondary Lever Types */
             secondary_lever_types?: string[];
             /** Settings */
@@ -3257,6 +3262,8 @@ export interface components {
          *         abstract_only: Every one of its documents was read from an abstract only.
          *         is_entrant_with_no_documents: Suggested, drawn from the Evidence
          *             search or added by the user, and no document has joined it.
+         *         search_pending: An option added since the build whose own option
+         *             search is still running or paused; its counts read zero until it ends.
          */
         OptionSummaryOut: {
             /**
@@ -3315,6 +3322,11 @@ export interface components {
             relations?: components["schemas"]["RelationOut"][];
             /** Restriction Text */
             restriction_text?: string | null;
+            /**
+             * Search Pending
+             * @default false
+             */
+            search_pending: boolean;
             /** Secondary Lever Types */
             secondary_lever_types?: string[];
             /** Settings */
@@ -3941,6 +3953,10 @@ export interface components {
          *             none (it has not reached synthesise, or ended before it). A
          *             scoping walk that carries one produced a baseline, whatever its
          *             terminal status (task 044 review, C5/C6).
+         *         parent_capability_run_id: The walk that dispatched this one (a longlist
+         *             walk's option search), or `None` for a parentless walk (task 045).
+         *         purpose: The walk's intent-record purpose (`baseline`, `longlist`,
+         *             `targeted`, ...), or `None` for an Evidence search walk.
          */
         RunOut: {
             /** Artefact Id */
@@ -3952,6 +3968,8 @@ export interface components {
             capability_run_id: string;
             /** Ended At */
             ended_at?: string | null;
+            /** Parent Capability Run Id */
+            parent_capability_run_id?: string | null;
             /**
              * Plan Id
              * Format: uuid
@@ -3959,6 +3977,8 @@ export interface components {
             plan_id: string;
             /** Plan Version */
             plan_version: number;
+            /** Purpose */
+            purpose?: string | null;
             /**
              * Started At
              * Format: date-time

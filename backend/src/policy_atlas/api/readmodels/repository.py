@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import uuid
 from collections import Counter
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Collection, Iterable, Mapping, Sequence
+from dataclasses import dataclass
 from functools import cmp_to_key
 from typing import Any, Literal, cast
 
@@ -71,6 +72,7 @@ from policy_atlas.core.schema import (
     annotation,
     artefact,
     block,
+    capability_run,
     characterisation_result,
     chunk,
     citation,
@@ -101,9 +103,19 @@ from policy_atlas.core.schema import (
 )
 from policy_atlas.evidence_search.assess.appraise import SCORE_LABELS
 from policy_atlas.evidence_search.assess.screen import effective_screen_rows
+from policy_atlas.evidence_search.extract.extract import record_ids_by_profile
+from policy_atlas.evidence_search.extract.interventions_records import (
+    PROFILE_ID as INTERVENTIONS_PROFILE_ID,
+)
 from policy_atlas.evidence_search.extract.quote_verify import build_basis, locate_unique_span
 from policy_atlas.options_scoping.labels import DocumentLabels, labels_for_snapshots
-from policy_atlas.options_scoping.longlist.coverage import empty_coverage
+from policy_atlas.options_scoping.longlist.coverage import (
+    CoverageMember,
+    document_key,
+    empty_coverage,
+    normalise_doi,
+    option_coverage,
+)
 from policy_atlas.options_scoping.longlist.lever_types import (
     AMBITION_BANDS,
     AMBITION_LABELS,
@@ -2883,6 +2895,8 @@ def _option_summary_fields(
     coverage: Mapping[str, Any],
     relations: list[RelationOut],
     record: Mapping[str, Any],
+    *,
+    search_pending: bool = False,
 ) -> dict[str, Any]:
     documents = _count(coverage.get("documents"))
     in_scope = _in_scope_out(record)
@@ -2912,6 +2926,7 @@ def _option_summary_fields(
         "relations": relations,
         "abstract_only": documents > 0 and _count(coverage.get("abstract_only")) == documents,
         "is_entrant_with_no_documents": row.origin != "clustered" and documents == 0,
+        "search_pending": search_pending,
     }
 
 
@@ -2939,6 +2954,274 @@ def _walk_of_run(conn: Connection, task_id: uuid.UUID, run_id: uuid.UUID) -> uui
         select(runs.c.capability_run_id).where(runs.c.run_id == run_id, runs.c.task_id == task_id)
     ).scalar_one_or_none()
     return value if isinstance(value, uuid.UUID) else None
+
+
+@dataclass(frozen=True)
+class _SearchUnit:
+    """One intervention profile record an added option's own search found."""
+
+    tss_id: uuid.UUID
+    role: str
+    basis: str | None
+    population: str | None
+    setting: str | None
+    outcome: str | None
+    study_geography: str | None
+    metadata: Mapping[str, Any]
+    locator: str
+
+
+@dataclass(frozen=True)
+class _AddedSearch:
+    """An option added since the build, read through its own option search.
+
+    ``pending`` while that walk is running or paused; ``units`` once it has
+    ended (empty when it found nothing).
+    """
+
+    pending: bool
+    units: tuple[_SearchUnit, ...] = ()
+
+
+def _added_searches(
+    conn: Connection,
+    task_id: uuid.UUID,
+    option_ids: Collection[uuid.UUID],
+) -> dict[uuid.UUID, _AddedSearch]:
+    """Each given option's latest parentless option search, and what it found.
+
+    An option added after the build (the verb *add*, ``POST /options``) has an
+    option search of its own — a walk with no parent under a ``targeted``
+    intent record naming the option — but nothing assigns its records to the
+    option until the next build. Until then the read model reads them
+    straight from that scope: its latest intervention-profile roll-up (the
+    records the profile wrote over the scope's screened-in documents, the set
+    the longlist component reads), comparators left out. The longlist walk's
+    own children are never read here: their records are the build's to assign.
+
+    Args:
+        conn: Open database connection. Read-only.
+        task_id: The task.
+        option_ids: The options to look up (those with no membership row and
+            no coverage in the latest build).
+
+    Returns:
+        One entry per option that has such a search.
+    """
+    if not option_ids:
+        return {}
+    wanted = {str(oid) for oid in option_ids}
+    walks = conn.execute(
+        select(
+            capability_run.c.status,
+            capability_run.c.evidence_scope_id,
+            evidence_scope.c.context["option_id"].astext.label("option_id"),
+        )
+        .select_from(
+            capability_run.join(
+                evidence_scope,
+                (evidence_scope.c.evidence_scope_id == capability_run.c.evidence_scope_id)
+                & (evidence_scope.c.task_id == capability_run.c.task_id),
+            )
+        )
+        .where(capability_run.c.task_id == task_id)
+        .where(capability_run.c.parent_capability_run_id.is_(None))
+        .where(evidence_scope.c.purpose == "targeted")
+        .where(evidence_scope.c.context["option_id"].astext.in_(wanted))
+        .order_by(capability_run.c.started_at.desc(), capability_run.c.capability_run_id.desc())
+    ).all()
+    latest: dict[uuid.UUID, Any] = {}
+    for walk in walks:
+        latest.setdefault(uuid.UUID(walk.option_id), walk)
+    ended = {
+        oid: walk.evidence_scope_id
+        for oid, walk in latest.items()
+        if walk.status not in ("running", "paused")
+    }
+    record_ids: dict[uuid.UUID, list[uuid.UUID]] = {}
+    if ended:
+        rollups = conn.execute(
+            select(extraction_result.c.evidence_scope_id, extraction_result.c.docs)
+            .where(extraction_result.c.task_id == task_id)
+            .where(extraction_result.c.evidence_scope_id.in_(set(ended.values())))
+            .order_by(
+                extraction_result.c.created_at.desc(),
+                extraction_result.c.extraction_result_id.desc(),
+            )
+        ).all()
+        for rollup in rollups:
+            if rollup.evidence_scope_id in record_ids:
+                continue
+            docs = rollup.docs if isinstance(rollup.docs, list) else []
+            ids = record_ids_by_profile([d for d in docs if isinstance(d, Mapping)]).get(
+                INTERVENTIONS_PROFILE_ID
+            )
+            if ids is None:
+                continue
+            parsed: list[uuid.UUID] = []
+            for raw in ids:
+                try:
+                    parsed.append(uuid.UUID(str(raw)))
+                except ValueError:
+                    continue
+            record_ids[rollup.evidence_scope_id] = parsed
+    units_by_scope: dict[uuid.UUID, list[_SearchUnit]] = {}
+    all_ids = {rid for ids in record_ids.values() for rid in ids}
+    if all_ids:
+        scope_of = {rid: scope for scope, ids in record_ids.items() for rid in ids}
+        ipr = intervention_profile_record
+        rows = conn.execute(
+            select(
+                ipr.c.record_id,
+                ipr.c.extraction_record_id,
+                ipr.c.role,
+                ipr.c.population,
+                ipr.c.setting,
+                ipr.c.outcome,
+                ipr.c.study_geography,
+                source_extraction_record.c.task_source_snapshot_id,
+                source_extraction_record.c.basis,
+                source_snapshot.c.metadata,
+                source_snapshot.c.source_locator,
+            )
+            .select_from(
+                ipr.join(
+                    source_extraction_record,
+                    (source_extraction_record.c.extraction_record_id == ipr.c.extraction_record_id)
+                    & (source_extraction_record.c.task_id == ipr.c.task_id),
+                )
+                .join(
+                    task_source_snapshot,
+                    (task_source_snapshot.c.task_source_snapshot_id
+                     == source_extraction_record.c.task_source_snapshot_id)
+                    & (task_source_snapshot.c.task_id == ipr.c.task_id),
+                )
+                .join(
+                    source_snapshot,
+                    source_snapshot.c.source_snapshot_id
+                    == task_source_snapshot.c.source_snapshot_id,
+                )
+            )
+            .where(ipr.c.task_id == task_id)
+            .where(ipr.c.extraction_record_id.in_(all_ids))
+            .where(ipr.c.role != "comparator")
+            .order_by(source_extraction_record.c.task_source_snapshot_id, ipr.c.record_id)
+        ).all()
+        for row in rows:
+            if row.role not in _DOCUMENT_ROLES:
+                continue
+            units_by_scope.setdefault(scope_of[row.extraction_record_id], []).append(
+                _SearchUnit(
+                    tss_id=row.task_source_snapshot_id,
+                    role=row.role,
+                    basis=row.basis,
+                    population=row.population,
+                    setting=row.setting,
+                    outcome=row.outcome,
+                    study_geography=row.study_geography,
+                    metadata=_as_mapping(row.metadata),
+                    locator=row.source_locator,
+                )
+            )
+    return {
+        oid: _AddedSearch(
+            pending=oid not in ended,
+            units=tuple(units_by_scope.get(ended[oid], ())) if oid in ended else (),
+        )
+        for oid in latest
+    }
+
+
+def _members_by_option(conn: Connection, task_id: uuid.UUID) -> set[uuid.UUID]:
+    return {
+        oid
+        for (oid,) in conn.execute(
+            select(option_membership.c.option_id)
+            .where(option_membership.c.task_id == task_id)
+            .distinct()
+        )
+    }
+
+
+def _needs_search_read(
+    rows: Iterable[Any], result: Any | None, members: set[uuid.UUID]
+) -> list[uuid.UUID]:
+    """Options with no membership row and no coverage in the latest build."""
+    coverage = _as_mapping(result.coverage) if result is not None else {}
+    return [
+        row.option_id
+        for row in rows
+        if row.option_id not in members and str(row.option_id) not in coverage
+    ]
+
+
+def _search_coverage(
+    conn: Connection, task_id: uuid.UUID, search: _AddedSearch, home: frozenset[str]
+) -> Mapping[str, Any]:
+    """An added option's coverage from its own search's records (DOI-collapsed)."""
+    if not search.units:
+        return empty_coverage()
+    labels = labels_for_snapshots(
+        conn, task_id=task_id, tss_ids={unit.tss_id for unit in search.units}
+    )
+    return option_coverage(
+        [
+            CoverageMember(
+                unit_kind="interventions",
+                doc_key=document_key(doi=normalise_doi(unit.metadata), document_id=unit.tss_id),
+                tss_id=unit.tss_id,
+                role=unit.role,
+                basis=unit.basis,
+                flagged=False,
+                population=unit.population,
+                setting=unit.setting,
+                outcome=unit.outcome,
+                study_geography=unit.study_geography,
+            )
+            for unit in search.units
+        ],
+        labels=labels,
+        home=home,
+    )
+
+
+def _search_documents(
+    conn: Connection, task_id: uuid.UUID, search: _AddedSearch, home: frozenset[str]
+) -> list[OptionDocumentOut]:
+    """An added option's documents from its own search, one per record."""
+    labels = labels_for_snapshots(
+        conn, task_id=task_id, tss_ids={unit.tss_id for unit in search.units}
+    )
+    out: list[tuple[str, str, OptionDocumentOut]] = []
+    for index, unit in enumerate(search.units):
+        label = labels.get(unit.tss_id)
+        evidence_type, tier = _label_fields(label)
+        title = _title(unit.metadata, unit.locator)
+        out.append(
+            (
+                title.casefold(),
+                f"{index:06d}",
+                OptionDocumentOut(
+                    task_source_snapshot_id=unit.tss_id,
+                    title=title,
+                    role=cast(Any, unit.role),
+                    evidence_type=evidence_type,
+                    tier=tier,
+                    design_feature_not_stated=False,
+                    where_tried_group=where_group([unit.study_geography], home),
+                    source_task_id=(
+                        label.source_task_id
+                        if label is not None and label.provenance == "inherited"
+                        else None
+                    ),
+                ),
+            )
+        )
+    return [document for _, _, document in sorted(out, key=lambda item: item[:2])]
+
+
+def _home(plan: ScopingPlan | None) -> frozenset[str]:
+    return where_codes(plan.where.text) if plan is not None else frozenset()
 
 
 def longlist_out(conn: Connection, task_id: uuid.UUID) -> LonglistOut | None:
@@ -2992,14 +3275,25 @@ def longlist_out(conn: Connection, task_id: uuid.UUID) -> LonglistOut | None:
         )
     themed_set = set(themed)
     unthemed = [row.option_id for row in rows if row.option_id not in themed_set]
+    searches = _added_searches(
+        conn, task_id, _needs_search_read(rows, result, _members_by_option(conn, task_id))
+    )
+    home = _home(built_from[1] if built_from else None)
+
+    def coverage_of(oid: uuid.UUID) -> Mapping[str, Any]:
+        search = searches.get(oid)
+        if search is not None:
+            return _search_coverage(conn, task_id, search, home)
+        return _option_coverage(result, oid)
 
     options = [
         OptionSummaryOut(
             **_option_summary_fields(
                 by_id[oid],
-                _option_coverage(result, oid),
+                coverage_of(oid),
                 relations.get(oid, []),
                 _design_record(result, "judgements", by_id[oid]),
+                search_pending=oid in searches and searches[oid].pending,
             )
         )
         for oid in [*themed, *unthemed]
@@ -3334,16 +3628,30 @@ def option_out(conn: Connection, task_id: uuid.UUID, option_id: uuid.UUID) -> Op
         )
     }
     relations = _option_relations(conn, task_id, names).get(option_id, [])
-    coverage = _option_coverage(result, option_id)
     judgements = _design_record(result, "judgements", row)
     plan_row = _scoping_plan_version(
         conn, task_id, int(result.plan_version) if result is not None else None
     )
     plan = plan_row[1] if plan_row is not None else None
-    home = where_codes(plan.where.text) if plan is not None else frozenset()
+    home = _home(plan)
+    search = _added_searches(
+        conn, task_id, _needs_search_read(rows, result, _members_by_option(conn, task_id))
+    ).get(option_id)
+    if search is not None:
+        coverage = _search_coverage(conn, task_id, search, home)
+        documents = _search_documents(conn, task_id, search, home)
+    else:
+        coverage = _option_coverage(result, option_id)
+        documents = _option_documents(conn, task_id, option_id, home)
     design = _design_out(row)
     return OptionOut(
-        **_option_summary_fields(row, coverage, relations, judgements),
+        **_option_summary_fields(
+            row,
+            coverage,
+            relations,
+            judgements,
+            search_pending=search is not None and search.pending,
+        ),
         design=design,
         design_features=list(design.design_features),
         evidence=_evidence_profile(coverage),
@@ -3355,7 +3663,7 @@ def option_out(conn: Connection, task_id: uuid.UUID, option_id: uuid.UUID) -> Op
             else None
         ),
         in_scope=_in_scope_out(judgements),
-        documents=_option_documents(conn, task_id, option_id, home),
+        documents=documents,
         run_id=result.run_id if result is not None else None,
         capability_run_id=(
             _walk_of_run(conn, task_id, result.run_id) if result is not None else None

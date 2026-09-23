@@ -373,8 +373,10 @@ def test_a_rebuild_keeps_the_existing_option_ids(conn: Connection) -> None:
     after = {row["option_id"]: row for row in walk.options()}
     assert set(after) == set(before)
     assert {row["created_by_run_id"] for row in after.values()} == {first_run}
-    assert second["entrants"] == first["entrants"]
-    assert (second["minted"], second["kept"]) == (0, 4)
+    # The user's own are entrants again (kept); the repeated suggestions are
+    # dropped — they stay on the task and reach the longlist as seeds.
+    assert second["entrants"] == first["entrants"][:2]
+    assert (second["minted"], second["kept"], second["dropped"]) == (0, 2, 2)
 
 
 def test_a_rebuild_adds_a_new_suggestion_beside_the_kept_ones(conn: Connection) -> None:
@@ -389,7 +391,64 @@ def test_a_rebuild_adds_a_new_suggestion_beside_the_kept_ones(conn: Connection) 
     rows = {row["name"]: row["option_id"] for row in walk.options()}
     assert rows["A"] == kept["option_id"]
     assert set(rows) == {"A", "B"}
-    assert (summary["minted"], summary["kept"]) == (1, 1)
+    assert (summary["minted"], summary["kept"], summary["dropped"]) == (1, 0, 1)
+    assert summary["entrants"] == [str(rows["B"])]
+
+
+def test_a_rebuild_shows_the_model_the_existing_options_and_drops_repeats(
+    conn: Connection,
+) -> None:
+    """The live-check defect: a rebuild re-proposed the report's options under
+    new names. The model now sees every existing option, and a suggestion
+    repeating one by name or by description mints nothing."""
+    walk = _Walk(conn, _plan(your_options=[]))
+    walk.link_report()
+    first_names = [f"Existing option {index}" for index in range(7)]
+    walk.suggest(
+        StubAgentBackend(
+            suggest_responses=SuggestResponse(
+                options=[
+                    _wire(name, source="linked_report", section=REPORT_SECTION)
+                    for name in first_names
+                ]
+            )
+        )
+    )
+    before = {row["option_id"] for row in walk.options()}
+    assert len(before) == 7
+
+    renamed = _wire("A new name for the same thing", source="linked_report")
+    renamed = renamed.model_copy(
+        update={"description": "  existing OPTION 0,   described in one sentence. "}
+    )
+    backend = StubAgentBackend(
+        suggest_responses=SuggestResponse(
+            options=[
+                _wire("EXISTING   option 3"),  # same name, other case and spacing
+                renamed,  # same description, new name
+                _wire("A genuinely new option"),
+            ]
+        )
+    )
+
+    _run, summary = walk.suggest(backend)
+
+    [seen] = backend.suggest_inputs
+    assert seen["plan"].existing_options == [
+        {"name": name, "description": f"{name}, described in one sentence."}
+        for name in first_names
+    ]
+    new_rows = [row for row in walk.options() if row["option_id"] not in before]
+    assert [row["name"] for row in new_rows] == ["A genuinely new option"]
+    assert (summary["minted"], summary["dropped"]) == (1, 2)
+    assert summary["entrants"] == [str(new_rows[0]["option_id"])]
+
+
+def test_a_first_build_shows_the_model_no_existing_options(conn: Connection) -> None:
+    walk = _Walk(conn, _plan())
+    backend = StubAgentBackend()
+    walk.suggest(backend)
+    assert backend.suggest_inputs[0]["plan"].existing_options == []
 
 
 def test_a_report_label_without_a_linked_report_is_suggested(conn: Connection) -> None:

@@ -25,6 +25,9 @@ type OptionSummaryOut = components["schemas"]["OptionSummaryOut"];
 type WhereTriedGroup = "where" | "comparable" | "other" | "unknown";
 type ShowFilter = "all" | "included" | "excluded";
 
+/** The setting facet shows this many chips before "more". */
+const SETTING_FACET_LIMIT = 8;
+
 const SHOW_FILTERS: { key: ShowFilter; label: string }[] = [
   { key: "all", label: "All" },
   { key: "included", label: "Included" },
@@ -71,7 +74,23 @@ export function LonglistView({ taskId, longlist }: { taskId: string; longlist: L
   const options = longlist.options ?? [];
   const optionsById = new Map(options.map((option) => [option.option_id, option]));
 
-  const allSettings = [...new Set(options.flatMap((option) => option.settings ?? []))];
+  // Settings are source-named and long-tailed (a live NEET longlist carried
+  // 28 of them): the facet shows the commonest few and folds the rest.
+  const settingCounts = new Map<string, number>();
+  for (const option of options) {
+    for (const setting of option.settings ?? []) {
+      settingCounts.set(setting, (settingCounts.get(setting) ?? 0) + 1);
+    }
+  }
+  const allSettings = [...settingCounts.entries()]
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .map(([setting]) => setting);
+  const [allSettingsShown, setAllSettingsShown] = useState(false);
+  const shownSettings =
+    allSettingsShown || allSettings.length <= SETTING_FACET_LIMIT
+      ? allSettings
+      : allSettings.filter((setting) => settingsFilter.has(setting) || allSettings.indexOf(setting) < SETTING_FACET_LIMIT);
+  const hiddenSettings = allSettings.length - shownSettings.length;
   const whereChips = whereTriedFacetChips(longlist.where_label);
 
   const passesFilters = (option: OptionSummaryOut): boolean => {
@@ -137,7 +156,11 @@ export function LonglistView({ taskId, longlist }: { taskId: string; longlist: L
         )}
         {option.no_in_scope_evidence && <Chip tone="yellow">no in-scope evidence</Chip>}
         {option.abstract_only && <Chip tone="soft">abstract only</Chip>}
-        {option.is_entrant_with_no_documents && <Chip tone="soft">no documents found yet</Chip>}
+        {option.search_pending ? (
+          <Chip tone="soft">searching for its evidence…</Chip>
+        ) : (
+          option.is_entrant_with_no_documents && <Chip tone="soft">no documents found yet</Chip>
+        )}
         {(option.relations ?? []).map((relation) => (
           <Chip key={`${relation.kind}-${relation.other_option_id}`} tone="soft">
             {relationLabel(relation)}
@@ -244,7 +267,7 @@ export function LonglistView({ taskId, longlist }: { taskId: string; longlist: L
           {allSettings.length > 0 && (
             <div role="group" aria-label="Setting" className="flex flex-wrap items-center gap-1.5">
               <span className="mr-1 text-caption font-semibold uppercase tracking-wide text-grey">Setting</span>
-              {allSettings.map((setting) => (
+              {shownSettings.map((setting) => (
                 <button
                   key={setting}
                   type="button"
@@ -255,6 +278,24 @@ export function LonglistView({ taskId, longlist }: { taskId: string; longlist: L
                   {scrub(setting)}
                 </button>
               ))}
+              {hiddenSettings > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setAllSettingsShown(true)}
+                  className="text-caption font-semibold text-blue hover:underline"
+                >
+                  +{hiddenSettings} more
+                </button>
+              )}
+              {allSettingsShown && allSettings.length > SETTING_FACET_LIMIT && (
+                <button
+                  type="button"
+                  onClick={() => setAllSettingsShown(false)}
+                  className="text-caption font-semibold text-blue hover:underline"
+                >
+                  fewer
+                </button>
+              )}
             </div>
           )}
           <div role="group" aria-label="Where tried" className="flex flex-wrap items-center gap-1.5">

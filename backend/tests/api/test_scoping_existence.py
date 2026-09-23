@@ -184,6 +184,20 @@ def test_a_parentless_option_search_is_never_the_latest_run(
         body = _get(client, owner, task_id)
         assert body["latest_run"]["capability_run_id"] == str(longlist)
         assert body["active_run"]["capability_run_id"] == str(added)
+        # The runs read says what each walk is, so the thread can tell an
+        # option search from the task's own walks (task 045, S12).
+        runs = client.get(f"/api/v1/tasks/{task_id}/runs", headers=owner)
+        assert runs.status_code == 200
+        by_id = {row["capability_run_id"]: row for row in runs.json()["data"]}
+        assert by_id[str(longlist)]["purpose"] == "longlist"
+        assert by_id[str(longlist)]["parent_capability_run_id"] is None
+        assert by_id[str(added)]["purpose"] == "targeted"
+        child = _walk(
+            engine, task_id, purpose="targeted", status="running", minutes=6, parent=longlist
+        )
+        one = client.get(f"/api/v1/tasks/{task_id}/runs/{child}", headers=owner).json()
+        assert one["parent_capability_run_id"] == str(longlist)
+        assert one["purpose"] == "targeted"
 
 
 def test_has_longlist_is_the_existence_of_a_longlist_result(
