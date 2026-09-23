@@ -1747,7 +1747,6 @@ dependencies = [
     { name = "fastapi" },
     { name = "httpcore" },
     { name = "httpx" },
-    { name = "ipykernel" },
     { name = "langfuse" },
     { name = "langgraph" },
     { name = "lxml" },
@@ -1767,6 +1766,7 @@ dependencies = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "ipykernel" },
     { name = "mypy" },
     { name = "pytest" },
     { name = "pytest-socket" },
@@ -1785,7 +1785,6 @@ requires-dist = [
     { name = "fastapi", specifier = ">=0.121,<1" },
     { name = "httpcore", specifier = ">=1,<2" },
     { name = "httpx", specifier = ">=0.28,<1" },
-    { name = "ipykernel", specifier = ">=7.3.0" },
     { name = "langfuse", specifier = ">=4.13,<5" },
     { name = "langgraph", specifier = ">=1" },
     { name = "lxml", specifier = ">=6" },
@@ -1805,6 +1804,7 @@ requires-dist = [
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "ipykernel", specifier = ">=7.3.0" },
     { name = "mypy", specifier = ">=2" },
     { name = "pytest", specifier = ">=9" },
     { name = "pytest-socket", specifier = ">=0.8.0" },
