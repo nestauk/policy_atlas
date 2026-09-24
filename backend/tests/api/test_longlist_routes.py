@@ -727,14 +727,16 @@ def test_exclude_records_the_reason_and_include_reverses_it(
             headers=owner.headers,
             json={"reason": "   "},
         )
-        assert blank.status_code == 422
+        # A reason is optional (owner, 2026-09-24): a blank one is recorded empty.
+        assert blank.status_code == 200
+        assert blank.json()["exclusion"]["reason"] == ""
         unknown = client.post(
             f"/api/v1/tasks/{built.task_id}/options/{uuid.uuid4()}/exclude",
             headers=owner.headers,
             json={"reason": "Why not."},
         )
         assert unknown.status_code == 404
-        assert len(_decisions(client, built, owner.headers)) == 2
+        assert len(_decisions(client, built, owner.headers)) == 3
 
 
 def test_user_state_survives_a_rebuilds_constrain(engine: Engine, tmp_path: Path) -> None:
@@ -1039,3 +1041,152 @@ def test_an_added_option_reads_its_own_search_until_the_next_build(conn: Connect
     # A build-assigned option is untouched by the rule.
     seeded = next(o for o in listed.options if o.name == "Youth guarantee")
     assert seeded.search_pending is False
+
+
+# --- step-7 fixes (A4, A5, S2, F3) ----------------------------------------------------
+
+
+def test_add_answers_with_the_option_when_its_search_is_still_queued(
+    engine: Engine, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A4: the option has committed, so a slow option-search pool is no 500. The
+    reservation fences the task until the queued search settles."""
+    from concurrent.futures import Future
+
+    from policy_atlas.api import longlist_actions
+    from policy_atlas.api.routers import runs as runs_router
+    from policy_atlas.runtime import option_search
+
+    queued: Future[None] = Future()
+    child_id = uuid.uuid4()
+
+    def run_option_search(*args: Any, **kwargs: Any) -> uuid.UUID:
+        with option_search._handles_lock:
+            option_search._futures[child_id] = queued
+        return child_id
+
+    def never_opens(*args: Any, **kwargs: Any) -> Any:
+        raise RuntimeError("executor did not create a capability run")
+
+    monkeypatch.setattr(longlist_actions, "run_option_search", run_option_search)
+    monkeypatch.setattr(longlist_actions, "_await_new_run", never_opens)
+    agent = _design_backend()
+    overrides = {get_agent_backend: lambda: agent, get_runner_backends: _runner_backends}
+    try:
+        with _clients(tmp_path, engine, overrides) as (client, (owner, colleague, _)):
+            built = _org_build(engine, owner, colleague, linked=False)
+            response = client.post(
+                f"/api/v1/tasks/{built.task_id}/options",
+                headers=owner.headers,
+                json={"text": "pay employers to hire young people"},
+            )
+            assert response.status_code == 201, response.text
+            assert response.json()["opened_run"] is None
+            assert response.json()["option"]["name"] == "Wage subsidy"
+            assert built.task_id in runs_router._dispatching_tasks
+            again = client.post(
+                f"/api/v1/tasks/{built.task_id}/options",
+                headers=owner.headers,
+                json={"text": "another"},
+            )
+            assert again.status_code == 409, again.text
+            queued.set_result(None)
+            assert built.task_id not in runs_router._dispatching_tasks
+            assert built.task_id not in runs_router._search_reservations
+    finally:
+        with option_search._handles_lock:
+            option_search._futures.pop(child_id, None)
+
+
+def test_a_document_two_added_searches_share_counts_for_both(conn: Connection) -> None:
+    """A5: one extraction record listed by two searches' roll-ups is each option's."""
+    walk = _Walk(conn)
+    walk.option("Youth guarantee", origin="added_by_you")
+    walk.build(_Scripted())
+    shared = walk.doc({"title": "A wage subsidy and mentoring trial"})
+    walk.classify(shared, RCT, 4)
+    walk.record(shared, "wage subsidy", study_geography="England")
+    added: list[uuid.UUID] = []
+    for name in ("Wage subsidy", "Mentoring"):
+        option_id = walk.option(name, origin="added_by_you")
+        added.append(option_id)
+        scope_id = uuid.uuid4()
+        conn.execute(
+            evidence_scope.insert().values(
+                evidence_scope_id=scope_id,
+                task_id=walk.task_id,
+                intent=f"{name}.",
+                context={"capability": "options_scoping", "option_id": str(option_id)},
+                created_at=now(),
+                purpose="targeted",
+                plan_id=walk.plan_id,
+            )
+        )
+        conn.execute(
+            capability_run.insert().values(
+                capability_run_id=uuid.uuid4(),
+                task_id=walk.task_id,
+                evidence_scope_id=scope_id,
+                capability="options_scoping",
+                plan_id=walk.plan_id,
+                plan_version=2,
+                status="succeeded",
+                started_at=now(),
+                ended_at=now(),
+                parent_capability_run_id=None,
+            )
+        )
+        walk.rollup(scope_id, [shared])
+    listed = repository.longlist_out(conn, walk.task_id)
+    assert listed is not None
+    counts = {o.option_id: o.document_count for o in listed.options}
+    assert [counts[oid] for oid in added] == [1, 1]
+
+
+def test_a_linked_finding_needs_a_link_to_this_task(conn: Connection) -> None:
+    """S2: a membership row naming another task's finding is read only while that
+    task is linked to this one."""
+    walk = _Walk(conn, _plan())
+    guarantee = walk.option("Youth guarantee", origin="added_by_you")
+    _linked_deep_task(conn, walk, "youth guarantee")
+    walk.build(_Scripted(routes={"youth guarantee": ("Youth guarantee", False)}))
+    card = repository.option_out(conn, walk.task_id, guarantee)
+    assert card is not None
+    assert "A deep read" in {d.title for d in card.documents}
+    conn.execute(task_link.delete().where(task_link.c.target_task_id == walk.task_id))
+    card = repository.option_out(conn, walk.task_id, guarantee)
+    assert card is not None
+    assert "A deep read" not in {d.title for d in card.documents}
+
+
+def test_an_option_from_the_evidence_search_names_its_report_section(
+    conn: Connection,
+) -> None:
+    """F3: the section suggest recorded for the option reaches the list and the card."""
+    from policy_atlas.core import events
+
+    walk = _Walk(conn)
+    walk.option("Youth guarantee", origin="added_by_you")
+    suggest_run = walk.run()
+    drawn = walk.option(
+        "Employer incentives", origin="from_evidence_search", created_by_run_id=suggest_run
+    )
+    events.append(
+        conn,
+        task_id=walk.task_id,
+        run_id=suggest_run,
+        event_type="component.completed",
+        payload={
+            "component": "suggest",
+            "report_sections": {str(drawn): "What works for employers"},
+        },
+    )
+    walk.build(_Scripted())
+    listed = repository.longlist_out(conn, walk.task_id)
+    assert listed is not None
+    sections = {o.option_id: o.from_section for o in listed.options}
+    assert sections[drawn] == "What works for employers"
+    assert {v for k, v in sections.items() if k != drawn} == {None}
+    card = repository.option_out(conn, walk.task_id, drawn)
+    assert card is not None
+    assert card.from_section == "What works for employers"

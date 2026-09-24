@@ -180,8 +180,9 @@ export type ScopingStartState =
   | { kind: "longlist_built"; options: number }
   | {
       kind: "rebuild_longlist";
-      /** The plan version the longlist on hand was built from. */
-      builtFrom: number;
+      /** The plan version the longlist on hand was built from; null when the
+       *  longlist could not be read (task 045, L6). */
+      builtFrom: number | null;
       rebuild: { label: string; onConfirm: () => void; disabled: boolean };
       notice: string | null;
     };
@@ -204,7 +205,10 @@ export function scopingStatusLine(state: ScopingStartState): string | null {
     case "longlist_built":
       return `Longlist built · ${state.options} ${state.options === 1 ? "option" : "options"}`;
     case "rebuild_longlist":
-      return `Longlist built from plan version ${state.builtFrom} · the plan has changed`;
+      // An unread longlist (L6) says so in its notice instead.
+      return state.builtFrom === null
+        ? null
+        : `Longlist built from plan version ${state.builtFrom} · the plan has changed`;
     case "confirmed":
       return "Plan confirmed · no longlist yet";
     case "none":
@@ -214,11 +218,13 @@ export function scopingStatusLine(state: ScopingStartState): string | null {
   }
 }
 
-/** The server page-size cap (`contract/common.py`). The list is newest
- *  first and, since task 045, carries the option searches too (one per
- *  option per build), so a task rebuilt many times could push its baseline
- *  walk past one page; a page holds several full builds. */
+/** The server page-size cap (`contract/common.py`). The list is read with
+ *  `parentless` (task 045, A13): only the baseline and longlist walks, never
+ *  the option searches, so the baseline walk cannot be paged out. */
 const SCOPING_RUNS_PAGE_SIZE = 200;
+
+/** The start area's words when the longlist exists but could not be read. */
+const LONGLIST_UNREAD_NOTICE = "The longlist couldn't be loaded.";
 
 /** A walk that produced a baseline worth confirming or rebuilding from. */
 function baselineProduced(status: string): boolean {
@@ -309,7 +315,7 @@ export function useScopingPlanStart({
   onStarted?: () => void;
 }): ScopingStartState {
   const planQuery = usePlan(taskId);
-  const runsQuery = useRuns(taskId, { page_size: SCOPING_RUNS_PAGE_SIZE });
+  const runsQuery = useRuns(taskId, { page_size: SCOPING_RUNS_PAGE_SIZE, parentless: true });
   const taskQuery = useTask(taskId);
   // Task 045 (S15): what exists and what is active. The longlist is read
   // only once the task says one exists (its plan version decides between
@@ -395,6 +401,7 @@ export function useScopingPlanStart({
     anyWalk: latestRun !== null,
     longlistExists,
     longlist: longlistQuery.data,
+    longlistError: longlistQuery.isError,
     currentVersion,
     confirmed,
     baselineRun: baselineRun !== null,
@@ -418,7 +425,7 @@ export function useScopingPlanStart({
           onConfirm: confirmAndBuildLonglist,
           disabled: confirmDisabled,
         },
-        notice,
+        notice: notice ?? (builtFrom === null ? LONGLIST_UNREAD_NOTICE : null),
       }),
     },
   });
@@ -435,6 +442,7 @@ function scopingStartDispatch({
   anyWalk,
   longlistExists,
   longlist,
+  longlistError,
   currentVersion,
   confirmed,
   baselineRun,
@@ -444,6 +452,7 @@ function scopingStartDispatch({
   anyWalk: boolean;
   longlistExists: boolean;
   longlist: ScopingLonglist | null | undefined;
+  longlistError: boolean;
   currentVersion: number | null;
   confirmed: boolean;
   baselineRun: boolean;
@@ -451,14 +460,15 @@ function scopingStartDispatch({
     build: () => ScopingStartState;
     rebuildOrConfirm: () => ScopingStartState;
     confirmed: () => ScopingStartState;
-    rebuildLonglist: (builtFrom: number) => ScopingStartState;
+    rebuildLonglist: (builtFrom: number | null) => ScopingStartState;
   };
 }): ScopingStartState {
   if (active) return { kind: "none", buildingLonglist: confirmed || longlistExists };
   if (!anyWalk) return states.build();
   if (longlistExists) {
     // Its plan version decides the state; until it has loaded, say nothing
-    // rather than guess.
+    // rather than guess. A read that failed (L6) still leaves Rebuild.
+    if (longlist == null && longlistError) return states.rebuildLonglist(null);
     if (longlist == null || currentVersion === null) return { kind: "none", buildingLonglist: false };
     if (currentVersion > longlist.plan_version) return states.rebuildLonglist(longlist.plan_version);
     return { kind: "longlist_built", options: longlist.counts.options };

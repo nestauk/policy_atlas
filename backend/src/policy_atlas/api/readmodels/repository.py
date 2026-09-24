@@ -98,6 +98,7 @@ from policy_atlas.core.schema import (
     source_snapshot,
     source_tag,
     synthesis_result,
+    task_link,
     task_plan,
     task_source_snapshot,
     tss_owns_snapshot,
@@ -125,6 +126,7 @@ from policy_atlas.options_scoping.longlist.lever_types import (
     LEVER_TYPES,
     TAXONOMY_VERSION,
 )
+from policy_atlas.options_scoping.longlist.longlist import TYPING_INVALID_REASON
 from policy_atlas.options_scoping.longlist.where_tried import where_codes, where_group
 from policy_atlas.runtime.capability_registry import OPTIONS_SCOPING, validate_plan
 from policy_atlas.runtime.scoping_plan import TRANSFERABILITY_DEFAULT, ScopingPlan, find_default
@@ -1258,7 +1260,7 @@ def _option_event_summary(event_type: str, payload: Mapping[str, Any]) -> str:
     return sentence
 
 
-def _event_decision(row: Any) -> DecisionOut:
+def _event_decision(row: Any, walk_id: uuid.UUID | None = None) -> DecisionOut:
     payload = row.payload if isinstance(row.payload, Mapping) else {}
     actor = payload.get("actor") if isinstance(payload.get("actor"), str) else None
     if row.event_type in OPTION_EVENT_KINDS:
@@ -1269,6 +1271,7 @@ def _event_decision(row: Any) -> DecisionOut:
             summary=_option_event_summary(row.event_type, payload),
             decided_by=cast(Any, "user") if actor else None,
             detail=dict(payload),
+            capability_run_id=walk_id,
         )
     text = {
         "component.completed": "Completed an evidence-search step.",
@@ -1294,7 +1297,26 @@ def _event_decision(row: Any) -> DecisionOut:
         summary=text,
         decided_by=cast(Any, "user") if actor else None,
         detail=dict(payload),
+        capability_run_id=walk_id,
     )
+
+
+def _walks_of_event_runs(
+    conn: Connection, task_id: uuid.UUID, rows: Sequence[Any]
+) -> dict[uuid.UUID, uuid.UUID]:
+    """Each event's component run → the walk it belongs to, in one query (task 045)."""
+    run_ids = {row.run_id for row in rows if row.run_id is not None}
+    if not run_ids:
+        return {}
+    return {
+        run_id: walk_id
+        for run_id, walk_id in conn.execute(
+            select(runs.c.run_id, runs.c.capability_run_id)
+            .where(runs.c.task_id == task_id)
+            .where(runs.c.run_id.in_(run_ids))
+        )
+        if walk_id is not None
+    }
 
 
 def decisions_page(
@@ -1310,7 +1332,11 @@ def decisions_page(
         .mappings()
         .all()
     )
-    decision_events: list[DecisionOut] = [_event_decision(row) for row in allowed]
+    walks = _walks_of_event_runs(conn, task_id, allowed)
+    decision_events: list[DecisionOut] = [
+        _event_decision(row, walks.get(row.run_id) if row.run_id is not None else None)
+        for row in allowed
+    ]
     for story in steering_history(conn, task_id):
         for event in story["events"]:
             if event["event_type"] != "steering.decision":
@@ -1328,6 +1354,9 @@ def decisions_page(
                     if decided_by in {"user", "agent", "standing_default"}
                     else None,
                     detail=dict(payload),
+                    # A steering event's walk is its story's key, never an
+                    # event_log.run_id join (see runtime.steering_history).
+                    capability_run_id=story["capability_run_id"],
                 )
             )
     decision_events.sort(key=lambda item: item.sequence, reverse=True)
@@ -2814,10 +2843,28 @@ def _scoping_plan_version(
 def _option_rows(
     conn: Connection, task_id: uuid.UUID, option_id: uuid.UUID | None = None
 ) -> list[Any]:
-    query = select(option).where(option.c.task_id == task_id)
+    """The task's options on the list: a merged duplicate is left out."""
+    query = (
+        select(option)
+        .where(option.c.task_id == task_id)
+        .where(option.c.merged_into_option_id.is_(None))
+    )
     if option_id is not None:
         query = query.where(option.c.option_id == option_id)
     return list(conn.execute(query.order_by(option.c.created_at, option.c.option_id)))
+
+
+def _also_found_as(conn: Connection, task_id: uuid.UUID) -> dict[uuid.UUID, list[str]]:
+    """Each kept option's merged duplicates' names, oldest first."""
+    out: dict[uuid.UUID, list[str]] = {}
+    for kept, name in conn.execute(
+        select(option.c.merged_into_option_id, option.c.name)
+        .where(option.c.task_id == task_id)
+        .where(option.c.merged_into_option_id.is_not(None))
+        .order_by(option.c.created_at, option.c.option_id)
+    ):
+        out.setdefault(kept, []).append(name)
+    return out
 
 
 def _option_relations(
@@ -2900,6 +2947,8 @@ def _option_summary_fields(
     record: Mapping[str, Any],
     *,
     search_pending: bool = False,
+    from_section: str | None = None,
+    also_found_as: list[str] | None = None,
 ) -> dict[str, Any]:
     documents = _count(coverage.get("documents"))
     in_scope = _in_scope_out(record)
@@ -2930,7 +2979,44 @@ def _option_summary_fields(
         "abstract_only": documents > 0 and _count(coverage.get("abstract_only")) == documents,
         "is_entrant_with_no_documents": row.origin != "clustered" and documents == 0,
         "search_pending": search_pending,
+        "from_section": from_section,
+        "also_found_as": list(also_found_as or []),
     }
+
+
+def _report_sections(
+    conn: Connection, task_id: uuid.UUID, rows: Iterable[Any]
+) -> dict[uuid.UUID, str]:
+    """The report section each *from your evidence search* option came from (F3).
+
+    ``suggest`` records it in its run's ``component.completed`` summary under
+    ``report_sections`` (``{option_id: heading}``); the option row's
+    ``created_by_run_id`` names that run.
+    """
+    wanted = {
+        row.option_id: row.created_by_run_id
+        for row in rows
+        if row.origin == "from_evidence_search" and row.created_by_run_id is not None
+    }
+    if not wanted:
+        return {}
+    sections: dict[str, Any] = {}
+    for (payload,) in conn.execute(
+        select(event_log.c.payload)
+        .where(event_log.c.task_id == task_id)
+        .where(event_log.c.run_id.in_(set(wanted.values())))
+        .where(event_log.c.event_type == "component.completed")
+        .order_by(event_log.c.sequence)
+    ):
+        summary = _as_mapping(payload)
+        if summary.get("component") == "suggest":
+            sections.update(_as_mapping(summary.get("report_sections")))
+    out: dict[uuid.UUID, str] = {}
+    for oid in wanted:
+        heading = sections.get(str(oid))
+        if isinstance(heading, str) and heading.strip():
+            out[oid] = heading
+    return out
 
 
 def _option_coverage(result: Any | None, option_id: uuid.UUID) -> Mapping[str, Any]:
@@ -3071,7 +3157,12 @@ def _added_searches(
     units_by_scope: dict[uuid.UUID, list[_SearchUnit]] = {}
     all_ids = {rid for ids in record_ids.values() for rid in ids}
     if all_ids:
-        scope_of = {rid: scope for scope, ids in record_ids.items() for rid in ids}
+        # One extraction record can be listed by several searches' roll-ups
+        # (a shared document): credit it to every scope that lists it (A5).
+        scopes_of: dict[uuid.UUID, list[uuid.UUID]] = {}
+        for scope, ids in record_ids.items():
+            for rid in ids:
+                scopes_of.setdefault(rid, []).append(scope)
         ipr = intervention_profile_record
         rows = conn.execute(
             select(
@@ -3113,19 +3204,19 @@ def _added_searches(
         for row in rows:
             if row.role not in _DOCUMENT_ROLES:
                 continue
-            units_by_scope.setdefault(scope_of[row.extraction_record_id], []).append(
-                _SearchUnit(
-                    tss_id=row.task_source_snapshot_id,
-                    role=row.role,
-                    basis=row.basis,
-                    population=row.population,
-                    setting=row.setting,
-                    outcome=row.outcome,
-                    study_geography=row.study_geography,
-                    metadata=_as_mapping(row.metadata),
-                    locator=row.source_locator,
-                )
+            unit = _SearchUnit(
+                tss_id=row.task_source_snapshot_id,
+                role=row.role,
+                basis=row.basis,
+                population=row.population,
+                setting=row.setting,
+                outcome=row.outcome,
+                study_geography=row.study_geography,
+                metadata=_as_mapping(row.metadata),
+                locator=row.source_locator,
             )
+            for scope in scopes_of[row.extraction_record_id]:
+                units_by_scope.setdefault(scope, []).append(unit)
     return {
         oid: _AddedSearch(
             pending=oid not in ended,
@@ -3282,6 +3373,8 @@ def longlist_out(conn: Connection, task_id: uuid.UUID) -> LonglistOut | None:
         conn, task_id, _needs_search_read(rows, result, _members_by_option(conn, task_id))
     )
     home = _home(built_from[1] if built_from else None)
+    sections = _report_sections(conn, task_id, rows)
+    merged = _also_found_as(conn, task_id)
 
     def coverage_of(oid: uuid.UUID) -> Mapping[str, Any]:
         search = searches.get(oid)
@@ -3297,6 +3390,8 @@ def longlist_out(conn: Connection, task_id: uuid.UUID) -> LonglistOut | None:
                 relations.get(oid, []),
                 _design_record(result, "judgements", by_id[oid]),
                 search_pending=oid in searches and searches[oid].pending,
+                from_section=sections.get(oid),
+                also_found_as=merged.get(oid),
             )
         )
         for oid in [*themed, *unthemed]
@@ -3315,7 +3410,8 @@ def longlist_out(conn: Connection, task_id: uuid.UUID) -> LonglistOut | None:
         none_fits=sum(
             1
             for row in rows
-            if row.primary_lever_type is None and row.lever_none_fits_reason is not None
+            if row.primary_lever_type is None
+            and row.lever_none_fits_reason not in (None, TYPING_INVALID_REASON)
         ),
     )
     taxonomy = _as_mapping(result.provenance).get("taxonomy_version")
@@ -3514,6 +3610,14 @@ def _option_documents(
             )
             .where(fru.c.task_id.in_({m.unit_task_id for m in linked}))
             .where(fru.c.finding_id.in_([m.unit_id for m in linked]))
+            # Only a task this one is linked from (S2): a membership row's
+            # task id is not trusted on its own.
+            .where(
+                select(task_link.c.link_id)
+                .where(task_link.c.target_task_id == task_id)
+                .where(task_link.c.source_task_id == fru.c.task_id)
+                .exists()
+            )
         ):
             findings[(row.task_id, row.finding_id)] = row
     own_by_snapshot = (
@@ -3620,11 +3724,19 @@ def option_out(conn: Connection, task_id: uuid.UUID, option_id: uuid.UUID) -> Op
     Args:
         conn: Open database connection. Read-only.
         task_id: The options-scoping task.
-        option_id: The option.
+        option_id: The option. A merged duplicate's id reads as its kept
+            option's card, so a link to it keeps working.
 
     Returns:
         The card, or ``None`` (the route's 404).
     """
+    kept = conn.execute(
+        select(option.c.merged_into_option_id).where(
+            option.c.task_id == task_id, option.c.option_id == option_id
+        )
+    ).scalar_one_or_none()
+    if kept is not None:
+        option_id = kept
     rows = _option_rows(conn, task_id, option_id)
     if not rows:
         return None
@@ -3660,6 +3772,8 @@ def option_out(conn: Connection, task_id: uuid.UUID, option_id: uuid.UUID) -> Op
             relations,
             judgements,
             search_pending=search is not None and search.pending,
+            from_section=_report_sections(conn, task_id, rows).get(option_id),
+            also_found_as=_also_found_as(conn, task_id).get(option_id),
         ),
         design=design,
         design_features=list(design.design_features),

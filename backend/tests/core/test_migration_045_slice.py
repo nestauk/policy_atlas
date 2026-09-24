@@ -176,6 +176,10 @@ def test_the_slice_round_trips(engine: Engine) -> None:
             assert link_option is not None and link_option["nullable"] is True
             parent = _column(conn, "capability_run", "parent_capability_run_id")
             assert parent is not None and parent["nullable"] is True
+            merged = _column(conn, "option", "merged_into_option_id")
+            assert merged is not None and merged["nullable"] is True
+            option_fks = {fk["name"] for fk in inspect(conn).get_foreign_keys("option")}
+            assert "fk_option_merged_into_task" in option_fks
             selection = _column(conn, "extraction_result", "selection_run_id")
             assert selection is not None and selection["nullable"] is True
             definition = _view_definition(conn)
@@ -314,7 +318,9 @@ def test_the_remedy_clears_a_longlist_walk_and_its_records_then_the_downgrade_ru
             )
         )
     try:
-        assert ops.run(engine, apply=True) == 0
+        with engine.connect() as conn:
+            every_scoping_task = list(ops._scoping_task_ids(conn))
+        assert ops.run(engine, apply=True, task_ids=every_scoping_task) == 0
         with engine.connect() as conn:
             for table in sorted(_NEW_TABLES):
                 count = conn.execute(
@@ -451,6 +457,29 @@ def test_a_parent_walk_must_be_a_walk_of_the_same_task(conn: Connection) -> None
     other_plan = _plan_row(conn, other_id)
     with pytest.raises(IntegrityError, match="fk_capr_parent_task"):
         _seed_walk(conn, other_id, purpose="targeted", plan_id=other_plan, parent=parent)
+
+
+def test_a_merged_option_names_another_option_of_its_own_task(conn: Connection) -> None:
+    task_id, _ = seed_task_and_run(conn)
+    kept, duplicate = _insert_option(conn, task_id), _insert_option(conn, task_id)
+    conn.execute(
+        option.update().where(option.c.option_id == duplicate).values(merged_into_option_id=kept)
+    )
+    stranger_id, _ = seed_task_and_run(conn)
+    foreign = _insert_option(conn, stranger_id)
+    with (
+        pytest.raises(IntegrityError, match="fk_option_merged_into_task"),
+        conn.begin_nested(),
+    ):
+        conn.execute(
+            option.update()
+            .where(option.c.option_id == duplicate)
+            .values(merged_into_option_id=foreign)
+        )
+    with pytest.raises(IntegrityError, match="ck_option_merged_not_self"):
+        conn.execute(
+            option.update().where(option.c.option_id == kept).values(merged_into_option_id=kept)
+        )
 
 
 def test_the_union_view_carries_profile_records_as_the_third_kind(conn: Connection) -> None:

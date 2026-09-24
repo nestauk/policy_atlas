@@ -382,6 +382,7 @@ describe("useScopingPlanStart — the longlist's states (task 045, S13/S15)", ()
     runs,
     task = {},
     longlist = null,
+    longlistError = false,
     confirmBaseline = { mutate: vi.fn(), isPending: false },
   }: {
     version: number;
@@ -389,6 +390,7 @@ describe("useScopingPlanStart — the longlist's states (task 045, S13/S15)", ()
     runs: unknown[];
     task?: { has_longlist?: boolean; active_run?: unknown };
     longlist?: { plan_version: number; options: number } | null;
+    longlistError?: boolean;
     confirmBaseline?: MutationStub;
   }) {
     vi.mocked(queries.usePlan).mockReturnValue({
@@ -409,6 +411,7 @@ describe("useScopingPlanStart — the longlist's states (task 045, S13/S15)", ()
     vi.mocked(queries.useLonglist).mockReturnValue({
       data:
         longlist === null ? null : { plan_version: longlist.plan_version, counts: { options: longlist.options } },
+      isError: longlistError,
     } as unknown as ReturnType<typeof queries.useLonglist>);
     vi.mocked(mutations.useStartRun).mockReturnValue({ mutate: vi.fn(), isPending: false } as unknown as ReturnType<
       typeof mutations.useStartRun
@@ -475,6 +478,28 @@ describe("useScopingPlanStart — the longlist's states (task 045, S13/S15)", ()
       { artefact_id: "artefact-1", plan_version: 3 },
       expect.anything(),
     );
+  });
+
+  // A13: the baseline is found among the task's own walks, never paged out
+  // by option searches.
+  it("reads the walks with the parentless filter", () => {
+    setup({ version: 1, runs: [baseline] });
+    expect(queries.useRuns).toHaveBeenLastCalledWith("t1", expect.objectContaining({ parentless: true }));
+  });
+
+  // L6: a longlist that exists but could not be read still offers Rebuild.
+  it("falls back to Rebuild longlist with a notice when the longlist read fails", () => {
+    const { result } = setup({
+      version: 2,
+      baselineConfirmed: confirmedAt(2),
+      runs: [longlistWalk, baseline],
+      task: { has_longlist: true },
+      longlistError: true,
+    });
+    if (result.current.kind !== "rebuild_longlist") throw new Error(`got ${result.current.kind}`);
+    expect(result.current.builtFrom).toBeNull();
+    expect(result.current.notice).toBe("The longlist couldn't be loaded.");
+    expect(scopingStatusLine(result.current)).toBeNull();
   });
 
   it("confirmed with no longlist and nothing running (a refused or failed open): Build longlist", () => {

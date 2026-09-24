@@ -19,13 +19,16 @@ holds none of them (P1):
 - :func:`dispatch_option_searches` — after ``suggest``: read the entrants,
   apply the cap (the user's own and the report-derived first, never dropped;
   the model's suggestions fill the rest), skip on a rebuild every entrant that
-  already has an option search (P12), dispatch one child walk each, and emit
-  the ``option_searches`` stage's start.
+  already has a finished option search (P12), dispatch one child walk each,
+  and emit the ``option_searches`` stage's start.
 - :func:`join_option_searches` — before ``longlist``: wait, outside any
   transaction, for every child to reach a terminal status, bounded by
   :data:`OPTION_SEARCH_JOIN_TIMEOUT`; stragglers are marked ``interrupted``
   and counted failed; emit the stage's completion with
   ``{total, finished, failed}``.
+- :func:`abandon_children` — on every end of the longlist walk: a child the
+  join never waited for (the walk failed, aborted or raised after the
+  fan-out) is cancelled and ended ``interrupted``, never left running.
 
 **Finding a walk's children** (for Phase 5 and any reader):
 ``capability_run.parent_capability_run_id = <the longlist walk>``; each
@@ -326,8 +329,9 @@ def entrants_for_search(
     own, then the report's, then the model's). When ``suggest`` failed there
     is no summary; the plan's own options (``origin = 'added_by_you'``) still
     exist and are the entrants. **Rebuild** (P12): an entrant that already has
-    an option search on this task — a walk under a ``targeted`` record whose
-    ``context.option_id`` names it — is not searched again. The cap
+    a finished option search on this task — a ``succeeded`` or ``degraded``
+    walk under a ``targeted`` record whose ``context.option_id`` names it — is
+    not searched again; one whose search failed or was cut off is. The cap
     (:data:`OPTION_SEARCH_CAP`, A16) keeps every ``added_by_you`` and
     ``from_evidence_search`` entrant and fills the rest with suggestions; an
     entrant whose stored design does not validate is skipped and logged.
@@ -361,6 +365,7 @@ def entrants_for_search(
             .where(option.c.task_id == task_id)
             .where(option.c.option_id.in_(ordered))
             .where(option.c.origin.in_(_ENTRANT_ORIGINS))
+            .where(option.c.merged_into_option_id.is_(None))  # a merged duplicate is no entrant
         )
     }
     searched = searched_option_ids(conn, task_id=task_id)
@@ -403,10 +408,12 @@ def _summary_entrants(
 
 
 def searched_option_ids(conn: Connection, *, task_id: uuid.UUID) -> set[uuid.UUID]:
-    """Return the options of a task that already have an option search.
+    """Return the options of a task that already have a finished option search.
 
     An option search is a walk under a ``targeted`` intent record whose
-    ``context.option_id`` names the option, whatever the walk's status.
+    ``context.option_id`` names the option; it counts only when it ended
+    ``succeeded`` or ``degraded``, so a rebuild retries a failed, aborted or
+    interrupted one.
 
     Args:
         conn: Open connection.
@@ -426,6 +433,7 @@ def searched_option_ids(conn: Connection, *, task_id: uuid.UUID) -> set[uuid.UUI
         )
         .where(evidence_scope.c.task_id == task_id)
         .where(evidence_scope.c.purpose == TARGETED_PURPOSE)
+        .where(capability_run.c.status.in_(_FINISHED))
     ).scalars()
     found: set[uuid.UUID] = set()
     for value in values:
@@ -519,36 +527,43 @@ def dispatch_option_searches(
         if already is not None:
             return already
         entrants = entrants_for_search(conn, task_id=task_id, suggest_run_id=suggest_run_id)
-    child_ids = [
-        run_option_search(
-            engine,
-            task_id=task_id,
-            plan_row=plan_row,
-            design=design,
-            option_id=option_id,
-            parent_capability_run_id=parent_id,
-            backends=backends,
-            user_id=None,
-        )
-        for option_id, design in entrants
-    ]
-    with engine.begin() as conn:
-        events.append(
-            conn,
-            task_id=task_id,
-            run_id=None,
-            event_type="run.started",
-            payload={
-                "component": OPTION_SEARCHES_STAGE,
-                "registry_component": OPTION_SEARCHES_STAGE,
-                "plan_id": str(plan_row["plan_id"]),
-                "plan_version": int(plan_row["version"]),
-                "session_id": str(session_id) if session_id is not None else None,
-                "capability_run_id": str(parent_id),
-                "child_capability_run_ids": [str(child) for child in child_ids],
-                "total": len(child_ids),
-            },
-        )
+    child_ids: list[uuid.UUID] = []
+    try:
+        for option_id, design in entrants:
+            child_ids.append(
+                run_option_search(
+                    engine,
+                    task_id=task_id,
+                    plan_row=plan_row,
+                    design=design,
+                    option_id=option_id,
+                    parent_capability_run_id=parent_id,
+                    backends=backends,
+                    user_id=None,
+                )
+            )
+        with engine.begin() as conn:
+            events.append(
+                conn,
+                task_id=task_id,
+                run_id=None,
+                event_type="run.started",
+                payload={
+                    "component": OPTION_SEARCHES_STAGE,
+                    "registry_component": OPTION_SEARCHES_STAGE,
+                    "plan_id": str(plan_row["plan_id"]),
+                    "plan_version": int(plan_row["version"]),
+                    "session_id": str(session_id) if session_id is not None else None,
+                    "capability_run_id": str(parent_id),
+                    "child_capability_run_ids": [str(child) for child in child_ids],
+                    "total": len(child_ids),
+                },
+            )
+    except Exception:
+        # No fan-out record names these children, so nothing would ever join
+        # or abandon them: end the ones already submitted before re-raising.
+        _interrupt_children(engine, task_id=task_id, child_ids=child_ids)
+        raise
     log.info(
         "option_search.fan_out",
         task_id=str(task_id),
@@ -595,14 +610,8 @@ def join_option_searches(
         if not pending or time.monotonic() >= deadline:
             break
         time.sleep(OPTION_SEARCH_JOIN_POLL)
-    interrupted: list[uuid.UUID] = []
+    interrupted = _interrupt_children(engine, task_id=task_id, child_ids=pending)
     for child in pending:
-        with _handles_lock:
-            future = _futures.get(child)
-            if future is not None and not future.cancel():
-                _abandoned.add(child)
-        if _end_child(engine, task_id=task_id, child_id=child, status="interrupted"):
-            interrupted.append(child)
         statuses[child] = "interrupted"
     finished = sum(1 for child in child_ids if statuses.get(child) in _FINISHED)
     outcome = JoinOutcome(
@@ -642,3 +651,84 @@ def _ended(child: uuid.UUID, status: str | None) -> bool:
     with _handles_lock:
         future = _futures.get(child)
     return future is None or future.done()
+
+
+def _interrupt_children(
+    engine: Engine, *, task_id: uuid.UUID, child_ids: list[uuid.UUID]
+) -> list[uuid.UUID]:
+    """Cancel or abandon each child and mark the ones with a row ``interrupted``.
+
+    A child still queued behind the pool's width is cancelled and never
+    starts; one already started is abandoned (it finishes ``interrupted`` as
+    soon as it opens its row, :func:`end_if_abandoned`); one with an active
+    row is ended now.
+
+    Returns:
+        The children whose row this call ended.
+    """
+    interrupted: list[uuid.UUID] = []
+    for child in child_ids:
+        with _handles_lock:
+            future = _futures.get(child)
+            if future is not None and not future.cancel():
+                _abandoned.add(child)
+        if _end_child(engine, task_id=task_id, child_id=child, status="interrupted"):
+            interrupted.append(child)
+    return interrupted
+
+
+def abandon_children(
+    engine: Engine, *, task_id: uuid.UUID, parent_id: uuid.UUID
+) -> list[uuid.UUID]:
+    """End every child of a walk that the join did not see end.
+
+    Called on every end of a longlist walk (its ``_finish_run`` and an
+    exception out of the walk): after a join every child is already terminal
+    and this changes nothing; when the walk ended between the fan-out and the
+    join, its children are cancelled and ended ``interrupted``. A child's
+    failure never fails the parent; nor does this.
+
+    Args:
+        engine: Database engine.
+        task_id: The task.
+        parent_id: The longlist walk.
+
+    Returns:
+        The children whose row this call ended.
+    """
+    with engine.connect() as conn:
+        child_ids = dispatched_children(conn, task_id=task_id, parent_id=parent_id)
+        if not child_ids:
+            return []
+        statuses = child_walks(conn, task_id=task_id, parent_id=parent_id)
+    pending = [child for child in child_ids if not _ended(child, statuses.get(child))]
+    if not pending:
+        return []
+    interrupted = _interrupt_children(engine, task_id=task_id, child_ids=pending)
+    log.info(
+        "option_search.abandoned_with_parent",
+        task_id=str(task_id),
+        capability_run_id=str(parent_id),
+        pending=len(pending),
+        interrupted=len(interrupted),
+    )
+    return interrupted
+
+
+def end_if_abandoned(engine: Engine, *, task_id: uuid.UUID, child_id: uuid.UUID) -> bool:
+    """End a just-opened child walk ``interrupted`` when its parent abandoned it.
+
+    The runner calls this right after the child's row commits: a parent that
+    abandoned the child before the row existed found nothing to end, so the
+    child ends itself here instead of running a whole walk nobody reads. (A
+    parent that abandons it after this check finds the row and ends it.)
+
+    Returns:
+        Whether the child was abandoned (and is now ``interrupted``).
+    """
+    with _handles_lock:
+        abandoned = child_id in _abandoned
+    if abandoned:
+        _end_child(engine, task_id=task_id, child_id=child_id, status="interrupted")
+        log.info("option_search.abandoned_after_open", capability_run_id=str(child_id))
+    return abandoned

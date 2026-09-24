@@ -507,6 +507,38 @@ def test_a_decision_in_words_lands_in_the_check_in_transaction(
         _cleanup(engine, task_id)
 
 
+def test_a_confirm_whose_longlist_did_not_open_says_so(
+    engine: Engine, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """F12: the decision stands, but no walk opened — the reply must not say
+    the longlist is being built."""
+    from policy_atlas.api.longlist_start import LonglistRefused
+    from policy_atlas.api.routers import task_agent as task_agent_router
+
+    def refuse(*args: Any, **kwargs: Any) -> uuid.UUID:
+        raise LonglistRefused("capacity", "the walk executor is at capacity")
+
+    monkeypatch.setattr(task_agent_router, "open_longlist_walk", refuse)
+    task_id: uuid.UUID | None = None
+    try:
+        task_id, walk_id, _check_in_id, _plan_id = _park_at_gate(engine)
+        with api_client(tmp_path, _overrides(agent=_sorts(_decision("confirm_plan")))) as (
+            client,
+            owner,
+            _other,
+        ):
+            _own(engine, task_id, owner)
+            response = _turn(client, owner, task_id, "Looks right, go ahead")
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert body["decision"]["opened_run"] is None
+        assert body["reply"] == gate_turns.CONFIRM_NOT_STARTED_REPLY
+        assert _decision_events(engine, task_id)[-1]["response"] == "continue"
+    finally:
+        _await_quiet(engine, task_id)
+        _cleanup(engine, task_id)
+
+
 def test_one_decision_survives_a_race_between_the_chat_and_the_card(
     engine: Engine, tmp_path: Path
 ) -> None:

@@ -147,7 +147,13 @@ def post_option(
         raise http_error(exc) from None
     return OptionAddedOut(
         option=_card(engine, task_id, added.option_id),
-        opened_run=opened_run(engine, task_id=task_id, capability_run_id=added.capability_run_id),
+        # ``None`` while the search is still queued (A4): the card reads it
+        # as search pending, and the run stream announces the walk.
+        opened_run=(
+            opened_run(engine, task_id=task_id, capability_run_id=added.capability_run_id)
+            if added.run_open
+            else None
+        ),
     )
 
 
@@ -155,11 +161,11 @@ def post_option(
 def post_exclude(
     task_id: uuid.UUID,
     option_id: uuid.UUID,
-    payload: OptionExcludeIn,
     user: Annotated[AuthenticatedUser, Depends(get_current_user)],
     engine: Annotated[Engine, Depends(get_engine)],
+    payload: Annotated[OptionExcludeIn | None, Body()] = None,
 ) -> OptionOut:
-    """Exclude an option with the user's reason; include again reverses it."""
+    """Exclude an option, with the user's reason when given; include again reverses it."""
     with engine.begin() as conn:
         accessible_task(conn, task_id=task_id, user_id=user.user_id, write=True, for_update=True)
         try:
@@ -167,15 +173,13 @@ def post_exclude(
                 conn,
                 task_id=task_id,
                 option_id=option_id,
-                reason=payload.reason,
+                reason=payload.reason if payload is not None else None,
                 actor=user.user_id,
             )
         except LonglistActionRefused as exc:
             raise http_error(exc) from None
         except OptionNotFound:
             raise HTTPException(status_code=404, detail=NOT_FOUND_DETAIL) from None
-        except ValueError:
-            raise HTTPException(status_code=422, detail="an exclusion needs a reason") from None
     return _card(engine, task_id, option_id)
 
 

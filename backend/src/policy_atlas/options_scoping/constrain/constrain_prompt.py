@@ -129,8 +129,9 @@ Requirements and the default screens — a verdict each:
 - The three default screens:
   - relevant: the option acts on at least one of the plan's stated
     outcomes. An option for a different outcome breaks it.
-  - distinct: the option is not the same thing as another option in the
-    batch or on the longlist under a different name. An option marked as
+  - distinct: the option is not the same thing as another option in this
+    batch under a different name. When it breaks, the reason names that
+    other option exactly as it is written in the batch. An option marked as
     PART OF another (a component of a package, or the package itself)
     NEVER breaks this screen: packages and their parts are shown together
     by design. Two options that differ in a defining feature are distinct.
@@ -142,8 +143,8 @@ Requirements and the default screens — a verdict each:
   design names no setting is 'cannot_check'.
 - Thin evidence is NEVER a reason to exclude: an option with zero
   documents, or with documents that only mention it, passes every screen
-  its design passes. Coverage is context for 'relevant' and 'in_scope'
-  only when the design is silent.
+  its design passes. Coverage never decides a verdict: when the design is
+  silent, the verdict is 'cannot_check'.
 - reason names the design feature the verdict rests on, in the
   constraint's own words where you can, so the user sees exactly what
   broke.

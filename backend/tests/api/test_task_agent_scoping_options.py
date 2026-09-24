@@ -322,6 +322,29 @@ def test_a_removed_default_is_never_minted_again(engine: Engine, tmp_path: Path)
         assert payload["removed_defaults"] == ["transferability"]
 
 
+def test_a_patch_that_carries_a_removed_default_back_restores_it(
+    engine: Engine, tmp_path: Path
+) -> None:
+    """L4: removing the default records it; sending it back restores it (not a 422)."""
+    scoping, agent = _OptionsScopingAgent(), StubAgentBackend()
+    with api_client(tmp_path, _overrides(scoping, agent)) as (client, owner, _other):
+        task_id = _scoping_task(client, owner)
+        ready = _to_ready(client, owner, task_id)
+        constraints = ready["scoping_plan"]["constraints"]
+        kept = [c for c in constraints if not c.get("default")]
+        assert _defaults(_patch(client, owner, task_id, {"constraints": kept})) == []
+        restored = _patch(client, owner, task_id, {"constraints": constraints})
+        assert [d["default"] for d in _defaults(restored)] == ["transferability"]
+        with engine.connect() as conn:
+            payload = conn.execute(
+                select(task_plan.c.payload)
+                .where(task_plan.c.task_id == uuid.UUID(task_id))
+                .order_by(task_plan.c.version.desc())
+                .limit(1)
+            ).scalar_one()
+        assert payload["removed_defaults"] == []
+
+
 # --- the baseline-state line ----------------------------------------------------
 
 _T0 = datetime(2026, 9, 22, 9, 0, tzinfo=UTC)

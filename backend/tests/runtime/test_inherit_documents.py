@@ -37,8 +37,13 @@ from tests.runtime.test_baseline_gate import (
 from tests.runtime.test_compose_by_purpose import _set_purpose
 from tests.runtime.test_runner import _cleanup, _runner_backends
 
+#: Owns every seeded task, so the build-time read check (review S1) passes.
+OWNER = "inherit-owner"
 
-def _make_task(conn: Connection, *, capability: str = "evidence_search") -> uuid.UUID:
+
+def _make_task(
+    conn: Connection, *, capability: str = "evidence_search", owner: str = OWNER
+) -> uuid.UUID:
     task_id = uuid.uuid4()
     conn.execute(
         task.insert().values(
@@ -48,6 +53,7 @@ def _make_task(conn: Connection, *, capability: str = "evidence_search") -> uuid
             status="active",
             updated_at=now(),
             capability=capability,
+            owner_user_id=owner,
         )
     )
     return task_id
@@ -56,8 +62,8 @@ def _make_task(conn: Connection, *, capability: str = "evidence_search") -> uuid
 class _Source:
     """One linked Evidence search task with a finished walk over one scope."""
 
-    def __init__(self, conn: Connection) -> None:
-        self.task_id = _make_task(conn)
+    def __init__(self, conn: Connection, *, owner: str = OWNER) -> None:
+        self.task_id = _make_task(conn, owner=owner)
         self.run_id = seed_run(conn, self.task_id)
         self.scope_id = seed_scope(conn, self.task_id)
         plan_id = uuid.uuid4()
@@ -274,6 +280,25 @@ def test_an_unreadable_link_is_named_and_the_others_are_kept(
     assert out["failed_links"] == 1
     assert out["failed_link_ids"] == [str(broken_link)]
     assert out["failed_reasons"] == ["OperationalError"]
+    assert out["degrades_walk"] is True
+
+
+def test_a_source_the_owner_can_no_longer_read_is_skipped_and_named(conn: Connection) -> None:
+    """A link grants no read: each build re-checks the owner's read on the source (S1)."""
+    readable = _Source(conn)
+    kept, _ = readable.document(conn)
+    private = _Source(conn, owner="someone-else")
+    private.document(conn)
+    target_id, run_id = _target(conn)
+    readable.link_to(conn, target_id)
+    lost_link = private.link_to(conn, target_id)
+
+    summary = inherit_documents(conn, task_id=target_id, run_id=run_id)
+
+    assert [row["source_snapshot_id"] for row in _rows(conn, target_id)] == [kept]
+    out = summary.as_summary()
+    assert out["failed_link_ids"] == [str(lost_link)]
+    assert out["failed_reasons"] == ["source not readable by the task owner"]
     assert out["degrades_walk"] is True
 
 

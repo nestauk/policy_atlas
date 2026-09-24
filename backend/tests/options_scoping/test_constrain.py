@@ -16,15 +16,20 @@ through the longlist component's own fixture and the stub longlist backend.
 from __future__ import annotations
 
 import uuid
+from datetime import timedelta
 from typing import Any, Literal
 
 import pytest
 from sqlalchemy import select, update
 from sqlalchemy.engine import Connection
 
+from policy_atlas.api import longlist_actions
+from policy_atlas.api.readmodels import repository
 from policy_atlas.core.schema import longlist_result, option, option_relation, task_source_snapshot
 from policy_atlas.core.usage import UsageResult
 from policy_atlas.options_scoping.constrain.constrain import (
+    DUPLICATE_KEPT_REASON,
+    DUPLICATE_UNNAMED_REASON,
     IN_SCOPE_EVIDENCE_KEY,
     JUDGEMENT_UNAVAILABLE,
     PACKAGE_DISTINCT_REASON,
@@ -47,6 +52,10 @@ from policy_atlas.options_scoping.constrain.in_scope import (
     in_scope_evidence,
 )
 from policy_atlas.options_scoping.longlist.longlist_backend import StubLonglistBackend
+from policy_atlas.options_scoping.longlist.longlist_cluster_prompt import (
+    DiscoveredOptionWire,
+    OptionDiscoveryResponse,
+)
 from policy_atlas.runtime.scoping_plan import TRANSFERABILITY_DEFAULT, find_default
 from tests.helpers import now
 from tests.options_scoping.test_longlist import _Walk
@@ -96,10 +105,13 @@ def _response(
     preference_ids: list[str] | None = None,
     *,
     verdicts: dict[tuple[uuid.UUID, str], Verdict] | None = None,
+    reasons: dict[tuple[uuid.UUID, str], str] | None = None,
     leaning: Literal["likely_meets", "likely_falls_short", "cannot_say"] = "likely_meets",
 ) -> ConstrainResponse:
-    """Every option, every id once; ``verdicts`` overrides ``passes`` per pair."""
+    """Every option, every id once; ``verdicts`` overrides ``passes`` per pair,
+    ``reasons`` the reason."""
     verdicts = verdicts or {}
+    reasons = reasons or {}
     return ConstrainResponse(
         options=[
             OptionConstrainWire(
@@ -108,7 +120,7 @@ def _response(
                     ConstraintJudgementWire(
                         constraint_id=cid,
                         verdict=verdicts.get((oid, cid), "passes"),
-                        reason=f"The design decides {cid}.",
+                        reason=reasons.get((oid, cid), f"The design decides {cid}."),
                     )
                     for cid in requirement_ids
                 ],
@@ -260,7 +272,10 @@ def test_distinct_never_excludes_a_part_of_row(conn: Connection) -> None:
     ids = [component, package, duplicate]
     backend = StubLonglistBackend(
         constrain_responses=_response(
-            ids, SCREEN_IDS, verdicts={(oid, "distinct"): "breaks" for oid in ids}
+            ids,
+            SCREEN_IDS,
+            verdicts={(oid, "distinct"): "breaks" for oid in ids},
+            reasons={(duplicate, "distinct"): "The same thing as Mentoring."},
         )
     )
 
@@ -271,8 +286,9 @@ def test_distinct_never_excludes_a_part_of_row(conn: Connection) -> None:
         distinct = _latest(walk).judgements[str(oid)]["1"]["distinct"]
         assert distinct["verdict"] == "passes"
         assert distinct["reason"] == PACKAGE_DISTINCT_REASON
-    assert _row(walk, duplicate).state == "excluded"
-    assert _row(walk, duplicate).exclusion["constraint"] == SCREEN_TEXT["distinct"]
+    # The duplicate is merged into the part it duplicates, not excluded.
+    assert _row(walk, duplicate).merged_into_option_id == component
+    assert _row(walk, duplicate).state == "included"
     # Both ends of the relation reach the prompt.
     sent = {o["option_id"]: o["relations"] for o in backend.constrain_inputs[0]["options"]}
     assert sent[str(component)] == [
@@ -287,12 +303,215 @@ def test_distinct_never_excludes_a_part_of_row(conn: Connection) -> None:
     assert sent[str(duplicate)] == []
 
 
+def test_distinct_keeps_the_earliest_of_a_duplicate_group(conn: Connection) -> None:
+    """Never every member: the user's option first, then the earliest created."""
+    walk = _walk(conn)
+    t0 = now()
+    first = walk.option("Youth guarantee", created_at=t0)
+    users = walk.option(
+        "Job guarantee", origin="added_by_you", created_at=t0 + timedelta(seconds=1)
+    )
+    later = walk.option("Guarantee scheme", created_at=t0 + timedelta(seconds=2))
+    walk.build(StubLonglistBackend())
+    ids = [first, users, later]
+    backend = StubLonglistBackend(
+        constrain_responses=_response(
+            ids,
+            SCREEN_IDS,
+            verdicts={(oid, "distinct"): "breaks" for oid in ids},
+            reasons={
+                (first, "distinct"): "The same offer as Job guarantee.",
+                (users, "distinct"): "The same offer as youth guarantee.",
+                (later, "distinct"): "Youth Guarantee and Job guarantee under a new name.",
+            },
+        )
+    )
+
+    _, summary = _constrain(walk, backend)
+
+    assert (_row(walk, users).state, _row(walk, users).exclusion) == ("included", None)
+    kept = _latest(walk).judgements[str(users)]["1"]["distinct"]
+    assert (kept["verdict"], kept["reason"]) == ("passes", DUPLICATE_KEPT_REASON)
+    # Merged into the kept option, not excluded (owner ruling 2026-09-24);
+    # ``later`` names ``first`` too, which is merged: the chain ends at ``users``.
+    for oid in (first, later):
+        assert _row(walk, oid).merged_into_option_id == users
+        assert (_row(walk, oid).state, _row(walk, oid).exclusion) == ("included", None)
+        assert _latest(walk).judgements[str(oid)]["1"]["distinct"]["verdict"] == "breaks"
+    assert summary["excluded"] == 0
+    assert _latest(walk).counts["merged"] == 2
+
+
+def _duplicate_pair(walk: _Walk, **dup_values: Any) -> tuple[uuid.UUID, uuid.UUID]:
+    """``Youth guarantee`` (kept) and a later ``Guarantee scheme``, one document each."""
+    t0 = now()
+    kept = walk.option("Youth guarantee", created_at=t0)
+    dup = walk.option("Guarantee scheme", created_at=t0 + timedelta(seconds=1), **dup_values)
+    docs = [walk.doc(), walk.doc()]
+    walk.record(docs[0], "Youth guarantee")
+    walk.record(docs[1], "Guarantee scheme")
+    walk.rollup(walk.scope_id, docs)
+    return kept, dup
+
+
+def _duplicate_breach(kept: uuid.UUID, dup: uuid.UUID) -> StubLonglistBackend:
+    return StubLonglistBackend(
+        constrain_responses=_response(
+            [kept, dup],
+            SCREEN_IDS,
+            verdicts={(dup, "distinct"): "breaks"},
+            reasons={(dup, "distinct"): "The same offer as Youth guarantee."},
+        )
+    )
+
+
+def _members(walk: _Walk, option_id: uuid.UUID) -> int:
+    return sum(1 for m in walk.memberships() if m.option_id == option_id)
+
+
+def test_a_duplicate_is_merged_into_the_kept_option_with_its_documents(
+    conn: Connection,
+) -> None:
+    walk = _walk(conn)
+    kept, dup = _duplicate_pair(walk)
+    walk.build(StubLonglistBackend())
+    assert (_members(walk, kept), _members(walk, dup)) == (1, 1)
+
+    _, summary = _constrain(walk, _duplicate_breach(kept, dup))
+
+    row = _row(walk, dup)
+    assert row.merged_into_option_id == kept
+    assert (row.state, row.exclusion) == ("included", None)  # left as it was
+    assert (_members(walk, kept), _members(walk, dup)) == (2, 0)
+    latest = _latest(walk)
+    assert latest.coverage[str(kept)]["documents"] == 2
+    distinct = latest.judgements[str(dup)]["1"]["distinct"]
+    assert (distinct["verdict"], distinct["reason"]) == (
+        "breaks",
+        "The same offer as Youth guarantee.",
+    )
+    assert summary["excluded"] == 0
+    assert (latest.counts["options"], latest.counts["merged"]) == (1, 1)
+    assert latest.counts["included"] == 1
+
+    # The read models: the duplicate leaves the list; the kept card names it.
+    longlist = repository.longlist_out(conn, walk.task_id)
+    assert longlist is not None
+    assert [o.option_id for o in longlist.options] == [kept]
+    assert longlist.options[0].also_found_as == ["Guarantee scheme"]
+    assert longlist.options[0].document_count == 2
+    assert (longlist.counts.options, longlist.counts.excluded) == (1, 0)
+    assert dup not in longlist.unthemed_option_ids
+    assert all(dup not in theme.option_ids for theme in longlist.themes)
+    card = repository.option_out(conn, walk.task_id, dup)  # a link to it still works
+    assert card is not None and card.option_id == kept
+    assert card.also_found_as == ["Guarantee scheme"]
+    assert len(card.documents) == 2
+    # No verb reaches the merged duplicate (the chat and the buttons lock through here).
+    with pytest.raises(longlist_actions.OptionNotFound):
+        longlist_actions._locked_option(conn, task_id=walk.task_id, option_id=dup)
+
+
+def test_a_user_held_duplicate_is_never_merged(conn: Connection) -> None:
+    walk = _walk(conn)
+    kept, dup = _duplicate_pair(
+        walk, exclusion={"constraint": None, "reason": "Keep it.", "by": "user"}
+    )
+    walk.build(StubLonglistBackend())
+
+    _, summary = _constrain(walk, _duplicate_breach(kept, dup))
+
+    assert _row(walk, dup).merged_into_option_id is None
+    assert _row(walk, dup).state == "included"
+    assert (_members(walk, kept), _members(walk, dup)) == (1, 1)
+    assert _latest(walk).counts["merged"] == 0
+
+
+class _RestatingBackend(StubLonglistBackend):
+    """Discovers an option named like the merged duplicate."""
+
+    def discover(self, **kwargs: Any) -> Any:
+        del kwargs
+        wire = DiscoveredOptionWire(
+            label="Guarantee scheme",
+            description="The scheme again.",
+            design_features=["an offer"],
+            outcomes_served=[],
+            is_bundle=False,
+            components=[],
+        )
+        return OptionDiscoveryResponse(options=[wire]), None
+
+
+def test_a_rebuild_keeps_the_merge(conn: Connection) -> None:
+    walk = _walk(conn)
+    kept, dup = _duplicate_pair(walk)
+    walk.build(StubLonglistBackend())
+    _constrain(walk, _duplicate_breach(kept, dup))
+
+    run_id, _ = walk.build(_RestatingBackend())
+    _, summary = _constrain(walk, StubLonglistBackend())
+
+    row = _row(walk, dup)  # never deleted, still merged
+    assert row.merged_into_option_id == kept
+    result = walk.result(run_id)
+    assert str(dup) not in result.provenance["seed_ids"]
+    assert result.provenance["clustering"]["restated_seeds_dropped"] == 1
+    assert [r.option_id for r in walk.options().values() if r.name == "Guarantee scheme"] == [dup]
+    assert _members(walk, dup) == 0
+    assert str(dup) not in _latest(walk).judgements  # not judged again
+    assert summary["options"] == len(walk.options()) - 1
+
+
+def test_a_distinct_breach_naming_no_option_of_its_batch_does_not_exclude(
+    conn: Connection,
+) -> None:
+    walk = _walk(conn)
+    t0 = now()
+    ids = [
+        walk.option(f"Option {i}", created_at=t0 + timedelta(seconds=i))
+        for i in range(CONSTRAIN_BATCH_SIZE + 1)
+    ]
+    walk.build(StubLonglistBackend())
+    unnamed, stray = ids[1], ids[-1]  # stray's partner is in the first batch
+    first_batch = _response(
+        ids[:CONSTRAIN_BATCH_SIZE],
+        SCREEN_IDS,
+        verdicts={(unnamed, "distinct"): "breaks"},
+        reasons={(unnamed, "distinct"): "A duplicate of another option."},
+    )
+    second_batch = _response(
+        [stray],
+        SCREEN_IDS,
+        verdicts={(stray, "distinct"): "breaks"},
+        reasons={(stray, "distinct"): "The same as Option 0."},
+    )
+    backend = StubLonglistBackend(constrain_responses=[first_batch, second_batch])
+
+    _, summary = _constrain(walk, backend)
+
+    assert summary["excluded"] == 0
+    for oid in (unnamed, stray):
+        assert _row(walk, oid).state == "included"
+        distinct = _latest(walk).judgements[str(oid)]["1"]["distinct"]
+        assert (distinct["verdict"], distinct["reason"]) == (
+            "cannot_check",
+            DUPLICATE_UNNAMED_REASON,
+        )
+
+
 def test_thin_evidence_never_excludes(conn: Connection) -> None:
     """A zero-document option passes every screen its design passes."""
     walk = _walk(conn, _requirement("No benefit sanctions"))
     empty = walk.option("Youth guarantee")
     walk.build(StubLonglistBackend())
-    backend = StubLonglistBackend()  # the default passes every requirement
+    # What a silent design with no documents yields: nothing checkable.
+    ids = ["req-1", *SCREEN_IDS]
+    backend = StubLonglistBackend(
+        constrain_responses=_response(
+            [empty], ids, verdicts={(empty, cid): "cannot_check" for cid in ids}
+        )
+    )
 
     _, summary = _constrain(walk, backend)
 
@@ -425,6 +644,29 @@ def test_a_year_bound_outside_marks_and_an_option_with_no_documents_is_not_marke
 
     assert _row(walk, old).no_in_scope_evidence is True
     assert _row(walk, empty).no_in_scope_evidence is False
+
+
+@pytest.mark.parametrize("bare_first", [True, False])
+def test_doi_twins_keep_the_snapshot_with_the_most_metadata(
+    conn: Connection, bare_first: bool
+) -> None:
+    """Whatever the row order, the twin that names a country is the one read."""
+    walk = _walk(conn, UK_ONLY)
+    oid = walk.option("Youth guarantee")
+    bare = {"doi": "10.1000/twin"}
+    french = {"doi": "https://doi.org/10.1000/TWIN", "publication_country": "FR"}
+    metas = [bare, french] if bare_first else [french, bare]
+    docs = [_inherited_doc(walk, meta) for meta in metas]
+    for doc in docs:
+        walk.record(doc, "youth guarantee")
+    walk.rollup(walk.scope_id, docs)
+    walk.build(StubLonglistBackend())
+
+    plan = scoping_plan(constraints=[UK_ONLY])
+    checked = in_scope_evidence(conn, task_id=walk.task_id, plan=plan, option_ids=[oid])
+
+    assert checked[oid]["documents"] == 1
+    assert checked[oid]["no_in_scope_evidence"] is True
 
 
 def test_a_plan_without_a_restriction_marks_nothing(conn: Connection) -> None:
@@ -566,6 +808,44 @@ def test_a_malformed_batch_degrades_to_cannot_check(conn: Connection) -> None:
     assert result.guesses == {}
     assert result.counts["cannot_check"] == 2
     assert result.provenance["constrain"]["failed_batches"] == 1
+
+
+def test_a_failed_batch_keeps_the_prior_state(conn: Connection) -> None:
+    walk = _walk(conn, _requirement("No benefit sanctions"))
+    prior = {"constraint": "No benefit sanctions", "reason": "Old.", "by": "constrain"}
+    was_out = walk.option("Was excluded", state="excluded", exclusion=prior)
+    was_in = walk.option("Was included")
+    walk.build(StubLonglistBackend())
+    malformed = _response([uuid.uuid4()], ["req-1", *SCREEN_IDS])
+    backend = StubLonglistBackend(constrain_responses=malformed)
+
+    _, summary = _constrain(walk, backend)
+
+    assert (_row(walk, was_out).state, _row(walk, was_out).exclusion) == ("excluded", prior)
+    assert (_row(walk, was_in).state, _row(walk, was_in).exclusion) == ("included", None)
+    assert summary["excluded"] == 1
+    assert _latest(walk).counts["excluded"] == 1
+
+
+def test_a_breach_with_a_blank_reason_makes_the_batch_malformed(conn: Connection) -> None:
+    walk = _walk(conn, _requirement("No benefit sanctions"))
+    oid = walk.option("Youth guarantee")
+    walk.build(StubLonglistBackend())
+    blank = _response(
+        [oid],
+        ["req-1", *SCREEN_IDS],
+        verdicts={(oid, "req-1"): "breaks"},
+        reasons={(oid, "req-1"): "  "},
+    )
+    backend = StubLonglistBackend(constrain_responses=blank)
+
+    _constrain(walk, backend)
+
+    assert backend.constrain_calls == 2
+    assert _row(walk, oid).state == "included"
+    record = _latest(walk).judgements[str(oid)]["1"]["req-1"]
+    assert (record["verdict"], record["reason"]) == ("cannot_check", JUDGEMENT_UNAVAILABLE)
+    assert _latest(walk).provenance["constrain"]["failed_batches"] == 1
 
 
 def test_a_malformed_batch_is_retried_once(conn: Connection) -> None:

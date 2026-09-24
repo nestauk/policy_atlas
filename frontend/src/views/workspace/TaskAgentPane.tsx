@@ -85,8 +85,7 @@ export function threadInputs(
   decisions: TaskAgentThreadDecision[],
 ): { boundaries: RunThreadBoundary[]; runDecisions: RunThreadDecision[] } {
   // Task 045 (S12): a child walk (a longlist walk's option search) gets no
-  // block of its own; it still claims the decisions logged in its window so
-  // its raw lines never land in the parent's block.
+  // block of its own; the decisions that name it go nowhere.
   const childIds = new Set(
     runs.filter((run) => run.parent_capability_run_id != null).map((run) => run.capability_run_id),
   );
@@ -97,16 +96,35 @@ export function threadInputs(
       afterTurnIndex: before.length > 0 ? Math.max(...before.map((turn) => turn.turn_index)) : null,
     };
   });
-  const orderedRuns = [...runs].sort((left, right) => left.started_at.localeCompare(right.started_at));
+  // Task 045 (F11): a decision whose event carries a run names its walk
+  // (`capability_run_id`, from the event's run) and goes to that walk — or
+  // nowhere, when the walk is a child or not one of these runs. A lifecycle
+  // event's `detail.capability_run_id` names its run the same way. Only a
+  // decision with neither is placed by time, and only among the parentless
+  // walks — a child window sits inside its parent's, so it must not swallow
+  // the parent's own lines.
+  const runIds = new Set(runs.map((run) => run.capability_run_id));
+  const orderedRuns = runs
+    .filter((run) => !childIds.has(run.capability_run_id))
+    .sort((left, right) => left.started_at.localeCompare(right.started_at));
   const runDecisions: RunThreadDecision[] = [];
   for (const decision of decisions) {
-    const owner = orderedRuns.findLast(
-      (run) =>
-        run.started_at <= decision.occurred_at &&
-        (run.ended_at === null || run.ended_at === undefined || decision.occurred_at <= run.ended_at),
-    );
-    if (owner !== undefined && !childIds.has(owner.capability_run_id)) {
-      runDecisions.push({ decision, capabilityRunId: owner.capability_run_id });
+    const walkId = decision.capability_run_id;
+    const tagged = decision.detail?.["capability_run_id"];
+    const ownerId =
+      walkId != null
+        ? runIds.has(walkId)
+          ? walkId
+          : undefined
+        : typeof tagged === "string" && runIds.has(tagged)
+          ? tagged
+          : orderedRuns.findLast(
+            (run) =>
+              run.started_at <= decision.occurred_at &&
+              (run.ended_at === null || run.ended_at === undefined || decision.occurred_at <= run.ended_at),
+          )?.capability_run_id;
+    if (ownerId !== undefined && !childIds.has(ownerId)) {
+      runDecisions.push({ decision, capabilityRunId: ownerId });
     }
   }
   return { boundaries, runDecisions };
@@ -608,8 +626,9 @@ function RunBlock({
       <AnsweredCheckIns answered={answered} checkIns={checkIns} />
       {/* The chat's own destination once the run lands (owner, 2026-08-05):
           a completed run's last word shouldn't be a quiet stage echo. */}
+      {/* Its kind is its own run's (task 045, A8) — never the live stream's. */}
       {!optionSearch && (
-        <RunFinishedNotice taskId={taskId} status={run.status} kind={walkKind(capability, stages)} />
+        <RunFinishedNotice taskId={taskId} status={run.status} kind={walkKind(capability, [], run.purpose)} />
       )}
     </div>
   );
@@ -737,6 +756,11 @@ export function TaskAgentPane({
   const planCardAt = lastTurnAt === -1 ? thread.length : lastTurnAt + 1;
   const planStarted = thread.slice(planCardAt).some((item) => item.type === "run_block");
   const liveRunId = stream.run?.id;
+  // Task 045 (A7): the live walk's own purpose, once the walk list has it —
+  // an added option's search is not the baseline.
+  const liveRunPurpose =
+    (runsQuery.data?.data ?? []).find((run) => run.capability_run_id === liveRunId)?.purpose ?? null;
+  const liveKind = walkKind(planQuery.data?.capability, stream.stages, liveRunPurpose);
   const threadHasLiveRun = thread.some(
     (item) => item.type === "run_block" && item.run.capability_run_id === liveRunId,
   );
@@ -782,6 +806,7 @@ export function TaskAgentPane({
           onMinimisedChange={setRunMinimised}
           onSeePlan={onReviewPlan}
           capability={planQuery.data?.capability}
+          purpose={liveRunPurpose}
         />
       </div>
     );
@@ -895,7 +920,7 @@ export function TaskAgentPane({
                 {liveCard}
                 <AnsweredCheckIns answered={streamDecisions} checkIns={checkInsQuery.data} />
                 {signpostBubbles}
-                <RunFinishedNotice taskId={taskId} status={stream.run?.status} kind={walkKind(planQuery.data?.capability, stream.stages)} />
+                <RunFinishedNotice taskId={taskId} status={stream.run?.status} kind={liveKind} />
               </div>
             ) : (
               <RunBlock
@@ -997,7 +1022,7 @@ export function TaskAgentPane({
             {liveCard}
             <AnsweredCheckIns answered={streamDecisions} checkIns={checkInsQuery.data} />
             {signpostBubbles}
-            <RunFinishedNotice taskId={taskId} status={stream.run?.status} kind={walkKind(planQuery.data?.capability, stream.stages)} />
+            <RunFinishedNotice taskId={taskId} status={stream.run?.status} kind={liveKind} />
           </div>
         )}
         </div>

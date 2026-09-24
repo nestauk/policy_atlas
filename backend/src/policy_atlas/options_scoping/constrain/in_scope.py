@@ -235,13 +235,25 @@ def _member_documents(
         .where(om.c.task_id == task_id, om.c.unit_kind.in_(("iof", "icf")))
     )
     documents: dict[uuid.UUID, dict[str, _Document]] = {}
+    # DOI twins: keep the snapshot with the most read metadata (countries,
+    # then year), ties to the lowest snapshot id — never the row order.
+    ranks: dict[tuple[uuid.UUID, str], tuple[int, int, str]] = {}
     for query in (own, linked):
         for row in conn.execute(query):
             metadata = row.metadata if isinstance(row.metadata, Mapping) else {}
             key = document_key(doi=normalise_doi(metadata), document_id=row.source_snapshot_id)
-            documents.setdefault(row.option_id, {})[key] = _Document(
+            doc = _Document(
                 key=key, countries=document_countries(metadata), year=document_year(metadata)
             )
+            rank = (
+                -int(bool(doc.countries)),
+                -int(doc.year is not None),
+                str(row.source_snapshot_id),
+            )
+            held = ranks.get((row.option_id, key))
+            if held is None or rank < held:
+                ranks[(row.option_id, key)] = rank
+                documents.setdefault(row.option_id, {})[key] = doc
     return documents
 
 

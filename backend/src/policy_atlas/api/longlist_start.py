@@ -35,15 +35,20 @@ from sqlalchemy.engine import Engine
 from policy_atlas.api.app import ApiConflict
 from policy_atlas.api.contract import LatestRun
 from policy_atlas.api.locks import task_lock
-from policy_atlas.api.routers._common import ACTIVE_WALK_STATUSES, parentless_walk
+from policy_atlas.api.routers._common import (
+    ACTIVE_WALK_STATUSES,
+    executor_walk,
+    parentless_walk,
+)
 from policy_atlas.api.routers.runs import (
     _await_new_run,
     _dispatch_lock,
     _dispatch_run,
     _dispatching_tasks,
+    executor_reservations,
     release_when_open,
 )
-from policy_atlas.core.schema import capability_run, evidence_scope, task_plan
+from policy_atlas.core.schema import capability_run, evidence_scope, longlist_result, task_plan
 from policy_atlas.options_scoping.longlist_intent import compile_longlist_intent
 from policy_atlas.runtime.capability_registry import OPTIONS_SCOPING, validate_plan
 from policy_atlas.runtime.runner import RunnerBackends
@@ -54,6 +59,11 @@ from policy_atlas.runtime.scoping_plan import (
 )
 
 log = structlog.get_logger()
+
+#: When this process started. A longlist intent record with no walk row yet is
+#: a walk still queued on this process's executor only if it was minted after
+#: this moment: a queue does not survive a restart (B3).
+_PROCESS_STARTED = datetime.now(UTC)
 
 
 class LonglistRefused(Exception):
@@ -164,8 +174,9 @@ def admit_and_mint(
                     select(capability_run.c.capability_run_id)
                     .where(capability_run.c.status == "running")
                     .where(parentless_walk())
+                    .where(executor_walk())
                 ).all()
-                if capacity is None or len(running) + len(_dispatching_tasks) >= capacity:
+                if capacity is None or len(running) + executor_reservations() >= capacity:
                     raise LonglistRefused("capacity", "the walk executor is at capacity")
             current = conn.execute(
                 select(task_plan)
@@ -325,7 +336,15 @@ def opened_run(engine: Engine, *, task_id: uuid.UUID, capability_run_id: uuid.UU
 
 
 def longlist_walk_exists(engine: Engine, *, task_id: uuid.UUID, plan_id: uuid.UUID) -> bool:
-    """Whether a longlist walk exists for one plan version.
+    """Whether a longlist exists, or is on its way, for one plan version (B3, F2).
+
+    Read from the longlist intent records of that version, not from walk rows:
+    a walk still queued on the executor has its record but no row yet, and a
+    retried confirm must not mint a second walk beside it. A record counts
+    when its walk is running or paused, when it has no walk row yet and was
+    minted by this process (still queued), or when a longlist result was
+    written under it. A walk that failed or was interrupted without a result
+    does not count, so *Build longlist* opens a fresh one.
 
     Args:
         engine: Database engine.
@@ -333,22 +352,60 @@ def longlist_walk_exists(engine: Engine, *, task_id: uuid.UUID, plan_id: uuid.UU
         plan_id: The plan version.
 
     Returns:
-        ``True`` when a walk runs (or ran) under a longlist intent record of
-        that version.
+        ``True`` when that version's longlist is built, building or queued.
     """
+    walk_row = (
+        select(capability_run.c.capability_run_id)
+        .where(capability_run.c.task_id == evidence_scope.c.task_id)
+        .where(capability_run.c.evidence_scope_id == evidence_scope.c.evidence_scope_id)
+    )
     with engine.connect() as conn:
         found = conn.execute(
-            select(capability_run.c.capability_run_id)
-            .select_from(
-                capability_run.join(
-                    evidence_scope,
-                    (evidence_scope.c.evidence_scope_id == capability_run.c.evidence_scope_id)
-                    & (evidence_scope.c.task_id == capability_run.c.task_id),
-                )
-            )
-            .where(capability_run.c.task_id == task_id)
+            select(evidence_scope.c.evidence_scope_id)
+            .where(evidence_scope.c.task_id == task_id)
             .where(evidence_scope.c.purpose == LONGLIST_PURPOSE)
             .where(evidence_scope.c.plan_id == plan_id)
+            .where(
+                walk_row.where(capability_run.c.status.in_(ACTIVE_WALK_STATUSES)).exists()
+                | (
+                    ~walk_row.exists()
+                    & (evidence_scope.c.created_at >= _PROCESS_STARTED)
+                )
+                | select(longlist_result.c.longlist_result_id)
+                .where(longlist_result.c.task_id == evidence_scope.c.task_id)
+                .where(longlist_result.c.evidence_scope_id == evidence_scope.c.evidence_scope_id)
+                .exists()
+            )
             .limit(1)
         ).scalar_one_or_none()
     return found is not None
+
+
+def plan_row_of_walk(
+    engine: Engine, *, task_id: uuid.UUID, capability_run_id: uuid.UUID
+) -> dict[str, Any] | None:
+    """The plan version a walk ran, as the opener takes a confirmed version (A10).
+
+    A gate's "Confirm plan and build longlist" confirms the version the
+    baseline walk ran; the opener refuses (``plan_stale``) if a newer version
+    has been minted since.
+
+    Args:
+        engine: Database engine.
+        task_id: The task.
+        capability_run_id: The walk (the baseline paused at the gate).
+
+    Returns:
+        The ``task_plan`` row, or ``None`` when the walk names no plan row.
+    """
+    with engine.connect() as conn:
+        row = conn.execute(
+            select(task_plan)
+            .select_from(
+                task_plan.join(capability_run, capability_run.c.plan_id == task_plan.c.plan_id)
+            )
+            .where(capability_run.c.task_id == task_id)
+            .where(capability_run.c.capability_run_id == capability_run_id)
+            .where(task_plan.c.task_id == task_id)
+        ).mappings().one_or_none()
+    return dict(row) if row is not None else None

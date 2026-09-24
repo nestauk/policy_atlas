@@ -1,4 +1,5 @@
 import type { components } from "../../api/gen/types";
+import { conflictSentences, isConflictCode } from "../../lib/errors";
 
 /**
  * Presentation helpers shared by the longlist's three surfaces (list view,
@@ -19,12 +20,21 @@ export function capitalise(value: string): string {
   return value.length === 0 ? value : value[0].toUpperCase() + value.slice(1);
 }
 
+/** "from your evidence search", naming the report section it was drawn
+ *  from when that was recorded (task 045, F3). */
+function fromEvidenceSearch(fromSection: string | null | undefined): string {
+  return fromSection != null && fromSection.trim() !== ""
+    ? `from your evidence search · ${fromSection.trim()}`
+    : "from your evidence search";
+}
+
 /** The origin tag's exact wording (contract § Terms "entrant"; deliverable
  *  9's list view spec). `clustered` carries the document count; the other
- *  three are fixed phrases. */
+ *  three are fixed phrases (the evidence-search one with its section). */
 export function originLabel(
   origin: OptionSummaryOut["origin"],
   documentCount: number,
+  fromSection?: string | null,
 ): string {
   switch (origin) {
     case "clustered":
@@ -32,7 +42,7 @@ export function originLabel(
     case "suggested":
       return "suggested by Policy Atlas";
     case "from_evidence_search":
-      return "from your evidence search";
+      return fromEvidenceSearch(fromSection);
     case "added_by_you":
       return "added by you";
   }
@@ -101,6 +111,14 @@ export function documentsSentence(
   return `${head}${list}.${noEvaluation}`;
 }
 
+/** The notice a failed add / exclude / include shows (task 045, F15): the
+ *  API's conflict sentence when it names one (a walk opened meanwhile),
+ *  else the action's own fallback. */
+export function actionFailedNotice(error: unknown, fallback: string): string {
+  const code = (error as { code?: string } | null | undefined)?.code;
+  return isConflictCode(code) ? conflictSentences[code] : fallback;
+}
+
 /** A constraint's text as a label: its own full stop dropped, so "…cuts.:
  *  passes" and 'breaks "…run.".' do not double up. */
 export function constraintLabel(text: string): string {
@@ -122,14 +140,17 @@ export function abstractOnlySentence(abstractOnly: number, documents: number): s
 
 /** The short origin: the count says "clustered"; the other three origins
  *  are the tag itself (the snapshot cell and the row meta). */
-export function originShort(origin: OptionSummaryOut["origin"]): string | null {
+export function originShort(
+  origin: OptionSummaryOut["origin"],
+  fromSection?: string | null,
+): string | null {
   switch (origin) {
     case "clustered":
       return null;
     case "suggested":
       return "suggested by Policy Atlas";
     case "from_evidence_search":
-      return "from your evidence search";
+      return fromEvidenceSearch(fromSection);
     case "added_by_you":
       return "added by you";
   }
@@ -142,7 +163,7 @@ export function rowMetaParts(option: OptionSummaryOut): string[] {
   if (option.search_pending) parts.push("searching for its evidence…");
   else if (option.is_entrant_with_no_documents) parts.push("no documents found yet");
   else parts.push(`${option.document_count} ${option.document_count === 1 ? "document" : "documents"}`);
-  const origin = originShort(option.origin);
+  const origin = originShort(option.origin, option.from_section);
   if (origin !== null) parts.push(origin);
   for (const relation of option.relations ?? []) parts.push(relationLabel(relation));
   return parts;

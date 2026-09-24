@@ -58,6 +58,7 @@ from policy_atlas.api.longlist_start import (
     longlist_walk_exists,
     open_longlist_walk,
     opened_run,
+    plan_row_of_walk,
 )
 from policy_atlas.api.longlist_turns import (
     LonglistSurface,
@@ -564,6 +565,11 @@ def _apply_scoping_patch(
                 [o["text"] for o in options], plan.your_options, turn_index=turn_index
             )
         ]
+    # A patch that carries a removed default back restores it (settled
+    # below); its marker leaves ``removed_defaults`` first, or the plan model
+    # refuses the constraint as a revival before the restore is reached (L4).
+    resent = {c.get("default") for c in data.get("constraints", []) if c.get("default")}
+    data["removed_defaults"] = [d for d in data.get("removed_defaults", []) if d not in resent]
     validated = validate_plan(OPTIONS_SCOPING, data)
     assert isinstance(validated, ScopingPlan)
     settled = settle_patched_defaults(validated, plan)
@@ -1156,6 +1162,7 @@ def _dispatch_gate_turn(
                     _open_follow_on_longlist(
                         engine,
                         task_id=task_id,
+                        gate_run_id=gate.capability_run_id,
                         executor=executor,
                         runner_backends=runner_backends,
                         user_id=user_id,
@@ -1180,8 +1187,12 @@ def _dispatch_gate_turn(
                     ),
                 )
                 return _ContinuedTurn(carried_text=outcome.carried_text, decision=decision)
+            reply = outcome.reply
+            if outcome.follow_on == LONGLIST_PURPOSE and decision.opened_run is None:
+                # The decision stands but no walk opened (F12): say so.
+                reply = gate_turns.CONFIRM_NOT_STARTED_REPLY
             result = TaskAgentTurnOut(
-                reply=outcome.reply,
+                reply=reply,
                 kind="decision",
                 # A turn that lost the race records no decision of its own: the
                 # durable one is the other surface's, and this turn may have
@@ -1228,14 +1239,17 @@ def _open_follow_on_longlist(
     engine: Engine,
     *,
     task_id: uuid.UUID,
+    gate_run_id: uuid.UUID,
     executor: ThreadPoolExecutor,
     runner_backends: RunnerBackends,
     user_id: str,
 ) -> LatestRun | None:
     """Open the longlist walk a gate decision asked for (task 045, S3; P7).
 
-    After the decision's commit and outside any transaction. A refusal (the
-    executor at capacity, a plan too long to screen against) does not undo
+    After the decision's commit and outside any transaction, on the version
+    the gate's walk ran — the one the decision confirmed (A10). A refusal (the
+    executor at capacity, a plan too long to screen against, a newer version
+    minted meanwhile) does not undo
     the decision, which is durable, nor fail the turn: the turn records the
     decision without an opened walk, and the plan document's confirm action
     opens the walk later ("confirmed but no walk" is resolved there).
@@ -1247,7 +1261,7 @@ def _open_follow_on_longlist(
         run_id = open_longlist_walk(
             engine,
             task_id=task_id,
-            plan_row=None,
+            plan_row=plan_row_of_walk(engine, task_id=task_id, capability_run_id=gate_run_id),
             backends=runner_backends,
             executor=executor,
             user_id=user_id,
@@ -2268,9 +2282,9 @@ def _open_confirmed_longlist(
 ) -> PlanOut:
     """Open the longlist walk on the committed confirmed version (P6).
 
-    Re-reads the version the route committed and hands it to the opener,
-    which refuses if another version has been minted since. Called outside
-    any transaction.
+    Re-reads exactly the version the route committed (``out.version``) and
+    hands it to the opener, which refuses if another version has been minted
+    since (A10). Called outside any transaction.
 
     Returns:
         ``out`` with ``opened_run`` set.
@@ -2284,9 +2298,7 @@ def _open_confirmed_longlist(
         plan_row = conn.execute(
             select(task_plan)
             .where(task_plan.c.task_id == task_id)
-            .where(task_plan.c.status == "approved")
-            .order_by(task_plan.c.version.desc())
-            .limit(1)
+            .where(task_plan.c.version == out.version)
         ).mappings().one()
     try:
         run_id = open_longlist_walk(

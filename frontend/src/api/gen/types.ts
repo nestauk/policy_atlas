@@ -866,7 +866,7 @@ export interface paths {
         put?: never;
         /**
          * Post Exclude
-         * @description Exclude an option with the user's reason; include again reverses it.
+         * @description Exclude an option, with the user's reason when given; include again reverses it.
          */
         post: operations["post_exclude_api_v1_tasks__task_id__options__option_id__exclude_post"];
         delete?: never;
@@ -974,6 +974,10 @@ export interface paths {
         /**
          * List Runs
          * @description List a task's walks from newest to oldest (paginated — runs accumulate).
+         *
+         *     ``parentless`` (task 045, A13) keeps only the walks with no parent that
+         *     are not option searches — the baseline and longlist walks — so a reader
+         *     looking for the baseline never pages through option searches.
          */
         get: operations["list_runs_api_v1_tasks__task_id__runs_get"];
         put?: never;
@@ -2125,8 +2129,13 @@ export interface components {
          *         summary: Human-readable summary of the decision.
          *         decided_by: Who decided, when known.
          *         detail: Optional structured detail.
+         *         capability_run_id: The walk the underlying event belongs to, when
+         *             the event carries a run (task 045) — lets the thread tell a
+         *             hidden child walk's lines from its parent's. Null otherwise.
          */
         DecisionOut: {
+            /** Capability Run Id */
+            capability_run_id?: string | null;
             /** Decided By */
             decided_by?: ("user" | "agent" | "standing_default") | null;
             /** Detail */
@@ -2999,10 +3008,12 @@ export interface components {
          *
          *     Args:
          *         option: The new option's card.
-         *         opened_run: The option search (a walk with no parent) it opened.
+         *         opened_run: The option search (a walk with no parent) it opened, or
+         *             ``None`` while that search is still queued on the option-search
+         *             pool (task 045, A4).
          */
         OptionAddedOut: {
-            opened_run: components["schemas"]["LatestRun"];
+            opened_run?: components["schemas"]["LatestRun"] | null;
             option: components["schemas"]["OptionOut"];
         };
         /**
@@ -3080,14 +3091,14 @@ export interface components {
         };
         /**
          * OptionExcludeIn
-         * @description Exclude an option, with the user's reason.
+         * @description Exclude an option, optionally with the user's reason.
          *
          *     Args:
-         *         reason: Why, in the user's words.
+         *         reason: Why, in the user's words; blank or absent is recorded empty.
          */
         OptionExcludeIn: {
             /** Reason */
-            reason: string;
+            reason?: string | null;
         };
         /**
          * OptionIncludeIn
@@ -3127,6 +3138,8 @@ export interface components {
              * @default false
              */
             abstract_only: boolean;
+            /** Also Found As */
+            also_found_as?: string[];
             /** Ambition */
             ambition?: string | null;
             /** Ambition Reason */
@@ -3160,6 +3173,8 @@ export interface components {
             evaluated_count: number;
             evidence: components["schemas"]["EvidenceProfileOut"];
             exclusion?: components["schemas"]["ExclusionOut"] | null;
+            /** From Section */
+            from_section?: string | null;
             /** Guesses */
             guesses?: components["schemas"]["GuessOut"][];
             in_scope?: components["schemas"]["InScopeOut"] | null;
@@ -3285,6 +3300,11 @@ export interface components {
          *             search or added by the user, and no document has joined it.
          *         search_pending: An option added since the build whose own option
          *             search is still running or paused; its counts read zero until it ends.
+         *         from_section: The Evidence search report section a *from your
+         *             evidence search* option was drawn from; `null` for any other
+         *             origin, or when the section was not recorded (task 045, F3).
+         *         also_found_as: The names of the duplicates merged into this option
+         *             (their documents are its documents); empty when none.
          */
         OptionSummaryOut: {
             /**
@@ -3292,6 +3312,8 @@ export interface components {
              * @default false
              */
             abstract_only: boolean;
+            /** Also Found As */
+            also_found_as?: string[];
             /** Ambition */
             ambition?: string | null;
             /** Ambition Reason */
@@ -3311,6 +3333,8 @@ export interface components {
              */
             evaluated_count: number;
             exclusion?: components["schemas"]["ExclusionOut"] | null;
+            /** From Section */
+            from_section?: string | null;
             /**
              * Is Entrant With No Documents
              * @default false
@@ -4455,6 +4479,11 @@ export interface components {
          * @description A component reached its terminal (successful) outcome.
          */
         StageCompletedFrame: {
+            /**
+             * Capability Run Id
+             * @default null
+             */
+            capability_run_id: string | null;
             /** Label */
             label: string;
             /**
@@ -4489,6 +4518,11 @@ export interface components {
          * @description A component failed or was skipped.
          */
         StageFailedFrame: {
+            /**
+             * Capability Run Id
+             * @default null
+             */
+            capability_run_id: string | null;
             /** Label */
             label: string;
             /**
@@ -4520,6 +4554,11 @@ export interface components {
         StageStartedFrame: {
             /** Blurb */
             blurb: string;
+            /**
+             * Capability Run Id
+             * @default null
+             */
+            capability_run_id: string | null;
             /** Label */
             label: string;
             /**
@@ -6468,9 +6507,9 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody: {
+        requestBody?: {
             content: {
-                "application/json": components["schemas"]["OptionExcludeIn"];
+                "application/json": components["schemas"]["OptionExcludeIn"] | null;
             };
         };
         responses: {
@@ -6636,6 +6675,7 @@ export interface operations {
             query?: {
                 page?: number;
                 page_size?: number;
+                parentless?: boolean;
             };
             header?: never;
             path: {

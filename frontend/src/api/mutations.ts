@@ -295,18 +295,18 @@ export function useAddOption(taskId: string) {
   });
 }
 
-/** `POST .../options/{option_id}/exclude` — exclude an option with the
- *  user's reason. */
+/** `POST .../options/{option_id}/exclude` — exclude an option, with the
+ *  user's reason when given (optional — owner, 2026-09-24). */
 export function useExcludeOption(taskId: string) {
   const client = useApiClient();
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (input: { optionId: string; reason: string }) => {
+    mutationFn: async (input: { optionId: string; reason?: string }) => {
       const { data, error, response } = await client.POST(
         "/api/v1/tasks/{task_id}/options/{option_id}/exclude",
         {
           params: { path: { task_id: taskId, option_id: input.optionId } },
-          body: { reason: input.reason },
+          body: input.reason !== undefined ? { reason: input.reason } : null,
         },
       );
       if (data === undefined) raise(error, response.status);

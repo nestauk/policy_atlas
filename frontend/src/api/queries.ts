@@ -34,8 +34,8 @@ export const queryKeys = {
   taskAgentTurns: (taskId: string, page?: number, pageSize?: number) =>
     ["tasks", taskId, "task-agent-turns", page, pageSize] as const,
   plan: (taskId: string) => ["tasks", taskId, "plan"] as const,
-  runs: (taskId: string, page?: number, pageSize?: number) =>
-    ["tasks", taskId, "runs", page, pageSize] as const,
+  runs: (taskId: string, page?: number, pageSize?: number, parentless?: boolean) =>
+    ["tasks", taskId, "runs", page, pageSize, parentless] as const,
   artefact: (taskId: string) => ["tasks", taskId, "artefact"] as const,
   sourceDossier: (taskId: string, sourceId: string) =>
     ["tasks", taskId, "source-dossier", sourceId] as const,
@@ -517,10 +517,16 @@ export function usePlan(taskId: string) {
 
 /** `GET /api/v1/tasks/{task_id}/runs` — paginated run blocks for the
  * task_agent-thread composition model. */
-export function useRuns(taskId: string, query?: PageQuery) {
+/** `parentless` (task 045, A13) keeps only the task's own walks — no
+ *  option searches, no child walks. */
+interface RunsQuery extends PageQuery {
+  parentless?: boolean;
+}
+
+export function useRuns(taskId: string, query?: RunsQuery) {
   const client = useApiClient();
   return useQuery({
-    queryKey: queryKeys.runs(taskId, query?.page, query?.page_size),
+    queryKey: queryKeys.runs(taskId, query?.page, query?.page_size, query?.parentless),
     queryFn: async () => {
       const { data, error } = await client.GET("/api/v1/tasks/{task_id}/runs", {
         params: { path: { task_id: taskId }, query },

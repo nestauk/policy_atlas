@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass, field
+from datetime import datetime, timedelta
 from typing import Any
 
 import pytest
@@ -262,14 +263,14 @@ class _Walk:
         self.extract_run = self.run()
         self._ser: dict[uuid.UUID, uuid.UUID] = {}
 
-    def _scope(self, purpose: str) -> uuid.UUID:
+    def _scope(self, purpose: str, context: dict[str, Any] | None = None) -> uuid.UUID:
         scope_id = uuid.uuid4()
         self.conn.execute(
             evidence_scope.insert().values(
                 evidence_scope_id=scope_id,
                 task_id=self.task_id,
                 intent=f"{purpose} intent",
-                context={},
+                context=context or {},
                 created_at=now(),
                 purpose=purpose,
                 plan_id=self.plan_id,
@@ -277,7 +278,13 @@ class _Walk:
         )
         return scope_id
 
-    def _walk(self, scope_id: uuid.UUID, parent: uuid.UUID | None = None) -> uuid.UUID:
+    def _walk(
+        self,
+        scope_id: uuid.UUID,
+        parent: uuid.UUID | None = None,
+        status: str = "running",
+        started_at: datetime | None = None,
+    ) -> uuid.UUID:
         walk_id = uuid.uuid4()
         self.conn.execute(
             capability_run.insert().values(
@@ -287,17 +294,35 @@ class _Walk:
                 capability="options_scoping",
                 plan_id=self.plan_id,
                 plan_version=2,
-                status="running",
-                started_at=now(),
+                status=status,
+                started_at=started_at or now(),
                 parent_capability_run_id=parent,
             )
         )
         return walk_id
 
-    def child_scope(self) -> uuid.UUID:
-        """A targeted scope whose walk is a child of this walk (an option search)."""
-        scope_id = self._scope("targeted")
-        self._walk(scope_id, parent=self.walk_id)
+    def child_scope(
+        self,
+        option_id: uuid.UUID,
+        *,
+        parent: uuid.UUID | None = None,
+        parentless: bool = False,
+        status: str = "succeeded",
+        started_at: datetime | None = None,
+    ) -> uuid.UUID:
+        """A targeted scope naming an option, and its walk (an option search).
+
+        By default the walk is a finished child of this walk (the join has
+        run by the time ``longlist`` does); ``parent`` names another walk,
+        ``parentless`` is the verb *add*'s search.
+        """
+        scope_id = self._scope("targeted", {"option_id": str(option_id)})
+        self._walk(
+            scope_id,
+            parent=None if parentless else (parent or self.walk_id),
+            status=status,
+            started_at=started_at,
+        )
         return scope_id
 
     def run(self, walk_id: uuid.UUID | None = None) -> uuid.UUID:
@@ -619,19 +644,58 @@ def test_comparator_records_never_become_members(conn: Connection) -> None:
 
 def test_the_option_searches_records_join_the_longlist_scope_s(conn: Connection) -> None:
     walk = _Walk(conn)
-    walk.option("Youth guarantee", origin="added_by_you")
+    seed = walk.option("Youth guarantee", origin="added_by_you")
     broad = walk.doc()
     targeted = walk.doc()
     walk.record(broad, "youth guarantee")
     walk.record(targeted, "youth guarantee")
     walk.rollup(walk.scope_id, [broad])
-    child = walk.child_scope()
+    child = walk.child_scope(seed)
     walk.rollup(child, [broad, targeted])  # the same document in both: one unit
     run_id, summary = walk.build(
         _Scripted(routes={"youth guarantee": ("Youth guarantee", False)})
     )
     assert summary["units"] == 2
     assert walk.result(run_id).provenance["scopes"]["targeted"] == [str(child)]
+
+
+def test_a_rebuild_reads_every_option_s_latest_finished_search_whatever_its_parent(
+    conn: Connection,
+) -> None:
+    """A1/B1: an earlier build's option search and the verb *add*'s parentless
+    one are read by the next build (a rebuild searches only new entrants); a
+    failed search is not, and per option only the latest finished one is."""
+    walk = _Walk(conn)
+    earlier = walk.option("Youth guarantee", origin="added_by_you")
+    added = walk.option("Wage subsidy", origin="added_by_you")
+    earlier_doc, stale_doc, added_doc, failed_doc = (walk.doc() for _ in range(4))
+    for doc in (earlier_doc, stale_doc):
+        walk.record(doc, "youth guarantee")
+    walk.record(added_doc, "wage subsidy")
+    walk.record(failed_doc, "wage subsidy")
+    old_build = walk._walk(walk._scope("longlist"), status="succeeded")
+    t0 = now() - timedelta(hours=2)
+    stale = walk.child_scope(earlier, parent=old_build, started_at=t0)
+    walk.rollup(stale, [stale_doc])
+    kept = walk.child_scope(earlier, parent=old_build, started_at=t0 + timedelta(minutes=5))
+    walk.rollup(kept, [earlier_doc])
+    add_search = walk.child_scope(added, parentless=True, status="degraded", started_at=t0)
+    walk.rollup(add_search, [added_doc])
+    failed = walk.child_scope(added, status="failed")
+    walk.rollup(failed, [failed_doc])
+    run_id, summary = walk.build(
+        _Scripted(
+            routes={
+                "youth guarantee": ("Youth guarantee", False),
+                "wage subsidy": ("Wage subsidy", False),
+            }
+        )
+    )
+    assert summary["units"] == 2
+    assert walk.result(run_id).provenance["scopes"]["targeted"] == [
+        str(add_search),
+        str(kept),
+    ]
 
 
 def test_seeds_survive_with_zero_members_and_no_discovery_past_the_ceiling(
@@ -692,8 +756,10 @@ def test_typing_one_primary_or_none_fits_the_version_and_the_ambition(
         assert options[name].primary_lever_type is None
         assert options[name].lever_none_fits_reason == TYPING_INVALID_REASON
         assert options[name].taxonomy_version == TAXONOMY_VERSION
-    assert summary["none_fits"] == 3
+    # The two invalid typings count once, under typing_invalid (F14).
+    assert summary["none_fits"] == 1
     result = walk.result(run_id)
+    assert result.counts["none_fits"] == 1
     assert result.counts["typing_invalid"] == 2
     # The runner-up is in the record only.
     assert result.provenance["runner_up"] == {
@@ -714,8 +780,9 @@ def test_a_failed_typing_call_is_typing_invalid_never_a_crash(conn: Connection) 
         def type_options(self, *, options: list[dict[str, object]]) -> Any:
             raise RuntimeError("provider down")
 
-    _run_id, summary = walk.build(_Broken())
-    assert summary["none_fits"] == 1
+    run_id, summary = walk.build(_Broken())
+    assert summary["none_fits"] == 0
+    assert walk.result(run_id).counts["typing_invalid"] == 1
     assert walk.options()["Youth guarantee"].lever_none_fits_reason == TYPING_INVALID_REASON
 
 

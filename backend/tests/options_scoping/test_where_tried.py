@@ -44,6 +44,13 @@ def test_us_the_pronoun_is_not_the_united_states() -> None:
     assert countries_in("US states")[0] == frozenset({"US"})
 
 
+@pytest.mark.parametrize("geography", ["North Korea", "north Korean schools", "the DPRK"])
+def test_north_korea_is_not_the_oecd_member(geography: str) -> None:
+    assert countries_in(geography) == (frozenset({"KP"}), False)
+    assert where_group([geography], UK) == "other"
+    assert countries_in("South Korea")[0] == frozenset({"KR"})
+
+
 def test_a_where_outside_the_mapping_leaves_the_where_group_empty() -> None:
     assert where_codes("Atlantis") == frozenset()
     assert where_group(["England"], frozenset()) == "comparable"

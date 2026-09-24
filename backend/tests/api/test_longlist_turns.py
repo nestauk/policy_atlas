@@ -880,6 +880,53 @@ def test_add_proposes_a_design_then_mints_it_and_opens_a_parentless_walk(
         assert thread == "active"
 
 
+def test_a_confirmed_add_that_fails_after_its_commit_is_never_applied_twice(
+    engine: Engine, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A4: the confirming turn consumes the pending *add* in the option's own
+    transaction, so a retry after a failure past that commit mints nothing."""
+    from policy_atlas.api import longlist_actions
+
+    def search_fails(*args: Any, **kwargs: Any) -> uuid.UUID:
+        raise RuntimeError("the option-search pool is gone")
+
+    monkeypatch.setattr(longlist_actions, "run_option_search", search_fails)
+    design = OptionDesignWire.model_validate(
+        {
+            "name": "Wage subsidy",
+            "description": "Employers are paid part of a young recruit's wage.",
+            "design_features": ["a wage subsidy for six months"],
+            "outcomes_served": ["the NEET rate"],
+            "assumed": [],
+        }
+    )
+    agent = _agent(
+        _sort("add", design_words="pay employers to hire young people"),
+        _assent(),
+        _assent(),
+        design=design,
+    )
+    with _clients(tmp_path, engine, _overrides(agent)) as (client, (owner2, colleague, _)):
+        built = _org_build(engine, owner2, colleague, linked=False)
+        proposed = _turn(client, owner2.headers, built.task_id, "Add a wage subsidy")
+        assert proposed.status_code == 200, proposed.text
+        failed = _turn(client, owner2.headers, built.task_id, "Go ahead")
+        assert failed.status_code == 500, failed.text
+        retried = _turn(client, owner2.headers, built.task_id, "Go ahead")
+        assert retried.status_code == 200, retried.text
+        assert retried.json()["kind"] == "reply"
+        with engine.connect() as conn:
+            names = list(
+                conn.execute(
+                    select(option.c.name)
+                    .where(option.c.task_id == built.task_id)
+                    .where(option.c.name == "Wage subsidy")
+                ).scalars()
+            )
+        assert names == ["Wage subsidy"]
+        assert [h["kind"] for h in _decisions(client, built, owner2.headers)] == ["option.added"]
+
+
 def test_a_parentless_option_search_never_closes_the_conversation(engine: Engine) -> None:
     """P3 for *add*: a finished walk under a ``targeted`` record leaves the thread active."""
     task_id: uuid.UUID | None = None

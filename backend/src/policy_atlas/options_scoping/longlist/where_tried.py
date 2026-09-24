@@ -61,6 +61,11 @@ COUNTRY_GROUPS: dict[str, str] = {
     "new england": "US",
     "british columbia": "CA",
     "new mexico": "US",
+    # North Korea is not South Korea (the OECD member): matched before "korea".
+    "north korea": "KP",
+    "north korean": "KP",
+    "democratic people's republic of korea": "KP",
+    "dprk": "KP",
     # OECD members.
     "australia": "AU",
     "australian": "AU",

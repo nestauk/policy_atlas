@@ -38,10 +38,10 @@ export const RUN_FINISHED_MESSAGE =
   `Evidence search is finished. You can read the report in the ${LIFECYCLE_LABELS.result} tab.`;
 
 /** What kind of walk a run card describes (task 045): an Evidence search, a
- *  scoping task's baseline walk, or its longlist walk. The words on the card
- *  and the finished notice follow it — "the evidence base is ready" is wrong
- *  for a longlist. */
-export type WalkKind = "evidence_search" | "baseline" | "longlist";
+ *  scoping task's baseline walk, its longlist walk, or an added option's own
+ *  search. The words on the card and the finished notice follow it — "the
+ *  evidence base is ready" is wrong for a longlist. */
+export type WalkKind = "evidence_search" | "baseline" | "longlist" | "option_search";
 
 const LONGLIST_STAGES = new Set([
   "inherit",
@@ -52,12 +52,17 @@ const LONGLIST_STAGES = new Set([
   "constrain",
 ]);
 
-/** Decide the walk kind from the task's capability and the run's stages. */
+/** Decide the walk kind from the task's capability and the run's own
+ *  purpose (task 045, A7/A8); the stages decide only when the purpose is not
+ *  known yet. */
 export function walkKind(
   capability: string | null | undefined,
   stages: StageEntry[],
+  purpose?: string | null,
 ): WalkKind {
   if (capability !== "options_scoping") return "evidence_search";
+  if (purpose === "targeted") return "option_search";
+  if (purpose === "longlist" || purpose === "baseline") return purpose;
   return stages.some((entry) => LONGLIST_STAGES.has(entry.stage)) ? "longlist" : "baseline";
 }
 
@@ -65,12 +70,14 @@ const DONE_TITLE: Record<WalkKind, string> = {
   evidence_search: "The evidence base is ready",
   baseline: "The baseline is ready",
   longlist: "The longlist is ready",
+  option_search: "The option's search is done",
 };
 
 const RESULTS_LABEL: Record<WalkKind, string> = {
   evidence_search: "Read the report",
   baseline: "Read the baseline",
   longlist: "Read the longlist",
+  option_search: "Read the longlist",
 };
 
 /** The finished notice, split around the Result-tab link it carries. */
@@ -78,10 +85,11 @@ export const FINISHED_NOTICE: Record<WalkKind, { before: string; after: string }
   evidence_search: { before: "Evidence search is finished. You can read the report in the", after: "tab." },
   baseline: { before: "The baseline is written. Read it in the", after: "tab." },
   longlist: { before: "The longlist is built. Open it in the", after: "tab." },
+  option_search: { before: "The option's search is done. See it in the", after: "tab." },
 };
 
 function resultHref(taskId: string, kind: WalkKind): string {
-  if (kind === "longlist") return `/tasks/${taskId}/result?view=longlist`;
+  if (kind === "longlist" || kind === "option_search") return `/tasks/${taskId}/result?view=longlist`;
   if (kind === "baseline") return `/tasks/${taskId}/result?view=baseline`;
   return `/tasks/${taskId}/result`;
 }
@@ -103,6 +111,9 @@ export function runningCardCopy(
   }
   if (status === "failed" || status === "aborted" || status === "interrupted") {
     return { tone: "stopped", eyebrow: "STOPPED", title: "Analysis stopped" };
+  }
+  if (kind === "option_search") {
+    return { tone: "running", eyebrow: "RUNNING", title: "Searching for the option's evidence" };
   }
   return { tone: "running", eyebrow: "RUNNING", title: "Analysis running…" };
 }

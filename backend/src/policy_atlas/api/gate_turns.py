@@ -46,6 +46,11 @@ CHANGE_PLAN = "change_plan"
 #: decision must read the same however it was taken, so it is never a model's
 #: sentence.
 CONFIRM_REPLY = "Plan confirmed. Building the longlist now."
+#: The confirm reply when the longlist walk could not be opened (F12): the
+#: decision stands, and the plan's Build longlist starts the walk later.
+CONFIRM_NOT_STARTED_REPLY = (
+    "Plan confirmed, but the longlist did not start: use Build longlist on the plan to start it."
+)
 CHANGE_REPLY = "The run has stopped so you can change the plan."
 
 #: The loser of a decision race. The decision is durable — the other surface

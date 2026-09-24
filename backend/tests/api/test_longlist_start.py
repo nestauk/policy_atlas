@@ -18,6 +18,7 @@ import time
 import uuid
 from collections.abc import Callable
 from concurrent.futures import Future
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -36,6 +37,8 @@ from policy_atlas.core.schema import (
     capability_run,
     conversation,
     evidence_scope,
+    longlist_result,
+    runs,
     task_plan,
 )
 from policy_atlas.options_scoping.longlist_intent import compile_longlist_intent
@@ -224,8 +227,45 @@ def test_a_second_confirm_while_the_longlist_walk_runs_is_run_active(
         _cleanup(engine, task_id)
 
 
-def test_the_idempotent_confirm_reopens_a_missing_walk(engine: Engine, tmp_path: Path) -> None:
-    """A version confirmed without a longlist walk opens one; with one, it is unchanged."""
+def _write_longlist_result(engine: Engine, task_id: uuid.UUID, walk_id: uuid.UUID) -> None:
+    """Record a longlist result under a walk's intent record, as a finished build does."""
+    run_id = uuid.uuid4()
+    with engine.begin() as conn:
+        scope_id = conn.execute(
+            select(capability_run.c.evidence_scope_id).where(
+                capability_run.c.capability_run_id == walk_id
+            )
+        ).scalar_one()
+        conn.execute(
+            runs.insert().values(
+                run_id=run_id,
+                task_id=task_id,
+                status="succeeded",
+                started_at=now(),
+                capability_run_id=walk_id,
+            )
+        )
+        conn.execute(
+            longlist_result.insert().values(
+                longlist_result_id=uuid.uuid4(),
+                task_id=task_id,
+                evidence_scope_id=scope_id,
+                run_id=run_id,
+                plan_version=2,
+                themes=[],
+                coverage={},
+                judgements={},
+                guesses=[],
+                counts={},
+                provenance={},
+                created_at=now(),
+            )
+        )
+
+
+def test_the_idempotent_confirm_reopens_a_failed_walk(engine: Engine, tmp_path: Path) -> None:
+    """F2: a version whose walk failed with no result opens a new one; a built
+    longlist, or a walk still queued, leaves it unchanged."""
     task_id: uuid.UUID | None = None
     executor = RecordingExecutor(status="succeeded")
     try:
@@ -233,14 +273,19 @@ def test_the_idempotent_confirm_reopens_a_missing_walk(engine: Engine, tmp_path:
             task_id, artefact_id = _seed_confirmable(engine, owner)
             first = _confirm(client, owner, task_id, artefact_id)
             assert first.status_code == 200, first.text
-            # Lose the walk: the version stays confirmed, the walk never existed.
+            # The walk fails before writing a longlist: the version stays confirmed.
             with engine.begin() as conn:
                 conn.execute(
-                    capability_run.delete().where(capability_run.c.task_id == task_id)
+                    capability_run.update()
+                    .where(capability_run.c.task_id == task_id)
+                    .values(status="failed")
                 )
             reopened = _confirm(client, owner, task_id, artefact_id, version=2)
+            assert reopened.status_code == 200, reopened.text
+            _write_longlist_result(
+                engine, task_id, uuid.UUID(reopened.json()["opened_run"]["capability_run_id"])
+            )
             again = _confirm(client, owner, task_id, artefact_id, version=2)
-        assert reopened.status_code == 200, reopened.text
         assert reopened.json()["version"] == 2
         assert reopened.json()["opened_run"] is not None
         assert again.status_code == 200, again.text
@@ -251,6 +296,76 @@ def test_the_idempotent_confirm_reopens_a_missing_walk(engine: Engine, tmp_path:
                 select(task_plan.c.version).where(task_plan.c.task_id == task_id)
             ).scalars().all()
         assert sorted(versions) == [1, 2]
+    finally:
+        _cleanup(engine, task_id)
+
+
+def test_a_retried_confirm_never_mints_a_second_walk_beside_a_queued_one(
+    engine: Engine, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """B3: the walk is queued (its record minted, no walk row yet) and the
+    reservation gone; the retry finds the record and opens nothing. A record
+    left by an earlier process (no queue survives a restart) does not count."""
+    task_id: uuid.UUID | None = None
+    executor = RecordingExecutor(status="succeeded")
+    try:
+        with api_client(tmp_path, _overrides(executor)) as (client, owner, _other):
+            task_id, artefact_id = _seed_confirmable(engine, owner)
+            assert _confirm(client, owner, task_id, artefact_id).status_code == 200
+            with engine.begin() as conn:
+                conn.execute(capability_run.delete().where(capability_run.c.task_id == task_id))
+            retried = _confirm(client, owner, task_id, artefact_id, version=2)
+            assert retried.status_code == 200, retried.text
+            assert retried.json()["opened_run"] is None
+            assert len(executor.submitted) == 1
+            monkeypatch.setattr(longlist_start, "_PROCESS_STARTED", datetime.now(UTC))
+            after_restart = _confirm(client, owner, task_id, artefact_id, version=2)
+        assert after_restart.status_code == 200, after_restart.text
+        assert after_restart.json()["opened_run"] is not None
+        assert len(executor.submitted) == 2
+    finally:
+        _cleanup(engine, task_id)
+
+
+def test_the_route_opens_exactly_the_version_it_confirmed(engine: Engine) -> None:
+    """A10: a version minted after the confirm's commit refuses the opener (plan_stale)."""
+    from policy_atlas.api.app import ApiConflict
+    from policy_atlas.api.auth import AuthenticatedUser
+    from policy_atlas.api.contract import PlanOut
+    from policy_atlas.api.routers.task_agent import _open_confirmed_longlist
+
+    task_id: uuid.UUID | None = None
+    executor = RecordingExecutor()
+    try:
+        task_id, scope_id = seed_scoping_task(engine)
+        insert_scoping_plan_row(engine, task_id=task_id, scope_id=scope_id, plan=scoping_plan())
+        confirmed = dict(_approved(engine, task_id))
+        with engine.begin() as conn:
+            conn.execute(
+                task_plan.insert().values(
+                    plan_id=uuid.uuid4(),
+                    task_id=task_id,
+                    evidence_scope_id=scope_id,
+                    version=2,
+                    status="approved",
+                    payload=confirmed["payload"],
+                    created_at=now(),
+                    created_by="user",
+                    approved_at=now(),
+                )
+            )
+        out = PlanOut(capability=OPTIONS_SCOPING, version=confirmed["version"], status="approved")
+        with pytest.raises(ApiConflict) as caught:
+            _open_confirmed_longlist(
+                engine,
+                task_id=task_id,
+                out=out,
+                executor=executor,  # type: ignore[arg-type]
+                backends=_runner_backends(),
+                user=AuthenticatedUser(user_id="user-1"),
+            )
+        assert caught.value.code == "plan_stale"
+        assert executor.submitted == []
     finally:
         _cleanup(engine, task_id)
 
@@ -397,6 +512,65 @@ def test_the_capacity_rule_counts_parentless_walks_only(engine: Engine) -> None:
         _cleanup(engine, task_id)
 
 
+def test_the_capacity_rule_leaves_out_an_added_option_search(engine: Engine) -> None:
+    """A12: an *add*'s option search (parentless, targeted) runs on the option-search
+    pool, so it never counts against the executor."""
+    task_id: uuid.UUID | None = None
+    other_id: uuid.UUID | None = None
+    try:
+        task_id, scope_id = seed_scoping_task(engine)
+        insert_scoping_plan_row(engine, task_id=task_id, scope_id=scope_id, plan=scoping_plan())
+        other_id, other_scope = seed_scoping_task(engine)
+        other_plan = insert_scoping_plan_row(
+            engine, task_id=other_id, scope_id=other_scope, plan=scoping_plan()
+        )
+        with engine.connect() as conn:
+            running = len(
+                conn.execute(
+                    select(capability_run.c.capability_run_id)
+                    .where(capability_run.c.status == "running")
+                    .where(capability_run.c.parent_capability_run_id.is_(None))
+                ).all()
+            )
+        capacity = running + runs_router.executor_reservations() + 1
+        targeted = uuid.uuid4()
+        with engine.begin() as conn:
+            conn.execute(
+                evidence_scope.insert().values(
+                    evidence_scope_id=targeted,
+                    task_id=other_id,
+                    intent="an added option",
+                    context={"capability": OPTIONS_SCOPING},
+                    created_at=now(),
+                    purpose="targeted",
+                    plan_id=other_plan,
+                )
+            )
+            conn.execute(
+                capability_run.insert().values(
+                    capability_run_id=uuid.uuid4(),
+                    task_id=other_id,
+                    evidence_scope_id=targeted,
+                    capability=OPTIONS_SCOPING,
+                    plan_id=other_plan,
+                    plan_version=1,
+                    status="running",
+                    started_at=now(),
+                )
+            )
+        admitted = longlist_start.admit_and_mint(engine, task_id=task_id, capacity=capacity)
+        with runs_router._dispatch_lock:
+            runs_router._dispatching_tasks.discard(task_id)
+        assert admitted.plan_row["version"] == 1
+        # It still fences its own task.
+        with pytest.raises(longlist_start.LonglistRefused) as caught:
+            longlist_start.admit_and_mint(engine, task_id=other_id, capacity=99)
+        assert caught.value.reason == "run_active"
+    finally:
+        _cleanup(engine, other_id)
+        _cleanup(engine, task_id)
+
+
 # --- the gate: the card and the race ----------------------------------------
 
 
@@ -494,6 +668,46 @@ def test_the_card_opens_the_walk_without_waiting_and_stays_204(
         assert scope["purpose"] == "longlist"
         assert scope["plan_id"] == plan_id
         assert _walks(engine, task_id) == [(walk_id, "succeeded")]
+    finally:
+        with runs_router._dispatch_lock:
+            if task_id is not None:
+                runs_router._dispatching_tasks.discard(task_id)
+        _cleanup(engine, task_id)
+
+
+def test_the_card_opens_on_the_version_the_gate_confirmed(
+    engine: Engine, tmp_path: Path
+) -> None:
+    """A10: the gate confirms the version its walk ran; a newer version minted
+    meanwhile refuses the opener rather than building from a plan nobody confirmed."""
+    task_id: uuid.UUID | None = None
+    executor = RecordingExecutor()
+    try:
+        with api_client(tmp_path, _overrides(executor)) as (client, owner, _other):
+            task_id, _walk_id, check_in_id, _plan_id = _park_at_gate(engine)
+            _own(engine, task_id, owner)
+            current = dict(_approved(engine, task_id))
+            with engine.begin() as conn:
+                conn.execute(
+                    task_plan.insert().values(
+                        plan_id=uuid.uuid4(),
+                        task_id=task_id,
+                        evidence_scope_id=current["evidence_scope_id"],
+                        version=current["version"] + 1,
+                        status="approved",
+                        payload=current["payload"],
+                        created_at=now(),
+                        created_by="user",
+                        approved_at=now(),
+                    )
+                )
+            response = client.post(
+                f"/api/v1/tasks/{task_id}/check-ins/{check_in_id}/response",
+                headers=owner,
+                json={"kind": "option", "option_id": "confirm_plan"},
+            )
+        assert response.status_code == 204, response.text
+        assert executor.submitted == []
     finally:
         with runs_router._dispatch_lock:
             if task_id is not None:

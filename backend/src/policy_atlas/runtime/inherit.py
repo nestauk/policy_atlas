@@ -37,6 +37,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.engine import Connection
 from sqlalchemy.exc import SQLAlchemyError
 
+from policy_atlas.api.routers._access import readable_task_leg
 from policy_atlas.core.schema import (
     artefact,
     block,
@@ -440,6 +441,23 @@ def _inherit_one_link(
     return created, len(rows) - created
 
 
+def _sources_owner_reads(conn: Connection, *, task_id: uuid.UUID) -> set[uuid.UUID]:
+    """Return the linked source tasks this task's owner may read right now."""
+    owner = conn.execute(
+        select(task.c.owner_user_id).where(task.c.task_id == task_id)
+    ).scalar_one_or_none()
+    if owner is None:
+        return set()
+    return set(
+        conn.execute(
+            select(task_link.c.source_task_id)
+            .join(task, task.c.task_id == task_link.c.source_task_id)
+            .where(task_link.c.target_task_id == task_id)
+            .where(readable_task_leg(owner))
+        ).scalars()
+    )
+
+
 def inherit_documents(
     conn: Connection, *, task_id: uuid.UUID, run_id: uuid.UUID
 ) -> InheritSummary:
@@ -479,8 +497,14 @@ def inherit_documents(
         .order_by(task_link.c.created_at, task_link.c.link_id)
     ).all()
     summary = InheritSummary(links=len(links))
+    readable = _sources_owner_reads(conn, task_id=task_id)
     for link in links:
         try:
+            # A link grants no read (ADR 0037): the owner must still read the
+            # source at every build, not only when the link was made (owner,
+            # 2026-09-24, task 045 review S1: "Recheck access only").
+            if link.source_task_id not in readable:
+                raise InheritLinkError("source not readable by the task owner")
             with conn.begin_nested():
                 created, present = _inherit_one_link(
                     conn,
@@ -541,7 +565,16 @@ def linked_reports(conn: Connection, task_id: uuid.UUID) -> list[tuple[str, str]
         .order_by(task_link.c.created_at, task_link.c.link_id)
     ).all()
     reports: list[tuple[str, str]] = []
+    readable = _sources_owner_reads(conn, task_id=task_id)
     for row in rows:
+        if row.source_task_id not in readable:
+            logger.warning(
+                "inherit.report_unreadable",
+                task_id=str(task_id),
+                link_id=str(row.link_id),
+                error="source not readable by the task owner",
+            )
+            continue
         try:
             with conn.begin_nested():
                 markdown = _report_markdown(

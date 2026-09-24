@@ -459,6 +459,17 @@ describe("walk kinds (task 045)", () => {
     expect(walkKind("options_scoping", [{ stage: "suggest", label: "Suggesting options", status: "completed" } as never])).toBe("longlist");
   });
 
+  // A7: an added option's own search is parentless but not the baseline.
+  it("reads an option search from the run's purpose and words it as its own kind", () => {
+    expect(walkKind("options_scoping", [], "targeted")).toBe("option_search");
+    expect(walkKind("options_scoping", [], "longlist")).toBe("longlist");
+    expect(runningCardCopy("running", "option_search").title).toBe("Searching for the option's evidence");
+    expect(runningCardCopy("succeeded", "option_search").title).toBe("The option's search is done");
+    expect(resultsSignpost(TASK_ID, "succeeded", "option_search")?.href).toBe(
+      `/tasks/${TASK_ID}/result?view=longlist`,
+    );
+  });
+
   it("words the done card and the notice for the walk kind", () => {
     expect(runningCardCopy("succeeded", "longlist").title).toBe("The longlist is ready");
     expect(runningCardCopy("succeeded", "baseline").title).toBe("The baseline is ready");

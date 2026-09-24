@@ -45,7 +45,7 @@ from policy_atlas.runtime.scoping_plan import (
 )
 from tests.helpers import now
 from tests.runtime.test_baseline_gate import scoping_plan
-from tests.runtime.test_inherit import _seed_linked_source
+from tests.runtime.test_inherit import OWNER, _seed_linked_source
 
 REPORT_SECTION = "Employment programmes"
 
@@ -98,6 +98,7 @@ class _Walk:
                 status="active",
                 updated_at=now(),
                 capability="options_scoping",
+                owner_user_id=OWNER,
             )
         )
         plan_id = uuid.uuid4()

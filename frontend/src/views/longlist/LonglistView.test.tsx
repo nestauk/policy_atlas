@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { MOCK_OPTION_ID_EXCLUDED, MOCK_OPTION_ID_NO_IN_SCOPE, mockLonglist } from "../../mock/fixtures";
 import { LonglistView } from "./LonglistView";
-import { ambitionLabel, checksSummary } from "./longlistPresentation";
+import { ambitionLabel, checksSummary, rowMetaParts } from "./longlistPresentation";
 import * as queries from "../../api/queries";
 import * as mutations from "../../api/mutations";
 
@@ -184,6 +184,52 @@ describe("LonglistView", () => {
     );
   });
 
+  // Deviation 46 (owner, 2026-09-24): the reason is optional on the button too.
+  it("Exclude with a blank reason posts no reason", async () => {
+    const user = userEvent.setup();
+    renderLonglist();
+    await user.click(screen.getByRole("button", { name: "Expand all" }));
+    const row = screen.getByText("School-based mentoring").closest("li") as HTMLElement;
+    await user.click(within(row).getByRole("button", { name: "Exclude" }));
+    await user.click(within(row).getByRole("button", { name: "Exclude" }));
+    expect(excludeMutate).toHaveBeenCalledWith({ optionId: MOCK_OPTION_ID_NO_IN_SCOPE }, expect.anything());
+  });
+
+  // F15: a refused exclude says why, next to its row.
+  it("shows the conflict sentence when an exclude is refused", async () => {
+    excludeMutate.mockImplementationOnce((_input, options: { onError: (error: unknown) => void }) =>
+      options.onError(Object.assign(new Error("busy"), { code: "run_active", status: 409 })),
+    );
+    const user = userEvent.setup();
+    renderLonglist();
+    await user.click(screen.getByRole("button", { name: "Expand all" }));
+    const row = screen.getByText("School-based mentoring").closest("li") as HTMLElement;
+    await user.click(within(row).getByRole("button", { name: "Exclude" }));
+    await user.click(within(row).getByRole("button", { name: "Exclude" }));
+    expect(within(row).getByRole("alert")).toHaveTextContent(/A run is already active/);
+  });
+
+  // F15: nothing to exclude or include while a walk runs.
+  it("disables Exclude and Include again while a walk is active", async () => {
+    const user = userEvent.setup();
+    renderLonglist({ active_run: { capability_run_id: "run-1", status: "running", started_at: "now" } });
+    await user.click(screen.getByRole("button", { name: "Expand all" }));
+    const row = screen.getByText("School-based mentoring").closest("li") as HTMLElement;
+    expect(within(row).getByRole("button", { name: "Exclude" })).toBeDisabled();
+    await user.click(screen.getByRole("button", { name: /Excluded options/ }));
+    const excludedRow = screen.getByText("National sanctions regime").closest("li") as HTMLElement;
+    expect(within(excludedRow).getByRole("button", { name: "Include again" })).toBeDisabled();
+  });
+
+  // F3: the list row names the report section too.
+  it("names the report section on a from-your-evidence-search row", () => {
+    const option = mockLonglist().options?.[0];
+    if (option === undefined) throw new Error("fixture has no option");
+    expect(
+      rowMetaParts({ ...option, origin: "from_evidence_search", from_section: "What works", relations: [] }),
+    ).toContain("from your evidence search · What works");
+  });
+
   it("Include again posts once for an excluded option", async () => {
     const user = userEvent.setup();
     renderLonglist();
@@ -191,7 +237,7 @@ describe("LonglistView", () => {
     const row = screen.getByText("National sanctions regime").closest("li") as HTMLElement;
     await user.click(within(row).getByRole("button", { name: "Include again" }));
     expect(includeMutate).toHaveBeenCalledTimes(1);
-    expect(includeMutate).toHaveBeenCalledWith({ optionId: MOCK_OPTION_ID_EXCLUDED });
+    expect(includeMutate).toHaveBeenCalledWith({ optionId: MOCK_OPTION_ID_EXCLUDED }, expect.anything());
   });
 
   it("Add an option posts once and is disabled while a walk is active", async () => {

@@ -200,6 +200,26 @@ def test_a_parentless_option_search_is_never_the_latest_run(
         assert one["purpose"] == "targeted"
 
 
+def test_the_parentless_runs_read_lists_the_task_own_walks_only(
+    engine: Engine, tmp_path: Path
+) -> None:
+    """A13: ``?parentless=true`` drops children and option searches, so the plan
+    document finds the baseline however many option searches ran after it."""
+    with api_client(tmp_path, _overrides()) as (client, owner, _other):
+        task_id = _scoping_task(client, owner)
+        baseline = _walk(engine, task_id, purpose=None, status="succeeded", minutes=0)
+        longlist = _walk(engine, task_id, purpose="longlist", status="succeeded", minutes=1)
+        _walk(engine, task_id, purpose="targeted", status="succeeded", minutes=2, parent=longlist)
+        _walk(engine, task_id, purpose="targeted", status="succeeded", minutes=3)
+        every = client.get(f"/api/v1/tasks/{task_id}/runs", headers=owner).json()
+        own = client.get(
+            f"/api/v1/tasks/{task_id}/runs", headers=owner, params={"parentless": "true"}
+        ).json()
+        assert every["pagination"]["total_items"] == 4
+        assert [row["capability_run_id"] for row in own["data"]] == [str(longlist), str(baseline)]
+        assert own["pagination"]["total_items"] == 2
+
+
 def test_has_longlist_is_the_existence_of_a_longlist_result(
     engine: Engine, tmp_path: Path
 ) -> None:

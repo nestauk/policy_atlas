@@ -83,7 +83,19 @@ class RunStatusFrame(_PersistedFrameBase):
     status: RunStatus
 
 
-class StageStartedFrame(_PersistedFrameBase):
+class _StageFrameBase(_PersistedFrameBase):
+    """Common fields for the three stage frames.
+
+    Args:
+        capability_run_id: The walk the component run belongs to (task 045,
+            A3), so a reader can keep an option search's stages off its
+            parent's timeline; `null` when the event names no component run.
+    """
+
+    capability_run_id: uuid.UUID | None = None
+
+
+class StageStartedFrame(_StageFrameBase):
     """A component run started."""
 
     type: Literal["stage.started"]
@@ -92,7 +104,7 @@ class StageStartedFrame(_PersistedFrameBase):
     blurb: str
 
 
-class StageCompletedFrame(_PersistedFrameBase):
+class StageCompletedFrame(_StageFrameBase):
     """A component reached its terminal (successful) outcome."""
 
     type: Literal["stage.completed"]
@@ -102,7 +114,7 @@ class StageCompletedFrame(_PersistedFrameBase):
     seconds: float | None = None
 
 
-class StageFailedFrame(_PersistedFrameBase):
+class StageFailedFrame(_StageFrameBase):
     """A component failed or was skipped."""
 
     type: Literal["stage.failed"]

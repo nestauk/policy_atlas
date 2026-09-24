@@ -232,6 +232,8 @@ def read_longlist_surface(conn: Connection, *, task_id: uuid.UUID) -> LonglistSu
     rows = conn.execute(
         select(option.c.option_id, option.c.name, option.c.state)
         .where(option.c.task_id == task_id)
+        # A merged duplicate has left the longlist (045 review P1).
+        .where(option.c.merged_into_option_id.is_(None))
         .order_by(option.c.created_at, option.c.option_id)
     ).all()
     return LonglistSurface(
@@ -787,8 +789,8 @@ def _apply(
 
     *Exclude* and *include again* write the option, its History event and this
     turn's completion in **one** transaction, so a retried turn can never
-    apply twice. *Add* opens a walk, which cannot share a transaction: its
-    turn completes the moment the walk is open.
+    apply twice. *Add* completes its turn in the transaction that mints the
+    option; its walk opens after that commit (:func:`_apply_add`).
     """
     if pending.verb == "add":
         return _apply_add(
@@ -809,6 +811,7 @@ def _apply(
                 select(option.c.name, option.c.state)
                 .where(option.c.task_id == task_id)
                 .where(option.c.option_id == option_id)
+                .where(option.c.merged_into_option_id.is_(None))
             ).one_or_none()
             if row is None:
                 turn = _Turn(TaskAgentTurnOut(reply=OPTION_GONE_REPLY, kind="reply", **base), None)
@@ -826,7 +829,6 @@ def _apply(
                         option_id=option_id,
                         reason=pending.reason,
                         actor=user_id,
-                        require_reason=False,
                     )
                 else:
                     include_option(conn, task_id=task_id, option_id=option_id, actor=user_id)
@@ -866,7 +868,37 @@ def _apply_add(
     runner_backends: RunnerBackends,
     base: dict[str, Any],
 ) -> TaskAgentTurnOut:
+    """Apply a confirmed *add*: the option, its History event and this turn in one commit.
+
+    The turn completes — consuming the pending action — in the transaction
+    that mints the option (A4), so a retried turn finds nothing pending and
+    can never mint a second option. The option search opens after that
+    commit; its id is then written onto the stored turn.
+    """
     design = cast(OptionDesign, pending.design)
+
+    def applied(option_id: uuid.UUID, capability_run_id: uuid.UUID | None) -> TaskAgentTurnOut:
+        return TaskAgentTurnOut(
+            reply=_applied_reply("add", design.name),
+            kind="action",
+            action=TurnActionOut(
+                verb="add",
+                option_id=option_id,
+                label=design.name,
+                capability_run_id=capability_run_id,
+            ),
+            **base,
+        )
+
+    def complete_in_commit(conn: Connection, option_id: uuid.UUID) -> None:
+        _complete(
+            conn,
+            task_id=task_id,
+            transcript_id=transcript_id,
+            result=applied(option_id, None),
+            pending=None,
+        )
+
     try:
         added = add_option(
             engine,
@@ -875,24 +907,19 @@ def _apply_add(
             design=design,
             backends=runner_backends,
             user_id=user_id,
+            in_commit=complete_in_commit,
         )
     except LonglistActionRefused as exc:
         refused = _Turn(
             TaskAgentTurnOut(reply=_sentence(exc.message), kind="reply", **base), pending
         )
         return _commit(engine, task_id=task_id, transcript_id=transcript_id, turn=refused)
-    turn = _Turn(
-        TaskAgentTurnOut(
-            reply=_applied_reply("add", design.name),
-            kind="action",
-            action=TurnActionOut(
-                verb="add",
-                option_id=added.option_id,
-                label=design.name,
-                capability_run_id=added.capability_run_id,
-            ),
-            **base,
-        ),
-        None,
-    )
-    return _commit(engine, task_id=task_id, transcript_id=transcript_id, turn=turn)
+    result = applied(added.option_id, added.capability_run_id)
+    with engine.begin() as conn:
+        conn.execute(
+            update(task_agent_transcript)
+            .where(task_agent_transcript.c.id == transcript_id)
+            .where(task_agent_transcript.c.task_id == task_id)
+            .values(response=result.model_dump(mode="json"))
+        )
+    return result

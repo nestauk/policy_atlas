@@ -27,6 +27,7 @@ from datetime import UTC, datetime
 from typing import Any, NamedTuple, cast
 
 import structlog
+from sqlalchemy import func
 from sqlalchemy import select as sa_select
 from sqlalchemy.engine import Connection
 from sqlalchemy.exc import IntegrityError
@@ -1319,15 +1320,26 @@ def _write_docs(
     only that document's savepoint rolls back, and the document becomes
     ``reused`` of the sibling's row — never ``failed``, and never an aborted
     component transaction.
+
+    Before the first write, one transaction-scoped advisory lock per memo key
+    is taken in sorted key order, so two sibling walks writing overlapping
+    documents serialise on their first shared key instead of deadlocking on
+    the unique index in opposite orders; the write order itself is unchanged.
     """
-    for doc in docs:
-        if doc.reused:
-            continue
-        doc_fingerprint = (
-            refresh_fingerprint
-            if doc.refreshed and refresh_fingerprint is not None
-            else fingerprint
-        )
+    written = [doc for doc in docs if not doc.reused]
+    _lock_memo_keys(
+        conn,
+        [
+            _memo_lock_key(
+                task_id,
+                doc.record_snapshot_id,
+                _doc_fingerprint(doc, fingerprint, refresh_fingerprint),
+            )
+            for doc in written
+        ],
+    )
+    for doc in written:
+        doc_fingerprint = _doc_fingerprint(doc, fingerprint, refresh_fingerprint)
         try:
             with conn.begin_nested():
                 _write_doc(
@@ -1343,6 +1355,25 @@ def _write_docs(
             if not _is_memo_conflict(exc):
                 raise
             _reuse_sibling_row(conn, task_id=task_id, fingerprint=doc_fingerprint, doc=doc)
+
+
+def _doc_fingerprint(doc: _Doc, fingerprint: str, refresh_fingerprint: str | None) -> str:
+    """The fingerprint ``_write_docs`` writes ``doc`` under."""
+    if doc.refreshed and refresh_fingerprint is not None:
+        return refresh_fingerprint
+    return fingerprint
+
+
+def _memo_lock_key(task_id: uuid.UUID, snapshot_id: uuid.UUID | None, fingerprint: str) -> int:
+    """A signed 64-bit advisory-lock key for one ``uq_ser_memo`` key."""
+    digest = hashlib.sha256(f"ser_memo:{task_id}:{snapshot_id}:{fingerprint}".encode()).digest()
+    return int.from_bytes(digest[:8], "big", signed=True)
+
+
+def _lock_memo_keys(conn: Connection, keys: list[int]) -> None:
+    """Take each key's transaction-scoped advisory lock, in sorted order."""
+    for key in sorted(set(keys)):
+        conn.execute(sa_select(func.pg_advisory_xact_lock(key)))
 
 
 def _is_memo_conflict(exc: IntegrityError) -> bool:

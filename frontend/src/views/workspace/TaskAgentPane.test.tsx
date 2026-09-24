@@ -99,7 +99,7 @@ describe("threadInputs", () => {
   });
 
   // Task 045 (S12): option searches are not shown in the parent's thread.
-  it("gives a child walk no block, and its raw lines go nowhere", () => {
+  it("gives a child walk no block, and the lines that name it go nowhere", () => {
     const parent = { ...run("longlist", "2026-09-22T10:00:00Z", "2026-09-22T10:30:00Z"), purpose: "longlist" };
     const child = {
       ...run("child", "2026-09-22T10:05:00Z", "2026-09-22T10:10:00Z"),
@@ -108,11 +108,39 @@ describe("threadInputs", () => {
     };
     const decisions = [
       { ...decision(1, "2026-09-22T10:02:00Z"), kind: "component.completed" },
-      { ...decision(2, "2026-09-22T10:06:00Z"), kind: "search.executed" },
+      { ...decision(2, "2026-09-22T10:06:00Z"), kind: "run.finished", detail: { capability_run_id: "child" } },
     ];
     const { boundaries, runDecisions } = threadInputs([], [child, parent], decisions);
     expect(boundaries.map((boundary) => boundary.run.capability_run_id)).toEqual(["longlist"]);
     expect(runDecisions).toEqual([{ decision: decisions[0], capabilityRunId: "longlist" }]);
+  });
+
+  // F11: an untagged line inside a child's window is the parent's.
+  it("keeps the parent's untagged lines logged during a child window", () => {
+    const parent = { ...run("longlist", "2026-09-22T10:00:00Z", "2026-09-22T10:30:00Z"), purpose: "longlist" };
+    const child = {
+      ...run("child", "2026-09-22T10:05:00Z", "2026-09-22T10:10:00Z"),
+      purpose: "targeted",
+      parent_capability_run_id: "longlist",
+    };
+    const during = { ...decision(3, "2026-09-22T10:07:00Z"), kind: "component.completed" };
+    const { runDecisions } = threadInputs([], [child, parent], [during]);
+    expect(runDecisions).toEqual([{ decision: during, capabilityRunId: "longlist" }]);
+  });
+
+  // A child's run-tagged line never lands in its parent's block, even though
+  // it falls inside the parent's window; the parent's own tagged line does.
+  it("never shows a child's run-tagged search in the parent block", () => {
+    const parent = { ...run("longlist", "2026-09-22T10:00:00Z", "2026-09-22T10:30:00Z"), purpose: "longlist" };
+    const child = {
+      ...run("child", "2026-09-22T10:05:00Z", "2026-09-22T10:10:00Z"),
+      purpose: "targeted",
+      parent_capability_run_id: "longlist",
+    };
+    const childSearch = { ...decision(4, "2026-09-22T10:07:00Z"), kind: "search.executed", capability_run_id: "child" };
+    const parentSearch = { ...decision(5, "2026-09-22T10:08:00Z"), kind: "search.executed", capability_run_id: "longlist" };
+    const { runDecisions } = threadInputs([], [child, parent], [childSearch, parentSearch]);
+    expect(runDecisions).toEqual([{ decision: parentSearch, capabilityRunId: "longlist" }]);
   });
 });
 
@@ -551,6 +579,23 @@ describe("TaskAgentPane — the options-scoping baseline gate", () => {
     expect(screen.getByText("Excluded Mentoring schemes", { selector: "span" })).toBeInTheDocument();
     expect(screen.getByText(/recorded/)).toBeInTheDocument();
     expect(screen.queryByText(/plan version/)).not.toBeInTheDocument();
+  });
+
+  // A8: a finished run's block takes its kind from its own run, not from
+  // whatever the live stream holds.
+  it("words a historical longlist block from its own purpose", () => {
+    mockPane({ turns: [] });
+    const longlistWalk: TaskAgentThreadRun = {
+      ...run("walk-2", "2026-09-22T10:00:00Z", "2026-09-22T10:30:00Z"),
+      purpose: "longlist",
+      parent_capability_run_id: null,
+    };
+    vi.mocked(queries.useRuns).mockReturnValue({
+      data: { data: [longlistWalk] },
+    } as unknown as ReturnType<typeof queries.useRuns>);
+    renderPane({ runStatus: "succeeded", stream: createInitialRunStreamState() });
+    expect(screen.getByText(/The longlist is built/)).toBeInTheDocument();
+    expect(screen.queryByText(/The baseline is written/)).not.toBeInTheDocument();
   });
 
   it("keeps the composer open at the gate, with the baseline question placeholder", () => {

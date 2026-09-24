@@ -76,6 +76,8 @@ class DocumentLabels:
         source_run_id: The pinned walk (``capability_run``) of that link.
         stale_rubric: ``True`` when the inherited appraisal's rubric differs
             from the current one and its score was withheld.
+        type_inherited: ``True`` when the evidence type came through the link.
+        tier_inherited: ``True`` when the appraisal came through the link.
     """
 
     evidence_type: str | None
@@ -85,6 +87,8 @@ class DocumentLabels:
     source_task_id: uuid.UUID | None = None
     source_run_id: uuid.UUID | None = None
     stale_rubric: bool = False
+    type_inherited: bool = False
+    tier_inherited: bool = False
 
 
 _ABSENT = DocumentLabels(
@@ -236,13 +240,14 @@ def labels_for_snapshots(
         own_class = classifications.get(tss_id)
         own_appraisal = appraisals.get(tss_id)
         link_row = inherited.get(tss_id)
-        used_link = False
+        type_inherited = False
+        tier_inherited = False
         evidence_type: str | None = None
         if own_class is not None:
             evidence_type = own_class.primary_evidence_type
         elif link_row is not None and link_row.primary_evidence_type is not None:
             evidence_type = link_row.primary_evidence_type
-            used_link = True
+            type_inherited = True
         quality_score: int | None = None
         rubric_version: str | None = None
         stale = False
@@ -250,13 +255,13 @@ def labels_for_snapshots(
             quality_score = own_appraisal.quality_score
             rubric_version = own_appraisal.rubric_version
         elif link_row is not None and link_row.quality_score is not None:
-            used_link = True
+            tier_inherited = True
             rubric_version = link_row.rubric_version
             if rubric_version == DEFAULT_RUBRIC_VERSION:
                 quality_score = link_row.quality_score
             else:
                 stale = True
-        if used_link:
+        if type_inherited or tier_inherited:
             assert link_row is not None
             resolved[tss_id] = DocumentLabels(
                 evidence_type=evidence_type,
@@ -266,6 +271,8 @@ def labels_for_snapshots(
                 source_task_id=link_row.source_task_id,
                 source_run_id=link_row.source_capability_run_id,
                 stale_rubric=stale,
+                type_inherited=type_inherited,
+                tier_inherited=tier_inherited,
             )
         elif own_class is not None or own_appraisal is not None:
             resolved[tss_id] = DocumentLabels(

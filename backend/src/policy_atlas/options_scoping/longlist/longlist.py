@@ -4,9 +4,9 @@ Contract deliverable 6, D4, D5, D8, D10, D11, D14, D16, D20; ADR 0039
 decisions 7 and 8. The longlist walk's clustering step:
 
 1. **Units.** The ``intervention_profile_record`` rows of the longlist scope
-   and of every targeted scope whose walk is a child of this walk (read
-   through each scope's latest extraction roll-up), minus ``comparator``
-   records; plus, per link whose pinned walk ran ``extract``, the source
+   and of each option's latest finished option search on this task, whatever
+   walk asked for it (read through each scope's latest extraction roll-up),
+   minus ``comparator`` records; plus, per link whose pinned walk ran ``extract``, the source
    task's IOF/ICF findings of that walk through ``finding_reference_union``
    (D5). Each unit's payload is this component's projection.
 2. **Seeded clustering, the engine untouched** (P8). The seeds are every
@@ -30,7 +30,9 @@ decisions 7 and 8. The longlist walk's clustering step:
 
 Every model call happens before the first write, so a failure leaves nothing
 behind. User state (``state``, ``exclusion``) is never touched and no option
-is ever deleted.
+is ever deleted. A duplicate constrain merged into a kept option
+(``merged_into_option_id``) is not a seed and stays merged; discovery may not
+re-mint its name.
 
 **How the two buckets pass through the engine.** The assignment prompt may
 answer ``not an option`` (the component's own label) or ``ungroupable``.
@@ -132,6 +134,7 @@ from policy_atlas.options_scoping.longlist.longlist_theme_prompt import (
 )
 from policy_atlas.options_scoping.longlist.where_tried import where_codes, where_labels
 from policy_atlas.options_scoping.suggest.suggest import walk_plan
+from policy_atlas.runtime.scoping_plan import TARGETED_PURPOSE
 
 log = structlog.get_logger()
 
@@ -609,7 +612,11 @@ def _clean_label_text(value: str, limit: int) -> str:
 
 
 def _seeds(conn: Connection, *, task_id: uuid.UUID) -> list[_Seed]:
-    """Every option of the task as a seed, labels made engine-valid and unique."""
+    """Every option of the task as a seed, labels made engine-valid and unique.
+
+    A duplicate constrain merged into a kept option is not a seed: it stays
+    merged (its name is a :func:`_merged_names` entry instead).
+    """
     rows = conn.execute(
         select(
             option.c.option_id,
@@ -618,7 +625,9 @@ def _seeds(conn: Connection, *, task_id: uuid.UUID) -> list[_Seed]:
             option.c.design,
             option.c.origin,
             option.c.created_at,
-        ).where(option.c.task_id == task_id)
+        )
+        .where(option.c.task_id == task_id)
+        .where(option.c.merged_into_option_id.is_(None))
     ).all()
     order = {origin: index for index, origin in enumerate(_SEED_ORIGIN_ORDER)}
     rows = sorted(
@@ -652,6 +661,17 @@ def _seeds(conn: Connection, *, task_id: uuid.UUID) -> list[_Seed]:
     return seeds
 
 
+def _merged_names(conn: Connection, *, task_id: uuid.UUID) -> list[str]:
+    """The names of the task's merged duplicates, which discovery must not re-mint."""
+    return list(
+        conn.execute(
+            select(option.c.name)
+            .where(option.c.task_id == task_id)
+            .where(option.c.merged_into_option_id.is_not(None))
+        ).scalars()
+    )
+
+
 # --- the engine's backends ------------------------------------------------------
 
 
@@ -682,13 +702,22 @@ class LonglistClusteringBackend(ClusteringBackend):
         backend: The model seam.
         question: The plan's question (context only).
         seeds: The seed options, in offer order.
+        retired: Names a discovered option may not restate either (the
+            merged duplicates'); dropped like a restated seed.
     """
 
-    def __init__(self, backend: LonglistBackend, *, question: str, seeds: list[_Seed]) -> None:
+    def __init__(
+        self,
+        backend: LonglistBackend,
+        *,
+        question: str,
+        seeds: list[_Seed],
+        retired: Sequence[str] = (),
+    ) -> None:
         self._backend = backend
         self._question = question
         self._seeds = seeds
-        self._seed_keys = {_key(seed.label) for seed in seeds}
+        self._seed_keys = {_key(seed.label) for seed in seeds} | {_key(n) for n in retired}
         self._lock = threading.Lock()
         self.discovered: dict[str, DiscoveredOptionWire] = {}
         self.answers: dict[str, _Answer] = {}
@@ -1085,21 +1114,113 @@ def _walk_ref(
     return None, int(version)
 
 
-def _child_scopes(
-    conn: Connection, *, task_id: uuid.UUID, walk_id: uuid.UUID | None
-) -> list[uuid.UUID]:
-    """The targeted scopes of this walk's child walks (its option searches)."""
-    if walk_id is None:
-        return []
-    return [
-        row.evidence_scope_id
-        for row in conn.execute(
-            select(capability_run.c.evidence_scope_id)
-            .where(capability_run.c.task_id == task_id)
-            .where(capability_run.c.parent_capability_run_id == walk_id)
-            .order_by(capability_run.c.started_at, capability_run.c.capability_run_id)
+def _option_search_scopes(conn: Connection, *, task_id: uuid.UUID) -> list[uuid.UUID]:
+    """Each option's latest finished option search on this task, any parent.
+
+    One targeted scope per option: the latest ``succeeded`` or ``degraded``
+    walk under a ``targeted`` record naming it — this walk's children, an
+    earlier build's (a rebuild searches only new entrants, P12) and the verb
+    *add*'s parentless searches alike, so a rebuild clusters every option's
+    records, not only the ones it searched itself.
+    """
+    walks = conn.execute(
+        select(
+            capability_run.c.evidence_scope_id,
+            evidence_scope.c.context["option_id"].astext.label("option_id"),
         )
-    ]
+        .select_from(
+            capability_run.join(
+                evidence_scope,
+                and_(
+                    evidence_scope.c.evidence_scope_id == capability_run.c.evidence_scope_id,
+                    evidence_scope.c.task_id == capability_run.c.task_id,
+                ),
+            )
+        )
+        .where(capability_run.c.task_id == task_id)
+        .where(evidence_scope.c.purpose == TARGETED_PURPOSE)
+        .where(capability_run.c.status.in_(("succeeded", "degraded")))
+        .order_by(capability_run.c.started_at.desc(), capability_run.c.capability_run_id.desc())
+    ).all()
+    latest: dict[str, uuid.UUID] = {}
+    for walk in walks:
+        if walk.option_id is not None:
+            latest.setdefault(walk.option_id, walk.evidence_scope_id)
+    return list(reversed(list(latest.values())))
+
+
+def membership_coverage(
+    conn: Connection,
+    *,
+    task_id: uuid.UUID,
+    scope_id: uuid.UUID,
+    where: str,
+    option_ids: Sequence[uuid.UUID],
+) -> dict[str, dict[str, Any]]:
+    """The options' coverage recomputed from their membership rows as they stand.
+
+    For constrain's *distinct* merge, which moves a duplicate's memberships
+    to the kept option after the build wrote its coverage. The units are
+    loaded exactly as :func:`longlist_scope` loads them (the walk's scope,
+    every option search, the links); a membership whose unit no longer loads
+    is skipped.
+
+    Args:
+        conn: Open connection.
+        task_id: The scoping task.
+        scope_id: The longlist walk's intent record.
+        where: The plan's *where* text (the home group).
+        option_ids: The options to recompute.
+
+    Returns:
+        ``{option_id: coverage}`` for each of ``option_ids``.
+    """
+    search_scopes = _option_search_scopes(conn, task_id=task_id)
+    own, _ = _own_units(conn, task_id=task_id, scope_ids=[scope_id, *search_scopes])
+    linked, _ = _linked_units(conn, task_id=task_id)
+    by_key = {(u.kind, u.record_id): u for u in own + linked}
+    members: dict[uuid.UUID, list[tuple[_Unit, bool]]] = {oid: [] for oid in option_ids}
+    for row in conn.execute(
+        select(
+            option_membership.c.option_id,
+            option_membership.c.unit_kind,
+            option_membership.c.unit_id,
+            option_membership.c.design_feature_not_stated,
+        )
+        .where(option_membership.c.task_id == task_id)
+        .where(option_membership.c.option_id.in_(list(option_ids)))
+    ):
+        unit = by_key.get((row.unit_kind, row.unit_id))
+        if unit is not None:
+            members[row.option_id].append((unit, bool(row.design_feature_not_stated)))
+    labels = labels_for_snapshots(
+        conn,
+        task_id=task_id,
+        tss_ids={u.label_tss_id for ms in members.values() for u, _ in ms if u.label_tss_id},
+    )
+    home = where_codes(where)
+    return {
+        str(oid): option_coverage(
+            [
+                CoverageMember(
+                    unit_kind=u.kind,
+                    doc_key=u.doc_key,
+                    tss_id=u.label_tss_id,
+                    role=u.role,
+                    basis=u.basis,
+                    flagged=flagged,
+                    population=u.population,
+                    setting=u.setting,
+                    outcome=u.outcome,
+                    study_geography=u.study_geography,
+                )
+                for u, flagged in ms
+            ],
+            labels=labels,
+            home=home,
+        )
+        for oid, ms in members.items()
+    }
 
 
 def longlist_scope(
@@ -1133,12 +1254,12 @@ def longlist_scope(
             (units = memberships + unclustered + not an option) breaks.
     """
     plan = walk_plan(conn, task_id=task_id, run_id=run_id, scope_id=context.scope_id)
-    walk_id, plan_version = _walk_ref(
+    _walk_id, plan_version = _walk_ref(
         conn, task_id=task_id, run_id=run_id, scope_id=context.scope_id
     )
-    child_scopes = _child_scopes(conn, task_id=task_id, walk_id=walk_id)
+    search_scopes = _option_search_scopes(conn, task_id=task_id)
     own, comparators = _own_units(
-        conn, task_id=task_id, scope_ids=[context.scope_id, *child_scopes]
+        conn, task_id=task_id, scope_ids=[context.scope_id, *search_scopes]
     )
     linked, link_provenance = _linked_units(conn, task_id=task_id)
     units = own + linked
@@ -1148,7 +1269,12 @@ def longlist_scope(
     ceiling = discovery_ceiling(len(units))
     # The seeds are all assigned against even when they outnumber the ceiling.
     max_labels = max(ceiling, len(seeds))
-    clustering_backend = LonglistClusteringBackend(backend, question=plan.question, seeds=seeds)
+    clustering_backend = LonglistClusteringBackend(
+        backend,
+        question=plan.question,
+        seeds=seeds,
+        retired=_merged_names(conn, task_id=task_id),
+    )
     try:
         clustering = (
             cluster_units(
@@ -1385,9 +1511,14 @@ def longlist_scope(
 
     states = [
         row.state
-        for row in conn.execute(select(option.c.state).where(option.c.task_id == task_id))
+        for row in conn.execute(
+            select(option.c.state)
+            .where(option.c.task_id == task_id)
+            .where(option.c.merged_into_option_id.is_(None))
+        )
     ]
-    none_fits = sum(1 for t in typings.values() if t.primary is None)
+    # An invalid typing is counted once, under ``typing_invalid``.
+    none_fits = sum(1 for t in typings.values() if t.primary is None and not t.invalid)
     documents = {u.doc_key for u in units}
     counts = {
         "options": len(options),
@@ -1441,7 +1572,7 @@ def longlist_scope(
         "discovered_ids": [str(o.option_id) for o in options if not o.seed],
         "scopes": {
             "longlist": str(context.scope_id),
-            "targeted": [str(scope) for scope in child_scopes],
+            "targeted": [str(scope) for scope in search_scopes],
         },
         "links": link_provenance,
         "clustering": {

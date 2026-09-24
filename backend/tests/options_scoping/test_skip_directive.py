@@ -277,6 +277,26 @@ def test_appraise_skips_resolved_tiers_but_not_a_stale_rubric(conn: Connection) 
     assert pool.stale not in skip
 
 
+def test_an_inherited_tier_beside_this_task_s_own_type_skips_neither_step(
+    conn: Connection,
+) -> None:
+    """L3: appraise is skipped only when the tier and the type both came from
+    the link; a document this task classified itself keeps an inherited tier
+    only as a label, and is classified and appraised here."""
+    pool = _Pool(conn)
+    source, pinned, snapshot_id, _ = _labelled_source(conn)
+    _link(conn, source, pool.target, pinned)
+    mixed = _share(conn, pool.target, snapshot_id)
+    _classify(conn, pool.target, mixed, NON_EVIDENCE)
+    seed_screening_result(conn, pool.target.task_id, pool.target.run_id, pool.scope_id, mixed)
+    for component in ("classify", "appraise"):
+        skip = resolved_skip_ids(
+            conn, task_id=pool.target.task_id, scope_id=pool.scope_id, component=component
+        )
+        assert mixed not in skip
+        assert pool.resolved in skip
+
+
 # --- leg_directive -------------------------------------------------------------------
 
 

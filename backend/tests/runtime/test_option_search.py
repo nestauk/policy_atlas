@@ -393,9 +393,52 @@ def test_without_a_suggest_summary_the_users_options_are_the_entrants(engine: En
         _cleanup(engine, task_id)
 
 
+def test_a_merged_duplicate_is_no_entrant(engine: Engine) -> None:
+    """Owner ruling 2026-09-24: a duplicate constrain merged stays merged."""
+    task_id: uuid.UUID | None = None
+    try:
+        task_id, _scope_id, _plan_id = _seed_longlist(engine, _longlist_plan())
+        own = _seed_option(engine, task_id, "Own", "added_by_you")
+        twin = _seed_option(engine, task_id, "Own twin", "added_by_you")
+        with engine.begin() as conn:
+            conn.execute(
+                option.update().where(option.c.option_id == twin).values(merged_into_option_id=own)
+            )
+        with engine.connect() as conn:
+            chosen = option_search.entrants_for_search(conn, task_id=task_id, suggest_run_id=None)
+        assert [option_id for option_id, _design in chosen] == [own]
+    finally:
+        _cleanup(engine, task_id)
+
+
+def _targeted_walk(
+    engine: Engine,
+    task_id: uuid.UUID,
+    plan_id: uuid.UUID,
+    option_id: uuid.UUID,
+    *,
+    parent: uuid.UUID | None,
+    status: str,
+) -> uuid.UUID:
+    targeted = uuid.uuid4()
+    with engine.begin() as conn:
+        conn.execute(
+            evidence_scope.insert().values(
+                evidence_scope_id=targeted,
+                task_id=task_id,
+                intent="an option",
+                context={"option_id": str(option_id)},
+                created_at=now(),
+                purpose="targeted",
+                plan_id=plan_id,
+            )
+        )
+    return _seed_walk(engine, task_id, targeted, plan_id, parent=parent, status=status)
+
+
 def test_a_rebuild_searches_only_entrants_without_a_search(engine: Engine) -> None:
-    """P12: an entrant already searched on this task (any walk under a targeted
-    record naming it) is not searched again; a new entrant is."""
+    """P12: an entrant already searched on this task (a finished walk under a
+    targeted record naming it) is not searched again; a new entrant is."""
     task_id: uuid.UUID | None = None
     try:
         task_id, scope_id, plan_id = _seed_longlist(engine, _longlist_plan())
@@ -415,7 +458,7 @@ def test_a_rebuild_searches_only_entrants_without_a_search(engine: Engine) -> No
                     plan_id=plan_id,
                 )
             )
-        _seed_walk(engine, task_id, targeted, plan_id, parent=parent, status="failed")
+        _seed_walk(engine, task_id, targeted, plan_id, parent=parent, status="succeeded")
         suggest_run = _seed_suggest_summary(engine, task_id, parent, [old, new])
         with engine.connect() as conn:
             assert option_search.searched_option_ids(conn, task_id=task_id) == {old}
@@ -423,6 +466,36 @@ def test_a_rebuild_searches_only_entrants_without_a_search(engine: Engine) -> No
                 conn, task_id=task_id, suggest_run_id=suggest_run
             )
         assert [option_id for option_id, _design in chosen] == [new]
+    finally:
+        _cleanup(engine, task_id)
+
+
+def test_a_rebuild_retries_a_search_that_did_not_finish(engine: Engine) -> None:
+    """B2: only a succeeded or degraded search counts as done; a failed,
+    aborted or interrupted one (of a build or of the verb add) is retried."""
+    task_id: uuid.UUID | None = None
+    try:
+        task_id, scope_id, plan_id = _seed_longlist(engine, _longlist_plan())
+        parent = _seed_walk(engine, task_id, scope_id, plan_id, status="degraded")
+        names = ("Done", "Degraded", "Failed", "Interrupted", "Aborted")
+        statuses = ("succeeded", "degraded", "failed", "interrupted", "aborted")
+        ids = [_seed_option(engine, task_id, name, "added_by_you") for name in names]
+        for option_id, status in zip(ids, statuses, strict=True):
+            _targeted_walk(
+                engine,
+                task_id,
+                plan_id,
+                option_id,
+                parent=None if status == "aborted" else parent,
+                status=status,
+            )
+        suggest_run = _seed_suggest_summary(engine, task_id, parent, ids)
+        with engine.connect() as conn:
+            assert option_search.searched_option_ids(conn, task_id=task_id) == set(ids[:2])
+            chosen = option_search.entrants_for_search(
+                conn, task_id=task_id, suggest_run_id=suggest_run
+            )
+        assert [option_id for option_id, _design in chosen] == ids[2:]
     finally:
         _cleanup(engine, task_id)
 
@@ -748,3 +821,267 @@ def test_the_ingest_slots_are_all_returned() -> None:
     )
     assert set(results) == {0, 1}
     assert walk_pool.INGEST_SLOTS._value == DEFAULT_MAX_WORKERS
+
+
+# --- the parent's end cleans up its children (A2, A6, A11) -------------------
+
+
+def _stuck_until(release: threading.Event, engine: Engine) -> Callable[..., None]:
+    """A child that opens its row as the runner does, then waits to be released.
+
+    Like the runner it ends itself at once when abandoned before its row
+    existed; released, it finishes ``succeeded`` through ``_finish_run``.
+    """
+
+    def child(*args: Any, **kwargs: Any) -> None:
+        _open_row(engine, kwargs)
+        if option_search.end_if_abandoned(
+            engine, task_id=kwargs["task_id"], child_id=kwargs["capability_run_id"]
+        ):
+            return
+        release.wait(timeout=30)
+        runner_module._finish_run(
+            engine,
+            [],
+            [],
+            status="succeeded",
+            capability_run_id=kwargs["capability_run_id"],
+            task_id=kwargs["task_id"],
+        )
+
+    return child
+
+
+def _await_statuses(
+    engine: Engine, task_id: uuid.UUID, children: list[uuid.UUID], want: str
+) -> dict[uuid.UUID, str]:
+    deadline = time.monotonic() + 10.0
+    found: dict[uuid.UUID, str] = {}
+    while time.monotonic() < deadline:
+        with engine.connect() as conn:
+            found = {
+                row.capability_run_id: row.status
+                for row in conn.execute(
+                    select(capability_run.c.capability_run_id, capability_run.c.status).where(
+                        capability_run.c.capability_run_id.in_(children)
+                    )
+                )
+            }
+        if len(found) == len(children) and set(found.values()) == {want}:
+            break
+        time.sleep(0.05)
+    return found
+
+
+def _terminal_events(engine: Engine, task_id: uuid.UUID, child: uuid.UUID) -> list[str]:
+    with engine.connect() as conn:
+        return [
+            entry["event_type"]
+            for entry in events.read(conn, task_id)
+            if entry["event_type"] in {"run.finished", "run.interrupted"}
+            and entry["payload"].get("capability_run_id") == str(child)
+        ]
+
+
+def _fan_out_children(engine: Engine, task_id: uuid.UUID) -> list[uuid.UUID]:
+    with engine.connect() as conn:
+        parent = conn.execute(
+            select(capability_run.c.capability_run_id)
+            .where(capability_run.c.task_id == task_id)
+            .where(capability_run.c.parent_capability_run_id.is_(None))
+            .where(capability_run.c.capability == "options_scoping")
+            .order_by(capability_run.c.started_at.desc())
+        ).first()
+        assert parent is not None
+        children = option_search.dispatched_children(
+            conn, task_id=task_id, parent_id=parent.capability_run_id
+        )
+    assert children
+    return children
+
+
+@pytest.mark.parametrize("how", ["spine_failure", "raise"])
+def test_a_walk_that_ends_before_its_join_interrupts_its_children(
+    engine: Engine, child_run_plan: Any, monkeypatch: pytest.MonkeyPatch, how: str
+) -> None:
+    """A2: a spine failure (any ``_finish_run``) or a raise after the fan-out
+    leaves no child running; each ends ``interrupted`` with one terminal event,
+    and its late finish changes nothing (A6)."""
+    task_id: uuid.UUID | None = None
+    release = threading.Event()
+    original_attempt = runner_module._run_step_attempt
+
+    def acquire_breaks(engine_: Engine, **kwargs: Any) -> Any:
+        if kwargs["step"].component == "acquire":
+            if how == "raise":
+                raise RuntimeError("the walk broke")
+            return runner_module._AttemptOutcome(
+                run_id=uuid.uuid4(),
+                status="failed",
+                wall_clock_s=0.0,
+                headline_counts={},
+                error="acquire failed",
+            )
+        return original_attempt(engine_, **kwargs)
+
+    try:
+        child_run_plan(_stuck_until(release, engine))
+        monkeypatch.setattr(runner_module, "_run_step_attempt", acquire_breaks)
+        plan = _longlist_plan("Youth guarantee")
+        task_id, scope_id, plan_id = _seed_longlist(engine, plan)
+        if how == "raise":
+            with pytest.raises(RuntimeError, match="the walk broke"):
+                _run_longlist(engine, task_id, scope_id, plan_id, plan)
+        else:
+            outcome = _run_longlist(engine, task_id, scope_id, plan_id, plan)
+            assert outcome.status == "failed"
+        children = _fan_out_children(engine, task_id)
+        assert len(children) == 2
+        statuses = _await_statuses(engine, task_id, children, "interrupted")
+        assert statuses == dict.fromkeys(children, "interrupted")
+        release.set()
+        _await_children_ended(engine, task_id)
+        time.sleep(0.2)
+        assert _await_statuses(engine, task_id, children, "interrupted") == statuses
+        for child in children:
+            assert _terminal_events(engine, task_id, child) == ["run.interrupted"]
+    finally:
+        release.set()
+        if task_id is not None:
+            _await_children_ended(engine, task_id)
+        _cleanup(engine, task_id)
+
+
+def test_a_fan_out_that_raises_part_way_interrupts_the_children_it_sent(
+    engine: Engine, child_run_plan: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A2/L5: a child submitted before the fan-out raised (so no fan-out record
+    names it) is still ended."""
+    task_id: uuid.UUID | None = None
+    release = threading.Event()
+    sent: list[uuid.UUID] = []
+    original = option_search.run_option_search
+
+    def second_breaks(*args: Any, **kwargs: Any) -> uuid.UUID:
+        if sent:
+            raise RuntimeError("the second dispatch broke")
+        sent.append(original(*args, **kwargs))
+        return sent[-1]
+
+    try:
+        child_run_plan(_stuck_until(release, engine))
+        monkeypatch.setattr(option_search, "run_option_search", second_breaks)
+        plan = _longlist_plan()
+        task_id, scope_id, plan_id = _seed_longlist(engine, plan)
+        parent = _seed_walk(engine, task_id, scope_id, plan_id)
+        _seed_option(engine, task_id, "One", "added_by_you")
+        _seed_option(engine, task_id, "Two", "added_by_you")
+        with pytest.raises(RuntimeError, match="second dispatch"):
+            option_search.dispatch_option_searches(
+                engine,
+                task_id=task_id,
+                parent_id=parent,
+                plan_row={
+                    "plan_id": plan_id,
+                    "version": 1,
+                    "payload": plan.model_dump(mode="json"),
+                },
+                suggest_run_id=None,
+                backends=_runner_backends(),
+                session_id=task_id,
+            )
+        assert len(sent) == 1
+        assert _await_statuses(engine, task_id, sent, "interrupted") == {sent[0]: "interrupted"}
+    finally:
+        release.set()
+        if task_id is not None:
+            _await_children_ended(engine, task_id)
+        _cleanup(engine, task_id)
+
+
+def test_a_child_abandoned_before_its_row_ends_interrupted_on_opening(engine: Engine) -> None:
+    """A11: the join abandoned the child before its row existed; the child
+    ends ``interrupted`` as soon as it opens the row and runs no step."""
+    task_id: uuid.UUID | None = None
+    child = uuid.uuid4()
+    try:
+        plan = _longlist_plan("Own")
+        task_id, scope_id, plan_id = _seed_longlist(engine, plan)
+        parent = _seed_walk(engine, task_id, scope_id, plan_id)
+        option_id = _seed_option(engine, task_id, "Own", "added_by_you")
+        targeted = uuid.uuid4()
+        with engine.begin() as conn:
+            conn.execute(
+                evidence_scope.insert().values(
+                    evidence_scope_id=targeted,
+                    task_id=task_id,
+                    intent=_design("Own").as_intent(),
+                    context={"capability": "options_scoping", "option_id": str(option_id)},
+                    created_at=now(),
+                    purpose="targeted",
+                    plan_id=plan_id,
+                )
+            )
+        with option_search._handles_lock:
+            option_search._abandoned.add(child)
+        outcome = run_plan(
+            engine,
+            task_id=task_id,
+            evidence_scope_id=targeted,
+            plan=option_search.unattended_plan(plan.model_dump(mode="json")),
+            plan_id=plan_id,
+            plan_version=1,
+            plan_row_id=plan_id,
+            backends=_runner_backends(),
+            io=NullIO(),
+            session_id=task_id,
+            capability_run_id=child,
+            parent_capability_run_id=parent,
+        )
+        assert outcome.steps == []
+        with engine.connect() as conn:
+            assert option_search.child_walks(conn, task_id=task_id, parent_id=parent) == {
+                child: "interrupted"
+            }
+        assert _terminal_events(engine, task_id, child) == ["run.interrupted"]
+    finally:
+        with option_search._handles_lock:
+            option_search._abandoned.discard(child)
+        _cleanup(engine, task_id)
+
+
+@pytest.mark.parametrize("parented", [True, False])
+def test_a_late_finish_never_overwrites_an_ended_option_search(
+    engine: Engine, parented: bool
+) -> None:
+    """A6: an option search already ended by the join (or its parent's end) —
+    a child or the verb add's parentless one — keeps that status, and its late
+    finish appends no second terminal event."""
+    task_id: uuid.UUID | None = None
+    try:
+        plan = _longlist_plan("Own")
+        task_id, scope_id, plan_id = _seed_longlist(engine, plan)
+        parent = _seed_walk(engine, task_id, scope_id, plan_id)
+        option_id = _seed_option(engine, task_id, "Own", "added_by_you")
+        child = _targeted_walk(
+            engine,
+            task_id,
+            plan_id,
+            option_id,
+            parent=parent if parented else None,
+            status="running",
+        )
+        assert option_search._end_child(
+            engine, task_id=task_id, child_id=child, status="failed"
+        )
+        runner_module._finish_run(
+            engine, [], [], status="succeeded", capability_run_id=child, task_id=task_id
+        )
+        with engine.connect() as conn:
+            status = conn.execute(
+                select(capability_run.c.status).where(capability_run.c.capability_run_id == child)
+            ).scalar_one()
+        assert status == "failed"
+        assert _terminal_events(engine, task_id, child) == ["run.finished"]
+    finally:
+        _cleanup(engine, task_id)

@@ -1764,8 +1764,20 @@
         "type": "object"
       },
       "DecisionOut": {
-        "description": "One entry in the paginated decision log.\n\nArgs:\n    sequence: The underlying event's `event_log` sequence.\n    occurred_at: When the decision was recorded.\n    kind: Decision kind.\n    summary: Human-readable summary of the decision.\n    decided_by: Who decided, when known.\n    detail: Optional structured detail.",
+        "description": "One entry in the paginated decision log.\n\nArgs:\n    sequence: The underlying event's `event_log` sequence.\n    occurred_at: When the decision was recorded.\n    kind: Decision kind.\n    summary: Human-readable summary of the decision.\n    decided_by: Who decided, when known.\n    detail: Optional structured detail.\n    capability_run_id: The walk the underlying event belongs to, when\n        the event carries a run (task 045) \u2014 lets the thread tell a\n        hidden child walk's lines from its parent's. Null otherwise.",
         "properties": {
+          "capability_run_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Capability Run Id"
+          },
           "decided_by": {
             "anyOf": [
               {
@@ -3629,18 +3641,24 @@
         "type": "object"
       },
       "OptionAddedOut": {
-        "description": "An option added by hand, and the option search it opened.\n\nArgs:\n    option: The new option's card.\n    opened_run: The option search (a walk with no parent) it opened.",
+        "description": "An option added by hand, and the option search it opened.\n\nArgs:\n    option: The new option's card.\n    opened_run: The option search (a walk with no parent) it opened, or\n        ``None`` while that search is still queued on the option-search\n        pool (task 045, A4).",
         "properties": {
           "opened_run": {
-            "$ref": "#/components/schemas/LatestRun"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LatestRun"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "option": {
             "$ref": "#/components/schemas/OptionOut"
           }
         },
         "required": [
-          "option",
-          "opened_run"
+          "option"
         ],
         "title": "OptionAddedOut",
         "type": "object"
@@ -3780,18 +3798,21 @@
       },
       "OptionExcludeIn": {
         "additionalProperties": false,
-        "description": "Exclude an option, with the user's reason.\n\nArgs:\n    reason: Why, in the user's words.",
+        "description": "Exclude an option, optionally with the user's reason.\n\nArgs:\n    reason: Why, in the user's words; blank or absent is recorded empty.",
         "properties": {
           "reason": {
-            "maxLength": 1000,
-            "minLength": 1,
-            "title": "Reason",
-            "type": "string"
+            "anyOf": [
+              {
+                "maxLength": 1000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
           }
         },
-        "required": [
-          "reason"
-        ],
         "title": "OptionExcludeIn",
         "type": "object"
       },
@@ -3822,6 +3843,13 @@
             "default": false,
             "title": "Abstract Only",
             "type": "boolean"
+          },
+          "also_found_as": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Also Found As",
+            "type": "array"
           },
           "ambition": {
             "anyOf": [
@@ -3910,6 +3938,17 @@
                 "type": "null"
               }
             ]
+          },
+          "from_section": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "From Section"
           },
           "guesses": {
             "items": {
@@ -4142,12 +4181,19 @@
         "type": "object"
       },
       "OptionSummaryOut": {
-        "description": "One option as the list view and the grid show it.\n\nArgs:\n    option_id: Stable option identity.\n    name: Option name.\n    description: One-sentence description.\n    outcomes_served: The plan's outcomes the option serves.\n    origin: Where it came from.\n    state: Included or excluded.\n    exclusion: Why it is excluded; `null` when included.\n    no_in_scope_evidence: Included, but none of its documents passes the\n        plan's evidence restriction.\n    restriction_text: The restriction none of its documents passes, when\n        `no_in_scope_evidence`.\n    primary_lever_type: The primary lever type; `null` when none fits or\n        the option is not typed yet.\n    lever_none_fits_reason: Why no lever type fits.\n    secondary_lever_types: The other lever types it also touches.\n    ambition: `do_minimum` \u00b7 `incremental` \u00b7 `structural`, as described,\n        not measured.\n    ambition_reason: The one-line justification.\n    taxonomy_version: The lever-type list version it was typed under.\n    design_version: The specified design's version.\n    document_count: Its documents (DOI-collapsed).\n    evaluated_count: Documents that evaluate it.\n    settings: The settings its documents name, most frequent first.\n    where_tried: Documents per where-tried group.\n    relations: Its relations to other options.\n    abstract_only: Every one of its documents was read from an abstract only.\n    is_entrant_with_no_documents: Suggested, drawn from the Evidence\n        search or added by the user, and no document has joined it.\n    search_pending: An option added since the build whose own option\n        search is still running or paused; its counts read zero until it ends.",
+        "description": "One option as the list view and the grid show it.\n\nArgs:\n    option_id: Stable option identity.\n    name: Option name.\n    description: One-sentence description.\n    outcomes_served: The plan's outcomes the option serves.\n    origin: Where it came from.\n    state: Included or excluded.\n    exclusion: Why it is excluded; `null` when included.\n    no_in_scope_evidence: Included, but none of its documents passes the\n        plan's evidence restriction.\n    restriction_text: The restriction none of its documents passes, when\n        `no_in_scope_evidence`.\n    primary_lever_type: The primary lever type; `null` when none fits or\n        the option is not typed yet.\n    lever_none_fits_reason: Why no lever type fits.\n    secondary_lever_types: The other lever types it also touches.\n    ambition: `do_minimum` \u00b7 `incremental` \u00b7 `structural`, as described,\n        not measured.\n    ambition_reason: The one-line justification.\n    taxonomy_version: The lever-type list version it was typed under.\n    design_version: The specified design's version.\n    document_count: Its documents (DOI-collapsed).\n    evaluated_count: Documents that evaluate it.\n    settings: The settings its documents name, most frequent first.\n    where_tried: Documents per where-tried group.\n    relations: Its relations to other options.\n    abstract_only: Every one of its documents was read from an abstract only.\n    is_entrant_with_no_documents: Suggested, drawn from the Evidence\n        search or added by the user, and no document has joined it.\n    search_pending: An option added since the build whose own option\n        search is still running or paused; its counts read zero until it ends.\n    from_section: The Evidence search report section a *from your\n        evidence search* option was drawn from; `null` for any other\n        origin, or when the section was not recorded (task 045, F3).\n    also_found_as: The names of the duplicates merged into this option\n        (their documents are its documents); empty when none.",
         "properties": {
           "abstract_only": {
             "default": false,
             "title": "Abstract Only",
             "type": "boolean"
+          },
+          "also_found_as": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Also Found As",
+            "type": "array"
           },
           "ambition": {
             "anyOf": [
@@ -4198,6 +4244,17 @@
                 "type": "null"
               }
             ]
+          },
+          "from_section": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "From Section"
           },
           "is_entrant_with_no_documents": {
             "default": false,
@@ -6797,6 +6854,19 @@
       "StageCompletedFrame": {
         "description": "A component reached its terminal (successful) outcome.",
         "properties": {
+          "capability_run_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Capability Run Id"
+          },
           "label": {
             "title": "Label",
             "type": "string"
@@ -6879,6 +6949,19 @@
       "StageFailedFrame": {
         "description": "A component failed or was skipped.",
         "properties": {
+          "capability_run_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Capability Run Id"
+          },
           "label": {
             "title": "Label",
             "type": "string"
@@ -6945,6 +7028,19 @@
           "blurb": {
             "title": "Blurb",
             "type": "string"
+          },
+          "capability_run_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Capability Run Id"
           },
           "label": {
             "title": "Label",
@@ -10747,7 +10843,7 @@
     },
     "/api/v1/tasks/{task_id}/options/{option_id}/exclude": {
       "post": {
-        "description": "Exclude an option with the user's reason; include again reverses it.",
+        "description": "Exclude an option, with the user's reason when given; include again reverses it.",
         "operationId": "post_exclude_api_v1_tasks__task_id__options__option_id__exclude_post",
         "parameters": [
           {
@@ -10775,11 +10871,18 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/OptionExcludeIn"
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/OptionExcludeIn"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Payload"
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "200": {
@@ -11057,7 +11160,7 @@
     },
     "/api/v1/tasks/{task_id}/runs": {
       "get": {
-        "description": "List a task's walks from newest to oldest (paginated \u2014 runs accumulate).",
+        "description": "List a task's walks from newest to oldest (paginated \u2014 runs accumulate).\n\n``parentless`` (task 045, A13) keeps only the walks with no parent that\nare not option searches \u2014 the baseline and longlist walks \u2014 so a reader\nlooking for the baseline never pages through option searches.",
         "operationId": "list_runs_api_v1_tasks__task_id__runs_get",
         "parameters": [
           {
@@ -11091,6 +11194,16 @@
               "minimum": 1,
               "title": "Page Size",
               "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "parentless",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Parentless",
+              "type": "boolean"
             }
           }
         ],

@@ -24,13 +24,13 @@ vi.mock("../../api/mutations", () => ({
 
 const TASK_ID = "11111111-1111-1111-1111-111111111111";
 
-function renderCard(optionId: string) {
+function renderCard(optionId: string, overrides: Record<string, unknown> = {}) {
   vi.mocked(queries.useTask).mockReturnValue(
     { data: { name: "NEET task" } } as unknown as ReturnType<typeof queries.useTask>,
   );
   vi.mocked(queries.useOption).mockReturnValue(
     {
-      data: mockLonglistOptionCards[optionId],
+      data: { ...mockLonglistOptionCards[optionId], ...overrides },
       isPending: false,
       isError: false,
     } as unknown as ReturnType<typeof queries.useOption>,
@@ -97,6 +97,36 @@ describe("OptionCard", () => {
     ).toBeInTheDocument();
   });
 
+  // F5: the in-scope record exists for every option once the plan restricts
+  // scope; the line is for the options with none in scope only.
+  it("hides the no-in-scope-evidence row for an option with in-scope evidence", () => {
+    renderCard(MOCK_OPTION_ID_NO_IN_SCOPE, { no_in_scope_evidence: false });
+    expect(screen.queryByText(/No in-scope evidence:/)).not.toBeInTheDocument();
+  });
+
+  // F3: the evidence-search origin names the report section it came from.
+  it("names the report section on a from-your-evidence-search option", () => {
+    renderCard(MOCK_OPTION_ID_NO_IN_SCOPE, {
+      origin: "from_evidence_search",
+      from_section: "What works for young people",
+      relations: [],
+    });
+    expect(
+      screen.getAllByText("From your evidence search · What works for young people.").length,
+    ).toBeGreaterThan(0);
+  });
+
+  // Owner ruling 2026-09-24: a duplicate is merged into the kept option.
+  it("names the duplicates merged into the option", () => {
+    renderCard(MOCK_OPTION_ID_NO_IN_SCOPE, { also_found_as: ["Guarantee scheme", "Job offer"] });
+    expect(screen.getByText("Also found as: Guarantee scheme, Job offer")).toBeInTheDocument();
+  });
+
+  it("says nothing about merges when there are none", () => {
+    renderCard(MOCK_OPTION_ID_NO_IN_SCOPE);
+    expect(screen.queryByText(/Also found as/)).not.toBeInTheDocument();
+  });
+
   it("shows the documents behind an option, including an inherited one", () => {
     renderCard(MOCK_OPTION_ID_EXCLUDED);
     expect(screen.getByText("National activation policy briefing")).toBeInTheDocument();
@@ -127,6 +157,6 @@ describe("OptionCard", () => {
     renderCard(MOCK_OPTION_ID_EXCLUDED);
     await user.click(screen.getByRole("button", { name: "Include again" }));
     expect(includeMutate).toHaveBeenCalledTimes(1);
-    expect(includeMutate).toHaveBeenCalledWith({ optionId: MOCK_OPTION_ID_EXCLUDED });
+    expect(includeMutate).toHaveBeenCalledWith({ optionId: MOCK_OPTION_ID_EXCLUDED }, expect.anything());
   });
 });

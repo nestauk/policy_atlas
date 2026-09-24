@@ -22,6 +22,7 @@ import { FILTER_CHIP_CLASS } from "../sourcesPresentation";
 import { LonglistGrid } from "./LonglistGrid";
 import {
   SCOPING_PASS_SENTENCE,
+  actionFailedNotice,
   byLeverThenName,
   capitalise,
   constraintLabel,
@@ -96,6 +97,9 @@ export function LonglistView({ taskId, longlist }: { taskId: string; longlist: L
   const [addText, setAddText] = useState("");
   const [excludingId, setExcludingId] = useState<string | null>(null);
   const [excludeReason, setExcludeReason] = useState("");
+  // Task 045 (F15): a refused add / exclude / include says so, next to the
+  // control it came from (`optionId` null: the add row).
+  const [notice, setNotice] = useState<{ optionId: string | null; text: string } | null>(null);
 
   const options = longlist.options ?? [];
   const optionsById = new Map(options.map((option) => [option.option_id, option]));
@@ -145,26 +149,45 @@ export function LonglistView({ taskId, longlist }: { taskId: string; longlist: L
     event.preventDefault();
     const text = addText.trim();
     if (text === "" || addOption.isPending || walkActive) return;
-    addOption.mutate({ text }, { onSuccess: () => setAddText("") });
+    setNotice(null);
+    addOption.mutate(
+      { text },
+      {
+        onSuccess: () => setAddText(""),
+        onError: (error) =>
+          setNotice({ optionId: null, text: actionFailedNotice(error, "The option couldn't be added. Try again.") }),
+      },
+    );
   };
 
+  // The reason is optional (owner, 2026-09-24): blank sends none.
   const submitExclude = (optionId: string) => {
     const reason = excludeReason.trim();
-    if (reason === "" || excludeOption.isPending) return;
+    if (excludeOption.isPending || walkActive) return;
+    setNotice(null);
     excludeOption.mutate(
-      { optionId, reason },
+      reason === "" ? { optionId } : { optionId, reason },
       {
         onSuccess: () => {
           setExcludingId(null);
           setExcludeReason("");
         },
+        onError: (error) =>
+          setNotice({ optionId, text: actionFailedNotice(error, "The option couldn't be excluded. Try again.") }),
       },
     );
   };
 
   const handleInclude = (optionId: string) => {
-    if (includeOption.isPending) return;
-    includeOption.mutate({ optionId });
+    if (includeOption.isPending || walkActive) return;
+    setNotice(null);
+    includeOption.mutate(
+      { optionId },
+      {
+        onError: (error) =>
+          setNotice({ optionId, text: actionFailedNotice(error, "The option couldn't be included again. Try again.") }),
+      },
+    );
   };
 
   const renderOptionRow = (option: OptionSummaryOut) => {
@@ -186,7 +209,7 @@ export function LonglistView({ taskId, longlist }: { taskId: string; longlist: L
               variant="secondary"
               size="sm"
               className="-my-2 flex-none"
-              disabled={includeOption.isPending}
+              disabled={includeOption.isPending || walkActive}
               onClick={() => handleInclude(option.option_id)}
             >
               Include again
@@ -197,6 +220,7 @@ export function LonglistView({ taskId, longlist }: { taskId: string; longlist: L
                 variant="secondary"
                 size="sm"
                 className="-my-2 flex-none"
+                disabled={walkActive}
                 onClick={() => {
                   setExcludeReason("");
                   setExcludingId(option.option_id);
@@ -246,7 +270,7 @@ export function LonglistView({ taskId, longlist }: { taskId: string; longlist: L
               type="submit"
               variant="secondary"
               size="sm"
-              disabled={excludeReason.trim() === "" || excludeOption.isPending}
+              disabled={excludeOption.isPending || walkActive}
             >
               Exclude
             </Button>
@@ -254,6 +278,11 @@ export function LonglistView({ taskId, longlist }: { taskId: string; longlist: L
               Cancel
             </Button>
           </form>
+        )}
+        {notice !== null && notice.optionId === option.option_id && (
+          <p role="alert" className="mt-2 text-body text-red">
+            {notice.text}
+          </p>
         )}
       </li>
     );
@@ -556,6 +585,11 @@ export function LonglistView({ taskId, longlist }: { taskId: string; longlist: L
             ? "Available once the current build finishes."
             : "It joins the longlist as added by you and gets its own evidence search."}
         </p>
+        {notice !== null && notice.optionId === null && (
+          <p role="alert" className="mt-2 text-body text-red">
+            {notice.text}
+          </p>
+        )}
       </form>
     </ReportPage>
   );

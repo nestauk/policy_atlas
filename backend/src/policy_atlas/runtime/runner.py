@@ -725,14 +725,16 @@ def resolved_skip_ids(
     keep the Evidence search's per-scope discipline.
 
     - ``classify``: the evidence type is inherited-resolved **and** nothing is
-      left for appraise to do — the tier is resolved (not a stale rubric), or
-      the type is outside the rubric's domain. Appraise works from this
-      scope's classification rows, so a document whose inherited appraisal is
-      under a stale rubric (or missing) is classified here and appraised
-      afresh rather than left without a tier.
-    - ``appraise``: the tier is inherited-resolved and not under a stale
-      rubric (the resolver withholds a stale score), so a stale-rubric
-      document is re-appraised.
+      left for appraise to do — the tier is inherited-resolved too (not a
+      stale rubric), or the type is outside the rubric's domain. Appraise
+      works from this scope's classification rows, so a document whose
+      inherited appraisal is under a stale rubric (or missing, or whose tier
+      is this task's own) is classified here and appraised afresh rather than
+      left without a tier.
+    - ``appraise``: the tier **and** the type are both inherited-resolved and
+      the tier is not under a stale rubric (the resolver withholds a stale
+      score), so a stale-rubric document is re-appraised, and an inherited
+      tier is never kept beside a type this task classified itself.
 
     Args:
         conn: Open connection.
@@ -755,13 +757,14 @@ def resolved_skip_ids(
     for tss_id, label in labels.items():
         if label.provenance != "inherited":
             continue
+        if not label.type_inherited or label.evidence_type is None:
+            continue
+        tier_resolved = label.tier_inherited and label.quality_score is not None
         if component == "appraise":
-            if label.quality_score is not None:
+            if tier_resolved:
                 skip.add(tss_id)
             continue
-        if label.evidence_type is None:
-            continue
-        if label.quality_score is not None or label.evidence_type not in DEFAULT_RUBRIC:
+        if tier_resolved or label.evidence_type not in DEFAULT_RUBRIC:
             skip.add(tss_id)
     return skip
 
@@ -878,6 +881,18 @@ def _run_plan_impl(
             session_id=session_id,
             parent_capability_run_id=parent_capability_run_id,
         )
+        # An option search its parent abandoned before this row existed ends
+        # here, ``interrupted``, instead of running a walk nobody reads (task
+        # 045, S2). The outcome is for the pool worker, which discards it.
+        if parent_capability_run_id is not None and option_search.end_if_abandoned(
+            engine, task_id=task_id, child_id=capability_run_id
+        ):
+            return RunPlanOutcome(
+                status="aborted",
+                steps=[],
+                flagged_events=[],
+                capability_run_id=capability_run_id,
+            )
         # The intent record's purpose picks the chain (task 045): a scoping
         # walk under a longlist or targeted record composes that chain.
         initial_chain = compose_plan(capability, plan, purpose=purpose)
@@ -1669,6 +1684,16 @@ def run_plan(
             flagged_events=flagged_events,
             capability_run_id=capability_run_id,
         )
+    except Exception:
+        # A longlist walk that raised after its fan-out leaves no child
+        # running behind it (task 045, S2); the raise itself is unchanged.
+        walk_id = park_context.get("capability_run_id")
+        if walk_id is not None:
+            try:
+                option_search.abandon_children(engine, task_id=task_id, parent_id=walk_id)
+            except Exception:
+                log.exception("runner.abandon_children_failed", capability_run_id=str(walk_id))
+        raise
 
 
 def _park_capability_run(
@@ -5623,6 +5648,24 @@ def _finish_run(
     task_id: uuid.UUID,
     follow_on: str | None = None,
 ) -> RunPlanOutcome:
+    with engine.connect() as conn:
+        purpose = conn.execute(
+            select(evidence_scope.c.purpose)
+            .select_from(
+                capability_run.join(
+                    evidence_scope,
+                    (evidence_scope.c.evidence_scope_id == capability_run.c.evidence_scope_id)
+                    & (evidence_scope.c.task_id == capability_run.c.task_id),
+                )
+            )
+            .where(capability_run.c.capability_run_id == capability_run_id)
+            .where(capability_run.c.task_id == task_id)
+        ).scalar_one_or_none()
+    if purpose == LONGLIST_PURPOSE:
+        # Every end of a longlist walk — the spine failed, an abort, or the
+        # walk's own finish — ends the option searches the join never waited
+        # for, before the walk itself (task 045, S2). After a join, a no-op.
+        option_search.abandon_children(engine, task_id=task_id, parent_id=capability_run_id)
     with engine.begin() as conn:
         ended_at = datetime.now(UTC)
         walk = conn.execute(
@@ -5640,15 +5683,23 @@ def _finish_run(
             )
             .where(capability_run.c.capability_run_id == capability_run_id)
             .where(capability_run.c.task_id == task_id)
+            # Locked: the join's ``_end_child`` updates only an active row, so
+            # the two can never both write a terminal status.
+            .with_for_update(of=capability_run)
         ).one_or_none()
         is_child = walk is not None and walk.parent_capability_run_id is not None
         # The verb *add*'s option search has no parent by design (task 045,
         # S11) but is still an option search: the thread the user is watching
         # is the longlist's, and its end must not close it either (P3).
         is_option_search = walk is not None and walk.purpose == TARGETED_PURPOSE
-        if is_child and walk is not None and walk.status == "interrupted":
-            # The parent's join cut this child off at its timeout and counted
-            # it failed (task 045, S2); its late finish keeps that record.
+        if (
+            (is_child or is_option_search)
+            and walk is not None
+            and walk.status not in ("running", "paused")
+        ):
+            # The parent's join (or its end) cut this option search off and
+            # counted it failed (task 045, S2); its late finish keeps that
+            # record and appends no second terminal event.
             log.info(
                 "runner.child_finished_after_interrupt",
                 capability_run_id=str(capability_run_id),

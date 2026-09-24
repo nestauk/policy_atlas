@@ -67,7 +67,7 @@ function sampleFrames(): SseFrame[] {
       sequence: 1,
     },
     {
-      type: "stage.started",
+      type: "stage.started", capability_run_id: null,
       stage: "acquire",
       label: "Acquiring sources",
       blurb: "Searching academic and grey-lit backends.",
@@ -75,7 +75,7 @@ function sampleFrames(): SseFrame[] {
       sequence: 2,
     },
     {
-      type: "stage.completed",
+      type: "stage.completed", capability_run_id: null,
       stage: "acquire",
       label: "Acquiring sources",
       summary: { found: 42 },
@@ -207,7 +207,7 @@ describe("reduceRunStreamFrame — new-run reset", () => {
       sequence: 1,
     });
     state = reduceRunStreamFrame(state, {
-      type: "stage.started",
+      type: "stage.started", capability_run_id: null,
       stage: "acquire",
       label: "Acquiring sources",
       blurb: "Searching.",
@@ -263,7 +263,7 @@ describe("reduceRunStreamFrame — new-run reset", () => {
         sequence: 1,
       },
       {
-        type: "stage.started",
+        type: "stage.started", capability_run_id: null,
         stage: "acquire",
         label: "Acquiring sources",
         blurb: "Searching.",
@@ -285,7 +285,7 @@ describe("reduceRunStreamFrame — new-run reset", () => {
         sequence: 4,
       },
       {
-        type: "stage.started",
+        type: "stage.started", capability_run_id: null,
         stage: "acquire",
         label: "Acquiring sources",
         blurb: "Searching again.",
@@ -576,7 +576,7 @@ describe("reduceRunStreamFrame — tick transience", () => {
 describe("reduceRunStreamFrame — stage lifecycle", () => {
   it("stage.completed updates the matching started entry in place rather than appending", () => {
     const started = reduceRunStreamFrame(createInitialRunStreamState(), {
-      type: "stage.started",
+      type: "stage.started", capability_run_id: null,
       stage: "screen",
       label: "Screening",
       blurb: "Applying inclusion criteria.",
@@ -584,7 +584,7 @@ describe("reduceRunStreamFrame — stage lifecycle", () => {
       sequence: 1,
     });
     const completed = reduceRunStreamFrame(started, {
-      type: "stage.completed",
+      type: "stage.completed", capability_run_id: null,
       stage: "screen",
       label: "Screening",
       summary: { included: 10 },
@@ -605,7 +605,7 @@ describe("reduceRunStreamFrame — stage lifecycle", () => {
 
   it("stage.failed with skipped=true records status skipped and carries the reason", () => {
     const started = reduceRunStreamFrame(createInitialRunStreamState(), {
-      type: "stage.started",
+      type: "stage.started", capability_run_id: null,
       stage: "group",
       label: "Grouping",
       blurb: "Clustering findings.",
@@ -613,7 +613,7 @@ describe("reduceRunStreamFrame — stage lifecycle", () => {
       sequence: 1,
     });
     const skipped = reduceRunStreamFrame(started, {
-      type: "stage.failed",
+      type: "stage.failed", capability_run_id: null,
       stage: "group",
       label: "Grouping",
       reason: "insufficient findings to cluster",
@@ -670,7 +670,7 @@ describe("reduceRunStreamFrame — child walks", () => {
       sequence: 1,
     });
     state = reduceRunStreamFrame(state, {
-      type: "stage.started",
+      type: "stage.started", capability_run_id: null,
       stage: "suggest",
       label: "Suggesting options",
       blurb: "",
@@ -690,5 +690,53 @@ describe("reduceRunStreamFrame — child walks", () => {
     expect(state.run?.status).toBe("running");
     expect(state.stages).toHaveLength(1);
     expect(state.runs[CHILD_ID]).toBe("succeeded");
+  });
+
+  // A3: a child's stage frames name the child; they stay off the walk's timeline.
+  it("drops a stage frame that names a different run than the tracked one", () => {
+    const CHILD_ID = "44444444-4444-4444-4444-444444444444";
+    let state = reduceRunStreamFrame(createInitialRunStreamState(), {
+      type: "run.status",
+      capability_run_id: TASK_RUN_ID,
+      status: "running",
+      occurred_at: "2026-09-22T10:00:00Z",
+      sequence: 1,
+    });
+    state = reduceRunStreamFrame(state, {
+      type: "stage.started",
+      capability_run_id: CHILD_ID,
+      stage: "acquire",
+      label: "Searching",
+      blurb: "",
+      occurred_at: "2026-09-22T10:00:01Z",
+      sequence: 2,
+    });
+    state = reduceRunStreamFrame(state, {
+      type: "stage.started",
+      capability_run_id: TASK_RUN_ID,
+      stage: "suggest",
+      label: "Suggesting options",
+      blurb: "",
+      occurred_at: "2026-09-22T10:00:02Z",
+      sequence: 3,
+    });
+    expect(state.stages.map((entry) => entry.stage)).toEqual(["suggest"]);
+    expect(state.lastSequence).toBe(3);
+  });
+
+  // A9: a child's late terminal frame, after the walk has finished, must not
+  // replace the walk as the tracked run.
+  it("keeps the finished walk when a child's run.finished arrives late", () => {
+    const CHILD_ID = "44444444-4444-4444-4444-444444444444";
+    const frames: SseFrame[] = [
+      { type: "run.status", capability_run_id: TASK_RUN_ID, status: "running", occurred_at: "2026-09-22T10:00:00Z", sequence: 1 },
+      { type: "run.status", capability_run_id: CHILD_ID, status: "running", occurred_at: "2026-09-22T10:00:01Z", sequence: 2 },
+      { type: "run.status", capability_run_id: TASK_RUN_ID, status: "succeeded", occurred_at: "2026-09-22T10:05:00Z", sequence: 3 },
+      { type: "run.status", capability_run_id: CHILD_ID, status: "interrupted", occurred_at: "2026-09-22T10:05:01Z", sequence: 4 },
+    ];
+    const state = frames.reduce(reduceRunStreamFrame, createInitialRunStreamState());
+    expect(state.run?.id).toBe(TASK_RUN_ID);
+    expect(state.run?.status).toBe("succeeded");
+    expect(state.runs[CHILD_ID]).toBe("interrupted");
   });
 });

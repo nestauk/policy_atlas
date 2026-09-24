@@ -13,7 +13,25 @@ Contract deliverable 7, D9, D10, D21, D22; ADR 0039 decisions 7 and 10.
 2. **Verdicts → state.** A ``breaks`` on a requirement or a screen excludes
    the option, naming the constraint (the first that broke, requirements
    before screens). *Distinct* never applies to an option with a ``part_of``
-   relation at either end: its verdict is forced to ``passes``. On a rebuild
+   relation at either end: its verdict is forced to ``passes``. A *distinct*
+   ``breaks`` applies only to a later duplicate: its reason must name (by
+   label or id) another option of the same batch that comes earlier in
+   :func:`_duplicate_order` and stays on the list; the earliest of a group is
+   kept (``passes``, :data:`DUPLICATE_KEPT_REASON`), and a ``breaks`` that
+   names no option of its batch is recorded ``cannot_check``
+   (:data:`DUPLICATE_UNNAMED_REASON`) — never an exclusion on a guess. A
+   later duplicate whose first break is *distinct* is **merged, not
+   excluded** (owner ruling 2026-09-24): ``merged_into_option_id`` names the
+   kept option (the final one of a chain, never a merged one), its
+   memberships move there (a unit the kept option already holds stays put),
+   the kept option's coverage is recomputed, and its own ``state`` and
+   ``exclusion`` are left as they were — it leaves the list through the
+   merge. Its judgement record still shows the *distinct* verdict. A
+   user-held duplicate is never merged away. Merged options are not judged
+   again on a rebuild. A
+   batch that stays malformed keeps every option's prior state and
+   ``exclusion``; a ``breaks`` with a blank reason makes a batch malformed.
+   On a rebuild
    every option is re-judged: one constrain excluded last time and now
    passing is included again. **User state always wins**: a row whose
    ``exclusion.by`` is ``"user"`` keeps its ``state`` and ``exclusion``
@@ -31,13 +49,16 @@ Contract deliverable 7, D9, D10, D21, D22; ADR 0039 decisions 7 and 10.
 4. **No in-scope evidence** (:mod:`.in_scope`), deterministic, no model call.
 5. **Writes.** ``longlist_result.judgements`` and ``.guesses`` of the walk's
    latest longlist row, keyed ``[option_id][design_version]`` (D10), its
-   ``counts`` updated; the option rows' ``state``, ``exclusion``,
-   ``no_in_scope_evidence`` and ``updated_at``. Every model call happens
+   ``counts`` (and, after a merge, the kept options' ``coverage``) updated;
+   the option rows' ``state``, ``exclusion``, ``no_in_scope_evidence``,
+   ``merged_into_option_id`` and ``updated_at``; a merged duplicate's
+   memberships. Every model call happens
    before the first write.
 """
 
 from __future__ import annotations
 
+import re
 import uuid
 from collections import Counter
 from collections.abc import Mapping, Sequence
@@ -46,10 +67,10 @@ from datetime import UTC, datetime
 from typing import Any, Protocol
 
 import structlog
-from sqlalchemy import select
+from sqlalchemy import exists, select
 from sqlalchemy.engine import Connection
 
-from policy_atlas.core.schema import longlist_result, option, option_relation
+from policy_atlas.core.schema import longlist_result, option, option_membership, option_relation
 from policy_atlas.core.usage import UsageAccumulator, UsageResult
 from policy_atlas.options_scoping.constrain.constrain_prompt import (
     CONSTRAIN_BATCH_SIZE,
@@ -58,6 +79,7 @@ from policy_atlas.options_scoping.constrain.constrain_prompt import (
     ConstrainResponse,
 )
 from policy_atlas.options_scoping.constrain.in_scope import in_scope_evidence
+from policy_atlas.options_scoping.longlist.longlist import membership_coverage
 from policy_atlas.options_scoping.longlist.longlist_backend import LONGLIST_JUDGMENT_MODEL
 from policy_atlas.options_scoping.suggest.suggest import walk_plan
 from policy_atlas.runtime.scoping_plan import TRANSFERABILITY_DEFAULT, ScopingPlan
@@ -70,6 +92,12 @@ BATCH_ATTEMPTS = 2
 JUDGEMENT_UNAVAILABLE = "judgement unavailable"
 #: The forced *distinct* reason for an option in a package relation (ruling 36).
 PACKAGE_DISTINCT_REASON = "packages and their parts are shown together"
+#: The *distinct* reason for the earliest option of a duplicate group (kept).
+DUPLICATE_KEPT_REASON = "the first of its duplicates on the longlist is kept"
+#: The *distinct* reason when a ``breaks`` names no other option of its batch.
+DUPLICATE_UNNAMED_REASON = "the option it duplicates could not be identified"
+#: Origins a duplicate group keeps first: the user's and Evidence search's own.
+_KEPT_FIRST_ORIGINS = frozenset({"added_by_you", "from_evidence_search"})
 #: The ``judgements`` key of the deterministic in-scope record. Not
 #: ``"in_scope"``: that id is the *within scope* default screen's.
 IN_SCOPE_EVIDENCE_KEY = "in_scope_evidence"
@@ -287,6 +315,8 @@ def _validated(
             preference_ids
         ):
             return None
+        if any(j.verdict == "breaks" and not j.reason.strip() for j in wire.judgements):
+            return None  # an exclusion must name why
         out[wire.option_id] = _Judged(
             verdicts={
                 j.constraint_id: _Verdict(j.verdict, j.reason.strip()) for j in wire.judgements
@@ -311,11 +341,16 @@ def _judge(
     preferences: list[dict[str, str]],
     options: list[dict[str, object]],
     usage: UsageAccumulator,
-) -> tuple[dict[str, _Judged], dict[str, int]]:
-    """Judge every option, batch by batch; a malformed batch degrades."""
+) -> tuple[dict[str, _Judged], dict[str, int], set[str]]:
+    """Judge every option, batch by batch; a malformed batch degrades.
+
+    Returns ``(judged, stats, failed)``; ``failed`` holds the option ids of
+    the batches that stayed malformed.
+    """
     requirement_ids = [r["id"] for r in requirements]
     preference_ids = [p["id"] for p in preferences]
     judged: dict[str, _Judged] = {}
+    failed: set[str] = set()
     stats = {"calls": 0, "retries": 0, "failed_batches": 0}
     for start in range(0, len(options), CONSTRAIN_BATCH_SIZE):
         batch = options[start : start + CONSTRAIN_BATCH_SIZE]
@@ -344,9 +379,64 @@ def _judge(
             log.warning("constrain.batch_malformed", attempt=attempt, options=len(batch))
         if result is None:
             stats["failed_batches"] += 1
+            failed.update(option_ids)
             result = {oid: _unavailable(requirement_ids) for oid in option_ids}
         judged.update(result)
-    return judged, stats
+    return judged, stats, failed
+
+
+def _duplicate_order(row: Any) -> tuple[bool, Any, str]:
+    """A duplicate group's keep order: the user's and Evidence search's
+    options first, then the earliest created, then the lowest id."""
+    return (row.origin not in _KEPT_FIRST_ORIGINS, row.created_at, str(row.option_id))
+
+
+def _named_options(reason: str, candidates: Sequence[tuple[str, str]]) -> set[str]:
+    """The candidate option ids a *distinct* reason names, by id or label.
+
+    Labels are matched case-insensitively on word boundaries, longest first;
+    a label found only inside a longer matched label ("Mentoring" inside
+    "Youth mentoring") does not count.
+    """
+    text = reason.casefold()
+    named = {oid for oid, _ in candidates if oid.casefold() in text}
+    by_label: dict[str, list[str]] = {}
+    for oid, label in candidates:
+        if label.strip():
+            by_label.setdefault(label.strip().casefold(), []).append(oid)
+    claimed: list[tuple[int, int]] = []
+    for label in sorted(by_label, key=lambda lab: (-len(lab), lab)):
+        for match in re.finditer(rf"(?<!\w){re.escape(label)}(?!\w)", text):
+            start, end = match.span()
+            if all(end <= s or start >= e for s, e in claimed):
+                claimed.append((start, end))
+                named.update(by_label[label])
+    return named
+
+
+def _move_memberships(
+    conn: Connection, *, task_id: uuid.UUID, duplicate: uuid.UUID, kept: uuid.UUID
+) -> None:
+    """Move a merged duplicate's memberships to the kept option.
+
+    A unit the kept option already holds stays on the duplicate
+    (``uq_om_option_unit``); the kept option shows it once.
+    """
+    om = option_membership
+    held = om.alias("held")
+    conn.execute(
+        om.update()
+        .where(om.c.task_id == task_id, om.c.option_id == duplicate)
+        .where(
+            ~exists().where(
+                held.c.task_id == task_id,
+                held.c.option_id == kept,
+                held.c.unit_kind == om.c.unit_kind,
+                held.c.unit_id == om.c.unit_id,
+            )
+        )
+        .values(option_id=kept)
+    )
 
 
 def constrain_scope(
@@ -368,7 +458,9 @@ def constrain_scope(
 
     Returns:
         ``{"options", "excluded", "no_in_scope", "cannot_check", "guesses"}``
-        — ``excluded`` counts every excluded option after this run (user
+        — ``options`` counts the options judged (a merged duplicate among
+        them; ``longlist_result.counts.merged`` counts those); ``excluded``
+        counts every excluded option on the list after this run (user
         exclusions included); ``cannot_check`` counts options with at least
         one ``cannot_check`` verdict; ``guesses`` counts the guesses written.
 
@@ -381,6 +473,7 @@ def constrain_scope(
         conn.execute(
             select(option)
             .where(option.c.task_id == task_id)
+            .where(option.c.merged_into_option_id.is_(None))  # merged: off the list
             .order_by(option.c.created_at, option.c.option_id)
         )
     )
@@ -399,7 +492,7 @@ def constrain_scope(
 
     # 1. Every model call, before any write.
     usage = UsageAccumulator()
-    judged, stats = _judge(
+    judged, stats, failed = _judge(
         backend,
         plan=_plan_data(plan),
         requirements=requirements,
@@ -415,57 +508,44 @@ def constrain_scope(
         ],
         usage=usage,
     )
-    # 2. The deterministic in-scope check (no model call).
-    in_scope = in_scope_evidence(
-        conn, task_id=task_id, plan=plan, option_ids=[row.option_id for row in rows]
-    )
+    # 2. Verdicts -> state or merge, earlier options first, so a duplicate's
+    # partner is settled before it. No write yet.
+    batch_of = {row.option_id: i // CONSTRAIN_BATCH_SIZE for i, row in enumerate(rows)}
+    ordered = sorted(rows, key=_duplicate_order)
+    rank = {row.option_id: i for i, row in enumerate(ordered)}
+    final_state: dict[uuid.UUID, str] = {}
+    merged_into: dict[uuid.UUID, uuid.UUID] = {}
+    decided: list[tuple[Any, dict[str, _Verdict], str, dict[str, Any]]] = []
 
-    # 3. Verdicts -> state, judgements and guesses.
-    now = datetime.now(UTC)
-    judgements: dict[str, dict[str, dict[str, Any]]] = {}
-    guesses: dict[str, dict[str, dict[str, Any]]] = {}
-    states: Counter[str] = Counter()
-    cannot_check = 0
-    guess_count = 0
-    no_in_scope = 0
-    for row in rows:
+    def kept_as(other: uuid.UUID) -> uuid.UUID | None:
+        """The option on the list that stands for ``other``, if any."""
+        if other in merged_into:
+            return merged_into[other]
+        return other if final_state.get(other) == "included" else None
+
+    for row in ordered:
         oid = str(row.option_id)
-        version = str(row.design_version)
-        entry = judged[oid]
-        verdicts = dict(entry.verdicts)
+        verdicts = dict(judged[oid].verdicts)
+        kept: uuid.UUID | None = None
         if row.option_id in relations:
             verdicts[_DISTINCT] = _Verdict("passes", PACKAGE_DISTINCT_REASON)
-        record: dict[str, Any] = {
-            cid: {
-                "verdict": verdicts[cid].verdict,
-                "reason": verdicts[cid].reason,
-                "constraint_text": texts[cid],
-            }
-            for cid in (r["id"] for r in requirements)
-        }
-        check = in_scope.get(row.option_id)
-        marked = bool(check and check["no_in_scope_evidence"])
-        if check is not None:
-            record[IN_SCOPE_EVIDENCE_KEY] = {
-                "restriction": check["restriction"],
-                "in_scope_documents": check["in_scope_documents"],
-                "documents": check["documents"],
-            }
-        judgements[oid] = {version: record}
-        if entry.guesses:
-            guesses[oid] = {
-                version: {
-                    cid: {"guess": guess, "leaning": leaning, "constraint_text": texts[cid]}
-                    for cid, (guess, leaning) in entry.guesses.items()
-                }
-            }
-            guess_count += len(entry.guesses)
-        if any(v.verdict == "cannot_check" for v in verdicts.values()):
-            cannot_check += 1
-        no_in_scope += int(marked)
-
-        values: dict[str, Any] = {"no_in_scope_evidence": marked, "updated_at": now}
-        if user_holds_state(row.exclusion):
+        elif verdicts[_DISTINCT].verdict == "breaks":
+            candidates = [
+                (str(other.option_id), other.name)
+                for other in rows
+                if batch_of[other.option_id] == batch_of[row.option_id]
+            ]
+            named = _named_options(verdicts[_DISTINCT].reason, candidates) - {oid}
+            partners = {kept_as(uuid.UUID(other)) for other in named} - {None}
+            kept = min(partners, key=lambda p: rank[p]) if partners else None
+            if not named:
+                verdicts[_DISTINCT] = _Verdict("cannot_check", DUPLICATE_UNNAMED_REASON)
+            elif kept is None:
+                verdicts[_DISTINCT] = _Verdict("passes", DUPLICATE_KEPT_REASON)
+        values: dict[str, Any] = {}
+        if user_holds_state(row.exclusion) or oid in failed:
+            # User state always wins (a user-held duplicate is never merged
+            # away); a failed batch keeps the prior state.
             state = row.state
         else:
             broken = next(
@@ -474,6 +554,11 @@ def constrain_scope(
             if broken is None:
                 state = "included"
                 values.update(state="included", exclusion=None)
+            elif broken["id"] == _DISTINCT and kept is not None:
+                # Merged, not excluded: its state stays as it was.
+                state = row.state
+                merged_into[row.option_id] = kept
+                values.update(merged_into_option_id=kept)
             else:
                 state = "excluded"
                 values.update(
@@ -484,16 +569,87 @@ def constrain_scope(
                         "by": "constrain",
                     },
                 )
-        states[state] += 1
+        final_state[row.option_id] = state
+        decided.append((row, verdicts, state, values))
+
+    # 3. The merges' writes: memberships to the kept option, its coverage
+    # recomputed; then the deterministic in-scope check (no model call) over
+    # the options on the list, reading the moved memberships.
+    for duplicate, kept_id in merged_into.items():
+        _move_memberships(conn, task_id=task_id, duplicate=duplicate, kept=kept_id)
+    coverage_updates = (
+        membership_coverage(
+            conn,
+            task_id=task_id,
+            scope_id=context.scope_id,
+            where=plan.where.text,
+            option_ids=sorted(set(merged_into.values()), key=str),
+        )
+        if merged_into
+        else {}
+    )
+    in_scope = in_scope_evidence(
+        conn,
+        task_id=task_id,
+        plan=plan,
+        option_ids=[row.option_id for row in rows if row.option_id not in merged_into],
+    )
+
+    # 4. Judgements, guesses and the option rows.
+    now = datetime.now(UTC)
+    judgements: dict[str, dict[str, dict[str, Any]]] = {}
+    guesses: dict[str, dict[str, dict[str, Any]]] = {}
+    states: Counter[str] = Counter()
+    cannot_check = 0
+    guess_count = 0
+    no_in_scope = 0
+    for row, verdicts, state, values in decided:
+        oid = str(row.option_id)
+        version = str(row.design_version)
+        entry = judged[oid]
+        record: dict[str, Any] = {
+            cid: {
+                "verdict": verdicts[cid].verdict,
+                "reason": verdicts[cid].reason,
+                "constraint_text": texts[cid],
+            }
+            for cid in (r["id"] for r in requirements)
+        }
+        if entry.guesses:
+            guesses[oid] = {
+                version: {
+                    cid: {"guess": guess, "leaning": leaning, "constraint_text": texts[cid]}
+                    for cid, (guess, leaning) in entry.guesses.items()
+                }
+            }
+            guess_count += len(entry.guesses)
+        if any(v.verdict == "cannot_check" for v in verdicts.values()):
+            cannot_check += 1
+        values["updated_at"] = now
+        if row.option_id not in merged_into:
+            check = in_scope.get(row.option_id)
+            marked = bool(check and check["no_in_scope_evidence"])
+            if check is not None:
+                record[IN_SCOPE_EVIDENCE_KEY] = {
+                    "restriction": check["restriction"],
+                    "in_scope_documents": check["in_scope_documents"],
+                    "documents": check["documents"],
+                }
+            no_in_scope += int(marked)
+            values["no_in_scope_evidence"] = marked
+            states[state] += 1
+        judgements[oid] = {version: record}
         conn.execute(
             option.update()
             .where(option.c.option_id == row.option_id, option.c.task_id == task_id)
             .values(**values)
         )
 
-    # 4. The walk's longlist row.
+    # 5. The walk's longlist row.
     counts = dict(result_row.counts) if isinstance(result_row.counts, Mapping) else {}
     counts.update(
+        options=len(rows) - len(merged_into),
+        merged=len(merged_into),
         included=states["included"],
         excluded=states["excluded"],
         no_in_scope_evidence=no_in_scope,
@@ -518,7 +674,13 @@ def constrain_scope(
             longlist_result.c.longlist_result_id == result_row.longlist_result_id,
             longlist_result.c.task_id == task_id,
         )
-        .values(judgements=judgements, guesses=guesses, counts=counts, provenance=provenance)
+        .values(
+            judgements=judgements,
+            guesses=guesses,
+            counts=counts,
+            provenance=provenance,
+            coverage={**coverage, **coverage_updates},
+        )
     )
     summary = {
         "options": len(rows),
@@ -527,5 +689,10 @@ def constrain_scope(
         "cannot_check": cannot_check,
         "guesses": guess_count,
     }
-    log.info("constrain.done", **summary, failed_batches=stats["failed_batches"])
+    log.info(
+        "constrain.done",
+        **summary,
+        merged=len(merged_into),
+        failed_batches=stats["failed_batches"],
+    )
     return summary

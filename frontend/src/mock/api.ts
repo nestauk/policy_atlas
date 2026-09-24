@@ -613,7 +613,16 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
   if (method === "GET" && path.endsWith(`/api/v1/tasks/${MOCK_TASK_ID}/runs`)) {
     // Newest first, as the API lists them: the longlist walks (task 045)
     // were all opened after the baseline walk.
-    return json(page([...mockLonglistWalks, ...(currentRun ? [currentRun] : [])]));
+    const walks = [...mockLonglistWalks, ...(currentRun ? [currentRun] : [])];
+    // `parentless` (A13): the task's own walks only, never an option search.
+    const parentless = url.searchParams.get("parentless") === "true";
+    return json(
+      page(
+        parentless
+          ? walks.filter((walk) => walk.parent_capability_run_id == null && walk.purpose !== "targeted")
+          : walks,
+      ),
+    );
   }
 
   if (method === "GET" && path.endsWith(`/api/v1/tasks/${MOCK_TASK_ID}/check-ins`)) {
@@ -1223,15 +1232,15 @@ function runStatus(status: "running" | "paused" | "succeeded" | "failed" | "abor
 }
 
 function stageStarted(stage: "acquire" | "screen" | "classify" | "appraise" | "characterise" | "synthesise", label: string, blurb: string, sequence: number): SseFrame {
-  return { type: "stage.started", stage, label, blurb, occurred_at: frameTime(), sequence };
+  return { type: "stage.started", capability_run_id: MOCK_RUN_ID, stage, label, blurb, occurred_at: frameTime(), sequence };
 }
 
 function stageCompleted(stage: "acquire" | "screen" | "classify" | "appraise" | "characterise" | "synthesise", label: string, summary: Record<string, number>, sequence: number): SseFrame {
-  return { type: "stage.completed", stage, label, summary, seconds: 4, occurred_at: frameTime(), sequence };
+  return { type: "stage.completed", capability_run_id: MOCK_RUN_ID, stage, label, summary, seconds: 4, occurred_at: frameTime(), sequence };
 }
 
 function stageFailed(stage: "synthesise", label: string, reason: string, sequence: number): SseFrame {
-  return { type: "stage.failed", stage, label, reason, skipped: false, occurred_at: frameTime(), sequence };
+  return { type: "stage.failed", capability_run_id: MOCK_RUN_ID, stage, label, reason, skipped: false, occurred_at: frameTime(), sequence };
 }
 
 function toSse(frame: SseFrame): string {
@@ -1398,9 +1407,9 @@ async function mockLonglistWalk(
     ...mockLonglistWalks,
   ];
   for (const entry of stages) {
-    emit({ type: "stage.started", stage: entry.stage, label: entry.label, blurb: entry.blurb, occurred_at: frameTime(), sequence: nextSequence() });
+    emit({ type: "stage.started", capability_run_id: walkId, stage: entry.stage, label: entry.label, blurb: entry.blurb, occurred_at: frameTime(), sequence: nextSequence() });
     await sleep(150);
-    emit({ type: "stage.completed", stage: entry.stage, label: entry.label, summary: entry.summary, seconds: 3, occurred_at: frameTime(), sequence: nextSequence() });
+    emit({ type: "stage.completed", capability_run_id: walkId, stage: entry.stage, label: entry.label, summary: entry.summary, seconds: 3, occurred_at: frameTime(), sequence: nextSequence() });
   }
   const endedAt = new Date().toISOString();
   mockLonglistWalks = mockLonglistWalks.map((walk) =>

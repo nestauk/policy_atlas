@@ -361,6 +361,9 @@ class DecisionOut(BaseModel):
         summary: Human-readable summary of the decision.
         decided_by: Who decided, when known.
         detail: Optional structured detail.
+        capability_run_id: The walk the underlying event belongs to, when
+            the event carries a run (task 045) — lets the thread tell a
+            hidden child walk's lines from its parent's. Null otherwise.
     """
 
     sequence: int
@@ -369,6 +372,7 @@ class DecisionOut(BaseModel):
     summary: str
     decided_by: DecidedBy | None = None
     detail: dict[str, Any] | None = None
+    capability_run_id: uuid.UUID | None = None
 
 
 class CitationOut(BaseModel):
@@ -860,6 +864,11 @@ class OptionSummaryOut(BaseModel):
             search or added by the user, and no document has joined it.
         search_pending: An option added since the build whose own option
             search is still running or paused; its counts read zero until it ends.
+        from_section: The Evidence search report section a *from your
+            evidence search* option was drawn from; `null` for any other
+            origin, or when the section was not recorded (task 045, F3).
+        also_found_as: The names of the duplicates merged into this option
+            (their documents are its documents); empty when none.
     """
 
     option_id: uuid.UUID
@@ -886,6 +895,8 @@ class OptionSummaryOut(BaseModel):
     abstract_only: bool = False
     is_entrant_with_no_documents: bool = False
     search_pending: bool = False
+    from_section: str | None = None
+    also_found_as: list[str] = Field(default_factory=list)
 
 
 class AmbitionBandOut(BaseModel):
@@ -1114,15 +1125,15 @@ class OptionAddIn(BaseModel):
 
 
 class OptionExcludeIn(BaseModel):
-    """Exclude an option, with the user's reason.
+    """Exclude an option, optionally with the user's reason.
 
     Args:
-        reason: Why, in the user's words.
+        reason: Why, in the user's words; blank or absent is recorded empty.
     """
 
     model_config = ConfigDict(extra="forbid")
 
-    reason: str = Field(min_length=1, max_length=OPTION_TEXT_MAX)
+    reason: str | None = Field(default=None, max_length=OPTION_TEXT_MAX)
 
 
 class OptionIncludeIn(BaseModel):
@@ -1142,8 +1153,10 @@ class OptionAddedOut(BaseModel):
 
     Args:
         option: The new option's card.
-        opened_run: The option search (a walk with no parent) it opened.
+        opened_run: The option search (a walk with no parent) it opened, or
+            ``None`` while that search is still queued on the option-search
+            pool (task 045, A4).
     """
 
     option: OptionOut
-    opened_run: LatestRun
+    opened_run: LatestRun | None = None

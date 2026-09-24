@@ -27,6 +27,7 @@ from policy_atlas.api.deps import (
 from policy_atlas.api.routers._access import accessible_task
 from policy_atlas.api.routers._common import (
     ACTIVE_WALK_STATUSES,
+    executor_walk,
     parentless_walk,
     run_artefact_id_column,
     run_out,
@@ -51,6 +52,15 @@ router = APIRouter(
 
 _dispatch_lock = threading.Lock()
 _dispatching_tasks: set[uuid.UUID] = set()
+#: The reservations an *add*'s option search holds (task 045, A4): they fence
+#: their task like any reservation but occupy no executor worker (the search
+#: runs on the option-search pool), so capacity leaves them out (A12).
+_search_reservations: set[uuid.UUID] = set()
+
+
+def executor_reservations() -> int:
+    """The reservations that will occupy an executor worker. Call under ``_dispatch_lock``."""
+    return len(_dispatching_tasks - _search_reservations)
 
 
 def dispatch_reserved(task_id: uuid.UUID) -> bool:
@@ -270,9 +280,10 @@ def create_run(
                 conn, task_id=task_id, user_id=user.user_id, write=True, for_update=True
             )
             # Parentless walks only (task 045, S15): a longlist walk's option
-            # searches never fence a user action — their parent does — and
-            # they never count against the executor, whose workers they do
-            # not occupy (they run on the option-search pool).
+            # searches never fence a user action — their parent does. No
+            # option search counts against the executor, whose workers they
+            # do not occupy (they run on the option-search pool) — not even
+            # an *add*'s parentless one, which still fences its task (A12).
             active = conn.execute(
                 select(capability_run.c.capability_run_id)
                 .where(capability_run.c.task_id == task_id)
@@ -286,8 +297,9 @@ def create_run(
                 select(capability_run.c.capability_run_id)
                 .where(capability_run.c.status == "running")
                 .where(parentless_walk())
+                .where(executor_walk())
             ).all()
-            if len(running) + len(_dispatching_tasks) >= settings.run_executor_max:
+            if len(running) + executor_reservations() >= settings.run_executor_max:
                 raise ApiConflict("capacity", "the walk executor is at capacity")
             plan_row = conn.execute(
                 select(task_plan)
@@ -348,18 +360,25 @@ def list_runs(
     engine: Annotated[Engine, Depends(get_engine)],
     page: Annotated[int, Query(ge=1)] = 1,
     page_size: Annotated[int, Query(ge=1, le=PAGE_SIZE_MAX)] = PAGE_SIZE_DEFAULT,
+    parentless: bool = False,
 ) -> Page[RunOut]:
-    """List a task's walks from newest to oldest (paginated — runs accumulate)."""
+    """List a task's walks from newest to oldest (paginated — runs accumulate).
+
+    ``parentless`` (task 045, A13) keeps only the walks with no parent that
+    are not option searches — the baseline and longlist walks — so a reader
+    looking for the baseline never pages through option searches.
+    """
+    where = [capability_run.c.task_id == task_id]
+    if parentless:
+        where += [parentless_walk(), executor_walk()]
     with engine.connect() as conn:
         accessible_task(conn, task_id=task_id, user_id=user.user_id, write=False)
         total = conn.execute(
-            select(func.count())
-            .select_from(capability_run)
-            .where(capability_run.c.task_id == task_id)
+            select(func.count()).select_from(capability_run).where(*where)
         ).scalar_one()
         rows = conn.execute(
             select(capability_run, run_artefact_id_column(), run_purpose_column())
-            .where(capability_run.c.task_id == task_id)
+            .where(*where)
             .order_by(capability_run.c.started_at.desc(), capability_run.c.capability_run_id.desc())
             .offset((page - 1) * page_size)
             .limit(page_size)

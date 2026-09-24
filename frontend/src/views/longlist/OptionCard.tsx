@@ -5,6 +5,7 @@ import { useExcludeOption, useIncludeOption } from "../../api/mutations";
 import { useOption, useTask } from "../../api/queries";
 import { errorCode } from "../../lib/errors";
 import { scrub } from "../../lib/scrub";
+import { isRunActive } from "../scopingActivity";
 import { useDocumentTitle } from "../../lib/title";
 import { Button } from "../../ui/brand/Button";
 import { Card } from "../../ui/brand/Card";
@@ -19,6 +20,7 @@ import { REPORT_TITLE_CLASS, ReportKindRow, ReportPage, SnapshotCells } from "..
 import {
   SCOPING_PASS_SENTENCE,
   abstractOnlySentence,
+  actionFailedNotice,
   ambitionLine,
   capitalise,
   checksSummary,
@@ -89,6 +91,9 @@ export function OptionCard() {
   const includeOption = useIncludeOption(taskId);
   const [excluding, setExcluding] = useState(false);
   const [reason, setReason] = useState("");
+  // Task 045 (F15): a refused exclude / include says so under the header.
+  const [notice, setNotice] = useState<string | null>(null);
+  const walkActive = isRunActive(task.data);
 
   useDocumentTitle(task.data?.name, option.data?.name ?? "Option");
 
@@ -155,20 +160,32 @@ export function OptionCard() {
   const whereLine = whereTriedSentence(item.where_tried, item.where_label);
   const checksLine = checksSummary(judgements.map((judgement) => judgement.verdict));
   const originSentence = `${capitalise(
-    [originLabel(item.origin, item.document_count), ...(item.relations ?? []).map(relationLabel)].join(" · "),
+    [originLabel(item.origin, item.document_count, item.from_section), ...(item.relations ?? []).map(relationLabel)].join(" · "),
   )}.`;
 
+  // The reason is optional (owner, 2026-09-24): blank sends none.
   const submitExclude = () => {
     const trimmed = reason.trim();
-    if (trimmed === "" || excludeOption.isPending) return;
+    if (excludeOption.isPending || walkActive) return;
+    setNotice(null);
     excludeOption.mutate(
-      { optionId, reason: trimmed },
+      trimmed === "" ? { optionId } : { optionId, reason: trimmed },
       {
         onSuccess: () => {
           setExcluding(false);
           setReason("");
         },
+        onError: (error) => setNotice(actionFailedNotice(error, "The option couldn't be excluded. Try again.")),
       },
+    );
+  };
+
+  const includeAgain = () => {
+    if (includeOption.isPending || walkActive) return;
+    setNotice(null);
+    includeOption.mutate(
+      { optionId },
+      { onError: (error) => setNotice(actionFailedNotice(error, "The option couldn't be included again. Try again.")) },
     );
   };
 
@@ -189,14 +206,14 @@ export function OptionCard() {
               <Button
                 variant="secondary"
                 size="sm"
-                disabled={includeOption.isPending}
-                onClick={() => includeOption.mutate({ optionId })}
+                disabled={includeOption.isPending || walkActive}
+                onClick={includeAgain}
               >
                 Include again
               </Button>
             ) : (
               !excluding && (
-                <Button variant="secondary" size="sm" onClick={() => setExcluding(true)}>
+                <Button variant="secondary" size="sm" disabled={walkActive} onClick={() => setExcluding(true)}>
                   Exclude
                 </Button>
               )
@@ -205,6 +222,10 @@ export function OptionCard() {
         </ReportKindRow>
         <h1 className={cn(REPORT_TITLE_CLASS, excluded && "text-grey")}>{scrub(item.name)}</h1>
         <p className={`mt-3 max-w-prose-measure ${REPORT_BODY_CLASS}`}>{scrub(item.description)}</p>
+        {/* Duplicates merged into this option: their documents are its documents. */}
+        {(item.also_found_as ?? []).length > 0 && (
+          <p className="mt-2 text-meta text-grey">Also found as: {scrub((item.also_found_as ?? []).join(", "))}</p>
+        )}
 
         {excluding && (
           <form
@@ -222,13 +243,19 @@ export function OptionCard() {
               placeholder="Why exclude this option?"
               className="min-w-0 flex-1 border border-line-2 bg-paper px-3 py-1.5 text-body text-ink placeholder:text-grey/80 focus-visible:outline-2 focus-visible:outline-blue"
             />
-            <Button type="submit" variant="secondary" size="sm" disabled={reason.trim() === "" || excludeOption.isPending}>
+            <Button type="submit" variant="secondary" size="sm" disabled={excludeOption.isPending || walkActive}>
               Exclude
             </Button>
             <Button variant="ghost" size="sm" onClick={() => setExcluding(false)}>
               Cancel
             </Button>
           </form>
+        )}
+
+        {notice !== null && (
+          <p role="alert" className="mt-3 text-body text-red">
+            {notice}
+          </p>
         )}
 
         <SnapshotCells
@@ -331,7 +358,7 @@ export function OptionCard() {
               <span className="text-grey">{item.transferability}.</span>
             </li>
           )}
-          {item.in_scope != null && (
+          {item.no_in_scope_evidence && item.in_scope != null && (
             <li>
               No in-scope evidence: none of the {item.in_scope.documents} documents pass{" "}
               {scrub(item.in_scope.restriction)}.
@@ -340,8 +367,8 @@ export function OptionCard() {
         </ul>
       </CardSection>
 
-      <CardSection id="origin" summary={originSentence}>
-        <p>{originSentence}</p>
+      <CardSection id="origin" summary={scrub(originSentence)}>
+        <p>{scrub(originSentence)}</p>
       </CardSection>
     </ReportPage>
   );

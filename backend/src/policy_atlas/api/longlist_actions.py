@@ -26,6 +26,7 @@ child walk never blocks (ADR 0039 decision 5).
 from __future__ import annotations
 
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
@@ -47,6 +48,7 @@ from policy_atlas.api.routers.runs import (
     _await_new_run,
     _dispatch_lock,
     _dispatching_tasks,
+    _search_reservations,
 )
 from policy_atlas.core import events
 from policy_atlas.core.schema import capability_run, option, task_plan
@@ -57,7 +59,7 @@ from policy_atlas.runtime.capability_registry import (
     capability_of_task,
     validate_plan,
 )
-from policy_atlas.runtime.option_search import run_option_search
+from policy_atlas.runtime.option_search import _futures, _handles_lock, run_option_search
 from policy_atlas.runtime.runner import RunnerBackends
 from policy_atlas.runtime.scoping_plan import ScopingPlan
 
@@ -144,6 +146,8 @@ def _locked_option(conn: Connection, *, task_id: uuid.UUID, option_id: uuid.UUID
     row = conn.execute(
         select(option)
         .where(option.c.task_id == task_id, option.c.option_id == option_id)
+        # A merged duplicate has left the longlist: no verb reaches it (045 review P1).
+        .where(option.c.merged_into_option_id.is_(None))
         .with_for_update()
     ).one_or_none()
     if row is None:
@@ -192,7 +196,6 @@ def exclude_option(
     option_id: uuid.UUID,
     reason: str | None,
     actor: str,
-    require_reason: bool = True,
 ) -> None:
     """Exclude an option with the user's reason, and log it as the user's turn.
 
@@ -206,21 +209,16 @@ def exclude_option(
         option_id: The option.
         reason: Why, in the user's words.
         actor: The user (token subject) the History event names.
-        require_reason: ``False`` for the Task Agent's verb *exclude*, whose
-            proposal the user confirmed with "Reason: none given" showing —
-            the reason is then recorded empty (the shape *include again*
-            writes), never invented. The button always requires one.
 
     Raises:
         LonglistActionRefused: ``not_scoping`` or ``run_active``.
         OptionNotFound: If the task holds no such option.
-        ValueError: If the reason is blank and one is required.
     """
     admit_longlist_action(conn, task_id=task_id)
     row = _locked_option(conn, task_id=task_id, option_id=option_id)
+    # A reason is optional on the button and the verb alike (owner, 2026-09-24):
+    # a blank one is recorded empty, never invented.
     text = _clean_reason(reason)
-    if text is None and require_reason:
-        raise ValueError("an exclusion needs a reason")
     conn.execute(
         option.update()
         .where(option.c.task_id == task_id, option.c.option_id == option_id)
@@ -358,10 +356,36 @@ class OptionAdded:
     Args:
         option_id: The new option (``origin = "added_by_you"``).
         capability_run_id: Its option search: a child walk with no parent.
+        run_open: Whether the search's walk row existed when the call
+            returned; ``False`` while the search is still queued on the
+            option-search pool (A4).
     """
 
     option_id: uuid.UUID
     capability_run_id: uuid.UUID
+    run_open: bool = True
+
+
+def _release_search_reservation(task_id: uuid.UUID) -> None:
+    with _dispatch_lock:
+        _dispatching_tasks.discard(task_id)
+        _search_reservations.discard(task_id)
+
+
+def _release_when_search_settles(task_id: uuid.UUID, child_id: uuid.UUID) -> None:
+    """Hold an *add*'s reservation until its queued search has run (A4).
+
+    The search's walk row is written only when the option-search pool starts
+    it; until then the reservation is the task's fence. It is given back when
+    the search's future settles (the row then exists, or the search ended
+    without one) — in process memory, so a restart cannot strand it.
+    """
+    with _handles_lock:
+        future = _futures.get(child_id)
+    if future is None:
+        _release_search_reservation(task_id)
+        return
+    future.add_done_callback(lambda _done: _release_search_reservation(task_id))
 
 
 def add_option(
@@ -372,6 +396,7 @@ def add_option(
     design: OptionDesign,
     backends: RunnerBackends,
     user_id: str,
+    in_commit: Callable[[Connection, uuid.UUID], None] | None = None,
 ) -> OptionAdded:
     """Mint an option as *added by you* and open its option search (no parent).
 
@@ -386,6 +411,11 @@ def add_option(
     assigned against the existing options by the next build's seeded
     clustering.
 
+    Once the option has committed, the call does not fail for a slow pool: if
+    the walk's row has not appeared within the wait, it returns the option
+    with ``run_open = False`` and keeps the reservation until the search
+    settles (A4).
+
     Args:
         engine: Database engine.
         task_id: The options-scoping task.
@@ -394,6 +424,9 @@ def add_option(
         backends: The runner backend bundle the option search runs with.
         user_id: The user (token subject): the History event's actor and the
             trace attribution.
+        in_commit: Called with the transaction and the new option's id just
+            before the option commits — the chat verb consumes its pending
+            action there, so a retried turn cannot mint a second option (A4).
 
     Returns:
         The option and its option search.
@@ -438,7 +471,10 @@ def add_option(
                 reason=None,
                 extra={"words": words, "design_version": design.version},
             )
+            if in_commit is not None:
+                in_commit(conn, option_id)
             _dispatching_tasks.add(task_id)
+            _search_reservations.add(task_id)
         try:
             child_id = run_option_search(
                 engine,
@@ -452,18 +488,26 @@ def add_option(
             )
         except BaseException:
             _dispatching_tasks.discard(task_id)
+            _search_reservations.discard(task_id)
             log.exception("option.add_search_failed", task_id=str(task_id))
             raise
     try:
         _await_new_run(engine, task_id=task_id, existing_ids=set(), capability_run_id=child_id)
-    finally:
+    except RuntimeError:
+        # The option has committed: answer with it, its search still queued.
+        log.warning(
+            "option.add_search_queued", task_id=str(task_id), capability_run_id=str(child_id)
+        )
+        _release_when_search_settles(task_id, child_id)
+        run_open = False
+    else:
         # Once the walk's row exists the database's `running` row is the fence.
-        with _dispatch_lock:
-            _dispatching_tasks.discard(task_id)
+        _release_search_reservation(task_id)
+        run_open = True
     log.info(
         "option.added",
         task_id=str(task_id),
         option_id=str(option_id),
         capability_run_id=str(child_id),
     )
-    return OptionAdded(option_id=option_id, capability_run_id=child_id)
+    return OptionAdded(option_id=option_id, capability_run_id=child_id, run_open=run_open)

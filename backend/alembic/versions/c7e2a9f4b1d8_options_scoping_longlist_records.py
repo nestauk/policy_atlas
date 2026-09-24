@@ -6,7 +6,10 @@ relaxed column and the recreated view: no existing row changes value.
 Upgrade
     ``option``                      the task-scoped option entity (ruling 44),
                                     with ``uq_option_id_task`` as the
-                                    composite-FK target for the three below.
+                                    composite-FK target for the three below;
+                                    ``merged_into_option_id`` a nullable
+                                    composite self-FK (a merged duplicate's
+                                    kept option), never the row itself.
     ``option_membership``           one row per unit assigned to an option.
     ``option_relation``             ``part_of`` (``variant_of`` reserved).
     ``longlist_result``             the run-keyed roll-up (the characterise
@@ -35,7 +38,7 @@ Downgrade — the refusal (the 044 A5 pattern, widened)
     walk whose option rows, profile records and parent link are gone. So the
     downgrade **refuses** while any ``capability_run`` row's intent record has
     purpose ``longlist`` or ``targeted``, and names the operator script
-    (``scripts/ops_remove_scoping_tasks.py --apply``). It also refuses while
+    (``scripts/ops_remove_scoping_tasks.py --task-id <id> --apply``). It also refuses while
     an ``extraction_result`` row has a NULL ``selection_run_id``, because
     ``NOT NULL`` cannot be restored over it. Both checks run before any DDL.
 
@@ -99,14 +102,14 @@ _WALK_REFUSAL = (
     "refusing to downgrade c7e2a9f4b1d8: {runs} capability_run row(s) belong to "
     "a longlist or targeted intent record. Dropping the option, profile and "
     "child-walk records would strand them. Remove the options-scoping tasks "
-    "first with 'python scripts/ops_remove_scoping_tasks.py --apply' (it lists "
+    "first with 'python scripts/ops_remove_scoping_tasks.py --task-id <id> --apply' (it lists "
     "what it would delete without the flag), then run the downgrade again."
 )
 _NULL_SELECTION_REFUSAL = (
     "refusing to downgrade c7e2a9f4b1d8: {rows} extraction_result row(s) have "
     "no selection_run_id (the selection-free path), so NOT NULL cannot be "
     "restored. Remove the options-scoping tasks first with "
-    "'python scripts/ops_remove_scoping_tasks.py --apply', then run the "
+    "'python scripts/ops_remove_scoping_tasks.py --task-id <id> --apply', then run the "
     "downgrade again."
 )
 
@@ -158,6 +161,21 @@ def upgrade() -> None:
         ),
     )
     op.create_index("ix_option_task", "option", ["task_id"])
+    # The kept option a duplicate was folded into (step-7 owner ruling
+    # 2026-09-24: duplicates are merged, not excluded). Added after the table
+    # so the self-FK can target ``uq_option_id_task``.
+    op.add_column("option", sa.Column("merged_into_option_id", _UUID, nullable=True))
+    op.create_foreign_key(
+        "fk_option_merged_into_task",
+        "option",
+        "option",
+        ["merged_into_option_id", "task_id"],
+        ["option_id", "task_id"],
+        match="SIMPLE",
+    )
+    op.create_check_constraint(
+        "ck_option_merged_not_self", "option", "merged_into_option_id <> option_id"
+    )
 
     op.create_table(
         "option_membership",
@@ -373,5 +391,8 @@ def downgrade() -> None:
     op.drop_table("option_relation")
     op.drop_index("ix_om_task", table_name="option_membership")
     op.drop_table("option_membership")
+    op.drop_constraint("ck_option_merged_not_self", "option", type_="check")
+    op.drop_constraint("fk_option_merged_into_task", "option", type_="foreignkey")
+    op.drop_column("option", "merged_into_option_id")
     op.drop_index("ix_option_task", table_name="option")
     op.drop_table("option")

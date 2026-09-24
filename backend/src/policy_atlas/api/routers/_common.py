@@ -54,6 +54,24 @@ def parentless_walk() -> ColumnElement[bool]:
     return capability_run.c.parent_capability_run_id.is_(None)
 
 
+def executor_walk() -> ColumnElement[bool]:
+    """Return the predicate "this walk runs on the walk executor" (task 045, A12).
+
+    An option search (a walk under a ``targeted`` intent record) runs on the
+    option-search pool, never on an executor worker — including the one the
+    chat verb *add* starts with no parent — so the capacity counts leave it
+    out. The per-task active fence still counts a parentless one.
+
+    Returns:
+        A clause over ``capability_run`` for a ``.where()``.
+    """
+    return ~exists().where(
+        evidence_scope.c.evidence_scope_id == capability_run.c.evidence_scope_id,
+        evidence_scope.c.task_id == capability_run.c.task_id,
+        evidence_scope.c.purpose == "targeted",
+    )
+
+
 def _latest_run_row(conn: Connection, row: RowMapping | dict[str, Any]) -> RowMapping | None:
     """Return the walk ``TaskOut.latest_run`` reports.
 

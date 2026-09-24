@@ -1577,6 +1577,9 @@ option = Table(
     Column("ambition_reason", Text, nullable=True),
     # The component run that minted the row; NULL for an option added by hand.
     Column("created_by_run_id", UUID(as_uuid=True), nullable=True),
+    # The kept option a duplicate was folded into (constrain's *distinct*
+    # merge): its documents moved there and it leaves the list. NULL otherwise.
+    Column("merged_into_option_id", UUID(as_uuid=True), nullable=True),
     Column("created_at", DateTime(timezone=True), nullable=False),
     Column("updated_at", DateTime(timezone=True), nullable=False),
     ForeignKeyConstraint(
@@ -1585,6 +1588,13 @@ option = Table(
         name="fk_option_run_task",
         match="SIMPLE",
     ),
+    ForeignKeyConstraint(
+        ["merged_into_option_id", "task_id"],
+        ["option.option_id", "option.task_id"],
+        name="fk_option_merged_into_task",
+        match="SIMPLE",
+    ),
+    CheckConstraint("merged_into_option_id <> option_id", name="ck_option_merged_not_self"),
     # Composite-FK target for membership, relation and ``task_link.option_id``.
     UniqueConstraint("option_id", "task_id", name="uq_option_id_task"),
     CheckConstraint(f"origin IN ({_OPTION_ORIGINS_SQL})", name="ck_option_origin"),
