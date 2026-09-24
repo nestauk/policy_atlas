@@ -23,8 +23,8 @@ from policy_atlas.core.schema import (
     artefact,
     chat_turn,
     conversation,
-    planning_transcript,
     task,
+    task_agent_transcript,
 )
 from tests.conftest import _alembic_cfg
 from tests.core.legacy_catalog import legacy_table
@@ -311,8 +311,8 @@ def test_029_backfill_follows_the_approved_truth_table(
             assert no_run_conversation[0]["status"] == "active"
             assert set(
                 conn.execute(
-                    select(planning_transcript.c.id).where(
-                        planning_transcript.c.conversation_id == no_run_conversation[0]["id"]
+                    select(task_agent_transcript.c.id).where(
+                        task_agent_transcript.c.conversation_id == no_run_conversation[0]["id"]
                     )
                 ).scalars()
             ) == set(no_run_turns)
@@ -329,15 +329,15 @@ def test_029_backfill_follows_the_approved_truth_table(
             assert mid_replan_conversations[0]["closed_at"] == mid_replan_ended_at
             assert set(
                 conn.execute(
-                    select(planning_transcript.c.id).where(
-                        planning_transcript.c.conversation_id == mid_replan_conversations[0]["id"]
+                    select(task_agent_transcript.c.id).where(
+                        task_agent_transcript.c.conversation_id == mid_replan_conversations[0]["id"]
                     )
                 ).scalars()
             ) == {pre_run_turn}
             assert set(
                 conn.execute(
-                    select(planning_transcript.c.id).where(
-                        planning_transcript.c.conversation_id == mid_replan_conversations[1]["id"]
+                    select(task_agent_transcript.c.id).where(
+                        task_agent_transcript.c.conversation_id == mid_replan_conversations[1]["id"]
                     )
                 ).scalars()
             ) == set(post_run_turns)
@@ -348,8 +348,8 @@ def test_029_backfill_follows_the_approved_truth_table(
             assert no_pre_run_split_conversations[0]["status"] == "active"
             assert set(
                 conn.execute(
-                    select(planning_transcript.c.id).where(
-                        planning_transcript.c.conversation_id
+                    select(task_agent_transcript.c.id).where(
+                        task_agent_transcript.c.conversation_id
                         == no_pre_run_split_conversations[0]["id"]
                     )
                 ).scalars()
@@ -411,8 +411,9 @@ def test_029_migration_roundtrip_preserves_legacy_rows_and_enforces_new_invarian
         with scratch.begin() as conn:
             inspector = inspect(conn)
             assert {"conversation", "chat_turn"} <= set(inspector.get_table_names())
+            # 044 renamed the table; at head it is `task_agent_transcript`.
             assert {"conversation_id"} <= {
-                column["name"] for column in inspector.get_columns("planning_transcript")
+                column["name"] for column in inspector.get_columns("task_agent_transcript")
             }
             assert {"conversation_id"} <= {
                 column["name"] for column in inspector.get_columns("plan")
@@ -434,7 +435,7 @@ def test_029_migration_roundtrip_preserves_legacy_rows_and_enforces_new_invarian
                 conversation.insert().values(
                     id=planning_id,
                     task_id=constraint_task_id,
-                    kind="planning",
+                    kind="task_agent",
                     title="Planning",
                     entry_artefact_id=None,
                     status="active",
@@ -448,7 +449,7 @@ def test_029_migration_roundtrip_preserves_legacy_rows_and_enforces_new_invarian
                     conversation.insert().values(
                         id=uuid.uuid4(),
                         task_id=constraint_task_id,
-                        kind="planning",
+                        kind="task_agent",
                         title="Second planning conversation",
                         entry_artefact_id=None,
                         status="active",
@@ -510,9 +511,12 @@ def test_029_migration_roundtrip_preserves_legacy_rows_and_enforces_new_invarian
             assert "capability_run_id" not in {
                 column["name"] for column in inspector.get_columns("artefact")
             }
+            # Below 029 the catalog still spells the 027 name, so reflect it
+            # rather than using the (044-renamed) `core.schema` table object.
+            legacy_transcript = legacy_table(conn, "planning_transcript")
             assert conn.execute(
-                select(planning_transcript.c.user_message).where(
-                    planning_transcript.c.id == transcript_id
+                select(legacy_transcript.c.user_message).where(
+                    legacy_transcript.c.id == transcript_id
                 )
             ).scalar_one() == "Legacy planning turn"
             assert conn.execute(

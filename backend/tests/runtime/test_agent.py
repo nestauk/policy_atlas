@@ -1,6 +1,6 @@
 """Scripted-IO tests for the agent CLI (task 017, the public interface).
 
-Everything is stubbed and egress-free: the stub planner, stub runner backends
+Everything is stubbed and egress-free: the stub task_agent, stub runner backends
 (with empty search backends so acquire is a no-op over the seeded fixture
 corpus) and a scripted console that feeds deterministic answers.
 """
@@ -34,12 +34,6 @@ from policy_atlas.runtime.agent_prompt import (
     RouterCompileWire,
     RouterFragmentWire,
 )
-from policy_atlas.runtime.planner import _STUB_SUGGESTED_ANSWERS, StubPlannerBackend
-from policy_atlas.runtime.planner_prompt import (
-    PlanDraftWire,
-    PlannerTurnWire,
-    SteerPointDefaultDraft,
-)
 from policy_atlas.runtime.runner import RunnerBackends
 from policy_atlas.runtime.steering import (
     Adjust,
@@ -52,6 +46,12 @@ from policy_atlas.runtime.steering import (
     render_check_in,
     render_collation,
     render_fanout_confirmation,
+)
+from policy_atlas.runtime.task_agent import _STUB_SUGGESTED_ANSWERS, StubTaskAgentBackend
+from policy_atlas.runtime.task_agent_prompt import (
+    PlanDraftWire,
+    PlannerTurnWire,
+    SteerPointDefaultDraft,
 )
 from policy_atlas.runtime.task_plan import TaskPlan
 from tests.helpers import delete_task_data
@@ -266,7 +266,7 @@ def test_validation_failure_is_fail_closed_and_runs_nothing(
     """An invalid ready draft never runs a chain; the surfaced error then abandons."""
 
     def invalid_plan_turn(
-        self: StubPlannerBackend,
+        self: StubTaskAgentBackend,
         turns: list[dict[str, str]],
         previous_draft: dict[str, object] | None,
         *,
@@ -289,7 +289,7 @@ def test_validation_failure_is_fail_closed_and_runs_nothing(
             ready=True,
         )
 
-    monkeypatch.setattr(StubPlannerBackend, "plan_turn", invalid_plan_turn)
+    monkeypatch.setattr(StubTaskAgentBackend, "plan_turn", invalid_plan_turn)
 
     console = ScriptedConsole(
         [
@@ -305,8 +305,8 @@ def test_validation_failure_is_fail_closed_and_runs_nothing(
     assert _printed(console, "failed validation")
 
 
-class _UnattendedPlanner:
-    """Planner double that proposes a ready, valid, unattended plan immediately."""
+class _UnattendedTaskAgent:
+    """Task Agent double that proposes a ready, valid, unattended plan immediately."""
 
     mode = "stub"
 
@@ -346,13 +346,13 @@ def test_unattended_run_never_pauses(engine: Engine) -> None:
         console = ScriptedConsole(
             [
                 "What works to reduce childhood obesity?",
-                "approve",  # no shape question from this planner double
+                "approve",  # no shape question from this task_agent double
             ]
         )
         result = main(
             console,
             engine=engine,
-            planner=_UnattendedPlanner(),
+            task_agent=_UnattendedTaskAgent(),
             backends=_stub_backends(),
         )
 
@@ -370,10 +370,10 @@ def test_unattended_run_never_pauses(engine: Engine) -> None:
 def test_turn_cap_exhaustion_exits_no_plan_not_abandoned(
     engine: Engine, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A planner that never converges is a system failure, not user abandonment."""
+    """A task_agent that never converges is a system failure, not user abandonment."""
 
     def never_ready(
-        self: StubPlannerBackend,
+        self: StubTaskAgentBackend,
         turns: list[dict[str, str]],
         previous_draft: dict[str, object] | None,
         *,
@@ -388,7 +388,7 @@ def test_turn_cap_exhaustion_exits_no_plan_not_abandoned(
             ready=False,
         )
 
-    monkeypatch.setattr(StubPlannerBackend, "plan_turn", never_ready)
+    monkeypatch.setattr(StubTaskAgentBackend, "plan_turn", never_ready)
 
     console = ScriptedConsole(["What works to reduce childhood obesity?"] + ["anything"] * 10)
     result = main(console, engine=engine, backends=_stub_backends())
@@ -399,10 +399,10 @@ def test_turn_cap_exhaustion_exits_no_plan_not_abandoned(
     assert _printed(console, "turn cap")
 
 
-def test_planner_declared_steer_point_defaults_reach_the_plan(engine: Engine) -> None:
+def test_task_agent_declared_steer_point_defaults_reach_the_plan(engine: Engine) -> None:
     """The wire model carries steer_point_defaults through to the validated plan."""
 
-    class _DefaultsPlanner:
+    class _DefaultsTaskAgent:
         mode = "stub"
 
         def plan_turn(
@@ -442,7 +442,7 @@ def test_planner_declared_steer_point_defaults_reach_the_plan(engine: Engine) ->
         result = main(
             console,
             engine=engine,
-            planner=_DefaultsPlanner(),
+            task_agent=_DefaultsTaskAgent(),
             backends=_stub_backends(),
         )
 
@@ -460,12 +460,12 @@ def test_planner_declared_steer_point_defaults_reach_the_plan(engine: Engine) ->
         _cleanup(engine, result.task_id if result else None)
 
 
-def test_planner_draft_author_affiliation_countries_reach_the_plan(engine: Engine) -> None:
+def test_task_agent_draft_author_affiliation_countries_reach_the_plan(engine: Engine) -> None:
     """The draft's flat author_affiliation_countries folds into scope_constraints,
     mirroring how publisher_country already folds via _build_plan.
     """
 
-    class _ScopedPlanner:
+    class _ScopedTaskAgent:
         mode = "stub"
 
         def plan_turn(
@@ -501,7 +501,7 @@ def test_planner_draft_author_affiliation_countries_reach_the_plan(engine: Engin
         result = main(
             console,
             engine=engine,
-            planner=_ScopedPlanner(),
+            task_agent=_ScopedTaskAgent(),
             backends=_stub_backends(),
         )
 
@@ -720,8 +720,8 @@ def _compile(
     return RouterCompileWire(fragments=fragments, summary=summary)
 
 
-class _ModerateStubPlanner(StubPlannerBackend):
-    """Stub planner variant for tests that deliberately exercise check-ins."""
+class _ModerateStubTaskAgent(StubTaskAgentBackend):
+    """Stub task_agent variant for tests that deliberately exercise check-ins."""
 
     def plan_turn(
         self,
@@ -774,7 +774,7 @@ def test_free_text_refusal_re_presents_the_menu(engine: Engine) -> None:
         )
         # main() constructs the deterministic StubAgentBackend (refuse-all).
         result = main(
-            console, engine=engine, planner=_ModerateStubPlanner(), backends=_stub_backends()
+            console, engine=engine, task_agent=_ModerateStubTaskAgent(), backends=_stub_backends()
         )
         assert result.exit_code == 0
         assert _printed(console, "None of that could be applied")
@@ -810,7 +810,7 @@ def test_confirmed_free_text_steer_applies_in_a_full_run(engine: Engine) -> None
         result = main(
             console,
             engine=engine,
-            planner=_ModerateStubPlanner(),
+            task_agent=_ModerateStubTaskAgent(),
             backends=_stub_backends(),
             agent=agent,
         )
@@ -831,8 +831,8 @@ def test_confirmed_free_text_steer_applies_in_a_full_run(engine: Engine) -> None
         _cleanup(engine, result.task_id if result else None)
 
 
-class _StandingInstructionsPlanner:
-    """Unattended planner that authors a standing default per steer point across
+class _StandingInstructionsTaskAgent:
+    """Unattended task_agent that authors a standing default per steer point across
     turns via its suggested-answers (the Task 5 authoring flow).
 
     One point per turn: it asks about ``evidence_search_coverage`` then
@@ -914,7 +914,7 @@ def test_standing_instructions_authoring_flow_two_points(engine: Engine) -> None
         result = main(
             console,
             engine=engine,
-            planner=_StandingInstructionsPlanner(),
+            task_agent=_StandingInstructionsTaskAgent(),
             backends=_stub_backends(),
         )
         assert result.plan is not None

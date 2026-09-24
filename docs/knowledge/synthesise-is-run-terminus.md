@@ -1,6 +1,6 @@
 ---
 type: Invariant
-title: Every EB run terminates in synthesise; every other component is a plan choice
+title: Every ES run terminates in synthesise; every other component is a plan choice
 description: Synthesise mints the capability's artefact, so no valid run shape ends before it; characterise and the rest of the composition run at the agent/sub-agent's discretion per intent.
 tags: [architecture, run-shape, orchestration, synthesise, invariant]
 timestamp: 2026-07-09
@@ -14,16 +14,16 @@ artefact. A chain described (in a contract, a smoke test, a skeleton profile, a
 doc) as ending at characterise or any other component is not a valid run shape:
 it produces no artefact, so nothing of value was delivered. Every component
 *between* the front edge and the terminus — characterise especially — is a
-**plan choice**: the agent / EB sub-agent composes which registry
+**plan choice**: the agent / ES sub-agent composes which registry
 components run for a given intent.
 
 # Why
 
-The spec makes both halves explicit (EB components.md §9): a rapid run is
+The spec makes both halves explicit (ES components.md §9): a rapid run is
 `acquire → screen → classify → appraise → ingest → synthesise`, and "a run
 without characterise yields an artefact with no landscape — a grounded answer,
 not an evidence report; the plan's legitimate choice." As-built agrees:
-`skeleton.py` calls synthesise "EB's terminal component" and ships a
+`skeleton.py` calls synthesise "ES's terminal component" and ships a
 no-reference rapid synthesise profile, so the terminus holds even when no
 grouping/selection/characterisation references exist.
 

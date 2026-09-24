@@ -100,7 +100,10 @@ FETCH_BYTE_CAP = 100 * 1024 * 1024  # generous guard, never a scissor (decision 
 PARSE_TIMEOUT_SECONDS = 120.0  # hard per-document parse timeout; worker is terminated
 # (120s: user-set 2026-07-05 — generous for a 200+-page report; fan-out absorbs the tail)
 THIN_TEXT_MIN_CHARS = 200  # below this, parsed text is a failure, never "ok" (decision 7)
-DEFAULT_MAX_WORKERS = 4
+# Parse workers are spawned processes doing CPU-bound work, so the width follows
+# the cores: 4 on the 2-vCPU staging task, up to 8 on a developer machine
+# (task 044 phase 8, owner 2026-09-17). Fetch threads are LIVE_FETCH_WORKERS.
+DEFAULT_MAX_WORKERS = max(4, min(8, os.cpu_count() or 4))
 # LiveDocumentFetcher has the actual global/per-host semaphores; this pool only supplies threads.
 LIVE_FETCH_WORKERS = 10
 
@@ -124,6 +127,24 @@ FAILURE_REASONS = (
 # a reason-coded outcome instead of being chunked as text (prod incident 2026-08-19:
 # a JPEG routed to the plain path and its NUL bytes killed the whole run at INSERT).
 _NON_TEXT_TYPE_PREFIXES = ("image/", "audio/", "video/", "font/", "model/")
+
+# A short page telling the client to enable JavaScript or cookies is the host
+# blocking a bot, not the document — record it as blocked_by_host, never as full
+# text (issue #74: a 284-char "JavaScript is disabled" wall cleared the 200-char
+# thin-text floor and 6 of 21 "read in full" documents were that page). Only
+# consulted below the ceiling, so a real paper that discusses JavaScript is
+# unaffected.
+_STUB_PAGE_CEILING_CHARS = 2000
+_STUB_PAGE_MARKERS = (
+    "javascript is disabled",
+    "javascript is required",
+    "enable javascript",
+    "cookies are disabled",
+    "enable cookies",
+    "checking your browser",
+    "just a moment...",
+    "verify you are a human",
+)
 
 _HTTP_STATUS_REASONS = {401: "paywall", 403: "blocked_by_host", 404: "not_found", 410: "not_found"}
 FETCH_FAILURE_REASON_PRIORITY = (
@@ -671,32 +692,10 @@ def _decode(body: bytes) -> str:
     return body.decode("utf-8", errors="replace")
 
 
-# Bot walls that answer a full-text fetch with a short "enable JavaScript" page
-# (issue #74: 6 of 21 "read in full" documents were this page). A real article
-# that merely mentions JavaScript is far longer than the wall, hence the length cap.
-_STUB_PAGE_MARKERS = (
-    "javascript is disabled",
-    "enable javascript",
-    "just a moment...",
-    "checking your browser",
-)
-_STUB_PAGE_MAX_CHARS = 1500
-
-
-def _is_stub_page(extracted: str) -> bool:
-    if len(extracted) > _STUB_PAGE_MAX_CHARS:
-        return False
-    lowered = extracted.lower()
-    return any(marker in lowered for marker in _STUB_PAGE_MARKERS)
-
-
 def _parse_html(body: bytes) -> dict[str, Any]:
     extracted = trafilatura.extract(body, include_comments=False, include_tables=True)
     if not extracted or not extracted.strip():
         return {"status": "error", "reason": "empty"}
-    if _is_stub_page(extracted):
-        # Spec: a bot block is `blocked_by_host`, never full text (components.md § ingest).
-        return {"status": "error", "reason": "blocked_by_host"}
     chunks = [
         {"content": para, "locator": {"paragraph": i}}
         for i, para in enumerate((p.strip() for p in extracted.splitlines()), start=1)
@@ -767,6 +766,10 @@ def parse_and_segment(body: bytes, content_type: str, thin_min: int) -> dict[str
     if total_chars == 0:
         reason = "no_text_layer" if base_type == "application/pdf" else "empty"
         return {"status": "error", "reason": reason}
+    if total_chars < _STUB_PAGE_CEILING_CHARS:
+        lowered = "\n".join(c["content"] for c in result["chunks"]).lower()
+        if any(marker in lowered for marker in _STUB_PAGE_MARKERS):
+            return {"status": "error", "reason": "blocked_by_host"}
     if total_chars < thin_min:
         return {"status": "error", "reason": "thin_text"}
     return result

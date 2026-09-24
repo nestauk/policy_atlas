@@ -16,7 +16,7 @@ When two of them disagree on such an area, the lower number wins (ratified from 
 
 1. [backend-architecture-reference.md](sources/backend/backend-architecture-reference.md) — canonical backend model: data model, tools/execution, plan-as-object, steering, collaboration, observability, persistence, security, deferred seams.
 2. [backend-architecture-briefing.md](sources/backend/backend-architecture-briefing.md) — compressed shared mental model + commitments/deferred-seams appendix + glossary.
-3. [backend-evidence-base-build-spec.md](sources/backend/backend-evidence-base-build-spec.md) — canonical Evidence Base capability behaviour (the doc these EB specs distil).
+3. [backend-evidence-base-build-spec.md](sources/backend/backend-evidence-base-build-spec.md) — canonical Evidence Base capability behaviour (the doc these ES specs distil).
 4. [evidence-base-ux-handoff.md](sources/evidence-base-ux/evidence-base-ux-handoff.md) — locked product decisions + repo-safe constraints; overrides visual shorthand below on those points.
 5. [evidence-base-wireframes.html](sources/evidence-base-ux/evidence-base-wireframes.html) — static UX reference; product intent only, never a schema/contract source.
 6. [nesta-brand-tokens.md](sources/evidence-base-ux/nesta-brand-tokens.md) + [hifi.css](sources/evidence-base-ux/hifi.css) — visual language / token cues.
@@ -33,7 +33,7 @@ the sources use the pre-038 words — `project` there is today's **`task`** (the
 and "the orchestrator" is the **Agent** (`agent`). The living table is
 [vocabulary.md § Code words](vocabulary.md#code-words).
 
-Backend architecture and EB capability design outrank all visual shorthand. On locked product decisions and repo-safe constraints, the UX handoff (#4) overrides the wireframe and visual assets (#5, #6, #7). For options scoping, the concept (#10) outranks its canvas (#11).
+Backend architecture and ES capability design outrank all visual shorthand. On locked product decisions and repo-safe constraints, the UX handoff (#4) overrides the wireframe and visual assets (#5, #6, #7). For options scoping, the concept (#10) outranks its canvas (#11).
 
 ## Distilled specs in this repo
 

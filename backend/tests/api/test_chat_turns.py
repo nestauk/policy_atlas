@@ -11,7 +11,7 @@ import pytest
 from sqlalchemy import event, func, select, update
 from sqlalchemy.engine import Engine
 
-from policy_atlas.api import chat_turns
+from policy_atlas.api import answer_core, chat_turns
 from policy_atlas.api.app import ApiCapacity, ApiConflict
 from policy_atlas.api.chat_turns import ChatTurnResult
 from policy_atlas.core.schema import capability_run, chat_turn, conversation, task
@@ -1409,7 +1409,9 @@ def test_durable_cancel_after_last_check_wins_at_terminal_commit(
         task_id, scope_id, conversation_id = _chat(engine)
         _walk(engine, task_id=task_id, scope_id=scope_id, status="succeeded")
         monkeypatch.setattr(chat_turns, "build_section_tools", _citable_tools)
-        real_floor = getattr(chat_turns, "apply_citation_floor")  # noqa: B009
+        # The floor now runs inside the shared answer core (task 044); the
+        # seam this test drives moved with it, the behaviour it pins did not.
+        real_floor = getattr(answer_core, "apply_citation_floor")  # noqa: B009
 
         def _sneaky_floor(*args: Any, **kwargs: Any) -> Any:
             """Apply the real floor, then simulate a racing durable cancel."""
@@ -1422,7 +1424,7 @@ def test_durable_cancel_after_last_check_wins_at_terminal_commit(
                 )
             return floored
 
-        monkeypatch.setattr(chat_turns, "apply_citation_floor", _sneaky_floor)
+        monkeypatch.setattr(answer_core, "apply_citation_floor", _sneaky_floor)
         result = chat_turns.run_chat_turn(
             engine,
             task_id=task_id,
@@ -1448,14 +1450,16 @@ def test_chat_call_site_pins_tool_allowlist_into_the_tool_loop(
         _walk(engine, task_id=task_id, scope_id=scope_id, status="succeeded")
         monkeypatch.setattr(chat_turns, "build_section_tools", _citable_tools)
         captured: dict[str, Any] = {}
-        real_run_tool_loop = getattr(chat_turns, "run_tool_loop")  # noqa: B009
+        # The tool loop now runs inside the shared answer core (task 044); the
+        # call site this test pins moved with it, the allowlist did not.
+        real_run_tool_loop = getattr(answer_core, "run_tool_loop")  # noqa: B009
 
         def _capturing_run_tool_loop(*args: Any, tools: dict[str, Any], **kwargs: Any) -> Any:
             """Record the tool mapping the call site hands to the kernel loop."""
             captured["tools"] = tools
             return real_run_tool_loop(*args, tools=tools, **kwargs)
 
-        monkeypatch.setattr(chat_turns, "run_tool_loop", _capturing_run_tool_loop)
+        monkeypatch.setattr(answer_core, "run_tool_loop", _capturing_run_tool_loop)
         chat_turns.run_chat_turn(
             engine,
             task_id=task_id,

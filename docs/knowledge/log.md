@@ -1,5 +1,25 @@
 # Knowledge update log
 
+## 2026-09-17 (task 044 step 8)
+* **Creation**: Added [baseline-gate-invariants-as-built](baseline-gate-invariants-as-built.md) —
+  the five gate properties the review stack pinned (failed synthesise, non-pausing IO, unattended
+  `proceed_flag` only, no `abort` floor, baseline = artefact written); five findings, three lanes.
+* **Creation**: Added [capability-registry-one-plan-reader](capability-registry-one-plan-reader.md) —
+  the registry as the one plan reader, 14 + 7 sites, the two-direction AST seam, the import-cycle
+  reason per-capability validators keep their own steer-point sets (044 build handoff + verifier F1/F8).
+* **Creation**: Added [evidence-scope-row-lock-serialises-synthesise](evidence-scope-row-lock-serialises-synthesise.md) —
+  check 7's summed "parallel" arms (044 build handoff).
+* **Creation**: Added [gitignore-needs-dockerignore-mirror](gitignore-needs-dockerignore-mirror.md)
+  (044 build-open red base) and [repo-root-scripts-not-typechecked](repo-root-scripts-not-typechecked.md)
+  (044 build handoff; security lane S8, verifier N2).
+* **Update**: [two-step-rename-needs-ledger-and-anchored-exemptions](two-step-rename-needs-ledger-and-anchored-exemptions.md)
+  gains the one-to-two joiner rule; [rename-sweep-inverts-screen-sense-words](rename-sweep-inverts-screen-sense-words.md)
+  gains stored enum literals; [testing-database](testing-database.md) gains the idle-in-transaction
+  lock and the downgrade-refusal cleanup; [prompt-hash-guard-hashes-whole-module](prompt-hash-guard-hashes-whole-module.md)
+  gains the name-based pin and the whole-module sweep exclusion (all from the 044 build handoff's
+  knowledge candidates). Declined: the "coverage statement port" candidate (a deviation record, not
+  durable knowledge).
+
 ## 2026-09-08 (task 040 step 8)
 * **Creation**: Added
   [additive-max-md-variants-prove-desktop-invariant](additive-max-md-variants-prove-desktop-invariant.md) —
@@ -19,7 +39,7 @@
 ## 2026-09-08 (task 039 step 8)
 * **Creation**: Added
   [scope-constraint-fields-projection-surfaces](scope-constraint-fields-projection-surfaces.md) —
-  the five surfaces a new `ScopeConstraints` field must touch; the planner
+  the five surfaces a new `ScopeConstraints` field must touch; the Task Agent
   sees constraints via `PlanDraftWire`, not the CLI render (the build's
   claim, corrected by the step-7 contract verifier), and the loose-wire →
   strict-draft fold needs a normaliser (039 review stack).
@@ -294,7 +314,7 @@
 * **Creation**: Added [run-id-fk-shapes-audit-carriers](run-id-fk-shapes-audit-carriers.md) — no run, no event: the carrier decision (table-first / outcome-object / re-run provenance) recurred three times in 017.
 * **Creation**: Added [two-phase-run-lifecycle-evented-vs-escaped](two-phase-run-lifecycle-evented-vs-escaped.md) — evented failure vs escaped exception; identity-first commit makes the failure backstop's FK trivial (017, decision 8).
 * **Creation**: Added [compile-target-parity-covers-composed-wholes](compile-target-parity-covers-composed-wholes.md) — parity checks compose with the real composer against the real bound; containment for canonicalising round-trips; registries for runtime-consumed names (017 review stack, three instances of one class).
-* **Update**: [model-output-nul-scrub](model-output-nul-scrub.md) — the planner became `_scrub_nul`'s second consumer; the scrub must be recursive over the whole record (017 review stack).
+* **Update**: [model-output-nul-scrub](model-output-nul-scrub.md) — the Task Agent became `_scrub_nul`'s second consumer; the scrub must be recursive over the whole record (017 review stack).
 * **Declined**: weight_emphasis multiplier semantics (already carried by `steering.py`'s constants comment + rank-shift tests); planner ~20–30 s/turn latency (an 018 surface input, carried in 017's review handoff, not durable knowledge).
 
 ## 2026-07-10 (task 016 step 8)

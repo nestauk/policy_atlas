@@ -596,9 +596,13 @@ def parse_search_directive(
         return "rapid", None, None
     if not isinstance(raw, dict):
         raise SearchDirectiveError("search directive must be an object")
-    unknown = set(raw) - {"depth", "filters", "guidance"}
+    unknown = set(raw) - {"depth", "filters", "guidance", "record_cap"}
     if unknown:
         raise SearchDirectiveError("search directive contains unknown keys")
+    # Validated here (this is the fail-closed gate for the whole directive) and
+    # read back by `parse_record_cap`, so the 3-tuple this function has always
+    # returned is unchanged for its existing callers.
+    parse_record_cap(context)
     depth: SearchDepth = "rapid"
     if "depth" in raw:
         raw_depth = raw["depth"]
@@ -615,6 +619,45 @@ def parse_search_directive(
             raw["guidance"], error=SearchDirectiveError, max_chars=DIRECTIVE_STRING_MAX
         )
     return depth, raw.get("filters"), guidance
+
+
+#: Ceiling on a directive-supplied per-backend record cap: the deepest rung's
+#: own cap. A plan may ask for *less* volume than its depth rung buys — the
+#: options-scoping baseline does (a narrow question about the status quo, task
+#: 044 D7) — but never for more than the deepest rung is budgeted for.
+RECORD_CAP_MAX = DEPTH_CONSTANTS["deep"]["record_cap_per_backend"]
+
+
+def parse_record_cap(context: dict[str, Any]) -> int | None:
+    """Parse the optional per-backend record cap from ``context["search"]``.
+
+    Added by task 044 (plan S2): the volume brake was previously reachable only
+    through the depth rung, so a plan whose question is narrow by construction
+    had no way to buy a smaller acquisition than ``rapid``'s 50 per backend.
+    The key is optional and additive — an absent value keeps the depth rung's
+    ``record_cap_per_backend`` exactly as before.
+
+    Args:
+        context: Evidence-scope context JSON object.
+
+    Returns:
+        The requested cap, or ``None`` to use the depth rung's own.
+
+    Raises:
+        SearchDirectiveError: If the value is not an integer in
+            ``1..RECORD_CAP_MAX``.
+    """
+    raw = context.get("search")
+    if not isinstance(raw, dict) or "record_cap" not in raw:
+        return None
+    value = raw["record_cap"]
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise SearchDirectiveError("search directive record_cap must be an integer")
+    if not 1 <= value <= RECORD_CAP_MAX:
+        raise SearchDirectiveError(
+            f"search directive record_cap must be between 1 and {RECORD_CAP_MAX}"
+        )
+    return value
 
 
 def _object_block(raw: Any, *, label: str) -> dict[str, Any]:
@@ -1271,6 +1314,7 @@ def run_search(
     """
     depth, raw_filters, guidance = parse_search_directive(context.context)
     constants = DEPTH_CONSTANTS[depth]
+    record_cap = parse_record_cap(context.context) or constants["record_cap_per_backend"]
     backend_names = [backend.name for backend in backends]
     validated_filters = validate_scope_filters(raw_filters, backend_names=backend_names)
     filter_variants_by_backend = {
@@ -1782,7 +1826,7 @@ def run_search(
         depth=depth,
         scope_wire_params=scope_wire_params,
         search_guidance=guidance,
-        record_cap_per_backend=constants["record_cap_per_backend"],
+        record_cap_per_backend=record_cap,
     )
     counts["search"] = {
         "depth": depth,

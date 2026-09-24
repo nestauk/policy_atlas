@@ -28,10 +28,10 @@ here; they do not restate it. Delete this section only if the slice introduces n
 ## Read first
 
 Specs this slice depends on (route via [specs/index.md](../../specs/index.md)). Read the source
-section in depth, not the heading. *Example* — EB slices commonly touch
-[EB capability](../../specs/capabilities/evidence-base/capability.md),
+section in depth, not the heading. *Example* — ES slices commonly touch
+[ES capability](../../specs/capabilities/evidence-search/capability.md),
 [data-model](../../specs/system/data-model.md) and
-[provenance-grounding](../../specs/system/provenance-grounding.md); for a non-EB slice, replace this
+[provenance-grounding](../../specs/system/provenance-grounding.md); for a non-ES slice, replace this
 with the relevant capability/system specs.
 
 ## Scope / Out of scope

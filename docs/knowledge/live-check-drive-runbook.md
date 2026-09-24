@@ -21,10 +21,10 @@ timestamp: 2026-07-29
   check — 027's drive tripped on this.
 - **Playwright specs in this repo are ESM** — `__dirname` needs the
   `fileURLToPath(import.meta.url)` shim.
-- **An unattended plan is not one turn**: the planner walks one standing
+- **An unattended plan is not one turn**: the Task Agent walks one standing
   instruction per steer point before honestly marking ready (~6 approvals in
   027 part B) — scripted drives need a generous turn budget.
-- **The planner pins structured extraction to deep analysis depth** — a
+- **The Task Agent pins structured extraction to deep analysis depth** — a
   standard-depth run has no extract stage and therefore no findings rows; live
   checks that need findings must ask for deep depth.
 - **Playwright strict mode collides with brand copy** (028): `getByText("ready")`

@@ -4,6 +4,8 @@
 .vscode/
 .DS_Store
 .impeccable/
+PRODUCT.md
+DESIGN.md
 
 # Environment and local credentials
 .env

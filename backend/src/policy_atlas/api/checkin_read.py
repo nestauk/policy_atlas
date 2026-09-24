@@ -6,6 +6,8 @@ from typing import Any
 
 from policy_atlas.api.contract import CheckInOption, CheckInOut, CheckInTrigger
 from policy_atlas.api.stage_vocabulary import stage_for_payload
+from policy_atlas.runtime.baseline_gate import render_baseline_gate
+from policy_atlas.runtime.steering import BASELINE_CONFIRM
 from policy_atlas.runtime.task_plan import canonical_steer_point
 
 
@@ -14,6 +16,12 @@ def _render(payload: dict[str, Any]) -> str:
     persisted = payload.get("render")
     if isinstance(persisted, str) and persisted:
         return persisted
+    if canonical_steer_point(payload.get("steer_point")) == BASELINE_CONFIRM:
+        # The baseline gate's card is a pure function of its bundle, so a pause
+        # written without its render still shows the heading, the key assumption
+        # and the settings rather than "synthesise: succeeded".
+        bundle = payload.get("bundle")
+        return render_baseline_gate(bundle if isinstance(bundle, dict) else {})
     component = payload.get("component") or "walk"
     kind = payload.get("kind") or "check_in"
     lines = [f"{component}: {kind}"]
@@ -51,9 +59,14 @@ def _check_in(row: dict[str, Any], *, decided: bool) -> CheckInOut:
     boundary = payload.get("boundary")
     if boundary not in {"after_component", "before_component"}:
         raise LookupError("check-in has malformed boundary")
+    # The baseline gate is its own check-in kind on the wire (web-api.md
+    # § Check-ins): the thread renders its card and opens the composer on it.
+    # Found live: the pause is written with the generic kind, so the frontend
+    # never recognised the gate.
+    is_gate = canonical_steer_point(payload.get("steer_point")) == BASELINE_CONFIRM
     return CheckInOut(
         check_in_id=row["event_id"],
-        kind=str(payload.get("kind") or "check_in"),
+        kind=BASELINE_CONFIRM if is_gate else str(payload.get("kind") or "check_in"),
         boundary=boundary,
         component=payload.get("component") if isinstance(payload.get("component"), str) else None,
         # The public presentation key, never the raw component name — the raw
@@ -107,6 +120,13 @@ def _task_bundle(payload: dict[str, Any]) -> dict[str, Any] | None:
         return {"shortlist": shortlist}
     if point == "finding_groups":
         return {"groups": bundle.get("groups") if isinstance(bundle.get("groups"), list) else []}
+    if point == BASELINE_CONFIRM:
+        key_assumption = bundle.get("key_assumption")
+        settings = bundle.get("settings")
+        return {
+            "key_assumption": key_assumption if isinstance(key_assumption, str) else None,
+            "settings": settings if isinstance(settings, dict) else {},
+        }
     if point == "synthesis_shape":
         proposal = bundle.get("proposal")
         rows = proposal.get("proposed_sections") if isinstance(proposal, dict) else []

@@ -19,7 +19,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from sqlalchemy import select
-from sqlalchemy.engine import Engine
+from sqlalchemy.engine import Connection, Engine
 
 from policy_atlas.core import events
 from policy_atlas.core.embeddings import EmbeddingBackend, StubEmbeddingBackend
@@ -61,9 +61,7 @@ def resolve_terminal_run_components(
 ) -> ResolvedRunScope | None:
     """Resolve the latest completed walk's terminal component attempts.
 
-    The reduction intentionally mirrors ``runtime.continuation_state.build``:
-    join ``run.started`` events to the walk's run rows, order by event sequence,
-    then let the latest event win for each component and registry component.
+    Selects the walk; ``_resolve_components`` does the reduction.
 
     Args:
         engine: Database engine used for this short-lived read.
@@ -84,16 +82,70 @@ def resolve_terminal_run_components(
         ).one_or_none()
         if cap_row is None:
             return None
-        cap = dict(cap_row._mapping)
-        event_rows = events.read(conn, task_id)
-        run_rows = [
-            dict(row._mapping)
-            for row in conn.execute(
-                select(runs)
-                .where(runs.c.task_id == task_id)
-                .where(runs.c.capability_run_id == cap["capability_run_id"])
-            )
-        ]
+        return _resolve_components(conn, task_id=task_id, cap=dict(cap_row._mapping))
+
+
+def resolve_run_components(
+    engine: Engine, task_id: uuid.UUID, *, capability_run_id: uuid.UUID
+) -> ResolvedRunScope | None:
+    """Resolve one named walk's component attempts, paused walks included.
+
+    The chat route reads the *latest completed* walk
+    (``resolve_terminal_run_components``, which keeps its
+    ``succeeded|degraded`` filter). A Task Agent turn taken while a scoping
+    walk is paused on its baseline gate has no completed walk to read: it
+    answers over the walk it is parked in, named by id. The component
+    reduction is identical — only the walk selection differs.
+
+    Args:
+        engine: Database engine used for this short-lived read.
+        task_id: Task owning the walk, enforced on the lookup.
+        capability_run_id: The walk to resolve.
+
+    Returns:
+        The resolved scope, or ``None`` when that task holds no such walk in a
+        paused or completed state (a walk still ``running`` has no pinned
+        answer scope, and an ``aborted`` or ``failed`` one is not answerable).
+    """
+    with engine.connect() as conn:
+        cap_row = conn.execute(
+            select(capability_run)
+            .where(capability_run.c.task_id == task_id)
+            .where(capability_run.c.capability_run_id == capability_run_id)
+            .where(capability_run.c.status.in_(("paused", "succeeded", "degraded")))
+        ).one_or_none()
+        if cap_row is None:
+            return None
+        return _resolve_components(conn, task_id=task_id, cap=dict(cap_row._mapping))
+
+
+def _resolve_components(
+    conn: Connection, *, task_id: uuid.UUID, cap: dict[str, Any]
+) -> ResolvedRunScope:
+    """Reduce one walk's ordered component attempts to its latest per component.
+
+    The reduction intentionally mirrors ``runtime.continuation_state.build``:
+    join ``run.started`` events to the walk's run rows, order by event
+    sequence, then let the latest event win for each component and registry
+    component.
+
+    Args:
+        conn: Open read connection.
+        task_id: Task owning the walk.
+        cap: The walk's ``capability_run`` row mapping.
+
+    Returns:
+        The resolved component scope for that walk.
+    """
+    event_rows = events.read(conn, task_id)
+    run_rows = [
+        dict(row._mapping)
+        for row in conn.execute(
+            select(runs)
+            .where(runs.c.task_id == task_id)
+            .where(runs.c.capability_run_id == cap["capability_run_id"])
+        )
+    ]
 
     # Parity with continuation_state.build() lines 184–214: do not replace
     # sequence ordering with timestamps (they are not the durable ordering key).

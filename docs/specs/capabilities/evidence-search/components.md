@@ -1,7 +1,7 @@
 ---
 type: Capability spec
 title: Evidence search — component skeleton
-description: The nine EB components plus the shared inherit step — declared I/O, tool wiring, realisation and gating.
+description: The nine ES components plus the shared inherit step — declared I/O, tool wiring, realisation and gating.
 tags: [capability, evidence-search, components]
 timestamp: 2026-09-08
 ---
@@ -25,8 +25,8 @@ Options scoping task, the child full run of scoping ruling 9 being the normal ca
 `inherit` component seeds the plan and the pool before acquire runs. It is the same component
 Options scoping uses in the other direction; §0 below gives this direction.
 
-**The mandatory EB spine** ([ADR 0013](../../../adr/0013-mandatory-eb-spine.md), task 016
-flow-back): every EB run executes acquire(`search`) → screen → classify → appraise →
+**The mandatory ES spine** ([ADR 0013](../../../adr/0013-mandatory-eb-spine.md), task 016
+flow-back): every ES run executes acquire(`search`) → screen → classify → appraise →
 ingest(fetch) → synthesise; every other component — characterise · select · extract · group ·
 stage-2 screen — is **Agent-discretionary**, chosen per the depth gradation. Mandatory
 ingest is a mandatory **attempt**, not a substrate guarantee: live fetching can fail per
@@ -66,11 +66,16 @@ fail-closed. Breadth and depth are independent — a targeted question compiles 
   task's **user context** and **evidence-scope constraint** as inputs — so a transferability cap set
   by unstated context persists (scoping ruling 41) and documents set aside under the scope stay set
   aside; the option's **mentioning documents** with their classify and appraise results and
-  abstract profiles, queued into the pool flagged *inherited* and **re-screened** against this plan
-  (whose intent is narrower than the scoping plan's); and the **light findings** the scoping
+  abstract profiles — the input is a `task_link` row and the rules are the data model's
+  ([§ Links between tasks](../../system/data-model.md), owner rulings on decision-sheet rows A6
+  and A7, 2026-09-09): the child **reads across the link and copies nothing**; the documents get
+  the child's own document rows and are **re-screened** against this plan (whose intent is
+  narrower than the scoping plan's); their classification and appraisal are read from the scoping
+  task's pinned run; links are many-to-many — and the **light findings** the scoping
   ⟨assess⟩ extracted for the option, reused **at finding grain**: `extract` skips only the
   requirements a light finding satisfies for the same source snapshot and profile version, and
-  fills the rest with the full profile (the mirror of scoping ruling 35). The scoping-pass profile
+  fills the rest with the full profile (the mirror of scoping ruling 35; how the findings cross
+  the link is decided with decision-sheet row A4). The scoping-pass profile
   becomes the prior version of the one document this task's report is (scoping ruling 47), in
   History.
 - ✅ Nothing inherited is trusted because it was found before: inherited documents are re-screened;
@@ -171,7 +176,7 @@ seam). Deferred seams (see
 [../../system/provenance-grounding.md](../../system/provenance-grounding.md)): ⏸ the full
 full-text pass (methods quality / risk-of-bias, gated to the selected subset; two-stage with the
 light tier) + modifier-tag-driven dimensions; ⏸ relative-to-feasible tier; the cross-document
-roll-up stays **out of EB's appraise** (EB appraises per document).
+roll-up stays **out of ES's appraise** (ES appraises per document).
 
 **Full-text ingestion — gated by screen, built for all screened-in**. After screen/classify/
 appraise (which run on the cheap envelope), full text is fetched and fully Tier-0-ingested
@@ -203,12 +208,12 @@ budget cap + lazy vectorisation for very large relevant sets is a possible later
 
 Produces the evidence-landscape **content, not presentation**: a run-scoped characterisation
 record + topic/theme tags (task 009 clarification, decision 7). Characterise does **not** mint
-an artefact or blocks — EB produces **one** artefact, composed once at the run terminus **by
+an artefact or blocks — ES produces **one** artefact, composed once at the run terminus **by
 synthesise** (task 013 flow-back, superseding the earlier Agent-composes reading; the
 Agent shapes sections at plan time — see [capability.md](capability.md)). Two parts:
 - **Coverage / patterns over metadata** — deterministic distributions and gaps over Tier-0
   columns (study-type, geography, recency, population, category). **Source/evidence policy is
-  flag-not-block here** — EB reads and counts *all* relevant in-corpus evidence, so coverage/gaps
+  flag-not-block here** — ES reads and counts *all* relevant in-corpus evidence, so coverage/gaps
   reflect what **exists**, with below-policy evidence present-but-flagged (no false gaps). When
   the user has supplied a policy, characterise computes **two coverage views** — the **overall**
   landscape and the **policy-filtered ("well-evidenced")** landscape — side by side, the **delta**
@@ -239,7 +244,7 @@ characterisation clusters**, breadth-adaptive (the landscape has already *measur
 no separate broad/narrow mode — stratify across whatever clusters exist; depth sets how deep per
 cluster). Guards against horizon scans collapsing onto a narrow top-k. Realised as the shared
 **`select`** tool (strategy-parameterised: *(candidate set, cheap signals, strategy, budget) →
-chosen subset + rationale*); EB's coverage-aware-stratified-over-clusters is one strategy.
+chosen subset + rationale*); ES's coverage-aware-stratified-over-clusters is one strategy.
 *(Options scoping adds a second: the **scoping read-set strategy** — stratify one option's
 documents by implementation and outcome family, reserve the counter-case, cap per option, record
 omissions; OS ruling 43, 2026-09-07.)*
@@ -270,9 +275,9 @@ directive** — **two profiles running through one component, over the same sele
 second component, no second selection** (task 021, ADR 0017): **`intervention_outcome_finding`**
 (`eb_iof_base_v1`) and **`implementation_context_finding`** (`eb_icf_base_v1`) — see
 [../../system/data-model.md](../../system/data-model.md) for grain + base fields of each.
-**EB's extraction profile(s)** (the EB-specific part) = its commitment to extract those **base
+**ES's extraction profile(s)** (the ES-specific part) = its commitment to extract those **base
 fields** over the **selected** subset, per selected profile. Question-relative judgements
-(normalised magnitude, causal weighting, is-beneficial) are **not** extracted by EB — they are
+(normalised magnitude, causal weighting, is-beneficial) are **not** extracted by ES — they are
 analysis enrichment for Impact/VfM.
 
 **Composition, as built:** the `profiles` directive compiles **fail-closed** — an unknown
@@ -285,7 +290,7 @@ domain (own schema version, own prompt, own field rules, own vetter) hanging off
 never invalidates the other profile's memoised findings. `extraction_result` stays one row per
 `(evidence_scope_id, run_id)`; its provenance/counts/per-doc statuses are keyed per profile, so
 "profile not selected" (absent) and "profile fired, zero findings" (present, count 0) stay
-distinguishable. The two-profile extract semantics are **plan-visible**: the planner prompt
+distinguishable. The two-profile extract semantics are **plan-visible**: the Task Agent prompt
 describes them, so composition is never silently compiled.
 
 ⏸ **v3.0 deep-synthesis scope remains schema-bound:** deep grounded synthesis reads whichever
@@ -342,7 +347,7 @@ designed.
 
 ## 9 — synthesise (run terminus)
 
-**EB's terminal component at every depth** (task 013 flow-back): it **composes the one artefact**
+**ES's terminal component at every depth** (task 013 flow-back): it **composes the one artefact**
 — mints it, renders content into blocks, binds them — with the Agent shaping the sections
 at plan time (capability-composes; see [capability.md](capability.md)). What it renders depends
 on what the run produced:

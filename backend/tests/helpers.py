@@ -274,7 +274,6 @@ def delete_task_data(conn: Connection, task_id: uuid.UUID) -> None:
         grouping_result,
         implementation_context_finding,
         intervention_outcome_finding,
-        planning_transcript,
         runs,
         search_coverage_record,
         selection_result,
@@ -286,6 +285,8 @@ def delete_task_data(conn: Connection, task_id: uuid.UUID) -> None:
         source_tag,
         synthesis_result,
         task,
+        task_agent_transcript,
+        task_link,
         task_plan,
         task_source_snapshot,
     )
@@ -411,17 +412,29 @@ def delete_task_data(conn: Connection, task_id: uuid.UUID) -> None:
         conn.execute(delete(source_snapshot).where(
             source_snapshot.c.source_snapshot_id.in_(snapshot_ids)
         ))
-    # Durable planning turns before their task parent.
-    conn.execute(delete(planning_transcript).where(
-        planning_transcript.c.task_id == task_id
+    # Links in BOTH directions before their task parent (task 044): a link
+    # row names two tasks, and either end blocks the delete.
+    conn.execute(delete(task_link).where(task_link.c.source_task_id == task_id))
+    conn.execute(delete(task_link).where(task_link.c.target_task_id == task_id))
+    # Durable task_agent turns before their task parent.
+    conn.execute(delete(task_agent_transcript).where(
+        task_agent_transcript.c.task_id == task_id
     ))
+    # The two tables point at each other (task 044): plan.evidence_scope_id one
+    # way, evidence_scope.plan_id the other. Break the second edge first, or
+    # deleting the plan trips fk_scope_plan_task.
+    conn.execute(
+        evidence_scope.update()
+        .where(evidence_scope.c.task_id == task_id)
+        .values(plan_id=None)
+    )
     # task_plan before evidence_scope (fk_plan_scope_task) and
     # before conversation (task_plan.conversation_id FKs onto it).
     conn.execute(delete(task_plan).where(
         task_plan.c.task_id == task_id
     ))
     # conversation after its FK dependants (chat_turn above,
-    # planning_transcript/task_plan above) and before task.
+    # task_agent_transcript/task_plan above) and before task.
     conn.execute(delete(conversation).where(conversation.c.task_id == task_id))
     conn.execute(delete(evidence_scope).where(evidence_scope.c.task_id == task_id))
     conn.execute(delete(task).where(task.c.task_id == task_id))

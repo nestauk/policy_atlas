@@ -11,8 +11,16 @@ from sqlalchemy.engine import Engine
 
 from policy_atlas.core import events
 from policy_atlas.core.schema import capability_run, runs, task_plan
+from policy_atlas.runtime.capability_registry import (
+    EVIDENCE_SEARCH,
+    AnyPlan,
+    capability_of_task,
+    compose_plan,
+    lattice_for,
+    validate_plan,
+)
 from policy_atlas.runtime.steering import PausePoint, pause_points
-from policy_atlas.runtime.task_plan import ComposedChain, TaskPlan, compose
+from policy_atlas.runtime.task_plan import ComposedChain
 
 
 @dataclass(frozen=True)
@@ -42,7 +50,10 @@ class ContinuationState:
 
     Args:
         capability_run_id: Identity of the parked capability walk.
-        plan: Version-max approved plan.
+        capability: The owning task's capability — which plan model read the
+            payload, which chain it composed to, and which steering lattice the
+            resumed walk's boundaries use (task 044).
+        plan: Version-max approved plan, of ``capability``'s model.
         plan_id: Persisted plan id.
         plan_version: Persisted plan version.
         plan_row_id: Current plan row id.
@@ -64,7 +75,7 @@ class ContinuationState:
     """
 
     capability_run_id: uuid.UUID
-    plan: TaskPlan
+    plan: AnyPlan
     plan_id: uuid.UUID
     plan_version: int
     plan_row_id: uuid.UUID | None
@@ -83,6 +94,9 @@ class ContinuationState:
     parked_component: str | None
     most_recent_attempted_run_id: uuid.UUID | None
     session_id: uuid.UUID | None
+    # Last, with a default, so the Evidence search constructions in the parity
+    # tests stay as they are; :func:`build` always passes the task's own value.
+    capability: str = EVIDENCE_SEARCH
 
 
 def build(
@@ -127,7 +141,7 @@ def build(
             raise LookupError(f"capability run {capability_run_id} does not exist")
         # Latest-approved is the walk's own lineage BY CONSTRUCTION, not by
         # accident (review finding codex-2, 2026-07-21): steering amendments
-        # supersede within the walk's lineage, and the planning router 409s
+        # supersede within the walk's lineage, and the task_agent router 409s
         # any turn while a walk is running or parked — so no unrelated plan
         # can become latest-approved between park and continuation.
         plan_row = conn.execute(
@@ -138,6 +152,7 @@ def build(
         ).first()
         if plan_row is None:
             raise LookupError("parked walk has no approved task plan")
+        capability = capability_of_task(conn, task_id)
         event_rows = events.read(conn, task_id)
         run_rows = [
             dict(row._mapping)
@@ -150,8 +165,12 @@ def build(
 
     cap = dict(cap_row._mapping)
     plan_data = dict(plan_row._mapping)
-    plan = TaskPlan.model_validate(plan_data["payload"])
-    chain = compose(plan)
+    # The parked walk's own capability decides which model reads its payload
+    # and which chain it composes to (C9); it is read inside the connection
+    # above rather than guessed from the walk row, because the task row is the
+    # single authority (D2).
+    plan = validate_plan(capability, plan_data["payload"])
+    chain = compose_plan(capability, plan)
     scoped_events = [
         entry
         for entry in event_rows
@@ -273,12 +292,13 @@ def build(
         most_recent = attempts[-1][1]["run_id"] if attempts else None
     return ContinuationState(
         capability_run_id=capability_run_id,
+        capability=capability,
         plan=plan,
         plan_id=plan_data["plan_id"],
         plan_version=plan_data["version"],
         plan_row_id=plan_data["plan_id"],
         chain=chain,
-        pause_points=pause_points(plan.steering_mode, chain),
+        pause_points=pause_points(plan.steering_mode, chain, lattice_for(capability)),
         pending_overlays=overlays,
         remaining_steps=_remaining_steps(chain, completed_components=completed_components),
         step_outcomes=outcomes,

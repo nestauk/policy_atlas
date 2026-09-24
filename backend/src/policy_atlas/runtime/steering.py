@@ -50,7 +50,6 @@ from policy_atlas.runtime.task_plan import (
     SteeringMode,
     TaskPlan,
     _enabled_components,
-    compose,
     time_band_for,
 )
 
@@ -165,6 +164,13 @@ DEEPENING_SELECTION = "deepening_selection"
 FINDING_GROUPS = "finding_groups"
 SYNTHESIS_SHAPE = "synthesis_shape"
 
+# Task 044's options-scoping gate. The NAME lives here beside the Evidence
+# search point names because :data:`_LATTICE_MODE_POLICY` is keyed by name; the
+# POINT itself is registered on the scoping lattice alone
+# (``capability_registry``), so :func:`lattice_policy` answers ``"off"`` for it
+# on an Evidence search walk however the mode table reads (A2).
+BASELINE_CONFIRM = "baseline_confirm"
+
 # Retained for callers/tests that name the existing P3 point directly.
 DEEPENING_SELECTION_STEER_POINT = DEEPENING_SELECTION
 
@@ -181,6 +187,10 @@ _LATTICE_MODE_POLICY: dict[SteeringMode, dict[str, LatticePolicy]] = {
         DEEPENING_SELECTION: "always",
         FINDING_GROUPS: "always",
         SYNTHESIS_SHAPE: "always",
+        # The baseline gate is structural, not a floor trigger: a scoping walk
+        # stops for the user before any option is generated (D11), so it is
+        # "always" in every attended mode and never "fired".
+        BASELINE_CONFIRM: "always",
     },
     "moderate": {
         SEARCH_REVIEW: "always",
@@ -188,6 +198,7 @@ _LATTICE_MODE_POLICY: dict[SteeringMode, dict[str, LatticePolicy]] = {
         DEEPENING_SELECTION: "fired",
         FINDING_GROUPS: "fired",
         SYNTHESIS_SHAPE: "always",
+        BASELINE_CONFIRM: "always",
     },
     "minimal": {
         SEARCH_REVIEW: "fired",
@@ -195,6 +206,7 @@ _LATTICE_MODE_POLICY: dict[SteeringMode, dict[str, LatticePolicy]] = {
         DEEPENING_SELECTION: "fired",
         FINDING_GROUPS: "fired",
         SYNTHESIS_SHAPE: "fired",
+        BASELINE_CONFIRM: "always",
     },
     "unattended": {
         SEARCH_REVIEW: "off",
@@ -202,6 +214,9 @@ _LATTICE_MODE_POLICY: dict[SteeringMode, dict[str, LatticePolicy]] = {
         DEEPENING_SELECTION: "off",
         FINDING_GROUPS: "off",
         SYNTHESIS_SHAPE: "off",
+        # Unattended does not pause; the gate becomes a recorded standing-default
+        # decision at the boundary instead (runner ``_resolve_unattended_boundary``).
+        BASELINE_CONFIRM: "off",
     },
 }
 
@@ -231,30 +246,51 @@ LATTICE_POINTS: dict[str, PausePoint] = {
 _LATTICE_BY_POINT: dict[PausePoint, str] = {point: name for name, point in LATTICE_POINTS.items()}
 
 
-def lattice_name_for(point: PausePoint) -> str | None:
+def lattice_name_for(
+    point: PausePoint, lattice: dict[str, PausePoint] | None = None
+) -> str | None:
     """Return the lattice point name for a boundary, or ``None`` if not one.
 
     Args:
         point: A concrete component boundary.
+        lattice: The **capability's** lattice (A2), from
+            ``capability_registry.lattice_for``. Defaults to the Evidence
+            search table, which is the only lattice registered in this slice,
+            so every existing caller is unchanged.
 
     Returns:
         The steer-point name (``search_exception``/``evidence_search_coverage``/
         ``deepening_selection``/``synthesis_shape``) or ``None`` when the
-        boundary is not a lattice point.
+        boundary is not a lattice point of that capability.
     """
-    return _LATTICE_BY_POINT.get(point)
+    if lattice is None or lattice is LATTICE_POINTS:
+        return _LATTICE_BY_POINT.get(point)
+    for name, candidate in lattice.items():
+        if candidate == point:
+            return name
+    return None
 
 
-def lattice_policy(mode: SteeringMode, name: str) -> LatticePolicy:
+def lattice_policy(
+    mode: SteeringMode, name: str, lattice: dict[str, PausePoint] | None = None
+) -> LatticePolicy:
     """Return the pause policy for a lattice point under a mode.
 
     Args:
         mode: Steering mode from the approved plan.
         name: Lattice point name.
+        lattice: The **capability's** lattice. A point that is not one of this
+            capability's is ``"off"`` regardless of what the mode table says
+            about the name — that is the whole of A2's protection, since the
+            mode table is keyed by name and a later capability's point would
+            otherwise fire on an Evidence search walk. Defaults to the
+            Evidence search table.
 
     Returns:
         ``"always"``, ``"fired"`` or ``"off"``.
     """
+    if name not in (LATTICE_POINTS if lattice is None else lattice):
+        return "off"
     return _LATTICE_MODE_POLICY[mode].get(name, "off")
 
 
@@ -407,7 +443,11 @@ def validate_steering_delta(
     return ValidatedDelta(component=component, delta=copied)
 
 
-def pause_points(mode: SteeringMode, chain: ComposedChain) -> set[PausePoint]:
+def pause_points(
+    mode: SteeringMode,
+    chain: ComposedChain,
+    lattice: dict[str, PausePoint] | None = None,
+) -> set[PausePoint]:
     """Compile a steering mode into the *always-pause* boundaries for a chain.
 
     This is the static pause set — the boundaries that pause unconditionally in
@@ -427,18 +467,22 @@ def pause_points(mode: SteeringMode, chain: ComposedChain) -> set[PausePoint]:
     Args:
         mode: Steering mode from the approved task plan.
         chain: Deterministically composed component chain.
+        lattice: The **capability's** lattice (A2), from
+            ``capability_registry.lattice_for``. Defaults to the Evidence
+            search table.
 
     Returns:
         The always-pause points present in ``chain``.
     """
+    points_table = LATTICE_POINTS if lattice is None else lattice
     component_set = set(chain.components)
     points: set[PausePoint] = set()
 
     if mode == "frequent":
         points.update(PausePoint("after_component", component) for component in component_set)
 
-    for name, point in LATTICE_POINTS.items():
-        if lattice_policy(mode, name) != "always":
+    for name, point in points_table.items():
+        if lattice_policy(mode, name, points_table) != "always":
             continue
         if point.component in component_set:
             points.add(point)
@@ -643,7 +687,42 @@ def build_steer_point_options(
         return _groups_options()
     if point == SYNTHESIS_SHAPE:
         return _p4_options()
+    if point == BASELINE_CONFIRM:
+        return baseline_confirm_options()
     raise ValueError(f"unknown steer point: {point!r}")
+
+
+def baseline_confirm_options() -> list[dict[str, Any]]:
+    """Return the two options the options-scoping baseline gate offers (D12).
+
+    Both ids are deliberately distinct from the durable response vocabulary
+    (``continue | adjust | abort | mode_change``, X10): the id names the user's
+    decision, the response names what the walk then does. Neither option
+    carries a delta — the gate does not amend the plan, it ends the walk one
+    way or the other.
+
+    Returns:
+        ``confirm_plan`` (the walk finishes) and ``change_plan`` (the walk ends
+        and the plan stays editable), in that order.
+    """
+    return [
+        {
+            "id": "confirm_plan",
+            "intent": "Confirm the plan",
+            "label": "Confirm plan and build longlist",
+            "description": "Accept the plan as it stands and go on to the longlist.",
+            "delta": {},
+            "requires_user_input": False,
+        },
+        {
+            "id": "change_plan",
+            "intent": "Change the plan",
+            "label": "Change the plan",
+            "description": "Stop here and edit the plan; the baseline you have read is kept.",
+            "delta": {},
+            "requires_user_input": False,
+        },
+    ]
 
 
 def generic_floor_options() -> list[dict[str, Any]]:
@@ -1591,7 +1670,19 @@ def apply_adjustment(
             components, falls outside directive grammar, cannot map to plan
             fields, or would change an already-run component configuration.
     """
-    current_chain = compose(plan)
+    # Local import: ``capability_registry`` reads this module's lattice, so a
+    # module-level import here would close the cycle. Constant capability, not
+    # a lookup — ``plan`` is already typed ``TaskPlan``, and the steering
+    # router is untouched by task 044 (C1: a gate edit does not come through
+    # here). Routed through the registry so the single seam holds (C9).
+    from policy_atlas.runtime.capability_registry import (
+        EVIDENCE_SEARCH,
+        compose_plan,
+        expect_task_plan,
+        validate_plan,
+    )
+
+    current_chain = compose_plan(EVIDENCE_SEARCH, plan)
     current_components = set(current_chain.components)
     _validate_delta_component_bounds(
         adjustment.directive_deltas,
@@ -1608,11 +1699,11 @@ def apply_adjustment(
             _apply_component_delta_to_payload(payload, component=component, delta=delta)
         payload["expected_artefact_shape"] = ""
         payload["time_band"] = ""
-        amended = TaskPlan.model_validate(payload)
+        amended = expect_task_plan(validate_plan(EVIDENCE_SEARCH, payload))
     except (ValidationError, ValueError, TypeError) as exc:
         raise SteeringAdjustmentError(str(exc)) from exc
 
-    amended_chain = compose(amended)
+    amended_chain = compose_plan(EVIDENCE_SEARCH, amended)
     _validate_completed_component_stability(
         current_chain=current_chain,
         amended_chain=amended_chain,
@@ -1989,6 +2080,16 @@ def _validate_directive_delta(
         # characterise precedent): validated through the synthesis grammar, and
         # exempt from the plan round-trip below.
         _require_keys(component, delta, {"synthesis"})
+        # ``template`` is in the synthesis grammar because the chain compiler
+        # sets it (``compose_scoping`` names the baseline template); it is not a
+        # steerable shape edit. A steering delta that carried it would switch a
+        # live Evidence search run's output kind to the options-scoping
+        # baseline, whose sections and gate the walk has no plan for.
+        if isinstance(delta["synthesis"], Mapping) and "template" in delta["synthesis"]:
+            raise SteeringAdjustmentError(
+                "the report template is set when the run is planned and cannot be "
+                "changed by a steering adjustment"
+            )
         try:
             # Answer-time validation has no grouping substrate; group_ids are
             # form-checked here and membership-checked at execution (028 M2).

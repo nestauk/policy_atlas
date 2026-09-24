@@ -31,8 +31,8 @@ export const queryKeys = {
     ["tasks", taskId, "findings", query?.page, query?.page_size, query?.profile, query?.facet, query?.group, query?.group_id, query?.source_id] as const,
   decisions: (taskId: string, page?: number, pageSize?: number) =>
     ["tasks", taskId, "decisions", page, pageSize] as const,
-  planningTurns: (taskId: string, page?: number, pageSize?: number) =>
-    ["tasks", taskId, "planning-turns", page, pageSize] as const,
+  taskAgentTurns: (taskId: string, page?: number, pageSize?: number) =>
+    ["tasks", taskId, "task-agent-turns", page, pageSize] as const,
   plan: (taskId: string) => ["tasks", taskId, "plan"] as const,
   runs: (taskId: string, page?: number, pageSize?: number) =>
     ["tasks", taskId, "runs", page, pageSize] as const,
@@ -118,7 +118,7 @@ interface FindingsQuery extends PageQuery {
 
 /** Filters for the task conversation library. */
 interface ConversationQuery {
-  kind?: "planning" | "chat";
+  kind?: "task_agent" | "chat";
   status?: "active" | "closed" | "archived";
 }
 
@@ -161,10 +161,11 @@ const ACTIVE_RUN_STATUSES = new Set(["running", "paused"]);
  *  keeps showing "Analysing"/"Paused" after the run has actually moved on.
  *  `refetchIntervalInBackground` defaults to `false`, so this only polls
  *  while the tab is visible. */
-export function useTasks(query?: TasksQuery) {
+export function useTasks(query?: TasksQuery, options?: { enabled?: boolean }) {
   const client = useApiClient();
   return useQuery({
     queryKey: queryKeys.tasks(query),
+    enabled: options?.enabled,
     queryFn: async () => {
       const { data, error } = await client.GET("/api/v1/tasks", { params: { query } });
       if (error) throw error;
@@ -391,14 +392,14 @@ export function useDecisions(taskId: string, query?: PageQuery) {
   });
 }
 
-/** `GET /api/v1/tasks/{task_id}/planning-turns` — the durable,
- * paginated planning transcript in ascending `turn_index` order. */
-export function usePlanningTurns(taskId: string, query?: PageQuery) {
+/** `GET /api/v1/tasks/{task_id}/task-agent-turns` — the durable,
+ * paginated task_agent transcript in ascending `turn_index` order. */
+export function useTaskAgentTurns(taskId: string, query?: PageQuery) {
   const client = useApiClient();
   return useQuery({
-    queryKey: queryKeys.planningTurns(taskId, query?.page, query?.page_size),
+    queryKey: queryKeys.taskAgentTurns(taskId, query?.page, query?.page_size),
     queryFn: async () => {
-      const { data, error } = await client.GET("/api/v1/tasks/{task_id}/planning-turns", {
+      const { data, error } = await client.GET("/api/v1/tasks/{task_id}/task-agent-turns", {
         params: { path: { task_id: taskId }, query },
       });
       if (error) throw error;
@@ -409,7 +410,7 @@ export function usePlanningTurns(taskId: string, query?: PageQuery) {
 }
 
 /** `GET /api/v1/tasks/{task_id}/conversations` — the task chat and
- * planning-conversation library. `options.enabled` lets the public task view
+ * task_agent-conversation library. `options.enabled` lets the public task view
  * (task 037) keep the hook mounted without issuing the non-public request. */
 export function useConversations(
   taskId: string,
@@ -502,7 +503,7 @@ export function usePlan(taskId: string) {
 }
 
 /** `GET /api/v1/tasks/{task_id}/runs` — paginated run blocks for the
- * planning-thread composition model. */
+ * task_agent-thread composition model. */
 export function useRuns(taskId: string, query?: PageQuery) {
   const client = useApiClient();
   return useQuery({

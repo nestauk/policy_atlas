@@ -48,6 +48,7 @@ from tests.core.legacy_catalog import legacy_table
 from tests.helpers import now
 
 REVISION = "c1a7f4e9b0d2"
+MIGRATION_038_REVISION = "c1a7f4e9b0d2"
 PRE_MIGRATION_REVISION = "b2f6a9d4c1e7"
 
 _MANIFEST = (
@@ -383,7 +384,9 @@ def _write_deploy_window_rows(engine: Engine, ids: dict[str, uuid.UUID]) -> None
                     ],
                 },
                 created_at=now(),
-                created_by="planner",
+                # 044: the new image writes the Task Agent attribution; the
+                # downgrade must put `planner` back.
+                created_by="task_agent",
                 approved_at=now(),
             )
         )
@@ -436,46 +439,58 @@ def _delete_everything(engine: Engine, ids: dict[str, uuid.UUID]) -> None:
 
 
 def test_038_renames_the_catalog_to_the_manifest(engine: Engine) -> None:
-    """Every manifest "after" name exists at head, and no retired name survives."""
+    """Every manifest "after" name exists at 038, and no retired name survives.
+
+    Read at ``c1a7f4e9b0d2``, not at head: task 044 renamed `planning_transcript`
+    (and its column and four constraints) again, so the 038 manifest's "after"
+    names are the catalog exactly at this revision. The assertion still proves
+    what it proved — that 038 landed every row of its own manifest.
+    """
     cfg = _alembic_cfg()
     command.upgrade(cfg, "head")
-    with engine.connect() as conn:
-        tables, columns, names = _live_names(conn)
+    command.downgrade(cfg, MIGRATION_038_REVISION)
+    try:
+        with engine.connect() as conn:
+            tables, columns, names = _live_names(conn)
 
-    # Manifest rows name the owning table by its pre-migration name; at head
-    # it is the renamed table (`project` is the Project entity, `task` the Task).
-    table_after = {row[0]: row[1] for row in _manifest_rows("Tables")}
-    after_tables = set(table_after.values())
-    after_columns = {
-        (table_after.get(row[0], row[0]), row[2]) for row in _manifest_rows("Columns")
-    }
-    after_names = {
-        (table_after.get(row[1], row[1]), row[3])
-        for row in _manifest_rows("Constraints and indexes")
-    }
-    assert after_tables <= tables
-    assert after_columns <= columns
-    assert after_names <= names
+        # Manifest rows name the owning table by its pre-migration name; at 038
+        # it is the renamed table (`project` is the Project entity, `task` the Task).
+        table_after = {row[0]: row[1] for row in _manifest_rows("Tables")}
+        after_tables = set(table_after.values())
+        after_columns = {
+            (table_after.get(row[0], row[0]), row[2]) for row in _manifest_rows("Columns")
+        }
+        after_names = {
+            (table_after.get(row[1], row[1]), row[3])
+            for row in _manifest_rows("Constraints and indexes")
+        }
+        assert after_tables <= tables
+        assert after_columns <= columns
+        assert after_names <= names
 
-    today_tables = set(table_after)
-    today_columns = {(table_after.get(row[0], row[0]), row[1]) for row in _manifest_rows("Columns")}
-    today_names = {
-        (table_after.get(row[1], row[1]), row[2])
-        for row in _manifest_rows("Constraints and indexes")
-        # `ck_capr_capability` is dropped and recreated under the same name.
-        if row[2] != row[3]
-    }
-    assert (today_tables & tables) <= _REUSED_BY_THE_PROJECT_ENTITY
-    assert {name for _, name in today_columns & columns} <= _REUSED_BY_THE_PROJECT_ENTITY
-    assert {name for _, name in today_names & names} <= _REUSED_BY_THE_PROJECT_ENTITY
+        today_tables = set(table_after)
+        today_columns = {
+            (table_after.get(row[0], row[0]), row[1]) for row in _manifest_rows("Columns")
+        }
+        today_names = {
+            (table_after.get(row[1], row[1]), row[2])
+            for row in _manifest_rows("Constraints and indexes")
+            # `ck_capr_capability` is dropped and recreated under the same name.
+            if row[2] != row[3]
+        }
+        assert (today_tables & tables) <= _REUSED_BY_THE_PROJECT_ENTITY
+        assert {name for _, name in today_columns & columns} <= _REUSED_BY_THE_PROJECT_ENTITY
+        assert {name for _, name in today_names & names} <= _REUSED_BY_THE_PROJECT_ENTITY
 
-    # I1 stated the other way round: nothing in the live catalog still carries
-    # a retired token, and every surviving `project` is the Project entity.
-    retired = re.compile(r"portfolio|_pss_|uq_pss|ck_pss|fk_pss|oplan|orchestration_plan")
-    live = tables | {name for _, name in columns} | {name for _, name in names}
-    assert not [name for name in live if retired.search(name)]
-    survivors = {name for name in live if "project" in name}
-    assert survivors <= _REUSED_BY_THE_PROJECT_ENTITY
+        # I1 stated the other way round: nothing in the live catalog still carries
+        # a retired token, and every surviving `project` is the Project entity.
+        retired = re.compile(r"portfolio|_pss_|uq_pss|ck_pss|fk_pss|oplan|orchestration_plan")
+        live = tables | {name for _, name in columns} | {name for _, name in names}
+        assert not [name for name in live if retired.search(name)]
+        survivors = {name for name in live if "project" in name}
+        assert survivors <= _REUSED_BY_THE_PROJECT_ENTITY
+    finally:
+        command.upgrade(cfg, "head")
 
 
 def test_038_round_trips_a_populated_pre_migration_database(engine: Engine) -> None:

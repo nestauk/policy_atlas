@@ -1,22 +1,22 @@
 ---
 type: Capability spec
-title: Evidence search (EB)
-description: The declarative EB spec and §5 compile target — EB as an instance of the capability framework.
+title: Evidence search (ES)
+description: The declarative ES spec and §5 compile target — ES as an instance of the capability framework.
 tags: [capability, evidence-search, compile-target]
 timestamp: 2026-06-22
 ---
 
-# Capability spec — Evidence search (EB)
+# Capability spec — Evidence search (ES)
 
 **The declarative spec — the §5 compile target.** Distilled from
 [backend-evidence-base-build-spec.md](../../sources/backend/backend-evidence-base-build-spec.md), now
-frozen origin; this spec + `docs/adr/` are canonical ([ADR 0002](../../../adr/0002-spec-governance.md)). EB is an **instance** of the capability
+frozen origin; this spec + `docs/adr/` are canonical ([ADR 0002](../../../adr/0002-spec-governance.md)). ES is an **instance** of the capability
 framework: shared machinery (Tier-0 substrate, retrieval contract, findings layer +
 `intervention_outcome_finding`, grounding) is owned by the system contracts and only
-**referenced** here; this spec holds what is **specific to EB**.
+**referenced** here; this spec holds what is **specific to ES**.
 
 Companion files: [components.md](components.md) (the skeleton) · [provenance.md](provenance.md)
-(EB's gap/pattern trust rules). System contracts:
+(ES's gap/pattern trust rules). System contracts:
 [../../system/data-model.md](../../system/data-model.md) ·
 [../../system/provenance-grounding.md](../../system/provenance-grounding.md) ·
 [../../system/execution-orchestration.md](../../system/execution-orchestration.md) ·
@@ -24,7 +24,7 @@ Companion files: [components.md](components.md) (the skeleton) · [provenance.md
 
 ## Artefact & scope
 
-- EB is a **single, broad capability producing one artefact**.
+- ES is a **single, broad capability producing one artefact**.
 - The artefact spans a **landscape ↔ synthesis depth axis**: shallow → an evidence *landscape*
   (corpus shape — metadata-grounded patterns, clusters, gaps); deep → adds a *synthesis* of what
   the evidence says (Tier-1 findings → grounded blocks). **The deep artefact contains the
@@ -41,19 +41,19 @@ Companion files: [components.md](components.md) (the skeleton) · [provenance.md
   fail-closed. **Breadth and depth are independent parameters**: a targeted question with a
   small time budget compiles to a *narrow-and-deep* run (small selection budget, few
   extractions, full grounding) — quick never has to mean shallow.
-- **EB owns evidence assembly** — unlike analysis capabilities that start downstream of an
-  existing selection, assembling the corpus broadly *is* EB's distinctive job, so its skeleton
-  **includes the assembly components** and **`search` egress originates from inside the EB run**.
+- **ES owns evidence assembly** — unlike analysis capabilities that start downstream of an
+  existing selection, assembling the corpus broadly *is* ES's distinctive job, so its skeleton
+  **includes the assembly components** and **`search` egress originates from inside the ES run**.
 - **Rigidity:** fairly structured (toward the deterministic end of the dial).
-- **Dependencies:** none upstream by default (EB is the front of the v3.0 chain). When a task is
+- **Dependencies:** none upstream by default (ES is the front of the v3.0 chain). When a task is
   started from an Options scoping task, the shared `inherit` component seeds it with that task's
   documents, light findings, user context and evidence scope before acquire runs (OS ruling 48;
   [components.md § 0](components.md)). Downstream capabilities
-  (Options Assessment, Impact, Transferability, VfM) consume EB's findings layer — all ⏸ deferred.
+  (Options Assessment, Impact, Transferability, VfM) consume ES's findings layer — all ⏸ deferred.
 
 **Scope boundaries** (the evidence-vs-analysis line):
-- Narrow, single-intervention deep analysis is **out of EB** → the **Impact** capability (⏸).
-- **Precise option resolution is out of EB** — EB groups interventions *descriptively*
+- Narrow, single-intervention deep analysis is **out of ES** → the **Impact** capability (⏸).
+- **Precise option resolution is out of ES** — ES groups interventions *descriptively*
   (corpus-grounded thematic clusters); resolving them into named, comparable options is
   decision-relative → the **Options scoping** capability
   ([../options-scoping/](../options-scoping/capability.md)). **One declared widening (owner,
@@ -63,7 +63,7 @@ Companion files: [components.md](components.md) (the skeleton) · [provenance.md
   computed with the parent's user context under the OS trust rules, and that report **is** the
   option profile shown in the scoping task (OS ruling 47). Such a task opens with `inherit` from
   the scoping task (OS ruling 48). Outside that case the evidence-descriptive rule stands.
-- EB may answer broader questions through grounded narrative synthesis over its **existing**
+- ES may answer broader questions through grounded narrative synthesis over its **existing**
   findings, but must **not** add new schemas, structured computations or tools belonging to
   future capabilities (handoff §7.9). **Direct chunk-grounded narrative synthesis** is
   sanctioned (task 013 flow-back;
@@ -84,7 +84,7 @@ acquire → screen → classify → appraise → ingest(fetch) → synthesise   
         + [select → extract → group]   (the deep chain, plan-selected) (discretionary)
 ```
 
-**The mandatory EB spine** ([ADR 0013](../../../adr/0013-mandatory-eb-spine.md), task 016):
+**The mandatory ES spine** ([ADR 0013](../../../adr/0013-mandatory-eb-spine.md), task 016):
 every run — rapid included — executes the spine, so every artefact synthesises over fetched
 text (or a document's labelled abstract basis where fetch failed — a mandatory *attempt*,
 reason-coded per document, never a substrate guarantee); characterise, select, extract, group
@@ -98,7 +98,7 @@ run produced — a characterise-only run's artefact is the landscape; a run that
 deep chain adds finding- and theme-grounded claims, so the deep artefact contains the
 landscape. Per-component detail in [components.md](components.md).
 
-**New shared tools EB introduces** (framework flow-backs, now in the system tool registry):
+**New shared tools ES introduces** (framework flow-backs, now in the system tool registry):
 `screen`, `classify`, `select`.
 
 ## Output structure
@@ -107,13 +107,13 @@ landscape. Per-component detail in [components.md](components.md).
   addressable units are the substrate. **Grounding is a per-unit property**, so a single section
   **mixes grounding modes freely** (a pattern, a cited finding and a gap in one paragraph). The
   characterise/synthesise split is about **production, not presentation**.
-- **EB declares little; the Agent *shapes* the sections at plan time** (how many, around
-  what facets, in what order — compiled plan parameters derived from intent); **EB's synthesise
+- **ES declares little; the Agent *shapes* the sections at plan time** (how many, around
+  what facets, in what order — compiled plan parameters derived from intent); **ES's synthesise
   component composes the artefact at the run terminus** (task 013 flow-back — the
   capability-composes rule: every capability sub-agent composes its own artefact; the
   Agent owns no runtime content machinery). "Synthesis" is therefore **multiple
   sections** (typically one per facet/intervention family), not one.
-- EB fixes only that the artefact carries:
+- ES fixes only that the artefact carries:
   - an **artefact summary** — citation-free navigation, faithfulness-checked, **outside the
     grounding economy** (deliberately *not* "key findings"); and
   - two **content kinds** — landscape *shape* (patterns/clusters/gaps) and grounded *findings*.
@@ -134,15 +134,15 @@ landscape. Per-component detail in [components.md](components.md).
   **Production ≠ presentation:** the key-findings block is produced **last** (it condenses what
   synthesis discovers) and the artefact summary is a late display rendering; both shown near the
   top, produced after their content. A convention, not a rigid template.
-- EB departs from v2's decision-oriented frame: it is **evidence-descriptive** — **no
+- ES departs from v2's decision-oriented frame: it is **evidence-descriptive** — **no
   recommendations / decision-answer section** (per scope above).
 
 ## Check-in points
 
-- EB defines **no check-in policy of its own** — frequency is the user-set §6 **steering mode**.
+- ES defines **no check-in policy of its own** — frequency is the user-set §6 **steering mode**.
   The landscape → synthesis crossing is a **mode-governed steer-point** (Frequent pauses there;
   Moderate pauses if the scope choice is important; Minimal flows through, logging/flagging).
-- **EB declares no unconditional input gate** (it renders no verdict/recommendation), **but it
+- **ES declares no unconditional input gate** (it renders no verdict/recommendation), **but it
   pre-declares one conditional steer-point: "deepening selection"** — which clusters/documents go
   to deep extraction (a known, recurring, **emphasis-shaping** judgement, not an unanticipated
   residual). It follows §6's resolve-structurally pattern:

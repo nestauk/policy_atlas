@@ -1,4 +1,4 @@
-"""Persistence helpers for planning-conversation lineage."""
+"""Persistence helpers for task_agent-conversation lineage."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from sqlalchemy import select, update
 from sqlalchemy.engine import Connection
 
 from policy_atlas.core.schema import conversation
-from policy_atlas.runtime.planner_prompt import PlanDraftWire
+from policy_atlas.runtime.task_agent_prompt import PlanDraftWire
 from policy_atlas.runtime.task_plan import TaskPlan
 
 log = structlog.get_logger()
@@ -24,7 +24,7 @@ def seed_draft_from_executed_plan(plan: TaskPlan) -> PlanDraftWire:
         plan: Validated approved plan stored for the completed lineage.
 
     Returns:
-        The equivalent planner draft, without execution-only fields.
+        The equivalent task_agent draft, without execution-only fields.
     """
     values = plan.model_dump(
         mode="json",
@@ -35,10 +35,10 @@ def seed_draft_from_executed_plan(plan: TaskPlan) -> PlanDraftWire:
     return PlanDraftWire.model_validate(values)
 
 
-def ensure_active_planning_conversation(
+def ensure_active_task_agent_conversation(
     conn: Connection, *, task_id: uuid.UUID, now: datetime
 ) -> uuid.UUID:
-    """Return or create the task's active planning conversation.
+    """Return or create the task's active task_agent conversation.
 
     The caller owns the task's phase-one row lock, which serializes first
     conversation creation. The partial unique index remains the database
@@ -46,16 +46,16 @@ def ensure_active_planning_conversation(
 
     Args:
         conn: Open transaction holding the task row lock.
-        task_id: Task whose planning lineage is being advanced.
+        task_id: Task whose task_agent lineage is being advanced.
         now: Creation timestamp for a new conversation.
 
     Returns:
-        The active planning conversation id.
+        The active task_agent conversation id.
     """
     active_id = conn.execute(
         select(conversation.c.id)
         .where(conversation.c.task_id == task_id)
-        .where(conversation.c.kind == "planning")
+        .where(conversation.c.kind == "task_agent")
         .where(conversation.c.status == "active")
     ).scalar_one_or_none()
     if active_id is not None:
@@ -66,7 +66,7 @@ def ensure_active_planning_conversation(
         conversation.insert().values(
             id=conversation_id,
             task_id=task_id,
-            kind="planning",
+            kind="task_agent",
             title="Planning",
             status="active",
             created_at=now,
@@ -74,26 +74,26 @@ def ensure_active_planning_conversation(
             archived_at=None,
         )
     )
-    log.info("planning_conversation.created", task_id=str(task_id))
+    log.info("task_agent_conversation.created", task_id=str(task_id))
     return conversation_id
 
 
-def close_planning_conversation(
+def close_task_agent_conversation(
     conn: Connection, *, task_id: uuid.UUID, closed_at: datetime
 ) -> None:
-    """Close the task's active planning conversation, if one exists.
+    """Close the task's active task_agent conversation, if one exists.
 
     Args:
         conn: Open transaction that owns the terminal-run write.
-        task_id: Task whose current planning lineage is closing.
+        task_id: Task whose current task_agent lineage is closing.
         closed_at: Terminal-run timestamp to persist as the closure time.
     """
     result = conn.execute(
         update(conversation)
         .where(conversation.c.task_id == task_id)
-        .where(conversation.c.kind == "planning")
+        .where(conversation.c.kind == "task_agent")
         .where(conversation.c.status == "active")
         .values(status="closed", closed_at=closed_at)
     )
     if result.rowcount:
-        log.info("planning_conversation.closed", task_id=str(task_id))
+        log.info("task_agent_conversation.closed", task_id=str(task_id))

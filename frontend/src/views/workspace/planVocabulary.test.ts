@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import type { components } from "../../api/gen/types";
 import {
   ANALYSIS_DEPTH_LABEL,
   ANALYSIS_QUESTION,
@@ -8,9 +9,13 @@ import {
   acquireSearchBlurb,
   axesForResearchApproach,
   COMPONENT_LABEL,
+  CONSTRAINT_CHECKED_AT_LABEL,
+  constraintEffectLines,
   RESEARCH_APPROACH_CUSTOM,
   researchApproachId,
   researchApproachLabel,
+  SCOPING_DEPTH_LABEL,
+  SCOPING_STEERING_MODE_LABEL,
   SEARCH_EFFORT_LABEL,
   SEARCH_SCOPE_HINT,
   SEARCH_SCOPE_RECORD_CAP,
@@ -18,9 +23,13 @@ import {
   STEERING_MODE_LABEL,
   scopeChips,
   stepsForAnalysisDepth,
+  TAG_ORIGIN_LABEL,
   timeBandFor,
   vocabLabel,
+  YOUR_CONTEXT_TYPE_LABEL,
 } from "./planVocabulary";
+
+type ScopingConstraint = components["schemas"]["ScopingConstraintOut"];
 
 describe("vocabLabel", () => {
   it("maps every locked key and omits unknown keys (never leaks raw enums)", () => {
@@ -173,5 +182,74 @@ describe("stepsForAnalysisDepth", () => {
       label: "Searching",
       blurb: "Querying academic databases.",
     });
+  });
+});
+
+describe("options-scoping plan vocabulary (task 044)", () => {
+  function constraint(overrides: Partial<ScopingConstraint> = {}): ScopingConstraint {
+    return {
+      text: "Only options a council can fund directly",
+      kind: "requirement",
+      origin: "your_call",
+      checked_at: "longlist",
+      country_group: null,
+      published_after: null,
+      published_before: null,
+      languages: null,
+      ...overrides,
+    };
+  }
+
+  it("maps every origin tag to its fixed screen words and omits an unknown origin", () => {
+    expect(vocabLabel(TAG_ORIGIN_LABEL, "from_your_question")).toBe("from your question");
+    expect(vocabLabel(TAG_ORIGIN_LABEL, "assumed")).toBe("assumed, please check");
+    expect(vocabLabel(TAG_ORIGIN_LABEL, "your_call")).toBe("your choice");
+    expect(vocabLabel(TAG_ORIGIN_LABEL, "unknown")).toBeNull();
+  });
+
+  it("shows the depth screen label, never the internal key", () => {
+    expect(SCOPING_DEPTH_LABEL.rapid).toBe("Rapid scoping");
+    expect(SCOPING_DEPTH_LABEL.standard).toBe("Standard scoping");
+    expect(vocabLabel(SCOPING_DEPTH_LABEL, "deep")).toBeNull();
+  });
+
+  it("shows the scoping check-ins words, distinct from the ES's own", () => {
+    expect(SCOPING_STEERING_MODE_LABEL.frequent).toBe("Walk me through it");
+    expect(SCOPING_STEERING_MODE_LABEL.moderate).toBe("At the key decisions");
+    expect(SCOPING_STEERING_MODE_LABEL.minimal).toBe("Only when something needs my judgment");
+    expect(SCOPING_STEERING_MODE_LABEL.unattended).toBe("Run through without asking");
+  });
+
+  it("shows the Your context type words", () => {
+    expect(YOUR_CONTEXT_TYPE_LABEL.present_fact).toBe("present fact");
+    expect(YOUR_CONTEXT_TYPE_LABEL.commitment).toBe("commitment");
+  });
+
+  it("shows the checked-at screen words for the constraints table", () => {
+    expect(CONSTRAINT_CHECKED_AT_LABEL.longlist).toBe("Longlist");
+    expect(CONSTRAINT_CHECKED_AT_LABEL.assessment).toBe("Assessment");
+    expect(CONSTRAINT_CHECKED_AT_LABEL.retrieval).toBe("Retrieval");
+  });
+
+  it("gives each constraint kind its fixed What-happens sentence", () => {
+    expect(constraintEffectLines(constraint({ kind: "requirement" }))).toEqual([
+      "Options that conflict are excluded, with the reason shown. You can include them again.",
+    ]);
+    expect(constraintEffectLines(constraint({ kind: "preference" }))).toEqual([
+      "Checked after assessment where costs or effects are comparable. Until then, a labelled guess that sorts and never excludes.",
+    ]);
+    expect(constraintEffectLines(constraint({ kind: "evidence_restriction" }))).toEqual([
+      'Other documents are set aside and counted. Known options stay, marked "no in-scope evidence" if none of their evidence is in scope.',
+    ]);
+  });
+
+  it("adds the not-yet-applied language rider only when languages are set", () => {
+    expect(
+      constraintEffectLines(constraint({ kind: "evidence_restriction", languages: ["English"] })),
+    ).toEqual([
+      'Other documents are set aside and counted. Known options stay, marked "no in-scope evidence" if none of their evidence is in scope.',
+      "Language: not yet applied at retrieval",
+    ]);
+    expect(constraintEffectLines(constraint({ kind: "requirement", languages: [] }))).toHaveLength(1);
   });
 });

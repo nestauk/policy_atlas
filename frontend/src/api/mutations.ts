@@ -20,11 +20,19 @@ function raise(error: unknown, status?: number): never {
 /**
  * Start a task from a question (plan D4).
  *
- * Two calls, no backend change: create the task, then post the same
- * question as its first planning turn, so the conversation opens with the
- * words the person actually typed rather than a system greeting.
+ * ONE create call (task 044, C10): the kind of work, the project and the
+ * tasks it starts from all travel in the body and are written in one
+ * transaction, so a create either lands whole or not at all. The separate
+ * PATCH this used to make could fail after the task existed, leaving a real
+ * but unassigned task — and "Starts from" cannot be built on a flow with
+ * that failure mode.
  *
- * The task's name is derived from the question here (D5). The planner's own
+ * The opening task_agent turn is still a second call, deliberately: it posts
+ * the same question so the conversation opens with the words the person
+ * actually typed rather than a system greeting, and a failure there leaves a
+ * real, usable task.
+ *
+ * The task's name is derived from the question here (D5). The task_agent's own
  * `plan.title` is deliberately not written back — that would be new
  * behaviour — so a task shows its derived name until renamed.
  */
@@ -32,33 +40,28 @@ export function useCreateTask() {
   const client = useApiClient();
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (input: { question: string; projectId?: string | null }) => {
+    mutationFn: async (input: {
+      question: string;
+      projectId?: string | null;
+      capability?: components["schemas"]["TaskCreate"]["capability"];
+      fromTaskIds?: string[];
+    }) => {
       const question = input.question.trim();
       const { data: task, error, response } = await client.POST("/api/v1/tasks", {
-        body: { name: taskNameFromQuestion(question), question },
+        body: {
+          name: taskNameFromQuestion(question),
+          question,
+          capability: input.capability ?? "evidence_search",
+          project_ids: input.projectId != null ? [input.projectId] : [],
+          from_task_ids: input.fromTaskIds ?? [],
+        },
       });
       if (task === undefined) raise(error, response.status);
-
-      if (input.projectId != null) {
-        // Unlike the opening turn below, this result IS checked: openapi-fetch
-        // never throws on its own, so an ignored error here (e.g. a colleague
-        // picking a colleague-owned org-visible project, which is readable
-        // but not writable) would silently leave the task unassigned with no
-        // sign anything went wrong.
-        const { data: patched, error: patchError, response: patchResponse } = await client.PATCH(
-          "/api/v1/tasks/{task_id}",
-          {
-            params: { path: { task_id: task.task_id } },
-            body: { project_ids: [input.projectId] },
-          },
-        );
-        if (patched === undefined) raise(patchError, patchResponse.status);
-      }
 
       // The opening turn. A failure here leaves a real, usable task whose
       // conversation is simply empty, so it is not worth unwinding the
       // creation — the person can just type the question again.
-      await client.POST("/api/v1/tasks/{task_id}/planning-turns", {
+      await client.POST("/api/v1/tasks/{task_id}/task-agent-turns", {
         params: { path: { task_id: task.task_id } },
         body: { message: question, client_turn_id: crypto.randomUUID() },
       });
@@ -182,17 +185,17 @@ export function useUpdateProject(projectId: string) {
   });
 }
 
-/** `POST .../planning-turns` — one real planner turn. `clientTurnId` is
+/** `POST .../task-agent-turns` — one real task_agent turn. `clientTurnId` is
  *  minted by the caller per logical turn (one per submitted message, not
  *  per send attempt) so that retrying the same submission reuses the id
  *  rather than minting a fresh one the server would treat as a new turn. */
-export function usePlanningTurn(taskId: string) {
+export function useTaskAgentTurn(taskId: string) {
   const client = useApiClient();
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (input: { message: string; clientTurnId: string }) => {
       const { data, error, response } = await client.POST(
-        "/api/v1/tasks/{task_id}/planning-turns",
+        "/api/v1/tasks/{task_id}/task-agent-turns",
         {
           params: { path: { task_id: taskId } },
           body: { message: input.message, client_turn_id: input.clientTurnId },
@@ -232,6 +235,29 @@ export function useStartRun(taskId: string) {
         params: { path: { task_id: taskId } },
         body: {},
       });
+      if (data === undefined) raise(error, response.status);
+      return data;
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.taskRoot(taskId) }),
+  });
+}
+
+/** `POST .../plan/confirm-baseline` — record that a plan version was
+ *  confirmed against its baseline (task 044, S4): a plan-scoped record, not a
+ *  steering decision, so it works whether or not a walk is active for it to
+ *  hang on. Idempotent on the same `(artefact_id, plan_version)` pair. */
+export function useConfirmBaseline(taskId: string) {
+  const client = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (body: components["schemas"]["ConfirmBaselineIn"]) => {
+      const { data, error, response } = await client.POST(
+        "/api/v1/tasks/{task_id}/plan/confirm-baseline",
+        {
+          params: { path: { task_id: taskId } },
+          body,
+        },
+      );
       if (data === undefined) raise(error, response.status);
       return data;
     },

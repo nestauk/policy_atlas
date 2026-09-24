@@ -9,7 +9,7 @@ from pathlib import Path
 from sqlalchemy import select
 from sqlalchemy.engine import Engine
 
-from policy_atlas.core.schema import artefact, chat_turn, conversation, planning_transcript
+from policy_atlas.core.schema import artefact, chat_turn, conversation, task_agent_transcript
 from tests.api.resource_support import api_client, create_task
 from tests.helpers import now
 
@@ -92,12 +92,12 @@ def _chat_turn(
     return turn_id
 
 
-def _planning_turn(engine: Engine, *, task_id: uuid.UUID, conversation_id: uuid.UUID) -> None:
-    """Insert one completed planning transcript row for a library preview."""
+def _task_agent_turn(engine: Engine, *, task_id: uuid.UUID, conversation_id: uuid.UUID) -> None:
+    """Insert one completed task_agent transcript row for a library preview."""
     stamp = now()
     with engine.begin() as conn:
         conn.execute(
-            planning_transcript.insert().values(
+            task_agent_transcript.insert().values(
                 id=uuid.uuid4(),
                 task_id=task_id,
                 conversation_id=conversation_id,
@@ -105,7 +105,7 @@ def _planning_turn(engine: Engine, *, task_id: uuid.UUID, conversation_id: uuid.
                 turn_index=0,
                 user_message="Plan the evidence review",
                 reply="I will prepare the plan.",
-                planner_state={},
+                task_agent_state={},
                 response={},
                 part=None,
                 suggestions=[],
@@ -125,10 +125,10 @@ def test_library_lists_mixed_kinds_filters_archived_and_carries_previews(
         chat_id = _conversation(
             engine, task_id=task_id, title="Recent chat", created_at_offset=20
         )
-        planning_id = _conversation(
+        task_agent_id = _conversation(
             engine,
             task_id=task_id,
-            kind="planning",
+            kind="task_agent",
             status="closed",
             title="Completed plan",
             created_at_offset=10,
@@ -147,11 +147,11 @@ def test_library_lists_mixed_kinds_filters_archived_and_carries_previews(
             user_message="What does the evidence say?",
             answer="The evidence supports the intervention.",
         )
-        _planning_turn(engine, task_id=task_id, conversation_id=planning_id)
+        _task_agent_turn(engine, task_id=task_id, conversation_id=task_agent_id)
 
         listed = client.get(f"/api/v1/tasks/{task_id}/conversations", headers=owner)
         assert listed.status_code == 200
-        assert [item["id"] for item in listed.json()["data"]] == [str(chat_id), str(planning_id)]
+        assert [item["id"] for item in listed.json()["data"]] == [str(chat_id), str(task_agent_id)]
         assert listed.json()["data"][0]["latest_turn_preview"] == {
             "user_message": "What does the evidence say?",
             "reply_snippet": "The evidence supports the intervention.",
@@ -172,14 +172,14 @@ def test_library_lists_mixed_kinds_filters_archived_and_carries_previews(
         closed = client.get(
             f"/api/v1/tasks/{task_id}/conversations?status=closed", headers=owner
         )
-        assert [item["id"] for item in closed.json()["data"]] == [str(planning_id)]
+        assert [item["id"] for item in closed.json()["data"]] == [str(task_agent_id)]
         archived = client.get(
             f"/api/v1/tasks/{task_id}/conversations?status=archived", headers=owner
         )
         assert [item["id"] for item in archived.json()["data"]] == [str(archived_id)]
 
 
-def test_create_and_patch_chat_context_chip_and_refuse_planning_mutation(
+def test_create_and_patch_chat_context_chip_and_refuse_task_agent_mutation(
     engine: Engine, tmp_path: Path
 ) -> None:
     """Only chats are hand-created or editable, and context artefacts stay task-local."""
@@ -200,7 +200,7 @@ def test_create_and_patch_chat_context_chip_and_refuse_planning_mutation(
             client.post(
                 f"/api/v1/tasks/{task_id}/conversations",
                 headers=owner,
-                json={"kind": "planning"},
+                json={"kind": "task_agent"},
             ).status_code
             == 422
         )
@@ -235,9 +235,9 @@ def test_create_and_patch_chat_context_chip_and_refuse_planning_mutation(
         assert cross_task.status_code == absent.status_code == 404
         assert cross_task.json() == absent.json()
 
-        planning_id = _conversation(engine, task_id=task_id, kind="planning")
+        task_agent_id = _conversation(engine, task_id=task_id, kind="task_agent")
         refused = client.patch(
-            f"/api/v1/conversations/{planning_id}", headers=owner, json={"title": "Nope"}
+            f"/api/v1/conversations/{task_agent_id}", headers=owner, json={"title": "Nope"}
         )
         assert refused.status_code == 422
 
@@ -277,13 +277,13 @@ def test_archive_round_trip_hides_ordinary_reads_and_turns_until_unarchived(
             client.get(f"/api/v1/conversations/{chat_id}/turns", headers=owner).status_code == 200
         )
 
-        planning_id = _conversation(engine, task_id=task_id, kind="planning")
+        task_agent_id = _conversation(engine, task_id=task_id, kind="task_agent")
         assert (
-            client.post(f"/api/v1/conversations/{planning_id}/archive", headers=owner).status_code
+            client.post(f"/api/v1/conversations/{task_agent_id}/archive", headers=owner).status_code
             == 422
         )
         assert (
-            client.get(f"/api/v1/conversations/{planning_id}/turns", headers=owner).status_code
+            client.get(f"/api/v1/conversations/{task_agent_id}/turns", headers=owner).status_code
             == 404
         )
 

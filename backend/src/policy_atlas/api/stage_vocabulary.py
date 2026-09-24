@@ -13,7 +13,8 @@ from __future__ import annotations
 from typing import Any
 
 from policy_atlas.api.contract import StageKey
-from policy_atlas.runtime.task_plan import registry_component_for
+from policy_atlas.runtime.steering import BASELINE_CONFIRM
+from policy_atlas.runtime.task_plan import canonical_steer_point, registry_component_for
 
 STAGE_PRESENTATION: dict[StageKey, tuple[str, str]] = {
     "acquire": ("Searching sources", "Queries out to academic and policy databases."),
@@ -41,8 +42,21 @@ STAGE_BY_REGISTRY: dict[str, StageKey] = {
 }
 
 
+#: Steer points whose card names its own stage word rather than borrowing the
+#: component's. The options-scoping baseline gate sits after ``synthesise``, but
+#: the card is about the baseline the step produced, not about the step: the
+#: stage word is looked up here so the mapping is stated rather than inherited
+#: by accident from the component name (task 044, P11).
+STAGE_BY_STEER_POINT: dict[str, StageKey] = {
+    BASELINE_CONFIRM: "synthesise",
+}
+
+
 def stage_for_payload(payload: dict[str, Any]) -> StageKey | None:
     """Map a composed or registry component name onto a public stage key."""
+    steer_point = canonical_steer_point(payload.get("steer_point"))
+    if isinstance(steer_point, str) and steer_point in STAGE_BY_STEER_POINT:
+        return STAGE_BY_STEER_POINT[steer_point]
     component = payload.get("component")
     if not isinstance(component, str):
         return None

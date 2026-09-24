@@ -27,9 +27,16 @@ from policy_atlas.core.tags import has_control_character
 from policy_atlas.runtime import runner as runner_module
 from policy_atlas.runtime import steering_events
 from policy_atlas.runtime.agent_backend import AgentBackend
+from policy_atlas.runtime.capability_registry import (
+    capability_of_task,
+    compose_plan,
+    expect_task_plan,
+    lattice_for,
+)
 from policy_atlas.runtime.continuation_state import ResumeDecision, build
 from policy_atlas.runtime.runner import RunPlanOutcome, run_plan
 from policy_atlas.runtime.steering import (
+    BASELINE_CONFIRM,
     Adjust,
     FanOut,
     PausePoint,
@@ -46,7 +53,7 @@ from policy_atlas.runtime.steering import (
     render_fanout_confirmation,
     validate_steering_delta,
 )
-from policy_atlas.runtime.task_plan import canonical_steer_point, compose
+from policy_atlas.runtime.task_plan import canonical_steer_point
 
 log = structlog.get_logger()
 
@@ -69,6 +76,13 @@ class AlreadyAnsweredError(Exception):
 
 class InvalidResponseError(ValueError):
     """Raised when a response is outside the pause's durable affordances."""
+
+
+#: What the options-scoping baseline gate says to anything but its own two
+#: options. It names them rather than describing the refusal (X3).
+_GATE_OPTIONS_ONLY = (
+    "this check-in offers Confirm plan and build longlist, or Change the plan"
+)
 
 
 @dataclass(frozen=True)
@@ -195,15 +209,39 @@ def answer_check_in(
             raise InvalidResponseError("free text must be compiled before it is confirmed")
         if kind == "free_text_confirm":
             raise InvalidResponseError("free-text confirmation uses confirm_free_text")
+        # The baseline gate offers two **ends**, and both of them are written
+        # out: "Confirm plan and build longlist" finishes the walk, "Change
+        # the plan" ends it and leaves the plan ``approved`` so it can be
+        # edited. The generic ``abort`` is neither — it abandons the plan —
+        # and reaching it here would hand the user a plan they were invited to
+        # change and cannot (X3). So at this one pause the universal floor is
+        # closed and only the offered ids are answers.
+        at_baseline_gate = _is_baseline_gate(pause.payload)
         if kind == "abort":
+            if at_baseline_gate:
+                raise InvalidResponseError(_GATE_OPTIONS_ONLY)
             return _persist_abort(
                 conn, task_id=task_id, pause=pause, state=state, actor=actor
             )
         if kind != "option":
             raise InvalidResponseError("check-in response kind is not supported")
 
-        option = _offered_option(pause.payload, _require_str(response, "option_id"))
+        option = _offered_option(
+            pause.payload,
+            _require_str(response, "option_id"),
+            allow_floor=not at_baseline_gate,
+        )
         params = _field(response, "params")
+        if at_baseline_gate:
+            # The gate's two options are ends, not amendments: the pause payload
+            # names the steer point, so neither branch is keyed off the option
+            # id alone.
+            if params is not None:
+                raise InvalidResponseError("the baseline gate does not accept parameters")
+            if option.get("id") == "change_plan":
+                return _persist_change_plan(
+                    conn, task_id=task_id, pause=pause, state=state, actor=actor
+                )
         _validate_offered_authored_delta(option, state=state, pause_payload=pause.payload)
         intent = _canonical_intent(option, params=params)
         renames = _theme_renames(params, pause.payload)
@@ -215,6 +253,11 @@ def answer_check_in(
                 state=state,
                 intent=intent,
                 actor=actor,
+                decision_extra=(
+                    _baseline_gate_decision(pause.payload, state)
+                    if at_baseline_gate
+                    else None
+                ),
             )
             if renames:
                 _apply_theme_renames(
@@ -261,6 +304,7 @@ def compile_free_text(
     )
     router_state = runner_module._SteeringState(
         plan=state.plan,
+        capability=state.capability,
         plan_id=state.plan_id,
         plan_version=state.plan_version,
         plan_row_id=state.plan_row_id,
@@ -282,7 +326,7 @@ def compile_free_text(
     compiled = agent.route(text, context, session_id=state.session_id)
     fanout = compile_fanout(
         compiled,
-        backend_scope=state.plan.backend_scope,
+        backend_scope=expect_task_plan(state.plan).backend_scope,
         current_components=set(state.chain.components),
         completed_components=state.completed_components,
         rerun_surface=RerunSurface(
@@ -716,6 +760,48 @@ def _pending_pause(
     )
 
 
+def pending_pause_for_walk(
+    conn: Connection, *, task_id: uuid.UUID, capability_run_id: uuid.UUID
+) -> tuple[uuid.UUID, dict[str, Any]] | None:
+    """Return one walk's latest still-undecided pause, if it has one.
+
+    :func:`_pending_pause` answers "may this named check-in be answered"; this
+    answers "which check-in is this walk waiting on" — what a Task Agent turn
+    taken at a pause needs before it can sort the turn (task 044, S5). The
+    undecided rule is the same one, read off the same durable events.
+
+    Args:
+        conn: Open read connection.
+        task_id: Task owning the walk.
+        capability_run_id: The parked walk.
+
+    Returns:
+        ``(check_in_id, pause_payload)``, or ``None`` when the walk has no
+        pause or its latest pause already carries a decision.
+    """
+    rows = events.read(conn, task_id)
+    pauses = [
+        row
+        for row in rows
+        if row["event_type"] == "steering.pause"
+        and _payload_uuid(row["payload"], "capability_run_id") == capability_run_id
+    ]
+    if not pauses:
+        return None
+    pause_row = pauses[-1]
+    if any(
+        row["event_type"] == steering_events.STEERING_DECISION
+        and row["sequence"] > pause_row["sequence"]
+        and _payload_uuid(row["payload"], "capability_run_id") == capability_run_id
+        for row in rows
+    ):
+        return None
+    payload = pause_row["payload"]
+    if not isinstance(payload, dict):
+        return None
+    return pause_row["event_id"], payload
+
+
 def _persist_intent(
     conn: Connection,
     *,
@@ -724,6 +810,7 @@ def _persist_intent(
     state: Any,
     intent: tuple[str, Any],
     actor: str,
+    decision_extra: dict[str, Any] | None = None,
 ) -> AnswerResult:
     """Persist one validated canonical-menu intent in the caller transaction."""
     kind, value = intent
@@ -731,7 +818,13 @@ def _persist_intent(
         return _persist_abort(conn, task_id=task_id, pause=pause, state=state, actor=actor)
     if kind == "continue":
         decision_id = _append_decision(
-            conn, task_id=task_id, pause=pause, state=state, response="continue", action=None
+            conn,
+            task_id=task_id,
+            pause=pause,
+            state=state,
+            response="continue",
+            action=None,
+            extra=decision_extra,
         )
         return _request_continuation(
             conn, task_id=task_id, pause=pause, decision_event_id=decision_id, actor=actor
@@ -811,6 +904,96 @@ def _persist_intent(
             conn, task_id=task_id, pause=pause, decision_event_id=decision_id, actor=actor
         )
     raise AssertionError(f"unknown validated intent {kind!r}")
+
+
+def _is_baseline_gate(pause_payload: dict[str, Any]) -> bool:
+    """Whether a pause is the options-scoping baseline gate.
+
+    Args:
+        pause_payload: The durable ``steering.pause`` payload.
+
+    Returns:
+        ``True`` when the pause names ``baseline_confirm`` as its steer point.
+    """
+    return canonical_steer_point(pause_payload.get("steer_point")) == BASELINE_CONFIRM
+
+
+def _baseline_gate_decision(pause_payload: dict[str, Any], state: Any) -> dict[str, Any]:
+    """The record a baseline-gate decision carries beyond the canonical fields.
+
+    Args:
+        pause_payload: The durable pause payload (source of the artefact id the
+            card actually showed).
+        state: Continuation state for the parked walk.
+
+    Returns:
+        The plan version the user answered for and the baseline artefact they
+        read; ``artefact_id`` is ``None`` when the bundle could not be built.
+    """
+    bundle = pause_payload.get("bundle")
+    artefact_id = bundle.get("artefact_id") if isinstance(bundle, dict) else None
+    return {
+        "plan_version": state.plan_version,
+        "artefact_id": artefact_id if isinstance(artefact_id, str) else None,
+    }
+
+
+def _persist_change_plan(
+    conn: Connection,
+    *,
+    task_id: uuid.UUID,
+    pause: _Pause,
+    state: Any,
+    actor: str,
+) -> AnswerResult:
+    """End the walk at the baseline gate and leave the plan editable (D12).
+
+    Everything :func:`_persist_abort` does except the one thing that would make
+    the plan unreachable: the plan row is **not** flipped to ``abandoned``,
+    because "change the plan" is a request to edit it and
+    ``_load_editable_plan`` reads only ``approved`` rows. The walk itself is
+    over — status ``aborted``, ``run.finished`` with the reason on it, no
+    continuation requested — so history shows it ended by the user's choice to
+    change the plan rather than by a plain stop.
+
+    Args:
+        conn: Open connection whose transaction this joins.
+        task_id: Task owning the parked walk.
+        pause: The pending gate pause.
+        state: Continuation state for the parked walk.
+        actor: Authenticated actor recorded in logs.
+
+    Returns:
+        The committed answer result; no continuation is requested.
+    """
+    decision_id = _append_decision(
+        conn,
+        task_id=task_id,
+        pause=pause,
+        state=state,
+        response="abort",
+        action=None,
+        extra={"action": "change_plan", **_baseline_gate_decision(pause.payload, state)},
+    )
+    conn.execute(
+        update(capability_run)
+        .where(capability_run.c.task_id == task_id)
+        .where(capability_run.c.capability_run_id == pause.capability_run_id)
+        .values(status="aborted", ended_at=datetime.now(UTC))
+    )
+    events.append(
+        conn,
+        task_id=task_id,
+        run_id=pause.run_id,
+        event_type="run.finished",
+        payload={
+            "capability_run_id": str(pause.capability_run_id),
+            "status": "aborted",
+            "reason": "change_plan",
+        },
+    )
+    log.info("continuation.change_plan", task_id=str(task_id), actor=actor)
+    return AnswerResult(pause.capability_run_id, decision_id, False)
 
 
 def _persist_abort(
@@ -893,7 +1076,9 @@ def _persist_fanout(
             action=action,
             user_text=user_text,
         )
-        current_state = _with_plan(current_state, amended, plan_id, version)
+        current_state = _with_plan(
+            current_state, amended, plan_id, version, capability_of_task(conn, task_id)
+        )
     rerun = fanout.rerun
     if rerun is not None:
         if rerun.kind == "replacement_rerun":
@@ -1026,21 +1211,33 @@ def _validate_offered_authored_delta(
         raise InvalidResponseError(f"authored option refused: {exc}") from exc
 
 
-def _offered_option(pause_payload: dict[str, Any], option_id: str) -> dict[str, Any]:
+def _offered_option(
+    pause_payload: dict[str, Any], option_id: str, *, allow_floor: bool = True
+) -> dict[str, Any]:
     """Return a durable offered option, including its presentation affordances.
 
     ``continue`` and ``abort`` are the universal floor at every pause (the
     in-process path accepts them regardless of the rendered option list, and
     a generic ``check_in`` pause may carry no explicit options at all) — they
     validate even when absent from the stored list.
+
+    Args:
+        pause_payload: The durable ``steering.pause`` payload.
+        option_id: The id being answered with.
+        allow_floor: Whether the ``continue``/``abort`` floor applies. The
+            options-scoping baseline gate passes ``False``: its two options
+            are ends, written out, and the floor's generic ``abort`` abandons
+            the plan the gate exists to let the user change (X3).
     """
     options = pause_payload.get("options") or []
     if not isinstance(options, list) or not all(isinstance(option, dict) for option in options):
         raise InvalidResponseError("check-in has malformed options")
     option = next((item for item in options if item.get("id") == option_id), None)
-    if option is None and option_id in ("continue", "abort"):
+    if option is None and allow_floor and option_id in ("continue", "abort"):
         option = {"id": option_id}
     if option is None:
+        if not allow_floor:
+            raise InvalidResponseError(_GATE_OPTIONS_ONLY)
         raise InvalidResponseError("option was not offered at this check-in")
     selected = dict(option)
     selected["_rerun_component"] = _optional_str(pause_payload.get("rerun_component"))
@@ -1143,8 +1340,14 @@ def _append_decision(
     action: Any,
     rerun_mode: Literal["replacement", "additive"] | None = None,
     user_text: str | None = None,
+    extra: dict[str, Any] | None = None,
 ) -> uuid.UUID:
-    """Use the shared steering payload builder for one durable decision."""
+    """Use the shared steering payload builder for one durable decision.
+
+    ``extra`` carries the point-specific record a decision needs beyond the
+    canonical attribution fields — at the baseline gate, the plan version and
+    the baseline artefact the user answered against.
+    """
     base = steering_events.base_payload(
         capability_run_id=pause.capability_run_id,
         plan_id=state.plan_id,
@@ -1162,6 +1365,8 @@ def _append_decision(
         user_text=user_text,
         rerun_mode=rerun_mode,
     )
+    if extra:
+        payload.update(extra)
     return steering_events.emit(
         conn,
         task_id=task_id,
@@ -1220,16 +1425,29 @@ def _current_plan_row(conn: Connection, *, task_id: uuid.UUID, state: Any) -> An
     return row
 
 
-def _with_plan(state: Any, plan: Any, plan_id: uuid.UUID, version: int) -> Any:
-    """Return minimal continuation state with the just-persisted plan identity."""
+def _with_plan(
+    state: Any, plan: Any, plan_id: uuid.UUID, version: int, capability: str
+) -> Any:
+    """Return minimal continuation state with the just-persisted plan identity.
+
+    Args:
+        state: The continuation state being replaced.
+        plan: The freshly persisted plan.
+        plan_id: Its row identity.
+        version: Its version number.
+        capability: The owning task's capability — it decides which chain the
+            plan composes to and which lattice its pauses come from (C9, A2).
+    """
+    chain = compose_plan(capability, plan)
     return type(state)(
         capability_run_id=state.capability_run_id,
+        capability=capability,
         plan=plan,
         plan_id=plan_id,
         plan_version=version,
         plan_row_id=plan_id,
-        chain=compose(plan),
-        pause_points=pause_points(plan.steering_mode, compose(plan)),
+        chain=chain,
+        pause_points=pause_points(plan.steering_mode, chain, lattice_for(capability)),
         pending_overlays=state.pending_overlays,
         remaining_steps=state.remaining_steps,
         step_outcomes=state.step_outcomes,

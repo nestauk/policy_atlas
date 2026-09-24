@@ -66,7 +66,7 @@ export function ConversationSidebar({
 }) {
   const conversations = useConversations(taskId, { status: "active" });
   const rows = conversations.data?.data ?? [];
-  // The main view marks the Task Agent by its planning id; the rail has no
+  // The main view marks the Task Agent by its task_agent id; the rail has no
   // rows to compare against, so it resolves the same id here.
   const onTaskAgent = selectedId === null || selectedId === taskAgentConversationId(rows);
   const [open, setOpen] = useState(readInitialOpen);
@@ -78,10 +78,10 @@ export function ConversationSidebar({
   };
 
   const openRow = (row: ConversationRow) => {
-    // Any planning row resolves to the Task Agent: the pane renders the
-    // Task's planning thread, never one lineage in isolation, so an id in
+    // Any task_agent row resolves to the Task Agent: the pane renders the
+    // Task's task_agent thread, never one lineage in isolation, so an id in
     // the URL would claim more than the view delivers.
-    if (row.kind === "planning") return onSelect(null);
+    if (row.kind === "task_agent") return onSelect(null);
     onSelect(row.id);
   };
   const newChatTitle = chatsEnabled ? COPY.newChat : COPY.newChatUnavailable;

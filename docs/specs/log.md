@@ -1,5 +1,81 @@
 # Spec update log
 
+## 2026-09-17
+* **Update** (task 044, phase 8; owner ruling "Go with options 2 and 5, targets 20 and 10"): the
+  depth sets the baseline's acquisition target and proposed-section allowance —
+  [OS capability](capabilities/options-scoping/capability.md) § Output structure,
+  [OS components](capabilities/options-scoping/components.md) § 11 and
+  [plan-as-object](system/plan-as-object.md) § Thoroughness. Rapid: the same eight required sections,
+  no proposed sections, acquisition target 10 per search backend. Standard: eight plus up to two proposed, target 20
+  per backend (was one target of 25 per backend; "per backend" made explicit on 2026-09-18 — owner:
+  "Add per backend to the docs", after the 044 review stack found the four documents read as totals). A five-section rapid merge was built, measured (no shorter write: 168 s and
+  189 s against 183 s for seven) and reverted the same day on the owner's ruling. Re-revises the
+  2026-09-09 "one shape at every depth" line after the measured 4.3 to 7.5 minute baselines.
+
+## 2026-09-09
+* **Update** (task 044, deliverable 2): the abbreviation **EB → ES** across the
+  living specs, `docs/tasks/_templates/`, `docs/agentic-ops/` and code comments
+  (the four "EB handoff" citations of the frozen source keep their name; ADRs,
+  merged task docs, frozen sources and this log's past entries untouched);
+  the Task Agent code names in [web-api.md](system/web-api.md) and
+  `docs/knowledge/` content (`planning` → `task_agent`, `/planning-turns` →
+  `/task-agent-turns`, `planning_transcript` → `task_agent_transcript`).
+* **Update** (task 044, contract § Spec changes 7; plan-review P9):
+  [web-api.md](system/web-api.md) § Task Agent turns and § Check-ins — a
+  sorted, non-approving Task Agent turn is admitted while an Options scoping
+  walk is **paused** (question → the answer core; decision → the check-in
+  response transaction); the approving branch and `PATCH /plan` stay 409
+  `run_active` while a walk is running or paused. Owner ruling D9
+  (2026-09-09): the gate is answered in the Task Agent chat; routing hangs on
+  the turn, not the conversation kind. New: check-in kind `baseline_confirm`,
+  `POST /tasks/{id}/plan/confirm-baseline`, `POST /tasks` with `capability`,
+  `project_ids` and `from_task_ids` in one transaction.
+* **Update** (task 044, owner ruling 2026-09-09 "option 2"):
+  [prompting.md](system/prompting.md) / ES components § 9 — the synthesis
+  section writer is **template-keyed**: one writer, a shared core plus a
+  preamble per output kind (report · baseline; profile and scoping report
+  arrive with tasks 3 and 5); the Evidence search assembly is byte-identical
+  and pinned by a test.
+
+## 2026-09-09
+* **Update** (owner rulings at the task 044 contract interview; applied with the owner's words
+  quoted): [OS capability § Output structure](capabilities/options-scoping/capability.md) and
+  [OS components § 11](capabilities/options-scoping/components.md) — the baseline's eight sections are
+  required and the writer may add up to two problem-specific sections; one shape at every depth.
+  [plan-as-object § Thoroughness](system/plan-as-object.md) — the baseline is not graded by depth
+  (revises decision-sheet row E12's baseline part); one measured compute target; the latency
+  levers. [OS capability § Check-in points](capabilities/options-scoping/capability.md) and
+  [OS components](capabilities/options-scoping/components.md) — the two structural gates pass on
+  standing defaults in unattended mode, recorded and flagged; unattended is never the default.
+  [vocabulary.md](vocabulary.md) — the Task Agent's code names (`task_agent`).
+* **Update** (owner rulings at the task 044 contract re-approval, after the adversarial reviews):
+  [plan-as-object § Plan vs config](system/plan-as-object.md) — plan ↔ turn provenance is at
+  **version grain**, not field grain; [plan-as-object § Thoroughness](system/plan-as-object.md) —
+  the baseline is written sequentially, with a development-time feasibility check against a
+  parallel version; no parallel mode in the product without a revision of the durability contract.
+
+## 2026-09-09
+* **Update**: Owner rulings on the sixteen pre-task-1 rows of the options-scoping decision sheet
+  (`docs/tasks/035-options-scoping/checks/decision-sheet.md`), decided one at a time and applied
+  with the ruling quoted. [data-model](system/data-model.md): a generic task-to-task **`task_link`**
+  (many-to-many, same project only, no purpose column; `inherit` reads across a link and copies
+  nothing beyond the receiving task's own document rows and screening; archive-not-delete for linked
+  tasks); inherited documents need no column (inherited = created by the inherit run); linked
+  findings read across the link and reused piecemeal, memo unchanged; document identity across
+  snapshots deferred to an Evidence search slice (`docs/deferred.md`); `setting` generalised to where
+  the target unit experiences the intervention; a stub-page ingest defect noted (issue #74).
+  [plan-as-object](system/plan-as-object.md): "face" retired ("where we search" / "what may be cited
+  as support"); the **evidence restriction** of OS ruling 23 is the existing search directive's
+  filters at retrieval; a **Your context** plan section (present fact / commitment, verbatim words,
+  turn provenance, attribution by user id, an entry may be flagged "test this as a condition");
+  **Where** defaults to the United Kingdom and setting is an optional scope-shaped constraint;
+  several intent records per plan; time managed by design targets not run-time cut-offs (baseline
+  ≈ 2 min rapid / 5 min standard), no small reading cap, compute and waiting time stated separately,
+  no rapid number promised. [provenance-grounding](system/provenance-grounding.md): the retrieved
+  cell reads existing source and finding fields (D3 folded into C3). [OS components](capabilities/options-scoping/components.md),
+  [OS capability](capabilities/options-scoping/capability.md), [OS trust](capabilities/options-scoping/trust.md)
+  and [EB components](capabilities/evidence-search/components.md) § 0 aligned. Frozen sources untouched.
+
 ## 2026-09-08
 * **Update**: Options scoping board refinement — concept rulings 45–47 (the report stays linear with
   verdict strips, the comparison table is the shortlist view after assessment; the Sources tab is

@@ -49,6 +49,10 @@ class RunOut(BaseModel):
         started_at: When the run started executing.
         ended_at: When the run reached a terminal status, or `None` while
             still running or paused.
+        artefact_id: The artefact this walk wrote, or `None` when it wrote
+            none (it has not reached synthesise, or ended before it). A
+            scoping walk that carries one produced a baseline, whatever its
+            terminal status (task 044 review, C5/C6).
     """
 
     capability_run_id: uuid.UUID
@@ -58,3 +62,4 @@ class RunOut(BaseModel):
     status: RunStatus
     started_at: datetime
     ended_at: datetime | None = None
+    artefact_id: uuid.UUID | None = None

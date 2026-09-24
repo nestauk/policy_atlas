@@ -32,7 +32,7 @@ from policy_atlas.evidence_search.extract.finding_references import (
 
 # Fingerprint components (contract decision 2): named constants; any
 # output-affecting change bumps a version and thus the extraction fingerprint.
-# PROFILE_ID is a stable requirement-family id ("EB's base IOF extraction");
+# PROFILE_ID is a stable requirement-family id ("ES's base IOF extraction");
 # field-set evolution rides the schema/prompt/rules version components, which
 # enter the fingerprint and recorded components map, so field additions do not
 # bump the profile.

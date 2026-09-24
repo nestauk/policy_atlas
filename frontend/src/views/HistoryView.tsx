@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useParams } from "react-router";
 
-import { useDecisions, usePlanningTurns, useTask } from "../api/queries";
+import { useDecisions, useTaskAgentTurns, useTask } from "../api/queries";
 import { errorCode } from "../lib/errors";
 import { scrub } from "../lib/scrub";
 import { useDocumentTitle } from "../lib/title";
@@ -25,7 +25,7 @@ export function HistoryView() {
   const { taskId = "" } = useParams();
   const task = useTask(taskId);
   const decisions = useDecisions(taskId, { page_size: PAGE_SIZE });
-  const turns = usePlanningTurns(taskId, { page_size: PAGE_SIZE });
+  const turns = useTaskAgentTurns(taskId, { page_size: PAGE_SIZE });
   const [open, setOpen] = useState<string | null>(null);
   useDocumentTitle(task.data?.name, LIFECYCLE_LABELS.history);
 

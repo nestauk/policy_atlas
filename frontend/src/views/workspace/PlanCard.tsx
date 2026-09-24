@@ -12,7 +12,7 @@ type PlanDraft = components["schemas"]["PlanDraft"];
 const EMPTY_OVERLAY: PlanOverlay = {};
 
 /**
- * Inline actions once the three planning steps are done: review in the plan
+ * Inline actions once the three task_agent steps are done: review in the plan
  * document, or start the search. Local plan edits apply on start, not on each save.
  *
  * `isOwner` (task 033 phase 10c, contract § 11 / rubric 37): starting a run
@@ -48,21 +48,31 @@ export function PlanCard({
     onDiscardOverlay,
   });
 
-  const plan: PlanDraft | null = planQuery.data?.plan ?? null;
-  const approved = planQuery.data?.status === "approved";
-  if (plan === null || !approved || !plan.ready || started) return null;
+  const planOut = planQuery.data;
+  // Task 044: a scoping turn's readiness lives on `scoping`, never `plan`
+  // (null for that capability) — the capability branch this card needs so a
+  // scoping task_agent turn drives it exactly as an ES one does (do not fork
+  // the pane: one card, one capability check). Scoping's own multi-state
+  // start action lives in the opened plan document (`planStart.ts`'s
+  // `useScopingPlanStart`) — this inline card only ever offers the door in.
+  const isScoping = planOut?.capability === "options_scoping";
+  const plan: PlanDraft | null = isScoping ? null : (planOut?.plan ?? null);
+  const approved = planOut?.status === "approved";
+  const scopingReady = isScoping && planOut?.scoping?.ready === true;
+  if (started || !approved) return null;
+  if (isScoping ? !scopingReady : plan === null || !plan.ready) return null;
 
   return (
     <div className="anim-rise mr-8 flex flex-wrap items-center gap-3" data-testid="plan-ready-actions">
       <Button className="px-6 py-3.5 text-body" onClick={() => onReviewPlan?.()}>
         Review the plan
       </Button>
-      {isOwner && (
+      {isOwner && !isScoping && (
         <Button className={cn(START_SEARCH_CLASS)} disabled={disabled} onClick={start}>
           {label}
         </Button>
       )}
-      {isOwner && startNotice != null && (
+      {isOwner && !isScoping && startNotice != null && (
         <div className="flex w-full flex-wrap items-center gap-3">
           <p role="alert" className="text-body text-red">
             {startNotice}

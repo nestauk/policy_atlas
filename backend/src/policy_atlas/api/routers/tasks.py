@@ -35,7 +35,11 @@ from policy_atlas.api.routers._access import (
     readable_or_public_task,
     trace_admin_listing,
 )
-from policy_atlas.api.routers._common import memberships_for_tasks, task_out
+from policy_atlas.api.routers._common import (
+    links_for_tasks,
+    memberships_for_tasks,
+    task_out,
+)
 from policy_atlas.core import events
 from policy_atlas.core.schema import (
     app_user,
@@ -43,7 +47,9 @@ from policy_atlas.core.schema import (
     project,
     project_membership,
     task,
+    task_link,
 )
+from policy_atlas.runtime.capability_registry import EVIDENCE_SEARCH
 
 log = structlog.get_logger()
 
@@ -140,7 +146,9 @@ def list_tasks(
         row_count=len(rows),
         total_items=int(total),
     )
-    memberships = memberships_for_tasks(conn, [row["task_id"] for row in rows])
+    page_task_ids = [row["task_id"] for row in rows]
+    memberships = memberships_for_tasks(conn, page_task_ids)
+    links = links_for_tasks(conn, page_task_ids, user_id=user.user_id)
     return Page(
         data=[
             task_out(
@@ -151,11 +159,231 @@ def list_tasks(
                     row["owner_user_id"], row["owner_display_name"]
                 ),
                 project_ids=memberships[row["task_id"]],
+                links=links[row["task_id"]],
             )
             for row in rows
         ],
         pagination=PageMeta(page=page, page_size=page_size, total_items=int(total)),
     )
+
+
+def assign_projects(
+    conn: Connection,
+    *,
+    task_id: uuid.UUID,
+    project_ids: list[uuid.UUID] | None,
+    user_id: str,
+) -> list[uuid.UUID]:
+    """Replace one task's project membership and derive what follows from it.
+
+    Lifted verbatim out of :func:`update_task` (task 044, S7) so
+    :func:`create_task` can run the identical rules inside the create
+    transaction — a second implementation of contract 033 § 6 is the last
+    thing this route needs. Every comment below is the original's.
+
+    Args:
+        conn: Open transaction. The caller has already resolved and locked the
+            task under the write grade.
+        task_id: The task whose membership is being replaced.
+        project_ids: The replacement set (``None`` reads as ``[]``).
+        user_id: The calling subject, for the colleague-mutation grade.
+
+    Returns:
+        The assigned project ids, deduped, in the order given.
+
+    Raises:
+        ApiConflict: 409 ``visibility_conflict`` when the set spans two
+            organisations.
+        HTTPException: 404 when a named project is outside the caller's
+            colleague-mutation estate.
+    """
+    assigned_ids = list(dict.fromkeys(project_ids or []))
+    # NEW targets resolve under the colleague-mutation grade (owner ∪
+    # same-org org-visible, never the admin leg — owner ruling
+    # 2026-08-27): a colleague may add their own task to an org-visible
+    # project they did not create. A project outside that estate
+    # must be as invisible here as it is on its own route, or PATCH
+    # becomes an existence oracle for someone else's rows. A project
+    # the task is ALREADY in is kept without re-resolving the grade:
+    # the body is replace-all, so re-checking would lock the owner out
+    # of editing their own membership set the moment a colleague's
+    # project they had joined went private. Its row is still loaded
+    # and locked, because the visibility derivation below reads it.
+    #
+    # Locked either way, so a cascade running on the same project
+    # cannot commit between this read and the write below and leave the
+    # assigned row carrying the old visibility — which is precisely an
+    # org-visible row inside a private Project. Both paths lock the
+    # project row before writing, and the cascade's member UPDATE
+    # takes row locks on the members it carries. The one interleaving
+    # that can deadlock is a re-assign of a task *into the project
+    # it is already in* racing that project's cascade; Postgres
+    # aborts one side, and the request is a no-op the caller can
+    # repeat.
+    current_ids = {
+        membership_row[0]
+        for membership_row in conn.execute(
+            select(project_membership.c.project_id).where(
+                project_membership.c.task_id == task_id
+            )
+        ).all()
+    }
+    group_rows = [
+        conn.execute(
+            select(project)
+            .where(project.c.project_id == target)
+            .with_for_update()
+        ).mappings().one()
+        if target in current_ids
+        else assignable_project(
+            conn, project_id=target, user_id=user_id
+        ).row
+        for target in assigned_ids
+    ]
+    now = datetime.now(UTC)
+    assignment: dict[str, object] = {"updated_at": now}
+    if group_rows:
+        # i.2 (promotion) and i.3 (demotion) are one rule, not two
+        # branches: the member is org-visible if **any** of its projects
+        # is org-visible, private otherwise (owner ruling 2026-08-27 on
+        # the ADR 0032 merge). Organisation is different — a row carries
+        # exactly one `org_id`, so a set spanning two organisations has
+        # no honest answer and is refused rather than picking a winner.
+        org_ids = {group_row["org_id"] for group_row in group_rows}
+        if len(org_ids) > 1:
+            raise ApiConflict(
+                "visibility_conflict",
+                "these projects belong to different organisations — a task "
+                "can only join projects in one organisation",
+            )
+        assignment["visibility"] = (
+            "org"
+            if any(group_row["visibility"] == "org" for group_row in group_rows)
+            else "private"
+        )
+        assignment["org_id"] = org_ids.pop()
+    # i.6, the empty-list case: clearing every membership writes neither
+    # field. The row keeps the visibility and organisation it had inside
+    # its projects — leaving is not a way to change either, and a row
+    # that was org-visible does not become private by being taken out.
+    conn.execute(
+        delete(project_membership).where(
+            project_membership.c.task_id == task_id
+        )
+    )
+    if assigned_ids:
+        conn.execute(
+            project_membership.insert(),
+            [
+                {
+                    "project_id": target,
+                    "task_id": task_id,
+                    "created_at": now,
+                }
+                for target in assigned_ids
+            ],
+        )
+    conn.execute(
+        update(task).where(task.c.task_id == task_id).values(**assignment)
+    )
+    return assigned_ids
+
+
+def _write_task_links(
+    conn: Connection,
+    *,
+    target_task_id: uuid.UUID,
+    source_task_ids: list[uuid.UUID],
+    assigned_project_ids: list[uuid.UUID],
+    user_id: str,
+    now: datetime,
+) -> None:
+    """Write the new task's Links, or refuse the whole create (C10, C11, C12).
+
+    Four rules, checked in this order because that is the order that tells
+    the caller the truth without leaking anything:
+
+    1.  **Readable.** Each source resolves under the ordinary read grade, so
+        an unreadable task is the same 404 the tasks route gives. A Link never
+        widens what a caller can see (ADR 0037 decision 2), and refusing here
+        with anything more specific would make create an existence oracle.
+    2.  **An Evidence search.** A Link is how a scoping task inherits an
+        Evidence search, and inheritance reads an Evidence search report and
+        coverage statement. A scoping source has neither, so linking one
+        would build the Task Agent's context out of a document that does not
+        exist — refused rather than silently inherited empty (S6, X4).
+    3.  **Same project.** The source must share at least one project with the
+        new task *as just assigned*. This is the create-time invariant; a pair
+        that later stops sharing one is flagged on read, never broken
+        (:func:`task_links_for`).
+    4.  **Finished walk.** The source's latest walk must be ``succeeded`` or
+        ``degraded``, and its id is pinned onto the row. A running, paused or
+        failed source has nothing stable to inherit.
+
+    Args:
+        conn: The create transaction. Any raise here rolls the task row back
+            with everything else — a scoping task linked to nothing is worse
+            than no task at all.
+        target_task_id: The task being created.
+        source_task_ids: The requested sources, deduped in order.
+        assigned_project_ids: The projects the new task just joined.
+        user_id: The calling subject.
+        now: The create timestamp, shared with the task row.
+
+    Raises:
+        HTTPException: 404 when a source is not readable by the caller.
+        ApiConflict: 409 ``link_source_capability`` when a source is not an
+            Evidence search task; 409 ``link_project_mismatch`` when a source
+            shares no project with the new task; 409
+            ``link_source_unfinished`` when its latest walk has not finished.
+    """
+    shared = set(assigned_project_ids)
+    for source_id in dict.fromkeys(source_task_ids):
+        source = accessible_task(conn, task_id=source_id, user_id=user_id)
+        if source.row["capability"] != EVIDENCE_SEARCH:
+            raise ApiConflict(
+                "link_source_capability",
+                "a task can only start from an Evidence search task",
+            )
+        source_projects = {
+            membership_row[0]
+            for membership_row in conn.execute(
+                select(project_membership.c.project_id).where(
+                    project_membership.c.task_id == source_id
+                )
+            ).all()
+        }
+        if not (shared & source_projects):
+            raise ApiConflict(
+                "link_project_mismatch",
+                "a task can only start from a task it shares a project with — "
+                "put both in the same project first",
+            )
+        latest = conn.execute(
+            select(capability_run.c.capability_run_id, capability_run.c.status)
+            .where(capability_run.c.task_id == source_id)
+            .order_by(
+                capability_run.c.started_at.desc(),
+                capability_run.c.capability_run_id.desc(),
+            )
+            .limit(1)
+        ).mappings().one_or_none()
+        if latest is None or latest["status"] not in ("succeeded", "degraded"):
+            raise ApiConflict(
+                "link_source_unfinished",
+                "a task can only start from a task whose latest run has "
+                "finished — wait for it, then try again",
+            )
+        conn.execute(
+            task_link.insert().values(
+                link_id=uuid.uuid4(),
+                source_task_id=source_id,
+                target_task_id=target_task_id,
+                source_capability_run_id=latest["capability_run_id"],
+                created_by=user_id,
+                created_at=now,
+            )
+        )
 
 
 @router.post("", response_model=TaskOut, status_code=status.HTTP_201_CREATED)
@@ -170,6 +398,19 @@ def create_task(
     the creator is unenrolled, which leaves the row reachable by its owner
     alone. `visibility` takes the column default `private` (owner amendment
     2026-08-26 — new work is unshared until its owner deliberately shares it).
+
+    Task 044 (C10): projects and Links arrive in the **same** request and are
+    written in the **same** transaction. The old create-then-patch flow could
+    leave a real, unassigned task behind, and "Starts from" cannot be built on
+    a flow with that failure mode — a scoping task linked to nothing has lost
+    the thing it was created for. So any refusal below rolls the task row back
+    with it.
+
+    Raises:
+        HTTPException: 404 when a named source task is not readable by the
+            caller.
+        ApiConflict: 409 ``visibility_conflict``, ``link_source_capability``,
+            ``link_project_mismatch`` or ``link_source_unfinished``.
     """
     now = datetime.now(UTC)
     task_id = uuid.uuid4()
@@ -179,6 +420,7 @@ def create_task(
             name=payload.name,
             question=payload.question,
             status="active",
+            capability=payload.capability,
             owner_user_id=user.user_id,
             created_at=now,
             updated_at=now,
@@ -186,8 +428,22 @@ def create_task(
             org_id=creator_org_id(conn, user.user_id),
         )
     )
+    # Projects first: the same-project rule below reads the membership this
+    # write creates, so a create that assigns and links in one body is judged
+    # against the state it is asking for, not the state before it.
+    assigned_ids = assign_projects(
+        conn, task_id=task_id, project_ids=payload.project_ids, user_id=user.user_id
+    )
+    _write_task_links(
+        conn,
+        target_task_id=task_id,
+        source_task_ids=payload.from_task_ids,
+        assigned_project_ids=assigned_ids,
+        user_id=user.user_id,
+        now=now,
+    )
     row = conn.execute(select(task).where(task.c.task_id == task_id)).mappings().one()
-    return task_out(conn, row, user_id=user.user_id)
+    return task_out(conn, row, user_id=user.user_id, project_ids=assigned_ids)
 
 
 @public_read_router.get("/{task_id}", response_model=TaskOut)
@@ -306,94 +562,11 @@ def update_task(
         )
     assigned_ids: list[uuid.UUID] | None = None
     if "project_ids" in changes:
-        assigned_ids = list(dict.fromkeys(changes["project_ids"] or []))
-        # NEW targets resolve under the colleague-mutation grade (owner ∪
-        # same-org org-visible, never the admin leg — owner ruling
-        # 2026-08-27): a colleague may add their own task to an org-visible
-        # project they did not create. A project outside that estate
-        # must be as invisible here as it is on its own route, or PATCH
-        # becomes an existence oracle for someone else's rows. A project
-        # the task is ALREADY in is kept without re-resolving the grade:
-        # the body is replace-all, so re-checking would lock the owner out
-        # of editing their own membership set the moment a colleague's
-        # project they had joined went private. Its row is still loaded
-        # and locked, because the visibility derivation below reads it.
-        #
-        # Locked either way, so a cascade running on the same project
-        # cannot commit between this read and the write below and leave the
-        # assigned row carrying the old visibility — which is precisely an
-        # org-visible row inside a private Project. Both paths lock the
-        # project row before writing, and the cascade's member UPDATE
-        # takes row locks on the members it carries. The one interleaving
-        # that can deadlock is a re-assign of a task *into the project
-        # it is already in* racing that project's cascade; Postgres
-        # aborts one side, and the request is a no-op the caller can
-        # repeat.
-        current_ids = {
-            membership_row[0]
-            for membership_row in conn.execute(
-                select(project_membership.c.project_id).where(
-                    project_membership.c.task_id == task_id
-                )
-            ).all()
-        }
-        group_rows = [
-            conn.execute(
-                select(project)
-                .where(project.c.project_id == target)
-                .with_for_update()
-            ).mappings().one()
-            if target in current_ids
-            else assignable_project(
-                conn, project_id=target, user_id=user.user_id
-            ).row
-            for target in assigned_ids
-        ]
-        now = datetime.now(UTC)
-        assignment: dict[str, object] = {"updated_at": now}
-        if group_rows:
-            # i.2 (promotion) and i.3 (demotion) are one rule, not two
-            # branches: the member is org-visible if **any** of its projects
-            # is org-visible, private otherwise (owner ruling 2026-08-27 on
-            # the ADR 0032 merge). Organisation is different — a row carries
-            # exactly one `org_id`, so a set spanning two organisations has
-            # no honest answer and is refused rather than picking a winner.
-            org_ids = {group_row["org_id"] for group_row in group_rows}
-            if len(org_ids) > 1:
-                raise ApiConflict(
-                    "visibility_conflict",
-                    "these projects belong to different organisations — a task "
-                    "can only join projects in one organisation",
-                )
-            assignment["visibility"] = (
-                "org"
-                if any(group_row["visibility"] == "org" for group_row in group_rows)
-                else "private"
-            )
-            assignment["org_id"] = org_ids.pop()
-        # i.6, the empty-list case: clearing every membership writes neither
-        # field. The row keeps the visibility and organisation it had inside
-        # its projects — leaving is not a way to change either, and a row
-        # that was org-visible does not become private by being taken out.
-        conn.execute(
-            delete(project_membership).where(
-                project_membership.c.task_id == task_id
-            )
-        )
-        if assigned_ids:
-            conn.execute(
-                project_membership.insert(),
-                [
-                    {
-                        "project_id": target,
-                        "task_id": task_id,
-                        "created_at": now,
-                    }
-                    for target in assigned_ids
-                ],
-            )
-        conn.execute(
-            update(task).where(task.c.task_id == task_id).values(**assignment)
+        assigned_ids = assign_projects(
+            conn,
+            task_id=task_id,
+            project_ids=changes["project_ids"],
+            user_id=user.user_id,
         )
     row = conn.execute(select(task).where(task.c.task_id == task_id)).mappings().one()
     return task_out(conn, row, user_id=user.user_id, project_ids=assigned_ids)

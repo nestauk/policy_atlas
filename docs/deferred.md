@@ -36,6 +36,32 @@ architectural decision to defer, not an omission. Sources: architecture referenc
 - **Options scoping: "Assess all kept options"** (owner, 2026-09-07): a whole-longlist
   assessment action beside "Assess these N". Deferred on inference cost; revisit after live
   runs show what a standard run costs (concept ruling 19).
+- **Options scoping, seams left by task 044 (owner rulings 2026-09-09, contract
+  `docs/tasks/044-scoping-shell-baseline/contract.md`):**
+  - **Deep depth for scoping** — not shown anywhere until it exists (D6).
+  - **"Search further" at the baseline gate** — an additive re-acquire that rewrites the sections
+    that gained sources; build once for the longlist too (D10). A request in words is refused as
+    not yet available.
+  - **Inherited document rows and longlist suggestions** — task 2 creates them when the longlist
+    scope re-screens the linked task's documents (D4). Task 1 pins the source runs and seeds the
+    Task Agent only.
+  - **`task_link.option_id`** — added in task 2 with the option table it references (D13).
+  - **Per-field turn provenance on the plan** — resolved, not deferred: the owner revised
+    plan-as-object § Plan vs config to version grain (2026-09-09); reopen only if a reader asks.
+  - **Baseline latency levers not taken in task 1** — show sections as they finish; start the
+    longlist's retrieval while the user reads the baseline (task 2; wastes some egress when the
+    plan changes at the gate); a faster model tier for the baseline sections when Bedrock lands,
+    quality-tested first, fresh minimal prompt per the doctrine (D7); parallel section writing in
+    the product, only by an owner revision of the durability contract after the task 044
+    feasibility check (C6); rebuilding only the baseline sections a plan change touched (open
+    question 7 — task 044 offers a full rebuild or going on with the existing baseline).
+  - **The Task Agent as the Evidence search's control surface** — owner: the Evidence search's
+    card-based steering "is maybe not optimal, because ideally … the user could control the task
+    through the task agent chat". Task 044 builds routed turns at a pause for scoping only, hung on
+    the turn rather than the conversation kind; a later Evidence search slice adopts them (D9).
+  - **Any chat carrying Task Agent turns** — owner direction: "any chat would be able to create
+    plans, edit artefacts, produce cited responses". The `task_agent` conversation kind then
+    becomes a "pinned first" flag; a one-value migration.
 - **Question-shape → future-capability mapping (user posture, 2026-07-10, recorded at the
   018 gate).** Two real-user question shapes from the V2 taxonomy have their ideal homes in
   capabilities that don't exist yet: **opinions / stakeholder mapping** (a proposed
@@ -1535,6 +1561,19 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
 
 ## Execution / collaboration / ops
 
+- **Langfuse costs ignore prompt-cache hits (found 2026-09-18 reading the 044 scoping
+  turns).** `costDetails.input` charges every prompt token at the full input rate: the NEET
+  scoping turns 5, 7 and 11 each carried 8,960 cached tokens of about 10,700 (OpenAI's
+  automatic prefix cache, reported in the observation metadata as `cached_tokens` by
+  `core/usage.py`) and Langfuse still priced them at about 5.8 cents each, the same as the
+  uncached turns 1 and 3. Every per-run and per-turn cost read from Langfuse (including the
+  time-window method in `docs/knowledge/langfuse-cost-by-time-window.md` and the 044 phase-8
+  "about $2.5") overstates the real spend wherever a prefix repeats — Task Agent turns, the
+  gate sort, the answer core, and the synthesise section writer's shared preamble. Fix
+  options: send `input_cached_tokens` as a separate usage type so Langfuse's model pricing
+  applies the cached rate (Langfuse supports per-usage-type prices), or compute cost in
+  `core/usage.py` from the provider's own totals. Until then treat Langfuse `totalCost` as an
+  upper bound.
 - **Per-lane test-DB partition (018 B2/C)** — concurrent `make verify` runs against the
   one shared test DB flake (migration round-trip + steering tests, psycopg INERROR);
   seen from worker lanes (B2/B4) and from a review-lane agent (step 7). Convention today:
@@ -1658,6 +1697,10 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   relevance per backend. Fix is in acquire: stamp acquired sources with the surfacing
   query/queries (a set — multi-query dedupe means one source can arrive via several).
   Pays off for search-loop tuning and for the demo/web-app search cards.
+- **Repo-root `scripts/*.py` are outside mypy** — `backend/pyproject.toml` `files = ["src",
+  "tests"]`, so `scripts/ops_remove_scoping_tasks.py` (destructive, `--apply`-guarded) and the
+  rename tooling are tested but never typechecked. Add `scripts/` to the mypy files or move
+  long-lived scripts under `backend/src/policy_atlas/ops` (044 review stack, two lanes).
 
 ## Steering surface (task 024 seams)
 
@@ -2447,3 +2490,252 @@ deliberately left, each with its reason:
   names only (042 D4); institutions render in the citation sheet and the
   dossier. Add them to references only if readers ask — the list is dense
   already.
+
+## Document identity across snapshots (deferred 2026-09-09; owner ruling on OS decision-sheet row A8)
+
+Tracked as issue #75.
+
+One document fetched from two backends, or in two versions, is two content-addressed snapshots and
+counts twice in coverage, selection and inherited counts (the options-scoping feasibility checks
+found one Cochrane review as five snapshots; run 6 spent cap places on copies). A corpus-level
+**document identity** — DOI-only as the first rule; dedup at acquire or ingest; whether it should
+precede the chunk index to improve retrieval diversity — is its own Evidence search slice after the
+options-scoping build. Interim: options scoping's task 2 groups by DOI where present at the point
+of counting, no schema or ingestion change. Source: `docs/tasks/035-options-scoping/checks/`
+(check 2 C2-5 and its *After review* section).
+
+## Frontend design consistency (impeccable document audit, 2026-09-09)
+
+Found while writing the local `DESIGN.md` from the built frontend. The frontend was
+AI-coded; these read as drift, not decisions (owner agreed 2026-09-09). One low-tier
+sweep, well under a day; after it lands, re-run `/impeccable document`. The Zosia
+Display usage question (page titles in Averta, error headings in Zosia) is **not**
+deferred here — the owner ruled the font is fine for now.
+
+- **Button sizes and the green tone live outside the Button component.** "New task"
+  (`views/listPageChrome.ts` `listNewButtonClass`), the New Task submit and "Start
+  search" (`views/workspace/planStart.ts` `START_SEARCH_CLASS`) each hand-build a larger
+  size (Body text, 24px × 14px) as class strings, and Start search overrides the colour the
+  same way. Hover colours are hard-coded hexes in three places (`#0000d6`, `#147a6c`,
+  `#f0f0f3`). Seam: a `size="lg"` variant and a green `tone` on `ui/brand/Button.tsx`;
+  delete the three class strings.
+- **Eyebrow labels drift.** `PaneHeading` is Extrabold; plan and check-in eyebrows
+  (`PartCard`, `CheckInBundle`, `CheckInCard`) are Bold; the conversation list uses
+  Caption size. Six files hard-code `tracking-[0.06em]` although the `--tracking-label`
+  token (`tracking-label`) exists for it. Seam: one Label component or class.
+- **The report sheet carries the only neutral shadow.** `ArtefactView` uses Tailwind
+  `shadow-sm` (grey) plus `ring-1 ring-line`; every other surface uses the navy-tinted
+  card shadow. Swap to the Card shadow or drop the shadow and keep the ring.
+- **Check-in cards use two colours for one state.** `CheckInCard` has a 2px Orange left
+  rule, a Yellow "Waiting on your input" chip and the Yellow glow; Orange means *paused*
+  on `StatusDot`. If "waiting on you" is one state it should be one colour — owner call
+  on which.
+
+## Options scoping shell and baseline (task 044 seams)
+
+- **Per-field turn provenance** — resolved by owner ruling (C16, 2026-09-09):
+  provenance is at **version grain** (`source_turn_index` per plan version;
+  `your_context[].turn_index` because the trust rules use it); per-field
+  turn references are not built. plan-as-object § Plan vs config revised.
+- **"Search further" at the gate** (D10) — the gate offers Confirm and Change
+  the plan; a request in words is refused honestly as not yet available.
+  Task 2 or later.
+- **Inherited document rows** (D4, task 2) — the linked task's screened
+  documents and its report's interventions enter with the longlist; in this
+  slice inherit gives the Task Agent the linked plan, report body and
+  coverage statement only.
+- **`task_link.option_id`** (D13) — lands with the option table in task 2.
+- **Scoping deep depth** (D6) — not shown anywhere until scoping deep
+  exists; the plan model admits `rapid | standard` only.
+- **Baseline latency levers not taken** (D7): starting the longlist's
+  retrieval while the user reads the baseline (task 2); a faster model tier
+  for the baseline sections when Bedrock lands, quality-tested first; a
+  parallel writing mode only by owner revision of the durability contract
+  ("never fan out the conclusion") — check 7's reading is in
+  `docs/tasks/044-scoping-shell-baseline/verification.md`; showing sections
+  as they finish is **taken** (the skeleton streams the actual list).
+- **The Task Agent as the Evidence search's control surface** (D9) — the ES
+  keeps card-based steering in this slice; the owner's direction is that
+  the Task Agent chat should be the surface a task is controlled from, and
+  that any chat should eventually plan, edit artefacts and answer with
+  citations (routing hangs on the turn, not the conversation kind).
+- **Rebuild only the touched baseline sections** (open question 7, deltas
+  not restarts) — "Rebuild baseline" is a supersede-by-rerun of the whole
+  walk in this slice.
+- **Language evidence restriction** (C8) — the ES `ScopeConstraints` model
+  has no language filter; a language restriction is stored on the scoping
+  plan and shown as "not yet applied at retrieval". An ES gap.
+- **ES Task Agent prompt default steering mode** — the ES prompt's own
+  default is unattended ("check-ins are requested, not offered") while the
+  execution contract names moderate; recorded, not fixed here (contract
+  second-round amendment 2).
+- **Prompt-hash guard is name-based** — `scripts/prompt_hash_guard.py` pins
+  `*prompt*` modules; the inline prompts in `synthesis_backend.py` and
+  `finding_vetter.py` are outside it. Add an explicit include list.
+- **`?chat=planning` URL token** — renamed to `task_agent` with no alias
+  (038 rule); a pre-deploy open tab shows a dead chat until the user clicks
+  the Task Agent.
+- **`agent_prompt.py` docstring** still cites `planner_prompt.py` /
+  `planner_v5` — hash-pinned; reword at the next `agent_v` edit.
+- **Review-stack seams (2026-09-17, task 044 step 7).** Recorded, not fixed in the slice:
+  - *Per-run fan-out has no cross-run bound* — classify runs 12 provider threads and ingest 4 to
+    8 parse workers per walk; the only gate across walks is `RUN_EXECUTOR_MAX` (default 2), so a
+    2-vCPU staging task can carry 24 classify calls and 16 parse processes at once. A shared
+    provider 429 storm or memory pressure is the failure. Owner-tunable; size a cross-run
+    semaphore when a second concurrent walk is routine (security lane S5).
+  - *A 422 on a plan patch echoes the pydantic error* — `detail=str(exc)` on a `ValidationError`
+    carries the caller's own values, the model names and the pydantic docs URL. The ES patch has
+    done this since 029; the scoping branch copies it. Replace with the contract's plain
+    `validation_error` shape when the patch routes are next touched (security lane S7).
+  - *One baseline intent record per plan version* — every approved scoping plan version writes
+    an `evidence_scope` row with `purpose = baseline` (C3), including versions that only add a
+    preference or record `baseline_confirmed`; the NEET task carries seven for two walks. By
+    design (one answer per version to "which plan was this built from"), but the unrun rows are
+    orphans a retention rule will have to know about (trace lane T3).
+  - *"A mixed turn answers first" is prompt-borne* — the gate sort has kinds question · decision
+    · unsure and no "mixed" flag; a turn that asks and decides at once is folded into `question`
+    by instruction, and the code offers the two decisions after every answer. Deterministic in
+    the code (a decision only commits when the sort names an offered option), not in the model.
+    The eval slice reads mixed utterances against the sort (Codex X12; verifier).
+  - *The reasoning label is pinned at claim grain* — "What is contested" carries its tier-4
+    reasoning as labelled claims, not as a visible "Reasoning:" sentence the way "Key
+    assumption" does; the writer's choice of sentence is prompt-borne. The slice flags a
+    reasoning section that carries no reasoning claim (`reasoning_label_missing`); whether the
+    label should also be visible in the prose is a template question for the eval slice (trace
+    lane T1; Codex X8).
+  - *Linked context is capped at ten sources per create* (`TaskCreate.from_task_ids`
+    `max_length=10`, Codex X11; three at the review stack, raised to ten on the owner's ruling
+    2026-09-18 as an accident guard, not a design limit) — each linked report may add up to 60,000 characters to every
+    Task Agent turn; raise the cap when a real need appears, with the prompt size measured.
+    **Owner reading 2026-09-18:** the models in use have very large context windows, so the
+    token count is not the concern at today's sizes; and the live traces show OpenAI's
+    automatic prompt cache serving the fixed prefix (system prompt + linked block) from the
+    third turn on — 8,960 of about 10,700 prompt tokens cached on turns 5, 7 and 11 of the
+    NEET scoping task (turns 1 and 3 paid in full). The cap guards cold turns and accidents,
+    not every turn.
+  - **Inheriting many linked searches: inline block vs retrieval (owner question 2026-09-18).**
+    Today `inherit` puts each linked task's whole plan, report body and coverage statement
+    inline, fenced, on every Task Agent turn (owner ruling 2026-09-09: no size cap — best
+    comprehension at planning time; turn 1 of the NEET task proposed Where and the outcomes
+    from the linked plan). The owner expects few links per task for now but wants the larger
+    case considered so the architecture does not corner itself. Options, none built:
+    1. *Inline, as now* — full comprehension; cost grows linearly with links, paid on cold
+       turns; the scoping Task Agent has no tool loop, so a turn stays one call.
+    2. *Hybrid digest + tool read* — inline the linked plan, coverage statement and the
+       report's key findings; give the Task Agent a `read_linked_report(task, section)` /
+       `search_linked_reports(query)` tool for detail. Scales to many links; adds a read turn
+       (the planner turns are 5 to 19 s today); the model sees what it asks for, so a
+       comprehension trade-off — it can miss context it did not think to read.
+    3. *Retrieval over the linked tasks' evidence* — the linked tasks' chunks and report
+       blocks already exist as rows (`chunk`, `block`); the answer core's `search_chunks` tool
+       set already scopes by task, so pointing it at a linked task's scope is cheap. This is
+       the shape task 2 needs for inherited documents (D4: screened documents and
+       interventions enter with the longlist — many rows, never inline) and the shape a
+       future meta-analysis capability needs natively (reading across many reports).
+    The seam is one function: `runtime/inherit.py::linked_context` returns
+    `LinkedTaskContext` objects and the prompt module renders them. Nothing downstream
+    depends on the block being inline, so moving to 2 or 3 changes the context assembly and
+    the prompt's tool section, not the link records or the plan. Recommendation recorded:
+    keep 1 for task 1 (small N, one-call turns, best comprehension), build 3 for documents
+    in task 2, and revisit 2 for reports when meta-analysis is contracted or when a real task
+    links more than a handful of searches. Quality reading needed before any switch.
+  - *Acquisition target wording* — `search.record_cap` applies **per backend** (20 · 10 per
+    backend = about 40 · 20 documents over Overton + OpenAlex); the contract § Baseline, the OS
+    capability spec § Output structure and the spec log of 2026-09-17 read as totals. **Resolved
+    2026-09-18** (owner: "Add per backend to the docs") — the four documents now say per backend;
+    the code is unchanged.
+
+## Synthesis optimisation (deferred 2026-09-17; owner intends a task after options scoping lands)
+
+Cost, latency and quality together. Measured on the task 044 NEET baseline
+(Langfuse trace `run:synthesise:3baa5bc1`, 9 sections, 180 s wall clock, 170 s
+in model calls): write turns 110 s, grounding judge 30 s, read turns 22 s,
+proposal and two repairs 7 s. Every section used two turns (one batched read
+turn of 3 to 6 tool calls, one write turn); the write turn is set by output
+tokens, and only about 30% of the emitted output is prose. The rest is the
+claims structure: each claim repeats its sentence verbatim as `text`, and each
+chunk citation carries a verbatim quote of about 250 characters (first section:
+2,250 prose characters against 7,100 of structure).
+
+- **Slim the emit payload** — claims anchored by prose position instead of a
+  repeated sentence; chunk citations by record id plus a short anchor the code
+  verifies against the frozen chunk. Halves the write turn (110 s → about 50 s
+  on the run above). Changes the grounding contract the Evidence search report
+  shares (ADR 0015 §4 span binding; the judge's verbatim-quote check). Owner:
+  "seems like something that would make a material difference".
+- **Judge and repair share** — per call the gpt-5.4-mini judge takes 4 to
+  12 s on 5–13k prompt tokens and a repair 3 to 24 s (phase 8 log timelines);
+  judge plus repair was 19 % of the Sept 9 live write and 37 % of a five-section
+  rapid write. The second bucket after the write turns. A smaller judge
+  envelope (chunks the claim cites, not the section's whole read set) and the
+  concurrency below are the levers; fewer failing claims at first write cuts
+  the repairs.
+- **Judge concurrent with the next section** — the mini judge runs after each
+  section in sequence (3 s each); judging section N while N+1 reads saves about
+  25 s per baseline without a user-visible stage change. Repairs land when the
+  judge returns.
+- **Citation quote length bound** (about 120 characters) — about a fifth of
+  output, roughly 20 s, if the payload stays as is.
+- **Reasoning on the writer** — `reasoning_effort="none"` is a provider
+  constraint on tool-bearing chat-completions calls to gpt-5.6-terra (029 H3
+  knowledge note), so today neither the ES report nor the baseline reasons
+  before writing; the design leans on read-then-write plus the judge. Untested:
+  whether the Responses endpoint lifts it. Reasoning tokens are output tokens,
+  so this trades latency for quality and needs its own measurement.
+- **Ruled out for the scoping latency slice** (owner, 2026-09-17): parallel or
+  wave section writing (coherence), a writer model change (terra is the mid
+  tier), fewer screen reps (stays 3), turn cap 4 → 3 and a smaller read window
+  (quality), stage overlap (discrete steps are clearer to the user). Taken
+  instead in task 044 phase 8: classify 12 wide, ingest parse workers by core
+  count, acquisition targets 20 · 10 by depth, no proposed sections at rapid
+  (a five-section rapid merge was measured — no shorter write — and reverted).
+- **Unsupported claims after the one repair pass stay in the prose** (owner
+  concern, 2026-09-17: "keeping unvalidated claims in the output isn't the best
+  for user trust"). Today, after judge → one repair → re-judge, a claim the
+  judge still marks `unsupported_mis_cited` is kept in the section and flagged
+  (ADR 0015 §5/§6 flag-not-drop; artefact flag `unsupported_claims_present`;
+  chat enrichment ranks it lowest), and a repaired claim that fails the
+  validators keeps its prose without a citation. `REPAIR_ROUND_CAP` is 1.
+  Options to weigh in the synthesis optimisation task: a second bounded repair
+  round for still-failing claims; hedge-or-delete as the default for a claim the
+  re-judge fails (the repair wire already supports both); a visible marker in
+  the rendered prose rather than a flag only in the annotation layer. Each is a
+  grounding-contract change shared with the ES report (ADR 0015, 013
+  invariants) and needs a quality read against a set of judged sections.
+- **Source coverage: reports cite a small share of the relevant documents**
+  (investigated 2026-09-17 from the dev database and Langfuse; owner asked
+  why). Measured funnel on the task 1e03e719 report run of 2026-09-08 (eight
+  sections, landscape depth): 100 candidates → 59 screened relevant → 53
+  appraised → 17 documents ever returned to the writer in any section → 12
+  cited. The other nine stored runs cite 7 to 12 documents whatever the corpus
+  (36 to 81 relevant), so the ceiling is structural. The writer cited 12 of the
+  17 it saw; the loss is upstream of the writer. Three caps in
+  `synthesis_tools.py` bind together:
+  1. `search_chunks` returns the top 8 chunks by fused score with no
+     per-document spread — one document filled 5 or 6 of a section's 11 slots.
+  2. `SYNTH_CHUNK_CHAR_BUDGET` (24,000 per section) is spent on the first read
+     turn: every section's read turn returned 10 to 13 chunks totalling 22,600
+     to 23,900 characters from 5 to 8 documents; later matches come back
+     `skipped_over_budget` (up to 13 in one section) and are not citable.
+  3. The writer takes one read turn (2 to 4 `search_chunks` plus two lookups)
+     and then emits — `force_emit: false` on all 16 `synthesise:section_turn`
+     generations, so it chose to stop at 2 of its 6 turns. The prompt says
+     "stop when saturated", and the budget makes it saturated at once.
+  Sections retrieve overlapping documents, so the run-wide union stays near 17.
+  Select (the shortlist) is NOT the cause: it runs only at analysis depth
+  standard/deep (`ANALYSIS_DEPTH_TABLE`, budgets 15/25), never at landscape or
+  in the scoping baseline chain, and none of the ten measured runs had it. Where
+  it did run (five standard-depth reports, July–Aug 2026) the 2.0 prior steered
+  7 to 13 of 8 to 21 cited documents into the shortlist without lowering the
+  total; it is a score multiplier, not a filter. Also: no stored run had
+  extraction, so every citation is a chunk claim and finding claims are zero.
+  Levers to weigh, none a bug fix (the caps are plan-pinned and working as
+  designed): a per-document cap or diversity rule in `search()`; a larger or
+  per-turn character budget; a prompt change that asks the writer to read again
+  after the first turn; surfacing `skipped_over_budget` counts to the user as a
+  coverage signal. Each trades against the write-turn latency above and needs
+  a quality read. Query recipe: `synthesis_result.blocks[].block_id → block →
+  annotation → citation → chunk → task_source_snapshot` (join on
+  `source_snapshot_id` OR `full_text_snapshot_id`); Langfuse v3 REST
+  `/api/public/observations` by run window (the CLI refuses both the legacy and
+  v2 endpoints on this project).

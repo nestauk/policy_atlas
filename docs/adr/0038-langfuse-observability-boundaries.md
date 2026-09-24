@@ -1,7 +1,7 @@
-# ADR 0037 — Langfuse observability boundaries: users, sessions, prompts, evals
+# ADR 0038 — Langfuse observability boundaries: users, sessions, prompts, evals
 
 - **Status:** Accepted — 2026-09-11 (owner, in review of PR #62)
-- **Date:** 2026-09-11
+- **Date:** 2026-09-11 (renumbered 0037 → 0038 at the 2026-09-18 merge of `dev` into `feat/options-scoping`: ADR 0037 was already taken by the options-scoping ADR accepted 2026-09-09; the two were written on separate branches)
 - **Task:** none. Issue #60 (too small for a task folder).
 - **Amends:** [ADR 0036](0036-one-vocabulary-across-code-schema-api-and-screen.md)
   rider V9 (which session id a chat turn carries).

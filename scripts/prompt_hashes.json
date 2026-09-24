@@ -6,10 +6,13 @@
   "backend/src/policy_atlas/evidence_search/extract/iof_prompt.py": "4d04ac7b17ddee2166e427c00487f958c7ccf27716aba7ceecfc2b9096f1aea3",
   "backend/src/policy_atlas/evidence_search/extract/relevance_prompt.py": "47fb6b94ad83e5ce77fd5d5bff488298346a6032d70fc178de8df287e4062cbc",
   "backend/src/policy_atlas/evidence_search/sourcing/search_prompts.py": "0e35de2b0d92df2a45d793fbc845d7555631dcec3346703fdd0c8fd75d253571",
+  "backend/src/policy_atlas/evidence_search/synthesis/baseline_prompt.py": "0d8d2482ee7b6cb757c7bd7f2329a0e06776d4a1efa52e407fa71c0ca27a7b33",
   "backend/src/policy_atlas/evidence_search/synthesis/summary_prompts.py": "3aad9c005256f0e9b10b2d1bef0db3a713cd9024ae43ce7a74fcd7430af09f44",
   "backend/src/policy_atlas/evidence_search/synthesis/synthesis_prompts_v6.py": "d3ba274385c6cc492e942c32792a35505ff38ea696596314b3d23c072daf1122",
   "backend/src/policy_atlas/evidence_search/synthesis/voice_prompt.py": "6dea6f2e552b6fa1775bc5394b9478d8c254982c505699f31b7223eef1e5384a",
   "backend/src/policy_atlas/runtime/agent_prompt.py": "cf10d2a1663be8ab7eccbc636e2e60b9170d5ce8ce4efeda6956040ecb32a403",
   "backend/src/policy_atlas/runtime/chat_prompt.py": "7e063d8f327f592774e08220221ed3e67d06365fe644d01e9472c224e91c28a9",
-  "backend/src/policy_atlas/runtime/planner_prompt.py": "4e85172f12953082a65daf40b9e3d456020271abe4c60138b8246b29e0538ce2"
+  "backend/src/policy_atlas/runtime/gate_sort_prompt.py": "d554013d8f8ec3c64ed0aa1da64a5c6cbd41e2721ffa96d2f77b149eaa5432da",
+  "backend/src/policy_atlas/runtime/task_agent_prompt.py": "4e85172f12953082a65daf40b9e3d456020271abe4c60138b8246b29e0538ce2",
+  "backend/src/policy_atlas/runtime/task_agent_scoping_prompt.py": "b0872642add88acb00eb047a00242ecb2e857b0f5fc4ce6863e3d3caa030db8a"
 }
