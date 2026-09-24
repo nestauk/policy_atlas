@@ -2,36 +2,36 @@
 depth constants, one Langfuse dataset run per depth.
 
 The sweep (``sweep_record_cap.py``) asks a research question by pushing the
-caps far above production. This script asks the operational one: with the
-pipeline exactly as deployed, how much of each review's reference list does a
-``rapid``, ``standard`` or ``deep`` search find? Run it by hand, locally, so the
-answer builds up into a history. (A GitHub Actions version is parked in
-``.github/workflows-disabled/`` until the open questions about cost and
-gating are settled.) It records numbers; it does not pass or fail
-on them.
+caps far above production. This script asks the operational question: with
+the pipeline exactly as deployed, how much of each review's reference list
+does a ``rapid``, ``standard`` or ``deep`` search find? Run it by hand,
+locally, so the answers build up into a history over time. (A GitHub Actions
+version is parked in ``.github/workflows-disabled/`` until the open questions
+about cost and gating are settled.) It records numbers. It does not pass or
+fail on them.
 
-How a depth is run (mirrors ``runtime/runner.py``'s round loop, see
+How a depth is run (this mirrors the round loop in ``runtime/runner.py``, see
 ``search_eval.run_one_query``):
 
 * ``rapid`` — one search round, no screening. Search recall only.
 * ``standard`` / ``deep`` — search, screen the new candidates, then let the
   pipeline's own rule (``search_loop.evaluate_deep_stop``) decide whether to
-  search again: it stops at the depth's round cap, or early when a round's
+  search again. It stops at the depth's round cap, or earlier when a round's
   screening yield collapses. Rounds after the first unlock the reformulate /
-  snowball / suggest / diversity arms, which are seeded from the screening
-  verdicts, so screening is not optional here. Search recall and screen recall
-  are both scored.
+  snowball / suggest / diversity arms. These are seeded from the screening
+  verdicts, so screening is not optional here. Search recall and screen
+  recall are both scored.
 
-Cost: rapid is cheap (at most 25 provider calls x 50 records per review, one
-generation LLM call). standard and deep screen every kept candidate each round
-— a few hundred screening LLM calls per review per run.
+Cost: rapid is cheap (at most 25 provider calls x 50 records per review, plus
+one generation LLM call). standard and deep screen every kept candidate in
+every round, which means a few hundred screening LLM calls per review per run.
 
 Scores on each dataset item (one review): the sweep's ``SCORE_KEYS``
 (search_recall, n_found, n_api_calls, n_failed_calls, ..., screen_recall,
-n_screened_in) plus ``rounds_run``. There are no run-level scores of our own:
+n_screened_in) plus ``rounds_run``. There are no run-level scores of our own.
 Langfuse's dataset-runs table shows the mean of each per-review score across
 the reviews, and that is the run summary. Check ``n_failed_calls`` before
-reading recall — any value above 0 means a provider call failed after retries,
+reading recall. Any value above 0 means a provider call failed after retries,
 so that review's recall is an undercount caused by the provider, not the code.
 
 Usage (same environment as the sweep; the dataset must already be uploaded
@@ -42,9 +42,9 @@ with ``ground_truth_dataset.py``):
         [--depths rapid standard deep] [--run-label LABEL] [--reviews TEXT ...]
 
 ``--reviews`` restricts the run to the dataset items whose id, review id or
-review title contains one of the given texts (case-insensitive) — for trying
-an expensive depth on a single review. The run still attaches to the dataset;
-it simply has fewer items, so its averages cover only those reviews.
+review title contains one of the given texts (case-insensitive). Use it to
+try an expensive depth on a single review. The run still attaches to the
+dataset. It simply has fewer items, so its averages cover only those reviews.
 """
 
 from __future__ import annotations
@@ -202,10 +202,7 @@ def _run_depth(
                 trans.rollback()
         review_id = item.metadata["review_id"]
         runs, _queries, _papers = _run_frames(
-            result,
-            ground_truth,
-            ground_truth.titles,
-            {"review_id": review_id, "depth": depth},
+            result, ground_truth, {"review_id": review_id, "depth": depth}
         )
         summary = {
             **_summary(runs),

@@ -2,33 +2,34 @@
 method, and which ``record_cap_per_backend``, buys recall?
 
 The question this answers: the search stage fetches far more records than it
-keeps. ``record_cap_per_backend`` is the number it keeps per backend, and so the
-ceiling on recall. How high does that cap have to go before recall stops
-improving — and does the way queries are generated change the answer?
+keeps. ``record_cap_per_backend`` is the number it keeps per backend, so it is
+the ceiling on recall. How high does that cap have to go before recall stops
+improving? And does the way queries are generated change the answer?
 
 The setup:
 
 * depth ``rapid`` — one search round, no reformulation loop.
-* ``result_cap_per_backend`` set to 2,000 — 40x the pipeline's own value of
-  50, so the number of records a single API call may return stops being the
-  limiting factor and the *keep* cap is the only knob. 10,000 was tried first
-  and the APIs pushed back: plain page-numbered paging runs out around there
-  (OpenAlex requires page x per-page <= 10,000), and 1,000 rapid page requests
-  per run is far more traffic than this pipeline normally sends.
+* ``result_cap_per_backend`` set to 2,000. This is 40x the pipeline's own
+  value of 50, so the number of records a single API call may return stops
+  being the limiting factor and the *keep* cap is the only knob. 10,000 was
+  tried first and the APIs pushed back: plain page-numbered paging runs out
+  around there (OpenAlex requires page x per-page <= 10,000), and 1,000 rapid
+  page requests per run is far more traffic than this pipeline normally
+  sends.
 * ``record_cap_per_backend`` swept over 50, 100, 250, 500, 1000, 2000.
-* The generation backend swept over ``--generation-backends`` — ``shared``
-  (one prompt writes both providers' queries) and ``per-provider`` (one prompt
-  per provider). See ``search_eval.GENERATION_BACKENDS``; each class names the
-  prompt files it reads in ``prompt_files``. Every backend is run at every
-  cap, so the two effects can be told apart.
+* The generation backend swept over ``--generation-backends``: ``shared``
+  (one prompt writes the queries for both providers) and ``per-provider``
+  (one prompt per provider). See ``search_eval.GENERATION_BACKENDS``; each
+  class names the prompt files it reads in ``prompt_files``. Every backend is
+  run at every cap, so the two effects can be told apart.
 * Screening OFF by default. Retrieval is what is usually being measured, and
-  screening every kept candidate is where the LLM bill is. Pass ``--screen`` to
-  run it too, which adds a ``screen_recall`` score; the gap between it and
+  screening every kept candidate is where the LLM bill is. Pass ``--screen``
+  to run it too. This adds a ``screen_recall`` score; the gap between it and
   ``search_recall`` is what screening lost.
 
-Each combination is run ``--repeats`` times because query generation is an LLM
-call and gives slightly different queries each time; comparing single runs
-would confuse generation-method and cap effects with query luck.
+Each combination is run ``--repeats`` times, because query generation is an
+LLM call and gives slightly different queries each time. Comparing single runs
+would mix up the generation-method and cap effects with query luck.
 
 How it is organised in Langfuse:
 
@@ -38,24 +39,24 @@ How it is organised in Langfuse:
 * Each generation backend x cap x repeat combination is one **dataset run**,
   named ``<label>/<backend>-cap<cap>-r<repeat>``. ``--run-label`` defaults to
   today's date plus the short git commit, so a sweep repeated next week lands
-  in fresh runs instead of appending to these (Langfuse merges runs of the same
-  name).
-* Every trace carries the cell's configuration in its metadata — generation
-  backend, prompt version and hash, both caps, depth, repeat, git commit — so
-  the trace list can be filtered on any of them. The git commit also goes in
+  in fresh runs instead of being appended to these (Langfuse merges runs with
+  the same name).
+* Every trace carries the cell's configuration in its metadata: generation
+  backend, prompt version and hash, both caps, depth, repeat, git commit. The
+  trace list can be filtered on any of them. The git commit also goes in
   Langfuse's ``release`` field, its slot for "which version of the code".
 * Recall and the efficiency counts are numeric **scores** on each item trace,
   so the dataset-run comparison view shows them side by side per run.
 * Langfuse labels every experiment trace with the environment
-  ``sdk-experiment``; filter on that to separate them from app traffic.
+  ``sdk-experiment``. Filter on that to separate them from app traffic.
 
 Langfuse is therefore required (``LANGFUSE_PUBLIC_KEY`` / ``SECRET_KEY`` /
 ``HOST``).
 
 Cost warning: one repeat can pull thousands of records from OpenAlex and
-Overton — up to 10 pages per OpenAlex call and 40 per Overton call. Reviews x
-backends x caps x repeats multiplies that: the defaults are 2 x 6 = 12 runs per
-review. Start with ``--repeats 1`` and a single ``--caps`` value.
+Overton, up to 10 pages per OpenAlex call and 40 per Overton call. Reviews x
+backends x caps x repeats multiplies that: the defaults are 2 x 6 = 12 runs
+per review. Start with ``--repeats 1`` and a single ``--caps`` value.
 
 Usage (needs a real Postgres via DATABASE_URL, plus OPENAI_API_KEY /
 OPENALEX_API_KEY / OVERTON_API_KEY, which is what ``--env-file backend/.env``
@@ -66,23 +67,24 @@ supplies), after the dataset has been uploaded once:
     uv run --project backend --env-file backend/.env \\
         python scripts/evals/search/sweep_record_cap.py --repeats 1
 
-Besides the Langfuse runs, writes three CSVs into ``results/``, all joinable on
-``run_id`` and all carrying the review's identifier and title:
+Besides the Langfuse runs, the script writes three CSVs into ``results/``.
+All of them can be joined on ``run_id`` and all carry the review's identifier
+and title:
 
 * ``<name>_runs.csv`` — one row per run x backend, plus a ``backend=all`` row
-  per run holding the run's own de-duplicated totals. The scoreboard.
+  per run holding the run's own de-duplicated totals. This is the scoreboard.
 * ``<name>_queries.csv`` — one row per API call: the generated query text, the
-  wire parameters it went out with, how many records came back and how many of
-  those the review actually cited.
+  wire parameters it was sent with, how many records came back, and how many
+  of those the review actually cited.
 * ``<name>_papers.csv`` — one row per run x reference-list paper: whether an
   API returned it, whether it survived the cap into the candidate set, which
   backend did each, and (with ``--screen``) whether screening kept it. Filter
-  to ``reached_db`` for the true positives; the rows where ``returned_by_api``
+  on ``reached_db`` for the true positives. The rows where ``returned_by_api``
   is true and ``reached_db`` is false are the papers the cap threw away after
   paying to fetch them.
 
-Cheaper alternative if API volume becomes a problem: acquire keeps the first N
-of a fixed candidate stream, so a single run at cap 2000 almost contains the
+A cheaper alternative if API volume becomes a problem: acquire keeps the first
+N of a fixed candidate stream, so a single run at cap 2000 almost contains the
 cap-50, cap-100 ... runs inside it. "Almost" is why this script runs them for
 real: the two backends share a de-duplication table, so what OpenAlex keeps
 changes what Overton keeps.
@@ -189,15 +191,14 @@ def _kept_by_backend(result: QueryResult) -> dict[str, str]:
 def _run_frames(
     result: QueryResult,
     ground_truth: GroundTruth,
-    titles: dict[str, str],
     meta: dict[str, Any],
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """One finished run -> its (runs, queries, papers) rows, all tagged with ``meta``.
 
     Args:
         result: The finished ``QueryResult``.
-        ground_truth: The review's reference list (the recall target).
-        titles: Key -> title for the target keys, from the dataset item.
+        ground_truth: The review's reference list (the recall target), with
+            ``titles`` for labelling the papers rows.
         meta: Identity columns (run_id, review, generation backend, cap, repeat) written
             onto every row of every frame, so the three files join and several
             reviews' sweeps concatenate.
@@ -220,7 +221,7 @@ def _run_frames(
                 # "doi" or "overton": which half of the target this document is,
                 # so OpenAlex and Overton recall can be read separately.
                 "space": "doi" if key in ground_truth.dois else "overton",
-                "title": titles.get(key),
+                "title": ground_truth.titles.get(key),
                 "returned_by_api": key in returned_by,
                 "returned_by": "+".join(sorted(returned_by.get(key, ()))) or None,
                 "reached_db": key in kept_by_key,
@@ -388,7 +389,7 @@ def _run_cell(
             "record_cap_per_backend": record_cap,
             "repeat": repeat,
         }
-        frames = _run_frames(result, ground_truth, ground_truth.titles, row_meta)
+        frames = _run_frames(result, ground_truth, row_meta)
         for bucket, frame in zip(sink, frames, strict=True):
             bucket.append(frame)
 

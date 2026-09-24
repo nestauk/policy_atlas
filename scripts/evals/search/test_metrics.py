@@ -1,5 +1,5 @@
 """Self-check for the eval's pure functions: scoring, CSV loading, the sweep's
-output tables, and the OpenAlex retry logic (no network, no DB).
+output tables, and the OpenAlex retry logic. No network, no database.
 
 Run: uv run --project backend python scripts/evals/search/test_metrics.py
 """
@@ -141,7 +141,8 @@ def _fake_run(screened: bool = False):
         dois={"10.1/a", "10.1/b", "10.1/c"},
         source="url",
         overton_ids={"overton:P9"},
-        titles={"overton:P9": "Loneliness statistics"},
+        # Key -> title, as the dataset item carries it (10.1/c deliberately has none).
+        titles={"10.1/a": "Paper A", "10.1/b": "Paper B", "overton:P9": "Loneliness statistics"},
     )
     openalex_records = [
         {"id": "W1", "display_name": "Paper A", "doi": "https://doi.org/10.1/A"},
@@ -194,9 +195,7 @@ def _fake_run(screened: bool = False):
         search_docs=search_docs,
         screened_docs=search_docs[:1] if screened else [],
     )
-    # Key -> title, as the dataset item carries it (10.1/c deliberately has none).
-    titles = {"10.1/a": "Paper A", "10.1/b": "Paper B", "overton:P9": "Loneliness statistics"}
-    return result, ground_truth, titles
+    return result, ground_truth
 
 
 def test_recording_backend_records_failed_calls() -> None:
@@ -316,13 +315,13 @@ def test_sweep_run_frames() -> None:
 
     from sweep_record_cap import _run_frames
 
-    result, ground_truth, titles = _fake_run()
+    result, ground_truth = _fake_run()
     meta = {
         "run_id": "shared-cap250-r1",
         "generation_backend": "shared",
         "record_cap_per_backend": 250,
     }
-    runs, queries, papers = _run_frames(result, ground_truth, titles, meta)
+    runs, queries, papers = _run_frames(result, ground_truth, meta)
 
     # Every frame carries the identity columns, so the three files join.
     for frame in (runs, queries, papers):
@@ -384,8 +383,8 @@ def test_sweep_run_frames_with_screening() -> None:
     """With --screen, the runs frame and scores carry screen_recall too."""
     from sweep_record_cap import _run_frames, _summary, score_summary
 
-    result, ground_truth, titles = _fake_run(screened=True)
-    runs, _queries, papers = _run_frames(result, ground_truth, titles, {"run_id": "r"})
+    result, ground_truth = _fake_run(screened=True)
+    runs, _queries, papers = _run_frames(result, ground_truth, {"run_id": "r"})
 
     by_backend = runs.set_index("backend")
     # Screening kept 10.1/a only: 1 of 4 targets overall, 1 of OpenAlex's 1, 0 of Overton's 1.

@@ -1,12 +1,12 @@
-"""Per-call and per-record views over one eval run's raw provider output, with
-titles and DOIs — not just the counts the sweep reports.
+"""Per-call and per-record views over the raw provider output of one eval run,
+with titles and DOIs, not just the counts the sweep reports.
 
-Both functions are pure reads over ``QueryResult.search_calls`` (every API
-call the run made and the raw records it returned), so a run can be inspected
-without paying for the API calls again. The sweep uses them to build its
-queries CSV and to find which API calls returned each cited paper; the
-per-paper funnel (returned by the API? survived the cap? screened in?) is the
-sweep's papers CSV.
+Both functions only read ``QueryResult.search_calls`` (every API call the run
+made and the raw records it returned), so a run can be inspected without
+paying for the API calls again. The sweep uses them to build its queries CSV
+and to find which API calls returned each cited paper. The per-paper funnel
+(returned by the API? survived the cap? screened in?) is the sweep's papers
+CSV.
 
 Usage in a notebook, with a ``QueryResult`` in ``result``::
 
@@ -95,7 +95,23 @@ def records_table(
                     ),
                 }
             )
-    return pd.DataFrame(rows)
+    columns = [
+        "call",
+        "backend",
+        "method",
+        "query",
+        "title",
+        "doi",
+        "key",
+        "year",
+        "usable",
+    ]
+    if ground_truth_keys is not None:
+        columns.append("in_gt")
+    # Columns are named explicitly so a run whose calls all returned nothing
+    # (a provider outage) gives an empty table with the right columns, not a
+    # KeyError in call_table and the sweep.
+    return pd.DataFrame(rows, columns=columns)
 
 
 def call_table(
@@ -200,6 +216,11 @@ def demo() -> None:
     assert calls_summary.loc[0, "gt_hits"] == 1
     assert calls_summary.loc[0, "with_doi"] == 1  # the untitled record maps to None
     assert calls_summary.loc[1, "gt_hits"] == 1  # the Overton call earned its keep
+
+    # A run where every call failed still gives well-formed tables.
+    failed = [{**calls[0], "result_count": 0, "records": [], "error": "504"}]
+    assert records_table(failed, keys).empty
+    assert call_table(failed, keys).loc[0, "gt_hits"] == 0
 
     print("inspect_run demo: ok")
 

@@ -5,6 +5,52 @@ This folder contains scripts related to calculating evaluation metrics against a
 * Testing the recall of the current production rapid/standard/deep search methodology
 * An experimental sweep across different record caps to see how these affect recall (basically seeing how lifting the cap on the number of records kept after deduplication affects recall)
 
+## How the files fit together
+
+The folder has seven Python files. You run three of them from the command line. The other four are helper modules that the scripts import.
+
+**Scripts you run:**
+
+| Script | What it does | When to run it |
+|---|---|---|
+| `ground_truth_dataset.py` | Reads the two CSV files in `input/` and uploads them to Langfuse as a dataset called `retrieval-ground-truth`. | Once at the start, and again each time `references.csv` or `gt_reviews.csv` changes. |
+| `production_recall.py` | Measures how much of each review's reference list the pipeline finds when it runs exactly as it does in production. It makes one Langfuse run for each search depth (rapid, standard, deep). | By hand, from time to time, so that a history of production recall builds up. |
+| `sweep_record_cap.py` | The experiment. It runs a rapid search many times, each time with a different cap on the number of records kept and with one of the two query-generation methods. It records the recall for each combination. | When you want to know how the record cap or the prompting method changes recall. |
+
+The two measuring scripts read the reviews and their reference lists from the Langfuse dataset. They do not read the CSV files. This means you must run `ground_truth_dataset.py` at least once before you run either of them.
+
+**Helper modules (these have no command line):**
+
+| Module | What it holds | Who uses it |
+|---|---|---|
+| `ground_truth.py` | Small building blocks that need no database and no pipeline code: the key used to match a found document to a reference (a lowercase DOI, or `overton:<id>` for documents without a DOI), the `GroundTruth` container, the function that turns a review title into a search intent, the date helpers, and one lookup to the OpenAlex API. | All the other files. |
+| `search_eval.py` | The core of the evaluation. Its function `run_one_query` takes one search intent, runs the real search stage (and screening, if asked) and works out the recall. It runs inside a database transaction that is always rolled back, so nothing is saved to the database. It returns a `QueryResult` that holds the recall and the raw records each API call returned. | `sweep_record_cap.py` and `production_recall.py`. |
+| `inspect_run.py` | Two functions that turn a `QueryResult` into tables: one row per API call, or one row per record returned. The tables show titles and DOIs, so in a notebook you can see which API call found which paper without paying for the calls again. | `sweep_record_cap.py` uses it to build its queries CSV and papers CSV. |
+| `test_metrics.py` | A self-check for the functions that need no network and no database: scoring, CSV loading, the output tables and the OpenAlex retry logic. | Run it after you change any of the files above: `uv run --project backend python scripts/evals/search/test_metrics.py`. |
+
+`production_recall.py` also imports the score names and the Langfuse upload code from `sweep_record_cap.py`. This means both scripts report the same set of scores, and you can compare their runs in Langfuse.
+
+**How data flows through the files:**
+
+```
+input/gt_reviews.csv ─┐
+input/references.csv ─┴─> ground_truth_dataset.py ──> Langfuse dataset
+                                                          │
+                              ┌───────────────────────────┴──────────────┐
+                              v                                          v
+                     production_recall.py                        sweep_record_cap.py
+                              │                                          │
+                              └────────> search_eval.run_one_query <─────┘
+                                          (real search + screening,
+                                           rolled back, never saved)
+                                                     │
+                                                     v
+                                     Langfuse runs + scores
+                                     results/*.csv (sweep only, built with inspect_run.py)
+```
+
+Abbreviations used above: CSV is a comma-separated values file. DOI is a Digital Object Identifier, the permanent ID of a published paper. API is an application programming interface, the way our code asks OpenAlex and Overton for records.
+
 ## Prerequisites
 
 Two files in `scripts/evals/search/input/`:

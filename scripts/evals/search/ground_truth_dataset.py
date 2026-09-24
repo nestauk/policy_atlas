@@ -1,22 +1,24 @@
 """Turn the two ground-truth CSVs into a Langfuse dataset.
 
-Run it once, and again whenever new ground truth datasets are added (one RQ + a set of references that answer the question); it
-upserts, so re-running never creates duplicates.
+Run it once, and again whenever new ground truth is added (one research
+question plus the set of references that answer it). It upserts, so running
+it again never creates duplicates.
 
 Inputs, both under ``input/``:
 
 * ``gt_reviews.csv`` — one row per review to search for. Columns: ``title``
   (cleaned into the search intent), ``doi`` or ``url`` (the review's
-  identifier), ``published_before`` (ISO ``YYYY-MM-DD`` search cutoff — when
-  empty on a DOI row it is derived from OpenAlex, one month before the
-  review's own publication date, and printed so you can paste it in; a URL
-  row must give it), and ``exclude`` (any value skips the row).
+  identifier), ``published_before`` (the search cutoff as an ISO
+  ``YYYY-MM-DD`` date; when it is empty on a DOI row, the script derives it
+  from OpenAlex as one month before the review's own publication date and
+  prints it so you can paste it in; a URL row must give it), and ``exclude``
+  (any value skips the row).
 * ``references.csv`` — one row per work a review cites. Columns used:
   ``review_title`` (must match ``title`` above exactly), ``ref_title``,
   ``label`` (only ``content`` rows form the recall target), and the scoring
-  key: ``doi`` (bare or ``https://doi.org/...``) or ``overton_id`` (Overton
-  policy-document id, for grey literature with no DOI). A ``content`` row with
-  neither cannot be scored and is counted, not silently dropped.
+  key: ``doi`` (bare or ``https://doi.org/...``) or ``overton_id`` (the
+  Overton policy-document id, for grey literature with no DOI). A ``content``
+  row with neither key cannot be scored. It is counted, not silently dropped.
 
 One Langfuse dataset item per review:
 

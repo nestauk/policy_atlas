@@ -1,11 +1,12 @@
 """Shared ground-truth helpers for the eval: the key a document is scored on,
-the ``GroundTruth`` container, the review-title-to-intent cleaner, the date
-helpers for a review's search cutoff, and the one OpenAlex lookup the dataset
-builder needs. Pure Python plus ``httpx`` — nothing here imports the pipeline
-or the database, so the CSV loader stays cheap to run.
+the ``GroundTruth`` container, the function that cleans a review title into a
+search intent, the date helpers for a review's search cutoff, and the one
+OpenAlex lookup the dataset builder needs. Plain Python plus ``httpx``.
+Nothing here imports the pipeline or the database, so the CSV loader stays
+cheap to run.
 
 The recall target itself comes from the hand-curated CSVs under ``input/``
-(see ``ground_truth_dataset.py``), not from anything here.
+(see ``ground_truth_dataset.py``), not from anything in this file.
 
 Dev-only eval tooling. Not part of the runtime package.
 """
@@ -101,17 +102,18 @@ def openalex_get(path: str, **params: str) -> httpx.Response:
     """
     delay = 1.0
     for attempt in range(5):
+        last = attempt == 4
         try:
             resp = httpx.get(f"{OPENALEX_HOST}{path}", params=_openalex_params(**params), timeout=30.0)
-            if resp.status_code < 500:
-                return resp
         except httpx.TransportError:
-            if attempt == 4:
+            if last:
                 raise
-        if attempt < 4:
-            time.sleep(delay)
-            delay *= 2
-    return resp
+        else:
+            if resp.status_code < 500 or last:
+                return resp
+        time.sleep(delay)
+        delay *= 2
+    raise AssertionError("unreachable")
 
 
 def fetch_openalex_work(doi: str) -> dict[str, Any]:

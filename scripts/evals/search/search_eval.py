@@ -1,13 +1,13 @@
 """Run one research intent through the real search stage (and optionally
 screening) and score it against a review's reference list.
 
-This is the engine ``sweep_record_cap.py`` and ``production_recall.py`` drive;
-it has no command line of its own. ``run_one_query`` seeds a throwaway
+This is the engine that ``sweep_record_cap.py`` and ``production_recall.py``
+drive. It has no command line of its own. ``run_one_query`` seeds a throwaway
 task/scope, runs the pipeline's own ``run_search`` and ``screen_sources`` for
-as many rounds as the depth allows, inside the caller's transaction (which the
-caller rolls back, so nothing is ever committed), and returns a ``QueryResult``
-with stage-attributed recall plus everything needed to unpick the run offline
-(see ``inspect_run.py``).
+as many rounds as the depth allows, and does so inside the caller's
+transaction (which the caller rolls back, so nothing is ever committed). It
+returns a ``QueryResult`` with recall attributed to each stage, plus
+everything needed to unpick the run offline (see ``inspect_run.py``).
 
 One ``run_search`` call is one search round. ``rapid`` is a single round.
 ``standard`` and ``deep`` are several: the app's runner searches, screens the
@@ -17,22 +17,23 @@ reformulate / snowball / suggest / diversity arms, which are seeded from the
 screening verdicts. ``run_one_query`` mirrors that loop exactly, so a
 multi-round depth cannot be measured with screening off.
 
-Precision is not scored: a screened-in paper absent from one review's
+Precision is not scored. A screened-in paper that is absent from one review's
 bibliography is not proven irrelevant (the review had its own scope and time
 cutoff), so bibliography membership is not a valid false-positive signal.
 
-Two separate caps bound how many candidates a run collects, and confusing them
+Two separate caps bound how many candidates a run collects. Confusing them
 wastes a lot of time:
 
-* ``result_cap_per_backend`` — records requested per HTTP call. With the depth's
-  ``call_budget`` (number of calls allowed), this bounds what a backend can be
-  *asked* for.
-* ``record_cap_per_backend`` — candidates acquire *keeps* per backend, applied
-  after dedup, before persisting. This is the ``acquire.capped`` log line, and
-  normally the tighter of the two: records past it were fetched and paid for,
-  then discarded. This is the cap that sets the recall ceiling.
+* ``result_cap_per_backend`` — records requested per HTTP call. Together with
+  the depth's ``call_budget`` (the number of calls allowed), this bounds what
+  a backend can be *asked* for.
+* ``record_cap_per_backend`` — the number of candidates acquire *keeps* per
+  backend, applied after dedup and before persisting. This is the
+  ``acquire.capped`` log line, and normally the tighter of the two: records
+  past it were fetched and paid for, then discarded. This is the cap that
+  sets the recall ceiling.
 
-Both live in ``search_loop.DEPTH_CONSTANTS``; the sweep overrides them in this
+Both live in ``search_loop.DEPTH_CONSTANTS``. The sweep overrides them in this
 process only.
 """
 
