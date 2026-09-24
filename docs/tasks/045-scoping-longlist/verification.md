@@ -1081,6 +1081,15 @@ changed (F11).
 re-pin), drift-check OK, frontend 86 files / 805 tests. The fixes were not
 re-driven live.
 
+**Dependency bump on the PR (2026-09-24, owner-approved).** CI's `audit`
+failed on newly published CVE-2026-63374, CVE-2026-64847 and CVE-2026-63349
+in `anyio` 4.14.0 (not introduced by this slice). Owner: "Bump it in this
+PR" — `backend/uv.lock` `anyio` 4.14.0 → 4.14.2 (lock only, no
+`pyproject.toml` change; 4.15.x is Python ≥ 3.15 only, so pinned to the
+single fixed patch). `make -C backend audit`: no known vulnerabilities. This
+is the one approval-gated change beyond the contract (rubric 14), approved
+by the owner.
+
 **Fake-done check on the fixes.** No test deleted or skipped; one renamed
 with a reason (`…reopens_a_missing_walk` → `…a_failed_walk`); every new broad
 `except` re-raises; changed expectations each follow a finding (B2 seeding,
