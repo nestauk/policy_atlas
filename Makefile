@@ -126,8 +126,8 @@ audit:
 audit-paths:
 	uv run --project backend python scripts/audit_paths.py
 
-# Prompt-family content-hash guard (task 025 C.4): fails if any prompt-bearing
-# module drifted from its committed hash (scripts/prompt_hashes.json) — prompt
+# Prompt-family content-hash guard: fails if any prompt-bearing
+# module or prompt text file drifted from its committed hash (scripts/prompt_hashes.json) — prompt
 # surfaces change only as named, deliberate slice work.
 prompt-guard:
 	uv run --project backend python scripts/prompt_hash_guard.py
