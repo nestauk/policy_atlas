@@ -62,9 +62,9 @@ OPENALEX_API_KEY / OVERTON_API_KEY, which is what ``--env-file backend/.env``
 supplies), after the dataset has been uploaded once:
 
     uv run --project backend --env-file backend/.env \\
-        python scripts/eval_ground_truth/ground_truth_dataset.py
+        python scripts/evals/search/ground_truth_dataset.py
     uv run --project backend --env-file backend/.env \\
-        python scripts/eval_ground_truth/sweep_record_cap.py --repeats 1
+        python scripts/evals/search/sweep_record_cap.py --repeats 1
 
 Besides the Langfuse runs, writes three CSVs into ``results/``, all joinable on
 ``run_id`` and all carrying the review's identifier and title:

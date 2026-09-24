@@ -313,7 +313,7 @@ architectural decision to defer, not an omission. Sources: architecture referenc
   `test_acquire_record_cap.py` bounds total volume, replacing the `results_returned == 45`
   assertion that per-call semantics had removed. **Still provisional:** 200 is sized from
   purpose (the deep loop's confident-relevant goal), not measured.
-  `scripts/eval_ground_truth/` (lives on a different branch) scores search recall against
+  `scripts/evals/search/` (lives on a different branch) scores search recall against
   published-review ground truth (baseline: mean 2.4%, max 9.1%, at rapid depth under the
   divided quota) — after this branch and that one merge, re-run it and set the caps from
   where recall stops improving. With rounds + arms live (task 029) that re-run is the

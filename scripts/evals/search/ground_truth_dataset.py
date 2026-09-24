@@ -30,7 +30,7 @@ One Langfuse dataset item per review:
 Usage:
 
     uv run --project backend --env-file backend/.env \\
-        python scripts/eval_ground_truth/ground_truth_dataset.py [--dry-run]
+        python scripts/evals/search/ground_truth_dataset.py [--dry-run]
 
 ``--dry-run`` prints what would be uploaded and needs no Langfuse keys.
 """

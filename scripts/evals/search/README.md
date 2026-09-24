@@ -7,7 +7,7 @@ This folder contains scripts related to calculating evaluation metrics against a
 
 ## Prerequisites
 
-Two files in `scripts/eval_ground_truth/input/`:
+Two files in `scripts/evals/search/input/`:
 - `gt_reviews.csv`
 - `references.csv`
 
@@ -26,12 +26,12 @@ This should be run whenever new reviews have been curated, i.e. if the local `re
 Dry-run first, since it uploads nothing and needs no Langfuse keys:
 
 ```
-uv run --project backend --env-file backend/.env python scripts/eval_ground_truth/ground_truth_dataset.py --dry-run
+uv run --project backend --env-file backend/.env python scripts/evals/search/ground_truth_dataset.py --dry-run
 ```
 
 Run it for real:
 ```
-uv run --project backend --env-file backend/.env python scripts/eval_ground_truth/ground_truth_dataset.py
+uv run --project backend --env-file backend/.env python scripts/evals/search/ground_truth_dataset.py
 ```
 
 ### Methodology details
@@ -48,7 +48,7 @@ Some other points worth knowing:
 
 - The date cut off as recorded in `gt_reviews.csv` is `<date review published> - 1 month`. The OpenAlex date cut off is inclusive so if the date of publication is used directly, you can end up accidentally including the source review itself. We put the cut off 1 month behind that to be on the safe side, as anything published less than a month before the review's publication is highly unlikely to make it into te systematic review.
 
-## 2. Establishing the recall of current roduction rapid/standard/deep search types
+## 2. Establishing the recall of current production rapid/standard/deep search types
 
 Key scripts/files: `production_recall.py`
 
@@ -58,11 +58,13 @@ This calculates recall at the search/retrieval and, if applicable, screening sta
 
 Ultimately this should be built into a regression test.
 
+A GitHub Actions workflow for this exists but is parked in `.github/workflows-disabled/`, so it is not live. Move it back to `.github/workflows/` to enable it once the cost and gating questions are settled.
+
 ### Usage
 
 ```
-make production-recall                                            # all depths, all reviews
-make production-recall ARGS="--depths rapid"                      # run it just for a rapid search (all reviews)
+make eval-search-recall                                            # all depths, all reviews
+make eval-search-recall ARGS="--depths rapid"                      # run it just for a rapid search (all reviews)
 ```
 
 ## 3. Experiment to see how lifting the cap on records kept from the two APIs affects recall
@@ -78,8 +80,8 @@ It also compares v2-style and v3 prompting methods. v2 comes with higher latency
 ### Usage
 
 ```
-uv run --project backend --env-file backend/.env python scripts/eval_ground_truth/sweep_record_cap.py --caps 50 --generation-backends shared --repeats 1   # smoke test
-uv run --project backend --env-file backend/.env python scripts/eval_ground_truth/sweep_record_cap.py                                                     # full sweep
+uv run --project backend --env-file backend/.env python scripts/evals/search/sweep_record_cap.py --caps 50 --generation-backends shared --repeats 1   # smoke test
+uv run --project backend --env-file backend/.env python scripts/evals/search/sweep_record_cap.py                                                     # full sweep
 
 ```
 

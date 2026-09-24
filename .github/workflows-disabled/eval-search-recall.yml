@@ -1,10 +1,15 @@
 # Search and screening recall against the golden dataset at production depth
 # settings, recorded as Langfuse dataset runs
-# (scripts/eval_ground_truth/README.md § Production recall).
+# (scripts/evals/search/README.md § Production recall).
 #
 # This job MEASURES; it does not gate. A red run means "could not measure"
 # (a provider or Langfuse was unreachable, a review's run crashed), never
 # "recall fell".
+#
+# PARKED: this folder is not read by GitHub, so the workflow is not live. Move
+# it back to .github/workflows/ to enable it. It is parked because each run
+# spends live provider/LLM credits and up to an hour of Actions minutes, and
+# the eval's open questions (gating, thresholds, cost) are not yet settled.
 #
 # Manual only: start it from the Actions tab ("Run workflow"), picking the
 # branch to measure and which depths. It calls live providers and screens
@@ -24,7 +29,7 @@ permissions:
   contents: read
 
 jobs:
-  production-recall:
+  eval-search-recall:
     runs-on: ubuntu-latest
     # standard and deep screen every kept candidate each round: a few hundred
     # LLM calls per review per depth, serially (providers are rate-limited).
@@ -32,8 +37,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
-      # .env.example holds empty keys; `uv run --env-file` does not override
-      # variables already set in the environment, so the secrets below win.
+      # The copied example config has empty keys. Variables already set in the
+      # job environment take precedence, so the secrets below win.
       - run: cp backend/.env.example backend/.env
       # Compose Postgres + migrations, the same as the verify gate. The eval
       # runs the real search stage inside a transaction it rolls back.
@@ -48,4 +53,4 @@ jobs:
           OPENALEX_EMAIL: ${{ secrets.OPENALEX_EMAIL }}
           OVERTON_API_KEY: ${{ secrets.OVERTON_API_KEY }}
         run: |
-          make production-recall ARGS="--run-label ${GITHUB_REF_NAME}-${GITHUB_SHA::7} --depths ${{ inputs.depths || 'rapid standard deep' }}"
+          make eval-search-recall ARGS="--run-label ${GITHUB_REF_NAME}-${GITHUB_SHA::7} --depths ${{ inputs.depths || 'rapid standard deep' }}"

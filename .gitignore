@@ -31,7 +31,7 @@ docs/research-and-development/
 scripts/recordings/
 
 # Ground-truth eval pilot: per-run reports (dev tooling output, not committed)
-scripts/eval_ground_truth/results/
+scripts/evals/search/results/
 
 # Node / frontend build artifacts (never committed)
 node_modules/

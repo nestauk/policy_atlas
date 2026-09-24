@@ -1,7 +1,7 @@
 """Self-check for the eval's pure functions: scoring, CSV loading, the sweep's
 output tables, and the OpenAlex retry logic (no network, no DB).
 
-Run: uv run --project backend python scripts/eval_ground_truth/test_metrics.py
+Run: uv run --project backend python scripts/evals/search/test_metrics.py
 """
 
 from ground_truth import clean_review_title, months_earlier, normalize_doi

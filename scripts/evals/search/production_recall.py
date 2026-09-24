@@ -4,9 +4,10 @@ depth constants, one Langfuse dataset run per depth.
 The sweep (``sweep_record_cap.py``) asks a research question by pushing the
 caps far above production. This script asks the operational one: with the
 pipeline exactly as deployed, how much of each review's reference list does a
-``rapid``, ``standard`` or ``deep`` search find? Run it by hand, locally or
-from the Actions tab (``.github/workflows/production-recall.yml``), so the
-answer builds up into a history. It records numbers; it does not pass or fail
+``rapid``, ``standard`` or ``deep`` search find? Run it by hand, locally, so the
+answer builds up into a history. (A GitHub Actions version is parked in
+``.github/workflows-disabled/`` until the open questions about cost and
+gating are settled.) It records numbers; it does not pass or fail
 on them.
 
 How a depth is run (mirrors ``runtime/runner.py``'s round loop, see
@@ -37,7 +38,7 @@ Usage (same environment as the sweep; the dataset must already be uploaded
 with ``ground_truth_dataset.py``):
 
     uv run --project backend --env-file backend/.env \\
-        python scripts/eval_ground_truth/production_recall.py \\
+        python scripts/evals/search/production_recall.py \\
         [--depths rapid standard deep] [--run-label LABEL] [--reviews TEXT ...]
 
 ``--reviews`` restricts the run to the dataset items whose id, review id or
