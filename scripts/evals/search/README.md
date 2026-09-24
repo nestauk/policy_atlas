@@ -7,7 +7,7 @@ This folder contains scripts related to calculating evaluation metrics against a
 
 ## How the files fit together
 
-The folder has seven Python files. You run three of them from the command line. The other four are helper modules that the scripts import.
+The folder has eight Python files. You run four of them from the command line. The other four are helper modules that the scripts import.
 
 **Scripts you run:**
 
@@ -15,6 +15,7 @@ The folder has seven Python files. You run three of them from the command line. 
 |---|---|---|
 | `ground_truth_dataset.py` | Reads the two CSV files in `input/` and uploads them to Langfuse as a dataset called `retrieval-ground-truth`. | Once at the start, and again each time `references.csv` or `gt_reviews.csv` changes. |
 | `production_recall.py` | Measures how much of each review's reference list the pipeline finds when it runs exactly as it does in production. It makes one Langfuse run for each search depth (rapid, standard, deep). | By hand, from time to time, so that a history of production recall builds up. |
+| `history.py` | Prints one markdown table row per dataset run in Langfuse: date, commit, settings, run name and mean recall. It writes nothing. | After each eval you can copy the rows worth keeping into `results/history.md` and add a note. |
 | `sweep_record_cap.py` | The experiment. It runs a rapid search many times, each time with a different cap on the number of records kept and with one of the two query-generation methods. It records the recall for each combination. | When you want to know how the record cap or the prompting method changes recall. |
 
 The two measuring scripts read the reviews and their reference lists from the Langfuse dataset. They do not read the CSV files. This means you must run `ground_truth_dataset.py` at least once before you run either of them.
@@ -146,3 +147,27 @@ The two generation backends are:
 |---|---|---|---|
 | v3 | `shared` | `OpenAISearchGenerationBackend` | `search_queries_system_v3.txt` — one prompt writes both the OpenAlex keyword queries and the Overton paraphrases |
 | v2 | `per-provider` | `V2SearchGenerationBackend` | `search_queries_openalex_system_v2.txt` and `search_queries_overton_system_v2.txt` — one prompt per provider, called once per query |
+
+## 4. Keeping a history of the headline results
+
+Key scripts/files: `history.py`, `results/history.md`
+
+### What this does
+
+Langfuse holds every run and all the detail. `results/history.md` holds only the headline numbers of the runs that matter (mean recall per run, with a note on each), so the history of recall lives in git next to the code. `history.py` prints one markdown table row per run in Langfuse so you can pick the rows to keep.
+
+### Usage
+
+Print a row for every run, oldest first:
+
+```
+uv run --project backend --env-file backend/.env python scripts/evals/search/history.py
+```
+
+Print only recent runs:
+
+```
+uv run --project backend --env-file backend/.env python scripts/evals/search/history.py --since 2026-09-24
+```
+
+Then copy the row(s) worth keeping into the table in `results/history.md` and fill in the notes cell. Leave out smoke tests and partial runs unless they tell you something.
