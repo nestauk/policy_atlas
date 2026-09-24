@@ -1,4 +1,4 @@
-.PHONY: setup dev dev-seed test test-fast typecheck lint build verify verify-fast okf-validate audit audit-paths prompt-guard frontend-install openapi-sync drift-check font-guard frontend-verify fe-api-smoke deploy-build-guard-test infra-setup deploy-check deploy-update deploy-bootstrap
+.PHONY: setup dev dev-seed test test-fast typecheck lint build verify verify-fast okf-validate audit audit-paths prompt-guard eval-search-recall frontend-install openapi-sync drift-check font-guard frontend-verify fe-api-smoke deploy-build-guard-test infra-setup deploy-check deploy-update deploy-bootstrap
 
 # Root Makefile (025 A.2 monorepo hoist): the Python project lives in
 # backend/; this Makefile owns the shared db service + the root-level gates
@@ -126,11 +126,21 @@ audit:
 audit-paths:
 	uv run --project backend python scripts/audit_paths.py
 
-# Prompt-family content-hash guard (task 025 C.4): fails if any prompt-bearing
-# module drifted from its committed hash (scripts/prompt_hashes.json) — prompt
+# Prompt-family content-hash guard: fails if any prompt-bearing
+# module or prompt text file drifted from its committed hash (scripts/prompt_hashes.json) — prompt
 # surfaces change only as named, deliberate slice work.
 prompt-guard:
 	uv run --project backend python scripts/prompt_hash_guard.py
+
+# Search + screening recall against the golden dataset at production depth
+# settings, recorded as Langfuse dataset runs (scripts/evals/search/README.md).
+# A GitHub Actions version is parked in .github/workflows-disabled/ (not live:
+# each run spends provider credits and up to an hour of Actions minutes). Needs
+# the live API keys and Langfuse keys in backend/.env (or the environment).
+# Records only — it does not pass or fail on the numbers.
+# Example: make eval-search-recall ARGS="--depths rapid"
+eval-search-recall:
+	uv run --project backend --env-file backend/.env python scripts/evals/search/production_recall.py $(ARGS)
 
 # Installs frontend dependencies from the committed lockfile (task 025 F.1).
 # A prerequisite for drift-check (and any other frontend gate) in CI, where

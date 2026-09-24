@@ -30,6 +30,10 @@ docs/research-and-development/
 # Task 007: raw dev-time API recordings — never committed
 scripts/recordings/
 
+# Ground-truth eval pilot: per-run reports (dev tooling output, not committed)
+scripts/evals/search/results/*
+!scripts/evals/search/results/history.md
+
 # Node / frontend build artifacts (never committed)
 node_modules/
 .vite/
@@ -61,3 +65,6 @@ docs/tasks/*/evidence/
 
 # Task 038 sweep state (per checkout, not a review artefact)
 scripts/.rename_038_state.json
+
+# Data
+*.csv
