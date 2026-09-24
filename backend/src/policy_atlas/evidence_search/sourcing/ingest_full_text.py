@@ -819,45 +819,91 @@ def _run_parse_jobs(
     Returns:
         index → parse result (ok / error / ``timeout``).
     """
+    # The process-wide ingest slots (task 045, S2): each live parse process
+    # holds one, so every walk in the process shares one budget of parse
+    # workers. Imported here, not at module level: the slots module sizes
+    # itself from this module's constant.
+    from policy_atlas.runtime.walk_pool import INGEST_SLOTS
+
     ctx = get_context("spawn")  # deterministic cross-platform; fork is unsafe with threads
     results: dict[int, dict[str, Any]] = {}
     pending = deque(jobs)
     live: deque[tuple[int, Any, Any, float]] = deque()
 
-    while pending or live:
-        while pending and len(live) < max_workers:
-            idx, body, content_type = pending.popleft()
-            recv_conn, send_conn = ctx.Pipe(duplex=False)
-            proc = ctx.Process(
-                target=_worker_entry,
-                args=(send_conn, parse_fn, body, content_type, thin_min),
-            )
-            proc.start()
-            send_conn.close()  # parent keeps only the receive end
-            live.append((idx, proc, recv_conn, time.monotonic()))
+    try:
+        while pending or live:
+            while pending and len(live) < max_workers:
+                # Block for a slot only with nothing of our own in flight: a
+                # walk holding slots must drain its own jobs rather than wait
+                # on another walk that may be waiting on it.
+                if not INGEST_SLOTS.acquire(blocking=not live):
+                    break
+                try:
+                    idx, body, content_type = pending.popleft()
+                    recv_conn, send_conn = ctx.Pipe(duplex=False)
+                    proc = ctx.Process(
+                        target=_worker_entry,
+                        args=(send_conn, parse_fn, body, content_type, thin_min),
+                    )
+                    proc.start()
+                except BaseException:
+                    INGEST_SLOTS.release()
+                    raise
+                send_conn.close()  # parent keeps only the receive end
+                live.append((idx, proc, recv_conn, time.monotonic()))
 
-        idx, proc, recv_conn, started = live.popleft()
-        remaining = parse_timeout - (time.monotonic() - started)
-        # Poll even when the deadline has lapsed (max → non-blocking): a sibling job
-        # whose result is already buffered must never be misread as a timeout just
-        # because an earlier-submitted job consumed this loop's wall-clock (step-7
-        # review finding, confirmed).
-        if recv_conn.poll(max(remaining, 0.0)):
+            idx, proc, recv_conn, started = live.popleft()
             try:
-                result = recv_conn.recv()
-            except EOFError:  # worker died before sending (e.g. OOM-killed)
-                result = {"status": "error", "reason": "corrupt", "detail": "worker died"}
-            proc.join()
-        else:
-            proc.terminate()
-            proc.join(5.0)
-            if proc.is_alive():  # SIGTERM ignored/stuck in native code — escalate
+                results[idx] = _drain_parse_job(proc, recv_conn, started, parse_timeout)
+            finally:
+                INGEST_SLOTS.release()
+    finally:
+        # An exception mid-drain leaves live jobs holding slots: stop them and
+        # give the slots back, or the process-wide budget shrinks for good.
+        for _idx, proc, recv_conn, _started in live:
+            if proc.is_alive():
                 proc.kill()
-                proc.join()
-            result = {"status": "error", "reason": "timeout"}
-        recv_conn.close()
-        results[idx] = result
+            proc.join()
+            recv_conn.close()
+            INGEST_SLOTS.release()
     return results
+
+
+def _drain_parse_job(
+    proc: Any, recv_conn: Any, started: float, parse_timeout: float
+) -> dict[str, Any]:
+    """Collect one parse job's result, terminating it at its deadline.
+
+    Args:
+        proc: The job's worker process.
+        recv_conn: The receive end of the job's pipe (closed here).
+        started: ``time.monotonic()`` at the job's start.
+        parse_timeout: Per-document seconds, measured from ``started``.
+
+    Returns:
+        The parse result (ok / error / ``timeout``).
+    """
+    remaining = parse_timeout - (time.monotonic() - started)
+    # Poll even when the deadline has lapsed (max → non-blocking): a sibling job
+    # whose result is already buffered must never be misread as a timeout just
+    # because an earlier-submitted job consumed this loop's wall-clock (step-7
+    # review finding, confirmed).
+    result: dict[str, Any]
+    if recv_conn.poll(max(remaining, 0.0)):
+        try:
+            result = recv_conn.recv()
+        except EOFError:  # worker died before sending (e.g. OOM-killed)
+            result = {"status": "error", "reason": "corrupt", "detail": "worker died"}
+        proc.join()
+    else:
+        proc.terminate()
+        proc.join(5.0)
+        if proc.is_alive():  # SIGTERM ignored/stuck in native code — escalate
+            proc.kill()
+            proc.join()
+        result = {"status": "error", "reason": "timeout"}
+    recv_conn.close()
+    return result
 
 
 # --- Component ---

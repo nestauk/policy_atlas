@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -16,12 +16,18 @@ vi.mock("../../api/queries", () => ({
   useTask: vi.fn(),
   useRuns: vi.fn(),
   useArtefact: vi.fn(),
+  useLonglist: vi.fn(),
+}));
+
+const { patchMutate, confirmMutate } = vi.hoisted(() => ({
+  patchMutate: vi.fn(),
+  confirmMutate: vi.fn(),
 }));
 
 vi.mock("../../api/mutations", () => ({
   useStartRun: () => ({ mutate: vi.fn(), isPending: false }),
-  usePatchPlan: () => ({ mutate: vi.fn(), isPending: false }),
-  useConfirmBaseline: () => ({ mutate: vi.fn(), isPending: false }),
+  usePatchPlan: () => ({ mutate: patchMutate, isPending: false }),
+  useConfirmBaseline: () => ({ mutate: confirmMutate, isPending: false }),
 }));
 
 const TASK_ID = "11111111-1111-1111-1111-111111111111";
@@ -108,6 +114,7 @@ function renderPlan(onOverlayChange = vi.fn(), overlay = {}) {
 // --- Options scoping fixtures (task 044) ----------------------------------
 
 type ScopingPlanDraft = components["schemas"]["ScopingPlanDraft"];
+type ScopingConstraintOut = components["schemas"]["ScopingConstraintOut"];
 type TaskLinkOut = components["schemas"]["TaskLinkOut"];
 type RunOut = components["schemas"]["RunOut"];
 
@@ -130,6 +137,8 @@ function fullScopingPlan(overrides: Partial<ScopingPlanDraft> = {}): ScopingPlan
         published_after: null,
         published_before: null,
         languages: null,
+        setting: false,
+        default: null,
       },
       {
         text: "Prefer a lower cost per participant",
@@ -140,6 +149,8 @@ function fullScopingPlan(overrides: Partial<ScopingPlanDraft> = {}): ScopingPlan
         published_after: null,
         published_before: null,
         languages: null,
+        setting: false,
+        default: null,
       },
       {
         text: "UK evidence only",
@@ -150,12 +161,15 @@ function fullScopingPlan(overrides: Partial<ScopingPlanDraft> = {}): ScopingPlan
         published_after: null,
         published_before: null,
         languages: ["English"],
+        setting: false,
+        default: null,
       },
     ],
     your_context: [
       { text: "We already run a careers service in every school.", type: "present_fact", turn_index: 1, test_as_condition: false },
       { text: "We plan to expand apprenticeships next year.", type: "commitment", turn_index: 2, test_as_condition: true },
     ],
+    your_options: null,
     entry_branch: "explore",
     linked_task_ids: [],
     steering_mode: "moderate",
@@ -182,9 +196,25 @@ function scopingPlanOut(overrides: Partial<ScopingPlanDraft> = {}, version = 1):
   };
 }
 
-function mockUseTask(links: TaskLinkOut[] = []) {
+function mockUseTask(
+  links: TaskLinkOut[] = [],
+  activity: { has_longlist?: boolean; active_run?: RunOut | null } = {},
+) {
   vi.mocked(queries.useTask).mockReturnValue(
-    { data: { links } } as unknown as ReturnType<typeof queries.useTask>,
+    {
+      data: { links, capability: "options_scoping", has_longlist: false, active_run: null, ...activity },
+    } as unknown as ReturnType<typeof queries.useTask>,
+  );
+}
+
+function mockUseLonglist(longlist: { plan_version: number; options: number } | null) {
+  vi.mocked(queries.useLonglist).mockReturnValue(
+    {
+      data:
+        longlist === null
+          ? null
+          : { plan_version: longlist.plan_version, counts: { options: longlist.options } },
+    } as unknown as ReturnType<typeof queries.useLonglist>,
   );
 }
 
@@ -224,6 +254,8 @@ beforeEach(() => {
   mockUseTask([]);
   mockUseRuns([]);
   mockUseArtefact(null);
+  mockUseLonglist(null);
+  confirmMutate.mockReset();
 });
 
 describe("PlanDocument", () => {
@@ -697,18 +729,21 @@ describe("PlanDocument — options scoping (task 044)", () => {
       expect(screen.getByRole("button", { name: "Confirm plan and build longlist" })).toBeInTheDocument();
     });
 
-    it("once baseline_confirmed names the current version: no button", () => {
+    it("confirmed for this version but no longlist and nothing running: says so, and Build longlist asks again", async () => {
       mockUsePlan({
         data: scopingPlanOut({ baseline_confirmed: { artefact_id: "artefact-1", plan_version: 1 } }, 1),
       });
       mockUseRuns([baselineRun({ plan_version: 1 })]);
       mockUseArtefact("artefact-1");
       renderPlan();
-      expect(
-        screen.getByText("Plan confirmed · the longlist arrives with the next stage"),
-      ).toBeInTheDocument();
+      expect(screen.getByText("Plan confirmed · no longlist yet")).toBeInTheDocument();
       expect(screen.queryByRole("button", { name: "Rebuild baseline" })).toBeNull();
       expect(screen.queryByRole("button", { name: "Confirm and build baseline" })).toBeNull();
+      await userEvent.click(screen.getByRole("button", { name: "Build longlist" }));
+      expect(confirmMutate).toHaveBeenCalledWith(
+        { artefact_id: "artefact-1", plan_version: 1 },
+        expect.anything(),
+      );
     });
 
     it("the latest walk succeeded and the plan hasn't moved since: confirmed, even with no baseline_confirmed record yet", () => {
@@ -716,9 +751,75 @@ describe("PlanDocument — options scoping (task 044)", () => {
       mockUseRuns([baselineRun({ plan_version: 1 })]);
       mockUseArtefact("artefact-1");
       renderPlan();
+      expect(screen.getByText("Plan confirmed · no longlist yet")).toBeInTheDocument();
+    });
+  });
+
+  describe("the longlist's states (task 045, S13)", () => {
+    const confirmedV2 = { baseline_confirmed: { artefact_id: "artefact-1", plan_version: 2 } };
+    const longlistWalk = baselineRun({
+      capability_run_id: "run-longlist",
+      plan_version: 2,
+      started_at: "2026-09-02T00:00:00Z",
+      artefact_id: null,
+    });
+    const runningChild = {
+      capability_run_id: "run-child",
+      task_id: TASK_ID,
+      plan_id: "plan-1",
+      plan_version: 2,
+      status: "running" as const,
+      started_at: "2026-09-03T00:00:00Z",
+      ended_at: null,
+    };
+
+    it("a longlist built from the plan on screen: Longlist built · N options, nothing to click", () => {
+      mockUsePlan({ data: scopingPlanOut(confirmedV2, 2) });
+      mockUseRuns([longlistWalk, baselineRun({ plan_version: 1 })]);
+      mockUseTask([], { has_longlist: true });
+      mockUseLonglist({ plan_version: 2, options: 14 });
+      renderPlan();
+      expect(screen.getByText("Longlist built · 14 options")).toBeInTheDocument();
+      expect(screen.queryByText("Plan confirmed · no longlist yet")).toBeNull();
+      expect(screen.queryByRole("button", { name: "Build longlist" })).toBeNull();
+      expect(screen.queryByRole("button", { name: "Rebuild longlist" })).toBeNull();
+      expect(screen.queryByRole("button", { name: "Rebuild baseline" })).toBeNull();
+    });
+
+    it("the plan changed after the longlist: built from plan version N, and Rebuild longlist confirms the new version", async () => {
+      mockUsePlan({ data: scopingPlanOut(confirmedV2, 3) });
+      mockUseRuns([longlistWalk, baselineRun({ plan_version: 1 })]);
+      mockUseTask([], { has_longlist: true });
+      mockUseLonglist({ plan_version: 2, options: 14 });
+      renderPlan();
       expect(
-        screen.getByText("Plan confirmed · the longlist arrives with the next stage"),
+        screen.getByText("Longlist built from plan version 2 · the plan has changed"),
       ).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Rebuild baseline" })).toBeNull();
+      await userEvent.click(screen.getByRole("button", { name: "Rebuild longlist" }));
+      expect(confirmMutate).toHaveBeenCalledWith(
+        { artefact_id: "artefact-1", plan_version: 3 },
+        expect.anything(),
+      );
+    });
+
+    it("the longlist walk running after the confirm: Building the longlist, nothing to click", () => {
+      mockUsePlan({ data: scopingPlanOut(confirmedV2, 2) });
+      mockUseRuns([{ ...longlistWalk, status: "running", ended_at: null }, baselineRun({ plan_version: 1 })]);
+      mockUseTask([], { active_run: { ...longlistWalk, status: "running", ended_at: null } });
+      renderPlan();
+      expect(screen.getByText("Building the longlist")).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Build longlist" })).toBeNull();
+    });
+
+    it("a running option search (a child walk) disables the start actions, even after a plan change", () => {
+      mockUsePlan({ data: scopingPlanOut(confirmedV2, 3) });
+      mockUseRuns([runningChild, longlistWalk, baselineRun({ plan_version: 1 })]);
+      mockUseTask([], { has_longlist: true, active_run: runningChild });
+      mockUseLonglist({ plan_version: 2, options: 14 });
+      renderPlan();
+      expect(screen.getByText("Building the longlist")).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Rebuild longlist" })).toBeNull();
     });
   });
 
@@ -732,5 +833,119 @@ describe("PlanDocument — options scoping (task 044)", () => {
     expect(screen.queryByRole("button", { name: "Edit" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Confirm and build baseline" })).toBeNull();
     expect(screen.getByRole("heading", { name: "Question and intended change" })).toBeInTheDocument();
+  });
+});
+
+describe("PlanDocument — options scoping, task 045 slots", () => {
+  const transferability: ScopingConstraintOut = {
+    text: "Transferable to United Kingdom",
+    kind: "preference",
+    origin: "assumed",
+    checked_at: "assessment",
+    country_group: null,
+    published_after: null,
+    published_before: null,
+    languages: null,
+    setting: false,
+    default: "transferability",
+  };
+
+  function withSlots(overrides: Partial<ScopingPlanDraft> = {}): PlanOut {
+    const base = fullScopingPlan();
+    return scopingPlanOut({
+      constraints: [...(base.constraints ?? []), transferability],
+      your_options: [
+        {
+          text: "A youth guarantee, like Finland's",
+          design: {
+            name: "Youth guarantee",
+            description: "Every young person out of work is offered a job, training or education.",
+            design_features: ["an offer within four months", "delivered through Jobcentre Plus"],
+            outcomes_served: ["NEET rate at 6 months"],
+            assumed: ["delivered through Jobcentre Plus"],
+            version: 1,
+          },
+          turn_index: 3,
+        },
+        { text: "wage subsidies", design: null, turn_index: 3 },
+      ],
+      ...overrides,
+    });
+  }
+
+  beforeEach(() => {
+    patchMutate.mockClear();
+  });
+
+  it("shows the user's words and the proposed design, assumed features marked", () => {
+    mockUsePlan({ data: withSlots() });
+    renderPlan();
+    expect(screen.getByRole("heading", { name: "Options you already have in mind" })).toBeInTheDocument();
+    const [first, second] = screen.getAllByTestId("your-option");
+    expect(first).toHaveTextContent("A youth guarantee, like Finland's");
+    expect(first).toHaveTextContent("Proposed design: Youth guarantee");
+    const features = Array.from(first.querySelectorAll("li")).map((item) => item.textContent);
+    expect(features).toEqual(["an offer within four months", "delivered through Jobcentre Plus(assumed)"]);
+    expect(second).toHaveTextContent("wage subsidies");
+    expect(second).toHaveTextContent("No design yet");
+  });
+
+  it("the options section's Edit seeds the composer", async () => {
+    mockUsePlan({ data: withSlots() });
+    const user = userEvent.setup();
+    const seeded: string[] = [];
+    window.addEventListener("policy-atlas:seed-composer", (event) => {
+      seeded.push((event as CustomEvent<string>).detail);
+    });
+    renderPlan();
+    const section = screen
+      .getByRole("heading", { name: "Options you already have in mind" })
+      .closest("section");
+    expect(section).not.toBeNull();
+    await user.click(within(section as HTMLElement).getByRole("button", { name: "Edit" }));
+    expect(seeded).toContain("Change the options I have in mind: ");
+  });
+
+  it("an empty list reads None; a slot not yet asked is hidden", () => {
+    mockUsePlan({ data: withSlots({ your_options: [] }) });
+    const { unmount } = renderPlan();
+    expect(screen.getByRole("heading", { name: "Options you already have in mind" })).toBeInTheDocument();
+    expect(screen.getByText("None")).toBeInTheDocument();
+    unmount();
+
+    mockUsePlan({ data: withSlots({ your_options: null }) });
+    renderPlan();
+    expect(screen.queryByRole("heading", { name: "Options you already have in mind" })).toBeNull();
+  });
+
+  it("shows the default preference as checked at assessment and assumed, with no guess", () => {
+    mockUsePlan({ data: withSlots() });
+    renderPlan();
+    const row = screen.getByText("Transferable to United Kingdom").closest("tr");
+    expect(row).not.toBeNull();
+    expect(row).toHaveTextContent("checked at assessment · assumed");
+    expect(row).toHaveTextContent("No guess before then.");
+    expect(row).not.toHaveTextContent("labelled guess");
+  });
+
+  it("Remove drops the default preference by a direct plan edit", async () => {
+    mockUsePlan({ data: withSlots() });
+    const user = userEvent.setup();
+    renderPlan();
+    await user.click(screen.getByRole("button", { name: "Remove" }));
+    expect(patchMutate).toHaveBeenCalledTimes(1);
+    const body = patchMutate.mock.calls[0][0] as { scoping: { constraints: ScopingConstraintOut[] } };
+    expect(body.scoping.constraints.map((c) => c.default)).toEqual([null, null, null]);
+  });
+
+  it("offers no Remove on a read-only plan", () => {
+    mockUsePlan({ data: withSlots() });
+    render(
+      <TooltipProvider delayDuration={0}>
+        <PlanDocument taskId={TASK_ID} readOnly onClose={vi.fn()} overlay={{}} onOverlayChange={vi.fn()} />
+      </TooltipProvider>,
+    );
+    expect(screen.queryByRole("button", { name: "Remove" })).toBeNull();
+    expect(screen.getByText("checked at assessment · assumed")).toBeInTheDocument();
   });
 });

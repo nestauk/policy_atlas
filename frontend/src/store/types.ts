@@ -90,6 +90,9 @@ export interface RunStreamState {
   appliedTypesAtLastSequence: string[];
   run: RunRef | null;
   runs: Record<string, RunStatus>;
+  /** Runs first seen while another walk was running or paused — child walks
+   *  (task 045 option searches). None of them ever becomes `run`. */
+  childRunIds: string[];
   stages: StageEntry[];
   pendingCheckIn: CheckInOut | null;
   decisions: ResolvedDecision[];
@@ -111,6 +114,7 @@ export function createInitialRunStreamState(): RunStreamState {
     appliedTypesAtLastSequence: [],
     run: null,
     runs: {},
+    childRunIds: [],
     stages: [],
     pendingCheckIn: null,
     decisions: [],

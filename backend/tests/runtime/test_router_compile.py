@@ -439,8 +439,14 @@ class _RaisingRouteBackend:
     def decide(self, *args: Any, **kwargs: Any) -> Any:
         return self._stub.decide(*args, **kwargs)
 
+    def propose_option_design(self, *args: Any, **kwargs: Any) -> Any:
+        raise NotImplementedError("not an options-scoping plan call")
+
     def sort_gate_turn(self, *args: Any, **kwargs: Any) -> Any:
         return self._stub.sort_gate_turn(*args, **kwargs)
+
+    def sort_longlist_turn(self, *args: Any, **kwargs: Any) -> Any:
+        return self._stub.sort_longlist_turn(*args, **kwargs)
 
 
 def test_free_text_backend_error_re_presents_menu_and_completes(engine: Engine) -> None:

@@ -102,4 +102,22 @@ describe("mergeHistory", () => {
     expect(mergeHistory([], [])).toEqual([]);
     expect(mergeHistory(undefined, undefined)).toEqual([]);
   });
+
+  it("files the user's longlist changes under Longlist, with the server's sentence (task 045)", () => {
+    const rows = mergeHistory(
+      ["option.added", "option.excluded", "option.included"].map((kind, index) => ({
+        sequence: index + 1,
+        occurred_at: `2026-09-22T10:0${index}:00Z`,
+        kind,
+        summary: `You changed option ${index + 1}.`,
+      })),
+      [],
+    );
+    expect(rows.map((row) => row.category)).toEqual(["Longlist", "Longlist", "Longlist"]);
+    expect(rows.map((row) => row.sentence)).toEqual([
+      "You changed option 1.",
+      "You changed option 2.",
+      "You changed option 3.",
+    ]);
+  });
 });

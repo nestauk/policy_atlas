@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import { Link, useParams, useSearchParams } from "react-router";
 
 import type { components } from "../api/gen/types";
-import { useApiClient, useArtefact, useConversations, useEvidence, useFindings, useLandscape, useTask, useSourceDossier } from "../api/queries";
+import { useApiClient, useArtefact, useConversations, useEvidence, useFindings, useLandscape, useLonglist, useTask, useSourceDossier } from "../api/queries";
 import { useQuery } from "@tanstack/react-query";
 import {
   cardEvidenceMeta,
@@ -27,7 +27,10 @@ import { errorCode } from "../lib/errors";
 import { scrub } from "../lib/scrub";
 import { useDocumentTitle } from "../lib/title";
 import { COPY } from "../lib/vocabulary";
-import { hasResult } from "./lifecycle";
+import { hasResult, resultView, resultViews, type TabOptions } from "./lifecycle";
+import { hasLonglist, hasTaskResult, statusRun } from "./scopingActivity";
+import { LonglistView } from "./longlist/LonglistView";
+import { Tabs, TabsList, TabsTrigger } from "../ui/radix/Tabs";
 import { isBaselineArtefact } from "./baselineBand";
 import { hasTerminalPartialLiveArtefact, useRunStream } from "../store";
 import type { LiveSection, RunStreamState } from "../store";
@@ -36,9 +39,9 @@ import { Chip, type ChipProps } from "../ui/brand/Chip";
 import { ReauthRedirect } from "../ui/feedback";
 import { Sheet, SheetContent } from "../ui/radix/Sheet";
 import { LIFECYCLE_PAGE_CLASS, READING_COLUMN_MAX_W } from "./listPageChrome";
+import { REPORT_TITLE_CLASS, ReportKindRow, ReportPage, SnapshotCells, type SnapshotCell } from "./reportPage";
 import { usePublicView } from "./publicView";
 import {
-  ContentsSidebar,
   FullReportExpandAllButton,
   FullReportExpandProvider,
   GatheredSection,
@@ -1301,11 +1304,83 @@ function MostRelevantSources({
   );
 }
 
+/**
+ * The Result tab. An Evidence search's report, or a scoping task's baseline,
+ * renders as it always has; once a scoping task has a longlist the Result
+ * gains the view switch — **Baseline · Longlist · Report** — and opens on
+ * the longlist (task 045, deliverable 9; ruling 50). The chosen view rides
+ * `?view=` so a link or a refresh keeps it. The public view never switches:
+ * a link grants no read of options.
+ */
+export function ArtefactView() {
+  const { taskId = "" } = useParams();
+  const isPublicView = usePublicView();
+  const task = useTask(taskId);
+  const options = { hasLonglist: !isPublicView && hasLonglist(task.data) };
+  if (resultViews(options) === null) return <ArtefactReport />;
+  return <ScopingResult taskId={taskId} options={options} />;
+}
+
+/** A scoping task's Result once its longlist exists: the switch, then the
+ *  chosen view. */
+function ScopingResult({ taskId, options }: { taskId: string; options: TabOptions }) {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const longlist = useLonglist(taskId);
+  const view = resultView(searchParams.get("view"), options);
+  const views = resultViews(options) ?? [];
+  const select = (next: string) => {
+    setSearchParams((current) => {
+      const params = new URLSearchParams(current);
+      // The longlist is the default; only the baseline needs spelling out.
+      if (next === "baseline") params.set("view", next);
+      else params.delete("view");
+      return params;
+    });
+  };
+  return (
+    <>
+      <Tabs value={view} onValueChange={select} className="mx-auto w-full max-w-5xl px-6 pt-6 max-md:px-4">
+        <TabsList aria-label="Result view">
+          {views.map((option) => (
+            <TabsTrigger
+              key={option.key}
+              value={option.key}
+              disabled={!option.available}
+              title={option.note}
+              className="disabled:cursor-default disabled:text-grey/70"
+            >
+              {option.label}
+              {option.note !== undefined && (
+                <span className="ml-1.5 font-normal">· {option.note}</span>
+              )}
+            </TabsTrigger>
+          ))}
+        </TabsList>
+      </Tabs>
+      {view === "baseline" ? (
+        <ArtefactReport />
+      ) : longlist.data != null ? (
+        <LonglistView taskId={taskId} longlist={longlist.data} />
+      ) : longlist.isPending ? (
+        <main aria-busy="true" aria-label="Loading the longlist" className={`${LIFECYCLE_PAGE_CLASS} py-10`}>
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="mb-4 h-16 animate-pulse border border-line bg-paper-2" />
+          ))}
+        </main>
+      ) : (
+        // The task says a longlist exists but the read found none (a stale
+        // read model, or a failed fetch): the baseline is still there.
+        <ArtefactReport />
+      )}
+    </>
+  );
+}
+
 /** The evidence base: A4 page frame, coverage snapshot, key-findings-first
  *  ordering, typed annotated prose, citation ladder, shared dossier
  *  (?source=… — deep-linkable, refresh-safe), and the live streaming state
  *  while synthesis writes. */
-export function ArtefactView() {
+function ArtefactReport() {
   const { taskId = "" } = useParams();
   const isPublicView = usePublicView();
   const task = useTask(taskId);
@@ -1348,7 +1423,11 @@ export function ArtefactView() {
   };
   const { setActiveConversation, openDraftChat } = useActiveConversation();
   // Chats need a result to ask about (038 V8) — the same gate as New chat.
-  const chatsEnabled = hasResult(task.data?.latest_run?.status) || hasResult(stream.run?.status);
+  // Task 045 (S15): a scoping task has a result once a baseline or a
+  // longlist exists; an Evidence search reads its latest run, as before.
+  const chatsEnabled =
+    hasTaskResult(task.data, { hasBaseline: isBaselineArtefact(artefact.data) }) ||
+    hasResult(stream.run?.status);
   const askAboutAnalysis = () => {
     // The open artefact is the chat's entry context (a chip and provenance
     // fact, never a scope fence); reuse a blank chat already carrying it,
@@ -1399,7 +1478,7 @@ export function ArtefactView() {
   if (artefact.isError || artefact.data === undefined || artefact.data === null) {
     // No committed artefact: show the in-progress skeleton when sections are
     // streaming (or streamed before a bad ending) — otherwise the empty state.
-    if (showLiveArtefact(stream, task.data?.latest_run)) {
+    if (showLiveArtefact(stream, statusRun(task.data))) {
       return <LiveArtefactBody stream={stream} />;
     }
     return (
@@ -1422,7 +1501,7 @@ export function ArtefactView() {
   // hiding that behind the old artefact would be dishonest (live-check
   // adjudication, 2026-07-29). A new run or a fresh mount clears it. Replay
   // of a finished succeeded run must not flash through this view.
-  if (showLiveArtefact(stream, task.data?.latest_run)) {
+  if (showLiveArtefact(stream, statusRun(task.data))) {
     return <LiveArtefactBody stream={stream} />;
   }
 
@@ -1455,7 +1534,7 @@ export function ArtefactView() {
   // Sources links into the sources view, filtered to the cited set
   // (028 F.5): there is no `status=cited` value, so the cited count routes
   // through the boolean `cited=true` param.
-  const snapshotCells: Array<[string, string, string | null]> = [];
+  const snapshotCells: SnapshotCell[] = [];
   if (typeof snapshot?.source_count === "number" && typeof snapshot?.included === "number") {
     // Transcription trap 3: `source_count` is the cited/reference count —
     // never "found".
@@ -1529,48 +1608,17 @@ export function ArtefactView() {
       ];
 
   return (
-    <div className="mx-auto flex w-full flex-col justify-center gap-6 px-6 max-md:gap-0 max-md:px-0 md:flex-row">
-      <ContentsSidebar entries={outlineEntries} />
-      <main className={`artefact-page anim-rise my-8 min-w-0 ${READING_COLUMN_MAX_W} flex-1 bg-paper px-10 py-9 shadow-sm ring-1 ring-line max-md:my-0 max-md:px-4 max-md:py-6 max-md:shadow-none max-md:ring-0`}>
+    <ReportPage entries={outlineEntries}>
       <header id="answer" className="mb-8">
-        <div className="flex items-center justify-between gap-4">
-          <p className="text-meta font-extrabold uppercase tracking-[0.06em] text-grey">
-            {/* The kind-of-artefact slot. The roll-up's depth label
-                ("scoping pass") stays on the wire for the later per-row
-                surfaces; the Result's heading says what the reader is looking
-                at (owner ruling 2026-09-18). */}
-            {baseline ? "Baseline" : "Report"}
-          </p>
+        <ReportKindRow kind={baseline ? "Baseline" : "Report"}>
+          {/* The kind-of-artefact slot. The roll-up's depth label
+              ("scoping pass") stays on the wire for the later per-row
+              surfaces; the Result's heading says what the reader is looking
+              at (owner ruling 2026-09-18). */}
           <ArtefactDownload artefact={data} />
-        </div>
-        <h1 className="mt-1 text-display font-extrabold leading-tight tracking-[-0.5px] text-navy max-md:text-title">
-          {scrub(data.title)}
-        </h1>
-        {snapshotCells.length > 0 && (
-          <div className="mt-4 grid grid-cols-2 border border-line sm:grid-cols-4">
-            {snapshotCells.map(([label, value, href]) => {
-              const content = (
-                <>
-                  <p className="text-meta font-bold uppercase tracking-[0.06em] text-grey">{label}</p>
-                  <p className="mt-1 text-body font-medium leading-snug text-navy">{scrub(value)}</p>
-                </>
-              );
-              return href !== null ? (
-                <Link
-                  key={label}
-                  to={href}
-                  className="border-r border-line p-3 last:border-r-0 hover:underline"
-                >
-                  {content}
-                </Link>
-              ) : (
-                <div key={label} className="border-r border-line p-3 last:border-r-0">
-                  {content}
-                </div>
-              );
-            })}
-          </div>
-        )}
+        </ReportKindRow>
+        <h1 className={REPORT_TITLE_CLASS}>{scrub(data.title)}</h1>
+        <SnapshotCells cells={snapshotCells} />
         {!isPublicView && (
           <button
             type="button"
@@ -1686,8 +1734,7 @@ export function ArtefactView() {
       {dossierSource !== null && (
         <SourceDossier taskId={taskId} sourceRef={dossierSource} onClose={closeDossier} />
       )}
-      </main>
-    </div>
+    </ReportPage>
   );
 }
 

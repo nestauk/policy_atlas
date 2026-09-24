@@ -53,6 +53,10 @@ class RunOut(BaseModel):
             none (it has not reached synthesise, or ended before it). A
             scoping walk that carries one produced a baseline, whatever its
             terminal status (task 044 review, C5/C6).
+        parent_capability_run_id: The walk that dispatched this one (a longlist
+            walk's option search), or `None` for a parentless walk (task 045).
+        purpose: The walk's intent-record purpose (`baseline`, `longlist`,
+            `targeted`, ...), or `None` for an Evidence search walk.
     """
 
     capability_run_id: uuid.UUID
@@ -63,3 +67,5 @@ class RunOut(BaseModel):
     started_at: datetime
     ended_at: datetime | None = None
     artefact_id: uuid.UUID | None = None
+    parent_capability_run_id: uuid.UUID | None = None
+    purpose: str | None = None

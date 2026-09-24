@@ -42,6 +42,9 @@ export const mockTask: components["schemas"]["TaskOut"] = {
   capability: "evidence_search",
   from_task_ids: [],
   links: [],
+  // Task 045: what exists and what is active. No walk, no longlist yet.
+  active_run: null,
+  has_longlist: false,
 };
 
 /** Task 033 phase 10a: the one project the mock serves. `task_count`
@@ -612,6 +615,8 @@ export const mockScopingPlanReady: components["schemas"]["ScopingPlanDraft"] = {
       published_after: null,
       published_before: null,
       languages: null,
+      setting: false,
+      default: null,
     },
     {
       text: "Prefer options with a lower cost per participant",
@@ -622,6 +627,8 @@ export const mockScopingPlanReady: components["schemas"]["ScopingPlanDraft"] = {
       published_after: null,
       published_before: null,
       languages: null,
+      setting: false,
+      default: null,
     },
     {
       text: "Evidence from the UK and other high-income countries only",
@@ -632,6 +639,38 @@ export const mockScopingPlanReady: components["schemas"]["ScopingPlanDraft"] = {
       published_after: null,
       published_before: null,
       languages: ["English"],
+      setting: false,
+      default: null,
+    },
+    {
+      text: "Transferable to United Kingdom",
+      kind: "preference",
+      origin: "assumed",
+      checked_at: "assessment",
+      country_group: null,
+      published_after: null,
+      published_before: null,
+      languages: null,
+      setting: false,
+      default: "transferability",
+    },
+  ],
+  your_options: [
+    {
+      text: "A youth guarantee, like the one Finland runs",
+      design: {
+        name: "Youth guarantee",
+        description: "Every young person out of work for four months is offered a job, training or education.",
+        design_features: [
+          "an offer within four months of leaving work or education",
+          "a job, apprenticeship, training or education place",
+          "delivered through Jobcentre Plus",
+        ],
+        outcomes_served: ["NEET rate at 6 months"],
+        assumed: ["delivered through Jobcentre Plus"],
+        version: 1,
+      },
+      turn_index: 2,
     },
   ],
   your_context: [
@@ -654,9 +693,23 @@ export const mockScopingPlanReady: components["schemas"]["ScopingPlanDraft"] = {
   steer_point_defaults: [],
   assumptions: ["The United Kingdom is the right jurisdiction unless you say otherwise."],
   steps: [
-    { stage: "acquire", label: "Searching sources", blurb: "Queries out to academic and policy databases." },
-    { stage: "screen", label: "Screening sources", blurb: "Checking relevance to the plan's scope." },
-    { stage: "synthesise", label: "Writing the baseline", blurb: "Setting out what happens if nothing changes." },
+    {
+      stage: "synthesise",
+      label: "Baseline",
+      blurb:
+        "What is in place, the trend, who is affected and what is contested, from Overton and OpenAlex. The run pauses for you to question it and confirm the plan.",
+    },
+    {
+      stage: "acquire",
+      label: "Longlist",
+      blurb:
+        "Suggest options, search widely, read every abstract for the interventions it covers, cluster them into options, apply your constraints.",
+    },
+    {
+      stage: "select",
+      label: "Shortlist and assessment",
+      blurb: "Review the proposed reading set. Assessment runs only when you say so. Not in this release.",
+    },
   ],
   time_band: "10-15 minutes",
   baseline_confirmed: null,
@@ -907,5 +960,495 @@ export function mockScopingDecisionTurn(
     status: "completed",
     created_at: createdAt,
     completed_at: createdAt,
+  };
+}
+
+// task 045 (6.2) -----------------------------------------------------------
+// The longlist's three surfaces (list view, reduced grid, option card): a
+// longlist walk on `mockScopingPlanReady`'s NEET/Tower Hamlets plan, two
+// themes and four options exercising every state the views must render —
+// one clustered and excluded (breaks the funding requirement, and part of
+// the package below), one suggested with no in-scope evidence, one added by
+// the user with zero documents (its own option search found nothing yet),
+// and one package bundling the excluded option.
+
+type OptionOutFixture = components["schemas"]["OptionOut"];
+type OptionSummaryOutFixture = components["schemas"]["OptionSummaryOut"];
+
+export const MOCK_LONGLIST_RUN_ID = "a0000000-0000-4000-8000-000000000001";
+export const MOCK_LONGLIST_WALK_ID = "a0000000-0000-4000-8000-000000000002";
+export const MOCK_LONGLIST_THEME_ID_CONDITIONALITY = "a0000000-0000-4000-8000-000000000020";
+export const MOCK_LONGLIST_THEME_ID_UNIVERSAL_OFFER = "a0000000-0000-4000-8000-000000000021";
+export const MOCK_OPTION_ID_EXCLUDED = "a0000000-0000-4000-8000-000000000010";
+export const MOCK_OPTION_ID_NO_IN_SCOPE = "a0000000-0000-4000-8000-000000000011";
+export const MOCK_OPTION_ID_ADDED_BY_YOU = "a0000000-0000-4000-8000-000000000012";
+export const MOCK_OPTION_ID_PACKAGE = "a0000000-0000-4000-8000-000000000013";
+const MOCK_LONGLIST_LINKED_TASK_ID = "a0000000-0000-4000-8000-000000000099";
+
+export const MOCK_LONGLIST_WHERE_LABEL = "United Kingdom";
+const MOCK_LONGLIST_RESTRICTION_TEXT = "Evidence from the UK and other high-income countries only";
+const MOCK_LONGLIST_FUNDING_CONSTRAINT = "Only include options a local authority can fund directly";
+const MOCK_LONGLIST_COST_PREFERENCE = "Prefer options with a lower cost per participant";
+
+/** One full `OptionOut` (the card) per longlist option, keyed by id — the
+ *  single source both `GET /options/{id}` and the two GETs' summaries
+ *  project from, and the exclude/include/add handlers mutate in place. */
+export const mockLonglistOptionCards: Record<string, OptionOutFixture> = {
+  [MOCK_OPTION_ID_EXCLUDED]: {
+    option_id: MOCK_OPTION_ID_EXCLUDED,
+    name: "National sanctions regime",
+    description: "A statutory duty on the local authority to withdraw benefits from NEET young people who refuse an offer.",
+    design: {
+      name: "National sanctions regime",
+      description: "A statutory duty on the local authority to withdraw benefits from NEET young people who refuse an offer.",
+      design_features: [
+        "a duty to withdraw benefits on refusal of an offer",
+        "administered by the local authority",
+        "applies after one missed offer",
+      ],
+      outcomes_served: ["NEET rate at 6 months"],
+      assumed: [],
+      version: 1,
+    },
+    design_features: ["a duty to withdraw benefits on refusal of an offer", "administered by the local authority", "applies after one missed offer"],
+    design_version: 1,
+    outcomes_served: ["NEET rate at 6 months"],
+    origin: "clustered",
+    state: "excluded",
+    exclusion: {
+      by: "constrain",
+      constraint: MOCK_LONGLIST_FUNDING_CONSTRAINT,
+      reason: "A local authority cannot withdraw a national benefit directly.",
+    },
+    no_in_scope_evidence: false,
+    restriction_text: null,
+    primary_lever_type: "enforce existing powers",
+    lever_none_fits_reason: null,
+    secondary_lever_types: ["regulate"],
+    ambition: "structural",
+    ambition_reason: "Changes who is entitled to a national benefit, not just how it is delivered.",
+    taxonomy_version: "lever-types-v1",
+    document_count: 6,
+    evaluated_count: 3,
+    settings: ["Jobcentre", "Secondary school"],
+    where_tried: { where: 4, comparable: 2, other: 0, unknown: 0 },
+    relations: [{ kind: "part_of", other_option_id: MOCK_OPTION_ID_PACKAGE, other_name: "Universal youth offer bundle" }],
+    abstract_only: false,
+    is_entrant_with_no_documents: false,
+    search_pending: false,
+    run_id: MOCK_LONGLIST_RUN_ID,
+    capability_run_id: MOCK_LONGLIST_WALK_ID,
+    plan_version: 1,
+    where_label: MOCK_LONGLIST_WHERE_LABEL,
+    depth_label: "scoping pass",
+    evidence: {
+      documents: 6,
+      by_evidence_type: { "Systematic review": 2, "Policy analysis": 3, "Local evaluation": 1 },
+      by_role: { evaluated: 3, described: 2, recommended: 0, mentioned: 1 },
+      by_tier: { Strong: 2, Moderate: 3, "not rated": 1 },
+      where_tried: { where: 4, comparable: 2, other: 0, unknown: 0 },
+      populations: ["16-24 year-olds"],
+      settings: ["Jobcentre", "Secondary school"],
+      outcomes: ["NEET rate at 6 months"],
+      flagged_not_stated: 1,
+      inherited_labels: 1,
+      abstract_only: 2,
+    },
+    judgements: [
+      { constraint_id: "relevant", constraint_text: "Relevant to the stated outcomes", verdict: "passes", reason: "Targets the NEET rate directly." },
+      { constraint_id: "distinct", constraint_text: "Distinct from the other options", verdict: "passes", reason: "No other option on the list withdraws benefits." },
+      { constraint_id: "in_scope", constraint_text: "Within scope", verdict: "passes", reason: "Its evidence is drawn from the plan's country group." },
+      { constraint_id: "req-1", constraint_text: MOCK_LONGLIST_FUNDING_CONSTRAINT, verdict: "breaks", reason: "A local authority cannot withdraw a national benefit directly." },
+    ],
+    guesses: [
+      { constraint_id: "pref-1", constraint_text: MOCK_LONGLIST_COST_PREFERENCE, guess: "likely a low cost per participant, a guess rather than evidence", leaning: "likely_meets" },
+    ],
+    transferability: "checked at assessment",
+    in_scope: null,
+    documents: [
+      { task_source_snapshot_id: "mock-doc-a1", title: "Conditionality and NEET outcomes: a local authority review", role: "evaluated", evidence_type: "Local evaluation", tier: "Moderate", design_feature_not_stated: false, where_tried_group: "where", source_task_id: null },
+      { task_source_snapshot_id: "mock-doc-a2", title: "Benefit sanctions for young jobseekers: a systematic review", role: "evaluated", evidence_type: "Systematic review", tier: "Strong", design_feature_not_stated: false, where_tried_group: "comparable", source_task_id: null },
+      { task_source_snapshot_id: null, title: "National activation policy briefing", role: "mentioned", evidence_type: "Policy analysis", tier: null, design_feature_not_stated: true, where_tried_group: "where", source_task_id: MOCK_LONGLIST_LINKED_TASK_ID },
+    ],
+  },
+  [MOCK_OPTION_ID_NO_IN_SCOPE]: {
+    option_id: MOCK_OPTION_ID_NO_IN_SCOPE,
+    name: "School-based mentoring",
+    description: "Trained mentors work one-to-one with pupils identified as at risk of becoming NEET.",
+    design: {
+      name: "School-based mentoring",
+      description: "Trained mentors work one-to-one with pupils identified as at risk of becoming NEET.",
+      design_features: ["one-to-one mentoring", "delivered in the school", "targeted at pupils flagged as at risk"],
+      outcomes_served: ["NEET rate at 6 months"],
+      assumed: [],
+      version: 1,
+    },
+    design_features: ["one-to-one mentoring", "delivered in the school", "targeted at pupils flagged as at risk"],
+    design_version: 1,
+    outcomes_served: ["NEET rate at 6 months"],
+    origin: "suggested",
+    state: "included",
+    exclusion: null,
+    no_in_scope_evidence: true,
+    restriction_text: MOCK_LONGLIST_RESTRICTION_TEXT,
+    primary_lever_type: "provide a service",
+    lever_none_fits_reason: null,
+    secondary_lever_types: [],
+    ambition: "incremental",
+    ambition_reason: "Adds support alongside the existing offer rather than changing who runs it.",
+    taxonomy_version: "lever-types-v1",
+    document_count: 4,
+    evaluated_count: 2,
+    settings: ["Secondary school", "Community centre"],
+    where_tried: { where: 0, comparable: 0, other: 3, unknown: 1 },
+    relations: [],
+    abstract_only: true,
+    is_entrant_with_no_documents: false,
+    search_pending: false,
+    run_id: MOCK_LONGLIST_RUN_ID,
+    capability_run_id: MOCK_LONGLIST_WALK_ID,
+    plan_version: 1,
+    where_label: MOCK_LONGLIST_WHERE_LABEL,
+    depth_label: "scoping pass",
+    evidence: {
+      documents: 4,
+      by_evidence_type: { "Local evaluation": 3, "Policy analysis": 1 },
+      by_role: { evaluated: 2, described: 1, recommended: 1, mentioned: 0 },
+      by_tier: { Moderate: 2, Limited: 1, "not rated": 1 },
+      where_tried: { where: 0, comparable: 0, other: 3, unknown: 1 },
+      populations: ["Pupils at risk of becoming NEET"],
+      settings: ["Secondary school", "Community centre"],
+      outcomes: ["NEET rate at 6 months"],
+      flagged_not_stated: 0,
+      inherited_labels: 0,
+      abstract_only: 4,
+    },
+    judgements: [
+      { constraint_id: "relevant", constraint_text: "Relevant to the stated outcomes", verdict: "passes", reason: "Targets pupils at risk of the NEET outcome." },
+      { constraint_id: "distinct", constraint_text: "Distinct from the other options", verdict: "passes", reason: "No other option delivers one-to-one mentoring." },
+      { constraint_id: "in_scope", constraint_text: "Within scope", verdict: "cannot_check", reason: "None of its documents pass the plan's evidence restriction." },
+      { constraint_id: "req-1", constraint_text: MOCK_LONGLIST_FUNDING_CONSTRAINT, verdict: "passes", reason: "Delivered through the school's existing budget." },
+    ],
+    guesses: [
+      { constraint_id: "pref-1", constraint_text: MOCK_LONGLIST_COST_PREFERENCE, guess: "likely a low cost per participant, a guess rather than evidence", leaning: "likely_meets" },
+    ],
+    transferability: "checked at assessment",
+    in_scope: { restriction: MOCK_LONGLIST_RESTRICTION_TEXT, in_scope_documents: 0, documents: 4 },
+    documents: [
+      { task_source_snapshot_id: "mock-doc-b1", title: "Peer mentoring for at-risk pupils in Ontario schools", role: "evaluated", evidence_type: "Local evaluation", tier: "Moderate", design_feature_not_stated: false, where_tried_group: "other", source_task_id: null },
+      { task_source_snapshot_id: "mock-doc-b2", title: "School mentoring and NEET risk: an Australian cohort study", role: "evaluated", evidence_type: "Local evaluation", tier: "Limited", design_feature_not_stated: false, where_tried_group: "other", source_task_id: null },
+      { task_source_snapshot_id: "mock-doc-b3", title: "Mentoring programmes for disengaged youth: a scoping review", role: "described", evidence_type: "Policy analysis", tier: null, design_feature_not_stated: false, where_tried_group: "other", source_task_id: null },
+      { task_source_snapshot_id: "mock-doc-b4", title: "Youth mentoring outcomes: unclear geography", role: "recommended", evidence_type: "Local evaluation", tier: "Moderate", design_feature_not_stated: false, where_tried_group: "unknown", source_task_id: null },
+    ],
+  },
+  [MOCK_OPTION_ID_ADDED_BY_YOU]: {
+    option_id: MOCK_OPTION_ID_ADDED_BY_YOU,
+    name: "Youth guarantee",
+    description: "Every young person out of work for four months is offered a job, training or education.",
+    design: {
+      name: "Youth guarantee",
+      description: "Every young person out of work for four months is offered a job, training or education.",
+      design_features: [
+        "an offer within four months of leaving work or education",
+        "a job, apprenticeship, training or education place",
+        "delivered through Jobcentre Plus",
+      ],
+      outcomes_served: ["NEET rate at 6 months"],
+      assumed: ["delivered through Jobcentre Plus"],
+      version: 1,
+    },
+    design_features: [
+      "an offer within four months of leaving work or education",
+      "a job, apprenticeship, training or education place",
+      "delivered through Jobcentre Plus",
+    ],
+    design_version: 1,
+    outcomes_served: ["NEET rate at 6 months"],
+    origin: "added_by_you",
+    state: "included",
+    exclusion: null,
+    no_in_scope_evidence: false,
+    restriction_text: null,
+    primary_lever_type: null,
+    lever_none_fits_reason: "The design bundles an offer, an obligation and a delivery channel — no single instrument fits yet.",
+    secondary_lever_types: [],
+    ambition: null,
+    ambition_reason: null,
+    taxonomy_version: "lever-types-v1",
+    document_count: 0,
+    evaluated_count: 0,
+    settings: [],
+    where_tried: { where: 0, comparable: 0, other: 0, unknown: 0 },
+    relations: [],
+    abstract_only: false,
+    is_entrant_with_no_documents: true,
+    search_pending: false,
+    run_id: MOCK_LONGLIST_RUN_ID,
+    capability_run_id: MOCK_LONGLIST_WALK_ID,
+    plan_version: 1,
+    where_label: MOCK_LONGLIST_WHERE_LABEL,
+    depth_label: "scoping pass",
+    evidence: {
+      documents: 0,
+      by_evidence_type: {},
+      by_role: {},
+      by_tier: {},
+      where_tried: { where: 0, comparable: 0, other: 0, unknown: 0 },
+      populations: [],
+      settings: [],
+      outcomes: [],
+      flagged_not_stated: 0,
+      inherited_labels: 0,
+      abstract_only: 0,
+    },
+    judgements: [],
+    guesses: [],
+    transferability: "checked at assessment",
+    in_scope: null,
+    documents: [],
+  },
+  [MOCK_OPTION_ID_PACKAGE]: {
+    option_id: MOCK_OPTION_ID_PACKAGE,
+    name: "Universal youth offer bundle",
+    description: "A single application bringing together careers advice, apprenticeships and training places under one offer.",
+    design: {
+      name: "Universal youth offer bundle",
+      description: "A single application bringing together careers advice, apprenticeships and training places under one offer.",
+      design_features: ["one application", "careers advice, apprenticeships and training places", "delivered through Jobcentre Plus"],
+      outcomes_served: ["NEET rate at 6 months", "Sustained employment or training at 12 months"],
+      assumed: [],
+      version: 1,
+    },
+    design_features: ["one application", "careers advice, apprenticeships and training places", "delivered through Jobcentre Plus"],
+    design_version: 1,
+    outcomes_served: ["NEET rate at 6 months", "Sustained employment or training at 12 months"],
+    origin: "suggested",
+    state: "included",
+    exclusion: null,
+    no_in_scope_evidence: false,
+    restriction_text: null,
+    primary_lever_type: "regulate",
+    lever_none_fits_reason: null,
+    secondary_lever_types: ["provide a service"],
+    ambition: "do_minimum",
+    ambition_reason: "Reorganises the existing offer into one application rather than adding anything new.",
+    taxonomy_version: "lever-types-v1",
+    document_count: 9,
+    evaluated_count: 5,
+    settings: ["Jobcentre", "Secondary school", "Community centre"],
+    where_tried: { where: 5, comparable: 3, other: 1, unknown: 0 },
+    relations: [{ kind: "has_part", other_option_id: MOCK_OPTION_ID_EXCLUDED, other_name: "National sanctions regime" }],
+    abstract_only: false,
+    is_entrant_with_no_documents: false,
+    search_pending: false,
+    run_id: MOCK_LONGLIST_RUN_ID,
+    capability_run_id: MOCK_LONGLIST_WALK_ID,
+    plan_version: 1,
+    where_label: MOCK_LONGLIST_WHERE_LABEL,
+    depth_label: "scoping pass",
+    evidence: {
+      documents: 9,
+      by_evidence_type: { "Systematic review": 4, "Local evaluation": 3, "Policy analysis": 2 },
+      by_role: { evaluated: 5, described: 3, recommended: 1, mentioned: 0 },
+      by_tier: { "Very strong": 2, Strong: 4, Moderate: 3 },
+      where_tried: { where: 5, comparable: 3, other: 1, unknown: 0 },
+      populations: ["16-24 year-olds"],
+      settings: ["Jobcentre", "Secondary school", "Community centre"],
+      outcomes: ["NEET rate at 6 months", "Sustained employment or training at 12 months"],
+      flagged_not_stated: 0,
+      inherited_labels: 0,
+      abstract_only: 1,
+    },
+    judgements: [
+      { constraint_id: "relevant", constraint_text: "Relevant to the stated outcomes", verdict: "passes", reason: "Serves both stated outcomes." },
+      { constraint_id: "distinct", constraint_text: "Distinct from the other options", verdict: "passes", reason: "The only option combining the existing offer into one application." },
+      { constraint_id: "in_scope", constraint_text: "Within scope", verdict: "passes", reason: "Its evidence is drawn from the plan's country group." },
+      { constraint_id: "req-1", constraint_text: MOCK_LONGLIST_FUNDING_CONSTRAINT, verdict: "passes", reason: "Delivered through the local authority's existing Jobcentre Plus partnership." },
+    ],
+    guesses: [
+      { constraint_id: "pref-1", constraint_text: MOCK_LONGLIST_COST_PREFERENCE, guess: "cannot say on cost from the design alone", leaning: "cannot_say" },
+    ],
+    transferability: "checked at assessment",
+    in_scope: null,
+    documents: [
+      { task_source_snapshot_id: "mock-doc-d1", title: "Single-application youth guarantees: a systematic review", role: "evaluated", evidence_type: "Systematic review", tier: "Very strong", design_feature_not_stated: false, where_tried_group: "where", source_task_id: null },
+      { task_source_snapshot_id: "mock-doc-d2", title: "Combining careers advice and apprenticeships: a local evaluation", role: "evaluated", evidence_type: "Local evaluation", tier: "Strong", design_feature_not_stated: false, where_tried_group: "comparable", source_task_id: null },
+      { task_source_snapshot_id: "mock-doc-d3", title: "One-stop youth offers outside the UK: a policy analysis", role: "described", evidence_type: "Policy analysis", tier: "Moderate", design_feature_not_stated: false, where_tried_group: "other", source_task_id: null },
+    ],
+  },
+};
+
+/** Project one option card down to the list/grid's summary shape (the same
+ *  fields `GET /longlist` returns for each option). */
+function toLonglistOptionSummary(option: OptionOutFixture): OptionSummaryOutFixture {
+  return {
+    option_id: option.option_id,
+    name: option.name,
+    description: option.description,
+    outcomes_served: option.outcomes_served,
+    origin: option.origin,
+    state: option.state,
+    exclusion: option.exclusion,
+    no_in_scope_evidence: option.no_in_scope_evidence,
+    restriction_text: option.restriction_text,
+    primary_lever_type: option.primary_lever_type,
+    lever_none_fits_reason: option.lever_none_fits_reason,
+    secondary_lever_types: option.secondary_lever_types,
+    ambition: option.ambition,
+    ambition_reason: option.ambition_reason,
+    taxonomy_version: option.taxonomy_version,
+    design_version: option.design_version,
+    document_count: option.document_count,
+    evaluated_count: option.evaluated_count,
+    settings: option.settings,
+    where_tried: option.where_tried,
+    relations: option.relations,
+    abstract_only: option.abstract_only,
+    is_entrant_with_no_documents: option.is_entrant_with_no_documents,
+    search_pending: option.search_pending,
+  };
+}
+
+/** Option ids added by hand or by chat verb since the walk built the four
+ *  fixture options above (`POST /options`, `mockFetch`) — always unthemed,
+ *  like a real rebuild's new entrants. */
+export const mockLonglistExtraOptionIds: string[] = [];
+
+/** Build one `OptionOut` for `POST /options` (the button's and the chat
+ *  verb's shared path, D13): minted *added by you*, zero documents, not yet
+ *  typed — an option search would fill it in, which the mock does not run. */
+export function buildMockAddedOption(text: string): OptionOutFixture {
+  const name = text.trim().length > 0 ? text.trim() : "New option";
+  return {
+    option_id: crypto.randomUUID(),
+    name,
+    description: name,
+    design: {
+      name,
+      description: name,
+      design_features: [name],
+      outcomes_served: [],
+      assumed: [],
+      version: 1,
+    },
+    design_features: [name],
+    design_version: 1,
+    outcomes_served: [],
+    origin: "added_by_you",
+    state: "included",
+    exclusion: null,
+    no_in_scope_evidence: false,
+    restriction_text: null,
+    primary_lever_type: null,
+    lever_none_fits_reason: "Not yet typed — its option search hasn't returned.",
+    secondary_lever_types: [],
+    ambition: null,
+    ambition_reason: null,
+    taxonomy_version: "lever-types-v1",
+    document_count: 0,
+    evaluated_count: 0,
+    settings: [],
+    where_tried: { where: 0, comparable: 0, other: 0, unknown: 0 },
+    relations: [],
+    abstract_only: false,
+    is_entrant_with_no_documents: true,
+    search_pending: false,
+    run_id: MOCK_LONGLIST_RUN_ID,
+    capability_run_id: MOCK_LONGLIST_WALK_ID,
+    plan_version: 1,
+    where_label: MOCK_LONGLIST_WHERE_LABEL,
+    depth_label: "scoping pass",
+    evidence: {
+      documents: 0,
+      by_evidence_type: {},
+      by_role: {},
+      by_tier: {},
+      where_tried: { where: 0, comparable: 0, other: 0, unknown: 0 },
+      populations: [],
+      settings: [],
+      outcomes: [],
+      flagged_not_stated: 0,
+      inherited_labels: 0,
+      abstract_only: 0,
+    },
+    judgements: [],
+    guesses: [],
+    transferability: "checked at assessment",
+    in_scope: null,
+    documents: [],
+  };
+}
+
+/** `GET /tasks/{id}/longlist` — two themes, four options, in themed-first
+ *  order (the package's theme before "No theme"'s single added-by-you
+ *  option), built from `mockLonglistOptionCards` so the summary and the
+ *  card never drift apart. Any option added since (`mockLonglistExtraOptionIds`)
+ *  appends unthemed, like a real rebuild's new entrants. */
+export function mockLonglist(): components["schemas"]["LonglistOut"] {
+  const options = [
+    MOCK_OPTION_ID_EXCLUDED,
+    MOCK_OPTION_ID_NO_IN_SCOPE,
+    MOCK_OPTION_ID_PACKAGE,
+    MOCK_OPTION_ID_ADDED_BY_YOU,
+    ...mockLonglistExtraOptionIds,
+  ].map((optionId) => toLonglistOptionSummary(mockLonglistOptionCards[optionId]));
+  return {
+    run_id: MOCK_LONGLIST_RUN_ID,
+    capability_run_id: MOCK_LONGLIST_WALK_ID,
+    plan_version: 1,
+    built_from_plan_version: 1,
+    current_plan_version: 1,
+    counts: {
+      options: options.length,
+      themes: 2,
+      included: options.filter((option) => option.state === "included").length,
+      excluded: options.filter((option) => option.state === "excluded").length,
+      no_in_scope: options.filter((option) => option.no_in_scope_evidence).length,
+      unclustered: 5,
+      not_an_option: 2,
+      none_fits: options.filter((option) => option.primary_lever_type == null).length,
+    },
+    themes: [
+      {
+        theme_id: MOCK_LONGLIST_THEME_ID_CONDITIONALITY,
+        name: "Conditionality and support",
+        description: "Options that attach an obligation or targeted help to the existing offer.",
+        option_ids: [MOCK_OPTION_ID_EXCLUDED, MOCK_OPTION_ID_NO_IN_SCOPE],
+      },
+      {
+        theme_id: MOCK_LONGLIST_THEME_ID_UNIVERSAL_OFFER,
+        name: "A universal offer",
+        description: "A single, non-conditional offer replacing today's patchwork.",
+        option_ids: [MOCK_OPTION_ID_PACKAGE],
+      },
+    ],
+    unthemed_option_ids: [MOCK_OPTION_ID_ADDED_BY_YOU, ...mockLonglistExtraOptionIds],
+    options,
+    where_label: MOCK_LONGLIST_WHERE_LABEL,
+    lever_types: [
+      "regulate",
+      "subsidise",
+      "tax or charge",
+      "inform",
+      "provide a service",
+      "enforce existing powers",
+      "devolve",
+      "change who runs the system",
+      "invest in infrastructure",
+      "convene",
+    ],
+    // Mirrors backend lever_types.py (LEVER_TYPES, AMBITION_DEFINITIONS);
+    // update alongside it.
+    lever_type_definitions: [
+      { key: "regulate", definition: "set or change rules, standards, bans, licensing or planning requirements" },
+      { key: "provide a service", definition: "deliver or fund a service or programme directly to people" },
+    ],
+    ambition_bands: [
+      { key: "do_minimum", label: "Do minimum", definition: "adjusts, extends, enforces or better funds what already exists; the arrangement stays" },
+      { key: "incremental", label: "Incremental", definition: "adds a new scheme, service, rule, charge or offer inside the present structure" },
+      { key: "structural", label: "Structural", definition: "changes the structure itself: who is entitled, who runs it, how it is funded, or what the system is" },
+    ],
+    taxonomy_version: "lever-types-v1",
+    depth_label: "scoping pass",
   };
 }

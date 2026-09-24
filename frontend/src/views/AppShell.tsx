@@ -16,6 +16,7 @@ import { COPY, PROJECT, TASK, TENANCY_COPY } from "../lib/vocabulary";
 import { isBaselineArtefact } from "./baselineBand";
 import { lifecycleTabs, publicLifecycleTabs, withChat } from "./lifecycle";
 import { PublicViewProvider } from "./publicView";
+import { activeRun, hasLonglist, isScoping, tabRunStatus } from "./scopingActivity";
 import { ErrorBoundary } from "../ui/feedback/ErrorBoundary";
 import { RunStreamProvider } from "../store";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/radix/Popover";
@@ -295,10 +296,13 @@ export function AppShell() {
   // per session — AppShell is the layout route), plus useTasks's own 15s
   // poll while any run is active; the query is shared with TasksListView.
   const allTasks = useTasks();
+  // Task 045 (S15): a scoping task is running when ANY of its walks is —
+  // an option search included — so `activeRun` reads `active_run` there and
+  // `latest_run` for an Evidence search, as before.
   const anyRunning =
     base !== null
-      ? task.data?.latest_run?.status === "running"
-      : (allTasks.data?.data.some((p) => p.latest_run?.status === "running") ?? false);
+      ? activeRun(task.data)?.status === "running"
+      : (allTasks.data?.data.some((p) => activeRun(p)?.status === "running") ?? false);
   const inWorkspace = base !== null && location.pathname === base;
   // Every task tab but Agent (038 V8, owner ruling 2026-09-05): the Agent
   // tab lists the same conversations in its own sidebar and shows the
@@ -333,9 +337,7 @@ export function AppShell() {
   // Task 044 (A17): a scoping task's Result tab unlocks on its baseline, not
   // on the walk's ending. Only a scoping task pays for the read — the empty
   // task id disables the query (and `ArtefactView` shares its cache entry).
-  const baselineArtefact = useArtefact(
-    task.data?.capability === "options_scoping" ? (taskId ?? "") : "",
-  );
+  const baselineArtefact = useArtefact(isScoping(task.data) ? (taskId ?? "") : "");
   const pendingCheckIns = useCheckIns(taskId ?? "", "pending", {
     enabled: base !== null && !inWorkspace && isOwner,
     refetchInterval: 15_000,
@@ -359,8 +361,9 @@ export function AppShell() {
       : withChat(
           publicAccess
             ? publicLifecycleTabs(base)
-            : lifecycleTabs(base, task.data?.latest_run?.status, {
+            : lifecycleTabs(base, tabRunStatus(task.data), {
                 hasBaseline: isBaselineArtefact(baselineArtefact.data),
+                hasLonglist: hasLonglist(task.data),
               }),
           chatParam,
         ).map((item) =>

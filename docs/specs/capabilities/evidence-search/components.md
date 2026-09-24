@@ -66,7 +66,7 @@ fail-closed. Breadth and depth are independent — a targeted question compiles 
   task's **user context** and **evidence-scope constraint** as inputs — so a transferability cap set
   by unstated context persists (scoping ruling 41) and documents set aside under the scope stay set
   aside; the option's **mentioning documents** with their classify and appraise results and
-  abstract profiles — the input is a `task_link` row and the rules are the data model's
+  intervention-profile records — the input is a `task_link` row and the rules are the data model's
   ([§ Links between tasks](../../system/data-model.md), owner rulings on decision-sheet rows A6
   and A7, 2026-09-09): the child **reads across the link and copies nothing**; the documents get
   the child's own document rows and are **re-screened** against this plan (whose intent is
@@ -292,6 +292,20 @@ never invalidates the other profile's memoised findings. `extraction_result` sta
 "profile not selected" (absent) and "profile fired, zero findings" (present, count 0) stay
 distinguishable. The two-profile extract semantics are **plan-visible**: the Task Agent prompt
 describes them, so composition is never silently compiled.
+
+**Third profile and the selection-free path** (Options scoping, [task 045 contract](../../../tasks/045-scoping-longlist/contract.md), D3 and D24).
+`extract` runs a third profile, the **intervention profile** (union kind `interventions`; id
+`os_interventions_base_v1`, schema `interventions_v1`, prompt `extract_interventions_v1`): for every
+screened-in document, the interventions its abstract covers, each with a **role** (evaluated ·
+described · recommended · comparator · mentioned), its stated design features, whether it is a
+bundle, a quote anchor and the shared reference columns, written to its own table,
+**`intervention_profile_record`**, and memoised through `source_extraction_record` like the other
+two; the records join `finding_reference_union` as a third branch. It is not a subset of IOF or
+ICF: it shares their reference columns and lacks the effect (IOF) and the typed claim (ICF) that
+define each. It runs over **every screened-in document of a scope with no `select` run** — the
+**selection-free path**, so an extraction's selection reference is optional (owner: "Yes,
+selection-free, record it as an edit to those rows" — decision-sheet rows E1, F2 and F3). The
+Evidence search's chain, its two profiles and § 1 acquire are unchanged.
 
 ⏸ **v3.0 deep-synthesis scope remains schema-bound:** deep grounded synthesis reads whichever
 of the two schemas' records a run produced; a facet or claim shape outside both schemas is

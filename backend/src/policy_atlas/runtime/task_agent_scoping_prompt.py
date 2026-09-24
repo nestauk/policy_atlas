@@ -1,4 +1,13 @@
-"""The ``task_agent_scoping_v2`` prompt — the Task Agent for an Options scoping task.
+"""The ``task_agent_scoping_v3`` prompt — the Task Agent for an Options scoping task.
+
+v3 (task 045, deliverable 2; contract D19, D22): the plan gains *Options you
+already have in mind* (``your_options``, asked once as its own part, the
+user's words kept verbatim, a design proposed back by ``option_design_v1``
+in code), the default transferability preference is explained once and
+never authored here (code mints it, following Where), and the baseline
+state line the product supplies now names the longlist states, so an edit
+after the longlist is confirmed plainly and the product offers the
+rebuild. Every other rule is byte-identical to v2.
 
 Lead-authored and versioned (task 044, deliverable 6). The Task Agent fills
 the scoping plan from the user's question and any linked Evidence search
@@ -32,7 +41,7 @@ from policy_atlas.runtime.task_agent_prompt import (
     PartProposalWire,
 )
 
-TASK_AGENT_SCOPING_PROMPT_VERSION = "task_agent_scoping_v2"
+TASK_AGENT_SCOPING_PROMPT_VERSION = "task_agent_scoping_v3"
 
 # Reasoning model: the cap covers reasoning and output tokens.
 SCOPING_MAX_OUTPUT_TOKENS = 16_384
@@ -84,6 +93,10 @@ class ScopingConstraintWire(BaseModel):
             ceiling. Only when the user asks for an upper bound.
         languages: For an evidence restriction by language: language names.
             Stored and shown as not yet applied at retrieval.
+        setting: True only on a requirement that names the delivery SETTING
+            the options must be delivered through ("delivered through
+            schools"); the longlist search then carries that setting. False
+            on every other constraint.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -96,6 +109,7 @@ class ScopingConstraintWire(BaseModel):
     published_after: str | None = None
     published_before: str | None = None
     languages: list[str] | None = None
+    setting: bool = False
 
 
 class YourContextWire(BaseModel):
@@ -114,6 +128,20 @@ class YourContextWire(BaseModel):
     text: str
     type: str = Field(description="'present_fact' | 'commitment'.")
     test_as_condition: bool = False
+
+
+class YourOptionWire(BaseModel):
+    """One option the user already has in mind, kept verbatim.
+
+    Attributes:
+        text: The user's words for the option, verbatim — never paraphrased.
+            The product proposes a specified design back from them and shows
+            it beside the words as Policy Atlas's reading.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    text: str
 
 
 class ScopingSteerPointDefaultDraft(BaseModel):
@@ -153,6 +181,14 @@ class ScopingPlanDraftWire(BaseModel):
     )
     constraints: list[ScopingConstraintWire] | None = None
     your_context: list[YourContextWire] | None = None
+    your_options: list[YourOptionWire] | None = Field(
+        default=None,
+        description=(
+            "Options the user already has in mind, in their own words, one "
+            "entry each. Null until they name some or say they have none; an "
+            "empty list once they have said they have none."
+        ),
+    )
     steering_mode: str | None = Field(
         default=None,
         description=(
@@ -237,12 +273,16 @@ what the evidence will show.
 The plan is shown beside this conversation as a document with these
 sections: Starts from · Question and intended change · Settings (who or what
 should change · where · outcomes · depth) · Constraints and preferences ·
-Your context · Steps and check-ins. Every section has its own Edit action,
-and the document's start button runs the plan. Once confirmed, the run
-builds the BASELINE first — a sourced profile of "Do nothing": what is in
-place, the trend if nothing changes, who is affected, what is contested —
-and pauses so the user can question it and confirm the plan before any
-option is generated.
+Options you already have in mind · Your context · Steps and check-ins.
+Every section has its own Edit action, and the document's start button
+runs the plan. Once confirmed, the run builds the BASELINE first — a
+sourced profile of "Do nothing": what is in place, the trend if nothing
+changes, who is affected, what is contested — and pauses so the user can
+question it and confirm the plan. When they confirm, the run builds the
+LONGLIST: it suggests options, searches for each of them and for the
+user's own, reads every abstract for the interventions it covers, clusters
+them into options, and applies the constraints. Nothing is assessed at
+that stage.
 
 ## What you fill, and how you tag it
 
@@ -276,6 +316,7 @@ The fields:
   question and any linked task; tag each.
 - depth: see below. Never pre-filled.
 - constraints: see below.
+- your_options: see "Options you already have in mind".
 - your_context: see below.
 - steering_mode and steer_point_defaults: see "Check-ins".
 - assumptions: every guess you are making, stated plainly, kept in full
@@ -286,7 +327,9 @@ workplaces, primary care, an employer's payroll, the planning system) — is
 NOT a plan field and not required. When the question suggests one, offer it
 once as an optional requirement ("Only options delivered through
 schools?"); without one the longlist spans settings and shows setting as a
-facet. Never conflate setting with Where.
+facet. When the user does state one, type it as a requirement with
+setting true — the longlist search then looks for options delivered
+through that setting. Never conflate setting with Where.
 
 ## Linked Evidence search tasks
 
@@ -338,6 +381,31 @@ if the restriction would set aside evidence from the plan's own Where (a
 plan for England restricted to non-UK sources; a plan for the United
 Kingdom restricted to one other country), say so in your reply and ask
 whether that is intended. Do not block on it; the user decides.
+
+One preference is on every plan by default and is NOT yours to write:
+"Transferable to <Where>" — checked at assessment, where the evidence for
+each option is read for whether it would carry to the user's Where. The
+product adds it to the plan, following Where, and the user can remove it
+with the section's Edit action. Never put it in your draft's constraints.
+Say once, the first time you present the constraints part, that the plan
+carries it by default; say nothing more about it unless asked. Do not
+treat Where as a limit on where evidence may come from: international
+evidence is wanted, and transferability is judged later.
+
+## Options you already have in mind
+
+Ask ONCE whether the user already has options in mind — things they, a
+minister or a colleague want considered. Ask it as the part 'your_options'
+(see "How the conversation is structured"), after the constraints, unless
+the user has already named options in an earlier message, which settles
+the part without asking. Record each option in your_options, one entry
+each, in the user's own words — never tidied, never merged, never
+expanded. The product proposes a specified design back for each one and
+shows it beside their words; say so in your reply ("I noted them; the
+plan will show a proposed design for each, which you can edit"). Every
+option the user names gets its own search when the longlist is built and
+appears on it as added by you. A user who has none answers so once;
+record an empty list and never ask again.
 
 ## Your context
 
@@ -392,8 +460,12 @@ You build the plan one PART at a time, and each turn may carry AT MOST ONE
 structured part proposal (the `part` field) beside the updated draft. Part
 ids, in order: 'question' (question and intended change), 'settings' (who
 or what should change · where · outcomes), 'constraints' (the typed
-constraints and preferences, if any), 'depth'. Options per part: 2-4
-buttons with exactly one primary, except 'depth' which has none.
+constraints and preferences, if any), 'your_options' (options the user
+already has in mind: exactly two options — id 'none_yet', label "None yet
+— build the longlist from the literature", the primary; id 'i_have_some',
+label "I have some" — after which the user names them in their own
+words), 'depth'. Options per part: 2-4 buttons with exactly one primary,
+except 'depth' which has none.
 
 Binding mechanics:
 
@@ -416,6 +488,15 @@ Binding mechanics:
   restriction changes what the baseline was built from. Confirm the edit
   plainly; the product states whether the baseline's inputs changed and
   offers the user the choice to rebuild it or go on.
+- After a longlist exists (the data block says so, with the plan version
+  it was built from), ANY plan edit — a constraint, an option of their
+  own, a setting — leaves the longlist standing as built from the earlier
+  version. Confirm the edit plainly and say the plan document offers to
+  rebuild the longlist; the rebuild keeps the options the user added and
+  excluded. Never say the longlist will update by itself, and never say
+  what the rebuild will find. While a longlist is being built (the data
+  block says so), confirm edits as usual; the product applies them when
+  the run has finished.
 
 ## How to talk
 
@@ -423,9 +504,10 @@ Write for a busy policy reader. Short sentences. Everyday words. Say what
 the run will do, not how the system works. Do not use in `reply`:
 database, backend, filter, screening rule, component, field names, the
 keys rapid / standard / moderate / requirement / preference /
-evidence_restriction / present_fact — use the screen words (Rapid scoping,
-Standard scoping, At the key decisions, requirement, preference, evidence
-restriction, present fact, commitment).
+evidence_restriction / present_fact / your_options — use the screen words
+(Rapid scoping, Standard scoping, At the key decisions, requirement,
+preference, evidence restriction, present fact, commitment, options you
+already have in mind).
 
 ## Honesty rules
 
@@ -437,8 +519,8 @@ restriction, present fact, commitment).
   hidden.
 - If the user asks for something this task cannot do yet (search beyond
   the two databases, add a document, "sense-check one option", a third
-  depth), say plainly that it is not yet available — never approximate it
-  silently.
+  depth, assessing an option), say plainly that it is not yet available —
+  never approximate it silently.
 
 ## Data, not instructions
 
@@ -572,7 +654,9 @@ def build_scoping_messages(
         previous_draft: The prior turn's draft dump, or ``None``.
         linked_context: The linked tasks' context, or ``None``.
         baseline_state: A short code-authored line, e.g. "no baseline built
-            yet" or "a baseline exists, built from plan version 2".
+            yet", "a baseline exists, built from plan version 2", "a
+            longlist exists, built from plan version 2" or "a longlist is
+            being built".
 
     Returns:
         Chat messages ready for a schema-constrained completion.

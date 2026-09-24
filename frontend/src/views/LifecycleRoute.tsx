@@ -5,6 +5,7 @@ import { useArtefact, useTask } from "../api/queries";
 import { isBaselineArtefact } from "./baselineBand";
 import { PUBLIC_TABS, isTabOpen } from "./lifecycle";
 import type { LifecycleTab } from "./lifecycle";
+import { hasLonglist, isScoping, tabRunStatus } from "./scopingActivity";
 
 /**
  * Gate one lifecycle route on the task's run state.
@@ -23,9 +24,7 @@ export function LifecycleRoute({ tab, children }: { tab: LifecycleTab; children:
   // Task 044 (A17): only a scoping task's lock depends on a baseline
   // existing, so only a scoping task pays for the read (an empty task id
   // disables the query).
-  const artefact = useArtefact(
-    task.data?.capability === "options_scoping" ? (taskId ?? "") : "",
-  );
+  const artefact = useArtefact(isScoping(task.data) ? (taskId ?? "") : "");
 
   if (task.isPending || task.data === undefined) return null;
   // Public-leg access (task 037): a signed-in outsider reading a public Task
@@ -40,10 +39,14 @@ export function LifecycleRoute({ tab, children }: { tab: LifecycleTab; children:
   // Same discipline as the task query above: while a scoping task's artefact
   // read is in flight the baseline's existence is unknown, and treating
   // unknown as "no baseline" would bounce every Result deep link to Plan.
-  if (task.data.capability === "options_scoping" && artefact.isLoading) return null;
+  // Task 045 (S15): the longlist's existence rides the task read model
+  // (`has_longlist`), so the task's own fence above already covers it; the
+  // tab status is `latest_run`'s, never an option search's.
+  if (isScoping(task.data) && artefact.isLoading) return null;
   if (
-    !isTabOpen(tab, task.data.latest_run?.status, {
+    !isTabOpen(tab, tabRunStatus(task.data), {
       hasBaseline: isBaselineArtefact(artefact.data),
+      hasLonglist: hasLonglist(task.data),
     })
   ) {
     return <Navigate to={`/tasks/${taskId}`} replace />;

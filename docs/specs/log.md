@@ -1,5 +1,74 @@
 # Spec update log
 
+## 2026-09-24
+Task 045 step-7 review (contract-verifier finding F1: D33 had removed the words from the card
+while the trust rule still required them). Contract: `docs/tasks/045-scoping-longlist/contract.md`.
+* **Update** (task 045, review F1; owner: "D33 wins, amend trust.md"):
+  [OS trust § The principle](capabilities/options-scoping/trust.md) and
+  [OS capability § Longlist](capabilities/options-scoping/capability.md) — the ambition tag stays a
+  tier-4 reasoning claim; the option card no longer carries the words "as described, not measured".
+* **Update** (task 045, review P1; owner: "If there are duplicate options, then shouldn't they be
+  merged instead of one being excluded? …" and "Fold into the kept option"):
+  [OS components § 7](capabilities/options-scoping/components.md) — a *distinct* breach merges the
+  duplicate into the kept option instead of excluding it.
+* **Update** (task 045, review deviation 46; owner: "Also allow empty reasons via the button"):
+  [OS components § 7](capabilities/options-scoping/components.md) — the user's exclusion never
+  requires a reason.
+
+## 2026-09-23
+Task 045 (the options-scoping longlist), contract § Spec changes, applied in its phase 8 with the
+owner's words quoted (item 10, the decision sheet, landed at plan approval). Contract:
+`docs/tasks/045-scoping-longlist/contract.md`.
+* **Update** (task 045, item 1; D19 accepted, D22 "Should be a default preference"):
+  [OS components § 1](capabilities/options-scoping/components.md) and
+  [plan-as-object § What a plan contains](system/plan-as-object.md) — the optional plan slot
+  *Options you already have in mind* (the user's words, a design proposed back, each an entrant with
+  its option search) and the default preference "Transferable to *Where*" on every scoping plan.
+* **Update** (task 045, item 2; D20, D21, D6, D25 — "Directly saying Z in the search scope may
+  constrain the results too much"; "let's go with option search"):
+  [OS components § 2–5](capabilities/options-scoping/components.md) and
+  [OS capability § Pipeline and gates](capabilities/options-scoping/capability.md) (Plan) — the
+  longlist intent is PICO-shaped without Where; Where enters nothing in retrieval and is shown as
+  *where tried*; setting is the optional S; an entrant's own search is the **option search**, a
+  child walk; "mini evidence search" stays the assessment-depth term.
+* **Update** (task 045, item 3; D3 owner naming, D4, D7 "free with the checklist", A15, D8, D11):
+  [OS components § 6](capabilities/options-scoping/components.md) (and the table, compositions,
+  § 0, § 2–5, interface ruling 1) and [OS capability](capabilities/options-scoping/capability.md)
+  — "abstract profile" → **intervention profile** and "intervention mention" →
+  **`intervention_profile_record`** in the living specs (not the frozen sources); suggest first
+  with the linked report as input; seeded assignment under `clamp(ceil(N/4), 8, 40)`; the
+  assignment reason and `design_feature_not_stated` flag on membership; the taxonomy version and
+  *none fits*; the 🟡 "unproven at option grain" closes on check 3; open question 5 closes.
+* **Update** (task 045, item 4; D9 "the ruling stands, deterministic check", D22):
+  [OS components § 7](capabilities/options-scoping/components.md),
+  [OS capability § Three kinds of constraint](capabilities/options-scoping/capability.md) and
+  [OS trust § Reasoned guesses](capabilities/options-scoping/trust.md) — "no in-scope evidence" is
+  computed from publication metadata; the transferability preference carries no guess.
+* **Update** (task 045, item 5; D12 "reduced grid in task 2", D15 "Assembled in task 2, on-demand
+  summary as a seam", D20): [OS capability § Output structure](capabilities/options-scoping/capability.md)
+  (Longlist) — the reduced grid before the proposal; the assembled option page and the on-demand
+  summary seam; the where-tried line and facet.
+* **Update** (task 045, item 6; A3 "origin stays the original source; inherited = created by the
+  inherit step", D23): [OS components § 0](capabilities/options-scoping/components.md) and
+  [data-model](system/data-model.md) § Corpus, § The findings layer, § The option entity, § Links
+  between tasks — inherited rows keep their origin; classification and appraisal read across
+  through one resolver; `intervention_profile_record`; the option tables; `task_link.option_id`
+  (unique per pair, noted for task 5 — A21); `capability_run.parent_capability_run_id`.
+* **Update** (task 045, item 7; D1, D13 "chat verbs in task 2, buttons as the second way", D14,
+  A2, A23, P4, P16a "card route stays 204"): [web-api](system/web-api.md) § Tasks, § Task Agent
+  turns, § Runs, § Check-ins, § Read models — the longlist routes, the longlist verbs, the two
+  confirm surfaces opening the longlist walk, `active_run` and `has_longlist`, `your_options` and
+  the default preference on the plan bodies, child walks on the run stream.
+* **Update** (task 045, item 8; D2 "start there, measure, I'll set it after"; "cap at 15, run the
+  live check at rapid"): [plan-as-object § Thoroughness](system/plan-as-object.md) — broad search
+  50 · 25 per backend (standard · rapid), option search 10 per backend, at most 15 option searches
+  per walk at width 4; the owner sets the final numbers after measurement.
+* **Update** (task 045, item 9; owner naming 2026-09-22): [vocabulary.md](vocabulary.md) — entrant,
+  option search, child walk, intervention profile, `intervention_profile_record`, where tried.
+* **Update** (task 045, item 11; D3, D24 "Yes, selection-free, record it as an edit to those
+  rows"): [ES components § 7](capabilities/evidence-search/components.md) — the third profile and
+  the selection-free path; § 0's inherited "abstract profiles" renamed; § 1 acquire unchanged.
+
 ## 2026-09-17
 * **Update** (task 044, phase 8; owner ruling "Go with options 2 and 5, targets 20 and 10"): the
   depth sets the baseline's acquisition target and proposed-section allowance —

@@ -2582,7 +2582,10 @@ deferred here — the owner ruled the font is fine for now.
     8 parse workers per walk; the only gate across walks is `RUN_EXECUTOR_MAX` (default 2), so a
     2-vCPU staging task can carry 24 classify calls and 16 parse processes at once. A shared
     provider 429 storm or memory pressure is the failure. Owner-tunable; size a cross-run
-    semaphore when a second concurrent walk is routine (security lane S5).
+    semaphore when a second concurrent walk is routine (security lane S5). **Closed by task 045**
+    (plan review P5; owner: "add the semaphore"): classify's and ingest's fan-outs now take shared
+    per-component semaphores across every walk in the process, so option searches running four
+    at once share one bound.
   - *A 422 on a plan patch echoes the pydantic error* — `detail=str(exc)` on a `ValidationError`
     carries the caller's own values, the model names and the pydantic docs URL. The ES patch has
     done this since 029; the scoping branch copies it. Replace with the contract's plain
@@ -2644,6 +2647,79 @@ deferred here — the owner ruled the font is fine for now.
     capability spec § Output structure and the spec log of 2026-09-17 read as totals. **Resolved
     2026-09-18** (owner: "Add per backend to the docs") — the four documents now say per backend;
     the code is unchanged.
+
+## Options scoping longlist (task 045 seams)
+
+Recorded by the task 045 contract, plan and build (`docs/tasks/045-scoping-longlist/`).
+
+- **On-demand written option summary** (D15) — the option card is assembled from the passes'
+  outputs; a written summary at first open (about 10 to 20 s once per card) is a seam. Per-run
+  written summaries are not built before assessment.
+- **Starting retrieval during the baseline pause** (D18) — stays deferred; the longlist walk
+  starts when the user confirms the plan.
+- **Open question 4, as bounded here** — the discovery ceiling is `clamp(ceil(N/4), 8, 40)` and
+  the unclustered residual is a number the user sees; the target longlist size stays open (D4).
+- **Open question 7 — update the longlist in place instead of rebuilding it (task 3; owner ruling
+  2026-09-24).** 045 ships "Rebuild longlist": after a plan change it re-runs the whole chain,
+  seeded with the existing options so ids, exclusions and additions survive. Owner: "I think a
+  full rebuild feels unnecessary. Why would the tool need to rerun all the original searches?
+  That feels like a waste of effort. The idea of a rebuild would also be quite confusing to
+  users" — to change in task 3 ("Record it, change it in task 3"). The shape proposed at review:
+  no Rebuild action; confirming a changed plan re-runs `constrain` only (a requirement, the
+  outcomes or the target unit change only the judgements) and an option search for any new
+  option the plan names; no new broad searches, no regrouping.
+- **Cross-task profile memo** (A22) — the intervention profile's memo is keyed by task, so a
+  document inherited from a linked task is profiled again in the scoping task. No cost today (no
+  Evidence search task runs the profile); a cross-task memo would reuse the linked task's records.
+- **The option search's `guidance` argument** (D26) — the option search takes the specified design
+  only. Tested on the NEET option searches during the build: the queries did not miss what the
+  designs meant, so the argument was **not built**. It would use the search directive's existing
+  steering channel and needs no prompt change.
+- **Instance-of relation / a two-level longlist** (decision-sheet row A9) — not built. The card's
+  *What it is* shows the stated design features from the records; a split between a class of
+  option and its implementations waits for evidence from live use.
+- **`task_link` is unique per task pair** (A21) — noted for task 5 (the full run).
+- **An option added after the build is not clustered on arrival, by owner decision** — it reads
+  its own option search's records; seeded assignment on add (plan S11) is not built and is not
+  wanted. Owner (2026-09-24): "I don't think we necessarily need the sort step since the longlist
+  is not meant to be exhaustive … the longlist is meant to show what options are out there, not
+  necessarily how much evidence there is for each of them." An added option sits in *No theme*
+  (owner: "Stay in 'No theme'"); a rebuild, while it exists, clusters its records.
+- **Component failure events land on an aborted transaction** — the harness's generic component
+  handler appends the failure event on the component's own transaction, so any database error
+  reads in the event log as an aborted transaction rather than the original error.
+- **One event-log sequence per task under child walks** — every child walk appends to the task's
+  one event-log sequence, so four walks at once contend for it; the retry cap was raised from 5
+  to 32. A per-walk sequence would remove the contention.
+- **History lists every child walk's stage events** beside the user's actions — a presentation
+  filter is wanted so the user's own actions stay readable.
+- ~~**The plan document finds the baseline walk in the first 200 runs**~~ — closed at the 045
+  review: `GET /runs?parentless=true`.
+- **Option-search queries carry the designs' institution words** (045 review F4, owner: "Accept,
+  record it") — of 210 generated option-search queries on the three NEET tasks none names a
+  country and none carries a geographic filter, but 27 (13 %) use UK institution words from the
+  designs ("local authority", "council", "NHS", "DWP", "Jobcentre Plus"), which tilts results
+  toward UK sources. Look again if option searches read too UK-heavy.
+- **Rebuild matching by `(origin, name)`** (045 deviation 14) — an own option that first entered
+  on its words and later gains a proposed design under another name would mint a second row
+  (only after a failed design proposal). Goes with the rebuild in task 3.
+- **Inherited rows carry no provider `source_tag`** (045 deviation 15) — classify's priors are
+  missing on an inherited document it does classify.
+- **Linked uploads reach the scoping task's readers** (045 review S1, owner: "Recheck access
+  only") — inherit re-checks at every build that the owner can still read the source, but an
+  uploaded document of a readable source is still inherited, so a public scoping task shows it.
+- **The reservation set is per process** (045 review B10, B11) — `_dispatching_tasks` and
+  `_dispatch_lock` live in one API process and a request's `finally` can clear a reservation a
+  newer request holds (pre-existing pattern, tiny window). Deployment constraint: one backend
+  worker process per environment until the reservation is a database row or a token.
+- **`archive_task_route` takes the dispatch lock and the task row in the reverse order** to the
+  openers (045 deviation 39) — a latent deadlock, pre-existing.
+- **`api/continuation._with_plan` omits `parked_boundary` / `parked_component`** (found in 045
+  Phase 1) — `ContinuationState` requires them since 027, so the fan-out path with plan
+  adjustments would raise `TypeError`. Pre-existing, unfixed.
+- **A snapshot shared by a linked task and the scoping task needs custom teardown** (045
+  deviation 41) — `delete_task_data` deletes snapshots the other task still references, so
+  `test_longlist_routes` builds its add fixture without the link.
 
 ## Synthesis optimisation (deferred 2026-09-17; owner intends a task after options scoping lands)
 

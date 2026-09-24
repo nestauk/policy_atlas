@@ -9,6 +9,7 @@ import { Card } from "../ui/brand/Card";
 import { taskDestination } from "./lifecycle";
 import { listNewButtonClass } from "./listPageChrome";
 import { TaskListRow } from "./TaskListRow";
+import { hasLonglist, statusRun } from "./scopingActivity";
 
 type LatestRun = components["schemas"]["TaskOut"]["latest_run"];
 
@@ -20,11 +21,21 @@ type TaskListItem = {
   capability?: string | null;
   updated_at: string;
   latest_run?: LatestRun;
+  /** Task 045 (S15): any running or paused walk, option searches included. */
+  active_run?: LatestRun;
+  /** Task 045: whether a scoping task has a longlist. */
+  has_longlist?: boolean;
   project_ids?: string[];
   source_count?: number | null;
   is_owner?: boolean;
   owner_display?: string | null;
 };
+
+/** Where a row lands: the Result once there is one to read (a finished run,
+ *  or a scoping task's longlist — task 045), else the Agent tab. */
+function rowDestination(row: TaskListItem): string {
+  return taskDestination(row.task_id, row.latest_run?.status, { hasLonglist: hasLonglist(row) });
+}
 
 function projectPrefix(
   ids: readonly string[] | undefined,
@@ -105,7 +116,7 @@ function FindTask({
                 type="button"
                 onClick={() => {
                   onClose();
-                  void navigate(taskDestination(row.task_id, row.latest_run?.status));
+                  void navigate(rowDestination(row));
                 }}
                 className="w-full cursor-pointer border-b border-line px-1 py-2.5 text-left text-body text-navy last:border-b-0 hover:bg-blue-tint-2 focus-visible:outline-2 focus-visible:outline-blue"
               >
@@ -220,7 +231,7 @@ export function TaskListPanel({
       {rows.map((row) => (
         <li key={row.task_id} className="border-b border-line last:border-b-0">
           <TaskListRow
-            to={taskDestination(row.task_id, row.latest_run?.status)}
+            to={rowDestination(row)}
             name={row.name}
             capabilityKey={row.capability}
             projectName={
@@ -229,7 +240,7 @@ export function TaskListPanel({
             showProjectPrefix={showProjectPrefix}
             sourceCount={row.source_count}
             updatedAt={row.updated_at}
-            latestRun={row.latest_run}
+            latestRun={statusRun(row)}
             ownerDisplay={showOwner ? (row.owner_display ?? null) : undefined}
             ownerlessLabel={ownerlessLabel}
           />

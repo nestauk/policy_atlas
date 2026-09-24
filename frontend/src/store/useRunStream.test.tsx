@@ -72,7 +72,7 @@ describe("RunStreamProvider / useRunStream", () => {
 
     act(() => {
       sseState.onFrame?.({
-        type: "stage.completed",
+        type: "stage.completed", capability_run_id: null,
         stage: "screen",
         label: "Screening",
         summary: { included: 10 },
@@ -81,7 +81,7 @@ describe("RunStreamProvider / useRunStream", () => {
         sequence: 1,
       });
       sseState.onFrame?.({
-        type: "stage.completed",
+        type: "stage.completed", capability_run_id: null,
         stage: "classify",
         label: "Classifying",
         summary: {},

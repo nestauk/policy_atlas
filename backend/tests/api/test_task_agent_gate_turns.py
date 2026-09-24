@@ -244,6 +244,27 @@ def _await_walk_ended(
     return status
 
 
+def _await_quiet(engine: Engine, task_id: uuid.UUID | None) -> None:
+    """Let a longlist walk a decision opened, and its option searches, stop running.
+
+    The walk may end, or park at a fired check-in; its children run on their
+    own pool and must not be writing while the test tears the task down.
+    """
+    if task_id is None:
+        return
+    deadline = time.monotonic() + 30.0
+    while time.monotonic() < deadline:
+        with engine.connect() as conn:
+            running = conn.execute(
+                select(capability_run.c.capability_run_id)
+                .where(capability_run.c.task_id == task_id)
+                .where(capability_run.c.status == "running")
+            ).first()
+        if running is None:
+            return
+        time.sleep(0.05)
+
+
 def _rows(engine: Engine, task_id: uuid.UUID) -> list[dict[str, Any]]:
     with engine.connect() as conn:
         return [
@@ -430,7 +451,8 @@ def test_a_question_that_loses_the_race_to_the_card_is_not_a_500(
 def test_a_decision_in_words_lands_in_the_check_in_transaction(
     engine: Engine, tmp_path: Path
 ) -> None:
-    """Bound to the run, the check-in and the plan version (C5) — and it ends the walk."""
+    """Bound to the run, the check-in and the plan version (C5) — it ends the walk
+    and opens the longlist walk."""
     task_id: uuid.UUID | None = None
     try:
         task_id, walk_id, check_in_id, _plan_id = _park_at_gate(engine)
@@ -447,6 +469,7 @@ def test_a_decision_in_words_lands_in_the_check_in_transaction(
         body = response.json()
         assert body["kind"] == "decision"
         assert body["reply"] == gate_turns.CONFIRM_REPLY
+        opened = body["decision"].pop("opened_run")
         assert body["decision"] == {
             "option_id": "confirm_plan",
             "label": "Confirm plan and build longlist",
@@ -457,10 +480,62 @@ def test_a_decision_in_words_lands_in_the_check_in_transaction(
         decision = _decision_events(engine, task_id)[-1]
         assert decision["response"] == "continue"
         assert decision["plan_version"] == 1
-        # The walk a decision continues actually moves, exactly as it does when
-        # the same decision is taken on the card.
+        # The decision ends the baseline walk (task 045) ...
         assert ended == "succeeded"
+        # ... and opens the longlist walk on the confirmed version, returned on
+        # the decision (task 045, S3; P7).
+        assert opened is not None
+        with engine.connect() as conn:
+            record = conn.execute(
+                select(evidence_scope.c.purpose, evidence_scope.c.plan_id)
+                .select_from(
+                    capability_run.join(
+                        evidence_scope,
+                        evidence_scope.c.evidence_scope_id
+                        == capability_run.c.evidence_scope_id,
+                    )
+                )
+                .where(
+                    capability_run.c.capability_run_id
+                    == uuid.UUID(opened["capability_run_id"])
+                )
+            ).one()
+        assert record.purpose == "longlist"
+        assert record.plan_id == _plan_id
     finally:
+        _await_quiet(engine, task_id)
+        _cleanup(engine, task_id)
+
+
+def test_a_confirm_whose_longlist_did_not_open_says_so(
+    engine: Engine, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """F12: the decision stands, but no walk opened — the reply must not say
+    the longlist is being built."""
+    from policy_atlas.api.longlist_start import LonglistRefused
+    from policy_atlas.api.routers import task_agent as task_agent_router
+
+    def refuse(*args: Any, **kwargs: Any) -> uuid.UUID:
+        raise LonglistRefused("capacity", "the walk executor is at capacity")
+
+    monkeypatch.setattr(task_agent_router, "open_longlist_walk", refuse)
+    task_id: uuid.UUID | None = None
+    try:
+        task_id, walk_id, _check_in_id, _plan_id = _park_at_gate(engine)
+        with api_client(tmp_path, _overrides(agent=_sorts(_decision("confirm_plan")))) as (
+            client,
+            owner,
+            _other,
+        ):
+            _own(engine, task_id, owner)
+            response = _turn(client, owner, task_id, "Looks right, go ahead")
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert body["decision"]["opened_run"] is None
+        assert body["reply"] == gate_turns.CONFIRM_NOT_STARTED_REPLY
+        assert _decision_events(engine, task_id)[-1]["response"] == "continue"
+    finally:
+        _await_quiet(engine, task_id)
         _cleanup(engine, task_id)
 
 
@@ -711,6 +786,8 @@ def test_a_failure_after_the_decision_leaves_it_durable_and_the_retry_replans(
         # (X6) — not a bare planning reply that loses it.
         body = retried.json()
         assert body["kind"] == "decision"
+        # "Change the plan" opens no walk (task 045: only the confirm does).
+        assert body["decision"].pop("opened_run") is None
         assert body["decision"] == {
             "option_id": "change_plan",
             "label": "Change the plan",
@@ -804,7 +881,10 @@ def test_confirming_without_rebuilding_records_both_versions(
             "plan_version": 3,
         }
         assert body["scoping"]["where"]["text"] == "England"
+        # The confirm opened the longlist walk on version 3 (task 045, S3).
+        assert body["opened_run"] is not None
     finally:
+        _await_quiet(engine, task_id)
         _cleanup(engine, task_id)
 
 

@@ -39,6 +39,7 @@ from policy_atlas.api.contract import (
     TaskAgentTurnOut,
     TurnDecisionOut,
 )
+from policy_atlas.api.contract.tasks import LatestRun
 from policy_atlas.api.deps import (
     get_agent_backend,
     get_chat_backend,
@@ -51,7 +52,22 @@ from policy_atlas.api.deps import (
     get_task_agent_backend,
 )
 from policy_atlas.api.gate_turns import PausedGate, read_paused_gate
+from policy_atlas.api.longlist_start import (
+    LonglistRefused,
+    http_error,
+    longlist_walk_exists,
+    open_longlist_walk,
+    opened_run,
+    plan_row_of_walk,
+)
+from policy_atlas.api.longlist_turns import (
+    LonglistSurface,
+    dispatch_longlist_turn,
+    is_longlist_state,
+    read_longlist_surface,
+)
 from policy_atlas.api.routers._access import accessible_task
+from policy_atlas.api.routers._common import ACTIVE_WALK_STATUSES, parentless_walk
 from policy_atlas.api.routers.check_ins import execute_claimed
 from policy_atlas.api.stage_vocabulary import STAGE_BY_REGISTRY, STAGE_PRESENTATION
 from policy_atlas.core import tracing
@@ -60,6 +76,8 @@ from policy_atlas.core.schema import (
     artefact,
     capability_run,
     conversation,
+    evidence_scope,
+    longlist_result,
     task_agent_transcript,
     task_link,
     task_plan,
@@ -72,6 +90,7 @@ from policy_atlas.evidence_search.sourcing.country_filters import (
     overton_display_names,
     validate_iso_alpha2,
 )
+from policy_atlas.options_scoping.design import OptionDesign
 from policy_atlas.runtime.agent import build_plan, persist_approved_plan
 from policy_atlas.runtime.agent_backend import AgentBackend
 from policy_atlas.runtime.capability_registry import (
@@ -90,13 +109,22 @@ from policy_atlas.runtime.conversation_lifecycle import (
 from policy_atlas.runtime.inherit import linked_context
 from policy_atlas.runtime.runner import RunnerBackends
 from policy_atlas.runtime.scoping_plan import (
+    DEFAULT_WHERE_TEXT,
+    LONGLIST_PURPOSE,
     SCOPING_STEPS,
     BaselineConfirmed,
     ScopingPlan,
     baseline_inputs_changed,
     baseline_inputs_sentence,
     build_scoping_plan,
+    compose_longlist_screen_intent,
+    default_preference_for,
+    ensure_option_designs,
+    merge_your_options,
+    propose_option_designs,
+    settle_patched_defaults,
     wire_draft_from_plan,
+    with_option_designs,
 )
 from policy_atlas.runtime.task_agent import TaskAgentBackend
 from policy_atlas.runtime.task_agent_prompt import PlanDraftWire
@@ -231,19 +259,51 @@ def _draft_from_plan(plan: TaskPlan) -> PlanDraft:
 # --- Options scoping (task 044 phase 3.2) ----------------------------------
 
 
-def _scoping_draft_from_wire(draft: Any, *, ready: bool) -> ScopingPlanDraft:
+def _scoping_draft_from_wire(
+    draft: Any, *, ready: bool, previous: ScopingPlan | None = None
+) -> ScopingPlanDraft:
     """Project the scoping Task Agent's loose draft into the API shape.
 
     Fields the model has not filled stay absent; the three steps and the time
     band are code-owned, so they are supplied here exactly as
-    ``build_scoping_plan`` supplies them to the plan. A draft field the closed
-    API vocabulary rejects (an origin tag the model invented, say) drops out of
-    the projection rather than 500ing the turn — the draft is not ready yet,
-    which is the honest reading.
+    ``build_scoping_plan`` supplies them to the plan — and so is the default
+    transferability preference (D22), so the draft shows the row the plan
+    will carry, and the options' designs already proposed on ``previous``.
+    A draft field the closed API vocabulary rejects (an origin tag the model
+    invented, say) drops out of the projection rather than 500ing the turn —
+    the draft is not ready yet, which is the honest reading.
     """
     values = draft.model_dump(exclude_none=True)
     values["steps"] = [step.model_dump() for step in SCOPING_STEPS]
     values["ready"] = ready
+    where = values.get("where")
+    where_text = DEFAULT_WHERE_TEXT
+    if isinstance(where, dict) and isinstance(where.get("text"), str) and where["text"]:
+        where_text = where["text"]
+    default = default_preference_for(where_text, previous)
+    if default is not None:
+        constraints = [
+            c
+            for c in values.get("constraints", [])
+            if not (
+                c.get("kind") == "preference"
+                and str(c.get("text", "")).casefold().startswith("transferable to")
+            )
+        ]
+        constraints.append(default.model_dump(mode="json"))
+        values["constraints"] = constraints
+    if "your_options" in values:
+        previous_options = previous.your_options if previous is not None else []
+        texts = [o["text"] for o in values["your_options"] if str(o.get("text", "")).strip()]
+        merged = merge_your_options(texts, previous_options, turn_index=0)
+        carried = {id(o) for o in previous_options}
+        values["your_options"] = [
+            {
+                **option.model_dump(mode="json"),
+                "turn_index": option.turn_index if id(option) in carried else None,
+            }
+            for option in merged
+        ]
     try:
         return ScopingPlanDraft.model_validate(values)
     except ValidationError:
@@ -273,6 +333,28 @@ def _linked_task_ids(conn: Connection, task_id: uuid.UUID) -> list[uuid.UUID]:
     return [uuid.UUID(str(value)) for value in rows]
 
 
+def _latest_approved_scoping_plan(conn: Connection, task_id: uuid.UUID) -> ScopingPlan | None:
+    """Return the latest approved scoping plan, or ``None`` before the first.
+
+    The previous version a new one is built against: it carries the default
+    preference's state and the options' designs forward (task 045, D19, D22).
+    """
+    payload = conn.execute(
+        select(task_plan.c.payload)
+        .where(task_plan.c.task_id == task_id)
+        .where(task_plan.c.status == "approved")
+        .order_by(task_plan.c.version.desc())
+        .limit(1)
+    ).scalar_one_or_none()
+    if payload is None:
+        return None
+    try:
+        plan = validate_plan(OPTIONS_SCOPING, payload)
+    except ValidationError:
+        return None
+    return plan if isinstance(plan, ScopingPlan) else None
+
+
 def _baseline_state(conn: Connection, task_id: uuid.UUID) -> str:
     """Return the code-authored baseline-state line for the scoping prompt.
 
@@ -282,8 +364,29 @@ def _baseline_state(conn: Connection, task_id: uuid.UUID) -> str:
     flag, because the prompt fences it as data alongside the transcript.
 
     A walk paused on the gate says so, so the Task Agent never proposes
-    starting a run that is already under way (task 044, S5).
+    starting a run that is already under way (task 044, S5). The longlist
+    states come first (task 045): a longlist walk under way ("a longlist is
+    being built"), then — after the gate — a built longlist ("a longlist
+    exists, built from plan version N", N from the latest
+    ``longlist_result``), then the baseline states unchanged.
     """
+    building = conn.execute(
+        select(capability_run.c.capability_run_id)
+        .select_from(
+            capability_run.join(
+                evidence_scope,
+                evidence_scope.c.evidence_scope_id == capability_run.c.evidence_scope_id,
+            )
+        )
+        .where(capability_run.c.task_id == task_id)
+        .where(capability_run.c.capability == OPTIONS_SCOPING)
+        .where(capability_run.c.status.in_(ACTIVE_WALK_STATUSES))
+        .where(parentless_walk())
+        .where(evidence_scope.c.purpose == LONGLIST_PURPOSE)
+        .limit(1)
+    ).first()
+    if building is not None:
+        return "a longlist is being built"
     paused_version = conn.execute(
         select(capability_run.c.plan_version)
         .where(capability_run.c.task_id == task_id)
@@ -297,6 +400,14 @@ def _baseline_state(conn: Connection, task_id: uuid.UUID) -> str:
             "paused on the baseline, which was built from plan version "
             f"{int(paused_version)}"
         )
+    longlist_version = conn.execute(
+        select(longlist_result.c.plan_version)
+        .where(longlist_result.c.task_id == task_id)
+        .order_by(longlist_result.c.created_at.desc())
+        .limit(1)
+    ).scalar_one_or_none()
+    if longlist_version is not None:
+        return f"a longlist exists, built from plan version {int(longlist_version)}"
     version = _baseline_built_from(conn, task_id)
     if version is None:
         return NO_BASELINE_STATE
@@ -427,16 +538,42 @@ def _scoping_plan_out(conn: Connection, task_id: uuid.UUID) -> PlanOut:
     )
 
 
-def _apply_scoping_patch(plan: ScopingPlan, patch: Any) -> ScopingPlan:
-    """Merge a typed scoping patch onto an approved plan and re-validate."""
+def _apply_scoping_patch(
+    plan: ScopingPlan,
+    patch: Any,
+    *,
+    turn_index: int = 0,
+    designs: dict[str, OptionDesign] | None = None,
+) -> ScopingPlan:
+    """Merge a typed scoping patch onto an approved plan and re-validate.
+
+    ``your_options`` merge by the user's words (unchanged words keep their
+    design; changed or new words get ``designs[text]`` when one was proposed
+    before the transaction, else none), and the default preference is settled
+    against the plan the patch applied to (task 045, D19, D22).
+    """
     data = plan.model_dump(mode="json")
     supplied = patch.model_dump(mode="json", exclude_unset=True)
+    options = supplied.pop("your_options", None)
     for field, value in supplied.items():
         if value is not None:
             data[field] = value
+    if options is not None:
+        data["your_options"] = [
+            option.model_dump(mode="json")
+            for option in merge_your_options(
+                [o["text"] for o in options], plan.your_options, turn_index=turn_index
+            )
+        ]
+    # A patch that carries a removed default back restores it (settled
+    # below); its marker leaves ``removed_defaults`` first, or the plan model
+    # refuses the constraint as a revival before the restore is reached (L4).
+    resent = {c.get("default") for c in data.get("constraints", []) if c.get("default")}
+    data["removed_defaults"] = [d for d in data.get("removed_defaults", []) if d not in resent]
     validated = validate_plan(OPTIONS_SCOPING, data)
     assert isinstance(validated, ScopingPlan)
-    return validated
+    settled = settle_patched_defaults(validated, plan)
+    return with_option_designs(settled, designs or {})
 
 
 def _labelled_answer(payload: AnswerPayloadOut | None) -> AnswerPayloadOut | None:
@@ -573,8 +710,9 @@ def _task_agent_inputs(
         # A gate turn — an answer, an ask-back, a recorded decision — is part
         # of the conversation but carries no plan draft (task 044), so it adds
         # its exchange and leaves the draft where the last planning turn left
-        # it. Only a row missing its *reply* is incomplete.
-        if task_agent_state is not None:
+        # it. Only a row missing its *reply* is incomplete. A longlist turn's
+        # state is its pending action (task 045), never a draft either.
+        if task_agent_state is not None and not is_longlist_state(task_agent_state):
             previous_draft = cast("dict[str, object]", task_agent_state)
     if turns:
         return turns, previous_draft
@@ -635,6 +773,7 @@ def _transcript_out(row: RowMapping, capability: str) -> TaskAgentTranscriptTurn
         # carries ``appraisal_label``.
         answer=_labelled_answer(projected.answer) if projected is not None else None,
         decision=projected.decision if projected is not None else None,
+        action=projected.action if projected is not None else None,
     )
 
 
@@ -650,11 +789,15 @@ class _Reserved:
         retried: Whether this is a re-run of a row that was already reserved —
             the only case in which the row may already carry a durable half
             (X6), so the only case worth a query to look.
+        longlist: The longlist this turn is sorted against, when the task is
+            an options-scoping task with a longlist and no parentless walk is
+            active (task 045, S11); ``None`` for every other turn.
     """
 
     transcript_id: uuid.UUID
     gate: PausedGate | None
     retried: bool = False
+    longlist: LonglistSurface | None = None
 
 
 def _paused_gate(
@@ -708,6 +851,8 @@ def _phase_one_turn(
         if existing["status"] == "completed":
             return _response_from_row(existing)
 
+    # Parentless walks only (task 045, S15): a longlist walk's option searches
+    # never fence the thread; their parent does.
     active = conn.execute(
         select(
             capability_run.c.capability_run_id,
@@ -715,7 +860,8 @@ def _phase_one_turn(
             capability_run.c.plan_version,
         )
         .where(capability_run.c.task_id == task_id)
-        .where(capability_run.c.status.in_(("running", "paused")))
+        .where(capability_run.c.status.in_(ACTIVE_WALK_STATUSES))
+        .where(parentless_walk())
         .limit(1)
     ).mappings().one_or_none()
     # The Task Agent chat is open at the baseline gate (D9): a turn taken while
@@ -728,6 +874,9 @@ def _phase_one_turn(
             "finish or stop the current run before replanning; "
             "use the run's check-ins to steer it",
         )
+    # With no walk active, a scoping task that has a longlist sorts the turn
+    # into the longlist verbs (task 045, S11), read under the same row lock.
+    longlist = read_longlist_surface(conn, task_id=task_id) if active is None else None
 
     if existing is not None:
         latest_id = conn.execute(
@@ -738,7 +887,7 @@ def _phase_one_turn(
         ).scalar_one()
         if latest_id != existing["id"]:
             raise ApiConflict("stale_turn", "only the latest Task Agent turn may be retried")
-        return _Reserved(cast(uuid.UUID, existing["id"]), gate, retried=True)
+        return _Reserved(cast(uuid.UUID, existing["id"]), gate, retried=True, longlist=longlist)
 
     pending = conn.execute(
         select(task_agent_transcript.c.id)
@@ -773,7 +922,7 @@ def _phase_one_turn(
             completed_at=None,
         )
     )
-    return _Reserved(transcript_id, gate)
+    return _Reserved(transcript_id, gate, longlist=longlist)
 
 
 @dataclass(frozen=True)
@@ -1009,6 +1158,18 @@ def _dispatch_gate_turn(
                 check_in_id=gate.check_in_id,
                 capability_run_id=gate.capability_run_id,
                 plan_version=gate.plan_version,
+                opened_run=(
+                    _open_follow_on_longlist(
+                        engine,
+                        task_id=task_id,
+                        gate_run_id=gate.capability_run_id,
+                        executor=executor,
+                        runner_backends=runner_backends,
+                        user_id=user_id,
+                    )
+                    if outcome.recorded and outcome.follow_on == LONGLIST_PURPOSE
+                    else None
+                ),
             )
             if outcome.carried_text is not None:
                 # Durable now, because the planner call below can crash after
@@ -1026,8 +1187,12 @@ def _dispatch_gate_turn(
                     ),
                 )
                 return _ContinuedTurn(carried_text=outcome.carried_text, decision=decision)
+            reply = outcome.reply
+            if outcome.follow_on == LONGLIST_PURPOSE and decision.opened_run is None:
+                # The decision stands but no walk opened (F12): say so.
+                reply = gate_turns.CONFIRM_NOT_STARTED_REPLY
             result = TaskAgentTurnOut(
-                reply=outcome.reply,
+                reply=reply,
                 kind="decision",
                 # A turn that lost the race records no decision of its own: the
                 # durable one is the other surface's, and this turn may have
@@ -1068,6 +1233,43 @@ def _dispatch_gate_turn(
         # because the fence then sees no active walk (X6).
         _fail_turn(engine, task_id=task_id, transcript_id=transcript_id)
         raise
+
+
+def _open_follow_on_longlist(
+    engine: Engine,
+    *,
+    task_id: uuid.UUID,
+    gate_run_id: uuid.UUID,
+    executor: ThreadPoolExecutor,
+    runner_backends: RunnerBackends,
+    user_id: str,
+) -> LatestRun | None:
+    """Open the longlist walk a gate decision asked for (task 045, S3; P7).
+
+    After the decision's commit and outside any transaction, on the version
+    the gate's walk ran — the one the decision confirmed (A10). A refusal (the
+    executor at capacity, a plan too long to screen against, a newer version
+    minted meanwhile) does not undo
+    the decision, which is durable, nor fail the turn: the turn records the
+    decision without an opened walk, and the plan document's confirm action
+    opens the walk later ("confirmed but no walk" is resolved there).
+
+    Returns:
+        The opened walk, or ``None`` when the opener refused.
+    """
+    try:
+        run_id = open_longlist_walk(
+            engine,
+            task_id=task_id,
+            plan_row=plan_row_of_walk(engine, task_id=task_id, capability_run_id=gate_run_id),
+            backends=runner_backends,
+            executor=executor,
+            user_id=user_id,
+        )
+    except LonglistRefused as exc:
+        log.warning("gate_turn_longlist_refused", task_id=str(task_id), reason=exc.reason)
+        return None
+    return opened_run(engine, task_id=task_id, capability_run_id=run_id)
 
 
 def _resume_walk(
@@ -1154,11 +1356,12 @@ def create_task_agent_turn(
         transcript_id = phase_one.transcript_id
 
         with engine.connect() as conn:
-            conversation_id = conn.execute(
-                select(task_agent_transcript.c.conversation_id).where(
-                    task_agent_transcript.c.id == transcript_id
-                )
-            ).scalar_one()
+            conversation_id, reserved_turn_index = conn.execute(
+                select(
+                    task_agent_transcript.c.conversation_id,
+                    task_agent_transcript.c.turn_index,
+                ).where(task_agent_transcript.c.id == transcript_id)
+            ).one()
         if conversation_id is None:
             raise RuntimeError("task_agent transcript turn has no conversation")
 
@@ -1188,6 +1391,27 @@ def create_task_agent_turn(
             # an ordinary planning turn on the user's own words (X6).
             planner_message = sorted_turn.carried_text
             carried_decision = sorted_turn.decision
+        elif phase_one.longlist is not None:
+            # While a longlist exists and no walk is active, the turn is
+            # sorted into the longlist verbs and never reaches the planner:
+            # a verb is proposed back and applied on a confirming turn
+            # (task 045, S11). Stored raw, returned labelled (C2).
+            with tracing.trace_scope(user_id=user.user_id):
+                return _labelled(
+                    dispatch_longlist_turn(
+                        engine,
+                        task_id=task_id,
+                        transcript_id=transcript_id,
+                        conversation_id=conversation_id,
+                        surface=phase_one.longlist,
+                        utterance=payload.message,
+                        user_id=user.user_id,
+                        agent=agent,
+                        chat_backend=chat_backend,
+                        embedding_backend=embedding_backend,
+                        runner_backends=runner_backends,
+                    )
+                )
         elif phase_one.retried:
             # A retry of the *second* half of such a turn: the walk is already
             # gone, so there is no gate to sort against and the decision lives
@@ -1204,6 +1428,7 @@ def create_task_agent_turn(
             contexts = linked_context(conn, task_id) if scoping else []
             linked_ids = _linked_task_ids(conn, task_id) if scoping else []
             baseline_state = _baseline_state(conn, task_id) if scoping else NO_BASELINE_STATE
+            previous_scoping = _latest_approved_scoping_plan(conn, task_id) if scoping else None
         turns.append({"role": "user", "text": planner_message})
         try:
             # The Task Agent's own session scope nests under this user scope
@@ -1243,12 +1468,20 @@ def create_task_agent_turn(
                     build_scoping_plan(
                         cast(ScopingPlanDraftWire, turn.plan_draft),
                         linked_task_ids=linked_ids,
+                        source_turn_index=int(reserved_turn_index),
+                        previous=previous_scoping,
                     )
                     if scoping
                     else build_plan(cast(PlanDraftWire, turn.plan_draft))
                 )
             except (ValidationError, ValueError):
                 ready = False
+        if isinstance(approved, ScopingPlan):
+            # Propose a design back for each new or reworded option (D19),
+            # here — outside any transaction, like the Task Agent call — so a
+            # design exists on the version the user confirms.
+            with tracing.trace_scope(user_id=user.user_id):
+                approved = ensure_option_designs(approved, agent, session_id=task_id)
         part = _validated_part(turn.part, scoping=scoping)
         reply_text = turn.reply
         if scoping and approved is not None:
@@ -1262,7 +1495,9 @@ def create_task_agent_turn(
             scoping_draft = (
                 _scoping_draft_from_plan(cast(ScopingPlan, approved))
                 if approved is not None
-                else _scoping_draft_from_wire(turn.plan_draft, ready=ready)
+                else _scoping_draft_from_wire(
+                    turn.plan_draft, ready=ready, previous=previous_scoping
+                )
             )
             result = TaskAgentTurnOut(
                 reply=reply_text,
@@ -1317,7 +1552,9 @@ def create_task_agent_turn(
                     conn.execute(
                         select(capability_run.c.status)
                         .where(capability_run.c.task_id == task_id)
-                        .where(capability_run.c.status.in_(("running", "paused")))
+                        .where(capability_run.c.status.in_(ACTIVE_WALK_STATUSES))
+                        # The same parentless fence as phase one (task 045).
+                        .where(parentless_walk())
                         .limit(1)
                     ).scalar_one_or_none()
                     is not None
@@ -1702,8 +1939,14 @@ def patch_plan(
     payload: PlanPatchIn,
     user: Annotated[AuthenticatedUser, Depends(get_current_user)],
     engine: Annotated[Engine, Depends(get_engine)],
+    agent: Annotated[AgentBackend, Depends(get_agent_backend)],
 ) -> PlanOut:
     """Apply typed edits to the current plan and persist a new approved version."""
+    designs: dict[str, OptionDesign] = {}
+    if payload.scoping is not None and payload.scoping.your_options is not None:
+        # Model calls stay outside the locked transaction below (review
+        # finding I2): propose designs for the new or reworded options first.
+        designs = _propose_patch_designs(engine, task_id, user.user_id, payload.scoping, agent)
     with engine.begin() as conn:
         # The task row lock, for the reason ``POST /runs`` and the turn route
         # take it (X5): the "no running/paused walk" check below and the new
@@ -1741,7 +1984,7 @@ def patch_plan(
                 )
             if payload.scoping is None:
                 raise HTTPException(status_code=422, detail="scoping edits are required")
-            return _patch_scoping_plan(conn, task_id, payload.scoping)
+            return _patch_scoping_plan(conn, task_id, payload.scoping, designs=designs)
         if payload.scoping is not None:
             raise HTTPException(
                 status_code=422,
@@ -1830,11 +2073,69 @@ def _persist_new_scoping_version(
     )
 
 
-def _patch_scoping_plan(conn: Connection, task_id: uuid.UUID, patch: Any) -> PlanOut:
+def _propose_patch_designs(
+    engine: Engine,
+    task_id: uuid.UUID,
+    user_id: str,
+    patch: Any,
+    agent: AgentBackend,
+) -> dict[str, OptionDesign]:
+    """Propose designs for a patch's new or reworded options, before its transaction.
+
+    Keyed by the options' words; the transaction applies them to whichever
+    options still lack a design (task 045, D19). Returns nothing when the
+    caller may not write the task or it has no approved scoping plan — the
+    locked transaction then refuses the patch as it always has.
+    """
+    with engine.connect() as conn:
+        accessible_task(conn, task_id=task_id, user_id=user_id, write=True)
+        if capability_of_task(conn, task_id) != OPTIONS_SCOPING:
+            return {}
+        current = _latest_approved_scoping_plan(conn, task_id)
+    if current is None:
+        return {}
+    texts = [o.text for o in patch.your_options]
+    missing = [
+        o.text
+        for o in merge_your_options(texts, current.your_options, turn_index=0)
+        if o.design is None
+    ]
+    if not missing:
+        return {}
+    target_unit = patch.target_unit.text if patch.target_unit is not None else None
+    outcomes = [o.text for o in patch.outcomes] if patch.outcomes is not None else None
+    with tracing.trace_scope(user_id=user_id):
+        return propose_option_designs(
+            missing,
+            question=current.question,
+            target_unit=target_unit or current.target_unit.text,
+            outcomes=outcomes or [o.text for o in current.outcomes],
+            backend=agent,
+            session_id=task_id,
+        )
+
+
+def _patch_scoping_plan(
+    conn: Connection,
+    task_id: uuid.UUID,
+    patch: Any,
+    *,
+    designs: dict[str, OptionDesign] | None = None,
+) -> PlanOut:
     """Apply typed scoping edits and persist a new approved version."""
     current, _row = _load_approved_scoping_plan(conn, task_id)
+    latest_turn = conn.execute(
+        select(func.max(task_agent_transcript.c.turn_index))
+        .where(task_agent_transcript.c.task_id == task_id)
+        .where(task_agent_transcript.c.status == "completed")
+    ).scalar_one()
     try:
-        patched = _apply_scoping_patch(current, patch)
+        patched = _apply_scoping_patch(
+            current,
+            patch,
+            turn_index=int(latest_turn) if latest_turn is not None else 0,
+            designs=designs,
+        )
     except (ValidationError, ValueError) as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     return _persist_new_scoping_version(conn, task_id, patched)
@@ -1846,8 +2147,10 @@ def confirm_baseline(
     payload: ConfirmBaselineIn,
     user: Annotated[AuthenticatedUser, Depends(get_current_user)],
     engine: Annotated[Engine, Depends(get_engine)],
+    executor: Annotated[ThreadPoolExecutor, Depends(get_executor)],
+    backends: Annotated[RunnerBackends, Depends(get_runner_backends)],
 ) -> PlanOut:
-    """Record that a plan version was confirmed against its baseline.
+    """Record that a plan version was confirmed, and open the longlist walk.
 
     "Confirm plan and build longlist" cannot be a steering event: by the time
     the user presses it the walk has ended, and a steering event needs a
@@ -1860,7 +2163,18 @@ def confirm_baseline(
     plan_version)`` pair that the current version already records returns that
     version unchanged rather than minting an identical one, so a double-tap
     does not fill the plan's history with duplicates.
+
+    **The longlist walk** (task 045, S3): once the confirmed version has
+    committed, the route re-reads it and opens the longlist walk on it outside
+    any transaction (P6: the task-row transaction is closed before the opener
+    takes the dispatch lock, the order ``create_run`` uses), returning the walk
+    in ``opened_run``. On the idempotent path a version already confirmed but
+    without a longlist walk — the opener refused, or the process died between
+    the two — opens one now rather than returning unchanged. A confirm on a
+    newer version than the last longlist's is a **rebuild** (D14): it opens a
+    longlist walk too, whose fan-out searches only entrants without a search.
     """
+    idempotent = False
     with engine.begin() as conn:
         # Locked for the same reason :func:`patch_plan` locks (X5): the walk
         # check and the new version's insert are one decision, and two
@@ -1874,10 +2188,12 @@ def confirm_baseline(
                 status_code=422,
                 detail="confirm-baseline applies to options-scoping tasks only",
             )
+        # Parentless walks only (task 045, S15).
         active = conn.execute(
             select(capability_run.c.status)
             .where(capability_run.c.task_id == task_id)
-            .where(capability_run.c.status.in_(("running", "paused")))
+            .where(capability_run.c.status.in_(ACTIVE_WALK_STATUSES))
+            .where(parentless_walk())
             .limit(1)
         ).scalar_one_or_none()
         if active is not None:
@@ -1909,24 +2225,92 @@ def confirm_baseline(
             and current.baseline_confirmed.plan_version == current_version
             and payload.plan_version in (current_version, current_version - 1)
         ):
-            return PlanOut(
+            idempotent = True
+            out = PlanOut(
                 scoping=_scoping_draft_from_plan(current),
                 capability=OPTIONS_SCOPING,
                 version=row["version"],
                 status=row["status"],
             )
-        if payload.plan_version != current_version:
-            raise ApiConflict(
-                "plan_stale",
-                "the plan moved on since you read it — review the current version, then confirm",
-            )
-        next_version = int(
-            conn.execute(
-                select(func.coalesce(func.max(task_plan.c.version), 0)).where(
-                    task_plan.c.task_id == task_id
+        else:
+            if payload.plan_version != current_version:
+                raise ApiConflict(
+                    "plan_stale",
+                    "the plan moved on since you read it — review the current version, "
+                    "then confirm",
                 )
-            ).scalar_one()
-        ) + 1
-        record = BaselineConfirmed(artefact_id=payload.artefact_id, plan_version=next_version)
-        confirmed = current.model_copy(update={"baseline_confirmed": record})
-        return _persist_new_scoping_version(conn, task_id, confirmed)
+            try:
+                # Refused before a version is minted: a plan the longlist
+                # cannot screen against must not read as confirmed.
+                compose_longlist_screen_intent(current)
+            except ValueError as exc:
+                raise HTTPException(
+                    status_code=422,
+                    detail=(
+                        "the plan's outcomes and requirements are too long to screen a "
+                        f"longlist against — shorten them, then confirm ({exc})"
+                    ),
+                ) from exc
+            next_version = int(
+                conn.execute(
+                    select(func.coalesce(func.max(task_plan.c.version), 0)).where(
+                        task_plan.c.task_id == task_id
+                    )
+                ).scalar_one()
+            ) + 1
+            record = BaselineConfirmed(
+                artefact_id=payload.artefact_id, plan_version=next_version
+            )
+            confirmed = current.model_copy(update={"baseline_confirmed": record})
+            out = _persist_new_scoping_version(conn, task_id, confirmed)
+    # Committed. The opener takes the dispatch lock and the task row itself.
+    if idempotent and longlist_walk_exists(engine, task_id=task_id, plan_id=row["plan_id"]):
+        return out
+    return _open_confirmed_longlist(
+        engine, task_id=task_id, out=out, executor=executor, backends=backends, user=user
+    )
+
+
+def _open_confirmed_longlist(
+    engine: Engine,
+    *,
+    task_id: uuid.UUID,
+    out: PlanOut,
+    executor: ThreadPoolExecutor,
+    backends: RunnerBackends,
+    user: AuthenticatedUser,
+) -> PlanOut:
+    """Open the longlist walk on the committed confirmed version (P6).
+
+    Re-reads exactly the version the route committed (``out.version``) and
+    hands it to the opener, which refuses if another version has been minted
+    since (A10). Called outside any transaction.
+
+    Returns:
+        ``out`` with ``opened_run`` set.
+
+    Raises:
+        ApiConflict: The opener's ``run_active``, ``capacity`` or
+            ``plan_stale``.
+        HTTPException: 422 when the plan cannot be screened against.
+    """
+    with engine.connect() as conn:
+        plan_row = conn.execute(
+            select(task_plan)
+            .where(task_plan.c.task_id == task_id)
+            .where(task_plan.c.version == out.version)
+        ).mappings().one()
+    try:
+        run_id = open_longlist_walk(
+            engine,
+            task_id=task_id,
+            plan_row=dict(plan_row),
+            backends=backends,
+            executor=executor,
+            user_id=user.user_id,
+        )
+    except LonglistRefused as exc:
+        raise http_error(exc) from None
+    return out.model_copy(
+        update={"opened_run": opened_run(engine, task_id=task_id, capability_run_id=run_id)}
+    )

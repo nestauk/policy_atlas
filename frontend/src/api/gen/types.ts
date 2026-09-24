@@ -789,6 +789,112 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/tasks/{task_id}/longlist": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Longlist
+         * @description Return the task's longlist, or 404 before the first build.
+         */
+        get: operations["get_longlist_api_v1_tasks__task_id__longlist_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tasks/{task_id}/options": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Post Option
+         * @description Add an option by hand: propose its design, mint it, open its option search.
+         *
+         *     The design is proposed back from the user's words (``option_design_v1``)
+         *     outside any transaction; the option is minted *added by you* and its
+         *     option search opened as a walk with no parent (:func:`add_option`). The
+         *     fence is read twice: before the model call, so a refused add costs no
+         *     call, and again under the lock.
+         */
+        post: operations["post_option_api_v1_tasks__task_id__options_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tasks/{task_id}/options/{option_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Option
+         * @description Return one option's card, or an indistinguishable 404.
+         */
+        get: operations["get_option_api_v1_tasks__task_id__options__option_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tasks/{task_id}/options/{option_id}/exclude": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Post Exclude
+         * @description Exclude an option, with the user's reason when given; include again reverses it.
+         */
+        post: operations["post_exclude_api_v1_tasks__task_id__options__option_id__exclude_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tasks/{task_id}/options/{option_id}/include": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Post Include
+         * @description Include an option again; a rebuild's constrain will not exclude it.
+         */
+        post: operations["post_include_api_v1_tasks__task_id__options__option_id__include_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/tasks/{task_id}/plan": {
         parameters: {
             query?: never;
@@ -827,7 +933,7 @@ export interface paths {
         put?: never;
         /**
          * Confirm Baseline
-         * @description Record that a plan version was confirmed against its baseline.
+         * @description Record that a plan version was confirmed, and open the longlist walk.
          *
          *     "Confirm plan and build longlist" cannot be a steering event: by the time
          *     the user presses it the walk has ended, and a steering event needs a
@@ -840,6 +946,16 @@ export interface paths {
          *     plan_version)`` pair that the current version already records returns that
          *     version unchanged rather than minting an identical one, so a double-tap
          *     does not fill the plan's history with duplicates.
+         *
+         *     **The longlist walk** (task 045, S3): once the confirmed version has
+         *     committed, the route re-reads it and opens the longlist walk on it outside
+         *     any transaction (P6: the task-row transaction is closed before the opener
+         *     takes the dispatch lock, the order ``create_run`` uses), returning the walk
+         *     in ``opened_run``. On the idempotent path a version already confirmed but
+         *     without a longlist walk — the opener refused, or the process died between
+         *     the two — opens one now rather than returning unchanged. A confirm on a
+         *     newer version than the last longlist's is a **rebuild** (D14): it opens a
+         *     longlist walk too, whose fan-out searches only entrants without a search.
          */
         post: operations["confirm_baseline_api_v1_tasks__task_id__plan_confirm_baseline_post"];
         delete?: never;
@@ -858,6 +974,10 @@ export interface paths {
         /**
          * List Runs
          * @description List a task's walks from newest to oldest (paginated — runs accumulate).
+         *
+         *     ``parentless`` (task 045, A13) keeps only the walks with no parent that
+         *     are not option searches — the baseline and longlist walks — so a reader
+         *     looking for the baseline never pages through option searches.
          */
         get: operations["list_runs_api_v1_tasks__task_id__runs_get"];
         put?: never;
@@ -1045,6 +1165,23 @@ export interface components {
              * @enum {string}
              */
             kind: "abort";
+        };
+        /**
+         * AmbitionBandOut
+         * @description One ambition band, a column of the reduced grid.
+         *
+         *     Args:
+         *         key: The stored value.
+         *         label: The display label.
+         *         definition: One line saying what the band means, for a group heading.
+         */
+        AmbitionBandOut: {
+            /** Definition */
+            definition?: string | null;
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
         };
         /**
          * AnswerPayloadOut
@@ -1992,8 +2129,13 @@ export interface components {
          *         summary: Human-readable summary of the decision.
          *         decided_by: Who decided, when known.
          *         detail: Optional structured detail.
+         *         capability_run_id: The walk the underlying event belongs to, when
+         *             the event carries a run (task 045) — lets the thread tell a
+         *             hidden child walk's lines from its parent's. Null otherwise.
          */
         DecisionOut: {
+            /** Capability Run Id */
+            capability_run_id?: string | null;
             /** Decided By */
             decided_by?: ("user" | "agent" | "standing_default") | null;
             /** Detail */
@@ -2097,6 +2239,89 @@ export interface components {
             venue?: string | null;
             /** Year */
             year?: number | null;
+        };
+        /**
+         * EvidenceProfileOut
+         * @description An option's source-quality profile — what the evidence base holds so far.
+         *
+         *     Every count is of documents, DOI-collapsed. Display only; never a verdict.
+         *
+         *     Args:
+         *         documents: Its documents.
+         *         by_evidence_type: Documents per evidence type; "Unknown" and
+         *             non-evidence documents are their own keys, "not rated" when unclassified.
+         *         by_tier: Documents per quality tier label, "not rated" when unappraised.
+         *         by_role: Documents per role.
+         *         where_tried: Documents per where-tried group.
+         *         populations: Populations its documents name, most frequent first.
+         *         settings: Settings its documents name, most frequent first.
+         *         outcomes: Outcomes its documents measure, most frequent first.
+         *         flagged_not_stated: Documents that cover the intervention without
+         *             stating the feature that defines this option.
+         *         inherited_labels: Documents whose type and tier were read from a
+         *             linked task.
+         *         abstract_only: Documents read from an abstract only.
+         */
+        EvidenceProfileOut: {
+            /**
+             * Abstract Only
+             * @default 0
+             */
+            abstract_only: number;
+            /** By Evidence Type */
+            by_evidence_type?: {
+                [key: string]: number;
+            };
+            /** By Role */
+            by_role?: {
+                [key: string]: number;
+            };
+            /** By Tier */
+            by_tier?: {
+                [key: string]: number;
+            };
+            /**
+             * Documents
+             * @default 0
+             */
+            documents: number;
+            /**
+             * Flagged Not Stated
+             * @default 0
+             */
+            flagged_not_stated: number;
+            /**
+             * Inherited Labels
+             * @default 0
+             */
+            inherited_labels: number;
+            /** Outcomes */
+            outcomes?: string[];
+            /** Populations */
+            populations?: string[];
+            /** Settings */
+            settings?: string[];
+            where_tried: components["schemas"]["WhereTriedOut"];
+        };
+        /**
+         * ExclusionOut
+         * @description Why an option is excluded.
+         *
+         *     Args:
+         *         constraint: The constraint it breaks, or "your decision".
+         *         reason: The reason, in words.
+         *         by: Who excluded it.
+         */
+        ExclusionOut: {
+            /**
+             * By
+             * @enum {string}
+             */
+            by: "constrain" | "user";
+            /** Constraint */
+            constraint: string;
+            /** Reason */
+            reason: string;
         };
         /**
          * FacetGroupsOut
@@ -2284,6 +2509,29 @@ export interface components {
             /** Facets */
             facets?: components["schemas"]["FacetGroupsOut"][];
         };
+        /**
+         * GuessOut
+         * @description One reasoned guess on a preference: Policy Atlas's reasoning, not evidence.
+         *
+         *     Args:
+         *         constraint_id: The preference's id (`pref-N`).
+         *         constraint_text: The preference, in words.
+         *         guess: The guess, in words.
+         *         leaning: Which way it leans.
+         */
+        GuessOut: {
+            /** Constraint Id */
+            constraint_id: string;
+            /** Constraint Text */
+            constraint_text: string;
+            /** Guess */
+            guess: string;
+            /**
+             * Leaning
+             * @enum {string}
+             */
+            leaning: "likely_meets" | "likely_falls_short" | "cannot_say";
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -2353,6 +2601,23 @@ export interface components {
             study_geography?: string | null;
             /** Workforce Requirements */
             workforce_requirements?: string | null;
+        };
+        /**
+         * InScopeOut
+         * @description The in-scope check against the plan's evidence restriction.
+         *
+         *     Args:
+         *         restriction: The restriction, in words.
+         *         in_scope_documents: Its documents that pass the restriction.
+         *         documents: Its documents.
+         */
+        InScopeOut: {
+            /** Documents */
+            documents: number;
+            /** In Scope Documents */
+            in_scope_documents: number;
+            /** Restriction */
+            restriction: string;
         };
         /**
          * IofFindingOut
@@ -2447,6 +2712,30 @@ export interface components {
             tau2?: number | null;
         };
         /**
+         * JudgementOut
+         * @description One constraint judgement on the option's current design version.
+         *
+         *     Args:
+         *         constraint_id: The constraint's id (`req-N`, or a default screen:
+         *             `relevant` · `distinct` · `in_scope`).
+         *         constraint_text: The constraint, in words.
+         *         verdict: Passes, breaks or cannot be checked.
+         *         reason: Why.
+         */
+        JudgementOut: {
+            /** Constraint Id */
+            constraint_id: string;
+            /** Constraint Text */
+            constraint_text: string;
+            /** Reason */
+            reason: string;
+            /**
+             * Verdict
+             * @enum {string}
+             */
+            verdict: "passes" | "breaks" | "cannot_check";
+        };
+        /**
          * LandscapeOut
          * @description Distributions over the screened-in set only (never the found count).
          *
@@ -2520,6 +2809,143 @@ export interface components {
             user_message: string;
         };
         /**
+         * LeverTypeOut
+         * @description One lever type of the taxonomy the options were typed against.
+         *
+         *     Args:
+         *         key: The stored value and display label.
+         *         definition: One line saying how the state acts under this type.
+         */
+        LeverTypeOut: {
+            /** Definition */
+            definition: string;
+            /** Key */
+            key: string;
+        };
+        /**
+         * LonglistCountsOut
+         * @description The list view's header counts.
+         *
+         *     ``options``, ``included``, ``excluded`` and ``no_in_scope`` are read from
+         *     the option rows as they stand (a user exclusion counts at once);
+         *     ``themes``, ``unclustered`` and ``not_an_option`` are the longlist run's.
+         *
+         *     Args:
+         *         options: Options on the longlist.
+         *         themes: Themes.
+         *         included: Options included.
+         *         excluded: Options excluded.
+         *         no_in_scope: Included options with no in-scope evidence.
+         *         unclustered: Records assigned to no option.
+         *         not_an_option: Records judged not to describe an actionable option.
+         *         none_fits: Options no lever type fits.
+         */
+        LonglistCountsOut: {
+            /** Excluded */
+            excluded: number;
+            /** Included */
+            included: number;
+            /** No In Scope */
+            no_in_scope: number;
+            /** None Fits */
+            none_fits: number;
+            /** Not An Option */
+            not_an_option: number;
+            /** Options */
+            options: number;
+            /** Themes */
+            themes: number;
+            /** Unclustered */
+            unclustered: number;
+        };
+        /**
+         * LonglistOut
+         * @description The `longlist` read model: the options grouped by theme, with their states.
+         *
+         *     Args:
+         *         run_id: The longlist component run the longlist came from.
+         *         capability_run_id: The longlist walk that run belonged to.
+         *         plan_version: The plan version the longlist was built from.
+         *         built_from_plan_version: The same number, named for the plan
+         *             document's "built from plan version N".
+         *         current_plan_version: The task's current approved plan version.
+         *         counts: The header counts.
+         *         themes: The themes, in display order.
+         *         unthemed_option_ids: Options in no theme (including options added
+         *             since the build).
+         *         options: Every option of the task, themed ones first in theme order.
+         *         where_label: The words the `where` group is shown under (the plan's
+         *             Where).
+         *         lever_types: The lever-type list the options were typed against, in
+         *             order (the grid's rows).
+         *         lever_type_definitions: The same list with each type's one-line
+         *             definition (the list view's group headings).
+         *         ambition_bands: The ambition bands, in order (the grid's columns).
+         *         taxonomy_version: The lever-type list version.
+         *         depth_label: The depth label every longlist surface carries.
+         */
+        LonglistOut: {
+            /** Ambition Bands */
+            ambition_bands?: components["schemas"]["AmbitionBandOut"][];
+            /** Built From Plan Version */
+            built_from_plan_version: number;
+            /** Capability Run Id */
+            capability_run_id?: string | null;
+            counts: components["schemas"]["LonglistCountsOut"];
+            /** Current Plan Version */
+            current_plan_version?: number | null;
+            /**
+             * Depth Label
+             * @default scoping pass
+             * @constant
+             */
+            depth_label: "scoping pass";
+            /** Lever Type Definitions */
+            lever_type_definitions?: components["schemas"]["LeverTypeOut"][];
+            /** Lever Types */
+            lever_types?: string[];
+            /** Options */
+            options?: components["schemas"]["OptionSummaryOut"][];
+            /** Plan Version */
+            plan_version: number;
+            /**
+             * Run Id
+             * Format: uuid
+             */
+            run_id: string;
+            /** Taxonomy Version */
+            taxonomy_version?: string | null;
+            /** Themes */
+            themes?: components["schemas"]["LonglistThemeOut"][];
+            /** Unthemed Option Ids */
+            unthemed_option_ids?: string[];
+            /** Where Label */
+            where_label: string;
+        };
+        /**
+         * LonglistThemeOut
+         * @description One theme: a generated grouping of options in the problem's own words.
+         *
+         *     Args:
+         *         theme_id: Stable theme identity.
+         *         name: Theme name.
+         *         description: One-line description.
+         *         option_ids: The theme's options, in display order.
+         */
+        LonglistThemeOut: {
+            /** Description */
+            description: string;
+            /** Name */
+            name: string;
+            /** Option Ids */
+            option_ids?: string[];
+            /**
+             * Theme Id
+             * Format: uuid
+             */
+            theme_id: string;
+        };
+        /**
          * MeOut
          * @description The authenticated caller's own identity row.
          *
@@ -2566,6 +2992,253 @@ export interface components {
             source_id: string;
         };
         /**
+         * OptionAddIn
+         * @description Add an option by hand: the user's words (the button's path, D13).
+         *
+         *     Args:
+         *         text: The option, in the user's words.
+         */
+        OptionAddIn: {
+            /** Text */
+            text: string;
+        };
+        /**
+         * OptionAddedOut
+         * @description An option added by hand, and the option search it opened.
+         *
+         *     Args:
+         *         option: The new option's card.
+         *         opened_run: The option search (a walk with no parent) it opened, or
+         *             ``None`` while that search is still queued on the option-search
+         *             pool (task 045, A4).
+         */
+        OptionAddedOut: {
+            opened_run?: components["schemas"]["LatestRun"] | null;
+            option: components["schemas"]["OptionOut"];
+        };
+        /**
+         * OptionDesignOut
+         * @description A specified design Policy Atlas proposed back from an option's words.
+         *
+         *     Args:
+         *         name: A short option name.
+         *         description: One sentence: what is done, by whom, for whom.
+         *         design_features: The features that define the option.
+         *         outcomes_served: Which of the plan's outcomes the option is for.
+         *         assumed: The features Policy Atlas supplied rather than the user
+         *             stated; shown as assumed.
+         *         version: The design's version.
+         */
+        OptionDesignOut: {
+            /** Assumed */
+            assumed?: string[];
+            /** Description */
+            description: string;
+            /** Design Features */
+            design_features: string[];
+            /** Name */
+            name: string;
+            /** Outcomes Served */
+            outcomes_served?: string[];
+            /**
+             * Version
+             * @default 1
+             */
+            version: number;
+        };
+        /**
+         * OptionDocumentOut
+         * @description One document behind an option ("Show the documents"), one per membership row.
+         *
+         *     Args:
+         *         task_source_snapshot_id: This task's document row, when the task holds one.
+         *         title: The document's title.
+         *         role: What the document does with the intervention.
+         *         evidence_type: Its evidence type, when classified.
+         *         tier: Its quality tier label, when appraised.
+         *         design_feature_not_stated: It covers the intervention without stating
+         *             the feature that defines this option.
+         *         where_tried_group: Where it was studied, grouped against Where.
+         *         source_task_id: The linked task the document or its labels came from,
+         *             when inherited.
+         */
+        OptionDocumentOut: {
+            /**
+             * Design Feature Not Stated
+             * @default false
+             */
+            design_feature_not_stated: boolean;
+            /** Evidence Type */
+            evidence_type?: string | null;
+            /**
+             * Role
+             * @enum {string}
+             */
+            role: "evaluated" | "described" | "recommended" | "mentioned";
+            /** Source Task Id */
+            source_task_id?: string | null;
+            /** Task Source Snapshot Id */
+            task_source_snapshot_id?: string | null;
+            /** Tier */
+            tier?: string | null;
+            /** Title */
+            title: string;
+            /**
+             * Where Tried Group
+             * @enum {string}
+             */
+            where_tried_group: "where" | "comparable" | "other" | "unknown";
+        };
+        /**
+         * OptionExcludeIn
+         * @description Exclude an option, optionally with the user's reason.
+         *
+         *     Args:
+         *         reason: Why, in the user's words; blank or absent is recorded empty.
+         */
+        OptionExcludeIn: {
+            /** Reason */
+            reason?: string | null;
+        };
+        /**
+         * OptionIncludeIn
+         * @description Include an option again, optionally with the user's reason.
+         *
+         *     Args:
+         *         reason: Why, in the user's words.
+         */
+        OptionIncludeIn: {
+            /** Reason */
+            reason?: string | null;
+        };
+        /**
+         * OptionOut
+         * @description The `option` read model: the option card, assembled (D15).
+         *
+         *     Args:
+         *         design: The specified design.
+         *         design_features: The design's defining features.
+         *         evidence: The source-quality profile.
+         *         judgements: The constraint judgements on the current design version.
+         *         guesses: The reasoned guesses on the current design version.
+         *         transferability: "checked at assessment" when the plan carries the
+         *             default transferability preference; `null` otherwise.
+         *         in_scope: The in-scope check, when the plan restricts the evidence.
+         *         documents: The documents behind it, one per membership row.
+         *         run_id: The longlist component run its coverage came from; `null`
+         *             before a longlist is built.
+         *         capability_run_id: The longlist walk that run belonged to.
+         *         plan_version: The plan version that longlist was built from.
+         *         where_label: The words the `where` group is shown under.
+         *         depth_label: The depth label every longlist surface carries.
+         */
+        OptionOut: {
+            /**
+             * Abstract Only
+             * @default false
+             */
+            abstract_only: boolean;
+            /** Also Found As */
+            also_found_as?: string[];
+            /** Ambition */
+            ambition?: string | null;
+            /** Ambition Reason */
+            ambition_reason?: string | null;
+            /** Capability Run Id */
+            capability_run_id?: string | null;
+            /**
+             * Depth Label
+             * @default scoping pass
+             * @constant
+             */
+            depth_label: "scoping pass";
+            /** Description */
+            description: string;
+            design: components["schemas"]["OptionDesignOut"];
+            /** Design Features */
+            design_features?: string[];
+            /** Design Version */
+            design_version: number;
+            /**
+             * Document Count
+             * @default 0
+             */
+            document_count: number;
+            /** Documents */
+            documents?: components["schemas"]["OptionDocumentOut"][];
+            /**
+             * Evaluated Count
+             * @default 0
+             */
+            evaluated_count: number;
+            evidence: components["schemas"]["EvidenceProfileOut"];
+            exclusion?: components["schemas"]["ExclusionOut"] | null;
+            /** From Section */
+            from_section?: string | null;
+            /** Guesses */
+            guesses?: components["schemas"]["GuessOut"][];
+            in_scope?: components["schemas"]["InScopeOut"] | null;
+            /**
+             * Is Entrant With No Documents
+             * @default false
+             */
+            is_entrant_with_no_documents: boolean;
+            /** Judgements */
+            judgements?: components["schemas"]["JudgementOut"][];
+            /** Lever None Fits Reason */
+            lever_none_fits_reason?: string | null;
+            /** Name */
+            name: string;
+            /**
+             * No In Scope Evidence
+             * @default false
+             */
+            no_in_scope_evidence: boolean;
+            /**
+             * Option Id
+             * Format: uuid
+             */
+            option_id: string;
+            /**
+             * Origin
+             * @enum {string}
+             */
+            origin: "clustered" | "suggested" | "from_evidence_search" | "added_by_you";
+            /** Outcomes Served */
+            outcomes_served?: string[];
+            /** Plan Version */
+            plan_version?: number | null;
+            /** Primary Lever Type */
+            primary_lever_type?: string | null;
+            /** Relations */
+            relations?: components["schemas"]["RelationOut"][];
+            /** Restriction Text */
+            restriction_text?: string | null;
+            /** Run Id */
+            run_id?: string | null;
+            /**
+             * Search Pending
+             * @default false
+             */
+            search_pending: boolean;
+            /** Secondary Lever Types */
+            secondary_lever_types?: string[];
+            /** Settings */
+            settings?: string[];
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "included" | "excluded";
+            /** Taxonomy Version */
+            taxonomy_version?: string | null;
+            /** Transferability */
+            transferability?: "checked at assessment" | null;
+            /** Where Label */
+            where_label: string;
+            where_tried: components["schemas"]["WhereTriedOut"];
+        };
+        /**
          * OptionResponse
          * @description Response picking a canonical or authored option.
          *
@@ -2591,6 +3264,126 @@ export interface components {
             params: {
                 [key: string]: unknown;
             } | null;
+        };
+        /**
+         * OptionSummaryOut
+         * @description One option as the list view and the grid show it.
+         *
+         *     Args:
+         *         option_id: Stable option identity.
+         *         name: Option name.
+         *         description: One-sentence description.
+         *         outcomes_served: The plan's outcomes the option serves.
+         *         origin: Where it came from.
+         *         state: Included or excluded.
+         *         exclusion: Why it is excluded; `null` when included.
+         *         no_in_scope_evidence: Included, but none of its documents passes the
+         *             plan's evidence restriction.
+         *         restriction_text: The restriction none of its documents passes, when
+         *             `no_in_scope_evidence`.
+         *         primary_lever_type: The primary lever type; `null` when none fits or
+         *             the option is not typed yet.
+         *         lever_none_fits_reason: Why no lever type fits.
+         *         secondary_lever_types: The other lever types it also touches.
+         *         ambition: `do_minimum` · `incremental` · `structural`, as described,
+         *             not measured.
+         *         ambition_reason: The one-line justification.
+         *         taxonomy_version: The lever-type list version it was typed under.
+         *         design_version: The specified design's version.
+         *         document_count: Its documents (DOI-collapsed).
+         *         evaluated_count: Documents that evaluate it.
+         *         settings: The settings its documents name, most frequent first.
+         *         where_tried: Documents per where-tried group.
+         *         relations: Its relations to other options.
+         *         abstract_only: Every one of its documents was read from an abstract only.
+         *         is_entrant_with_no_documents: Suggested, drawn from the Evidence
+         *             search or added by the user, and no document has joined it.
+         *         search_pending: An option added since the build whose own option
+         *             search is still running or paused; its counts read zero until it ends.
+         *         from_section: The Evidence search report section a *from your
+         *             evidence search* option was drawn from; `null` for any other
+         *             origin, or when the section was not recorded (task 045, F3).
+         *         also_found_as: The names of the duplicates merged into this option
+         *             (their documents are its documents); empty when none.
+         */
+        OptionSummaryOut: {
+            /**
+             * Abstract Only
+             * @default false
+             */
+            abstract_only: boolean;
+            /** Also Found As */
+            also_found_as?: string[];
+            /** Ambition */
+            ambition?: string | null;
+            /** Ambition Reason */
+            ambition_reason?: string | null;
+            /** Description */
+            description: string;
+            /** Design Version */
+            design_version: number;
+            /**
+             * Document Count
+             * @default 0
+             */
+            document_count: number;
+            /**
+             * Evaluated Count
+             * @default 0
+             */
+            evaluated_count: number;
+            exclusion?: components["schemas"]["ExclusionOut"] | null;
+            /** From Section */
+            from_section?: string | null;
+            /**
+             * Is Entrant With No Documents
+             * @default false
+             */
+            is_entrant_with_no_documents: boolean;
+            /** Lever None Fits Reason */
+            lever_none_fits_reason?: string | null;
+            /** Name */
+            name: string;
+            /**
+             * No In Scope Evidence
+             * @default false
+             */
+            no_in_scope_evidence: boolean;
+            /**
+             * Option Id
+             * Format: uuid
+             */
+            option_id: string;
+            /**
+             * Origin
+             * @enum {string}
+             */
+            origin: "clustered" | "suggested" | "from_evidence_search" | "added_by_you";
+            /** Outcomes Served */
+            outcomes_served?: string[];
+            /** Primary Lever Type */
+            primary_lever_type?: string | null;
+            /** Relations */
+            relations?: components["schemas"]["RelationOut"][];
+            /** Restriction Text */
+            restriction_text?: string | null;
+            /**
+             * Search Pending
+             * @default false
+             */
+            search_pending: boolean;
+            /** Secondary Lever Types */
+            secondary_lever_types?: string[];
+            /** Settings */
+            settings?: string[];
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "included" | "excluded";
+            /** Taxonomy Version */
+            taxonomy_version?: string | null;
+            where_tried: components["schemas"]["WhereTriedOut"];
         };
         /**
          * OrganisationRef
@@ -2893,6 +3686,8 @@ export interface components {
          *             infer it from which field is null.
          *         version: Plan row version.
          *         status: Plan status (e.g. `draft`, `approved`).
+         *         opened_run: The longlist walk `POST .../plan/confirm-baseline` opened,
+         *             on that route's response. Absent on every other plan read.
          */
         PlanOut: {
             /**
@@ -2900,6 +3695,7 @@ export interface components {
              * @default evidence_search
              */
             capability: string;
+            opened_run?: components["schemas"]["LatestRun"] | null;
             plan?: components["schemas"]["PlanDraft"] | null;
             scoping?: components["schemas"]["ScopingPlanDraft"] | null;
             /** Status */
@@ -2972,7 +3768,7 @@ export interface components {
              * Stage
              * @enum {string}
              */
-            stage: "acquire" | "screen" | "classify" | "appraise" | "characterise" | "select" | "extract" | "group" | "synthesise";
+            stage: "acquire" | "screen" | "classify" | "appraise" | "characterise" | "select" | "extract" | "group" | "synthesise" | "inherit" | "suggest" | "option_searches" | "extract_interventions" | "longlist" | "constrain";
         };
         /**
          * PlanUpdatedFrame
@@ -3153,6 +3949,30 @@ export interface components {
             year?: number | null;
         };
         /**
+         * RelationOut
+         * @description A relation between two options, read from this option's side.
+         *
+         *     Args:
+         *         kind: ``part_of`` (this option is part of the other) or ``has_part``
+         *             (the other is part of this one).
+         *         other_option_id: The other option.
+         *         other_name: The other option's name.
+         */
+        RelationOut: {
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "part_of" | "has_part";
+            /** Other Name */
+            other_name: string;
+            /**
+             * Other Option Id
+             * Format: uuid
+             */
+            other_option_id: string;
+        };
+        /**
          * RunCreate
          * @description Inbound body for `POST /api/v1/tasks/{id}/runs`.
          *
@@ -3178,6 +3998,10 @@ export interface components {
          *             none (it has not reached synthesise, or ended before it). A
          *             scoping walk that carries one produced a baseline, whatever its
          *             terminal status (task 044 review, C5/C6).
+         *         parent_capability_run_id: The walk that dispatched this one (a longlist
+         *             walk's option search), or `None` for a parentless walk (task 045).
+         *         purpose: The walk's intent-record purpose (`baseline`, `longlist`,
+         *             `targeted`, ...), or `None` for an Evidence search walk.
          */
         RunOut: {
             /** Artefact Id */
@@ -3189,6 +4013,8 @@ export interface components {
             capability_run_id: string;
             /** Ended At */
             ended_at?: string | null;
+            /** Parent Capability Run Id */
+            parent_capability_run_id?: string | null;
             /**
              * Plan Id
              * Format: uuid
@@ -3196,6 +4022,8 @@ export interface components {
             plan_id: string;
             /** Plan Version */
             plan_version: number;
+            /** Purpose */
+            purpose?: string | null;
             /**
              * Started At
              * Format: date-time
@@ -3297,6 +4125,12 @@ export interface components {
          *         published_before: ISO date ceiling, when there is one.
          *         languages: Language names. Stored and shown as not yet applied at
          *             retrieval — the search grammar has no language filter.
+         *         setting: True on a requirement naming the delivery setting the
+         *             options must be delivered through; the longlist search carries it.
+         *         default: `transferability` on the default transferability preference
+         *             every scoping plan carries (checked at assessment, assumed, follows
+         *             Where until edited); `null` on a constraint the user asked for.
+         *             Omitting the default from a patch removes it.
          */
         ScopingConstraintOut: {
             /**
@@ -3306,6 +4140,11 @@ export interface components {
             checked_at: "longlist" | "assessment" | "retrieval";
             /** @default null */
             country_group: components["schemas"]["CountryGroupDraft"] | null;
+            /**
+             * Default
+             * @default null
+             */
+            default: "transferability" | null;
             /**
              * Kind
              * @enum {string}
@@ -3331,6 +4170,11 @@ export interface components {
              * @default null
              */
             published_before: string | null;
+            /**
+             * Setting
+             * @default false
+             */
+            setting: boolean;
             /** Text */
             text: string;
         };
@@ -3349,8 +4193,11 @@ export interface components {
          *         where: The jurisdiction the policy would apply to.
          *         outcomes: The outcomes evidence is read against.
          *         depth: The scoping depth the user chose.
-         *         constraints: Typed constraints and preferences.
+         *         constraints: Typed constraints and preferences, including the default
+         *             transferability preference (marked by `default`).
          *         your_context: The user's own situation, verbatim.
+         *         your_options: Options the user already has in mind, each with its
+         *             proposed design.
          *         entry_branch: `explore` is the only branch in this release.
          *         linked_task_ids: The tasks this plan starts from.
          *         steering_mode: Check-in cadence for the run.
@@ -3437,6 +4284,11 @@ export interface components {
              * @default null
              */
             your_context: components["schemas"]["YourContextOut"][] | null;
+            /**
+             * Your Options
+             * @default null
+             */
+            your_options: components["schemas"]["YourOptionOut"][] | null;
         };
         /**
          * ScopingPlanPatch
@@ -3451,8 +4303,10 @@ export interface components {
          *         where: Replacement jurisdiction.
          *         outcomes: Replacement outcome list.
          *         depth: Replacement depth.
-         *         constraints: Replacement constraint list.
+         *         constraints: Replacement constraint list. Omitting the default
+         *             transferability preference removes it for good.
          *         your_context: Replacement Your context list.
+         *         your_options: Replacement options list, by the user's words.
          *         steering_mode: Replacement check-in cadence.
          *         steer_point_defaults: Replacement standing instructions.
          *         assumptions: Replacement assumptions.
@@ -3475,6 +4329,8 @@ export interface components {
             where?: components["schemas"]["TaggedOut"] | null;
             /** Your Context */
             your_context?: components["schemas"]["YourContextOut"][] | null;
+            /** Your Options */
+            your_options?: components["schemas"]["YourOptionIn"][] | null;
         };
         /**
          * ScopingSteerPointDefaultOut
@@ -3623,6 +4479,11 @@ export interface components {
          * @description A component reached its terminal (successful) outcome.
          */
         StageCompletedFrame: {
+            /**
+             * Capability Run Id
+             * @default null
+             */
+            capability_run_id: string | null;
             /** Label */
             label: string;
             /**
@@ -3641,7 +4502,7 @@ export interface components {
              * Stage
              * @enum {string}
              */
-            stage: "acquire" | "screen" | "classify" | "appraise" | "characterise" | "select" | "extract" | "group" | "synthesise";
+            stage: "acquire" | "screen" | "classify" | "appraise" | "characterise" | "select" | "extract" | "group" | "synthesise" | "inherit" | "suggest" | "option_searches" | "extract_interventions" | "longlist" | "constrain";
             /** Summary */
             summary?: {
                 [key: string]: number | string;
@@ -3657,6 +4518,11 @@ export interface components {
          * @description A component failed or was skipped.
          */
         StageFailedFrame: {
+            /**
+             * Capability Run Id
+             * @default null
+             */
+            capability_run_id: string | null;
             /** Label */
             label: string;
             /**
@@ -3674,7 +4540,7 @@ export interface components {
              * Stage
              * @enum {string}
              */
-            stage: "acquire" | "screen" | "classify" | "appraise" | "characterise" | "select" | "extract" | "group" | "synthesise";
+            stage: "acquire" | "screen" | "classify" | "appraise" | "characterise" | "select" | "extract" | "group" | "synthesise" | "inherit" | "suggest" | "option_searches" | "extract_interventions" | "longlist" | "constrain";
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -3688,6 +4554,11 @@ export interface components {
         StageStartedFrame: {
             /** Blurb */
             blurb: string;
+            /**
+             * Capability Run Id
+             * @default null
+             */
+            capability_run_id: string | null;
             /** Label */
             label: string;
             /**
@@ -3701,7 +4572,7 @@ export interface components {
              * Stage
              * @enum {string}
              */
-            stage: "acquire" | "screen" | "classify" | "appraise" | "characterise" | "select" | "extract" | "group" | "synthesise";
+            stage: "acquire" | "screen" | "classify" | "appraise" | "characterise" | "select" | "extract" | "group" | "synthesise" | "inherit" | "suggest" | "option_searches" | "extract_interventions" | "longlist" | "constrain";
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -3746,8 +4617,10 @@ export interface components {
          *             which are all replies.
          *         answer: The cited answer, on an `answer` turn.
          *         decision: The recorded gate decision, on a `decision` turn.
+         *         action: The applied longlist verb, on an `action` turn.
          */
         TaskAgentTranscriptTurnOut: {
+            action?: components["schemas"]["TurnActionOut"] | null;
             answer?: components["schemas"]["AnswerPayloadOut"] | null;
             /** Capability */
             capability?: string | null;
@@ -3767,7 +4640,7 @@ export interface components {
             created_at: string;
             decision?: components["schemas"]["TurnDecisionOut"] | null;
             /** Kind */
-            kind?: ("reply" | "answer" | "decision") | null;
+            kind?: ("reply" | "answer" | "decision" | "action") | null;
             part?: components["schemas"]["PartProposalOut"] | null;
             /** Reply */
             reply: string | null;
@@ -3806,11 +4679,12 @@ export interface components {
          * TaskAgentTurnOut
          * @description Response body for one task_agent turn.
          *
-         *     A turn is one of three things, named by ``kind``: a planning ``reply``, a
-         *     grounded ``answer`` from the paused walk's evidence, or a recorded
-         *     ``decision`` at a gate. The three are additive optional fields rather than
-         *     a discriminated union, so every existing reader keeps working and a turn
-         *     stored before task 044 stays valid with ``kind`` absent.
+         *     A turn is one of four things, named by ``kind``: a planning ``reply``, a
+         *     grounded ``answer`` from the paused walk's evidence (or the longlist's), a
+         *     recorded ``decision`` at a gate, or an applied longlist ``action`` (task
+         *     045). They are additive optional fields rather than a discriminated union,
+         *     so every existing reader keeps working and a turn stored before task 044
+         *     stays valid with ``kind`` absent.
          *
          *     Args:
          *         reply: The task_agent's conversational reply for this turn.
@@ -3828,8 +4702,10 @@ export interface components {
          *             which are all replies.
          *         answer: The cited answer, on an `answer` turn.
          *         decision: The recorded gate decision, on a `decision` turn.
+         *         action: The applied longlist verb, on an `action` turn.
          */
         TaskAgentTurnOut: {
+            action?: components["schemas"]["TurnActionOut"] | null;
             answer?: components["schemas"]["AnswerPayloadOut"] | null;
             /** Capability */
             capability?: string | null;
@@ -3837,7 +4713,7 @@ export interface components {
             conversation_id?: string | null;
             decision?: components["schemas"]["TurnDecisionOut"] | null;
             /** Kind */
-            kind?: ("reply" | "answer" | "decision") | null;
+            kind?: ("reply" | "answer" | "decision" | "action") | null;
             part?: components["schemas"]["PartProposalOut"] | null;
             plan?: components["schemas"]["PlanDraft"] | null;
             /** Reply */
@@ -3954,7 +4830,16 @@ export interface components {
          *         updated_at: When the task row was last written.
          *         archived_at: When the task was archived, or `None` if active.
          *         latest_run: The derived latest-run read model, or `None` before any
-         *             run has been created.
+         *             run has been created. For an options-scoping task it is the
+         *             latest walk that is neither an option search (a `targeted` walk)
+         *             nor a child walk; scoping readers should key on `active_run` and
+         *             the existence flags instead (task 045).
+         *         active_run: Any running or paused walk of the task, option searches
+         *             and child walks included, or `None` when nothing is running —
+         *             "is anything active", not "what ran last" (task 045).
+         *         has_longlist: Whether a longlist exists for this task: a longlist
+         *             walk has written its result (task 045). Always `false` for an
+         *             Evidence search task.
          *         project_ids: Projects this task belongs to. Empty means
          *             unassigned, which is a normal state, not an error.
          *         source_count: How many Included sources this task has (funnel
@@ -3986,6 +4871,7 @@ export interface components {
              * @enum {string}
              */
             access: "full" | "public";
+            active_run?: components["schemas"]["LatestRun"] | null;
             /** Archived At */
             archived_at?: string | null;
             /**
@@ -4001,6 +4887,11 @@ export interface components {
             created_at: string;
             /** From Task Ids */
             from_task_ids?: string[];
+            /**
+             * Has Longlist
+             * @default false
+             */
+            has_longlist: boolean;
             /** Is Owner */
             is_owner: boolean;
             /** Is Public */
@@ -4215,12 +5106,39 @@ export interface components {
              * Stage
              * @default null
              */
-            stage: ("acquire" | "screen" | "classify" | "appraise" | "characterise" | "select" | "extract" | "group" | "synthesise") | null;
+            stage: ("acquire" | "screen" | "classify" | "appraise" | "characterise" | "select" | "extract" | "group" | "synthesise" | "inherit" | "suggest" | "option_searches" | "extract_interventions" | "longlist" | "constrain") | null;
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
              */
             type: "tick";
+        };
+        /**
+         * TurnActionOut
+         * @description The longlist verb a Task Agent turn applied, once the user confirmed it.
+         *
+         *     Args:
+         *         verb: ``add``, ``exclude`` or ``include_again``.
+         *         option_id: The option the verb applied to (the new option, for ``add``).
+         *         label: That option's name.
+         *         capability_run_id: The option search ``add`` opened (a walk with no
+         *             parent), so the thread can follow it. Absent for the other verbs.
+         */
+        TurnActionOut: {
+            /** Capability Run Id */
+            capability_run_id?: string | null;
+            /** Label */
+            label: string;
+            /**
+             * Option Id
+             * Format: uuid
+             */
+            option_id: string;
+            /**
+             * Verb
+             * @enum {string}
+             */
+            verb: "add" | "exclude" | "include_again";
         };
         /**
          * TurnDecisionOut
@@ -4232,6 +5150,8 @@ export interface components {
          *         check_in_id: The check-in the decision answered.
          *         capability_run_id: The walk the check-in belongs to.
          *         plan_version: The plan version the decision was taken against.
+         *         opened_run: The longlist walk "Confirm plan and build longlist" opened,
+         *             when this decision opened one. Absent on every other decision.
          */
         TurnDecisionOut: {
             /**
@@ -4246,6 +5166,7 @@ export interface components {
             check_in_id: string;
             /** Label */
             label: string;
+            opened_run?: components["schemas"]["LatestRun"] | null;
             /** Option Id */
             option_id: string;
             /** Plan Version */
@@ -4316,6 +5237,38 @@ export interface components {
             entry_id: string;
         };
         /**
+         * WhereTriedOut
+         * @description Documents per where-tried group (DOI-collapsed).
+         *
+         *     Args:
+         *         where: Studied in the plan's Where.
+         *         comparable: Studied in a comparable system (OECD).
+         *         other: Studied in another named country.
+         *         unknown: No recognisable geography.
+         */
+        WhereTriedOut: {
+            /**
+             * Comparable
+             * @default 0
+             */
+            comparable: number;
+            /**
+             * Other
+             * @default 0
+             */
+            other: number;
+            /**
+             * Unknown
+             * @default 0
+             */
+            unknown: number;
+            /**
+             * Where
+             * @default 0
+             */
+            where: number;
+        };
+        /**
          * YourContextOut
          * @description One entry of the user's own context, verbatim.
          *
@@ -4340,6 +5293,39 @@ export interface components {
              * @enum {string}
              */
             type: "present_fact" | "commitment";
+        };
+        /**
+         * YourOptionIn
+         * @description One option in a scoping plan edit: the user's words only.
+         *
+         *     Args:
+         *         text: The user's words, verbatim. Unchanged words keep their design;
+         *             new or changed words get a design proposed back.
+         */
+        YourOptionIn: {
+            /** Text */
+            text: string;
+        };
+        /**
+         * YourOptionOut
+         * @description One option the user already has in mind.
+         *
+         *     Args:
+         *         text: The user's words, verbatim.
+         *         design: The proposed design; `null` until proposed.
+         *         turn_index: The Task Agent turn it came from; `null` on a draft not
+         *             yet approved.
+         */
+        YourOptionOut: {
+            /** @default null */
+            design: components["schemas"]["OptionDesignOut"] | null;
+            /** Text */
+            text: string;
+            /**
+             * Turn Index
+             * @default null
+             */
+            turn_index: number | null;
         };
     };
     responses: never;
@@ -5413,6 +6399,176 @@ export interface operations {
             };
         };
     };
+    get_longlist_api_v1_tasks__task_id__longlist_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LonglistOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_option_api_v1_tasks__task_id__options_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OptionAddIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OptionAddedOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_option_api_v1_tasks__task_id__options__option_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+                option_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OptionOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_exclude_api_v1_tasks__task_id__options__option_id__exclude_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+                option_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["OptionExcludeIn"] | null;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OptionOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_include_api_v1_tasks__task_id__options__option_id__include_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+                option_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["OptionIncludeIn"] | null;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OptionOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_plan_api_v1_tasks__task_id__plan_get: {
         parameters: {
             query?: never;
@@ -5519,6 +6675,7 @@ export interface operations {
             query?: {
                 page?: number;
                 page_size?: number;
+                parentless?: boolean;
             };
             header?: never;
             path: {

@@ -11,7 +11,7 @@ from __future__ import annotations
 import uuid
 from typing import Any, Literal, cast
 
-from sqlalchemy import case, func, select
+from sqlalchemy import ColumnElement, case, exists, func, select
 from sqlalchemy.engine import Connection, RowMapping
 
 from policy_atlas.api.contract import LatestRun, RunOut, TaskLinkOut, TaskOut
@@ -21,15 +21,97 @@ from policy_atlas.core.schema import (
     app_user,
     artefact,
     capability_run,
+    evidence_scope,
+    longlist_result,
     project_membership,
     task,
     task_link,
 )
 from policy_atlas.evidence_search.assess.screen import effective_screen_rows
+from policy_atlas.runtime.capability_registry import OPTIONS_SCOPING
 
 #: Sentinel for "resolve the owner's display name yourself". Distinct from
 #: ``None``, which is a legitimate resolved value (an ownerless row).
 _RESOLVE = object()
+
+
+#: A walk that is still going: the admission fences and ``active_run`` read these.
+ACTIVE_WALK_STATUSES: tuple[str, ...] = ("running", "paused")
+
+
+def parentless_walk() -> ColumnElement[bool]:
+    """Return the predicate "this walk has no parent walk" (task 045, S15).
+
+    The admission fences — ``POST /runs``, ``confirm-baseline`` and the Task
+    Agent turn route — consider parentless walks only, so a longlist walk's
+    option searches (its children) never block a user action; the parent
+    itself is parentless and still does. An option search the chat verb
+    *add* starts has no parent by design, so it blocks like any walk.
+
+    Returns:
+        A clause over ``capability_run`` for a ``.where()``.
+    """
+    return capability_run.c.parent_capability_run_id.is_(None)
+
+
+def executor_walk() -> ColumnElement[bool]:
+    """Return the predicate "this walk runs on the walk executor" (task 045, A12).
+
+    An option search (a walk under a ``targeted`` intent record) runs on the
+    option-search pool, never on an executor worker — including the one the
+    chat verb *add* starts with no parent — so the capacity counts leave it
+    out. The per-task active fence still counts a parentless one.
+
+    Returns:
+        A clause over ``capability_run`` for a ``.where()``.
+    """
+    return ~exists().where(
+        evidence_scope.c.evidence_scope_id == capability_run.c.evidence_scope_id,
+        evidence_scope.c.task_id == capability_run.c.task_id,
+        evidence_scope.c.purpose == "targeted",
+    )
+
+
+def _latest_run_row(conn: Connection, row: RowMapping | dict[str, Any]) -> RowMapping | None:
+    """Return the walk ``TaskOut.latest_run`` reports.
+
+    Unchanged for an Evidence search: the most recent walk. For an
+    options-scoping task, the most recent walk that is neither a child walk
+    nor an option search (a ``targeted`` intent record) — ADR 0039 decision
+    5 — so an option search never becomes "the task's run" to a reader that
+    has not yet moved to ``active_run`` and the existence flags.
+    """
+    query = select(capability_run).where(capability_run.c.task_id == row["task_id"])
+    if row["capability"] == OPTIONS_SCOPING:
+        query = (
+            query.select_from(
+                capability_run.join(
+                    evidence_scope,
+                    (evidence_scope.c.evidence_scope_id == capability_run.c.evidence_scope_id)
+                    & (evidence_scope.c.task_id == capability_run.c.task_id),
+                )
+            )
+            .where(parentless_walk())
+            .where(evidence_scope.c.purpose.is_distinct_from("targeted"))
+        )
+    return (
+        conn.execute(
+            query.order_by(
+                capability_run.c.started_at.desc(), capability_run.c.capability_run_id.desc()
+            ).limit(1)
+        )
+        .mappings()
+        .one_or_none()
+    )
+
+
+def _latest_run_out(walk: RowMapping) -> LatestRun:
+    return LatestRun(
+        capability_run_id=walk["capability_run_id"],
+        status=walk["status"],
+        started_at=walk["started_at"],
+        ended_at=walk["ended_at"],
+    )
 
 
 def resolve_owner_display(conn: Connection, owner_user_id: str | None) -> str | None:
@@ -74,11 +156,30 @@ def run_artefact_id_column() -> Any:
     )
 
 
+def run_purpose_column() -> Any:
+    """The walk's intent-record purpose, as a labelled scalar subquery.
+
+    Selected beside ``capability_run`` so :func:`run_out` can say what kind of
+    walk it is (task 045): the thread keeps option searches out of its run
+    blocks. ``None`` for a walk whose scope carries no purpose (an Evidence
+    search).
+    """
+    return (
+        select(evidence_scope.c.purpose)
+        .where(evidence_scope.c.evidence_scope_id == capability_run.c.evidence_scope_id)
+        .where(evidence_scope.c.task_id == capability_run.c.task_id)
+        .limit(1)
+        .scalar_subquery()
+        .label("purpose")
+    )
+
+
 def run_out(row: RowMapping | dict[str, Any]) -> RunOut:
     """Project one capability-run row into its public contract shape.
 
-    ``artefact_id`` is read when the row was selected with
-    :func:`run_artefact_id_column`; a bare ``capability_run`` row reports none.
+    ``artefact_id`` and ``purpose`` are read when the row was selected with
+    :func:`run_artefact_id_column` / :func:`run_purpose_column`; a bare
+    ``capability_run`` row reports none.
     """
     return RunOut(
         capability_run_id=row["capability_run_id"],
@@ -89,6 +190,8 @@ def run_out(row: RowMapping | dict[str, Any]) -> RunOut:
         started_at=row["started_at"],
         ended_at=row["ended_at"],
         artefact_id=row.get("artefact_id"),
+        parent_capability_run_id=row.get("parent_capability_run_id"),
+        purpose=row.get("purpose"),
     )
 
 
@@ -266,21 +369,27 @@ def task_out(
     Returns:
         The public task shape.
     """
-    latest = conn.execute(
+    latest = _latest_run_row(conn, row)
+    latest_out = None
+    source_count = None
+    # What exists and what is active (task 045, S15; owner: "scoping readers
+    # see what exists and what is active"): one ``SELECT … LIMIT 1`` for any
+    # running or paused walk, children included, and one ``EXISTS`` for the
+    # longlist — a fixed two statements per task, whatever it has run.
+    active = conn.execute(
         select(capability_run)
         .where(capability_run.c.task_id == row["task_id"])
+        .where(capability_run.c.status.in_(ACTIVE_WALK_STATUSES))
         .order_by(capability_run.c.started_at.desc(), capability_run.c.capability_run_id.desc())
         .limit(1)
     ).mappings().one_or_none()
-    latest_out = None
-    source_count = None
+    has_longlist = row["capability"] == OPTIONS_SCOPING and bool(
+        conn.execute(
+            select(exists().where(longlist_result.c.task_id == row["task_id"]))
+        ).scalar()
+    )
     if latest is not None:
-        latest_out = LatestRun(
-            capability_run_id=latest["capability_run_id"],
-            status=latest["status"],
-            started_at=latest["started_at"],
-            ended_at=latest["ended_at"],
-        )
+        latest_out = _latest_run_out(latest)
         # Same population the funnel's ``relevant`` (Included) counts. Derived
         # per read and only once a run exists: before that, ``None`` says the
         # question has not been asked, which is not the same as a run that
@@ -319,6 +428,8 @@ def task_out(
         updated_at=row["updated_at"],
         archived_at=row["archived_at"],
         latest_run=latest_out,
+        active_run=_latest_run_out(active) if active is not None else None,
+        has_longlist=has_longlist,
         project_ids=project_ids,
         source_count=source_count,
         visibility=row["visibility"],

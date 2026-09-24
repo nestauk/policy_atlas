@@ -1192,15 +1192,27 @@ def build_retrieval_scope(
     task_id: uuid.UUID,
     scope_id: uuid.UUID,
     selected_tss_ids: set[uuid.UUID],
+    extra_scope_ids: Sequence[uuid.UUID] = (),
 ) -> RetrievalScope:
     """Load the screened-in chunk retrieval scope.
+
+    **Several scopes** (task 045, S11, P13): an options-scoping chat answers
+    over the longlist scope and the option searches' targeted scopes at once.
+    A document screened in under more than one of them is **one** document:
+    the precedence rule keeps one row per ``task_source_snapshot_id`` — the
+    primary scope's row wins, then the latest by ``screened_at`` — and that
+    row's scope supplies its classification and appraisal. With no extra
+    scope the rule is inert (the effective row is already unique per scope
+    and document).
 
     Args:
         conn: Open database connection.
         task_id: Task id that scopes every read.
         scope_id: Evidence scope id whose relevant screened documents form the
-            retrieval corpus.
+            retrieval corpus; with ``extra_scope_ids``, the primary scope.
         selected_tss_ids: Referenced selection set, used only as a soft prior.
+        extra_scope_ids: Further evidence scopes whose relevant screened
+            documents join the corpus under the precedence rule.
 
     Returns:
         Frozen document, chunk and unit records for in-memory retrieval.
@@ -1225,6 +1237,32 @@ def build_retrieval_scope(
     # status='relevant' join, which would leak in demoted docs and double-read
     # confirmed ones).
     effective = effective_screen_rows()
+    scope_ids = [scope_id, *(s for s in extra_scope_ids if s != scope_id)]
+    # One row per document across the scopes (P13): the primary scope first,
+    # then the latest screen, then the scope id for a deterministic tie-break.
+    ranked = (
+        sa_select(
+            effective.c.task_id,
+            effective.c.task_source_snapshot_id,
+            effective.c.evidence_scope_id,
+            effective.c.screen_decision_confidence,
+            effective.c.screen_stage,
+            func.row_number()
+            .over(
+                partition_by=effective.c.task_source_snapshot_id,
+                order_by=(
+                    case((effective.c.evidence_scope_id == scope_id, 0), else_=1),
+                    effective.c.screened_at.desc(),
+                    effective.c.evidence_scope_id,
+                ),
+            )
+            .label("_scope_rank"),
+        )
+        .where(effective.c.task_id == task_id)
+        .where(effective.c.evidence_scope_id.in_(scope_ids))
+        .where(effective.c.status == "relevant")
+        .subquery("scope_ranked")
+    )
     screened_docs = (
         sa_select(
             task_source_snapshot.c.task_source_snapshot_id.label("tss_id"),
@@ -1235,17 +1273,17 @@ def build_retrieval_scope(
             source_snapshot.c.text_basis,
             source_classification_result.c.primary_evidence_type,
             source_appraisal_result.c.quality_score,
-            effective.c.screen_decision_confidence,
-            effective.c.screen_stage,
+            ranked.c.screen_decision_confidence,
+            ranked.c.screen_stage,
         )
-        .select_from(effective)
+        .select_from(ranked)
         .join(
             task_source_snapshot,
             (
                 task_source_snapshot.c.task_source_snapshot_id
-                == effective.c.task_source_snapshot_id
+                == ranked.c.task_source_snapshot_id
             )
-            & (task_source_snapshot.c.task_id == effective.c.task_id),
+            & (task_source_snapshot.c.task_id == ranked.c.task_id),
         )
         .join(
             source_snapshot,
@@ -1258,7 +1296,7 @@ def build_retrieval_scope(
                 == task_source_snapshot.c.task_source_snapshot_id
             )
             & (source_classification_result.c.task_id == task_id)
-            & (source_classification_result.c.evidence_scope_id == scope_id),
+            & (source_classification_result.c.evidence_scope_id == ranked.c.evidence_scope_id),
         )
         .outerjoin(
             source_appraisal_result,
@@ -1267,11 +1305,9 @@ def build_retrieval_scope(
                 == task_source_snapshot.c.task_source_snapshot_id
             )
             & (source_appraisal_result.c.task_id == task_id)
-            & (source_appraisal_result.c.evidence_scope_id == scope_id),
+            & (source_appraisal_result.c.evidence_scope_id == ranked.c.evidence_scope_id),
         )
-        .where(effective.c.task_id == task_id)
-        .where(effective.c.evidence_scope_id == scope_id)
-        .where(effective.c.status == "relevant")
+        .where(ranked.c._scope_rank == 1)
         .subquery()
     )
     chunk_text_basis = chunk_text_basis_case(
@@ -2552,11 +2588,11 @@ def _ensure_kind(arguments: dict[str, Any]) -> str:
 
 def _screened_in_doc_ids(
     task_id: uuid.UUID,
-    scope_id: uuid.UUID,
+    scope_ids: Sequence[uuid.UUID],
     *,
     screened_by_run_ids: set[uuid.UUID] | None = None,
 ) -> Any:
-    """Select of this scope's screened-in doc ids — the lookup read boundary.
+    """Select of these scopes' screened-in doc ids — the lookup read boundary.
 
     Effective-relevant via the helper (never a raw status='relevant' join),
     per the same screened-in-scope rule as ``_load_retrieval_scope``.
@@ -2565,17 +2601,24 @@ def _screened_in_doc_ids(
     query = (
         sa_select(effective.c.task_source_snapshot_id)
         .where(effective.c.task_id == task_id)
-        .where(effective.c.evidence_scope_id == scope_id)
+        .where(effective.c.evidence_scope_id.in_(list(scope_ids)))
         .where(effective.c.status == "relevant")
     )
     return query
+
+
+def _scope_precedence(
+    scope_column: ColumnElement[uuid.UUID], scope_id: uuid.UUID
+) -> ColumnElement[int]:
+    """Order the primary scope's row first (task 045, P13)."""
+    return case((scope_column == scope_id, 0), else_=1)
 
 
 def _doc_id_for_scope(
     conn: Connection,
     *,
     task_id: uuid.UUID,
-    scope_id: uuid.UUID,
+    scope_ids: Sequence[uuid.UUID],
     arguments: dict[str, Any],
     screened_by_run_ids: set[uuid.UUID] | None = None,
 ) -> uuid.UUID:
@@ -2589,7 +2632,7 @@ def _doc_id_for_scope(
         .where(
             task_source_snapshot.c.task_source_snapshot_id.in_(
                 _screened_in_doc_ids(
-                    task_id, scope_id, screened_by_run_ids=screened_by_run_ids
+                    task_id, scope_ids, screened_by_run_ids=screened_by_run_ids
                 )
             )
         )
@@ -2754,13 +2797,20 @@ def make_lookup_reader(
     extraction_run_id: uuid.UUID | None,
     grouping_run_id: uuid.UUID | None,
     snapshot_run_ids: set[uuid.UUID] | None = None,
+    extra_scope_ids: Sequence[uuid.UUID] = (),
 ) -> Callable[[dict[str, Any]], dict[str, Any]]:
     """Create the universal closed-vocabulary lookup reader.
+
+    With ``extra_scope_ids`` (task 045, S11) the per-document and scope-wide
+    reads span every scope, a per-document label reading the primary scope's
+    row first and then the latest (the retrieval precedence rule, P13); the
+    selection, characterisation and grouping reads stay the primary scope's,
+    since their run ids are the primary walk's.
 
     Args:
         conn: Open database connection.
         task_id: Task id scoping all reads.
-        scope_id: Evidence scope id.
+        scope_id: Evidence scope id (the primary scope).
         characterisation_run_id: Optional referenced characterisation run.
         selection_run_id: Optional referenced selection run.
         extraction_run_id: Optional referenced extraction run.
@@ -2768,10 +2818,12 @@ def make_lookup_reader(
         snapshot_run_ids: Optional terminal-walk run ids bounding otherwise
             scope-wide records to the turn-start snapshot. ``None`` preserves
             synthesis's historic whole-scope reads.
+        extra_scope_ids: Further evidence scopes the reads span.
 
     Returns:
         A validated ``lookup`` implementation.
     """
+    scope_ids = [scope_id, *(s for s in extra_scope_ids if s != scope_id)]
 
     def reader(arguments: dict[str, Any]) -> dict[str, Any]:
         kind = _ensure_kind(arguments)
@@ -2779,7 +2831,7 @@ def make_lookup_reader(
             doc_id = _doc_id_for_scope(
                 conn,
                 task_id=task_id,
-                scope_id=scope_id,
+                scope_ids=scope_ids,
                 arguments=arguments,
                 screened_by_run_ids=snapshot_run_ids,
             )
@@ -2791,11 +2843,15 @@ def make_lookup_reader(
                         source_appraisal_result.c.rubric_version,
                     )
                     .where(source_appraisal_result.c.task_id == task_id)
-                    .where(source_appraisal_result.c.evidence_scope_id == scope_id)
+                    .where(source_appraisal_result.c.evidence_scope_id.in_(scope_ids))
                     .where(source_appraisal_result.c.task_source_snapshot_id == doc_id)
                     .where(_snapshot_run_filter(
                         source_appraisal_result.c.appraised_by_run_id, snapshot_run_ids
                     ))
+                    .order_by(
+                        _scope_precedence(source_appraisal_result.c.evidence_scope_id, scope_id),
+                        source_appraisal_result.c.appraised_at.desc(),
+                    )
                 ).first()
                 result = (
                     _absent()
@@ -2809,11 +2865,17 @@ def make_lookup_reader(
                 row = conn.execute(
                     sa_select(source_classification_result.c.primary_evidence_type)
                     .where(source_classification_result.c.task_id == task_id)
-                    .where(source_classification_result.c.evidence_scope_id == scope_id)
+                    .where(source_classification_result.c.evidence_scope_id.in_(scope_ids))
                     .where(source_classification_result.c.task_source_snapshot_id == doc_id)
                     .where(_snapshot_run_filter(
                         source_classification_result.c.classified_by_run_id, snapshot_run_ids
                     ))
+                    .order_by(
+                        _scope_precedence(
+                            source_classification_result.c.evidence_scope_id, scope_id
+                        ),
+                        source_classification_result.c.classified_at.desc(),
+                    )
                 ).first()
                 result = (
                     _absent()
@@ -2856,7 +2918,7 @@ def make_lookup_reader(
                     source_screening_result.c.screen_decision_confidence,
                 )
                 .where(source_screening_result.c.task_id == task_id)
-                .where(source_screening_result.c.evidence_scope_id == scope_id)
+                .where(source_screening_result.c.evidence_scope_id.in_(scope_ids))
                 .where(source_screening_result.c.task_source_snapshot_id == doc_id)
                 .where(_snapshot_run_filter(
                     source_screening_result.c.screened_by_run_id, snapshot_run_ids
@@ -2867,7 +2929,11 @@ def make_lookup_reader(
                 # every decided stage for the doc, never a filtered subset of
                 # decisions (only attempt noise is excluded).
                 .where(source_screening_result.c.status != "failed")
-                .order_by(source_screening_result.c.screen_stage)
+                .order_by(
+                    _scope_precedence(source_screening_result.c.evidence_scope_id, scope_id),
+                    source_screening_result.c.evidence_scope_id,
+                    source_screening_result.c.screen_stage,
+                )
             ).fetchall()
             return {
                 "kind": kind,
@@ -2910,7 +2976,7 @@ def make_lookup_reader(
                     search_coverage_record.c.verdict_origin,
                 )
                 .where(search_coverage_record.c.task_id == task_id)
-                .where(search_coverage_record.c.evidence_scope_id == scope_id)
+                .where(search_coverage_record.c.evidence_scope_id.in_(scope_ids))
                 .where(_snapshot_run_filter(
                     search_coverage_record.c.acquired_by_run_id, snapshot_run_ids
                 ))
@@ -2970,7 +3036,7 @@ def make_lookup_reader(
                     source_tag.c.task_source_snapshot_id.in_(
                         _screened_in_doc_ids(
                             task_id,
-                            scope_id,
+                            scope_ids,
                             screened_by_run_ids=snapshot_run_ids,
                         )
                     )
@@ -2995,7 +3061,7 @@ def make_lookup_reader(
                     source_tag.c.task_source_snapshot_id.in_(
                         _screened_in_doc_ids(
                             task_id,
-                            scope_id,
+                            scope_ids,
                             screened_by_run_ids=snapshot_run_ids,
                         )
                     )

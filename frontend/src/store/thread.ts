@@ -108,8 +108,10 @@ export type TaskAgentThreadItem =
 
 /** What a durable turn is. `kind` is absent on every turn stored before task
  *  044 — those are all replies, so the absence reads as `reply` rather than
- *  as an unknown. */
-export function taskAgentTurnKind(turn: TaskAgentThreadTurn): "reply" | "answer" | "decision" {
+ *  as an unknown. Task 045 adds `action`: a confirmed longlist verb. */
+export function taskAgentTurnKind(
+  turn: TaskAgentThreadTurn,
+): "reply" | "answer" | "decision" | "action" {
   return turn.kind ?? "reply";
 }
 

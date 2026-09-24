@@ -106,7 +106,10 @@ test.describe("mock options-scoping baseline gate", () => {
     await page.getByRole("button", { name: "Review the plan" }).click();
     const plan = page.getByRole("dialog", { name: "Scoping plan" });
     await plan.getByRole("button", { name: "Confirm and build baseline" }).click();
-    await plan.getByRole("button", { name: "Close the scoping plan" }).click();
+    // A started walk closes the plan (WorkspaceView's onStarted). Task 045
+    // keeps the start area mounted while a walk runs, so the close is no
+    // longer lost to a race with the stream's first frame.
+    await expect(plan).toBeHidden();
   }
 
   test("the gate card sits in the thread and the composer takes a question about the baseline", async ({
@@ -149,5 +152,102 @@ test.describe("mock options-scoping baseline gate", () => {
     const plan = page.getByRole("dialog", { name: "Scoping plan" });
     await expect(plan.getByRole("button", { name: "Rebuild baseline" })).toBeVisible();
     await expect(plan.getByRole("button", { name: "Confirm plan and build longlist" })).toBeVisible();
+  });
+});
+
+/**
+ * Task 045 (6.3): after the gate's Confirm the mock opens the longlist walk
+ * (six stages, then `has_longlist`). The plan document walks its longlist
+ * states — "Building the longlist", "Longlist built · N options", and after a
+ * plan edit "built from plan version N" with Rebuild longlist — and the
+ * Result opens on the longlist behind the Baseline · Longlist · Report switch.
+ */
+test.describe("mock options-scoping longlist states (task 045)", () => {
+  async function buildLonglist(page: import("@playwright/test").Page) {
+    await page.goto("/new");
+    await page.getByRole("button", { name: "Options scoping" }).click();
+    await page
+      .getByLabel("Your question")
+      .fill("How can we reduce the number of young people not in education, employment or training?");
+    await page.getByRole("button", { name: "Prepare plan" }).click();
+    await expect(page.getByRole("region", { name: "Task Agent conversation" })).toBeVisible();
+
+    await page.getByRole("button", { name: "Review the plan" }).click();
+    const plan = page.getByRole("dialog", { name: "Scoping plan" });
+    await plan.getByRole("button", { name: "Confirm and build baseline" }).click();
+    // A started walk closes the plan (WorkspaceView's onStarted). Task 045
+    // keeps the start area mounted while a walk runs, so the close is no
+    // longer lost to a race with the stream's first frame.
+    await expect(plan).toBeHidden();
+
+    const thread = page.getByRole("region", { name: "Task Agent conversation" });
+    await thread.getByRole("button", { name: "Confirm plan and build longlist" }).click();
+  }
+
+  /** While a walk runs the plan opens from the run card's See plan; once
+   *  it has finished, from Review the plan. */
+  async function openPlan(page: import("@playwright/test").Page) {
+    await page.getByRole("button", { name: /^(Review the plan|See plan)$/ }).first().click();
+  }
+
+  test("the plan document says the longlist is building, then built, and the Result opens on it", async ({
+    page,
+  }) => {
+    await buildLonglist(page);
+
+    await openPlan(page);
+    const plan = page.getByRole("dialog", { name: "Scoping plan" });
+    await expect(plan.getByText("Building the longlist")).toBeVisible();
+    await expect(plan.getByText(/^Longlist built · \d+ options$/)).toBeVisible({ timeout: 10_000 });
+    await expect(plan.getByRole("button", { name: "Rebuild baseline" })).toHaveCount(0);
+    await plan.getByRole("button", { name: "Close the scoping plan" }).click();
+
+    await page.getByRole("link", { name: "Result" }).first().click();
+    const views = page.getByRole("tablist", { name: "Result view" });
+    await expect(views.getByRole("tab", { name: "Longlist" })).toHaveAttribute("aria-selected", "true");
+    await expect(views.getByRole("tab", { name: /Report/ })).toBeDisabled();
+    await views.getByRole("tab", { name: "Baseline" }).click();
+    await expect(
+      page.getByRole("heading", { name: "Do nothing: current policy and trajectory" }),
+    ).toBeVisible();
+  });
+
+  test("the longlist walk's beats show in the thread", async ({ page }) => {
+    await buildLonglist(page);
+    const thread = page.getByRole("region", { name: "Task Agent conversation" });
+    const step = thread.getByRole("button", { name: "Suggesting options" });
+    await expect(step).toBeVisible({ timeout: 10_000 });
+    await step.click();
+    await expect(thread.getByText("Suggested 6 options · 2 from your evidence search")).toBeVisible();
+  });
+
+  test("an option search (a child walk) gets no block of its own in the thread", async ({ page }) => {
+    await buildLonglist(page);
+    const thread = page.getByRole("region", { name: "Task Agent conversation" });
+    // The walk has finished, so /runs now lists the child beside its parent.
+    await openPlan(page);
+    const plan = page.getByRole("dialog", { name: "Scoping plan" });
+    await expect(plan.getByText(/^Longlist built · \d+ options$/)).toBeVisible({ timeout: 10_000 });
+    await plan.getByRole("button", { name: "Close the scoping plan" }).click();
+    await expect(thread.getByText(/^Option search/)).toHaveCount(0);
+    // The baseline's block only: the longlist walk is the stream's live run
+    // (its run card), and the child adds nothing.
+    await expect(thread.getByText(/^Analysis run —/)).toHaveCount(1);
+  });
+
+  test("a plan edit after the longlist offers Rebuild longlist, which starts the walk again", async ({
+    page,
+  }) => {
+    await buildLonglist(page);
+    await openPlan(page);
+    const plan = page.getByRole("dialog", { name: "Scoping plan" });
+    await expect(plan.getByText(/^Longlist built · \d+ options$/)).toBeVisible({ timeout: 10_000 });
+
+    await plan.getByRole("button", { name: "Remove" }).click();
+    await expect(
+      plan.getByText("Longlist built from plan version 1 · the plan has changed"),
+    ).toBeVisible();
+    await plan.getByRole("button", { name: "Rebuild longlist" }).click();
+    await expect(plan.getByText("Building the longlist")).toBeVisible();
   });
 });
