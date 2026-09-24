@@ -147,9 +147,18 @@ machinery were wrong as written. The decisions below are what survived.
    (ADR 0037 D13). Option-level judgements are keyed `(option_id,
    design_version)` on the option row and in `longlist_result`; the
    annotation layer is not extended until a reader needs it; the ambition
-   tag and the guesses are labelled reasoning in words, no claim row. A
+   tag and the guesses are labelled reasoning in words, no claim row. **The
+   walk's claim inventory**, declared once here: the membership set is
+   `option_membership`; option judgements and guesses live in
+   `longlist_result`; the walk writes no claim rows. A
    rebuild seeds the clustering with the existing options, so ids, user
-   exclusions and additions survive; nothing is deleted.
+   exclusions and additions survive; nothing is deleted. A *distinct*
+   breach **merges** the duplicate into the kept option
+   (`option.merged_into_option_id`; its memberships move to the kept option,
+   its name shows as *also found as*; a user-held option is never merged
+   away) — the step-7 review's owner ruling (2026-09-24: "If there are
+   duplicate options, then shouldn't they be merged instead of one being
+   excluded?").
 
    *Rejected:* an instance-of relation and a two-level longlist (sheet row
    A9; waits for evidence from live use); a run-time stability marker (a
@@ -216,14 +225,32 @@ machinery were wrong as written. The decisions below are what survived.
     widen the run stream's vocabulary additively; the six beat sentences
     are composed client-side from the completion summaries.
 
+13. **Review-stage rulings and constraints (step 7, 2026-09-24).**
+    Inherit re-checks, at every build, that the task owner can still read
+    each linked source (a link grants no read, ADR 0037); an unreadable
+    link is skipped and named and the walk degrades (owner: "Recheck
+    access only" — uploads of a readable source still inherit). A longlist
+    walk's children are interrupted on every exit of the walk, not only at
+    the join. The per-task event-log append retries up to 32 times because
+    child walks write to their task's one sequence at once: this **retires
+    ADR 0001 §6's one-writer-per-task assumption** for options-scoping tasks
+    (bounded, unmeasured beyond "no failed append"; a per-walk sequence is
+    the deferred remedy). The start and add reservations live in the API
+    process: **one backend worker process per environment** until they are
+    database rows.
+
 ## Rollback
 
 One alembic revision, reversible. Quiesce the API. `alembic downgrade -1`
 refuses while any `capability_run` row has a scope of purpose `longlist` or
 `targeted`; the remedy is `scripts/ops_remove_scoping_tasks.py` (ADR 0037)
-extended to those walks, which hard-deletes the scoping tasks' longlist and
-targeted walks, option rows, memberships, relations, `longlist_result` rows
-and profile records. The downgrade then drops `option_relation`,
+extended to those walks. Run it without flags to list the scoping tasks,
+then `python scripts/ops_remove_scoping_tasks.py --task-id <id> [--task-id
+<id> …] --apply` — `--apply` refuses without named tasks. It hard-deletes
+**each named options-scoping task whole**: its baseline, plan versions,
+conversations, longlist and targeted walks, option rows, memberships,
+relations, `longlist_result` rows and profile records — not only the
+longlist data. The downgrade then drops `option_relation`,
 `option_membership`, `option`, `longlist_result`, `intervention_profile_record`,
 the columns `task_link.option_id` and `capability_run.parent_capability_run_id`,
 restores `NOT NULL` on `extraction_result.selection_run_id` (refusing while

@@ -1,5 +1,20 @@
 # Spec update log
 
+## 2026-09-24
+Task 045 step-7 review (contract-verifier finding F1: D33 had removed the words from the card
+while the trust rule still required them). Contract: `docs/tasks/045-scoping-longlist/contract.md`.
+* **Update** (task 045, review F1; owner: "D33 wins, amend trust.md"):
+  [OS trust § The principle](capabilities/options-scoping/trust.md) and
+  [OS capability § Longlist](capabilities/options-scoping/capability.md) — the ambition tag stays a
+  tier-4 reasoning claim; the option card no longer carries the words "as described, not measured".
+* **Update** (task 045, review P1; owner: "If there are duplicate options, then shouldn't they be
+  merged instead of one being excluded? …" and "Fold into the kept option"):
+  [OS components § 7](capabilities/options-scoping/components.md) — a *distinct* breach merges the
+  duplicate into the kept option instead of excluding it.
+* **Update** (task 045, review deviation 46; owner: "Also allow empty reasons via the button"):
+  [OS components § 7](capabilities/options-scoping/components.md) — the user's exclusion never
+  requires a reason.
+
 ## 2026-09-23
 Task 045 (the options-scoping longlist), contract § Spec changes, applied in its phase 8 with the
 owner's words quoted (item 10, the decision sheet, landed at plan approval). Contract:

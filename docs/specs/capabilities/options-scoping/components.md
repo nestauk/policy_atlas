@@ -266,7 +266,12 @@ Evidence search direction (from a scoping task, the child full run's normal case
   ruling 23), or *no in-scope evidence*, plus a labelled **reasoned guess** per after-assessment
   constraint; the three default screens (relevant to outcomes · distinct · in scope) applied and
   cited like any other — the *distinct* screen never excludes a variant or a part-of relation
-  (ruling 36). After assessment, a failed or uncheckable effect/cost constraint is shown on the
+  (ruling 36). A *distinct* breach **merges** rather than excludes: the duplicate folds into the
+  option kept (the user's and the evidence search's first, then the earliest), its documents move
+  to the kept option and its name shows there as *also found as*; a user-held option is never
+  merged away (task 045 review; owner, 2026-09-24: "If there are duplicate options, then
+  shouldn't they be merged instead of one being excluded? If we exclude one of the options then
+  the user loses visibility into some of the evidence that backs the options"). After assessment, a failed or uncheckable effect/cost constraint is shown on the
   option ("breaks: low cost (assessed)" / "unresolved: cost not comparable"); the option stays and
   the user decides (ruling 40).
 - ✅ The ES screen's per-item judgment with the object changed: an option judged against
@@ -275,7 +280,9 @@ Evidence search direction (from a scoping task, the child full run's normal case
   ✅ Screens judge the **specified design**; a finding about the parent's typical implementations
   is not a finding against a variant (ruling 15). ✅ Corpus-based screen findings are cited by
   coverage denominator. ✅ Fallible by design, so every judgment is shown and reversible (*Include
-  again*), and every exclusion is kept with its reason as institutional memory. ✅ Reasoned guesses
+  again*), and every exclusion is kept with its reason as institutional memory; the user's own
+  exclusion takes a reason when given and never requires one (task 045 review; owner,
+  2026-09-24: "Also allow empty reasons via the button"). ✅ Reasoned guesses
   are capped reasoning claims: a flag and a user-requested sort, never a screen and **never an
   input to `shortlist`** (rulings 12, 19; [trust.md](trust.md)).
 - ✅ **No in-scope evidence is a deterministic check** ([task 045 contract](../../../tasks/045-scoping-longlist/contract.md), D9; owner: "the ruling

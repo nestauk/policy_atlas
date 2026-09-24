@@ -81,8 +81,9 @@ not done. Terms and deliverable numbers are defined in
    ceiling is `clamp(ceil(N/4), 8, 40)`; options carry name, description,
    specified design v1, outcomes served, one primary lever type from the
    versioned constant list or *none fits* with a reason, secondary types,
-   the taxonomy version, and an ambition tag with a justification and the
-   words "as described, not measured"; the runner-up is in
+   the taxonomy version, and an ambition tag with a justification (the
+   words "as described, not measured" dropped by D33; owner 2026-09-24:
+   "D33 wins, amend trust.md"); the runner-up is in
    `longlist_result` only; a bundle becomes a package with *part of* rows;
    themes are generated with a one-line "what it does"; coverage is the
    source-quality profile with Unknown and Non-evidence as their own

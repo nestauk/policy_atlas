@@ -366,9 +366,10 @@ plan ──confirm──▶ baseline ══PAUSE: confirm plan against baseline�
   constraint · no in-scope evidence); its source-quality profile shows unknown-type and
   non-evidence documents as their own buckets (ruling 43). Two views: list (for judging each option) and grid
   (**primary lever type × ambition**, for judging the set; ambition is a per-option tag with a
-  one-line justification, labelled "as described, not measured" and carried as a **tier-4
+  one-line justification, carried as a **tier-4
   reasoning claim** since no evidence has been read when it is assigned, ruling 20; owner
-  2026-09-07). A click opens a
+  2026-09-07; the words "as described, not measured" dropped from the card, owner 2026-09-24,
+  task 045 D33: "D33 wins, amend trust.md"). A click opens a
   light **option-before-assessment** page: what it is for · what the evidence base holds so far
   (the **source-quality profile**: mentioning documents by evidence type and quality tier,
   countries, populations, outcomes — never "how sure", ruling 33) · screens and guesses · where

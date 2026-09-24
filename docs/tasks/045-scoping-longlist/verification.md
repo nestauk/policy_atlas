@@ -644,8 +644,10 @@ the running server kept the old code):
   transaction (`InFailedSqlTransaction`), hiding the cause. Fix (2.2
   agent): each document's memo + record writes run in a savepoint; a
   `uq_ser_memo` conflict re-reads the sibling's row and marks the document
-  `reused`; IOF/ICF share the path with a savepoint per document and no
-  other change. Test
+  `reused`. *Corrected at step 7 (F9):* IOF/ICF share this path, so their
+  writes are now per-document savepoints too and a memo clash there also
+  becomes reuse instead of a failure — benign, but a change to the ES
+  write path, not "no other change". Test
   `test_a_sibling_walk_s_memo_row_is_reused_not_a_failed_transaction`.
   **Still exposed (known gap, harness):** `_run_scope_component`'s generic
   `except` appends the failure event on the component's own transaction
@@ -808,9 +810,10 @@ widened with `action`. No path or field removed or retyped.
   production pool is untouched (contract § Constraints).
 - The `guidance` seam (D26) was judged from the option searches' screened-in
   counts, not from reading the generated queries one by one.
-- The (g) question was answered over the union of scopes but cited two
-  longlist-scope documents rather than the added option's own; the
-  unit test covers the "document only an option search found" case.
+- ~~The (g) question cited two longlist-scope documents rather than the
+  added option's own.~~ Closed at step 7: both were also screened in by the
+  added option's own search; the precedence rule shows the primary scope
+  (§ Review findings).
 - The concurrency fix (the memo race) and the rebuild-suggest fix were
   tested but not re-driven live; the running server carried the old code.
 - Effective concurrency under the per-task event-log sequence (the retry
@@ -969,6 +972,119 @@ migration were checked clean.
     targets to measure against (open question 4).
   - The chat's dev token must be minted for the same subject that owns the
     task (`dev-user`), or every write route is 403.
+
+## Review findings (step 7, 2026-09-23/24)
+
+Adjudicated in a fresh conversation (not the build chat). Diff base
+`origin/feat/options-scoping...HEAD`, generated files and mock fixtures
+excluded. Baseline gate before any lane: `make verify` green (backend 3142,
+frontend 789, okf 148/0, prompt-guard 24 unchanged, drift-check OK).
+
+**Lanes run**
+
+| Lane | Reviewer | Result |
+|---|---|---|
+| Contract verifier | `contract-verifier` (Opus, read-only) | every rubric item, the 48 deviations, the review focus; F1–F16 |
+| `/code-review medium` (Claude half) | the pre-commit run over the whole branch (§ Review handoff) | 13 ranked + 7 lower-confidence findings, verified below |
+| Security | `agent-skills:security-auditor` | S1 major, S2–S4 minor |
+| Adversarial | **`deep-reasoner` in place of Codex** | Codex failed in 8 s on the workspace spend cap (job `task-muemymv5-ofhlij`); the brief went to `deep-reasoner` per the Codex-exhaustion fallback. **The family flip did not happen on this slice**: every lane, like every build phase, was Claude. Verified the 20 handed-over items (16 confirmed, 3 partly, 1 refuted) and found B1–B11 |
+| Live-trace content | lead | below |
+| OKF | `make okf-validate` (in `make verify`) | 148/0 |
+| `/simplify` | not run separately | the fixes were each scoped to one finding and reviewed by the lead; the handed-over list carried the reuse/simplification angles |
+
+**Live-trace content review (lead, dev DB)**
+
+- **(g) passed; the build's write-up misread it.** Both documents the answer
+  cited (`98dc312d…`, `3fcf5d4d…`) were screened in by the added option's own
+  search (scope `4e73ddb3…`, ended 00:30:28, question at 00:31:06) as well as
+  by the longlist scope. `build_retrieval_scope`'s precedence rule (P13)
+  attributes a document in two scopes to the primary scope, so the citation
+  *reads* as a longlist document. The Known unverified item is closed.
+- T1's rebuild holds 14 *from your evidence search* options for 7 report
+  options: the duplicate re-proposals from the pre-fix server (Phase 8 defect,
+  fixed in the tree, not re-driven live).
+- Constrain judgements read sensibly; one judgement for the owner: the
+  user-added mentoring option was excluded by "Only options a local authority
+  can run." because its design says a youth organisation delivers it (the
+  model reads "run" as "deliver", not "commission").
+- An included option keeps `exclusion = {by: user, reason: "", constraint:
+  "your decision"}` as the "user decided" marker — by design
+  (`include_option` docstring); the read model hides it.
+- T2's theme names are plain, distinct and on the question.
+- **F4 checked on the live searches (owner asked):** of 210 generated
+  option-search queries, none names a country and none carries a geographic
+  filter; 27 (13 %) use UK institution words taken from the designs ("local
+  authority", "council", "NHS", "DWP", "Jobcentre Plus").
+
+**Findings and adjudication** (ids: A = handed-over list, L = its
+lower-confidence items, B = adversarial new, F = contract verifier,
+S = security)
+
+| Id | Sev | Finding | Lanes | Decision |
+|---|---|---|---|---|
+| A1 + B1 | major | a rebuild dropped earlier option-search documents; an add search was never read by any build | code-review, adversarial | **fixed** — `longlist._option_search_scopes`: each option's latest finished targeted walk, any parent |
+| A2 + F10, L5, F13 | major | children orphaned when the walk ends before the join or the fan-out raises | code-review, adversarial, contract | **fixed** — `option_search.abandon_children` on every `_finish_run` of a longlist walk and on any raise; the fan-out ends what it sent if it raises |
+| A3 | major | child stage frames on the parent's timeline | code-review, adversarial | **fixed** — stage frames carry `capability_run_id`; the reducer drops other walks' frames |
+| A4 + deviation 48 | major | add could 500 after its commit and mint a second option on retry | code-review, adversarial, contract | **fixed** — returns the option with the search queued; the chat's pending action is consumed in the option's transaction |
+| A10 | major | the gate confirm opened the walk on the latest plan, not the confirmed one | code-review, adversarial | **fixed** — opens on exactly `out.version`; gate paths pass the gate walk's version |
+| B2 | major | failed/interrupted searches counted as done | adversarial | **fixed** — `searched_option_ids` counts succeeded/degraded only |
+| B3 + F2 | major | a retried confirm could open a second walk; a failed walk blocked Build longlist | adversarial, contract | **fixed** — existence read from the longlist scope row (active, queued this process, or with a result) |
+| F3 | major | the report section was never named on *from your evidence search* | contract | **fixed** — `from_section` on the option read models, shown on the row and the card |
+| F5 | major | every card claimed "no in-scope evidence" under an evidence restriction | contract | **fixed** — guarded on `no_in_scope_evidence` |
+| S1 | major | inherit re-checked no access; a public scoping task could expose a linked task's uploads | security | **owner: "Recheck access only"** — `inherit._sources_owner_reads`: the owner must read the source at every build, else the link is skipped and named (walk degraded); the linked report for `suggest` likewise. Uploads still inherit (owner's choice) |
+| F1 | major | D33 removed "as described, not measured" against the trust rule | contract | **owner: "D33 wins, amend trust.md"** — trust.md, capability.md, rubric 6 and log.md amended |
+| F4 | major | Where can reach option-search designs | contract | **owner: accept, record** — measured above; deferred.md |
+| A5 | minor | shared extraction record credited to one scope | code-review, adversarial | fixed |
+| A6 | minor | `_finish_run` race with the join | code-review, adversarial | fixed — row lock; an ended option search keeps its status and gets no second terminal event |
+| A7, A8 | minor | an add search worded as the baseline; history blocks took the live stages | code-review, adversarial | fixed — `option_search` walk kind from the run's purpose |
+| A9 | partly | a late child `run.finished` replaced a terminal tracked walk | adversarial | fixed — the reducer remembers child ids |
+| A11 | minor | an abandoned straggler ran a full walk | code-review, adversarial | fixed — `end_if_abandoned` right after the row opens |
+| A12 | minor | capacity counted add searches | code-review, adversarial | fixed — `executor_walk()` leaves targeted walks out of capacity, not out of the task fence |
+| A13 + L6 | minor | baseline looked up in the first 200 runs; start area empty on a longlist read error | code-review, adversarial | fixed — `GET /runs?parentless=true`; Rebuild with a notice |
+| F11 + g4 | minor | the thread hid the parent's lines in child windows | contract | fixed — `DecisionOut.capability_run_id`; child-tagged lines dropped, untagged placed among parentless walks |
+| F12 | minor | "Building the longlist now." when nothing opened | contract | fixed — `CONFIRM_NOT_STARTED_REPLY` |
+| F14 | minor | invalid typing double-counted; duplicate DOI normaliser | contract | fixed (both the component and the read model); **declined** the normaliser swap: coverage's strips `doi:` and casefolds, acquire's does not — not a duplicate |
+| F15 | minor | verb errors silent; buttons live during a walk | contract | fixed |
+| B4 + P1 | minor → owner | *distinct* excluded every member of a duplicate group | adversarial | fixed — keep the earliest; a breach whose reason names no option of its batch reads `cannot_check`. **Owner (P1): "If there are duplicate options, then shouldn't they be merged instead of one being excluded?" → "Fold into the kept option"** — the duplicate's documents move to the kept option, its name shows as *also found as*, it leaves the list (`option.merged_into_option_id`, 045's own revision `c7e2a9f4b1d8` amended — still one migration; an already-migrated DB needs the column added by hand, done on the local dev DB 2026-09-24); merged options are not seeds, entrants, chat options or verb targets; a merged id opens the kept card |
+| B6, B7 | minor | a failed batch re-included options; a blank-reason breach excluded | adversarial | fixed |
+| B9 | minor | in-scope check kept an arbitrary DOI twin | adversarial | fixed |
+| L1 | minor | "North Korea" grouped as comparable | code-review | fixed |
+| L3 | partly | a partly inherited label skipped appraise | adversarial | fixed — per-field provenance |
+| L4 | minor | restore of a removed default unreachable | code-review | fixed |
+| L7 | minor | sibling memo writes could deadlock | code-review, adversarial | fixed — advisory locks per memo key in sorted order (sorting the loop broke the ES write-order contract test) |
+| S2 | minor | the card's linked-finding read trusted the membership's task id | security | fixed — requires a `task_link` |
+| S4 + F8 | minor | the ops script deleted every scoping task | security, contract | fixed — `--apply` needs `--task-id`; migration hints updated |
+| Deviation 46 | escalated | the verb stored an empty reason, the button required one | contract | **owner: "Also allow empty reasons via the button"** — reason optional on both |
+| L2 | — | `_inherited_rows` arbitrary pair | code-review | **refuted** (unique per scope and source; fixed order) |
+| S3 | minor | assent rests on the model's sort | security | **declined** — the two-turn sorted assent is the contracted design (rubric 10); turns are owner-only and re-validated at apply |
+| F7 + B5 | minor → owner | "thin evidence never excludes" rested on a prompt that let coverage decide relevant/in-scope; the *distinct* rule neither asked for the partner's name nor matched the batch | contract, adversarial | test strengthened (all `cannot_check`); **owner (P2): "Fine, go ahead with your suggestion"** — `constrain_v1` edited in place (unshipped; hash re-pinned, words only): a *distinct* breach names the duplicate as written in the batch; "or on the longlist" dropped; "Coverage never decides a verdict: when the design is silent, the verdict is 'cannot_check'" |
+| S11 | descope → owner | seeded assignment on add not built | contract | **owner: "I don't think we necessarily need the sort step since the longlist is not meant to be exhaustive"** — not wanted; an added option sits in *No theme* (owner: "Stay in 'No theme'") |
+| D2 (open question 7) | owner | "Rebuild longlist" re-runs the whole chain | owner, at review | **owner: "I think a full rebuild feels unnecessary … The idea of a rebuild would also be quite confusing to users" → "Record it, change it in task 3"** — deferred.md |
+| B8 | minor | siblings serialise on the per-task event sequence | adversarial | already deferred |
+| B10, B11 | minor/note | reservation cleared under another request; single-process admission | adversarial | deferred / recorded as a deployment constraint |
+| F6, F9, F16, deviation 16 | minor | claim inventory missing from the ADR; IOF/ICF savepoint claim overstated; ES retrieval changed for several scopes; the retry cap retires ADR 0001's one writer per task | contract | recorded in step 8 (ADR 0039 and this file) |
+
+**Convergence.** A1/B1, A2/F10, A4/48 and B3/F2 were found by two or three
+lanes independently — high confidence. Unique catches that justify their lane:
+S1 (security only), F1/F3/F5 (contract only), B2/B4/B6 (adversarial only),
+the (g) root cause (live-trace only).
+
+**Deviations.** The contract verifier's verdicts are adopted: adopt 1–7, 9–13,
+17, 18, 20, 22–25, 27, 28, 30–45, 47; adopt with a record 16, 39, 41, 48;
+changes for 14, 15 (recorded in deferred.md), 19/22 (F12), 21 (A2), 26/29
+(F14); 46 escalated and ruled; Phase 8's four fixes adopted, the thread one
+changed (F11).
+
+**Final gate after the fixes (2026-09-24).** `make verify` green: okf 157/0
+(9 new knowledge concepts), backend 3182 passed, mypy and ruff clean, infra
+46, audit-paths 136/0, prompt-guard 24 unchanged (after the `constrain_v1`
+re-pin), drift-check OK, frontend 86 files / 805 tests. The fixes were not
+re-driven live.
+
+**Fake-done check on the fixes.** No test deleted or skipped; one renamed
+with a reason (`…reopens_a_missing_walk` → `…a_failed_walk`); every new broad
+`except` re-raises; changed expectations each follow a finding (B2 seeding,
+F14 counts, B4 partner naming, deviation 46's blank reason, S4 `--task-id`).
 
 ## Deferred work
 

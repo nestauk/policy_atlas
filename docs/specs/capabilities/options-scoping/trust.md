@@ -27,7 +27,8 @@ supported sentence, and the sentence is what gets copied into advice.
   evidence-derived options. This is how structural and thin-evidence options get in at all.
 - ✅ **Interpretation is labelled.** Mechanism sentences, failure modes, assumptions and the
   **ambition tag** (assigned at longlist depth before any evidence is read; a tier-4 reasoning
-  claim, shown "as described, not measured", ruling 20) reuse the ES's claim-type and
+  claim, ruling 20; the option card no longer carries the words "as described, not measured" —
+  owner 2026-09-24, task 045 D33: "D33 wins, amend trust.md") reuse the ES's claim-type and
   grounding-tier machinery rather than a new scheme: tier-2/3 inferences
   where the literature supports them; capped, visibly labelled *reasoning* claims (tier 4,
   "reasoning, not evidence", which must not smuggle findings) where they are the model's own

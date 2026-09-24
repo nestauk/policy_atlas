@@ -1,5 +1,41 @@
 # Knowledge update log
 
+## 2026-09-24 (task 045 step 8)
+* **Creation**: Added [child-walks-end-on-every-parent-exit](child-walks-end-on-every-parent-exit.md) —
+  abandon children on every end of the parent, the self-ending straggler, one terminal write under
+  a row lock (review A2/A6/A11, F10/F13, L5).
+* **Creation**: Added [walk-existence-reads-intent-record-and-status](walk-existence-reads-intent-record-and-status.md) —
+  key existence on the scope row, count only live or good walks (review B2, B3, F2).
+* **Creation**: Added [longlist-rebuild-reads-every-earlier-build](longlist-rebuild-reads-every-earlier-build.md) —
+  latest finished search per option whatever its parent; suggest sees existing options (review
+  A1/B1; build candidate "a rebuild's model step must see what already exists").
+* **Creation**: Added [mutation-never-fails-after-its-commit](mutation-never-fails-after-its-commit.md)
+  (review A4, deviation 48) and [concurrent-walk-frames-carry-the-walk-id](concurrent-walk-frames-carry-the-walk-id.md)
+  (review A3, A7–A9, F11).
+* **Creation**: Added [sibling-walk-memo-writes-reuse-and-sorted-locks](sibling-walk-memo-writes-reuse-and-sorted-locks.md) —
+  memo race → reuse in a savepoint; sorted advisory locks against sibling deadlock (build candidate
+  "memo races under concurrent walks"; review L7, F9).
+* **Creation**: Added [task-link-grants-no-read](task-link-grants-no-read.md) (security S1 with the
+  owner's "Recheck access only", S2) and [multi-scope-retrieval-primary-scope-wins](multi-scope-retrieval-primary-scope-wins.md)
+  (the (g) misread; F16).
+* **Creation**: Added [study-geography-from-abstracts-mostly-unknown](study-geography-from-abstracts-mostly-unknown.md)
+  (build candidate; Phase 8 (c); L1).
+* **Update**: [event-log-sequence](event-log-sequence.md) gains the third writer family, the 5 → 32
+  retry bound, ADR 0001's one-writer-per-task retired and the serialisation cost (deviation 16,
+  B8, build candidate); [fail-loud-before-first-write](fail-loud-before-first-write.md) gains the
+  045 harness-layer recurrence (build candidate); [db-row-is-the-single-flight-authority](db-row-is-the-single-flight-authority.md)
+  gains 045's process-local admission as a single-process constraint (B10/B11);
+  [plan-lineage-by-fencing-not-custody](plan-lineage-by-fencing-not-custody.md) gains the
+  confirmed-version opener (A10); [residual-counted-after-narrowing](residual-counted-after-narrowing.md)
+  gains the two-sided residual count (F14); [wire-field-additions-break-all-construction-sites](wire-field-additions-break-all-construction-sites.md)
+  gains the openapi-typescript defaulted-field and full-object `PlanOut` expectations (build
+  candidates); [live-check-drive-runbook](live-check-drive-runbook.md) gains the dev-token subject
+  (build candidate). Declined: steering mode vs plan row and compose-time filters (ADR 0039
+  records both); the single-option confirm part (a UI observation, nothing to re-learn); the
+  clustering ceiling binding at 40 (open question 4, the owner's measurement, not a rule); the
+  setting-facet cap (one fixed UI cap); the component-level fixes (A5, A12, A13, B4, B6, B7, B9,
+  L3, L4, F3, F5, F12, F15, S4 — each local and test-pinned).
+
 ## 2026-09-17 (task 044 step 8)
 * **Creation**: Added [baseline-gate-invariants-as-built](baseline-gate-invariants-as-built.md) —
   the five gate properties the review stack pinned (failed synthesise, non-pausing IO, unattended
