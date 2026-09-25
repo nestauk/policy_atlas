@@ -668,17 +668,62 @@ def test_baseline_paging_consensus() -> None:
         )
         == 1
     )
-    four = [
-        {"results": [{"paper_id": str(i)}], "page_size": 300, "is_end": False}
-        for i in range(5)
+    # Page size 300: pages 0-2 give 900 results. Page 3 at 300 would pass 1,000 and
+    # Consensus answers 400, so the last request is page 9 at size 100, then stop.
+    # Pages can hold a few results fewer than their size, and Consensus sends no
+    # next_page on the page before the ceiling; positions, not counts, drive the rule.
+    full = [
+        {
+            "results": [{"paper_id": "0"}] * 297,
+            "page_size": 300,
+            "is_end": False,
+            "next_page": 1,
+        },
+        {
+            "results": [{"paper_id": "1"}] * 300,
+            "page_size": 300,
+            "is_end": False,
+            "next_page": 2,
+        },
+        {
+            "results": [{"paper_id": "2"}] * 299,
+            "page_size": 300,
+            "is_end": False,
+            "next_page": None,
+        },
+        {"results": [{"paper_id": "last"}] * 100, "page_size": 100, "is_end": False},
+    ]
+    seen = []
+    fetched = fetch_consensus(
+        "q", "2020-01-01", get=_baseline_get(full, seen), api_key="x"
+    )
+    assert [(p["page"], p["page_size"]) for p in seen] == [
+        ("0", "1000"),
+        ("1", "300"),
+        ("2", "300"),
+        ("9", "100"),
+    ]
+    assert len(fetched.pages) == 4 and fetched.page_size == 300
+    # Page size 750 (Deep plan): page 0 at 750, then page 3 at 250.
+    deep = [
+        {"results": [{}] * 750, "page_size": 750, "is_end": False},
+        {"results": [{}] * 250, "page_size": 250, "is_end": False},
+    ]
+    seen = []
+    fetch_consensus("q", "2020-01-01", get=_baseline_get(deep, seen), api_key="x")
+    assert [(p["page"], p["page_size"]) for p in seen] == [("0", "1000"), ("3", "250")]
+    # Fewer than 1,000 results in total: stops on is_end without a remainder request.
+    short = [
+        {"results": [{}] * 300, "page_size": 300, "is_end": False},
+        {"results": [{}] * 40, "page_size": 300, "is_end": True},
     ]
     assert (
         len(
             fetch_consensus(
-                "q", "2020-01-01", get=_baseline_get(four), api_key="x"
+                "q", "2020-01-01", get=_baseline_get(short), api_key="x"
             ).pages
         )
-        == 4
+        == 2
     )
 
 
@@ -982,6 +1027,9 @@ def test_history_cost_column() -> None:
     no_cost_row = dict(baseline)
     no_cost_row["cost"] = None
     assert render_row(no_cost_row).count("n/a") >= 1
+    tiny = dict(baseline)
+    tiny["cost"] = 0.002
+    assert "$0.0020 api" in render_row(tiny)
 
     header_line = HEADER.splitlines()[0]
     assert header_line.count("|") == row_baseline.count("|")
