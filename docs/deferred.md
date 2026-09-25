@@ -2469,7 +2469,11 @@ Context: `scripts/evals/search/baseline_recall.py` and `results/history.md` (row
   Open questions for that slice: the snippet arm leans towards open-access papers (body
   text), returns about 550 unique papers per 1,000 snippets, and needs a DOI lookup step;
   Semantic Scholar's keyword search needs every word to match and is the wrong shape for a
-  title-length intent, so a keyword-shaped query would test it fairly.
+  title-length intent, so a keyword-shaped query would test it fairly. If the cost
+  trade-off matters for that decision, price a cap as a request sized to the cap (one
+  Consensus call per 100 results), not as the 300-result pages the baselines fetched: the
+  cap-50 to cap-200 Consensus rows overstate that price by up to 3x (review stack,
+  2026-09-25).
 - **Upload the cache to S3.** `results/cache/` is one laptop's copy of what each service
   ranked where (about 25 MB for three arms and four reviews). Worth keeping if the results
   are ever cited; today a `--refresh` refetch is the only recovery, and Consensus bills

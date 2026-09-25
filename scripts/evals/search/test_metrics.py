@@ -1,5 +1,5 @@
 """Self-check for the eval's pure functions: scoring, CSV loading, the sweep's
-output tables, and the OpenAlex retry logic. No network, no database.
+output tables, the OpenAlex retry logic, and the ground-truth fetchers' parsing. No network, no database.
 
 Run: uv run --project backend python scripts/evals/search/test_metrics.py
 """
@@ -668,6 +668,16 @@ def test_baseline_paging_consensus() -> None:
         )
         == 1
     )
+    # A page size whose remainder cannot be asked for as one page (350: 700 covered,
+    # 300 left, 700 % 300 != 0) stops short and says so: incomplete, one failed call.
+    odd_size = [
+        {"results": [{}] * 350, "page_size": 350, "is_end": False, "next_page": 1},
+        {"results": [{}] * 350, "page_size": 350, "is_end": False, "next_page": 2},
+    ]
+    short = fetch_consensus(
+        "q", "2020-01-01", get=_baseline_get(odd_size), api_key="x"
+    )
+    assert not short.complete and short.n_failed_calls == 1 and len(short.pages) == 2
     # Page size 300: pages 0-2 give 900 results. Page 3 at 300 would pass 1,000 and
     # Consensus answers 400, so the last request is page 9 at size 100, then stop.
     # Pages can hold a few results fewer than their size, and Consensus sends no
@@ -764,7 +774,27 @@ def test_baseline_retry() -> None:
         sleep=sleeps.append,
         get=lambda *args, **kwargs: httpx.Response(503),
     )
-    assert getter("url", {}, {}).status_code == 503 and sleeps[-3:] == [1.0, 2.0, 4.0]
+    assert getter("url", {}, {}).status_code == 503 and sleeps == [1.0, 2.0, 4.0]
+    # A connection failure on every attempt hands back None, never raises.
+    attempts = []
+
+    def broken(*args, **kwargs):
+        attempts.append(1)
+        raise httpx.ConnectError("down")
+
+    assert make_getter("semantic-scholar", sleep=sleeps.append, get=broken)(
+        "url", {}, {}
+    ) is None and len(attempts) == 4
+    # A retry never fires faster than the arm's interval: the snippet arm waits 3 s
+    # even when retry-after says 1.
+    sleeps = []
+    values = [httpx.Response(429, headers={"retry-after": "1"}), httpx.Response(200)]
+    getter = make_getter(
+        "semantic-scholar-snippet",
+        sleep=sleeps.append,
+        get=lambda *args, **kwargs: values.pop(0),
+    )
+    assert getter("url", {}, {}).status_code == 200 and sleeps == [3.0]
 
     def failing(url, params, headers):
         return httpx.Response(503)
@@ -845,6 +875,18 @@ def test_baseline_cache_round_trip() -> None:
             refresh=True,
             fetcher=replacement,
         )[1]
+        # A file fetched for a different intent or cutoff is not reused.
+        refetched = []
+        for intent, cutoff in (("other", "2020-01-01"), ("q", "2021-01-01")):
+            load_or_fetch(
+                "consensus",
+                item_id="item",
+                intent=intent,
+                cutoff=cutoff,
+                cache_dir=root,
+                fetcher=lambda *_: refetched.append(1) or fetched,
+            )
+        assert len(refetched) == 2 and read_cache(path, intent="other") is None
         assert set(json.loads(path.read_text())) == {
             "arm",
             "intent",
@@ -880,6 +922,27 @@ def test_baseline_slice_and_cost() -> None:
         cost_usd("consensus", pages) == 0.3
         and cost_usd("semantic-scholar", pages) == 0.0
     )
+    # Consensus at a cap: the pages that cover the cap at the echoed size 300, so caps
+    # 50 to 200 cost one page (three calls) and cap 1,000 costs 300+300+300+100 (ten).
+    consensus = Fetched(
+        [
+            {"results": [{"doi": "10/a"}] * 297},
+            {"results": [{}] * 299},
+            {"results": [{}] * 294},
+            {"results": [{}] * 98},
+        ],
+        {},
+        300,
+        0,
+        True,
+        "2026-01-01T00:00:00+00:00",
+    )
+    target_a = GroundTruth(dois={"10/a"}, source="doi")
+    at_50 = score_arm("consensus", consensus, target_a, 50)
+    at_1000 = score_arm("consensus", consensus, target_a, 1000)
+    assert at_50["api_cost_usd"] == 0.15 and at_50["n_api_calls"] == 1
+    assert at_50["n_api_records"] == 297 and at_50["n_candidates_kept"] == 1
+    assert at_1000["api_cost_usd"] == 0.5 and at_1000["n_api_calls"] == 4
     fetched = Fetched(
         [{"meta": {"cost_usd": 0.2}, "results": [{"doi": "10/a"}]}],
         {},
@@ -981,6 +1044,15 @@ def test_baseline_snippet_arm() -> None:
     assert score["n_api_calls"] == 2 and score["n_api_records"] == 3
     assert score["n_found"] == 1 and score["n_candidates_kept"] == 2
     assert score["api_cost_usd"] == 0.0 and cost_usd(SNIPPET, fetched.pages) == 0.0
+    assert score_arm(SNIPPET, fetched, GroundTruth(dois=set(), source="doi"), 1000)[
+        "n_api_calls"
+    ] == 2
+    # A hit with no paper id (or no paper) is skipped, not a crash.
+    odd = {"data": [hit("1", "A"), {"score": 0.5}, {"paper": {"title": "no id"}}]}
+    get, seen = scripted([odd, [{"externalIds": {"DOI": "10.1/A"}}]])
+    fetched = fetch_semantic_scholar_snippet("q", "2020-01-01", get=get, api_key="k")
+    assert seen[1]["json"] == {"ids": ["CorpusId:1"]} and fetched.complete
+    assert [r["doi"] for r in records_of(SNIPPET, fetched)] == ["10.1/A"]
     # 600 unique papers need two lookups of 500 and 100.
     many = {"data": [hit(str(i)) for i in range(600)]}
     get, seen = scripted([many, [{}] * 500, [{}] * 100])
@@ -1058,10 +1130,14 @@ def test_history_cost_column() -> None:
         ),
     ]
 
+    from langfuse.api.core import ApiError
+
     class _Trace:
         @staticmethod
         def get(trace_id):
             trace_calls.append(trace_id)
+            if trace_id == "t4":
+                raise ApiError(status_code=404, body="pruned")
             return SimpleNamespace(total_cost=trace_cost.get(trace_id))
 
     class _Scores:
@@ -1102,13 +1178,19 @@ def test_history_cost_column() -> None:
     assert "t1" not in trace_calls and "t2" not in trace_calls
 
     pipeline = by_name["pipeline"]
-    assert pipeline["cost"] == 1.0
+    # t4's trace is gone (404): its cost is left out, the listing still prints.
+    assert pipeline["cost"] == 0.45
     assert pipeline["cost_kind"] == "llm"
+    # --since skips older runs before any of their items are fetched.
+    trace_calls.clear()
+    assert [r["run"] for r in fetch_runs(client, "ds", since="2026-01-02")] == [
+        "pipeline"
+    ] and "t1" not in trace_calls
 
     row_baseline = render_row(baseline)
     row_pipeline = render_row(pipeline)
     assert "$0.30 api" in row_baseline
-    assert "$1.00 llm" in row_pipeline
+    assert "$0.45 llm" in row_pipeline
 
     no_cost_row = dict(baseline)
     no_cost_row["cost"] = None
@@ -1119,6 +1201,144 @@ def test_history_cost_column() -> None:
 
     header_line = HEADER.splitlines()[0]
     assert header_line.count("|") == row_baseline.count("|")
+
+
+def test_doi_if_valid() -> None:
+    from ground_truth import doi_if_valid
+
+    assert doi_if_valid("No DOI") is None
+    assert doi_if_valid("") is None
+    assert doi_if_valid(None) is None
+    assert doi_if_valid("10.1002/CL2.1125") == "10.1002/cl2.1125"
+    assert doi_if_valid("https://doi.org/10.1002/cl2.1125.") == "10.1002/cl2.1125"
+    assert doi_if_valid("doi: 10.23846/EGM019") == "10.23846/egm019"
+
+
+def test_clean_review_title_gap_maps() -> None:
+    assert clean_review_title("Human rights: an evidence gap map") == "Human rights"
+    assert clean_review_title("Digital interventions for loneliness: An evidence and gap map") == (
+        "Digital interventions for loneliness"
+    )
+    assert clean_review_title("Big data: a systematic map") == "Big data"
+    # A title with no review-type tail is untouched.
+    assert clean_review_title("Diversion") == "Diversion"
+
+
+def test_not_a_review_title() -> None:
+    from ground_truth import NOT_A_REVIEW_TITLE_RE
+
+    assert NOT_A_REVIEW_TITLE_RE.match("PROTOCOL: Effects of X on Y")
+    assert NOT_A_REVIEW_TITLE_RE.match("Erratum to: Effects of X")
+    assert not NOT_A_REVIEW_TITLE_RE.match("Effects of protocol training on nurses")
+
+
+def test_write_ground_truth_round_trip() -> None:
+    """The fetchers' CSVs load through the same loaders as the hand-made ones."""
+    import tempfile
+    from pathlib import Path
+
+    from ground_truth import write_ground_truth
+    from ground_truth_dataset import load_references, load_reviews
+
+    reviews = [{"title": "Cash transfers", "doi": "10.1/r", "url": "", "published_before": "2020-01-01", "exclude": ""}]
+    refs = [
+        {"review_title": "Cash transfers", "ref_title": "A", "label": "content", "doi": "10.1/a", "overton_id": "", "url": "", "year": 2019, "ref_id": "W1"},
+        {"review_title": "Cash transfers", "ref_title": "B", "label": "", "doi": "10.1/b", "overton_id": "", "url": "", "year": 2019, "ref_id": "W2"},
+        {"review_title": "Cash transfers", "ref_title": "C", "label": "content", "doi": "", "overton_id": "", "url": "http://x", "year": "", "ref_id": "W3"},
+    ]
+    with tempfile.TemporaryDirectory() as tmp:
+        rev_path, ref_path = write_ground_truth("t", reviews, refs, out_dir=Path(tmp))
+        assert [r.doi for r in load_reviews(rev_path)] == ["10.1/r"]
+        target = load_references(ref_path)["Cash transfers"]
+        assert set(target["titles"]) == {"10.1/a"}  # only labelled content rows with a key count
+        assert target["n_unscorable"] == 1  # C: content, but no DOI and no Overton id
+    try:
+        write_ground_truth("t", reviews, [{**refs[0], "review_title": "Other"}], out_dir=Path(tmp))
+    except ValueError as exc:
+        assert "Other" in str(exc)
+    else:
+        raise AssertionError("a reference naming an unknown review must be refused")
+
+
+def test_get_3ie_map_rows() -> None:
+    from get_3ie import build_rows, map_rows
+
+    data = {
+        "interventions": [
+            {"map_layout_group_id": 1, "map_layout_group_title": "Systems", "sub_levels": [
+                {"map_layout_group_id": 11, "map_layout_group_title": " Police  reform "},
+                {"map_layout_group_id": 12, "map_layout_group_title": "Courts"},
+            ]},
+            {"map_layout_group_id": 2, "map_layout_group_title": "Flat row"},
+        ],
+        "interventions_outcomes": {
+            "11": {"a": {"bubbles": [{"records": [{"id": "s1"}, {"id": "s2"}]}]}, "b": {"bubbles": [{"records": [{"id": "s2"}]}]}},
+            "2": {"a": {"bubbles": [{"records": [{"id": 3}]}]}},
+        },
+        "project_records": {
+            "s1": {"id": "s1", "title": "One", "doi": "10.1234/one", "year_of_publication": "2015", "url": "u1"},
+            "s2": {"id": "s2", "title": "Two", "doi": "No DOI", "year_of_publication": "2019", "url": "u2"},
+            "3": {"id": 3, "title": "Three", "doi": "", "year_of_publication": "", "url": ""},
+        },
+    }
+    assert map_rows(data) == [("11", "Police reform", {"s1", "s2"}), ("12", "Courts", set()), ("2", "Flat row", {"3"})]
+    egm = {"title": "Rule of law: an evidence gap map", "url": "https://x/egm/rol", "year": "2020"}
+    reviews, refs = build_rows(egm, data, min_studies=2)
+    assert [(r["title"], r["level"], r["n_references"], r["n_with_doi"], r["published_before"]) for r in reviews] == [
+        ("Rule of law", "map", 3, 1, "2019-12-31"),
+        ("Rule of law: Police reform", "intervention", 2, 1, "2019-12-31"),
+    ]
+    assert reviews[1]["url"] == "https://x/egm/rol#intervention=11"
+    row_refs = [r for r in refs if r["review_title"] == "Rule of law: Police reform"]
+    assert [(r["ref_id"], r["doi"], r["label"]) for r in row_refs] == [("3ie:s1", "10.1234/one", "content"), ("3ie:s2", "", "content")]
+
+
+def test_get_yef_strands() -> None:
+    from get_yef import MAP_SCOPE, build_rows, strands
+
+    csv_data = {"rows": [
+        [{"id": 100, "title": "Toolkit strand", "parentId": None, "isColumn": True}],
+        [{"id": 101, "title": "Uncategorised", "parentId": 100}, {"id": 102, "title": "Mentoring ", "parentId": 100}, {"id": 103, "title": "CCTV", "parentId": 100}],
+        [{"id": 200, "title": "Outcomes", "parentId": None}, {"id": 201, "title": "Violence", "parentId": 200}],
+    ]}
+    names = strands(csv_data)
+    assert names == {102: "Mentoring", 103: "CCTV"}
+    items = [
+        {"ItemId": 1, "Title": "M1", "DOI": "10.1234/m1", "Year": "2018", "URL": "", "Codes": [{"AttributeId": 102}, {"AttributeId": 201}]},
+        {"ItemId": 2, "Title": "M2", "DOI": "", "Year": "2021", "URL": "http://m2", "Codes": [{"AttributeId": 102}]},
+        {"ItemId": 3, "Title": "C1", "DOI": "", "Year": "", "URL": "", "Codes": [{"AttributeId": 103}]},
+    ]
+    reviews, refs = build_rows(items, names, min_studies=2)
+    assert [(r["title"], r["level"], r["n_references"], r["published_before"]) for r in reviews] == [
+        (MAP_SCOPE, "map", 3, "2021-12-31"),
+        (f"{MAP_SCOPE}: Mentoring", "intervention", 2, "2021-12-31"),
+    ]
+    assert [r["ref_id"] for r in refs if r["review_title"].endswith("Mentoring")] == ["yef:1", "yef:2"]
+
+
+def test_get_sr4all_filter() -> None:
+    from get_sr4all import DEFAULT_FIELDS, wanted
+
+    ok = {"field": "Psychology", "doi": "10.1/x", "research_questions": ["q"], "language": "en", "referenced_works_count": 40, "title": "X: a systematic review"}
+    assert wanted(ok, set(DEFAULT_FIELDS), 30)
+    assert not wanted({**ok, "field": "Medicine"}, set(DEFAULT_FIELDS), 30)
+    assert not wanted({**ok, "research_questions": []}, set(DEFAULT_FIELDS), 30)
+    assert not wanted({**ok, "referenced_works_count": 29}, set(DEFAULT_FIELDS), 30)
+    assert not wanted({**ok, "title": "Protocol for X"}, set(DEFAULT_FIELDS), 30)
+    assert not wanted({**ok, "language": "de"}, set(DEFAULT_FIELDS), 30)
+
+
+def test_get_campbell_select() -> None:
+    from get_campbell import select_reviews
+
+    works = [
+        {"id": "W1", "title": "Hot spots policing", "doi": "10.1/1", "publication_date": "2019-05-01", "referenced_works_count": 100},
+        {"id": "W2", "title": "PROTOCOL: Hot spots policing", "doi": "10.1/2", "publication_date": "2018-01-01", "referenced_works_count": 100},
+        {"id": "W3", "title": "Hot spots policing", "doi": "10.1/3", "publication_date": "2023-01-01", "referenced_works_count": 150},  # update: same title
+        {"id": "W4", "title": "Short one", "doi": "10.1/4", "publication_date": "2019-01-01", "referenced_works_count": 10},
+        {"id": "W5", "title": "No DOI", "doi": None, "publication_date": "2019-01-01", "referenced_works_count": 100},
+    ]
+    assert [w["id"] for w in select_reviews(works, min_refs=30)] == ["W1"]
 
 
 if __name__ == "__main__":
@@ -1151,4 +1371,12 @@ if __name__ == "__main__":
     test_baseline_snippet_arm()
     test_baseline_score_evaluator()
     test_history_cost_column()
+    test_doi_if_valid()
+    test_clean_review_title_gap_maps()
+    test_not_a_review_title()
+    test_write_ground_truth_round_trip()
+    test_get_3ie_map_rows()
+    test_get_yef_strands()
+    test_get_sr4all_filter()
+    test_get_campbell_select()
     print("ok")

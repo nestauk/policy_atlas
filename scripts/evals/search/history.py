@@ -33,6 +33,7 @@ from typing import Any
 
 from ground_truth import iso_date
 from ground_truth_dataset import DEFAULT_DATASET
+from langfuse.api.core import ApiError
 
 from policy_atlas.core import tracing
 
@@ -43,14 +44,22 @@ HEADER = (
 )
 
 
-def fetch_runs(client: Any, dataset_name: str) -> list[dict[str, Any]]:
-    """One row per dataset run, oldest first, with each score averaged over its items."""
+def fetch_runs(
+    client: Any, dataset_name: str, since: str | None = None
+) -> list[dict[str, Any]]:
+    """One row per dataset run, oldest first, with each score averaged over its items.
+
+    ``since`` (YYYY-MM-DD) skips older runs before their items are fetched, so a
+    short listing does not pay for every historical run's score and trace lookups.
+    """
     dataset = client.api.datasets.get(dataset_name)
     rows = []
     for run in sorted(
         client.api.datasets.get_runs(dataset_name, limit=100).data,
         key=lambda r: r.created_at,
     ):
+        if since and run.created_at.strftime("%Y-%m-%d") < since:
+            continue
         items = client.api.dataset_run_items.list(
             dataset_id=dataset.id, run_name=run.name, limit=100
         ).data
@@ -70,7 +79,12 @@ def fetch_runs(client: Any, dataset_name: str) -> list[dict[str, Any]]:
         else:
             llm_costs = []
             for item in items:
-                total_cost = getattr(client.api.trace.get(item.trace_id), "total_cost", None)
+                try:
+                    trace = client.api.trace.get(item.trace_id)
+                except ApiError:
+                    # A trace pruned by retention must not abort the whole listing.
+                    continue
+                total_cost = getattr(trace, "total_cost", None)
                 if total_cost is not None:
                     llm_costs.append(total_cost)
             cost = sum(llm_costs) if llm_costs else None
@@ -100,13 +114,20 @@ def _pct(value: float | None) -> str:
     return "-" if value is None else f"{value:.1%}"
 
 
+def usd(value: float) -> str:
+    """Dollars to two decimals, or four when the amount would otherwise show as $0.00.
+
+    OpenAlex bills fractions of a cent per page, so $0.0004 must not print as $0.00.
+    Shared with ``baseline_recall.py`` so both tables format money the same way.
+    """
+    return f"${value:.2f}" if value == 0 or value >= 0.01 else f"${value:.4f}"
+
+
 def _cost(r: dict[str, Any]) -> str:
     cost = r.get("cost")
     if cost is None:
         return "n/a"
-    # OpenAlex bills fractions of a cent, so show four decimals rather than $0.00.
-    dollars = f"${cost:.2f}" if cost == 0 or cost >= 0.01 else f"${cost:.4f}"
-    return f"{dollars} {r['cost_kind']}"
+    return f"{usd(cost)} {r['cost_kind']}"
 
 
 def render_row(r: dict[str, Any]) -> str:
@@ -133,9 +154,7 @@ def main() -> None:
         parser.error(
             "Langfuse is not configured (LANGFUSE_PUBLIC_KEY / SECRET_KEY / HOST)."
         )
-    rows = fetch_runs(client, args.dataset)
-    if args.since:
-        rows = [r for r in rows if r["date"] >= args.since]
+    rows = fetch_runs(client, args.dataset, since=args.since)
     print(HEADER)
     for row in rows:
         print(render_row(row))

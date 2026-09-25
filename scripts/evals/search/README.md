@@ -7,7 +7,7 @@ This folder contains scripts related to calculating evaluation metrics against a
 
 ## How the files fit together
 
-The folder has nine Python files. You run five of them from the command line. The other four are helper modules that the scripts import.
+The folder has thirteen Python files. You run nine of them from the command line. The other four are helper modules that the scripts import.
 
 **Scripts you run:**
 
@@ -17,6 +17,7 @@ The folder has nine Python files. You run five of them from the command line. Th
 | `production_recall.py` | Measures how much of each review's reference list the pipeline finds when it runs exactly as it does in production. It makes one Langfuse run for each search depth (rapid, standard, deep). | By hand, from time to time, so that a history of production recall builds up. |
 | `history.py` | Prints one markdown table row per dataset run in Langfuse: date, commit, settings, run name, mean recall and the run's variable cost. It writes nothing. | After each eval you can copy the rows worth keeping into `results/history.md` and add a note. |
 | `baseline_recall.py` | The baselines. Sends each review's intent once, as plain text, to Semantic Scholar (keyword and semantic search), Consensus and OpenAlex, caches the raw result pages locally, and scores recall at several result caps. One Langfuse run per service and cap. | When you want a "what does good look like" number to compare the pipeline's recall with. The services are called once; later runs read the cache. See section 5. |
+| `get_campbell.py`, `get_3ie.py`, `get_yef.py`, `get_sr4all.py` | The ground-truth fetchers. Each downloads one public source of "review plus the studies it covers", keeps the raw download under `results/ground_truth/raw/`, and writes two CSVs in the same shape as `input/gt_reviews.csv` and `input/references.csv` into `results/ground_truth/`. | When you want to grow the ground truth beyond the four hand-made reviews. See section 6. |
 | `sweep_record_cap.py` | The experiment. It runs a rapid search many times, each time with a different cap on the number of records kept and with one of the two query-generation methods. It records the recall for each combination. | When you want to know how the record cap or the prompting method changes recall. |
 
 The two measuring scripts read the reviews and their reference lists from the Langfuse dataset. They do not read the CSV files. This means you must run `ground_truth_dataset.py` at least once before you run either of them.
@@ -51,7 +52,7 @@ input/references.csv ─┴─> ground_truth_dataset.py ──> Langfuse dataset
                                      results/*.csv (sweep only, built with inspect_run.py)
 ```
 
-Abbreviations used above: CSV is a comma-separated values file. DOI is a Digital Object Identifier, the permanent ID of a published paper. API is an application programming interface, the way our code asks OpenAlex and Overton for records.
+Abbreviations used above: CSV is a comma-separated values file. JSON is a plain-text data format (JavaScript Object Notation) that programs read and write. DOI is a Digital Object Identifier, the permanent ID of a published paper. API is an application programming interface, the way our code asks OpenAlex and Overton for records.
 
 ## Prerequisites
 
@@ -178,11 +179,13 @@ Then copy the row(s) worth keeping into the table in `results/history.md` and fi
 Each row also shows the run's **variable cost**: the money that changes with how much you
 search, summed over the reviews in the run. The label after the number says what it counts.
 
-- `api` — baseline runs. The **computed** price of fetching that many results from the
-  service, from the service's own price table (Consensus $0.05 per call, one call per 100
-  papers; OpenAlex reports its own `cost_usd`; Semantic Scholar is free). It is what that cap
-  would cost on its own. It is not what the run spent: with the cache, the services are
-  called once and every cap is scored from the same pages.
+- `api` — baseline runs. The **computed** price of the result pages needed to reach that
+  cap, at the page size the service returned, from the service's own price table (Consensus
+  $0.05 per call, one call per 100 papers returned; OpenAlex reports its own `cost_usd`;
+  Semantic Scholar is free). Consensus answers up to 300 results per request on our plan,
+  so caps 50, 100 and 200 all cost one request of three calls ($0.15 per review); a request
+  sized to the cap would cost less (one call for 50 results). It is not what the run spent:
+  with the cache, the services are called once and every cap is scored from the same pages.
 - `llm` — pipeline runs. The language-model spend that Langfuse attributes to that review's
   trace (`total_cost`), summed over the reviews.
 
@@ -265,3 +268,47 @@ baselines' cap-50 and cap-100 rows. If one plain OpenAlex search matches or beat
 pipeline's rapid recall at a similar number of candidates, the weak part is probably our
 query generation, not OpenAlex's corpus. That is a sign, not proof: the pipeline sends many
 generated queries and then trims, so the two are not a controlled pair.
+
+## 6. Growing the ground truth: the `get_*.py` fetchers
+
+### What this does
+
+The four hand-made reviews in `input/` are too few to tell a real improvement from noise. Each `get_<dataset>.py` script pulls one public collection of "a review question plus the studies that answer it" and writes it in the same two-CSV shape that `ground_truth_dataset.py` already reads, so nothing downstream changes. Raw downloads go to `results/ground_truth/raw/` and the CSVs to `results/ground_truth/`; git ignores both.
+
+| Script | Source | What one "review" is | Studies per review | `label` column |
+|---|---|---|---|---|
+| `get_campbell.py` | Campbell Systematic Reviews (a social-policy review journal), listed through OpenAlex | One published review; the title is the intent, the reference list the target | 30 to several hundred | **empty** — needs the labelling pass |
+| `get_3ie.py` | 3ie Development Evidence Portal evidence gap maps (development interventions in low- and middle-income countries) | One intervention row of a map (`level = intervention`), or a whole map (`level = map`) | 20 to a few thousand | `content` |
+| `get_yef.py` | Youth Endowment Fund Programmes Evidence and Gap Map (preventing youth violence, mostly UK and US studies) | One toolkit strand such as mentoring or hot-spots policing, or the whole map | 20 to a few hundred | `content` |
+| `get_sr4all.py` | Webis-SR4ALL-26, a Zenodo corpus of 300,000 systematic reviews found in OpenAlex | One review in a social-science field with a stated research question | 30 or more | **empty** — needs the labelling pass |
+
+Two kinds of target, and they are not equally clean:
+
+- **Gap-map rows** (3ie, YEF) list studies that screeners coded as being about that intervention. Every one is on topic, so the rows are labelled `content` and are scorable straight away. About a quarter to a third have no DOI (grey literature). Those rows keep a URL but cannot be scored until an Overton id is filled in.
+- **Reference lists** (Campbell, SR4ALL) mix the studies a review is about with background and methods citations. The `label` column is left empty, so `ground_truth_dataset.py` counts none of them until the labelling repo ([policy_atlas_gt_labelling](https://github.com/nestauk/policy_atlas_gt_labelling)) has marked the `content` rows, exactly as was done for the first four reviews.
+
+Columns beyond the ones the loaders read (`dataset`, `review_id`, `level`, `n_references`, `n_with_doi`, `research_questions`, `url`, `year`, `ref_id`) are there for the person choosing and labelling reviews. The loaders ignore them.
+
+### Usage
+
+```
+# Each script caches its raw download; add --refresh to download again.
+uv run --project backend --env-file backend/.env python scripts/evals/search/get_campbell.py --min-refs 30
+uv run --project backend python scripts/evals/search/get_3ie.py --min-studies 20
+uv run --project backend python scripts/evals/search/get_yef.py --min-studies 20
+# SR4ALL: first download sr4all_full.jsonl (1.6 GB, doi 10.5281/zenodo.18431942) into results/ground_truth/raw/
+uv run --project backend --env-file backend/.env python scripts/evals/search/get_sr4all.py --limit 100
+
+# Then pick rows, label where needed, and upload as usual:
+uv run --project backend --env-file backend/.env python scripts/evals/search/ground_truth_dataset.py \
+    --reviews scripts/evals/search/results/ground_truth/3ie_reviews.csv \
+    --references scripts/evals/search/results/ground_truth/3ie_references.csv --dataset retrieval-ground-truth-3ie --dry-run
+```
+
+### Methodology details
+
+- **Intent.** As for the hand-made reviews, the `title` column becomes the intent through `clean_review_title`, which now also strips "an evidence gap map" and "a systematic map" tails. A gap-map row's title is "<map title>: <intervention row>", for example "The effects of rule of law interventions on justice outcomes: Diversion".
+- **Cutoff.** A Campbell or SR4ALL review is identified by its DOI and gets `published_before` one month before its OpenAlex publication date, as before. A gap-map row is identified by a URL, so it needs an explicit date: the script uses 31 December of the latest publication year among the row's studies, the last date a study could carry and still be in the map.
+- **3ie's review records are not used.** The portal lists 1,700 systematic reviews, but a review record links to at most four "related" studies, not its included-study list. Only the maps carry full study lists. The maps are read through the two JSON calls the map page itself makes; there is no documented API. 3ie's terms allow non-commercial use with attribution.
+- **SR4ALL selection** is repeatable: English reviews with a DOI, at least one stated research question, at least `--min-refs` references, a non-protocol title and a `field` in `--fields` (default: Social Sciences, Psychology, Economics, Business), then the `--limit` most cited. The stated research questions are kept in the `research_questions` column for a later eval that starts from a question instead of a title.
+- **Duplicate titles** (an updated review with the same title as the original) are dropped after the first, because the title is the join key between the two CSVs.
