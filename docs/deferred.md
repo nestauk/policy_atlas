@@ -2461,12 +2461,15 @@ Context: `scripts/evals/search/baseline_recall.py` and `results/history.md` (row
   suggest-only title lookup on OpenAlex and Overton with a human accepting each key) is in
   git history at commit `37d496c`. Lands with the owner's planned ground-truth expansion
   to more reviews, not before.
-- **The "swap" slice.** The baselines show one plain Consensus search beating the
-  pipeline's rapid depth and one plain OpenAlex search falling below it. Whether to add a
-  Semantic Scholar or Consensus backend to the pipeline, or to change how queries are
-  written for OpenAlex, is a separate decision on these results. Semantic Scholar's search
-  needs every word to match and is the wrong shape for a title-length intent; a keyword
-  query would test it fairly.
+- **The "swap" slice.** The baselines show one Semantic Scholar semantic (snippet) search
+  reaching 18.1% at the 1,000 ceiling, above the pipeline's deep depth (15.3%), and one plain
+  Consensus search beating the pipeline's rapid depth, while one plain OpenAlex search falls
+  below it. Whether to add a Semantic Scholar snippet or Consensus backend to the pipeline,
+  or to change how queries are written for OpenAlex, is a separate decision on these results.
+  Open questions for that slice: the snippet arm leans towards open-access papers (body
+  text), returns about 550 unique papers per 1,000 snippets, and needs a DOI lookup step;
+  Semantic Scholar's keyword search needs every word to match and is the wrong shape for a
+  title-length intent, so a keyword-shaped query would test it fairly.
 - **Upload the cache to S3.** `results/cache/` is one laptop's copy of what each service
   ranked where (about 25 MB for three arms and four reviews). Worth keeping if the results
   are ever cited; today a `--refresh` refetch is the only recovery, and Consensus bills
