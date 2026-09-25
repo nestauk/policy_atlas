@@ -69,7 +69,7 @@ RESULT_CEILING = 1000
 EXPERIMENT = "retrieval-baseline"
 CACHE_DIR = Path(__file__).parent / "results" / "cache"
 # Prices read from the services' documentation on 2026-09-25.
-CONSENSUS_USD_PER_CALL = 0.05
+CONSENSUS_USD_PER_CALL = 0.05  # our API beta account pays this on every call, no free amount
 CONSENSUS_PAPERS_PER_CALL = 100
 MIN_INTERVAL_S = {"semantic-scholar": 1.0, "consensus": 1.0, "openalex-raw": 0.2}
 KEY_ENV = {
@@ -253,6 +253,7 @@ def fetch_consensus(intent: str, cutoff: str, *, get: Getter, api_key: str) -> F
     """
     pages: list[dict[str, Any]] = []
     page, page_size = 0, 1000
+    echoed_first = 1000
     request = {
         "query": intent,
         "page": "0",
@@ -270,24 +271,32 @@ def fetch_consensus(intent: str, cutoff: str, *, get: Getter, api_key: str) -> F
             "https://api.consensus.app/v1/search", params, {"x-api-key": api_key}
         )
         if response is None or response.status_code != 200:
-            return _failure(pages, request, page_size)
+            return _failure(pages, request, echoed_first)
         body = response.json()
         pages.append(body)
         results = body.get("results", [])
         # An empty first page with no echoed size would make a zero page size.
         echoed = int(body.get("page_size") or len(results) or 1)
         if len(pages) == 1:
-            page_size = echoed
-        if (
-            not results
-            or body.get("is_end", False)
-            or (page + 1) * page_size >= RESULT_CEILING
-        ):
+            page_size = echoed_first = echoed
+        # Positions covered so far in the service's ranked list. A page can hold a few
+        # results fewer than its size, so count positions, not results.
+        covered = (page + 1) * page_size
+        if not results or body.get("is_end", False) or covered >= RESULT_CEILING:
             break
         page = int(
             body.get("next_page") if body.get("next_page") is not None else page + 1
         )
-    return Fetched(pages, request, page_size, 0, True, _now())
+        if (page + 1) * page_size > RESULT_CEILING:
+            # Consensus rejects a page that would pass 1,000 results with a 400, and
+            # sends no next_page at that point. At page size 300 that leaves positions
+            # 900-999 unreachable at this size, so the last request asks for exactly the
+            # remaining slice at a smaller size: page 9 at size 100 (750 -> page 3 at 250).
+            remaining = RESULT_CEILING - covered
+            if remaining <= 0 or covered % remaining:
+                break
+            page, page_size = covered // remaining, remaining
+    return Fetched(pages, request, echoed_first, 0, True, _now())
 
 
 def fetch_openalex_raw(intent: str, cutoff: str, *, get: Getter) -> Fetched:
@@ -513,13 +522,18 @@ def score_baseline(*, output: dict[str, Any], **_: Any) -> list[Evaluation]:
     ]
 
 
+def _usd(value: float) -> str:
+    """Dollars to two decimals, or four when the amount would otherwise show as $0.00."""
+    return f"${value:.2f}" if value == 0 or value >= 0.01 else f"${value:.4f}"
+
+
 def _describe(title: str, score: dict[str, Any]) -> str:
     failed = (
         f", {score['n_failed_calls']} REQUESTS FAILED — recall is an undercount"
         if score["n_failed_calls"]
         else ""
     )
-    return f"  {title[:60]}: search_recall={score['search_recall']:.0%} ({score['n_found']}/{score['n_ground_truth']}); kept={score['n_candidates_kept']}, requests={score['n_api_calls']}, cost=${score['api_cost_usd']:.2f}{failed}"
+    return f"  {title[:60]}: search_recall={score['search_recall']:.0%} ({score['n_found']}/{score['n_ground_truth']}); kept={score['n_candidates_kept']}, requests={score['n_api_calls']}, cost={_usd(score['api_cost_usd'])}{failed}"
 
 
 def run_baseline(
@@ -660,9 +674,9 @@ def main() -> None:
         parser.error(str(exc))
     label = args.run_label or f"{date.today().isoformat()}-{git_commit[:7]}"
     ceilings = {
-        "semantic-scholar": "10",
-        "openalex-raw": "5",
-        "consensus": "≤ 10 calls per review at $0.05 per call above the plan's included amount",
+        "semantic-scholar": "at most 10 requests per review, free",
+        "openalex-raw": "at most 5 requests per review, free",
+        "consensus": "at most 10 calls per review at $0.05 per call, billed on every call",
     }
     for arm in args.arms:
         needed = sum(
@@ -670,9 +684,7 @@ def main() -> None:
             for item in items
             for cached in [read_cache(cache_path(arm, str(item.id)))]
         )
-        print(
-            f"{arm}: {needed} review(s) need fetch; ceiling {ceilings[arm]} per review"
-        )
+        print(f"{arm}: {needed} review(s) need a fetch; {ceilings[arm]}")
     for arm in args.arms:
         for item in items:
             started = time.monotonic()
@@ -708,7 +720,7 @@ def main() -> None:
     )
     for row in rows:
         print(
-            f"{row['arm']:<18}{row['cap']:>6}{row['mean_recall']:>14.1%}{row['kept']:>8}{row['requests']:>11}{row['failed']:>8}{row['cost']:>10.2f}  {row['fetched_at']}  {row['url']}"
+            f"{row['arm']:<18}{row['cap']:>6}{row['mean_recall']:>14.1%}{row['kept']:>8}{row['requests']:>11}{row['failed']:>8}{_usd(row['cost']):>11}  {row['fetched_at']}  {row['url']}"
         )
     tracing.flush(client)
 

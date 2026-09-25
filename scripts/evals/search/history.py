@@ -102,7 +102,11 @@ def _pct(value: float | None) -> str:
 
 def _cost(r: dict[str, Any]) -> str:
     cost = r.get("cost")
-    return "n/a" if cost is None else f"${cost:.2f} {r['cost_kind']}"
+    if cost is None:
+        return "n/a"
+    # OpenAlex bills fractions of a cent, so show four decimals rather than $0.00.
+    dollars = f"${cost:.2f}" if cost == 0 or cost >= 0.01 else f"${cost:.4f}"
+    return f"{dollars} {r['cost_kind']}"
 
 
 def render_row(r: dict[str, Any]) -> str:
