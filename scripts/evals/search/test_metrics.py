@@ -494,6 +494,400 @@ def test_select_items() -> None:
         assert "Parental leave" in str(exc)  # lists what was available
 
 
+def _baseline_response(body):
+    import httpx
+
+    return httpx.Response(
+        200, json=body, request=httpx.Request("GET", "https://example.test")
+    )
+
+
+def _baseline_get(bodies, seen=None):
+    values = list(bodies)
+    seen = seen if seen is not None else []
+
+    def get(url, params, headers):
+        seen.append(dict(params))
+        return _baseline_response(values.pop(0))
+
+    return get
+
+
+def test_baseline_records_of() -> None:
+    from baseline_recall import Fetched, records_of
+    from ground_truth import record_key
+
+    common = dict(
+        request={},
+        page_size=100,
+        n_failed_calls=0,
+        complete=True,
+        fetched_at="2026-01-01T00:00:00+00:00",
+    )
+    semantic = Fetched(
+        pages=[
+            {
+                "data": [
+                    {"paperId": "S1", "externalIds": {"DOI": "10.1/A"}, "title": "S"},
+                    {"paperId": "S2", "externalIds": None, "title": "No key"},
+                ]
+            }
+        ],
+        **common,
+    )
+    consensus = Fetched(
+        pages=[{"results": [{"paper_id": "C1", "doi": "10.1/C", "title": "C"}]}],
+        **common,
+    )
+    openalex = Fetched(
+        pages=[{"results": [{"id": "W1", "doi": "10.1/O", "display_name": "O"}]}],
+        **common,
+    )
+    assert records_of("semantic-scholar", semantic)[0] == {
+        "doi": "10.1/A",
+        "backend": "semantic-scholar",
+        "backend_record_id": "S1",
+        "title": "S",
+    }
+    assert record_key(records_of("semantic-scholar", semantic)[1]) is None
+    assert records_of("consensus", consensus)[0]["backend_record_id"] == "C1"
+    assert records_of("openalex-raw", openalex)[0]["title"] == "O"
+
+
+def test_baseline_cutoffs() -> None:
+    from baseline_recall import (
+        consensus_cutoff,
+        fetch_consensus,
+        fetch_openalex_raw,
+        openalex_cutoff,
+        semantic_scholar_cutoff,
+        semantic_scholar_query,
+    )
+
+    assert semantic_scholar_cutoff("2019-03-15") == ":2019-03-15"
+    assert openalex_cutoff("2019-03-15") == "to_publication_date:2019-03-15"
+    assert consensus_cutoff("2019-03-15") == {"year_max": "2019", "month_max": "3"}
+    assert consensus_cutoff("2019-11-01")["month_max"] == "11"
+    assert semantic_scholar_query("work-life balance") == "work life balance"
+    seen = []
+    fetch_consensus(
+        "work-life balance",
+        "2019-03-15",
+        get=_baseline_get([{"results": [], "page_size": 300, "is_end": True}], seen),
+        api_key="secret",
+    )
+    fetch_openalex_raw(
+        "work-life balance", "2019-03-15", get=_baseline_get([{"results": []}], seen)
+    )
+    assert all(
+        params["query"] == "work-life balance" for params in seen if "query" in params
+    )
+    assert (
+        next(params for params in seen if "search" in params)["search"]
+        == "work-life balance"
+    )
+
+
+def test_baseline_paging_semantic_scholar() -> None:
+    from baseline_recall import fetch_semantic_scholar
+
+    seen = []
+    fetched = fetch_semantic_scholar(
+        "q",
+        "2020-01-01",
+        get=_baseline_get(
+            [{"data": [{"paperId": "1"}], "next": 100}, {"data": [{"paperId": "2"}]}],
+            seen,
+        ),
+        api_key="x",
+    )
+    assert len(fetched.pages) == 2 and [p["offset"] for p in seen] == ["0", "100"]
+    assert (
+        len(
+            fetch_semantic_scholar(
+                "q", "2020-01-01", get=_baseline_get([{"data": []}]), api_key="x"
+            ).pages
+        )
+        == 1
+    )
+    full = {"data": [{"paperId": str(i)} for i in range(100)]}
+    assert (
+        len(
+            fetch_semantic_scholar(
+                "q", "2020-01-01", get=_baseline_get([full]), api_key="x"
+            ).pages
+        )
+        == 1
+    )
+    pages = [
+        {"data": [{"paperId": f"{i}-{j}"} for j in range(100)], "next": (i + 1) * 100}
+        for i in range(11)
+    ]
+    seen = []
+    assert (
+        len(
+            fetch_semantic_scholar(
+                "q", "2020-01-01", get=_baseline_get(pages, seen), api_key="x"
+            ).pages
+        )
+        == 10
+    )
+    assert [p["offset"] for p in seen] == [str(i * 100) for i in range(10)]
+
+
+def test_baseline_paging_consensus() -> None:
+    from baseline_recall import fetch_consensus
+
+    seen = []
+    pages = [
+        {
+            "results": [{"paper_id": "1"}],
+            "page_size": 300,
+            "is_end": False,
+            "next_page": 1,
+        },
+        {"results": [{"paper_id": "2"}], "page_size": 300, "is_end": True},
+    ]
+    fetched = fetch_consensus(
+        "q", "2020-01-01", get=_baseline_get(pages, seen), api_key="x"
+    )
+    assert (
+        seen[0]["page"] == "0"
+        and seen[0]["page_size"] == "1000"
+        and seen[1]["page_size"] == "300"
+        and fetched.page_size == 300
+    )
+    assert (
+        len(
+            fetch_consensus(
+                "q",
+                "2020-01-01",
+                get=_baseline_get([{"results": [], "page_size": 300, "is_end": False}]),
+                api_key="x",
+            ).pages
+        )
+        == 1
+    )
+    four = [
+        {"results": [{"paper_id": str(i)}], "page_size": 300, "is_end": False}
+        for i in range(5)
+    ]
+    assert (
+        len(
+            fetch_consensus(
+                "q", "2020-01-01", get=_baseline_get(four), api_key="x"
+            ).pages
+        )
+        == 4
+    )
+
+
+def test_baseline_paging_openalex() -> None:
+    from baseline_recall import fetch_openalex_raw
+
+    seen = []
+    short = fetch_openalex_raw(
+        "q", "2020-01-01", get=_baseline_get([{"results": [{}]}], seen)
+    )
+    assert (
+        len(short.pages) == 1
+        and seen[0]["per-page"] == "200"
+        and seen[0]["filter"] == "to_publication_date:2020-01-01"
+    )
+    full = [{"results": [{"id": str(j)} for j in range(200)]} for _ in range(6)]
+    assert (
+        len(fetch_openalex_raw("q", "2020-01-01", get=_baseline_get(full)).pages) == 5
+    )
+
+
+def test_baseline_retry() -> None:
+    import httpx
+
+    from baseline_recall import fetch_openalex_raw, make_getter
+
+    sleeps = []
+    values = [httpx.Response(429, headers={"retry-after": "3"}), httpx.Response(200)]
+    getter = make_getter(
+        "semantic-scholar",
+        sleep=sleeps.append,
+        get=lambda *args, **kwargs: values.pop(0),
+    )
+    assert getter("url", {}, {}).status_code == 200 and 3.0 in sleeps
+    sleeps = []
+    getter = make_getter(
+        "semantic-scholar",
+        sleep=sleeps.append,
+        get=lambda *args, **kwargs: httpx.Response(503),
+    )
+    assert getter("url", {}, {}).status_code == 503 and sleeps[-3:] == [1.0, 2.0, 4.0]
+
+    def failing(url, params, headers):
+        return httpx.Response(503)
+
+    fetched = fetch_openalex_raw("q", "2020-01-01", get=failing)
+    assert fetched.n_failed_calls == 1 and not fetched.complete and fetched.pages == []
+    # A full page, then a failure: the page already fetched is kept, the fetch is
+    # marked incomplete, and nothing is raised.
+    full_page = {"results": [{"id": str(j)} for j in range(200)]}
+    answers = [_baseline_response(full_page), httpx.Response(503)]
+
+    def then_failing(url, params, headers):
+        return answers.pop(0)
+
+    fetched = fetch_openalex_raw("q", "2020-01-01", get=then_failing)
+    assert (
+        fetched.n_failed_calls == 1 and not fetched.complete and len(fetched.pages) == 1
+    )
+
+
+def test_baseline_cache_round_trip() -> None:
+    import json
+    import tempfile
+    from pathlib import Path
+
+    from baseline_recall import (
+        Fetched,
+        cache_path,
+        load_or_fetch,
+        read_cache,
+        write_cache,
+    )
+
+    fetched = Fetched(
+        [{"results": []}], {"query": "q"}, 100, 0, True, "2026-01-01T00:00:00+00:00"
+    )
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        path = cache_path("consensus", "item", root)
+        write_cache(
+            path, arm="consensus", intent="q", cutoff="2020-01-01", fetched=fetched
+        )
+        assert (
+            read_cache(path).pages == fetched.pages
+            and read_cache(path).page_size == 100
+        )
+        calls = []
+        assert load_or_fetch(
+            "consensus",
+            item_id="item",
+            intent="q",
+            cutoff="2020-01-01",
+            cache_dir=root,
+            fetcher=lambda *_: calls.append(1),
+        )[1]
+        incomplete = Fetched([], {}, 100, 1, False, fetched.fetched_at)
+        write_cache(
+            path, arm="consensus", intent="q", cutoff="2020-01-01", fetched=incomplete
+        )
+
+        def replacement(*_):
+            return fetched
+
+        assert not load_or_fetch(
+            "consensus",
+            item_id="item",
+            intent="q",
+            cutoff="2020-01-01",
+            cache_dir=root,
+            fetcher=replacement,
+        )[1]
+        assert not load_or_fetch(
+            "consensus",
+            item_id="item",
+            intent="q",
+            cutoff="2020-01-01",
+            cache_dir=root,
+            refresh=True,
+            fetcher=replacement,
+        )[1]
+        assert set(json.loads(path.read_text())) == {
+            "arm",
+            "intent",
+            "cutoff",
+            "request",
+            "page_size",
+            "fetched_at",
+            "complete",
+            "n_failed_calls",
+            "pages",
+        }
+        assert (
+            "x-api-key" not in path.read_text()
+            and path.name.endswith(".json")
+            and len(path.stem) == 16
+        )
+
+
+def test_baseline_slice_and_cost() -> None:
+    from baseline_recall import (
+        Fetched,
+        cost_usd,
+        pages_for_cap,
+        score_arm,
+        slice_at_cap,
+    )
+    from ground_truth import GroundTruth
+
+    records = [{"doi": "10/a"}, {"doi": "10/a"}, {"doi": "10/b"}]
+    assert len(slice_at_cap(records, 2)) == 1 and len(slice_at_cap(records, 3)) == 2
+    pages = [{"results": [{}] * 20}, {"results": [{}] * 150}, {"results": [{}] * 300}]
+    assert (
+        cost_usd("consensus", pages) == 0.3
+        and cost_usd("semantic-scholar", pages) == 0.0
+    )
+    fetched = Fetched(
+        [{"meta": {"cost_usd": 0.2}, "results": [{"doi": "10/a"}]}],
+        {},
+        200,
+        0,
+        True,
+        "2026-01-01T00:00:00+00:00",
+    )
+    assert cost_usd("openalex-raw", pages_for_cap(fetched, 200)) == 0.2
+    # A cited DOI in position N+1 is outside cap N, so it is not found at that cap.
+    later = Fetched(
+        [{"meta": {"cost_usd": 0.1}, "results": [{"doi": "10/x"}, {"doi": "10/a"}]}],
+        {},
+        200,
+        0,
+        True,
+        "2026-01-01T00:00:00+00:00",
+    )
+    target = GroundTruth(dois={"10/a"}, source="doi")
+    assert score_arm("openalex-raw", later, target, 1)["n_found"] == 0
+    assert score_arm("openalex-raw", later, target, 2)["n_found"] == 1
+    # The cache path scores exactly like the live path.
+    import tempfile
+    from pathlib import Path
+
+    from baseline_recall import cache_path, read_cache, write_cache
+
+    with tempfile.TemporaryDirectory() as tmp:
+        path = cache_path("openalex-raw", "item", Path(tmp))
+        write_cache(
+            path, arm="openalex-raw", intent="q", cutoff="2020-01-01", fetched=later
+        )
+        for cap in (1, 2, 50):
+            assert score_arm(
+                "openalex-raw", read_cache(path), target, cap
+            ) == score_arm("openalex-raw", later, target, cap)
+    assert (
+        score_arm(
+            "openalex-raw", fetched, GroundTruth(dois={"10/a"}, source="doi"), 200
+        )["n_found"]
+        == 1
+    )
+
+
+def test_baseline_score_evaluator() -> None:
+    from baseline_recall import BASELINE_SCORE_KEYS, score_baseline
+
+    output = {key: 1 for key in BASELINE_SCORE_KEYS} | {"n_ground_truth": 2}
+    assert [
+        evaluation.name for evaluation in score_baseline(output=output)
+    ] == BASELINE_SCORE_KEYS
+
+
 if __name__ == "__main__":
     test_normalize_doi()
     test_record_key()
@@ -513,4 +907,13 @@ if __name__ == "__main__":
     test_multi_round_depth_needs_screening()
     test_production_recall_scores()
     test_select_items()
+    test_baseline_records_of()
+    test_baseline_cutoffs()
+    test_baseline_paging_semantic_scholar()
+    test_baseline_paging_consensus()
+    test_baseline_paging_openalex()
+    test_baseline_retry()
+    test_baseline_cache_round_trip()
+    test_baseline_slice_and_cost()
+    test_baseline_score_evaluator()
     print("ok")
