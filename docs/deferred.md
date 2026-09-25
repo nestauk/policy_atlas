@@ -2447,3 +2447,42 @@ deliberately left, each with its reason:
   names only (042 D4); institutions render in the citation sheet and the
   dossier. Add them to references only if readers ask — the list is dense
   already.
+
+## Search recall baselines (task 046 seams)
+
+Context: `scripts/evals/search/baseline_recall.py` and `results/history.md` (rows dated
+2026-09-25). Contract at `docs/tasks/046-search-baselines/contract.md`.
+
+- **P2 — grey-literature scoring keys, with the raw Overton arm.** The ground truth has 34
+  references with no DOI and no Overton id (31 in the loneliness review), so every recall
+  number, baseline and pipeline alike, is scholarly recall only. Fixing it is labelling
+  work on the ground truth: fill the `overton_id` column, then add the `overton` arm to
+  the baselines so Overton's contribution becomes visible. The design that was drafted (a
+  suggest-only title lookup on OpenAlex and Overton with a human accepting each key) is in
+  git history at commit `37d496c`. Lands with the owner's planned ground-truth expansion
+  to more reviews, not before. **Update 2026-09-25:** the expansion has its inputs: the four
+  fetchers (`scripts/evals/search/get_*.py`, contract § Amendment 2) write candidate reviews
+  from Campbell, 3ie gap maps, the YEF gap map and SR4ALL into `results/ground_truth/`. The
+  gap-map rows carry about 9,500 grey-literature studies with a URL and no DOI; that is the
+  `overton_id` labelling set. Still to do: choose the rows, label the reference-list sources,
+  fill `overton_id`, upload, then the `overton` arm.
+- **The "swap" slice.** The baselines show one Semantic Scholar semantic (snippet) search
+  reaching 18.1% at the 1,000 ceiling, above the pipeline's deep depth (15.3%), and one plain
+  Consensus search beating the pipeline's rapid depth, while one plain OpenAlex search falls
+  below it. Whether to add a Semantic Scholar snippet or Consensus backend to the pipeline,
+  or to change how queries are written for OpenAlex, is a separate decision on these results.
+  Open questions for that slice: the snippet arm leans towards open-access papers (body
+  text), returns about 550 unique papers per 1,000 snippets, and needs a DOI lookup step;
+  Semantic Scholar's keyword search needs every word to match and is the wrong shape for a
+  title-length intent, so a keyword-shaped query would test it fairly. If the cost
+  trade-off matters for that decision, price a cap as a request sized to the cap (one
+  Consensus call per 100 results), not as the 300-result pages the baselines fetched: the
+  cap-50 to cap-200 Consensus rows overstate that price by up to 3x (review stack,
+  2026-09-25).
+- **Upload the cache to S3.** `results/cache/` is one laptop's copy of what each service
+  ranked where (about 25 MB for three arms and four reviews). Worth keeping if the results
+  are ever cited; today a `--refresh` refetch is the only recovery, and Consensus bills
+  every call.
+- **Ranking-stability test.** Fetch the same query several times and measure how much the
+  ranking moves, so a recall difference of a point or two between runs can be told from
+  noise. Not run; each Consensus repeat costs about $0.50 per review.

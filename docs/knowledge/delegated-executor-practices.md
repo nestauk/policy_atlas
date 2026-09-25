@@ -3,7 +3,7 @@ type: Runbook
 title: Delegated-executor practices — Codex sandbox has no localhost DB; shared worktrees need ownership lists; killed workers resume by message
 description: Codex jobs cannot reach localhost Postgres, so delegated backend phases say "tests run lead-side" in the brief and the lead actually runs them before the gate; two codex jobs plus the lead can share one worktree when every brief carries an explicit file-ownership list; a fast-worker killed by a transient API stall resumes losslessly via SendMessage to the same agent id.
 tags: [codex, delegation, worktree, subagents, testing]
-timestamp: 2026-07-29
+timestamp: 2026-09-25
 ---
 
 # Rules
@@ -28,6 +28,17 @@ timestamp: 2026-07-29
   asserted ids/compilation instead of answering the pause (see
   [tested-in-isolation-is-not-wired](tested-in-isolation-is-not-wired.md)).
   Weight review budget toward delegated tests, not delegated product code.
+  Confirmed a fourth time in 046: Codex's `baseline_recall.py` survived four review
+  lanes with only edge-case findings, while its tests missed three of the
+  contract's listed self-checks.
+- **A background `make verify-fast` shares the test database** with anything
+  else that runs pytest. A brief delegated while a gate is in flight must say
+  "do not run the gate / pytest"; the lead runs the gate once both land (046
+  build; see [testing-database](testing-database.md)).
+- **Committing one phase's slice of a shared file** while a sibling phase has
+  already edited it: snapshot the file at gate time and stage the snapshot blob
+  with `git update-index --cacheinfo`, so the commit carries what the gate saw
+  and the sibling's edits stay in the working tree (046 build, `test_metrics.py`).
 - **Two families editing one working tree concurrently** is safe when the
   briefs carry disjoint file lists AND each names the sibling's files;
   string-anchored edits on one SHARED file from two agents also merged
