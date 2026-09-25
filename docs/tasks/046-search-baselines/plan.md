@@ -4,7 +4,8 @@ Problems P1–P4, decisions D1–D9, the terms and the arms table are defined in
 [contract.md](contract.md). This plan cites them and adds nothing to scope. P2 and D5 are
 deferred and have no phase.
 
-> Plan approved (before implementation): 2026-09-25 · owner.
+> Plan approved (before implementation): 2026-09-25 · owner. Phase 5 (arm 1b) added during
+> the build, owner-approved 2026-09-25.
 > Plan-stage adversarial review: ran 2026-09-25 (read-only Codex brief). Its findings are
 > folded into S1, S4–S6 and Phase 3 below. Two owner changes followed: the P2 deferral
 > removed the key-suggestion phase and the raw Overton arm; D9 (fetch once, cache) split
@@ -160,3 +161,21 @@ evidence expected lists; the deferred entries (rubric item 10: P2 with the raw O
 and the suggest-only key lookup design at commit `37d496c`; the "swap" slice; S3 upload
 of the cache; the ranking-stability test) in `docs/deferred.md`. Commit. Stop. Review runs
 in a fresh conversation.
+
+## Phase 5 — Arm 1b, `semantic-scholar-snippet` — `lead`
+
+Added during the build (owner, 2026-09-25). Lead because it is a small, seam-bearing change
+to a module already under review and needs the live rate-limit judgment.
+
+1. `fetch_semantic_scholar_snippet(intent, cutoff, *, get, api_key)`: one `GET snippet/search`
+   with `limit=1000`, `fields=snippet.snippetKind` and the cutoff; then `POST paper/batch`
+   (`fields=externalIds,title`, 500 `CorpusId:<id>` ids per call) for the unique papers in
+   order of first appearance. Pages: the snippet response, then one `{"batch", "ids"}` page
+   per lookup. The getter gains a `json=` argument for the POST. Minimum interval 3 s (the
+   free tier throttles below 1 request per second in practice).
+2. `records_of` for this arm: unique papers in snippet order, DOI from the lookup, `corpusId`
+   as `backend_record_id`. `score_arm`: every cap needs all pages (`n_api_calls` = search +
+   lookups); `n_api_records` = snippets. Cost 0.
+3. Self-checks per the contract's arm 1b bullet. `make verify-fast` green. Commit.
+4. Live: `--arms semantic-scholar-snippet` (12 free requests, four Langfuse runs). Rows and
+   notes into `history.md`; README and `verification.md` addenda. Commit.

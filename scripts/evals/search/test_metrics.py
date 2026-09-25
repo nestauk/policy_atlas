@@ -924,6 +924,92 @@ def test_baseline_slice_and_cost() -> None:
     )
 
 
+def test_baseline_snippet_arm() -> None:
+    """Semantic Scholar snippet search: one ranked request, then DOI lookups by corpus id."""
+    import httpx
+
+    from baseline_recall import (
+        SNIPPET,
+        Fetched,
+        cost_usd,
+        fetch_semantic_scholar_snippet,
+        records_of,
+        score_arm,
+    )
+    from ground_truth import GroundTruth
+
+    def hit(corpus_id, title="t"):
+        return {"score": 1.0, "paper": {"corpusId": corpus_id, "title": title}}
+
+    def scripted(bodies):
+        values = list(bodies)
+        seen = []
+
+        def get(url, params, headers, json=None):
+            seen.append({"url": url, "params": dict(params), "json": json})
+            return httpx.Response(
+                200, json=values.pop(0), request=httpx.Request("GET", url)
+            )
+
+        return get, seen
+
+    # Two unique papers among three snippets; the second paper has no DOI in the lookup.
+    snippets = {
+        "retrievalVersion": "pa1-v1",
+        "data": [hit("1", "A"), hit("2", "B"), hit("1")],
+    }
+    batch = [{"externalIds": {"DOI": "10.1/A"}, "title": "A"}, None]
+    get, seen = scripted([snippets, batch])
+    fetched = fetch_semantic_scholar_snippet(
+        "work-life", "2020-01-01", get=get, api_key="k"
+    )
+    assert len(seen) == 2 and fetched.complete and fetched.n_failed_calls == 0
+    assert seen[0]["params"]["query"] == "work-life"  # verbatim, no hyphen rule here
+    assert seen[0]["params"]["limit"] == "1000"
+    assert seen[0]["params"]["publicationDateOrYear"] == ":2020-01-01"
+    assert seen[1]["json"] == {"ids": ["CorpusId:1", "CorpusId:2"]}
+    assert seen[1]["params"]["fields"] == "externalIds,title"
+    records = records_of(SNIPPET, fetched)
+    assert [r["backend_record_id"] for r in records] == [
+        "1",
+        "2",
+    ]  # deduped, rank order
+    assert records[0]["doi"] == "10.1/A" and records[1]["doi"] is None
+    assert records[0]["backend"] == SNIPPET and records[0]["title"] == "A"
+    score = score_arm(SNIPPET, fetched, GroundTruth(dois={"10.1/a"}, source="doi"), 50)
+    # All pages are needed for any cap: the search plus its lookups. Snippets are the records.
+    assert score["n_api_calls"] == 2 and score["n_api_records"] == 3
+    assert score["n_found"] == 1 and score["n_candidates_kept"] == 2
+    assert score["api_cost_usd"] == 0.0 and cost_usd(SNIPPET, fetched.pages) == 0.0
+    # 600 unique papers need two lookups of 500 and 100.
+    many = {"data": [hit(str(i)) for i in range(600)]}
+    get, seen = scripted([many, [{}] * 500, [{}] * 100])
+    fetched = fetch_semantic_scholar_snippet("q", "2020-01-01", get=get, api_key="k")
+    assert len(seen) == 3 and len(seen[1]["json"]["ids"]) == 500
+    assert (
+        len(seen[2]["json"]["ids"]) == 100 and len(records_of(SNIPPET, fetched)) == 600
+    )
+    # No snippets: one request, no lookup, complete.
+    get, seen = scripted([{"data": []}])
+    fetched = fetch_semantic_scholar_snippet("q", "2020-01-01", get=get, api_key="k")
+    assert len(seen) == 1 and fetched.complete and records_of(SNIPPET, fetched) == []
+    # A failing lookup: counted, incomplete, the snippet page kept, nothing raised.
+    answers = [httpx.Response(200, json=snippets), httpx.Response(503)]
+
+    def then_failing(url, params, headers, json=None):
+        return answers.pop(0)
+
+    fetched = fetch_semantic_scholar_snippet(
+        "q", "2020-01-01", get=then_failing, api_key="k"
+    )
+    assert (
+        fetched.n_failed_calls == 1 and not fetched.complete and len(fetched.pages) == 1
+    )
+    # A cached file with no lookup pages still scores (all DOIs unknown).
+    bare = Fetched([snippets], {}, 1000, 1, False, "2026-01-01T00:00:00+00:00")
+    assert all(r["doi"] is None for r in records_of(SNIPPET, bare))
+
+
 def test_baseline_score_evaluator() -> None:
     from baseline_recall import BASELINE_SCORE_KEYS, score_baseline
 
@@ -1062,6 +1148,7 @@ if __name__ == "__main__":
     test_baseline_retry()
     test_baseline_cache_round_trip()
     test_baseline_slice_and_cost()
+    test_baseline_snippet_arm()
     test_baseline_score_evaluator()
     test_history_cost_column()
     print("ok")

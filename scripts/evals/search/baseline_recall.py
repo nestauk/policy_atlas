@@ -4,8 +4,9 @@ The pipeline finds a share of each review's reference list (see
 ``production_recall.py``). This script gives that share something to be compared
 with. A **baseline** is the simplest possible search: the review's intent text is sent
 once, as it is, to one search service. No language model writes queries, nothing is
-screened, and there is no second round. The three services (called **arms**, as in an
-experiment) are Semantic Scholar, Consensus and OpenAlex. The results are scored
+screened, and there is no second round. The four **arms** (as in an experiment) are
+Semantic Scholar's keyword search, Semantic Scholar's semantic snippet search, Consensus
+and OpenAlex. The results are scored
 against the same ground truth, with the same recall formula and the same scoring key
 (a lowercase DOI, Digital Object Identifier) as the pipeline runs, so the rows sit next
 to each other in ``history.py`` and ``results/history.md``.
@@ -24,9 +25,10 @@ How it runs, in two stages:
    ``BASELINE_SCORE_KEYS``. ``api_cost_usd`` is the computed price of fetching that
    cap on its own (from the service's price table), not the money this run spent.
 
-Keys: ``SEMANTIC_SCHOLAR_API_KEY`` and ``CONSENSUS_API_KEY`` in ``backend/.env``.
-OpenAlex needs none. Rate limits and retries: one request per second for Semantic
-Scholar and Consensus, five per second for OpenAlex; a 429 or 5xx answer is retried
+Keys: ``SEMANTIC_SCHOLAR_API_KEY`` (both Semantic Scholar arms) and ``CONSENSUS_API_KEY``
+in ``backend/.env``. OpenAlex needs none. Rate limits and retries: one request per second
+for Semantic Scholar keyword search and Consensus, one per three seconds for the snippet
+arm, five per second for OpenAlex; a 429 or 5xx answer is retried
 up to four times, after which the request counts as failed and that review's fetch
 stops and is marked incomplete (it is fetched again next run).
 
@@ -63,17 +65,29 @@ from sweep_record_cap import _git_commit, _ground_truth_from_item
 
 from policy_atlas.core import tracing
 
-ARMS = ["semantic-scholar", "consensus", "openalex-raw"]
+ARMS = ["semantic-scholar", "semantic-scholar-snippet", "consensus", "openalex-raw"]
+SNIPPET = "semantic-scholar-snippet"
+BATCH_SIZE = 500  # paper/batch accepts up to 500 ids per call
 DEFAULT_CAPS = [50, 100, 200, 1000]
 RESULT_CEILING = 1000
 EXPERIMENT = "retrieval-baseline"
 CACHE_DIR = Path(__file__).parent / "results" / "cache"
 # Prices read from the services' documentation on 2026-09-25.
-CONSENSUS_USD_PER_CALL = 0.05  # our API beta account pays this on every call, no free amount
+CONSENSUS_USD_PER_CALL = (
+    0.05  # our API beta account pays this on every call, no free amount
+)
 CONSENSUS_PAPERS_PER_CALL = 100
-MIN_INTERVAL_S = {"semantic-scholar": 1.0, "consensus": 1.0, "openalex-raw": 0.2}
+# The free Semantic Scholar tier throttles below one request per second in practice;
+# the snippet arm makes only three requests per review, so it can afford to go slowly.
+MIN_INTERVAL_S = {
+    "semantic-scholar": 1.0,
+    SNIPPET: 3.0,
+    "consensus": 1.0,
+    "openalex-raw": 0.2,
+}
 KEY_ENV = {
     "semantic-scholar": "SEMANTIC_SCHOLAR_API_KEY",
+    SNIPPET: "SEMANTIC_SCHOLAR_API_KEY",
     "consensus": "CONSENSUS_API_KEY",
 }
 BASELINE_SCORE_KEYS = [
@@ -86,9 +100,8 @@ BASELINE_SCORE_KEYS = [
     "api_cost_usd",
 ]
 
-Getter: TypeAlias = Callable[
-    [str, dict[str, str], dict[str, str]], httpx.Response | None
-]
+# get(url, params, headers, json=None): a GET, or a POST with a JSON body when json is given.
+Getter: TypeAlias = Callable[..., httpx.Response | None]
 
 
 @dataclass
@@ -108,7 +121,11 @@ def _now() -> str:
 
 
 def make_getter(
-    arm: str, *, sleep: Callable[[float], None] = time.sleep, get: Any = httpx.get
+    arm: str,
+    *,
+    sleep: Callable[[float], None] = time.sleep,
+    get: Any = httpx.get,
+    post: Any = httpx.post,
 ) -> Getter:
     """Build the rate-limited, retrying HTTP getter for an arm.
 
@@ -116,6 +133,7 @@ def make_getter(
         arm: Baseline arm name.
         sleep: Injectable wait function, used by self-checks.
         get: Injectable ``httpx.get`` equivalent, used by self-checks.
+        post: Injectable ``httpx.post`` equivalent, for the snippet arm's id lookup.
 
     Returns:
         A getter accepting URL/path, query parameters, and headers.
@@ -123,7 +141,10 @@ def make_getter(
     last_request: float | None = None
 
     def getter(
-        url: str, params: dict[str, str], headers: dict[str, str]
+        url: str,
+        params: dict[str, str],
+        headers: dict[str, str],
+        json: dict[str, Any] | None = None,
     ) -> httpx.Response | None:
         nonlocal last_request
         for attempt in range(4):
@@ -133,11 +154,14 @@ def make_getter(
                     sleep(wait)
             last_request = time.monotonic()
             try:
-                response = (
-                    openalex_get(url, **params)
-                    if arm == "openalex-raw"
-                    else get(url, params=params, headers=headers, timeout=30.0)
-                )
+                if arm == "openalex-raw":
+                    response = openalex_get(url, **params)
+                elif json is not None:
+                    response = post(
+                        url, params=params, headers=headers, json=json, timeout=60.0
+                    )
+                else:
+                    response = get(url, params=params, headers=headers, timeout=30.0)
             except httpx.TransportError:
                 response = None
             if (
@@ -239,6 +263,60 @@ def fetch_semantic_scholar(
     return Fetched(pages, request, 100, 0, True, _now())
 
 
+def fetch_semantic_scholar_snippet(
+    intent: str, cutoff: str, *, get: Getter, api_key: str
+) -> Fetched:
+    """Fetch Semantic Scholar's semantic (snippet) search, then look up the papers' DOIs.
+
+    ``snippet/search`` ranks passages from title, abstract and body text by meaning, not by
+    keyword match, and returns up to 1,000 snippets in one request with no paging. Each
+    snippet names its paper by ``corpusId`` only, so a second step maps the unique papers,
+    in the order they first appear, to DOIs with ``paper/batch`` (500 ids per call).
+
+    Pages: the snippet response first, then one ``{"batch": [...]}`` page per lookup call,
+    each a list aligned with the ids sent. Body-text snippets exist only for open-access
+    papers, so this arm leans towards them.
+
+    Args:
+        intent: Dataset search text, sent verbatim.
+        cutoff: ISO date before which results must have been published.
+        get: Rate-limited response getter (also used for the POST lookup).
+        api_key: Semantic Scholar key.
+
+    Returns:
+        Raw pages and completion metadata.
+    """
+    request = {
+        "query": intent,
+        "limit": str(RESULT_CEILING),
+        "fields": "snippet.snippetKind",
+        "publicationDateOrYear": semantic_scholar_cutoff(cutoff),
+    }
+    headers = {"x-api-key": api_key}
+    response = get(
+        "https://api.semanticscholar.org/graph/v1/snippet/search", request, headers
+    )
+    if response is None or response.status_code != 200:
+        return _failure([], request, RESULT_CEILING)
+    body = response.json()
+    pages: list[dict[str, Any]] = [body]
+    unique_ids = list(
+        dict.fromkeys(str(hit["paper"]["corpusId"]) for hit in body.get("data", []))
+    )
+    for start in range(0, len(unique_ids), BATCH_SIZE):
+        ids = unique_ids[start : start + BATCH_SIZE]
+        lookup = get(
+            "https://api.semanticscholar.org/graph/v1/paper/batch",
+            {"fields": "externalIds,title"},
+            headers,
+            json={"ids": [f"CorpusId:{i}" for i in ids]},
+        )
+        if lookup is None or lookup.status_code != 200:
+            return _failure(pages, request, RESULT_CEILING)
+        pages.append({"batch": lookup.json(), "ids": ids})
+    return Fetched(pages, request, RESULT_CEILING, 0, True, _now())
+
+
 def fetch_consensus(intent: str, cutoff: str, *, get: Getter, api_key: str) -> Fetched:
     """Fetch Consensus result pages through the 1,000-record ceiling.
 
@@ -332,6 +410,7 @@ def fetch_openalex_raw(intent: str, cutoff: str, *, get: Getter) -> Fetched:
 
 FETCHERS: dict[str, Callable[..., Fetched]] = {
     "semantic-scholar": fetch_semantic_scholar,
+    SNIPPET: fetch_semantic_scholar_snippet,
     "consensus": fetch_consensus,
     "openalex-raw": fetch_openalex_raw,
 }
@@ -409,8 +488,45 @@ def load_or_fetch(
     return fetched, False
 
 
+def _snippet_records(fetched: Fetched) -> list[dict[str, Any]]:
+    """Unique papers in the order their best snippet was ranked, with DOIs from the lookup."""
+    externals: dict[str, dict[str, Any]] = {}
+    for page in fetched.pages[1:]:
+        for corpus_id, paper in zip(
+            page.get("ids", []), page.get("batch", []), strict=False
+        ):
+            if paper:
+                externals[str(corpus_id)] = paper
+    records: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for hit in fetched.pages[0].get("data", []) if fetched.pages else []:
+        corpus_id = str(hit["paper"]["corpusId"])
+        if corpus_id in seen:
+            continue
+        seen.add(corpus_id)
+        paper = externals.get(corpus_id, {})
+        records.append(
+            {
+                "doi": (paper.get("externalIds") or {}).get("DOI"),
+                "backend": SNIPPET,
+                "backend_record_id": corpus_id,
+                "title": hit["paper"].get("title"),
+            }
+        )
+    return records
+
+
+def _page_records(arm: str, page: dict[str, Any]) -> int:
+    """How many results one raw page holds (snippets count; id-lookup pages hold none)."""
+    if arm == "semantic-scholar" or arm == SNIPPET:
+        return len(page.get("data", []))
+    return len(page.get("results", []))
+
+
 def records_of(arm: str, fetched: Fetched) -> list[dict[str, Any]]:
     """Flatten raw service pages into the shared scoring envelope."""
+    if arm == SNIPPET:
+        return _snippet_records(fetched)
     records: list[dict[str, Any]] = []
     for page in fetched.pages:
         source = (
@@ -471,7 +587,7 @@ def pages_for_cap(fetched: Fetched, cap: int) -> list[dict[str, Any]]:
 
 def cost_usd(arm: str, pages: list[dict[str, Any]]) -> float:
     """Compute the documented variable API cost for these raw pages."""
-    if arm == "semantic-scholar":
+    if arm in ("semantic-scholar", SNIPPET):
         return 0.0
     if arm == "consensus":
         total = sum(
@@ -488,17 +604,13 @@ def score_arm(
     arm: str, fetched: Fetched, ground_truth: GroundTruth, cap: int
 ) -> dict[str, Any]:
     """Score one cached arm at one candidate cap against a review's target."""
-    pages = pages_for_cap(fetched, cap)
+    # The snippet arm is one search plus its id lookups; every cap needs all of them.
+    pages = fetched.pages if arm == SNIPPET else pages_for_cap(fetched, cap)
     sliced = slice_at_cap(records_of(arm, fetched), cap)
     found = {
         key for record in sliced if (key := record_key(record)) is not None
     } & ground_truth.keys
-    n_records = sum(
-        len(page.get("data", []))
-        if arm == "semantic-scholar"
-        else len(page.get("results", []))
-        for page in pages
-    )
+    n_records = sum(_page_records(arm, page) for page in pages)
     return {
         "search_recall": len(found) / len(ground_truth.keys)
         if ground_truth.keys
@@ -675,6 +787,7 @@ def main() -> None:
     label = args.run_label or f"{date.today().isoformat()}-{git_commit[:7]}"
     ceilings = {
         "semantic-scholar": "at most 10 requests per review, free",
+        SNIPPET: "3 requests per review (one search, two id lookups), free",
         "openalex-raw": "at most 5 requests per review, free",
         "consensus": "at most 10 calls per review at $0.05 per call, billed on every call",
     }

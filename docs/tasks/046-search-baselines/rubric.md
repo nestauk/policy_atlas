@@ -8,7 +8,7 @@ P2 and D5 are deferred and have no item here.
        D1–D4 and D6–D9 hold as written.
 2. [ ] `make verify` passes. `test_metrics.py` passes with every new self-check listed in
        the contract's § Acceptance checks.
-3. [ ] **P1.** All three arms were fetched once to 1,000 results over all four reviews and
+3. [ ] **P1.** All four arms (the fourth added by owner amendment, 2026-09-25) were fetched once to 1,000 results over all four reviews and
        scored at caps 50, 100, 200 and 1,000 from the cache (D9). Each run is in Langfuse
        with exactly the seven scores in D6 and the metadata keys in D6, including
        `fetched_at`, and appears as a row in `history.py` output. A second run with no
