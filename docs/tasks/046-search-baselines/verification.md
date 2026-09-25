@@ -12,7 +12,9 @@ commits that follow it. Public-safe: no keys, no cache content, no raw abstracts
 | `make verify-fast` (Phase 1 gate) | pass | 2583 tests, mypy, ruff |
 | `make verify-fast` (paging-fix gate) | pass | 2583 tests, mypy, ruff |
 | `make verify` (step-6 exit, working tree at `8b4a61b` + docs) | pass | okf-validate, backend 2583 tests, mypy 306 files, ruff, build, frontend 617 tests; one pre-existing eslint warning (`SplashField.tsx`), also in the baseline log |
-| `uv run --project backend python scripts/evals/search/test_metrics.py` | pass (`ok`) | 10 new self-checks: `test_baseline_*` (9) and `test_history_cost_column` |
+| `make verify-fast` (Phase 5 gate, snippet arm) | pass | 2583 tests, mypy, ruff |
+| `make verify` (step-6 exit after Phase 5, commit `af1c86e` + docs) | pass | same suites as above, exit 0, same pre-existing eslint warning |
+| `uv run --project backend python scripts/evals/search/test_metrics.py` | pass (`ok`) | 11 new self-checks: `test_baseline_*` (10, incl. `test_baseline_snippet_arm`) and `test_history_cost_column` |
 | `uv run --project backend ruff check scripts/evals/search/` | pass | scripts are outside the `make lint` scope (`src`, `tests`), so run by hand |
 
 ## Checks beyond the build
@@ -133,6 +135,31 @@ with no flags made zero service requests" is that run, not a separate dry run.
 (Consensus refetch). Substring audit: neither key value and no `x-api-key` string occurs
 in any cache file. `git check-ignore` confirms the rule at `.gitignore:34`.
 
+### Phase 5 addendum: arm 1b `semantic-scholar-snippet` (owner amendment, 2026-09-25)
+
+Commit `af1c86e`; gate `make verify-fast` green (2583 tests, mypy, ruff); `test_metrics.py`
+gained `test_baseline_snippet_arm`. Live: `--arms semantic-scholar-snippet`, 11 requests
+(four searches, seven id lookups), 42 s, 0 failed, free; four Langfuse runs
+`2026-09-25-af1c86e/semantic-scholar-snippet-cap<cap>` with the seven D6 scores and six
+metadata keys (checked on the cap-1000 run). Re-run with `--dry-run` made zero requests.
+Cache: four files, 4.7 MB, all complete, no key substring, no `x-api-key`. Per review: 1,000
+snippets each (title 7-122, abstract 72-191, body 687-921), 417-635 unique papers, every one
+with a DOI from the lookup.
+
+| cap | mean recall | kept | pipeline row at the same cap |
+|---:|---:|---:|---|
+| 50 | 4.3% | 199 | rapid 5.6% |
+| 100 | 10.0% | 397 | standard 10.7% |
+| 200 | 12.9% | 794 | deep 15.3% |
+| 1000 | 18.1% | 2182 | none; best baseline |
+
+Deviation to adjudicate: the arm was added after the plan gate. The owner asked for it in
+this conversation after the report on the Semantic Scholar docs (`paper/search` requires
+every query word; `snippet/search` ranks by meaning). Contract § Arms, plan Phase 5 and
+rubric item 3 carry the amendment. Two design points the reviewer should weigh: for this
+arm `n_api_calls` counts the search plus its id lookups at every cap (three, not one), and
+`n_candidates_kept` at cap 1,000 is about 550 because snippets collapse to papers.
+
 ## Diff summary
 
 - **`scripts/evals/search/baseline_recall.py`** (new, Codex-authored from the lead's brief;
@@ -197,7 +224,8 @@ traces carry the intent text, scores and metadata, no service payloads.
 ## Review handoff (step-7/8 inputs)
 
 - **Executor provenance (family flip):** Phase 1 product code and tests by Codex (GPT family)
-  from the lead's brief; Phase 2 by `fast-worker` (Sonnet); Phase 3-4 by the lead. Lead edits
+  from the lead's brief; Phase 2 by `fast-worker` (Sonnet); Phase 3-5 by the lead (Phase 5,
+  the snippet arm, is lead-authored product code and tests: weigh review attention there). Lead edits
   to Codex's output, for the reviewer to weigh: three added tests (cache-equals-live scores,
   match at N+1 not found, pages kept before a failure), the zero page-size guard, the
   Consensus last-page rule (deviation 1), `_usd` formatting, argparse help strings and the
@@ -215,8 +243,12 @@ traces carry the intent text, scores and metadata, no service payloads.
     must be page 9 at size 100. Pages return a few results fewer than `page_size`, so paging
     arithmetic must use positions, not counts.
   - Semantic Scholar's `paper/search` is an all-words match: a title-length intent returns
-    the service's `total` of 0-22 for most reviews. Any fair test of Semantic Scholar needs a
-    keyword-shaped query, which is exactly what the pipeline's generation step produces.
+    the service's `total` of 0-22 for most reviews. The same API's `snippet/search` is a
+    semantic (dense) retriever over passages: verbatim intents work, it returns snippets
+    keyed by `corpusId` (no DOI; map with `paper/batch`, 500 ids per call), 1,000 snippets
+    collapse to about 550 papers, and body-text snippets exist only for open-access papers.
+    Its free-tier rate limit is stricter than one request per second in practice; a 3 s
+    interval plus the retry rule fetched four reviews cleanly.
   - OpenAlex reports `meta.cost_usd` = 0.0001 per page (with the key), so any 2-decimal cost
     display shows $0.00; both tables switch to 4 decimals under one cent.
   - The Consensus API beta account is billed $0.05 on every call with no included amount
