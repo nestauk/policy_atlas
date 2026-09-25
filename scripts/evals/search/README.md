@@ -7,7 +7,7 @@ This folder contains scripts related to calculating evaluation metrics against a
 
 ## How the files fit together
 
-The folder has eight Python files. You run four of them from the command line. The other four are helper modules that the scripts import.
+The folder has nine Python files. You run five of them from the command line. The other four are helper modules that the scripts import.
 
 **Scripts you run:**
 
@@ -15,7 +15,8 @@ The folder has eight Python files. You run four of them from the command line. T
 |---|---|---|
 | `ground_truth_dataset.py` | Reads the two CSV files in `input/` and uploads them to Langfuse as a dataset called `retrieval-ground-truth`. | Once at the start, and again each time `references.csv` or `gt_reviews.csv` changes. |
 | `production_recall.py` | Measures how much of each review's reference list the pipeline finds when it runs exactly as it does in production. It makes one Langfuse run for each search depth (rapid, standard, deep). | By hand, from time to time, so that a history of production recall builds up. |
-| `history.py` | Prints one markdown table row per dataset run in Langfuse: date, commit, settings, run name and mean recall. It writes nothing. | After each eval you can copy the rows worth keeping into `results/history.md` and add a note. |
+| `history.py` | Prints one markdown table row per dataset run in Langfuse: date, commit, settings, run name, mean recall and the run's variable cost. It writes nothing. | After each eval you can copy the rows worth keeping into `results/history.md` and add a note. |
+| `baseline_recall.py` | The baselines. Sends each review's intent once, as plain text, to Semantic Scholar, Consensus and OpenAlex, caches the raw result pages locally, and scores recall at several result caps. One Langfuse run per service and cap. | When you want a "what does good look like" number to compare the pipeline's recall with. The services are called once; later runs read the cache. See section 5. |
 | `sweep_record_cap.py` | The experiment. It runs a rapid search many times, each time with a different cap on the number of records kept and with one of the two query-generation methods. It records the recall for each combination. | When you want to know how the record cap or the prompting method changes recall. |
 
 The two measuring scripts read the reviews and their reference lists from the Langfuse dataset. They do not read the CSV files. This means you must run `ground_truth_dataset.py` at least once before you run either of them.
@@ -171,3 +172,95 @@ uv run --project backend --env-file backend/.env python scripts/evals/search/his
 ```
 
 Then copy the row(s) worth keeping into the table in `results/history.md` and fill in the notes cell. Leave out smoke tests and partial runs unless they tell you something.
+
+### The variable cost column
+
+Each row also shows the run's **variable cost**: the money that changes with how much you
+search, summed over the reviews in the run. The label after the number says what it counts.
+
+- `api` — baseline runs. The **computed** price of fetching that many results from the
+  service, from the service's own price table (Consensus $0.05 per call, one call per 100
+  papers; OpenAlex reports its own `cost_usd`; Semantic Scholar is free). It is what that cap
+  would cost on its own. It is not what the run spent: with the cache, the services are
+  called once and every cap is scored from the same pages.
+- `llm` — pipeline runs. The language-model spend that Langfuse attributes to that review's
+  trace (`total_cost`), summed over the reviews.
+
+Neither figure includes flat subscriptions (Overton, OpenAlex premium, the Consensus plan
+fee), compute, or Langfuse itself. `n/a` means neither source had a number.
+
+## 5. Search recall baselines: what does good look like?
+
+Key scripts/files: `baseline_recall.py`, `results/cache/`
+
+### What this does
+
+The pipeline's recall numbers (section 2) have nothing to be compared with. Is 5.6% at rapid
+depth bad, normal, or as good as this ground truth allows? The baselines answer that with
+the simplest possible search: each review's intent text is sent **once, unchanged**, to one
+search service. No language model writes queries, nothing is screened, there is no second
+round. Three services are tried, each called an **arm** (as in an experiment):
+
+| Arm | Service | What it is |
+|---|---|---|
+| `semantic-scholar` | Semantic Scholar Academic Graph | Free scholarly search with its own relevance ranking. Needs a free key. |
+| `consensus` | Consensus | Paid scholarly search built on Semantic Scholar's corpus with its own ranking. Calls are metered. |
+| `openalex-raw` | OpenAlex | The service the pipeline already uses, but with one plain search instead of many generated queries. Free. |
+
+The results are scored exactly like the pipeline runs: same ground truth, same cutoff date
+(nothing published after the review's cutoff counts), same scoring key (a lowercase DOI) and
+same recall formula. Because every key in the ground truth is a DOI today, all these numbers,
+the baselines' and the pipeline's, are **scholarly recall**: a government report the review
+cites cannot be found by anyone.
+
+Two things differ between arms on purpose and are written into the notes in `history.md`:
+Semantic Scholar matches nothing on hyphenated words, so hyphens are sent as spaces for that
+arm only; and Consensus filters dates by month, so it may include papers from up to 30 days
+after the cutoff day.
+
+### How it runs: fetch once, score from the cache
+
+1. **Fetch.** For each arm and review the script sends one search and reads every result
+   page up to the service's 1,000-result ceiling. The raw pages are saved to the **cache**:
+   one JSON file per arm and review under `results/cache/<arm>/`. The file holds the pages
+   as the service returned them, the request parameters (never the key) and the fetch time.
+   Git ignores it.
+2. **Score.** For each **cap** (50, 100, 200 and 1,000 by default) the script keeps the
+   first N results in the service's own order, removes duplicates, and counts how many of
+   the review's references are among them. Each arm and cap becomes one Langfuse dataset
+   run with the same score names as the pipeline runs plus `api_cost_usd`.
+
+A second run with no flags reads the cache and makes **no service calls**. Pass `--refresh`
+only when you want fresh results from the services (Consensus calls cost money). A fetch that
+failed part-way is saved with `complete: false` and is fetched again on the next run.
+
+### Usage
+
+Keys go in `backend/.env`: `SEMANTIC_SCHOLAR_API_KEY` and `CONSENSUS_API_KEY`. OpenAlex
+needs none. The dataset must already be in Langfuse (section 1).
+
+```
+# Try one arm on one review, score and print, upload nothing (still fills the cache):
+uv run --project backend --env-file backend/.env python scripts/evals/search/baseline_recall.py --arms consensus --reviews parental --dry-run
+
+# All arms, all reviews, all caps; one Langfuse run per arm and cap:
+uv run --project backend --env-file backend/.env python scripts/evals/search/baseline_recall.py
+
+# Later, re-score after a code change without calling the services:
+uv run --project backend --env-file backend/.env python scripts/evals/search/baseline_recall.py
+```
+
+Before any request the script prints how many reviews need a fetch per arm and the ceiling
+of requests. Consensus needs at most 10 calls per review (1,000 papers at 100 per call), and
+our API beta account pays $0.05 on every call with no free amount: a full fetch of four
+reviews is about $2.00. Use `--refresh` sparingly.
+
+### How to read the rows next to the pipeline rows
+
+Compare a baseline row with a pipeline row that has a **similar number of candidates kept**
+(`n_candidates_kept` in Langfuse), not a similar number of requests. The pipeline's rapid
+depth keeps up to 50 candidates per backend, so its cap-50 row is the neighbour of the
+baselines' cap-50 and cap-100 rows. If one plain OpenAlex search matches or beats the
+pipeline's rapid recall at a similar number of candidates, the weak part is probably our
+query generation, not OpenAlex's corpus. That is a sign, not proof: the pipeline sends many
+generated queries and then trims, so the two are not a controlled pair.
