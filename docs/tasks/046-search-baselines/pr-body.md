@@ -18,16 +18,28 @@ shape for an all-words engine). Strong sign that retrieval method, not corpus, i
 pipeline's weak part. All numbers are scholarly recall only: every ground-truth key is a DOI
 (P2 deferred to the owner's ground-truth expansion).
 
+**Amendment 2 (owner-directed, folded in post hoc, contract § Amendment 2):** four
+ground-truth **fetchers** that start the expansion from four hand-made reviews towards about
+one hundred: `get_campbell.py` (Campbell Systematic Reviews via OpenAlex, reference lists
+resolved to DOIs), `get_3ie.py` (every evidence gap map on 3ie's Development Evidence Portal,
+one review per map and per intervention row), `get_yef.py` (the Youth Endowment Fund gap map
+and its toolkit strands) and `get_sr4all.py` (the Webis-SR4ALL-26 corpus, social-science
+fields, most-cited reviews). Each writes the two CSV shapes `ground_truth_dataset.py` already
+reads (D10); gap-map rows are labelled `content`, reference lists stay unlabelled until the
+labelling pass (D11). Shared helpers land in `ground_truth.py`. P2 itself stays deferred.
+
 Files: `scripts/evals/search/baseline_recall.py` (new), `history.py` (cost column),
-`test_metrics.py` (self-checks), `README.md` § 5, `results/history.md`, `backend/.env.example`
-(two empty key names), `docs/deferred.md`, `docs/knowledge/` (four concepts, one update),
-`docs/agentic-ops/environment.md`.
+`test_metrics.py` (self-checks), `README.md` § 5 and § 6, `results/history.md`,
+`backend/.env.example` (two empty key names), `get_campbell.py`, `get_3ie.py`, `get_yef.py`,
+`get_sr4all.py` (new), `ground_truth.py` (shared fetcher helpers), `docs/deferred.md`,
+`docs/knowledge/` (four concepts, one update), `docs/agentic-ops/environment.md`.
 
 ## Proof it works
 
 Evidence in `docs/tasks/046-search-baselines/verification.md`.
 
-- **`make verify`:** pass (build-open, step-6 exit, review-open, and after the review fixes).
+- **`make verify`:** pass (build-open, step-6 exit, review-open, and after the review fixes,
+  at `36596c2`). Not yet re-run on the Amendment 2 commit.
 - **Self-checks:** `uv run --project backend python scripts/evals/search/test_metrics.py`
   → `ok` (eleven new checks, extended by the review stack: paging per arm incl. Consensus's
   refusal to cross 1,000, retry pacing, cache round trip and staleness, cost at a cap,
@@ -63,8 +75,12 @@ the live path · scope (no pipeline or ground-truth change).
 
 ## Reviews run
 
-Findings recorded in `verification.md` § Review findings (22 findings, 19 adopted, 3
-declined with reasons).
+**Status: the review stack ran on the baselines slice (commits through `36596c2`) and its
+fixes are in. Amendment 2 (the fetchers, `d483c29`) landed after that review and is not yet
+reviewed; the review cycle will run again on the whole branch before merge.**
+
+Baselines-slice findings are in `verification.md` § Review findings (22 findings, 19
+adopted, 3 declined with reasons).
 
 - [x] Contract verifier (pinned Opus, read-only)
 - [x] `/code-review` (medium)
@@ -75,6 +91,9 @@ declined with reasons).
   loop) were applied.
 
 ## Known gaps & deferred seams
+
+The fetchers are unreviewed (see above). Their outputs are not yet in Langfuse: the CSVs are
+inputs to the labelling pass and to `ground_truth_dataset.py`, not part of this PR's numbers.
 
 `docs/deferred.md` § Search recall baselines: P2 grey-literature keys with the raw Overton
 arm (design at `37d496c`), the "swap" slice (with the cap-sized cost note), S3 upload of the
