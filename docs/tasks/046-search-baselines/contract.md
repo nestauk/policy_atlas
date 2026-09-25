@@ -3,6 +3,8 @@
 > **Status:** drafted, adversarial review folded in (2026-09-25); P2 deferred and
 > fetch-once cache added by owner (2026-09-25). Contract approved (before planning):
 > 2026-09-25 · owner · Plan approved (before implementation): 2026-09-25 · owner · ADR: none.
+> **Amendment (build, 2026-09-25, owner-approved):** a fourth arm, `semantic-scholar-snippet`,
+> added after the live run showed arm 1 is a keyword engine (see § Arms).
 
 ## Goal
 
@@ -12,7 +14,7 @@ and 15.3% at deep depth (see `scripts/evals/search/results/history.md`). We do n
 that is bad, normal, or good, because we have nothing to compare it with.
 
 The comparison is a set of **baselines**: the simplest possible search against three
-services. One plain-text search per review, one service, no language model, no screening,
+services (four arms: Semantic Scholar offers two different search engines). One plain-text search per review, one service, no language model, no screening,
 no second round. Score the results against the same ground truth, with the same recall
 formula, and record them in the same place as the pipeline's own runs.
 
@@ -109,8 +111,14 @@ next to recall and cost for the pipeline's existing rapid, standard and deep row
 
 ## Arms
 
-Three arms. Each is one search request per review, fetched in pages to the service's
-1,000-result ceiling and cached (D9). Facts below come from the services' own
+Four arms. Each is one search request per review, fetched in pages to the service's
+1,000-result ceiling and cached (D9). Arm 1b was added during the build (owner, 2026-09-25):
+the live run showed arm 1 is Semantic Scholar's **keyword** engine (the docs for its bulk
+variant say "all terms in the query must be present in the paper"; it returned 0, 1 and 22
+papers for three intents), while the same API offers a **semantic** engine, `snippet/search`,
+which "returns the text snippets that most closely match the query". Both are kept: arm 1
+shows what a verbatim intent does to a keyword engine, arm 1b what Semantic Scholar's own
+semantic retrieval does with it. Facts below come from the services' own
 documentation, read on 2026-09-25 (Consensus: `docs.consensus.app`, API plans and access
 page and the search endpoint's parameter table; Semantic Scholar: the published API
 specification at `api.semanticscholar.org/graph/v1/swagger.json`), and from live probes
@@ -119,6 +127,7 @@ the same day.
 | # | Arm name | Service | Search request | Paging | Cutoff filter | Key returned | Cost |
 |---|---|---|---|---|---|---|---|
 | 1 | `semantic-scholar` | Semantic Scholar Academic Graph | `GET https://api.semanticscholar.org/graph/v1/paper/search?query=<intent>&fields=externalIds,title,publicationDate`, header `x-api-key`. Relevance-ranked. The spec says hyphenated terms match nothing, so hyphens in the intent are sent as spaces (the one allowed change to the text; D1). | `limit=100` (the maximum), `offset`; the response's `next` is the next offset and is absent on the last page. At most 1,000 results per query. | `publicationDateOrYear=:<cutoff>` (inclusive) | `externalIds.DOI` | Free with a key, about 1 request per second. Without a key the shared pool answers 429 at once. |
+| 1b | `semantic-scholar-snippet` | Semantic Scholar snippet search | `GET https://api.semanticscholar.org/graph/v1/snippet/search?query=<intent>&limit=1000&fields=snippet.snippetKind`, header `x-api-key`. Ranked by meaning over passages from title, abstract and body text (`retrievalVersion` `pa1-v1` on 2026-09-25). Intent verbatim, no hyphen rule. Each snippet names its paper by `corpusId` only, so a second step maps the unique papers, in order of first appearance, to DOIs with `POST /graph/v1/paper/batch?fields=externalIds,title` (500 ids per call). | No paging: one request returns up to 1,000 snippets. About 550 unique papers per 1,000 snippets, so the cap-1000 row holds fewer than 1,000 candidates; a cap of N is the first N unique papers. | `publicationDateOrYear=:<cutoff>` (inclusive) | `externalIds.DOI` from the lookup | Free with a key. Three requests per review. Body-text snippets exist only for open-access papers, so the arm leans towards them (the notes say so). |
 | 2 | `consensus` | Consensus | `GET https://api.consensus.app/v1/search?query=<intent>`, header `x-api-key`. Relevance-ranked over about 220 million papers. Every result carries `doi`, `title`, `publish_year`, `publish_date`. | `page` is **zero-indexed**; `page_size` defaults to 20 and is silently capped to the plan's maximum (Pro and Teams 300, Deep 750), so the script reads the `page_size` echoed back. `is_end` is true on the last page; `next_page` gives the next. At most 1,000 results per query. Pages after the first need a paid plan. | `year_max` + `month_max` of the cutoff (inclusive, month granularity; see D2) | `doi` | Included calls per month: Pro and Teams 500, Deep 2,000. One call per 100 papers returned, rounded up. Above the included amount, $0.05 per call, only if "additional usage" is switched on in the dashboard. Rate limit 1 request per second; a faster request gets 429 with a `retry-after` header. |
 | 3 | `openalex-raw` | OpenAlex | `GET https://api.openalex.org/works?search=<intent>&select=id,doi,display_name,publication_date` — OpenAlex's own relevance search over title, abstract and full text. Sent through `ground_truth.openalex_get`. | `per-page=200`, `page` from 1; stop when a page returns fewer than 200, or after page 5 (1,000 results, to match the other two). | `filter=to_publication_date:<cutoff>` (inclusive) | `doi` | Free. OpenAlex reports `meta.cost_usd` in every response; the script records it. |
 
@@ -284,6 +293,10 @@ needs and "additional usage" is off; or scope would grow past this slice.
   averaging.
 - Deterministic vs AI eval: all checks here are deterministic. The recall numbers are
   measurements, not pass/fail thresholds.
+- Arm 1b self-checks: one search request with `limit=1000` and the cutoff; unique papers in
+  snippet order; lookups in batches of 500 with `CorpusId:<id>` ids; a paper missing from
+  the lookup has no key; every cap counts all requests (search plus lookups); a failing
+  lookup counts as failed and leaves the fetch incomplete; cost 0.
 - **Live check (pinned):** one full fetch of all three arms over all four reviews to
   1,000 results, then scoring at all four caps from the cache, preceded by the Consensus
   preflight. Expected: Semantic Scholar 40 requests, about 1 minute; OpenAlex 20 requests,

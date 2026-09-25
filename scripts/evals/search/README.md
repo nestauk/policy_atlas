@@ -16,7 +16,7 @@ The folder has nine Python files. You run five of them from the command line. Th
 | `ground_truth_dataset.py` | Reads the two CSV files in `input/` and uploads them to Langfuse as a dataset called `retrieval-ground-truth`. | Once at the start, and again each time `references.csv` or `gt_reviews.csv` changes. |
 | `production_recall.py` | Measures how much of each review's reference list the pipeline finds when it runs exactly as it does in production. It makes one Langfuse run for each search depth (rapid, standard, deep). | By hand, from time to time, so that a history of production recall builds up. |
 | `history.py` | Prints one markdown table row per dataset run in Langfuse: date, commit, settings, run name, mean recall and the run's variable cost. It writes nothing. | After each eval you can copy the rows worth keeping into `results/history.md` and add a note. |
-| `baseline_recall.py` | The baselines. Sends each review's intent once, as plain text, to Semantic Scholar, Consensus and OpenAlex, caches the raw result pages locally, and scores recall at several result caps. One Langfuse run per service and cap. | When you want a "what does good look like" number to compare the pipeline's recall with. The services are called once; later runs read the cache. See section 5. |
+| `baseline_recall.py` | The baselines. Sends each review's intent once, as plain text, to Semantic Scholar (keyword and semantic search), Consensus and OpenAlex, caches the raw result pages locally, and scores recall at several result caps. One Langfuse run per service and cap. | When you want a "what does good look like" number to compare the pipeline's recall with. The services are called once; later runs read the cache. See section 5. |
 | `sweep_record_cap.py` | The experiment. It runs a rapid search many times, each time with a different cap on the number of records kept and with one of the two query-generation methods. It records the recall for each combination. | When you want to know how the record cap or the prompting method changes recall. |
 
 The two measuring scripts read the reviews and their reference lists from the Langfuse dataset. They do not read the CSV files. This means you must run `ground_truth_dataset.py` at least once before you run either of them.
@@ -199,11 +199,12 @@ The pipeline's recall numbers (section 2) have nothing to be compared with. Is 5
 depth bad, normal, or as good as this ground truth allows? The baselines answer that with
 the simplest possible search: each review's intent text is sent **once, unchanged**, to one
 search service. No language model writes queries, nothing is screened, there is no second
-round. Three services are tried, each called an **arm** (as in an experiment):
+round. Three services are tried in four ways, each called an **arm** (as in an experiment):
 
 | Arm | Service | What it is |
 |---|---|---|
-| `semantic-scholar` | Semantic Scholar Academic Graph | Free scholarly search with its own relevance ranking. Needs a free key. |
+| `semantic-scholar` | Semantic Scholar, keyword search (`paper/search`) | Free. Every word of the query must appear in the paper, then a ranker orders the matches. A title-length intent matches almost nothing, and that is what this arm shows. Needs a free key. |
+| `semantic-scholar-snippet` | Semantic Scholar, semantic search (`snippet/search`) | Free, same key. Ranks passages from title, abstract and body text by meaning. Returns snippets, not papers: 1,000 snippets are about 550 unique papers, and each names its paper by an internal id, so the script looks the DOIs up in a second step. Body text exists only for open-access papers, so this arm leans towards them. |
 | `consensus` | Consensus | Paid scholarly search built on Semantic Scholar's corpus with its own ranking. Calls are metered. |
 | `openalex-raw` | OpenAlex | The service the pipeline already uses, but with one plain search instead of many generated queries. Free. |
 
