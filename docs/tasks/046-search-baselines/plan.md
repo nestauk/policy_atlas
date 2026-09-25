@@ -6,6 +6,8 @@ deferred and have no phase.
 
 > Plan approved (before implementation): 2026-09-25 · owner. Phase 5 (arm 1b) added during
 > the build, owner-approved 2026-09-25.
+> Phase 6 (ground-truth fetchers) written post hoc, 2026-09-25: the work was owner-directed
+> in a side conversation and folded in afterwards (contract § Amendment 2).
 > Plan-stage adversarial review: ran 2026-09-25 (read-only Codex brief). Its findings are
 > folded into S1, S4–S6 and Phase 3 below. Two owner changes followed: the P2 deferral
 > removed the key-suggestion phase and the raw Overton arm; D9 (fetch once, cache) split
@@ -179,3 +181,22 @@ to a module already under review and needs the live rate-limit judgment.
 3. Self-checks per the contract's arm 1b bullet. `make verify-fast` green. Commit.
 4. Live: `--arms semantic-scholar-snippet` (12 free requests, four Langfuse runs). Rows and
    notes into `history.md`; README and `verification.md` addenda. Commit.
+
+## Phase 6 — Ground-truth fetchers (post hoc) — `lead`
+
+Written after the code (contract § Amendment 2, P5, D10-D14). Recorded as it was done.
+
+1. Research first, no code: where do 3ie's data live, and what other public collections pair
+   a review question with its studies. Findings: 3ie review records do not list included
+   studies (D13); 3ie gap maps do, through two undocumented JSON calls; the YEF map is one HTML
+   page with the data embedded; Campbell reviews are listable through OpenAlex; SR4ALL is a
+   300,000-review corpus on Zenodo with OpenAlex reference ids and extracted research
+   questions. Screening datasets (SYNERGY, CSMeD, CLEF TAR) and Epistemonikos are medical and
+   were not used.
+2. Shared helpers into `ground_truth.py` (Deliverable 10), so each fetcher is one file with
+   `list/select`, `build_rows` and `main`.
+3. `get_campbell.py`, `get_3ie.py`, `get_yef.py`, `get_sr4all.py` (Deliverables 6-9), each
+   with a raw cache and `--refresh` (D14).
+4. Self-checks in `test_metrics.py`; README section 6; `ruff check` clean.
+5. Live: run each fetcher once; `ground_truth_dataset.py --dry-run` on the gap-map CSVs.
+   Numbers into `verification.md` § Phase 6 addendum. Commit.

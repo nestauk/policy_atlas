@@ -21,6 +21,10 @@ commits that follow it. Public-safe: no keys, no cache content, no raw abstracts
 | `test_metrics.py` and `ruff check scripts/evals/search/` (after the review fixes) | pass (`ok`) | eleven `test_baseline_*`/`test_history_*` checks, extended per § Review findings |
 | `make okf-validate` (after the step-8 records) | pass | 147 concepts, 0 violations |
 | cache re-score, paid keys blanked, `--dry-run` (after the fixes) | 0 fetches | all 16 rows identical to `history.md` |
+| `test_metrics.py` (Phase 6, fetchers) | pass (`ok`) | eight new self-checks: `test_doi_if_valid`, `test_clean_review_title_gap_maps`, `test_not_a_review_title`, `test_write_ground_truth_round_trip`, `test_get_3ie_map_rows`, `test_get_yef_strands`, `test_get_sr4all_filter`, `test_get_campbell_select` |
+| `ruff check scripts/evals/search/` (Phase 6) | pass | |
+| `get_yef.py`, `get_3ie.py`, `get_campbell.py`, `get_sr4all.py` (live, once each) | exit 0 | numbers in § Phase 6 addendum |
+| `ground_truth_dataset.py --dry-run` on `yef_*.csv` and `3ie_*.csv` | 20 and 197 items | every row loaded; no network (all rows carry `published_before`) |
 
 ## Checks beyond the build
 
@@ -166,6 +170,43 @@ rubric item 3 carry the amendment. Two design points the reviewer should weigh: 
 arm `n_api_calls` counts the search plus its id lookups at every cap (three, not one), and
 `n_candidates_kept` at cap 1,000 is about 550 because snippets collapse to papers.
 
+### Phase 6 addendum: ground-truth fetchers (post hoc, 2026-09-25)
+
+Contract § Amendment 2, plan Phase 6. Each fetcher was run once from a clean cache.
+
+| Dataset | Reviews written | of which map / intervention | References | With a DOI | Label | Raw cache |
+|---|---:|---|---:|---:|---|---|
+| campbell | 349 | 349 reviews (of 1,055 journal works; `--min-refs 30`) | 53,803 | 47,478 | empty | 15 MB, 2 files |
+| 3ie | 197 | 18 maps / 179 intervention rows (`--min-studies 20`) | 27,572 | 20,070 | content | 35 MB, 19 files |
+| yef | 20 | 1 map / 19 strands (of 43; `--min-studies 20`) | 5,218 | 3,181 | content | 28 MB, 1 file |
+| sr4all | 100 | 100 reviews (2,480 passed the filter; `--limit 100`) | 9,471 | 8,864 | empty | 2.8 MB, 2 files, plus the 1.6 GB corpus |
+
+3ie: 42 gap-map records in the portal; 18 have their map on the portal and were read; 24 point
+at the older `gapmaps.3ieimpact.org` site and were skipped (D13). The SR4ALL filter kept the
+most-cited social-science reviews, which leans towards mental-health topics; `--fields` and
+`--limit` are the knobs. Run times: YEF and 3ie under a minute each, SR4ALL about two minutes
+(one pass over the corpus, then about 190 OpenAlex lookups), Campbell about fifteen minutes
+(46,014 unique cited works, 921 OpenAlex lookups of 50 ids).
+
+Dry-run of the existing loader: `yef_*.csv` 20 items, `3ie_*.csv` 197 items, every row
+loaded, cutoffs as written (for example the YEF "Anti-bullying programmes" strand: 25 target
+keys, 16 unscorable, cutoff 2024-12-31). The unscorable counts are the grey-literature rows
+with a URL and no DOI: P2's input, still deferred.
+
+No key, cache file or CSV is tracked: `results/` stays git-ignored; `grep -rl api_key` over
+the raw cache finds nothing.
+
+**Known limits.** The Campbell and SR4ALL id-to-DOI cache is written once at the end of the
+lookup loop, so a crash mid-way repeats the lookups. The YEF page URL is pinned to the April
+2026 edition. 3ie has no documented API; the two endpoints are what the map page calls.
+
+**Deviation to adjudicate.** The fetchers were built before any contract text existed
+(owner-directed, side conversation) and written up afterwards as § Amendment 2. Also, while
+they were being built, the review-stack conversation committed `36596c2` from the same
+working tree, which swept in the Phase 6 edits to `README.md` (section 6) and
+`test_metrics.py` (eight tests) ahead of the code they describe. At that commit alone
+`test_metrics.py` cannot import `get_3ie`; the Phase 6 commit that follows repairs it.
+
 ## Diff summary
 
 - **`scripts/evals/search/baseline_recall.py`** (new, Codex-authored from the lead's brief;
@@ -183,6 +224,12 @@ arm `n_api_calls` counts the search plus its id lookups at every cap (three, not
   filled from `history.py`), twelve baseline rows with notes.
 - **`backend/.env.example`**: the two key names, empty.
 - **`docs/deferred.md`**: § Search recall baselines (task 046 seams), four entries.
+- **Phase 6 (post hoc):** `get_campbell.py`, `get_3ie.py`, `get_yef.py`, `get_sr4all.py`
+  (new, one file each: list or select, `build_rows`, `main`); `ground_truth.py` (+131 lines:
+  `doi_if_valid`, `NOT_A_REVIEW_TITLE_RE`, `resolve_openalex_works` and `_cached`,
+  `cached_json`, `write_ground_truth`, the column tuples, gap-map tails in
+  `clean_review_title`); `test_metrics.py` (eight tests); README section 6; contract
+  § Amendment 2, plan Phase 6, rubric item 12, `docs/deferred.md` P2 entry.
 
 ### Flagged deviations (minor, resolved within the contract's vocabulary)
 
@@ -411,3 +458,4 @@ the same table.
 | 9 | yes | This file. |
 | 10 | yes | `docs/deferred.md` § Search recall baselines: four entries plus the cap-sized cost note. |
 | 11 | yes | This section; contract/plan adversarial reviews recorded in the contract status line. |
+| 12 | yes (self-reported at build, not yet through the review stack) | § Phase 6 addendum: four live runs, dry-run loads 217 items, eight self-checks `ok`, `ruff` clean, `results/` untracked. Post-hoc write-up flagged as a deviation. |

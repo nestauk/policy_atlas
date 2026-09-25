@@ -1,8 +1,8 @@
 # Rubric: 046-search-baselines
 
 The task is **done only if every box holds**. Otherwise it is in progress, not done.
-Problems P1–P4, decisions D1–D9 and the arms are defined in [contract.md](contract.md).
-P2 and D5 are deferred and have no item here.
+Problems P1–P5, decisions D1–D14 and the arms are defined in [contract.md](contract.md).
+P2 and D5 are deferred and have no item here. Item 12 covers § Amendment 2 (post hoc).
 
 1. [ ] Implementation satisfies [contract.md](contract.md): all five deliverables land;
        D1–D4 and D6–D9 hold as written.
@@ -37,3 +37,8 @@ P2 and D5 are deferred and have no item here.
 11. [ ] Review stack for Tier 2 ran. The adversarial reviews of contract and plan the owner
         asked for ran at design time; their findings and outcomes are in the contract's
         status line and in [verification.md](verification.md).
+12. [ ] **P5 (Amendment 2).** The four fetchers run end to end and write
+        `<dataset>_reviews.csv` and `<dataset>_references.csv` that `ground_truth_dataset.py
+        --dry-run` loads unchanged (D10). Gap-map rows are `content`, reference-list rows
+        unlabelled (D11). A second run makes no download (D14). Self-checks listed in the
+        contract's added § Acceptance checks pass. Nothing under `results/` is committed.

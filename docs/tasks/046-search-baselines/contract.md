@@ -10,6 +10,11 @@
 > figure is the price of the result pages that cover the cap at the echoed page size, as
 > plan S7 pins; the wording "fetching that cap on its own" was corrected in the README and
 > `history.md` (see verification.md § Review findings).
+> **Amendment 2 (post-hoc, 2026-09-25, owner-directed):** four ground-truth fetchers
+> (`get_campbell.py`, `get_3ie.py`, `get_yef.py`, `get_sr4all.py`) and their shared helpers,
+> built in a side conversation the same day and folded into this task. Written up after the
+> code, as § Amendment 2 at the end of this contract. It starts the ground-truth expansion
+> that P2 was deferred to; P2 itself stays deferred.
 
 ## Goal
 
@@ -329,3 +334,133 @@ Review focus: is the comparison fair (same intent, same cutoff, same key, same f
 does anything favour one arm silently; is the cost number labelled honestly; does the
 cache path score identically to the live path; scope creep into pipeline code or into
 the ground truth.
+
+## Amendment 2 — Ground-truth fetchers (post-hoc, 2026-09-25)
+
+Written after the code, to record what was built and why. Owner-directed in a side
+conversation that began as research ("where can we download 3ie metadata, and what other
+datasets exist?") and ended with four scripts. The code follows the rest of this contract's
+vocabulary: a **review** is one intent plus one set of references, keyed as § Terms says.
+
+### Why
+
+The eval measures recall over four hand-made reviews. Four is too few to tell a real change
+from noise, and every problem in § Problems is measured on them. The owner wants about one
+hundred. Building them by hand at the pace of the first four is weeks of work; several public
+collections already pair a review question with the studies that answer it.
+
+### Problem
+
+- **P5 — The ground truth is four reviews.** No script can add to it. Each new review means
+  finding a published review, getting its reference list, resolving DOIs and labelling, all by
+  hand, in a separate repo.
+
+### Deliverable (added)
+
+6. **`scripts/evals/search/get_campbell.py`** — lists every work in the journal *Campbell
+   Systematic Reviews* through OpenAlex, keeps finished reviews with a DOI, a publication date
+   and at least `--min-refs` references (default 30; protocols and errata dropped by title),
+   resolves every cited work to a DOI, and writes the two CSVs (D10).
+7. **`scripts/evals/search/get_3ie.py`** — reads every evidence gap map hosted on 3ie's
+   Development Evidence Portal through the two JSON calls the map page itself makes, and
+   writes one review per map and one per intervention row with at least `--min-studies`
+   studies (default 20) (D11, D12).
+8. **`scripts/evals/search/get_yef.py`** — downloads the Youth Endowment Fund Programmes
+   Evidence and Gap Map page (one HTML file with the whole dataset embedded as JSON), and
+   writes one review for the map and one per toolkit strand with at least `--min-studies`
+   studies (D11, D12).
+9. **`scripts/evals/search/get_sr4all.py`** — streams the Webis-SR4ALL-26 corpus (300,000
+   systematic reviews, 1.6 GB, downloaded by hand into `results/ground_truth/raw/`), keeps
+   English reviews with a DOI, a stated research question, at least `--min-refs` references
+   and a `field` in `--fields` (default: the four social-science fields), takes the `--limit`
+   most cited (default 100), resolves cited works to DOIs and writes the two CSVs (D10).
+10. **`scripts/evals/search/ground_truth.py`** — the shared parts: `doi_if_valid` (a real DOI
+    out of a messy field, else none), `NOT_A_REVIEW_TITLE_RE`, `resolve_openalex_works` and
+    its cached form, `cached_json`, `write_ground_truth`, the `REVIEW_COLUMNS` and
+    `REFERENCE_COLUMNS` tuples, and `clean_review_title` extended to strip "an evidence gap
+    map" / "an evidence and gap map" / "a systematic map" tails.
+11. **`test_metrics.py`** self-checks and **README** section 6 for the above.
+
+Shipped means: each script runs end to end, writes `<dataset>_reviews.csv` and
+`<dataset>_references.csv` under `results/ground_truth/`, and `ground_truth_dataset.py
+--dry-run` loads those files unchanged.
+
+### Terms (added)
+
+| Term | Meaning here |
+|---|---|
+| **Fetcher** | One `get_<dataset>.py` script. Downloads one public source, caches the raw download under `results/ground_truth/raw/<dataset>/`, writes two CSVs. |
+| **Gap map** | A grid of intervention rows by outcome columns; each cell lists the studies screeners coded into it. Two sources here (3ie, YEF). A row is a natural review: its intervention is the intent, its studies the target. |
+| **Reference-list source** | A published review whose cited works stand in for its included studies (Campbell, SR4ALL). Same shape as the four original reviews, same caveat: background and methods citations are mixed in. |
+| **Level** | `review` (a published review), `map` (a whole gap map) or `intervention` (one row or strand of a gap map). A column in the reviews CSV; the loader ignores it. |
+| **Label** | `content` for a reference that counts towards recall. Gap-map rows are written `content`. Reference-list rows are written empty. |
+
+### Decisions (added)
+
+- **D10 — Same two CSVs, extra columns allowed.** Every fetcher writes the shape
+  `ground_truth_dataset.py` already reads (`title`, `doi`, `url`, `published_before`,
+  `exclude`; `review_title`, `ref_title`, `label`, `doi`, `overton_id`). Extra columns
+  (`dataset`, `review_id`, `level`, `n_references`, `n_with_doi`, `research_questions`,
+  `url`, `year`, `ref_id`) are for the person choosing and labelling; the loaders ignore
+  them. No change to the loaders, so nothing downstream moves.
+- **D11 — Gap-map rows are `content`; reference lists are unlabelled.** A map's screeners
+  already judged each study on topic, so its rows are scorable at once. A reference list is
+  not: its `label` stays empty until the labelling pass (the `policy_atlas_gt_labelling`
+  repo) marks the `content` rows, exactly as for the first four reviews. Writing `content`
+  on reference lists would inflate the target and lower every recall number.
+- **D12 — A gap-map row's intent and cutoff.** Intent: "<map title>: <intervention row>",
+  with the map title passed through `clean_review_title` first, so "The effects of rule of
+  law interventions on justice outcomes: Diversion". Identifier: the map URL, plus
+  `#intervention=<id>` or `#strand=<id>` for a row, so each row is a distinct Langfuse item.
+  Cutoff: a URL row must give `published_before`; the scripts use 31 December of the latest
+  publication year among the row's studies, the last date a study could carry and still be
+  in the map.
+- **D13 — 3ie's review records are not used.** The portal lists about 1,700 systematic
+  reviews, but a review record links to at most four "related" studies, not its
+  included-study list (probed 2026-09-25). Only the maps carry full study lists. Maps on the
+  older `gapmaps.3ieimpact.org` site have no JSON feed and are skipped and counted.
+- **D14 — Fetch once, cache, re-run offline.** Each fetcher keeps its raw download and
+  reuses it; `--refresh` forces a new download. The OpenAlex id-to-DOI cache fetches only
+  ids it does not already hold, so widening a selection later costs only the new lookups.
+  Selection is repeatable: SR4ALL's filter is deterministic and takes the most cited first.
+
+### Scope (added)
+
+- **In:** the files in Deliverable 6-11. Reads from OpenAlex (free, polite pool), 3ie's
+  portal API (no key; terms allow non-commercial use with attribution), the YEF page and a
+  local copy of the SR4ALL corpus. Outputs under `results/ground_truth/`, git-ignored.
+- **Out:** labelling reference lists. Filling `overton_id` for the grey-literature rows (P2,
+  still deferred: these CSVs are its input). Choosing which rows go into the Langfuse dataset.
+  Uploading anything. Any change to `ground_truth_dataset.py` or to the loaders.
+
+### Constraints (added)
+
+- **Dependencies:** none added (`httpx` only).
+- **Secrets:** none needed. OpenAlex reads `OPENALEX_EMAIL` / `OPENALEX_API_KEY` from
+  `backend/.env` if present, through the existing `openalex_get`.
+- **Egress:** developer-run scripts. 3ie has no documented API; the scripts call the two
+  endpoints the map page uses. Volume: one call per map plus one per record page.
+- **Terms of use:** 3ie permits non-commercial use with attribution and prohibits commercial
+  use. SR4ALL is CC BY 4.0. The YEF page is public. Cite the sources in anything that reuses
+  the lists.
+
+### Acceptance checks (added)
+
+- `test_metrics.py` green with: `doi_if_valid` on "No DOI", a bare DOI, a `doi.org` link
+  with a trailing full stop and a `doi:` prefix; `clean_review_title` on gap-map tails and a
+  title with no tail; `NOT_A_REVIEW_TITLE_RE`; `write_ground_truth` round trip through the
+  real `load_reviews` / `load_references` (only labelled content rows with a key count; a
+  reference naming an unknown review is refused); 3ie `map_rows` on a two-level and a
+  one-level map and `build_rows` at map and intervention level with the cutoff and DOI
+  counts; YEF `strands` (drops "Uncategorised") and `build_rows`; SR4ALL `wanted` on each
+  filter clause; Campbell `select_reviews` (protocol, short list, no DOI and duplicate title
+  dropped).
+- `ruff check scripts/evals/search/` clean.
+- **Live check:** each fetcher run once end to end; `ground_truth_dataset.py --dry-run` on
+  the 3ie and YEF files loads every row; a second run of each fetcher makes no download.
+
+### Verification evidence expected
+
+In `verification.md`: the four runs' printed summaries (reviews, references, with-DOI
+counts), the raw cache sizes, the dry-run results, the gates, the diff summary, and any
+deviation.
