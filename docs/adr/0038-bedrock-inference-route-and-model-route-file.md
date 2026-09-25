@@ -15,10 +15,13 @@ The specs always named Amazon Bedrock as the target route, and the deferred log 
 the move as waiting on the evaluation slice, because a move was expected to change the
 model family and reopen every model choice.
 
-Two facts changed that. First, Bedrock now serves the exact OpenAI models the app uses,
-through an endpoint that speaks the OpenAI API, so the text route can move without
-changing model family. Verified from London on 2026-09-24 with the existing client and
-no code change. Second, Bedrock also serves Anthropic's Claude models and Cohere's
+Two facts changed that. First, Bedrock now serves OpenAI's GPT-5.6 family through an
+endpoint that speaks the OpenAI API, so the text route can move without changing model
+family. The app's main model, gpt-5.6-terra, is served as is. Its cheap model,
+gpt-5.4-mini, is not on Bedrock, and gpt-5.5 is US-only, so both get stand-ins from the
+same family: GPT-5.6 Luna and Terra. Verified from London on 2026-09-24 with the
+existing client and no code change. Whether Luna matches gpt-5.4-mini is unmeasured
+(decision 7). Second, Bedrock also serves Anthropic's Claude models and Cohere's
 embedding model through EU-only routing profiles, which gives the team a way to compare
 vendors and to keep embeddings inside the EU.
 

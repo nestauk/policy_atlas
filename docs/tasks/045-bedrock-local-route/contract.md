@@ -35,11 +35,17 @@ set on the new models and re-tuning prompts) come later and are out of scope her
 
 ## Why this is safe to do now
 
-The team verified on 2026-09-24 that Bedrock serves the exact OpenAI models the app uses
-today (GPT-5.6 Terra and GPT-5.6 Luna), through an endpoint that speaks the same API the
-app already speaks. Both models answered a test call from the London region with the
-existing OpenAI client and no code change. The remaining facts below come from the AWS
-model cards and are marked where a live probe is still owed.
+The app uses three OpenAI models today: gpt-5.6-terra for synthesis and chat, gpt-5.5
+for the planner and agent, and gpt-5.4-mini for the fourteen high-volume steps. The team
+verified on 2026-09-24 that Bedrock serves Terra through an endpoint that speaks the same
+API the app already speaks: Terra answered a test call from the London region with the
+existing OpenAI client and no code change. The other two are not reachable from London:
+gpt-5.4-mini is not on Bedrock at all, and gpt-5.5 is US-only. So the slice keeps Terra
+as it is and tries two stand-ins from the same OpenAI family: GPT-5.6 Luna, Bedrock's
+cheap tier, in place of gpt-5.4-mini, and Terra in place of gpt-5.5. Luna also answered
+the London test call. Whether Luna is good enough is not known yet; that is the
+evaluation slice's question (D8). The remaining facts below come from the AWS model
+cards and the live probes of 2026-09-25.
 
 ## Deliverable
 
