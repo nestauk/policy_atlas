@@ -5,6 +5,11 @@
 > 2026-09-25 · owner · Plan approved (before implementation): 2026-09-25 · owner · ADR: none.
 > **Amendment (build, 2026-09-25, owner-approved):** a fourth arm, `semantic-scholar-snippet`,
 > added after the live run showed arm 1 is a keyword engine (see § Arms).
+> **Review note (2026-09-25):** D4's Consensus price model ("above the included monthly
+> amount") is stale for our account, which is billed on every call. The `api_cost_usd`
+> figure is the price of the result pages that cover the cap at the echoed page size, as
+> plan S7 pins; the wording "fetching that cap on its own" was corrected in the README and
+> `history.md` (see verification.md § Review findings).
 
 ## Goal
 

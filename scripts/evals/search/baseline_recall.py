@@ -22,15 +22,24 @@ How it runs, in two stages:
    N results in the service's own order are kept, duplicates on the scoring key are
    removed, and recall is the share of the review's references among them. Each arm
    and cap becomes one Langfuse dataset run with the scores listed in
-   ``BASELINE_SCORE_KEYS``. ``api_cost_usd`` is the computed price of fetching that
-   cap on its own (from the service's price table), not the money this run spent.
+   ``BASELINE_SCORE_KEYS``. ``api_cost_usd`` is the computed price of the result pages
+   needed to reach that cap, at the page size the service returned, from the service's
+   price table. It is not the money this run spent. Consensus answers up to 300 results
+   per request on our plan, so caps 50, 100 and 200 all cost one request (three calls);
+   a request sized to the cap would cost less.
+
+Dates: every cutoff is written as YYYY-MM-DD (an ISO 8601 date), and only works
+published on or before it count.
 
 Keys: ``SEMANTIC_SCHOLAR_API_KEY`` (both Semantic Scholar arms) and ``CONSENSUS_API_KEY``
 in ``backend/.env``. OpenAlex needs none. Rate limits and retries: one request per second
 for Semantic Scholar keyword search and Consensus, one per three seconds for the snippet
-arm, five per second for OpenAlex; a 429 or 5xx answer is retried
-up to four times, after which the request counts as failed and that review's fetch
-stops and is marked incomplete (it is fetched again next run).
+arm, five per second for OpenAlex. A "too many requests" answer (HTTP 429) or a server
+error (HTTP 5xx) is retried up to four times, waiting at least the arm's interval each
+time; after that the request counts as failed and that review's fetch stops and is
+marked incomplete (it is fetched again next run). OpenAlex requests go through
+``ground_truth.openalex_get``, which carries its own five-try retry, so this script does
+not retry them a second time.
 
 Usage::
 
@@ -59,6 +68,7 @@ from typing import Any, TypeAlias
 import httpx
 from ground_truth import GroundTruth, openalex_get, record_key
 from ground_truth_dataset import DEFAULT_DATASET
+from history import usd
 from langfuse import Evaluation, propagate_attributes
 from production_recall import select_items
 from sweep_record_cap import _git_commit, _ground_truth_from_item
@@ -78,7 +88,7 @@ CONSENSUS_USD_PER_CALL = (
 )
 CONSENSUS_PAPERS_PER_CALL = 100
 # The free Semantic Scholar tier throttles below one request per second in practice;
-# the snippet arm makes only three requests per review, so it can afford to go slowly.
+# the snippet arm makes only two or three requests per review, so it can afford to go slowly.
 MIN_INTERVAL_S = {
     "semantic-scholar": 1.0,
     SNIPPET: 3.0,
@@ -140,6 +150,14 @@ def make_getter(
     """
     last_request: float | None = None
 
+    def pace() -> None:
+        nonlocal last_request
+        if last_request is not None:
+            wait = MIN_INTERVAL_S[arm] - (time.monotonic() - last_request)
+            if wait > 0:
+                sleep(wait)
+        last_request = time.monotonic()
+
     def getter(
         url: str,
         params: dict[str, str],
@@ -147,16 +165,17 @@ def make_getter(
         json: dict[str, Any] | None = None,
     ) -> httpx.Response | None:
         nonlocal last_request
-        for attempt in range(4):
-            if last_request is not None:
-                wait = MIN_INTERVAL_S[arm] - (time.monotonic() - last_request)
-                if wait > 0:
-                    sleep(wait)
-            last_request = time.monotonic()
+        if arm == "openalex-raw":
+            # openalex_get already retries five times (1, 2, 4, 8 s); one policy, not two.
+            pace()
             try:
-                if arm == "openalex-raw":
-                    response = openalex_get(url, **params)
-                elif json is not None:
+                return openalex_get(url, **params)
+            except httpx.TransportError:
+                return None
+        for attempt in range(4):
+            pace()
+            try:
+                if json is not None:
                     response = post(
                         url, params=params, headers=headers, json=json, timeout=60.0
                     )
@@ -183,9 +202,8 @@ def make_getter(
                 )
             except ValueError:
                 delay = float(2**attempt)
-            sleep(delay)
-            # Every retry delay is at least the arm interval, so it already
-            # satisfies the pacing rule without a second, redundant wait.
+            # Never retry faster than the arm's interval, whatever retry-after says.
+            sleep(max(delay, MIN_INTERVAL_S[arm]))
             last_request = None
         return None
 
@@ -193,17 +211,17 @@ def make_getter(
 
 
 def semantic_scholar_cutoff(cutoff: str) -> str:
-    """Convert an ISO cutoff into Semantic Scholar's inclusive filter."""
+    """Convert a YYYY-MM-DD cutoff into Semantic Scholar's inclusive filter."""
     return f":{cutoff}"
 
 
 def openalex_cutoff(cutoff: str) -> str:
-    """Convert an ISO cutoff into OpenAlex's inclusive filter."""
+    """Convert a YYYY-MM-DD cutoff into OpenAlex's inclusive filter."""
     return f"to_publication_date:{cutoff}"
 
 
 def consensus_cutoff(cutoff: str) -> dict[str, str]:
-    """Convert an ISO cutoff into Consensus's inclusive year/month filters."""
+    """Convert a YYYY-MM-DD cutoff into Consensus's inclusive year/month filters."""
     return {"year_max": cutoff[:4], "month_max": str(int(cutoff[5:7]))}
 
 
@@ -225,7 +243,7 @@ def fetch_semantic_scholar(
 
     Args:
         intent: Dataset search text.
-        cutoff: ISO date before which results must have been published.
+        cutoff: Cutoff date as YYYY-MM-DD; only works published on or before it count.
         get: Rate-limited response getter.
         api_key: Semantic Scholar key.
 
@@ -263,6 +281,16 @@ def fetch_semantic_scholar(
     return Fetched(pages, request, 100, 0, True, _now())
 
 
+def _snippet_corpus_ids(body: dict[str, Any]) -> list[str]:
+    """Corpus ids of a snippet page in rank order; a hit with no paper id is skipped."""
+    ids = []
+    for hit in body.get("data", []):
+        corpus_id = (hit.get("paper") or {}).get("corpusId") if isinstance(hit, dict) else None
+        if corpus_id is not None:
+            ids.append(str(corpus_id))
+    return ids
+
+
 def fetch_semantic_scholar_snippet(
     intent: str, cutoff: str, *, get: Getter, api_key: str
 ) -> Fetched:
@@ -279,7 +307,7 @@ def fetch_semantic_scholar_snippet(
 
     Args:
         intent: Dataset search text, sent verbatim.
-        cutoff: ISO date before which results must have been published.
+        cutoff: Cutoff date as YYYY-MM-DD; only works published on or before it count.
         get: Rate-limited response getter (also used for the POST lookup).
         api_key: Semantic Scholar key.
 
@@ -300,9 +328,7 @@ def fetch_semantic_scholar_snippet(
         return _failure([], request, RESULT_CEILING)
     body = response.json()
     pages: list[dict[str, Any]] = [body]
-    unique_ids = list(
-        dict.fromkeys(str(hit["paper"]["corpusId"]) for hit in body.get("data", []))
-    )
+    unique_ids = list(dict.fromkeys(_snippet_corpus_ids(body)))
     for start in range(0, len(unique_ids), BATCH_SIZE):
         ids = unique_ids[start : start + BATCH_SIZE]
         lookup = get(
@@ -322,7 +348,7 @@ def fetch_consensus(intent: str, cutoff: str, *, get: Getter, api_key: str) -> F
 
     Args:
         intent: Dataset search text, sent verbatim.
-        cutoff: ISO date before which results must have been published.
+        cutoff: Cutoff date as YYYY-MM-DD; only works published on or before it count.
         get: Rate-limited response getter.
         api_key: Consensus key.
 
@@ -372,7 +398,11 @@ def fetch_consensus(intent: str, cutoff: str, *, get: Getter, api_key: str) -> F
             # remaining slice at a smaller size: page 9 at size 100 (750 -> page 3 at 250).
             remaining = RESULT_CEILING - covered
             if remaining <= 0 or covered % remaining:
-                break
+                # The remaining slice cannot be asked for as one page at this size
+                # (only sizes 300 and 750 are known to work), so the fetch stops short
+                # of the ceiling. Count it as a failed request so the run says
+                # "undercount" and the file is fetched again next run.
+                return _failure(pages, request, echoed_first)
             page, page_size = covered // remaining, remaining
     return Fetched(pages, request, echoed_first, 0, True, _now())
 
@@ -382,7 +412,7 @@ def fetch_openalex_raw(intent: str, cutoff: str, *, get: Getter) -> Fetched:
 
     Args:
         intent: Dataset search text, sent verbatim.
-        cutoff: ISO date before which results must have been published.
+        cutoff: Cutoff date as YYYY-MM-DD; only works published on or before it count.
         get: Rate-limited response getter.
 
     Returns:
@@ -431,11 +461,22 @@ def write_cache(
     path.write_text(json.dumps(value, indent=2) + "\n", encoding="utf-8")
 
 
-def read_cache(path: Path) -> Fetched | None:
-    """Read one cached fetch, or return None when it has not been fetched."""
+def read_cache(
+    path: Path, *, intent: str | None = None, cutoff: str | None = None
+) -> Fetched | None:
+    """Read one cached fetch, or return None when it has not been fetched.
+
+    When ``intent`` or ``cutoff`` is given, a file fetched for a different text or
+    date is treated as absent, so an edited dataset item is fetched again rather
+    than scored against stale results.
+    """
     if not path.exists():
         return None
     value = json.loads(path.read_text(encoding="utf-8"))
+    if intent is not None and value.get("intent") != intent:
+        return None
+    if cutoff is not None and value.get("cutoff") != cutoff:
+        return None
     return Fetched(**{key: value[key] for key in Fetched.__dataclass_fields__})
 
 
@@ -455,7 +496,7 @@ def load_or_fetch(
         arm: Baseline arm name.
         item_id: Dataset item identity used for the cache filename.
         intent: Dataset search text.
-        cutoff: ISO publication cutoff.
+        cutoff: Cutoff date as YYYY-MM-DD.
         refresh: Whether to bypass a complete cache entry.
         cache_dir: Root directory for cached raw pages.
         fetcher: Optional test or custom fetch function.
@@ -464,7 +505,7 @@ def load_or_fetch(
         The fetched pages and whether they came from cache.
     """
     path = cache_path(arm, item_id, cache_dir)
-    cached = read_cache(path)
+    cached = read_cache(path, intent=intent, cutoff=cutoff)
     if cached is not None and cached.complete and not refresh:
         return cached, True
     if fetcher is None:
@@ -495,25 +536,19 @@ def _snippet_records(fetched: Fetched) -> list[dict[str, Any]]:
         for corpus_id, paper in zip(
             page.get("ids", []), page.get("batch", []), strict=False
         ):
-            if paper:
+            if isinstance(paper, dict):
                 externals[str(corpus_id)] = paper
-    records: list[dict[str, Any]] = []
-    seen: set[str] = set()
-    for hit in fetched.pages[0].get("data", []) if fetched.pages else []:
-        corpus_id = str(hit["paper"]["corpusId"])
-        if corpus_id in seen:
-            continue
-        seen.add(corpus_id)
-        paper = externals.get(corpus_id, {})
-        records.append(
-            {
-                "doi": (paper.get("externalIds") or {}).get("DOI"),
-                "backend": SNIPPET,
-                "backend_record_id": corpus_id,
-                "title": hit["paper"].get("title"),
-            }
-        )
-    return records
+    if not fetched.pages:
+        return []
+    return [
+        {
+            "doi": (externals.get(corpus_id, {}).get("externalIds") or {}).get("DOI"),
+            "backend": SNIPPET,
+            "backend_record_id": corpus_id,
+            "title": externals.get(corpus_id, {}).get("title"),
+        }
+        for corpus_id in dict.fromkeys(_snippet_corpus_ids(fetched.pages[0]))
+    ]
 
 
 def _page_records(arm: str, page: dict[str, Any]) -> int:
@@ -581,12 +616,21 @@ def slice_at_cap(records: list[dict[str, Any]], cap: int) -> list[dict[str, Any]
 
 
 def pages_for_cap(fetched: Fetched, cap: int) -> list[dict[str, Any]]:
-    """Return only the pages needed to reach an independently fetched cap."""
+    """Return the pages needed to cover the first ``cap`` positions at the fetched page size.
+
+    Counts positions, not results, so a page a few results short of its size still
+    counts as full. Exact for caps up to one page and for the 1,000 ceiling; a cap
+    such as 300 on a 297-result page would be one page short.
+    """
     return fetched.pages[: min(len(fetched.pages), math.ceil(cap / fetched.page_size))]
 
 
 def cost_usd(arm: str, pages: list[dict[str, Any]]) -> float:
-    """Compute the documented variable API cost for these raw pages."""
+    """Price of these raw pages from the service's price table.
+
+    Consensus bills one call per 100 results returned in a page, so the price of a cap
+    is the price of the pages that cover it, not of a request sized to the cap.
+    """
     if arm in ("semantic-scholar", SNIPPET):
         return 0.0
     if arm == "consensus":
@@ -634,18 +678,13 @@ def score_baseline(*, output: dict[str, Any], **_: Any) -> list[Evaluation]:
     ]
 
 
-def _usd(value: float) -> str:
-    """Dollars to two decimals, or four when the amount would otherwise show as $0.00."""
-    return f"${value:.2f}" if value == 0 or value >= 0.01 else f"${value:.4f}"
-
-
 def _describe(title: str, score: dict[str, Any]) -> str:
     failed = (
         f", {score['n_failed_calls']} REQUESTS FAILED — recall is an undercount"
         if score["n_failed_calls"]
         else ""
     )
-    return f"  {title[:60]}: search_recall={score['search_recall']:.0%} ({score['n_found']}/{score['n_ground_truth']}); kept={score['n_candidates_kept']}, requests={score['n_api_calls']}, cost={_usd(score['api_cost_usd'])}{failed}"
+    return f"  {title[:60]}: search_recall={score['search_recall']:.0%} ({score['n_found']}/{score['n_ground_truth']}); kept={score['n_candidates_kept']}, requests={score['n_api_calls']}, cost={usd(score['api_cost_usd'])}{failed}"
 
 
 def run_baseline(
@@ -739,7 +778,7 @@ def main() -> None:
         nargs="+",
         choices=ARMS,
         default=ARMS,
-        help="Services to run (default: all three).",
+        help="Services to run (default: all four).",
     )
     parser.add_argument(
         "--caps",
@@ -787,9 +826,9 @@ def main() -> None:
     label = args.run_label or f"{date.today().isoformat()}-{git_commit[:7]}"
     ceilings = {
         "semantic-scholar": "at most 10 requests per review, free",
-        SNIPPET: "3 requests per review (one search, two id lookups), free",
+        SNIPPET: "2 or 3 requests per review (one search, one or two id lookups), free",
         "openalex-raw": "at most 5 requests per review, free",
-        "consensus": "at most 10 calls per review at $0.05 per call, billed on every call",
+        "consensus": f"at most 10 calls per review at ${CONSENSUS_USD_PER_CALL:.2f} per call, billed on every call",
     }
     for arm in args.arms:
         needed = sum(
@@ -833,7 +872,7 @@ def main() -> None:
     )
     for row in rows:
         print(
-            f"{row['arm']:<18}{row['cap']:>6}{row['mean_recall']:>14.1%}{row['kept']:>8}{row['requests']:>11}{row['failed']:>8}{_usd(row['cost']):>11}  {row['fetched_at']}  {row['url']}"
+            f"{row['arm']:<18}{row['cap']:>6}{row['mean_recall']:>14.1%}{row['kept']:>8}{row['requests']:>11}{row['failed']:>8}{usd(row['cost']):>11}  {row['fetched_at']}  {row['url']}"
         )
     tracing.flush(client)
 

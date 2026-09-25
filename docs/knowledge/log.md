@@ -1,5 +1,28 @@
 # Knowledge update log
 
+## 2026-09-25 (task 046 step 8)
+* **Creation**: Added
+  [consensus-api-paging-and-billing](consensus-api-paging-and-billing.md) — zero-indexed
+  pages, HTTP 400 past the 1,000 ceiling with next_page null one page early, positions
+  not results, $0.05 on every call for our beta account (046 live probe, flagged
+  deviation 1).
+* **Creation**: Added
+  [semantic-scholar-two-search-engines](semantic-scholar-two-search-engines.md) — the
+  keyword engine vs the snippet (semantic) engine, corpusId-to-DOI lookup, open-access
+  lean, rate limit (046 arms 1 and 1b).
+* **Creation**: Added
+  [eval-cost-figures-name-their-unit](eval-cost-figures-name-their-unit.md) — computed vs
+  spent, page-priced vs cap-priced, api vs llm, four decimals under a cent, and the
+  request-checking cache (046 review stack, findings 1 and 3, convergent).
+* **Creation**: Added
+  [langfuse-dataset-run-name-reuse-appends](langfuse-dataset-run-name-reuse-appends.md) —
+  same run_name appends items; zero-request checks use --dry-run or a new label (046
+  flagged deviation 2).
+* **Update**: [delegated-executor-practices](delegated-executor-practices.md) — fourth
+  confirmation that delegated tests are the defect surface (046); background
+  `make verify-fast` shares the test DB with delegated briefs; committing one phase's
+  slice of a shared file via `git update-index --cacheinfo` (046 build handoff).
+
 ## 2026-09-08 (task 040 step 8)
 * **Creation**: Added
   [additive-max-md-variants-prove-desktop-invariant](additive-max-md-variants-prove-desktop-invariant.md) —
