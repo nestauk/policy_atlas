@@ -2,7 +2,7 @@
 
 > **Status:** drafted, adversarial review folded in (2026-09-25); P2 deferred and
 > fetch-once cache added by owner (2026-09-25). Contract approved (before planning):
-> _pending · owner_ · Plan approved (before implementation): _pending · owner_ · ADR: none.
+> 2026-09-25 · owner · Plan approved (before implementation): 2026-09-25 · owner · ADR: none.
 
 ## Goal
 

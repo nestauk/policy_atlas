@@ -4,7 +4,7 @@ Problems P1–P4, decisions D1–D9, the terms and the arms table are defined in
 [contract.md](contract.md). This plan cites them and adds nothing to scope. P2 and D5 are
 deferred and have no phase.
 
-> Plan approved (before implementation): _pending · owner_.
+> Plan approved (before implementation): 2026-09-25 · owner.
 > Plan-stage adversarial review: ran 2026-09-25 (read-only Codex brief). Its findings are
 > folded into S1, S4–S6 and Phase 3 below. Two owner changes followed: the P2 deferral
 > removed the key-suggestion phase and the raw Overton arm; D9 (fetch once, cache) split
