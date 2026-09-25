@@ -888,6 +888,105 @@ def test_baseline_score_evaluator() -> None:
     ] == BASELINE_SCORE_KEYS
 
 
+def test_history_cost_column() -> None:
+    """The ``variable cost`` column: summed api_cost_usd, or summed trace cost."""
+    from datetime import datetime, timezone
+    from types import SimpleNamespace
+
+    from history import HEADER, fetch_runs, render_row
+
+    def score(name, value):
+        return SimpleNamespace(name=name, value=value)
+
+    def page(data):
+        return SimpleNamespace(data=data)
+
+    scores_by_trace = {
+        "t1": [score("search_recall", 0.5), score("api_cost_usd", 0.10)],
+        "t2": [score("search_recall", 0.25), score("api_cost_usd", 0.20)],
+        "t3": [score("search_recall", 0.5)],
+        "t4": [score("search_recall", 0.5)],
+    }
+    items_by_run = {
+        "baseline": [SimpleNamespace(trace_id="t1"), SimpleNamespace(trace_id="t2")],
+        "pipeline": [SimpleNamespace(trace_id="t3"), SimpleNamespace(trace_id="t4")],
+    }
+    trace_cost = {"t3": 0.45, "t4": 0.55}
+    trace_calls: list[str] = []
+
+    runs = [
+        SimpleNamespace(
+            created_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+            name="baseline",
+            metadata={},
+        ),
+        SimpleNamespace(
+            created_at=datetime(2026, 1, 2, tzinfo=timezone.utc),
+            name="pipeline",
+            metadata={},
+        ),
+    ]
+
+    class _Trace:
+        @staticmethod
+        def get(trace_id):
+            trace_calls.append(trace_id)
+            return SimpleNamespace(total_cost=trace_cost.get(trace_id))
+
+    class _Scores:
+        @staticmethod
+        def get_many(trace_id, limit=100):
+            return page(scores_by_trace[trace_id])
+
+    class _DatasetRunItems:
+        @staticmethod
+        def list(dataset_id, run_name, limit=100):
+            return page(items_by_run[run_name])
+
+    class _Datasets:
+        @staticmethod
+        def get(name):
+            return SimpleNamespace(id="ds1")
+
+        @staticmethod
+        def get_runs(name, limit=100):
+            return page(runs)
+
+    client = SimpleNamespace(
+        api=SimpleNamespace(
+            datasets=_Datasets(),
+            dataset_run_items=_DatasetRunItems(),
+            scores=_Scores(),
+            trace=_Trace(),
+        )
+    )
+
+    rows = fetch_runs(client, "ds")
+    by_name = {r["run"]: r for r in rows}
+
+    baseline = by_name["baseline"]
+    assert abs(baseline["cost"] - 0.30) < 1e-9
+    assert baseline["cost_kind"] == "api"
+    assert baseline["search_recall"] == 0.375
+    assert "t1" not in trace_calls and "t2" not in trace_calls
+
+    pipeline = by_name["pipeline"]
+    assert pipeline["cost"] == 1.0
+    assert pipeline["cost_kind"] == "llm"
+
+    row_baseline = render_row(baseline)
+    row_pipeline = render_row(pipeline)
+    assert "$0.30 api" in row_baseline
+    assert "$1.00 llm" in row_pipeline
+
+    no_cost_row = dict(baseline)
+    no_cost_row["cost"] = None
+    assert render_row(no_cost_row).count("n/a") >= 1
+
+    header_line = HEADER.splitlines()[0]
+    assert header_line.count("|") == row_baseline.count("|")
+
+
 if __name__ == "__main__":
     test_normalize_doi()
     test_record_key()
@@ -916,4 +1015,5 @@ if __name__ == "__main__":
     test_baseline_cache_round_trip()
     test_baseline_slice_and_cost()
     test_baseline_score_evaluator()
+    test_history_cost_column()
     print("ok")

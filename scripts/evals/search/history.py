@@ -10,6 +10,12 @@ smoke tests or partial runs) with a note on each. To add a run: run this
 script, copy the row you want, paste it into ``history.md`` and fill in the
 note. Pass ``--since YYYY-MM-DD`` to print only recent runs.
 
+The ``variable cost`` column is the run's variable cost, summed over its
+reviews. ``api`` means the computed price of the search-service calls
+(baseline runs); ``llm`` means the language-model spend Langfuse attributes
+to the run's traces (pipeline runs). Neither includes flat subscriptions,
+compute or Langfuse itself.
+
 Usage:
 
     uv run --project backend --env-file backend/.env \\
@@ -32,8 +38,8 @@ from policy_atlas.core import tracing
 
 HEADER = (
     "| date | commit | experiment | depth | backend | record cap | reviews "
-    "| search recall | screen recall | failed calls | run | notes |\n"
-    "|---|---|---|---|---|---|---|---|---|---|---|---|"
+    "| search recall | screen recall | failed calls | variable cost | run | notes |\n"
+    "|---|---|---|---|---|---|---|---|---|---|---|---|---|"
 )
 
 
@@ -58,6 +64,17 @@ def fetch_runs(client: Any, dataset_name: str) -> list[dict[str, Any]]:
                 if score.value is not None:
                     values[score.name].append(float(score.value))
         mean = {name: statistics.mean(v) for name, v in values.items()}
+        if values.get("api_cost_usd"):
+            cost: float | None = sum(values["api_cost_usd"])
+            cost_kind: str | None = "api"
+        else:
+            llm_costs = []
+            for item in items:
+                total_cost = getattr(client.api.trace.get(item.trace_id), "total_cost", None)
+                if total_cost is not None:
+                    llm_costs.append(total_cost)
+            cost = sum(llm_costs) if llm_costs else None
+            cost_kind = "llm" if llm_costs else None
         meta = run.metadata or {}
         rows.append(
             {
@@ -72,6 +89,8 @@ def fetch_runs(client: Any, dataset_name: str) -> list[dict[str, Any]]:
                 "search_recall": mean.get("search_recall"),
                 "screen_recall": mean.get("screen_recall"),
                 "failed_calls": int(sum(values.get("n_failed_calls", []))),
+                "cost": cost,
+                "cost_kind": cost_kind,
             }
         )
     return rows
@@ -81,12 +100,17 @@ def _pct(value: float | None) -> str:
     return "-" if value is None else f"{value:.1%}"
 
 
+def _cost(r: dict[str, Any]) -> str:
+    cost = r.get("cost")
+    return "n/a" if cost is None else f"${cost:.2f} {r['cost_kind']}"
+
+
 def render_row(r: dict[str, Any]) -> str:
     """One markdown table row in the ``history.md`` column order, notes left empty."""
     return (
         f"| {r['date']} | {r['commit']} | {r['experiment']} | {r['depth']} | {r['backend']} "
         f"| {r['cap']} | {r['n_reviews']} | {_pct(r['search_recall'])} | {_pct(r['screen_recall'])} "
-        f"| {r['failed_calls']} | {r['run']} |  |"
+        f"| {r['failed_calls']} | {_cost(r)} | {r['run']} |  |"
     )
 
 
