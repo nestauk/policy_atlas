@@ -437,10 +437,18 @@ have to undo, and to name the seams they will pick up.
   policies, or the global profiles are denied; check and raise token-per-minute quotas;
   submit the Anthropic use case form if any Claude path needs it; written sign-off on
   data residency for the global profiles.
-- Re-embed the deployed database under the new embedding profile. Every reader filters
-  on the profile, so until this runs the deployed app sees no vectors. The staging slice
-  owns the job and its runtime. This slice should leave the profile constant derived from
-  configuration, not hard-coded, so the job can be a normal ingest under the new setting.
+- Decide whether to re-embed the deployed database under the new embedding profile, based
+  on cost. Every reader filters on the profile, so projects created before the switch
+  would have no vectors the new code can read. Two features depend on them: the chat's
+  retrieval over a project's sources, and the coverage count in the characterise step.
+  Re-embedding is not strictly necessary. The owner's current view (2026-09-25) is that
+  we could simply not support chat on older projects rather than pay to re-embed them;
+  new projects embed under the new profile as they are created. The staging slice costs
+  the re-embed (number of chunks times Cohere's per-token price) and makes the call. If
+  chat on older projects is dropped, the app should say so plainly on those projects
+  rather than show an empty answer. This slice should leave the profile constant derived
+  from configuration, not hard-coded, so a re-embed, if chosen, is a normal ingest under
+  the new setting.
 - Remove `OPENAI_API_KEY` from the app secret once nothing reads it.
 - Add Bedrock model names to the Langfuse pricing table in each project.
 
@@ -520,7 +528,8 @@ have to undo, and to name the seams they will pick up.
   hashes. Five prompt modules are re-pinned only because a model constant moved out of
   them; their prompt text is unchanged and the diff proves it.
 - Re-embedding the staging or production database. Locally, re-embedding happens on the
-  next ingest; for deployed data it is a planned job in the staging slice.
+  next ingest; for deployed data the staging slice decides on cost grounds whether to
+  re-embed or to drop chat on older projects (§ Future work).
 - Changing `EMBEDDING_DIMENSIONS`, the `chunk_embedding` table or the unit policy.
 - Moving any other step to Claude.
 - Measuring or claiming model quality. Re-tuning prompts for Luna.

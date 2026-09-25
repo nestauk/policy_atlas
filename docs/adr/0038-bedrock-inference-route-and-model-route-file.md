@@ -63,7 +63,9 @@ environment files.
    profile, under a new embedding profile label `cohere_embed_v4_1536_v1`. The vector
    column and length are unchanged. Old OpenAI vectors keep their label and are ignored
    by every reader, which already filters on the label. Local databases re-embed on the
-   next ingest. The deployed database is re-embedded by the staging slice. The embedding
+   next ingest. For the deployed database the staging slice decides, on cost, whether to
+   re-embed older projects or to stop offering chat retrieval on them; new projects embed
+   under the new label as they are created. The embedding
    interface gains a "document or query" argument because Cohere embeds the two
    differently; the Langfuse wrapper forwards and records it.
 
@@ -93,7 +95,8 @@ environment files.
   client library. Keys expire within 12 hours.
 - Staging and production need task-role permissions per model, Marketplace terms
   accepted per account, an organisation-level allowance for the `unspecified` region
-  value that global profiles evaluate against, quota checks, and a re-embed job. The
+  value that global profiles evaluate against, quota checks, and a cost-based decision on
+  re-embedding older projects. The
   container mints its own short-term key from its task role. None of this is in task
   045; it is the staging slice.
 - Moving further steps to Claude is one class per seam, following the query generation
