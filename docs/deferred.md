@@ -2460,7 +2460,12 @@ Context: `scripts/evals/search/baseline_recall.py` and `results/history.md` (row
   the baselines so Overton's contribution becomes visible. The design that was drafted (a
   suggest-only title lookup on OpenAlex and Overton with a human accepting each key) is in
   git history at commit `37d496c`. Lands with the owner's planned ground-truth expansion
-  to more reviews, not before.
+  to more reviews, not before. **Update 2026-09-25:** the expansion has its inputs: the four
+  fetchers (`scripts/evals/search/get_*.py`, contract § Amendment 2) write candidate reviews
+  from Campbell, 3ie gap maps, the YEF gap map and SR4ALL into `results/ground_truth/`. The
+  gap-map rows carry about 9,500 grey-literature studies with a URL and no DOI; that is the
+  `overton_id` labelling set. Still to do: choose the rows, label the reference-list sources,
+  fill `overton_id`, upload, then the `overton` arm.
 - **The "swap" slice.** The baselines show one Semantic Scholar semantic (snippet) search
   reaching 18.1% at the 1,000 ceiling, above the pipeline's deep depth (15.3%), and one plain
   Consensus search beating the pipeline's rapid depth, while one plain OpenAlex search falls
