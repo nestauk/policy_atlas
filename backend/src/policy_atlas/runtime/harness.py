@@ -22,7 +22,7 @@ from policy_atlas.core import events
 from policy_atlas.core.embeddings import EmbeddingBackend, StubEmbeddingBackend
 from policy_atlas.core.inference import InferenceProvider
 from policy_atlas.core.liveness import task_liveness
-from policy_atlas.core.schema import evidence_scope, runs
+from policy_atlas.core.schema import evidence_scope, runs, task_plan
 from policy_atlas.evidence_search.assess.appraise import AppraiseContext, appraise_sources
 from policy_atlas.evidence_search.assess.classification_backend import (
     ClassificationBackend,
@@ -65,6 +65,7 @@ from policy_atlas.evidence_search.extract.finding_vetter import (
 from policy_atlas.evidence_search.extract.interventions_records import (
     PROFILE_ID as INTERVENTIONS_PROFILE_ID,
 )
+from policy_atlas.evidence_search.extract.interventions_records import TaggingContext
 from policy_atlas.evidence_search.extract.relevance_annotator import (
     RelevanceAnnotatorBackend,
 )
@@ -108,15 +109,18 @@ from policy_atlas.options_scoping.longlist.longlist_backend import (
     LonglistBackend,
     StubLonglistBackend,
 )
+from policy_atlas.options_scoping.longlist_intent import plan_tagging_context
 from policy_atlas.options_scoping.suggest.suggest import (
     SuggestBackend,
     SuggestContext,
     suggest_options,
 )
 from policy_atlas.runtime.agent_backend import StubAgentBackend
+from policy_atlas.runtime.capability_registry import OPTIONS_SCOPING, validate_plan
 from policy_atlas.runtime.inherit import inherit_documents
 from policy_atlas.runtime.progress import ProgressEmitter
 from policy_atlas.runtime.run_spec import Config
+from policy_atlas.runtime.scoping_plan import ScopingPlan
 
 log = structlog.get_logger()
 
@@ -323,20 +327,101 @@ def _run_extract(state: HarnessState) -> HarnessState:
     return _run_scope_component(state, context_cls, sources_fn)
 
 
+def _scope_tagging_context(
+    conn: Connection, *, task_id: uuid.UUID, scope_id: uuid.UUID
+) -> TaggingContext | None:
+    """The tagging context of the scope's plan (task 046, S4), or ``None``.
+
+    Reads the plan version the intent record names (``evidence_scope.plan_id``)
+    on the component's own connection and builds the context with the place
+    strip applied (:func:`plan_tagging_context`). A scope with no plan gives
+    ``None``, which leaves the profile exactly as it was before 046.
+
+    Args:
+        conn: The component's connection.
+        task_id: Owning task.
+        scope_id: The walk's intent record.
+
+    Returns:
+        The tagging context, or ``None`` when the scope names no plan.
+
+    Raises:
+        ValueError: If the scope names a plan version that does not exist or
+            is not a scoping plan.
+        pydantic.ValidationError: If the stored plan payload is invalid.
+    """
+    plan_id = conn.execute(
+        select(evidence_scope.c.plan_id).where(
+            evidence_scope.c.evidence_scope_id == scope_id,
+            evidence_scope.c.task_id == task_id,
+        )
+    ).scalar_one_or_none()
+    if plan_id is None:
+        return None
+    payload = conn.execute(
+        select(task_plan.c.payload).where(
+            task_plan.c.plan_id == plan_id, task_plan.c.task_id == task_id
+        )
+    ).scalar_one_or_none()
+    if payload is None:
+        raise ValueError(f"extract_interventions: plan {plan_id} of the scope not found")
+    plan = validate_plan(OPTIONS_SCOPING, payload)
+    if not isinstance(plan, ScopingPlan):  # pragma: no cover - the registry's model
+        raise ValueError("extract_interventions: the scope's plan is not a scoping plan")
+    return plan_tagging_context(plan)
+
+
+def _extract_interventions_scope(
+    conn: Connection,
+    *,
+    task_id: uuid.UUID,
+    run_id: uuid.UUID,
+    context: ExtractContext,
+    extraction_backend: ExtractionBackend,
+    interventions_backend: InterventionsBackend,
+) -> dict[str, Any]:
+    """Run the intervention profile with the scope plan's tagging context.
+
+    Args:
+        conn: Open database connection.
+        task_id: Owning task id.
+        run_id: Run writing the extraction result.
+        context: The selection-free extract context.
+        extraction_backend: IOF extraction backend (unused by this profile;
+            ``extract_scope`` requires one).
+        interventions_backend: The intervention profile backend.
+
+    Returns:
+        The extraction component summary.
+    """
+    return extract_scope(
+        conn,
+        task_id=task_id,
+        run_id=run_id,
+        context=context,
+        extraction_backend=extraction_backend,
+        interventions_backend=interventions_backend,
+        profiles=(INTERVENTIONS_PROFILE_ID,),
+        interventions_context=_scope_tagging_context(
+            conn, task_id=task_id, scope_id=context.scope_id
+        ),
+    )
+
+
 def _run_extract_interventions(state: HarnessState) -> HarnessState:
     """The intervention profile node (task 045, ADR 0039 decision 6).
 
     The selection-free path: ``extract_scope`` over every screened-in document
     of the scope, with the intervention profile named through the
     ``profiles`` kwarg — never the scope's extraction directive, whose
-    IOF-mandatory rule stands (plan P9). No select run is referenced.
+    IOF-mandatory rule stands (plan P9). No select run is referenced. The
+    scope plan's tagging context rides along (task 046, S4).
     """
     context_cls = functools.partial(ExtractContext, selection_run_id=None)
     sources_fn = functools.partial(
-        extract_scope,
+        _extract_interventions_scope,
         extraction_backend=state["extraction_backend"],
         interventions_backend=state["interventions_backend"],
-        profiles=(INTERVENTIONS_PROFILE_ID,),
     )
     return _run_scope_component(state, context_cls, sources_fn)
 

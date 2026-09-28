@@ -16,6 +16,10 @@ countries an option's documents were studied in, read from each record's
 A facet and a card line; never a filter, never a verdict. Deterministic: the
 same text always gives the same group. The mapping is deliberately small and
 honest — a geography it does not know is ``unknown``, never guessed.
+
+The same names drive :func:`strip_place` (task 046, S6), which takes the
+place out of a plan text before it reaches the longlist: the country and
+sub-national names only, never the nationality adjectives.
 """
 
 from __future__ import annotations
@@ -36,121 +40,68 @@ COMPARABLE_LABEL = "comparable systems (OECD)"
 
 OECD_CODES: frozenset[str] = frozenset(TIER1_GROUPS["OECD members"])
 
-#: Country names and adjectives (lower case) → ISO-3166 alpha-2. Every OECD
-#: member, the United Kingdom's nations, and a short list of countries that
-#: recur in policy evidence. Adjectives that name a language or a wider
-#: region as often as a country ("English", "American", "Indian") are left
-#: out: they would guess. Multi-word entries that contain another entry
-#: ("new south wales", "northern ireland", "british columbia") are matched
-#: first, so the longer place wins.
-COUNTRY_GROUPS: dict[str, str] = {
-    # The United Kingdom and its nations.
+#: Country names (lower case) → ISO-3166 alpha-2. Every OECD member, the
+#: United Kingdom and a short list of countries that recur in policy
+#: evidence. Multi-word entries that contain another entry ("north korea",
+#: "united states of america") are matched first, so the longer place wins.
+COUNTRY_NAMES: dict[str, str] = {
+    # The United Kingdom.
     "united kingdom": "GB",
     "great britain": "GB",
     "britain": "GB",
-    "british": "GB",
-    "england": "GB",
-    "scotland": "GB",
-    "scottish": "GB",
-    "wales": "GB",
-    "welsh": "GB",
-    "northern ireland": "GB",
-    "london": "GB",
-    # Places whose names contain another entry.
-    "new south wales": "AU",
-    "new england": "US",
-    "british columbia": "CA",
-    "new mexico": "US",
     # North Korea is not South Korea (the OECD member): matched before "korea".
     "north korea": "KP",
-    "north korean": "KP",
     "democratic people's republic of korea": "KP",
     "dprk": "KP",
     # OECD members.
     "australia": "AU",
-    "australian": "AU",
     "austria": "AT",
-    "austrian": "AT",
     "belgium": "BE",
-    "belgian": "BE",
     "canada": "CA",
-    "canadian": "CA",
     "chile": "CL",
-    "chilean": "CL",
     "colombia": "CO",
-    "colombian": "CO",
     "costa rica": "CR",
-    "costa rican": "CR",
     "czech republic": "CZ",
     "czechia": "CZ",
-    "czech": "CZ",
     "denmark": "DK",
-    "danish": "DK",
     "estonia": "EE",
-    "estonian": "EE",
     "finland": "FI",
-    "finnish": "FI",
     "france": "FR",
-    "french": "FR",
     "germany": "DE",
-    "german": "DE",
     "greece": "GR",
-    "greek": "GR",
     "hungary": "HU",
-    "hungarian": "HU",
     "iceland": "IS",
-    "icelandic": "IS",
     "ireland": "IE",
-    "irish": "IE",
     "israel": "IL",
-    "israeli": "IL",
     "italy": "IT",
-    "italian": "IT",
     "japan": "JP",
-    "japanese": "JP",
     "south korea": "KR",
     "republic of korea": "KR",
     "korea": "KR",
-    "korean": "KR",
     "latvia": "LV",
-    "latvian": "LV",
     "lithuania": "LT",
-    "lithuanian": "LT",
     "luxembourg": "LU",
     "mexico": "MX",
-    "mexican": "MX",
     "netherlands": "NL",
-    "dutch": "NL",
     "holland": "NL",
     "new zealand": "NZ",
     "norway": "NO",
-    "norwegian": "NO",
     "poland": "PL",
-    "polish": "PL",
     "portugal": "PT",
-    "portuguese": "PT",
     "slovakia": "SK",
-    "slovak": "SK",
     "slovenia": "SI",
-    "slovenian": "SI",
     "spain": "ES",
-    "spanish": "ES",
     "sweden": "SE",
-    "swedish": "SE",
     "switzerland": "CH",
-    "swiss": "CH",
     "turkey": "TR",
     "türkiye": "TR",
-    "turkish": "TR",
     "united states": "US",
     "united states of america": "US",
     # Outside the OECD, recurring in policy evidence.
     "argentina": "AR",
     "bangladesh": "BD",
     "brazil": "BR",
-    "brazilian": "BR",
     "china": "CN",
-    "chinese": "CN",
     "egypt": "EG",
     "ethiopia": "ET",
     "ghana": "GH",
@@ -179,6 +130,181 @@ COUNTRY_GROUPS: dict[str, str] = {
     "vietnam": "VN",
     "zambia": "ZM",
     "zimbabwe": "ZW",
+}
+
+#: Recurring sub-national places (lower case) → the ISO-3166 alpha-2 code of
+#: their country (task 046, item 26): the United Kingdom's nations, the
+#: English regions and the largest cities and combined authorities; the US
+#: states; the Canadian provinces and territories; the Australian states and
+#: territories. Deliberately modest. A name that is also a country
+#: ("Georgia") or recurs as a city elsewhere ("Birmingham", "Newcastle") is
+#: left out: it would guess.
+SUBNATIONAL_PLACES: dict[str, str] = {
+    # The United Kingdom's nations.
+    "england": "GB",
+    "scotland": "GB",
+    "wales": "GB",
+    "northern ireland": "GB",
+    # English regions.
+    "north east england": "GB",
+    "north west england": "GB",
+    "yorkshire and the humber": "GB",
+    "yorkshire": "GB",
+    "east midlands": "GB",
+    "west midlands": "GB",
+    "east of england": "GB",
+    "south east england": "GB",
+    "south west england": "GB",
+    "greater london": "GB",
+    # The largest UK cities and combined authorities.
+    "london": "GB",
+    "greater manchester": "GB",
+    "manchester": "GB",
+    "liverpool city region": "GB",
+    "merseyside": "GB",
+    "liverpool": "GB",
+    "west yorkshire": "GB",
+    "leeds": "GB",
+    "south yorkshire": "GB",
+    "sheffield": "GB",
+    "tyne and wear": "GB",
+    "bristol": "GB",
+    "glasgow": "GB",
+    "edinburgh": "GB",
+    "cardiff": "GB",
+    "belfast": "GB",
+    # US states (Georgia is left out: it is also a country).
+    "alabama": "US",
+    "alaska": "US",
+    "arizona": "US",
+    "arkansas": "US",
+    "california": "US",
+    "colorado": "US",
+    "connecticut": "US",
+    "delaware": "US",
+    "florida": "US",
+    "hawaii": "US",
+    "idaho": "US",
+    "illinois": "US",
+    "indiana": "US",
+    "iowa": "US",
+    "kansas": "US",
+    "kentucky": "US",
+    "louisiana": "US",
+    "maine": "US",
+    "maryland": "US",
+    "massachusetts": "US",
+    "michigan": "US",
+    "minnesota": "US",
+    "mississippi": "US",
+    "missouri": "US",
+    "montana": "US",
+    "nebraska": "US",
+    "nevada": "US",
+    "new hampshire": "US",
+    "new jersey": "US",
+    "new mexico": "US",
+    "new york": "US",
+    "north carolina": "US",
+    "north dakota": "US",
+    "ohio": "US",
+    "oklahoma": "US",
+    "oregon": "US",
+    "pennsylvania": "US",
+    "rhode island": "US",
+    "south carolina": "US",
+    "south dakota": "US",
+    "tennessee": "US",
+    "texas": "US",
+    "utah": "US",
+    "vermont": "US",
+    "virginia": "US",
+    "west virginia": "US",
+    "washington state": "US",
+    "wisconsin": "US",
+    "wyoming": "US",
+    "new england": "US",
+    # Canadian provinces and territories.
+    "alberta": "CA",
+    "british columbia": "CA",
+    "manitoba": "CA",
+    "new brunswick": "CA",
+    "newfoundland and labrador": "CA",
+    "newfoundland": "CA",
+    "nova scotia": "CA",
+    "ontario": "CA",
+    "prince edward island": "CA",
+    "quebec": "CA",
+    "québec": "CA",
+    "saskatchewan": "CA",
+    "yukon": "CA",
+    "nunavut": "CA",
+    "northwest territories": "CA",
+    # Australian states and territories.
+    "new south wales": "AU",
+    "victoria": "AU",
+    "queensland": "AU",
+    "western australia": "AU",
+    "south australia": "AU",
+    "tasmania": "AU",
+    "northern territory": "AU",
+    "australian capital territory": "AU",
+}
+
+#: Nationality and country adjectives (lower case) → ISO-3166 alpha-2. They
+#: place a study ("a Danish cohort") but also name a population ("Polish
+#: migrant workers"), so the place strip never uses them. Adjectives that
+#: name a language or a wider region as often as a country ("English",
+#: "American", "Indian") are left out: they would guess.
+COUNTRY_ADJECTIVES: dict[str, str] = {
+    "british": "GB",
+    "scottish": "GB",
+    "welsh": "GB",
+    "north korean": "KP",
+    "australian": "AU",
+    "austrian": "AT",
+    "belgian": "BE",
+    "canadian": "CA",
+    "chilean": "CL",
+    "colombian": "CO",
+    "costa rican": "CR",
+    "czech": "CZ",
+    "danish": "DK",
+    "estonian": "EE",
+    "finnish": "FI",
+    "french": "FR",
+    "german": "DE",
+    "greek": "GR",
+    "hungarian": "HU",
+    "icelandic": "IS",
+    "irish": "IE",
+    "israeli": "IL",
+    "italian": "IT",
+    "japanese": "JP",
+    "korean": "KR",
+    "latvian": "LV",
+    "lithuanian": "LT",
+    "mexican": "MX",
+    "dutch": "NL",
+    "norwegian": "NO",
+    "polish": "PL",
+    "portuguese": "PT",
+    "slovak": "SK",
+    "slovenian": "SI",
+    "spanish": "ES",
+    "swedish": "SE",
+    "swiss": "CH",
+    "turkish": "TR",
+    "brazilian": "BR",
+    "chinese": "CN",
+}
+
+#: Every name the matcher reads a geography by: the places, then the
+#: adjectives. Longer entries are matched first, so the longer place wins.
+COUNTRY_GROUPS: dict[str, str] = {
+    **COUNTRY_NAMES,
+    **SUBNATIONAL_PLACES,
+    **COUNTRY_ADJECTIVES,
 }
 
 #: Upper-case abbreviations, matched case-sensitively ("us" is a pronoun).
@@ -290,3 +416,91 @@ def where_labels(where_text: str | None) -> dict[str, str]:
         "other": "other",
         "unknown": "unknown",
     }
+
+
+# --- The place strip (task 046, S6; PA11) -----------------------------------
+
+#: The prepositions that lead a place the strip removes. "living in" comes
+#: before "in" in the alternation by length, so the longer lead is removed
+#: whole.
+PLACE_PREPOSITIONS: tuple[str, ...] = ("living in", "in", "across", "within", "from")
+
+_PREPOSITION = "(?i:{})".format(
+    "|".join(
+        r"\s+".join(re.escape(word) for word in phrase.split())
+        for phrase in sorted(PLACE_PREPOSITIONS, key=len, reverse=True)
+    )
+)
+_ARTICLE = r"(?i:the\s+)?"
+# A place is a country or sub-national name (case-insensitive) or an
+# abbreviation (case-sensitive: "us" is a pronoun). Never an adjective, and
+# never the head of a compound ("UK-wide", "London-based").
+_PLACE = (
+    rf"(?:(?i:{_alternation([*COUNTRY_NAMES, *SUBNATIONAL_PLACES])})(?![\w-])"
+    rf"|(?<![\w.])(?:{_alternation(ABBREVIATIONS)})(?![\w-]))"
+)
+# "in Greater Manchester and Lancashire" keeps "and Lancashire" (not a known
+# place); "across England and Wales" and "in Leeds, UK" go whole.
+_PLACE_LIST = rf"{_ARTICLE}{_PLACE}(?:\s*(?:,|(?i:and|or)|&)\s*{_ARTICLE}{_PLACE})*"
+_LED_PLACE_RE = re.compile(rf"(?<![\w])(?:{_PREPOSITION})\s+{_PLACE_LIST}")
+_TRAILING_PREPOSITION_RE = re.compile(rf"\s+(?:{_PREPOSITION})\s*(?=[.;:!?]?\s*$)")
+
+
+def _tidy(text: str) -> str:
+    """Collapse the whitespace and punctuation a removal leaves behind."""
+    text = re.sub(r"\s+", " ", text)
+    text = re.sub(r"\s+([.,;:!?])", r"\1", text)
+    text = re.sub(r"([,;:])(?:\s*[,;:])+", r"\1", text)
+    text = re.sub(r"[,;:]\s*(?=[.!?]|$)", "", text)
+    text = _TRAILING_PREPOSITION_RE.sub("", text)
+    text = re.sub(r"^[\s,;:]+", "", text)
+    text = re.sub(r"\(\s*\)", "", text)
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def strip_place(text: str, where_text: str | None) -> tuple[str, list[str]]:
+    """Remove the place from a plan text, never a population's nationality.
+
+    Two removals, in order:
+
+    1. the plan's Where text wherever it appears verbatim (case-insensitive,
+       on word boundaries), with a leading preposition and article when one
+       leads it ("in the United Kingdom" when Where is "United Kingdom");
+    2. a place the where-tried matcher knows — a country or sub-national
+       name, or an abbreviation ("UK") — **only when a preposition leads
+       it** ("in", "living in", "across", "within", "from"), removed with
+       that preposition and a following "the"; a list of known places
+       ("across England and Wales") goes whole.
+
+    The matcher's adjective entries are never used, so "Polish migrant
+    workers" keeps "Polish"; an unled place name ("UK adults") stays unless
+    it is the Where text. The result has tidy whitespace, no space before a
+    full stop or comma and no dangling preposition. A text with no place is
+    returned unchanged.
+
+    Args:
+        text: The plan text (a target unit, an intended change, a question).
+        where_text: The plan's Where, or ``None``.
+
+    Returns:
+        ``(cleaned, removed)``: the cleaned text and the removed spans, as
+        they appeared, in removal order; ``(text, [])`` when nothing matched.
+    """
+    removed: list[str] = []
+
+    def _record(match: re.Match[str]) -> str:
+        removed.append(" ".join(match.group(0).split()))
+        return " "
+
+    cleaned = text
+    where = " ".join((where_text or "").split())
+    if where:
+        where_pattern = r"\s+".join(re.escape(word) for word in where.split(" "))
+        where_re = re.compile(
+            rf"(?<![\w-])(?:(?:{_PREPOSITION})\s+)?{_ARTICLE}(?i:{where_pattern})(?![\w-])"
+        )
+        cleaned = where_re.sub(_record, cleaned)
+    cleaned = _LED_PLACE_RE.sub(_record, cleaned)
+    if not removed:
+        return text, []
+    return _tidy(cleaned), removed

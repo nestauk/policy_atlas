@@ -22,6 +22,9 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from policy_atlas.evidence_search.extract.interventions_records import TaggingContext
+from policy_atlas.options_scoping.longlist.where_tried import strip_place
+
 if TYPE_CHECKING:
     from policy_atlas.runtime.scoping_plan import ScopingPlan
 
@@ -97,3 +100,27 @@ def longlist_screening_criteria(plan: ScopingPlan) -> list[str]:
             f"The intervention is delivered through the required setting: {'; '.join(settings)}."
         )
     return criteria
+
+
+def plan_tagging_context(plan: ScopingPlan) -> TaggingContext:
+    """Build the intervention profile's tagging context from the plan (task 046, S4).
+
+    The target unit and the intended change pass through the place strip
+    (S6) against the plan's Where; the outcomes do not. Deterministic: the
+    same plan always gives the same context, so the same ``context_hash``.
+    Where itself never enters the context.
+
+    Args:
+        plan: The validated scoping plan.
+
+    Returns:
+        The tagging context.
+    """
+    where = plan.where.text
+    target_unit, _ = strip_place(plan.target_unit.text, where)
+    intended_change, _ = strip_place(plan.intended_change.text, where)
+    return TaggingContext(
+        target_unit=target_unit,
+        outcomes=tuple(outcome.text for outcome in plan.outcomes),
+        intended_change=intended_change,
+    )

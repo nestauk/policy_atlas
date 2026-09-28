@@ -13,12 +13,14 @@ fingerprint and the writer are the profile bundle's (Phase 2.2).
 
 from __future__ import annotations
 
+import hashlib
+import json
 from dataclasses import dataclass
 from typing import Literal, get_args
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from policy_atlas.core.schema import INTERVENTION_ROLES
+from policy_atlas.core.schema import INTERVENTION_ROLES, OBJECT_TAGS, POPULATION_TAGS
 from policy_atlas.evidence_search.extract.finding_references import render_field_sections
 from policy_atlas.evidence_search.extract.quote_verify import NULL_LIKE_STRINGS
 
@@ -29,6 +31,13 @@ InterventionRole = Literal["evaluated", "described", "recommended", "comparator"
 
 # The Literal type is the schema CHECK vocabulary — drift fails at import.
 assert get_args(InterventionRole) == INTERVENTION_ROLES
+
+#: The plan-relative tags (task 046, S5). Null on a record means "not tagged".
+PopulationTag = Literal["on_target", "adjacent", "other"]
+ObjectTag = Literal["plan_object", "option", "neither"]
+
+assert get_args(PopulationTag) == POPULATION_TAGS
+assert get_args(ObjectTag) == OBJECT_TAGS
 
 
 class InterventionsRecordWire(BaseModel):
@@ -176,15 +185,62 @@ INTERVENTIONS_FIELD_RULES_VERSION = "interventions_rules_v1"
 _NULLABLE_TEXT_FIELDS = ("outcome", "population", "setting", "study_geography", "study_design")
 
 
+@dataclass(frozen=True)
+class TaggingContext:
+    """The plan fields the intervention profile tags each record against (task 046, S4).
+
+    Built by the scoping side from the approved plan, with the place strip
+    applied to the target unit and the intended change (never to the
+    outcomes). It reaches the profile through ``extract_scope``'s
+    ``interventions_context`` keyword; the IOF and ICF profiles never see it.
+
+    Attributes:
+        target_unit: The plan's target unit, place stripped.
+        outcomes: The plan's outcome texts, in plan order.
+        intended_change: The plan's intended change, place stripped.
+    """
+
+    target_unit: str
+    outcomes: tuple[str, ...]
+    intended_change: str
+
+    @property
+    def context_hash(self) -> str:
+        """Full sha256 hex over the canonical JSON of the three fields.
+
+        Stable across processes: the same context always gives the same
+        hash. The intervention profile's fingerprint carries it, so a record
+        tagged under one context is never reused under another.
+        """
+        canonical = json.dumps(
+            {
+                "target_unit": self.target_unit,
+                "outcomes": list(self.outcomes),
+                "intended_change": self.intended_change,
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+        )
+        return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
 class InterventionsRecordCarrier(InterventionsRecordWire):
     """One wire record with its document's ``covers_no_intervention`` attached.
 
     Pipeline-internal, never a model-facing schema: the shared extract
     pipeline handles records one by one, so the document-level flag rides on
-    each record to reach the table, which carries it per row.
+    each record to reach the table, which carries it per row. The three
+    plan-relative tags (task 046, S5) ride here too, optional: the present
+    wire model does not ask for them (its prompt and response schema are
+    unchanged), so they stay ``None`` — "not tagged" — until a wire model
+    that emits them is switched on.
     """
 
     covers_no_intervention: bool
+    population_tag: PopulationTag | None = None
+    outcome_tag: str | None = None
+    object_tag: ObjectTag | None = None
 
 
 class InterventionsRecord(BaseModel):
@@ -204,6 +260,9 @@ class InterventionsRecord(BaseModel):
     study_design: str | None
     quote: str
     covers_no_intervention: bool
+    population_tag: PopulationTag | None = None
+    outcome_tag: str | None = None
+    object_tag: ObjectTag | None = None
 
 
 @dataclass
@@ -254,7 +313,9 @@ def validate_interventions_record(
     lose blank entries; the grain is the intervention alone — a record whose
     intervention names nothing is invalid. The quote is kept verbatim, even
     when empty: a quote that does not locate earns a failed grounding, never a
-    dropped record.
+    dropped record. The plan-relative tags are carried as they are (the
+    closed two by their Literal types; a null-like ``outcome_tag`` becomes
+    ``None``) and enter no coverage marker: an absent tag is "not tagged".
 
     Args:
         wire: The carried wire record, after NUL scrubbing.
@@ -299,6 +360,9 @@ def validate_interventions_record(
         study_design=text_values["study_design"],
         quote=wire.quote,
         covers_no_intervention=wire.covers_no_intervention,
+        population_tag=wire.population_tag,
+        outcome_tag=_coerce(wire.outcome_tag),
+        object_tag=wire.object_tag,
     )
     return ValidatedInterventionsRecord(
         record=record,

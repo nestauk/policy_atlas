@@ -55,6 +55,7 @@ from policy_atlas.evidence_search.extract.interventions_records import (
 from policy_atlas.evidence_search.extract.interventions_records import (
     InterventionsRecordCarrier,
     InterventionsResponse,
+    TaggingContext,
     dedup_interventions_records,
     validate_interventions_record,
 )
@@ -188,9 +189,11 @@ class _RecordingBackend(StubInterventionsBackend):
     def __init__(self) -> None:
         self.payloads: list[ExtractionWindowPayload] = []
 
-    def extract(self, payload: ExtractionWindowPayload) -> UsageResult[InterventionsResponse]:
+    def extract(
+        self, payload: ExtractionWindowPayload, context: TaggingContext | None = None
+    ) -> UsageResult[InterventionsResponse]:
         self.payloads.append(payload)
-        return super().extract(payload)
+        return super().extract(payload, context)
 
 
 # --- the selection-free path ------------------------------------------------------
@@ -388,7 +391,10 @@ def test_setting_and_geography_come_from_the_abstract_and_quotes_are_grounded(
     assert profile_findings(summary, INTERVENTIONS_PROFILE_ID)["total"] == 3
 
 
-def test_a_title_only_document_is_profiled_and_an_empty_one_fails(conn: Connection) -> None:
+def test_a_title_only_document_is_dropped_and_counted_and_an_empty_one_fails(
+    conn: Connection,
+) -> None:
+    """Task 046, S10: a title with no abstract is dropped before the memo, and counted."""
     task_id, run_id = seed_task_and_run(conn)
     scope_id = seed_scope(conn, task_id)
     title_only = _seed_doc(
@@ -405,7 +411,8 @@ def test_a_title_only_document_is_profiled_and_an_empty_one_fails(conn: Connecti
             select(source_extraction_record).where(source_extraction_record.c.task_id == task_id)
         )
     }
-    assert outcome[title_only] == ("extracted", None)
+    assert title_only not in outcome
+    assert summary["counts"]["title_only"] == 1
     assert outcome[empty] == ("extraction_failed", "empty_basis")
     assert _counts(summary)["failed"] == 1
     assert "extraction_failures" in summary["flags"]

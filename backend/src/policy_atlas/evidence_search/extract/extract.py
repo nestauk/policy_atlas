@@ -17,6 +17,7 @@ structurally (missing selection row, invariant violation).
 
 from __future__ import annotations
 
+import functools
 import hashlib
 import json
 import uuid
@@ -99,6 +100,7 @@ from policy_atlas.evidence_search.extract.interventions_records import (
 )
 from policy_atlas.evidence_search.extract.interventions_records import (
     InterventionsRecordCarrier,
+    TaggingContext,
     dedup_interventions_records,
     interventions_claim_key,
     validate_interventions_record,
@@ -653,9 +655,10 @@ def _resolve_interventions_basis(doc: _Doc) -> None:
     resolution chose: the profile never reads full text, so the basis is
     ``abstract_only`` and the record snapshot is the envelope snapshot (the
     memo key). A document with neither a title nor an abstract fails with
-    ``empty_basis``; a document with a title and no abstract is profiled from
-    its title (the prompt carries the missing abstract as JSON null).
-    One payload per document — no windowing.
+    ``empty_basis``. A document with a title and no abstract never reaches
+    here on the selection-free path: ``extract_scope`` drops it before basis
+    resolution and counts it (task 046, S10). One payload per document — no
+    windowing.
     """
     doc.status = ""
     doc.error = None
@@ -686,6 +689,12 @@ def _resolve_interventions_basis(doc: _Doc) -> None:
             metadata=doc.metadata,
         )
     ]
+
+
+def _is_title_only(doc: _Doc) -> bool:
+    """True when the document has a title and no abstract (task 046, S10)."""
+    abstract = doc.abstract
+    return bool(doc.title.strip()) and (abstract is None or not abstract.strip())
 
 
 def _greedy_windows(segments: list[tuple[str, str]]) -> list[list[tuple[str, str]]]:
@@ -1749,10 +1758,10 @@ def _icf_profile(
 
 
 def _interventions_fingerprint(
-    mode: str, finding_vetter_active: bool
+    mode: str, finding_vetter_active: bool, *, context: TaggingContext | None = None
 ) -> tuple[str, dict[str, Any]]:
     del finding_vetter_active  # the intervention profile has no vetter
-    return interventions_fingerprint(mode, retry_cap=EXTRACT_RETRY_CAP)
+    return interventions_fingerprint(mode, retry_cap=EXTRACT_RETRY_CAP, context=context)
 
 
 def _no_vetter(*args: Any, **kwargs: Any) -> Any:
@@ -1761,11 +1770,18 @@ def _no_vetter(*args: Any, **kwargs: Any) -> Any:
     raise RuntimeError("the intervention profile has no finding vetter")
 
 
-def _interventions_profile(interventions_backend: InterventionsBackend) -> ExtractionProfileBundle:
+def _interventions_profile(
+    interventions_backend: InterventionsBackend,
+    interventions_context: TaggingContext | None = None,
+) -> ExtractionProfileBundle:
+    # The tagging context (task 046, S4) is bound into this bundle's own
+    # fingerprint and backend seams, so ``_run_profile`` carries it to the memo
+    # key and every call without the shared pipeline — or the IOF and ICF
+    # bundles — knowing it exists.
     return ExtractionProfileBundle(
         profile_id=INTERVENTIONS_PROFILE_ID,
-        fingerprint=_interventions_fingerprint,
-        backend=InterventionsWindowAdapter(interventions_backend),
+        fingerprint=functools.partial(_interventions_fingerprint, context=interventions_context),
+        backend=InterventionsWindowAdapter(interventions_backend, interventions_context),
         wire_record_model=InterventionsRecordCarrier,
         validate_record=validate_interventions_record,
         dedup_records=dedup_interventions_records,
@@ -1788,6 +1804,7 @@ def _selected_profiles(
     icf_extraction_backend: Any,
     icf_finding_vetter_backend: ICFFindingVetterBackend | None,
     interventions_backend: InterventionsBackend | None = None,
+    interventions_context: TaggingContext | None = None,
 ) -> list[ExtractionProfileBundle]:
     requested_tuple = tuple(requested)
     if not requested_tuple:
@@ -1811,7 +1828,9 @@ def _selected_profiles(
             raise ExtractError(
                 f"profile {INTERVENTIONS_PROFILE_ID!r} requested with no interventions backend"
             )
-        bundles[INTERVENTIONS_PROFILE_ID] = _interventions_profile(interventions_backend)
+        bundles[INTERVENTIONS_PROFILE_ID] = _interventions_profile(
+            interventions_backend, interventions_context
+        )
     return [
         bundles[profile_id]
         for profile_id in ALL_PROFILE_IDS
@@ -2191,6 +2210,7 @@ def extract_scope(
     profiles: Sequence[str] = (PROFILE_ID,),
     refresh: str | None = None,
     interventions_backend: InterventionsBackend | None = None,
+    interventions_context: TaggingContext | None = None,
 ) -> dict[str, Any]:
     """Extract findings for one evidence scope's selection.
 
@@ -2226,6 +2246,11 @@ def extract_scope(
         interventions_backend: The intervention profile seam (task 045).
             Required when that profile is requested — a missing backend is
             an ``ExtractError``, never a silent stub.
+        interventions_context: The tagging context for the intervention
+            profile (task 046, S4), or ``None``. It enters that profile's
+            fingerprint (``context_hash``) and reaches its backend; the IOF
+            and ICF profiles never receive it. ``None`` is byte-identical to
+            the pre-046 pipeline.
 
     Returns:
         The extraction summary payload for ``component.completed``.
@@ -2234,9 +2259,15 @@ def extract_scope(
         ExtractError: If the selection row is missing, a profile id is unknown
             or duplicated, a selected tss lacks its snapshot row, a coverage
             invariant fails, the intervention profile is requested with no
-            backend, or the selection-free path is asked for a profile other
-            than the intervention profile.
+            backend, the selection-free path is asked for a profile other
+            than the intervention profile, or a tagging context is given
+            without the intervention profile.
     """
+    if interventions_context is not None and INTERVENTIONS_PROFILE_ID not in tuple(profiles):
+        raise ExtractError(
+            "a tagging context is for the intervention profile only "
+            f"({INTERVENTIONS_PROFILE_ID!r})"
+        )
     profile_bundles = _selected_profiles(
         profiles,
         extraction_backend=extraction_backend,
@@ -2248,6 +2279,7 @@ def extract_scope(
         ),
         icf_finding_vetter_backend=icf_finding_vetter_backend,
         interventions_backend=interventions_backend,
+        interventions_context=interventions_context,
     )
     selection_free = context.selection_run_id is None
     if selection_free:
@@ -2276,6 +2308,14 @@ def extract_scope(
         selected=selected,
         with_chunks=not selection_free,
     )
+    title_only = 0
+    if selection_free:
+        # S10 (task 046): a title with no abstract is too thin to profile.
+        # Dropped here — before basis resolution and the memo — so it costs
+        # no call and writes no extraction record row; the summary counts it.
+        profiled = [doc for doc in docs if not _is_title_only(doc)]
+        title_only = len(docs) - len(profiled)
+        docs = profiled
     for doc in docs:
         _resolve_basis(doc)
 
@@ -2285,7 +2325,7 @@ def extract_scope(
             task_id=task_id,
             run_id=run_id,
             base_docs=docs,
-            selected_count=len(selected),
+            selected_count=len(selected) - title_only,
             profile=profile,
             created_at=created_at,
             refresh=refresh,
@@ -2298,6 +2338,8 @@ def extract_scope(
         selection_run_id=context.selection_run_id,
         refresh=refresh,
     )
+    if selection_free:
+        summary["counts"]["title_only"] = title_only
     # B2′ (ADR 0023): the sibling relevance annotator runs post-vetting,
     # post-write (it reads the persisted finding rows) and pre-roll-up. Gated on
     # steering — only when emphasis is present AND a backend is wired — and

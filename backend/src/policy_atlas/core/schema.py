@@ -1074,6 +1074,17 @@ INTERVENTION_ROLES: tuple[str, ...] = (
 )
 _INTERVENTION_ROLES_SQL = ", ".join(f"'{r}'" for r in INTERVENTION_ROLES)
 
+#: How a record's population stands to the plan's target unit (task 046, S5):
+#: the target unit itself, a wider or adjacent population, or neither. Null
+#: means "not tagged" (a record profiled before the tagging context existed).
+POPULATION_TAGS: tuple[str, ...] = ("on_target", "adjacent", "other")
+_POPULATION_TAGS_SQL = ", ".join(f"'{t}'" for t in POPULATION_TAGS)
+
+#: Whether a record names the plan's object of change, an option, or neither
+#: (task 046, S5). Null means "not tagged".
+OBJECT_TAGS: tuple[str, ...] = ("plan_object", "option", "neither")
+_OBJECT_TAGS_SQL = ", ".join(f"'{t}'" for t in OBJECT_TAGS)
+
 intervention_profile_record = Table(
     "intervention_profile_record",
     metadata,
@@ -1095,6 +1106,11 @@ intervention_profile_record = Table(
     Column("study_design", Text, nullable=True),
     # Document level, carried on each record: the abstract covers no intervention.
     Column("covers_no_intervention", Boolean, nullable=False, server_default=text("false")),
+    # The plan-relative tags (task 046, S5): null is "not tagged".
+    # ``outcome_tag`` is free text — a plan outcome's text, or ``other``.
+    Column("population_tag", Text, nullable=True),
+    Column("outcome_tag", Text, nullable=True),
+    Column("object_tag", Text, nullable=True),
     Column("field_coverage", JSONB, nullable=False),
     # Anchors: the qv_v1 grounding payload shape the IOF/ICF rows use.
     Column("grounding", JSONB, nullable=False),
@@ -1108,6 +1124,14 @@ intervention_profile_record = Table(
         name="fk_ipr_record_task",
     ),
     CheckConstraint(f"role IN ({_INTERVENTION_ROLES_SQL})", name="ck_ipr_role"),
+    CheckConstraint(
+        f"population_tag IS NULL OR population_tag IN ({_POPULATION_TAGS_SQL})",
+        name="ck_ipr_population_tag",
+    ),
+    CheckConstraint(
+        f"object_tag IS NULL OR object_tag IN ({_OBJECT_TAGS_SQL})",
+        name="ck_ipr_object_tag",
+    ),
     CheckConstraint("jsonb_typeof(design_features) = 'array'", name="ck_ipr_design_features_array"),
     CheckConstraint("jsonb_typeof(components) = 'array'", name="ck_ipr_components_array"),
     CheckConstraint("jsonb_typeof(grounding) = 'array'", name="ck_ipr_grounding_array"),
