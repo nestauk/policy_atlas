@@ -19,9 +19,11 @@ decides on. It lands before task 3 (shortlist and assessment).
 > for the findings". **Re-approved as amended 2026-09-28 · owner** ("yes,
 > approved"). **Amended 2026-09-28 after approval, on the owner's
 > rulings R24–R27** (the iteration loops and the prompts open for
-> refinement) **and at the plan gate** (§ Amendments at the plan gate). ·
-> Plan approved:
-> _—_ · ADR: **0040** (to write at step 4).
+> refinement) **and at the plan gate** (§ Amendments at the plan gate;
+> R28). **Plan approved 2026-09-28 · owner.** ADR:
+> **[0040](../../adr/0040-options-scoping-longlist-refinement.md)** —
+> Accepted 2026-09-28. **Design phase closed 2026-09-28; the build runs in
+> a fresh conversation with `task-cycle-build`.**
 >
 > **Branching:** `task/046-longlist-refinement` from `feat/options-scoping`
 > at `1e49a65f`. PR target: `feat/options-scoping`, merge commit, per PR #69.

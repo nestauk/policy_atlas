@@ -11,8 +11,10 @@ code at `7c5ba2e2`, not against the contract's own claims.
 > `deep-reasoner`, read-only; the Codex lane has no budget): 21 findings,
 > verdict "material change needed", folded in § Plan-review folds. The lead
 > checked P3 and P7 in the code; they hold. The owner ruled PA3 ("Fine") and
-> replaced PA9 by R28 (`theme` as a component of its own). Plan approved (before implementation): _—_. **ADR 0040 is
-> written at step 4, after plan approval and before any build phase.**
+> replaced PA9 by R28 (`theme` as a component of its own). **Plan approved
+> (before implementation): 2026-09-28 · owner** ("yes, confirmed").
+> **ADR [0040](../../adr/0040-options-scoping-longlist-refinement.md)**
+> was written at step 4, after plan approval and before any build phase.
 
 Executor marks per AGENTS.md § Agent-side model routing. **Owner ruling
 2026-09-04 stands:** judgment-bearing phases go to `deep-reasoner`, not
