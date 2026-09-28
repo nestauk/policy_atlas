@@ -17,12 +17,16 @@ The chain it compiles to is chosen by the intent record's ``purpose`` (task
 - ``baseline`` (or no purpose): ``acquire → screen_abstract → classify →
   appraise → ingest_full_text → synthesise``, with synthesise in baseline mode;
 - ``longlist``: ``inherit → suggest → acquire → screen_abstract → classify →
-  appraise → ingest_full_text → extract_interventions → longlist →
-  constrain`` — the option searches are dispatched and joined by the runner,
-  not by a component;
-- ``targeted`` (one option search, a child walk): ``acquire →
-  screen_abstract → classify → appraise → ingest_full_text →
-  extract_interventions``.
+  appraise → extract_interventions → longlist → constrain → theme`` — the
+  option searches are dispatched and joined (before ``screen_abstract``) by
+  the runner, not by a component (task 046, ADR 0040 decision 1);
+- ``targeted``: an option search a longlist walk dispatched carries
+  ``acquire_only: true`` in its intent record's context and runs ``acquire``
+  alone; the verb *add*'s parentless search runs ``acquire →
+  screen_abstract → classify → appraise → extract_interventions``.
+
+No longlist or targeted chain ingests full text (task 046, R13): task 3 fetches
+it for shortlisted options.
 
 The shortlist is described in :data:`SCOPING_STEPS` and not composed.
 
@@ -36,6 +40,7 @@ the registry's ``options_scoping`` entry.
 from __future__ import annotations
 
 import uuid
+from collections.abc import Mapping
 from typing import TYPE_CHECKING, Annotated, Any, Literal, Self
 
 import structlog
@@ -178,8 +183,10 @@ SCOPING_SPINE: tuple[str, ...] = (
 )
 
 #: The longlist walk's chain, with each step's spine flag (A6, P16b; owner:
-#: "inherit non-spine"). ``inherit`` and ``suggest`` degrade the walk when they
-#: fail; every other step fails it.
+#: "inherit non-spine"). ``inherit``, ``suggest`` and ``theme`` degrade the walk
+#: when they fail; every other step fails it. ``theme`` runs after
+#: ``constrain`` has committed, so its failure cannot touch the verdicts (task
+#: 046, R28). No step ingests full text (R13).
 LONGLIST_CHAIN: tuple[tuple[str, bool], ...] = (
     ("inherit", False),
     ("suggest", False),
@@ -187,22 +194,32 @@ LONGLIST_CHAIN: tuple[tuple[str, bool], ...] = (
     ("screen_abstract", True),
     ("classify", True),
     ("appraise", True),
-    ("ingest_full_text", True),
     ("extract_interventions", True),
     ("longlist", True),
     ("constrain", True),
+    ("theme", False),
 )
 
-#: One option search's chain (a child walk). Every step is spine *for the
-#: child*; the child's failure only degrades its parent (the runner's join).
+#: The verb *add*'s option search (a targeted walk with no parent). Every step
+#: is spine for that walk. Its intent is the option's design (task 046, AM1).
 TARGETED_CHAIN: tuple[str, ...] = (
     "acquire",
     "screen_abstract",
     "classify",
     "appraise",
-    "ingest_full_text",
     "extract_interventions",
 )
+
+#: An option search a longlist walk dispatched (task 046, R18, AM4): it only
+#: acquires. Its documents join the task's pool, and the longlist scope's one
+#: screen judges them after the runner's join. A failed child only degrades
+#: its parent.
+ACQUIRE_ONLY_CHAIN: tuple[str, ...] = ("acquire",)
+
+#: The intent-record context key that marks a longlist walk's option search
+#: (task 046, AM4). Written by ``option_search.run_option_search`` when the
+#: walk has a parent; read by :func:`compose_scoping`.
+ACQUIRE_ONLY_KEY = "acquire_only"
 
 #: The three steps the plan document shows. Code-supplied, never authored by
 #: the Task Agent: only the first runs in this slice, and a model that could
@@ -1374,8 +1391,8 @@ def _longlist_directive_delta(component: str, plan: ScopingPlan) -> dict[str, An
     """Return one longlist-chain step's directive delta.
 
     The acquire carries the broad search's depth target and the evidence
-    restrictions; the screen carries the longlist screening criteria (target
-    unit, outcomes, setting when required, **no place** — D20, D21). The
+    restrictions; the screen carries the longlist screening criteria (the wide
+    target unit and the outcomes; no setting, no place — task 046, S7). The
     PICO-shaped intent itself (:func:`compile_longlist_intent`) is the
     longlist intent record's text, written by the start surface, not a
     directive. The other steps' components read no directive.
@@ -1393,9 +1410,9 @@ def _targeted_directive_delta(component: str, plan: ScopingPlan) -> dict[str, An
     The acquire carries the option search target at either depth and the
     evidence restrictions; the intent (the entrant's specified design,
     ``OptionDesign.as_intent()``) is the targeted intent record's own, written
-    by the option search tool (S2). The screen still carries the plan's
-    criteria — target unit, outcomes, setting when required, no place — so an
-    option search screens for the same problem the longlist does.
+    by the option search tool (S2). The add walk's screen carries the same two
+    plan criteria as the longlist's (task 046, AM1): the wide target unit and
+    the outcomes. An acquire-only search composes its acquire step alone.
     """
     if component == "acquire":
         return {"search": _search_directive(plan, OPTION_SEARCH_TARGET)}
@@ -1404,7 +1421,11 @@ def _targeted_directive_delta(component: str, plan: ScopingPlan) -> dict[str, An
     return {}
 
 
-def compose_scoping(plan: ScopingPlan, purpose: str | None = None) -> ComposedChain:
+def compose_scoping(
+    plan: ScopingPlan,
+    purpose: str | None = None,
+    context: Mapping[str, Any] | None = None,
+) -> ComposedChain:
     """Compose an approved scoping plan into the chain its intent record names.
 
     Args:
@@ -1412,6 +1433,11 @@ def compose_scoping(plan: ScopingPlan, purpose: str | None = None) -> ComposedCh
         purpose: The intent record's ``purpose``. ``None`` or ``"baseline"``
             compose the baseline; ``"longlist"`` and ``"targeted"`` compose
             the longlist walk's chain and one option search's chain.
+        context: The intent record's ``context``. A ``targeted`` record whose
+            context carries ``acquire_only: true`` (a longlist walk's option
+            search, task 046, AM4) composes :data:`ACQUIRE_ONLY_CHAIN`; without
+            it (the verb *add*'s search) :data:`TARGETED_CHAIN`. Ignored for
+            every other purpose.
 
     Returns:
         The composed chain. The baseline is the six-step chain ``acquire →
@@ -1450,6 +1476,8 @@ def compose_scoping(plan: ScopingPlan, purpose: str | None = None) -> ComposedCh
             ]
         )
     if purpose == TARGETED_PURPOSE:
+        acquire_only = bool(context is not None and context.get(ACQUIRE_ONLY_KEY) is True)
+        chain = ACQUIRE_ONLY_CHAIN if acquire_only else TARGETED_CHAIN
         return ComposedChain(
             steps=[
                 ComponentStep(
@@ -1457,7 +1485,7 @@ def compose_scoping(plan: ScopingPlan, purpose: str | None = None) -> ComposedCh
                     directive_delta=_targeted_directive_delta(component, plan),
                     spine=True,
                 )
-                for component in TARGETED_CHAIN
+                for component in chain
             ]
         )
     raise ValueError(f"no options-scoping chain for intent-record purpose {purpose!r}")

@@ -93,6 +93,7 @@ from policy_atlas.runtime.capability_registry import (
     AnyPlan,
     capability_of_task,
     compose_plan,
+    context_of_scope,
     expect_task_plan,
     lattice_for,
     purpose_of_scope,
@@ -186,6 +187,8 @@ LLM_BEARING_COMPONENTS = frozenset(
         "suggest",
         "longlist",
         "constrain",
+        # Task 046: theme makes the discovery and assignment calls over options.
+        "theme",
     }
 )
 SPINE_COMPONENTS = frozenset(SPINE)
@@ -871,7 +874,7 @@ def _run_plan_impl(
     if resume_from is None:
         if capability_run_id is None:
             capability_run_id = uuid.uuid4()
-        capability, purpose = _open_capability_run(
+        capability, purpose, scope_context = _open_capability_run(
             engine,
             capability_run_id=capability_run_id,
             task_id=task_id,
@@ -894,8 +897,12 @@ def _run_plan_impl(
                 capability_run_id=capability_run_id,
             )
         # The intent record's purpose picks the chain (task 045): a scoping
-        # walk under a longlist or targeted record composes that chain.
-        initial_chain = compose_plan(capability, plan, purpose=purpose)
+        # walk under a longlist or targeted record composes that chain; the
+        # record's context marks a longlist walk's option search acquire-only
+        # (task 046, AM4).
+        initial_chain = compose_plan(
+            capability, plan, purpose=purpose, context=scope_context
+        )
         steering_state = _SteeringState(
             plan=plan,
             capability=capability,
@@ -946,9 +953,9 @@ def _run_plan_impl(
             purpose = purpose_of_scope(
                 conn, task_id=task_id, evidence_scope_id=evidence_scope_id
             )
-    # The option searches' barriers (task 045, S2): a longlist walk dispatches
-    # its option searches after ``suggest`` and joins them before
-    # ``longlist``. ``None`` until the fan-out has run (or been found to have
+    # The option searches' barriers (task 045, S2; task 046, S2): a longlist
+    # walk dispatches its option searches after ``suggest`` and joins them
+    # before ``screen_abstract``. ``None`` until the fan-out has run (or been found to have
     # run, on a resumed walk).
     option_search_children: list[uuid.UUID] | None = None
     option_searches_joined = False
@@ -1126,11 +1133,14 @@ def _run_plan_impl(
                     backends=backend_bundle,
                     session_id=session_id,
                 )
-            # The join, before ``longlist`` runs and outside any transaction.
+            # The join, before ``screen_abstract`` runs and outside any
+            # transaction (task 046, S2): the option searches only acquire,
+            # so the longlist scope's one screen — whose stage-1 load is
+            # task-wide — judges their documents with the broad search's.
             # A child that failed (or was cut off by the timeout) is a
             # skipped entrant: the walk ends ``degraded``, never ``failed``.
             if (
-                step.component == "longlist"
+                step.component == "screen_abstract"
                 and option_search_children is not None
                 and not option_searches_joined
             ):
@@ -5591,7 +5601,7 @@ def _open_capability_run(
     plan_version: int,
     session_id: uuid.UUID | None,
     parent_capability_run_id: uuid.UUID | None = None,
-) -> tuple[str, str | None]:
+) -> tuple[str, str | None, dict[str, Any]]:
     """Open the walk-identity row before the step loop (contract decision 2).
 
     ``parent_capability_run_id`` is written on the row (task 045): a longlist
@@ -5603,11 +5613,15 @@ def _open_capability_run(
         kind, so the two can never disagree, and the caller needs the value
         anyway to compose the chain. Beside it, the purpose of the intent
         record the walk runs under (task 045, S1), read in the same
-        transaction because it too selects the chain.
+        transaction because it too selects the chain, and that record's
+        context (task 046, AM4: it marks an acquire-only option search).
     """
     with engine.begin() as conn:
         capability = capability_of_task(conn, task_id)
         purpose = purpose_of_scope(
+            conn, task_id=task_id, evidence_scope_id=evidence_scope_id
+        )
+        scope_context = context_of_scope(
             conn, task_id=task_id, evidence_scope_id=evidence_scope_id
         )
         conn.execute(
@@ -5635,7 +5649,7 @@ def _open_capability_run(
                 "plan_version": plan_version,
             },
         )
-    return capability, purpose
+    return capability, purpose, scope_context
 
 
 def _finish_run(

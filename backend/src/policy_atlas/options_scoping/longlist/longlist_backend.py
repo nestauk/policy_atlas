@@ -2,7 +2,7 @@
 
 Five calls, each one lead-authored prompt builder
 (:mod:`~policy_atlas.options_scoping.longlist.longlist_cluster_prompt`,
-:mod:`~policy_atlas.options_scoping.longlist.longlist_theme_prompt`,
+:mod:`~policy_atlas.options_scoping.theme.longlist_theme_prompt`,
 :mod:`~policy_atlas.options_scoping.longlist.lever_typing_prompt`):
 
 - ``discover`` — seeded option discovery (judgment model);
@@ -60,7 +60,7 @@ from policy_atlas.options_scoping.longlist.longlist_cluster_prompt import (
     build_longlist_assignment_messages,
     build_longlist_discovery_messages,
 )
-from policy_atlas.options_scoping.longlist.longlist_theme_prompt import (
+from policy_atlas.options_scoping.theme.longlist_theme_prompt import (
     LONGLIST_THEME_PROMPT_VERSION,
     THEME_MAX_OUTPUT_TOKENS,
     ThemeAssignmentsResponse,

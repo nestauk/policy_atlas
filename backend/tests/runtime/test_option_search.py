@@ -248,16 +248,17 @@ def child_run_plan(monkeypatch: pytest.MonkeyPatch) -> Iterator[Callable[[Any], 
 # --- the walk end to end on the stub backends -------------------------------
 
 
-def test_a_stub_longlist_walk_fans_out_after_suggest_and_joins_before_longlist(
+def test_a_stub_longlist_walk_fans_out_after_suggest_and_joins_before_the_screen(
     engine: Engine,
 ) -> None:
-    """inherit → suggest → [fan-out] → acquire … extract_interventions → [join] → longlist.
+    """inherit → suggest → [fan-out] → acquire → [join] → screen_abstract … theme.
 
     Every entrant (the user's two, the stub's one suggestion) gets one child
     walk under its own targeted record naming the option, with the design's
-    ``as_intent()`` as its intent and the confirmed plan version; both
-    barriers emit under ``option_searches`` and the stream maps them to stage
-    frames with the join's counts.
+    ``as_intent()`` as its intent, the confirmed plan version and
+    ``acquire_only`` (task 046, S1, S2); both barriers emit under
+    ``option_searches`` and the stream maps them to stage frames with the
+    join's counts.
     """
     task_id: uuid.UUID | None = None
     try:
@@ -267,23 +268,25 @@ def test_a_stub_longlist_walk_fans_out_after_suggest_and_joins_before_longlist(
         parent = outcome.capability_run_id
         assert parent is not None
         steps = [step.component for step in outcome.steps]
-        assert steps[:8] == [
+        assert steps == [
             "inherit",
             "suggest",
             "acquire",
             "screen_abstract",
             "classify",
             "appraise",
-            "ingest_full_text",
             "extract_interventions",
+            "longlist",
+            "constrain",
+            "theme",
         ]
-        assert "longlist" in steps
 
         children = _children(engine, task_id, parent)
         assert len(children) == 3
         assert all(child.status == "succeeded" for child in children)
         assert all(child.purpose == "targeted" for child in children)
         assert all(child.plan_id == plan_id for child in children)
+        assert all(child.context["acquire_only"] is True for child in children)
         with engine.connect() as conn:
             options = {
                 row.option_id: row
@@ -312,8 +315,8 @@ def test_a_stub_longlist_walk_fans_out_after_suggest_and_joins_before_longlist(
         join = order.index(("component.completed", "option_searches"))
         assert order.index(("component.completed", "suggest")) < fan_out
         assert fan_out < order.index(("run.started", "acquire"))
-        assert order.index(("component.completed", "extract_interventions")) < join
-        assert join < order.index(("run.started", "longlist"))
+        assert order.index(("component.completed", "acquire")) < join
+        assert join < order.index(("run.started", "screen_abstract"))
 
         # The stream maps both barriers to the option_searches stage.
         with engine.connect() as conn:

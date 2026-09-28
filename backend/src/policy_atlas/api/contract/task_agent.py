@@ -79,6 +79,7 @@ PlanStageKey = Literal[
     "extract_interventions",
     "longlist",
     "constrain",
+    "theme",
 ]
 
 #: Country-group membership provenance. Mirrors

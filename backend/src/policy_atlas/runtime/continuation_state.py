@@ -16,6 +16,7 @@ from policy_atlas.runtime.capability_registry import (
     AnyPlan,
     capability_of_task,
     compose_plan,
+    context_of_scope,
     lattice_for,
     purpose_of_scope,
     validate_plan,
@@ -157,6 +158,9 @@ def build(
         purpose = purpose_of_scope(
             conn, task_id=task_id, evidence_scope_id=cap_row.evidence_scope_id
         )
+        scope_context = context_of_scope(
+            conn, task_id=task_id, evidence_scope_id=cap_row.evidence_scope_id
+        )
         event_rows = events.read(conn, task_id)
         run_rows = [
             dict(row._mapping)
@@ -176,7 +180,7 @@ def build(
     plan = validate_plan(capability, plan_data["payload"])
     # The walk's own intent record picks the chain (task 045, S1): a parked
     # longlist walk resumes on the longlist chain, not the baseline one.
-    chain = compose_plan(capability, plan, purpose=purpose)
+    chain = compose_plan(capability, plan, purpose=purpose, context=scope_context)
     scoped_events = [
         entry
         for entry in event_rows

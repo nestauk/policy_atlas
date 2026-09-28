@@ -115,6 +115,7 @@ from policy_atlas.options_scoping.suggest.suggest import (
     SuggestContext,
     suggest_options,
 )
+from policy_atlas.options_scoping.theme.theme import ThemeContext, theme_scope
 from policy_atlas.runtime.agent_backend import StubAgentBackend
 from policy_atlas.runtime.capability_registry import OPTIONS_SCOPING, validate_plan
 from policy_atlas.runtime.inherit import inherit_documents
@@ -454,7 +455,7 @@ def _run_suggest(state: HarnessState) -> HarnessState:
 
 
 def _run_longlist(state: HarnessState) -> HarnessState:
-    """The longlist step (task 045, S8): records clustered into options, themes, typing."""
+    """The longlist step (task 045, S8): records clustered into options, and typing."""
     sources_fn = functools.partial(longlist_scope, backend=state["longlist_backend"])
     return _run_scope_component(state, LonglistContext, sources_fn)
 
@@ -466,6 +467,16 @@ def _run_constrain(state: HarnessState) -> HarnessState:
     """
     sources_fn = functools.partial(constrain_scope, backend=state["longlist_backend"])
     return _run_scope_component(state, ConstrainContext, sources_fn)
+
+
+def _run_theme(state: HarnessState) -> HarnessState:
+    """The theme step (task 046, R28): the included options grouped into themes.
+
+    Rides the longlist backend's theme calls (the same seam). Not a spine
+    step: a failure degrades the walk and the verdicts stay.
+    """
+    sources_fn = functools.partial(theme_scope, backend=state["longlist_backend"])
+    return _run_scope_component(state, ThemeContext, sources_fn)
 
 
 def _run_group(state: HarnessState) -> HarnessState:
@@ -680,6 +691,7 @@ def build_graph() -> Any:
     g.add_node("suggest", _run_suggest)
     g.add_node("longlist", _run_longlist)
     g.add_node("constrain", _run_constrain)
+    g.add_node("theme", _run_theme)
     g.add_node("group", _run_group)
     g.add_node("synthesise", _run_synthesise)
     g.add_node("finish", _finish)
@@ -702,6 +714,7 @@ def build_graph() -> Any:
             "suggest": "suggest",
             "longlist": "longlist",
             "constrain": "constrain",
+            "theme": "theme",
             "group": "group",
             "synthesise": "synthesise",
         },
@@ -719,6 +732,7 @@ def build_graph() -> Any:
     g.add_edge("suggest", "finish")
     g.add_edge("longlist", "finish")
     g.add_edge("constrain", "finish")
+    g.add_edge("theme", "finish")
     g.add_edge("group", "finish")
     g.add_edge("synthesise", "finish")
     g.add_edge("finish", END)

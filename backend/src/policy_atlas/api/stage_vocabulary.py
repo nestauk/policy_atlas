@@ -36,11 +36,12 @@ STAGE_PRESENTATION: dict[StageKey, tuple[str, str]] = {
         "Reading the abstracts",
         "Which interventions each one covers, and how.",
     ),
-    "longlist": ("Clustering into options", "Records grouped into options, options into themes."),
+    "longlist": ("Clustering into options", "Records grouped into options."),
     "constrain": (
         "Applying your constraints",
         "Every option checked against the plan's requirements.",
     ),
+    "theme": ("Grouping into themes", "Included options grouped into themes."),
 }
 
 STAGE_BY_REGISTRY: dict[str, StageKey] = {
@@ -60,6 +61,7 @@ STAGE_BY_REGISTRY: dict[str, StageKey] = {
     "extract_interventions": "extract_interventions",
     "longlist": "longlist",
     "constrain": "constrain",
+    "theme": "theme",
 }
 
 

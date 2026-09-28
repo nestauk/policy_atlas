@@ -30,6 +30,7 @@ from policy_atlas.runtime.agent_backend import AgentBackend
 from policy_atlas.runtime.capability_registry import (
     capability_of_task,
     compose_plan,
+    context_of_walk,
     expect_task_plan,
     lattice_for,
     purpose_of_walk,
@@ -1164,9 +1165,13 @@ def _persist_fanout(
             plan_id,
             version,
             capability_of_task(conn, task_id),
-            # The parked walk's intent record picks its chain (task 045, S1);
-            # _with_plan holds no connection, so the purpose is read here.
+            # The parked walk's intent record picks its chain (task 045, S1;
+            # task 046, AM4: its context too); _with_plan holds no connection,
+            # so both are read here.
             purpose=purpose_of_walk(
+                conn, task_id=task_id, capability_run_id=pause.capability_run_id
+            ),
+            scope_context=context_of_walk(
                 conn, task_id=task_id, capability_run_id=pause.capability_run_id
             ),
         )
@@ -1524,6 +1529,7 @@ def _with_plan(
     capability: str,
     *,
     purpose: str | None = None,
+    scope_context: Mapping[str, Any] | None = None,
 ) -> Any:
     """Return minimal continuation state with the just-persisted plan identity.
 
@@ -1536,8 +1542,10 @@ def _with_plan(
             plan composes to and which lattice its pauses come from (C9, A2).
         purpose: The parked walk's intent-record purpose (task 045, S1), read
             by the caller, which holds the connection.
+        scope_context: The parked walk's intent-record context (task 046,
+            AM4), read by the caller beside the purpose.
     """
-    chain = compose_plan(capability, plan, purpose=purpose)
+    chain = compose_plan(capability, plan, purpose=purpose, context=scope_context)
     return type(state)(
         capability_run_id=state.capability_run_id,
         capability=capability,

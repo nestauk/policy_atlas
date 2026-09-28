@@ -1,18 +1,19 @@
-"""The longlist's PICO-shaped intent and its screening criteria (task 045, D20, D21).
+"""The longlist's PICO-shaped intent and its screening criteria (task 045; task 046).
 
 Both are compiled deterministically from the approved scoping plan:
 
-- **P** — the target unit (who or what should change);
+- **P** — the target unit (who or what should change), with its place removed
+  by :func:`~policy_atlas.options_scoping.longlist.where_tried.strip_place`
+  (task 046, S6), and judged wide: a wider or adjacent population passes;
 - **I** — left open: any intervention;
-- **O** — the plan's outcomes;
-- **S** — the delivery setting, **only** when the user stated one as a
-  requirement (a constraint with ``setting=True``, D21).
+- **O** — the plan's outcomes.
 
-There is no C (no comparison before assessment) and **no place**: Where
-enters nothing in the longlist's retrieval chain — not the intent, not query
-generation, not the screen, not acquisition ranking (D20 as amended; ADR 0039
-decision 10). Where is shown on the way out as *where tried* and returns at
-transferability (task 3).
+There is no C (no comparison before assessment), **no setting** and **no
+place** (task 046, S7, R19; reopens 045 D21): the screen's error is neither
+visible nor reversible, so it judges wide, and a setting requirement is
+checked by constrain (:func:`setting_requirements`). Where enters nothing in
+the longlist's retrieval chain; it is shown on the way out as *where tried*
+and returns at transferability (task 3).
 
 The plan model imports this module for its chain directives, so the plan type
 is imported for type checking only; the functions read plain attributes.
@@ -45,16 +46,40 @@ def setting_requirements(plan: ScopingPlan) -> list[str]:
     return [c.text for c in plan.constraints if c.kind == "requirement" and c.setting]
 
 
+def _slot(text: str) -> str:
+    """One slot's text with its trailing full stops removed, so no ".." appears."""
+    return text.strip().rstrip(".").rstrip()
+
+
 def _outcomes(plan: ScopingPlan) -> str:
-    return "; ".join(outcome.text for outcome in plan.outcomes)
+    return "; ".join(_slot(outcome.text) for outcome in plan.outcomes)
+
+
+def screen_target_unit(plan: ScopingPlan) -> tuple[str, list[str]]:
+    """Return the target unit the screen reads, and the place spans removed.
+
+    The plan's target unit after :func:`strip_place` against the plan's Where
+    (task 046, S6), with its trailing full stops removed.
+
+    Args:
+        plan: The validated scoping plan.
+
+    Returns:
+        ``(target_unit, removed)``: the text the intent and the criteria
+        compose, and the removed spans in removal order (empty when the
+        target unit names no place). The longlist start surface records
+        ``removed`` in the longlist scope's context as ``place_removed``.
+    """
+    cleaned, removed = strip_place(plan.target_unit.text, plan.where.text)
+    return _slot(cleaned), removed
 
 
 def compile_longlist_intent(plan: ScopingPlan) -> str:
     """Compile the longlist intent record's text from the plan (PICO-shaped).
 
     Deterministic: the same plan always gives the same intent. Contains the
-    target unit and the outcomes, the setting only when a setting requirement
-    exists, and never Where or a comparison.
+    place-stripped target unit and the outcomes; never a setting, Where, a
+    place or a comparison (task 046, S7).
 
     Args:
         plan: The validated scoping plan.
@@ -62,44 +87,39 @@ def compile_longlist_intent(plan: ScopingPlan) -> str:
     Returns:
         The intent paragraph.
     """
-    parts = [
-        f"Interventions for {plan.target_unit.text}.",
-        "Intervention: any intervention, programme or policy (left open).",
-        f"Outcomes: {_outcomes(plan)}.",
-    ]
-    settings = setting_requirements(plan)
-    if settings:
-        parts.append(f"Setting: {'; '.join(settings)}.")
-    return " ".join(parts)
+    target_unit, _ = screen_target_unit(plan)
+    return " ".join(
+        [
+            f"Interventions for {target_unit}.",
+            "Intervention: any intervention, programme or policy (left open).",
+            f"Outcomes: {_outcomes(plan)}.",
+        ]
+    )
 
 
 def longlist_screening_criteria(plan: ScopingPlan) -> list[str]:
     """Compose the longlist screen's criteria from the plan, as data.
 
-    The target unit, the outcomes and — only when required — the setting;
-    **no place** (D20). The same criteria screen the broad search and every
-    option search (the targeted chain), whose intent is the entrant's design.
-    The screen composes them with its intent under its 2,000-character
-    ceiling and refuses (never truncates) an over-long list;
+    Exactly two criteria (task 046, S7): the wide target unit (a wider or
+    adjacent population passes) and the outcomes. No setting criterion and no
+    place. The same criteria screen the longlist scope and the verb *add*'s
+    option search, whose intent is the option's design (AM1). The screen
+    composes them with its intent under its 2,000-character ceiling and
+    refuses (never truncates) an over-long list;
     ``scoping_plan.compose_longlist_screen_intent`` runs that check up front.
 
     Args:
         plan: The validated scoping plan.
 
     Returns:
-        The criteria, in order.
+        The two criteria, in order.
     """
-    criteria = [
-        "The document evaluates, describes or proposes an intervention, "
-        f"programme or policy aimed at {plan.target_unit.text}.",
+    target_unit, _ = screen_target_unit(plan)
+    return [
+        "The document evaluates, describes or proposes an intervention, programme or "
+        f"policy aimed at {target_unit}, or at a wider or adjacent population.",
         f"It bears on at least one of these outcomes: {_outcomes(plan)}.",
     ]
-    settings = setting_requirements(plan)
-    if settings:
-        criteria.append(
-            f"The intervention is delivered through the required setting: {'; '.join(settings)}."
-        )
-    return criteria
 
 
 def plan_tagging_context(plan: ScopingPlan) -> TaggingContext:

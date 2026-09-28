@@ -436,6 +436,36 @@ def test_a_plan_too_long_to_screen_is_refused_before_anything_is_minted(
         _cleanup(engine, task_id)
 
 
+def test_the_place_the_screen_input_lost_is_recorded_when_the_walk_opens(
+    engine: Engine,
+) -> None:
+    """Task 046, S6: ``place_removed`` on the longlist scope's context."""
+    task_id: uuid.UUID | None = None
+    plan = scoping_plan(
+        target_unit={
+            "text": "refugees and asylum seekers living in Greater Manchester",
+            "origin": "your_call",
+        },
+        where={"text": "United Kingdom", "origin": "your_call"},
+    )
+    try:
+        task_id, scope_id = seed_scoping_task(engine)
+        insert_scoping_plan_row(engine, task_id=task_id, scope_id=scope_id, plan=plan)
+        admitted = longlist_start.admit_and_mint(engine, task_id=task_id, capacity=99)
+        with runs_router._dispatch_lock:
+            runs_router._dispatching_tasks.discard(task_id)
+        with engine.connect() as conn:
+            record = conn.execute(
+                select(evidence_scope).where(
+                    evidence_scope.c.evidence_scope_id == admitted.evidence_scope_id
+                )
+            ).one()
+        assert record.context["place_removed"] == ["living in Greater Manchester"]
+        assert "Greater Manchester" not in record.intent
+    finally:
+        _cleanup(engine, task_id)
+
+
 def test_the_capacity_rule_counts_parentless_walks_only(engine: Engine) -> None:
     """Children never count against the executor: they run on their own pool."""
     task_id: uuid.UUID | None = None

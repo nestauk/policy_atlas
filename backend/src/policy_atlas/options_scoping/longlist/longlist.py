@@ -4,10 +4,11 @@ Contract deliverable 6, D4, D5, D8, D10, D11, D14, D16, D20; ADR 0039
 decisions 7 and 8. The longlist walk's clustering step:
 
 1. **Units.** The ``intervention_profile_record`` rows of the longlist scope
-   and of each option's latest finished option search on this task, whatever
-   walk asked for it (read through each scope's latest extraction roll-up),
-   minus ``comparator`` records; plus, per link whose pinned walk ran ``extract``, the source
-   task's IOF/ICF findings of that walk through ``finding_reference_union``
+   and of each option's latest finished add-walk search (a targeted walk with
+   no parent; task 046, S3), read through each scope's latest extraction
+   roll-up, one extraction per document, minus ``comparator`` records; plus,
+   per link whose pinned walk ran ``extract``, the source task's IOF/ICF
+   findings of that walk through ``finding_reference_union``
    (D5). Each unit's payload is this component's projection.
 2. **Seeded clustering, the engine untouched** (P8). The seeds are every
    option the task holds — on a first build the entrants ``suggest`` minted
@@ -21,7 +22,9 @@ decisions 7 and 8. The longlist walk's clustering step:
    bundle is a package with ``part_of`` rows from its components. One option
    per record; a document with several records lands in several options.
    Memberships are replaced wholesale by this run's.
-4. **Themes**: a second, unseeded ``cluster_units`` run over the options.
+4. **Themes** are not built here: the ``theme`` component groups the
+   included options after ``constrain`` (task 046, R28); this component
+   writes ``themes = []`` and no theme counts.
 5. **Typing**: one batched call per :data:`LEVER_TYPING_BATCH_SIZE` options;
    lever types and the ambition tag on the option row, the runner-up in
    ``longlist_result.provenance`` only (D8).
@@ -92,8 +95,14 @@ from policy_atlas.evidence_search.clustering_engine import (
     ClusterUnit,
     cluster_units,
 )
-from policy_atlas.evidence_search.extract.extract import record_ids_by_profile
+from policy_atlas.evidence_search.extract.extract import (
+    EXTRACT_RETRY_CAP,
+    record_ids_by_profile,
+)
 from policy_atlas.evidence_search.extract.icf_records import PROFILE_ID as ICF_PROFILE_ID
+from policy_atlas.evidence_search.extract.interventions_profile import (
+    interventions_fingerprint,
+)
 from policy_atlas.evidence_search.extract.interventions_records import (
     PROFILE_ID as INTERVENTIONS_PROFILE_ID,
 )
@@ -127,14 +136,11 @@ from policy_atlas.options_scoping.longlist.longlist_cluster_prompt import (
     OPTION_LABEL_MAX,
     DiscoveredOptionWire,
 )
-from policy_atlas.options_scoping.longlist.longlist_theme_prompt import (
-    LONGLIST_THEME_PROMPT_VERSION,
-    THEME_DESCRIPTION_MAX,
-    THEME_LABEL_MAX,
-)
 from policy_atlas.options_scoping.longlist.where_tried import where_codes, where_labels
+from policy_atlas.options_scoping.longlist_intent import plan_tagging_context
 from policy_atlas.options_scoping.suggest.suggest import walk_plan
-from policy_atlas.runtime.scoping_plan import TARGETED_PURPOSE
+from policy_atlas.runtime.capability_registry import OPTIONS_SCOPING, validate_plan
+from policy_atlas.runtime.scoping_plan import TARGETED_PURPOSE, ScopingPlan
 
 log = structlog.get_logger()
 
@@ -151,14 +157,9 @@ ASSIGNMENT_BATCH_SIZE = 30
 DISCOVERY_RETRY_CAP = 1
 ASSIGNMENT_REPAIR_CAP = 1
 MAX_CONCURRENT_BATCHES = 4
-#: Engine policy for the theme clustering.
-THEME_ASSIGNMENT_BATCH_SIZE = 40
 
 #: The discovery ceiling ``clamp(ceil(N / 4), 8, 40)`` over N units (D4).
 CEILING_DIVISOR, CEILING_MIN, CEILING_MAX = 4, 8, 40
-#: The theme ceiling ``clamp(ceil(n / 3), 3, 12)`` over n options (lead call:
-#: about three options a theme, characterise's 3..12 theme bounds).
-THEME_CEILING_DIVISOR, THEME_CEILING_MIN, THEME_CEILING_MAX = 3, 3, 12
 
 #: A unit payload's free-text bound (the quote, a claim, each reference).
 UNIT_TEXT_MAX = 240
@@ -168,10 +169,6 @@ TYPING_INVALID_REASON = "typing invalid"
 
 #: Seeds are offered in entrant order, then the clustered options (D14).
 _SEED_ORIGIN_ORDER = ("added_by_you", "from_evidence_search", "suggested", "clustered")
-
-# Fixed namespace for content-keyed theme identity — never rotate:
-# theme_id = uuid5(ns, f"{task_id}:{theme_name}") (the characterise pattern).
-_THEME_ID_NAMESPACE = uuid.UUID("0a5e1f4c-3b2d-4e8f-9c71-045045045045")
 
 UnitKind = Literal["interventions", "iof", "icf"]
 
@@ -186,21 +183,6 @@ def discovery_ceiling(unit_count: int) -> int:
         The ceiling.
     """
     return max(CEILING_MIN, min(CEILING_MAX, math.ceil(unit_count / CEILING_DIVISOR)))
-
-
-def theme_ceiling(option_count: int) -> int:
-    """The theme ceiling ``clamp(ceil(n / 3), 3, 12)``.
-
-    Args:
-        option_count: n, the options grouped.
-
-    Returns:
-        The ceiling.
-    """
-    return max(
-        THEME_CEILING_MIN,
-        min(THEME_CEILING_MAX, math.ceil(option_count / THEME_CEILING_DIVISOR)),
-    )
 
 
 class LonglistFailure(Exception):
@@ -241,6 +223,11 @@ class _Unit:
     outcome: str | None
     study_geography: str | None
     payload: dict[str, object]
+    # The record's three tags (task 046), ``None`` when the record was written
+    # under another tagging context than the current plan's (S3 a).
+    population_tag: str | None = None
+    outcome_tag: str | None = None
+    object_tag: str | None = None
 
 
 def _bound(value: object, limit: int = UNIT_TEXT_MAX) -> str | None:
@@ -298,13 +285,79 @@ def _latest_rollup_record_ids(
     return {}
 
 
-def _own_units(
-    conn: Connection, *, task_id: uuid.UUID, scope_ids: Sequence[uuid.UUID]
-) -> tuple[list[_Unit], int]:
-    """The profile records of the given scopes, minus comparators.
+def current_profile_fingerprints(
+    conn: Connection, *, task_id: uuid.UUID, scope_id: uuid.UUID
+) -> frozenset[str]:
+    """The intervention-profile fingerprints of the scope plan's tagging context.
+
+    The profile's fingerprint depends on the backend mode, which this
+    component does not know, so both modes' fingerprints are returned; a
+    record matches when its extraction record carries either (task 046,
+    S3 a). The context is built from the plan the intent record names
+    (``evidence_scope.plan_id``), as the profile's own harness node builds it;
+    a record with no plan gives the context-free fingerprint.
+
+    Args:
+        conn: Open connection.
+        task_id: The scoping task.
+        scope_id: The longlist walk's intent record.
 
     Returns:
-        ``(units, comparator_records)``.
+        The fingerprints a record tagged under the current plan carries.
+    """
+    payload = conn.execute(
+        select(task_plan.c.payload)
+        .select_from(
+            evidence_scope.join(
+                task_plan,
+                and_(
+                    task_plan.c.plan_id == evidence_scope.c.plan_id,
+                    task_plan.c.task_id == evidence_scope.c.task_id,
+                ),
+            )
+        )
+        .where(
+            evidence_scope.c.evidence_scope_id == scope_id,
+            evidence_scope.c.task_id == task_id,
+        )
+    ).scalar_one_or_none()
+    context = None
+    if payload is not None:
+        try:
+            plan = validate_plan(OPTIONS_SCOPING, payload)
+        except ValidationError:
+            log.warning("longlist.scope_plan_invalid", scope_id=str(scope_id))
+        else:
+            if isinstance(plan, ScopingPlan):
+                context = plan_tagging_context(plan)
+    return frozenset(
+        interventions_fingerprint(mode, retry_cap=EXTRACT_RETRY_CAP, context=context)[0]
+        for mode in ("live", "stub")
+    )
+
+
+def _own_units(
+    conn: Connection,
+    *,
+    task_id: uuid.UUID,
+    scope_ids: Sequence[uuid.UUID],
+    current_fingerprints: frozenset[str],
+) -> tuple[list[_Unit], int, int]:
+    """The profile records of the given scopes, minus comparators.
+
+    The union of the scopes' latest roll-ups (task 046, S3). A document
+    profiled in two scopes counts once: the memo shares one extraction record
+    between scopes profiled under the same fingerprint, and when a document
+    has records from more than one extraction record (profiled under two
+    tagging contexts) only one extraction's records are kept — the one
+    written under the current plan's context, else the newest. A record whose
+    extraction fingerprint is not in ``current_fingerprints`` reads as "not
+    tagged": its tags are ``None`` in the unit and its payload.
+
+    Returns:
+        ``(units, comparator_records, superseded_records)``;
+        ``superseded_records`` counts the records of a document's other
+        extractions, left out.
     """
     record_ids: list[uuid.UUID] = []
     for scope_id in scope_ids:
@@ -318,28 +371,31 @@ def _own_units(
         )
         record_ids.extend(ids.get(INTERVENTIONS_PROFILE_ID, []))
     if not record_ids:
-        return [], 0
+        return [], 0, 0
     ipr = intervention_profile_record
+    ser = source_extraction_record
     rows = conn.execute(
         select(
             ipr,
-            source_extraction_record.c.task_source_snapshot_id,
-            source_extraction_record.c.basis,
+            ser.c.task_source_snapshot_id,
+            ser.c.basis,
+            ser.c.extraction_fingerprint,
+            ser.c.created_at.label("extracted_at"),
             source_snapshot.c.metadata,
         )
         .select_from(
             ipr.join(
-                source_extraction_record,
+                ser,
                 and_(
-                    source_extraction_record.c.extraction_record_id == ipr.c.extraction_record_id,
-                    source_extraction_record.c.task_id == ipr.c.task_id,
+                    ser.c.extraction_record_id == ipr.c.extraction_record_id,
+                    ser.c.task_id == ipr.c.task_id,
                 ),
             )
             .join(
                 task_source_snapshot,
                 and_(
                     task_source_snapshot.c.task_source_snapshot_id
-                    == source_extraction_record.c.task_source_snapshot_id,
+                    == ser.c.task_source_snapshot_id,
                     task_source_snapshot.c.task_id == ipr.c.task_id,
                 ),
             )
@@ -350,18 +406,37 @@ def _own_units(
         )
         .where(ipr.c.task_id == task_id)
         .where(ipr.c.extraction_record_id.in_(set(record_ids)))
-        .order_by(source_extraction_record.c.task_source_snapshot_id, ipr.c.record_id)
+        .order_by(ser.c.task_source_snapshot_id, ipr.c.record_id)
     ).all()
+    # One extraction per document: the current context's, else the newest.
+    chosen: dict[uuid.UUID, tuple[bool, datetime, str]] = {}
+    for row in rows:
+        rank = (
+            row.extraction_fingerprint in current_fingerprints,
+            row.extracted_at,
+            str(row.extraction_record_id),
+        )
+        best = chosen.get(row.task_source_snapshot_id)
+        if best is None or rank > best:
+            chosen[row.task_source_snapshot_id] = rank
     units: list[_Unit] = []
     seen: set[uuid.UUID] = set()
     comparators = 0
+    superseded = 0
     for row in rows:
         if row.record_id in seen:
             continue
         seen.add(row.record_id)
+        if str(row.extraction_record_id) != chosen[row.task_source_snapshot_id][2]:
+            superseded += 1
+            continue
         if row.role == "comparator":
             comparators += 1
             continue
+        tagged = row.extraction_fingerprint in current_fingerprints
+        population_tag = row.population_tag if tagged else None
+        outcome_tag = row.outcome_tag if tagged else None
+        object_tag = row.object_tag if tagged else None
         unit_id = str(row.record_id)
         payload: dict[str, object] = {
             "unit_id": unit_id,
@@ -375,6 +450,9 @@ def _own_units(
             "setting": _bound(row.setting),
             "study_geography": _bound(row.study_geography),
             "quote": _first_quote(row.grounding),
+            "population_tag": population_tag,
+            "outcome_tag": outcome_tag,
+            "object_tag": object_tag,
         }
         units.append(
             _Unit(
@@ -394,9 +472,12 @@ def _own_units(
                 outcome=row.outcome,
                 study_geography=row.study_geography,
                 payload=payload,
+                population_tag=population_tag,
+                outcome_tag=outcome_tag,
+                object_tag=object_tag,
             )
         )
-    return units, comparators
+    return units, comparators, superseded
 
 
 #: The role a linked finding's kind implies, for the role funnel and the
@@ -818,62 +899,6 @@ class LonglistClusteringBackend(ClusteringBackend):
         return assignments, usage
 
 
-class _ThemeClusteringBackend(ClusteringBackend):
-    """The engine's backend for themes over options (unseeded)."""
-
-    def __init__(self, backend: LonglistBackend, *, question: str) -> None:
-        self._backend = backend
-        self._question = question
-
-    def discover(
-        self,
-        units: list[ClusterUnit],
-        *,
-        min_labels: int,
-        max_labels: int,
-    ) -> UsageResult[list[ClusterLabel]]:
-        """Discover themes over the options."""
-        del min_labels
-        response, usage = self._backend.discover_themes(
-            question=self._question,
-            records=[unit.payload for unit in units],
-            max_labels=max_labels,
-        )
-        return (
-            [
-                ClusterLabel(label=t.label.strip(), description=t.description)
-                for t in response.themes
-            ],
-            usage,
-        )
-
-    def assign(
-        self,
-        batch: list[ClusterUnit],
-        *,
-        labels: list[ClusterLabel],
-    ) -> UsageResult[AssignmentOutput]:
-        """Assign options to themes; ``ungroupable`` becomes the residual."""
-        response, usage = self._backend.assign_themes(
-            themes=[{"label": label.label, "description": label.description} for label in labels],
-            records=[unit.payload for unit in batch],
-        )
-        by_key = {_key(label.label): label.label for label in labels}
-        residual_keys = {_key(MODEL_RESIDUAL_LABEL), _key(RESIDUAL_LABEL)}
-        assignments = [
-            ClusterAssignment(
-                unit_id=wire.unit_id,
-                label=(
-                    RESIDUAL_LABEL
-                    if _key(wire.theme_label) in residual_keys
-                    else by_key.get(_key(wire.theme_label), wire.theme_label)
-                ),
-            )
-            for wire in response.assignments
-        ]
-        return assignments, usage
-
-
 def _forbidden_label(noun: str) -> Any:
     def _reason(index: int, label: str) -> str | None:
         if label.casefold() in _RESERVED_LABELS:
@@ -901,24 +926,6 @@ def _option_policy(max_labels: int) -> ClusteringPolicy:
     )
 
 
-def _theme_policy(max_labels: int) -> ClusteringPolicy:
-    return ClusteringPolicy(
-        min_labels=0,
-        max_labels=max_labels,
-        assignment_batch_size=THEME_ASSIGNMENT_BATCH_SIZE,
-        discovery_retry_cap=DISCOVERY_RETRY_CAP,
-        assignment_repair_cap=ASSIGNMENT_REPAIR_CAP,
-        residual_label=RESIDUAL_LABEL,
-        unresolved_policy="residual",
-        label_max=THEME_LABEL_MAX,
-        description_max=THEME_DESCRIPTION_MAX,
-        forbidden_label_reason=_forbidden_label("theme"),
-        label_noun="theme",
-        log_event_prefix="longlist.themes",
-        max_concurrent_batches=MAX_CONCURRENT_BATCHES,
-    )
-
-
 def _engine_stats(result: ClusteringResult | None) -> dict[str, Any]:
     if result is None:
         return {"ran": False}
@@ -938,7 +945,7 @@ def _engine_stats(result: ClusteringResult | None) -> dict[str, Any]:
     }
 
 
-# --- options, themes, typing ------------------------------------------------------
+# --- options, typing ------------------------------------------------------
 
 
 @dataclass
@@ -1115,13 +1122,14 @@ def _walk_ref(
 
 
 def _option_search_scopes(conn: Connection, *, task_id: uuid.UUID) -> list[uuid.UUID]:
-    """Each option's latest finished option search on this task, any parent.
+    """Each option's latest finished add-walk search on this task.
 
     One targeted scope per option: the latest ``succeeded`` or ``degraded``
-    walk under a ``targeted`` record naming it — this walk's children, an
-    earlier build's (a rebuild searches only new entrants, P12) and the verb
-    *add*'s parentless searches alike, so a rebuild clusters every option's
-    records, not only the ones it searched itself.
+    walk with **no parent** under a ``targeted`` record naming it — the verb
+    *add*'s search (task 046, S3, AM5). A longlist walk's option searches only
+    acquire; the longlist scope screens and profiles their documents, so
+    their scopes supply no units — and an old full-chain child of a build
+    before this slice would supply a document a second time.
     """
     walks = conn.execute(
         select(
@@ -1139,6 +1147,7 @@ def _option_search_scopes(conn: Connection, *, task_id: uuid.UUID) -> list[uuid.
         )
         .where(capability_run.c.task_id == task_id)
         .where(evidence_scope.c.purpose == TARGETED_PURPOSE)
+        .where(capability_run.c.parent_capability_run_id.is_(None))
         .where(capability_run.c.status.in_(("succeeded", "degraded")))
         .order_by(capability_run.c.started_at.desc(), capability_run.c.capability_run_id.desc())
     ).all()
@@ -1162,7 +1171,7 @@ def membership_coverage(
     For constrain's *distinct* merge, which moves a duplicate's memberships
     to the kept option after the build wrote its coverage. The units are
     loaded exactly as :func:`longlist_scope` loads them (the walk's scope,
-    every option search, the links); a membership whose unit no longer loads
+    the add-walk searches, the links); a membership whose unit no longer loads
     is skipped.
 
     Args:
@@ -1176,7 +1185,14 @@ def membership_coverage(
         ``{option_id: coverage}`` for each of ``option_ids``.
     """
     search_scopes = _option_search_scopes(conn, task_id=task_id)
-    own, _ = _own_units(conn, task_id=task_id, scope_ids=[scope_id, *search_scopes])
+    own, _, _ = _own_units(
+        conn,
+        task_id=task_id,
+        scope_ids=[scope_id, *search_scopes],
+        current_fingerprints=current_profile_fingerprints(
+            conn, task_id=task_id, scope_id=scope_id
+        ),
+    )
     linked, _ = _linked_units(conn, task_id=task_id)
     by_key = {(u.kind, u.record_id): u for u in own + linked}
     members: dict[uuid.UUID, list[tuple[_Unit, bool]]] = {oid: [] for oid in option_ids}
@@ -1233,7 +1249,7 @@ def longlist_scope(
 ) -> dict[str, Any]:
     """Build the longlist for one longlist walk.
 
-    Every model call (discovery, assignment, themes, typing) happens before
+    Every model call (discovery, assignment, typing) happens before
     the first write; the writes — new option rows, ``part_of`` relations, the
     task's memberships replaced, typing on every option, and
     ``longlist_result`` last — share the component transaction.
@@ -1246,7 +1262,7 @@ def longlist_scope(
         backend: The model seam.
 
     Returns:
-        The component summary: ``options``, ``themes``, ``unclustered``,
+        The component summary: ``options``, ``unclustered``,
         ``not_an_option``, ``none_fits`` and ``units``.
 
     Raises:
@@ -1258,8 +1274,13 @@ def longlist_scope(
         conn, task_id=task_id, run_id=run_id, scope_id=context.scope_id
     )
     search_scopes = _option_search_scopes(conn, task_id=task_id)
-    own, comparators = _own_units(
-        conn, task_id=task_id, scope_ids=[context.scope_id, *search_scopes]
+    own, comparators, superseded = _own_units(
+        conn,
+        task_id=task_id,
+        scope_ids=[context.scope_id, *search_scopes],
+        current_fingerprints=current_profile_fingerprints(
+            conn, task_id=task_id, scope_id=context.scope_id
+        ),
     )
     linked, link_provenance = _linked_units(conn, task_id=task_id)
     units = own + linked
@@ -1358,55 +1379,11 @@ def longlist_scope(
                 continue
             relations.append((component.option_id, package.option_id))
 
-    # 3. Themes: an unseeded run over the options.
+    # 3. Themes are the ``theme`` component's, after ``constrain`` (task 046,
+    # R28): this row is written with none.
     usage = UsageAccumulator()
     if clustering is not None:
         usage.add_payload(clustering.usage_totals)
-    themes_ceiling = theme_ceiling(len(options))
-    try:
-        theme_result = (
-            cluster_units(
-                [
-                    ClusterUnit(
-                        unit_id=str(o.option_id),
-                        payload={
-                            "unit_id": str(o.option_id),
-                            "label": o.label,
-                            "description": o.description,
-                            "design_features": o.design_features,
-                            "outcomes_served": o.outcomes,
-                        },
-                    )
-                    for o in options
-                ],
-                backend=_ThemeClusteringBackend(backend, question=plan.question),
-                policy=_theme_policy(themes_ceiling),
-            )
-            if options
-            else None
-        )
-    except ClusteringFailure as exc:
-        raise LonglistFailure(f"longlist theme grouping failed: {exc.error}") from exc
-    if theme_result is not None:
-        usage.add_payload(theme_result.usage_totals)
-    themes_out: list[dict[str, Any]] = []
-    no_theme = len(options)
-    if theme_result is not None:
-        members_by_theme: dict[str, list[str]] = {label.label: [] for label in theme_result.labels}
-        for o in options:
-            theme = theme_result.assignments.get(str(o.option_id), RESIDUAL_LABEL)
-            if theme != RESIDUAL_LABEL:
-                members_by_theme[theme].append(str(o.option_id))
-        no_theme = len(options) - sum(len(ids) for ids in members_by_theme.values())
-        themes_out = [
-            {
-                "theme_id": str(uuid.uuid5(_THEME_ID_NAMESPACE, f"{task_id}:{label.label}")),
-                "name": label.label,
-                "description": label.description,
-                "option_ids": members_by_theme[label.label],
-            }
-            for label in theme_result.labels
-        ]
 
     # 4. Typing.
     typings, typing_stats = _type_options(backend, options, usage)
@@ -1522,8 +1499,6 @@ def longlist_scope(
     documents = {u.doc_key for u in units}
     counts = {
         "options": len(options),
-        "themes": len(themes_out),
-        "no_theme": no_theme,
         "included": sum(1 for s in states if s == "included"),
         "excluded": sum(1 for s in states if s == "excluded"),
         "no_in_scope_evidence": 0,
@@ -1545,13 +1520,11 @@ def longlist_scope(
         "backend_mode": backend.mode,
         "prompt_versions": {
             "cluster": LONGLIST_CLUSTER_PROMPT_VERSION,
-            "theme": LONGLIST_THEME_PROMPT_VERSION,
             "typing": LEVER_TYPING_PROMPT_VERSION,
         },
         "models": {
             "discovery": LONGLIST_JUDGMENT_MODEL if live else "stub",
             "assignment": LONGLIST_ASSIGNMENT_MODEL if live else "stub",
-            "themes": LONGLIST_JUDGMENT_MODEL if live else "stub",
             "typing": LONGLIST_JUDGMENT_MODEL if live else "stub",
         },
         "taxonomy_version": TAXONOMY_VERSION,
@@ -1563,23 +1536,18 @@ def longlist_scope(
             "max_labels": max_labels,
             "max_new": clustering_backend.max_new,
         },
-        "theme_ceiling": {
-            "formula": "clamp(ceil(n/3), 3, 12)",
-            "options": len(options),
-            "ceiling": themes_ceiling,
-        },
         "seed_ids": [str(seed.option_id) for seed in seeds],
         "discovered_ids": [str(o.option_id) for o in options if not o.seed],
         "scopes": {
             "longlist": str(context.scope_id),
             "targeted": [str(scope) for scope in search_scopes],
+            "superseded_records": superseded,
         },
         "links": link_provenance,
         "clustering": {
             **_engine_stats(clustering),
             "restated_seeds_dropped": clustering_backend.restated_seeds_dropped,
         },
-        "theme_clustering": _engine_stats(theme_result),
         "typing": typing_stats,
         "runner_up": {
             str(option_id): {"lever_type": t.runner_up, "reason": t.runner_up_reason}
@@ -1597,7 +1565,7 @@ def longlist_scope(
             evidence_scope_id=context.scope_id,
             run_id=run_id,
             plan_version=plan_version,
-            themes=themes_out,
+            themes=[],
             coverage=coverage,
             judgements={},
             guesses={},
@@ -1610,14 +1578,12 @@ def longlist_scope(
         "longlist.built",
         units=len(units),
         options=len(options),
-        themes=len(themes_out),
         unclustered=len(unclustered),
         not_an_option=len(not_an_option),
         none_fits=none_fits,
     )
     return {
         "options": len(options),
-        "themes": len(themes_out),
         "unclustered": len(unclustered),
         "not_an_option": len(not_an_option),
         "none_fits": none_fits,

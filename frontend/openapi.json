@@ -5274,7 +5274,8 @@
               "option_searches",
               "extract_interventions",
               "longlist",
-              "constrain"
+              "constrain",
+              "theme"
             ],
             "title": "Stage",
             "type": "string"
@@ -6908,7 +6909,8 @@
               "option_searches",
               "extract_interventions",
               "longlist",
-              "constrain"
+              "constrain",
+              "theme"
             ],
             "title": "Stage",
             "type": "string"
@@ -6999,7 +7001,8 @@
               "option_searches",
               "extract_interventions",
               "longlist",
-              "constrain"
+              "constrain",
+              "theme"
             ],
             "title": "Stage",
             "type": "string"
@@ -7071,7 +7074,8 @@
               "option_searches",
               "extract_interventions",
               "longlist",
-              "constrain"
+              "constrain",
+              "theme"
             ],
             "title": "Stage",
             "type": "string"
@@ -8013,7 +8017,8 @@
                   "option_searches",
                   "extract_interventions",
                   "longlist",
-                  "constrain"
+                  "constrain",
+                  "theme"
                 ],
                 "type": "string"
               },

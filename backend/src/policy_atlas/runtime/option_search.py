@@ -21,7 +21,8 @@ holds none of them (P1):
   the model's suggestions fill the rest), skip on a rebuild every entrant that
   already has a finished option search (P12), dispatch one child walk each,
   and emit the ``option_searches`` stage's start.
-- :func:`join_option_searches` — before ``longlist``: wait, outside any
+- :func:`join_option_searches` — before ``screen_abstract`` (task 046,
+  S2; the children only acquire): wait, outside any
   transaction, for every child to reach a terminal status, bounded by
   :data:`OPTION_SEARCH_JOIN_TIMEOUT`; stragglers are marked ``interrupted``
   and counted failed; emit the stage's completion with
@@ -57,6 +58,7 @@ from policy_atlas.core.schema import capability_run, event_log, evidence_scope, 
 from policy_atlas.options_scoping.design import OptionDesign
 from policy_atlas.runtime.capability_registry import OPTIONS_SCOPING, validate_plan
 from policy_atlas.runtime.scoping_plan import (
+    ACQUIRE_ONLY_KEY,
     BASELINE_CONFIRM,
     OPTION_SEARCH_CAP,
     TARGETED_PURPOSE,
@@ -133,7 +135,9 @@ def run_option_search(
 
     In one transaction, inserts the targeted intent record (``purpose =
     'targeted'``, ``intent = design.as_intent()``, ``plan_id`` = the confirmed
-    version, ``context.option_id`` naming the option) and mints the child's
+    version, ``context.option_id`` naming the option, and
+    ``context.acquire_only = true`` when the walk has a parent — task 046,
+    AM4: a longlist walk's option search only acquires) and mints the child's
     ``capability_run_id``; then submits the child walk to the option-search
     pool. The walk's own row is written by the runner when the pool starts it.
 
@@ -158,13 +162,18 @@ def run_option_search(
     plan_version = int(plan_row["version"])
     scope_id = uuid.uuid4()
     child_id = uuid.uuid4()
+    scope_context: dict[str, Any] = {"capability": OPTIONS_SCOPING, "option_id": str(option_id)}
+    if parent_capability_run_id is not None:
+        # A longlist walk's option search only acquires (task 046, AM4): the
+        # composer reads this key; the parent's one screen judges the pool.
+        scope_context[ACQUIRE_ONLY_KEY] = True
     with engine.begin() as conn:
         conn.execute(
             evidence_scope.insert().values(
                 evidence_scope_id=scope_id,
                 task_id=task_id,
                 intent=design.as_intent(),
-                context={"capability": OPTIONS_SCOPING, "option_id": str(option_id)},
+                context=scope_context,
                 created_at=datetime.now(UTC),
                 purpose=TARGETED_PURPOSE,
                 plan_id=plan_id,

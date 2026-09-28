@@ -67,9 +67,9 @@ from policy_atlas.options_scoping.longlist.longlist import (
     TYPING_INVALID_REASON,
     LonglistContext,
     LonglistFailure,
+    current_profile_fingerprints,
     discovery_ceiling,
     longlist_scope,
-    theme_ceiling,
 )
 from policy_atlas.options_scoping.longlist.longlist_backend import (
     STUB_DISCOVERED_LABEL,
@@ -82,7 +82,7 @@ from policy_atlas.options_scoping.longlist.longlist_cluster_prompt import (
     OptionAssignmentWire,
     OptionDiscoveryResponse,
 )
-from policy_atlas.options_scoping.longlist.longlist_theme_prompt import (
+from policy_atlas.options_scoping.theme.longlist_theme_prompt import (
     ThemeAssignmentsResponse,
     ThemeAssignmentWire,
     ThemeDiscoveryResponse,
@@ -525,11 +525,6 @@ def test_the_discovery_ceiling_is_clamp_ceil_n_over_4_8_40(units: int, ceiling: 
     assert discovery_ceiling(units) == ceiling
 
 
-@pytest.mark.parametrize(("options", "ceiling"), [(2, 3), (20, 7), (60, 12)])
-def test_the_theme_ceiling_is_clamp_ceil_n_over_3_3_12(options: int, ceiling: int) -> None:
-    assert theme_ceiling(options) == ceiling
-
-
 # --- assignment ---------------------------------------------------------------------
 
 
@@ -560,7 +555,6 @@ def test_every_record_lands_in_one_option_unclustered_or_not_an_option(
 
     assert summary == {
         "options": 3,
-        "themes": 1,
         "unclustered": 1,
         "not_an_option": 1,
         "none_fits": 0,
@@ -642,7 +636,8 @@ def test_comparator_records_never_become_members(conn: Connection) -> None:
     assert walk.result(run_id).counts["comparator_records"] == 1
 
 
-def test_the_option_searches_records_join_the_longlist_scope_s(conn: Connection) -> None:
+def test_an_add_walk_s_records_join_the_longlist_scope_s(conn: Connection) -> None:
+    """Task 046, S3: the verb *add*'s parentless search supplies units."""
     walk = _Walk(conn)
     seed = walk.option("Youth guarantee", origin="added_by_you")
     broad = walk.doc()
@@ -650,7 +645,7 @@ def test_the_option_searches_records_join_the_longlist_scope_s(conn: Connection)
     walk.record(broad, "youth guarantee")
     walk.record(targeted, "youth guarantee")
     walk.rollup(walk.scope_id, [broad])
-    child = walk.child_scope(seed)
+    child = walk.child_scope(seed, parentless=True)
     walk.rollup(child, [broad, targeted])  # the same document in both: one unit
     run_id, summary = walk.build(
         _Scripted(routes={"youth guarantee": ("Youth guarantee", False)})
@@ -659,12 +654,12 @@ def test_the_option_searches_records_join_the_longlist_scope_s(conn: Connection)
     assert walk.result(run_id).provenance["scopes"]["targeted"] == [str(child)]
 
 
-def test_a_rebuild_reads_every_option_s_latest_finished_search_whatever_its_parent(
+def test_a_rebuild_reads_only_the_latest_finished_add_walk_search_of_each_option(
     conn: Connection,
 ) -> None:
-    """A1/B1: an earlier build's option search and the verb *add*'s parentless
-    one are read by the next build (a rebuild searches only new entrants); a
-    failed search is not, and per option only the latest finished one is."""
+    """Task 046, S3 (AM5): the verb *add*'s parentless search is read by the
+    next build; a longlist walk's option search (a child with a parent, here
+    an earlier build's) supplies no units, and a failed search none either."""
     walk = _Walk(conn)
     earlier = walk.option("Youth guarantee", origin="added_by_you")
     added = walk.option("Wage subsidy", origin="added_by_you")
@@ -691,11 +686,11 @@ def test_a_rebuild_reads_every_option_s_latest_finished_search_whatever_its_pare
             }
         )
     )
-    assert summary["units"] == 2
-    assert walk.result(run_id).provenance["scopes"]["targeted"] == [
-        str(add_search),
-        str(kept),
-    ]
+    assert summary["units"] == 1
+    assert walk.result(run_id).provenance["scopes"]["targeted"] == [str(add_search)]
+    assert {str(stale), str(kept), str(failed)}.isdisjoint(
+        walk.result(run_id).provenance["scopes"]["targeted"]
+    )
 
 
 def test_seeds_survive_with_zero_members_and_no_discovery_past_the_ceiling(
@@ -1127,10 +1122,8 @@ def test_the_stub_backend_matches_seeds_by_name_and_discovers_one(conn: Connecti
     assert options["Youth guarantee"].option_id == seed_id
     assert all(row.primary_lever_type == "provide a service" for row in options.values())
     assert all(row.ambition == "incremental" for row in options.values())
-    assert walk.result(run_id).themes[0]["option_ids"] == [
-        str(seed_id),
-        str(options[STUB_DISCOVERED_LABEL].option_id),
-    ]
+    # Themes are the ``theme`` component's (task 046, R28): none written here.
+    assert walk.result(run_id).themes == []
 
 
 def test_the_harness_runs_longlist_on_the_stub_backends(conn: Connection) -> None:
@@ -1152,10 +1145,159 @@ def test_the_harness_runs_longlist_on_the_stub_backends(conn: Connection) -> Non
     assert outcome["error"] is None
     assert outcome["summary"] == {
         "options": 1,
-        "themes": 1,
         "unclustered": 0,
         "not_an_option": 0,
         "none_fits": 0,
         "units": 0,
     }
     assert walk.result(run_id).coverage[str(seed_id)]["members"] == 0
+
+
+# --- task 046: units from the longlist scope and the add walks (S3, AM5) ---------
+
+
+def _extraction(
+    walk: _Walk, tss_id: uuid.UUID, *, fingerprint: str, created_at: datetime | None = None
+) -> uuid.UUID:
+    """A second extraction record of a document, under its own fingerprint."""
+    snapshot_id = walk.conn.execute(
+        select(task_source_snapshot.c.source_snapshot_id).where(
+            task_source_snapshot.c.task_source_snapshot_id == tss_id
+        )
+    ).scalar_one()
+    ser_id = uuid.uuid4()
+    walk.conn.execute(
+        source_extraction_record.insert().values(
+            extraction_record_id=ser_id,
+            task_id=walk.task_id,
+            source_snapshot_id=snapshot_id,
+            task_source_snapshot_id=tss_id,
+            extraction_fingerprint=fingerprint,
+            status="extracted",
+            basis="abstract_only",
+            run_id=walk.extract_run,
+            created_at=created_at or now(),
+        )
+    )
+    return ser_id
+
+
+def _record_under(walk: _Walk, ser_id: uuid.UUID, intervention: str, **values: Any) -> uuid.UUID:
+    record_id = uuid.uuid4()
+    row: dict[str, Any] = {
+        "record_id": record_id,
+        "task_id": walk.task_id,
+        "extraction_record_id": ser_id,
+        "intervention": intervention,
+        "role": "evaluated",
+        "design_features": [],
+        "is_bundle": False,
+        "components": [],
+        "field_coverage": {},
+        "grounding": [{"quote": f"We studied {intervention}."}],
+        "created_at": now(),
+    }
+    row.update(values)
+    walk.conn.execute(intervention_profile_record.insert().values(**row))
+    return record_id
+
+
+def _rollup_of(walk: _Walk, scope_id: uuid.UUID, docs: dict[uuid.UUID, uuid.UUID]) -> None:
+    """A roll-up naming, per document, the given extraction record."""
+    walk.conn.execute(
+        extraction_result.insert().values(
+            extraction_result_id=uuid.uuid4(),
+            task_id=walk.task_id,
+            evidence_scope_id=scope_id,
+            run_id=walk.run(),
+            selection_run_id=None,
+            extraction_provenance={},
+            docs=[
+                {
+                    "tss_id": str(tss_id),
+                    "basis": "abstract_only",
+                    "profiles": {INTERVENTIONS_PROFILE_ID: {"extraction_record_id": str(ser)}},
+                }
+                for tss_id, ser in docs.items()
+            ],
+            counts={},
+            flags=[],
+            created_at=now(),
+        )
+    )
+
+
+def _current_fingerprint(walk: _Walk) -> str:
+    return sorted(
+        current_profile_fingerprints(walk.conn, task_id=walk.task_id, scope_id=walk.scope_id)
+    )[0]
+
+
+def test_a_rebuild_of_a_task_built_before_this_slice_counts_no_document_twice(
+    conn: Connection,
+) -> None:
+    """AM5: an old full-chain child scope with records supplies no unit."""
+    walk = _Walk(conn)
+    seed = walk.option("Youth guarantee", origin="added_by_you")
+    doc = walk.doc()
+    # The pre-046 build: its child screened and profiled the document under the
+    # context-free fingerprint.
+    old_build = walk._walk(walk._scope("longlist"), status="succeeded")
+    old_child = walk.child_scope(seed, parent=old_build, started_at=now() - timedelta(hours=1))
+    old_ser = _extraction(walk, doc, fingerprint="pre-046", created_at=now() - timedelta(hours=1))
+    _record_under(walk, old_ser, "youth guarantee")
+    _rollup_of(walk, old_child, {doc: old_ser})
+    # This build's longlist scope profiled it again, under the plan's context.
+    new_ser = _extraction(walk, doc, fingerprint=_current_fingerprint(walk))
+    _record_under(walk, new_ser, "youth guarantee")
+    _rollup_of(walk, walk.scope_id, {doc: new_ser})
+    backend = _Scripted(routes={"youth guarantee": ("Youth guarantee", False)})
+    run_id, summary = walk.build(backend)
+    assert summary["units"] == 1
+    result = walk.result(run_id)
+    assert result.counts["documents"] == 1
+    assert result.provenance["scopes"]["targeted"] == []
+    assert len(walk.memberships()) == 1
+
+
+def test_a_document_profiled_in_two_scopes_counts_once_under_the_current_context(
+    conn: Connection,
+) -> None:
+    """An add walk and the longlist scope profiled one document under two
+    contexts: only the current context's extraction is read."""
+    walk = _Walk(conn)
+    seed = walk.option("Youth guarantee", origin="added_by_you")
+    doc = walk.doc()
+    add_search = walk.child_scope(seed, parentless=True)
+    stale = _extraction(walk, doc, fingerprint="older plan", created_at=now())
+    _record_under(walk, stale, "youth guarantee")
+    _record_under(walk, stale, "wage subsidy")
+    _rollup_of(walk, add_search, {doc: stale})
+    current = _extraction(
+        walk, doc, fingerprint=_current_fingerprint(walk), created_at=now() - timedelta(hours=1)
+    )
+    kept = _record_under(walk, current, "youth guarantee", population_tag="on_target")
+    _rollup_of(walk, walk.scope_id, {doc: current})
+    backend = _Scripted(routes={"youth guarantee": ("Youth guarantee", False)})
+    run_id, summary = walk.build(backend)
+    assert summary["units"] == 1
+    assert [m.unit_id for m in walk.memberships()] == [kept]
+    assert walk.result(run_id).provenance["scopes"]["superseded_records"] == 2
+
+
+def test_a_record_tagged_under_another_context_reads_as_not_tagged(conn: Connection) -> None:
+    """S3 (a): tags pass through only under the current plan's fingerprint."""
+    walk = _Walk(conn)
+    walk.option("Youth guarantee", origin="added_by_you")
+    current_doc, stale_doc = walk.doc(), walk.doc()
+    tags = {"population_tag": "adjacent", "outcome_tag": "the NEET rate", "object_tag": "option"}
+    current = _extraction(walk, current_doc, fingerprint=_current_fingerprint(walk))
+    _record_under(walk, current, "youth guarantee", **tags)
+    stale = _extraction(walk, stale_doc, fingerprint="older plan")
+    _record_under(walk, stale, "wage subsidy", **tags)
+    _rollup_of(walk, walk.scope_id, {current_doc: current, stale_doc: stale})
+    backend = _Scripted(discovered=[_discovered("Wage subsidy")])
+    walk.build(backend)
+    records = {r["intervention"]: r for r in backend.calls["assign"][0]["records"]}
+    assert {k: records["youth guarantee"][k] for k in tags} == tags
+    assert {k: records["wage subsidy"][k] for k in tags} == dict.fromkeys(tags)

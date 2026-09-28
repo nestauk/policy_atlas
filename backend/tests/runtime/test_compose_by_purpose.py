@@ -114,14 +114,15 @@ def test_the_longlist_chain_and_its_spine() -> None:
         "screen_abstract",
         "classify",
         "appraise",
-        "ingest_full_text",
         "extract_interventions",
         "longlist",
         "constrain",
+        "theme",
     ]
-    # Owner at the plan gate: "inherit non-spine"; suggest degrades too.
+    # Owner at the plan gate: "inherit non-spine"; suggest degrades too; theme
+    # degrades after the verdicts are stored (task 046, R28).
     non_spine = [step.component for step in chain.steps if not step.is_spine]
-    assert non_spine == ["inherit", "suggest"]
+    assert non_spine == ["inherit", "suggest", "theme"]
     assert all(step.spine is not None for step in chain.steps)
 
 
@@ -132,7 +133,6 @@ def test_the_targeted_chain_is_the_spine_to_the_profile() -> None:
         "screen_abstract",
         "classify",
         "appraise",
-        "ingest_full_text",
         "extract_interventions",
     ]
     assert all(step.spine is True for step in chain.steps)
@@ -327,10 +327,10 @@ def test_a_walk_under_a_longlist_intent_record_runs_the_longlist_chain(
             ("screen_abstract", "succeeded"),
             ("classify", "succeeded"),
             ("appraise", "succeeded"),
-            ("ingest_full_text", "succeeded"),
             ("extract_interventions", "succeeded"),
             ("longlist", "succeeded"),
             ("constrain", "succeeded"),
+            ("theme", "succeeded"),
         ]
         assert outcome.status == "succeeded"
         with engine.connect() as conn:
