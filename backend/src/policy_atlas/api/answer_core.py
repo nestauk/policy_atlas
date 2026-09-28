@@ -36,6 +36,7 @@ from policy_atlas.evidence_search.synthesis.synthesis_tools import (
     gathered_ids,
     run_tool_loop,
 )
+from policy_atlas.options_scoping.labels import DocumentLabels, labels_for_snapshots
 from policy_atlas.runtime.chat_backend import ChatBackend
 from policy_atlas.runtime.chat_context import assemble_chat_frame, window_turns
 from policy_atlas.runtime.chat_floor import apply_citation_floor
@@ -234,9 +235,10 @@ def _resolve_citation_sources(
     ``repository.chunk_quote_context_out`` for the same chunk-side filter).
 
     Also resolves the cited document's ``appraisal_score`` + ``evidence_type``
-    (mirroring ``repository.artefact_out``'s CitationOut resolution exactly —
-    latest appraisal/classification row per task_source_snapshot_id,
-    task-scoped, no narrower join). The score, not the label, is what
+    through the label resolver (``options_scoping.labels``, task 045 S5) —
+    the same resolution ``repository.artefact_out``'s CitationOut uses: this
+    task's latest rows, then a linked task's pinned walk for an inherited
+    document. The score, not the label, is what
     persists here (``evidence_search.assess.appraise``'s read-time-copy pin —
     ``apply_appraisal_labels`` derives ``appraisal_label`` fresh on every read
     instead). At persist time this also snaps a chunk citation's
@@ -244,13 +246,10 @@ def _resolve_citation_sources(
     locates it uniquely in that chunk's content (marking ``quote_snapped:
     true`` only when the text actually changed).
     """
-    from policy_atlas.api.readmodels.repository import latest_row_by_id
     from policy_atlas.core.schema import chunk as chunk_table
     from policy_atlas.core.schema import (
         implementation_context_finding,
         intervention_outcome_finding,
-        source_appraisal_result,
-        source_classification_result,
         source_extraction_record,
         source_snapshot,
         task_source_snapshot,
@@ -271,8 +270,7 @@ def _resolve_citation_sources(
     chunk_ids, finding_ids = _uuids("chunk"), _uuids("finding")
     facts: dict[str, dict[str, Any]] = {}
     chunk_contents: dict[str, str] = {}
-    appraisal: dict[uuid.UUID, Any] = {}
-    classification: dict[uuid.UUID, Any] = {}
+    labels: dict[uuid.UUID, DocumentLabels] = {}
     with engine.connect() as conn:
         if chunk_ids:
             for row in conn.execute(
@@ -339,45 +337,10 @@ def _resolve_citation_sources(
                     }
         resolved_tss_ids = {uuid.UUID(fact["source_id"]) for fact in facts.values()}
         if resolved_tss_ids:
-            # Same join/effective-row rules as repository.artefact_out's
-            # CitationOut resolution: task-scoped, latest row per
-            # task_source_snapshot_id wins. Narrowed to the tss ids already
-            # resolved above (task 029 delta-review) — cost proportional to
-            # citations, not to the whole task's appraisal/classification set.
-            appraisal = latest_row_by_id(
-                conn.execute(
-                    select(
-                        source_appraisal_result.c.task_source_snapshot_id,
-                        source_appraisal_result.c.quality_score,
-                        source_appraisal_result.c.appraised_at,
-                    )
-                    .where(source_appraisal_result.c.task_id == task_id)
-                    .where(
-                        source_appraisal_result.c.task_source_snapshot_id.in_(
-                            resolved_tss_ids
-                        )
-                    )
-                ).all(),
-                "task_source_snapshot_id",
-                "appraised_at",
-            )
-            classification = latest_row_by_id(
-                conn.execute(
-                    select(
-                        source_classification_result.c.task_source_snapshot_id,
-                        source_classification_result.c.primary_evidence_type,
-                        source_classification_result.c.classified_at,
-                    )
-                    .where(source_classification_result.c.task_id == task_id)
-                    .where(
-                        source_classification_result.c.task_source_snapshot_id.in_(
-                            resolved_tss_ids
-                        )
-                    )
-                ).all(),
-                "task_source_snapshot_id",
-                "classified_at",
-            )
+            # Narrowed to the tss ids already resolved above (task 029
+            # delta-review) — cost proportional to citations, not to the
+            # whole task's appraisal/classification set.
+            labels = labels_for_snapshots(conn, task_id=task_id, tss_ids=resolved_tss_ids)
 
     basis_cache: dict[str, BasisText] = {}
     resolved: list[dict[str, Any]] = []
@@ -388,16 +351,14 @@ def _resolve_citation_sources(
 
         source_id = source_facts.get("source_id")
         if source_id is not None:
-            tss_id = uuid.UUID(source_id)
-            appraisal_row = appraisal.get(tss_id)
-            if appraisal_row is not None:
+            label = labels.get(uuid.UUID(source_id))
+            if label is not None and label.quality_score is not None:
                 # The score, not the label, persists (evidence_search.assess.appraise's
                 # read-time-copy pin) — apply_appraisal_labels derives the label
                 # fresh on every read from this score.
-                merged["appraisal_score"] = appraisal_row.quality_score
-            classification_row = classification.get(tss_id)
-            if classification_row is not None:
-                merged["evidence_type"] = classification_row.primary_evidence_type
+                merged["appraisal_score"] = label.quality_score
+            if label is not None and label.evidence_type is not None:
+                merged["evidence_type"] = label.evidence_type
 
         quote = citation.get("quote")
         if citation.get("kind") == "chunk" and quote:

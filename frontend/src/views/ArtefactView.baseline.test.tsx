@@ -35,6 +35,7 @@ vi.mock("../api/queries", async (importOriginal) => {
     useFunnel: vi.fn(),
     usePlan: vi.fn(),
     useRuns: vi.fn(),
+    useLonglist: vi.fn(),
   };
 });
 
@@ -54,6 +55,15 @@ vi.mock("./workspace/chat/conversationState", async (importOriginal) => {
 
 vi.mock("../lib/title", () => ({ useDocumentTitle: vi.fn() }));
 
+// The longlist view is Phase 6.2's; the switch only has to mount it.
+vi.mock("./longlist/LonglistView", () => ({
+  LonglistView: ({ taskId, longlist }: { taskId: string; longlist: { run_id: string } }) => (
+    <div>
+      Longlist view for {taskId} from {longlist.run_id}
+    </div>
+  ),
+}));
+
 const GATE_WALK = {
   capability_run_id: "10000000-0000-4000-8000-000000000001",
   status: "paused",
@@ -70,6 +80,8 @@ function renderBaseline({
   planVersion = 1,
   baselineConfirmed = null as { artefact_id: string; plan_version: number } | null,
   artefact = mockBaselineArtefact as unknown,
+  hasLonglist = false,
+  path = `/tasks/${TASK_ID}/result`,
 } = {}) {
   vi.mocked(queries.useTask).mockReturnValue({
     data: {
@@ -77,8 +89,13 @@ function renderBaseline({
       name: "Cutting NEET numbers in Tower Hamlets",
       capability: "options_scoping",
       latest_run: { capability_run_id: GATE_WALK.capability_run_id, status: "paused" },
+      has_longlist: hasLonglist,
     },
   } as unknown as ReturnType<typeof queries.useTask>);
+  vi.mocked(queries.useLonglist).mockReturnValue({
+    isPending: false,
+    data: hasLonglist ? { run_id: "run-longlist" } : null,
+  } as unknown as ReturnType<typeof queries.useLonglist>);
   vi.mocked(queries.useArtefact).mockReturnValue({
     isPending: false,
     isError: false,
@@ -114,7 +131,7 @@ function renderBaseline({
       client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
     >
       <TooltipProvider>
-        <MemoryRouter initialEntries={[`/tasks/${TASK_ID}/result`]}>
+        <MemoryRouter initialEntries={[path]}>
           <Routes>
             <Route path="/tasks/:taskId/result" element={<ArtefactView />} />
           </Routes>
@@ -183,5 +200,56 @@ describe("ArtefactView — the options-scoping baseline", () => {
     expect(screen.getByText("Report")).toBeInTheDocument();
     expect(screen.queryByText(/the situation these options would change/)).not.toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Executive summary" })).toBeInTheDocument();
+  });
+});
+
+describe("ArtefactView — the Result's view switch (task 045, deliverable 9)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("before a longlist exists there is no switch: the Result is the baseline", () => {
+    renderBaseline();
+    expect(screen.queryByRole("tablist", { name: "Result view" })).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Do nothing: current policy and trajectory" }),
+    ).toBeInTheDocument();
+  });
+
+  it("once a longlist exists: Baseline · Longlist · Report, opening on the longlist, Report not yet available", () => {
+    renderBaseline({ hasLonglist: true });
+    const tabs = within(screen.getByRole("tablist", { name: "Result view" })).getAllByRole("tab");
+    expect(tabs.map((tab) => tab.textContent)).toEqual([
+      "Baseline",
+      "Longlist",
+      "Report· available after assessment",
+    ]);
+    expect(tabs[1]).toHaveAttribute("aria-selected", "true");
+    expect(tabs[2]).toBeDisabled();
+    expect(screen.getByText(`Longlist view for ${TASK_ID} from run-longlist`)).toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: "Do nothing: current policy and trajectory" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("switches to the baseline and back", async () => {
+    const { default: userEvent } = await import("@testing-library/user-event");
+    const user = userEvent.setup();
+    renderBaseline({ hasLonglist: true });
+    await user.click(screen.getByRole("tab", { name: "Baseline" }));
+    expect(
+      screen.getByRole("heading", { name: "Do nothing: current policy and trajectory" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(`Longlist view for ${TASK_ID} from run-longlist`)).not.toBeInTheDocument();
+    await user.click(screen.getByRole("tab", { name: "Longlist" }));
+    expect(screen.getByText(`Longlist view for ${TASK_ID} from run-longlist`)).toBeInTheDocument();
+  });
+
+  it("?view=baseline opens the baseline directly", () => {
+    renderBaseline({ hasLonglist: true, path: `/tasks/${TASK_ID}/result?view=baseline` });
+    expect(screen.getByRole("tab", { name: "Baseline" })).toHaveAttribute("aria-selected", "true");
+    expect(
+      screen.getByRole("heading", { name: "Do nothing: current policy and trajectory" }),
+    ).toBeInTheDocument();
   });
 });

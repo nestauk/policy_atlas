@@ -190,7 +190,13 @@ class _PayloadCapturingAgent:
     ) -> Any:
         raise NotImplementedError("decide-only capture stub")
 
+    def propose_option_design(self, *args: Any, **kwargs: Any) -> Any:
+        raise NotImplementedError("not an options-scoping plan call")
+
     def sort_gate_turn(self, *args: Any, **kwargs: Any) -> Any:
+        raise NotImplementedError("decide-only capture stub")
+
+    def sort_longlist_turn(self, *args: Any, **kwargs: Any) -> Any:
         raise NotImplementedError("decide-only capture stub")
 
     def decide(

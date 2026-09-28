@@ -70,6 +70,15 @@ may be refined as implementation lands.
   it a factor row of its own, its evidence cell reading "not addressed by the evidence" when the
   evidence does not name it, its context cell carrying the entry under its own type. How the
   evidence's own blockers are found, quote-vetted and judged necessary is task 3's, not the plan's.
+- **Options you already have in mind** *(options scoping; [task 045 contract](../tasks/045-scoping-longlist/contract.md), D19, accepted by the
+  owner as a spec addition)* — an optional slot, asked once in the planning conversation: the options
+  the user named, in their own words, each with the turn that produced it and a specified design the
+  Task Agent proposes back. Each becomes an entrant, *added by you*, with its own option search in
+  the longlist walk.
+- **The default transferability preference** *(options scoping; [task 045 contract](../tasks/045-scoping-longlist/contract.md), D22; owner:
+  "Should be a default preference")* — every scoping plan carries the constraint "Transferable to
+  *Where*": kind preference, origin *assumed*, checked at assessment, its text following Where until
+  the user edits it, removable. No reasoned guess is made for it before assessment.
 - **Several intent records per plan** *(owner ruling on OS decision-sheet row C4, 2026-09-09)*. An
   intent record (`evidence_scope` in the code) is the row a compiled plan creates to hold the
   question a run is answering, plus its settings; every result row points at one. A plan may
@@ -132,7 +141,14 @@ referent). Instead:
   sections as they finish; starting the longlist's retrieval while the user reads the baseline;
   a faster model tier for the sections when Bedrock lands, quality-tested first. The owner's
   expectation for a whole rapid path is about 15 to 20 minutes.)* The option profile's
-  targets are set in task 3. A section is never left incomplete for time; "not found" is a content
+  targets are set in task 3. *(The longlist's targets, [task 045 contract](../tasks/045-scoping-longlist/contract.md), D2 — owner: "start there,
+  measure, I'll set it after"; "cap at 15, run the live check at rapid":)* the broad search acquires
+  **50 per search backend at standard and 25 at rapid**; each **option search** acquires **10 per
+  backend**; a longlist walk runs **at most 15 option searches**, the user's own options and those
+  drawn from the linked report always run and the model's suggestions fill the rest; they run **in
+  parallel at width 4** under a cross-walk bound (D6; owner: "parallel at width 4, build the
+  cross-walk bound in this task"). The expected pool at standard is about 350 to 450 documents, at
+  rapid about half; the owner sets the final numbers after measurement. A section is never left incomplete for time; "not found" is a content
   state (OS ruling 40). No rapid number is promised until the real path is timed; the plan shows a
   coarse time band (OS open question 3 stays open).
 

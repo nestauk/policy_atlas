@@ -27,7 +27,7 @@ Downgrade — the refusal (A5, C15)
     row. Archiving is not a remedy: an archived task keeps its row. So the
     downgrade **refuses** while any ``task`` or ``capability_run`` row carries
     ``options_scoping``, and names the operator script that removes them
-    (``scripts/ops_remove_scoping_tasks.py --apply``). Once none remain, the
+    (``scripts/ops_remove_scoping_tasks.py --task-id <id> --apply``). Once none remain, the
     drops run in reverse order.
 
 Revision ID: b5e1d7a4c026
@@ -57,7 +57,7 @@ _REFUSAL = (
     "capability_run row(s) still carry capability 'options_scoping'. "
     "Dropping task.capability would silently reclassify them as Evidence "
     "searches, and archiving keeps the row. Remove them first with "
-    "'python scripts/ops_remove_scoping_tasks.py --apply' (it lists what it "
+    "'python scripts/ops_remove_scoping_tasks.py --task-id <id> --apply' (it lists what it "
     "would delete without the flag), then run the downgrade again."
 )
 

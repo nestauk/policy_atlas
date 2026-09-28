@@ -23,6 +23,15 @@ COMPONENT_REGISTRY: dict[str, dict[str, list[str]]] = {
     # synthesise: all four run references optional — deepest-given resolves
     # the rest transitively at execution.
     "synthesise": {"requires": ["evidence_scope_id"]},
+    # Options scoping, task 045 (ADR 0039). Each reads the walk's intent
+    # record only: ``extract_interventions`` is the selection-free profile
+    # (no ``selection_run_id`` — which is why it is a component and not a
+    # directive on ``extract``).
+    "inherit": {"requires": ["evidence_scope_id"]},
+    "suggest": {"requires": ["evidence_scope_id"]},
+    "extract_interventions": {"requires": ["evidence_scope_id"]},
+    "longlist": {"requires": ["evidence_scope_id"]},
+    "constrain": {"requires": ["evidence_scope_id"]},
 }
 VALID_COMPONENTS = set(COMPONENT_REGISTRY.keys())
 

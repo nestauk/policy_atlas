@@ -39,6 +39,10 @@ _REFERENCES_TAIL = (
 )
 
 
+#: Owns every seeded task, so inherit's build-time read check (review S1) passes.
+OWNER = "inherit-owner"
+
+
 def _make_task(conn: Connection, *, name: str, capability: str = "evidence_search") -> uuid.UUID:
     task_id = uuid.uuid4()
     conn.execute(
@@ -49,6 +53,7 @@ def _make_task(conn: Connection, *, name: str, capability: str = "evidence_searc
             status="active",
             updated_at=now(),
             capability=capability,
+            owner_user_id=OWNER,
         )
     )
     return task_id

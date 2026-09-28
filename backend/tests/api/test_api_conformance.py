@@ -48,6 +48,9 @@ _CONDITIONALLY_PUBLIC_GETS = frozenset(
         "/api/v1/tasks/{task_id}/coverage",
         "/api/v1/tasks/{task_id}/citations/{citation_key}/context",
         "/api/v1/tasks/{task_id}/chunks/{chunk_id}/context",
+        # Task 045 (S12): the longlist and the option card, public like the artefact.
+        "/api/v1/tasks/{task_id}/longlist",
+        "/api/v1/tasks/{task_id}/options/{option_id}",
     }
 )
 
@@ -61,6 +64,8 @@ _PUBLIC_STRUCTURAL_GETS = _CONDITIONALLY_PUBLIC_GETS - frozenset(
         "/api/v1/tasks/{task_id}/coverage",
         "/api/v1/tasks/{task_id}/citations/{citation_key}/context",
         "/api/v1/tasks/{task_id}/chunks/{chunk_id}/context",
+        "/api/v1/tasks/{task_id}/longlist",
+        "/api/v1/tasks/{task_id}/options/{option_id}",
     }
 )
 

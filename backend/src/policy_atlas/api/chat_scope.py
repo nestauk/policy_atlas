@@ -9,13 +9,21 @@ appraisal, classification, tags, screening, coverage, ``docs_by_tag``, and
 ``tag_aggregate`` are snapshot-bound to every component-run id in that walk.
 All of those currently carry a creating-run key, so no structured lookup kind
 is scope-wide-by-necessity.
+
+**An options-scoping task's scope set** (task 045, S11, A8; ADR 0039
+decision 5): once a longlist exists the chat — the ordinary task chat and
+the Task Agent's longlist questions alike — answers over the walk that built
+it **and** every option search's targeted scope, so an added option's own
+documents are reachable; before that, over the baseline walk. A document in
+two of those scopes is one document under the precedence rule
+(``build_retrieval_scope``).
 """
 
 from __future__ import annotations
 
 import uuid
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
 from sqlalchemy import select
@@ -23,7 +31,14 @@ from sqlalchemy.engine import Connection, Engine
 
 from policy_atlas.core import events
 from policy_atlas.core.embeddings import EmbeddingBackend, StubEmbeddingBackend
-from policy_atlas.core.schema import capability_run, grouping_result, runs, selection_result
+from policy_atlas.core.schema import (
+    capability_run,
+    evidence_scope,
+    grouping_result,
+    longlist_result,
+    runs,
+    selection_result,
+)
 from policy_atlas.evidence_search.synthesis.synthesis_tools import (
     ChunkRetriever,
     PassThroughChunkReranker,
@@ -33,6 +48,12 @@ from policy_atlas.evidence_search.synthesis.synthesis_tools import (
     make_findings_reader,
     make_lookup_reader,
 )
+from policy_atlas.options_scoping.labels import labels_for_snapshots
+from policy_atlas.runtime.capability_registry import OPTIONS_SCOPING, capability_of_task
+from policy_atlas.runtime.scoping_plan import TARGETED_PURPOSE
+
+#: A walk whose evidence a chat may answer over.
+_TERMINAL = ("succeeded", "degraded")
 
 
 @dataclass(frozen=True)
@@ -46,6 +67,13 @@ class ResolvedRunScope:
         selection_run_id: Latest successful selection attempt.
         extraction_run_id: Latest successful extraction attempt.
         grouping_run_id: Latest successful grouping attempt.
+        extra_scope_ids: Further evidence scopes the readers span — an
+            options-scoping task's option searches (task 045, S11). Empty
+            for every other scope.
+        resolve_labels: Whether a document with no label in its own scope
+            takes the label resolver's (``options_scoping.labels``) — an
+            inherited document on a longlist carries its linked task's labels
+            and is never re-classified or re-appraised there.
     """
 
     capability_run_id: uuid.UUID
@@ -54,6 +82,8 @@ class ResolvedRunScope:
     selection_run_id: uuid.UUID | None
     extraction_run_id: uuid.UUID | None
     grouping_run_id: uuid.UUID | None
+    extra_scope_ids: tuple[uuid.UUID, ...] = ()
+    resolve_labels: bool = False
 
 
 def resolve_terminal_run_components(
@@ -61,7 +91,13 @@ def resolve_terminal_run_components(
 ) -> ResolvedRunScope | None:
     """Resolve the latest completed walk's terminal component attempts.
 
-    Selects the walk; ``_resolve_components`` does the reduction.
+    Selects the walk; ``_resolve_components`` does the reduction. An Evidence
+    search reads its latest completed walk, as it always has. An
+    options-scoping task reads what exists (task 045, S11, A8): once a
+    ``longlist_result`` exists, the completed walk that built the latest one,
+    with every option search's targeted scope as an extra scope; before that,
+    its latest completed walk that is neither a child nor an option search
+    (the baseline walk).
 
     Args:
         engine: Database engine used for this short-lived read.
@@ -71,10 +107,12 @@ def resolve_terminal_run_components(
         The resolved terminal scope, or ``None`` when no completed walk exists.
     """
     with engine.connect() as conn:
+        if capability_of_task(conn, task_id) == OPTIONS_SCOPING:
+            return _resolve_scoping(conn, task_id=task_id)
         cap_row = conn.execute(
             select(capability_run)
             .where(capability_run.c.task_id == task_id)
-            .where(capability_run.c.status.in_(("succeeded", "degraded")))
+            .where(capability_run.c.status.in_(_TERMINAL))
             .order_by(
                 capability_run.c.started_at.desc(), capability_run.c.capability_run_id.desc()
             )
@@ -83,6 +121,84 @@ def resolve_terminal_run_components(
         if cap_row is None:
             return None
         return _resolve_components(conn, task_id=task_id, cap=dict(cap_row._mapping))
+
+
+def _resolve_scoping(conn: Connection, *, task_id: uuid.UUID) -> ResolvedRunScope | None:
+    """Resolve an options-scoping task's chat scope: the longlist set, else the baseline."""
+    longlist_walk = conn.execute(
+        select(capability_run)
+        .select_from(
+            longlist_result.join(
+                runs,
+                (runs.c.run_id == longlist_result.c.run_id)
+                & (runs.c.task_id == longlist_result.c.task_id),
+            ).join(
+                capability_run,
+                (capability_run.c.capability_run_id == runs.c.capability_run_id)
+                & (capability_run.c.task_id == runs.c.task_id),
+            )
+        )
+        .where(longlist_result.c.task_id == task_id)
+        .where(capability_run.c.status.in_(_TERMINAL))
+        .order_by(longlist_result.c.created_at.desc(), longlist_result.c.longlist_result_id)
+        .limit(1)
+    ).one_or_none()
+    if longlist_walk is not None:
+        resolved = _resolve_components(conn, task_id=task_id, cap=dict(longlist_walk._mapping))
+        return replace(
+            resolved,
+            extra_scope_ids=targeted_scope_ids(conn, task_id=task_id),
+            resolve_labels=True,
+        )
+    baseline = conn.execute(
+        select(capability_run)
+        .select_from(
+            capability_run.join(
+                evidence_scope,
+                (evidence_scope.c.evidence_scope_id == capability_run.c.evidence_scope_id)
+                & (evidence_scope.c.task_id == capability_run.c.task_id),
+            )
+        )
+        .where(capability_run.c.task_id == task_id)
+        .where(capability_run.c.status.in_(_TERMINAL))
+        .where(capability_run.c.parent_capability_run_id.is_(None))
+        .where(evidence_scope.c.purpose.is_distinct_from(TARGETED_PURPOSE))
+        .order_by(capability_run.c.started_at.desc(), capability_run.c.capability_run_id.desc())
+        .limit(1)
+    ).one_or_none()
+    if baseline is None:
+        return None
+    return _resolve_components(conn, task_id=task_id, cap=dict(baseline._mapping))
+
+
+def targeted_scope_ids(conn: Connection, *, task_id: uuid.UUID) -> tuple[uuid.UUID, ...]:
+    """Return every option search's targeted scope on a task, oldest first.
+
+    The children of the longlist walks (a rebuild searches only its new
+    entrants, so an earlier walk's children still hold the other options'
+    documents) and every parentless option search the verb *add* opened.
+
+    Args:
+        conn: Open read connection.
+        task_id: The options-scoping task.
+
+    Returns:
+        The distinct targeted scope ids, in walk start order.
+    """
+    rows = conn.execute(
+        select(capability_run.c.evidence_scope_id)
+        .select_from(
+            capability_run.join(
+                evidence_scope,
+                (evidence_scope.c.evidence_scope_id == capability_run.c.evidence_scope_id)
+                & (evidence_scope.c.task_id == capability_run.c.task_id),
+            )
+        )
+        .where(capability_run.c.task_id == task_id)
+        .where(evidence_scope.c.purpose == TARGETED_PURPOSE)
+        .order_by(capability_run.c.started_at, capability_run.c.capability_run_id)
+    ).scalars()
+    return tuple(dict.fromkeys(rows))
 
 
 def resolve_run_components(
@@ -232,7 +348,10 @@ def build_chat_readers(
             task_id=task_id,
             scope_id=scope.evidence_scope_id,
             selected_tss_ids=selected_tss_ids,
+            extra_scope_ids=scope.extra_scope_ids,
         )
+        if scope.resolve_labels:
+            _fill_resolved_labels(conn, task_id=task_id, docs=retrieval_scope.docs)
         terminal_run_ids = set(
             conn.execute(
                 select(runs.c.run_id)
@@ -240,6 +359,22 @@ def build_chat_readers(
                 .where(runs.c.capability_run_id == scope.capability_run_id)
             ).scalars()
         )
+        if scope.extra_scope_ids:
+            # The option searches' own component runs belong to the snapshot too.
+            terminal_run_ids |= set(
+                conn.execute(
+                    select(runs.c.run_id)
+                    .select_from(
+                        runs.join(
+                            capability_run,
+                            (capability_run.c.capability_run_id == runs.c.capability_run_id)
+                            & (capability_run.c.task_id == runs.c.task_id),
+                        )
+                    )
+                    .where(runs.c.task_id == task_id)
+                    .where(capability_run.c.evidence_scope_id.in_(scope.extra_scope_ids))
+                ).scalars()
+            )
 
     retriever = ChunkRetriever(
         retrieval_scope,
@@ -260,6 +395,7 @@ def build_chat_readers(
                 extraction_run_id=scope.extraction_run_id,
                 grouping_run_id=scope.grouping_run_id,
                 snapshot_run_ids=terminal_run_ids,
+                extra_scope_ids=scope.extra_scope_ids,
             )(arguments)
 
     if scope.extraction_run_id is None:
@@ -286,3 +422,32 @@ def build_chat_readers(
             )(arguments)
 
     return retriever, findings_reader, lookup_reader
+
+
+def _fill_resolved_labels(
+    conn: Connection, *, task_id: uuid.UUID, docs: dict[str, dict[str, Any]]
+) -> None:
+    """Give an unlabelled document the label resolver's labels, in place.
+
+    A document inherited from a linked Evidence search task is neither
+    classified nor appraised again in the longlist scope (task 045, S6); its
+    labels are read across through the resolver, the same one the citations
+    use. Without this the retriever would read it as unappraised, and the
+    citation floor would refuse a citation to it.
+    """
+    missing = {
+        uuid.UUID(tss_id): doc
+        for tss_id, doc in docs.items()
+        if doc.get("appraisal_tier") is None or doc.get("primary_evidence_type") is None
+    }
+    if not missing:
+        return
+    labels = labels_for_snapshots(conn, task_id=task_id, tss_ids=set(missing))
+    for tss_id, doc in missing.items():
+        label = labels.get(tss_id)
+        if label is None:
+            continue
+        if doc.get("appraisal_tier") is None and label.quality_score is not None:
+            doc["appraisal_tier"] = str(label.quality_score)
+        if doc.get("primary_evidence_type") is None and label.evidence_type is not None:
+            doc["primary_evidence_type"] = label.evidence_type

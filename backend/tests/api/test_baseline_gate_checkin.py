@@ -23,12 +23,11 @@ from policy_atlas.api.continuation import (
     InvalidResponseError,
     answer_check_in,
     claim_continuation,
-    execute_continuation,
 )
 from policy_atlas.core import events
 from policy_atlas.core.schema import capability_run, task, task_plan
 from policy_atlas.runtime.baseline_gate import GATE_HEADING
-from policy_atlas.runtime.runner import NullIO, WalkParked
+from policy_atlas.runtime.runner import WalkParked
 from policy_atlas.runtime.scoping_plan import BASELINE_CONFIRM
 from tests.api.resource_support import api_client
 from tests.runtime.test_baseline_gate import (
@@ -112,8 +111,9 @@ def _own(engine: Engine, task_id: uuid.UUID, headers: dict[str, str]) -> None:
 # --- confirm ----------------------------------------------------------------
 
 
-def test_confirm_plan_finishes_the_walk_succeeded(engine: Engine) -> None:
-    """The confirm option is an ordinary ``continue``: the walk ends by running out."""
+def test_confirm_plan_ends_the_walk_and_asks_for_the_longlist(engine: Engine) -> None:
+    """Task 045 (S3): the confirm option ends the walk itself — no continuation —
+    and hands the caller the follow-on that opens the longlist walk."""
     task_id: uuid.UUID | None = None
     try:
         task_id, capability_run_id, check_in_id, _plan_id = _park_at_gate(engine)
@@ -124,18 +124,11 @@ def test_confirm_plan_finishes_the_walk_succeeded(engine: Engine) -> None:
             response=_option("confirm_plan"),
             actor="user-1",
         )
-        assert answer.continuation_requested is True
+        assert answer.continuation_requested is False
+        assert answer.follow_on == "longlist"
         assert claim_continuation(
             engine, task_id=task_id, capability_run_id=capability_run_id
-        ) is not None
-        outcome = execute_continuation(
-            engine,
-            task_id=task_id,
-            capability_run_id=capability_run_id,
-            backends=_runner_backends(),
-            io=NullIO(),
-        )
-        assert outcome.status == "succeeded"
+        ) is None
         with engine.connect() as conn:
             assert (
                 conn.execute(
@@ -151,6 +144,7 @@ def test_confirm_plan_finishes_the_walk_succeeded(engine: Engine) -> None:
             if payload.get("component") == "synthesise"
         )
         assert decision["response"] == "continue"
+        assert decision["action"] == "confirm_plan"
         assert decision["plan_version"] == 1
         uuid.UUID(decision["artefact_id"])
     finally:

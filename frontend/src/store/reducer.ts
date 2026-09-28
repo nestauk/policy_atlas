@@ -24,6 +24,13 @@ import {
  * carry no `sequence` at all, update only the transient `liveness` slice,
  * and never advance `lastSequence`.
  */
+/** Task 045 (A3): a stage frame names its walk; one from a different walk
+ *  than the tracked run (a longlist walk's option search) is not this
+ *  timeline's. A frame without a run id (older events) still applies. */
+function isOtherRunsStage(state: RunStreamState, runId: string | null): boolean {
+  return runId !== null && state.run !== null && runId !== state.run.id;
+}
+
 export function reduceRunStreamFrame(state: RunStreamState, frame: SseFrame): RunStreamState {
   if (frame.type === "tick") {
     const key = frame.stage ?? GLOBAL_LIVENESS_KEY;
@@ -55,6 +62,28 @@ export function reduceRunStreamFrame(state: RunStreamState, frame: SseFrame): Ru
       // currently tracks is a fresh walk — its timeline must not inherit
       // the previous (possibly interrupted) run's stage entries or liveness.
       const current = base.run;
+      // Task 045 (S12): a longlist walk's option searches are child walks on
+      // the same task stream. A different run's frame while the tracked walk
+      // is still running or paused can only be such a child (the admission
+      // fences never open a second parentless walk beside a live one), so it
+      // is recorded but never becomes the live run.
+      // Task 045 (A9): a child seen that way stays a child — its late
+      // terminal frame, arriving after the walk itself has finished, must not
+      // replace the walk as the tracked run.
+      if (
+        (current !== null &&
+          current.id !== frame.capability_run_id &&
+          (current.status === "running" || current.status === "paused")) ||
+        base.childRunIds.includes(frame.capability_run_id)
+      ) {
+        return {
+          ...base,
+          runs: { ...base.runs, [frame.capability_run_id]: frame.status },
+          childRunIds: base.childRunIds.includes(frame.capability_run_id)
+            ? base.childRunIds
+            : [...base.childRunIds, frame.capability_run_id],
+        };
+      }
       const isNewRun = frame.status === "running" && frame.capability_run_id !== current?.id;
       const sameRun = current !== null && current.id === frame.capability_run_id;
       const isTerminal =
@@ -83,6 +112,7 @@ export function reduceRunStreamFrame(state: RunStreamState, frame: SseFrame): Ru
     }
 
     case "stage.started":
+      if (isOtherRunsStage(base, frame.capability_run_id)) return base;
       return {
         ...base,
         stages: [
@@ -92,6 +122,7 @@ export function reduceRunStreamFrame(state: RunStreamState, frame: SseFrame): Ru
       };
 
     case "stage.completed":
+      if (isOtherRunsStage(base, frame.capability_run_id)) return base;
       return {
         ...base,
         stages: replaceStartedStage(base.stages, frame.stage, {
@@ -107,6 +138,7 @@ export function reduceRunStreamFrame(state: RunStreamState, frame: SseFrame): Ru
       // The pinned stage-entry shape (task 025 §4) has no `reason` field —
       // the failure reason travels in `summary` instead, the one bucket
       // already typed to hold an arbitrary string value.
+      if (isOtherRunsStage(base, frame.capability_run_id)) return base;
       return {
         ...base,
         stages: replaceStartedStage(base.stages, frame.stage, {

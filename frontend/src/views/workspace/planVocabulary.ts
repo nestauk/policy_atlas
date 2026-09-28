@@ -320,10 +320,33 @@ const CONSTRAINT_KIND_EFFECT: Record<ScopingConstraint["kind"], string> = {
     'Other documents are set aside and counted. Known options stay, marked "no in-scope evidence" if none of their evidence is in scope.',
 };
 
+/** The "What happens" sentence for a code-minted default constraint (task
+ *  045, D22), replacing its kind's sentence: the transferability preference
+ *  gets no reasoned guess before assessment, so the preference sentence
+ *  ("a labelled guess") would be wrong for it. */
+const DEFAULT_CONSTRAINT_EFFECT: Record<string, string> = {
+  transferability:
+    "Read at assessment for whether each option's evidence carries to your Where. No guess before then.",
+};
+
+/** The rider shown beside a default constraint's text (task 045, D22). */
+export const DEFAULT_CONSTRAINT_RIDER: Record<string, string> = {
+  transferability: "checked at assessment · assumed",
+};
+
+/** "Options you already have in mind" (task 045, D19). */
+export const YOUR_OPTIONS_TITLE = "Options you already have in mind";
+export const YOUR_OPTIONS_NONE = "None";
+export const YOUR_OPTIONS_DESIGN_LABEL = "Proposed design";
+export const YOUR_OPTIONS_DESIGN_PENDING = "No design yet";
+export const YOUR_OPTIONS_ASSUMED_TAG = "assumed";
+
 /** One constraint row's "What happens" text, plus the not-yet-applied
  *  language rider when the constraint names languages (C8). */
 export function constraintEffectLines(constraint: ScopingConstraint): string[] {
-  const lines = [CONSTRAINT_KIND_EFFECT[constraint.kind]];
+  const defaultEffect =
+    constraint.default != null ? DEFAULT_CONSTRAINT_EFFECT[constraint.default] : undefined;
+  const lines = [defaultEffect ?? CONSTRAINT_KIND_EFFECT[constraint.kind]];
   if (constraint.languages != null && constraint.languages.length > 0) {
     lines.push("Language: not yet applied at retrieval");
   }

@@ -11,10 +11,20 @@ what should change, where, and against which outcomes — each tagged with where
 it came from, so a thin-context plan stays honest (a guess shown as a guess is
 a fine plan; a guess shown as a fact is not).
 
-The chain it compiles to is fixed: ``acquire → screen_abstract → classify →
-appraise → ingest_full_text → synthesise``, with synthesise in baseline mode.
-Only the baseline runs in this slice; the longlist and the shortlist are
-described in :data:`SCOPING_STEPS` and not composed.
+The chain it compiles to is chosen by the intent record's ``purpose`` (task
+045, ADR 0039 decision 2) and is otherwise fixed:
+
+- ``baseline`` (or no purpose): ``acquire → screen_abstract → classify →
+  appraise → ingest_full_text → synthesise``, with synthesise in baseline mode;
+- ``longlist``: ``inherit → suggest → acquire → screen_abstract → classify →
+  appraise → ingest_full_text → extract_interventions → longlist →
+  constrain`` — the option searches are dispatched and joined by the runner,
+  not by a component;
+- ``targeted`` (one option search, a child walk): ``acquire →
+  screen_abstract → classify → appraise → ingest_full_text →
+  extract_interventions``.
+
+The shortlist is described in :data:`SCOPING_STEPS` and not composed.
 
 This module deliberately does **not** import the capability registry (the
 registry imports the plan models, so the dependency runs one way only). The
@@ -26,11 +36,16 @@ the registry's ``options_scoping`` entry.
 from __future__ import annotations
 
 import uuid
-from typing import Annotated, Any, Literal, Self
+from typing import TYPE_CHECKING, Annotated, Any, Literal, Self
 
+import structlog
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from policy_atlas.api.contract.task_agent import PlanStep
+from policy_atlas.evidence_search.assess.screen import (
+    ScreenDirectiveError,
+    _compose_screen_intent,
+)
 from policy_atlas.evidence_search.sourcing.country_filters import TIER1_GROUPS
 from policy_atlas.evidence_search.synthesis.baseline_prompt import (
     BASELINE_PROPOSED_SECTIONS_MAX,
@@ -38,6 +53,14 @@ from policy_atlas.evidence_search.synthesis.baseline_prompt import (
     BASELINE_TEMPLATE_KEY,
     SOURCES_SECTION_NAV_LABEL,
     SOURCES_SECTION_TITLE,
+)
+from policy_atlas.options_scoping.design import OptionDesign
+from policy_atlas.options_scoping.longlist_intent import (
+    compile_longlist_intent,
+    longlist_screening_criteria,
+)
+from policy_atlas.options_scoping.suggest.suggest_prompt import (
+    SUGGEST_BOUND as _PROMPT_SUGGEST_BOUND,
 )
 from policy_atlas.runtime.task_agent_scoping_prompt import (
     ScopingConstraintWire,
@@ -52,6 +75,11 @@ from policy_atlas.runtime.task_plan import (
     SteeringMode,
     _require_clean_string,
 )
+
+if TYPE_CHECKING:
+    from policy_atlas.runtime.agent_backend import AgentBackend
+
+log = structlog.get_logger()
 
 #: Where one plan field came from. Shown to the user beside the field.
 Origin = Literal["from_your_question", "assumed", "your_call"]
@@ -87,6 +115,26 @@ BASELINE_CONFIRM = "baseline_confirm"
 #: on depth (owner, 2026-09-17: "targets 20 and 10").
 BASELINE_ACQUISITION_TARGETS: dict[str, int] = {"standard": 20, "rapid": 10}
 
+#: The broad search's per-backend acquisition target by depth (contract §
+#: Plan object "Compile constants", D2). Measured in the build; the numbers
+#: are the owner's after measurement.
+LONGLIST_ACQUISITION_TARGETS: dict[str, int] = {"standard": 50, "rapid": 25}
+
+#: One option search's per-backend acquisition target (D2), at either depth.
+OPTION_SEARCH_TARGET = 10
+
+#: At most this many option searches per longlist walk (A16): the user's own
+#: options and the report-derived ones always run, suggestions fill the rest.
+OPTION_SEARCH_CAP = 15
+
+#: How many option searches run at once (the cross-walk bound's width).
+OPTION_SEARCH_WIDTH = 4
+
+#: The suggest step proposes at most this many options (D7), within the cap.
+#: The prompt module's constant is the value; re-exported here beside the
+#: other compile constants.
+SUGGEST_BOUND = _PROMPT_SUGGEST_BOUND
+
 #: The coarse band the plan document shows. Replaced by the lead after the
 #: Phase 7 measurement; never a promise of a number.
 BASELINE_TIME_BAND = "A few minutes · then a check-in"
@@ -94,7 +142,32 @@ BASELINE_TIME_BAND = "A few minutes · then a check-in"
 #: The default jurisdiction, tagged ``assumed`` so the user is asked to check it.
 DEFAULT_WHERE_TEXT = "United Kingdom"
 
-#: The six components a scoping walk runs in this slice.
+#: The marker of a code-minted default constraint (task 045, D22). One value
+#: in this slice: the transferability preference every scoping plan carries.
+DefaultPreference = Literal["transferability"]
+
+#: The default transferability preference's marker.
+TRANSFERABILITY_DEFAULT: DefaultPreference = "transferability"
+
+
+def default_transferability_text(where_text: str) -> str:
+    """Return the default preference's text for a Where (D22).
+
+    Args:
+        where_text: The plan's Where.
+
+    Returns:
+        "Transferable to <Where>".
+    """
+    return f"Transferable to {where_text}"
+
+#: The intent-record purposes that select a chain. ``variant`` (admitted by
+#: ``ck_scope_purpose``) is task 3's and composes nothing yet.
+BASELINE_PURPOSE = "baseline"
+LONGLIST_PURPOSE = "longlist"
+TARGETED_PURPOSE = "targeted"
+
+#: The six components a scoping baseline walk runs.
 SCOPING_SPINE: tuple[str, ...] = (
     "acquire",
     "screen_abstract",
@@ -102,6 +175,33 @@ SCOPING_SPINE: tuple[str, ...] = (
     "appraise",
     "ingest_full_text",
     "synthesise",
+)
+
+#: The longlist walk's chain, with each step's spine flag (A6, P16b; owner:
+#: "inherit non-spine"). ``inherit`` and ``suggest`` degrade the walk when they
+#: fail; every other step fails it.
+LONGLIST_CHAIN: tuple[tuple[str, bool], ...] = (
+    ("inherit", False),
+    ("suggest", False),
+    ("acquire", True),
+    ("screen_abstract", True),
+    ("classify", True),
+    ("appraise", True),
+    ("ingest_full_text", True),
+    ("extract_interventions", True),
+    ("longlist", True),
+    ("constrain", True),
+)
+
+#: One option search's chain (a child walk). Every step is spine *for the
+#: child*; the child's failure only degrades its parent (the runner's join).
+TARGETED_CHAIN: tuple[str, ...] = (
+    "acquire",
+    "screen_abstract",
+    "classify",
+    "appraise",
+    "ingest_full_text",
+    "extract_interventions",
 )
 
 #: The three steps the plan document shows. Code-supplied, never authored by
@@ -120,9 +220,9 @@ SCOPING_STEPS: tuple[PlanStep, ...] = (
     PlanStep(
         label="Longlist",
         blurb=(
-            "Retrieve, screen on titles and abstracts, read each abstract for "
-            "the interventions it names, cluster the mentions into options, "
-            "apply the constraints. Not in this release."
+            "Suggest options, search widely, read every abstract for the "
+            "interventions it covers, cluster them into options, apply your "
+            "constraints."
         ),
         stage="acquire",
     ),
@@ -184,6 +284,12 @@ class ScopingConstraint(BaseModel):
         published_before: ISO date ceiling for a year restriction.
         languages: Language names. **Stored and shown as not yet applied at
             retrieval** — the ES search grammar has no language filter (C8).
+        setting: True only on a requirement that names the delivery setting
+            the options must be delivered through (D21). The longlist intent
+            carries such a requirement as its S; nothing else reads a setting.
+        default: The marker of a code-minted default constraint (D22), or
+            ``None`` for a constraint the user asked for. Only the default
+            transferability preference carries one in this slice.
     """
 
     model_config = ConfigDict(extra="forbid", strict=True)
@@ -196,6 +302,8 @@ class ScopingConstraint(BaseModel):
     published_after: str | None = None
     published_before: str | None = None
     languages: list[str] | None = None
+    setting: bool = False
+    default: DefaultPreference | None = None
 
     @field_validator("text")
     @classmethod
@@ -241,9 +349,17 @@ class ScopingConstraint(BaseModel):
             The validated constraint.
 
         Raises:
-            ValueError: If ``checked_at`` does not match ``kind``, or a
-                non-restriction carries a retrieval field.
+            ValueError: If ``checked_at`` does not match ``kind``, a
+                non-restriction carries a retrieval field, a setting is not a
+                requirement, or the transferability default is not a
+                preference.
         """
+        if self.setting and self.kind != "requirement":
+            raise ValueError(f"only a requirement may name a setting; kind is {self.kind!r}")
+        if self.default == TRANSFERABILITY_DEFAULT and self.kind != "preference":
+            raise ValueError(
+                f"the transferability default is a preference; kind is {self.kind!r}"
+            )
         expected = CHECKED_AT_BY_KIND[self.kind]
         if self.checked_at != expected:
             raise ValueError(
@@ -299,6 +415,44 @@ class YourContextEntry(BaseModel):
         """
         if not value.strip():
             raise ValueError("your_context.text must not be blank")
+        return value
+
+
+class YourOption(BaseModel):
+    """One option the user already has in mind (task 045, D19).
+
+    Args:
+        text: The user's words for the option, verbatim — never stripped,
+            never tidied.
+        design: The specified design ``option_design_v1`` proposed back from
+            the words, or ``None`` until it has been proposed. Dropped when
+            the words change, so it is proposed again.
+        turn_index: The Task Agent turn that approved the plan version the
+            option first appeared in.
+    """
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    text: str
+    design: OptionDesign | None = None
+    turn_index: int = Field(ge=0)
+
+    @field_validator("text")
+    @classmethod
+    def validate_text(cls, value: str) -> str:
+        """Validate the verbatim words.
+
+        Args:
+            value: Candidate text.
+
+        Returns:
+            The text, unchanged.
+
+        Raises:
+            ValueError: If it is blank.
+        """
+        if not value.strip():
+            raise ValueError("your_options.text must not be blank")
         return value
 
 
@@ -379,8 +533,13 @@ class ScopingPlan(BaseModel):
             acquisition target and whether proposed sections are allowed (D7
             as revised 2026-09-17); the seven sections are the same at both.
             Tasks 2 and 3 read it too.
-        constraints: Typed constraints and preferences.
+        constraints: Typed constraints and preferences, including the default
+            transferability preference unless the user removed it (D22).
         your_context: The user's own situation, verbatim.
+        your_options: Options the user already has in mind, verbatim, each
+            with its proposed design (D19). Optional.
+        removed_defaults: The default constraints the user removed. A
+            removed default is never minted again on a later version.
         entry_branch: ``explore`` is the only branch in this slice.
         linked_task_ids: The Evidence search tasks this plan starts from.
         steering_mode: As the ES. The scoping default is ``moderate``.
@@ -406,6 +565,8 @@ class ScopingPlan(BaseModel):
     depth: Literal["rapid", "standard"]
     constraints: list[ScopingConstraint] = Field(default_factory=list)
     your_context: list[YourContextEntry] = Field(default_factory=list)
+    your_options: list[YourOption] = Field(default_factory=list)
+    removed_defaults: list[DefaultPreference] = Field(default_factory=list)
     entry_branch: Literal["explore"] = "explore"
     # Lax for the same reason ``BaselineConfirmed`` is: the stored payload
     # carries these as strings. The relaxation must sit on the ITEM type — a
@@ -455,6 +616,25 @@ class ScopingPlan(BaseModel):
             ValueError: If an entry is empty or padded with whitespace.
         """
         return [_require_clean_string(value, field_name="assumptions") for value in values]
+
+    @model_validator(mode="after")
+    def validate_default_constraints(self) -> Self:
+        """Carry each default constraint at most once, and never a removed one.
+
+        Returns:
+            The validated plan.
+
+        Raises:
+            ValueError: If a default is carried twice, or carried after the
+                user removed it.
+        """
+        markers = [c.default for c in self.constraints if c.default is not None]
+        if len(set(markers)) != len(markers):
+            raise ValueError("a default constraint may appear only once")
+        revived = set(markers) & set(self.removed_defaults)
+        if revived:
+            raise ValueError(f"removed default constraints are carried again: {sorted(revived)}")
+        return self
 
     @model_validator(mode="after")
     def validate_standing_defaults(self) -> Self:
@@ -547,6 +727,7 @@ def _constraint_from_wire(wire: ScopingConstraintWire, index: int) -> ScopingCon
             "published_after": wire.published_after,
             "published_before": wire.published_before,
             "languages": wire.languages,
+            "setting": wire.setting,
         }
     )
 
@@ -638,6 +819,10 @@ def wire_draft_from_plan(plan: ScopingPlan) -> dict[str, Any]:
     payload = plan.model_dump(mode="json")
     constraints = []
     for c in payload.get("constraints", []):
+        # A code-minted default is the product's, never the Task Agent's
+        # (v3: "Never put it in your draft's constraints").
+        if c.get("default") is not None:
+            continue
         group = c.get("country_group")
         constraints.append(
             {
@@ -653,6 +838,7 @@ def wire_draft_from_plan(plan: ScopingPlan) -> dict[str, Any]:
                 "published_after": c.get("published_after"),
                 "published_before": c.get("published_before"),
                 "languages": c.get("languages"),
+                "setting": c.get("setting", False),
             }
         )
     return {
@@ -668,6 +854,7 @@ def wire_draft_from_plan(plan: ScopingPlan) -> dict[str, Any]:
             {"text": e["text"], "type": e["type"], "test_as_condition": e["test_as_condition"]}
             for e in payload.get("your_context", [])
         ],
+        "your_options": [{"text": o["text"]} for o in payload.get("your_options", [])],
         "steering_mode": payload.get("steering_mode"),
         "steer_point_defaults": [
             {"steer_point": d["steer_point"], "action": d["action"]}
@@ -678,24 +865,286 @@ def wire_draft_from_plan(plan: ScopingPlan) -> dict[str, Any]:
     }
 
 
+# --- The default transferability preference (task 045, D22) ---------------
+
+
+def find_default(plan: ScopingPlan, marker: DefaultPreference) -> ScopingConstraint | None:
+    """Return the plan's default constraint with ``marker``, if it carries one.
+
+    Args:
+        plan: The scoping plan.
+        marker: The default's marker.
+
+    Returns:
+        The constraint, or ``None`` when the plan does not carry it.
+    """
+    return next((c for c in plan.constraints if c.default == marker), None)
+
+
+def _mint_transferability(where_text: str) -> ScopingConstraint:
+    return ScopingConstraint(
+        text=default_transferability_text(where_text),
+        kind="preference",
+        origin="assumed",
+        checked_at="assessment",
+        default=TRANSFERABILITY_DEFAULT,
+    )
+
+
+def _follows_where(default: ScopingConstraint, where_text: str) -> bool:
+    """Whether a default's text is still the code-authored one for ``where_text``."""
+    return default.text == default_transferability_text(where_text)
+
+
+def default_preference_for(
+    where_text: str, previous: ScopingPlan | None
+) -> ScopingConstraint | None:
+    """Return the default transferability preference a new plan version carries.
+
+    The rule (D22): minted on every scoping plan; **follows Where until the
+    user edits it** (a previous default whose text is still the code-authored
+    one for the previous Where is re-texted to the new Where; an edited one is
+    kept as the user left it); **not re-minted** once the user removed it. A
+    plan from before the default existed (task 044) gets one minted on its
+    next version.
+
+    Args:
+        where_text: The new version's Where.
+        previous: The latest approved version, or ``None`` for the first.
+
+    Returns:
+        The constraint to carry, or ``None`` when the user removed it.
+    """
+    if previous is None:
+        return _mint_transferability(where_text)
+    if TRANSFERABILITY_DEFAULT in previous.removed_defaults:
+        return None
+    prior = find_default(previous, TRANSFERABILITY_DEFAULT)
+    if prior is None:
+        return _mint_transferability(where_text)
+    if _follows_where(prior, previous.where.text):
+        return prior.model_copy(update={"text": default_transferability_text(where_text)})
+    return prior
+
+
+def duplicates_default(constraint: ScopingConstraint) -> bool:
+    """Whether a Task Agent-authored constraint restates the transferability default.
+
+    The prompt tells the Task Agent never to author it; this is the code-side
+    fence for when it does anyway: a preference whose text begins
+    "Transferable to" is the default's family, and would double the row.
+
+    Args:
+        constraint: A constraint from the Task Agent's draft.
+
+    Returns:
+        True when the constraint should be dropped in favour of the default.
+    """
+    return constraint.kind == "preference" and constraint.text.casefold().startswith(
+        "transferable to"
+    )
+
+
+def settle_patched_defaults(patched: ScopingPlan, previous: ScopingPlan) -> ScopingPlan:
+    """Settle the default preference after a direct edit of an approved plan.
+
+    A patch replaces the constraint list outright, so here — unlike the
+    Task Agent's draft, which never carries the default — a missing default
+    **is** a removal and is recorded, so no later version mints it again. A
+    patch that carries the default back restores it. A default left
+    unedited keeps following Where: a Where edit re-texts it unless its text
+    was already the user's own.
+
+    Args:
+        patched: The merged plan, validated.
+        previous: The approved version the patch applied to.
+
+    Returns:
+        The plan with its default constraints and ``removed_defaults`` settled.
+    """
+    prior = find_default(previous, TRANSFERABILITY_DEFAULT)
+    current = find_default(patched, TRANSFERABILITY_DEFAULT)
+    removed = set(previous.removed_defaults) | set(patched.removed_defaults)
+    others = [c for c in patched.constraints if c.default is None]
+    if current is None:
+        if prior is not None:
+            removed.add(TRANSFERABILITY_DEFAULT)
+        elif TRANSFERABILITY_DEFAULT not in removed:
+            current = _mint_transferability(patched.where.text)
+    else:
+        removed.discard(TRANSFERABILITY_DEFAULT)
+        if (
+            prior is not None
+            and current.text == prior.text
+            and _follows_where(prior, previous.where.text)
+        ):
+            current = current.model_copy(
+                update={"text": default_transferability_text(patched.where.text)}
+            )
+    constraints = [*others, current] if current is not None else others
+    return ScopingPlan.model_validate(
+        {
+            **patched.model_dump(),
+            "constraints": [c.model_dump() for c in constraints],
+            "removed_defaults": sorted(removed),
+        }
+    )
+
+
+# --- Options you already have in mind (task 045, D19) -----------------------
+
+
+def merge_your_options(
+    texts: list[str], previous: list[YourOption], *, turn_index: int
+) -> list[YourOption]:
+    """Carry each option's design across a plan change, keyed by its verbatim words.
+
+    An option whose words are unchanged keeps its design and its turn; one
+    whose words changed (or that is new) starts with no design, so it is
+    proposed again (D19).
+
+    Args:
+        texts: The options' words, in order, as the new version states them.
+        previous: The previous version's options.
+        turn_index: The turn index a new option records.
+
+    Returns:
+        The new version's options, in ``texts`` order.
+    """
+    pool = list(previous)
+    merged: list[YourOption] = []
+    for text in texts:
+        match = next((option for option in pool if option.text == text), None)
+        if match is not None:
+            pool.remove(match)
+            merged.append(match)
+        else:
+            merged.append(YourOption(text=text, design=None, turn_index=turn_index))
+    return merged
+
+
+def propose_option_designs(
+    texts: list[str],
+    *,
+    question: str,
+    target_unit: str,
+    outcomes: list[str],
+    backend: AgentBackend,
+    session_id: uuid.UUID | None = None,
+) -> dict[str, OptionDesign]:
+    """Propose a design for each distinct text through ``option_design_v1``.
+
+    One judgment-model call per distinct text. A failed call is logged and the
+    text is left without a design — a plan approval never fails for a side
+    call — so a reader that needs a design (the longlist walk's entrants)
+    proposes it again through :func:`ensure_option_designs`.
+
+    Args:
+        texts: The options' words.
+        question: The plan's question.
+        target_unit: The plan's target unit.
+        outcomes: The plan's outcomes.
+        backend: The agent backend.
+        session_id: The Langfuse session (the task id).
+
+    Returns:
+        ``{text: design}`` for each text a design was proposed for.
+    """
+    designs: dict[str, OptionDesign] = {}
+    for text in dict.fromkeys(texts):
+        try:
+            wire = backend.propose_option_design(
+                text,
+                question=question,
+                target_unit=target_unit,
+                outcomes=outcomes,
+                session_id=session_id,
+            )
+            designs[text] = OptionDesign.from_wire(wire)
+        except Exception as exc:  # noqa: BLE001 - a side call never fails the approval
+            log.warning("option_design_failed", error_type=type(exc).__name__)
+    return designs
+
+
+def with_option_designs(plan: ScopingPlan, designs: dict[str, OptionDesign]) -> ScopingPlan:
+    """Return ``plan`` with each design-less option given its design from ``designs``.
+
+    Args:
+        plan: The scoping plan.
+        designs: Designs keyed by the options' verbatim words.
+
+    Returns:
+        The plan; unchanged when nothing applied.
+    """
+    if not any(o.design is None and o.text in designs for o in plan.your_options):
+        return plan
+    options = [
+        option.model_copy(update={"design": designs[option.text]})
+        if option.design is None and option.text in designs
+        else option
+        for option in plan.your_options
+    ]
+    return plan.model_copy(update={"your_options": options})
+
+
+def ensure_option_designs(
+    plan: ScopingPlan, backend: AgentBackend, *, session_id: uuid.UUID | None = None
+) -> ScopingPlan:
+    """Propose a design back for every option that has none yet (D19).
+
+    Called when a plan version is approved (the Task Agent turn that makes a
+    draft ready, and a direct plan edit), so a design exists when the plan is
+    confirmed; outside any transaction, since each proposal is a model call.
+
+    Args:
+        plan: The scoping plan.
+        backend: The agent backend.
+        session_id: The Langfuse session (the task id).
+
+    Returns:
+        The plan with designs filled wherever a proposal succeeded.
+    """
+    missing = [o.text for o in plan.your_options if o.design is None]
+    if not missing:
+        return plan
+    designs = propose_option_designs(
+        missing,
+        question=plan.question,
+        target_unit=plan.target_unit.text,
+        outcomes=[o.text for o in plan.outcomes],
+        backend=backend,
+        session_id=session_id,
+    )
+    return with_option_designs(plan, designs)
+
+
 def build_scoping_plan(
     draft: ScopingPlanDraftWire,
     *,
     linked_task_ids: list[uuid.UUID] | None = None,
     source_turn_index: int | None = None,
+    previous: ScopingPlan | None = None,
 ) -> ScopingPlan:
     """Build the executable scoping plan from a ready draft, fail-closed.
 
     Mirrors ``agent.build_plan``: the Task Agent's draft is loose (every field
     optional, every enum a bare string) and this is where it becomes a plan or
-    fails. It supplies the code-owned fields — the three steps, the time band
-    and the default ``where`` — which the prompt is explicitly told not to
-    author.
+    fails. It supplies the code-owned fields — the three steps, the time band,
+    the default ``where`` and the default transferability preference (D22) —
+    which the prompt is explicitly told not to author. A draft constraint that
+    restates the default is dropped while the plan carries it.
+
+    ``your_options`` carry their designs across versions by their verbatim
+    words (:func:`merge_your_options`); a new or reworded option has no design
+    until :func:`ensure_option_designs` proposes one. A draft that leaves
+    ``your_options`` null keeps the previous version's options.
 
     Args:
         draft: The Task Agent's ready plan draft.
         linked_task_ids: The tasks this plan starts from, from ``task_link``.
         source_turn_index: The turn that produced this payload.
+        previous: The latest approved version, or ``None`` for the first. It
+            carries the default's state and the options' designs forward.
 
     Returns:
         The validated scoping plan.
@@ -731,10 +1180,29 @@ def build_scoping_plan(
             _tagged_from_wire(item, field_name=f"outcomes[{i}]")
             for i, item in enumerate(draft.outcomes)
         ]
-    if draft.constraints is not None:
-        data["constraints"] = [
-            _constraint_from_wire(wire, index) for index, wire in enumerate(draft.constraints)
-        ]
+    constraints = [
+        _constraint_from_wire(wire, index) for index, wire in enumerate(draft.constraints or [])
+    ]
+    where_text = data["where"].text
+    default = default_preference_for(where_text, previous)
+    if default is not None:
+        duplicates = [c for c in constraints if duplicates_default(c)]
+        if duplicates:
+            log.warning("scoping_draft_default_duplicate_dropped", count=len(duplicates))
+        constraints = [c for c in constraints if not duplicates_default(c)]
+        constraints.append(default)
+    data["constraints"] = constraints
+    if previous is not None and previous.removed_defaults:
+        data["removed_defaults"] = list(previous.removed_defaults)
+    previous_options = previous.your_options if previous is not None else []
+    if draft.your_options is not None:
+        data["your_options"] = merge_your_options(
+            [option.text for option in draft.your_options],
+            previous_options,
+            turn_index=source_turn_index or 0,
+        )
+    elif previous_options:
+        data["your_options"] = list(previous_options)
     if draft.your_context is not None:
         data["your_context"] = [
             YourContextEntry.model_validate(
@@ -845,14 +1313,7 @@ def _screening_criteria(plan: ScopingPlan) -> list[str]:
 
 def _scoping_directive_delta(component: str, plan: ScopingPlan) -> dict[str, Any]:
     if component == "acquire":
-        search: dict[str, Any] = {
-            "depth": "rapid",
-            "record_cap": BASELINE_ACQUISITION_TARGETS[plan.depth],
-        }
-        filters = scope_constraints_for(plan).to_filters()
-        if filters:
-            search["filters"] = filters
-        return {"search": search}
+        return {"search": _search_directive(plan, BASELINE_ACQUISITION_TARGETS[plan.depth])}
     if component == "screen_abstract":
         return {"screening": {"criteria": _screening_criteria(plan)}}
     if component == "synthesise":
@@ -868,28 +1329,135 @@ def _scoping_directive_delta(component: str, plan: ScopingPlan) -> dict[str, Any
     return {}
 
 
-def compose_scoping(plan: ScopingPlan) -> ComposedChain:
-    """Compose an approved scoping plan into the fixed baseline chain.
+def _search_directive(plan: ScopingPlan, record_cap: int) -> dict[str, Any]:
+    """Return one acquire directive: the per-backend target and the restrictions.
+
+    The shape the baseline has always used (``search_loop`` admits only
+    ``depth · filters · guidance · record_cap``): one round at ``rapid`` —
+    multi-round search is an Evidence search dial — capped per backend, with
+    the plan's evidence restrictions as ``filters``.
+    """
+    search: dict[str, Any] = {"depth": "rapid", "record_cap": record_cap}
+    filters = scope_constraints_for(plan).to_filters()
+    if filters:
+        search["filters"] = filters
+    return search
+
+
+def compose_longlist_screen_intent(plan: ScopingPlan) -> str:
+    """Return the longlist screen's composed intent input, fail-closed.
+
+    The PICO-shaped intent plus the longlist screening criteria, through the
+    screen's own composer, so the 2,000-character ceiling is checked exactly
+    as the screen will check it (reject, never truncate). The start surfaces
+    call this before opening a longlist walk, so an over-long plan is refused
+    before any search is spent.
 
     Args:
         plan: The validated scoping plan.
 
     Returns:
-        The six-step chain ``acquire → screen_abstract → classify → appraise →
-        ingest_full_text → synthesise`` and nothing else. There are no
-        discretionary components. Depth (D7, revised 2026-09-17) changes the
-        acquire target and the proposed-section allowance inside the
-        directives, never the chain or the section list.
+        The composed screen intent.
+
+    Raises:
+        ValueError: If the composed string exceeds the screen's ceiling.
     """
-    return ComposedChain(
-        steps=[
-            ComponentStep(
-                component=component,
-                directive_delta=_scoping_directive_delta(component, plan),
-                reference_rule=(
-                    "deepest_successful_reference" if component == "synthesise" else None
-                ),
-            )
-            for component in SCOPING_SPINE
-        ]
-    )
+    try:
+        return _compose_screen_intent(
+            compile_longlist_intent(plan), longlist_screening_criteria(plan)
+        )
+    except ScreenDirectiveError as exc:
+        raise ValueError(str(exc)) from exc
+
+
+def _longlist_directive_delta(component: str, plan: ScopingPlan) -> dict[str, Any]:
+    """Return one longlist-chain step's directive delta.
+
+    The acquire carries the broad search's depth target and the evidence
+    restrictions; the screen carries the longlist screening criteria (target
+    unit, outcomes, setting when required, **no place** — D20, D21). The
+    PICO-shaped intent itself (:func:`compile_longlist_intent`) is the
+    longlist intent record's text, written by the start surface, not a
+    directive. The other steps' components read no directive.
+    """
+    if component == "acquire":
+        return {"search": _search_directive(plan, LONGLIST_ACQUISITION_TARGETS[plan.depth])}
+    if component == "screen_abstract":
+        return {"screening": {"criteria": longlist_screening_criteria(plan)}}
+    return {}
+
+
+def _targeted_directive_delta(component: str, plan: ScopingPlan) -> dict[str, Any]:
+    """Return one option search step's directive delta.
+
+    The acquire carries the option search target at either depth and the
+    evidence restrictions; the intent (the entrant's specified design,
+    ``OptionDesign.as_intent()``) is the targeted intent record's own, written
+    by the option search tool (S2). The screen still carries the plan's
+    criteria — target unit, outcomes, setting when required, no place — so an
+    option search screens for the same problem the longlist does.
+    """
+    if component == "acquire":
+        return {"search": _search_directive(plan, OPTION_SEARCH_TARGET)}
+    if component == "screen_abstract":
+        return {"screening": {"criteria": longlist_screening_criteria(plan)}}
+    return {}
+
+
+def compose_scoping(plan: ScopingPlan, purpose: str | None = None) -> ComposedChain:
+    """Compose an approved scoping plan into the chain its intent record names.
+
+    Args:
+        plan: The validated scoping plan.
+        purpose: The intent record's ``purpose``. ``None`` or ``"baseline"``
+            compose the baseline; ``"longlist"`` and ``"targeted"`` compose
+            the longlist walk's chain and one option search's chain.
+
+    Returns:
+        The composed chain. The baseline is the six-step chain ``acquire →
+        screen_abstract → classify → appraise → ingest_full_text →
+        synthesise``, unchanged, with no spine flags (the Evidence search
+        spine set applies). The longlist and targeted chains set ``spine`` on
+        every step. There are no discretionary components. Depth changes the
+        acquire targets and the proposed-section allowance inside the
+        directives, never a chain.
+
+    Raises:
+        ValueError: If the purpose names no chain this build composes.
+    """
+    if purpose is None or purpose == BASELINE_PURPOSE:
+        return ComposedChain(
+            steps=[
+                ComponentStep(
+                    component=component,
+                    directive_delta=_scoping_directive_delta(component, plan),
+                    reference_rule=(
+                        "deepest_successful_reference" if component == "synthesise" else None
+                    ),
+                )
+                for component in SCOPING_SPINE
+            ]
+        )
+    if purpose == LONGLIST_PURPOSE:
+        return ComposedChain(
+            steps=[
+                ComponentStep(
+                    component=component,
+                    directive_delta=_longlist_directive_delta(component, plan),
+                    spine=spine,
+                )
+                for component, spine in LONGLIST_CHAIN
+            ]
+        )
+    if purpose == TARGETED_PURPOSE:
+        return ComposedChain(
+            steps=[
+                ComponentStep(
+                    component=component,
+                    directive_delta=_targeted_directive_delta(component, plan),
+                    spine=True,
+                )
+                for component in TARGETED_CHAIN
+            ]
+        )
+    raise ValueError(f"no options-scoping chain for intent-record purpose {purpose!r}")

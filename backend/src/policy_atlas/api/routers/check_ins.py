@@ -26,12 +26,18 @@ from policy_atlas.api.deps import (
     get_executor,
     get_runner_backends,
 )
+from policy_atlas.api.longlist_start import (
+    LonglistRefused,
+    open_longlist_walk,
+    plan_row_of_walk,
+)
 from policy_atlas.api.routers._access import accessible_task
 from policy_atlas.api.run_io import ParkIO
 from policy_atlas.core import events, tracing
 from policy_atlas.core.schema import capability_run
 from policy_atlas.runtime.agent_backend import AgentBackend
 from policy_atlas.runtime.runner import RunnerBackends
+from policy_atlas.runtime.scoping_plan import LONGLIST_PURPOSE
 from policy_atlas.runtime.steering_history import steering_history
 
 log = structlog.get_logger()
@@ -233,6 +239,28 @@ def respond_to_check_in(
     except LookupError:
         raise HTTPException(status_code=404, detail="resource not found") from None
 
+    if result.follow_on == LONGLIST_PURPOSE:
+        # "Confirm plan and build longlist" (task 045, S3): the decision has
+        # committed; open the second walk without waiting for its row — the
+        # card route stays 204 (owner) and the thread learns of the walk from
+        # the run stream. A refusal leaves the durable decision standing and
+        # is logged, as on the chat path; the plan document's confirm action
+        # opens the walk later. It opens on the version the gate's walk ran —
+        # the one this decision confirmed — or not at all (A10).
+        try:
+            open_longlist_walk(
+                engine,
+                task_id=task_id,
+                plan_row=plan_row_of_walk(
+                    engine, task_id=task_id, capability_run_id=result.capability_run_id
+                ),
+                backends=backends,
+                executor=executor,
+                user_id=user.user_id,
+                await_run=False,
+            )
+        except LonglistRefused as exc:
+            log.warning("check_in_longlist_refused", task_id=str(task_id), reason=exc.reason)
     if result.continuation_requested:
         claim = continuation.claim_continuation(
             engine,

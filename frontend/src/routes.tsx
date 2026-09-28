@@ -6,6 +6,7 @@ import { ArtefactView } from "./views/ArtefactView";
 import { FindingsView } from "./views/FindingsView";
 import { HistoryView } from "./views/HistoryView";
 import { LifecycleRoute, RedirectToPath } from "./views/LifecycleRoute";
+import { OptionCard } from "./views/longlist/OptionCard";
 import { NewTaskView } from "./views/NewTaskView";
 import { ProjectDetailView, ProjectsView } from "./views/ProjectsView";
 import { ShareView } from "./views/ShareView";
@@ -108,6 +109,16 @@ export const authenticatedRouter = createBrowserRouter([
             element: (
               <LifecycleRoute tab="result">
                 <ArtefactView />
+              </LifecycleRoute>
+            ),
+          },
+          {
+            // Task 045 phase 6.2: the option card, one longlist option's
+            // full read. Result-tab gated, same as the longlist itself.
+            path: "/tasks/:taskId/options/:optionId",
+            element: (
+              <LifecycleRoute tab="result">
+                <OptionCard />
               </LifecycleRoute>
             ),
           },

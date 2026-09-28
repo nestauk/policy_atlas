@@ -26,6 +26,21 @@ STAGE_PRESENTATION: dict[StageKey, tuple[str, str]] = {
     "extract": ("Extracting findings", "Each claim is pulled out with its exact quote."),
     "group": ("Grouping findings", "Findings that answer the same question, together."),
     "synthesise": ("Writing the report", "Cited, checked, ready to challenge."),
+    "inherit": ("Reading the linked search", "Its documents and report join this task."),
+    "suggest": ("Suggesting options", "From the plan, the baseline and any linked report."),
+    "option_searches": (
+        "Searching for each option",
+        "One search per suggestion and per option of yours.",
+    ),
+    "extract_interventions": (
+        "Reading the abstracts",
+        "Which interventions each one covers, and how.",
+    ),
+    "longlist": ("Clustering into options", "Records grouped into options, options into themes."),
+    "constrain": (
+        "Applying your constraints",
+        "Every option checked against the plan's requirements.",
+    ),
 }
 
 STAGE_BY_REGISTRY: dict[str, StageKey] = {
@@ -39,6 +54,12 @@ STAGE_BY_REGISTRY: dict[str, StageKey] = {
     "extract": "extract",
     "group": "group",
     "synthesise": "synthesise",
+    "inherit": "inherit",
+    "suggest": "suggest",
+    "option_searches": "option_searches",
+    "extract_interventions": "extract_interventions",
+    "longlist": "longlist",
+    "constrain": "constrain",
 }
 
 

@@ -3,7 +3,7 @@ type: Invariant
 title: Cross-process turn correctness lives in the DB row, never in process-local state
 description: Chat-turn single-flight, cancel, and capacity are all decided by the chat_turn row's status under the task row lock. Process-local locks and registries are latency optimisations only — every one of the 029 review stack's race findings was a path where local state was treated as the authority.
 tags: [chat, concurrency, single-flight, cancel, idempotency, two-phase, invariant]
-timestamp: 2026-08-11
+timestamp: 2026-09-24
 ---
 
 # Rule
@@ -43,3 +43,12 @@ Every process-local registry in the chat path (`_turn_locks`, `_live_cancels`)
 is a hint, not a fence. When the workspace-cluster work multiplies API tasks,
 audit anything new that keeps per-process state about a durable row — the row
 must already tell the whole story without it.
+
+045 added more of it, recorded as a **single-process deployment constraint**
+(adversarial B10/B11): the longlist and add admission's `_dispatching_tasks` /
+`_search_reservations`, the option-search abandon set, and
+`longlist_walk_exists`'s "still queued" leg, which trusts an intent record
+only if this process minted it (`created_at >= _PROCESS_STARTED`). The
+durable halves are keyed on rows
+([walk-existence-reads-intent-record-and-status](walk-existence-reads-intent-record-and-status.md));
+the queued window is not.

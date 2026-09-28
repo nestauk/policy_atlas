@@ -2470,3 +2470,71 @@ def test_citation_context_starts_and_ends_on_whole_words(
             if task_id is not None:
                 with engine.begin() as conn:
                     delete_task_data(conn, task_id)
+
+
+def test_decisions_name_the_walk_of_their_event_run(engine: Engine) -> None:
+    """Task 045: a decision whose event carries a run names that run's walk, so
+    the thread can drop a hidden child walk's lines; a run with no walk and an
+    event with no run both leave it null."""
+    from policy_atlas.core.schema import capability_run, evidence_scope, task
+
+    task_id, scope_id, walk_id = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+    walked, loose = uuid.uuid4(), uuid.uuid4()
+    try:
+        with engine.begin() as conn:
+            conn.execute(
+                task.insert().values(
+                    task_id=task_id,
+                    name="Decision walks",
+                    status="active",
+                    created_at=now(),
+                    updated_at=now(),
+                )
+            )
+            conn.execute(
+                evidence_scope.insert().values(
+                    evidence_scope_id=scope_id,
+                    task_id=task_id,
+                    intent="intent",
+                    context={},
+                    created_at=now(),
+                )
+            )
+            conn.execute(
+                capability_run.insert().values(
+                    capability_run_id=walk_id,
+                    task_id=task_id,
+                    evidence_scope_id=scope_id,
+                    capability="evidence_search",
+                    plan_id=uuid.uuid4(),
+                    plan_version=1,
+                    status="running",
+                    started_at=now(),
+                )
+            )
+            for run_id, walk in ((walked, walk_id), (loose, None)):
+                conn.execute(
+                    runs.insert().values(
+                        run_id=run_id,
+                        task_id=task_id,
+                        status="running",
+                        started_at=now(),
+                        capability_run_id=walk,
+                    )
+                )
+            events.append(
+                conn, task_id=task_id, run_id=walked, event_type="search.executed", payload={}
+            )
+            events.append(
+                conn, task_id=task_id, run_id=loose, event_type="search.executed", payload={}
+            )
+            events.append(
+                conn, task_id=task_id, run_id=None, event_type="task.renamed", payload={}
+            )
+        with engine.connect() as conn:
+            page = repository.decisions_page(conn, task_id, page=1, page_size=10)
+        # Newest first: the run-less rename, the loose run, the walked run.
+        assert [item.capability_run_id for item in page.data] == [None, None, walk_id]
+    finally:
+        with engine.begin() as conn:
+            delete_task_data(conn, task_id)

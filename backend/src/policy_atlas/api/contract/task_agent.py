@@ -22,6 +22,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from .chat import AnswerPayloadOut
+from .tasks import LatestRun
 
 #: Search backend scope. Mirrors `task_plan.BackendScope`.
 TASK_AGENT_MESSAGE_MAX = 10_000
@@ -72,6 +73,12 @@ PlanStageKey = Literal[
     "extract",
     "group",
     "synthesise",
+    "inherit",
+    "suggest",
+    "option_searches",
+    "extract_interventions",
+    "longlist",
+    "constrain",
 ]
 
 #: Country-group membership provenance. Mirrors
@@ -79,9 +86,14 @@ PlanStageKey = Literal[
 CountryGroupAuthorship = Literal["pinned-table", "planner-proposed", "user-amended"]
 
 #: What one Task Agent turn is. A `reply` plans; an `answer` answers from the
-#: paused walk's evidence; a `decision` records the option a gate turn chose.
-#: Absent on turns stored before task 044, which are all replies.
-TaskAgentTurnKind = Literal["reply", "answer", "decision"]
+#: paused walk's evidence (or, once a longlist exists, the longlist's and its
+#: option searches'); a `decision` records the option a gate turn chose; an
+#: `action` records a longlist verb the user confirmed (task 045). Absent on
+#: turns stored before task 044, which are all replies.
+TaskAgentTurnKind = Literal["reply", "answer", "decision", "action"]
+
+#: The longlist verbs a confirmed turn applies (task 045, D13).
+LonglistVerb = Literal["add", "exclude", "include_again"]
 
 
 class CountryGroupDraft(BaseModel):
@@ -211,6 +223,9 @@ ScopingDepth = Literal["rapid", "standard"]
 #: One entry's kind in Your context. Mirrors `scoping_plan.YourContextEntry`.
 YourContextType = Literal["present_fact", "commitment"]
 
+#: A code-minted default constraint's marker. Mirrors `scoping_plan.DefaultPreference`.
+DefaultPreference = Literal["transferability"]
+
 
 class TaggedOut(BaseModel):
     """One scoping plan field with the origin tag the user sees.
@@ -237,6 +252,12 @@ class ScopingConstraintOut(BaseModel):
         published_before: ISO date ceiling, when there is one.
         languages: Language names. Stored and shown as not yet applied at
             retrieval — the search grammar has no language filter.
+        setting: True on a requirement naming the delivery setting the
+            options must be delivered through; the longlist search carries it.
+        default: `transferability` on the default transferability preference
+            every scoping plan carries (checked at assessment, assumed, follows
+            Where until edited); `null` on a constraint the user asked for.
+            Omitting the default from a patch removes it.
     """
 
     text: str
@@ -247,6 +268,8 @@ class ScopingConstraintOut(BaseModel):
     published_after: str | None = None
     published_before: str | None = None
     languages: list[str] | None = None
+    setting: bool = False
+    default: DefaultPreference | None = None
 
 
 class YourContextOut(BaseModel):
@@ -263,6 +286,55 @@ class YourContextOut(BaseModel):
     type: YourContextType
     turn_index: int
     test_as_condition: bool = False
+
+
+class OptionDesignOut(BaseModel):
+    """A specified design Policy Atlas proposed back from an option's words.
+
+    Args:
+        name: A short option name.
+        description: One sentence: what is done, by whom, for whom.
+        design_features: The features that define the option.
+        outcomes_served: Which of the plan's outcomes the option is for.
+        assumed: The features Policy Atlas supplied rather than the user
+            stated; shown as assumed.
+        version: The design's version.
+    """
+
+    name: str
+    description: str
+    design_features: list[str]
+    outcomes_served: list[str] = Field(default_factory=list)
+    assumed: list[str] = Field(default_factory=list)
+    version: int = 1
+
+
+class YourOptionOut(BaseModel):
+    """One option the user already has in mind.
+
+    Args:
+        text: The user's words, verbatim.
+        design: The proposed design; `null` until proposed.
+        turn_index: The Task Agent turn it came from; `null` on a draft not
+            yet approved.
+    """
+
+    text: str
+    design: OptionDesignOut | None = None
+    turn_index: int | None = None
+
+
+class YourOptionIn(BaseModel):
+    """One option in a scoping plan edit: the user's words only.
+
+    Args:
+        text: The user's words, verbatim. Unchanged words keep their design;
+            new or changed words get a design proposed back.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    text: str = Field(min_length=1, max_length=TASK_AGENT_MESSAGE_MAX)
 
 
 class ScopingSteerPointDefaultOut(BaseModel):
@@ -303,8 +375,11 @@ class ScopingPlanDraft(BaseModel):
         where: The jurisdiction the policy would apply to.
         outcomes: The outcomes evidence is read against.
         depth: The scoping depth the user chose.
-        constraints: Typed constraints and preferences.
+        constraints: Typed constraints and preferences, including the default
+            transferability preference (marked by `default`).
         your_context: The user's own situation, verbatim.
+        your_options: Options the user already has in mind, each with its
+            proposed design.
         entry_branch: `explore` is the only branch in this release.
         linked_task_ids: The tasks this plan starts from.
         steering_mode: Check-in cadence for the run.
@@ -325,6 +400,7 @@ class ScopingPlanDraft(BaseModel):
     depth: ScopingDepth | None = None
     constraints: list[ScopingConstraintOut] | None = None
     your_context: list[YourContextOut] | None = None
+    your_options: list[YourOptionOut] | None = None
     entry_branch: Literal["explore"] | None = None
     linked_task_ids: list[uuid.UUID] | None = None
     steering_mode: SteeringMode | None = None
@@ -348,8 +424,10 @@ class ScopingPlanPatch(BaseModel):
         where: Replacement jurisdiction.
         outcomes: Replacement outcome list.
         depth: Replacement depth.
-        constraints: Replacement constraint list.
+        constraints: Replacement constraint list. Omitting the default
+            transferability preference removes it for good.
         your_context: Replacement Your context list.
+        your_options: Replacement options list, by the user's words.
         steering_mode: Replacement check-in cadence.
         steer_point_defaults: Replacement standing instructions.
         assumptions: Replacement assumptions.
@@ -364,6 +442,7 @@ class ScopingPlanPatch(BaseModel):
     depth: ScopingDepth | None = None
     constraints: list[ScopingConstraintOut] | None = None
     your_context: list[YourContextOut] | None = None
+    your_options: list[YourOptionIn] | None = None
     steering_mode: SteeringMode | None = None
     steer_point_defaults: list[ScopingSteerPointDefaultOut] | None = None
     assumptions: list[str] | None = None
@@ -463,6 +542,8 @@ class TurnDecisionOut(BaseModel):
         check_in_id: The check-in the decision answered.
         capability_run_id: The walk the check-in belongs to.
         plan_version: The plan version the decision was taken against.
+        opened_run: The longlist walk "Confirm plan and build longlist" opened,
+            when this decision opened one. Absent on every other decision.
     """
 
     option_id: str
@@ -470,16 +551,35 @@ class TurnDecisionOut(BaseModel):
     check_in_id: uuid.UUID
     capability_run_id: uuid.UUID
     plan_version: int
+    opened_run: LatestRun | None = None
+
+
+class TurnActionOut(BaseModel):
+    """The longlist verb a Task Agent turn applied, once the user confirmed it.
+
+    Args:
+        verb: ``add``, ``exclude`` or ``include_again``.
+        option_id: The option the verb applied to (the new option, for ``add``).
+        label: That option's name.
+        capability_run_id: The option search ``add`` opened (a walk with no
+            parent), so the thread can follow it. Absent for the other verbs.
+    """
+
+    verb: LonglistVerb
+    option_id: uuid.UUID
+    label: str
+    capability_run_id: uuid.UUID | None = None
 
 
 class TaskAgentTurnOut(BaseModel):
     """Response body for one task_agent turn.
 
-    A turn is one of three things, named by ``kind``: a planning ``reply``, a
-    grounded ``answer`` from the paused walk's evidence, or a recorded
-    ``decision`` at a gate. The three are additive optional fields rather than
-    a discriminated union, so every existing reader keeps working and a turn
-    stored before task 044 stays valid with ``kind`` absent.
+    A turn is one of four things, named by ``kind``: a planning ``reply``, a
+    grounded ``answer`` from the paused walk's evidence (or the longlist's), a
+    recorded ``decision`` at a gate, or an applied longlist ``action`` (task
+    045). They are additive optional fields rather than a discriminated union,
+    so every existing reader keeps working and a turn stored before task 044
+    stays valid with ``kind`` absent.
 
     Args:
         reply: The task_agent's conversational reply for this turn.
@@ -497,6 +597,7 @@ class TaskAgentTurnOut(BaseModel):
             which are all replies.
         answer: The cited answer, on an `answer` turn.
         decision: The recorded gate decision, on a `decision` turn.
+        action: The applied longlist verb, on an `action` turn.
     """
 
     reply: str
@@ -509,6 +610,7 @@ class TaskAgentTurnOut(BaseModel):
     kind: TaskAgentTurnKind | None = None
     answer: AnswerPayloadOut | None = None
     decision: TurnDecisionOut | None = None
+    action: TurnActionOut | None = None
 
 
 class TaskAgentTranscriptTurnOut(BaseModel):
@@ -531,6 +633,7 @@ class TaskAgentTranscriptTurnOut(BaseModel):
             which are all replies.
         answer: The cited answer, on an `answer` turn.
         decision: The recorded gate decision, on a `decision` turn.
+        action: The applied longlist verb, on an `action` turn.
     """
 
     turn_index: int
@@ -547,6 +650,7 @@ class TaskAgentTranscriptTurnOut(BaseModel):
     kind: TaskAgentTurnKind | None = None
     answer: AnswerPayloadOut | None = None
     decision: TurnDecisionOut | None = None
+    action: TurnActionOut | None = None
 
 
 class PlanOut(BaseModel):
@@ -560,6 +664,8 @@ class PlanOut(BaseModel):
             infer it from which field is null.
         version: Plan row version.
         status: Plan status (e.g. `draft`, `approved`).
+        opened_run: The longlist walk `POST .../plan/confirm-baseline` opened,
+            on that route's response. Absent on every other plan read.
     """
 
     plan: PlanDraft | None = None
@@ -567,6 +673,7 @@ class PlanOut(BaseModel):
     capability: str = "evidence_search"
     version: int
     status: str
+    opened_run: LatestRun | None = None
 
 
 class PlanPatchIn(BaseModel):

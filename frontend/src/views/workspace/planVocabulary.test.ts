@@ -196,6 +196,8 @@ describe("options-scoping plan vocabulary (task 044)", () => {
       published_after: null,
       published_before: null,
       languages: null,
+      setting: false,
+      default: null,
       ...overrides,
     };
   }

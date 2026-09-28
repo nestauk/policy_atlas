@@ -32,6 +32,10 @@ const taskState = vi.hoisted(() => ({
   access: "full",
   pending: false,
   capability: "evidence_search" as string | undefined,
+  // Task 045 (S15): what exists and what is active.
+  latestRun: null as { status: string } | null,
+  activeRun: null as { status: string } | null,
+  hasLonglist: false,
 }));
 
 // Both mocked as spies (task 037 review fix) so a describe block below can
@@ -52,6 +56,9 @@ vi.mock("../api/queries", () => ({
           is_owner: taskState.isOwner,
           access: taskState.access,
           capability: taskState.capability,
+          latest_run: taskState.latestRun,
+          active_run: taskState.activeRun,
+          has_longlist: taskState.hasLonglist,
         }
       : undefined,
   }),
@@ -455,5 +462,53 @@ describe("AppShell — gates the run stream and chat panel until access is known
     expect(useConversationsState.mock).not.toHaveBeenCalled();
     expect(screen.queryByLabelText("Agent")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Open the Agent")).not.toBeInTheDocument();
+  });
+});
+
+// Task 045 (S15): a scoping task reads `active_run` for "running" — an option
+// search (a child walk) animates the logo — while the tabs stay on its
+// `latest_run` and the longlist's existence, so the child never opens or
+// locks one. An Evidence search keeps reading `latest_run` alone.
+describe("AppShell — the scoping readers (task 045)", () => {
+  afterEach(() => {
+    taskState.capability = "evidence_search";
+    taskState.latestRun = null;
+    taskState.activeRun = null;
+    taskState.hasLonglist = false;
+  });
+
+  function logoAnimates() {
+    const nav = screen.getByRole("navigation", { name: "App" });
+    return nav.querySelector("svg g[transform]") !== null;
+  }
+
+  function tabLocks() {
+    const bar = screen.getAllByRole("navigation", { name: TASK.one })[0];
+    return ["Result", "Sources", "History"].map(
+      (label) => within(bar).queryAllByRole("link", { name: label }).length > 0,
+    );
+  }
+
+  it("a running child animates the logo but opens and locks no tab", () => {
+    taskState.capability = "options_scoping";
+    taskState.latestRun = { status: "succeeded" };
+    taskState.hasLonglist = true;
+    const first = renderShell(`/tasks/${TASK_ID}/sources`);
+    expect(logoAnimates()).toBe(false);
+    const before = tabLocks();
+    expect(before).toEqual([true, true, true]);
+    first.unmount();
+
+    taskState.activeRun = { status: "running" };
+    renderShell(`/tasks/${TASK_ID}/sources`);
+    expect(logoAnimates()).toBe(true);
+    expect(tabLocks()).toEqual(before);
+  });
+
+  it("an Evidence search ignores active_run: latest_run alone drives the logo", () => {
+    taskState.latestRun = { status: "succeeded" };
+    taskState.activeRun = { status: "running" };
+    renderShell(`/tasks/${TASK_ID}/sources`);
+    expect(logoAnimates()).toBe(false);
   });
 });

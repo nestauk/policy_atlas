@@ -17,6 +17,7 @@ from policy_atlas.runtime.capability_registry import (
     capability_of_task,
     compose_plan,
     lattice_for,
+    purpose_of_scope,
     validate_plan,
 )
 from policy_atlas.runtime.steering import PausePoint, pause_points
@@ -153,6 +154,9 @@ def build(
         if plan_row is None:
             raise LookupError("parked walk has no approved task plan")
         capability = capability_of_task(conn, task_id)
+        purpose = purpose_of_scope(
+            conn, task_id=task_id, evidence_scope_id=cap_row.evidence_scope_id
+        )
         event_rows = events.read(conn, task_id)
         run_rows = [
             dict(row._mapping)
@@ -170,7 +174,9 @@ def build(
     # above rather than guessed from the walk row, because the task row is the
     # single authority (D2).
     plan = validate_plan(capability, plan_data["payload"])
-    chain = compose_plan(capability, plan)
+    # The walk's own intent record picks the chain (task 045, S1): a parked
+    # longlist walk resumes on the longlist chain, not the baseline one.
+    chain = compose_plan(capability, plan, purpose=purpose)
     scoped_events = [
         entry
         for entry in event_rows

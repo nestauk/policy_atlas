@@ -112,6 +112,17 @@ DISCRETIONARY_COMPONENTS: tuple[DiscretionaryComponent, ...] = (
     "group",
 )
 ALL_STEPS: tuple[str, ...] = SPINE + DISCRETIONARY_COMPONENTS
+#: The steps only an options-scoping chain composes (task 045, ADR 0039). Each
+#: is its own registry component (``registry_component_for`` is the identity
+#: for them); :func:`_validate_registry` checks them with the rest so a chain
+#: can never name a component the harness does not dispatch.
+OPTIONS_SCOPING_STEPS: tuple[str, ...] = (
+    "inherit",
+    "suggest",
+    "extract_interventions",
+    "longlist",
+    "constrain",
+)
 DEEP_CHAIN_COMPONENTS: frozenset[DiscretionaryComponent] = frozenset(("select", "extract", "group"))
 DEEP_GROUPING_FACETS: tuple[GroupingFacet, ...] = (
     "intervention",
@@ -321,7 +332,10 @@ def _enabled_components(depth: AnalysisDepth) -> set[DiscretionaryComponent]:
 
 
 def _validate_registry() -> None:
-    missing = sorted({registry_component_for(step) for step in ALL_STEPS} - set(COMPONENT_REGISTRY))
+    missing = sorted(
+        {registry_component_for(step) for step in (*ALL_STEPS, *OPTIONS_SCOPING_STEPS)}
+        - set(COMPONENT_REGISTRY)
+    )
     if missing:
         raise ValueError(f"coordination references unknown registry component(s): {missing}")
 
@@ -980,6 +994,13 @@ class ComponentStep(BaseModel):
         component: Coordination component step name.
         directive_delta: Context directive delta for the component.
         reference_rule: Optional reference-threading rule for the runner.
+        spine: Whether a failure of this step fails the walk (task 045, ADR
+            0039 decision 2). ``None`` defers to the Evidence search's global
+            spine set (:data:`SPINE`), so every Evidence search chain — which
+            never sets it — is unchanged. A chain that declares its own spine
+            (the options-scoping longlist and targeted chains) sets it on
+            every step. The chain is recomposed from the plan on resume, so
+            the flag survives a park without being persisted.
     """
 
     model_config = ConfigDict(extra="forbid", strict=True)
@@ -987,6 +1008,19 @@ class ComponentStep(BaseModel):
     component: str
     directive_delta: dict[str, Any] = Field(default_factory=dict)
     reference_rule: str | None = None
+    spine: bool | None = None
+
+    @property
+    def is_spine(self) -> bool:
+        """Return whether this step's failure ends the walk ``failed``.
+
+        Returns:
+            ``spine`` when the chain declared it, else membership of the
+            Evidence search spine set.
+        """
+        if self.spine is not None:
+            return self.spine
+        return self.component in SPINE
 
 
 class ComposedChain(BaseModel):
@@ -1072,11 +1106,14 @@ def _directive_delta(component: str, plan: TaskPlan) -> dict[str, Any]:
     return {}
 
 
-def compose(plan: TaskPlan) -> ComposedChain:
+def compose(plan: TaskPlan, purpose: str | None = None) -> ComposedChain:
     """Compose an approved task plan into a fixed ES chain.
 
     Args:
         plan: Validated task plan.
+        purpose: The intent record's purpose. Accepted for the registry's
+            compose-by-purpose signature (task 045) and ignored: an Evidence
+            search has one chain, and its intent records carry no purpose.
 
     Returns:
         A composed chain whose mandatory spine is present in order and whose
@@ -1086,6 +1123,7 @@ def compose(plan: TaskPlan) -> ComposedChain:
         ValueError: If the component registry no longer contains a referenced
             underlying component.
     """
+    del purpose
     _validate_registry()
     selected = set(plan.components)
     ordered_components: list[str] = [

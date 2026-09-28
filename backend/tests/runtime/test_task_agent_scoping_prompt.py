@@ -1,4 +1,4 @@
-"""Pins for the ``task_agent_scoping_v2`` prompt surface (task 044, deliverable 6)."""
+"""Pins for the ``task_agent_scoping_v3`` prompt surface (task 044, deliverable 6)."""
 
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ from policy_atlas.runtime.task_agent_scoping_prompt import (
 
 
 def test_version_pinned() -> None:
-    assert TASK_AGENT_SCOPING_PROMPT_VERSION == "task_agent_scoping_v2"
+    assert TASK_AGENT_SCOPING_PROMPT_VERSION == "task_agent_scoping_v3"
 
 
 def test_depth_is_offered_as_two_screen_labels_never_the_keys() -> None:

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router";
 
-import { useCheckIns, useDecisions, useFunnel, usePlan, useRuns } from "../../api/queries";
+import { useCheckIns, useDecisions, useFunnel, usePlan, useRuns, useTask } from "../../api/queries";
 import { useComposerSeed } from "../../lib/composerSeed";
 import { scrub } from "../../lib/scrub";
 import { COPY, TASK } from "../../lib/vocabulary";
@@ -50,6 +50,9 @@ import {
   elapsedSeconds,
   formatElapsed,
   runFinishedSignpost,
+  FINISHED_NOTICE,
+  walkKind,
+  type WalkKind,
 } from "./runProgress";
 
 /** The server page-size cap; one task_agent conversation fits comfortably. */
@@ -58,6 +61,9 @@ const TRANSCRIPT_PAGE_SIZE = 200;
 /** The composer's invitation while a scoping walk is parked on the baseline
  *  gate (task 044 Phase 5.5, the Baseline board). */
 const SCOPING_GATE_PLACEHOLDER = "Question the baseline…";
+/** Task 045: while a longlist exists and nothing runs, the thread takes the
+ *  longlist verbs as well as questions. */
+const LONGLIST_PLACEHOLDER = "Ask about the longlist, or add, exclude or include an option.";
 
 /** A decision turn's one line: the option as it was labelled, that it is on
  *  the record, and the plan version it was taken against. */
@@ -78,23 +84,47 @@ export function threadInputs(
   runs: TaskAgentThreadRun[],
   decisions: TaskAgentThreadDecision[],
 ): { boundaries: RunThreadBoundary[]; runDecisions: RunThreadDecision[] } {
-  const boundaries = runs.map((run) => {
+  // Task 045 (S12): a child walk (a longlist walk's option search) gets no
+  // block of its own; the decisions that name it go nowhere.
+  const childIds = new Set(
+    runs.filter((run) => run.parent_capability_run_id != null).map((run) => run.capability_run_id),
+  );
+  const boundaries = runs.filter((run) => !childIds.has(run.capability_run_id)).map((run) => {
     const before = turns.filter((turn) => turn.created_at <= run.started_at);
     return {
       run,
       afterTurnIndex: before.length > 0 ? Math.max(...before.map((turn) => turn.turn_index)) : null,
     };
   });
-  const orderedRuns = [...runs].sort((left, right) => left.started_at.localeCompare(right.started_at));
+  // Task 045 (F11): a decision whose event carries a run names its walk
+  // (`capability_run_id`, from the event's run) and goes to that walk — or
+  // nowhere, when the walk is a child or not one of these runs. A lifecycle
+  // event's `detail.capability_run_id` names its run the same way. Only a
+  // decision with neither is placed by time, and only among the parentless
+  // walks — a child window sits inside its parent's, so it must not swallow
+  // the parent's own lines.
+  const runIds = new Set(runs.map((run) => run.capability_run_id));
+  const orderedRuns = runs
+    .filter((run) => !childIds.has(run.capability_run_id))
+    .sort((left, right) => left.started_at.localeCompare(right.started_at));
   const runDecisions: RunThreadDecision[] = [];
   for (const decision of decisions) {
-    const owner = orderedRuns.findLast(
-      (run) =>
-        run.started_at <= decision.occurred_at &&
-        (run.ended_at === null || run.ended_at === undefined || decision.occurred_at <= run.ended_at),
-    );
-    if (owner !== undefined) {
-      runDecisions.push({ decision, capabilityRunId: owner.capability_run_id });
+    const walkId = decision.capability_run_id;
+    const tagged = decision.detail?.["capability_run_id"];
+    const ownerId =
+      walkId != null
+        ? runIds.has(walkId)
+          ? walkId
+          : undefined
+        : typeof tagged === "string" && runIds.has(tagged)
+          ? tagged
+          : orderedRuns.findLast(
+            (run) =>
+              run.started_at <= decision.occurred_at &&
+              (run.ended_at === null || run.ended_at === undefined || decision.occurred_at <= run.ended_at),
+          )?.capability_run_id;
+    if (ownerId !== undefined && !childIds.has(ownerId)) {
+      runDecisions.push({ decision, capabilityRunId: ownerId });
     }
   }
   return { boundaries, runDecisions };
@@ -169,6 +199,7 @@ export function taskAgentComposerPlaceholder(
   planReady = false,
   isOwner = true,
   atScopingGate = false,
+  hasLonglist = false,
 ): string {
   if (!isOwner) {
     return `Steering is limited to the ${TASK.lower} owner.`;
@@ -181,6 +212,9 @@ export function taskAgentComposerPlaceholder(
   }
   if (runStatus === "running" || runStatus === "paused") {
     return "Replanning unlocks when this run finishes.";
+  }
+  if (hasLonglist) {
+    return LONGLIST_PLACEHOLDER;
   }
   if (runStatus === "succeeded" || runStatus === "degraded") {
     return "Describe a change to the plan to run again.";
@@ -317,14 +351,30 @@ export function DecisionLine({
   );
 }
 
+/** The recorded line for an applied longlist verb: the verb, then the
+ *  option's name (task 045). An unknown verb shows the name alone. */
+export function actionLine(action: { verb: string; label: string }): string {
+  switch (action.verb) {
+    case "add":
+      return `Added ${action.label}`;
+    case "exclude":
+      return `Excluded ${action.label}`;
+    case "include_again":
+      return `Included ${action.label} again`;
+    default:
+      return action.label;
+  }
+}
+
 /** A durable turn: user bubble, then the task_agent reply — or an honest
  *  incomplete row (pending spinner copy / failed with retry).
  *
  *  Task 044 Phase 5.5: a turn is one of three things (`kind`). A `reply`
  *  renders as it always has. An `answer` renders its grounded prose through
  *  the CHAT's own citation renderer (`ChatAnswer`) — one renderer, two
- *  surfaces. A `decision` renders the gate decision it recorded. `kind` is
- *  absent on every pre-044 turn, which reads as `reply`. */
+ *  surfaces. A `decision` renders the gate decision it recorded, and an
+ *  `action` (task 045) the longlist verb it applied. `kind` is absent on
+ *  every pre-044 turn, which reads as `reply`. */
 function DurableTurn({
   taskId,
   turn,
@@ -371,6 +421,18 @@ function DurableTurn({
       <div className="space-y-6">
         {!isConfirmTurn && <UserBubble text={turn.user_message} />}
         <DecisionLine label={turn.decision.label} planVersion={turn.decision.plan_version} />
+      </div>
+    );
+  }
+  // Task 045: a confirmed longlist verb (add · exclude · include again) is
+  // the user's recorded action — the same quiet line as a gate decision,
+  // under the reply that confirmed it.
+  if (kind === "action" && turn.action != null) {
+    return (
+      <div className="space-y-6">
+        <UserBubble text={turn.user_message} />
+        {turn.status === "completed" && taskAgentText !== "" && <TaskAgentBubble text={taskAgentText} />}
+        <DecisionLine label={actionLine(turn.action)} planVersion={null} />
       </div>
     );
   }
@@ -494,20 +556,23 @@ function AnsweredCheckIns({
 function RunFinishedNotice({
   taskId,
   status,
+  kind = "evidence_search",
 }: {
   taskId: string;
   status: RunStatus | undefined;
+  kind?: WalkKind;
 }) {
-  const notice = runFinishedSignpost(taskId, status);
+  const notice = runFinishedSignpost(taskId, status, kind);
   if (notice === null) return null;
+  const words = FINISHED_NOTICE[kind];
   return (
     <div className="anim-rise mr-8 border-2 border-[#17A88D] bg-[#DDF2EE] px-4 py-3">
       <p className="max-w-prose-measure text-lead text-navy">
-        Evidence search is finished. You can read the report in the{" "}
+        {words.before}{" "}
         <Link to={notice.href} className="font-semibold text-blue underline">
           {notice.label}
         </Link>{" "}
-        tab.
+        {words.after}
       </p>
     </div>
   );
@@ -520,21 +585,32 @@ function RunBlock({
   stages,
   answered,
   checkIns,
+  capability,
 }: {
   taskId: string;
   run: TaskAgentThreadRun;
   decisions: TaskAgentThreadDecision[];
   stages: StageEntry[];
+  capability?: string | null;
   answered: ResolvedDecision[];
   checkIns: ReturnType<typeof useCheckIns>["data"];
 }) {
   const status = RUN_BLOCK_STATUS[run.status] ?? null;
-  const presentedDecisions = presentRunDecisions(decisions, stages);
+  // Task 045: a parentless option search (the chat verb *add*'s own search)
+  // keeps a block, headed as what it is, with its stage rows only.
+  const optionSearch = run.purpose === "targeted";
+  const presentedDecisions = presentRunDecisions(
+    optionSearch ? decisions.filter((decision) => decision.kind === "component.completed") : decisions,
+    stages,
+  );
   return (
     <div className="space-y-2">
       <div className="flex items-center gap-2 text-caption text-grey">
         <span aria-hidden="true" className="h-px flex-1 bg-line" />
-        <span>Analysis run{status !== null ? ` — ${status}` : ""}</span>
+        <span>
+          {optionSearch ? "Option search" : "Analysis run"}
+          {status !== null ? ` — ${status}` : ""}
+        </span>
         <span aria-hidden="true" className="h-px flex-1 bg-line" />
       </div>
       {presentedDecisions.map((decision) => (
@@ -550,7 +626,10 @@ function RunBlock({
       <AnsweredCheckIns answered={answered} checkIns={checkIns} />
       {/* The chat's own destination once the run lands (owner, 2026-08-05):
           a completed run's last word shouldn't be a quiet stage echo. */}
-      <RunFinishedNotice taskId={taskId} status={run.status} />
+      {/* Its kind is its own run's (task 045, A8) — never the live stream's. */}
+      {!optionSearch && (
+        <RunFinishedNotice taskId={taskId} status={run.status} kind={walkKind(capability, [], run.purpose)} />
+      )}
     </div>
   );
 }
@@ -595,6 +674,7 @@ export function TaskAgentPane({
 }) {
   const transcript = useTaskAgentTranscript(taskId, { page_size: TRANSCRIPT_PAGE_SIZE });
   const planQuery = usePlan(taskId);
+  const taskQuery = useTask(taskId);
   // `PlanOut.plan` is null on a scoping task (task 044) — `scoping` carries
   // its own `ready` flag instead. Only one of the two is ever non-null for a
   // given task, so reading both costs nothing on the branch that doesn't apply.
@@ -676,6 +756,11 @@ export function TaskAgentPane({
   const planCardAt = lastTurnAt === -1 ? thread.length : lastTurnAt + 1;
   const planStarted = thread.slice(planCardAt).some((item) => item.type === "run_block");
   const liveRunId = stream.run?.id;
+  // Task 045 (A7): the live walk's own purpose, once the walk list has it —
+  // an added option's search is not the baseline.
+  const liveRunPurpose =
+    (runsQuery.data?.data ?? []).find((run) => run.capability_run_id === liveRunId)?.purpose ?? null;
+  const liveKind = walkKind(planQuery.data?.capability, stream.stages, liveRunPurpose);
   const threadHasLiveRun = thread.some(
     (item) => item.type === "run_block" && item.run.capability_run_id === liveRunId,
   );
@@ -720,6 +805,8 @@ export function TaskAgentPane({
           minimised={runMinimised}
           onMinimisedChange={setRunMinimised}
           onSeePlan={onReviewPlan}
+          capability={planQuery.data?.capability}
+          purpose={liveRunPurpose}
         />
       </div>
     );
@@ -833,13 +920,14 @@ export function TaskAgentPane({
                 {liveCard}
                 <AnsweredCheckIns answered={streamDecisions} checkIns={checkInsQuery.data} />
                 {signpostBubbles}
-                <RunFinishedNotice taskId={taskId} status={stream.run?.status} />
+                <RunFinishedNotice taskId={taskId} status={stream.run?.status} kind={liveKind} />
               </div>
             ) : (
               <RunBlock
                 key={`run-${item.run.capability_run_id}`}
                 taskId={taskId}
                 run={item.run}
+                capability={planQuery.data?.capability}
                 decisions={item.decisions}
                 stages={stream.stages}
                 answered={
@@ -934,7 +1022,7 @@ export function TaskAgentPane({
             {liveCard}
             <AnsweredCheckIns answered={streamDecisions} checkIns={checkInsQuery.data} />
             {signpostBubbles}
-            <RunFinishedNotice taskId={taskId} status={stream.run?.status} />
+            <RunFinishedNotice taskId={taskId} status={stream.run?.status} kind={liveKind} />
           </div>
         )}
         </div>
@@ -961,7 +1049,7 @@ export function TaskAgentPane({
           value={message}
           onChange={setMessage}
           onSubmit={() => send({ message, clientTurnId: crypto.randomUUID() })}
-          placeholder={taskAgentComposerPlaceholder(runStatus, planReady, isOwner, atScopingGate)}
+          placeholder={taskAgentComposerPlaceholder(runStatus, planReady, isOwner, atScopingGate, taskQuery.data?.has_longlist === true)}
           disabled={composerFenced || !isOwner}
           sendDisabled={composerDisabled}
         />

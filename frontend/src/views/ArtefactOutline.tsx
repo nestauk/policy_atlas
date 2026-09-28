@@ -332,12 +332,15 @@ export function SectionDisclosure({
   section,
   defaultOpen,
   collapsible,
+  meta,
   children,
 }: {
   id: string;
   section: OutlineSection;
   defaultOpen: boolean;
   collapsible: boolean;
+  /** Small text after the title in the heading row (a theme's option count). */
+  meta?: React.ReactNode;
   children: React.ReactNode;
 }) {
   const [open, setOpen] = useState(defaultOpen);
@@ -361,13 +364,17 @@ export function SectionDisclosure({
         >
           <h2 className={`flex-1 ${REPORT_SECTION_HEADING_CLASS}`}>
             {scrub(section.title)}
+            {meta !== undefined && <span className="ml-2 whitespace-nowrap text-meta font-normal text-grey">{meta}</span>}
           </h2>
           <span aria-hidden="true" className={`${SECTION_EXPAND_LINK_CLASS} max-md:hidden`}>
             {expanded ? "Collapse −" : "Expand +"}
           </span>
         </button>
       ) : (
-        <h2 className={REPORT_SECTION_HEADING_CLASS}>{scrub(section.title)}</h2>
+        <h2 className={REPORT_SECTION_HEADING_CLASS}>
+          {scrub(section.title)}
+          {meta !== undefined && <span className="ml-2 whitespace-nowrap text-meta font-normal text-grey">{meta}</span>}
+        </h2>
       )}
       {/* Fallback (first-sentence) summaries render unmarked — the checked/
           fallback distinction is provenance for reviewers, not users

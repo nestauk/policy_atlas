@@ -125,6 +125,33 @@ def _row_exists(engine: Engine, table: str, task_id: uuid.UUID) -> int:
         )
 
 
+def _every_scoping_task(engine: Engine) -> list[uuid.UUID]:
+    with engine.connect() as conn:
+        return list(ops._scoping_task_ids(conn))
+
+
+def test_apply_needs_named_scoping_tasks_and_deletes_nothing_without(
+    engine: Engine, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """S4: ``--apply`` never removes every scoping task; it takes explicit ids."""
+    ids = _seed_scoping_task(engine)
+    with engine.begin() as conn:
+        es_task_id, _ = seed_task_and_run(conn)
+    try:
+        assert ops.run(engine, apply=True) == 2
+        assert "--task-id" in capsys.readouterr().err
+        assert ops.run(engine, apply=True, task_ids=[]) == 2
+        assert ops.run(engine, apply=True, task_ids=[ids["task_id"], es_task_id]) == 2
+        assert str(es_task_id) in capsys.readouterr().err
+        assert _row_exists(engine, "task", ids["task_id"]) == 1
+        assert _row_exists(engine, "task", es_task_id) == 1
+    finally:
+        with engine.begin() as conn:
+            conn.execute(text("DELETE FROM runs WHERE task_id = :tid"), {"tid": es_task_id})
+            conn.execute(text("DELETE FROM task WHERE task_id = :tid"), {"tid": es_task_id})
+        _delete_scoping_task_rows(engine, ids)
+
+
 def test_list_mode_reports_counts_and_deletes_nothing(
     engine: Engine, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -170,7 +197,7 @@ def test_refuses_when_an_evidence_search_task_links_to_it(
         assert str(scoping["task_id"]) in err
         assert str(es_task_id) in err
 
-        assert ops.run(engine, apply=True) == 2
+        assert ops.run(engine, apply=True, task_ids=[scoping["task_id"]]) == 2
         assert _row_exists(engine, "task", scoping["task_id"]) == 1
     finally:
         with engine.begin() as conn:
@@ -221,7 +248,7 @@ def test_apply_removes_every_scoping_row_and_then_the_downgrade_succeeds(
         )
 
     try:
-        assert ops.run(engine, apply=True) == 0
+        assert ops.run(engine, apply=True, task_ids=_every_scoping_task(engine)) == 0
 
         with engine.connect() as conn:
             assert (
@@ -248,7 +275,7 @@ def test_apply_removes_every_scoping_row_and_then_the_downgrade_succeeds(
             message = str(caught.value)
             assert "ops_remove_scoping_tasks" in message
         finally:
-            assert ops.run(engine, apply=True) == 0
+            assert ops.run(engine, apply=True, task_ids=_every_scoping_task(engine)) == 0
 
         with engine.connect() as conn:
             assert (

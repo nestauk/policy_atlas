@@ -139,8 +139,9 @@ Status legend: ✅ settled · 🟡 leaning · ❓ open · ⏸ deferred.
   strategy so that distinct implementations, the required outcomes and the counter-case
   survive**, omissions are represented, and a budget-limited result may be explicitly incomplete
   (rulings 38, 43); the check measures **whole-run** time to a usable result, not extraction alone.
-  Mentions and the abstract-level fields come from `extract`'s abstract profile over every
-  screened-in document; the screen is unchanged (ruling 43). ❓ How "one vote per independent study" detects
+  The intervention profile records and the abstract-level fields come from `extract`'s
+  **intervention profile** over every screened-in document; the screen is unchanged (ruling 43;
+  named by the owner in task 045, D3). ❓ How "one vote per independent study" detects
   several papers on one trial is open (a trial or registration identifier in the light
   extraction is the candidate).
 - ✅ **Depth settings and entry branches are orthogonal** (ruling 25). *Rapid* and *standard*
@@ -179,7 +180,18 @@ plan ──confirm──▶ baseline ══PAUSE: confirm plan against baseline�
   which the Task Agent conversation offers and which is checked against the specified design;
   without one the longlist spans settings and shows setting as a facet. Where and setting are
   never conflated. The UK default is a candidate for the Evidence search's planning chat, not
-  applied there in this ruling. Non-linear: the user revises the plan
+  applied there in this ruling. *([task 045 contract](../../../tasks/045-scoping-longlist/contract.md), D20, D21.)* The **longlist intent** is compiled
+  PICO-shaped from the plan: the target unit (P), the intervention left open (I), the outcomes (O),
+  and the setting only when the user stated one as a requirement (S, optional; owner: "not all users
+  will have a setting requirement so it is optional"); no comparison before assessment. **Where
+  enters nothing in the longlist's retrieval** — not the intent, not query generation, not the
+  screen, not acquisition ranking. Owner: "The Z that will be input by users is usually the UK, but
+  the idea of options appraisal is also to bring in international evidence that might be
+  transferable. Directly saying Z in the search scope may constrain the results too much." Where is
+  shown on the way out as **where tried** (the countries an option's documents were studied in,
+  grouped against Where) and returns at transferability. An entrant's own search is the **option
+  search**, a child walk under its own intent record (D6, D25; owner: "let's go with option
+  search"); **mini evidence search** stays the assessment-depth term. Non-linear: the user revises the plan
   after seeing evidence and re-runs apply **deltas, not restarts** (concept § Shape 1; ❓ delta
   granularity and working-set versioning are open question 7).
 - ✅ **Baseline, and it pauses** (rulings 2, 24). Confirming the plan builds the baseline only. The
@@ -189,7 +201,7 @@ plan ──confirm──▶ baseline ══PAUSE: confirm plan against baseline�
   key assumption, what is contested) labelled reasoning (ruling 40). No orientation stage; the
   baseline's "what is contested" element is how newcomers are served in v1. ❓ Baseline content generation couples to
   grey-literature and official-statistics sourcing (open question 6).
-- ✅ **Longlist.** Two directions into one funnel: bottom-up (**intervention mentions** — not
+- ✅ **Longlist.** Two directions into one funnel: bottom-up (**intervention profile records** — not
   documents — cluster into options, many-to-many, since a document may discuss a bundle or, as a
   systematic review does, many interventions; drill-down shows the constituents; ruling 31) and
   top-down (lever-type suggestions, the user's
@@ -202,8 +214,8 @@ plan ──confirm──▶ baseline ══PAUSE: confirm plan against baseline�
   *distinct* screen never excludes a variant or a part-of relation; support binds to a finding
   and a specified design, never to a document (ruling 36); packages and ingredients are linked
   part of and shown together. ❓ Minting mechanics — clustering, overlap and dedup,
-  target longlist size — are open question 4; 🟡 clustering at option grain is unproven and is
-  checked before the longlist contract (ruling 31).
+  target longlist size — are open question 4; ✅ clustering at option grain was shown to work by
+  [check 3](../../../tasks/035-options-scoping/checks/check-3-option-grain.md) (ruling 31; the 🟡 closed with task 045).
 - ✅ **Screening is a pipeline stage, not a user step** (ruling 4). Screens run on longlist
   metadata as options complete. Hard screens = the user's session constraints of the
   scope-shaped kind plus three defaults (relevant to stated outcomes, distinct, within scope).
@@ -214,14 +226,19 @@ plan ──confirm──▶ baseline ══PAUSE: confirm plan against baseline�
   against the option's specified design. *Effect- and cost-shaped* constraints ("low cost", "at
   least moderate evidence") are checked after assessment; the plan says so; until then each
   option carries a labelled **reasoned guess** that is a flag and a user-requested sort only
-  (see [trust.md](trust.md)). *Evidence restrictions* ("OECD evidence only"; "evidence-scope
+  (see [trust.md](trust.md)) — except the default preference **"Transferable to *Where*"**, present
+  on every scoping plan, which gets no guess before assessment ([task 045 contract](../../../tasks/045-scoping-longlist/contract.md), D22; owner: "Should
+  be a default preference"). *Evidence restrictions* ("OECD evidence only"; "evidence-scope
   constraints" in the frozen rulings) are the Evidence search's search-directive filters —
   country group, years, languages — applied at retrieval (owner ruling on decision-sheet row C1,
   2026-09-09; the Sources statement says they filter by where a source was published, not where a
   study was done) and **can never exclude a known option**; an option whose only example
   is out of scope stays, marked "no in-scope evidence" (an evidence-scope constraint can prevent
   an option from ever being discovered, so the breadth claim is bounded by the authorised scope,
-  ruling 36). The agent asks when a sentence is ambiguous between the kinds. Screen findings
+  ruling 36). *(Task 045, D9; owner: "the ruling stands, deterministic check": "no in-scope
+  evidence" is computed without a model call from publication country and year against the
+  restriction's country group and years — language not applied — and is reachable only through
+  inherited documents or an earlier plan version's restriction.)* The agent asks when a sentence is ambiguous between the kinds. Screen findings
   that rest on the corpus are cited. After assessment, an effect- or cost-shaped constraint that
   fails or cannot be checked is shown on the option ("breaks: low cost (assessed)" /
   "unresolved: cost not comparable"); the option stays and the user decides (ruling 40).
@@ -349,13 +366,21 @@ plan ──confirm──▶ baseline ══PAUSE: confirm plan against baseline�
   constraint · no in-scope evidence); its source-quality profile shows unknown-type and
   non-evidence documents as their own buckets (ruling 43). Two views: list (for judging each option) and grid
   (**primary lever type × ambition**, for judging the set; ambition is a per-option tag with a
-  one-line justification, labelled "as described, not measured" and carried as a **tier-4
+  one-line justification, carried as a **tier-4
   reasoning claim** since no evidence has been read when it is assigned, ruling 20; owner
-  2026-09-07). A click opens a
+  2026-09-07; the words "as described, not measured" dropped from the card, owner 2026-09-24,
+  task 045 D33: "D33 wins, amend trust.md"). A click opens a
   light **option-before-assessment** page: what it is for · what the evidence base holds so far
   (the **source-quality profile**: mentioning documents by evidence type and quality tier,
   countries, populations, outcomes — never "how sure", ruling 33) · screens and guesses · where
-  it came from.
+  it came from. *([task 045 contract](../../../tasks/045-scoping-longlist/contract.md).)* The grid is built **reduced** before the proposal: lever type ×
+  ambition, tiles that open the option and show its states, no shortlist actions, gap messages or
+  footer (D12; owner: "reduced grid in task 2"). The option page is **assembled** from the passes'
+  outputs, not written by the synthesiser; an on-demand written summary at first open is a recorded
+  seam (D15; owner: "Assembled in task 2, on-demand summary as a seam"). Each option carries a
+  **where tried** line — grouped against the plan's Where as *United Kingdom · comparable systems
+  (OECD) · other* — and the list a where-tried facet beside the setting facet; never a filter, never
+  a verdict (D20, D21).
 - ✅ **Shortlist view.** Before assessment, the places with their reasons and the assess action;
   after, the same options with their assessed rows, which live in the report's "what the
   evidence base holds" section (ruling 32).
@@ -494,7 +519,8 @@ contracts:
 
 ❓ Open (carried from concept § Open questions, updated by the rulings): 2 mini-search cost
 envelope and the light-extraction-plus-reading shape to check (reading rule settled, ruling 16;
-read-set discipline stated, ruling 38; study-independence detection open) · 3 rapid latency budget · 4 option-minting mechanics · 5 taxonomy storage (curated asset 🟡 vs prompt-internal)
+read-set discipline stated, ruling 38; study-independence detection open) · 3 rapid latency budget · 4 option-minting mechanics · ~~5 taxonomy storage~~ (closed by task 045,
+D8: one versioned list in code, the taxonomy version on every option, *none fits* counted and shown)
 · 6 baseline generation and grey-literature sourcing · 7 iteration mechanics and versioning ·
 8 the entry point from the product's front door (the rest of the product surface is settled) ·
 9 magnitude banding (requires its own eval before any band reaches users) · 10 the similarity

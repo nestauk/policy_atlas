@@ -16,7 +16,14 @@ function LocationProbe() {
 
 function mockTask(
   status: string | null,
-  { pending = false, access = "full", capability = "evidence_search", artefact = null } = {},
+  {
+    pending = false,
+    access = "full",
+    capability = "evidence_search",
+    artefact = null,
+    hasLonglist = false,
+    activeRun = null as { status: string } | null,
+  } = {},
 ) {
   // Task 044: only a scoping task reads the artefact, and only to learn
   // whether a baseline exists.
@@ -33,6 +40,8 @@ function mockTask(
           access,
           capability,
           latest_run: status === null ? null : { status },
+          active_run: activeRun,
+          has_longlist: hasLonglist,
         },
   } as unknown as ReturnType<typeof queries.useTask>);
 }
@@ -177,5 +186,25 @@ describe("LifecycleRoute — public-leg access shows Results and Sources only (t
     mockTask("succeeded");
     renderAt(`/tasks/${TASK_ID}/share`);
     expect(screen.getByText("Share page")).toBeInTheDocument();
+  });
+});
+
+describe("LifecycleRoute — the longlist and a running child (task 045)", () => {
+  it("opens Result on a scoping task with a longlist, whatever its latest walk's ending", () => {
+    mockTask("aborted", { capability: "options_scoping", hasLonglist: true });
+    renderAt(`/tasks/${TASK_ID}/result`);
+    expect(screen.getByText("Results page")).toBeInTheDocument();
+  });
+
+  it("a running child never opens a tab its task's latest walk keeps locked", () => {
+    mockTask("aborted", { capability: "options_scoping", activeRun: { status: "running" } });
+    renderAt(`/tasks/${TASK_ID}/result`);
+    expect(screen.getByTestId("path").textContent).toBe(`/tasks/${TASK_ID}`);
+  });
+
+  it("a running child never locks a tab its task's latest walk opened", () => {
+    mockTask("succeeded", { capability: "options_scoping", hasLonglist: true, activeRun: { status: "running" } });
+    renderAt(`/tasks/${TASK_ID}/history`);
+    expect(screen.getByText("History page")).toBeInTheDocument();
   });
 });

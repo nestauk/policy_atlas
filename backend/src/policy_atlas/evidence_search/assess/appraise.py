@@ -23,6 +23,7 @@ from policy_atlas.core.schema import (
     source_classification_result,
     task_source_snapshot,
 )
+from policy_atlas.evidence_search.assess.classify import SKIP_TSS_KEY, parse_skip_ids
 from policy_atlas.evidence_search.assess.screen import effective_screen_rows
 
 DEFAULT_RUBRIC_VERSION = "v2-hierarchy-v1"
@@ -76,6 +77,9 @@ def _parse_appraisal_directive(raw: Any) -> dict[str, int]:
       1..5 — anything else (including bool, float, out-of-range) rejects.
     - An empty ``rubric`` map rejects: a directive with no scoring effect
       is meaningless and must not silently no-op.
+    - ``skip_task_source_snapshot_ids`` (task 045), when present, must be a
+      list of id strings; it is validated here and read by
+      :func:`_parse_appraisal_skip`. It never changes the rubric.
 
     Args:
         raw: The ``context["appraisal"]`` object, or ``None``.
@@ -93,9 +97,11 @@ def _parse_appraisal_directive(raw: Any) -> dict[str, int]:
         raise AppraiseDirectiveError("appraisal directive must be an object")
     if not raw:
         return {}
-    unknown = set(raw) - {"rubric"}
+    unknown = set(raw) - {"rubric", SKIP_TSS_KEY}
     if unknown:
         raise AppraiseDirectiveError("appraisal directive contains unknown keys")
+    if SKIP_TSS_KEY in raw:
+        parse_skip_ids(raw[SKIP_TSS_KEY], AppraiseDirectiveError)
     if "rubric" not in raw:
         return {}
 
@@ -117,6 +123,22 @@ def _parse_appraisal_directive(raw: Any) -> dict[str, int]:
             )
         override[evidence_type] = tier
     return override
+
+
+def _parse_appraisal_skip(raw: Any) -> frozenset[uuid.UUID]:
+    """Return the documents the appraisal directive says to leave alone (task 045).
+
+    Called after :func:`_parse_appraisal_directive` has validated ``raw``.
+
+    Args:
+        raw: The ``context["appraisal"]`` object, or ``None``.
+
+    Returns:
+        The ``skip_task_source_snapshot_ids`` as ids; empty when absent.
+    """
+    if not isinstance(raw, dict) or SKIP_TSS_KEY not in raw:
+        return frozenset()
+    return parse_skip_ids(raw[SKIP_TSS_KEY], AppraiseDirectiveError)
 
 
 def _derive_rubric_version(override: dict[str, int]) -> str:
@@ -222,9 +244,12 @@ def appraise_sources(
         longer effective-relevant, e.g. stage-2 demoted — never appraised),
         and ``already_appraised`` (pre-existing appraisal rows for the scope).
         Invariant: appraised + already_appraised + skipped_non_evidence +
-        skipped_unknown + skipped_demoted = classification rows for the scope.
+        skipped_unknown + skipped_demoted = classification rows for the scope
+        (+ ``resolved_elsewhere``, present only under a task 045 skip
+        directive: documents whose tier a linked task already answers).
     """
     rubric_override = _parse_appraisal_directive(context.context.get("appraisal"))
+    skip = _parse_appraisal_skip(context.context.get("appraisal"))
     effective_rubric: dict[str, int] = {**DEFAULT_RUBRIC, **rubric_override}
     rubric_version = _derive_rubric_version(rubric_override)
 
@@ -314,6 +339,11 @@ def appraise_sources(
             )
         )
     ).fetchall()
+    # Task 045: documents whose tier the label resolver already answers from a
+    # linked task are left alone and counted (``resolved_elsewhere``).
+    resolved_elsewhere = sum(1 for row in appraisable_rows if row[0] in skip)
+    if skip:
+        appraisable_rows = [row for row in appraisable_rows if row[0] not in skip]
 
     # Rubric-domain classifications whose doc is no longer effective-relevant
     # (stage-2 demoted): excluded from the write path above, reported here.
@@ -389,7 +419,7 @@ def appraise_sources(
     if appraisal_rows:
         conn.execute(source_appraisal_result.insert(), appraisal_rows)
 
-    return {
+    summary: dict[str, Any] = {
         "appraised": len(appraisable_rows),
         "by_score": by_score,
         "skipped_non_evidence": skip_counts.get(_NON_EVIDENCE_TYPE, 0),
@@ -398,3 +428,8 @@ def appraise_sources(
         "already_appraised": already_appraised,
         "unclassified": unclassified,
     }
+    if SKIP_TSS_KEY in (context.context.get("appraisal") or {}):
+        # Present only under the directive, so every other summary is unchanged;
+        # it joins the partition in the Returns invariant.
+        summary["resolved_elsewhere"] = resolved_elsewhere
+    return summary

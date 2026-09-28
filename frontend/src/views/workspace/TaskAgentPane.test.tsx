@@ -31,6 +31,7 @@ vi.mock("../../api/queries", async (importOriginal) => {
     useDecisions: vi.fn(),
     useCheckIns: vi.fn(),
     useFunnel: vi.fn(),
+    useTask: vi.fn(),
   };
 });
 vi.mock("../../api/mutations", async (importOriginal) => {
@@ -95,6 +96,51 @@ describe("threadInputs", () => {
     const runs = [run("r1", "2026-07-28T09:00:00Z", null)];
     const { boundaries } = threadInputs([turn(0, "2026-07-28T10:00:00Z")], runs, []);
     expect(boundaries[0].afterTurnIndex).toBeNull();
+  });
+
+  // Task 045 (S12): option searches are not shown in the parent's thread.
+  it("gives a child walk no block, and the lines that name it go nowhere", () => {
+    const parent = { ...run("longlist", "2026-09-22T10:00:00Z", "2026-09-22T10:30:00Z"), purpose: "longlist" };
+    const child = {
+      ...run("child", "2026-09-22T10:05:00Z", "2026-09-22T10:10:00Z"),
+      purpose: "targeted",
+      parent_capability_run_id: "longlist",
+    };
+    const decisions = [
+      { ...decision(1, "2026-09-22T10:02:00Z"), kind: "component.completed" },
+      { ...decision(2, "2026-09-22T10:06:00Z"), kind: "run.finished", detail: { capability_run_id: "child" } },
+    ];
+    const { boundaries, runDecisions } = threadInputs([], [child, parent], decisions);
+    expect(boundaries.map((boundary) => boundary.run.capability_run_id)).toEqual(["longlist"]);
+    expect(runDecisions).toEqual([{ decision: decisions[0], capabilityRunId: "longlist" }]);
+  });
+
+  // F11: an untagged line inside a child's window is the parent's.
+  it("keeps the parent's untagged lines logged during a child window", () => {
+    const parent = { ...run("longlist", "2026-09-22T10:00:00Z", "2026-09-22T10:30:00Z"), purpose: "longlist" };
+    const child = {
+      ...run("child", "2026-09-22T10:05:00Z", "2026-09-22T10:10:00Z"),
+      purpose: "targeted",
+      parent_capability_run_id: "longlist",
+    };
+    const during = { ...decision(3, "2026-09-22T10:07:00Z"), kind: "component.completed" };
+    const { runDecisions } = threadInputs([], [child, parent], [during]);
+    expect(runDecisions).toEqual([{ decision: during, capabilityRunId: "longlist" }]);
+  });
+
+  // A child's run-tagged line never lands in its parent's block, even though
+  // it falls inside the parent's window; the parent's own tagged line does.
+  it("never shows a child's run-tagged search in the parent block", () => {
+    const parent = { ...run("longlist", "2026-09-22T10:00:00Z", "2026-09-22T10:30:00Z"), purpose: "longlist" };
+    const child = {
+      ...run("child", "2026-09-22T10:05:00Z", "2026-09-22T10:10:00Z"),
+      purpose: "targeted",
+      parent_capability_run_id: "longlist",
+    };
+    const childSearch = { ...decision(4, "2026-09-22T10:07:00Z"), kind: "search.executed", capability_run_id: "child" };
+    const parentSearch = { ...decision(5, "2026-09-22T10:08:00Z"), kind: "search.executed", capability_run_id: "longlist" };
+    const { runDecisions } = threadInputs([], [child, parent], [childSearch, parentSearch]);
+    expect(runDecisions).toEqual([{ decision: parentSearch, capabilityRunId: "longlist" }]);
   });
 });
 
@@ -180,6 +226,12 @@ describe("taskAgentComposerPlaceholder", () => {
     );
     expect(taskAgentComposerPlaceholder(undefined, true)).toBe(
       "Suggest changes here, or edit directly in the plan.",
+    );
+    expect(taskAgentComposerPlaceholder("succeeded", true, true, false, true)).toBe(
+      "Ask about the longlist, or add, exclude or include an option.",
+    );
+    expect(taskAgentComposerPlaceholder("running", true, true, false, true)).toBe(
+      "Replanning unlocks when this run finishes.",
     );
     expect(taskAgentComposerPlaceholder("running")).toBe(
       "Replanning unlocks when this run finishes.",
@@ -277,6 +329,9 @@ describe("TaskAgentPane — non-owner read-only (task 033 phase 10c, contract §
     >);
     vi.mocked(queries.useFunnel).mockReturnValue({ data: undefined } as unknown as ReturnType<
       typeof queries.useFunnel
+    >);
+    vi.mocked(queries.useTask).mockReturnValue({ data: undefined } as unknown as ReturnType<
+      typeof queries.useTask
     >);
     vi.mocked(mutations.useTaskAgentTurn).mockReturnValue({
       mutateAsync: vi.fn(),
@@ -494,6 +549,53 @@ describe("TaskAgentPane — the options-scoping baseline gate", () => {
       text.indexOf("Does the baseline cover young people"),
     );
     expect(text.indexOf("Does the baseline cover young people")).toBeLessThan(text.indexOf("recorded"));
+  });
+
+  // Task 045 (deliverable 10): a confirmed longlist verb is an `action` turn,
+  // rendered as the same quiet recorded line as a gate decision.
+  it("renders an action turn as the user's words, the confirming reply and a recorded line", () => {
+    const action: TaskAgentThreadTurn = {
+      turn_index: 4,
+      client_turn_id: "00000000-0000-0000-0000-0000000000a4",
+      user_message: "Yes, exclude it",
+      reply: "Done — Mentoring schemes is excluded.",
+      suggestions: [],
+      part: null,
+      kind: "action",
+      action: {
+        verb: "exclude",
+        option_id: "55555555-5555-5555-5555-555555555555",
+        label: "Mentoring schemes",
+        capability_run_id: null,
+      },
+      status: "completed",
+      created_at: "2026-09-22T10:14:00Z",
+      completed_at: "2026-09-22T10:14:01Z",
+    };
+    mockPane({ turns: [action] });
+    renderPane({ runStatus: "succeeded", stream: createInitialRunStreamState() });
+    expect(screen.getByText("Yes, exclude it")).toBeInTheDocument();
+    expect(screen.getByText("Done — Mentoring schemes is excluded.")).toBeInTheDocument();
+    expect(screen.getByText("Excluded Mentoring schemes", { selector: "span" })).toBeInTheDocument();
+    expect(screen.getByText(/recorded/)).toBeInTheDocument();
+    expect(screen.queryByText(/plan version/)).not.toBeInTheDocument();
+  });
+
+  // A8: a finished run's block takes its kind from its own run, not from
+  // whatever the live stream holds.
+  it("words a historical longlist block from its own purpose", () => {
+    mockPane({ turns: [] });
+    const longlistWalk: TaskAgentThreadRun = {
+      ...run("walk-2", "2026-09-22T10:00:00Z", "2026-09-22T10:30:00Z"),
+      purpose: "longlist",
+      parent_capability_run_id: null,
+    };
+    vi.mocked(queries.useRuns).mockReturnValue({
+      data: { data: [longlistWalk] },
+    } as unknown as ReturnType<typeof queries.useRuns>);
+    renderPane({ runStatus: "succeeded", stream: createInitialRunStreamState() });
+    expect(screen.getByText(/The longlist is built/)).toBeInTheDocument();
+    expect(screen.queryByText(/The baseline is written/)).not.toBeInTheDocument();
   });
 
   it("keeps the composer open at the gate, with the baseline question placeholder", () => {

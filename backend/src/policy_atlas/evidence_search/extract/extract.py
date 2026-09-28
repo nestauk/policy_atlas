@@ -27,8 +27,10 @@ from datetime import UTC, datetime
 from typing import Any, NamedTuple, cast
 
 import structlog
+from sqlalchemy import func
 from sqlalchemy import select as sa_select
 from sqlalchemy.engine import Connection
+from sqlalchemy.exc import IntegrityError
 
 from policy_atlas.core import tracing
 from policy_atlas.core.openai_client import CallBudget
@@ -48,8 +50,10 @@ from policy_atlas.core.schema import (
 )
 from policy_atlas.core.usage import TokenUsage, UsageAccumulator
 from policy_atlas.core.windowing import greedy_windows as _shared_greedy_windows
+from policy_atlas.evidence_search.corpus.characterise import screened_sources
 from policy_atlas.evidence_search.extract.extraction_backend import (
     ExtractionBackend,
+    InterventionsBackend,
     StubICFExtractionBackend,
 )
 from policy_atlas.evidence_search.extract.finding_vetter import (
@@ -82,6 +86,22 @@ from policy_atlas.evidence_search.extract.icf_records import (
 from policy_atlas.evidence_search.extract.icf_records import (
     ICFRecord,
     ICFRecordWire,
+)
+from policy_atlas.evidence_search.extract.interventions_profile import (
+    InterventionsWindowAdapter,
+    basis_segments,
+    ground_interventions_record,
+    interventions_fingerprint,
+    write_interventions_record,
+)
+from policy_atlas.evidence_search.extract.interventions_records import (
+    PROFILE_ID as INTERVENTIONS_PROFILE_ID,
+)
+from policy_atlas.evidence_search.extract.interventions_records import (
+    InterventionsRecordCarrier,
+    dedup_interventions_records,
+    interventions_claim_key,
+    validate_interventions_record,
 )
 from policy_atlas.evidence_search.extract.iof_prompt import (
     EXTRACT_MAX_OUTPUT_TOKENS,
@@ -131,7 +151,14 @@ OVERSIZE_POLICY = "char_split_v1"
 EXTRACT_RETRY_CAP = 1
 MAX_CONCURRENT_EXTRACT = 4
 EXTRACTION_PROFILE = PROFILE_ID
+#: The profiles an Evidence search extraction directive may name (the ES
+#: grammar; ``task_plan.EXTRACT_PROFILE_IDS`` pins it at import).
 KNOWN_PROFILE_IDS = (PROFILE_ID, ICF_PROFILE_ID)
+#: Every profile ``extract_scope`` runs, in run order. The intervention profile
+#: (task 045) is reachable only through the ``profiles`` kwarg — the
+#: ``extract_interventions`` component — never through the ES directive, whose
+#: IOF-mandatory rule stands (plan P9).
+ALL_PROFILE_IDS = (*KNOWN_PROFILE_IDS, INTERVENTIONS_PROFILE_ID)
 
 # D3 (024 steering surface): extraction.refresh — memo-bypass class vocabulary.
 # "abstract_only" and "all" force a fresh extraction attempt for their class
@@ -149,9 +176,12 @@ VETTED_OUT_RECORDS_CAP = 50
 class ExtractionProfileBundle:
     """Concrete extraction profile wiring for the shared document pipeline.
 
-    The two instances in this module are deliberately plain data, not a
+    The three instances in this module are deliberately plain data, not a
     registry. Each bundle carries every profile-specific seam: fingerprint,
-    backend, validation/dedup, table writer and optional vetter.
+    backend, validation/dedup, table writer and optional vetter. The last two
+    fields are ``None`` for the windowed full-text profiles (IOF, ICF) and set
+    by the intervention profile, which reads its own title-and-abstract basis
+    and grounds one quote per record by unique span.
     """
 
     profile_id: str
@@ -166,6 +196,11 @@ class ExtractionProfileBundle:
     validate_vetter_coverage: Callable[..., None]
     judge_payload_entry: Callable[..., dict[str, Any]]
     vetted_out_record: Callable[..., dict[str, Any]]
+    resolve_basis: Callable[[_Doc], None] | None = None
+    ground_record: (
+        Callable[[Sequence[tuple[str | None, str]], Any], tuple[list[dict[str, Any]], bool]]
+        | None
+    ) = None
 
 
 class ExtractError(Exception):
@@ -191,13 +226,16 @@ class ExtractContext:
             across components; a reviewer need not re-flag its presence.
         context: Scope context JSONB (unused by extraction in v1).
         selection_run_id: Explicit selection run whose ``selected`` set is
-            extracted — the compile-fails-closed upstream reference.
+            extracted — the compile-fails-closed upstream reference — or
+            ``None`` for the selection-free path (task 045, D24): every
+            screened-in document of the scope, for the intervention profile
+            only.
     """
 
     scope_id: uuid.UUID
     intent: str
     context: dict[str, Any]
-    selection_run_id: uuid.UUID
+    selection_run_id: uuid.UUID | None
 
 
 def _digest(components: dict[str, Any]) -> tuple[str, dict[str, Any]]:
@@ -392,19 +430,51 @@ def _load_selection(
     return cast("list[dict[str, Any]]", selected)
 
 
+def _screened_in_docs(
+    conn: Connection,
+    *,
+    task_id: uuid.UUID,
+    scope_id: uuid.UUID,
+) -> list[dict[str, Any]]:
+    """The selection-free path's document set: every screened-in document.
+
+    The ``characterise.screened_sources`` query (the effective screening row
+    per document, status ``relevant``), projected to the ``{tss_id,
+    text_basis}`` shape ``_load_docs`` reads from a selection. ``text_basis``
+    is ``abstract_only`` by construction: the only selection-free profile
+    reads title and abstract, never full text, even when the document has it.
+
+    Args:
+        conn: Open database connection.
+        task_id: Owning task.
+        scope_id: Evidence scope whose screened-in set is read.
+
+    Returns:
+        One ``{tss_id, text_basis}`` entry per screened-in document, in the
+        query's deterministic task-source order.
+    """
+    return [
+        {"tss_id": str(source.tss_id), "text_basis": "abstract_only"}
+        for source in screened_sources(conn, task_id=task_id, scope_id=scope_id)
+    ]
+
+
 def _load_docs(
     conn: Connection,
     *,
     task_id: uuid.UUID,
     scope_id: uuid.UUID,
     selected: list[dict[str, Any]],
+    with_chunks: bool = True,
 ) -> list[_Doc]:
     """Load each selected document in selected-list order.
 
     Joins the selected tss ids to their envelope snapshot metadata +
     full-text link and (LEFT JOIN) the classification result for
     ``primary_evidence_type``; full-text chunks are loaded and grouped by
-    snapshot. A selected tss id with no tss row is a structural failure.
+    snapshot unless ``with_chunks`` is false (the selection-free path, whose
+    profile never reads full text). A selected tss id with no tss row is a
+    structural failure.
     """
     order: list[tuple[uuid.UUID, str]] = []
     for record in selected:
@@ -455,10 +525,14 @@ def _load_docs(
                 "primary_evidence_type": row.primary_evidence_type,
             }
 
-    chunk_source_ids = {
-        _frozen_text_snapshot_id(row["full_text_snapshot_id"], row["source_snapshot_id"])
-        for row in loaded.values()
-    }
+    chunk_source_ids = (
+        {
+            _frozen_text_snapshot_id(row["full_text_snapshot_id"], row["source_snapshot_id"])
+            for row in loaded.values()
+        }
+        if with_chunks
+        else set()
+    )
     chunks_by_snapshot: dict[uuid.UUID, list[tuple[uuid.UUID, str]]] = {}
     if chunk_source_ids:
         chunk_rows = conn.execute(
@@ -570,6 +644,48 @@ def _resolve_basis(doc: _Doc) -> None:
     _fail_basis(
         doc, basis="abstract_only", snapshot_id=doc.envelope_snapshot_id, error="basis_mismatch"
     )
+
+
+def _resolve_interventions_basis(doc: _Doc) -> None:
+    """Resolve the intervention profile's own basis for one profile-local doc.
+
+    Title and abstract from the envelope metadata, whatever basis the shared
+    resolution chose: the profile never reads full text, so the basis is
+    ``abstract_only`` and the record snapshot is the envelope snapshot (the
+    memo key). A document with neither a title nor an abstract fails with
+    ``empty_basis``; a document with a title and no abstract is profiled from
+    its title (the prompt carries the missing abstract as JSON null).
+    One payload per document — no windowing.
+    """
+    doc.status = ""
+    doc.error = None
+    doc.window_payloads = []
+    segments = basis_segments(doc.title, doc.abstract)
+    if not segments:
+        _fail_basis(
+            doc,
+            basis="abstract_only",
+            snapshot_id=doc.envelope_snapshot_id,
+            error="empty_basis",
+        )
+        doc.basis_snapshot_id = None
+        doc.original_segments = ()
+        return
+    doc.basis = "abstract_only"
+    doc.basis_snapshot_id = doc.envelope_snapshot_id
+    doc.record_snapshot_id = doc.envelope_snapshot_id
+    doc.original_segments = list(segments)
+    doc.window_payloads = [
+        ExtractionWindowPayload(
+            tss_id=str(doc.tss_id),
+            window_index=0,
+            title=doc.title,
+            abstract=doc.abstract,
+            primary_evidence_type=doc.primary_evidence_type,
+            segments=[{"segment_id": sid, "content": content} for sid, content in segments],
+            metadata=doc.metadata,
+        )
+    ]
 
 
 def _greedy_windows(segments: list[tuple[str, str]]) -> list[list[tuple[str, str]]]:
@@ -878,6 +994,13 @@ def _process_doc(
     coverage_list: list[dict[str, str]] = []
     quote_unverified = 0
     for record in survivors:
+        if profile.ground_record is not None:
+            grounded, failed = profile.ground_record(doc.original_segments, record)
+            if failed:
+                quote_unverified += 1
+            groundings.append(grounded)
+            coverage_list.append(coverage_by_claim[profile.claim_key(record)])
+            continue
         entries: list[dict[str, Any]] = []
         any_failed = False
         for anchor in record.anchors:
@@ -1190,45 +1313,163 @@ def _write_docs(
             still exists, so writing under the same fingerprint would
             collide with ``uq_ser_memo`` (task_id, source_snapshot_id,
             extraction_fingerprint).
+
+    Each document's writes run in a savepoint. When a concurrent walk on the
+    same task wrote the same memo key first (two option-search child walks
+    profiling one document; task 045), the insert violates ``uq_ser_memo``:
+    only that document's savepoint rolls back, and the document becomes
+    ``reused`` of the sibling's row — never ``failed``, and never an aborted
+    component transaction.
+
+    Before the first write, one transaction-scoped advisory lock per memo key
+    is taken in sorted key order, so two sibling walks writing overlapping
+    documents serialise on their first shared key instead of deadlocking on
+    the unique index in opposite orders; the write order itself is unchanged.
     """
-    for doc in docs:
-        if doc.reused:
-            continue
-        record_id = uuid.uuid4()
-        doc.extraction_record_id = record_id
-        doc_fingerprint = (
-            refresh_fingerprint
-            if doc.refreshed and refresh_fingerprint is not None
-            else fingerprint
-        )
-        conn.execute(
-            source_extraction_record.insert().values(
-                extraction_record_id=record_id,
-                task_id=task_id,
-                source_snapshot_id=doc.record_snapshot_id,
-                task_source_snapshot_id=doc.tss_id,
-                extraction_fingerprint=doc_fingerprint,
-                status=doc.status,
-                basis=doc.basis,
-                primary_evidence_type=doc.sent_evidence_type,
-                error=doc.error,
-                finding_count=doc.finding_count,
-                run_id=run_id,
-                created_at=created_at,
-            )
-        )
-        for record, grounding, coverage in zip(
-            doc.survivors, doc.groundings, doc.coverage_by_survivor, strict=True
-        ):
-            profile.write_finding(
-                conn,
+    written = [doc for doc in docs if not doc.reused]
+    _lock_memo_keys(
+        conn,
+        [
+            _memo_lock_key(
                 task_id,
-                record_id,
-                record,
-                grounding,
-                coverage,
-                created_at,
+                doc.record_snapshot_id,
+                _doc_fingerprint(doc, fingerprint, refresh_fingerprint),
             )
+            for doc in written
+        ],
+    )
+    for doc in written:
+        doc_fingerprint = _doc_fingerprint(doc, fingerprint, refresh_fingerprint)
+        try:
+            with conn.begin_nested():
+                _write_doc(
+                    conn,
+                    task_id=task_id,
+                    run_id=run_id,
+                    fingerprint=doc_fingerprint,
+                    doc=doc,
+                    created_at=created_at,
+                    profile=profile,
+                )
+        except IntegrityError as exc:
+            if not _is_memo_conflict(exc):
+                raise
+            _reuse_sibling_row(conn, task_id=task_id, fingerprint=doc_fingerprint, doc=doc)
+
+
+def _doc_fingerprint(doc: _Doc, fingerprint: str, refresh_fingerprint: str | None) -> str:
+    """The fingerprint ``_write_docs`` writes ``doc`` under."""
+    if doc.refreshed and refresh_fingerprint is not None:
+        return refresh_fingerprint
+    return fingerprint
+
+
+def _memo_lock_key(task_id: uuid.UUID, snapshot_id: uuid.UUID | None, fingerprint: str) -> int:
+    """A signed 64-bit advisory-lock key for one ``uq_ser_memo`` key."""
+    digest = hashlib.sha256(f"ser_memo:{task_id}:{snapshot_id}:{fingerprint}".encode()).digest()
+    return int.from_bytes(digest[:8], "big", signed=True)
+
+
+def _lock_memo_keys(conn: Connection, keys: list[int]) -> None:
+    """Take each key's transaction-scoped advisory lock, in sorted order."""
+    for key in sorted(set(keys)):
+        conn.execute(sa_select(func.pg_advisory_xact_lock(key)))
+
+
+def _is_memo_conflict(exc: IntegrityError) -> bool:
+    """Whether ``exc`` is a ``uq_ser_memo`` unique violation."""
+    diag = getattr(exc.orig, "diag", None)
+    return getattr(diag, "constraint_name", None) == "uq_ser_memo"
+
+
+def _reuse_sibling_row(
+    conn: Connection, *, task_id: uuid.UUID, fingerprint: str, doc: _Doc
+) -> None:
+    """Point a document at the memo row a concurrent walk wrote first.
+
+    Args:
+        conn: Open database connection (its savepoint already rolled back).
+        task_id: Owning task.
+        fingerprint: The fingerprint the document was written under.
+        doc: The document whose write lost the race.
+
+    Raises:
+        ExtractError: If the conflicting row cannot be read back.
+    """
+    row = conn.execute(
+        sa_select(
+            source_extraction_record.c.extraction_record_id,
+            source_extraction_record.c.status,
+            source_extraction_record.c.basis,
+            source_extraction_record.c.finding_count,
+        )
+        .where(source_extraction_record.c.task_id == task_id)
+        .where(source_extraction_record.c.extraction_fingerprint == fingerprint)
+        .where(source_extraction_record.c.status.in_(MEMO_STATUSES))
+        .where(source_extraction_record.c.source_snapshot_id == doc.record_snapshot_id)
+        .order_by(source_extraction_record.c.created_at.desc())
+    ).first()
+    if row is None:
+        raise ExtractError(f"memo conflict for tss {doc.tss_id} but no memo row to reuse")
+    log.info(
+        "extract.memo_conflict_reused",
+        tss_id=str(doc.tss_id),
+        extraction_record_id=str(row.extraction_record_id),
+    )
+    doc.reused = True
+    doc.extraction_record_id = row.extraction_record_id
+    doc.status = row.status
+    doc.basis = row.basis
+    doc.finding_count = int(row.finding_count)
+    doc.error = None
+    doc.survivors = []
+    doc.groundings = []
+    doc.coverage_by_survivor = []
+    doc.vetted_out_count = 0
+    doc.vetted_out_records = []
+
+
+def _write_doc(
+    conn: Connection,
+    *,
+    task_id: uuid.UUID,
+    run_id: uuid.UUID,
+    fingerprint: str,
+    doc: _Doc,
+    created_at: datetime,
+    profile: ExtractionProfileBundle,
+) -> None:
+    """Write one document's memo record and its findings."""
+    record_id = uuid.uuid4()
+    doc.extraction_record_id = record_id
+    conn.execute(
+        source_extraction_record.insert().values(
+            extraction_record_id=record_id,
+            task_id=task_id,
+            source_snapshot_id=doc.record_snapshot_id,
+            task_source_snapshot_id=doc.tss_id,
+            extraction_fingerprint=fingerprint,
+            status=doc.status,
+            basis=doc.basis,
+            primary_evidence_type=doc.sent_evidence_type,
+            error=doc.error,
+            finding_count=doc.finding_count,
+            run_id=run_id,
+            created_at=created_at,
+        )
+    )
+    for record, grounding, coverage in zip(
+        doc.survivors, doc.groundings, doc.coverage_by_survivor, strict=True
+    ):
+        profile.write_finding(
+            conn,
+            task_id,
+            record_id,
+            record,
+            grounding,
+            coverage,
+            created_at,
+        )
 
 
 # --- Summary / invariants ---------------------------------------------------
@@ -1381,7 +1622,7 @@ def _build_summary(
     base_docs: Sequence[_Doc],
     profile_runs: Sequence[_ProfileRun],
     *,
-    selection_run_id: uuid.UUID,
+    selection_run_id: uuid.UUID | None,
     refresh: str | None = None,
 ) -> dict[str, Any]:
     selected = len(base_docs)
@@ -1448,7 +1689,7 @@ def _build_summary(
             "basis": _basis_counts(base_docs),
             "profiles": counts_profiles,
         },
-        "selection_run_id": str(selection_run_id),
+        "selection_run_id": str(selection_run_id) if selection_run_id is not None else None,
         "flags": flags,
         # D3 (024 steering surface): the executed refresh value is echoed
         # verbatim, scope-wide (it applies identically across every requested
@@ -1507,6 +1748,38 @@ def _icf_profile(
     )
 
 
+def _interventions_fingerprint(
+    mode: str, finding_vetter_active: bool
+) -> tuple[str, dict[str, Any]]:
+    del finding_vetter_active  # the intervention profile has no vetter
+    return interventions_fingerprint(mode, retry_cap=EXTRACT_RETRY_CAP)
+
+
+def _no_vetter(*args: Any, **kwargs: Any) -> Any:
+    """The intervention profile's vetter seams: it has no vetter (S7)."""
+    del args, kwargs
+    raise RuntimeError("the intervention profile has no finding vetter")
+
+
+def _interventions_profile(interventions_backend: InterventionsBackend) -> ExtractionProfileBundle:
+    return ExtractionProfileBundle(
+        profile_id=INTERVENTIONS_PROFILE_ID,
+        fingerprint=_interventions_fingerprint,
+        backend=InterventionsWindowAdapter(interventions_backend),
+        wire_record_model=InterventionsRecordCarrier,
+        validate_record=validate_interventions_record,
+        dedup_records=dedup_interventions_records,
+        claim_key=interventions_claim_key,
+        write_finding=write_interventions_record,
+        vetter_backend=None,
+        validate_vetter_coverage=_no_vetter,
+        judge_payload_entry=_no_vetter,
+        vetted_out_record=_no_vetter,
+        resolve_basis=_resolve_interventions_basis,
+        ground_record=ground_interventions_record,
+    )
+
+
 def _selected_profiles(
     requested: Sequence[str],
     *,
@@ -1514,13 +1787,14 @@ def _selected_profiles(
     finding_vetter_backend: FindingVetterBackend | None,
     icf_extraction_backend: Any,
     icf_finding_vetter_backend: ICFFindingVetterBackend | None,
+    interventions_backend: InterventionsBackend | None = None,
 ) -> list[ExtractionProfileBundle]:
     requested_tuple = tuple(requested)
     if not requested_tuple:
         raise ExtractError("at least one extraction profile id must be requested")
     if len(set(requested_tuple)) != len(requested_tuple):
         raise ExtractError("duplicate extraction profile id requested")
-    unknown = [profile_id for profile_id in requested_tuple if profile_id not in KNOWN_PROFILE_IDS]
+    unknown = [profile_id for profile_id in requested_tuple if profile_id not in ALL_PROFILE_IDS]
     if unknown:
         raise ExtractError(f"unknown extraction profile id requested: {unknown[0]}")
 
@@ -1530,9 +1804,17 @@ def _selected_profiles(
             icf_extraction_backend, icf_finding_vetter_backend
         ),
     }
+    if INTERVENTIONS_PROFILE_ID in requested_tuple:
+        # Loud, never a silent stub: the caller wires the backend (the harness
+        # resolves its stub default; production wires the live one).
+        if interventions_backend is None:
+            raise ExtractError(
+                f"profile {INTERVENTIONS_PROFILE_ID!r} requested with no interventions backend"
+            )
+        bundles[INTERVENTIONS_PROFILE_ID] = _interventions_profile(interventions_backend)
     return [
         bundles[profile_id]
-        for profile_id in KNOWN_PROFILE_IDS
+        for profile_id in ALL_PROFILE_IDS
         if profile_id in requested_tuple
     ]
 
@@ -1685,6 +1967,9 @@ def _run_profile(
         _digest({**components, "refresh": refresh})[0] if refresh is not None else None
     )
     docs = [_clone_doc_for_profile(doc) for doc in base_docs]
+    if profile.resolve_basis is not None:
+        for doc in docs:
+            profile.resolve_basis(doc)
     _apply_memo(
         conn, task_id=task_id, fingerprint=fingerprint, docs=docs, refresh=refresh
     )
@@ -1905,10 +2190,13 @@ def extract_scope(
     relevance_emphasis: Sequence[str] | None = None,
     profiles: Sequence[str] = (PROFILE_ID,),
     refresh: str | None = None,
+    interventions_backend: InterventionsBackend | None = None,
 ) -> dict[str, Any]:
     """Extract findings for one evidence scope's selection.
 
-    Loads the referenced selection row, resolves each document's basis, checks
+    Loads the referenced selection row — or, on the selection-free path
+    (``context.selection_run_id is None``), the scope's whole screened-in
+    set — resolves each document's basis, checks
     the durable memo per selected profile, fans out the windowed extraction
     calls, validates / verifies / dedups emitted records, writes durable
     profile records + findings and finally the run-scoped roll-up.
@@ -1932,17 +2220,22 @@ def extract_scope(
             are present. NEVER enters the extraction or vetter prompts, nor the
             extraction fingerprint (memo reuse untouched).
         profiles: Selected extraction profile ids. Profiles run in
-            ``KNOWN_PROFILE_IDS`` order regardless of caller order.
+            ``ALL_PROFILE_IDS`` order regardless of caller order.
         refresh: D3 ``extraction.refresh`` value (``"abstract_only" | "failed"
             | "all"``), or ``None`` for as-built memo behaviour.
+        interventions_backend: The intervention profile seam (task 045).
+            Required when that profile is requested — a missing backend is
+            an ``ExtractError``, never a silent stub.
 
     Returns:
         The extraction summary payload for ``component.completed``.
 
     Raises:
         ExtractError: If the selection row is missing, a profile id is unknown
-            or duplicated, a selected tss lacks its snapshot row, or a coverage
-            invariant fails.
+            or duplicated, a selected tss lacks its snapshot row, a coverage
+            invariant fails, the intervention profile is requested with no
+            backend, or the selection-free path is asked for a profile other
+            than the intervention profile.
     """
     profile_bundles = _selected_profiles(
         profiles,
@@ -1954,13 +2247,26 @@ def extract_scope(
             else StubICFExtractionBackend()
         ),
         icf_finding_vetter_backend=icf_finding_vetter_backend,
+        interventions_backend=interventions_backend,
     )
-    selected = _load_selection(
-        conn,
-        task_id=task_id,
-        scope_id=context.scope_id,
-        selection_run_id=context.selection_run_id,
-    )
+    selection_free = context.selection_run_id is None
+    if selection_free:
+        # D24: no select run. Only the abstract-basis intervention profile
+        # runs here — IOF/ICF depend on select's full-text basis decision.
+        if tuple(profiles) != (INTERVENTIONS_PROFILE_ID,):
+            raise ExtractError(
+                "the selection-free path runs the intervention profile only "
+                f"({INTERVENTIONS_PROFILE_ID!r})"
+            )
+        selected = _screened_in_docs(conn, task_id=task_id, scope_id=context.scope_id)
+    else:
+        assert context.selection_run_id is not None  # narrowed by selection_free
+        selected = _load_selection(
+            conn,
+            task_id=task_id,
+            scope_id=context.scope_id,
+            selection_run_id=context.selection_run_id,
+        )
     created_at = datetime.now(UTC)
 
     docs = _load_docs(
@@ -1968,6 +2274,7 @@ def extract_scope(
         task_id=task_id,
         scope_id=context.scope_id,
         selected=selected,
+        with_chunks=not selection_free,
     )
     for doc in docs:
         _resolve_basis(doc)
@@ -2030,7 +2337,7 @@ def _write_rollup(
     task_id: uuid.UUID,
     run_id: uuid.UUID,
     scope_id: uuid.UUID,
-    selection_run_id: uuid.UUID,
+    selection_run_id: uuid.UUID | None,
     summary: dict[str, Any],
     created_at: datetime,
 ) -> None:

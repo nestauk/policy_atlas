@@ -66,6 +66,15 @@ Each Task should (more or less) feature similar "Lifecycle Tabs" (**Tabs**):
 
 **Context:** a collection of links; the set of existing Projects, Tasks (and/or Artefacts) that can input into a current user Task or Chat. This can be determined by the user themselves (eg selecting specific Tasks as Context for Chat), or determined by user actions (eg selecting specific option to appraise in detail).
 
+**Options scoping words** *(task 045, the longlist; owner rulings 2026-09-22 — [contract § Terms](../tasks/045-scoping-longlist/contract.md))*:
+
+- **Entrant:** an option that did not come from clustering the evidence — *suggested by Policy Atlas*, *from your evidence search* or *added by you*. Every entrant gets an option search.
+- **Option search:** an option's own small search (acquire, screen, classify, appraise, ingest, intervention profile), run from its specified design. Owner: "let's go with option search". Not the **mini evidence search**, which is the assessment-depth reading of a shortlisted option.
+- **Child walk:** a walk started by another walk — an option search under the longlist walk that asked for it (code: `capability_run.parent_capability_run_id`). An option search the Task Agent starts to add an option has no parent.
+- **Intervention profile:** the `extract` profile that reads every screened-in document's abstract for the interventions it covers, each with its role (evaluated · described · recommended · comparator · mentioned). Owner naming, replacing "abstract profile" (code: `os_interventions_base_v1`).
+- **Intervention profile record** (`intervention_profile_record`): one row per intervention a document covers — the unit the longlist clusters into options. Not a finding of effect. Owner naming, replacing "intervention mention". On screen: a document *covers* or *names* an option.
+- **Where tried:** the countries an option's documents were studied in, grouped against the plan's Where (*United Kingdom · comparable systems (OECD) · other*). A facet and a card line, never a filter or a verdict.
+
 ## Future direction (information only; not in scope of task 038)
 
 - A user may want to re-run some aspect of a Task, or the whole Task, from a new chat rather than only from the Task Agent. Iterative re-running of Tasks is not bottomed out and can be its own feature.

@@ -1371,3 +1371,70 @@ def test_sse_stream_closes_when_the_administrators_flag_is_revoked(
                 await admin_stream.aclose()
 
     asyncio.run(exercise())
+
+
+def test_stage_frames_name_the_walk_their_component_run_belongs_to(engine: Engine) -> None:
+    """Task 045, A3: a stage frame carries its walk, so an option search's stages
+    can be kept off its parent's timeline; a component run with no walk has none."""
+    from policy_atlas.core.schema import capability_run, evidence_scope, runs
+    from tests.helpers import now
+
+    task_id, scope_id, walk_id = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+    walked, loose = uuid.uuid4(), uuid.uuid4()
+    try:
+        with engine.begin() as conn:
+            conn.execute(
+                task.insert().values(
+                    task_id=task_id,
+                    name="Stage frames",
+                    status="active",
+                    created_at=now(),
+                    updated_at=now(),
+                )
+            )
+            conn.execute(
+                evidence_scope.insert().values(
+                    evidence_scope_id=scope_id,
+                    task_id=task_id,
+                    intent="intent",
+                    context={},
+                    created_at=now(),
+                )
+            )
+            conn.execute(
+                capability_run.insert().values(
+                    capability_run_id=walk_id,
+                    task_id=task_id,
+                    evidence_scope_id=scope_id,
+                    capability="evidence_search",
+                    plan_id=uuid.uuid4(),
+                    plan_version=1,
+                    status="running",
+                    started_at=now(),
+                )
+            )
+            for run_id, walk in ((walked, walk_id), (loose, None)):
+                conn.execute(
+                    runs.insert().values(
+                        run_id=run_id,
+                        task_id=task_id,
+                        status="running",
+                        started_at=now(),
+                        capability_run_id=walk,
+                    )
+                )
+                events.append(
+                    conn,
+                    task_id=task_id,
+                    run_id=run_id,
+                    event_type="run.started",
+                    payload={"component": "screen"},
+                )
+        with engine.connect() as conn:
+            rows = sse._event_rows(conn, task_id=task_id, after=0, through=None)
+            frames = sse._map_rows(conn, task_id=task_id, rows=rows, through=None)
+        stages = [frame for frame in frames if frame["type"] == "stage.started"]
+        assert [frame["capability_run_id"] for frame in stages] == [str(walk_id), None]
+    finally:
+        with engine.begin() as conn:
+            delete_task_data(conn, task_id)

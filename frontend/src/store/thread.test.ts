@@ -260,6 +260,10 @@ describe("taskAgentTurnKind", () => {
     expect(taskAgentTurnKind(turn(1))).toBe("reply");
     expect(taskAgentTurnKind({ ...turn(1), kind: "answer" })).toBe("answer");
   });
+
+  it("reads a confirmed longlist verb as an action (task 045)", () => {
+    expect(taskAgentTurnKind({ ...turn(1), kind: "action" })).toBe("action");
+  });
 });
 
 describe("taskAgentAnswerRow", () => {

@@ -20,6 +20,15 @@ from sqlalchemy.exc import IntegrityError
 
 from policy_atlas.core.schema import event_log
 
+#: How many times one append re-reads the sequence after a collision. Each
+#: retry follows a competing writer's commit (the insert waits on the other
+#: transaction's uncommitted row, then collides), so the bound is roughly the
+#: number of writers one task can have at once. Since task 045 that is a
+#: longlist walk, its option searches (up to four at a time, child walks on
+#: the same task) and the API: five was too few — measured on the stub
+#: longlist walk, a child's ``run.started`` exhausted it.
+APPEND_ATTEMPTS = 32
+
 
 def append(
     conn: Connection,
@@ -54,8 +63,10 @@ def append(
     # re-reads instead of poisoning the caller's transaction or failing a
     # component commit (review finding, 2026-07-21). Collisions stay hard
     # errors after the bounded retries; misordering remains impossible.
+    # Task 045 added a third family: a longlist walk's child walks, which run
+    # concurrently on the same task (see ``APPEND_ATTEMPTS``).
     event_id = uuid.uuid4()
-    for attempt in range(5):
+    for attempt in range(APPEND_ATTEMPTS):
         current_max = conn.execute(
             select(func.coalesce(func.max(event_log.c.sequence), 0)).where(
                 event_log.c.task_id == task_id
@@ -78,7 +89,7 @@ def append(
             return event_id
         except IntegrityError:
             savepoint.rollback()
-            if attempt == 4:
+            if attempt == APPEND_ATTEMPTS - 1:
                 raise
     raise AssertionError("unreachable")  # pragma: no cover
 

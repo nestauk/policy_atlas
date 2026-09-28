@@ -1,17 +1,30 @@
 #!/usr/bin/env python3
-"""Hard-delete every ``options_scoping`` task so revision ``b5e1d7a4c026`` can downgrade.
+"""Hard-delete named ``options_scoping`` tasks so their revisions can downgrade.
 
-That revision's ``downgrade()`` refuses while any ``task`` or ``capability_run``
-row still carries ``capability = 'options_scoping'`` — dropping
-``task.capability`` and narrowing ``ck_capr_capability`` would silently
-reclassify those rows as Evidence searches. ADR 0037 § Rollback names the
-remedy this script is: "archiving keeps the row, so it is not a remedy". This
-is pre-merge, staging-only data; there is no production options-scoping data
-to protect yet.
+Two revisions refuse while options-scoping data exists, and this script is the
+remedy both name:
 
-Default (no flags) LISTS every options-scoping task and its row counts across
-the tables ``--apply`` would touch, and changes nothing. ``--apply``
-hard-deletes them all, inside one transaction, in FK order.
+- ``b5e1d7a4c026`` (task 044) refuses while any ``task`` or ``capability_run``
+  row still carries ``capability = 'options_scoping'`` — dropping
+  ``task.capability`` and narrowing ``ck_capr_capability`` would silently
+  reclassify those rows as Evidence searches. ADR 0037 § Rollback: "archiving
+  keeps the row, so it is not a remedy".
+- ``c7e2a9f4b1d8`` (task 045) refuses while any walk runs under a
+  ``longlist`` or ``targeted`` intent record (the longlist walk and its option
+  searches), or an ``extraction_result`` has no ``selection_run_id``. Those
+  walks exist only on options-scoping tasks, so removing the tasks removes
+  them, with their option, membership, relation, ``longlist_result`` and
+  intervention-profile rows (ADR 0039 § Rollback).
+
+Options-scoping tasks may be real users' work, so nothing is deleted by
+default and nothing is deleted wholesale: ``--apply`` removes only the tasks
+named with one or more ``--task-id`` flags, and refuses (exit 2) without one.
+
+Default (no ``--apply``) LISTS the options-scoping tasks — the named ones, or
+every one when none is named — and their row counts across the tables
+``--apply`` would touch, and changes nothing. ``--apply --task-id ...``
+hard-deletes the named tasks, inside one transaction, in FK order. A named id
+that is not an options-scoping task refuses the run (exit 2).
 
 Both modes refuse (exit 2) before any delete if an Evidence search task links
 to one of the scoping tasks as its target — i.e. a ``task_link`` row whose
@@ -23,7 +36,8 @@ they plan the run — the refusal fires in list mode too.
 Usage::
 
     uv run --project backend python scripts/ops_remove_scoping_tasks.py
-    uv run --project backend python scripts/ops_remove_scoping_tasks.py --apply
+    uv run --project backend python scripts/ops_remove_scoping_tasks.py \
+        --apply --task-id <uuid> [--task-id <uuid> ...]
 """
 
 from __future__ import annotations
@@ -44,6 +58,11 @@ _DEV_URL = "postgresql+psycopg://policy_atlas:policy_atlas@localhost:5432/policy
 #: The result tables a scoping task can carry rows in — summed for the
 #: operator-facing listing's "results" count.
 RESULT_TABLES: tuple[str, ...] = (
+    "option",
+    "option_membership",
+    "option_relation",
+    "longlist_result",
+    "intervention_profile_record",
     "source_screening_result",
     "source_classification_result",
     "source_appraisal_result",
@@ -80,12 +99,24 @@ RESULT_TABLES: tuple[str, ...] = (
 #: - ``event_log`` FKs to ``runs``, so it precedes ``runs``, not follows it.
 #: - ``runs`` FKs to ``capability_run`` (``runs.capability_run_id``), and
 #:   ``artefact`` also FKs to ``capability_run`` — both precede it.
-#: - ``capability_run`` FKs to ``evidence_scope``, so it precedes it.
+#: - ``capability_run`` FKs to ``evidence_scope``, so it precedes it. Its
+#:   self-FK (``parent_capability_run_id``, task 045) is satisfied inside one
+#:   statement: a parent and its children always share a ``task_id``.
+#: - The task 045 option records lead: ``option_membership`` and
+#:   ``option_relation`` FK to ``option``; ``option`` FKs to ``runs`` (and is
+#:   named by ``task_link.option_id``, whose rows are already gone);
+#:   ``longlist_result`` FKs to ``runs`` and ``evidence_scope``;
+#:   ``intervention_profile_record`` FKs to ``source_extraction_record``.
 #:
 #: Never touched — corpus-level, shared between tasks: ``source_snapshot``,
 #: ``chunk``, ``chunk_embedding``. ``finding_reference_union`` is a VIEW, not
 #: a table: never deleted from.
 TASK_ID_TABLES: tuple[str, ...] = (
+    "option_membership",
+    "option_relation",
+    "option",
+    "longlist_result",
+    "intervention_profile_record",
     "synthesis_result",
     "grouping_result",
     "extraction_result",
@@ -116,6 +147,23 @@ def _scoping_task_ids(conn: Connection) -> list[uuid.UUID]:
     """Return every task id whose ``task.capability`` is options_scoping."""
     rows = conn.execute(text("SELECT task_id FROM task WHERE capability = 'options_scoping'"))
     return [row[0] for row in rows]
+
+
+def _selected(
+    conn: Connection, named: list[uuid.UUID] | None
+) -> tuple[list[uuid.UUID], list[uuid.UUID]]:
+    """Return ``(scoping task ids to act on, named ids that are not scoping tasks)``.
+
+    Args:
+        conn: Open database connection.
+        named: The ``--task-id`` values, or ``None``/empty for every scoping task.
+    """
+    every = _scoping_task_ids(conn)
+    if not named:
+        return every, []
+    scoping = set(every)
+    wanted = list(dict.fromkeys(named))
+    return [t for t in wanted if t in scoping], [t for t in wanted if t not in scoping]
 
 
 def _refusals(conn: Connection, task_ids: list[uuid.UUID]) -> list[tuple[uuid.UUID, uuid.UUID]]:
@@ -189,7 +237,7 @@ def _counts(conn: Connection, task_id: uuid.UUID) -> dict[str, int]:
 
 
 def _list_only(conn: Connection, task_ids: list[uuid.UUID]) -> None:
-    """Print the operator-facing listing for every scoping task. Deletes nothing.
+    """Print the operator-facing listing for the given scoping tasks. Deletes nothing.
 
     Args:
         conn: Open database connection.
@@ -208,7 +256,7 @@ def _list_only(conn: Connection, task_ids: list[uuid.UUID]) -> None:
 
 
 def _apply(conn: Connection, task_ids: list[uuid.UUID]) -> None:
-    """Hard-delete every scoping task and its rows, in FK order.
+    """Hard-delete the given scoping tasks and their rows, in FK order.
 
     Args:
         conn: Open database connection, inside the caller's transaction.
@@ -309,20 +357,37 @@ def _print_refusal(refusals: list[tuple[uuid.UUID, uuid.UUID]]) -> None:
         print(f"  scoping task {scoping_id} -> evidence_search task {es_id}", file=sys.stderr)
 
 
-def run(engine: Engine, apply: bool) -> int:
-    """List or apply the removal of every options-scoping task.
+def _print_not_scoping(ids: list[uuid.UUID]) -> None:
+    print("refusing: not an options_scoping task:", file=sys.stderr)
+    for task_id in ids:
+        print(f"  {task_id}", file=sys.stderr)
+
+
+def run(engine: Engine, apply: bool, task_ids: list[uuid.UUID] | None = None) -> int:
+    """List options-scoping tasks, or remove the named ones.
 
     Args:
         engine: Database engine to run against.
-        apply: When ``True``, hard-delete inside one transaction; when
-            ``False`` (the default), only list and change nothing.
+        apply: When ``True``, hard-delete the named tasks inside one
+            transaction; when ``False`` (the default), only list and change
+            nothing.
+        task_ids: The tasks to act on (``--task-id``). Required with
+            ``apply``; without it, listing covers every options-scoping task.
 
     Returns:
         Process exit code: ``0`` on success (including the empty case),
-        ``2`` on the linked-Evidence-search refusal.
+        ``2`` on a refusal (``--apply`` with no ``--task-id``, a named id that
+        is not an options-scoping task, or a linked Evidence search).
     """
+    if apply and not task_ids:
+        print("refusing: --apply needs one or more --task-id", file=sys.stderr)
+        return 2
+    named = task_ids
     with engine.connect() as conn:
-        task_ids = _scoping_task_ids(conn)
+        task_ids, unknown = _selected(conn, named)
+        if unknown:
+            _print_not_scoping(unknown)
+            return 2
         refusals = _refusals(conn, task_ids)
         if refusals:
             _print_refusal(refusals)
@@ -337,7 +402,10 @@ def run(engine: Engine, apply: bool) -> int:
     with engine.begin() as conn:
         # Re-check inside the write transaction: belt and braces against a
         # task_link written between the read above and this transaction.
-        task_ids = _scoping_task_ids(conn)
+        task_ids, unknown = _selected(conn, named)
+        if unknown:
+            _print_not_scoping(unknown)
+            return 2
         refusals = _refusals(conn, task_ids)
         if refusals:
             _print_refusal(refusals)
@@ -350,19 +418,27 @@ def run(engine: Engine, apply: bool) -> int:
 
 
 def main() -> int:
-    """Entry point: parse ``--apply`` and run against ``$DATABASE_URL``."""
+    """Entry point: parse the flags and run against ``$DATABASE_URL``."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--apply",
         action="store_true",
-        help="hard-delete every options_scoping task (default: list only)",
+        help="hard-delete the tasks named with --task-id (default: list only)",
+    )
+    parser.add_argument(
+        "--task-id",
+        action="append",
+        type=uuid.UUID,
+        default=[],
+        dest="task_ids",
+        help="an options_scoping task to act on; repeatable; required with --apply",
     )
     args = parser.parse_args()
 
     url = make_url(os.environ.get("DATABASE_URL", _DEV_URL))
     engine = create_engine(url)
     try:
-        return run(engine, args.apply)
+        return run(engine, args.apply, args.task_ids)
     finally:
         engine.dispose()
 

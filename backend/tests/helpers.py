@@ -274,6 +274,11 @@ def delete_task_data(conn: Connection, task_id: uuid.UUID) -> None:
         grouping_result,
         implementation_context_finding,
         intervention_outcome_finding,
+        intervention_profile_record,
+        longlist_result,
+        option,
+        option_membership,
+        option_relation,
         runs,
         search_coverage_record,
         selection_result,
@@ -322,6 +327,22 @@ def delete_task_data(conn: Connection, task_id: uuid.UUID) -> None:
         annotation.c.block_id.in_(block_ids_subq)
     )
 
+    # Task 045 option records first: membership and relation FK onto option;
+    # option FKs onto runs and is named by task_link.option_id (cleared here,
+    # the link rows themselves go below); longlist_result FKs onto scope/runs;
+    # the profile records FK onto source_extraction_record.
+    conn.execute(delete(option_membership).where(option_membership.c.task_id == task_id))
+    conn.execute(delete(option_relation).where(option_relation.c.task_id == task_id))
+    conn.execute(
+        task_link.update()
+        .where(task_link.c.target_task_id == task_id)
+        .values(option_id=None)
+    )
+    conn.execute(delete(option).where(option.c.task_id == task_id))
+    conn.execute(delete(longlist_result).where(longlist_result.c.task_id == task_id))
+    conn.execute(delete(intervention_profile_record).where(
+        intervention_profile_record.c.task_id == task_id
+    ))
     # Task 013 row first: FKs onto artefact and all four upstream result tables
     # (characterisation/selection/extraction/grouping) plus scope/runs.
     conn.execute(delete(synthesis_result).where(

@@ -1,6 +1,7 @@
 import { useState } from "react";
 
 import type { components } from "../../api/gen/types";
+import { usePatchPlan } from "../../api/mutations";
 import { usePlan, useTask } from "../../api/queries";
 import { seedComposer } from "../../lib/composerSeed";
 import { scrub } from "../../lib/scrub";
@@ -21,7 +22,7 @@ import {
   screeningOverlayError,
   type PlanOverlay,
 } from "./planOverlay";
-import { SCOPING_CONFIRMED_LINE, START_SEARCH_CLASS, usePlanStart, useScopingPlanStart } from "./planStart";
+import { START_SEARCH_CLASS, scopingStatusLine, usePlanStart, useScopingPlanStart } from "./planStart";
 import {
   ANALYSIS_DEPTH_LABEL,
   ANALYSIS_QUESTION,
@@ -29,6 +30,7 @@ import {
   axesForResearchApproach,
   CONSTRAINT_CHECKED_AT_LABEL,
   constraintEffectLines,
+  DEFAULT_CONSTRAINT_RIDER,
   RESEARCH_APPROACH_CUSTOM,
   RESEARCH_APPROACH_HINT,
   RESEARCH_APPROACH_PRESET_LABEL,
@@ -47,12 +49,18 @@ import {
   timeBandFor,
   vocabLabel,
   YOUR_CONTEXT_TYPE_LABEL,
+  YOUR_OPTIONS_ASSUMED_TAG,
+  YOUR_OPTIONS_DESIGN_LABEL,
+  YOUR_OPTIONS_DESIGN_PENDING,
+  YOUR_OPTIONS_NONE,
+  YOUR_OPTIONS_TITLE,
 } from "./planVocabulary";
 
 type ScopingPlanDraft = components["schemas"]["ScopingPlanDraft"];
 type TaggedOut = components["schemas"]["TaggedOut"];
 type ScopingConstraintOut = components["schemas"]["ScopingConstraintOut"];
 type YourContextOut = components["schemas"]["YourContextOut"];
+type YourOptionOut = components["schemas"]["YourOptionOut"];
 type TaskLinkOut = components["schemas"]["TaskLinkOut"];
 
 const panelLabelClass = "text-lead font-bold text-white";
@@ -481,10 +489,15 @@ function ConstraintsSection({
   constraints,
   onEdit,
   readOnly,
+  onRemoveDefault,
 }: {
   constraints: ScopingConstraintOut[];
   onEdit: () => void;
   readOnly: boolean;
+  /** Removes a code-minted default row by a direct plan edit (task 045,
+   *  D22) — the Task Agent never authors the default, so it cannot remove
+   *  it either. Omitted while the plan cannot be edited directly. */
+  onRemoveDefault?: (constraint: ScopingConstraintOut) => void;
 }) {
   return (
     <ScopingSection label="Constraints and preferences" onEdit={onEdit} readOnly={readOnly}>
@@ -506,7 +519,23 @@ function ConstraintsSection({
                   key={`${constraint.kind}-${constraint.text}-${index}`}
                   className="border-t border-white/10 align-top"
                 >
-                  <td className="py-2 pr-3">{scrub(constraint.text)}</td>
+                  <td className="py-2 pr-3">
+                    {scrub(constraint.text)}
+                    {constraint.default != null && DEFAULT_CONSTRAINT_RIDER[constraint.default] != null && (
+                      <span className={cn("block", panelHintClass)}>
+                        {DEFAULT_CONSTRAINT_RIDER[constraint.default]}
+                      </span>
+                    )}
+                    {constraint.default != null && !readOnly && onRemoveDefault !== undefined && (
+                      <button
+                        type="button"
+                        className={cn("mt-1 block underline", panelHintClass)}
+                        onClick={() => onRemoveDefault(constraint)}
+                      >
+                        Remove
+                      </button>
+                    )}
+                  </td>
                   <td className="py-2 pr-3 text-[#e8edf2]">
                     {constraintEffectLines(constraint).map((line) => (
                       <span key={line} className="block">
@@ -522,6 +551,58 @@ function ConstraintsSection({
             </tbody>
           </table>
         </div>
+      )}
+    </ScopingSection>
+  );
+}
+
+/** "Options you already have in mind" (task 045, D19): the user's words,
+ *  then the design Policy Atlas proposed back, features it supplied marked
+ *  assumed. Hidden until the plan has asked (the slot is null); an empty
+ *  list — the user said they have none — shows "None". */
+function YourOptionsSection({
+  options,
+  onEdit,
+  readOnly,
+}: {
+  options: YourOptionOut[] | null | undefined;
+  onEdit: () => void;
+  readOnly: boolean;
+}) {
+  if (options == null) return null;
+  return (
+    <ScopingSection label={YOUR_OPTIONS_TITLE} onEdit={onEdit} readOnly={readOnly}>
+      {options.length === 0 ? (
+        <p className="text-lead text-[#97a8bc] italic">{YOUR_OPTIONS_NONE}</p>
+      ) : (
+        <ul className="space-y-4 text-lead text-white">
+          {options.map((option, index) => (
+            <li key={`${option.text}-${index}`} data-testid="your-option">
+              <p>{scrub(option.text)}</p>
+              {option.design != null ? (
+                <div className="mt-1.5">
+                  <p className={panelHintClass}>
+                    {YOUR_OPTIONS_DESIGN_LABEL}: {scrub(option.design.name)}
+                  </p>
+                  <ul className="mt-1 list-disc space-y-0.5 pl-5 text-[#e8edf2]">
+                    {option.design.design_features.map((feature, featureIndex) => (
+                      <li key={`${feature}-${featureIndex}`}>
+                        {scrub(feature)}
+                        {(option.design?.assumed ?? []).includes(feature) && (
+                          <span className={cn("ml-2 italic", panelHintClass)}>
+                            ({YOUR_OPTIONS_ASSUMED_TAG})
+                          </span>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : (
+                <p className={cn("mt-1 italic", panelHintClass)}>{YOUR_OPTIONS_DESIGN_PENDING}</p>
+              )}
+            </li>
+          ))}
+        </ul>
       )}
     </ScopingSection>
   );
@@ -582,8 +663,9 @@ function ScopingStepsSection({ steps }: { steps: ScopingPlanDraft["steps"] }) {
   );
 }
 
-/** The scoping plan's start area, in its three states (contract deliverable
- *  5); `useScopingPlanStart` carries the state logic. */
+/** The scoping plan's start area, in its states (contract deliverable 5;
+ *  task 045 adds the longlist's); `useScopingPlanStart` carries the state
+ *  logic and `scopingStatusLine` the one sentence each state says. */
 function ScopingStartActions({
   taskId,
   runActive,
@@ -594,16 +676,32 @@ function ScopingStartActions({
   onStarted?: () => void;
 }) {
   const state = useScopingPlanStart({ taskId, runActive, onStarted });
+  const line = scopingStatusLine(state);
+  const lineElement = line !== null && <p className="text-lead text-white">{line}</p>;
 
-  // The walk is running or paused: the gate's own check-in card and the
-  // Task Agent chat own the decision here, not this card — confirm-baseline
-  // is 409 `run_active` while it's live, so there is nothing safe to offer.
-  if (state.kind === "none") {
-    return null;
+  // A walk is running or paused. Before the plan is confirmed the gate's own
+  // check-in card and the Task Agent chat own the decision; after it the line
+  // says the longlist is being built. Either way confirm-baseline is 409
+  // `run_active` while it's live, so there is nothing safe to offer.
+  if (state.kind === "none" || state.kind === "longlist_built") {
+    return lineElement || null;
   }
 
-  if (state.kind === "confirmed") {
-    return <p className="text-lead text-white">{SCOPING_CONFIRMED_LINE}</p>;
+  if (state.kind === "confirmed" || state.kind === "rebuild_longlist") {
+    const action = state.kind === "confirmed" ? state.build : state.rebuild;
+    return (
+      <div className="space-y-3">
+        {lineElement}
+        <Button className={cn(START_SEARCH_CLASS)} disabled={action.disabled} onClick={action.onConfirm}>
+          {action.label}
+        </Button>
+        {state.notice != null && (
+          <p role="alert" className="text-body text-red-tint">
+            {state.notice}
+          </p>
+        )}
+      </div>
+    );
   }
 
   if (state.kind === "build") {
@@ -649,16 +747,26 @@ function ScopingPlanSections({
   scoping,
   readOnly,
   runActive,
+  approved,
   onStarted,
 }: {
   taskId: string;
   scoping: ScopingPlanDraft;
   readOnly: boolean;
   runActive: boolean;
+  /** Whether an approved version exists — a direct plan edit needs one. */
+  approved: boolean;
   onStarted?: () => void;
 }) {
   const taskQuery = useTask(taskId);
   const links = taskQuery.data?.links ?? [];
+  const patchPlan = usePatchPlan(taskId);
+  const constraints = scoping.constraints ?? [];
+  const removeDefault =
+    approved && !runActive
+      ? (row: ScopingConstraintOut) =>
+          patchPlan.mutate({ scoping: { constraints: constraints.filter((c) => c !== row) } })
+      : undefined;
 
   return (
     <>
@@ -675,8 +783,14 @@ function ScopingPlanSections({
           readOnly={readOnly}
         />
         <ConstraintsSection
-          constraints={scoping.constraints ?? []}
+          constraints={constraints}
           onEdit={() => seedComposer("Change a constraint or preference: ")}
+          readOnly={readOnly}
+          onRemoveDefault={removeDefault}
+        />
+        <YourOptionsSection
+          options={scoping.your_options}
+          onEdit={() => seedComposer("Change the options I have in mind: ")}
           readOnly={readOnly}
         />
         <YourContextSection
@@ -687,7 +801,10 @@ function ScopingPlanSections({
         <ScopingStepsSection steps={scoping.steps} />
       </div>
 
-      {!readOnly && (
+      {/* A live walk makes the plan read-only, but the start area still says
+          where things stand ("Building the longlist") — it offers nothing to
+          click while a walk runs (task 045). */}
+      {(!readOnly || runActive) && (
         <div className="pt-8">
           <ScopingStartActions taskId={taskId} runActive={runActive} onStarted={onStarted} />
         </div>
@@ -889,6 +1006,7 @@ export function PlanDocument({
               scoping={planQuery.data.scoping}
               readOnly={readOnly}
               runActive={runActive}
+              approved={planQuery.data.status === "approved"}
               onStarted={onStarted}
             />
           )}
