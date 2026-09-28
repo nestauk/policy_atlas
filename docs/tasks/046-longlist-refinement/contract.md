@@ -17,7 +17,10 @@ decides on. It lands before task 3 (shortlist and assessment).
 > the review. The five amendments that needed the owner (AM1, AM3, AM7,
 > AM8, AM9) were ruled 2026-09-28: "Happy with all your recommendations
 > for the findings". **Re-approved as amended 2026-09-28 · owner** ("yes,
-> approved"). · Plan approved:
+> approved"). **Amended 2026-09-28 after approval, on the owner's
+> rulings R24–R27** (the iteration loops and the prompts open for
+> refinement) **and at the plan gate** (§ Amendments at the plan gate). ·
+> Plan approved:
 > _—_ · ADR: **0040** (to write at step 4).
 >
 > **Branching:** `task/046-longlist-refinement` from `feat/options-scoping`
@@ -142,7 +145,7 @@ Paths are under `backend/src/policy_atlas/` unless they start with
 | 7 | Typing input and wire | Option fields only; four prose fields; batches in sequence | + plan and baseline; ambition judged against the baseline's status quo; the wire drops `lever_reason` and `runner_up_reason` and keeps `ambition_reason` and `none_fits_reason` (both are shown today); batches in parallel | `lever_typing_prompt.py`, `longlist.py:1011-1051` |
 | 7 | Constrain batches | In sequence | In parallel | `constrain.py:336-385` |
 | 7 | Runner-up lever | In `longlist_result.provenance`; not served | Served on the option and shown on the card when the typing names one | `api/readmodels/repository.py`, `api/contract/read_models.py`, `OptionCard.tsx` |
-| 8 | Themes | Built inside `longlist`, before `constrain`; not recomputed | Built after `constrain`, over included options only | `longlist.py:1361-1409`, `constrain.py`, `runtime/scoping_plan.py` (`LONGLIST_CHAIN`) |
+| 8 | Themes | Built inside `longlist`, before `constrain`; not recomputed. Excluded options stay in them (obesity 13 of 13, energy 20 of 20). | A component of its own, **`theme`**, after `constrain`: `longlist → constrain → theme`. It groups the included options only. The code and the prompt move out of the longlist package; the clustering engine is not touched. Not a spine step: a failure degrades the walk and the options show under "No theme". (R28) | `longlist.py:1361-1409` → new `options_scoping/theme/` (`theme.py`, `longlist_theme_prompt.py` moved), `runtime/scoping_plan.py`, `runtime/run_spec.py`, `runtime/harness.py`, `runtime/task_plan.py`, `api/stage_vocabulary.py`, `frontend/src/views/workspace/runProgress.ts` |
 | 9 | Baseline as reference | Read by `suggest` only | Also passed to discovery, typing and constrain | `options_scoping/suggest/suggest.py:220` (`baseline_sections`, reused) |
 | 10 | Constrain plan data | `question`, `target_unit`, `intended_change`, `outcomes`. The intended change text carries "in the UK". | No place token reaches the prompt. An exclusion never has place as its reason. | `constrain.py:173-179`, `constrain_prompt.py:129-140` |
 | 10 | Target unit text | The planning conversation can write the place into it (refugees: "… living in Greater Manchester"). The longlist intent and criteria then carry the place, and the screen rejects on it. | The planning prompt keeps target unit, setting and geography apart. The compose step removes the plan's Where text from the intent and criteria and records the removal. | `runtime/task_agent_scoping_prompt.py`, `options_scoping/longlist_intent.py` |
@@ -200,6 +203,11 @@ the restated intent that carried the item.
 | R20 | — | **Accepted (in the fold).** Suggested designs name no place and no institution of one country. |
 | R21 | — | **Accepted.** Constrain judges the option as a kind of action: silence passes; a setting requirement excludes only when that kind of action cannot be delivered through the required setting; evidence from another setting stays attached. Owner: "That sounds right." |
 | R22 | — | **Accepted** ("yes to all"). Record and do not fix in this slice: provider-written abstracts, duplicate documents without a DOI, the untested guesses path, the process-wide option-search pool, empty OpenAlex queries, full-text fetch failures (to task 3). See § Known limits accepted. |
+| R24 | R12; the two-round tuning limit | **Accepted.** Prompt refinement is a loop for each stage: change, replay, read, refine. Owner: "I think it would make sense to do multi round iteration - i.e. make the changes, replay, review results, then refine further". The replay tool is built early and runs one stage at a time. Tuning set: obesity, refugees, caregiving, energy. Check set, not used for tuning: NEET, heat pumps, cohesion. |
+| R25 | — | **Accepted** ("D1 - A"). The lead runs the rounds and reports to the owner at the end of each stage's loop; the owner decides if the stage is good. |
+| R26 | § Stop conditions | **Accepted** ("D2 - sounds good"). A loop stops when its measures pass on the tuning set, or after five rounds; then the lead stops and reports. |
+| R27 | § Constraints (prompts) | **Accepted.** "Since we're doing iterative prompt refinements, all longlist prompts can be in scope for refinement." Open: planning, suggest, intervention profile, discovery and assignment, lever typing, constrain, themes, option design. Not open: the Evidence search prompts (screen, classify, search queries, baseline template, chat) and the longlist verbs sort. Reading confirmed by the owner ("yes, that reading is right"). A prompt changes only on a finding from a round, named with the change; each change is re-pinned with its diff. |
+| R28 | OS components § 6; ADR 0039 decision 8 | **Accepted.** "Yes, three components". The longlist walk's last three components are `longlist` (options), `constrain` (verdicts) and `theme` (themes of the included options). Owner, on theming inside one component that runs twice: "wouldn't that just be two components then?"; on theming inside constrain: "I don't think it makes sense for constrain to contain theming". `theme` is the Evidence search characterise's theme machine, modified (its unit is the option). It is not a spine step. The list shows no themes from the end of `longlist` to the end of `theme`; accepted in this slice and recorded for task 3. |
 | R23 | — | **Accepted** ("yes to all"). The not-stated flag is on 43 to 66 percent of memberships in five runs. Measure it in the replay at reader grain, then decide. |
 
 ## The four slots (R19)
@@ -236,13 +244,29 @@ points here. "AMn" folds finding "An".
 | AM11 | A11 (material). `longlist_scope` deletes and rewrites the task's memberships and typing, so a replay on the stored task destroys the comparison. | The replay runs on a **clone** of each stored task (plan, baseline artefact, documents). It screens the whole cloned pool once in a new longlist scope under the new screen input. The stored task is checked unchanged by a row count and hash before and after. | Folded |
 | AM12 | A12 (material). Spec and ADR lines this slice changes were missing from § Spec changes. | Added to § Spec changes: trust § Screening ("screens judge the option's specified design" → the kind of action, R21); trust § Provenance labels and capability § Depths and modes ("full text read for the documents cited"; ingest in the longlist spine → R13); ADR 0039 decisions 2 and 3 (chain shapes, the join) and decision 8 (runner-up "never shown" → shown, item 7), superseded in ADR 0040. | Folded |
 | AM14 | A14 (minor) | The per-document cap keeps records by role (evaluated, described, recommended, mentioned), then in the profile's order. Drops are counted per rule. Title-only documents have their own count on the read model. | Folded |
-| AM15 | A15 (minor) | The theme count moves to the constrain step's summary; `frontend/src/views/workspace/runProgress.ts` joins the surface map. Themes are correct at build time; a later user exclusion does not rebuild them. | Folded |
+| AM15 | A15 (minor) | *Superseded by R28: the theme count is in the `theme` step's summary.* ~~The theme count moves to the constrain step's summary;~~ `frontend/src/views/workspace/runProgress.ts` joins the surface map. Themes are correct at build time; a later user exclusion does not rebuild them. | Folded |
 | AM16 | A16 (minor) | Concurrent acquires can insert one DOI twice. Recorded as a known limit; M9 reports duplicates per run. | Folded |
 | AM17 | A17 (minor) | R15 applies to the longlist run's screen, not to the baseline. The planning prompt revision changes the target unit text, so the baseline's criteria text changes with it; no other baseline change. | Folded |
 | AM18 | A18 (minor) | M3 (youth guarantee, ALMP) and M4 (place exclusions in energy and cohesion) are read in stage 1. Stage 2 reads them only for the three live domains. | Folded |
 | AM19 | A19 (minor) | A kept typing keeps its own `taxonomy_version`. The page shows the definitions of the version an option was typed under. | Folded |
 | AM20 | A20 (minor) | A variant is a distinct folded intervention name among an option's members, with its document count; at most 8 are shown, by count. Folded seeds are listed first. Variants are recomputed wherever coverage is (constrain's merge; an added option's own coverage). | Folded |
 | AM21 | A21 (minor) | § Public interface gains the thinning counts and the title-only count. The rubric gains boxes for null tags and for the recorded place removal. "One stage-1 screen row" is per longlist walk. | Folded |
+
+## Amendments at the plan gate (2026-09-28)
+
+The plan-stage adversarial review (fallback lane, `deep-reasoner`,
+read-only; the Codex lane has no budget) returned 21 findings, verdict
+"material change needed". Most are seam detail and are folded in
+[plan.md](plan.md) § Plan-review folds. The ones that change this contract:
+
+| # | Finding | Amendment | State |
+|---|---|---|---|
+| PA3 | P3. Chat citations carry no text basis (`api/answer_core.py:297-301`), so the *abstract only* label (AM10) has nothing to read. | The citation facts gain `text_basis` (additive; the chat path is shared, so an Evidence search chat shows the label too). | **Accepted** (owner: "Fine") |
+| PA9 | P9. Building themes at the end of `constrain` puts a model call that can fail after the verdicts, and the list shows no themes while constrain runs. | The lead proposed a filter with no model call. **The owner rejected it** ("why don't we filter the excluded options before the theme generation?") and ruled R28: `theme` is a component of its own after `constrain`. Its failure cannot touch the verdicts, because `constrain` has committed. | **Replaced by R28** |
+| PA11 | P11. The where-tried matcher holds nationalities ("Polish", "Irish"). A strip by matcher removes part of a population. | The place strip removes the plan's Where text and place phrases led by a preposition ("in", "living in", "across", "within"). It never removes a nationality. Supersedes AM7's definition of the strip. | Folded |
+| PA1 | P1. The replay never runs the planning conversation, so it cannot test the planning prompt. | A **planning replay**: the seven original questions are put to the planning prompt, and the lead reads the target unit, Where and Your context of each draft plan. M4 in the stage replay tests the place strip only. | Folded |
+| PA14 | P14. Rubric box 16 said "three nullable columns and nothing else". | The two columns with fixed values carry a check constraint each. The box is reworded. | Folded |
+| PA21 | P21. A child that the join timeout cut off can still add documents after the screen. | Known limit; M9 counts documents with no screen row in the longlist scope. | Folded |
 
 ## Compile constants
 
@@ -261,10 +285,16 @@ points here. "AMn" folds finding "An".
 Each change follows from a ruling above. The wording is put to the owner in
 the build, and only accepted wording is applied.
 
+0. OS components (the diagram, the component table, § 6, the ⟨longlist
+   depth⟩ composition) and ADR 0039 decision 8: **`theme` is a component of
+   its own after `constrain`** (R28). § 6 longlist loses "then options into
+   themes"; a new section describes `theme` (in: the included options; out:
+   the themes; origin: ES characterise, modified; not a spine step). OS
+   capability § Pipeline and gates: the stage order.
 1. OS components § 6: reader grain; target size and hard ceiling in place of
    the formula; the corpus digest; the residual pass; variants on the card;
    suggestions at reader grain and the fold; no package minting by
-   discovery; lever list v2; themes after constrain; the baseline as
+   discovery; lever list v2; the baseline as
    reference for discovery, typing and constrain (R1, R2, R9, R14).
 2. OS components § 10 extract and § 2–5: the tagging context and the three
    tags; the setting rule; title-only documents are not profiled (R3, R17).
@@ -332,14 +362,20 @@ Approval is this contract's sign-off.
   scoping owns.
 - **Runtime egress:** the same hosts and verbs as 045. Fewer calls. The
   profile prompt now carries three plan fields to the inference route.
-- **Public interface:** additive only — `variants`, `tried_on`,
+- **Public interface:** additive only — one new stage key on the run
+  stream, `theme` (R28); `text_basis` on the chat citation facts (PA3);
+  `variants`, `tried_on`,
   `runner_up_lever_type` on the option read models; a `tried_on` facet
   source on the longlist read model. OpenAPI regenerated by
   `make openapi-sync`.
-- **Prompts (lead-authored, hash-pinned):** six revisions with new version
-  names and recorded diffs: `task_agent_scoping_v4`, `longlist_suggest_v2`,
-  `extract_interventions_v2`, `longlist_cluster_v2`, `lever_typing_v2`,
-  `constrain_v2`. Every other pinned hash is unchanged.
+- **Prompts (lead-authored, hash-pinned):** six revisions are planned,
+  with new version names and recorded diffs: `task_agent_scoping_v4`,
+  `longlist_suggest_v2`, `extract_interventions_v2`, `longlist_cluster_v2`,
+  `lever_typing_v2`, `constrain_v2`. The theme prompt and the option design
+  prompt are open too and change only on a finding from a round (R27). A
+  prompt can go through several rounds; the version name changes once for
+  the slice and each round's diff is recorded. The Evidence search prompts
+  and the longlist verbs prompt keep their hashes.
 - **Runner (scoping side):** the join of the option searches moves from
   before `longlist` to before `screen_abstract`; the targeted chain of a
   child is `acquire` only. The Evidence search's park-and-resume path is
@@ -402,6 +438,12 @@ model cannot follow the new rule; the measurement goes in
 - **Full-text fetch fails for about half the documents** (obesity: 52 of
   74 attempts). Task 3 fetches full text for shortlisted options and must
   plan for this (R22).
+- **The list shows no themes for a short time** (from the end of
+  `longlist` to the end of `theme`; estimate 2 to 3 minutes). Holding the
+  Result on the baseline until `theme` ends changes the rule for "a
+  longlist exists"; recorded for task 3 (R28).
+- **Themes go out of date after a user's exclusion**, as today. `theme` can
+  run alone, so task 3's update in place can run it again.
 - **A larger pool.** With setting and place out of the screen and adjacent
   populations admitted, the pool grows. The replay measures the pool size
   and the share of records tagged `other`.
@@ -414,9 +456,8 @@ model cannot follow the new rule; the measurement goes in
 Halt and escalate when: a second migration or a new table is needed; a
 second edit inside an Evidence search component is needed; moving the join
 needs a change to the Evidence search's park-and-resume path; the chat cannot answer from abstract chunks
-without ingest (R13); the replays do not land between 13 and 25 options
-after two rounds of prompt tuning (report the read-backs, do not tune a
-third time without the owner); scope would grow into task 3; the budget is
+without ingest (R13); a stage's loop does not pass its measures on the
+tuning set after five rounds (R26: stop and report the read-backs); scope would grow into task 3; the budget is
 spent.
 
 ## Acceptance checks
@@ -431,8 +472,12 @@ spent.
     `created_by = "longlist"`; at most one residual pass.
   - item 2: prompts carry short ids only; a mangled short id is repaired
     without a second model call where the mapping is unambiguous.
-  - items 5, 8: the distinct call receives every option; themes contain no
-    excluded or merged option.
+  - items 5, 8: the distinct call receives every option; `theme` runs after
+    `constrain` and receives the included options only; themes contain no
+    excluded or merged option; `longlist` writes no theme and `constrain`
+    has no theme code; a failed `theme` step ends the walk `degraded` with
+    the verdicts stored; the run stream carries the `theme` stage; the
+    registry, the harness graph and the plan mapping know `theme`.
   - item 6: a discovered option's outcomes are a subset of the plan's.
   - items 7, 26: typing and constrain batches run in parallel; an invalid
     typing keeps the previous values; the runner-up is served.
@@ -464,7 +509,11 @@ spent.
   - frontend (vitest): the *tried on* line and facet; variants on the card;
     the runner-up line; the flag wording.
 - **No AI eval in this slice.** Option quality is read by hand.
-- **The staged check (R12):**
+- **The staged check (R12, as amended by R24–R26):** stage 1 below is the
+  work loop of the build, not one run at the end. Each prompt stage is
+  tuned on the tuning set and then read once on the check set. A figure
+  from the check set is reported as it is; the prompts are not tuned on it.
+- **The stages:**
   1. **Replay, the seven stored tasks.** Suggest, profile, longlist and
      constrain over the stored documents; stored documents the old screen
      rejected are screened once under the widened criteria. No search.

@@ -1,7 +1,7 @@
 # Rubric: 046-longlist-refinement
 
 The task is **done only if every box holds**. Terms, item numbers, rulings
-(R1–R23) and measures (M1–M9) are defined in [contract.md](contract.md).
+(R1–R28), amendments and measures (M1–M9) are defined in [contract.md](contract.md).
 This file does not restate them.
 
 ## Items (one box per group; each cites the contract's item numbers)
@@ -24,7 +24,9 @@ This file does not restate them.
    plan and the baseline. Typing and constrain batches run in parallel. The
    typing wire has no `lever_reason` and no `runner_up_reason`. The
    runner-up lever is served and shown. A typing failure keeps the previous
-   typing. Themes are built after constrain and hold included options only.
+   typing. `theme` is a component of its own after `constrain` (R28): it
+   holds included options only, it is not a spine step, `longlist` writes
+   no theme, and `constrain` has no theme code.
 4. [ ] **Constrain (items 5, 6, 10, 11, 12; R4, R21).** No place token
    reaches the prompt. Population overlap does not exclude. Silence about
    the target unit or the setting passes. A setting requirement excludes
@@ -79,19 +81,26 @@ This file does not restate them.
     synthesis backend and the baseline targets are unchanged.
 13. [ ] `make verify` passes (okf-validate · test · typecheck · lint ·
     build · drift-check · prompt-guard).
-14. [ ] Six prompt revisions are re-pinned with their diffs recorded
-    (`task_agent_scoping_v4`, `longlist_suggest_v2`, `extract_interventions_v2`,
-    `longlist_cluster_v2`, `lever_typing_v2`, `constrain_v2`). Every other
-    hash is unchanged.
-15. [ ] **The staged check (R12).** The replay ran on the seven stored
-    tasks and left their stored longlists unchanged. Three live rapid runs
+14. [ ] Each prompt revision is re-pinned, and each round's diff is
+    recorded with the finding that caused it (R27). The planned six are
+    `task_agent_scoping_v4`, `longlist_suggest_v2`, `extract_interventions_v2`,
+    `longlist_cluster_v2`, `lever_typing_v2`, `constrain_v2`; the theme and
+    option design prompts changed only on a recorded finding. The Evidence
+    search prompts and the longlist verbs prompt are unchanged.
+15. [ ] **The staged check (R12, R24–R26).** Each stage's loop is recorded
+    round by round (the change, the figures, the reading), ran at most five
+    rounds, and was reported to the owner at its end. The prompts were
+    tuned on the tuning set only; the check set was read and not tuned on.
+    The planning replay ran on the seven questions. The replay ran on
+    clones and left the seven stored tasks unchanged. Three live rapid runs
     ran (obesity, refugees, caregiving). M1 to M6 pass on the hand reading,
     or a failed measure is reported as failed with its read-back. M7 to M9
     are reported beside the pre-contract figures. Each figure was read back
     from a saved result file. The other four live runs ran only if the
     owner asked for them.
-16. [ ] One reversible alembic revision adds three nullable columns and
-    nothing else. No new table.
+16. [ ] One reversible alembic revision adds three nullable columns, with
+    a check constraint on the two that hold fixed values, and nothing else.
+    No new table.
 17. [ ] No approval-gated change beyond the contract's § Constraints.
 18. [ ] No generated files or secrets edited by hand.
 19. [ ] No tests deleted, skipped or weakened without written
