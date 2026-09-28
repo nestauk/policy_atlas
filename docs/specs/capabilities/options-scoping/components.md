@@ -22,11 +22,11 @@ capabilities and combined into gradations of one
 ([vocabulary.md § Components](../../vocabulary.md)). Every OS component is marked **is ES** (an
 Evidence search component, possibly parameterised), **ES modified** (a variation: a new object,
 template or field set) or **new**, and every "new" is justified. The ES's mandatory spine —
-acquire, screen, classify, appraise, ingest — runs **as is** at longlist depth; OS adds three
-variations (plan slots, `longlist`, `constrain`) and two new components (`inherit`, `shortlist`); `inherit` is now **shared**, the Evidence search having adopted it for the reverse direction (ruling 48).
+acquire, screen, classify, appraise, ingest — runs **as is** at longlist depth; OS adds four
+variations (plan slots, `longlist`, `constrain`, `theme`) and two new components (`inherit`, `shortlist`); `inherit` is now **shared**, the Evidence search having adopted it for the reverse direction (ruling 48).
 The three depths of ruling 3 are **compositions** of these components, not components themselves.
-Honesty about what "reuse" means (pass-3 review): by the execution contract's I/O test, `longlist`
-and `constrain` are OS components in their own right, **built on the shared ES engines** (the
+Honesty about what "reuse" means (pass-3 review): by the execution contract's I/O test, `longlist`,
+`constrain` and `theme` are OS components in their own right, **built on the shared ES engines** (the
 two-stage grouping engine and deterministic coverage utilities; the per-item judgment fan-out) —
 nothing is mirrored, but their I/O is new. Reuse of the spine also asks three **declared changes to
 ES interfaces** (ruling 43): `extract` registers two new profiles (the **intervention profile** run
@@ -40,7 +40,7 @@ across capabilities (ruling 40).
 ```
 [0 inherit] ─▶ 1 plan ──▶ ⟨baseline⟩ ══gate: confirm plan against baseline══▶
    suggest ─▶ option searches (child walks) ∥ 2 acquire ─▶ 3 screen ─▶ 4 classify ─▶ 5 appraise ─▶ (ingest)
-     ─▶ 10 extract(interventions) ─▶ 6 longlist ─▶ 7 constrain ─▶ 8 shortlist
+     ─▶ 10 extract(interventions) ─▶ 6 longlist ─▶ 7 constrain ─▶ 7a theme ─▶ 8 shortlist
                                        (the ES spine as is, then the longlist; runs over every option)
    ══gate: "Assess these N"══▶ ⟨assess⟩ per shortlisted option ─▶ 11 synthesise(report, assessed) ─▶ export (Share seam)
                                      └──▶ ⟨full run⟩ per option = the whole ES chain as a child task (user-triggered)
@@ -75,8 +75,9 @@ across capabilities (ruling 40).
 | 3 | screen | is ES, stage 1 only, **unchanged** | title-and-abstract consensus screen for relevance, plan as intent (compiled to carry the target unit and, for the baseline, the place explicitly; the longlist intent carries no place — task 045 D20); an **evidence restriction** (ruling 23) is the search directive's country-group, year and language filters applied at retrieval — never here (owner ruling on decision-sheet row C1, 2026-09-09) | per-doc fan-out | mandatory; **no stage 2 in OS** |
 | 4 | classify | is ES | primary evidence type + open tags per screened-in document; Unknown and Non-evidence shown as their own buckets in an option's source-quality profile (a non-evidence document counts as a mention, never as evidence); Unknown is not resolved within scoping (ruling 43) | per-doc fan-out | mandatory |
 | 5 | appraise | is ES | quality tier per document under the versioned rubric; the per-option roll-up happens in `longlist` | per-doc fan-out | mandatory |
-| 6 | longlist | ES characterise, **modified** — unit = intervention profile record (or finding), many-to-many | both characterise machines at option grain: cluster **intervention profile records** (or extracted findings where a deep search was inherited) into options — a document may support several options — then options into themes; per-option coverage/patterns (counts, types, tiers, countries, populations, outcomes); entrants without documents; option schema (specified design, primary + secondary lever type, ambition tag, relations) | procedure + agent | mandatory; ✅ shown to work at option grain by check 3 (task 045) |
+| 6 | longlist | ES characterise, **modified** — unit = intervention profile record (or finding), many-to-many | the first characterise machine at option grain: cluster **intervention profile records** (or extracted findings where a deep search was inherited) into options — a document may support several options *(the second machine, options into themes, is `theme`, § 7a)*; per-option coverage/patterns (counts, types, tiers, countries, populations, outcomes); entrants without documents; option schema (specified design, primary + secondary lever type, ambition tag, relations) | procedure + agent | mandatory; ✅ shown to work at option grain by check 3 (task 045) |
 | 7 | constrain | ES screen, **modified** — object = option, criteria = the plan's constraints | scope-shaped screens on metadata and the specified design; reasoned guesses for after-assessment constraints | per-option fan-out (LLM judgment, checkable, cited when corpus-based) | mandatory; every exclusion carries its constraint |
+| 7a | theme | ES characterise, **modified** — unit = option, after `constrain` | groups the **included** options into generated themes, each with a one-line "what it does"; an excluded or merged option is in no theme | procedure + agent | runs on every longlist; **not a spine step**: a failure degrades the walk and the options show under "No theme" |
 | 8 | shortlist | **new** — coverage over primary lever types has no ES analogue | one place per primary lever type present, one named reason each; gap messages; warnings; the unassessed list | procedure + agent | mandatory; user adds/removes on top |
 | 9 | select | is ES (new strategy) | the capped **read set** for one shortlisted option: stratify by implementation and outcome family, reserve the counter-case, cap per option, record omissions (ruling 38) | procedure (+ optional bounded rerank) | inside ⟨assess⟩ only |
 | 10 | extract | is ES, **two new profiles** | **intervention profile** over every screened-in document at longlist depth, with no `select` step (the interventions each abstract covers, each with its role and stated design features; setting, study geography, population, outcome; reused by memo) — the source of `intervention_profile_record` rows (ruling 43; task 045 D3, D24); 🟡 **light full-text profile** over the selected read set inside ⟨assess⟩ (proposed: direction, outcome family, magnitude with comparator and period, design, setting; a trial/registration identifier only if independence detection needs it); inherited findings reused at finding grain (ruling 35) | per-source fan-out | intervention profile mandatory; light profile inside ⟨assess⟩; field sets and independence method are check 2 |
@@ -87,7 +88,7 @@ across capabilities (ruling 40).
 | Composition | Made of | Runs |
 |---|---|---|
 | ⟨baseline⟩ | acquire (Overton and OpenAlex only in v1, grey-literature-weighted source policy; the coverage statement names live official statistics and departmental pages as not searched — ruling 43) → screen → classify → appraise → ingest → synthesise(**baseline**) | once, after plan confirmation; the run pauses after it |
-| ⟨longlist depth⟩ | suggest → an **option search** per entrant (child walks, in parallel) beside the broad acquire → screen → classify → appraise → ingest → extract(**intervention profile**) over every screened-in document → longlist → constrain → shortlist (task 045, deliverable 3) | over every option; the Result is the longlist until assessment (ruling 50) |
+| ⟨longlist depth⟩ | suggest → an **option search** per entrant (child walks, in parallel) beside the broad acquire → screen → classify → appraise → ingest → extract(**intervention profile**) over every screened-in document → longlist → constrain → theme → shortlist (task 045, deliverable 3; `theme` added by task 046, R28) | over every option; the Result is the longlist until assessment (ruling 50) |
 | ⟨assess⟩ | [acquire with the option as intent, if its document set is thin → screen → classify → appraise → ingest → extract(intervention profile)] → **select** (the scoping read-set strategy: stratify by implementation and outcome family, reserve the counter-case, cap per option, record omissions — rulings 38, 43) → extract(**light**) over the selected set (inherited findings reused at finding grain — ruling 35) → synthesise(**profile**); then synthesise(**report**, assessed). "How sure" = confidence in the specified claim from relevant evidence, documents counted until independence is known (ruling 33) | per shortlisted option, on "Assess these N" |
 | ⟨full run⟩ | the whole ES chain (incl. classify, select, stage-2, full extract, group) as a **child Evidence search task**, opened by the child's `inherit` from the scoping task (the option's design, documents, light findings, user context and evidence scope — ruling 48) with the profile template; its report **is** the option profile, shown in place in the scoping task (ruling 47) | per option, user-triggered (ruling 9) |
 | export | the Share/export seam (arch §10; no contract yet), not a component | user-triggered |
@@ -208,15 +209,15 @@ Evidence search direction (from a scoping task, the child full run's normal case
   entrants (`suggest`'s options and the plan's own); inherited, user and ministerial additions. **Out:** the longlist — options (name, one-sentence description,
   **specified design**, constituent interventions with their documents, stated outcomes served,
   **one primary lever type** and any secondary ones, ambition tag with a one-line justification
-  carried as a tier-4 reasoning claim, relations *variant of* / *part of*) grouped into generated
-  themes, each theme mapped to lever type(s) with a one-line "what it does"; **per-option
+  carried as a tier-4 reasoning claim, relations *variant of* / *part of*) with **per-option
   coverage** (study count by evidence type and quality tier, countries, populations, outcomes
   measured) — the longlist metadata, shown as a **source-quality profile**, never as "how sure"
-  (ruling 33).
-- ✅ **Same two machines as ES characterise, at option grain**: the bounded two-stage LLM grouping
-  (discover, then assign, code-enforced exhaustiveness, an explicit unclustered bucket) discovers
-  *options* rather than landscape themes and then groups options into themes; the deterministic
-  coverage/patterns run per option instead of per run. **Different, and why it will not work off
+  (ruling 33). The themes are made by `theme` (§ 7a), after `constrain`.
+- ✅ **The ES characterise machines, at option grain, in two components**: in `longlist`, the
+  bounded two-stage LLM grouping (discover, then assign, code-enforced exhaustiveness, an explicit
+  unclustered bucket) discovers *options* rather than landscape themes, and the deterministic
+  coverage/patterns run per option instead of per run; in `theme` (§ 7a), the same grouping groups
+  the included options into themes. **Different, and why it will not work off
   the shelf** (owner, 2026-09-07): characterise assigns each *document* to one theme, and **a
   document is not an option**. Documents discuss bundles, name several interventions, and —
   systematic reviews especially — cover many intervention types. So the **unit of assignment is
@@ -226,7 +227,8 @@ Evidence search direction (from a scoping task, the child full run's normal case
   support several options and counts once per option it covers; a review's contribution is
   visible as such ("3 of 12 documents are reviews spanning several options"); a bundle becomes a
   package option with *part of* links to its constituents. The output is an option schema with a
-  specified design, two grouping levels, generation-free entrants and relations. Named for what
+  specified design, generation-free entrants and relations. The second grouping level is `theme`'s
+  output. Named for what
   it produces. ✅ **Shown to work at option grain** by [check 3](../../../tasks/035-options-scoping/checks/check-3-option-grain.md) (827 records from 295
   documents → 29 options, residual 26 %; 128 inherited findings → 22 options, residual 6 %); the
   🟡 closes with task 045.
@@ -293,6 +295,37 @@ Evidence search direction (from a scoping task, the child full run's normal case
   and documents acquired under an earlier plan version's restriction can fall outside it (A12).
   ✅ The default preference **"Transferable to *Where*"** gets **no reasoned guess** before
   assessment (D22; ruling 29): its row reads "checked at assessment" beside the where-tried line.
+
+## 7a — theme (characterise, modified)
+
+- **In:** the options that `constrain` left **included** (not excluded, not merged), each with its
+  name, one-sentence description, specified design and outcomes served. **Out:** the generated
+  themes — each with a name in the problem's own words, a one-line "what it does", and its options —
+  and the count of options in no theme.
+- ✅ **A component of its own, after `constrain`** ([task 046 contract](../../../tasks/046-longlist-refinement/contract.md), R28;
+  [ADR 0040](../../../adr/0040-options-scoping-longlist-refinement.md) decision 5). Until task 046
+  the themes were made inside `longlist`, before `constrain`, and an excluded option stayed in a
+  theme that was written for it. Owner, 2026-09-28: "why don't we filter the excluded options before
+  the theme generation?"; on theming inside `constrain`: "I don't think it makes sense for constrain
+  to contain theming"; on one component that runs at two points: "wouldn't that just be two
+  components then?"
+- ✅ **The ES characterise theme machine with the unit changed**: the bounded two-stage LLM grouping
+  (discover, then assign, code-enforced exhaustiveness) over options instead of documents,
+  unseeded, on the shared clustering engine with no change. Themes are generated for each problem
+  and are never a fixed list (ruling 11). A theme groups the list and labels the grid; it never
+  earns a shortlist place (ruling 20).
+- ✅ **Not a spine step.** If `theme` fails, the walk ends *degraded*: the options and their
+  verdicts stand, and the options show under "No theme". Thin or absent themes never hide an
+  option.
+- ✅ **It can run without `longlist`.** A change that alters only the verdicts can run `constrain`
+  and then `theme`, with no new search and no new clustering of records. 🟡 The update in place of
+  the longlist after a plan change uses this (task 3; owner ruling 2026-09-24, `docs/deferred.md`).
+- ✅ **Known limits, stated.** From the end of `longlist` to the end of `theme` the longlist shows
+  its options with no themes. A user's own *Exclude* or *Include again* does not run `theme` again,
+  so a theme can hold one option more or less than its description was written for, until the next
+  run.
+- **Why a modification and not new:** the mechanism, the engine and the prompt shape are
+  characterise's; only the unit (option) and the input filter (included only) are different.
 
 ## 8 — shortlist (new)
 

@@ -160,7 +160,7 @@ Stage order (concept § Shape 1–6, rulings 2–6, 14):
 
 ```
 plan ──confirm──▶ baseline ══PAUSE: confirm plan against baseline══▶ longlist
-     ──▶ [screens + coverage proposal, as options complete] ──▶ shortlist (user adds/removes)
+     ──▶ [screens, then themes of the included options] ──▶ shortlist (user adds/removes)
      ══GATE: "Assess these N"══▶ assessment ──▶ summary ──▶ export
                                      └──per option──▶ full evidence search (ES task)
 ```
@@ -220,7 +220,9 @@ plan ──confirm──▶ baseline ══PAUSE: confirm plan against baseline�
   metadata as options complete. Hard screens = the user's session constraints of the
   scope-shaped kind plus three defaults (relevant to stated outcomes, distinct, within scope).
   Every exclusion cites the specific constraint it broke; **thin evidence never excludes an
-  option, it is noted**; an excluded option stays in its theme and can be included again.
+  option, it is noted**; an excluded option stays visible, in the *Excluded options* section, and
+  can be included again; it is in no theme, because the themes are made from the included options
+  (task 046, R28).
 - ✅ **Three kinds of constraint** (rulings 12, 23). *Scope-shaped* constraints (geography,
   target group, sector, lever type, "no X" about the option itself) are checked at the longlist
   against the option's specified design. *Effect- and cost-shaped* constraints ("low cost", "at

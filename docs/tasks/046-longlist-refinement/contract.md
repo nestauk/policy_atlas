@@ -287,7 +287,8 @@ read-only; the Codex lane has no budget) returned 21 findings, verdict
 Each change follows from a ruling above. The wording is put to the owner in
 the build, and only accepted wording is applied.
 
-0. OS components (the diagram, the component table, § 6, the ⟨longlist
+0. **Applied 2026-09-28, wording accepted by the owner ("Looks good").**
+   OS components (the diagram, the component table, § 6, the ⟨longlist
    depth⟩ composition) and ADR 0039 decision 8: **`theme` is a component of
    its own after `constrain`** (R28). § 6 longlist loses "then options into
    themes"; a new section describes `theme` (in: the included options; out:

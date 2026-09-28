@@ -1,5 +1,12 @@
 # Spec update log
 
+## 2026-09-28
+* **Update**: [OS components](capabilities/options-scoping/components.md) and
+  [OS capability](capabilities/options-scoping/capability.md) — `theme` is a component of its own
+  after `constrain` (§ 7a): it groups the included options into themes; `longlist` no longer makes
+  themes. Owner ruling R28, task 046 contract; ADR 0040 decision 5. Wording accepted by the owner
+  2026-09-28 ("Looks good").
+
 ## 2026-09-24
 Task 045 step-7 review (contract-verifier finding F1: D33 had removed the words from the card
 while the trust rule still required them). Contract: `docs/tasks/045-scoping-longlist/contract.md`.
