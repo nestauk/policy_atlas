@@ -2,7 +2,8 @@
 
 The contract's longlist bullet: every record lands in one option, unclustered
 or not an option (code-enforced); a document with three records can belong to
-three options; a bundle mints a package with *part of* rows; each option has
+three options; a bundle is one option and no *part of* row is written (task
+046, item 4); each option has
 one primary lever type from the list or *none fits* with a reason, the
 taxonomy version and an ambition tag with its justification; the runner-up is
 in ``longlist_result`` and not on the option row; coverage buckets Unknown and
@@ -11,12 +12,16 @@ Where, settings, and counts flagged members; two documents sharing a DOI count
 once and stay two membership rows; seeds are assigned against and survive with
 zero members; linked findings cluster beside profile records (D5); the
 rebuild keeps ids and user state and deletes nothing; comparator records never
-become members. Seeded on the transactional ``conn`` fixture, with a scripted
-backend standing in for the model.
+become members. Task 046 (items 1, 2, 4, 6, 7, 15, 26): the target size and the
+hard ceiling, the corpus digest, folds and their guards, the residual pass,
+short ids, outcomes at mint time, typing in parallel with the keep-previous
+rule, and the thinning rules. Seeded on the transactional ``conn`` fixture,
+with a scripted backend standing in for the model.
 """
 
 from __future__ import annotations
 
+import threading
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
@@ -64,11 +69,15 @@ from policy_atlas.options_scoping.longlist.lever_typing_prompt import (
     LeverTypingWire,
 )
 from policy_atlas.options_scoping.longlist.longlist import (
+    LONGLIST_HARD_CEILING,
+    LONGLIST_TARGET_SIZE,
+    RECORDS_PER_DOCUMENT_MAX,
     TYPING_INVALID_REASON,
     LonglistContext,
     LonglistFailure,
+    corpus_digest,
     current_profile_fingerprints,
-    discovery_ceiling,
+    discovery_bounds,
     longlist_scope,
 )
 from policy_atlas.options_scoping.longlist.longlist_backend import (
@@ -78,6 +87,7 @@ from policy_atlas.options_scoping.longlist.longlist_backend import (
 from policy_atlas.options_scoping.longlist.longlist_cluster_prompt import (
     NOT_AN_OPTION_LABEL,
     DiscoveredOptionWire,
+    FoldWire,
     OptionAssignmentsResponse,
     OptionAssignmentWire,
     OptionDiscoveryResponse,
@@ -105,9 +115,6 @@ def _discovered(label: str, **overrides: Any) -> DiscoveredOptionWire:
         "label": label,
         "description": f"{label}, as the units state it.",
         "design_features": [f"{label} feature"],
-        "outcomes_served": ["the NEET rate"],
-        "is_bundle": False,
-        "components": [],
     }
     values.update(overrides)
     return DiscoveredOptionWire.model_validate(values)
@@ -119,9 +126,7 @@ def _typing(unit_id: str, **overrides: Any) -> LeverTypingWire:
         "primary_lever_type": "subsidise",
         "secondary_lever_types": ["inform"],
         "runner_up_lever_type": None,
-        "runner_up_reason": None,
         "none_fits_reason": None,
-        "lever_reason": "The defining feature is a payment.",
         "ambition": "incremental",
         "ambition_reason": "A new scheme inside the present structure.",
     }
@@ -139,9 +144,14 @@ class _Scripted:
     """
 
     discovered: list[DiscoveredOptionWire] = field(default_factory=list)
+    folds: list[FoldWire] = field(default_factory=list)
+    # The residual pass's discovery, when it differs from the first pass's.
+    residual_discovered: list[DiscoveredOptionWire] | None = None
     routes: dict[str, tuple[str, bool]] = field(default_factory=dict)
     typings: dict[str, dict[str, Any]] = field(default_factory=dict)
     discover_error: Exception | None = None
+    # How the answered unit id is written back (a model mangling short ids).
+    mangle: Any = None
     calls: dict[str, list[dict[str, Any]]] = field(
         default_factory=lambda: {"discover": [], "assign": [], "themes": [], "type": []}
     )
@@ -150,17 +160,30 @@ class _Scripted:
     def discover(
         self,
         *,
-        question: str,
+        plan: dict[str, object],
+        baseline_sections: list[tuple[str, str]],
         seeds: list[dict[str, object]],
-        records: list[dict[str, object]],
+        digest: list[dict[str, object]],
+        target_size: int,
         max_new: int,
+        residual: bool = False,
     ) -> UsageResult[OptionDiscoveryResponse]:
         self.calls["discover"].append(
-            {"question": question, "seeds": seeds, "records": records, "max_new": max_new}
+            {
+                "plan": plan,
+                "baseline_sections": baseline_sections,
+                "seeds": seeds,
+                "digest": digest,
+                "target_size": target_size,
+                "max_new": max_new,
+                "residual": residual,
+            }
         )
         if self.discover_error is not None:
             raise self.discover_error
-        return OptionDiscoveryResponse(options=self.discovered), None
+        if residual and self.residual_discovered is not None:
+            return OptionDiscoveryResponse(options=self.residual_discovered, folds=[]), None
+        return OptionDiscoveryResponse(options=self.discovered, folds=self.folds), None
 
     def assign(
         self, *, options: list[dict[str, object]], records: list[dict[str, object]]
@@ -169,9 +192,10 @@ class _Scripted:
         out = []
         for record in records:
             label, flag = self.routes.get(str(record.get("intervention")), ("ungroupable", False))
+            unit_id = str(record["unit_id"])
             out.append(
                 OptionAssignmentWire(
-                    unit_id=str(record["unit_id"]),
+                    unit_id=self.mangle(unit_id) if self.mangle else unit_id,
                     option_label=label,
                     reason=f"{record.get('intervention')} decides it.",
                     design_feature_not_stated=flag,
@@ -208,9 +232,15 @@ class _Scripted:
         )
 
     def type_options(
-        self, *, options: list[dict[str, object]]
+        self,
+        *,
+        options: list[dict[str, object]],
+        plan: dict[str, object],
+        baseline_sections: list[tuple[str, str]],
     ) -> UsageResult[LeverTypingResponse]:
-        self.calls["type"].append({"options": options})
+        self.calls["type"].append(
+            {"options": options, "plan": plan, "baseline_sections": baseline_sections}
+        )
         return (
             LeverTypingResponse(
                 typings=[
@@ -405,7 +435,12 @@ class _Walk:
         self.conn.execute(intervention_profile_record.insert().values(**row))
         return record_id
 
-    def rollup(self, scope_id: uuid.UUID, tss_ids: list[uuid.UUID]) -> None:
+    def rollup(
+        self,
+        scope_id: uuid.UUID,
+        tss_ids: list[uuid.UUID],
+        counts: dict[str, Any] | None = None,
+    ) -> None:
         """The scope's intervention-profile roll-up over the given documents."""
         self.conn.execute(
             extraction_result.insert().values(
@@ -427,7 +462,7 @@ class _Walk:
                     }
                     for tss_id in tss_ids
                 ],
-                counts={},
+                counts=counts or {},
                 flags=[],
                 created_at=now(),
             )
@@ -520,9 +555,15 @@ class _Walk:
 # --- the ceilings ------------------------------------------------------------------
 
 
-@pytest.mark.parametrize(("units", "ceiling"), [(10, 8), (100, 25), (400, 40)])
-def test_the_discovery_ceiling_is_clamp_ceil_n_over_4_8_40(units: int, ceiling: int) -> None:
-    assert discovery_ceiling(units) == ceiling
+@pytest.mark.parametrize(
+    ("seeds", "bounds"), [(0, (25, 25)), (3, (22, 25)), (25, (0, 25)), (31, (0, 31))]
+)
+def test_the_bounds_are_the_hard_ceiling_counting_seeds(
+    seeds: int, bounds: tuple[int, int]
+) -> None:
+    """Task 046, R1: ``max_new = max(25 - seeds, 0)``; every seed is assigned against."""
+    assert (LONGLIST_TARGET_SIZE, LONGLIST_HARD_CEILING) == (20, 25)
+    assert discovery_bounds(seeds) == bounds
 
 
 # --- assignment ---------------------------------------------------------------------
@@ -582,43 +623,41 @@ def test_every_record_lands_in_one_option_unclustered_or_not_an_option(
     assert result.provenance["seed_ids"] == [str(seed_id)]
     discover = backend.calls["discover"][0]
     assert [seed["label"] for seed in discover["seeds"]] == ["Youth guarantee"]
-    assert discover["max_new"] == discovery_ceiling(5) - 1
+    assert discover["max_new"] == LONGLIST_HARD_CEILING - 1
+    assert discover["target_size"] == LONGLIST_TARGET_SIZE
 
 
-def test_a_discovered_bundle_mints_a_package_with_part_of_rows(conn: Connection) -> None:
+def test_a_bundle_is_one_option_and_no_part_of_row_is_written(conn: Connection) -> None:
+    """Task 046, item 4: discovery mints no package; ``part_of`` stays for users."""
     walk = _Walk(conn)
-    seed_id = walk.option("Careers advice")
+    walk.option("Careers advice")
     doc = walk.doc()
     walk.record(doc, "careers advice")
     walk.record(doc, "mentoring")
     walk.record(doc, "guarantee package", is_bundle=True, components=["mentoring", "advice"])
     walk.rollup(walk.scope_id, [doc])
     backend = _Scripted(
-        discovered=[
-            _discovered("Mentoring"),
-            _discovered(
-                "Guarantee package", is_bundle=True, components=["mentoring", "Careers advice"]
-            ),
-        ],
+        discovered=[_discovered("Mentoring"), _discovered("Guarantee package")],
         routes={
             "careers advice": ("Careers advice", False),
             "mentoring": ("Mentoring", False),
             "guarantee package": ("Guarantee package", False),
         },
     )
-    walk.build(backend)
-    options = walk.options()
-    package = options["Guarantee package"].option_id
-    relations = {
-        (row.from_option_id, row.to_option_id, row.kind, row.created_by)
-        for row in conn.execute(
-            select(option_relation).where(option_relation.c.task_id == walk.task_id)
-        )
-    }
-    assert relations == {
-        (options["Mentoring"].option_id, package, "part_of", "longlist"),
-        (seed_id, package, "part_of", "longlist"),
-    }
+    run_id, summary = walk.build(backend)
+    assert summary["options"] == 3
+    assert "Guarantee package" in walk.options()
+    assert conn.execute(
+        select(func.count())
+        .select_from(option_relation)
+        .where(option_relation.c.task_id == walk.task_id)
+        .where(option_relation.c.created_by == "longlist")
+    ).scalar_one() == 0
+    result = walk.result(run_id)
+    assert "packages" not in result.counts and "bundles" not in result.provenance
+    # The unit payloads carry no bundle fields any more.
+    records = backend.calls["assign"][0]["records"]
+    assert all("is_bundle" not in r and "components" not in r for r in records)
 
 
 def test_comparator_records_never_become_members(conn: Connection) -> None:
@@ -693,27 +732,51 @@ def test_a_rebuild_reads_only_the_latest_finished_add_walk_search_of_each_option
     )
 
 
-def test_seeds_survive_with_zero_members_and_no_discovery_past_the_ceiling(
-    conn: Connection,
-) -> None:
+def test_seeds_over_the_ceiling_survive_and_discovery_adds_none(conn: Connection) -> None:
+    """Task 046, AM9: seeds alone over 25 — discovery adds no option (it may
+    still fold) and the excess is recorded; every seed survives, members or
+    not."""
     walk = _Walk(conn)
-    seeds = [walk.option(f"Seed option {i}") for i in range(9)]
+    seeds = [walk.option(f"Seed option {i}", origin="added_by_you") for i in range(26)]
     doc = walk.doc()
     walk.record(doc, "Seed option 0")
     walk.rollup(walk.scope_id, [doc])
-    backend = _Scripted(routes={"Seed option 0": ("Seed option 0", False)})
+    backend = _Scripted(
+        discovered=[_discovered("Something new")],
+        routes={"Seed option 0": ("Seed option 0", False)},
+    )
     run_id, summary = walk.build(backend)
-    # Nine seeds over one unit: the ceiling (8) is below the seeds, so every
-    # seed is offered, no new option is asked for, and no call is made.
+    # Nothing can be added and no seed can be folded (all the user's): no call.
     assert backend.calls["discover"] == []
-    assert summary["options"] == 9
+    assert summary["options"] == 26
     result = walk.result(run_id)
-    assert result.provenance["ceiling"]["max_labels"] == 9
-    assert result.provenance["ceiling"]["max_new"] == 0
+    ceiling = result.provenance["ceiling"]
+    assert (ceiling["max_labels"], ceiling["max_new"], ceiling["excess"]) == (26, 0, 1)
     empty = result.coverage[str(seeds[5])]
     assert empty["members"] == 0 and empty["documents"] == 0
-    assert result.counts["seeds_without_members"] == 8
-    assert set(walk.options()) == {f"Seed option {i}" for i in range(9)}
+    assert result.counts["seeds_without_members"] == 25
+    assert set(walk.options()) == {f"Seed option {i}" for i in range(26)}
+
+
+def test_seeds_over_the_ceiling_that_can_fold_still_get_one_call_and_no_new_option(
+    conn: Connection,
+) -> None:
+    walk = _Walk(conn)
+    for i in range(26):
+        walk.option(f"Seed option {i}")
+    doc = walk.doc()
+    walk.record(doc, "Seed option 0")
+    walk.rollup(walk.scope_id, [doc])
+    backend = _Scripted(
+        discovered=[_discovered("Something new")],
+        routes={"Seed option 0": ("Seed option 0", False)},
+    )
+    run_id, summary = walk.build(backend)
+    assert [call["max_new"] for call in backend.calls["discover"]] == [0]
+    assert summary["options"] == 26
+    ceiling = walk.result(run_id).provenance["ceiling"]
+    assert (ceiling["over_ceiling_dropped"], ceiling["excess"]) == (1, 1)
+    assert "Something new" not in walk.options()
 
 
 # --- typing -----------------------------------------------------------------------
@@ -729,10 +792,7 @@ def test_typing_one_primary_or_none_fits_the_version_and_the_ambition(
     walk.option("Wrong band")
     backend = _Scripted(
         typings={
-            "Free bus passes": {
-                "runner_up_lever_type": "provide a service",
-                "runner_up_reason": "The pass is delivered by the operator.",
-            },
+            "Free bus passes": {"runner_up_lever_type": "provide a service"},
             "A new body": {"primary_lever_type": None, "none_fits_reason": "It sets a mood."},
             "Garbled": {"primary_lever_type": "make it so"},
             "Wrong band": {"primary_lever_type": None, "none_fits_reason": None},
@@ -747,38 +807,47 @@ def test_typing_one_primary_or_none_fits_the_version_and_the_ambition(
     assert bus.ambition in AMBITION_BANDS and bus.ambition_reason
     assert options["A new body"].primary_lever_type is None
     assert options["A new body"].lever_none_fits_reason == "It sets a mood."
+    # An invalid typing leaves the columns as they were (task 046, S12): here
+    # never typed, so still empty.
     for name in ("Garbled", "Wrong band"):
         assert options[name].primary_lever_type is None
-        assert options[name].lever_none_fits_reason == TYPING_INVALID_REASON
-        assert options[name].taxonomy_version == TAXONOMY_VERSION
+        assert options[name].lever_none_fits_reason is None
+        assert options[name].taxonomy_version is None
+        assert options[name].ambition is None
     # The two invalid typings count once, under typing_invalid (F14).
     assert summary["none_fits"] == 1
     result = walk.result(run_id)
     assert result.counts["none_fits"] == 1
     assert result.counts["typing_invalid"] == 2
-    # The runner-up is in the record only.
+    # The runner-up is in the record only; the wire has no reasons for it.
     assert result.provenance["runner_up"] == {
-        str(bus.option_id): {
-            "lever_type": "provide a service",
-            "reason": "The pass is delivered by the operator.",
-        }
+        str(bus.option_id): {"lever_type": "provide a service"}
     }
+    # The typing prompt receives the plan and the baseline (item 9).
+    typed = backend.calls["type"][0]
+    assert typed["plan"]["target_unit"] == "16 to 24 year olds"
+    assert typed["baseline_sections"] == []
     assert "runner_up" not in dict(bus._mapping)
     assert "provide a service" not in bus.secondary_lever_types
 
 
-def test_a_failed_typing_call_is_typing_invalid_never_a_crash(conn: Connection) -> None:
+def test_a_failed_typing_call_is_counted_never_a_crash(conn: Connection) -> None:
     walk = _Walk(conn)
     walk.option("Youth guarantee")
 
     class _Broken(_Scripted):
-        def type_options(self, *, options: list[dict[str, object]]) -> Any:
+        def type_options(self, **kwargs: Any) -> Any:
             raise RuntimeError("provider down")
 
     run_id, summary = walk.build(_Broken())
     assert summary["none_fits"] == 0
-    assert walk.result(run_id).counts["typing_invalid"] == 1
-    assert walk.options()["Youth guarantee"].lever_none_fits_reason == TYPING_INVALID_REASON
+    result = walk.result(run_id)
+    assert result.counts["typing_invalid"] == 1
+    assert result.provenance["typing"]["failed_batches"] == 1
+    # The option's columns are left as they were (task 046, S12).
+    row = walk.options()["Youth guarantee"]
+    assert (row.lever_none_fits_reason, row.taxonomy_version) == (None, None)
+    assert row.lever_none_fits_reason != TYPING_INVALID_REASON
 
 
 # --- coverage ---------------------------------------------------------------------
@@ -802,7 +871,14 @@ def test_coverage_buckets_labels_roles_where_tried_settings_and_flags(conn: Conn
         danish, "youth guarantee flagged", role="recommended", study_geography="Denmark"
     )
     walk.record(oecd, "youth guarantee", role="described", study_geography="12 OECD countries")
-    walk.record(nowhere, "youth guarantee", role="mentioned", study_geography="a large city")
+    # A feature keeps the mention through thinning (task 046, S10).
+    walk.record(
+        nowhere,
+        "youth guarantee",
+        role="mentioned",
+        study_geography="a large city",
+        design_features=["a job offer"],
+    )
     walk.rollup(walk.scope_id, [uk, uk_again, danish, oecd, nowhere])
     run_id, _summary = walk.build(
         _Scripted(
@@ -1301,3 +1377,442 @@ def test_a_record_tagged_under_another_context_reads_as_not_tagged(conn: Connect
     records = {r["intervention"]: r for r in backend.calls["assign"][0]["records"]}
     assert {k: records["youth guarantee"][k] for k in tags} == tags
     assert {k: records["wage subsidy"][k] for k in tags} == dict.fromkeys(tags)
+
+
+# --- task 046: reader grain (items 1, 2, 4, 6, 7, 15, 26) -------------------------
+
+
+def _tagged(walk: _Walk, tss_id: uuid.UUID, intervention: str, **values: Any) -> uuid.UUID:
+    """A record of the document under the current plan's tagging context."""
+    ser_id = walk._ser.get(tss_id)
+    if ser_id is None:
+        ser_id = _extraction(walk, tss_id, fingerprint=_current_fingerprint(walk))
+        walk._ser[tss_id] = ser_id
+    return _record_under(walk, ser_id, intervention, **values)
+
+
+def test_the_digest_folds_names_and_counts_records_by_role() -> None:
+    digest, names = corpus_digest(
+        [
+            ("Youth guarantee", "evaluated"),
+            ("youth  GUARANTEE", "described"),
+            ("Youth guarantee", "evaluated"),
+            ("Wage subsidy", "mentioned"),
+            (None, "evaluated"),
+            ("Apprenticeships", None),
+        ]
+    )
+    assert names == 3
+    assert digest == [
+        {"name": "Youth guarantee", "records": 3, "roles": {"evaluated": 2, "described": 1}},
+        {"name": "Apprenticeships", "records": 1, "roles": {}},
+        {"name": "Wage subsidy", "records": 1, "roles": {"mentioned": 1}},
+    ]
+    capped, total = corpus_digest([(f"name {i}", "evaluated") for i in range(450)])
+    assert (len(capped), total) == (400, 450)
+
+
+def test_no_discovery_call_receives_unit_payloads(conn: Connection) -> None:
+    walk = _Walk(conn)
+    walk.option("Youth guarantee", origin="added_by_you")
+    first, second = walk.doc(), walk.doc()
+    walk.record(first, "youth guarantee")
+    walk.record(first, "wage subsidy", role="described")
+    walk.record(second, "Youth Guarantee", role="recommended")
+    walk.rollup(walk.scope_id, [first, second])
+    backend = _Scripted(discovered=[_discovered("Wage subsidy")])
+    run_id, _ = walk.build(backend)
+    call = backend.calls["discover"][0]
+    assert "records" not in call
+    sent = repr(call)
+    assert "We studied" not in sent  # no quote, no unit record
+    assert all(str(m.unit_id) not in sent for m in walk.memberships())
+    assert call["digest"] == [
+        {"name": "Youth Guarantee", "records": 2, "roles": {"evaluated": 1, "recommended": 1}},
+        {"name": "wage subsidy", "records": 1, "roles": {"described": 1}},
+    ]
+    assert call["seeds"][0]["origin"] == "added by you"
+    assert call["plan"] == {
+        "question": "What could reduce the number of young people not in work?",
+        "intended_change": "Reduce the number of young people not in work",
+        "target_unit": "16 to 24 year olds",
+        "outcomes": ["the NEET rate"],
+    }
+    assert walk.result(run_id).provenance["digest"] == {"units": 3, "names": 2, "shown": 2}
+
+
+def test_the_option_count_never_exceeds_the_hard_ceiling(conn: Connection) -> None:
+    walk = _Walk(conn)
+    for name in ("Seed one", "Seed two", "Seed three"):
+        walk.option(name, origin="added_by_you")
+    doc = walk.doc()
+    walk.record(doc, "anything")
+    walk.rollup(walk.scope_id, [doc])
+    backend = _Scripted(
+        discovered=[_discovered(f"Discovered {i}") for i in range(30)],
+        routes={"anything": ("Discovered 0", False)},
+    )
+    run_id, summary = walk.build(backend)
+    assert backend.calls["discover"][0]["max_new"] == 22
+    assert summary["options"] == LONGLIST_HARD_CEILING
+    ceiling = walk.result(run_id).provenance["ceiling"]
+    assert (ceiling["over_ceiling_dropped"], ceiling["excess"]) == (8, 0)
+    assert len(walk.options()) == LONGLIST_HARD_CEILING
+
+
+def test_a_suggested_seed_folds_into_a_wider_option_and_shows_as_its_variant(
+    conn: Connection,
+) -> None:
+    walk = _Walk(conn)
+    seed = walk.option("Named breakfast programme", origin="suggested")
+    doc = walk.doc()
+    walk.record(doc, "school breakfast clubs")
+    walk.rollup(walk.scope_id, [doc])
+    backend = _Scripted(
+        discovered=[_discovered("School food provision")],
+        folds=[
+            FoldWire(seed_label="Named breakfast programme", into_label="School food provision")
+        ],
+        routes={"school breakfast clubs": ("School food provision", False)},
+    )
+    run_id, summary = walk.build(backend)
+    options = walk.options()
+    wider = options["School food provision"]
+    folded = options["Named breakfast programme"]
+    # The existing merge: the seed row stays, merged into the new option.
+    assert folded.option_id == seed and folded.merged_into_option_id == wider.option_id
+    assert folded.name == "Named breakfast programme"
+    assert summary["options"] == 1
+    # No unit can be assigned to a folded seed.
+    offered = [o["label"] for o in backend.calls["assign"][0]["options"]]
+    assert offered == ["School food provision"]
+    result = walk.result(run_id)
+    variants = result.coverage[str(wider.option_id)]["variants"]
+    assert variants[0] == {
+        "name": "Named breakfast programme",
+        "documents": 0,
+        "folded_seed": True,
+    }
+    assert str(seed) not in result.coverage
+    assert result.counts["folded"] == 1
+    assert result.provenance["folds"]["accepted"] == [
+        {
+            "seed_id": str(seed),
+            "seed_label": "Named breakfast programme",
+            "into_id": str(wider.option_id),
+            "into_label": "School food provision",
+        }
+    ]
+
+
+def test_a_user_s_option_and_a_user_held_seed_are_never_folded(conn: Connection) -> None:
+    walk = _Walk(conn)
+    own = walk.option("My own option", origin="added_by_you")
+    held = walk.option(
+        "Held suggestion",
+        exclusion={"constraint": None, "reason": "Keep it.", "by": "user"},
+    )
+    target = walk.option("Wider option")
+    doc = walk.doc()
+    walk.record(doc, "something")
+    walk.rollup(walk.scope_id, [doc])
+    backend = _Scripted(
+        folds=[
+            FoldWire(seed_label="My own option", into_label="Wider option"),
+            FoldWire(seed_label="Held suggestion", into_label="Wider option"),
+        ],
+        routes={"something": ("Wider option", False)},
+    )
+    run_id, summary = walk.build(backend)
+    options = walk.options()
+    assert options["My own option"].option_id == own
+    assert options["My own option"].merged_into_option_id is None
+    assert options["Held suggestion"].option_id == held
+    assert options["Held suggestion"].merged_into_option_id is None
+    assert options["Wider option"].option_id == target
+    assert summary["options"] == 3
+    folds = walk.result(run_id).provenance["folds"]
+    assert folds["accepted"] == []
+    assert folds["rejected_by_reason"] == {"added_by_you": 1, "user_held": 1}
+
+
+def test_a_fold_into_an_unknown_label_or_a_folded_seed_is_rejected_and_counted(
+    conn: Connection,
+) -> None:
+    walk = _Walk(conn)
+    walk.option("Seed A")
+    walk.option("Seed B")
+    walk.option("Seed C")
+    doc = walk.doc()
+    walk.record(doc, "something")
+    walk.rollup(walk.scope_id, [doc])
+    backend = _Scripted(
+        discovered=[_discovered("Wider")],
+        folds=[
+            FoldWire(seed_label="Seed A", into_label="Nowhere"),
+            FoldWire(seed_label="Seed B", into_label="Wider"),
+            FoldWire(seed_label="Seed C", into_label="Seed B"),
+            FoldWire(seed_label="Seed B", into_label="Seed A"),
+            FoldWire(seed_label="Seed A", into_label="Seed A"),
+            FoldWire(seed_label="Not a seed", into_label="Wider"),
+        ],
+        routes={"something": ("Wider", False)},
+    )
+    run_id, summary = walk.build(backend)
+    options = walk.options()
+    assert options["Seed B"].merged_into_option_id == options["Wider"].option_id
+    assert options["Seed A"].merged_into_option_id is None
+    assert options["Seed C"].merged_into_option_id is None
+    assert summary["options"] == 3
+    folds = walk.result(run_id).provenance["folds"]
+    assert folds["rejected_by_reason"] == {
+        "unknown_target": 1,
+        "into_folded_seed": 1,
+        "already_folded": 1,
+        "into_itself": 1,
+        "unknown_seed": 1,
+    }
+    assert len(folds["rejected"]) == 5
+
+
+def test_the_residual_pass_runs_once_over_the_unclustered_units(conn: Connection) -> None:
+    walk = _Walk(conn)
+    walk.option("Youth guarantee", origin="added_by_you")
+    doc = walk.doc()
+    walk.record(doc, "youth guarantee")
+    walk.record(doc, "wage subsidy")
+    walk.record(doc, "a theory of change")
+    walk.record(doc, "something else")
+    walk.rollup(walk.scope_id, [doc])
+    backend = _Scripted(
+        residual_discovered=[_discovered("Wage subsidy")],
+        routes={
+            "youth guarantee": ("Youth guarantee", False),
+            # Unknown in the first pass (the engine's repair leaves it
+            # residual), placed once the residual pass discovers it.
+            "wage subsidy": ("Wage subsidy", False),
+            "a theory of change": (NOT_AN_OPTION_LABEL, False),
+        },
+    )
+    run_id, summary = walk.build(backend)
+    calls = backend.calls["discover"]
+    assert [call["residual"] for call in calls] == [False, True]
+    residual = calls[1]
+    assert [seed["origin"] for seed in residual["seeds"]] == ["on the list"]
+    assert residual["max_new"] == LONGLIST_HARD_CEILING - 1
+    # Its digest covers the unclustered units only (not the not-an-option one).
+    assert {entry["name"] for entry in residual["digest"]} == {"wage subsidy", "something else"}
+    # Its assignment offers every option.
+    assert {o["label"] for o in backend.calls["assign"][-1]["options"]} == {
+        "Youth guarantee",
+        "Wage subsidy",
+    }
+    assert summary == {
+        "options": 2,
+        "unclustered": 1,
+        "not_an_option": 1,
+        "none_fits": 0,
+        "units": 4,
+    }
+    wage = walk.options()["Wage subsidy"]
+    assert wage.origin == "clustered"
+    assert [m.option_id for m in walk.memberships()].count(wage.option_id) == 1
+    record = walk.result(run_id).provenance["residual_pass"]
+    assert record["ran"] is True
+    assert (record["units"], record["new_options"], record["units_placed"]) == (2, 1, 1)
+    assert record["units_left"] == 1
+
+
+def test_the_residual_pass_is_skipped_with_no_room_or_nothing_unclustered(
+    conn: Connection,
+) -> None:
+    walk = _Walk(conn)
+    for i in range(25):
+        walk.option(f"Seed option {i}", origin="added_by_you")
+    doc = walk.doc()
+    walk.record(doc, "something else")
+    walk.rollup(walk.scope_id, [doc])
+    backend = _Scripted(residual_discovered=[_discovered("Never")])
+    run_id, summary = walk.build(backend)
+    assert backend.calls["discover"] == []  # no room, nothing foldable
+    assert summary["unclustered"] == 1
+    record = walk.result(run_id).provenance["residual_pass"]
+    assert (record["ran"], record["skipped"]) == (False, "no room under the ceiling")
+
+    other = _Walk(conn)
+    other.option("Youth guarantee", origin="added_by_you")
+    placed = other.doc()
+    other.record(placed, "youth guarantee")
+    other.rollup(other.scope_id, [placed])
+    backend = _Scripted(routes={"youth guarantee": ("Youth guarantee", False)})
+    run_id, _ = other.build(backend)
+    assert [call["residual"] for call in backend.calls["discover"]] == [False]
+    record = other.result(run_id).provenance["residual_pass"]
+    assert (record["ran"], record["skipped"]) == (False, "no unclustered unit")
+
+
+def test_prompts_carry_short_ids_and_a_mangled_one_is_repaired_without_a_call(
+    conn: Connection,
+) -> None:
+    walk = _Walk(conn)
+    seed = walk.option("Youth guarantee", origin="added_by_you")
+    doc = walk.doc()
+    for i in range(3):
+        walk.record(doc, f"youth guarantee {i}")
+    walk.rollup(walk.scope_id, [doc])
+    mangled = {"u1": "U1", "u2": " u2 ", "u3": "3"}
+    backend = _Scripted(
+        routes={f"youth guarantee {i}": ("Youth guarantee", False) for i in range(3)},
+        mangle=lambda unit_id: mangled[unit_id],
+    )
+    run_id, summary = walk.build(backend)
+    records = backend.calls["assign"][0]["records"]
+    assert [r["unit_id"] for r in records] == ["u1", "u2", "u3"]
+    assert all(str(m.unit_id) not in repr(backend.calls["assign"]) for m in walk.memberships())
+    # One assignment call: the three ids were repaired in code.
+    assert len(backend.calls["assign"]) == 1
+    assert summary["unclustered"] == 0
+    assert [m.option_id for m in walk.memberships()] == [seed] * 3
+    assert walk.result(run_id).provenance["clustering"]["short_id_repairs"] == 3
+
+
+def test_a_discovered_option_s_outcomes_are_the_plan_outcomes_its_members_name(
+    conn: Connection,
+) -> None:
+    plan = scoping_plan(
+        outcomes=[
+            {"text": "the NEET rate", "origin": "assumed"},
+            {"text": "employment", "origin": "assumed"},
+        ]
+    )
+    walk = _Walk(conn, plan)
+    seed = walk.option("Youth guarantee", origin="added_by_you")
+    first, second = walk.doc(), walk.doc()
+    _tagged(walk, first, "wage subsidy", outcome_tag="employment")
+    _tagged(walk, first, "wage subsidy scheme", outcome_tag="other")
+    _tagged(walk, second, "mentoring", outcome_tag="other")
+    walk.rollup(walk.scope_id, [first, second])
+    backend = _Scripted(
+        discovered=[_discovered("Wage subsidy"), _discovered("Mentoring")],
+        routes={
+            "wage subsidy": ("Wage subsidy", False),
+            "wage subsidy scheme": ("Wage subsidy", False),
+            "mentoring": ("Mentoring", False),
+        },
+    )
+    walk.build(backend)
+    options = walk.options()
+    plan_outcomes = {"the NEET rate", "employment"}
+    wage = options["Wage subsidy"]
+    assert wage.outcomes == ["employment"]
+    assert wage.design["outcomes_served"] == ["employment"]
+    assert set(wage.outcomes) <= plan_outcomes
+    assert options["Mentoring"].outcomes == []
+    # A seed keeps its design's outcomes.
+    assert options["Youth guarantee"].option_id == seed
+    assert options["Youth guarantee"].outcomes == ["the NEET rate"]
+
+
+def test_typing_batches_run_in_parallel(conn: Connection) -> None:
+    walk = _Walk(conn)
+    for i in range(41):  # three batches of at most 20
+        walk.option(f"Seed option {i}", origin="added_by_you")
+    barrier = threading.Barrier(3, timeout=10)
+
+    class _Together(_Scripted):
+        def type_options(self, **kwargs: Any) -> Any:
+            barrier.wait()  # only passes when the three batches are in flight at once
+            return super().type_options(**kwargs)
+
+    backend = _Together()
+    run_id, _ = walk.build(backend)
+    typing = walk.result(run_id).provenance["typing"]
+    assert (typing["calls"], typing["failed_batches"], typing["invalid"]) == (3, 0, 0)
+    assert all(row.primary_lever_type == "subsidise" for row in walk.options().values())
+
+
+def test_an_invalid_typing_keeps_the_previous_values_version_and_runner_up(
+    conn: Connection,
+) -> None:
+    walk = _Walk(conn)
+    walk.option("Free bus passes")
+    walk.build(_Scripted(typings={"Free bus passes": {"runner_up_lever_type": "inform"}}))
+    before = walk.options()["Free bus passes"]
+    # Typed under the earlier list: the version must survive a failed typing.
+    conn.execute(
+        option.update()
+        .where(option.c.option_id == before.option_id)
+        .values(taxonomy_version="lever_types_v1")
+    )
+    run_id, _ = walk.build(
+        _Scripted(typings={"Free bus passes": {"primary_lever_type": "make it so"}})
+    )
+    after = walk.options()["Free bus passes"]
+    assert (after.primary_lever_type, after.ambition, after.ambition_reason) == (
+        before.primary_lever_type,
+        before.ambition,
+        before.ambition_reason,
+    )
+    assert after.secondary_lever_types == before.secondary_lever_types
+    assert after.taxonomy_version == "lever_types_v1"
+    result = walk.result(run_id)
+    assert result.counts["typing_invalid"] == 1
+    assert result.provenance["typing"]["kept_ids"] == [str(before.option_id)]
+    assert result.provenance["runner_up"] == {
+        str(before.option_id): {"lever_type": "inform", "carried_forward": True}
+    }
+
+
+def test_each_thinning_rule_with_its_count_and_never_on_a_tag(conn: Connection) -> None:
+    walk = _Walk(conn)
+    walk.option("Youth guarantee", origin="added_by_you")
+    bare, collapse, crowded = walk.doc(), walk.doc(), walk.doc()
+    # Rule 1: a bare mention goes; a mention with a feature or an outcome stays.
+    walk.record(bare, "passing mention", role="mentioned")
+    walk.record(bare, "featured mention", role="mentioned", design_features=["free"])
+    walk.record(bare, "outcome mention", role="mentioned", outcome="employment")
+    # Rule 2: the same folded name in one document collapses to the highest role.
+    walk.record(collapse, "Youth guarantee", role="described")
+    kept_evaluated = walk.record(collapse, "youth  GUARANTEE", role="evaluated")
+    # Rule 3: at most eight a document, by role; the two mentions go.
+    for i in range(7):
+        walk.record(crowded, f"programme {i}", role="evaluated")
+    walk.record(crowded, "recommended one", role="recommended")
+    for i in range(2):
+        walk.record(crowded, f"mentioned {i}", role="mentioned", outcome="x")
+    # A tag never drops a record.
+    tagged_doc = walk.doc()
+    _tagged(
+        walk,
+        tagged_doc,
+        "other-tagged",
+        population_tag="other",
+        outcome_tag="other",
+        object_tag="neither",
+    )
+    walk.rollup(walk.scope_id, [bare, collapse, crowded, tagged_doc])
+    backend = _Scripted(routes={"youth GUARANTEE": ("Youth guarantee", False)})
+    run_id, summary = walk.build(backend)
+    result = walk.result(run_id)
+    assert result.provenance["thinning"] == {
+        "mentioned_without_features_or_outcome": 1,
+        "same_name_in_document": 1,
+        "over_document_cap": 2,
+        "document_cap": RECORDS_PER_DOCUMENT_MAX,
+    }
+    assert summary["units"] == 2 + 1 + 8 + 1
+    sent = {r["intervention"] for call in backend.calls["assign"] for r in call["records"]}
+    assert "other-tagged" in sent
+    assert "passing mention" not in sent
+    assert not {"mentioned 0", "mentioned 1"} & sent
+    assert kept_evaluated in {m.unit_id for m in walk.memberships()}
+
+
+def test_the_title_only_count_is_copied_from_the_extract_summary(conn: Connection) -> None:
+    walk = _Walk(conn)
+    walk.option("Youth guarantee", origin="added_by_you")
+    doc = walk.doc()
+    walk.record(doc, "youth guarantee")
+    walk.rollup(walk.scope_id, [doc], counts={"title_only": 3})
+    run_id, _ = walk.build(_Scripted(routes={"youth guarantee": ("Youth guarantee", False)}))
+    assert walk.result(run_id).counts["title_only"] == 3

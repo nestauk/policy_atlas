@@ -1,4 +1,11 @@
-"""The ``longlist_suggest_v1`` prompt — the model's own suggested options (task 045).
+"""The ``longlist_suggest_v2`` prompt — the model's own suggested options (task 045; task 046).
+
+v2 (task 046; R14, R20): a suggestion is named at reader grain — one kind
+of action — and its name and design name no place and no institution of one
+country; the baseline is the status quo, not an option. Findings: an
+instance-grain suggestion ("School-family diet and activity programme in
+deprived primaries") did not absorb the class-level reviews; the refugee
+suggestions carried "Greater Manchester councils" into their searches.
 
 Lead-authored and versioned (contract D7, A15; ADR 0039). The first step of
 the longlist walk asks the judgment model, from the plan, the baseline's
@@ -25,7 +32,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from policy_atlas.core.prompt_fields import sanitize_prompt_field
 from policy_atlas.options_scoping.longlist.lever_types import lever_types_as_data
 
-SUGGEST_PROMPT_VERSION = "longlist_suggest_v1"
+SUGGEST_PROMPT_VERSION = "longlist_suggest_v2"
 
 # The suggestion bound (contract § Plan object): about ten, within the
 # option-search cap of 15 so the user's own and the report's entrants are
@@ -49,9 +56,10 @@ class SuggestedOptionWire(BaseModel):
 
     name: str = Field(
         description=(
-            "A short option name a policy reader would recognise as one thing "
-            "to do (at most 80 characters). Names what would be done, never "
-            "whether it works."
+            "A short name for one kind of action a government could take, as "
+            "a policy reader would name it (at most 80 characters). No place, "
+            "no named programme of one country. Names what would be done, "
+            "never whether it works."
         )
     )
     description: str = Field(
@@ -65,8 +73,9 @@ class SuggestedOptionWire(BaseModel):
             "The features that define this option as a specified design: the "
             "offer, the obligation or incentive, who delivers it, to whom, for "
             "how long, free or paid, universal or targeted. Short phrases, "
-            "three to six. These are what the option's own search will look "
-            "for and what support will bind to."
+            "three to six. No place and no institution of one country. These "
+            "are what the option's own search will look for and what support "
+            "will bind to."
         )
     )
     outcomes_served: list[str] = Field(
@@ -117,9 +126,26 @@ you propose is assessed here; the user sees your suggestions labelled
 What to propose:
 - Options a government could adopt for THIS question, its intended change,
   its target unit and its outcomes: specified designs, each named by what
-  is done, by whom, for whom, with its defining features stated. Not
-  themes ("school-based approaches"), not aims ("improve outcomes"), not
-  research ("commission a study").
+  is done, by whom, for whom, with its defining features stated. Name each
+  at the grain a decision maker chooses between: one KIND of action
+  ("upfront grants for heat pumps", "family-based healthy weight
+  programmes", "paid work placements with language tuition"). A named
+  programme, one trial's version, a delivery detail or a variant of
+  another suggestion is below that grain: it belongs inside the design
+  features of the kind it is a case of, never in a row of its own. The
+  test: would a minister see two of your suggestions as the same
+  decision? Then they are one option. Not themes ("school-based
+  approaches"), not aims ("improve outcomes"), not research ("commission
+  a study").
+- Each suggestion gets its own literature search, and evidence from any
+  country is wanted. So the name, the description and the design features
+  name NO place and NO institution that exists in one country only: "the
+  local authority" or "the public employment service", never a named
+  council or "Jobcentre Plus". The plan's target unit says who the option
+  is for; do not restate where they live.
+- Use the baseline: what it says is already in place is the status quo,
+  not an option. Propose what would CHANGE it. An option that extends or
+  reforms something in place says so in its design features.
 - Draw on the plan's Your context: what the user already has in place is
   not an option to propose again, and a stated commitment may shape what
   fits alongside it.
@@ -254,6 +280,23 @@ def _section_block(title: str, body: str) -> str:
     return f'<section title="{safe_title}">\n{safe_body}\n</section>'
 
 
+def render_baseline_blocks(baseline_sections: list[tuple[str, str]]) -> str:
+    """Render the baseline's sections as fenced data blocks.
+
+    Shared by every longlist prompt that reads the baseline as reference
+    (task 046, item 9).
+
+    Args:
+        baseline_sections: ``(title, markdown)`` per baseline section, in
+            document order.
+
+    Returns:
+        One block per section, or a plain line when there is none.
+    """
+    blocks = [_section_block(title, body) for title, body in baseline_sections]
+    return "\n\n".join(blocks) if blocks else "No baseline sections."
+
+
 def build_suggest_messages(
     *,
     plan: SuggestPlanContext,
@@ -295,7 +338,6 @@ def build_suggest_messages(
         },
         ensure_ascii=False,
     )
-    blocks = [_section_block(title, body) for title, body in baseline_sections]
     reports = (
         "\n\n".join(
             LINKED_REPORT_TEMPLATE.format(
@@ -318,7 +360,7 @@ def build_suggest_messages(
                 bound=bound,
                 levers_json=json.dumps(lever_types_as_data(), ensure_ascii=False),
                 plan_json=plan_json,
-                baseline_blocks="\n\n".join(blocks) if blocks else "No baseline sections.",
+                baseline_blocks=render_baseline_blocks(baseline_sections),
                 linked_reports=reports,
             ),
         },

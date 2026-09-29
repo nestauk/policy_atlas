@@ -10,26 +10,48 @@ decisions 7 and 8. The longlist walk's clustering step:
    per link whose pinned walk ran ``extract``, the source task's IOF/ICF
    findings of that walk through ``finding_reference_union``
    (D5). Each unit's payload is this component's projection.
+   Before clustering the profile records are **thinned** (task 046, S10):
+   ``mentioned`` records with no features and no outcome are dropped,
+   records of one document with the same folded name collapse to the one of
+   the highest role, and at most :data:`RECORDS_PER_DOCUMENT_MAX` records a
+   document are kept; each rule's count is in ``provenance.thinning``.
 2. **Seeded clustering, the engine untouched** (P8). The seeds are every
    option the task holds — on a first build the entrants ``suggest`` minted
    (and the user's own), on a rebuild every existing option (D14).
    :class:`LonglistClusteringBackend` returns the seeds plus newly
    discovered options from ``discover`` and places each unit under one label
    in ``assign``; :func:`~policy_atlas.evidence_search.clustering_engine.cluster_units`
-   runs exactly as characterise runs it.
-3. **Option rows**: seeds keep their rows; each discovered option mints one
-   (``origin="clustered"``, design v1 from the discovery wire); a discovered
-   bundle is a package with ``part_of`` rows from its components. One option
-   per record; a document with several records lands in several options.
+   runs exactly as characterise runs it. Discovery reads the plan, the
+   baseline, the seeds and the **corpus digest** — never a unit record — and
+   works to :data:`LONGLIST_TARGET_SIZE`; new options stop at
+   :data:`LONGLIST_HARD_CEILING`, seeds included (task 046, R1). It may
+   **fold** a suggested seed into a wider option (the existing merge,
+   ``merged_into_option_id``); code rejects a fold of a user's option, of a
+   user-held one, into an unknown label or into a folded seed, and counts
+   each rejection. Assignment prompts carry short unit ids (``u1`` …) that
+   code maps back per call.
+3. **The residual pass** (task 046, R9): a second ``cluster_units`` call
+   over the *unclustered* units only, every option on the list as a seed
+   that cannot be folded, its new options bounded by the room left under the
+   ceiling; skipped when there is no room or no unclustered unit. Its answers
+   replace the first call's for those units. At most once.
+4. **Option rows**: seeds keep their rows; each discovered option mints one
+   (``origin="clustered"``, design v1 from the discovery wire, its outcomes
+   the plan outcomes its members' outcome tags name). No package is minted
+   and no ``part_of`` row is written (task 046, item 4). One option per
+   record; a document with several records lands in several options.
    Memberships are replaced wholesale by this run's.
-4. **Themes** are not built here: the ``theme`` component groups the
+5. **Themes** are not built here: the ``theme`` component groups the
    included options after ``constrain`` (task 046, R28); this component
    writes ``themes = []`` and no theme counts.
-5. **Typing**: one batched call per :data:`LEVER_TYPING_BATCH_SIZE` options;
-   lever types and the ambition tag on the option row, the runner-up in
-   ``longlist_result.provenance`` only (D8).
-6. **Coverage** (:mod:`.coverage`), deterministic, DOI-collapsed.
-7. **``longlist_result``**, written last (the 010 pattern).
+6. **Typing**: one call per :data:`LEVER_TYPING_BATCH_SIZE` options, the
+   batches in a thread pool of :data:`TYPING_MAX_CONCURRENT`, with the plan
+   and the baseline; lever types and the ambition tag on the option row, the
+   runner-up in ``longlist_result.provenance`` (D8). An invalid or failed
+   typing leaves the option's columns as they are and carries its runner-up
+   forward (task 046, S12).
+7. **Coverage** (:mod:`.coverage`), deterministic, DOI-collapsed.
+8. **``longlist_result``**, written last (the 010 pattern).
 
 Every model call happens before the first write, so a failure leaves nothing
 behind. User state (``state``, ``exclusion``) is never touched and no option
@@ -49,11 +71,12 @@ sees the component's label, so its validation is unchanged.
 
 from __future__ import annotations
 
-import math
+import re
 import threading
 import unicodedata
 import uuid
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any, Literal
@@ -61,9 +84,9 @@ from typing import Any, Literal
 import structlog
 from pydantic import ValidationError
 from sqlalchemy import and_, select
-from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.engine import Connection
 
+from policy_atlas.core import tracing
 from policy_atlas.core.schema import (
     capability_run,
     evidence_scope,
@@ -75,7 +98,6 @@ from policy_atlas.core.schema import (
     longlist_result,
     option,
     option_membership,
-    option_relation,
     runs,
     source_extraction_record,
     source_snapshot,
@@ -110,6 +132,7 @@ from policy_atlas.evidence_search.extract.iof_records import PROFILE_ID as IOF_P
 from policy_atlas.options_scoping.design import OptionDesign
 from policy_atlas.options_scoping.labels import labels_for_snapshots
 from policy_atlas.options_scoping.longlist.coverage import (
+    ROLE_BUCKETS,
     CoverageMember,
     FoldedSeed,
     document_key,
@@ -124,6 +147,7 @@ from policy_atlas.options_scoping.longlist.lever_types import (
 from policy_atlas.options_scoping.longlist.lever_typing_prompt import (
     LEVER_TYPING_BATCH_SIZE,
     LEVER_TYPING_PROMPT_VERSION,
+    LeverTypingResponse,
 )
 from policy_atlas.options_scoping.longlist.longlist_backend import (
     LONGLIST_ASSIGNMENT_MODEL,
@@ -138,8 +162,8 @@ from policy_atlas.options_scoping.longlist.longlist_cluster_prompt import (
     DiscoveredOptionWire,
 )
 from policy_atlas.options_scoping.longlist.where_tried import where_codes, where_labels
-from policy_atlas.options_scoping.longlist_intent import plan_tagging_context
-from policy_atlas.options_scoping.suggest.suggest import walk_plan
+from policy_atlas.options_scoping.longlist_intent import longlist_plan_data, plan_tagging_context
+from policy_atlas.options_scoping.suggest.suggest import baseline_sections, walk_plan
 from policy_atlas.runtime.capability_registry import OPTIONS_SCOPING, validate_plan
 from policy_atlas.runtime.scoping_plan import TARGETED_PURPOSE, ScopingPlan
 
@@ -159,31 +183,59 @@ DISCOVERY_RETRY_CAP = 1
 ASSIGNMENT_REPAIR_CAP = 1
 MAX_CONCURRENT_BATCHES = 4
 
-#: The discovery ceiling ``clamp(ceil(N / 4), 8, 40)`` over N units (D4).
-CEILING_DIVISOR, CEILING_MIN, CEILING_MAX = 4, 8, 40
+#: The list's target size and hard ceiling, seeds included (task 046, R1).
+LONGLIST_TARGET_SIZE = 20
+LONGLIST_HARD_CEILING = 25
+
+#: Thinning (task 046, S10): records kept per document, at most.
+RECORDS_PER_DOCUMENT_MAX = 8
+#: The corpus digest's names, at most (task 046, S8).
+DIGEST_NAMES_MAX = 400
+#: Typing batches in flight at once (task 046, S12).
+TYPING_MAX_CONCURRENT = 4
 
 #: A unit payload's free-text bound (the quote, a claim, each reference).
 UNIT_TEXT_MAX = 240
 UNIT_FEATURES_MAX = 8
-#: The reason an unusable typing is recorded under (fail-closed, D8).
+#: The reason an unusable typing was recorded under before task 046 (a
+#: stored row can still carry it; the read models leave it out of *none
+#: fits*). A typing that fails now leaves the option's columns as they are.
 TYPING_INVALID_REASON = "typing invalid"
 
 #: Seeds are offered in entrant order, then the clustered options (D14).
 _SEED_ORIGIN_ORDER = ("added_by_you", "from_evidence_search", "suggested", "clustered")
 
+#: The reader's word for a seed's origin, as the discovery prompt reads it.
+ORIGIN_WORDS: dict[str, str] = {
+    "added_by_you": "added by you",
+    "suggested": "suggested by Policy Atlas",
+    "from_evidence_search": "from your evidence search",
+    "clustered": "on the list",
+}
+#: The word for every seed of the residual pass, and for any other origin.
+ON_THE_LIST = "on the list"
+
+#: The role order thinning keeps by (the highest first).
+_ROLE_RANK: dict[str, int] = {role: rank for rank, role in enumerate(ROLE_BUCKETS)}
+
+#: A model-mangled short id ("U1", " u1 ", "1", "u 01") read as ``u<n>``.
+_SHORT_ID = re.compile(r"^\s*u?\s*0*(\d+)\s*$", re.IGNORECASE)
+
 UnitKind = Literal["interventions", "iof", "icf"]
 
 
-def discovery_ceiling(unit_count: int) -> int:
-    """The option ceiling ``clamp(ceil(N / 4), 8, 40)`` (D4), counting seeds.
+def discovery_bounds(seed_count: int) -> tuple[int, int]:
+    """The discovery bounds for ``seed_count`` seeds (task 046, R1, AM9).
 
     Args:
-        unit_count: N, the units clustered.
+        seed_count: The seeds offered.
 
     Returns:
-        The ceiling.
+        ``(max_new, max_labels)``: new options stop at the hard ceiling,
+        seeds included, and every seed is always assigned against.
     """
-    return max(CEILING_MIN, min(CEILING_MAX, math.ceil(unit_count / CEILING_DIVISOR)))
+    max_new = max(LONGLIST_HARD_CEILING - seed_count, 0)
+    return max_new, max(seed_count + max_new, seed_count)
 
 
 class LonglistFailure(Exception):
@@ -337,14 +389,87 @@ def current_profile_fingerprints(
     )
 
 
+@dataclass(frozen=True)
+class _OwnUnits:
+    """What :func:`_own_units` read: the units and the counts of what it left out."""
+
+    units: list[_Unit]
+    comparators: int = 0
+    superseded: int = 0
+    thinning: dict[str, int] = field(default_factory=dict)
+
+
+def _thin_order(row: Any) -> tuple[int, datetime, str]:
+    """Thinning's keep order within a document: role, then profile order (S10)."""
+    return (_ROLE_RANK.get(row.role, len(_ROLE_RANK)), row.created_at, str(row.record_id))
+
+
+def _thin(rows: Sequence[Any]) -> tuple[set[uuid.UUID], dict[str, int]]:
+    """The thinning rules of S10 over one union of profile records, in order.
+
+    1. a ``mentioned`` record with no design feature and no outcome is dropped;
+    2. records of one document with the same folded intervention name
+       collapse to one, the highest role kept (then the earliest, then the
+       lowest record id);
+    3. at most :data:`RECORDS_PER_DOCUMENT_MAX` records a document are kept,
+       by role, then ``created_at``, then ``record_id``.
+
+    No rule reads a tag.
+
+    Args:
+        rows: The records, comparators and superseded extractions already
+            left out.
+
+    Returns:
+        ``(kept record ids, counts per rule)``.
+    """
+    bare = 0
+    survivors: list[Any] = []
+    for row in rows:
+        if row.role == "mentioned" and not _string_list(row.design_features) and (
+            _bound(row.outcome) is None
+        ):
+            bare += 1
+            continue
+        survivors.append(row)
+    collapsed = 0
+    named: set[tuple[uuid.UUID, str]] = set()
+    distinct: list[Any] = []
+    for row in sorted(survivors, key=_thin_order):
+        name = _bound(row.intervention)
+        if name is not None:
+            doc_name = (row.task_source_snapshot_id, _key(name))
+            if doc_name in named:
+                collapsed += 1
+                continue
+            named.add(doc_name)
+        distinct.append(row)
+    capped = 0
+    per_document: dict[uuid.UUID, int] = {}
+    kept: set[uuid.UUID] = set()
+    for row in sorted(distinct, key=_thin_order):
+        held = per_document.get(row.task_source_snapshot_id, 0)
+        if held >= RECORDS_PER_DOCUMENT_MAX:
+            capped += 1
+            continue
+        per_document[row.task_source_snapshot_id] = held + 1
+        kept.add(row.record_id)
+    return kept, {
+        "mentioned_without_features_or_outcome": bare,
+        "same_name_in_document": collapsed,
+        "over_document_cap": capped,
+        "document_cap": RECORDS_PER_DOCUMENT_MAX,
+    }
+
+
 def _own_units(
     conn: Connection,
     *,
     task_id: uuid.UUID,
     scope_ids: Sequence[uuid.UUID],
     current_fingerprints: frozenset[str],
-) -> tuple[list[_Unit], int, int]:
-    """The profile records of the given scopes, minus comparators.
+) -> _OwnUnits:
+    """The profile records of the given scopes, minus comparators, thinned.
 
     The union of the scopes' latest roll-ups (task 046, S3). A document
     profiled in two scopes counts once: the memo shares one extraction record
@@ -353,12 +478,12 @@ def _own_units(
     tagging contexts) only one extraction's records are kept — the one
     written under the current plan's context, else the newest. A record whose
     extraction fingerprint is not in ``current_fingerprints`` reads as "not
-    tagged": its tags are ``None`` in the unit and its payload.
+    tagged": its tags are ``None`` in the unit and its payload. The thinning
+    of S10 (:func:`_thin`) then runs over what that rule keeps.
 
     Returns:
-        ``(units, comparator_records, superseded_records)``;
-        ``superseded_records`` counts the records of a document's other
-        extractions, left out.
+        The units in document order, the comparator records, the records of
+        a document's other extractions (superseded) and the thinning counts.
     """
     record_ids: list[uuid.UUID] = []
     for scope_id in scope_ids:
@@ -372,7 +497,7 @@ def _own_units(
         )
         record_ids.extend(ids.get(INTERVENTIONS_PROFILE_ID, []))
     if not record_ids:
-        return [], 0, 0
+        return _OwnUnits(units=[], thinning=_thin([])[1])
     ipr = intervention_profile_record
     ser = source_extraction_record
     rows = conn.execute(
@@ -420,7 +545,7 @@ def _own_units(
         best = chosen.get(row.task_source_snapshot_id)
         if best is None or rank > best:
             chosen[row.task_source_snapshot_id] = rank
-    units: list[_Unit] = []
+    candidates: list[Any] = []
     seen: set[uuid.UUID] = set()
     comparators = 0
     superseded = 0
@@ -434,6 +559,12 @@ def _own_units(
         if row.role == "comparator":
             comparators += 1
             continue
+        candidates.append(row)
+    kept, thinning = _thin(candidates)
+    units: list[_Unit] = []
+    for row in candidates:
+        if row.record_id not in kept:
+            continue
         tagged = row.extraction_fingerprint in current_fingerprints
         population_tag = row.population_tag if tagged else None
         outcome_tag = row.outcome_tag if tagged else None
@@ -444,8 +575,6 @@ def _own_units(
             "intervention": _bound(row.intervention),
             "role": row.role,
             "design_features": _string_list(row.design_features),
-            "is_bundle": bool(row.is_bundle),
-            "components": _string_list(row.components),
             "outcome": _bound(row.outcome),
             "population": _bound(row.population),
             "setting": _bound(row.setting),
@@ -478,7 +607,9 @@ def _own_units(
                 object_tag=object_tag,
             )
         )
-    return units, comparators, superseded
+    return _OwnUnits(
+        units=units, comparators=comparators, superseded=superseded, thinning=thinning
+    )
 
 
 #: The role a linked finding's kind implies, for the role funnel and the
@@ -678,12 +809,18 @@ class _Seed:
     label: str
     description: str
     design_features: list[str]
+    origin: str = "clustered"
+    #: The user set this option's state (``exclusion.by == "user"``).
+    user_held: bool = False
+    name: str = ""
+    outcomes: list[str] = field(default_factory=list)
 
-    def as_data(self) -> dict[str, object]:
+    def as_data(self, origin: str) -> dict[str, object]:
         return {
             "label": self.label,
             "description": self.description,
             "design_features": self.design_features,
+            "origin": origin,
         }
 
 
@@ -699,6 +836,9 @@ def _seeds(conn: Connection, *, task_id: uuid.UUID) -> list[_Seed]:
     A duplicate constrain merged into a kept option is not a seed: it stays
     merged (its name is a :func:`_merged_names` entry instead).
     """
+    # Imported here: ``constrain`` imports this module.
+    from policy_atlas.options_scoping.constrain.constrain import user_holds_state
+
     rows = conn.execute(
         select(
             option.c.option_id,
@@ -706,6 +846,7 @@ def _seeds(conn: Connection, *, task_id: uuid.UUID) -> list[_Seed]:
             option.c.description,
             option.c.design,
             option.c.origin,
+            option.c.exclusion,
             option.c.created_at,
         )
         .where(option.c.task_id == task_id)
@@ -728,16 +869,24 @@ def _seeds(conn: Connection, *, task_id: uuid.UUID) -> list[_Seed]:
         taken.add(label.casefold())
         description = _clean_label_text(row.description, OPTION_DESCRIPTION_MAX) or label
         try:
-            features = list(OptionDesign.model_validate(row.design).design_features)
+            design = OptionDesign.model_validate(row.design)
         except ValidationError:
             log.warning("longlist.seed_design_invalid", option_id=str(row.option_id))
-            features = []
+            features: list[str] = []
+            outcomes: list[str] = []
+        else:
+            features = list(design.design_features)
+            outcomes = list(design.outcomes_served)
         seeds.append(
             _Seed(
                 option_id=row.option_id,
                 label=label,
                 description=description,
                 design_features=features,
+                origin=row.origin,
+                user_held=user_holds_state(row.exclusion),
+                name=row.name,
+                outcomes=outcomes,
             )
         )
     return seeds
@@ -769,42 +918,148 @@ def _key(value: str) -> str:
     return " ".join(value.split()).casefold()
 
 
-class LonglistClusteringBackend(ClusteringBackend):
-    """The engine's backend for seeded option clustering (P8).
+def corpus_digest(
+    entries: Iterable[tuple[object, object]], *, limit: int = DIGEST_NAMES_MAX
+) -> tuple[list[dict[str, object]], int]:
+    """The corpus digest: each folded intervention name with its record counts (S8).
 
-    ``discover`` returns the seeds followed by the options the model discovers
-    beyond them (one call, ``max_new = max_labels - len(seeds)``, none when
-    that is zero); the discovered options' full wire is kept on the side by
-    label. ``assign`` returns ``unit_id → label`` to the engine and keeps the
-    reason and ``design_feature_not_stated`` on the side by unit id; the
-    component's ``not an option`` and the prompt's ``ungroupable`` reach the
-    engine as its residual label, the difference remembered here.
+    Built by code from the units, in place of every unit record: one entry
+    per folded name (whitespace collapsed, case folded) with its record count
+    and its counts by role, by records descending then name, at most
+    ``limit`` names. The name shown is the name's most frequent spelling
+    (then the shortest, then the first alphabetically). A unit with no name
+    is left out.
+
+    Args:
+        entries: ``(intervention, role)`` per unit.
+        limit: The names kept, at most.
+
+    Returns:
+        ``(digest, distinct names)``: each entry ``{"name", "records",
+        "roles"}``, ``roles`` in role order with zero counts left out; and
+        the number of distinct names before the limit.
+    """
+    records: dict[str, int] = {}
+    roles: dict[str, dict[str, int]] = {}
+    spellings: dict[str, dict[str, int]] = {}
+    for intervention, role in entries:
+        name = _bound(intervention)
+        if name is None:
+            continue
+        key = _key(name)
+        records[key] = records.get(key, 0) + 1
+        by_role = roles.setdefault(key, {})
+        if isinstance(role, str) and role in _ROLE_RANK:
+            by_role[role] = by_role.get(role, 0) + 1
+        spelled = spellings.setdefault(key, {})
+        spelled[name] = spelled.get(name, 0) + 1
+    shown = {
+        key: min(counts, key=lambda text: (-counts[text], len(text), text))
+        for key, counts in spellings.items()
+    }
+    ordered = sorted(records, key=lambda key: (-records[key], shown[key]))
+    digest: list[dict[str, object]] = [
+        {
+            "name": shown[key],
+            "records": records[key],
+            "roles": {role: roles[key][role] for role in ROLE_BUCKETS if role in roles[key]},
+        }
+        for key in ordered[:limit]
+    ]
+    return digest, len(records)
+
+
+def _short_id(raw: str, short: Mapping[str, str]) -> tuple[str, bool]:
+    """Map a returned short id back to its unit id (S9).
+
+    A mangled short id ("U1", " u1 ", "1") is read as ``u<n>`` when that is
+    an id of this call; an id not of this call goes to the engine as it came
+    (an unknown id, which the engine's repair path handles).
+
+    Returns:
+        ``(unit id or the raw id, repaired)``.
+    """
+    if raw in short:
+        return short[raw], False
+    match = _SHORT_ID.match(raw)
+    if match is not None:
+        candidate = f"u{int(match.group(1))}"
+        if candidate in short:
+            return short[candidate], True
+    return raw, False
+
+
+@dataclass(frozen=True)
+class _Fold:
+    seed: _Seed
+    into_label: str
+
+
+class LonglistClusteringBackend(ClusteringBackend):
+    """The engine's backend for seeded option clustering (P8; task 046, S8, S9).
+
+    ``discover`` returns the seeds that are not folded, followed by the
+    options the model discovers beyond them (one call over the plan, the
+    baseline, the seeds and the corpus digest — never a unit record —
+    ``max_new = max_labels - len(seeds)``); the discovered options' full wire
+    is kept on the side by label, the accepted folds by seed. New options
+    over ``max_new``, restated seeds and repeated labels are dropped and
+    counted. ``assign`` sends each batch under short ids (``u1`` …, a map
+    built per call), maps the answers back, returns ``unit_id → label`` to
+    the engine and keeps the reason and ``design_feature_not_stated`` on the
+    side by unit id; the component's ``not an option`` and the prompt's
+    ``ungroupable`` reach the engine as its residual label, the difference
+    remembered here.
 
     Args:
         backend: The model seam.
-        question: The plan's question (context only).
+        plan: The plan fields as data, place stripped.
+        baseline: The baseline's ``(title, markdown)`` sections.
         seeds: The seed options, in offer order.
         retired: Names a discovered option may not restate either (the
             merged duplicates'); dropped like a restated seed.
+        residual: The residual pass: every seed is "on the list" and no fold
+            is accepted.
     """
 
     def __init__(
         self,
         backend: LonglistBackend,
         *,
-        question: str,
+        plan: dict[str, object],
+        baseline: list[tuple[str, str]],
         seeds: list[_Seed],
         retired: Sequence[str] = (),
+        residual: bool = False,
     ) -> None:
         self._backend = backend
-        self._question = question
+        self._plan = plan
+        self._baseline = baseline
         self._seeds = seeds
+        self._residual = residual
         self._seed_keys = {_key(seed.label) for seed in seeds} | {_key(n) for n in retired}
         self._lock = threading.Lock()
         self.discovered: dict[str, DiscoveredOptionWire] = {}
+        self.folds: dict[uuid.UUID, _Fold] = {}
+        self.rejected_folds: list[dict[str, str]] = []
         self.answers: dict[str, _Answer] = {}
         self.restated_seeds_dropped = 0
+        self.repeated_labels_dropped = 0
+        self.over_ceiling_dropped = 0
+        self.short_id_repairs = 0
         self.max_new = 0
+        self.called = False
+        self.digest: dict[str, int] = {}
+
+    def _origin(self, seed: _Seed) -> str:
+        if self._residual:
+            return ON_THE_LIST
+        return ORIGIN_WORDS.get(seed.origin, ON_THE_LIST)
+
+    def _foldable(self) -> bool:
+        return not self._residual and any(
+            seed.origin != "added_by_you" and not seed.user_held for seed in self._seeds
+        )
 
     def discover(
         self,
@@ -813,10 +1068,13 @@ class LonglistClusteringBackend(ClusteringBackend):
         min_labels: int,
         max_labels: int,
     ) -> UsageResult[list[ClusterLabel]]:
-        """Return the seeds plus newly discovered options.
+        """Return the seeds not folded plus newly discovered options.
+
+        The call is made when a new option is allowed or a seed can be
+        folded; the seeds alone come back otherwise.
 
         Args:
-            units: The units, in deterministic order.
+            units: The units, in deterministic order (read for the digest only).
             min_labels: The policy's minimum (unused: the prompt has none).
             max_labels: The policy's ceiling, counting the seeds.
 
@@ -824,27 +1082,94 @@ class LonglistClusteringBackend(ClusteringBackend):
             Seed labels then discovered labels, and the call's usage.
         """
         del min_labels
-        labels = [
-            ClusterLabel(label=seed.label, description=seed.description) for seed in self._seeds
-        ]
         self.discovered = {}
+        self.folds = {}
+        self.rejected_folds = []
+        self.restated_seeds_dropped = 0
+        self.repeated_labels_dropped = 0
+        self.over_ceiling_dropped = 0
         self.max_new = max(max_labels - len(self._seeds), 0)
-        if self.max_new == 0:
-            return labels, None
-        response, usage = self._backend.discover(
-            question=self._question,
-            seeds=[seed.as_data() for seed in self._seeds],
-            records=[unit.payload for unit in units],
-            max_new=self.max_new,
+        digest, names = corpus_digest(
+            (unit.payload.get("intervention"), unit.payload.get("role")) for unit in units
         )
+        self.digest = {"units": len(units), "names": names, "shown": len(digest)}
+        if self.max_new == 0 and not self._foldable():
+            return self._labels(), None
+        self.called = True
+        response, usage = self._backend.discover(
+            plan=self._plan,
+            baseline_sections=self._baseline,
+            seeds=[seed.as_data(self._origin(seed)) for seed in self._seeds],
+            digest=digest,
+            target_size=LONGLIST_TARGET_SIZE,
+            max_new=self.max_new,
+            residual=self._residual,
+        )
+        taken: set[str] = set()
         for wire in response.options:
             label = wire.label.strip()
-            if _key(label) in self._seed_keys:
+            key = _key(label)
+            if key in self._seed_keys:
                 self.restated_seeds_dropped += 1
                 continue
+            if key in taken:
+                self.repeated_labels_dropped += 1
+                continue
+            if len(self.discovered) >= self.max_new:
+                self.over_ceiling_dropped += 1
+                continue
+            taken.add(key)
             self.discovered[label] = wire
-            labels.append(ClusterLabel(label=label, description=wire.description))
-        return labels, usage
+        for fold in response.folds:
+            self._fold(fold.seed_label, fold.into_label)
+        return self._labels(), usage
+
+    def _fold(self, seed_label: str, into_label: str) -> None:
+        """Accept one fold, or record why it is rejected (the four guards, S8)."""
+        seeds = {_key(seed.label): seed for seed in self._seeds}
+        new = {_key(label): label for label in self.discovered}
+        seed = seeds.get(_key(seed_label))
+        target_key = _key(into_label)
+        folded = {fold.seed.option_id for fold in self.folds.values()}
+        targets = {_key(fold.into_label) for fold in self.folds.values()}
+        reason: str | None = None
+        if self._residual:
+            reason = "residual_pass"
+        elif seed is None:
+            reason = "unknown_seed"
+        elif seed.origin == "added_by_you":
+            reason = "added_by_you"
+        elif seed.user_held:
+            reason = "user_held"
+        elif target_key == _key(seed.label):
+            reason = "into_itself"
+        elif target_key not in seeds and target_key not in new:
+            reason = "unknown_target"
+        elif seed.option_id in folded:
+            reason = "already_folded"
+        elif target_key in seeds and seeds[target_key].option_id in folded:
+            reason = "into_folded_seed"
+        elif _key(seed.label) in targets:
+            reason = "seed_is_fold_target"
+        if reason is not None or seed is None:
+            self.rejected_folds.append(
+                {"seed_label": seed_label, "into_label": into_label, "reason": reason or ""}
+            )
+            return
+        target = seeds[target_key].label if target_key in seeds else new[target_key]
+        self.folds[seed.option_id] = _Fold(seed=seed, into_label=target)
+
+    def _labels(self) -> list[ClusterLabel]:
+        labels = [
+            ClusterLabel(label=seed.label, description=seed.description)
+            for seed in self._seeds
+            if seed.option_id not in self.folds
+        ]
+        labels.extend(
+            ClusterLabel(label=label, description=wire.description)
+            for label, wire in self.discovered.items()
+        )
+        return labels
 
     def _option_data(self, label: ClusterLabel) -> dict[str, object]:
         wire = self.discovered.get(label.label)
@@ -867,26 +1192,35 @@ class LonglistClusteringBackend(ClusteringBackend):
         *,
         labels: list[ClusterLabel],
     ) -> UsageResult[AssignmentOutput]:
-        """Assign one batch; the component's labels become the engine's residual.
+        """Assign one batch under short ids; the component's labels become the engine's residual.
 
         Args:
             batch: The batch's units.
             labels: The validated labels (seeds and discovered).
 
         Returns:
-            One assignment per answered unit (duplicates kept, so the engine
-            sees conflicts), and the call's usage.
+            One assignment per answered unit, keyed by the unit's id after
+            mapping back (duplicates kept, so the engine sees conflicts), and
+            the call's usage.
         """
+        short = {f"u{index}": unit.unit_id for index, unit in enumerate(batch, start=1)}
+        records = [
+            {"unit_id": sid, **{k: v for k, v in unit.payload.items() if k != "unit_id"}}
+            for sid, unit in zip(short, batch, strict=True)
+        ]
         response, usage = self._backend.assign(
             options=[self._option_data(label) for label in labels],
-            records=[unit.payload for unit in batch],
+            records=records,
         )
         by_key = {_key(label.label): label.label for label in labels}
         not_an_option = _key(NOT_AN_OPTION_LABEL)
         residual_keys = {_key(MODEL_RESIDUAL_LABEL), _key(RESIDUAL_LABEL)}
+        known = set(short.values())
         assignments: list[ClusterAssignment] = []
         with self._lock:
             for wire in response.assignments:
+                unit_id, repaired = _short_id(wire.unit_id, short)
+                self.short_id_repairs += int(repaired)
                 raw = _key(wire.option_label)
                 if raw == not_an_option:
                     answer = _Answer("not_an_option", RESIDUAL_LABEL, wire.reason, False)
@@ -895,8 +1229,9 @@ class LonglistClusteringBackend(ClusteringBackend):
                 else:
                     label = by_key.get(raw, wire.option_label)
                     answer = _Answer("option", label, wire.reason, wire.design_feature_not_stated)
-                self.answers[wire.unit_id] = answer
-                assignments.append(ClusterAssignment(unit_id=wire.unit_id, label=answer.label))
+                if unit_id in known:
+                    self.answers[unit_id] = answer
+                assignments.append(ClusterAssignment(unit_id=unit_id, label=answer.label))
         return assignments, usage
 
 
@@ -967,38 +1302,24 @@ class _Typing:
     primary: str | None
     secondary: list[str]
     none_fits_reason: str | None
-    ambition: str | None
-    ambition_reason: str | None
+    ambition: str
+    ambition_reason: str
     runner_up: str | None
-    runner_up_reason: str | None
-    invalid: bool
 
 
-_INVALID_TYPING = _Typing(
-    primary=None,
-    secondary=[],
-    none_fits_reason=TYPING_INVALID_REASON,
-    ambition=None,
-    ambition_reason=None,
-    runner_up=None,
-    runner_up_reason=None,
-    invalid=True,
-)
-
-
-def _validated_typing(wire: Any) -> _Typing:
-    """One wire typing, validated fail-closed (D8)."""
+def _validated_typing(wire: Any) -> _Typing | None:
+    """One wire typing, validated fail-closed (D8); ``None`` when unusable."""
     primary = wire.primary_lever_type
     reason = (wire.none_fits_reason or "").strip() or None
     ambition = wire.ambition
     ambition_reason = (wire.ambition_reason or "").strip() or None
     if ambition not in AMBITION_BANDS or ambition_reason is None:
-        return _INVALID_TYPING
+        return None
     if primary is None:
         if reason is None:
-            return _INVALID_TYPING
+            return None
     elif primary not in LEVER_TYPE_KEYS:
-        return _INVALID_TYPING
+        return None
     secondary: list[str] = []
     for key in wire.secondary_lever_types:
         if key in LEVER_TYPE_KEYS and key != primary and key not in secondary:
@@ -1011,24 +1332,36 @@ def _validated_typing(wire: Any) -> _Typing:
         ambition=ambition,
         ambition_reason=ambition_reason,
         runner_up=runner_up if runner_up != primary else None,
-        runner_up_reason=((wire.runner_up_reason or "").strip() or None) if runner_up else None,
-        invalid=False,
     )
 
 
 def _type_options(
-    backend: LonglistBackend, options: list[_Option], usage: UsageAccumulator
-) -> tuple[dict[uuid.UUID, _Typing], dict[str, Any]]:
-    """Type every option, one call per batch; any failure is *typing invalid*."""
+    backend: LonglistBackend,
+    options: list[_Option],
+    usage: UsageAccumulator,
+    *,
+    plan: dict[str, object],
+    baseline: list[tuple[str, str]],
+) -> tuple[dict[uuid.UUID, _Typing], list[uuid.UUID], dict[str, Any]]:
+    """Type every option, one call per batch, the batches in a thread pool (S12).
+
+    Returns:
+        ``(valid typings, kept option ids, stats)``: an option whose typing
+        is invalid, missing or in a failed batch is *kept* — its columns are
+        left as they are.
+    """
+    batches = [
+        options[start : start + LEVER_TYPING_BATCH_SIZE]
+        for start in range(0, len(options), LEVER_TYPING_BATCH_SIZE)
+    ]
     typings: dict[uuid.UUID, _Typing] = {}
-    calls = 0
+    answered: set[uuid.UUID] = set()
     failed_batches = 0
-    for start in range(0, len(options), LEVER_TYPING_BATCH_SIZE):
-        batch = options[start : start + LEVER_TYPING_BATCH_SIZE]
-        by_unit = {str(o.option_id): o for o in batch}
-        calls += 1
-        try:
-            response, call_usage = backend.type_options(
+    with ThreadPoolExecutor(max_workers=TYPING_MAX_CONCURRENT) as pool:
+        futures = [
+            tracing.submit_with_context(
+                pool,
+                backend.type_options,
                 options=[
                     {
                         "unit_id": str(o.option_id),
@@ -1037,32 +1370,116 @@ def _type_options(
                         "design_features": o.design_features,
                     }
                     for o in batch
-                ]
+                ],
+                plan=plan,
+                baseline_sections=baseline,
             )
-        except Exception as exc:  # fail-closed: the batch is recorded invalid
-            failed_batches += 1
-            log.warning("longlist.typing_batch_failed", error_type=type(exc).__name__)
+            for batch in batches
+        ]
+        results: list[UsageResult[LeverTypingResponse] | None] = []
+        for future in futures:
+            try:
+                results.append(future.result())
+            except Exception as exc:  # fail-closed: the batch's options are kept
+                failed_batches += 1
+                log.warning("longlist.typing_batch_failed", error_type=type(exc).__name__)
+                results.append(None)
+    for batch, result in zip(batches, results, strict=True):
+        if result is None:
             continue
+        response, call_usage = result
         usage.add(call_usage)
+        by_unit = {str(o.option_id): o for o in batch}
         for wire in response.typings:
             target = by_unit.get(wire.unit_id)
-            if target is None or target.option_id in typings:
+            if target is None or target.option_id in answered:
                 continue
-            typings[target.option_id] = _validated_typing(wire)
-    for o in options:
-        typings.setdefault(o.option_id, _INVALID_TYPING)
-    return typings, {
-        "calls": calls,
+            answered.add(target.option_id)
+            typing = _validated_typing(wire)
+            if typing is not None:
+                typings[target.option_id] = typing
+    kept = [o.option_id for o in options if o.option_id not in typings]
+    return typings, kept, {
+        "calls": len(batches),
         "batch_size": LEVER_TYPING_BATCH_SIZE,
+        "max_concurrent": TYPING_MAX_CONCURRENT,
         "failed_batches": failed_batches,
-        "invalid": sum(1 for t in typings.values() if t.invalid),
+        "invalid": len(kept),
+        "kept_ids": [str(option_id) for option_id in kept],
     }
 
 
-def _discovered_design(label: str, wire: DiscoveredOptionWire) -> OptionDesign:
-    """Design v1 from the discovery wire; a wire with no feature keeps its description."""
+def _earlier_runner_ups(
+    conn: Connection, *, task_id: uuid.UUID, option_ids: Sequence[uuid.UUID]
+) -> dict[str, dict[str, Any]]:
+    """The runner-up a kept typing carries forward (S12).
+
+    Per option, the runner-up of the latest earlier ``longlist_result`` of
+    the task that records one for it. A result that typed the option validly
+    with no runner-up (it lists the option among its options and not among
+    its ``typing.kept_ids``) ends the search: the typing that stands has none.
+
+    Args:
+        conn: Open connection.
+        task_id: The scoping task.
+        option_ids: The options whose typing was kept.
+
+    Returns:
+        ``{option_id: {"lever_type", "carried_forward": True}}``.
+    """
+    wanted = {str(option_id) for option_id in option_ids}
+    found: dict[str, dict[str, Any]] = {}
+    if not wanted:
+        return found
+    settled: set[str] = set()
+    for (provenance,) in conn.execute(
+        select(longlist_result.c.provenance)
+        .where(longlist_result.c.task_id == task_id)
+        .order_by(
+            longlist_result.c.created_at.desc(), longlist_result.c.longlist_result_id.desc()
+        )
+    ):
+        record = provenance if isinstance(provenance, Mapping) else {}
+        runner_ups = record.get("runner_up")
+        runner_ups = runner_ups if isinstance(runner_ups, Mapping) else {}
+        typing = record.get("typing")
+        kept_ids = typing.get("kept_ids") if isinstance(typing, Mapping) else None
+        listed = {
+            str(option_id)
+            for key in ("seed_ids", "discovered_ids")
+            for option_id in (record.get(key) or [])
+        }
+        for option_id in wanted - settled:
+            entry = runner_ups.get(option_id)
+            lever = entry.get("lever_type") if isinstance(entry, Mapping) else None
+            if isinstance(lever, str) and lever in LEVER_TYPE_KEYS:
+                found[option_id] = {"lever_type": lever, "carried_forward": True}
+                settled.add(option_id)
+            elif isinstance(kept_ids, list) and option_id in listed and option_id not in kept_ids:
+                settled.add(option_id)
+        if settled >= wanted:
+            break
+    return found
+
+
+def _member_outcomes(members: Sequence[_Unit], plan_outcomes: Sequence[str]) -> list[str]:
+    """The plan outcomes the members' outcome tags name, in plan order (S11).
+
+    ``other`` and a tag that names no plan outcome are left out; empty when no
+    member has a plan outcome.
+    """
+    tags = {_key(unit.outcome_tag) for unit in members if unit.outcome_tag}
+    return [outcome for outcome in plan_outcomes if _key(outcome) in tags]
+
+
+def _discovered_design(
+    label: str, wire: DiscoveredOptionWire, outcomes: list[str]
+) -> OptionDesign:
+    """Design v1 from the discovery wire and the members' outcomes (S11).
+
+    A wire with no feature keeps its description as the one feature.
+    """
     features = [f for f in (_bound(item, 2_000) for item in wire.design_features) if f]
-    outcomes = [o for o in (_bound(item, 2_000) for item in wire.outcomes_served) if o]
     description = _bound(wire.description, 2_000) or label
     try:
         return OptionDesign(
@@ -1075,7 +1492,11 @@ def _discovered_design(label: str, wire: DiscoveredOptionWire) -> OptionDesign:
     except ValidationError:
         log.warning("longlist.discovered_design_invalid")
         return OptionDesign(
-            name=label, description=label, design_features=[label], outcomes_served=[], assumed=[]
+            name=label,
+            description=label,
+            design_features=[label],
+            outcomes_served=outcomes,
+            assumed=[],
         )
 
 
@@ -1245,14 +1666,14 @@ def membership_coverage(
         ``{option_id: coverage}`` for each of ``option_ids``.
     """
     search_scopes = _option_search_scopes(conn, task_id=task_id)
-    own, _, _ = _own_units(
+    own = _own_units(
         conn,
         task_id=task_id,
         scope_ids=[scope_id, *search_scopes],
         current_fingerprints=current_profile_fingerprints(
             conn, task_id=task_id, scope_id=scope_id
         ),
-    )
+    ).units
     linked, _ = _linked_units(conn, task_id=task_id)
     by_key = {(u.kind, u.record_id): u for u in own + linked}
     members: dict[uuid.UUID, list[tuple[_Unit, bool]]] = {oid: [] for oid in option_ids}
@@ -1293,6 +1714,83 @@ def membership_coverage(
     }
 
 
+def _title_only(conn: Connection, *, task_id: uuid.UUID, scope_id: uuid.UUID) -> int:
+    """The title-only documents the scope's latest extraction left unprofiled (S10)."""
+    counts = conn.execute(
+        select(extraction_result.c.counts)
+        .where(extraction_result.c.task_id == task_id)
+        .where(extraction_result.c.evidence_scope_id == scope_id)
+        .order_by(
+            extraction_result.c.created_at.desc(),
+            extraction_result.c.extraction_result_id.desc(),
+        )
+        .limit(1)
+    ).scalar_one_or_none()
+    value = counts.get("title_only") if isinstance(counts, Mapping) else None
+    return value if isinstance(value, int) and not isinstance(value, bool) else 0
+
+
+def _cluster(
+    units: Sequence[_Unit], backend: LonglistClusteringBackend, max_labels: int
+) -> ClusteringResult | None:
+    """One ``cluster_units`` call over ``units``; ``None`` when there is none."""
+    if not units:
+        return None
+    return cluster_units(
+        [ClusterUnit(unit_id=u.unit_id, payload=u.payload) for u in units],
+        backend=backend,
+        policy=_option_policy(max_labels),
+    )
+
+
+def _new_options(
+    clustering: ClusteringResult | None,
+    backend: LonglistClusteringBackend,
+    by_label: Mapping[str, _Option],
+) -> list[_Option]:
+    """The options this clustering discovered, one row each, in label order."""
+    if clustering is None:
+        return []
+    minted: list[_Option] = []
+    for label in clustering.labels:
+        wire = backend.discovered.get(label.label)
+        if wire is None or label.label in by_label:
+            continue
+        minted.append(
+            _Option(
+                option_id=uuid.uuid4(),
+                label=label.label,
+                description=label.description,
+                design_features=[
+                    f for f in (_bound(item, 2_000) for item in wire.design_features) if f
+                ],
+                outcomes=[],
+                seed=False,
+                wire=wire,
+            )
+        )
+    return minted
+
+
+def _placements(
+    units: Sequence[_Unit],
+    clustering: ClusteringResult | None,
+    answers: Mapping[str, _Answer],
+) -> dict[str, tuple[str, _Answer | None]]:
+    """Each unit's final place: an option label or the residual, and its answer."""
+    assignments = clustering.assignments if clustering is not None else {}
+    return {
+        unit.unit_id: (assignments.get(unit.unit_id, RESIDUAL_LABEL), answers.get(unit.unit_id))
+        for unit in units
+    }
+
+
+def _unclustered(placement: tuple[str, _Answer | None]) -> bool:
+    """Whether a unit ended in the residual without a *not an option* answer."""
+    final, answer = placement
+    return final == RESIDUAL_LABEL and not (answer is not None and answer.kind == "not_an_option")
+
+
 def longlist_scope(
     conn: Connection,
     *,
@@ -1303,10 +1801,10 @@ def longlist_scope(
 ) -> dict[str, Any]:
     """Build the longlist for one longlist walk.
 
-    Every model call (discovery, assignment, typing) happens before
-    the first write; the writes — new option rows, ``part_of`` relations, the
-    task's memberships replaced, typing on every option, and
-    ``longlist_result`` last — share the component transaction.
+    Every model call (discovery, assignment, the residual pass, typing)
+    happens before the first write; the writes — new option rows, the folds'
+    merges, the task's memberships replaced, typing on every option typed
+    validly, and ``longlist_result`` last — share the component transaction.
 
     Args:
         conn: Open connection inside the component transaction.
@@ -1327,8 +1825,10 @@ def longlist_scope(
     _walk_id, plan_version = _walk_ref(
         conn, task_id=task_id, run_id=run_id, scope_id=context.scope_id
     )
+    plan_data = longlist_plan_data(plan)
+    baseline = baseline_sections(conn, task_id)
     search_scopes = _option_search_scopes(conn, task_id=task_id)
-    own, comparators, superseded = _own_units(
+    own = _own_units(
         conn,
         task_id=task_id,
         scope_ids=[context.scope_id, *search_scopes],
@@ -1337,31 +1837,20 @@ def longlist_scope(
         ),
     )
     linked, link_provenance = _linked_units(conn, task_id=task_id)
-    units = own + linked
+    units = own.units + linked
     seeds = _seeds(conn, task_id=task_id)
+    retired = _merged_names(conn, task_id=task_id)
 
     # 1. Seeded option clustering, the engine untouched.
-    ceiling = discovery_ceiling(len(units))
-    # The seeds are all assigned against even when they outnumber the ceiling.
-    max_labels = max(ceiling, len(seeds))
+    max_new, max_labels = discovery_bounds(len(seeds))
     clustering_backend = LonglistClusteringBackend(
-        backend,
-        question=plan.question,
-        seeds=seeds,
-        retired=_merged_names(conn, task_id=task_id),
+        backend, plan=plan_data, baseline=baseline, seeds=seeds, retired=retired
     )
     try:
-        clustering = (
-            cluster_units(
-                [ClusterUnit(unit_id=u.unit_id, payload=u.payload) for u in units],
-                backend=clustering_backend,
-                policy=_option_policy(max_labels),
-            )
-            if units
-            else None
-        )
+        clustering = _cluster(units, clustering_backend, max_labels)
     except ClusteringFailure as exc:
         raise LonglistFailure(f"longlist clustering failed: {exc.error}") from exc
+    folds = clustering_backend.folds
 
     now = datetime.now(UTC)
     options: list[_Option] = [
@@ -1370,39 +1859,95 @@ def longlist_scope(
             label=seed.label,
             description=seed.description,
             design_features=seed.design_features,
-            outcomes=[],
+            outcomes=list(seed.outcomes),
             seed=True,
         )
         for seed in seeds
+        if seed.option_id not in folds
     ]
     by_label = {o.label: o for o in options}
-    if clustering is not None:
-        for label in clustering.labels:
-            wire = clustering_backend.discovered.get(label.label)
-            if wire is None or label.label in by_label:
-                continue
-            design = _discovered_design(label.label, wire)
-            discovered = _Option(
-                option_id=uuid.uuid4(),
-                label=label.label,
-                description=label.description,
-                design_features=list(design.design_features),
-                outcomes=list(design.outcomes_served),
-                seed=False,
-                wire=wire,
-                design=design,
-            )
-            options.append(discovered)
-            by_label[label.label] = discovered
+    for discovered in _new_options(clustering, clustering_backend, by_label):
+        options.append(discovered)
+        by_label[discovered.label] = discovered
+    placements = _placements(units, clustering, clustering_backend.answers)
+    answers: dict[str, _Answer] = dict(clustering_backend.answers)
 
+    # 2. The residual pass (R9): the unclustered units only, every option on
+    # the list as a seed that cannot be folded, at most once.
+    residual_units = [unit for unit in units if _unclustered(placements[unit.unit_id])]
+    room = max(LONGLIST_HARD_CEILING - len(options), 0)
+    residual_record: dict[str, Any] = {
+        "ran": False,
+        "skipped": None,
+        "units": len(residual_units),
+        "max_new": room,
+    }
+    residual_backend: LonglistClusteringBackend | None = None
+    residual_clustering: ClusteringResult | None = None
+    if not residual_units:
+        residual_record["skipped"] = "no unclustered unit"
+    elif room == 0:
+        residual_record["skipped"] = "no room under the ceiling"
+    else:
+        residual_seeds = [
+            _Seed(
+                option_id=o.option_id,
+                label=o.label,
+                description=o.description,
+                design_features=o.design_features,
+            )
+            for o in options
+        ]
+        residual_backend = LonglistClusteringBackend(
+            backend,
+            plan=plan_data,
+            baseline=baseline,
+            seeds=residual_seeds,
+            retired=[*retired, *(fold.seed.label for fold in folds.values())],
+            residual=True,
+        )
+        try:
+            residual_clustering = _cluster(
+                residual_units, residual_backend, len(residual_seeds) + room
+            )
+        except ClusteringFailure as exc:
+            # The first pass stands; the residual stays unclustered.
+            log.warning("longlist.residual_pass_failed", error=exc.error)
+            residual_record["skipped"] = "failed"
+            residual_record["error"] = exc.error
+            residual_backend = None
+    if residual_backend is not None:
+        new_in_residual = _new_options(residual_clustering, residual_backend, by_label)
+        for discovered in new_in_residual:
+            options.append(discovered)
+            by_label[discovered.label] = discovered
+        second = _placements(residual_units, residual_clustering, residual_backend.answers)
+        placements.update(second)
+        for unit in residual_units:
+            answer = residual_backend.answers.get(unit.unit_id)
+            if answer is None:
+                answers.pop(unit.unit_id, None)
+            else:
+                answers[unit.unit_id] = answer
+        placed = sum(1 for label, _ in second.values() if label != RESIDUAL_LABEL)
+        residual_record.update(
+            ran=True,
+            new_options=len(new_in_residual),
+            units_placed=placed,
+            units_left=len(residual_units) - placed,
+            restated_seeds_dropped=residual_backend.restated_seeds_dropped,
+            short_id_repairs=residual_backend.short_id_repairs,
+            digest=residual_backend.digest,
+            clustering=_engine_stats(residual_clustering),
+        )
+
+    # 3. The merge: every unit in one option, unclustered or not an option,
+    # checked once.
     unclustered: list[_Unit] = []
     not_an_option: list[_Unit] = []
-    answers = clustering_backend.answers
-    assignments = clustering.assignments if clustering is not None else {}
     for unit in units:
-        final = assignments.get(unit.unit_id, RESIDUAL_LABEL)
+        final, answer = placements[unit.unit_id]
         if final == RESIDUAL_LABEL:
-            answer = answers.get(unit.unit_id)
             if answer is not None and answer.kind == "not_an_option":
                 not_an_option.append(unit)
             else:
@@ -1417,43 +1962,54 @@ def longlist_scope(
             f"unclustered={len(unclustered)} not_an_option={len(not_an_option)}"
         )
 
-    # 2. Packages: a discovered bundle's components, matched by label.
-    label_keys = {_key(o.label): o for o in options}
-    relations: list[tuple[uuid.UUID, uuid.UUID]] = []
-    unmatched_components = 0
-    packages = 0
-    for package in options:
-        if package.wire is None or not package.wire.is_bundle:
+    # 4. Outcomes at mint time (S11): a discovered option's are the plan
+    # outcomes its members' tags name; a seed keeps its design's.
+    plan_outcomes = [outcome.text for outcome in plan.outcomes]
+    for o in options:
+        if o.seed or o.wire is None:
             continue
-        packages += 1
-        for component_label in package.wire.components:
-            component = label_keys.get(_key(component_label))
-            if component is None or component.option_id == package.option_id:
-                unmatched_components += 1
-                continue
-            relations.append((component.option_id, package.option_id))
+        o.design = _discovered_design(o.label, o.wire, _member_outcomes(o.members, plan_outcomes))
+        o.design_features = list(o.design.design_features)
+        o.outcomes = list(o.design.outcomes_served)
 
-    # 3. Themes are the ``theme`` component's, after ``constrain`` (task 046,
+    # Themes are the ``theme`` component's, after ``constrain`` (task 046,
     # R28): this row is written with none.
     usage = UsageAccumulator()
     if clustering is not None:
         usage.add_payload(clustering.usage_totals)
+    if residual_clustering is not None:
+        usage.add_payload(residual_clustering.usage_totals)
 
-    # 4. Typing.
-    typings, typing_stats = _type_options(backend, options, usage)
+    # 5. Typing (S12): batches in parallel; a kept typing carries forward.
+    typings, kept_typings, typing_stats = _type_options(
+        backend, options, usage, plan=plan_data, baseline=baseline
+    )
+    runner_ups: dict[str, dict[str, Any]] = {
+        str(option_id): {"lever_type": t.runner_up}
+        for option_id, t in typings.items()
+        if t.runner_up is not None
+    }
+    runner_ups.update(_earlier_runner_ups(conn, task_id=task_id, option_ids=kept_typings))
 
-    # 5. Coverage (deterministic).
+    # 6. Coverage (deterministic).
     label_ids = {u.label_tss_id for u in units if u.label_tss_id is not None}
     labels = labels_for_snapshots(conn, task_id=task_id, tss_ids=label_ids)
     home = where_codes(plan.where.text)
     # A folded seed's own documents are this build's: its earlier memberships
-    # are replaced by this build's writes.
+    # are replaced by this build's writes. This build's folds are not written
+    # yet; they join the ones already stored, with no documents of their own.
+    target_ids = {o.label: o.option_id for o in options}
     folded = _folded_seeds(
         conn,
         task_id=task_id,
         option_ids=[o.option_id for o in options],
         documents_of={o.option_id: {u.doc_key for u in o.members} for o in options},
     )
+    fold_rows: list[tuple[uuid.UUID, uuid.UUID]] = []
+    for fold in folds.values():
+        into = target_ids[fold.into_label]
+        fold_rows.append((fold.seed.option_id, into))
+        folded.setdefault(into, []).append(FoldedSeed(name=fold.seed.name, documents=0))
     coverage = {
         str(o.option_id): option_coverage(
             [_coverage_member(u, flagged=_flagged(answers, u, o.label)) for u in o.members],
@@ -1464,7 +2020,8 @@ def longlist_scope(
         for o in options
     }
 
-    # 6. Writes, all after every model call.
+    # 7. Writes, all after every model call. New option rows first, then the
+    # folds' merges (which may name them).
     for o in options:
         minted = o.design
         if o.seed or minted is None:
@@ -1486,19 +2043,16 @@ def longlist_scope(
                 updated_at=now,
             )
         )
-    for from_id, to_id in relations:
+    for seed_id, into in fold_rows:
+        # A duplicate merged into the folded seed follows it, so a merge
+        # always names an option on the list.
         conn.execute(
-            pg_insert(option_relation)
-            .values(
-                relation_id=uuid.uuid4(),
-                task_id=task_id,
-                from_option_id=from_id,
-                to_option_id=to_id,
-                kind="part_of",
-                created_by="longlist",
-                created_at=now,
+            option.update()
+            .where(option.c.task_id == task_id)
+            .where(
+                (option.c.option_id == seed_id) | (option.c.merged_into_option_id == seed_id)
             )
-            .on_conflict_do_nothing(constraint="uq_orel_pair_kind")
+            .values(merged_into_option_id=into, updated_at=now)
         )
     conn.execute(option_membership.delete().where(option_membership.c.task_id == task_id))
     membership_rows = [
@@ -1520,7 +2074,9 @@ def longlist_scope(
     if membership_rows:
         conn.execute(option_membership.insert(), membership_rows)
     for o in options:
-        typing = typings[o.option_id]
+        typing = typings.get(o.option_id)
+        if typing is None:
+            continue  # kept: the option's columns stay as they are (S12)
         conn.execute(
             option.update()
             .where(option.c.option_id == o.option_id, option.c.task_id == task_id)
@@ -1543,8 +2099,7 @@ def longlist_scope(
             .where(option.c.merged_into_option_id.is_(None))
         )
     ]
-    # An invalid typing is counted once, under ``typing_invalid``.
-    none_fits = sum(1 for t in typings.values() if t.primary is None and not t.invalid)
+    none_fits = sum(1 for t in typings.values() if t.primary is None)
     documents = {u.doc_key for u in units}
     counts = {
         "options": len(options),
@@ -1558,12 +2113,17 @@ def longlist_scope(
         "units": len(units),
         "members": member_count,
         "documents": len(documents),
-        "comparator_records": comparators,
+        "comparator_records": own.comparators,
+        "title_only": _title_only(conn, task_id=task_id, scope_id=context.scope_id),
         "seeds": len(seeds),
+        "folded": len(folds),
         "discovered": sum(1 for o in options if not o.seed),
-        "packages": packages,
         "seeds_without_members": sum(1 for o in options if o.seed and not o.members),
     }
+    rejected_folds = clustering_backend.rejected_folds
+    rejected_by_reason: dict[str, int] = {}
+    for rejection in rejected_folds:
+        rejected_by_reason[rejection["reason"]] = rejected_by_reason.get(rejection["reason"], 0) + 1
     live = backend.mode == "live"
     provenance: dict[str, Any] = {
         "backend_mode": backend.mode,
@@ -1578,32 +2138,47 @@ def longlist_scope(
         },
         "taxonomy_version": TAXONOMY_VERSION,
         "ceiling": {
-            "formula": "clamp(ceil(N/4), 8, 40)",
-            "units": len(units),
-            "ceiling": ceiling,
+            "target_size": LONGLIST_TARGET_SIZE,
+            "hard_ceiling": LONGLIST_HARD_CEILING,
             "seeds": len(seeds),
+            "max_new": max_new,
             "max_labels": max_labels,
-            "max_new": clustering_backend.max_new,
+            "discovery_called": clustering_backend.called,
+            "over_ceiling_dropped": clustering_backend.over_ceiling_dropped,
+            "excess": max(len(options) - LONGLIST_HARD_CEILING, 0),
         },
+        "digest": clustering_backend.digest,
+        "thinning": own.thinning,
+        "folds": {
+            "accepted": [
+                {
+                    "seed_id": str(fold.seed.option_id),
+                    "seed_label": fold.seed.label,
+                    "into_id": str(target_ids[fold.into_label]),
+                    "into_label": fold.into_label,
+                }
+                for fold in folds.values()
+            ],
+            "rejected": rejected_folds,
+            "rejected_by_reason": rejected_by_reason,
+        },
+        "residual_pass": residual_record,
         "seed_ids": [str(seed.option_id) for seed in seeds],
         "discovered_ids": [str(o.option_id) for o in options if not o.seed],
         "scopes": {
             "longlist": str(context.scope_id),
             "targeted": [str(scope) for scope in search_scopes],
-            "superseded_records": superseded,
+            "superseded_records": own.superseded,
         },
         "links": link_provenance,
         "clustering": {
             **_engine_stats(clustering),
             "restated_seeds_dropped": clustering_backend.restated_seeds_dropped,
+            "repeated_labels_dropped": clustering_backend.repeated_labels_dropped,
+            "short_id_repairs": clustering_backend.short_id_repairs,
         },
         "typing": typing_stats,
-        "runner_up": {
-            str(option_id): {"lever_type": t.runner_up, "reason": t.runner_up_reason}
-            for option_id, t in typings.items()
-            if t.runner_up is not None
-        },
-        "bundles": {"packages": packages, "unmatched_components": unmatched_components},
+        "runner_up": runner_ups,
         "where_tried_labels": where_labels(plan.where.text),
         "usage_totals": usage.payload(),
     }
@@ -1627,6 +2202,8 @@ def longlist_scope(
         "longlist.built",
         units=len(units),
         options=len(options),
+        folded=len(folds),
+        residual_pass=residual_record["ran"],
         unclustered=len(unclustered),
         not_an_option=len(not_an_option),
         none_fits=none_fits,

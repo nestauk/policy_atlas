@@ -312,14 +312,7 @@ def _build(
             source_task_id = _linked_deep_task(conn, walk, "youth guarantee")
             _inherit_label(conn, target=walk, source_task_id=source_task_id)
         backend = _Scripted(
-            discovered=[
-                _discovered("Mentoring"),
-                _discovered(
-                    "Guarantee package",
-                    is_bundle=True,
-                    components=["Mentoring", "Youth guarantee"],
-                ),
-            ],
+            discovered=[_discovered("Mentoring"), _discovered("Guarantee package")],
             routes={
                 "youth guarantee": ("Youth guarantee", False),
                 "youth guarantee flagged": ("Youth guarantee", True),
@@ -335,6 +328,24 @@ def _build(
             },
         )
         run_id, _ = walk.build(backend)
+        # The longlist mints no package (task 046, item 4); ``part_of`` rows
+        # are the user's, so the fixture writes the package's two as a user.
+        by_name = {
+            row.name: row.option_id
+            for row in conn.execute(select(option).where(option.c.task_id == walk.task_id))
+        }
+        for part in ("Mentoring", "Youth guarantee"):
+            conn.execute(
+                option_relation.insert().values(
+                    relation_id=uuid.uuid4(),
+                    task_id=walk.task_id,
+                    from_option_id=by_name[part],
+                    to_option_id=by_name["Guarantee package"],
+                    kind="part_of",
+                    created_by="user",
+                    created_at=now(),
+                )
+            )
         conn.execute(
             capability_run.update()
             .where(capability_run.c.capability_run_id == walk.walk_id)

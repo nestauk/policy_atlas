@@ -5,11 +5,13 @@ Five calls, each one lead-authored prompt builder
 :mod:`~policy_atlas.options_scoping.theme.longlist_theme_prompt`,
 :mod:`~policy_atlas.options_scoping.longlist.lever_typing_prompt`):
 
-- ``discover`` — seeded option discovery (judgment model);
+- ``discover`` — seeded option discovery over the plan, the baseline, the
+  seeds and the corpus digest (judgment model);
 - ``assign`` — one assignment batch (mini model);
 - ``discover_themes`` / ``assign_themes`` — themes over the options
   (judgment model; the contract's model route puts theme grouping there);
-- ``type_options`` — one lever-typing batch (judgment model);
+- ``type_options`` — one lever-typing batch, with the plan and the baseline
+  (judgment model; batches run in a thread pool);
 - ``constrain`` — one constraint-judgement batch (judgment model), the
   walk's ``constrain`` step (S9) on the same seam
   (:mod:`~policy_atlas.options_scoping.constrain.constrain_prompt`).
@@ -89,18 +91,24 @@ class LonglistBackend(Protocol):
     def discover(
         self,
         *,
-        question: str,
+        plan: dict[str, object],
+        baseline_sections: list[tuple[str, str]],
         seeds: list[dict[str, object]],
-        records: list[dict[str, object]],
+        digest: list[dict[str, object]],
+        target_size: int,
         max_new: int,
+        residual: bool = False,
     ) -> UsageResult[OptionDiscoveryResponse]:
-        """Discover options beyond the seeds.
+        """Discover options beyond the seeds, and fold suggested seeds.
 
         Args:
-            question: The plan's question (context only).
-            seeds: The seed options as data.
-            records: Every unit's record, keyed by ``unit_id``.
+            plan: The plan fields as data, place stripped.
+            baseline_sections: ``(title, markdown)`` per baseline section.
+            seeds: The seed options as data, each with its ``origin`` word.
+            digest: The corpus digest (never the unit records).
+            target_size: The list's target size, seeds included.
             max_new: The ceiling on new options.
+            residual: True for the residual pass.
 
         Returns:
             The parsed discovery and token usage.
@@ -151,12 +159,20 @@ class LonglistBackend(Protocol):
         ...
 
     def type_options(
-        self, *, options: list[dict[str, object]]
+        self,
+        *,
+        options: list[dict[str, object]],
+        plan: dict[str, object],
+        baseline_sections: list[tuple[str, str]],
     ) -> UsageResult[LeverTypingResponse]:
         """Type one batch of options (lever type and ambition).
 
+        Called from a thread pool: one call per batch, several at once.
+
         Args:
             options: The batch's options as data, keyed by ``unit_id``.
+            plan: The plan fields as data, place stripped.
+            baseline_sections: ``(title, markdown)`` per baseline section.
 
         Returns:
             The parsed typings and token usage.
@@ -251,15 +267,24 @@ class OpenAILonglistBackend:
     def discover(
         self,
         *,
-        question: str,
+        plan: dict[str, object],
+        baseline_sections: list[tuple[str, str]],
         seeds: list[dict[str, object]],
-        records: list[dict[str, object]],
+        digest: list[dict[str, object]],
+        target_size: int,
         max_new: int,
+        residual: bool = False,
     ) -> UsageResult[OptionDiscoveryResponse]:
         """Seeded discovery on the judgment model (see :class:`LonglistBackend`)."""
         return self._call(
             build_longlist_discovery_messages(
-                question=question, seeds=seeds, records=records, max_new=max_new
+                plan=plan,
+                baseline_sections=baseline_sections,
+                seeds=seeds,
+                digest=digest,
+                target_size=target_size,
+                max_new=max_new,
+                residual=residual,
             ),
             response_format=OptionDiscoveryResponse,
             model=LONGLIST_JUDGMENT_MODEL,
@@ -310,11 +335,17 @@ class OpenAILonglistBackend:
         )
 
     def type_options(
-        self, *, options: list[dict[str, object]]
+        self,
+        *,
+        options: list[dict[str, object]],
+        plan: dict[str, object],
+        baseline_sections: list[tuple[str, str]],
     ) -> UsageResult[LeverTypingResponse]:
         """One typing batch on the judgment model (see :class:`LonglistBackend`)."""
         return self._call(
-            build_lever_typing_messages(options=options),
+            build_lever_typing_messages(
+                options=options, plan=plan, baseline_sections=baseline_sections
+            ),
             response_format=LeverTypingResponse,
             model=LONGLIST_JUDGMENT_MODEL,
             max_output_tokens=LEVER_TYPING_MAX_OUTPUT_TOKENS,
@@ -356,9 +387,9 @@ def _casefold(value: object) -> str:
 class StubLonglistBackend:
     """Deterministic zero-egress longlist backend for tests and local runs.
 
-    - ``discover`` proposes :data:`STUB_DISCOVERED_LABEL` when some record's
-      ``intervention`` matches no seed label and ``max_new`` allows one;
-      otherwise nothing.
+    - ``discover`` proposes :data:`STUB_DISCOVERED_LABEL` when some digest
+      name matches no seed label and ``max_new`` allows one; otherwise
+      nothing. It folds no seed.
     - ``assign`` places a record whose ``intervention`` equals an option label
       (case-insensitively) under that option; any other record under the
       discovered option when it is listed, else ``ungroupable``.
@@ -395,30 +426,30 @@ class StubLonglistBackend:
     def discover(
         self,
         *,
-        question: str,
+        plan: dict[str, object],
+        baseline_sections: list[tuple[str, str]],
         seeds: list[dict[str, object]],
-        records: list[dict[str, object]],
+        digest: list[dict[str, object]],
+        target_size: int,
         max_new: int,
+        residual: bool = False,
     ) -> UsageResult[OptionDiscoveryResponse]:
-        """Propose the one stub option when an unmatched record exists."""
-        del question
+        """Propose the one stub option when a digest name matches no seed; fold none."""
+        del plan, baseline_sections, target_size, residual
         seed_labels = {_casefold(seed["label"]) for seed in seeds}
-        unmatched = any(_casefold(r.get("intervention", "")) not in seed_labels for r in records)
+        unmatched = any(_casefold(entry.get("name", "")) not in seed_labels for entry in digest)
         options = (
             [
                 DiscoveredOptionWire(
                     label=STUB_DISCOVERED_LABEL,
                     description="A stub option for records no seed names.",
                     design_features=["stub design feature"],
-                    outcomes_served=[],
-                    is_bundle=False,
-                    components=[],
                 )
             ]
             if unmatched and max_new > 0
             else []
         )
-        return OptionDiscoveryResponse(options=options), None
+        return OptionDiscoveryResponse(options=options, folds=[]), None
 
     def assign(
         self, *, options: list[dict[str, object]], records: list[dict[str, object]]
@@ -467,9 +498,14 @@ class StubLonglistBackend:
         )
 
     def type_options(
-        self, *, options: list[dict[str, object]]
+        self,
+        *,
+        options: list[dict[str, object]],
+        plan: dict[str, object],
+        baseline_sections: list[tuple[str, str]],
     ) -> UsageResult[LeverTypingResponse]:
         """Type every option ``provide a service`` / ``incremental``."""
+        del plan, baseline_sections
         return (
             LeverTypingResponse(
                 typings=[
@@ -478,9 +514,7 @@ class StubLonglistBackend:
                         primary_lever_type="provide a service",
                         secondary_lever_types=[],
                         runner_up_lever_type=None,
-                        runner_up_reason=None,
                         none_fits_reason=None,
-                        lever_reason="Stub typing.",
                         ambition="incremental",
                         ambition_reason="Stub ambition.",
                     )

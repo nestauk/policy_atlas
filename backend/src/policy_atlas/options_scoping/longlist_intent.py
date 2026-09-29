@@ -122,6 +122,31 @@ def longlist_screening_criteria(plan: ScopingPlan) -> list[str]:
     ]
 
 
+def longlist_plan_data(plan: ScopingPlan) -> dict[str, object]:
+    """The plan fields the longlist's discovery and typing prompts read, as data.
+
+    The question, the intended change and the target unit pass through the
+    place strip (S6) against the plan's Where; the outcomes do not (task 046,
+    items 1, 7, 9). Where itself is not included.
+
+    Args:
+        plan: The validated scoping plan.
+
+    Returns:
+        ``{"question", "intended_change", "target_unit", "outcomes"}``.
+    """
+    where = plan.where.text
+    question, _ = strip_place(plan.question, where)
+    intended_change, _ = strip_place(plan.intended_change.text, where)
+    target_unit, _ = strip_place(plan.target_unit.text, where)
+    return {
+        "question": question,
+        "intended_change": intended_change,
+        "target_unit": target_unit,
+        "outcomes": [outcome.text for outcome in plan.outcomes],
+    }
+
+
 def plan_tagging_context(plan: ScopingPlan) -> TaggingContext:
     """Build the intervention profile's tagging context from the plan (task 046, S4).
 

@@ -436,11 +436,8 @@ class _RestatingBackend(StubLonglistBackend):
             label="Guarantee scheme",
             description="The scheme again.",
             design_features=["an offer"],
-            outcomes_served=[],
-            is_bundle=False,
-            components=[],
         )
-        return OptionDiscoveryResponse(options=[wire]), None
+        return OptionDiscoveryResponse(options=[wire], folds=[]), None
 
 
 def test_a_rebuild_keeps_the_merge(conn: Connection) -> None:
