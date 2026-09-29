@@ -405,9 +405,9 @@ detail is in [amendment-2-final.md](amendment-2-final.md) ("final" below).
 This section adds phases 9 to 14 and changes no phase above.
 
 > **Status:** written 2026-09-29 from the final document, which the owner
-> decided the same day after the adversarial review. The open questions are
-> in final § 7.3; phases 9, 12 and 13 build to their answers (Q1–Q3 and Q7
-> for Phase 9; Q6 and Q8 for Phases 10 and 12; Q5 for Phase 13).
+> decided the same day after the adversarial review. The eight build
+> questions (final § 7.3, B1–B8) are the lead's decision (data shape or name); the owner can change it. No open question
+> blocks a phase.
 
 Executor marks as above: every prompt and its refine loop is `lead`
 (prompt-bearing work and adjudication); judgement-bearing code is
@@ -434,9 +434,13 @@ Gate: **full `make verify`**.
 plan screen structure, read model fields). `requirement` → `boundary` in
 `ConstraintKind`, `CHECKED_AT_BY_KIND` (`runtime/scoping_plan.py:94`,
 `:99-105`) and the planning wire; the kind `consideration` with `aspect`
-(the line keys) and `hard`. No plan slot "Who decides". The one-off script
-in the gitignored evidence folder corrects the replay clones' test plans;
-it is not product code. No code for plans of an earlier iteration (R52).
+(one of the eight line keys or `transferability`, B1) and `hard`;
+`consideration` checked at `assessment` in `CHECKED_AT_BY_KIND`, no new
+`CheckedAt` value (B3); the aim stays `intended_change` (B2). No plan slot
+"Who decides". The one-off script in the gitignored evidence folder
+corrects the replay clones' test plans: it renames `requirement` to
+`boundary` and rewrites the test statements about who can act as
+considerations on `who_decides` (B7). It is not product code. No code for plans of an earlier iteration (R52).
 
 Gate: `make verify-fast` · `make prompt-guard` · `make drift-check`. Commit.
 
@@ -456,9 +460,12 @@ Gate: `make verify-fast` · `make prompt-guard`. Commit. Report to the owner
 
 ### Phase 10 — The schema revision (R45) — `deep-reasoner`
 
-One reversible alembic revision on `d8f3b6a2c4e1`: one JSON column on
-`longlist_result` for the profile, keyed by option id and design version as
-`judgements` is. Round-trip test. No other schema change.
+One reversible alembic revision on `d8f3b6a2c4e1`: the JSON column
+`longlist_result.option_profile`, keyed by option id and design version as
+`judgements` is. Per option: for each line key (`cost`, `time_to_set_up`,
+`time_to_effect`, `workforce`, `who_decides`, `dependencies`,
+`coordination`, `delivery_complexity`) the sentence and the mark (`less`,
+`more` or null); the setting. No entry = not profiled yet (B6). Round-trip test. No other schema change.
 
 Gate: **full `make verify`**. Commit.
 
@@ -486,15 +493,17 @@ did for `theme`:
   `api/stage_vocabulary.py`; the stage in
   `frontend/src/views/workspace/runProgress.ts`; its package under
   `options_scoping/`, prompt hashes pinned in `scripts/prompt_hashes.json`.
-- Lever typing moves from `longlist` (its step 6) into `option_profile`,
-  with the R29 lever reason. `longlist` writes no typing and no ambition.
+- Lever typing moves from `longlist` (its step 6) into `option_profile` as
+  built, with the R29 lever reason and the keep-previous rule for one
+  invalid typing (S12; B8). `longlist` writes no typing and no ambition.
   `suggest` does not change.
 - Inside it, at one time: one call per line over the whole list, the
   ambition call and the setting call. Input per call: the plan (Where for
   "who decides" only), the baseline, and per option its design and at most
   5 records by role; the caps are constants; the judgment model.
-- Writes: the lines and the setting to the new column; the lever type and
-  ambition to the option columns. No special failure rule: a failed call is
+- Writes: the lines and the setting to `longlist_result.option_profile`;
+  the lever type to the option columns; ambition's mark (`less`, `more` or
+  null) to `option.ambition` and its sentence to `option.ambition_reason`. No special failure rule: a failed call is
   tried again by the existing means, then the step fails.
 - A full rebuild makes all again. "Add an option" does not change.
 - The replay tool has `option_profile` as a stage.
@@ -523,8 +532,8 @@ Gate: `make verify-fast` · `make prompt-guard`. Commit. Report to the owner
 Constrain reads `option_profile`. The authority label from the line "who
 decides" and the user's consideration on it; never an exclusion; no label
 without the consideration. The place exception: constrain reads that line;
-all other plan data stays place-stripped. The clear-failure rule (D1) if
-final § 7.3 Q5 keeps it. It lands with round 0 of `constrain_v3` from the
+all other plan data stays place-stripped. D1 is not in amendment 2 (B5):
+constrain's exclusions do not change. It lands with round 0 of `constrain_v3` from the
 lead.
 
 Gate: `make verify-fast` · `make prompt-guard` · `make drift-check`. Commit.
@@ -532,7 +541,9 @@ Gate: `make verify-fast` · `make prompt-guard` · `make drift-check`. Commit.
 ### Phase 13L — Constrain loop — `lead`
 
 `constrain_v3` on the hard-requirement test data
-(`9-constrain-hard-requirements.txt`, the clones as Phase 9 left them).
+(`9-constrain-hard-requirements.txt`, the clones as Phase 9's script left
+them, with the statements about who can act as considerations on
+`who_decides`).
 
 Stop measure: M11, the authority label right for at least 9 of 10 options,
 read by hand. Reported: no exclusion comes from "who decides".

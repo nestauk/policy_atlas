@@ -135,8 +135,10 @@ that is not a loop's stop measure is reported, not passed (R48, R49).
 
 24. [ ] **The plan (R34; R35 withdrawn).** In `runtime/scoping_plan.py`:
     the kinds are `boundary`, `consideration` (with `aspect` whose values are
-    the eight line keys, and `hard`), `preference` and
-    `evidence_restriction`; no plan slot "Who decides". The plan read model
+    the eight line keys of box 40 or `transferability`, and `hard`),
+    `preference` and `evidence_restriction`; `CHECKED_AT_BY_KIND` maps
+    `boundary` to `longlist` and `consideration` to `assessment`, with no new
+    `CheckedAt` value; no plan slot "Who decides"; no new aim field. The plan read model
     and the plan screen show `boundary` (screen word "requirement") and
     `consideration`. In the planning-loop round record, on the seven
     questions and the probe: every statement lands in the right kind and
@@ -149,8 +151,9 @@ that is not a loop's stop measure is reported, not passed (R48, R49).
     registry (`run_spec.py`), the harness graph, the plan mapping
     (`task_plan.py`), `LLM_BEARING_COMPONENTS` (`runner.py`), the stage key
     `option_profile` on the run stream and the stage in `runProgress.ts` all
-    know it, as they know `theme`. Lever typing is in `option_profile`;
-    `longlist` has no typing code and writes no ambition. There is no code
+    know it, as they know `theme`. Lever typing is in `option_profile` as
+    built, with its keep-previous rule for one invalid typing; `longlist`
+    has no typing code and writes no ambition. There is no code
     path for a built list with no profile; a failed call fails the step
     after the existing retry (a test shows it). Each line call gets the plan
     (Where only for "who decides"), the baseline, and per option its design
@@ -179,16 +182,17 @@ that is not a loop's stop measure is reported, not passed (R48, R49).
 30. [ ] **Ambition (R40).** One call over the whole list in
     `option_profile`: relative (Smaller · Bigger · no mark) with one sentence
     against the baseline; no option called "do minimum". Stored in
-    `option.ambition` and `option.ambition_reason`. Lever typing writes no
+    `option.ambition` (mark `less`, `more` or null) and
+    `option.ambition_reason` (sentence). Lever typing writes no
     ambition. `ambition_bands`, the three bands, group by ambition and the
     ambition word on a list row are gone from the read model, the repository
     and the views. On the card, ambition is in "What it is", after the lever
     line.
 31. [ ] **The delivery setting (R41).** One call over the whole list writes
     one main setting and at most one more per option, empty for a
-    system-level instrument; stored in the profile column. No fixed list of
-    settings in code or prompt. The Setting facet reads it; on the card it is
-    in "What it is". M12 (at most 10 labels, no place or body name) is
+    system-level instrument; stored in `longlist_result.option_profile`. No
+    fixed list of settings in code or prompt. The Setting facet reads it; on
+    the card it is in "What it is". M12 (at most 10 labels, no place or body name) is
     reported.
 32. [ ] **Outcome counts (R42).** Per option, in documents: the documents
     that evaluate it and, among them, the documents for each plan outcome (a
@@ -215,9 +219,10 @@ that is not a loop's stop measure is reported, not passed (R48, R49).
     burden line, no legal-change line and no "powers" line in code, prompt
     or screen.
 45. [ ] **The rename (R53).** No product code or prompt holds the kind
-    `requirement`. The one-off script is in the gitignored evidence folder,
-    and a round record shows the clones' test plans read as valid plans after
-    it ran.
+    `requirement`. The one-off script is in the gitignored evidence folder;
+    after it ran, a round record shows the clones' test plans read as valid
+    plans and their statements about who can act are considerations on
+    `who_decides`.
 
 ### Cross-cutting
 
@@ -244,8 +249,12 @@ that is not a loop's stop measure is reported, not passed (R48, R49).
     read-model rule for old ambition words, old plan kinds or a longlist
     with no profile made by an earlier development iteration.
 40. [ ] **Migration (R45).** Exactly one reversible alembic revision on
-    `d8f3b6a2c4e1`: one JSON column on `longlist_result`, keyed by option id
-    and design version; a round-trip test; full `make verify` at Phase 10.
+    `d8f3b6a2c4e1`: the JSON column `longlist_result.option_profile`, keyed
+    by option id and design version; per option the line keys `cost`,
+    `time_to_set_up`, `time_to_effect`, `workforce`, `who_decides`,
+    `dependencies`, `coordination`, `delivery_complexity`, each with a
+    sentence and a mark stored as `less`, `more` or null, and the setting; no
+    entry for an option not yet profiled; a round-trip test; full `make verify` at Phase 10.
     No other schema change; no new table.
 41. [ ] **Measures and time (R46, R49).** M8, M10, M12 and M14 are reported
     in `verification.md`, read back from saved files; M11 is the 13L stop
