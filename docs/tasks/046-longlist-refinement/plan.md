@@ -406,9 +406,9 @@ phases 9 to 14 and changes no phase above.
 
 > **Status:** written 2026-09-29 from amendment-2-final.md, which the owner
 > decided the same day. The adversarial review of the amendment is still to
-> come. Two questions are open there (§ 7.3): Q19 (the form of the profile
-> step in the walk, and constrain's rule when it fails) and Q20 (the hard /
-> not-hard rule on "who decides"). Phases 11 and 12 build to the answers.
+> come. Open for the owner to confirm (amendment-2-final.md § 7.1): the
+> failure rule of the profile component, which is the lead's recommendation;
+> the component's name (and stage key) is not in the record.
 
 Executor marks as above: every prompt and its refine loop is `lead`
 (prompt-bearing work and adjudication); judgement-bearing code is
@@ -459,18 +459,39 @@ from the existing `outcome_tag`. No schema, no prompt change.
 
 Gate: `make verify-fast` · `make drift-check`. Commit.
 
-### Phase 11 — The profile step (R36, R37, R40, R41, R51, R52)
+### Phase 11 — The profile component (R36, R37, R40, R41, R51, R52; Q19)
 
-**`deep-reasoner`** (component, storage, add-one path) · **`fast-worker`**
-(replay stage wiring, tests from an exact list). Before `constrain`, on the
-whole list: one call per line over the whole list, the ambition call and the
-setting call, all at one time; stored in the longlist result; lever typing
-stops writing `ambition` and `ambition_reason`; the add-one path for "Add an
-option" (the new option only, with the other options' sentences and marks as
-context); a full rebuild makes all lines again, a reader's exclusion or merge
-does not; no code for stored values of an earlier development iteration; the
-replay tool stage. The form of the step in the walk and the failure rule
-follow the answer to Q19.
+**`deep-reasoner`** (component, registration, storage, add-one path, failure
+rule) · **`fast-worker`** (replay stage wiring, stage key and progress label
+structure, tests from an exact list). Brief, the same kinds of work as
+S13a did for `theme`:
+
+- A component of its own between `longlist` and `constrain`, not a spine
+  step: `LONGLIST_CHAIN` in `runtime/scoping_plan.py` becomes `… → longlist →
+  <profile> → constrain → theme` (`<profile>`: name not decided). Registered in `runtime/run_spec.py`,
+  `runtime/harness.py` and `runtime/task_plan.py`; a stage key in
+  `api/stage_vocabulary.py`; the stage in
+  `frontend/src/views/workspace/runProgress.ts`; its prompts in its own
+  package under `options_scoping/`, hashes pinned in
+  `scripts/prompt_hashes.json`.
+- It reads the latest `longlist_result` of the scope and all its options,
+  and writes the profile (lines, marks, setting, ambition) into that row.
+  Inside it: one call per line over the whole list, the ambition call and
+  the setting call, all at one time.
+- `longlist` makes the list and the lever type; lever typing stops writing
+  `ambition` and `ambition_reason`.
+- Failure: the walk goes on; the longlist shows with no profile, and
+  constrain runs with no labels (lead's recommendation, to be confirmed).
+- The add-one path for "Add an option": the new option only, with the other
+  options' sentences and marks for each line as context. A full rebuild
+  makes all lines again; a reader's exclusion or merge does not.
+- No code for stored values of an earlier development iteration.
+- The replay tool has the component as a stage.
+
+Tests: the chain order; the registry, the harness graph, the plan mapping
+and the run stream know the component; a failed profile step leaves the
+longlist and gives constrain no profile; `longlist` writes no ambition; the
+add-one path changes no other option's marks.
 
 Gate: `make verify-fast` · `make prompt-guard` · `make drift-check`; full
 `make verify` if a revision is added (R45). Commit.
@@ -488,7 +509,8 @@ Gate: `make verify-fast` · `make prompt-guard`. Commit. Report to the owner
 
 ### Phase 12 — Constrain (R38, R50) — `deep-reasoner`
 
-Constrain reads the profile. The clear-failure rule (D1); a hard
+Constrain reads the profile; with no profile, it runs with no labels. The
+clear-failure rule (D1); a hard
 consideration on "who decides" can exclude; one that is not hard gives the
 authority label from the line "who decides"; no such consideration, no label;
 the limit label for a hard consideration on another line, with the line's

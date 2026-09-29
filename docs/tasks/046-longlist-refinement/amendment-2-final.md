@@ -8,9 +8,11 @@
 > **Source.** [amendment-2-proposed.md](amendment-2-proposed.md) is the
 > record: the first proposal (Parts A–F, ten decisions), the owner's first and
 > second answers, "Topic 1 decided" to "Topic 5 decided", "Topic 4 changed",
-> and "Questions 15 to 18 decided". The answers to Q1–Q14 are the lead's
+> "Questions 15 to 18 decided" and "Questions 19 and 20 decided". The
+> answers to Q1–Q14 are the lead's
 > recommendations, accepted by the owner on 2026-09-29; the answers to
-> Q15–Q18 are the owner's own choices. The owner's words are quoted in § 3,
+> Q15–Q20 are the owner's own choices, except the failure rule of Q19
+> (§ 2.3). The owner's words are quoted in § 3,
 > § 4 and § 7.2. This file states the result only. Precedence: a later
 > decision wins over an earlier one and over the first proposal; the owner's
 > words win over the lead's. Where a decision changed something, this file
@@ -85,7 +87,7 @@ example "at least moderate evidence"), `evidence_restriction` (unchanged).
 - Timing is not a kind of its own: a deadline is a time consideration with
   `hard: true`.
 
-**Who can act** (Q17, and the lead's note on what follows from it): the Task
+**Who can act** (Q17, Q20): the Task
 Agent still asks its question when Where is below national level ("Should I
 keep only options that a council can adopt, or also show options that need
 national action?", A2) and stores the answer as a consideration on "who
@@ -138,6 +140,8 @@ loop, not a decision.
 | Rule | Decided | Source |
 |---|---|---|
 | When | The profile runs **before constrain**, on the whole list, all lines in one step | Q15 |
+| Where in the walk | A **component of its own** between `longlist` and `constrain`, the same form as `theme`: `longlist` → the profile component → `constrain` → `theme`. `longlist` makes the list (which options there are, which documents belong to each, the lever type); it no longer writes ambition. The profile is stored in the longlist result | Q19 |
+| If the profile step fails | The longlist shows with no profile, and constrain runs with no labels. Lead's recommendation, put to the owner in Q19; the owner did not comment on it (§ 7.1) | Q19 |
 | One call for each line reads the **whole list** | The call gets the line's question, the plan, and the design and evidence records of every option | Topic 1 |
 | The calls run at one time | Yes | Topic 1 |
 | Output per option | One plain sentence that answers the line's question, and (on a marked line) the mark | Topic 1, topic 2 |
@@ -180,9 +184,10 @@ profile runs before constrain. "Include again" makes nothing.
   user's consideration on "who decides" that is not hard, and labels the
   option. Label values (B4, not changed later): *within your power* · *needs
   action by <body>* · *unclear*.
-- A **hard** consideration on "who decides" can exclude (lead's note on Q17).
+- A **hard** consideration on "who decides" can exclude; one that is not
+  hard gives the authority label only (Q20).
 - With no consideration on "who decides", the option has no authority label
-  (Q9, as restated by the lead's note on Q17).
+  (Q9, Q17).
 - The authority label is a **filter** on the list, not the sort order (Q3).
 - An option that needs action by another body stays on the list with that
   body named, unless the user's hard consideration excludes it (D3; Q17).
@@ -245,13 +250,14 @@ level, and the records?" — accepted in principle.)
 
 ### 2.8 Constrain
 
-Constrain runs after the profile step (Q15). Decided:
+Constrain runs after the profile component (Q15, Q19). If the profile step
+failed, constrain runs with no labels (§ 2.3). Decided:
 
 - Boundary: can exclude (A1).
 - **An exclusion needs a clear failure.** Mixed or missing information keeps
   the option and says so (D1, accepted by Q3).
 - Who can act: a hard consideration on "who decides" can exclude; one that
-  is not hard gives the authority label of § 2.4 (Q17, lead's note).
+  is not hard gives the authority label of § 2.4 only (Q20).
 - **A limit on any other line never excludes at the longlist** (Q1).
   Constrain puts a label on the option ("may not fit your limit on cost") and
   gives the line's sentence as the reason. The shortlist step uses the label.
@@ -320,8 +326,8 @@ supersedes. These items are in `contract.md` § Amendment 2 (2026-09-29).
 | R34 | AM8; R33 | **Five kinds of user statement.** Boundary (can exclude), authority (a consideration on "who decides"; labels; excludes only when the user says so), implementation consideration (informs; a hard one gets a limit label and never excludes, R50), transferability consideration (kept for the assessment), aim (becomes the outcomes). Constraint kinds: `boundary` (screen word "requirement"), `consideration` with `aspect` and `hard`, `preference`, `evidence_restriction`. A capacity statement is a consideration, never a preference. A consideration can name any of the eight lines; a deadline names "time to set up", or "time to effect" when the user speaks of results; one sentence that names several things is stored as one consideration for each line (Q2, Q17). A4–A6 as written in the first proposal (Q3). AM8 ("No new plan field") is withdrawn. Owner: "Yes these 5 kinds feel right." · "the plan kinds look good" · "Maybe we should just have it sit in consideration rather than necessitating a who decide slot?" Q2 and Q3: lead's recommendation, accepted by the owner (2026-09-29); owner: "I take your recommendations for the rest". |
 | R35 | — | **Withdrawn (Q17).** It was the plan slot "Who decides" (owner then: "Yes"). There is no such slot; what the user says about who can act is a consideration on the line "who decides" (R34, R38). Owner: "Maybe we should just have it sit in consideration rather than necessitating a who decide slot?" |
 | R36 | R33 | **"What it would take": eight lines.** Cost · time to set up · time to effect · workforce requirements · who decides (no mark) · dependencies (no mark) · coordination requirements · delivery complexity. Coordination and delivery complexity stay apart. A line always has a sentence; "cannot judge" is not a value (Q7). Owner: "I think the 8 aspects are better, as we said before composite assessments are more likely to be inaccurate than if we split up the assessments right? Also a broad complexity dimension feels a bit hard to interpret." · "Yes dependencies feel distinct, I think it would still be useful information for the options page." · "Can't we just have "workforce requirements", "higher/lower" and that could cover both the number of staff and the skills? And "coordination requirements" higher or lower as well" · "Yes, I think something like that for coordination could work, but obviously we'll see what the prompt refinement results look like". Q7: lead's recommendation, accepted by the owner (2026-09-29). |
-| R37 | — | **One call per line over the whole list; way A; before constrain.** Each line is one plain sentence per option. An option gets a mark only when it clearly takes less or more than most of the list. No bands, no fixed list of answers, no anchor examples, no guards. The basis mark is dropped (Q8). The profile runs before constrain, on the whole list, all lines in one step (Q15); an excluded option keeps its profile and "Include again" makes nothing (Q16); a full rebuild makes all lines again, a reader's exclusion or merge does not (Q12). Owner: "I agree on topic 1" · "we should address the root clause, not apply a bandaid" · "Again a fixed list, what you've outlined feels too rigid at least for some of the aspects. Would those really work for a broad variety of domains?" · "Won't it be biased towards the domains that we name. When we're thinking about a generalised tool, I don't know how we can ensure we have good coverage of anchor examples" · "Yes I think that's good." (way A) · "that's good enough" (stability) · "Time is fine for now." · "This seems like added complexity for not much gain. Why don't we just run profile before constrain. As we saw before, constrain doesn't usually remove that many options anyway" · "Running profile before would make this moot". Q8 and Q12: lead's recommendation, accepted by the owner (2026-09-29). |
-| R38 | A2 of the first proposal | **Who decides and the authority label; powers cut; legal change out.** The line names one body and the place it assumes; a legal means only when the baseline or a document states it. The Task Agent's question about who can act is stored as a consideration on "who decides". A hard one can exclude; one that is not hard gives the authority label; with none, no label (Q9, Q17). The label is a filter on the list, not the sort order (Q3). Owner: "I thought power was meant to be the authority in charge of something?" · "Yes I think that's good." · "authority would sort and label, and exclude only when the user says so." · "The legal change one feels like it might be prone to errors. Will that be based just on the LLMs knowledge of what's already in place?" · "Maybe we should just have it sit in consideration rather than necessitating a who decide slot?" The hard / not-hard rule is the lead's note on what follows from Q17. Q3 and Q9: lead's recommendation, accepted by the owner (2026-09-29). |
+| R37 | — | **One call per line over the whole list; way A; a component before constrain.** Each line is one plain sentence per option. An option gets a mark only when it clearly takes less or more than most of the list. No bands, no fixed list of answers, no anchor examples, no guards. The basis mark is dropped (Q8). The profile runs before constrain, on the whole list, all lines in one step (Q15); an excluded option keeps its profile and "Include again" makes nothing (Q16); a full rebuild makes all lines again, a reader's exclusion or merge does not (Q12). Owner: "I agree on topic 1" · "we should address the root clause, not apply a bandaid" · "Again a fixed list, what you've outlined feels too rigid at least for some of the aspects. Would those really work for a broad variety of domains?" · "Won't it be biased towards the domains that we name. When we're thinking about a generalised tool, I don't know how we can ensure we have good coverage of anchor examples" · "Yes I think that's good." (way A) · "that's good enough" (stability) · "Time is fine for now." · "This seems like added complexity for not much gain. Why don't we just run profile before constrain. As we saw before, constrain doesn't usually remove that many options anyway" · "Running profile before would make this moot" · on Q19, the profile as a component of its own between `longlist` and `constrain`, the same form as `theme`: "I think it is its own step. But then what does the longlist step do?" Failure rule (the longlist shows with no profile; constrain runs with no labels): lead's recommendation, put to the owner in Q19, not commented on. Q8 and Q12: lead's recommendation, accepted by the owner (2026-09-29). |
+| R38 | A2 of the first proposal | **Who decides and the authority label; powers cut; legal change out.** The line names one body and the place it assumes; a legal means only when the baseline or a document states it. The Task Agent's question about who can act is stored as a consideration on "who decides". A hard one can exclude; one that is not hard gives the authority label; with none, no label (Q9, Q17). The label is a filter on the list, not the sort order (Q3). Owner: "I thought power was meant to be the authority in charge of something?" · "Yes I think that's good." · "authority would sort and label, and exclude only when the user says so." · "The legal change one feels like it might be prone to errors. Will that be based just on the LLMs knowledge of what's already in place?" · "Maybe we should just have it sit in consideration rather than necessitating a who decide slot?" · on the hard / not-hard rule (Q20): "yea fine" Q3 and Q9: lead's recommendation, accepted by the owner (2026-09-29). |
 | R39 | — | **Acceptability out; burden only after a test across domains.** Owner: "Let's leave it out, it feels too shaky. Maybe burden could be a good substitute but I feel like we would have to test a range of domains to decide if it's right to include". |
 | R40 | Concept meaning of the ambition tag (do minimum · incremental · structural) | **Ambition is how big a proposal is, in relative levels.** Meaning, levels, sentence and the "do minimum" rule as § 2.5. Ambition is its own call over the whole list; lever typing stops writing `ambition` and `ambition_reason`; on the card, ambition is in "What it is", after the lever line (Q4). Owner: "I liked ambition because it was short" · "If ambition is what's used in the green book and its what policymakers would be familiar with then I think it could stay but we just need to make sure that how we are deciding how ambitious something is makes sense" · "yes" · "These are likely to be quite small scale but it doesn't mean that the options can't necessarily be scaled to have a large reach" · "I think relative levels are quite good, it would make a better grid view" · "Agree". Q4: lead's recommendation, accepted by the owner (2026-09-29). |
 | R41 | R32 ("nothing is built for it") | **The delivery setting is a fact about the option**, written by one call over the whole list; no fixed list; the record's words stay as "studied in"; on the card in "What it is" (Q11). Owner: "I think so, what's the difference between the option level, and the records?" (accepted in principle); R32 stands: "I don't think a fixed list is the right solution here given that policy atlas should be able to cater to a wide range of domains, and I don't think we'll be able to maintain a fixed list that would be able to do this". Q11: lead's recommendation, accepted by the owner (2026-09-29). |
@@ -344,12 +350,12 @@ supersedes. These items are in `contract.md` § Amendment 2 (2026-09-29).
 | § Constraints, Schema | No migration planned; one revision allowed if a column proves necessary (R45). No new table |
 | § Constraints, Prompts | New or revised: `task_agent_scoping_v5`; the line prompt or prompts (new; name not decided); the add-one variant (new, R51); the ambition prompt (new, whole list); the setting prompt (new, whole list); `lever_typing_v3` (stops writing ambition); `constrain_v3`. `extract_interventions` does not change (Q5) |
 | § Constraints, Stored data | No code for stored values of an earlier development iteration (R52) |
-| § Public interface | Additive: on the option read models, the eight lines (sentence, mark), ambition in its new form, the delivery setting, the authority label, the limit label, the outcome counts; on the plan read model, the kind `consideration` with `aspect` and `hard`; the grid's column choice; the authority-label filter. OpenAPI by `make openapi-sync` |
-| § Walk | The profile step runs before `constrain`; the walk stays a line (R37, R46). See § 7.3 Q19 |
+| § Public interface | Additive: on the option read models, the eight lines (sentence, mark), ambition in its new form, the delivery setting, the authority label, the limit label, the outcome counts; on the plan read model, the kind `consideration` with `aspect` and `hard`; the grid's column choice; the authority-label filter; one new stage key on the run stream for the profile component (as `theme` added one, R28). OpenAPI by `make openapi-sync` |
+| § Walk | `longlist` → the profile component → `constrain` → `theme`: the profile is a component of its own, the same form as `theme` (R37, Q19); the walk stays a line (R46) |
 | § Stop conditions | As R45 |
 | § Measures | R49; M8 stays reported (R46) |
 | § Known limits | A document that reports on two plan outcomes is counted for one (R42) |
-| § Spec changes | New items, wording to the owner: the five kinds, and who can act as a consideration (OS components § 1, plan-as-object); "What it would take", ambition's new meaning and the Green Book note, the setting at option level, the outcome counts (OS components § 6, OS capability § Output structure); the limit label and the clear-failure rule (OS components § 7); the label on the heading (OS trust § Reasoned guesses); the shortlist principle (OS capability § Pipeline and gates) |
+| § Spec changes | New items, wording to the owner: the five kinds, and who can act as a consideration (OS components § 1, plan-as-object); "What it would take", ambition's new meaning and the Green Book note, the setting at option level, the outcome counts (OS components § 6, OS capability § Output structure); the profile as a component of its own between `longlist` and `constrain`, in the diagram, the component table, a new section and the ⟨longlist depth⟩ composition row (as item 0 did for `theme`, R28); the limit label and the clear-failure rule (OS components § 7); the label on the heading (OS trust § Reasoned guesses); the shortlist principle (OS capability § Pipeline and gates) |
 | § Risk tier | Tier 4 stays. The adversarial review of this amendment runs later (§ 7) |
 
 ## 4. What is cut or deferred
@@ -409,9 +415,9 @@ full `make verify`. Other phases close on the gates in the table.
 | 9 | **The plan.** Plan model: kind `boundary` (renamed from `requirement`, screen word unchanged); kind `consideration` with `aspect` (any of the eight lines, "who decides" included) and `hard`; stored transferability consideration. No plan slot "Who decides". Plan read model additive. Plan screen structure | `deep-reasoner` (plan model) · `fast-worker` (plan screen structure, read model fields) | `make verify-fast` · `prompt-guard` · `drift-check` |
 | 9L | **Planning loop:** `task_agent_scoping_v5` (five kinds; capacity → consideration; the deadline rule; one consideration per line for a sentence that names several things; the question about who can act, stored as a consideration on "who decides", hard only when the user says to keep only options within that power; aims as the user's words plus *assumed* outcomes). Planning replay on the seven questions plus the probe `9-plan-probe-temporary-accommodation.json` | lead | `make verify-fast` · `prompt-guard` |
 | 10 | **Outcome counts.** In coverage, per option: documents that evaluate the option; among them, documents for each plan outcome, from the existing `outcome_tag`. No schema, no prompt change | `fast-worker` (exact rule from R42) | `make verify-fast` · `drift-check` |
-| 11 | **The profile step.** Before `constrain`, on the whole list: one call per line over the whole list, the ambition call and the setting call, all at one time; stored in the longlist result; lever typing stops writing ambition; the add-one path for "Add an option" (R51); a full rebuild makes all lines again, a reader's exclusion or merge does not; the replay tool stage for it. Its form in the walk and its failure rule as § 7.3 Q19 decides | `deep-reasoner` (component, storage, add-one path) · `fast-worker` (replay stage wiring, tests from an exact list) | `make verify-fast` · `prompt-guard` · `drift-check`; full `make verify` if a revision is added (R45) |
+| 11 | **The profile component** (Q19; the same kinds of work as `theme` in the first build, plan S13a). A new component between `longlist` and `constrain`: the chain `longlist` → the profile component → `constrain` → `theme` in `runtime/scoping_plan.py`; registered in `runtime/run_spec.py`, `runtime/harness.py` and `runtime/task_plan.py`; a stage key in `api/stage_vocabulary.py`; the stage in `frontend/src/views/workspace/runProgress.ts`; the prompts in its own package with their hashes pinned. It reads the latest longlist result and all its options, and writes the profile into that result. Inside it: one call per line over the whole list, the ambition call and the setting call, all at one time. `longlist` (lever typing) stops writing `ambition` and `ambition_reason`. Failure: the longlist shows with no profile and constrain runs with no labels (§ 2.3). The add-one path for "Add an option" (R51); a full rebuild makes all lines again, a reader's exclusion or merge does not; no code for stored values of an earlier development iteration; the replay tool stage | `deep-reasoner` (component, registration, storage, add-one path, failure rule) · `fast-worker` (replay stage wiring, stage key and progress label structure, tests from an exact list) | `make verify-fast` · `prompt-guard` · `drift-check`; full `make verify` if a revision is added (R45) |
 | 11L | **Profile loop:** the line prompt(s), the add-one variant, the ambition prompt, the setting prompt, `lever_typing_v3`. Checks of § 6. Also the first read of the R29 lever reasons and the R31 designs, which no round has read | lead | `make verify-fast` · `prompt-guard` |
-| 12 | **Constrain.** Reads the profile. The clear-failure rule (D1); a hard consideration on "who decides" can exclude; one that is not hard gives the authority label from the line "who decides", none when there is no such consideration; the limit label for a hard consideration on another line, with the line's sentence as the reason, never an exclusion; the reasoned guess removed for a preference about an aspect (B8) | `deep-reasoner` | `make verify-fast` · `prompt-guard` · `drift-check` |
+| 12 | **Constrain.** Reads the profile; with no profile, runs with no labels. The clear-failure rule (D1); a hard consideration on "who decides" can exclude; one that is not hard gives the authority label from the line "who decides", none when there is no such consideration; the limit label for a hard consideration on another line, with the line's sentence as the reason, never an exclusion; the reasoned guess removed for a preference about an aspect (B8) | `deep-reasoner` | `make verify-fast` · `prompt-guard` · `drift-check` |
 | 12L | **Constrain loop:** `constrain_v3` with the hard-requirement test (`9-constrain-hard-requirements.txt`, the three clones that hold its requirements); M11 | lead | `make verify-fast` · `prompt-guard` |
 | 13 | **Read models and views.** Additive read-model fields and `make openapi-sync` (`fast-worker`). Structure (`fast-worker`): plain rows; the authority-label filter; "What it is" with ambition after the lever line and the setting; the card block "What it would take", collapsed by default: collapsed a row of eight cells (name above, level word below), expanded the eight lines with sentences, no word for a line with no mark; the outcome counts in "What the evidence base holds so far"; the grid column chooser with "Middle" as the middle column head; the Setting facet from the option-level setting; the limit label; the plan screen's new kind; the compare table not built. Design and words (lead): the block in both states, the heading label, the level words, the tints put to the owner on the built screen | `fast-worker` (read models, structure, vitest) · lead (design, words) | `make verify-fast` · `prompt-guard` · `drift-check` · `frontend-verify` |
 | 14 | **Exit.** Three live rapid runs (obesity, refugees, caregiving); M1–M12 and M14 read back from saved files (M10–M12 and M14 reported); spec changes with the owner's accepted wording; `docs/specs/log.md`; `docs/deferred.md` (burden, legal change grounded form, outcome direction to task 3, the two-outcome count limit); `verification.md` | lead | **full `make verify`** |
@@ -456,7 +462,7 @@ each example was found in that file.
 | Ambition is not judged by the size of the studies or by whether the option would work | Topic 3 |
 | The profile orders a nudge below a clinical service on delivery complexity (M14) | R49 |
 | The authority label is right for at least 9 of 10 options on the hard-requirement test (M11) | R49 |
-| A hard consideration on "who decides" can exclude; one that is not hard gives only the label | Q17 |
+| A hard consideration on "who decides" can exclude; one that is not hard gives only the label | Q20 |
 | A limit on another line gives a limit label with the line's sentence as the reason, and never an exclusion | Q1 |
 | Planning: the answer about who can act becomes a consideration on "who decides"; a deadline names "time to set up", or "time to effect" when the user speaks of results; a sentence that names several things gives one consideration per line | Q2; Q17 |
 | Outcome counts: note how many evaluating documents report on more than one plan outcome (the known limit of R42) | Q5 |
@@ -485,7 +491,10 @@ of them have the same mark on both.
    higher level, a pale Nesta Aqua for the lower level, navy text. The owner
    decides on the built screen.
 2. **Spec wording.** [spec-changes-proposed.md](spec-changes-proposed.md)
-   (task 046 build) is not applied. The new items of § 3 need wording too.
+   (task 046 build) is not applied. The new items of § 3 need wording too,
+   among them the profile as a new component (OS components: the diagram,
+   the component table, its own section, the ⟨longlist depth⟩ composition
+   row; OS capability § Pipeline and gates: the stage order).
 3. **Adversarial review of this amendment.** Owner: "not yet but we will do."
 4. **Exact heading words** of "What it would take" and its label (decision 4:
    "The wording of the heading comes with the spec changes").
@@ -496,7 +505,11 @@ of them have the same mark on both.
    (verification.md, known item 4).
 7. **The line questions** other than coordination are not decided; the
    tested wording is the start of the loop (§ 2.2).
-8. Later work: a grounded legal-change line; a burden line after a test
+8. **The failure rule of the profile component** (the longlist shows with
+   no profile; constrain runs with no labels) is the lead's recommendation.
+   The owner did not comment on it in Q19. Confirm.
+9. **The component's name** (and so its stage key) is not in the record.
+10. Later work: a grounded legal-change line; a burden line after a test
    across domains; the outcome direction in task 3; E2 (about five shortlist
    options) and E3 (every use of the profile in the cut shown as a written
    reason) of the first proposal are not ruled; they belong to task 3.
@@ -508,8 +521,9 @@ on Q1, "1. I take your recommendation"; on Q5 and Q6, "5,6. I take your
 recommendation"; on Q12, "12. Why does add an option: need to run the calls
 again for the whole list. Can't we just assess the aspects for just that one
 option, with the context of what the other items have been marked as?"; on
-the rest, "I take your recommendations for the rest". Q15–Q18: the owner's
-own choices; the words are in § 3 and § 4.
+the rest, "I take your recommendations for the rest". Q15–Q20: the owner's
+own choices; the words are in § 3 and § 4. The failure rule of Q19 is the
+lead's recommendation, not commented on by the owner.
 
 | Q | Decision |
 |---|---|
@@ -531,18 +545,5 @@ own choices; the words are in § 3 and § 4.
 | Q16 | No special case: an excluded option has its profile; "Include again" makes nothing |
 | Q17 | No plan slot "Who decides"; who can act is a consideration on the line "who decides" |
 | Q18 | No handling of old longlists or stored values of an earlier development iteration |
-
-### 7.3 New questions
-
-**Q19.** Q15 says the profile runs before constrain "all lines in one step".
-The record does not say the form of that step: inside the `longlist`
-component (the first proposal's "simpler way"), or a component of its own
-between `longlist` and `constrain` (R28 fixed the walk's last three
-components as `longlist`, `constrain`, `theme`; a new component adds a stage
-key to the run stream). The record also does not say what constrain does when
-the profile step fails (constrain now reads the profile for both labels).
-
-**Q20.** The hard / not-hard rule for a consideration on "who decides" (a
-hard one can exclude; one that is not hard gives the label) is the lead's
-note on what follows from Q17. The record shows no separate owner answer to
-it. Confirm.
+| Q19 | The profile is a component of its own between `longlist` and `constrain`, the same form as `theme`; `longlist` no longer writes ambition; failure rule (lead's recommendation, not commented on): the longlist shows with no profile, constrain runs with no labels |
+| Q20 | A hard consideration on "who decides" can exclude; one that is not hard gives the authority label only |
