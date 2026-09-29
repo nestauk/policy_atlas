@@ -315,3 +315,13 @@ against the saved file.
 | "Who decides" names a law by title and year | school food standards | Topic 2: a legal means only when the baseline or a document states it. The loop must test it. |
 | "Who decides" names two bodies, or uses an acronym | children's meal standards; "DHSC" | Not covered. New rule for the prompt: one body, its full name. |
 | A sentence that answers another question | lobbying controls, time to effect | Not covered. New check for the loop: the sentence answers its line's question. |
+
+## Topic 4 decided (2026-09-29): the words for the levels, and two questions
+
+| Item | Decision | The owner's words |
+|---|---|---|
+| Words for the levels | One comparative word for each line; the middle level is "Middle". Ambition: Smaller · Bigger. Cost: Cheaper · Costlier. Time to set up and time to effect: Quicker · Slower. Delivery complexity: Simpler · More complex. | "Your words for the levels sound good. The ones I'm not sure about our workforce and coordination." |
+| Workforce | The line is **"Workforce requirements"**, levels Lower · Middle · Higher. One mark covers the number of people and the skills. The sentence tells which of the two causes the level. | "Can't we just have "workforce requirements", "higher/lower" and that could cover both the number of staff and the skills? And "coordination requirements" higher or lower as well" |
+| Coordination | The line is **"Coordination requirements"**, levels Lower · Middle · Higher. The question changes from the count of bodies to: "Which separate bodies must act together to set up and run the option, and how closely must they work together? Do not answer about what happens in one instance of delivery." The refine loop measures the overlap with delivery complexity. | "Yes, I think something like that for coordination could work, but obviously we'll see what the prompt refinement results look like" |
+| All prompts | Each goes through a refine loop; the one-off experiments are not the final quality. | "All the prompts should go through refine loops anyway so that should hopefully get rid of most snags compared to your one off experiments." |
+| Tints | Open. The lead's proposal: a pale tint of Nesta Violet for the higher level and of Nesta Aqua for the lower level, navy text. The owner decides on the built screen. | "We should use some nesta colours for tints" |
