@@ -338,6 +338,7 @@ against the saved file.
 | Item | Decision | The owner's words |
 |---|---|---|
 | Option card, "What it would take" | The section collapses like the card's other sections. **Collapsed:** the row of eight cells, the line name above and the level word below, no word for a line with no mark (variant C, without the sentence on demand). **Expanded:** all eight lines, the name and the mark on the left, the sentence on the right (variant B). This replaces "all eight lines, always open". | "I actually change my mind on the aspect variants on the card. Looking at it again, since the card's other sections are collapsible, I think variant C when collapsed, and B when expanded makes sense" |
+| Default state | The section is **collapsed** when the card opens (the lead's recommendation: the row of cells is the summary, the eight sentences are long). | "Yes sounds good." |
 
 The final statement of amendment 2, with the answers to its 14 questions, is
 `amendment-2-final.md`.
