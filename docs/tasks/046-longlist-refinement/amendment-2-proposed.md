@@ -342,3 +342,21 @@ against the saved file.
 
 The final statement of amendment 2, with the answers to its 14 questions, is
 `amendment-2-final.md`.
+
+## Questions 15 to 18 decided (2026-09-29)
+
+The owner chose the simpler way on each. The lead agrees with all four.
+
+| Q | Decision | The owner's words |
+|---|---|---|
+| 15 | **The profile runs before constrain**, on the whole list, all lines in one step. This replaces the lead's recommendation on Q12 that the profile runs after constrain. "Add an option" stays as decided: the new option only, with the other options as context. | "This seems like added complexity for not much gain. Why don't we just run profile before constrain. As we saw before, constrain doesn't usually remove that many options anyway" |
+| 16 | No special case. An excluded option has its profile, so "Include again" makes nothing. | "Running profile before would make this moot" |
+| 17 | **No plan slot "Who decides".** What the user says about who can act is a consideration that names the line "who decides". This replaces A2 of the first proposal. A consideration can name any of the eight lines. | "Maybe we should just have it sit in consideration rather than necessitating a who decide slot?" |
+| 18 | **No handling of old longlists.** The build writes no code for stored values of an earlier development iteration (old ambition words, lists with no profile). This also replaces the part of Q4 that kept the old words. | "This feature is still in development and nothing is staged yet. We don't have to add complexity just due to an earlier development iteration. I don't care about old longlists, they don't exist in production or staging." |
+
+What follows from 17, stated by the lead: the Task Agent still asks its
+question when Where is below national level, and stores the answer as a
+consideration. The consideration's `hard` flag carries "exclude only when the
+user says so": a hard consideration on "who decides" can exclude; one that is
+not hard gives the authority label. A limit on another line never excludes
+(Q1). With no such consideration, the option has no authority label (Q9).
