@@ -271,6 +271,23 @@ export function leverDefinitionFor(
   return typed === undefined ? current : definitionSentence(typed.definition);
 }
 
+/** The list's Tried on facet (task 046, item 23): the populations of the
+ *  options' adjacent evidence, counted by option, the most common first,
+ *  at most `limit` shown. A count only: it never filters. */
+export function triedOnFacet(
+  options: readonly { tried_on?: readonly { population: string }[] | null }[],
+  limit: number,
+): { shown: [string, number][]; hidden: number } {
+  const counts = new Map<string, number>();
+  for (const option of options) {
+    for (const entry of option.tried_on ?? []) {
+      counts.set(entry.population, (counts.get(entry.population) ?? 0) + 1);
+    }
+  }
+  const all = [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+  return { shown: all.slice(0, limit), hidden: Math.max(all.length - limit, 0) };
+}
+
 /** The runner-up lever line (task 046, item 7): the type the typing named
  *  as a close second, in the lever line's own shape. */
 export function runnerUpLine(runnerUp: string): string {

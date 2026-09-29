@@ -2657,8 +2657,9 @@ Recorded by the task 045 contract, plan and build (`docs/tasks/045-scoping-longl
   written summaries are not built before assessment.
 - **Starting retrieval during the baseline pause** (D18) — stays deferred; the longlist walk
   starts when the user confirms the plan.
-- **Open question 4, as bounded here** — the discovery ceiling is `clamp(ceil(N/4), 8, 40)` and
-  the unclustered residual is a number the user sees; the target longlist size stays open (D4).
+- **Open question 4 — CLOSED by task 046 (R1).** The longlist has a target size of 20 and a hard
+  ceiling of 25, seeds included; the unclustered records get one residual pass and are then a
+  number the user sees. The formula `clamp(ceil(N/4), 8, 40)` is removed.
 - **Open question 7 — update the longlist in place instead of rebuilding it (task 3; owner ruling
   2026-09-24).** 045 ships "Rebuild longlist": after a plan change it re-runs the whole chain,
   seeded with the existing options so ids, exclusions and additions survive. Owner: "I think a
@@ -2721,7 +2722,65 @@ Recorded by the task 045 contract, plan and build (`docs/tasks/045-scoping-longl
   deviation 41) — `delete_task_data` deletes snapshots the other task still references, so
   `test_longlist_routes` builds its add fixture without the link.
 
+## Options scoping longlist refinement (task 046 seams)
+
+Recorded by the task 046 contract, plan and build (`docs/tasks/046-longlist-refinement/`).
+
+- **Full text for shortlisted options (task 3; R13).** No longlist or targeted chain fetches full
+  text; the chat answers from abstract chunks, and its citations say *abstract only*. Task 3
+  fetches full text for the shortlisted options. In the seven pre-contract runs about half of
+  the fetches failed (obesity: 52 of 74 attempts), so task 3 must plan for a missing full text.
+- **No themes between `longlist` and `theme` (R28).** The list shows its options with no themes
+  from the end of `longlist` to the end of `theme` (20 to 45 s in the replays). Holding the
+  Result on the baseline until `theme` ends changes the rule for "a longlist exists"; for task 3.
+  Themes also go out of date after a user's own exclusion; `theme` can run alone, so task 3's
+  update in place can run it again.
+- **User-visible loop budgets (R11).** The target size, the ceiling, the residual pass count and
+  the records-per-document cap are constants; the user does not see or set them.
+- **The not-stated flag at reader grain (R23).** The flag is on 76 to 96 percent of memberships
+  in the replays. Its future is the owner's decision (round record 5.2).
+- **The records-per-document cap of 8** removes 15 to 116 records per run where a review names
+  many interventions. The thinning counts are served; a review-aware rule is a seam.
+- **A setting that names a place moves or drops as a whole** ("primary schools in England" is
+  not kept as "primary schools"); on the read side only.
+- **A late child search can add documents after the screen (PA21).** A child that the join
+  timeout cut off can still acquire; its documents have no screen row in the longlist scope
+  until the next build.
+- **The profile memo key holds the prompt version, not the prompt text.** A text change without
+  a version change would reuse old records in the product. The slice changes the version once.
+- **`suggest` writes its token use to a log line only**, not to its summary (found by the
+  replay tool).
+- **Known limits recorded and not fixed (R22):** provider-written abstracts (32 to 52 percent
+  of "abstracts" are machine summaries); duplicate documents without a DOI (6 to 27 duplicate
+  titles per run; issue #75); the reasoned-guess path has no live test (no plan of the seven had
+  a preference); the option-search pool is shared by every task in the process; OpenAlex
+  returned nothing for 27 to 47 of 50 to 60 generated option-search queries.
+
+## System-level cost and latency (deferred by task 046, R16; owner 2026-09-28)
+
+Cost changes that edit an Evidence search component are not made inside a capability slice.
+Owner: "If cost optimisations require changes to the underlying evidence search components,
+then maybe they don't fit into this task and should be considered later at a system level cost
+and latency optimisation task."
+
+- **Query variants and a fallback ladder** (046 item 21) — the option searches keep three query
+  forms; the review and trial variants nearly always return nothing, and Overton receives the
+  whole design paragraph as its query.
+- **The baseline writer's tool list** (046 item 24) — the writer asks for tools the scoping
+  chain never fills (4 to 7 `characterisation_summary` errors per baseline).
+- **A screen memo across scopes** — the add walk's screen loads the task's whole pool and
+  judges it against the option's design (AM1 kept it as built).
+- **The option-search loop (L1)** and **allocation by corpus size (L3)** — bounded loops that
+  need a stop condition in the search loop.
+
 ## Synthesis optimisation (deferred 2026-09-17; owner intends a task after options scoping lands)
+
+**Second case (task 046, R7):** the rapid baselines of the seven pre-contract runs cited 2 to
+15 sources, and their screens kept few documents (heat pumps 2 of 11, refugees 4 of 11, energy 6
+of 20). The baseline target stays at 10. Owner: "I think the low number of citations is more
+likely to be an issue with the RAG implementation and associated parts of synthesis, as I've
+noticed it in evidence search syntheses as well." The baseline is now the reference for
+discovery, typing and constrain, so a thin baseline weakens those judgements too.
 
 Cost, latency and quality together. Measured on the task 044 NEET baseline
 (Langfuse trace `run:synthesise:3baa5bc1`, 9 sections, 180 s wall clock, 170 s

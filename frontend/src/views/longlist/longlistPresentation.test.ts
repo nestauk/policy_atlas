@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   leverDefinitionFor,
   runnerUpLine,
+  triedOnFacet,
   triedOnSentence,
   variantLine,
 } from "./longlistPresentation";
@@ -44,5 +45,20 @@ describe("longlist presentation (task 046)", () => {
 
   it("words the runner-up like the lever line", () => {
     expect(runnerUpLine("regulate")).toBe("Runner-up lever type: Regulate.");
+  });
+
+  it("limits the Tried on facet and counts what it hides", () => {
+    const options = [
+      { tried_on: [{ population: "adolescents" }, { population: "families" }] },
+      { tried_on: [{ population: "adolescents" }, { population: "parents" }] },
+      { tried_on: null },
+    ];
+    expect(triedOnFacet(options, 2)).toEqual({
+      shown: [
+        ["adolescents", 2],
+        ["families", 1],
+      ],
+      hidden: 1,
+    });
   });
 });
