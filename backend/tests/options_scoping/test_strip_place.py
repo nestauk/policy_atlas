@@ -93,3 +93,27 @@ def test_a_sub_national_place_counts_as_where() -> None:
 
 def test_georgia_is_not_read_as_a_us_state() -> None:
     assert countries_in("Georgia") == (frozenset(), False)
+
+
+def test_an_origin_is_part_of_the_population_and_stays() -> None:
+    """PA11: "from" leads no removal; the origin defines the group."""
+    assert strip_place("migrants from India", "United Kingdom") == ("migrants from India", [])
+
+
+def test_a_removal_leaves_no_dangling_conjunction() -> None:
+    """Found by the 046 replay on the stored refugee plan."""
+    cleaned, removed = strip_place(
+        "Adults granted refugee status in the last two years and living in Greater Manchester",
+        "Greater Manchester",
+    )
+    assert cleaned == "Adults granted refugee status in the last two years"
+    assert removed == ["living in Greater Manchester"]
+
+
+def test_a_removed_where_leaves_no_dangling_of() -> None:
+    """Found by the 046 planning replay on the obesity intended change."""
+    cleaned, removed = strip_place(
+        "Reduce childhood obesity in the most deprived areas of England.", "England"
+    )
+    assert cleaned == "Reduce childhood obesity in the most deprived areas."
+    assert removed == ["England"]

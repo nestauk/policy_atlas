@@ -420,10 +420,11 @@ def where_labels(where_text: str | None) -> dict[str, str]:
 
 # --- The place strip (task 046, S6; PA11) -----------------------------------
 
-#: The prepositions that lead a place the strip removes. "living in" comes
-#: before "in" in the alternation by length, so the longer lead is removed
-#: whole.
-PLACE_PREPOSITIONS: tuple[str, ...] = ("living in", "in", "across", "within", "from")
+#: The prepositions that lead a place the strip removes (contract PA11).
+#: "from" is not one: an origin defines a population ("migrants from
+#: India"). "living in" comes before "in" in the alternation by length, so
+#: the longer lead is removed whole.
+PLACE_PREPOSITIONS: tuple[str, ...] = ("living in", "in", "across", "within")
 
 _PREPOSITION = "(?i:{})".format(
     "|".join(
@@ -452,6 +453,9 @@ def _tidy(text: str) -> str:
     text = re.sub(r"\s+([.,;:!?])", r"\1", text)
     text = re.sub(r"([,;:])(?:\s*[,;:])+", r"\1", text)
     text = re.sub(r"[,;:]\s*(?=[.!?]|$)", "", text)
+    # "… in the last two years and living in X" leaves a conjunction with
+    # nothing after it; "the most deprived areas of X" leaves an "of".
+    text = re.sub(r"\s+(?i:and|or|of)(?:\s+(?i:the))?\s*(?=[.,;:!?]|$)", "", text)
     text = _TRAILING_PREPOSITION_RE.sub("", text)
     text = re.sub(r"^[\s,;:]+", "", text)
     text = re.sub(r"\(\s*\)", "", text)
@@ -468,7 +472,7 @@ def strip_place(text: str, where_text: str | None) -> tuple[str, list[str]]:
        leads it ("in the United Kingdom" when Where is "United Kingdom");
     2. a place the where-tried matcher knows — a country or sub-national
        name, or an abbreviation ("UK") — **only when a preposition leads
-       it** ("in", "living in", "across", "within", "from"), removed with
+       it** ("in", "living in", "across", "within"), removed with
        that preposition and a following "the"; a list of known places
        ("across England and Wales") goes whole.
 
