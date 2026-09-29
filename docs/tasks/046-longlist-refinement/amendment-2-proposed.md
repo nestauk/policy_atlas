@@ -262,3 +262,27 @@ coordination · delivery complexity.
 **Time:** the step takes about one minute in every form that was tested. The
 time comes from the sentences (one for each option, in each call), not from
 the way of comparison.
+
+## Topic 3 decided (2026-09-29): ambition
+
+Evidence: `evidence/rounds/9-change-from-now.txt`, `9-ambition-seven.txt`; the
+Green Book (2026), paras 5.18, 5.28, 5.29.
+
+| Item | Decision | The owner |
+|---|---|---|
+| The word | **Ambition stays.** | "I liked ambition because it was short"; "If ambition is what's used in the green book and its what policymakers would be familiar with then I think it could stay but we just need to make sure that how we are deciding how ambitious something is makes sense" |
+| The meaning | **How big a proposal the option is: how much it sets out to change, compared with what the baseline says is in place now.** Judged on the kind of action as if adopted in full: an adjustment to something in place, something new beside it, or a change to how the system works (who is entitled, who provides, who pays, what the rules are). | "yes" |
+| Not the basis | The size of the studies ("These are likely to be quite small scale but it doesn't mean that the options can't necessarily be scaled to have a large reach"), and whether the option would work (that is the assessment, after the shortlist). | |
+| The levels | **Relative: more ambitious than most · less ambitious than most · no mark** (way A). The three fixed bands (do minimum, incremental, structural) go. | "I think relative levels are quite good, it would make a better grid view" |
+| The sentence | One sentence under the mark: what the option changes against the baseline. | "yes" |
+| "Do minimum" | **No option is called "do minimum" at the longlist stage.** The Green Book's do minimum and preferred way forward belong to the shortlist (the next task). | "Agree" |
+| Ambition from the aspects | **No.** Of 79 options with an ambition mark on seven lists, the cost mark says the same for 33 and the opposite for 16. Rules and market reforms change much and cost the state little. | the lead's test, after the owner's question |
+| The grid | The reader chooses which line gives the columns (ambition, cost, or another aspect). Details in topic 4. | "your idea of allowing the user to select which aspect the grid shows as the columns could be good" |
+
+Findings on the present label, for the record: 80 to 92 percent of the
+options of the three live runs are "incremental"; and the label uses the
+Green Book's words with another meaning (the Green Book's do minimum is "the
+option that just achieves the proposal's objectives", para 5.18).
+
+To state in the specification: the Green Book compares versions of one
+option; Policy Atlas compares kinds of action on one list.
