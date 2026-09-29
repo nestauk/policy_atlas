@@ -367,3 +367,38 @@ not hard gives the authority label. A limit on another line never excludes
 |---|---|---|
 | 19 | **The profile is a step of its own**, a component between `longlist` and `constrain`, the same form as `theme`. `longlist` makes the list: which options there are, which documents belong to each, and the lever type. It no longer writes ambition. The lead's recommendation on failure, put to the owner in the same question: if the profile step fails, the longlist shows with no profile and constrain runs with no labels. | "I think it is its own step. But then what does the longlist step do?" |
 | 20 | A consideration on "who decides" that is hard can exclude an option; one that is not hard gives the authority label only. | "yea fine" |
+
+## Questions 1 to 14 decided (2026-09-29)
+
+These are the questions of `amendment-2-final.md` § 7.2 in its first version. This section was added to the
+record after the adversarial review found that the record did not hold them. On Q12, the part "the profile
+calls run after constrain" was later replaced by Q15.
+
+The lead put a recommendation for each question to the owner. The owner's
+answer, in the owner's exact words (quote these, and only these, as the
+owner's words):
+
+- On Q1: "1. I take your recommendation"
+- On Q5 and Q6: "5,6. I take your recommendation"
+- On Q12: "12. Why does add an option: need to run the calls again for the whole list. Can't we just assess the aspects for just that one option, with the context of what the other items have been marked as?"
+- On all the others: "I take your recommendations for the rest"
+
+Everything below is the LEAD's recommendation that the owner accepted. Mark
+it as "lead's recommendation, accepted by the owner", not as owner words.
+
+| Q | Decision |
+|---|---|
+| 1 | At the longlist, a limit on an aspect (a hard consideration) never excludes. Constrain puts a label on the option ("may not fit your limit on cost") and gives the line's sentence as the reason. The shortlist step uses the label. Exclusion stays for what the option is, and for who can act when the user says so. |
+| 2 | A consideration can name any of the eight lines. A deadline names "time to set up", unless the user speaks of results (then "time to effect"). One user sentence that names several things is stored as several considerations, one for each line. |
+| 3 | D1 (an exclusion needs a clear failure): accepted. B6 (sort and filter by one line): the grid with reader-chosen columns does this; the list does not sort by a line. The authority label is a filter on the list, not the sort order. B8 and A4–A6: accepted as written in the first proposal. |
+| 4 | Ambition is its own call over the whole list. Lever typing stops writing `ambition` and `ambition_reason`. Stored longlists keep their old words and show them as they are. On the card, ambition is in "What it is", after the lever line. |
+| 5 | The outcome counts come from the existing `outcome_tag` (one plan outcome for each record), counted among the documents that evaluate the option. No new field, no prompt change. Known limit: a document that reports on two plan outcomes is counted for one. If the refine loop or the live check shows that this hides much, the lead brings a new field to the owner then. |
+| 6 | The profile (lines, marks, setting, authority label, ambition) is stored in the longlist result (JSON). Amendment 2 plans NO migration. If the build finds that a column is necessary, there is one revision for the whole amendment (the owner allowed it), and the lead records why. |
+| 7 | "Cannot judge" is not a value. A line always has a sentence; when nothing can be said, it has no mark. |
+| 8 | The basis mark is dropped: not produced, not stored. |
+| 9 | When the plan has no "Who decides", the option has no authority label. |
+| 10 | On the card, a line with no mark shows no word. "Middle" is only a column head in the grid. |
+| 11 | The delivery setting shows in "What it is". The outcome counts show in "What the evidence base holds so far". |
+| 12 | The profile calls run AFTER constrain, on the options that stay. "Add an option": the lines of the NEW option only are made, one call for each line, and each call gets the other options' sentences and marks for that line as context; the marks of the other options do not change (the owner's question above; the lead agrees: marks that a reader has seen stay stable, and one option in about 25 moves "most" very little). A full rebuild of the longlist makes all lines again. An exclusion or a merge by the reader does not make them again. This add-one prompt form is a new prompt variant and goes through the refine loop; check: the new option's marks agree with a full whole-list run in most cases. |
+| 13 | M10, M11, M12, M14 are reported measures, not pass conditions, until a loop gives real figures. |
+| 14 | The lead computed the obesity figure again from `profile-final-form.json`: 24 options, 14 the same (11 with no mark on both, 3 the same mark), 2 opposite. It agrees. The seven-list figure (168 options, 52%) is NOT checked by the lead; keep it marked so. |
