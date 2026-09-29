@@ -720,6 +720,37 @@ def test_the_card_and_list_serve_the_runner_up_lever_type(conn: Connection) -> N
     assert card.runner_up_lever_type == "inform"
 
 
+def test_the_card_and_list_serve_the_lever_reason(conn: Connection) -> None:
+    """R29: the reason for the lever type is read like the runner-up."""
+    walk = _Walk(conn)
+    walk.option("Youth guarantee", origin="added_by_you")
+    walk.option("No reason", origin="added_by_you")
+    doc = walk.doc()
+    walk.record(doc, "youth guarantee")
+    walk.rollup(walk.scope_id, [doc])
+    backend = _Scripted(
+        routes={"youth guarantee": ("Youth guarantee", False)},
+        typings={
+            "Youth guarantee": {"lever_reason": "The state pays employers to hire."},
+            "No reason": {"lever_reason": ""},
+        },
+    )
+    walk.build(backend)
+    options = walk.options()
+
+    listed = repository.longlist_out(conn, walk.task_id)
+    assert listed is not None
+    by_id = {o.option_id: o for o in listed.options}
+    assert by_id[options["Youth guarantee"].option_id].lever_reason == (
+        "The state pays employers to hire."
+    )
+    assert by_id[options["No reason"].option_id].lever_reason is None
+
+    card = repository.option_out(conn, walk.task_id, options["Youth guarantee"].option_id)
+    assert card is not None
+    assert card.lever_reason == "The state pays employers to hire."
+
+
 def test_the_card_and_list_serve_tried_on_and_variants(conn: Connection) -> None:
     walk = _Walk(conn)
     option_id = walk.option("Youth guarantee", origin="added_by_you")

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   leverDefinitionFor,
+  leverLine,
   runnerUpLine,
   triedOnFacet,
   triedOnSentence,
@@ -47,6 +48,15 @@ describe("longlist presentation (task 046)", () => {
     expect(runnerUpLine("regulate")).toBe("Runner-up lever type: Regulate.");
   });
 
+  // Task 046, R29: the reason follows the lever sentence, as with the ambition.
+  it("appends the lever reason after the lever sentence when present", () => {
+    expect(leverLine("subsidise", ["inform"], null, " The council pays the fares. ")).toBe(
+      "Primary lever type: Subsidise; it also touches Inform. The council pays the fares.",
+    );
+    expect(leverLine("subsidise", [], null, "  ")).toBe("Primary lever type: Subsidise.");
+    expect(leverLine("subsidise", [], null)).toBe("Primary lever type: Subsidise.");
+  });
+
   it("limits the Tried on facet and counts what it hides", () => {
     const options = [
       { tried_on: [{ population: "adolescents" }, { population: "families" }] },
@@ -60,5 +70,11 @@ describe("longlist presentation (task 046)", () => {
       ],
       hidden: 1,
     });
+  });
+
+  it("shows one reason when no lever type fits", () => {
+    expect(leverLine(null, [], "It changes a court process.", "Who acts is unclear.")).toBe(
+      "Primary lever type: none fits. It changes a court process.",
+    );
   });
 });

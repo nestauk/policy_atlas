@@ -239,20 +239,29 @@ export function themeSummary(description: string): string {
 
 /** The lever line on the option card: the primary type and what it also
  *  touches, or the none-fits reason (contract deliverable 9; the board's
- *  sentence shape). */
+ *  sentence shape). With `reason` (task 046, R29), the typing's sentence on
+ *  why follows, as the ambition reason follows the ambition. */
 export function leverLine(
   primary: string | null | undefined,
   secondary: string[] | undefined,
   noneFitsReason: string | null | undefined,
+  reason?: string | null,
 ): string {
+  const why = (reason ?? "").trim();
+  const withReason = (line: string) => (why === "" ? line : `${line} ${why}`);
   if (primary == null) {
-    const reason = (noneFitsReason ?? "").trim();
-    return reason === "" ? "Primary lever type: none fits." : `Primary lever type: none fits. ${reason}`;
+    // One reason only: the none-fits reason says what the option does instead.
+    const noneFits = (noneFitsReason ?? "").trim();
+    return noneFits === ""
+      ? withReason("Primary lever type: none fits.")
+      : `Primary lever type: none fits. ${noneFits}`;
   }
   const also = (secondary ?? []).map((type) => capitalise(type));
-  return also.length > 0
-    ? `Primary lever type: ${capitalise(primary)}; it also touches ${also.join(", ")}.`
-    : `Primary lever type: ${capitalise(primary)}.`;
+  return withReason(
+    also.length > 0
+      ? `Primary lever type: ${capitalise(primary)}; it also touches ${also.join(", ")}.`
+      : `Primary lever type: ${capitalise(primary)}.`,
+  );
 }
 
 /** A lever group's definition (task 046, AM19): the definition of the

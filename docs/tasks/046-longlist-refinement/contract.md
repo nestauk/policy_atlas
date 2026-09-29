@@ -270,6 +270,19 @@ read-only; the Codex lane has no budget) returned 21 findings, verdict
 | PA14 | P14. Rubric box 16 said "three nullable columns and nothing else". | The two columns with fixed values carry a check constraint each. The box is reworded. | Folded |
 | PA21 | P21. A child that the join timeout cut off can still add documents after the screen. | Known limit; M9 counts documents with no screen row in the longlist scope. | Folded |
 
+## Amendments after the live check (2026-09-29)
+
+The owner read the build's results (verification.md) on 2026-09-29 and ruled
+in the build conversation. Each ruling supersedes the matching words above.
+
+| # | Reopens | Ruling |
+|---|---|---|
+| R29 | Item 7 (the typing wire drops `lever_reason`) | **The lever type has a reason on the card**, as the ambition has. Owner: "For the ambition, we have a reasoning for the label described in the options profile. I think it would be nice to have this for the lever type too." The wire keeps `lever_reason`; it is stored with the longlist result (no new column) and served on the option. `runner_up_reason` stays removed. |
+| R30 | Item 3; R23 | **The not-stated flag leaves the longlist card.** Measured at reader grain: 79 to 86 percent of memberships in the three live runs. Owner: "Yes" to "remove 'not stated in the abstract' from the longlist card". The flag stays in the stored data and the counts; task 3 reads full text. |
+| R31 | R20 | **The design of the user's own option names no place** and no institution of one country, as a suggested design does. The user's words stay verbatim. Owner: "Yes". Finding: both own-option searches of the live refugee run found no document about the option; the design, which is the search query, held "in Greater Manchester". Prompt `option_design_v2` (a seventh revision, on a finding, R27). |
+| R32 | Item 14 | **No fixed list of setting kinds.** Owner: "I don't think a fixed list is the right solution here given that policy atlas should be able to cater to a wide range of domains, and I don't think we'll be able to maintain a fixed list that would be able to do this". The way to a reliable setting is open; nothing is built for it until the owner rules. |
+| R33 | Items 10–12 | **Constraints are under discussion.** Owner: "the idea of constraints is quite nuanced … There's something there about what should constrain an option, vs what is an implementation consideration, vs what's about transferability". A test with hard requirements ran on three replays (evidence `rounds/9-constrain-hard-requirements.txt`). No change to constrain until the owner rules. |
+
 ## Compile constants
 
 | Constant | Value | Source |

@@ -556,6 +556,7 @@ class StubLonglistBackend:
                 typings=[
                     LeverTypingWire(
                         unit_id=str(o["unit_id"]),
+                        lever_reason="Stub lever reason.",
                         primary_lever_type="provide a service",
                         secondary_lever_types=[],
                         runner_up_lever_type=None,

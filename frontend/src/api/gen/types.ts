@@ -3232,6 +3232,8 @@ export interface components {
             judgements?: components["schemas"]["JudgementOut"][];
             /** Lever None Fits Reason */
             lever_none_fits_reason?: string | null;
+            /** Lever Reason */
+            lever_reason?: string | null;
             /** Name */
             name: string;
             /**
@@ -3359,6 +3361,9 @@ export interface components {
          *         runner_up_lever_type: The lever type the typing pass came closest to
          *             besides the primary, when one was recorded; `null` otherwise
          *             (task 046).
+         *         lever_reason: One sentence on why the option has its lever type,
+         *             when the typing pass recorded one; `null` otherwise (task 046,
+         *             R29).
          *         tried_on: The populations its adjacent evidence was tried on, most
          *             documents first (task 046).
          */
@@ -3398,6 +3403,8 @@ export interface components {
             is_entrant_with_no_documents: boolean;
             /** Lever None Fits Reason */
             lever_none_fits_reason?: string | null;
+            /** Lever Reason */
+            lever_reason?: string | null;
             /** Name */
             name: string;
             /**

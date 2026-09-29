@@ -123,6 +123,7 @@ def _discovered(label: str, **overrides: Any) -> DiscoveredOptionWire:
 def _typing(unit_id: str, **overrides: Any) -> LeverTypingWire:
     values: dict[str, Any] = {
         "unit_id": unit_id,
+        "lever_reason": "The council pays for the scheme.",
         "primary_lever_type": "subsidise",
         "secondary_lever_types": ["inform"],
         "runner_up_lever_type": None,
@@ -1760,6 +1761,47 @@ def test_an_invalid_typing_keeps_the_previous_values_version_and_runner_up(
     assert result.provenance["typing"]["kept_ids"] == [str(before.option_id)]
     assert result.provenance["runner_up"] == {
         str(before.option_id): {"lever_type": "inform", "carried_forward": True}
+    }
+
+
+def test_the_lever_reason_is_stored_and_a_kept_typing_carries_it_forward(
+    conn: Connection,
+) -> None:
+    """R29: each option's lever reason sits beside the runner-up, kept like it."""
+    walk = _Walk(conn)
+    walk.option("Free bus passes")
+    walk.option("Blank reason")
+    walk.option("Garbled")
+    first = walk.build(
+        _Scripted(
+            typings={
+                "Free bus passes": {"lever_reason": " The council pays the fares. "},
+                "Blank reason": {"lever_reason": "   "},
+                "Garbled": {"primary_lever_type": "make it so"},
+            }
+        )
+    )[0]
+    ids = {name: str(row.option_id) for name, row in walk.options().items()}
+    # A blank reason is not stored and never makes the typing invalid; an
+    # invalid typing stores none.
+    assert walk.result(first).provenance["lever_reason"] == {
+        ids["Free bus passes"]: "The council pays the fares."
+    }
+    assert walk.options()["Blank reason"].primary_lever_type == "subsidise"
+    # The next build's typing fails for bus passes: its earlier reason stays.
+    # A new valid reason replaces the old one.
+    second = walk.build(
+        _Scripted(
+            typings={
+                "Free bus passes": {"primary_lever_type": "make it so"},
+                "Blank reason": {"lever_reason": "A grant to each household."},
+                "Garbled": {"primary_lever_type": "make it so"},
+            }
+        )
+    )[0]
+    assert walk.result(second).provenance["lever_reason"] == {
+        ids["Free bus passes"]: "The council pays the fares.",
+        ids["Blank reason"]: "A grant to each household.",
     }
 
 

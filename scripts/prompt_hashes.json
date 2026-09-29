@@ -12,7 +12,7 @@
   "backend/src/policy_atlas/evidence_search/synthesis/synthesis_prompts_v6.py": "d3ba274385c6cc492e942c32792a35505ff38ea696596314b3d23c072daf1122",
   "backend/src/policy_atlas/evidence_search/synthesis/voice_prompt.py": "6dea6f2e552b6fa1775bc5394b9478d8c254982c505699f31b7223eef1e5384a",
   "backend/src/policy_atlas/options_scoping/constrain/constrain_prompt.py": "e14327279c348dded7ba0b0bfb70ab246101f30ecdff5bab30b5a8606141e734",
-  "backend/src/policy_atlas/options_scoping/longlist/lever_typing_prompt.py": "3144a00fa154d5f558ba5162b13f11a4d749eb20fcdc033be66037caa4375c7c",
+  "backend/src/policy_atlas/options_scoping/longlist/lever_typing_prompt.py": "eeeae48106b1b9b82942eba1c9dfaf7aea371c063562f1d5615f8c320e1cd222",
   "backend/src/policy_atlas/options_scoping/longlist/longlist_cluster_prompt.py": "a2074f4b7207d75f03a2ae9381e724d769fb2916defe071ff50a5c2dae3944dc",
   "backend/src/policy_atlas/options_scoping/suggest/suggest_prompt.py": "6c1919c880775d0ce551fa1f50cfb2caed7e4d6ef90ab3901556f17eccd77dcf",
   "backend/src/policy_atlas/options_scoping/theme/longlist_theme_prompt.py": "a34d67871e325d91b997f4687cc6c9c55ea2c999b99b478f538506dcaee277be",
@@ -20,7 +20,7 @@
   "backend/src/policy_atlas/runtime/chat_prompt.py": "7e063d8f327f592774e08220221ed3e67d06365fe644d01e9472c224e91c28a9",
   "backend/src/policy_atlas/runtime/gate_sort_prompt.py": "d554013d8f8ec3c64ed0aa1da64a5c6cbd41e2721ffa96d2f77b149eaa5432da",
   "backend/src/policy_atlas/runtime/longlist_verbs_prompt.py": "df6bbff96ecf87b185da7f1e782fbe1881f22c253850ff8eda84da4e1236391c",
-  "backend/src/policy_atlas/runtime/option_design_prompt.py": "270e355d69d8f4d87257aec79ba9daf65890318682365fe4f8125de7ff22bd91",
+  "backend/src/policy_atlas/runtime/option_design_prompt.py": "17938dc9f69d38f72ff924d63e57d0eb7336ed799d4c68b40f6ba8b6eff1d958",
   "backend/src/policy_atlas/runtime/task_agent_prompt.py": "4e85172f12953082a65daf40b9e3d456020271abe4c60138b8246b29e0538ce2",
   "backend/src/policy_atlas/runtime/task_agent_scoping_prompt.py": "6ff7b29a3a37e732260ec6dc3a20aa1e015c006e17d35883481121d1e22aee47"
 }

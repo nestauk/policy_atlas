@@ -3,8 +3,11 @@
 v2 (task 046, items 7, 9): the prompt receives the plan and the baseline;
 ambition is judged against what the baseline says is in place; the lever
 rule asks who acts and how, under ``lever_types_v2``; the runner-up is
-shown to the reader; the wire drops ``lever_reason`` and
-``runner_up_reason``. Finding: caregiving typed 35 of 40 options "provide a
+shown to the reader; the wire drops ``runner_up_reason``. The wire keeps
+``lever_reason``, written before the type, and the card shows it (R29; owner,
+2026-09-29: "For the ambition, we have a reasoning for the label described in
+the options profile. I think it would be nice to have this for the lever type
+too."). Finding: caregiving typed 35 of 40 options "provide a
 service" and 33 of 40 "incremental".
 
 Lead-authored and versioned (contract D8; concept ruling 20). One batched
@@ -47,6 +50,14 @@ class LeverTypingWire(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     unit_id: str = Field(description="The option's id, copied exactly from the batch.")
+    lever_reason: str = Field(
+        description=(
+            "Written FIRST: one sentence for the reader, naming who acts and "
+            "how in this option's design, which decides the primary lever "
+            "type (or that no type fits). Plain words; no lever-type key in "
+            "quotation marks."
+        )
+    )
     primary_lever_type: str | None = Field(
         description=(
             "Exactly one key copied from the lever-type list: the lever "
@@ -141,6 +152,10 @@ Lever type:
   Never repeat the primary.
 - Name a runner-up when the decision was close. It is shown to the reader
   beside the primary.
+- lever_reason is shown to the reader under the lever type, as the
+  ambition reason is shown under the ambition. One sentence: who acts and
+  how ("The council pays charities to run the groups, so the defining
+  instrument is the payment.").
 - When no listed type names what the option does, set the primary to null
   and say in none_fits_reason what the option does instead. This is a
   legitimate answer, counted and shown so the list can be revised; never

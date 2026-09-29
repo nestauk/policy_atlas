@@ -75,7 +75,7 @@ import re
 import threading
 import unicodedata
 import uuid
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -1305,6 +1305,7 @@ class _Typing:
     ambition: str
     ambition_reason: str
     runner_up: str | None
+    lever_reason: str | None = None
 
 
 def _validated_typing(wire: Any) -> _Typing | None:
@@ -1325,6 +1326,9 @@ def _validated_typing(wire: Any) -> _Typing | None:
         if key in LEVER_TYPE_KEYS and key != primary and key not in secondary:
             secondary.append(key)
     runner_up = wire.runner_up_lever_type if wire.runner_up_lever_type in LEVER_TYPE_KEYS else None
+    # R29: the reader's sentence for the lever type; a blank one is not
+    # shown, and never makes the typing invalid.
+    lever_reason = (wire.lever_reason or "").strip() or None
     return _Typing(
         primary=primary,
         secondary=secondary,
@@ -1332,6 +1336,7 @@ def _validated_typing(wire: Any) -> _Typing | None:
         ambition=ambition,
         ambition_reason=ambition_reason,
         runner_up=runner_up if runner_up != primary else None,
+        lever_reason=lever_reason,
     )
 
 
@@ -1427,8 +1432,68 @@ def _earlier_runner_ups(
     Returns:
         ``{option_id: {"lever_type", "carried_forward": True}}``.
     """
+
+    def _runner_up(entry: Any) -> dict[str, Any] | None:
+        lever = entry.get("lever_type") if isinstance(entry, Mapping) else None
+        if isinstance(lever, str) and lever in LEVER_TYPE_KEYS:
+            return {"lever_type": lever, "carried_forward": True}
+        return None
+
+    return _earlier_typing_entries(
+        conn, task_id=task_id, option_ids=option_ids, key="runner_up", read=_runner_up
+    )
+
+
+def _earlier_lever_reasons(
+    conn: Connection, *, task_id: uuid.UUID, option_ids: Sequence[uuid.UUID]
+) -> dict[str, str]:
+    """The lever reason a kept typing carries forward (R29), as the runner-up does.
+
+    Args:
+        conn: Open connection.
+        task_id: The scoping task.
+        option_ids: The options whose typing was kept.
+
+    Returns:
+        ``{option_id: reason}``.
+    """
+
+    def _reason(entry: Any) -> str | None:
+        return (entry.strip() or None) if isinstance(entry, str) else None
+
+    return _earlier_typing_entries(
+        conn, task_id=task_id, option_ids=option_ids, key="lever_reason", read=_reason
+    )
+
+
+def _earlier_typing_entries[T](
+    conn: Connection,
+    *,
+    task_id: uuid.UUID,
+    option_ids: Sequence[uuid.UUID],
+    key: str,
+    read: Callable[[Any], T | None],
+) -> dict[str, T]:
+    """Per kept option, one typing entry of the latest earlier result that has it.
+
+    Walks the task's ``longlist_result`` rows newest first and reads
+    ``provenance[key][option_id]`` through ``read``. A result that typed the
+    option validly without the entry (it lists the option among its options
+    and not among its ``typing.kept_ids``) ends the search: the typing that
+    stands has none.
+
+    Args:
+        conn: Open connection.
+        task_id: The scoping task.
+        option_ids: The options whose typing was kept.
+        key: The provenance key (``runner_up``, ``lever_reason``).
+        read: Returns the usable value of a stored entry, or ``None``.
+
+    Returns:
+        ``{option_id: value}`` for each option an earlier result supplies.
+    """
     wanted = {str(option_id) for option_id in option_ids}
-    found: dict[str, dict[str, Any]] = {}
+    found: dict[str, T] = {}
     if not wanted:
         return found
     settled: set[str] = set()
@@ -1440,20 +1505,19 @@ def _earlier_runner_ups(
         )
     ):
         record = provenance if isinstance(provenance, Mapping) else {}
-        runner_ups = record.get("runner_up")
-        runner_ups = runner_ups if isinstance(runner_ups, Mapping) else {}
+        entries = record.get(key)
+        entries = entries if isinstance(entries, Mapping) else {}
         typing = record.get("typing")
         kept_ids = typing.get("kept_ids") if isinstance(typing, Mapping) else None
         listed = {
             str(option_id)
-            for key in ("seed_ids", "discovered_ids")
-            for option_id in (record.get(key) or [])
+            for list_key in ("seed_ids", "discovered_ids")
+            for option_id in (record.get(list_key) or [])
         }
         for option_id in wanted - settled:
-            entry = runner_ups.get(option_id)
-            lever = entry.get("lever_type") if isinstance(entry, Mapping) else None
-            if isinstance(lever, str) and lever in LEVER_TYPE_KEYS:
-                found[option_id] = {"lever_type": lever, "carried_forward": True}
+            value = read(entries.get(option_id))
+            if value is not None:
+                found[option_id] = value
                 settled.add(option_id)
             elif isinstance(kept_ids, list) and option_id in listed and option_id not in kept_ids:
                 settled.add(option_id)
@@ -1990,6 +2054,12 @@ def longlist_scope(
         if t.runner_up is not None
     }
     runner_ups.update(_earlier_runner_ups(conn, task_id=task_id, option_ids=kept_typings))
+    lever_reasons: dict[str, str] = {
+        str(option_id): t.lever_reason
+        for option_id, t in typings.items()
+        if t.lever_reason is not None
+    }
+    lever_reasons.update(_earlier_lever_reasons(conn, task_id=task_id, option_ids=kept_typings))
 
     # 6. Coverage (deterministic).
     label_ids = {u.label_tss_id for u in units if u.label_tss_id is not None}
@@ -2179,6 +2249,7 @@ def longlist_scope(
         },
         "typing": typing_stats,
         "runner_up": runner_ups,
+        "lever_reason": lever_reasons,
         "where_tried_labels": where_labels(plan.where.text),
         "usage_totals": usage.payload(),
     }

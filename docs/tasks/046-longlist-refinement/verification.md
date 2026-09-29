@@ -276,6 +276,30 @@ contract changes.
 | `tests/api/test_read_models.py`, `test_answer_core.py` | one assertion added each (`text_basis`) | PA3 |
 | `frontend … OptionCard.test.tsx`, `runProgress.test.ts`, `RunningCard.test.tsx` | flag wording; the longlist sentence has no theme count | item 3; R28 |
 
+## Amendment pass 1 (2026-09-29, after the owner read the results)
+
+The owner's rulings R29 to R33 are in contract.md § Amendments after the
+live check, with the owner's words.
+
+| Ruling | Change | State |
+|---|---|---|
+| R29 | The lever type has a reason on the card. The typing wire keeps `lever_reason` (written before the type); it is stored with the longlist result and served as `lever_reason`. When no lever type fits, the card shows the none-fits reason only. | built |
+| R30 | The chip "not stated in the abstract" is off the longlist card. The flag stays in the data. | built |
+| R31 | The design of the user's own option names no place: prompt `option_design_v2` (the seventh prompt revision, on a finding) and a code guard (`strip_place` on the name, the description and each feature). The user's words stay verbatim. | built |
+| R32 | No fixed list of setting kinds. Three other ways were measured on the three live runs (`evidence/rounds/9-setting-study.txt`). Nothing is built. | open, with the owner |
+| R33 | Constraints. A test with hard requirements ran on three replays (`evidence/rounds/9-constrain-hard-requirements.txt`): requirements about what the option is were judged correctly (7 of 7 exclusions correct); requirements about who can act were judged too leniently. The planning prompt was probed with the owner's example (`evidence/rounds/9-plan-probe-temporary-accommodation.json`). Nothing is built. | open, with the owner |
+
+Gates of the pass: `make verify-fast` backend 3325 passed; `prompt-guard` 24
+unchanged; `drift-check` OK; `frontend-verify` 87 files, 825 tests. The full
+`make verify` must run again before the review, because the tree changed
+after the step-6 exit gate.
+
+Not yet replayed: R29 and R31 change two prompts. No replay round has read
+the lever reasons or the new designs by hand.
+
+Test data left in the dev database: the replay clones of refugees, obesity
+and energy hold the test requirements of R33 in their plans.
+
 ## Review findings
 
 Not yet. The review stack (step 7) runs in a fresh conversation.

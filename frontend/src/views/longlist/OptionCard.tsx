@@ -298,7 +298,7 @@ export function OptionCard() {
             ))}
           </ul>
         )}
-        <p>{leverLine(item.primary_lever_type, item.secondary_lever_types, item.lever_none_fits_reason)}</p>
+        <p>{leverLine(item.primary_lever_type, item.secondary_lever_types, item.lever_none_fits_reason, item.lever_reason)}</p>
         {item.runner_up_lever_type != null && <p>{runnerUpLine(item.runner_up_lever_type)}</p>}
         {item.ambition != null && <p>{ambitionLine(item.ambition, item.ambition_reason)}</p>}
         {(item.variants ?? []).length > 0 && (
@@ -338,7 +338,6 @@ export function OptionCard() {
                   {document.evidence_type != null && <Chip tone="soft">{scrub(document.evidence_type)}</Chip>}
                   <Chip tone="soft">{roleLabel(document.role)}</Chip>
                   <Chip tone="soft">{scrub(whereTriedGroupLabel(document.where_tried_group, item.where_label))}</Chip>
-                  {document.design_feature_not_stated && <Chip tone="soft">not stated in the abstract</Chip>}
                   {document.source_task_id != null && <Chip tone="soft">inherited from a linked task</Chip>}
                 </div>
               </li>

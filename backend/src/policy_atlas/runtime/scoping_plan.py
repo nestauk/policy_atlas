@@ -1047,6 +1047,7 @@ def propose_option_designs(
     target_unit: str,
     outcomes: list[str],
     backend: AgentBackend,
+    where: str | None = None,
     session_id: uuid.UUID | None = None,
 ) -> dict[str, OptionDesign]:
     """Propose a design for each distinct text through ``option_design_v1``.
@@ -1062,6 +1063,7 @@ def propose_option_designs(
         target_unit: The plan's target unit.
         outcomes: The plan's outcomes.
         backend: The agent backend.
+        where: The plan's Where, taken out of each design (task 046, R31).
         session_id: The Langfuse session (the task id).
 
     Returns:
@@ -1077,7 +1079,7 @@ def propose_option_designs(
                 outcomes=outcomes,
                 session_id=session_id,
             )
-            designs[text] = OptionDesign.from_wire(wire)
+            designs[text] = OptionDesign.from_wire(wire, where=where)
         except Exception as exc:  # noqa: BLE001 - a side call never fails the approval
             log.warning("option_design_failed", error_type=type(exc).__name__)
     return designs
@@ -1130,6 +1132,7 @@ def ensure_option_designs(
         target_unit=plan.target_unit.text,
         outcomes=[o.text for o in plan.outcomes],
         backend=backend,
+        where=plan.where.text,
         session_id=session_id,
     )
     return with_option_designs(plan, designs)

@@ -67,7 +67,8 @@ describe("OptionCard", () => {
     expect(screen.getByRole("heading", { name: "National sanctions regime" })).toBeInTheDocument();
     expect(screen.getByText("scoping pass")).toBeInTheDocument();
     expect(screen.getByText("A duty to withdraw benefits on refusal of an offer")).toBeInTheDocument();
-    expect(screen.getByText("Primary lever type: Enforce existing powers; it also touches Regulate.")).toBeInTheDocument();
+    // Task 046, R29: the lever line is followed by its reason.
+    expect(screen.getByText(/^Primary lever type: Enforce existing powers; it also touches Regulate\./)).toBeInTheDocument();
     expect(
       screen.getByText("Ambition: Structural. Changes who is entitled to a national benefit, not just how it is delivered."),
     ).toBeInTheDocument();
@@ -131,8 +132,9 @@ describe("OptionCard", () => {
     renderCard(MOCK_OPTION_ID_EXCLUDED);
     expect(screen.getByText("National activation policy briefing")).toBeInTheDocument();
     expect(screen.getByText(/inherited from a linked task/)).toBeInTheDocument();
-    // Task 046 (contract item 3): wording changed from "feature not stated".
-    expect(screen.getByText(/not stated in the abstract/)).toBeInTheDocument();
+    // Task 046, R30: the flag is true for almost every document, so the card
+    // no longer shows it (the fixture's briefing carries it).
+    expect(screen.queryByText(/not stated in the abstract/)).not.toBeInTheDocument();
   });
 
   // Task 046, contract item 1: the tried-on line, from the evidence profile.
@@ -163,6 +165,29 @@ describe("OptionCard", () => {
   it("shows the runner-up lever type when one is recorded", () => {
     renderCard(MOCK_OPTION_ID_EXCLUDED);
     expect(screen.getByText("Runner-up lever type: Regulate.")).toBeInTheDocument();
+  });
+
+  // Task 046, R29: the lever line carries the reason, as the ambition line does;
+  // the section summary (shown when collapsed) keeps the short form.
+  it("follows the lever line with its reason, the summary without it", async () => {
+    const user = userEvent.setup();
+    renderCard(MOCK_OPTION_ID_EXCLUDED);
+    expect(
+      screen.getByText(
+        "Primary lever type: Enforce existing powers; it also touches Regulate. The council withholds a benefit payment when a young person refuses an offer.",
+      ),
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /What it is\b(?! for)/ }));
+    expect(
+      screen.getByText("Primary lever type: Enforce existing powers; it also touches Regulate."),
+    ).toBeInTheDocument();
+  });
+
+  it("shows the lever line alone when no reason is recorded", () => {
+    renderCard(MOCK_OPTION_ID_EXCLUDED, { lever_reason: null });
+    expect(
+      screen.getByText("Primary lever type: Enforce existing powers; it also touches Regulate."),
+    ).toBeInTheDocument();
   });
 
   it("shows no runner-up line when none is recorded", () => {

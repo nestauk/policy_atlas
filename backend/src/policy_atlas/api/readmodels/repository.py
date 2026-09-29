@@ -2861,6 +2861,20 @@ def _runner_up_lever_type(result: Any | None, option_id: uuid.UUID) -> str | Non
     return lever if isinstance(lever, str) else None
 
 
+def _lever_reason(result: Any | None, option_id: uuid.UUID) -> str | None:
+    """The lever reason the longlist provenance recorded for an option (R29).
+
+    ``provenance["lever_reason"]`` is ``{option_id: text}``, written by the
+    longlist component beside the runner-up (a kept typing's reason is
+    carried forward from an earlier build) — task 046.
+    """
+    if result is None:
+        return None
+    reasons = _as_mapping(_as_mapping(result.provenance).get("lever_reason"))
+    reason = reasons.get(str(option_id))
+    return reason if isinstance(reason, str) and reason.strip() else None
+
+
 def _latest_longlist_row(conn: Connection, task_id: uuid.UUID) -> Any | None:
     """The task's latest ``longlist_result`` row (a longlist exists iff one does)."""
     return conn.execute(
@@ -3011,6 +3025,7 @@ def _option_summary_fields(
     from_section: str | None = None,
     also_found_as: list[str] | None = None,
     runner_up_lever_type: str | None = None,
+    lever_reason: str | None = None,
 ) -> dict[str, Any]:
     documents = _count(coverage.get("documents"))
     in_scope = _in_scope_out(record)
@@ -3029,6 +3044,7 @@ def _option_summary_fields(
         "primary_lever_type": row.primary_lever_type,
         "lever_none_fits_reason": row.lever_none_fits_reason,
         "runner_up_lever_type": runner_up_lever_type,
+        "lever_reason": lever_reason,
         "secondary_lever_types": _string_list(row.secondary_lever_types),
         "ambition": row.ambition,
         "ambition_reason": row.ambition_reason,
@@ -3465,6 +3481,7 @@ def longlist_out(conn: Connection, task_id: uuid.UUID) -> LonglistOut | None:
                 from_section=sections.get(oid),
                 also_found_as=merged.get(oid),
                 runner_up_lever_type=_runner_up_lever_type(result, oid),
+                lever_reason=_lever_reason(result, oid),
             )
         )
         for oid in [*themed, *unthemed]
@@ -3858,6 +3875,7 @@ def option_out(conn: Connection, task_id: uuid.UUID, option_id: uuid.UUID) -> Op
             from_section=_report_sections(conn, task_id, rows).get(option_id),
             also_found_as=_also_found_as(conn, task_id).get(option_id),
             runner_up_lever_type=_runner_up_lever_type(result, option_id),
+            lever_reason=_lever_reason(result, option_id),
         ),
         design=design,
         design_features=list(design.design_features),

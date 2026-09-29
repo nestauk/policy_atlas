@@ -121,6 +121,28 @@ def test_a_reworded_option_loses_its_design_and_is_proposed_again() -> None:
     assert all(o.design is not None for o in again.your_options)
 
 
+def test_the_design_leaves_out_the_place_and_the_users_words_keep_it() -> None:
+    """R31: the stored design has no place; the user's own words are verbatim."""
+    words = "Employment support for adults granted refugee status in Greater Manchester"
+    agent = StubAgentBackend()
+    plan = build_scoping_plan(
+        _draft(
+            where=TaggedText(text="Greater Manchester", origin="your_call"),
+            your_options=_options(words),
+        )
+    )
+    option = ensure_option_designs(plan, agent).your_options[0]
+    assert agent.option_design_words == [words]
+    assert option.text == words
+    assert option.design is not None
+    assert option.design.description == (
+        "Employment support for adults granted refugee status"
+    )
+    assert option.design.design_features == [
+        "Employment support for adults granted refugee status"
+    ]
+
+
 def test_a_draft_that_leaves_options_null_keeps_the_previous_ones() -> None:
     first = build_scoping_plan(_draft(your_options=_options("a youth guarantee")))
     assert build_scoping_plan(_draft(), previous=first).your_options == first.your_options

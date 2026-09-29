@@ -2111,6 +2111,7 @@ def _propose_patch_designs(
             target_unit=target_unit or current.target_unit.text,
             outcomes=outcomes or [o.text for o in current.outcomes],
             backend=agent,
+            where=patch.where.text if patch.where is not None else current.where.text,
             session_id=task_id,
         )
 

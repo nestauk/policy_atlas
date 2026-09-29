@@ -899,6 +899,9 @@ class OptionSummaryOut(BaseModel):
         runner_up_lever_type: The lever type the typing pass came closest to
             besides the primary, when one was recorded; `null` otherwise
             (task 046).
+        lever_reason: One sentence on why the option has its lever type,
+            when the typing pass recorded one; `null` otherwise (task 046,
+            R29).
         tried_on: The populations its adjacent evidence was tried on, most
             documents first (task 046).
     """
@@ -915,6 +918,7 @@ class OptionSummaryOut(BaseModel):
     primary_lever_type: str | None = None
     lever_none_fits_reason: str | None = None
     runner_up_lever_type: str | None = None
+    lever_reason: str | None = None
     secondary_lever_types: list[str] = Field(default_factory=list)
     ambition: str | None = None
     ambition_reason: str | None = None
