@@ -1,39 +1,52 @@
-"""The ``constrain`` component: the longlist walk's last step (task 045, S9).
+"""The ``constrain`` component: the longlist walk's last step (task 045, S9; task 046, S6, S13).
 
-Contract deliverable 7, D9, D10, D21, D22; ADR 0039 decisions 7 and 10.
+Contract deliverable 7, D9, D10, D21, D22; ADR 0039 decisions 7 and 10;
+task 046 items 5, 7, 10, 11, 12, R4, R21, AM6, AM7.
 
-1. **Judgements.** Every option of the task — included and excluded — is
+1. **Distinct** (task 046, S13). One call over the whole list — every option
+   that is not merged, with its label, description, design features, origin
+   and relations — made before the batches (``constrain_v2``'s distinct
+   prompt). Each reported pair is checked: a pair naming an unknown id, the
+   same id twice, a duplicate already reported, or a chain (the kept option
+   is itself a duplicate) is dropped and counted. Of a pair, the option kept
+   is the user's or Evidence search's when exactly one of the two is
+   (:data:`_KEPT_FIRST_ORIGINS`; the pair is turned round when the call named
+   the other), otherwise the one the call named. The duplicate's *distinct*
+   verdict is ``breaks`` with a reason naming the kept option; every other
+   option ``passes``. A call that fails or stays malformed after its retry
+   gives every option ``cannot_check`` on *distinct* and no merge.
+2. **Judgements.** Every option of the task — included and excluded — is
    judged, one call per :data:`CONSTRAIN_BATCH_SIZE` options on the judgment
-   model (``constrain_v1``), against the plan's ``requirement`` constraints
-   (a setting requirement among them, D21) followed by the three
-   :data:`DEFAULT_SCREENS`, on the option's specified design and a compact
-   coverage summary. The response is validated fail-closed; a malformed batch
+   model, the batches in a thread pool of :data:`CONSTRAIN_MAX_CONCURRENT`,
+   against the plan's ``requirement`` constraints (a setting requirement
+   among them, D21, verbatim, AM7) followed by the :data:`DEFAULT_SCREENS`
+   (*relevant*, *within scope*), on the option's specified design, a compact
+   coverage summary (no ``where_tried``: AM7) and the baseline. The plan
+   fields reach the prompt with their place removed (:func:`_plan_data`,
+   S6); the removed spans are recorded in ``provenance.constrain.
+   place_removed``. The response is validated fail-closed; a malformed batch
    is retried once, then its options are recorded ``cannot_check`` on every
-   constraint ("judgement unavailable") — never a crash, never an exclusion.
-2. **Verdicts → state.** A ``breaks`` on a requirement or a screen excludes
-   the option, naming the constraint (the first that broke, requirements
-   before screens). *Distinct* never applies to an option with a ``part_of``
-   relation at either end: its verdict is forced to ``passes``. A *distinct*
-   ``breaks`` applies only to a later duplicate: its reason must name (by
-   label or id) another option of the same batch that comes earlier in
-   :func:`_duplicate_order` and stays on the list; the earliest of a group is
-   kept (``passes``, :data:`DUPLICATE_KEPT_REASON`), and a ``breaks`` that
-   names no option of its batch is recorded ``cannot_check``
-   (:data:`DUPLICATE_UNNAMED_REASON`) — never an exclusion on a guess. A
-   later duplicate whose first break is *distinct* is **merged, not
-   excluded** (owner ruling 2026-09-24): ``merged_into_option_id`` names the
-   kept option (the final one of a chain, never a merged one), its
-   memberships move there (a unit the kept option already holds stays put),
-   the kept option's coverage is recomputed, and its own ``state`` and
-   ``exclusion`` are left as they were — it leaves the list through the
-   merge. Its judgement record still shows the *distinct* verdict. A
-   user-held duplicate is never merged away. Merged options are not judged
-   again on a rebuild. A
-   batch that stays malformed keeps every option's prior state and
-   ``exclusion``; a ``breaks`` with a blank reason makes a batch malformed.
-   On a rebuild
-   every option is re-judged: one constrain excluded last time and now
-   passing is included again. **User state always wins**: a row whose
+   requirement and screen ("judgement unavailable") — never a crash, never
+   an exclusion.
+3. **Verdicts → state.** A ``breaks`` on a requirement or a screen excludes
+   the option, naming the constraint (the first that broke: requirements,
+   then *relevant*, *distinct*, *within scope*). *Distinct* never applies to
+   an option with a ``part_of`` relation at either end: its verdict is forced
+   to ``passes``. Kept options are settled before their duplicates. A
+   duplicate whose first break is *distinct* is **merged, not excluded**
+   (owner ruling 2026-09-24) when its kept option stays on the list:
+   ``merged_into_option_id`` names the kept option, its memberships move
+   there (a unit the kept option already holds stays put), the kept option's
+   coverage is recomputed, and its own ``state`` and ``exclusion`` are left
+   as they were — it leaves the list through the merge. Its judgement record
+   still shows the *distinct* verdict. When the kept option leaves the list
+   (excluded), the duplicate is the one kept (``passes``,
+   :data:`DUPLICATE_KEPT_REASON`). A user-held duplicate is never merged
+   away. Merged options are not judged again on a rebuild. A batch that
+   stays malformed keeps every option's prior state and ``exclusion`` (and
+   no merge); a ``breaks`` with a blank reason makes a batch malformed. On a
+   rebuild every option is re-judged: one constrain excluded last time and
+   now passing is included again. **User state always wins**: a row whose
    ``exclusion.by`` is ``"user"`` keeps its ``state`` and ``exclusion``
    untouched, whichever state that is. That is the marker this slice
    defines with the row's existing fields: the user's *exclude* writes
@@ -43,26 +56,26 @@ Contract deliverable 7, D9, D10, D21, D22; ADR 0039 decisions 7 and 10.
    ``state == "excluded"``). A row with no ``exclusion``, or one written
    ``by="constrain"``, is constrain's to set. Thin evidence never excludes:
    nothing here reads a document count as an input to the state.
-3. **Guesses.** One capped reasoned guess per preference and option, the
+4. **Guesses.** One capped reasoned guess per preference and option, the
    default transferability preference removed before the call (D22: no guess
    before assessment). A guess never changes state.
-4. **No in-scope evidence** (:mod:`.in_scope`), deterministic, no model call.
-5. **Writes.** ``longlist_result.judgements`` and ``.guesses`` of the walk's
+5. **No in-scope evidence** (:mod:`.in_scope`), deterministic, no model call.
+6. **Writes.** ``longlist_result.judgements`` and ``.guesses`` of the walk's
    latest longlist row, keyed ``[option_id][design_version]`` (D10), its
    ``counts`` (and, after a merge, the kept options' ``coverage``) updated;
    the option rows' ``state``, ``exclusion``, ``no_in_scope_evidence``,
    ``merged_into_option_id`` and ``updated_at``; a merged duplicate's
-   memberships. Every model call happens
-   before the first write.
+   memberships. Every model call — the distinct call and every batch —
+   happens before the first write.
 """
 
 from __future__ import annotations
 
-import re
 import uuid
 from collections import Counter
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any, Protocol
 
@@ -70,33 +83,43 @@ import structlog
 from sqlalchemy import exists, select
 from sqlalchemy.engine import Connection
 
+from policy_atlas.core import tracing
 from policy_atlas.core.schema import longlist_result, option, option_membership, option_relation
-from policy_atlas.core.usage import UsageAccumulator, UsageResult
+from policy_atlas.core.usage import TokenUsage, UsageAccumulator, UsageResult
 from policy_atlas.options_scoping.constrain.constrain_prompt import (
     CONSTRAIN_BATCH_SIZE,
     CONSTRAIN_PROMPT_VERSION,
     DEFAULT_SCREENS,
+    DISTINCT_SCREEN,
     ConstrainResponse,
+    DistinctResponse,
 )
 from policy_atlas.options_scoping.constrain.in_scope import in_scope_evidence
-from policy_atlas.options_scoping.longlist.longlist import membership_coverage
+from policy_atlas.options_scoping.longlist.longlist import (
+    ON_THE_LIST,
+    ORIGIN_WORDS,
+    membership_coverage,
+)
 from policy_atlas.options_scoping.longlist.longlist_backend import LONGLIST_JUDGMENT_MODEL
-from policy_atlas.options_scoping.suggest.suggest import walk_plan
+from policy_atlas.options_scoping.longlist.where_tried import strip_place
+from policy_atlas.options_scoping.suggest.suggest import baseline_sections, walk_plan
 from policy_atlas.runtime.scoping_plan import TRANSFERABILITY_DEFAULT, ScopingPlan
 
 log = structlog.get_logger()
 
-#: Attempts per batch: the call and one retry.
+#: Attempts per batch and for the distinct call: the call and one retry.
 BATCH_ATTEMPTS = 2
-#: The reason recorded when a batch stays malformed after its retry.
+#: Constrain batches in flight at once (task 046, S13).
+CONSTRAIN_MAX_CONCURRENT = 4
+#: The reason recorded when a batch or the distinct call stays malformed.
 JUDGEMENT_UNAVAILABLE = "judgement unavailable"
 #: The forced *distinct* reason for an option in a package relation (ruling 36).
 PACKAGE_DISTINCT_REASON = "packages and their parts are shown together"
-#: The *distinct* reason for the earliest option of a duplicate group (kept).
+#: The *distinct* reason for an option the distinct call reported no duplicate of.
+DISTINCT_PASSES_REASON = "no other option on the longlist is the same kind of action"
+#: The *distinct* reason for a duplicate whose kept option left the list.
 DUPLICATE_KEPT_REASON = "the first of its duplicates on the longlist is kept"
-#: The *distinct* reason when a ``breaks`` names no other option of its batch.
-DUPLICATE_UNNAMED_REASON = "the option it duplicates could not be identified"
-#: Origins a duplicate group keeps first: the user's and Evidence search's own.
+#: Origins a duplicate pair keeps first: the user's and Evidence search's own.
 _KEPT_FIRST_ORIGINS = frozenset({"added_by_you", "from_evidence_search"})
 #: The ``judgements`` key of the deterministic in-scope record. Not
 #: ``"in_scope"``: that id is the *within scope* default screen's.
@@ -104,7 +127,7 @@ IN_SCOPE_EVIDENCE_KEY = "in_scope_evidence"
 #: Setting texts shown per option in the coverage summary.
 COVERAGE_SETTINGS_MAX = 5
 
-_DISTINCT = "distinct"
+_DISTINCT = DISTINCT_SCREEN[0]
 
 
 class ConstrainFailure(Exception):
@@ -123,11 +146,16 @@ class ConstrainBackend(Protocol):
         self,
         *,
         plan: dict[str, object],
+        baseline_sections: list[tuple[str, str]],
         requirements: list[dict[str, str]],
         preferences: list[dict[str, str]],
         options: list[dict[str, object]],
     ) -> UsageResult[ConstrainResponse]:
-        """Judge one batch (see ``LonglistBackend.constrain``)."""
+        """Judge one batch (see ``LonglistBackend.constrain``); called from a thread pool."""
+        ...
+
+    def distinct(self, *, options: list[dict[str, object]]) -> UsageResult[DistinctResponse]:
+        """Report the duplicates over the whole list (see ``LonglistBackend.distinct``)."""
         ...
 
 
@@ -170,13 +198,46 @@ def user_holds_state(exclusion: object) -> bool:
     return isinstance(exclusion, Mapping) and exclusion.get("by") == "user"
 
 
-def _plan_data(plan: ScopingPlan) -> dict[str, object]:
-    return {
-        "question": plan.question,
-        "target_unit": plan.target_unit.text,
-        "intended_change": plan.intended_change.text,
+def _plan_data(plan: ScopingPlan) -> tuple[dict[str, object], list[str]]:
+    """The plan fields the per-option prompt reads, and the place spans removed.
+
+    The question, the intended change and the target unit pass through
+    :func:`strip_place` against the plan's Where (S6, R4, AM7): the exact
+    target unit with its place removed, never the screen's widened sentence.
+    The outcomes are passed as they are; Where itself is not included.
+    Requirement texts are not stripped (they are not plan data here).
+
+    Args:
+        plan: The validated scoping plan.
+
+    Returns:
+        ``(plan_data, removed)``: ``{"question", "target_unit",
+        "intended_change", "outcomes"}`` and the removed spans in field order
+        (question, target unit, intended change).
+    """
+    where = plan.where.text
+    question, question_removed = strip_place(plan.question, where)
+    target_unit, target_removed = strip_place(plan.target_unit.text, where)
+    intended_change, change_removed = strip_place(plan.intended_change.text, where)
+    data: dict[str, object] = {
+        "question": question,
+        "target_unit": target_unit,
+        "intended_change": intended_change,
         "outcomes": [outcome.text for outcome in plan.outcomes],
     }
+    return data, [*question_removed, *target_removed, *change_removed]
+
+
+def _checks(requirements: list[dict[str, str]]) -> list[dict[str, str]]:
+    """Every id an option's state reads, in the order the first break is taken.
+
+    The requirements, then the default screens with *distinct* in its place
+    (relevant · distinct · within scope), as the read models order them.
+    """
+    screens = [{"id": key, "text": label} for key, label in DEFAULT_SCREENS]
+    distinct = {"id": DISTINCT_SCREEN[0], "text": DISTINCT_SCREEN[1]}
+    user = [r for r in requirements if r["id"] not in dict(DEFAULT_SCREENS)]
+    return [*user, screens[0], distinct, *screens[1:]]
 
 
 def _constraint_lists(
@@ -252,43 +313,66 @@ def _mapping(value: object) -> Mapping[str, Any]:
     return value if isinstance(value, Mapping) else {}
 
 
-def _coverage_summary(coverage: object, where_labels: Mapping[str, str]) -> dict[str, object]:
-    """A compact coverage summary: context for the screens, never an exclusion input."""
+def _coverage_summary(coverage: object) -> dict[str, object]:
+    """A compact coverage summary: context for the screens, never an exclusion input.
+
+    No ``where_tried`` (AM7: place never reaches the prompt); the counts by
+    role and the *tried on* populations stay.
+    """
     cov = _mapping(coverage)
     roles = _mapping(cov.get("role"))
-    where = _mapping(cov.get("where_tried"))
     settings = _mapping(cov.get("settings"))
     top_settings = sorted(settings.items(), key=lambda kv: (-int(kv[1] or 0), str(kv[0])))
+    tried_on = cov.get("tried_on")
     return {
         "documents": int(cov.get("documents") or 0),
         "evaluated": int(roles.get("evaluated") or 0),
         "roles": {str(k): int(v or 0) for k, v in roles.items()},
-        "where_tried": {
-            where_labels.get(str(k), str(k)): int(v or 0) for k, v in where.items() if v
-        },
+        "tried_on": [
+            {
+                "population": str(entry.get("population") or ""),
+                "documents": int(entry.get("documents") or 0),
+            }
+            for entry in (tried_on if isinstance(tried_on, list) else [])
+            if isinstance(entry, Mapping)
+        ],
         "settings": [str(text) for text, _ in top_settings[:COVERAGE_SETTINGS_MAX]],
     }
 
 
-def _option_data(
-    row: Any,
-    relations: list[dict[str, object]],
-    coverage: object,
-    where_labels: Mapping[str, str],
-) -> dict[str, object]:
+def _design_features(row: Any) -> list[object]:
     design = row.design if isinstance(row.design, Mapping) else {}
     features = design.get("design_features")
+    return list(features) if isinstance(features, list) else []
+
+
+def _option_data(
+    row: Any, relations: list[dict[str, object]], coverage: object
+) -> dict[str, object]:
+    design = row.design if isinstance(row.design, Mapping) else {}
     outcomes = design.get("outcomes_served")
     return {
         "option_id": str(row.option_id),
         "label": row.name,
         "description": row.description,
-        "design_features": list(features) if isinstance(features, list) else [],
+        "design_features": _design_features(row),
         "outcomes_served": (
             list(outcomes) if isinstance(outcomes, list) else list(row.outcomes or [])
         ),
         "relations": relations,
-        "coverage": _coverage_summary(coverage, where_labels),
+        "coverage": _coverage_summary(coverage),
+    }
+
+
+def _distinct_option_data(row: Any, relations: list[dict[str, object]]) -> dict[str, object]:
+    """One option as the distinct call reads it (origin in the reader's words)."""
+    return {
+        "option_id": str(row.option_id),
+        "label": row.name,
+        "description": row.description,
+        "design_features": _design_features(row),
+        "origin": ORIGIN_WORDS.get(row.origin, ON_THE_LIST),
+        "relations": relations,
     }
 
 
@@ -333,51 +417,102 @@ def _unavailable(requirement_ids: Sequence[str]) -> _Judged:
     )
 
 
+@dataclass
+class _BatchOutcome:
+    """One batch's result, built in a worker thread and merged in the caller."""
+
+    result: dict[str, _Judged] | None = None
+    usages: list[TokenUsage | None] = field(default_factory=list)
+    calls: int = 0
+
+
+def _judge_batch(
+    backend: ConstrainBackend,
+    *,
+    plan: dict[str, object],
+    baseline: list[tuple[str, str]],
+    requirements: list[dict[str, str]],
+    preferences: list[dict[str, str]],
+    batch: list[dict[str, object]],
+) -> _BatchOutcome:
+    """One batch: the call and one retry; ``result`` is ``None`` when it stays malformed.
+
+    Runs in a worker thread: it touches no connection and no shared state.
+    """
+    option_ids = [str(o["option_id"]) for o in batch]
+    outcome = _BatchOutcome()
+    for attempt in range(BATCH_ATTEMPTS):
+        outcome.calls += 1
+        try:
+            response, call_usage = backend.constrain(
+                plan=plan,
+                baseline_sections=baseline,
+                requirements=requirements,
+                preferences=preferences,
+                options=batch,
+            )
+        except Exception as exc:  # fail-closed: a failed call is a malformed batch
+            log.warning("constrain.batch_call_failed", error_type=type(exc).__name__)
+            continue
+        outcome.usages.append(call_usage)
+        outcome.result = _validated(
+            response,
+            option_ids=option_ids,
+            requirement_ids=[r["id"] for r in requirements],
+            preference_ids=[p["id"] for p in preferences],
+        )
+        if outcome.result is not None:
+            break
+        log.warning("constrain.batch_malformed", attempt=attempt, options=len(batch))
+    return outcome
+
+
 def _judge(
     backend: ConstrainBackend,
     *,
     plan: dict[str, object],
+    baseline: list[tuple[str, str]],
     requirements: list[dict[str, str]],
     preferences: list[dict[str, str]],
     options: list[dict[str, object]],
     usage: UsageAccumulator,
 ) -> tuple[dict[str, _Judged], dict[str, int], set[str]]:
-    """Judge every option, batch by batch; a malformed batch degrades.
+    """Judge every option, the batches in a thread pool; a malformed batch degrades.
 
     Returns ``(judged, stats, failed)``; ``failed`` holds the option ids of
     the batches that stayed malformed.
     """
     requirement_ids = [r["id"] for r in requirements]
-    preference_ids = [p["id"] for p in preferences]
+    batches = [
+        options[start : start + CONSTRAIN_BATCH_SIZE]
+        for start in range(0, len(options), CONSTRAIN_BATCH_SIZE)
+    ]
+    with ThreadPoolExecutor(max_workers=CONSTRAIN_MAX_CONCURRENT) as pool:
+        futures = [
+            tracing.submit_with_context(
+                pool,
+                _judge_batch,
+                backend,
+                plan=plan,
+                baseline=baseline,
+                requirements=requirements,
+                preferences=preferences,
+                batch=batch,
+            )
+            for batch in batches
+        ]
+        outcomes = [future.result() for future in futures]
     judged: dict[str, _Judged] = {}
     failed: set[str] = set()
     stats = {"calls": 0, "retries": 0, "failed_batches": 0}
-    for start in range(0, len(options), CONSTRAIN_BATCH_SIZE):
-        batch = options[start : start + CONSTRAIN_BATCH_SIZE]
-        option_ids = [str(o["option_id"]) for o in batch]
-        result: dict[str, _Judged] | None = None
-        for attempt in range(BATCH_ATTEMPTS):
-            stats["calls"] += 1
-            if attempt:
-                stats["retries"] += 1
-            try:
-                response, call_usage = backend.constrain(
-                    plan=plan, requirements=requirements, preferences=preferences, options=batch
-                )
-            except Exception as exc:  # fail-closed: a failed call is a malformed batch
-                log.warning("constrain.batch_call_failed", error_type=type(exc).__name__)
-                continue
+    for batch, outcome in zip(batches, outcomes, strict=True):
+        stats["calls"] += outcome.calls
+        stats["retries"] += outcome.calls - 1
+        for call_usage in outcome.usages:
             usage.add(call_usage)
-            result = _validated(
-                response,
-                option_ids=option_ids,
-                requirement_ids=requirement_ids,
-                preference_ids=preference_ids,
-            )
-            if result is not None:
-                break
-            log.warning("constrain.batch_malformed", attempt=attempt, options=len(batch))
+        result = outcome.result
         if result is None:
+            option_ids = [str(o["option_id"]) for o in batch]
             stats["failed_batches"] += 1
             failed.update(option_ids)
             result = {oid: _unavailable(requirement_ids) for oid in option_ids}
@@ -385,33 +520,124 @@ def _judge(
     return judged, stats, failed
 
 
-def _duplicate_order(row: Any) -> tuple[bool, Any, str]:
-    """A duplicate group's keep order: the user's and Evidence search's
-    options first, then the earliest created, then the lowest id."""
-    return (row.origin not in _KEPT_FIRST_ORIGINS, row.created_at, str(row.option_id))
+@dataclass
+class _Distinct:
+    """The distinct call's answer, checked and turned into verdicts.
 
-
-def _named_options(reason: str, candidates: Sequence[tuple[str, str]]) -> set[str]:
-    """The candidate option ids a *distinct* reason names, by id or label.
-
-    Labels are matched case-insensitively on word boundaries, longest first;
-    a label found only inside a longer matched label ("Mentoring" inside
-    "Youth mentoring") does not count.
+    Attributes:
+        verdicts: The *distinct* verdict per option id (every option).
+        kept: The kept option id per duplicate option id.
+        stats: ``calls``, ``retries``, ``failed``, ``pairs`` (accepted) and
+            ``dropped`` counts by cause.
     """
-    text = reason.casefold()
-    named = {oid for oid, _ in candidates if oid.casefold() in text}
-    by_label: dict[str, list[str]] = {}
-    for oid, label in candidates:
-        if label.strip():
-            by_label.setdefault(label.strip().casefold(), []).append(oid)
-    claimed: list[tuple[int, int]] = []
-    for label in sorted(by_label, key=lambda lab: (-len(lab), lab)):
-        for match in re.finditer(rf"(?<!\w){re.escape(label)}(?!\w)", text):
-            start, end = match.span()
-            if all(end <= s or start >= e for s, e in claimed):
-                claimed.append((start, end))
-                named.update(by_label[label])
-    return named
+
+    verdicts: dict[str, _Verdict]
+    kept: dict[str, str]
+    stats: dict[str, Any]
+
+
+def _kept_first(row: Any) -> bool:
+    return row.origin in _KEPT_FIRST_ORIGINS
+
+
+def _distinct_verdicts(response: DistinctResponse, rows: Sequence[Any]) -> _Distinct:
+    """Check the reported pairs and map them to *distinct* verdicts (S13).
+
+    A reported pair is dropped (and counted) when it names an id not on the
+    list (``unknown_id``), the same id twice (``same_id``), a duplicate an
+    earlier pair already reported (``repeated``), or a kept option that is
+    itself reported as a duplicate (``chain``). Of each remaining pair the
+    user's or Evidence search's option is kept when exactly one of the two is
+    one (the pair is turned round when the call named the other: ``turned``;
+    a turned pair whose new duplicate is already another pair's duplicate is
+    ``repeated``, and a pair that pointed at the new duplicate follows it to
+    its kept option); otherwise the kept option is the one the call named.
+    The duplicate of each pair ``breaks`` with a reason naming its kept
+    option; every other option ``passes``.
+    """
+    by_id = {str(row.option_id): row for row in rows}
+    dropped = dict.fromkeys(("unknown_id", "same_id", "repeated", "chain"), 0)
+    reported: dict[str, tuple[str, str]] = {}  # duplicate -> (kept, reason), as reported
+    for wire in response.duplicates:
+        duplicate, kept = wire.option_id.strip(), wire.same_as_option_id.strip()
+        if duplicate not in by_id or kept not in by_id:
+            dropped["unknown_id"] += 1
+        elif duplicate == kept:
+            dropped["same_id"] += 1
+        elif duplicate in reported:
+            dropped["repeated"] += 1
+        else:
+            reported[duplicate] = (kept, wire.reason.strip())
+    for duplicate in [d for d, (kept, _) in reported.items() if kept in reported]:
+        dropped["chain"] += 1
+        del reported[duplicate]
+    turned = 0
+    pairs: dict[str, tuple[str, str]] = {}
+    for duplicate, (kept, reason) in reported.items():
+        if _kept_first(by_id[duplicate]) and not _kept_first(by_id[kept]):
+            duplicate, kept = kept, duplicate
+            turned += 1
+        if duplicate in pairs:
+            dropped["repeated"] += 1
+            continue
+        pairs[duplicate] = (kept, reason)
+    for duplicate, (kept, reason) in list(pairs.items()):
+        if kept in pairs:  # a turned pair made ``kept`` a duplicate: follow it
+            pairs[duplicate] = (pairs[kept][0], reason)
+    verdicts = {oid: _Verdict("passes", DISTINCT_PASSES_REASON) for oid in by_id}
+    for duplicate, (kept, reason) in pairs.items():
+        named = f'The same as "{by_id[kept].name}"'
+        verdicts[duplicate] = _Verdict("breaks", f"{named}: {reason}" if reason else f"{named}.")
+    return _Distinct(
+        verdicts=verdicts,
+        kept={duplicate: kept for duplicate, (kept, _) in pairs.items()},
+        stats={"pairs": len(pairs), "turned": turned, "dropped": dropped},
+    )
+
+
+def _distinct(
+    backend: ConstrainBackend,
+    *,
+    rows: Sequence[Any],
+    relations: Mapping[uuid.UUID, list[dict[str, object]]],
+    usage: UsageAccumulator,
+) -> _Distinct:
+    """The one distinct call over the whole list, before the batches (S13).
+
+    The call and one retry. A call that fails both times (a raised error,
+    which is how a malformed structured answer surfaces) gives every option
+    ``cannot_check`` and no pair.
+    """
+    options = [_distinct_option_data(row, relations.get(row.option_id, [])) for row in rows]
+    calls = 0
+    response: DistinctResponse | None = None
+    if rows:
+        for attempt in range(BATCH_ATTEMPTS):
+            calls += 1
+            try:
+                response, call_usage = backend.distinct(options=options)
+            except Exception as exc:  # fail-closed: no merge on a failed call
+                log.warning(
+                    "constrain.distinct_call_failed",
+                    attempt=attempt,
+                    error_type=type(exc).__name__,
+                )
+                continue
+            usage.add(call_usage)
+            break
+    base = {"calls": calls, "retries": max(calls - 1, 0)}
+    if rows and response is None:
+        return _Distinct(
+            verdicts={
+                str(row.option_id): _Verdict("cannot_check", JUDGEMENT_UNAVAILABLE)
+                for row in rows
+            },
+            kept={},
+            stats={**base, "failed": True, "pairs": 0, "turned": 0, "dropped": {}},
+        )
+    checked = _distinct_verdicts(response or DistinctResponse(duplicates=[]), rows)
+    checked.stats = {**base, "failed": False, **checked.stats}
+    return checked
 
 
 def _move_memberships(
@@ -454,7 +680,7 @@ def constrain_scope(
         task_id: The scoping task.
         run_id: This ``constrain`` run.
         context: The walk's intent record.
-        backend: The model seam (the longlist backend's ``constrain``).
+        backend: The model seam (the longlist backend's ``distinct`` and ``constrain``).
 
     Returns:
         ``{"options", "excluded", "no_in_scope", "cannot_check", "guesses"}``
@@ -481,38 +707,35 @@ def constrain_scope(
     relations = _relations(conn, task_id=task_id, labels=labels)
     coverage = result_row.coverage if isinstance(result_row.coverage, Mapping) else {}
     provenance = dict(result_row.provenance) if isinstance(result_row.provenance, Mapping) else {}
-    where_labels_raw = provenance.get("where_tried_labels")
-    where_labels = (
-        {str(k): str(v) for k, v in where_labels_raw.items()}
-        if isinstance(where_labels_raw, Mapping)
-        else {}
-    )
     requirements, preferences = _constraint_lists(plan)
-    texts = {r["id"]: r["text"] for r in requirements + preferences}
+    checks = _checks(requirements)
+    texts = {r["id"]: r["text"] for r in checks + preferences}
+    plan_data, place_removed = _plan_data(plan)
+    if place_removed:
+        log.info("constrain.place_removed", spans=len(place_removed))
 
-    # 1. Every model call, before any write.
+    # 1. Every model call, before any write: the distinct call over the whole
+    # list first, then the batches in parallel.
     usage = UsageAccumulator()
+    distinct = _distinct(backend, rows=rows, relations=relations, usage=usage)
     judged, stats, failed = _judge(
         backend,
-        plan=_plan_data(plan),
+        plan=plan_data,
+        baseline=baseline_sections(conn, task_id),
         requirements=requirements,
         preferences=preferences,
         options=[
-            _option_data(
-                row,
-                relations.get(row.option_id, []),
-                coverage.get(str(row.option_id)),
-                where_labels,
-            )
+            _option_data(row, relations.get(row.option_id, []), coverage.get(str(row.option_id)))
             for row in rows
         ],
         usage=usage,
     )
-    # 2. Verdicts -> state or merge, earlier options first, so a duplicate's
-    # partner is settled before it. No write yet.
-    batch_of = {row.option_id: i // CONSTRAIN_BATCH_SIZE for i, row in enumerate(rows)}
-    ordered = sorted(rows, key=_duplicate_order)
-    rank = {row.option_id: i for i, row in enumerate(ordered)}
+    # 2. Verdicts -> state or merge, every kept option before the duplicates,
+    # so a duplicate's kept option is settled before it. No write yet.
+    ordered = sorted(
+        rows,
+        key=lambda row: (str(row.option_id) in distinct.kept, row.created_at, str(row.option_id)),
+    )
     final_state: dict[uuid.UUID, str] = {}
     merged_into: dict[uuid.UUID, uuid.UUID] = {}
     decided: list[tuple[Any, dict[str, _Verdict], str, dict[str, Any]]] = []
@@ -525,22 +748,13 @@ def constrain_scope(
 
     for row in ordered:
         oid = str(row.option_id)
-        verdicts = dict(judged[oid].verdicts)
+        verdicts = {**judged[oid].verdicts, _DISTINCT: distinct.verdicts[oid]}
         kept: uuid.UUID | None = None
         if row.option_id in relations:
             verdicts[_DISTINCT] = _Verdict("passes", PACKAGE_DISTINCT_REASON)
         elif verdicts[_DISTINCT].verdict == "breaks":
-            candidates = [
-                (str(other.option_id), other.name)
-                for other in rows
-                if batch_of[other.option_id] == batch_of[row.option_id]
-            ]
-            named = _named_options(verdicts[_DISTINCT].reason, candidates) - {oid}
-            partners = {kept_as(uuid.UUID(other)) for other in named} - {None}
-            kept = min(partners, key=lambda p: rank[p]) if partners else None
-            if not named:
-                verdicts[_DISTINCT] = _Verdict("cannot_check", DUPLICATE_UNNAMED_REASON)
-            elif kept is None:
+            kept = kept_as(uuid.UUID(distinct.kept[oid]))
+            if kept is None:
                 verdicts[_DISTINCT] = _Verdict("passes", DUPLICATE_KEPT_REASON)
         values: dict[str, Any] = {}
         if user_holds_state(row.exclusion) or oid in failed:
@@ -548,9 +762,7 @@ def constrain_scope(
             # away); a failed batch keeps the prior state.
             state = row.state
         else:
-            broken = next(
-                (r for r in requirements if verdicts[r["id"]].verdict == "breaks"), None
-            )
+            broken = next((r for r in checks if verdicts[r["id"]].verdict == "breaks"), None)
             if broken is None:
                 state = "included"
                 values.update(state="included", exclusion=None)
@@ -613,7 +825,7 @@ def constrain_scope(
                 "reason": verdicts[cid].reason,
                 "constraint_text": texts[cid],
             }
-            for cid in (r["id"] for r in requirements)
+            for cid in (r["id"] for r in checks)
         }
         if entry.guesses:
             guesses[oid] = {
@@ -663,7 +875,10 @@ def constrain_scope(
         "prompt_version": CONSTRAIN_PROMPT_VERSION,
         "model": LONGLIST_JUDGMENT_MODEL if live else "stub",
         "batch_size": CONSTRAIN_BATCH_SIZE,
+        "max_concurrent": CONSTRAIN_MAX_CONCURRENT,
         **stats,
+        "distinct": distinct.stats,
+        "place_removed": place_removed,
         "requirements": len(requirements) - len(DEFAULT_SCREENS),
         "preferences": len(preferences),
         "usage_totals": usage.payload(),

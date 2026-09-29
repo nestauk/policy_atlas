@@ -12,9 +12,12 @@ Five calls, each one lead-authored prompt builder
   (judgment model; the contract's model route puts theme grouping there);
 - ``type_options`` — one lever-typing batch, with the plan and the baseline
   (judgment model; batches run in a thread pool);
-- ``constrain`` — one constraint-judgement batch (judgment model), the
-  walk's ``constrain`` step (S9) on the same seam
-  (:mod:`~policy_atlas.options_scoping.constrain.constrain_prompt`).
+- ``constrain`` — one constraint-judgement batch with the plan and the
+  baseline (judgment model; batches run in a thread pool), the walk's
+  ``constrain`` step (S9) on the same seam
+  (:mod:`~policy_atlas.options_scoping.constrain.constrain_prompt`);
+- ``distinct`` — the constrain step's one duplicate check over the whole list
+  (judgment model; task 046, S13).
 
 Backends parse structurally and return the wire; the component and the shared
 clustering engine own every semantic check. :class:`StubLonglistBackend` is
@@ -23,6 +26,7 @@ deterministic and makes no call.
 
 from __future__ import annotations
 
+import threading
 import uuid
 from collections.abc import Callable
 from typing import Any, Protocol
@@ -38,11 +42,14 @@ from policy_atlas.evidence_search.assess.screen_prompt import SCREEN_MODEL
 from policy_atlas.options_scoping.constrain.constrain_prompt import (
     CONSTRAIN_MAX_OUTPUT_TOKENS,
     CONSTRAIN_PROMPT_VERSION,
+    DISTINCT_MAX_OUTPUT_TOKENS,
     ConstrainResponse,
     ConstraintJudgementWire,
+    DistinctResponse,
     OptionConstrainWire,
     ReasonedGuessWire,
     build_constrain_messages,
+    build_distinct_messages,
 )
 from policy_atlas.options_scoping.longlist.lever_typing_prompt import (
     LEVER_TYPING_MAX_OUTPUT_TOKENS,
@@ -183,20 +190,35 @@ class LonglistBackend(Protocol):
         self,
         *,
         plan: dict[str, object],
+        baseline_sections: list[tuple[str, str]],
         requirements: list[dict[str, str]],
         preferences: list[dict[str, str]],
         options: list[dict[str, object]],
     ) -> UsageResult[ConstrainResponse]:
         """Judge one batch of options against the constraints (S9).
 
+        Called from a thread pool: one call per batch, several at once.
+
         Args:
-            plan: The plan fields as data.
+            plan: The plan fields as data, place stripped.
+            baseline_sections: ``(title, markdown)`` per baseline section.
             requirements: The requirement constraints, then the default screens.
             preferences: The preferences, the transferability preference removed.
             options: The batch's options as data, keyed by ``option_id``.
 
         Returns:
             The parsed judgements and guesses and token usage.
+        """
+        ...
+
+    def distinct(self, *, options: list[dict[str, object]]) -> UsageResult[DistinctResponse]:
+        """Report the options that duplicate another, over the whole list (S13).
+
+        Args:
+            options: Every option on the list that is not merged, as data.
+
+        Returns:
+            The parsed duplicate pairs and token usage.
         """
         ...
 
@@ -357,6 +379,7 @@ class OpenAILonglistBackend:
         self,
         *,
         plan: dict[str, object],
+        baseline_sections: list[tuple[str, str]],
         requirements: list[dict[str, str]],
         preferences: list[dict[str, str]],
         options: list[dict[str, object]],
@@ -364,12 +387,27 @@ class OpenAILonglistBackend:
         """One constrain batch on the judgment model (see :class:`LonglistBackend`)."""
         return self._call(
             build_constrain_messages(
-                plan=plan, requirements=requirements, preferences=preferences, options=options
+                plan=plan,
+                baseline_sections=baseline_sections,
+                requirements=requirements,
+                preferences=preferences,
+                options=options,
             ),
             response_format=ConstrainResponse,
             model=LONGLIST_JUDGMENT_MODEL,
             max_output_tokens=CONSTRAIN_MAX_OUTPUT_TOKENS,
             name="longlist:constrain",
+            prompt_version=CONSTRAIN_PROMPT_VERSION,
+        )
+
+    def distinct(self, *, options: list[dict[str, object]]) -> UsageResult[DistinctResponse]:
+        """The distinct call on the judgment model (see :class:`LonglistBackend`)."""
+        return self._call(
+            build_distinct_messages(options=options),
+            response_format=DistinctResponse,
+            model=LONGLIST_JUDGMENT_MODEL,
+            max_output_tokens=DISTINCT_MAX_OUTPUT_TOKENS,
+            name="longlist:distinct",
             prompt_version=CONSTRAIN_PROMPT_VERSION,
         )
 
@@ -400,11 +438,18 @@ class StubLonglistBackend:
     - ``constrain`` answers from a FIFO queue of canned responses (the last
       one repeats once the queue drains, the ``StubAgentBackend`` pattern);
       with none, every option passes every requirement and screen and every
-      guess is ``cannot_say``. Its calls and inputs are recorded.
+      guess is ``cannot_say``. Its calls and inputs are recorded. Batches
+      call it from a thread pool: the queue and the records are guarded by a
+      lock, and with several batches in flight the queue answers in call
+      order.
+    - ``distinct`` answers the same way from its own queue; with none, it
+      reports no duplicate. Its calls and inputs are recorded.
 
     Args:
         constrain_responses: Canned :class:`ConstrainResponse` value(s), or
             ``None`` for the deterministic default.
+        distinct_responses: Canned :class:`DistinctResponse` value(s), or
+            ``None`` for the deterministic default (no duplicate).
     """
 
     mode = "stub"
@@ -413,15 +458,15 @@ class StubLonglistBackend:
         self,
         *,
         constrain_responses: ConstrainResponse | list[ConstrainResponse] | None = None,
+        distinct_responses: DistinctResponse | list[DistinctResponse] | None = None,
     ) -> None:
-        if constrain_responses is None:
-            self._constrain_queue: list[ConstrainResponse] = []
-        elif isinstance(constrain_responses, list):
-            self._constrain_queue = list(constrain_responses)
-        else:
-            self._constrain_queue = [constrain_responses]
+        self._constrain_queue: list[ConstrainResponse] = _queue(constrain_responses)
+        self._distinct_queue: list[DistinctResponse] = _queue(distinct_responses)
+        self._lock = threading.Lock()
         self.constrain_calls = 0
         self.constrain_inputs: list[dict[str, Any]] = []
+        self.distinct_calls = 0
+        self.distinct_inputs: list[list[dict[str, object]]] = []
 
     def discover(
         self,
@@ -528,29 +573,47 @@ class StubLonglistBackend:
         self,
         *,
         plan: dict[str, object],
+        baseline_sections: list[tuple[str, str]],
         requirements: list[dict[str, str]],
         preferences: list[dict[str, str]],
         options: list[dict[str, object]],
     ) -> UsageResult[ConstrainResponse]:
         """Answer from the queue, else pass everything and guess ``cannot_say``."""
-        self.constrain_calls += 1
-        self.constrain_inputs.append(
-            {
-                "plan": plan,
-                "requirements": list(requirements),
-                "preferences": list(preferences),
-                "options": list(options),
-            }
-        )
-        return _next_response(
-            self._constrain_queue,
-            lambda: _pass_everything(requirements, preferences, options),
-        ), None
+        with self._lock:
+            self.constrain_calls += 1
+            self.constrain_inputs.append(
+                {
+                    "plan": plan,
+                    "baseline_sections": list(baseline_sections),
+                    "requirements": list(requirements),
+                    "preferences": list(preferences),
+                    "options": list(options),
+                }
+            )
+            return _next_response(
+                self._constrain_queue,
+                lambda: _pass_everything(requirements, preferences, options),
+            ), None
+
+    def distinct(self, *, options: list[dict[str, object]]) -> UsageResult[DistinctResponse]:
+        """Answer from the queue, else report no duplicate."""
+        with self._lock:
+            self.distinct_calls += 1
+            self.distinct_inputs.append(list(options))
+            return _next_response(
+                self._distinct_queue, lambda: DistinctResponse(duplicates=[])
+            ), None
 
 
-def _next_response(
-    queue: list[ConstrainResponse], default: Callable[[], ConstrainResponse]
-) -> ConstrainResponse:
+def _queue[T](responses: T | list[T] | None) -> list[T]:
+    if responses is None:
+        return []
+    if isinstance(responses, list):
+        return list(responses)
+    return [responses]
+
+
+def _next_response[T](queue: list[T], default: Callable[[], T]) -> T:
     if not queue:
         return default()
     if len(queue) == 1:

@@ -1,20 +1,30 @@
-"""The ``constrain`` component (task 045 Phase 5.3, S9; contract deliverable 7).
+"""The ``constrain`` component (task 045 Phase 5.3, S9; task 046 Phase 6.1, S6, S13).
 
 The contract's constrain bullet: a requirement breach excludes with the
-constraint named; a setting requirement is judged; the three default screens
-run and cite; *distinct* never excludes a *part of* row; thin evidence never
-excludes; every preference except the transferability preference yields one
+constraint named; a setting requirement is judged; the default screens run
+and cite (*distinct* by its own call over the whole list, task 046 item 5);
+*distinct* never excludes a *part of* row; thin evidence never excludes;
+every preference except the transferability preference yields one
 capped guess per option, and that one yields none; an inherited document
 outside the country group marks its only option no in-scope evidence,
 included, with the restriction named; guesses never change state; the
 in-scope check makes no backend call. Plus: user state wins on a rebuild; a
 malformed batch degrades to ``cannot_check``; judgements are keyed
-``(option_id, design_version)``. Seeded on the transactional ``conn`` fixture
-through the longlist component's own fixture and the stub longlist backend.
+``(option_id, design_version)``. Task 046: the distinct call receives every
+option and feeds the merge rule, drops bad pairs, and degrades to
+``cannot_check`` with no merge; no place token reaches the plan data and the
+removal is recorded, a requirement naming a place stays verbatim (item 10);
+silence passes and a setting break excludes with the requirement named (item
+11, stub level); a pathway-only option reaches the prompt and passes (AM6);
+the batches run in parallel; no ``where_tried`` in the option payload; the
+baseline is passed. Seeded on the transactional ``conn`` fixture through the
+longlist component's own fixture and the stub longlist backend.
 """
 
 from __future__ import annotations
 
+import json
+import threading
 import uuid
 from datetime import timedelta
 from typing import Any, Literal
@@ -27,9 +37,10 @@ from policy_atlas.api import longlist_actions
 from policy_atlas.api.readmodels import repository
 from policy_atlas.core.schema import longlist_result, option, option_relation, task_source_snapshot
 from policy_atlas.core.usage import UsageResult
+from policy_atlas.options_scoping.constrain import constrain as constrain_module
 from policy_atlas.options_scoping.constrain.constrain import (
+    DISTINCT_PASSES_REASON,
     DUPLICATE_KEPT_REASON,
-    DUPLICATE_UNNAMED_REASON,
     IN_SCOPE_EVIDENCE_KEY,
     JUDGEMENT_UNAVAILABLE,
     PACKAGE_DISTINCT_REASON,
@@ -40,8 +51,11 @@ from policy_atlas.options_scoping.constrain.constrain import (
 from policy_atlas.options_scoping.constrain.constrain_prompt import (
     CONSTRAIN_BATCH_SIZE,
     DEFAULT_SCREENS,
+    DISTINCT_SCREEN,
     ConstrainResponse,
     ConstraintJudgementWire,
+    DistinctPairWire,
+    DistinctResponse,
     OptionConstrainWire,
     ReasonedGuessWire,
     Verdict,
@@ -56,13 +70,17 @@ from policy_atlas.options_scoping.longlist.longlist_cluster_prompt import (
     DiscoveredOptionWire,
     OptionDiscoveryResponse,
 )
+from policy_atlas.options_scoping.longlist.where_tried import countries_in
 from policy_atlas.runtime.scoping_plan import TRANSFERABILITY_DEFAULT, find_default
 from tests.helpers import now
 from tests.options_scoping.test_longlist import _Walk
 from tests.runtime.test_baseline_gate import scoping_plan
 
+# The screens the per-option batches judge (relevant, within scope) ...
 SCREEN_IDS = [key for key, _ in DEFAULT_SCREENS]
-SCREEN_TEXT = dict(DEFAULT_SCREENS)
+# ... and every screen a judgement record stores, in the read models' order.
+STORED_SCREEN_IDS = ["relevant", "distinct", "in_scope"]
+STORED_SCREEN_TEXT = {**dict(DEFAULT_SCREENS), DISTINCT_SCREEN[0]: DISTINCT_SCREEN[1]}
 
 
 def _requirement(text: str, *, setting: bool = False) -> dict[str, Any]:
@@ -134,6 +152,16 @@ def _response(
                 ],
             )
             for oid in option_ids
+        ]
+    )
+
+
+def _pairs(*pairs: tuple[uuid.UUID | str, uuid.UUID | str, str]) -> DistinctResponse:
+    """A distinct answer: ``(duplicate, kept, reason)`` per pair."""
+    return DistinctResponse(
+        duplicates=[
+            DistinctPairWire(option_id=str(dup), same_as_option_id=str(kept), reason=reason)
+            for dup, kept, reason in pairs
         ]
     )
 
@@ -228,7 +256,7 @@ def test_a_setting_requirement_is_judged_like_any_requirement(conn: Connection) 
     assert _row(walk, elsewhere).exclusion["constraint"] == "Delivered through schools"
 
 
-def test_the_three_default_screens_run_and_cite(conn: Connection) -> None:
+def test_the_default_screens_run_and_cite(conn: Connection) -> None:
     walk = _walk(conn)
     off_topic = walk.option("Pension auto-enrolment")
     walk.build(StubLonglistBackend())
@@ -240,16 +268,25 @@ def test_the_three_default_screens_run_and_cite(conn: Connection) -> None:
 
     _constrain(walk, backend)
 
-    # The plan has no requirement: the call still carries the three screens.
+    # The plan has no requirement: the batch still carries its two screens;
+    # *distinct* is judged by its own call, never in the batch.
     assert backend.constrain_inputs[0]["requirements"] == [
         {"id": key, "text": label} for key, label in DEFAULT_SCREENS
     ]
+    assert "distinct" not in SCREEN_IDS
     row = _row(walk, off_topic)
     assert row.state == "excluded"
-    assert row.exclusion["constraint"] == SCREEN_TEXT["relevant"]
+    assert row.exclusion["constraint"] == STORED_SCREEN_TEXT["relevant"]
     record = _latest(walk).judgements[str(off_topic)]["1"]
-    assert {key: record[key]["constraint_text"] for key in SCREEN_IDS} == SCREEN_TEXT
-    assert [record[key]["verdict"] for key in SCREEN_IDS] == ["breaks", "passes", "passes"]
+    assert {
+        key: record[key]["constraint_text"] for key in STORED_SCREEN_IDS
+    } == STORED_SCREEN_TEXT
+    assert [record[key]["verdict"] for key in STORED_SCREEN_IDS] == [
+        "breaks",
+        "passes",
+        "passes",
+    ]
+    assert record["distinct"]["reason"] == DISTINCT_PASSES_REASON
 
 
 def test_distinct_never_excludes_a_part_of_row(conn: Connection) -> None:
@@ -269,13 +306,10 @@ def test_distinct_never_excludes_a_part_of_row(conn: Connection) -> None:
         )
     )
     walk.build(StubLonglistBackend())
-    ids = [component, package, duplicate]
     backend = StubLonglistBackend(
-        constrain_responses=_response(
-            ids,
-            SCREEN_IDS,
-            verdicts={(oid, "distinct"): "breaks" for oid in ids},
-            reasons={(duplicate, "distinct"): "The same thing as Mentoring."},
+        distinct_responses=_pairs(
+            (duplicate, component, "The same thing as Mentoring."),
+            (package, component, "The package is mentoring."),
         )
     )
 
@@ -289,8 +323,10 @@ def test_distinct_never_excludes_a_part_of_row(conn: Connection) -> None:
     # The duplicate is merged into the part it duplicates, not excluded.
     assert _row(walk, duplicate).merged_into_option_id == component
     assert _row(walk, duplicate).state == "included"
-    # Both ends of the relation reach the prompt.
-    sent = {o["option_id"]: o["relations"] for o in backend.constrain_inputs[0]["options"]}
+    # Both ends of the relation reach both prompts.
+    batch = {o["option_id"]: o["relations"] for o in backend.constrain_inputs[0]["options"]}
+    sent: dict[Any, Any] = {o["option_id"]: o["relations"] for o in backend.distinct_inputs[0]}
+    assert batch == sent
     assert sent[str(component)] == [
         {
             "kind": "part_of",
@@ -303,8 +339,8 @@ def test_distinct_never_excludes_a_part_of_row(conn: Connection) -> None:
     assert sent[str(duplicate)] == []
 
 
-def test_distinct_keeps_the_earliest_of_a_duplicate_group(conn: Connection) -> None:
-    """Never every member: the user's option first, then the earliest created."""
+def test_distinct_keeps_the_users_option_of_a_duplicate_group(conn: Connection) -> None:
+    """Never every member; the user's option is kept even when the call names another."""
     walk = _walk(conn)
     t0 = now()
     first = walk.option("Youth guarantee", created_at=t0)
@@ -313,17 +349,11 @@ def test_distinct_keeps_the_earliest_of_a_duplicate_group(conn: Connection) -> N
     )
     later = walk.option("Guarantee scheme", created_at=t0 + timedelta(seconds=2))
     walk.build(StubLonglistBackend())
-    ids = [first, users, later]
     backend = StubLonglistBackend(
-        constrain_responses=_response(
-            ids,
-            SCREEN_IDS,
-            verdicts={(oid, "distinct"): "breaks" for oid in ids},
-            reasons={
-                (first, "distinct"): "The same offer as Job guarantee.",
-                (users, "distinct"): "The same offer as youth guarantee.",
-                (later, "distinct"): "Youth Guarantee and Job guarantee under a new name.",
-            },
+        distinct_responses=_pairs(
+            # The call keeps the wrong one: the pair is turned round.
+            (users, first, "The same offer as Youth guarantee."),
+            (later, first, "Youth guarantee under a new name."),
         )
     )
 
@@ -331,15 +361,20 @@ def test_distinct_keeps_the_earliest_of_a_duplicate_group(conn: Connection) -> N
 
     assert (_row(walk, users).state, _row(walk, users).exclusion) == ("included", None)
     kept = _latest(walk).judgements[str(users)]["1"]["distinct"]
-    assert (kept["verdict"], kept["reason"]) == ("passes", DUPLICATE_KEPT_REASON)
+    assert (kept["verdict"], kept["reason"]) == ("passes", DISTINCT_PASSES_REASON)
     # Merged into the kept option, not excluded (owner ruling 2026-09-24);
-    # ``later`` names ``first`` too, which is merged: the chain ends at ``users``.
+    # ``later`` named ``first``, which the turn made a duplicate: it follows
+    # ``first`` to ``users``.
     for oid in (first, later):
         assert _row(walk, oid).merged_into_option_id == users
         assert (_row(walk, oid).state, _row(walk, oid).exclusion) == ("included", None)
-        assert _latest(walk).judgements[str(oid)]["1"]["distinct"]["verdict"] == "breaks"
+        distinct = _latest(walk).judgements[str(oid)]["1"]["distinct"]
+        assert distinct["verdict"] == "breaks"
+        assert distinct["reason"].startswith('The same as "Job guarantee"')
     assert summary["excluded"] == 0
     assert _latest(walk).counts["merged"] == 2
+    stats = _latest(walk).provenance["constrain"]["distinct"]
+    assert (stats["pairs"], stats["turned"], stats["failed"]) == (2, 1, False)
 
 
 def _duplicate_pair(walk: _Walk, **dup_values: Any) -> tuple[uuid.UUID, uuid.UUID]:
@@ -355,14 +390,7 @@ def _duplicate_pair(walk: _Walk, **dup_values: Any) -> tuple[uuid.UUID, uuid.UUI
 
 
 def _duplicate_breach(kept: uuid.UUID, dup: uuid.UUID) -> StubLonglistBackend:
-    return StubLonglistBackend(
-        constrain_responses=_response(
-            [kept, dup],
-            SCREEN_IDS,
-            verdicts={(dup, "distinct"): "breaks"},
-            reasons={(dup, "distinct"): "The same offer as Youth guarantee."},
-        )
-    )
+    return StubLonglistBackend(distinct_responses=_pairs((dup, kept, "The same offer.")))
 
 
 def _members(walk: _Walk, option_id: uuid.UUID) -> int:
@@ -388,7 +416,7 @@ def test_a_duplicate_is_merged_into_the_kept_option_with_its_documents(
     distinct = latest.judgements[str(dup)]["1"]["distinct"]
     assert (distinct["verdict"], distinct["reason"]) == (
         "breaks",
-        "The same offer as Youth guarantee.",
+        'The same as "Youth guarantee": The same offer.',
     )
     assert summary["excluded"] == 0
     assert (latest.counts["options"], latest.counts["merged"]) == (1, 1)
@@ -460,41 +488,131 @@ def test_a_rebuild_keeps_the_merge(conn: Connection) -> None:
     assert summary["options"] == len(walk.options()) - 1
 
 
-def test_a_distinct_breach_naming_no_option_of_its_batch_does_not_exclude(
+def test_a_duplicate_whose_kept_option_is_excluded_stays_on_the_list(conn: Connection) -> None:
+    walk = _walk(conn, _requirement("No benefit sanctions"))
+    kept, dup = _duplicate_pair(walk)
+    walk.build(StubLonglistBackend())
+    backend = StubLonglistBackend(
+        constrain_responses=_response(
+            [kept, dup], ["req-1", *SCREEN_IDS], verdicts={(kept, "req-1"): "breaks"}
+        ),
+        distinct_responses=_pairs((dup, kept, "The same offer.")),
+    )
+
+    _, summary = _constrain(walk, backend)
+
+    assert _row(walk, kept).state == "excluded"
+    row = _row(walk, dup)
+    assert (row.merged_into_option_id, row.state) == (None, "included")
+    distinct = _latest(walk).judgements[str(dup)]["1"]["distinct"]
+    assert (distinct["verdict"], distinct["reason"]) == ("passes", DUPLICATE_KEPT_REASON)
+    assert (summary["excluded"], _latest(walk).counts["merged"]) == (1, 0)
+
+
+def test_unknown_same_repeated_and_chain_pairs_are_dropped_and_counted(
     conn: Connection,
 ) -> None:
     walk = _walk(conn)
     t0 = now()
-    ids = [
-        walk.option(f"Option {i}", created_at=t0 + timedelta(seconds=i))
-        for i in range(CONSTRAIN_BATCH_SIZE + 1)
-    ]
+    a, b, c, d = (
+        walk.option(name, created_at=t0 + timedelta(seconds=i))
+        for i, name in enumerate(["Option A", "Option B", "Option C", "Option D"])
+    )
     walk.build(StubLonglistBackend())
-    unnamed, stray = ids[1], ids[-1]  # stray's partner is in the first batch
-    first_batch = _response(
-        ids[:CONSTRAIN_BATCH_SIZE],
-        SCREEN_IDS,
-        verdicts={(unnamed, "distinct"): "breaks"},
-        reasons={(unnamed, "distinct"): "A duplicate of another option."},
+    backend = StubLonglistBackend(
+        distinct_responses=_pairs(
+            (a, uuid.uuid4(), "Names an option not on the list."),
+            ("not-an-id", b, "Names nothing."),
+            (c, c, "The same id twice."),
+            (b, a, "B is A."),  # kept: a merge
+            (b, d, "B again."),  # repeated
+            (d, b, "D is B."),  # chain: B is itself a duplicate
+        )
     )
-    second_batch = _response(
-        [stray],
-        SCREEN_IDS,
-        verdicts={(stray, "distinct"): "breaks"},
-        reasons={(stray, "distinct"): "The same as Option 0."},
-    )
-    backend = StubLonglistBackend(constrain_responses=[first_batch, second_batch])
 
     _, summary = _constrain(walk, backend)
 
+    assert _row(walk, b).merged_into_option_id == a
+    for oid in (a, c, d):
+        row = _row(walk, oid)
+        assert (row.merged_into_option_id, row.state) == (None, "included")
+        distinct = _latest(walk).judgements[str(oid)]["1"]["distinct"]
+        assert (distinct["verdict"], distinct["reason"]) == ("passes", DISTINCT_PASSES_REASON)
     assert summary["excluded"] == 0
-    for oid in (unnamed, stray):
-        assert _row(walk, oid).state == "included"
+    stats = _latest(walk).provenance["constrain"]["distinct"]
+    assert stats["pairs"] == 1
+    assert stats["dropped"] == {"unknown_id": 2, "same_id": 1, "repeated": 1, "chain": 1}
+
+
+def test_the_distinct_call_receives_every_option_before_the_batches(conn: Connection) -> None:
+    walk = _walk(conn)
+    t0 = now()
+    ids = [
+        walk.option(f"Option {i}", created_at=t0 + timedelta(seconds=i))
+        for i in range(CONSTRAIN_BATCH_SIZE + 2)
+    ]
+    users = walk.option("Your option", origin="added_by_you", created_at=t0)
+    walk.build(StubLonglistBackend())
+    calls: list[str] = []
+
+    class _Ordered(StubLonglistBackend):
+        def distinct(self, *, options: list[dict[str, object]]) -> Any:
+            calls.append("distinct")
+            return super().distinct(options=options)
+
+        def constrain(self, **kwargs: Any) -> Any:
+            calls.append("batch")
+            return super().constrain(**kwargs)
+
+    backend = _Ordered()
+
+    _constrain(walk, backend)
+
+    assert backend.distinct_calls == 1
+    assert calls == ["distinct", "batch", "batch"]
+    sent = backend.distinct_inputs[0]
+    assert {o["option_id"] for o in sent} == {str(oid) for oid in [*ids, users]}
+    assert set(sent[0]) == {
+        "option_id",
+        "label",
+        "description",
+        "design_features",
+        "origin",
+        "relations",
+    }
+    origins = {o["option_id"]: o["origin"] for o in sent}
+    assert origins[str(users)] == "added by you"
+    assert origins[str(ids[0])] == "suggested by Policy Atlas"
+
+
+def test_a_failed_distinct_call_gives_cannot_check_and_no_merge(conn: Connection) -> None:
+    walk = _walk(conn)
+    kept, dup = _duplicate_pair(walk)
+    walk.build(StubLonglistBackend())
+
+    class _DistinctDown(StubLonglistBackend):
+        def distinct(self, *, options: list[dict[str, object]]) -> Any:
+            self.distinct_calls += 1
+            raise RuntimeError("malformed answer")
+
+    backend = _DistinctDown()
+
+    _, summary = _constrain(walk, backend)
+
+    assert backend.distinct_calls == 2  # the call and its one retry
+    for oid in (kept, dup):
+        row = _row(walk, oid)
+        assert (row.merged_into_option_id, row.state) == (None, "included")
         distinct = _latest(walk).judgements[str(oid)]["1"]["distinct"]
         assert (distinct["verdict"], distinct["reason"]) == (
             "cannot_check",
-            DUPLICATE_UNNAMED_REASON,
+            JUDGEMENT_UNAVAILABLE,
         )
+    assert summary["cannot_check"] == 2 and summary["excluded"] == 0
+    latest = _latest(walk)
+    assert latest.counts["merged"] == 0
+    assert latest.provenance["constrain"]["distinct"]["failed"] is True
+    assert (_members(walk, kept), _members(walk, dup)) == (1, 1)
 
 
 def test_thin_evidence_never_excludes(conn: Connection) -> None:
@@ -702,6 +820,7 @@ def test_the_in_scope_check_makes_no_backend_call(conn: Connection) -> None:
             self,
             *,
             plan: dict[str, object],
+            baseline_sections: list[tuple[str, str]],
             requirements: list[dict[str, str]],
             preferences: list[dict[str, str]],
             options: list[dict[str, object]],
@@ -856,7 +975,7 @@ def test_a_malformed_batch_is_retried_once(conn: Connection) -> None:
     _constrain(walk, backend)
 
     assert backend.constrain_calls == 2
-    assert _row(walk, oid).exclusion["constraint"] == SCREEN_TEXT["in_scope"]
+    assert _row(walk, oid).exclusion["constraint"] == STORED_SCREEN_TEXT["in_scope"]
 
 
 def test_judgements_are_keyed_by_option_and_design_version(conn: Connection) -> None:
@@ -880,9 +999,10 @@ def test_options_are_judged_in_batches(conn: Connection) -> None:
 
     _, summary = _constrain(walk, backend)
 
-    assert [len(call["options"]) for call in backend.constrain_inputs] == [
-        CONSTRAIN_BATCH_SIZE,
+    # The batches run in parallel, so they may answer in either order.
+    assert sorted(len(call["options"]) for call in backend.constrain_inputs) == [
         2,
+        CONSTRAIN_BATCH_SIZE,
     ]
     assert summary["options"] == CONSTRAIN_BATCH_SIZE + 2
     assert len(_latest(walk).judgements) == CONSTRAIN_BATCH_SIZE + 2
@@ -918,4 +1038,183 @@ def test_the_harness_runs_constrain_on_the_stub_backend(conn: Connection) -> Non
         "cannot_check": 0,
         "guesses": 0,
     }
-    assert set(_latest(walk).judgements[str(oid)]["1"]) == set(SCREEN_IDS)
+    assert set(_latest(walk).judgements[str(oid)]["1"]) == set(STORED_SCREEN_IDS)
+
+
+# --- task 046: place, the payload, the baseline, the kind of action, parallel ------------
+
+
+def test_no_place_reaches_the_plan_data_and_the_removal_is_recorded(conn: Connection) -> None:
+    """Item 10 (R4, AM7): the plan fields hold no token the where-tried matcher
+    recognises; a requirement that names a place reaches the prompt verbatim."""
+    council = "Only options a council in England can run"
+    plan = scoping_plan(
+        question="What could reduce the number of young people not in work in Greater Manchester?",
+        intended_change={
+            "text": "Reduce the number of young people not in work in the UK",
+            "origin": "from_your_question",
+        },
+        constraints=[_requirement(council)],
+    )
+    raw = json.dumps([plan.question, plan.intended_change.text])
+    assert countries_in(raw)[0]  # the plan names places ...
+    walk = _Walk(conn, plan)
+    walk.option("Youth guarantee")
+    walk.build(StubLonglistBackend())
+    backend = StubLonglistBackend()
+
+    _constrain(walk, backend)
+
+    sent = backend.constrain_inputs[0]
+    # ... and none reaches the prompt's plan data.
+    assert countries_in(json.dumps(sent["plan"], ensure_ascii=False)) == (frozenset(), False)
+    assert sent["plan"] == {
+        "question": "What could reduce the number of young people not in work?",
+        "target_unit": "16 to 24 year olds",
+        "intended_change": "Reduce the number of young people not in work",
+        "outcomes": ["the NEET rate"],
+    }
+    assert _latest(walk).provenance["constrain"]["place_removed"] == [
+        "in Greater Manchester",
+        "in the UK",
+    ]
+    assert sent["requirements"][0] == {"id": "req-1", "text": council}
+
+
+def test_the_option_payload_has_no_where_tried(conn: Connection) -> None:
+    """AM7: ``where_tried`` leaves the payload; the role counts and *tried on* stay."""
+    walk = _walk(conn)
+    oid = walk.option("Youth guarantee")
+    doc = walk.doc()
+    walk.record(doc, "Youth guarantee")
+    walk.rollup(walk.scope_id, [doc])
+    walk.build(StubLonglistBackend())
+    assert "where_tried" in _latest(walk).coverage[str(oid)]  # the build still writes it
+    backend = StubLonglistBackend()
+
+    _constrain(walk, backend)
+
+    coverage = backend.constrain_inputs[0]["options"][0]["coverage"]
+    assert set(coverage) == {"documents", "evaluated", "roles", "tried_on", "settings"}
+    assert coverage["documents"] == 1
+    assert "where_tried" not in repr(backend.constrain_inputs)
+
+
+def test_the_baseline_reaches_the_batches(
+    conn: Connection, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    walk = _walk(conn)
+    walk.option("Youth guarantee")
+    walk.build(StubLonglistBackend())
+    sections = [("What is in place now", "A national youth guarantee runs today.")]
+    seen: list[uuid.UUID] = []
+
+    def _baseline(_conn: Connection, task_id: uuid.UUID) -> list[tuple[str, str]]:
+        seen.append(task_id)
+        return sections
+
+    monkeypatch.setattr(constrain_module, "baseline_sections", _baseline)
+    backend = StubLonglistBackend()
+
+    _constrain(walk, backend)
+
+    assert seen == [walk.task_id]
+    assert backend.constrain_inputs[0]["baseline_sections"] == sections
+
+
+def test_silence_passes_and_a_setting_break_excludes_with_the_requirement_named(
+    conn: Connection,
+) -> None:
+    """Item 11 (R21), stub level: the component keeps a silent design, excludes a
+    kind of action that cannot be delivered through the setting with the
+    requirement named, and keeps a ``cannot_check``."""
+    setting = "Delivered through health visiting, midwifery or family hub services"
+    walk = _walk(conn, _requirement(setting, setting=True))
+    silent = walk.option("Parenting support")
+    tax = walk.option("National sugar tax")
+    unknown = walk.option("Infant feeding advice")
+    walk.build(StubLonglistBackend())
+    reason = "A national tax cannot be delivered through health visiting."
+    backend = StubLonglistBackend(
+        constrain_responses=_response(
+            [silent, tax, unknown],
+            ["req-1", *SCREEN_IDS],
+            verdicts={(tax, "req-1"): "breaks", (unknown, "req-1"): "cannot_check"},
+            reasons={
+                (silent, "req-1"): "The design names no setting.",
+                (tax, "req-1"): reason,
+            },
+        )
+    )
+
+    _, summary = _constrain(walk, backend)
+
+    assert (_row(walk, silent).state, _row(walk, silent).exclusion) == ("included", None)
+    assert _row(walk, tax).state == "excluded"
+    assert _row(walk, tax).exclusion == {"constraint": setting, "reason": reason, "by": "constrain"}
+    assert _latest(walk).judgements[str(tax)]["1"]["req-1"] == {
+        "verdict": "breaks",
+        "reason": reason,
+        "constraint_text": setting,
+    }
+    assert (_row(walk, unknown).state, _row(walk, unknown).exclusion) == ("included", None)
+    assert (summary["excluded"], summary["cannot_check"]) == (1, 1)
+
+
+def test_a_pathway_only_option_reaches_the_prompt_and_passes_relevant(conn: Connection) -> None:
+    """AM6: no listed outcome, members reporting only a pathway outcome; the design
+    and the description still reach the prompt, and ``passes`` keeps it."""
+    walk = _walk(conn)
+    design = {
+        "name": "Sugar reformulation",
+        "description": "Producers cut the sugar in everyday foods.",
+        "design_features": ["voluntary targets for producers"],
+        "outcomes_served": [],
+    }
+    oid = walk.option(
+        "Sugar reformulation",
+        outcomes=[],
+        design=design,
+        description=design["description"],
+    )
+    doc = walk.doc()
+    walk.record(doc, "Sugar reformulation", outcome="sugar intake")
+    walk.rollup(walk.scope_id, [doc])
+    walk.build(StubLonglistBackend())
+    backend = StubLonglistBackend(
+        constrain_responses=_response(
+            [oid],
+            SCREEN_IDS,
+            reasons={(oid, "relevant"): "Less sugar leads to lower obesity prevalence."},
+        )
+    )
+
+    _constrain(walk, backend)
+
+    sent = backend.constrain_inputs[0]["options"][0]
+    assert sent["outcomes_served"] == []
+    assert sent["description"] == "Producers cut the sugar in everyday foods."
+    assert sent["design_features"] == ["voluntary targets for producers"]
+    assert (_row(walk, oid).state, _row(walk, oid).exclusion) == ("included", None)
+    assert _latest(walk).judgements[str(oid)]["1"]["relevant"]["verdict"] == "passes"
+
+
+def test_the_batches_run_in_parallel(conn: Connection) -> None:
+    walk = _walk(conn)
+    for i in range(2 * CONSTRAIN_BATCH_SIZE + 1):
+        walk.option(f"Option {i}")
+    walk.build(StubLonglistBackend())
+    barrier = threading.Barrier(3, timeout=10)
+
+    class _Barrier(StubLonglistBackend):
+        def constrain(self, **kwargs: Any) -> Any:
+            barrier.wait()  # only passes when the three batches are in flight at once
+            return super().constrain(**kwargs)
+
+    backend = _Barrier()
+
+    _, summary = _constrain(walk, backend)
+
+    assert backend.constrain_calls == 3
+    assert summary["options"] == 2 * CONSTRAIN_BATCH_SIZE + 1
+    assert _latest(walk).provenance["constrain"]["failed_batches"] == 0

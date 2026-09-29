@@ -190,12 +190,17 @@ class _Breaks(StubLonglistBackend):
         self,
         *,
         plan: dict[str, object],
+        baseline_sections: list[tuple[str, str]],
         requirements: list[dict[str, str]],
         preferences: list[dict[str, str]],
         options: list[dict[str, object]],
     ) -> tuple[ConstrainResponse, Any]:
         response, usage = super().constrain(
-            plan=plan, requirements=requirements, preferences=preferences, options=options
+            plan=plan,
+            baseline_sections=baseline_sections,
+            requirements=requirements,
+            preferences=preferences,
+            options=options,
         )
         for wire in response.options:
             if wire.option_id in self.breaking:
