@@ -230,3 +230,35 @@ The owner: "I agree on topic 1".
 - Open from the test: the step takes about one minute; the places of two
   aspects are less stable (dependencies, time to effect); the "basis" mark is
   not reliable and is not shown until a test proves it.
+
+## Topic 2 decided in part (2026-09-29): the test across seven fields
+
+Evidence: `evidence/rounds/9-aspect-pass-seven.txt`.
+
+| Item | The owner | State |
+|---|---|---|
+| Time: about one minute for the step | "Time is fine for now." | **accepted** |
+| Dependencies: a sentence only, no place | "Yes dependencies feel distinct, I think it would still be useful information for the options page." | **accepted** |
+| Stability: cost 92 percent, the other aspects near 80 percent, with the sentence always beside the place | "that's good enough" | **accepted** for a first version |
+| "The list differs little" is used too seldom (1 of 56 aspect runs). The lead's idea (name the least and the most demanding option and the distance) | "I don't think that idea is great, what are some other options?" | **rejected**; other ways under test |
+
+## Topic 2 decided (2026-09-29): the comparison, and the aspects
+
+Evidence: `evidence/rounds/9-aspect-variants.txt` (ways A and B),
+`9-aspect-groups-v2.txt` (the changed way B, which failed).
+
+| Item | Decision | The owner |
+|---|---|---|
+| The way of comparison | **Way A: only what stands out.** An option gets a mark only when it clearly takes less or more than most of the list on an aspect. Every other option has no mark. On a list that differs little, nobody stands out. The sentence is always beside the mark and carries the kind of demand. | "Yes I think that's good." |
+| Way B (free groups with a phrase) | Rejected after two tests. With a limit of four the model made four groups almost every time, also on a list that differs little. With no limit it made 4 to 12 groups, by kind and not by amount, and their order changed between runs (pairs in the opposite order: up to 19 percent). | the lead's finding; the owner asked for the test |
+| "Powers" | **Split, then cut.** The lead's question held two questions (who decides; is a new law needed). The owner: "I thought power was meant to be the authority in charge of something?" | |
+| "Who decides" | **An aspect: one sentence that names the body**, with the place it assumes (from the plan's Where). No mark. Constrain compares it with the plan's "Who decides" for the authority label. The sentence names a legal means only when the baseline or a document states it. | "Yes I think that's good." |
+| "Legal change" | **Out of the first version.** The owner: "The legal change one feels like it might be prone to errors. Will that be based just on the LLMs knowledge of what's already in place?" It would rest on the model's knowledge, law differs by place and changes with time, and the reader knows it better. A grounded form (search and cite the present legal basis) is a later piece of work. | "Yes I think that's good." |
+
+**The aspects of the first version (eight lines):** cost · time to set up ·
+time to effect · workforce · who decides (no mark) · dependencies (no mark) ·
+coordination · delivery complexity.
+
+**Time:** the step takes about one minute in every form that was tested. The
+time comes from the sentences (one for each option, in each call), not from
+the way of comparison.
