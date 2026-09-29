@@ -398,6 +398,148 @@ records' figures.
 
 Gate: **full `make verify`** (step-6 exit). Commit.
 
+## Amendment 2 (2026-09-29)
+
+Rulings R34–R52 are in [contract.md](contract.md) § Amendment 2; the design
+detail is in [amendment-2-final.md](amendment-2-final.md). This section adds
+phases 9 to 14 and changes no phase above.
+
+> **Status:** written 2026-09-29 from amendment-2-final.md, which the owner
+> decided the same day. The adversarial review of the amendment is still to
+> come. Two questions are open there (§ 7.3): Q19 (the form of the profile
+> step in the walk, and constrain's rule when it fails) and Q20 (the hard /
+> not-hard rule on "who decides"). Phases 11 and 12 build to the answers.
+
+Executor marks as above: every prompt and its refine loop is `lead`
+(prompt-bearing work and adjudication); judgement-bearing code is
+`deep-reasoner`; mechanical work is `fast-worker`; taste-bearing frontend
+work and final words are `lead`, with the `impeccable` skill. Every new or
+changed prompt goes through § The loop (R48).
+
+**Verify gates.** Full `make verify` at Phase 9.0 and Phase 14. A phase that
+adds a schema revision (only if R45's allowed revision is needed) also closes
+on full `make verify`. Other phases close on the gates named below. One green
+commit per phase, and one per loop round that changes a prompt.
+
+### Phase 9.0 — Build-open baseline — `lead` (inline)
+
+Reason: a one-command check. The tree changed after the step-6 exit gate
+(verification.md § Amendment pass 1).
+
+Gate: **full `make verify`**.
+
+### Phase 9 — The plan (R34, R35 withdrawn)
+
+**`deep-reasoner`** (plan model) · **`fast-worker`** (plan screen structure,
+read model fields). Kind `boundary` (renamed from `requirement`; the screen
+word stays "requirement"); kind `consideration` with `aspect` (any of the
+eight lines, "who decides" included) and `hard`; the stored transferability
+consideration. No plan slot "Who decides". Plan read model additive.
+
+Gate: `make verify-fast` · `make prompt-guard` · `make drift-check`. Commit.
+
+### Phase 9L — Planning loop — `lead`
+
+`task_agent_scoping_v5`: the five kinds; a capacity statement is a
+consideration; the deadline rule; one consideration per line for a sentence
+that names several things; the question about who can act, stored as a
+consideration on "who decides"; aims as the user's words plus *assumed*
+outcomes. Measure: the planning replay on the seven questions and the probe
+`9-plan-probe-temporary-accommodation.json`, read by hand against the checks
+of amendment-2-final.md § 6.
+
+Gate: `make verify-fast` · `make prompt-guard`. Commit. Report to the owner
+(R25).
+
+### Phase 10 — Outcome counts (R42) — `fast-worker`
+
+Brief (exact rule from R42): in coverage, per option, the documents that
+evaluate the option and, among them, the documents for each plan outcome,
+from the existing `outcome_tag`. No schema, no prompt change.
+
+Gate: `make verify-fast` · `make drift-check`. Commit.
+
+### Phase 11 — The profile step (R36, R37, R40, R41, R51, R52)
+
+**`deep-reasoner`** (component, storage, add-one path) · **`fast-worker`**
+(replay stage wiring, tests from an exact list). Before `constrain`, on the
+whole list: one call per line over the whole list, the ambition call and the
+setting call, all at one time; stored in the longlist result; lever typing
+stops writing `ambition` and `ambition_reason`; the add-one path for "Add an
+option" (the new option only, with the other options' sentences and marks as
+context); a full rebuild makes all lines again, a reader's exclusion or merge
+does not; no code for stored values of an earlier development iteration; the
+replay tool stage. The form of the step in the walk and the failure rule
+follow the answer to Q19.
+
+Gate: `make verify-fast` · `make prompt-guard` · `make drift-check`; full
+`make verify` if a revision is added (R45). Commit.
+
+### Phase 11L — Profile loop — `lead`
+
+The line prompt(s), the add-one variant, the ambition prompt, the setting
+prompt, `lever_typing_v3`. Measures and checks: amendment-2-final.md § 6
+(the known faults, way A, stability, M10, M12, M14, the add-one agreement,
+the overlap of coordination with delivery complexity). Also the first read
+of the R29 lever reasons and the R31 designs, which no round has read.
+
+Gate: `make verify-fast` · `make prompt-guard`. Commit. Report to the owner
+(R25).
+
+### Phase 12 — Constrain (R38, R50) — `deep-reasoner`
+
+Constrain reads the profile. The clear-failure rule (D1); a hard
+consideration on "who decides" can exclude; one that is not hard gives the
+authority label from the line "who decides"; no such consideration, no label;
+the limit label for a hard consideration on another line, with the line's
+sentence as the reason, never an exclusion; the reasoned guess removed for a
+preference about an aspect (B8). It lands with round 0 of `constrain_v3` from
+the lead.
+
+Gate: `make verify-fast` · `make prompt-guard` · `make drift-check`. Commit.
+
+### Phase 12L — Constrain loop — `lead`
+
+`constrain_v3` with the hard-requirement test
+(`9-constrain-hard-requirements.txt`, the three clones that hold its
+requirements). Measures: M11 (reported, R49); the exclusions and labels read
+one by one.
+
+Gate: `make verify-fast` · `make prompt-guard`. Commit. Report to the owner
+(R25).
+
+### Phase 13 — Read models and views (R43, R44)
+
+13.1 **Read models — `fast-worker`.** The additive fields of
+amendment-2-final.md § 3 "Contract parts that change"; `make openapi-sync`.
+
+13.2 **Structure — `fast-worker`.** Plain rows; the authority-label filter;
+"What it is" with ambition after the lever line and the setting; the card
+block "What it would take", collapsed by default: collapsed a row of eight
+cells (name above, level word below), expanded the eight lines with
+sentences, no word for a line with no mark; the outcome counts in "What the
+evidence base holds so far"; the grid column chooser with "Middle" as the
+middle column head; the Setting facet from the option-level setting; the
+limit label; the plan screen's new kind; no compare table. Vitest tests.
+
+13.3 **Design and words — `lead`.** Reason: taste-bearing surfaces and
+product copy. The block in both states, the heading label, the level words;
+the tints put to the owner on the built screen.
+
+Gate: `make verify-fast` · `make prompt-guard` · `make drift-check` ·
+`make frontend-verify`. Commit.
+
+### Phase 14 — Live check, evidence, specs, exit — `lead`
+
+Reason: adjudication and the owner's words on spec changes. Three live rapid
+runs (obesity, refugees, caregiving); M1–M12 and M14 read back from saved
+files (M8, M10–M12 and M14 reported); spec changes with the owner's accepted
+wording; `docs/specs/log.md`; `docs/deferred.md` (burden, a grounded
+legal-change line, the outcome direction to task 3, the two-outcome count
+limit); `verification.md`.
+
+Gate: **full `make verify`**. Commit.
+
 ## Plan-review folds (2026-09-28, fallback lane)
 
 | # | Finding | Fold |
