@@ -406,8 +406,12 @@ This section adds phases 9 to 14 and changes no phase above.
 
 > **Status:** written 2026-09-29 from the final document, which the owner
 > decided the same day after the adversarial review. The eight build
-> questions (final § 7.3, B1–B8) are the lead's decision (data shape or name); the owner can change it. No open question
-> blocks a phase.
+> questions (final § 7.3, B1–B8) are the lead's decisions (data shape or
+> name); the owner can change each. The plan-stage adversarial review
+> (2026-09-30) gave 13 findings; the lead accepted all, and they are folded
+> here (the seams S16–S19, the rename sites, the typing data, the split of
+> Phase 12, the ADR task, the replay-tool tasks). No open question blocks a
+> phase.
 
 Executor marks as above: every prompt and its refine loop is `lead`
 (prompt-bearing work and adjudication); judgement-bearing code is
@@ -415,11 +419,59 @@ Executor marks as above: every prompt and its refine loop is `lead`
 work and final words are `lead`, with the `impeccable` skill. Every loop
 follows § The loop and names **one stop measure**; the other measures are
 reported (R48). The stop measures of 9L and 12L are proposed here; the lead
-confirms each at round 0.
+confirms each at round 0. **A prompt change that a code phase needs lands
+as round 0 of its loop in the same commit as that code** (the wire models
+are prompt text, and `make prompt-guard` ties them to the hashes).
 
 **Verify gates.** Full `make verify` at Phase 9.0, Phase 10 (the schema
 revision) and Phase 14. Other phases close on the gates named below. One
 green commit per phase, and one per loop round that changes a prompt.
+
+### Decisions fixed here, amendment 2 (lead seam design)
+
+Lead's decisions from the plan review (2026-09-30), in the form of S1–S15.
+Checked against the code at the head of the branch.
+
+S16. **Input of `option_profile`** (R37). It loads the walk's options that
+are not merged (as `theme_scope` loads the walk's options, but not only the
+included ones), each with its design and at most 5 member records ordered by
+role (evaluated, described, recommended, mentioned); both caps are named
+constants. Each line call gets the plan (Where only in the `who_decides`
+call) and the baseline blocks (`baseline_sections`, `render_baseline_blocks`,
+as `suggest` reads them). The judgment model.
+
+S17. **Write target** (R37, R45; B6). It updates the latest `longlist_result`
+row of the walk's scope, as `theme_scope` does: the new column
+`option_profile` (final § 2.10: per option id and design version, the line
+keys with sentence and mark `less` · `more` · null, and the setting), and the
+typing keys of S20. Lever type and ambition go on the `option` row
+(`primary_lever_type`, `secondary_lever_types`, `lever_none_fits_reason`,
+`taxonomy_version`, `ambition`, `ambition_reason`).
+
+S18. **The authority label** (R38). Constrain writes it in its own output,
+`longlist_result.judgements` (keyed `[option_id][design_version]`,
+`options_scoping/constrain/constrain.py:65-67`), as one labelled entry for
+each option that has a label; never into the `option_profile` column. Its
+input: the option's `who_decides` sentence and the plan's considerations on
+`who_decides`. With no such consideration, no entry.
+
+S19. **Read model** (R43). The option read model serves the lines, marks and
+setting from `longlist_result.option_profile`, and the authority label from
+`judgements` (the repository already reads `judgements` per design version,
+`api/readmodels/repository.py:2975-2980`). An option with no entry (added,
+not rebuilt) serves no profile.
+
+S20. **The typing data moves with lever typing** (B8). Lever typing keeps its
+behaviour as built: a failed or invalid typing batch keeps the previous
+typing (`options_scoping/longlist/longlist.py:1386-1391`). Its data stays in
+the same keys of the same `longlist_result` row, now written by
+`option_profile`, so the read side does not change: `provenance.lever_reason`
+and `provenance.runner_up` (read at `api/readmodels/repository.py:2849-2875`),
+`provenance.typing` with `kept_ids`, `seed_ids`, `discovered_ids`
+(`longlist.py:1469-1526`, `2051-2062`), `counts.typing_invalid`
+(`longlist.py:2182`), `provenance.prompt_versions.typing` and
+`provenance.models.typing` (`longlist.py:2200-2207`). A line, ambition or
+setting call that still fails after the existing retry fails the step.
 
 ### Phase 9.0 — Build-open baseline — `lead` (inline)
 
@@ -430,30 +482,53 @@ Gate: **full `make verify`**.
 
 ### Phase 9 — The plan (R34, R53; R35 withdrawn)
 
-**`deep-reasoner`** (plan model) · **`fast-worker`** (the one-off script,
-plan screen structure, read model fields). `requirement` → `boundary` in
-`ConstraintKind`, `CHECKED_AT_BY_KIND` (`runtime/scoping_plan.py:94`,
-`:99-105`) and the planning wire; the kind `consideration` with `aspect`
-(one of the eight line keys or `transferability`, B1) and `hard`;
-`consideration` checked at `assessment` in `CHECKED_AT_BY_KIND`, no new
-`CheckedAt` value (B3); the aim stays `intended_change` (B2). No plan slot
-"Who decides". The one-off script in the gitignored evidence folder
-corrects the replay clones' test plans: it renames `requirement` to
-`boundary` and rewrites the test statements about who can act as
-considerations on `who_decides` (B7). It is not product code. No code for plans of an earlier iteration (R52).
+**`deep-reasoner`** (plan model and rename) · **`fast-worker`** (the
+one-off script, the replay-tool changes, plan screen structure) · **`lead`**
+(the prompt and wire, as 9L round 0 in the same commit).
 
-Gate: `make verify-fast` · `make prompt-guard` · `make drift-check`. Commit.
+- Plan model: `requirement` → `boundary`; the kind `consideration` with
+  `aspect` (one of the eight line keys or `transferability`, B1) and `hard`;
+  `consideration` checked at `assessment` in `CHECKED_AT_BY_KIND`, no new
+  `CheckedAt` value (B3); the aim stays `intended_change` (B2). No plan slot
+  "Who decides". No code for plans of an earlier iteration (R52).
+- **Rename sites** (grep `"requirement"` again at build start):
+  `runtime/scoping_plan.py:94` (`ConstraintKind`), `:103`
+  (`CHECKED_AT_BY_KIND`), `:300` (docstring), `:374`;
+  `options_scoping/longlist_intent.py:46`; `options_scoping/suggest/suggest.py:207`;
+  `options_scoping/constrain/constrain.py:252`; `api/contract/task_agent.py:216`;
+  `frontend/src/views/workspace/planVocabulary.ts:316`;
+  `frontend/src/mock/fixtures.ts:611`; the generated types
+  (`make openapi-sync`); and the tests that hold the literal.
+- **The prompt and wire rename is the lead's**
+  (`runtime/task_agent_scoping_prompt.py:88-111`, `347-375`, `530-532`). It
+  lands as 9L round 0 in the same commit as the Phase 9 code.
+- **The one-off script** (gitignored evidence folder, not product code):
+  renames every constraint of kind `requirement` to `boundary` in the plans
+  of all seven replay clones, and rewrites the test statements about who can
+  act (the refugees and obesity clones, `set_requirements.py`) as
+  considerations on `who_decides` (B7). It keeps `guard_clone`
+  (`clone.py:118-124`) and the name check of `set_requirements.py:29-30`, and
+  never touches a row of the seven stored tasks. After Phase 9 no clone is
+  made again, unless the clone tool applies the same rename.
+- **The replay tool** (`fast-worker`): the planning replay sends one turn and
+  prints kind and text only (`replay.py` `cmd_planning`); it gains a scripted
+  second turn (the answer to the question about who can act) and prints
+  `aspect` and `hard`.
+
+Gate: `make verify-fast` · `make prompt-guard` · `make drift-check` ·
+`make openapi-sync` · `make frontend-verify`. Commit.
 
 ### Phase 9L — Planning loop — `lead`
 
 `task_agent_scoping_v5`: the five kinds; A4–A6 as copied in final § 2.1; the
 deadline rule; one consideration per line for a sentence that names several
 things; the new question about who can act, stored as a consideration on
-"who decides"; B8 as a planning rule. Replay: the seven questions and the
-probe `9-plan-probe-temporary-accommodation.json`.
+`who_decides`; B8 as a planning rule. Replay: tuning set obesity, refugees,
+caregiving, energy, plus the probe `9-plan-probe-temporary-accommodation.json`;
+check set NEET, heat pumps, cohesion (the first build's split).
 
-Stop measure (proposed): every statement of the seven questions and the
-probe lands in the right kind and line, read by hand.
+Stop measure (proposed): on the tuning set and the probe, every statement
+lands in the right kind and line (`aspect`), read by hand.
 
 Gate: `make verify-fast` · `make prompt-guard`. Commit. Report to the owner
 (R25).
@@ -461,11 +536,8 @@ Gate: `make verify-fast` · `make prompt-guard`. Commit. Report to the owner
 ### Phase 10 — The schema revision (R45) — `deep-reasoner`
 
 One reversible alembic revision on `d8f3b6a2c4e1`: the JSON column
-`longlist_result.option_profile`, keyed by option id and design version as
-`judgements` is. Per option: for each line key (`cost`, `time_to_set_up`,
-`time_to_effect`, `workforce`, `who_decides`, `dependencies`,
-`coordination`, `delivery_complexity`) the sentence and the mark (`less`,
-`more` or null); the setting. No entry = not profiled yet (B6). Round-trip test. No other schema change.
+`longlist_result.option_profile` (S17; shape in final § 2.10). Round-trip
+test. No other schema change.
 
 Gate: **full `make verify`**. Commit.
 
@@ -478,39 +550,68 @@ plan outcome (a document counts when one of its evaluating records has that
 
 Gate: `make verify-fast` · `make drift-check`. Commit.
 
-### Phase 12 — The component `option_profile` (R36, R37, R40, R41, R52)
+### Phase 11A — ADR 0040 amendment — `lead`
 
-**`deep-reasoner`** (component, the move of lever typing, storage) ·
-**`fast-worker`** (replay stage wiring, stage key and progress label
-structure, tests from an exact list). Brief, the same kinds of work as S13a
-did for `theme`:
+ADR 0040 (committed on this branch at `5d9f206a`, not merged) is amended
+before Phase 12: the walk becomes `longlist → option_profile → constrain →
+theme`; lever typing is in `option_profile`; the place exception of R38. Its
+own commit.
+
+Gate: `make verify-fast`. Commit.
+
+### Phase 12a — The component `option_profile`, typing moved (R37; S16, S17, S20)
+
+**`deep-reasoner`** (component, the move of lever typing, the schema
+read and write) · **`fast-worker`** (registration sites, stage key and
+progress label structure, stub, replay stage, tests from an exact list).
+No new prompt; behaviour is unchanged except where typing runs. Brief, the
+same kinds of work as S13a did for `theme`:
 
 - A spine component between `longlist` and `constrain`: `LONGLIST_CHAIN` in
   `runtime/scoping_plan.py` becomes `… → longlist → option_profile →
-  constrain → theme`. Registered in `runtime/run_spec.py`,
-  `runtime/harness.py`, `runtime/task_plan.py` and `LLM_BEARING_COMPONENTS`
-  (`runtime/runner.py:175-192`); stage key `option_profile` in
-  `api/stage_vocabulary.py`; the stage in
-  `frontend/src/views/workspace/runProgress.ts`; its package under
-  `options_scoping/`, prompt hashes pinned in `scripts/prompt_hashes.json`.
+  constrain → theme`.
+- **Registration:** `runtime/run_spec.py`; `runtime/harness.py` (the
+  component map and the dispatch near `:717`); `runtime/task_plan.py`;
+  `LLM_BEARING_COMPONENTS` (`runtime/runner.py:175-192`);
+  `api/contract/sse.py` (both copies: `StageKey` and `STAGE_KEYS`,
+  `:27-62`); `api/contract/task_agent.py:70-83`; `api/stage_vocabulary.py`
+  (the stage map near `:64` and the blurb near `:44`; the blurb's words are
+  the lead's); `frontend/src/views/workspace/runProgress.ts`.
 - Lever typing moves from `longlist` (its step 6) into `option_profile` as
-  built, with the R29 lever reason and the keep-previous rule for one
-  invalid typing (S12; B8). `longlist` writes no typing and no ambition.
-  `suggest` does not change.
-- Inside it, at one time: one call per line over the whole list, the
-  ambition call and the setting call. Input per call: the plan (Where for
-  "who decides" only), the baseline, and per option its design and at most
-  5 records by role; the caps are constants; the judgment model.
-- Writes: the lines and the setting to `longlist_result.option_profile`;
-  the lever type to the option columns; ambition's mark (`less`, `more` or
-  null) to `option.ambition` and its sentence to `option.ambition_reason`. No special failure rule: a failed call is
-  tried again by the existing means, then the step fails.
-- A full rebuild makes all again. "Add an option" does not change.
+  built: the backend method and its stub (`longlist_backend.py:359-374`,
+  stub near `:559`), the Langfuse name (`longlist:type`, `:374`), the typing
+  data of S20. `longlist` writes no typing and no ambition. `suggest` does
+  not change.
+- Its package under `options_scoping/`; the lever typing prompt keeps its
+  text and hash (only its path moves in `scripts/prompt_hashes.json`).
 - The replay tool has `option_profile` as a stage.
 
 Tests: the chain order; the registry, the harness graph, the plan mapping,
-`LLM_BEARING_COMPONENTS` and the run stream know `option_profile`; `longlist`
-writes no typing and no ambition; a failed call fails the step.
+`LLM_BEARING_COMPONENTS`, the run stream and the stage map know
+`option_profile`; `longlist` writes no typing; **the lever types, the typing
+keys and the counts of a stub run are the same as before the move.**
+
+Gate: `make verify-fast` · `make prompt-guard` · `make drift-check` ·
+`make openapi-sync` · `make frontend-verify`. Commit.
+
+### Phase 12b — The line, ambition and setting calls (R36, R40, R41; S16, S17)
+
+**`deep-reasoner`** (the calls, storage) · **`lead`** (12L round 0 in the
+same commit: the line, ambition and setting prompts, and the typing wire
+without `ambition` and `ambition_reason`).
+
+- Inside `option_profile`, at one time: one call per line over the whole
+  list, the ambition call and the setting call, with the input of S16; the
+  backend methods, their stubs and their Langfuse names.
+- Writes as S17: the lines and the setting to `longlist_result.option_profile`;
+  ambition's mark (`less`, `more` or null) to `option.ambition` and its
+  sentence to `option.ambition_reason`. A line, ambition or setting call that
+  still fails after the existing retry fails the step (S20).
+- A full rebuild makes all again. "Add an option" does not change.
+
+Tests: each line key is written for every option; ambition values are
+`less`, `more` or null; a failed line call fails the step; a failed typing
+batch keeps the previous typing.
 
 Gate: `make verify-fast` · `make prompt-guard` · `make drift-check`. Commit.
 
@@ -522,40 +623,43 @@ designs, which no round has read.
 
 Stop measure (proposed): none of the six known faults of final § 6.1 on the
 tuning set, read by hand. Reported: M10, M12, M14, stability, the overlap of
-coordination with delivery complexity.
+coordination with delivery complexity; **lever typing:** the lever spread
+and the reasons read by hand beside the first build's final read; **ambition:**
+the count of `less` / `more` / no mark per list, and the sentences read by
+hand against "not the size of the studies, not whether it works".
 
 Gate: `make verify-fast` · `make prompt-guard`. Commit. Report to the owner
 (R25).
 
-### Phase 13 — Constrain (R38) — `deep-reasoner`
+### Phase 13 — Constrain (R38; S18) — `deep-reasoner`
 
-Constrain reads `option_profile`. The authority label from the line "who
-decides" and the user's consideration on it; never an exclusion; no label
-without the consideration. The place exception: constrain reads that line;
-all other plan data stays place-stripped. D1 is not in amendment 2 (B5):
-constrain's exclusions do not change. It lands with round 0 of `constrain_v3` from the
-lead.
+Constrain reads `option_profile`. The authority label as S18, from the
+`who_decides` sentence and the plan's considerations on `who_decides`; never
+an exclusion; no label without the consideration. The place exception:
+constrain reads that line; all other plan data stays place-stripped. D1 is
+not in amendment 2 (B5): constrain's exclusions do not change. It lands with
+round 0 of `constrain_v3` from the lead.
 
 Gate: `make verify-fast` · `make prompt-guard` · `make drift-check`. Commit.
 
 ### Phase 13L — Constrain loop — `lead`
 
-`constrain_v3` on the hard-requirement test data
-(`9-constrain-hard-requirements.txt`, the clones as Phase 9's script left
-them, with the statements about who can act as considerations on
-`who_decides`).
+`constrain_v3` on the refugees and obesity clones, whose plans hold the
+test statements about who can act (`9-constrain-hard-requirements.txt`),
+rewritten by Phase 9's script as considerations on `who_decides`.
 
 Stop measure: M11, the authority label right for at least 9 of 10 options,
-read by hand. Reported: no exclusion comes from "who decides".
+read by hand. No check-set read is possible for M11: only these two clones
+hold such statements. Reported: no exclusion comes from `who_decides`.
 
 Gate: `make verify-fast` · `make prompt-guard`. Commit. Report to the owner
 (R25).
 
-### Phase 14a — Read models and views (R40, R43, R44)
+### Phase 14a — Read models and views (R40, R43, R44; S19)
 
 14a.1 **Read models — `fast-worker`.** Remove `ambition_bands` and the
 ambition group source; add the fields of final § 3 "Contract parts that
-change"; `make openapi-sync`.
+change" as S19; `make openapi-sync`.
 
 14a.2 **Structure — `fast-worker`.** Plain rows (no ambition word); grouping
 by theme and lever type only; the authority-label filter; "What it is" with
@@ -563,8 +667,8 @@ ambition after the lever line and the setting; "What it would take"
 collapsed by default (a row of eight cells), expanded the eight lines,
 hidden for an added option before a rebuild; the outcome counts in "What the
 evidence base holds so far"; the grid column chooser with "Middle" and
-"Untagged"; the Setting facet from the option-level setting; the plan
-screen's kinds; no compare table. Vitest tests.
+"Untagged"; the Setting facet from the option-level setting; no compare
+table. (The plan screen's kinds are done in Phase 9.) Vitest tests.
 
 14a.3 **Design and words — `lead`.** The block in both states, the heading
 label, the level words; the tints put to the owner on the built screen.
@@ -574,11 +678,19 @@ Gate: `make verify-fast` · `make prompt-guard` · `make drift-check` ·
 
 ### Phase 14 — Live check, evidence, specs, exit — `lead`
 
-Three live rapid runs (obesity, refugees, caregiving); M1–M12 and M14 read
-back from saved files; spec changes with the owner's accepted wording
-(`option_profile` included); `docs/specs/log.md`; `docs/deferred.md`
-(burden, a grounded legal-change line, the outcome direction and the limits
-for task 3, building an added option in place); `verification.md`.
+- Three live rapid runs (obesity, refugees, caregiving); M1–M10, M12 and M14
+  read back from saved files. M11 is read in 13L from the refugees and
+  obesity clones, not from live runs.
+- The browser check on the live obesity run (rubric box 33): the card in
+  both states, the grid with a chosen line, the list rows, the filter.
+- `verification.md` gains: the overlap figure (box 38), the round records of
+  every loop (box 35) and of the one-off script (box 45), the OpenAPI diff
+  (box 46), the rollback as the contract states it, and the known limits of
+  final § 2.10.
+- Spec changes with the owner's accepted wording (`option_profile`
+  included); `docs/specs/log.md`; `docs/deferred.md` (burden, a grounded
+  legal-change line, the outcome direction and the limits for task 3,
+  building an added option in place, "studied in").
 
 Gate: **full `make verify`**. Commit.
 

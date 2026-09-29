@@ -152,10 +152,14 @@ that is not a loop's stop measure is reported, not passed (R48, R49).
     (`task_plan.py`), `LLM_BEARING_COMPONENTS` (`runner.py`), the stage key
     `option_profile` on the run stream and the stage in `runProgress.ts` all
     know it, as they know `theme`. Lever typing is in `option_profile` as
-    built, with its keep-previous rule for one invalid typing; `longlist`
-    has no typing code and writes no ambition. There is no code
-    path for a built list with no profile; a failed call fails the step
-    after the existing retry (a test shows it). Each line call gets the plan
+    built, with its keep-previous rule for a failed or invalid typing batch;
+    its data stays in the same `longlist_result` keys (`provenance`
+    `lever_reason`, `runner_up`, `typing`, `prompt_versions.typing`,
+    `models.typing`; `counts.typing_invalid`), and a test shows a stub run's
+    lever types and typing keys are the same as before the move. `longlist`
+    has no typing code and writes no ambition. There is no code path for a
+    built list with no profile; a line, ambition or setting call that fails
+    after the existing retry fails the step (a test shows it). Each line call gets the plan
     (Where only for "who decides"), the baseline, and per option its design
     and at most 5 records by role; the caps are named constants; the model
     is the judgment model.
@@ -173,7 +177,9 @@ that is not a loop's stop measure is reported, not passed (R48, R49).
     tuning set). Constrain reads that line and no other place text (its
     other plan data stays stripped, `constrain.py:_plan_data`). Constrain
     gives *within your power* · *needs action by <body>* · *unclear* from the
-    user's consideration on "who decides"; with none, no label. **No
+    user's consideration on "who decides", as one labelled entry in
+    `longlist_result.judgements`, never in `option_profile`; with none, no
+    entry. The option read model serves it from `judgements`. **No
     exclusion comes from "who decides" or from any consideration** (a test,
     and the 13L round record). The label is a filter on the list, not the
     sort order. M11 on the hard-requirement data: threshold 9 of 10 options
@@ -267,7 +273,10 @@ that is not a loop's stop measure is reported, not passed (R48, R49).
 43. [ ] **Spec changes of amendment 2**, `option_profile` included, are
     applied only with the owner's accepted wording, with one line each in
     `docs/specs/log.md`.
-44. [ ] **Gates.** Full `make verify` passes at Phases 9.0, 10 and 14.
+44. [ ] **Gates.** Full `make verify` passes at Phases 9.0, 10 and 14;
+    Phases 9 and 12a also pass `make openapi-sync` and `make frontend-verify`.
+    ADR 0040 is amended (walk, typing in `option_profile`, place exception)
+    in its own commit before Phase 12a.
 46. [ ] **The contract's corrected lines hold.** The OpenAPI diff shows the
     removal of `ambition_bands` and the additions of final § 3 and nothing
     else; `verification.md` records the rollback as the contract states it
