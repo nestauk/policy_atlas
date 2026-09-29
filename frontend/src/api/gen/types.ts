@@ -1791,6 +1791,8 @@ export interface components {
          *         appraisal_label: Optional appraisal label.
          *         evidence_type: The cited document's classified evidence type — the
          *             input the appraisal rubric scores from.
+         *         text_basis: The cited document's extraction basis (`abstract_only`
+         *             or `full_text`), when known (task 046).
          */
         CitationOut: {
             /** Appraisal Label */
@@ -1814,6 +1816,8 @@ export interface components {
             source_id?: string | null;
             /** Source Title */
             source_title: string;
+            /** Text Basis */
+            text_basis?: string | null;
         };
         /**
          * CitedInOut
@@ -2261,6 +2265,8 @@ export interface components {
          *         inherited_labels: Documents whose type and tier were read from a
          *             linked task.
          *         abstract_only: Documents read from an abstract only.
+         *         tried_on: The populations its adjacent evidence was tried on, most
+         *             documents first (task 046).
          */
         EvidenceProfileOut: {
             /**
@@ -2301,6 +2307,8 @@ export interface components {
             populations?: string[];
             /** Settings */
             settings?: string[];
+            /** Tried On */
+            tried_on?: components["schemas"]["TriedOnOut"][];
             where_tried: components["schemas"]["WhereTriedOut"];
         };
         /**
@@ -2839,6 +2847,14 @@ export interface components {
          *         unclustered: Records assigned to no option.
          *         not_an_option: Records judged not to describe an actionable option.
          *         none_fits: Options no lever type fits.
+         *         title_only: Records the pool held with a title only (task 046).
+         *         thinned_mentioned: Records dropped for stating no design feature and
+         *             no outcome (`mentioned_without_features_or_outcome`, task 046).
+         *         thinned_collapsed: Records collapsed onto one per document for
+         *             sharing a folded intervention name (`same_name_in_document`,
+         *             task 046).
+         *         thinned_capped: Records dropped over the per-document cap
+         *             (`over_document_cap`, task 046).
          */
         LonglistCountsOut: {
             /** Excluded */
@@ -2855,6 +2871,26 @@ export interface components {
             options: number;
             /** Themes */
             themes: number;
+            /**
+             * Thinned Capped
+             * @default 0
+             */
+            thinned_capped: number;
+            /**
+             * Thinned Collapsed
+             * @default 0
+             */
+            thinned_collapsed: number;
+            /**
+             * Thinned Mentioned
+             * @default 0
+             */
+            thinned_mentioned: number;
+            /**
+             * Title Only
+             * @default 0
+             */
+            title_only: number;
             /** Unclustered */
             unclustered: number;
         };
@@ -2880,6 +2916,9 @@ export interface components {
          *             order (the grid's rows).
          *         lever_type_definitions: The same list with each type's one-line
          *             definition (the list view's group headings).
+         *         lever_type_definitions_by_version: Every lever-type taxonomy version's
+         *             definitions, keyed by version, so an option typed under an
+         *             earlier version can show that version's wording (task 046).
          *         ambition_bands: The ambition bands, in order (the grid's columns).
          *         taxonomy_version: The lever-type list version.
          *         depth_label: The depth label every longlist surface carries.
@@ -2902,6 +2941,10 @@ export interface components {
             depth_label: "scoping pass";
             /** Lever Type Definitions */
             lever_type_definitions?: components["schemas"]["LeverTypeOut"][];
+            /** Lever Type Definitions By Version */
+            lever_type_definitions_by_version?: {
+                [key: string]: components["schemas"]["LeverTypeOut"][];
+            };
             /** Lever Types */
             lever_types?: string[];
             /** Options */
@@ -3131,6 +3174,8 @@ export interface components {
          *         plan_version: The plan version that longlist was built from.
          *         where_label: The words the `where` group is shown under.
          *         depth_label: The depth label every longlist surface carries.
+         *         variants: The option's distinct intervention names, folded seeds
+         *             first (task 046).
          */
         OptionOut: {
             /**
@@ -3216,6 +3261,8 @@ export interface components {
             restriction_text?: string | null;
             /** Run Id */
             run_id?: string | null;
+            /** Runner Up Lever Type */
+            runner_up_lever_type?: string | null;
             /**
              * Search Pending
              * @default false
@@ -3234,6 +3281,10 @@ export interface components {
             taxonomy_version?: string | null;
             /** Transferability */
             transferability?: "checked at assessment" | null;
+            /** Tried On */
+            tried_on?: components["schemas"]["TriedOnOut"][];
+            /** Variants */
+            variants?: components["schemas"]["VariantOut"][];
             /** Where Label */
             where_label: string;
             where_tried: components["schemas"]["WhereTriedOut"];
@@ -3305,6 +3356,11 @@ export interface components {
          *             origin, or when the section was not recorded (task 045, F3).
          *         also_found_as: The names of the duplicates merged into this option
          *             (their documents are its documents); empty when none.
+         *         runner_up_lever_type: The lever type the typing pass came closest to
+         *             besides the primary, when one was recorded; `null` otherwise
+         *             (task 046).
+         *         tried_on: The populations its adjacent evidence was tried on, most
+         *             documents first (task 046).
          */
         OptionSummaryOut: {
             /**
@@ -3367,6 +3423,8 @@ export interface components {
             relations?: components["schemas"]["RelationOut"][];
             /** Restriction Text */
             restriction_text?: string | null;
+            /** Runner Up Lever Type */
+            runner_up_lever_type?: string | null;
             /**
              * Search Pending
              * @default false
@@ -3383,6 +3441,8 @@ export interface components {
             state: "included" | "excluded";
             /** Taxonomy Version */
             taxonomy_version?: string | null;
+            /** Tried On */
+            tried_on?: components["schemas"]["TriedOnOut"][];
             where_tried: components["schemas"]["WhereTriedOut"];
         };
         /**
@@ -5114,6 +5174,20 @@ export interface components {
             type: "tick";
         };
         /**
+         * TriedOnOut
+         * @description One population the option's adjacent evidence was tried on (task 046).
+         *
+         *     Args:
+         *         population: The population text (its facet label).
+         *         documents: Its documents (DOI-collapsed).
+         */
+        TriedOnOut: {
+            /** Documents */
+            documents: number;
+            /** Population */
+            population: string;
+        };
+        /**
          * TurnActionOut
          * @description The longlist verb a Task Agent turn applied, once the user confirmed it.
          *
@@ -5184,6 +5258,26 @@ export interface components {
             msg: string;
             /** Error Type */
             type: string;
+        };
+        /**
+         * VariantOut
+         * @description One distinct intervention name among the option's members (task 046).
+         *
+         *     Args:
+         *         name: The variant's name (a member's intervention name, or a folded
+         *             seed's name).
+         *         documents: Its documents (DOI-collapsed; a folded seed shows the
+         *             larger of its own and a same-named member's count).
+         *         folded_seed: Whether this variant is an option discovery folded into
+         *             this one, listed first.
+         */
+        VariantOut: {
+            /** Documents */
+            documents: number;
+            /** Folded Seed */
+            folded_seed: boolean;
+            /** Name */
+            name: string;
         };
         /**
          * WaitlistSignup

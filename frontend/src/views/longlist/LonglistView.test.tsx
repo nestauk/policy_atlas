@@ -135,6 +135,21 @@ describe("LonglistView", () => {
     expect(screen.queryByText("Youth guarantee")).not.toBeInTheDocument();
   });
 
+  // Task 046, contract item 5: a plain grouped count beside Where tried,
+  // that never filters an option out of the list.
+  it("shows the Tried on facet as a plain grouped count that never filters", async () => {
+    const user = userEvent.setup();
+    renderLonglist();
+    const triedOnGroup = screen.getByRole("group", { name: "Tried on" });
+    expect(
+      within(triedOnGroup).getByText("18-24 year-olds in Northern England (1)"),
+    ).toBeInTheDocument();
+    expect(within(triedOnGroup).queryByRole("button")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Expand all" }));
+    expect(screen.getByText("School-based mentoring")).toBeInTheDocument();
+    expect(screen.getByText("Youth guarantee")).toBeInTheDocument();
+  });
+
   it("summarises a collapsed theme with its description and option names, plus a No theme section", () => {
     renderLonglist();
     expect(

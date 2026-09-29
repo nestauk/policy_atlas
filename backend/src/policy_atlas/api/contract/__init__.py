@@ -125,6 +125,8 @@ from .read_models import (
     ThemeRefItemOut,
     ThemeRefOut,
     ThemeSourceOut,
+    TriedOnOut,
+    VariantOut,
     WhereTriedGroup,
     WhereTriedOut,
 )
@@ -237,6 +239,8 @@ __all__ = [
     "OptionState",
     "OptionSummaryOut",
     "RelationOut",
+    "TriedOnOut",
+    "VariantOut",
     "WhereTriedGroup",
     "WhereTriedOut",
     "CHAT_MESSAGE_MAX",

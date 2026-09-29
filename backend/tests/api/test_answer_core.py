@@ -175,6 +175,8 @@ def test_answers_over_a_paused_walk_without_writing_a_row(engine: Engine) -> Non
         # Resolved to a document, not left as a durable id (the chat rule).
         assert payload.citations[0]["source_title"] == title
         assert payload.citations[0]["source_id"]
+        # The cited chunk's snapshot basis rides through unchanged (task 046).
+        assert payload.citations[0]["text_basis"] == "full_text"
         assert payload.evidence_not_held is False
         assert payload.stopped_before_evidence_check is False
         assert payload.as_payload()["enrichment"] == {"status": "pending"}

@@ -392,6 +392,8 @@ class CitationOut(BaseModel):
         appraisal_label: Optional appraisal label.
         evidence_type: The cited document's classified evidence type — the
             input the appraisal rubric scores from.
+        text_basis: The cited document's extraction basis (`abstract_only`
+            or `full_text`), when known (task 046).
     """
 
     citation_id: uuid.UUID
@@ -403,6 +405,7 @@ class CitationOut(BaseModel):
     grounding_rationale: str | None = None
     appraisal_label: str | None = None
     evidence_type: str | None = None
+    text_basis: str | None = None
 
 
 class GapCaveatOut(BaseModel):
@@ -757,6 +760,14 @@ class LonglistCountsOut(BaseModel):
         unclustered: Records assigned to no option.
         not_an_option: Records judged not to describe an actionable option.
         none_fits: Options no lever type fits.
+        title_only: Records the pool held with a title only (task 046).
+        thinned_mentioned: Records dropped for stating no design feature and
+            no outcome (`mentioned_without_features_or_outcome`, task 046).
+        thinned_collapsed: Records collapsed onto one per document for
+            sharing a folded intervention name (`same_name_in_document`,
+            task 046).
+        thinned_capped: Records dropped over the per-document cap
+            (`over_document_cap`, task 046).
     """
 
     options: int
@@ -767,6 +778,10 @@ class LonglistCountsOut(BaseModel):
     unclustered: int
     not_an_option: int
     none_fits: int
+    title_only: int = 0
+    thinned_mentioned: int = 0
+    thinned_collapsed: int = 0
+    thinned_capped: int = 0
 
 
 class LonglistThemeOut(BaseModel):
@@ -830,6 +845,18 @@ class RelationOut(BaseModel):
     other_name: str
 
 
+class TriedOnOut(BaseModel):
+    """One population the option's adjacent evidence was tried on (task 046).
+
+    Args:
+        population: The population text (its facet label).
+        documents: Its documents (DOI-collapsed).
+    """
+
+    population: str
+    documents: int
+
+
 class OptionSummaryOut(BaseModel):
     """One option as the list view and the grid show it.
 
@@ -869,6 +896,11 @@ class OptionSummaryOut(BaseModel):
             origin, or when the section was not recorded (task 045, F3).
         also_found_as: The names of the duplicates merged into this option
             (their documents are its documents); empty when none.
+        runner_up_lever_type: The lever type the typing pass came closest to
+            besides the primary, when one was recorded; `null` otherwise
+            (task 046).
+        tried_on: The populations its adjacent evidence was tried on, most
+            documents first (task 046).
     """
 
     option_id: uuid.UUID
@@ -882,6 +914,7 @@ class OptionSummaryOut(BaseModel):
     restriction_text: str | None = None
     primary_lever_type: str | None = None
     lever_none_fits_reason: str | None = None
+    runner_up_lever_type: str | None = None
     secondary_lever_types: list[str] = Field(default_factory=list)
     ambition: str | None = None
     ambition_reason: str | None = None
@@ -897,6 +930,7 @@ class OptionSummaryOut(BaseModel):
     search_pending: bool = False
     from_section: str | None = None
     also_found_as: list[str] = Field(default_factory=list)
+    tried_on: list[TriedOnOut] = Field(default_factory=list)
 
 
 class AmbitionBandOut(BaseModel):
@@ -946,6 +980,9 @@ class LonglistOut(BaseModel):
             order (the grid's rows).
         lever_type_definitions: The same list with each type's one-line
             definition (the list view's group headings).
+        lever_type_definitions_by_version: Every lever-type taxonomy version's
+            definitions, keyed by version, so an option typed under an
+            earlier version can show that version's wording (task 046).
         ambition_bands: The ambition bands, in order (the grid's columns).
         taxonomy_version: The lever-type list version.
         depth_label: The depth label every longlist surface carries.
@@ -963,6 +1000,9 @@ class LonglistOut(BaseModel):
     where_label: str
     lever_types: list[str] = Field(default_factory=list)
     lever_type_definitions: list[LeverTypeOut] = Field(default_factory=list)
+    lever_type_definitions_by_version: dict[str, list[LeverTypeOut]] = Field(
+        default_factory=dict
+    )
     ambition_bands: list[AmbitionBandOut] = Field(default_factory=list)
     taxonomy_version: str | None = None
     depth_label: Literal["scoping pass"] = "scoping pass"
@@ -988,6 +1028,8 @@ class EvidenceProfileOut(BaseModel):
         inherited_labels: Documents whose type and tier were read from a
             linked task.
         abstract_only: Documents read from an abstract only.
+        tried_on: The populations its adjacent evidence was tried on, most
+            documents first (task 046).
     """
 
     documents: int = 0
@@ -1001,6 +1043,7 @@ class EvidenceProfileOut(BaseModel):
     flagged_not_stated: int = 0
     inherited_labels: int = 0
     abstract_only: int = 0
+    tried_on: list[TriedOnOut] = Field(default_factory=list)
 
 
 class JudgementOut(BaseModel):
@@ -1076,6 +1119,23 @@ class OptionDocumentOut(BaseModel):
     source_task_id: uuid.UUID | None = None
 
 
+class VariantOut(BaseModel):
+    """One distinct intervention name among the option's members (task 046).
+
+    Args:
+        name: The variant's name (a member's intervention name, or a folded
+            seed's name).
+        documents: Its documents (DOI-collapsed; a folded seed shows the
+            larger of its own and a same-named member's count).
+        folded_seed: Whether this variant is an option discovery folded into
+            this one, listed first.
+    """
+
+    name: str
+    documents: int
+    folded_seed: bool
+
+
 class OptionOut(OptionSummaryOut):
     """The `option` read model: the option card, assembled (D15).
 
@@ -1095,6 +1155,8 @@ class OptionOut(OptionSummaryOut):
         plan_version: The plan version that longlist was built from.
         where_label: The words the `where` group is shown under.
         depth_label: The depth label every longlist surface carries.
+        variants: The option's distinct intervention names, folded seeds
+            first (task 046).
     """
 
     design: OptionDesignOut
@@ -1110,6 +1172,7 @@ class OptionOut(OptionSummaryOut):
     plan_version: int | None = None
     where_label: str
     depth_label: Literal["scoping pass"] = "scoping pass"
+    variants: list[VariantOut] = Field(default_factory=list)
 
 
 class OptionAddIn(BaseModel):

@@ -28,6 +28,7 @@ import {
   constraintLabel,
   countsLine,
   definitionSentence,
+  leverDefinitionFor,
   instrumentsSummary,
   leverAmbitionLabel,
   longlistTitle,
@@ -123,6 +124,18 @@ export function LonglistView({ taskId, longlist }: { taskId: string; longlist: L
   const allSettings = [...settingCounts.entries()]
     .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
     .map(([setting]) => setting);
+  // The Tried on facet (task 046): a plain grouped count of the options'
+  // adjacent-evidence populations, beside Where tried — it never filters an
+  // option out of the list and never excludes (task 046, item 23).
+  const triedOnCounts = new Map<string, number>();
+  for (const option of options) {
+    for (const entry of option.tried_on ?? []) {
+      triedOnCounts.set(entry.population, (triedOnCounts.get(entry.population) ?? 0) + 1);
+    }
+  }
+  const triedOnChips = [...triedOnCounts.entries()].sort(
+    (a, b) => b[1] - a[1] || a[0].localeCompare(b[0]),
+  );
   const [allSettingsShown, setAllSettingsShown] = useState(false);
   const shownSettings =
     allSettingsShown || allSettings.length <= SETTING_FACET_LIMIT
@@ -326,16 +339,20 @@ export function LonglistView({ taskId, longlist }: { taskId: string; longlist: L
     summary: definition,
   });
   const byLever = [
-    ...leverTypes.map((lever) =>
-      withDefinition(
-        {
-          key: lever,
-          name: capitalise(lever),
-          options: includedOptions.filter((option) => option.primary_lever_type === lever).sort((a, b) => a.name.localeCompare(b.name)),
-        },
-        leverDefinitions.get(lever) ?? "",
-      ),
-    ),
+    ...leverTypes.map((lever) => {
+      const group = includedOptions
+        .filter((option) => option.primary_lever_type === lever)
+        .sort((a, b) => a.name.localeCompare(b.name));
+      return withDefinition(
+        { key: lever, name: capitalise(lever), options: group },
+        leverDefinitionFor(
+          lever,
+          group,
+          longlist.lever_type_definitions_by_version,
+          leverDefinitions.get(lever) ?? "",
+        ),
+      );
+    }),
     withDefinition(
       {
         key: "none-fits",
@@ -484,6 +501,16 @@ export function LonglistView({ taskId, longlist }: { taskId: string; longlist: L
             </button>
           ))}
         </div>
+        {triedOnChips.length > 0 && (
+          <div role="group" aria-label="Tried on" className="mt-2 flex flex-wrap items-start gap-1.5">
+            <span className={FACET_LABEL_CLASS}>Tried on</span>
+            {triedOnChips.map(([population, count]) => (
+              <span key={population} className={facetChipClass(false)}>
+                {scrub(population)} ({count})
+              </span>
+            ))}
+          </div>
+        )}
         {filtersActive && (
           <p className="mt-3 text-meta text-grey" role="status">
             {shownCount === 0

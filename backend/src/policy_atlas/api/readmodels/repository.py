@@ -64,6 +64,8 @@ from policy_atlas.api.contract import (
     ThemeRefItemOut,
     ThemeRefOut,
     ThemeSourceOut,
+    TriedOnOut,
+    VariantOut,
     WhereTriedOut,
 )
 from policy_atlas.api.lifecycle import LIFECYCLE_EVENT_KINDS, both_generations
@@ -125,6 +127,7 @@ from policy_atlas.options_scoping.longlist.lever_types import (
     LEVER_TYPE_KEYS,
     LEVER_TYPES,
     TAXONOMY_VERSION,
+    lever_types_by_version,
 )
 from policy_atlas.options_scoping.longlist.longlist import TYPING_INVALID_REASON
 from policy_atlas.options_scoping.longlist.where_tried import where_codes, where_group
@@ -1452,6 +1455,20 @@ def artefact_out(conn: Connection, task_id: uuid.UUID) -> ArtefactOut | None:
         else []
     )
     snapshots = {row.source_snapshot_id for row in citation_rows}
+    # The cited snapshot's own basis (task 046) — not envelope-resolved: it
+    # says whether THIS quote's snapshot is full text or an abstract only.
+    text_basis_by_snapshot = (
+        {
+            row.source_snapshot_id: row.text_basis
+            for row in conn.execute(
+                select(source_snapshot.c.source_snapshot_id, source_snapshot.c.text_basis).where(
+                    source_snapshot.c.source_snapshot_id.in_(snapshots)
+                )
+            )
+        }
+        if snapshots
+        else {}
+    )
     # Bibliographic authority is the document's ENVELOPE snapshot; a cited
     # full-text snapshot is only the textual authority (its metadata carries
     # fetch facts, never a title). Every display read resolves through the
@@ -1543,6 +1560,7 @@ def artefact_out(conn: Connection, task_id: uuid.UUID) -> ArtefactOut | None:
                     if label is not None and label.quality_score is not None
                     else None,
                     evidence_type=label.evidence_type if label is not None else None,
+                    text_basis=text_basis_by_snapshot.get(snapshot_id),
                 )
             )
         claim_type = (
@@ -2800,6 +2818,49 @@ def _where_tried_out(raw: object) -> WhereTriedOut:
     return WhereTriedOut(**{group: _count(counts.get(group)) for group in _WHERE_GROUPS})
 
 
+def _tried_on_out(raw: object) -> list[TriedOnOut]:
+    """Coverage's ``tried_on`` list, read defensively (an old stored record has none)."""
+    out: list[TriedOnOut] = []
+    for item in raw if isinstance(raw, list) else []:
+        entry = _as_mapping(item)
+        population = entry.get("population")
+        if isinstance(population, str) and population:
+            out.append(TriedOnOut(population=population, documents=_count(entry.get("documents"))))
+    return out
+
+
+def _variants_out(raw: object) -> list[VariantOut]:
+    """Coverage's ``variants`` list, read defensively (an old stored record has none)."""
+    out: list[VariantOut] = []
+    for item in raw if isinstance(raw, list) else []:
+        entry = _as_mapping(item)
+        name = entry.get("name")
+        if isinstance(name, str) and name:
+            out.append(
+                VariantOut(
+                    name=name,
+                    documents=_count(entry.get("documents")),
+                    folded_seed=bool(entry.get("folded_seed")),
+                )
+            )
+    return out
+
+
+def _runner_up_lever_type(result: Any | None, option_id: uuid.UUID) -> str | None:
+    """The runner-up lever type the longlist provenance recorded for an option.
+
+    ``provenance["runner_up"]`` is ``{option_id: {"lever_type", ...}}``, written
+    by the longlist component (an entry can carry ``carried_forward: true``
+    when a kept typing's runner-up came from an earlier build) — task 046.
+    """
+    if result is None:
+        return None
+    runner_ups = _as_mapping(_as_mapping(result.provenance).get("runner_up"))
+    entry = _as_mapping(runner_ups.get(str(option_id)))
+    lever = entry.get("lever_type")
+    return lever if isinstance(lever, str) else None
+
+
 def _latest_longlist_row(conn: Connection, task_id: uuid.UUID) -> Any | None:
     """The task's latest ``longlist_result`` row (a longlist exists iff one does)."""
     return conn.execute(
@@ -2949,6 +3010,7 @@ def _option_summary_fields(
     search_pending: bool = False,
     from_section: str | None = None,
     also_found_as: list[str] | None = None,
+    runner_up_lever_type: str | None = None,
 ) -> dict[str, Any]:
     documents = _count(coverage.get("documents"))
     in_scope = _in_scope_out(record)
@@ -2966,6 +3028,7 @@ def _option_summary_fields(
         ),
         "primary_lever_type": row.primary_lever_type,
         "lever_none_fits_reason": row.lever_none_fits_reason,
+        "runner_up_lever_type": runner_up_lever_type,
         "secondary_lever_types": _string_list(row.secondary_lever_types),
         "ambition": row.ambition,
         "ambition_reason": row.ambition_reason,
@@ -2981,6 +3044,7 @@ def _option_summary_fields(
         "search_pending": search_pending,
         "from_section": from_section,
         "also_found_as": list(also_found_as or []),
+        "tried_on": _tried_on_out(coverage.get("tried_on")),
     }
 
 
@@ -3058,6 +3122,8 @@ class _SearchUnit:
     study_geography: str | None
     metadata: Mapping[str, Any]
     locator: str
+    population_tag: str | None = None
+    intervention: str | None = None
 
 
 @dataclass(frozen=True)
@@ -3173,6 +3239,8 @@ def _added_searches(
                 ipr.c.setting,
                 ipr.c.outcome,
                 ipr.c.study_geography,
+                ipr.c.population_tag,
+                ipr.c.intervention,
                 source_extraction_record.c.task_source_snapshot_id,
                 source_extraction_record.c.basis,
                 source_snapshot.c.metadata,
@@ -3214,6 +3282,8 @@ def _added_searches(
                 study_geography=row.study_geography,
                 metadata=_as_mapping(row.metadata),
                 locator=row.source_locator,
+                population_tag=row.population_tag,
+                intervention=row.intervention,
             )
             for scope in scopes_of[row.extraction_record_id]:
                 units_by_scope.setdefault(scope, []).append(unit)
@@ -3271,6 +3341,8 @@ def _search_coverage(
                 setting=unit.setting,
                 outcome=unit.outcome,
                 study_geography=unit.study_geography,
+                intervention=unit.intervention,
+                population_tag=unit.population_tag,
             )
             for unit in search.units
         ],
@@ -3392,11 +3464,13 @@ def longlist_out(conn: Connection, task_id: uuid.UUID) -> LonglistOut | None:
                 search_pending=oid in searches and searches[oid].pending,
                 from_section=sections.get(oid),
                 also_found_as=merged.get(oid),
+                runner_up_lever_type=_runner_up_lever_type(result, oid),
             )
         )
         for oid in [*themed, *unthemed]
     ]
     stored = _as_mapping(result.counts)
+    thinning = _as_mapping(_as_mapping(result.provenance).get("thinning"))
     counts = LonglistCountsOut(
         options=len(rows),
         themes=len(themes),
@@ -3413,6 +3487,10 @@ def longlist_out(conn: Connection, task_id: uuid.UUID) -> LonglistOut | None:
             if row.primary_lever_type is None
             and row.lever_none_fits_reason not in (None, TYPING_INVALID_REASON)
         ),
+        title_only=_count(stored.get("title_only")),
+        thinned_mentioned=_count(thinning.get("mentioned_without_features_or_outcome")),
+        thinned_collapsed=_count(thinning.get("same_name_in_document")),
+        thinned_capped=_count(thinning.get("over_document_cap")),
     )
     taxonomy = _as_mapping(result.provenance).get("taxonomy_version")
     plan_version = int(result.plan_version)
@@ -3431,6 +3509,10 @@ def longlist_out(conn: Connection, task_id: uuid.UUID) -> LonglistOut | None:
         lever_type_definitions=[
             LeverTypeOut(key=lever.key, definition=lever.definition) for lever in LEVER_TYPES
         ],
+        lever_type_definitions_by_version={
+            version: [LeverTypeOut(key=lever.key, definition=lever.definition) for lever in levers]
+            for version, levers in lever_types_by_version().items()
+        },
         ambition_bands=[
             AmbitionBandOut(
                 key=band, label=AMBITION_LABELS[band], definition=AMBITION_DEFINITIONS.get(band)
@@ -3518,6 +3600,7 @@ def _evidence_profile(coverage: Mapping[str, Any]) -> EvidenceProfileOut:
         flagged_not_stated=_count(coverage.get("flagged_documents")),
         inherited_labels=_count(coverage.get("inherited_labels")),
         abstract_only=_count(coverage.get("abstract_only")),
+        tried_on=_tried_on_out(coverage.get("tried_on")),
     )
 
 
@@ -3774,6 +3857,7 @@ def option_out(conn: Connection, task_id: uuid.UUID, option_id: uuid.UUID) -> Op
             search_pending=search is not None and search.pending,
             from_section=_report_sections(conn, task_id, rows).get(option_id),
             also_found_as=_also_found_as(conn, task_id).get(option_id),
+            runner_up_lever_type=_runner_up_lever_type(result, option_id),
         ),
         design=design,
         design_features=list(design.design_features),
@@ -3793,4 +3877,5 @@ def option_out(conn: Connection, task_id: uuid.UUID, option_id: uuid.UUID) -> Op
         ),
         plan_version=int(result.plan_version) if result is not None else None,
         where_label=_where_label(result, plan),
+        variants=_variants_out(coverage.get("variants")),
     )

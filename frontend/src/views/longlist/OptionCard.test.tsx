@@ -131,7 +131,43 @@ describe("OptionCard", () => {
     renderCard(MOCK_OPTION_ID_EXCLUDED);
     expect(screen.getByText("National activation policy briefing")).toBeInTheDocument();
     expect(screen.getByText(/inherited from a linked task/)).toBeInTheDocument();
-    expect(screen.getByText(/feature not stated/)).toBeInTheDocument();
+    // Task 046 (contract item 3): wording changed from "feature not stated".
+    expect(screen.getByText(/not stated in the abstract/)).toBeInTheDocument();
+  });
+
+  // Task 046, contract item 1: the tried-on line, from the evidence profile.
+  it("shows the tried-on line when the evidence profile carries one", () => {
+    renderCard(MOCK_OPTION_ID_EXCLUDED);
+    expect(screen.getByText("Tried on: 18-24 year-olds in Northern England (2 documents).")).toBeInTheDocument();
+  });
+
+  it("shows no tried-on line when the evidence profile carries none", () => {
+    renderCard(MOCK_OPTION_ID_NO_IN_SCOPE, { evidence: { ...mockLonglistOptionCards[MOCK_OPTION_ID_NO_IN_SCOPE].evidence, tried_on: [] } });
+    expect(screen.queryByText(/Tried on:/)).not.toBeInTheDocument();
+  });
+
+  // Task 046, contract item 2: the variants block, folded seeds marked "suggested by Policy Atlas".
+  it("shows the variants block, a folded seed row naming its origin", () => {
+    renderCard(MOCK_OPTION_ID_EXCLUDED);
+    expect(screen.getByText("Variants")).toBeInTheDocument();
+    expect(screen.getByText("National sanctions regime · 6 documents")).toBeInTheDocument();
+    expect(screen.getByText("Benefit sanctions pilot · 2 documents · suggested by Policy Atlas")).toBeInTheDocument();
+  });
+
+  it("shows no variants block when the option has none", () => {
+    renderCard(MOCK_OPTION_ID_NO_IN_SCOPE);
+    expect(screen.queryByText("Variants")).not.toBeInTheDocument();
+  });
+
+  // Task 046, contract item 3: the runner-up lever type, beside the lever.
+  it("shows the runner-up lever type when one is recorded", () => {
+    renderCard(MOCK_OPTION_ID_EXCLUDED);
+    expect(screen.getByText("Runner-up lever type: Regulate.")).toBeInTheDocument();
+  });
+
+  it("shows no runner-up line when none is recorded", () => {
+    renderCard(MOCK_OPTION_ID_NO_IN_SCOPE);
+    expect(screen.queryByText(/Runner-up lever type:/)).not.toBeInTheDocument();
   });
 
   it("never renders the words \"how sure\"", () => {

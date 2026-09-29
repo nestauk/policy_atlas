@@ -47,13 +47,21 @@ describe("beatSentence", () => {
     expect(beatSentence("extract_interventions", { records: 1 })).toBe("1 intervention covered");
   });
 
-  it("longlist: null on missing options, omits each null part", () => {
+  it("longlist: null on missing options, omits each null part, never reads a theme count", () => {
+    // Task 046: theme moved to its own step, so a `themes` count in the
+    // longlist summary (an older frame) is ignored here.
     expect(beatSentence("longlist", {})).toBeNull();
     expect(
       beatSentence("longlist", { options: 6, themes: 2, unclustered: 4, not_an_option: 1 }),
-    ).toBe("6 options in 2 themes · 4 records unclustered · 1 not an option");
-    expect(beatSentence("longlist", { options: 1, themes: 1 })).toBe("1 option in 1 theme");
+    ).toBe("6 options · 4 records unclustered · 1 not an option");
+    expect(beatSentence("longlist", { options: 1 })).toBe("1 option");
     expect(beatSentence("longlist", { options: 3 })).toBe("3 options");
+  });
+
+  it("theme: null on missing themes, else the theme count", () => {
+    expect(beatSentence("theme", {})).toBeNull();
+    expect(beatSentence("theme", { themes: 2, no_theme: 1 })).toBe("2 themes");
+    expect(beatSentence("theme", { themes: 1 })).toBe("1 theme");
   });
 
   it("constrain: null when both counts absent, omits a null part", () => {

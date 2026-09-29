@@ -31,6 +31,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select, update
 from sqlalchemy.engine import Connection, Engine
 
+from policy_atlas.api.contract import TriedOnOut, VariantOut
 from policy_atlas.api.deps import get_agent_backend, get_runner_backends
 from policy_atlas.api.readmodels import repository
 from policy_atlas.core.schema import (
@@ -52,6 +53,7 @@ from policy_atlas.options_scoping.constrain.constrain import (
     constrain_scope,
 )
 from policy_atlas.options_scoping.constrain.constrain_prompt import ConstrainResponse
+from policy_atlas.options_scoping.longlist.lever_types import lever_types_by_version
 from policy_atlas.options_scoping.longlist.longlist_backend import StubLonglistBackend
 from policy_atlas.runtime.agent_backend import StubAgentBackend
 from policy_atlas.runtime.option_design_prompt import OptionDesignWire
@@ -67,8 +69,12 @@ from tests.api.resource_support import api_client, create_task
 from tests.helpers import delete_task_data, now
 from tests.options_scoping.test_longlist import (
     RCT,
+    _current_fingerprint,
     _discovered,
+    _extraction,
     _linked_deep_task,
+    _record_under,
+    _rollup_of,
     _Scripted,
     _Walk,
 )
@@ -686,6 +692,234 @@ def test_an_option_added_since_the_build_reads_with_an_empty_profile(conn: Conne
         "other": 0,
         "unknown": 0,
     }
+
+
+# --- task 046: the read models gain runner-up, tried on, variants, thinning --------
+
+
+def test_the_card_and_list_serve_the_runner_up_lever_type(conn: Connection) -> None:
+    walk = _Walk(conn)
+    walk.option("Youth guarantee", origin="added_by_you")
+    doc = walk.doc()
+    walk.record(doc, "youth guarantee")
+    walk.rollup(walk.scope_id, [doc])
+    backend = _Scripted(
+        routes={"youth guarantee": ("Youth guarantee", False)},
+        typings={"Youth guarantee": {"runner_up_lever_type": "inform"}},
+    )
+    walk.build(backend)
+    option_id = walk.options()["Youth guarantee"].option_id
+
+    listed = repository.longlist_out(conn, walk.task_id)
+    assert listed is not None
+    summary = next(o for o in listed.options if o.option_id == option_id)
+    assert summary.runner_up_lever_type == "inform"
+
+    card = repository.option_out(conn, walk.task_id, option_id)
+    assert card is not None
+    assert card.runner_up_lever_type == "inform"
+
+
+def test_the_card_and_list_serve_tried_on_and_variants(conn: Connection) -> None:
+    walk = _Walk(conn)
+    option_id = walk.option("Youth guarantee", origin="added_by_you")
+    fingerprint = _current_fingerprint(walk)
+    docs: dict[uuid.UUID, uuid.UUID] = {}
+    for intervention, population, population_tag in (
+        ("youth guarantee", "young people aged 16 to 24", "on_target"),
+        ("youth guarantee", "young adults", "adjacent"),
+    ):
+        doc = walk.doc()
+        ser = _extraction(walk, doc, fingerprint=fingerprint)
+        _record_under(
+            walk, ser, intervention, population=population, population_tag=population_tag
+        )
+        docs[doc] = ser
+    _rollup_of(walk, walk.scope_id, docs)
+    walk.build(_Scripted(routes={"youth guarantee": ("Youth guarantee", False)}))
+
+    expected_tried_on = [TriedOnOut(population="young adults", documents=1)]
+    listed = repository.longlist_out(conn, walk.task_id)
+    assert listed is not None
+    summary = next(o for o in listed.options if o.option_id == option_id)
+    assert summary.tried_on == expected_tried_on
+
+    card = repository.option_out(conn, walk.task_id, option_id)
+    assert card is not None
+    assert card.tried_on == expected_tried_on
+    assert card.evidence.tried_on == expected_tried_on
+    assert card.variants == [VariantOut(name="youth guarantee", documents=2, folded_seed=False)]
+
+
+def test_the_list_serves_title_only_and_the_thinning_counts(conn: Connection) -> None:
+    """The read model's field names, mapped from the component's own (task 046):
+    ``thinned_mentioned`` = ``mentioned_without_features_or_outcome``,
+    ``thinned_collapsed`` = ``same_name_in_document``,
+    ``thinned_capped`` = ``over_document_cap``.
+    """
+    walk = _Walk(conn)
+    walk.option("Youth guarantee", origin="added_by_you")
+    bare, collapse, crowded = walk.doc(), walk.doc(), walk.doc()
+    # Rule 1: a bare mention goes; a mention with a feature or an outcome stays.
+    walk.record(bare, "passing mention", role="mentioned")
+    walk.record(bare, "featured mention", role="mentioned", design_features=["free"])
+    walk.record(bare, "outcome mention", role="mentioned", outcome="employment")
+    # Rule 2: the same folded name in one document collapses to the highest role.
+    walk.record(collapse, "Youth guarantee", role="described")
+    walk.record(collapse, "youth  GUARANTEE", role="evaluated")
+    # Rule 3: at most eight a document, by role; the two mentions go.
+    for i in range(7):
+        walk.record(crowded, f"programme {i}", role="evaluated")
+    walk.record(crowded, "recommended one", role="recommended")
+    for i in range(2):
+        walk.record(crowded, f"mentioned {i}", role="mentioned", outcome="x")
+    walk.rollup(walk.scope_id, [bare, collapse, crowded], counts={"title_only": 5})
+    walk.build(_Scripted(routes={"youth GUARANTEE": ("Youth guarantee", False)}))
+
+    listed = repository.longlist_out(conn, walk.task_id)
+    assert listed is not None
+    counts = listed.counts
+    assert counts.title_only == 5
+    assert counts.thinned_mentioned == 1
+    assert counts.thinned_collapsed == 1
+    assert counts.thinned_capped == 2
+
+
+def test_the_list_serves_every_lever_type_taxonomy_version(conn: Connection) -> None:
+    walk = _Walk(conn)
+    walk.option("Youth guarantee", origin="added_by_you")
+    walk.build(_Scripted())
+    listed = repository.longlist_out(conn, walk.task_id)
+    assert listed is not None
+    by_version = lever_types_by_version()
+    assert set(listed.lever_type_definitions_by_version) == set(by_version)
+    for version, levers in by_version.items():
+        assert [d.key for d in listed.lever_type_definitions_by_version[version]] == [
+            lever.key for lever in levers
+        ]
+        assert [d.definition for d in listed.lever_type_definitions_by_version[version]] == [
+            lever.definition for lever in levers
+        ]
+
+
+def test_an_added_option_s_own_search_serves_tried_on_and_variants(conn: Connection) -> None:
+    """Item 6: ``_search_coverage`` carries ``population_tag`` and
+    ``intervention`` so an added option's own search fills ``tried_on`` and
+    ``variants`` too, not only a built option's coverage."""
+    walk = _Walk(conn)
+    walk.option("Youth guarantee", origin="added_by_you")
+    walk.build(_Scripted())
+    added = walk.option("Wage subsidy", origin="added_by_you")
+    scope_id = uuid.uuid4()
+    conn.execute(
+        evidence_scope.insert().values(
+            evidence_scope_id=scope_id,
+            task_id=walk.task_id,
+            intent="Wage subsidy.",
+            context={"capability": "options_scoping", "option_id": str(added)},
+            created_at=now(),
+            purpose="targeted",
+            plan_id=walk.plan_id,
+        )
+    )
+    conn.execute(
+        capability_run.insert().values(
+            capability_run_id=uuid.uuid4(),
+            task_id=walk.task_id,
+            evidence_scope_id=scope_id,
+            capability="options_scoping",
+            plan_id=walk.plan_id,
+            plan_version=2,
+            status="succeeded",
+            started_at=now(),
+            ended_at=now(),
+            parent_capability_run_id=None,
+        )
+    )
+    doc = walk.doc()
+    walk.record(doc, "Wage subsidy", population="16 to 24 year olds", population_tag="adjacent")
+    walk.rollup(scope_id, [doc])
+
+    card = repository.option_out(conn, walk.task_id, added)
+    assert card is not None
+    assert card.tried_on == [TriedOnOut(population="16 to 24 year olds", documents=1)]
+    assert card.variants == [VariantOut(name="Wage subsidy", documents=1, folded_seed=False)]
+
+
+def test_a_longlist_walk_s_child_search_never_hides_the_option_s_membership_evidence(
+    conn: Connection,
+) -> None:
+    """Item 9: a longlist walk's own child option search is acquire-only
+    (task 046 phase 2) — it has no screen rows or records of its own. The
+    option card and the list still read the option's evidence through its
+    memberships in the longlist scope, never through that child search
+    (``_added_searches`` only ever reads a *parentless* targeted scope)."""
+    walk = _Walk(conn)
+    walk.option("Youth guarantee", origin="added_by_you")
+    doc = walk.doc()
+    walk.record(doc, "youth guarantee")
+    walk.rollup(walk.scope_id, [doc])
+    walk.build(_Scripted(routes={"youth guarantee": ("Youth guarantee", False)}))
+    option_id = walk.options()["Youth guarantee"].option_id
+    # The child acquire-only search this option got during the build: a
+    # parented targeted scope naming it, with no screen or extraction rows.
+    walk.child_scope(option_id)
+
+    card = repository.option_out(conn, walk.task_id, option_id)
+    assert card is not None
+    assert card.search_pending is False
+    assert card.document_count == 1 and len(card.documents) == 1
+
+    listed = repository.longlist_out(conn, walk.task_id)
+    assert listed is not None
+    summary = next(o for o in listed.options if o.option_id == option_id)
+    assert summary.search_pending is False and summary.document_count == 1
+
+
+def test_an_old_stored_longlist_reads_with_every_new_field_defaulted(conn: Connection) -> None:
+    """Item 8: a longlist stored before this slice has no ``tried_on``,
+    ``variants``, thinning counts or ``runner_up`` and was typed under
+    ``lever_types_v1`` — every new field falls back to its default."""
+    walk = _Walk(conn)
+    option_id = walk.option("Youth guarantee", origin="added_by_you")
+    doc = walk.doc()
+    walk.record(doc, "youth guarantee")
+    walk.rollup(walk.scope_id, [doc])
+    run_id, _ = walk.build(_Scripted(routes={"youth guarantee": ("Youth guarantee", False)}))
+    stored = walk.result(run_id)
+    old_coverage = {
+        oid: {
+            k: v
+            for k, v in cov.items()
+            if k not in ("tried_on", "variants", "population_tags", "setting_repairs")
+        }
+        for oid, cov in stored.coverage.items()
+    }
+    old_provenance = {k: v for k, v in stored.provenance.items() if k != "runner_up"}
+    old_provenance["thinning"] = {}
+    old_provenance["taxonomy_version"] = "lever_types_v1"
+    old_counts = {k: v for k, v in stored.counts.items() if k != "title_only"}
+    conn.execute(
+        update(longlist_result)
+        .where(longlist_result.c.run_id == run_id)
+        .values(coverage=old_coverage, provenance=old_provenance, counts=old_counts)
+    )
+
+    listed = repository.longlist_out(conn, walk.task_id)
+    assert listed is not None
+    assert listed.taxonomy_version == "lever_types_v1"
+    assert listed.counts.title_only == 0
+    assert listed.counts.thinned_mentioned == 0
+    assert listed.counts.thinned_collapsed == 0
+    assert listed.counts.thinned_capped == 0
+    summary = next(o for o in listed.options if o.option_id == option_id)
+    assert summary.tried_on == []
+    assert summary.runner_up_lever_type is None
+
+    card = repository.option_out(conn, walk.task_id, option_id)
+    assert card is not None
+    assert card.variants == []
+    assert card.evidence.tried_on == []
 
 
 # --- the buttons -------------------------------------------------------------------

@@ -1024,6 +1024,7 @@ export const mockLonglistOptionCards: Record<string, OptionOutFixture> = {
     restriction_text: null,
     primary_lever_type: "enforce existing powers",
     lever_none_fits_reason: null,
+    runner_up_lever_type: "regulate",
     secondary_lever_types: ["regulate"],
     ambition: "structural",
     ambition_reason: "Changes who is entitled to a national benefit, not just how it is delivered.",
@@ -1041,6 +1042,11 @@ export const mockLonglistOptionCards: Record<string, OptionOutFixture> = {
     plan_version: 1,
     where_label: MOCK_LONGLIST_WHERE_LABEL,
     depth_label: "scoping pass",
+    tried_on: [{ population: "18-24 year-olds in Northern England", documents: 2 }],
+    variants: [
+      { name: "National sanctions regime", documents: 6, folded_seed: false },
+      { name: "Benefit sanctions pilot", documents: 2, folded_seed: true },
+    ],
     evidence: {
       documents: 6,
       by_evidence_type: { "Systematic review": 2, "Policy analysis": 3, "Local evaluation": 1 },
@@ -1053,6 +1059,7 @@ export const mockLonglistOptionCards: Record<string, OptionOutFixture> = {
       flagged_not_stated: 1,
       inherited_labels: 1,
       abstract_only: 2,
+      tried_on: [{ population: "18-24 year-olds in Northern England", documents: 2 }],
     },
     judgements: [
       { constraint_id: "relevant", constraint_text: "Relevant to the stated outcomes", verdict: "passes", reason: "Targets the NEET rate directly." },
@@ -1293,6 +1300,7 @@ function toLonglistOptionSummary(option: OptionOutFixture): OptionSummaryOutFixt
     restriction_text: option.restriction_text,
     primary_lever_type: option.primary_lever_type,
     lever_none_fits_reason: option.lever_none_fits_reason,
+    runner_up_lever_type: option.runner_up_lever_type,
     secondary_lever_types: option.secondary_lever_types,
     ambition: option.ambition,
     ambition_reason: option.ambition_reason,
@@ -1306,6 +1314,7 @@ function toLonglistOptionSummary(option: OptionOutFixture): OptionSummaryOutFixt
     abstract_only: option.abstract_only,
     is_entrant_with_no_documents: option.is_entrant_with_no_documents,
     search_pending: option.search_pending,
+    tried_on: option.tried_on,
   };
 }
 
@@ -1407,6 +1416,10 @@ export function mockLonglist(): components["schemas"]["LonglistOut"] {
       unclustered: 5,
       not_an_option: 2,
       none_fits: options.filter((option) => option.primary_lever_type == null).length,
+      title_only: 3,
+      thinned_mentioned: 4,
+      thinned_collapsed: 1,
+      thinned_capped: 0,
     },
     themes: [
       {
@@ -1443,6 +1456,74 @@ export function mockLonglist(): components["schemas"]["LonglistOut"] {
       { key: "regulate", definition: "set or change rules, standards, bans, licensing or planning requirements" },
       { key: "provide a service", definition: "deliver or fund a service or programme directly to people" },
     ],
+    // Every taxonomy version (task 046): mirrors backend lever_types.py's
+    // LEVER_TYPES (v2, current) and LEVER_TYPES_V1 — update alongside it.
+    lever_type_definitions_by_version: {
+      lever_types_v2: [
+        { key: "regulate", definition: "set or change rules, standards, bans, licensing or planning requirements" },
+        {
+          key: "subsidise",
+          definition:
+            "pay for, grant-fund, discount or otherwise lower the price of something for people, or fund a provider to deliver it",
+        },
+        { key: "tax or charge", definition: "raise the price of something through a tax, levy, fee or charge" },
+        { key: "inform", definition: "give information, advice, campaigns, labelling or guidance to change behaviour" },
+        {
+          key: "provide a service",
+          definition:
+            "deliver a service or programme to people directly, by the state's own bodies and staff (a public service, a facility, a scheme run by a public body)",
+        },
+        { key: "enforce existing powers", definition: "apply, inspect or enforce rules and duties that already exist" },
+        {
+          key: "devolve",
+          definition: "move a decision, budget or power to a lower tier of government or a local body",
+        },
+        {
+          key: "change who runs the system",
+          definition: "reorganise institutions, commissioning, ownership or accountability for a service",
+        },
+        {
+          key: "build or change infrastructure",
+          definition: "create or alter physical environments, routes, facilities or estates",
+        },
+        {
+          key: "procure or commission",
+          definition:
+            "buy a service or goods from a provider, or use public purchasing or commissioning rules to change what is bought or from whom",
+        },
+      ],
+      lever_types_v1: [
+        { key: "regulate", definition: "set or change rules, standards, bans, licensing or planning requirements" },
+        {
+          key: "subsidise",
+          definition:
+            "pay for, grant-fund, discount or otherwise lower the price of something for people or providers",
+        },
+        { key: "tax or charge", definition: "raise the price of something through a tax, levy, fee or charge" },
+        { key: "inform", definition: "give information, advice, campaigns, labelling or guidance to change behaviour" },
+        {
+          key: "provide a service",
+          definition: "deliver or fund a service or programme directly to people (a scheme, a programme, a facility)",
+        },
+        { key: "enforce existing powers", definition: "apply, inspect or enforce rules and duties that already exist" },
+        {
+          key: "devolve",
+          definition: "move a decision, budget or power to a lower tier of government or a local body",
+        },
+        {
+          key: "change who runs the system",
+          definition: "reorganise institutions, commissioning, ownership or accountability for a service",
+        },
+        {
+          key: "build or change infrastructure",
+          definition: "create or alter physical environments, routes, facilities or estates",
+        },
+        {
+          key: "procure or commission",
+          definition: "use public purchasing or commissioning rules to change what is bought or from whom",
+        },
+      ],
+    },
     ambition_bands: [
       { key: "do_minimum", label: "Do minimum", definition: "adjusts, extends, enforces or better funds what already exists; the arrangement stays" },
       { key: "incremental", label: "Incremental", definition: "adds a new scheme, service, rule, charge or offer inside the present structure" },

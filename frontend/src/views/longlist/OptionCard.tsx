@@ -27,6 +27,9 @@ import {
   constraintLabel,
   documentsSentence,
   leverLine,
+  runnerUpLine,
+  triedOnSentence,
+  variantLine,
   originLabel,
   originShort,
   outcomesSentence,
@@ -296,7 +299,18 @@ export function OptionCard() {
           </ul>
         )}
         <p>{leverLine(item.primary_lever_type, item.secondary_lever_types, item.lever_none_fits_reason)}</p>
+        {item.runner_up_lever_type != null && <p>{runnerUpLine(item.runner_up_lever_type)}</p>}
         {item.ambition != null && <p>{ambitionLine(item.ambition, item.ambition_reason)}</p>}
+        {(item.variants ?? []).length > 0 && (
+          <div>
+            <p className="font-bold text-navy">Variants</p>
+            <ul className="list-disc space-y-1 pl-5">
+              {(item.variants ?? []).map((variant, index) => (
+                <li key={index}>{scrub(variantLine(variant))}</li>
+              ))}
+            </ul>
+          </div>
+        )}
       </CardSection>
 
       <CardSection id="what-it-is-for" summary={outcomesSentence(item.outcomes_served) || "No outcomes recorded."}>
@@ -324,7 +338,7 @@ export function OptionCard() {
                   {document.evidence_type != null && <Chip tone="soft">{scrub(document.evidence_type)}</Chip>}
                   <Chip tone="soft">{roleLabel(document.role)}</Chip>
                   <Chip tone="soft">{scrub(whereTriedGroupLabel(document.where_tried_group, item.where_label))}</Chip>
-                  {document.design_feature_not_stated && <Chip tone="soft">feature not stated</Chip>}
+                  {document.design_feature_not_stated && <Chip tone="soft">not stated in the abstract</Chip>}
                   {document.source_task_id != null && <Chip tone="soft">inherited from a linked task</Chip>}
                 </div>
               </li>
@@ -332,6 +346,7 @@ export function OptionCard() {
           </ul>
         )}
         {populationsSentence !== "" && <p>Populations: {populationsSentence}.</p>}
+        {(evidence.tried_on ?? []).length > 0 && <p>{scrub(triedOnSentence(evidence.tried_on ?? []))}</p>}
         {settingsSentence !== "" && <p>Settings: {settingsSentence}.</p>}
         {measuredSentence !== "" && <p>Outcomes measured: {measuredSentence}.</p>}
         <p className="text-meta text-grey">{abstractOnlySentence(evidence.abstract_only, evidence.documents)}</p>

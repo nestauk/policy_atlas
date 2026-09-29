@@ -50,6 +50,7 @@ const LONGLIST_STAGES = new Set([
   "extract_interventions",
   "longlist",
   "constrain",
+  "theme",
 ]);
 
 /** Decide the walk kind from the task's capability and the run's own
@@ -350,14 +351,9 @@ export function beatSentence(
     case "longlist": {
       const options = num(summary, "options");
       if (options === null) return null;
-      const themes = num(summary, "themes");
       const unclustered = num(summary, "unclustered");
       const notAnOption = num(summary, "not_an_option");
-      const parts: string[] = [
-        themes !== null
-          ? `${count(options, "option", "options")} in ${count(themes, "theme", "themes")}`
-          : count(options, "option", "options"),
-      ];
+      const parts: string[] = [count(options, "option", "options")];
       if (unclustered !== null) parts.push(`${count(unclustered, "record", "records")} unclustered`);
       if (notAnOption !== null) parts.push(`${notAnOption} not an option`);
       return parts.join(" · ");
@@ -370,6 +366,11 @@ export function beatSentence(
       if (excluded !== null) parts.push(`${excluded} excluded`);
       if (noInScope !== null) parts.push(`${noInScope} with no in-scope evidence`);
       return parts.join(" · ");
+    }
+    case "theme": {
+      const themes = num(summary, "themes");
+      if (themes === null) return null;
+      return `${count(themes, "theme", "themes")}`;
     }
     default:
       return null;

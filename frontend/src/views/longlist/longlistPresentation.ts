@@ -255,6 +255,60 @@ export function leverLine(
     : `Primary lever type: ${capitalise(primary)}.`;
 }
 
+/** A lever group's definition (task 046, AM19): the definition of the
+ *  taxonomy version its options were typed under, when they share one the
+ *  longlist knows; the current list's definition otherwise. */
+export function leverDefinitionFor(
+  lever: string,
+  options: readonly { taxonomy_version?: string | null }[],
+  byVersion: Record<string, { key: string; definition: string }[]> | undefined,
+  current: string,
+): string {
+  const versions = new Set(options.map((option) => option.taxonomy_version ?? ""));
+  if (versions.size !== 1) return current;
+  const [version] = versions;
+  const typed = (byVersion?.[version] ?? []).find((entry) => entry.key === lever);
+  return typed === undefined ? current : definitionSentence(typed.definition);
+}
+
+/** The runner-up lever line (task 046, item 7): the type the typing named
+ *  as a close second, in the lever line's own shape. */
+export function runnerUpLine(runnerUp: string): string {
+  return `Runner-up lever type: ${capitalise(runnerUp)}.`;
+}
+
+/** "{n} document(s)", the unit the card counts evidence in. */
+export function documentCount(n: number): string {
+  return `${n} ${n === 1 ? "document" : "documents"}`;
+}
+
+/** The card's "Tried on" sentence (task 046, item 23): the populations an
+ *  option's adjacent evidence studied, the unit said once — "Tried on:
+ *  adolescents (2 documents), preschool children (1)." */
+export function triedOnSentence(
+  triedOn: readonly { population: string; documents: number }[],
+): string {
+  const parts = triedOn.map((entry, index) =>
+    index === 0
+      ? `${entry.population} (${documentCount(entry.documents)})`
+      : `${entry.population} (${entry.documents})`,
+  );
+  return `Tried on: ${parts.join(", ")}.`;
+}
+
+/** One variant row on the card (task 046, R2): the name, its documents, and
+ *  the origin when it is a suggestion folded into this option. */
+export function variantLine(variant: {
+  name: string;
+  documents: number;
+  folded_seed: boolean;
+}): string {
+  const parts = [variant.name];
+  if (variant.documents > 0) parts.push(documentCount(variant.documents));
+  if (variant.folded_seed) parts.push("suggested by Policy Atlas");
+  return parts.join(" · ");
+}
+
 /** A document's where-tried group, as the card's document list words it. */
 export function whereTriedGroupLabel(
   group: "where" | "comparable" | "other" | "unknown",

@@ -443,7 +443,8 @@ describe("RunningCard — a longlist walk's beats (task 045)", () => {
       ["Suggesting options", "Suggested 6 options · 2 from your evidence search"],
       ["Searching for each option", "Searched for 7 of 8 options · 1 failed"],
       ["Reading the abstracts", "Read 120 abstracts · 64 interventions covered"],
-      ["Building the longlist", "14 options in 4 themes · 3 records unclustered"],
+      // Task 046: the longlist step's sentence no longer reads a theme count.
+      ["Building the longlist", "14 options · 3 records unclustered"],
     ];
     for (const [label, beat] of beats) {
       await user.click(screen.getByRole("button", { name: label }));
