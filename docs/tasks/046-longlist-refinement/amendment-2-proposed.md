@@ -402,3 +402,11 @@ it as "lead's recommendation, accepted by the owner", not as owner words.
 | 12 | The profile calls run AFTER constrain, on the options that stay. "Add an option": the lines of the NEW option only are made, one call for each line, and each call gets the other options' sentences and marks for that line as context; the marks of the other options do not change (the owner's question above; the lead agrees: marks that a reader has seen stay stable, and one option in about 25 moves "most" very little). A full rebuild of the longlist makes all lines again. An exclusion or a merge by the reader does not make them again. This add-one prompt form is a new prompt variant and goes through the refine loop; check: the new option's marks agree with a full whole-list run in most cases. |
 | 13 | M10, M11, M12, M14 are reported measures, not pass conditions, until a loop gives real figures. |
 | 14 | The lead computed the obesity figure again from `profile-final-form.json`: 24 options, 14 the same (11 with no mark on both, 3 the same mark), 2 opposite. It agrees. The seven-list figure (168 options, 52%) is NOT checked by the lead; keep it marked so. |
+
+## The profile step: three more decisions (2026-09-29)
+
+| Item | Decision | The owner's words |
+|---|---|---|
+| Lever typing | **It moves to the profile step.** `longlist` makes the list (the options, their documents, the variants); `profile` holds all that is said about an option (lever type, ambition, the eight lines, the setting). The lead checked `longlist.py`: typing is its step 6 and no later part of `longlist` reads the result. `suggest` uses the list of lever types, not the typing, and does not change. | "Doesn't the lever type also conceptually belong more in profile?" · "1. yes" |
+| The component's name | `profile`. | "2. yes" |
+| The failure rule | **No special rule.** The lead's recommendation (the list shows with no profile, constrain runs with no labels) is withdrawn. The profile step fails as every other step of the walk fails; there is no code path for a list with no profile. A call that fails is tried again by the means that the model calls have now; if it still fails, the step fails. | "3. maybe, I just think this might be overly defensive programming" |
