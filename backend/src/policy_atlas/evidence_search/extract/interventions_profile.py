@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import threading
 import uuid
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -48,6 +49,7 @@ from policy_atlas.evidence_search.extract.interventions_records import (
     InterventionsRecord,
     InterventionsRecordCarrier,
     TaggingContext,
+    apply_tagging_rules,
 )
 from policy_atlas.evidence_search.extract.iof_records import (
     ABSTRACT_SEGMENT_ID,
@@ -249,8 +251,11 @@ class InterventionsWindowAdapter:
     The pipeline reads ``response.findings`` per call; the profile answers
     ``records`` plus a document-level ``covers_no_intervention``. The adapter
     carries the flag onto each record and renames nothing else. It also holds
-    the run's tagging context (task 046, S4) and hands it to the backend on
-    each call; with no context the backend is called exactly as before.
+    the run's tagging context (task 046, S4), hands it to the backend on each
+    call (with no context the backend is called exactly as before) and
+    settles each record's tags by :func:`apply_tagging_rules`, counting the
+    outcome tags repaired to ``other`` in :attr:`outcome_tag_repairs`. Calls
+    run on the pipeline's thread pool, so the count is locked.
 
     Args:
         backend: The intervention profile backend.
@@ -262,6 +267,14 @@ class InterventionsWindowAdapter:
     ) -> None:
         self._backend = backend
         self._context = context
+        self._lock = threading.Lock()
+        self._outcome_tag_repairs = 0
+
+    @property
+    def outcome_tag_repairs(self) -> int:
+        """Outcome tags repaired to ``other`` across this adapter's successful calls."""
+        with self._lock:
+            return self._outcome_tag_repairs
 
     @property
     def mode(self) -> str:
@@ -269,7 +282,7 @@ class InterventionsWindowAdapter:
         return self._backend.mode
 
     def extract(self, payload: ExtractionWindowPayload) -> UsageResult[_CarriedResponse]:
-        """Profile one document and carry the document flag onto each record.
+        """Profile one document, settle its tags and carry the document flag onto each record.
 
         Args:
             payload: The document's single payload.
@@ -281,11 +294,16 @@ class InterventionsWindowAdapter:
             response, usage = self._backend.extract(payload)
         else:
             response, usage = self._backend.extract(payload, context=self._context)
+        tagged = [apply_tagging_rules(record, self._context) for record in response.records]
+        repairs = sum(1 for item in tagged if item.outcome_tag_repaired)
+        if repairs:
+            with self._lock:
+                self._outcome_tag_repairs += repairs
         carried = [
             InterventionsRecordCarrier(
-                **record.model_dump(),
+                **item.record.model_dump(),
                 covers_no_intervention=response.covers_no_intervention,
             )
-            for record in response.records
+            for item in tagged
         ]
         return _CarriedResponse(findings=carried), usage

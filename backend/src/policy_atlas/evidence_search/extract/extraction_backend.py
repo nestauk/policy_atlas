@@ -389,6 +389,11 @@ _INTERVENTIONS_RECORD_DEFAULTS: dict[str, Any] = {
     "setting": None,
     "study_geography": None,
     "study_design": None,
+    # The plan-relative tags (task 046, S4): a sentinel record may omit them;
+    # absent is "not tagged", the context-free value.
+    "population_tag": None,
+    "outcome_tag": None,
+    "object_tag": None,
 }
 
 
@@ -458,10 +463,10 @@ class OpenAIInterventionsBackend:
 
         Args:
             payload: The document's single payload (window 0).
-            context: The run's tagging context, or ``None``. Received and not
-                yet used: the present prompt carries no plan field, so the
-                messages and the response schema are the same with or without
-                it (task 046 Phase 1; the tagging prompt reads it later).
+            context: The run's tagging context, or ``None``. It enters the
+                user message as the policy context the three tags are read
+                against (``null`` when absent); the response schema is the
+                same either way.
 
         Returns:
             The parsed profile plus token usage.
@@ -469,11 +474,11 @@ class OpenAIInterventionsBackend:
         Raises:
             RuntimeError: If the response cannot be parsed into the expected shape.
         """
-        del context  # carried for the tagging prompt; the present prompt has no plan field
         messages = build_interventions_messages(
             title=payload.title,
             abstract=payload.abstract,
             primary_evidence_type=payload.primary_evidence_type,
+            context=context,
         )
 
         def _update(span: Any, result: UsageResult[InterventionsResponse]) -> None:

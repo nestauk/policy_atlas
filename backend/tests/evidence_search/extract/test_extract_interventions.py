@@ -544,7 +544,7 @@ def test_the_intervention_fingerprint_names_its_components() -> None:
     assert len(digest) == 64
     assert components["profile"] == INTERVENTIONS_PROFILE_ID
     assert components["schema"] == "interventions_v1"
-    assert components["prompt"] == "extract_interventions_v1"
+    assert components["prompt"] == "extract_interventions_v2"
     assert components["finding_vetter"] is None
     assert "window" not in components
     assert digest != interventions_fingerprint("live", retry_cap=1)[0]

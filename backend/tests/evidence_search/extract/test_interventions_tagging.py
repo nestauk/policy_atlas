@@ -62,12 +62,13 @@ from tests.evidence_search.extract.test_extract_interventions import (
 from tests.helpers import now, seed_run, seed_scope, seed_task_and_run
 from tests.runtime.test_baseline_gate import scoping_plan
 
-#: The intervention profile's fingerprint at 046 build-open (before this
-#: phase), with no tagging context — pinned so a context-free run keeps
-#: reusing every stored record.
+#: The intervention profile's fingerprint with no tagging context, pinned so a
+#: context-free run keeps reusing every stored record. Re-pinned for the
+#: prompt version ``extract_interventions_v2`` (task 046 Phase 4): the prompt
+#: version is a fingerprint component, so the v1 values no longer apply.
 PINNED_NO_CONTEXT = {
-    "stub": "53737bfa2b095d8e65166a543cf7d992debc9dd89ea45c73ce0e553a29cae253",
-    "live": "d97b6c58285fb4aa522eb12de3760e4870dcdf0133262cc4336428e2bf5d408d",
+    "stub": "12529134d686dea40879dce125826286deeb2bf826a9803fd9361266976ca9a9",
+    "live": "c325937a04e248bc01dfff80a6cbbf77875f38fb17207fe7bfde0d2abdc51f71",
 }
 
 CONTEXT = TaggingContext(

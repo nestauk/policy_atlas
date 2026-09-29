@@ -105,10 +105,14 @@ class InterventionsRecordWire(BaseModel):
     )
     setting: str | None = Field(
         description=(
-            "Where recipients experienced the intervention, exactly as the "
-            "abstract names it ('primary schools', 'community leisure centres', "
-            "'Jobcentres'), or null. The delivery setting, never the body that "
-            "mandated it. Never inferred."
+            "The KIND of place where recipients meet the intervention, as a "
+            "common noun from the abstract ('primary schools', 'home', "
+            "'workplace', 'primary care', 'community leisure centres'), or "
+            "null. Never a country, region, city or town; never a named "
+            "organisation or building; never the body that mandated it; never "
+            "the intervention itself. Null for an instrument that acts on a "
+            "whole system (a tax, a price rule, a national regulation). Never "
+            "inferred."
         )
     )
     study_geography: str | None = Field(
@@ -131,6 +135,37 @@ class InterventionsRecordWire(BaseModel):
             "A verbatim span copied from the title or abstract that names this "
             "intervention. Exact text — never paraphrased, never stitched from "
             "two places."
+        )
+    )
+    population_tag: PopulationTag | None = Field(
+        description=(
+            "A sorting label against the policy context's target_unit: "
+            "'on_target' (the same kind of people or bodies as the target "
+            "unit, or a part of them), 'adjacent' (a wider group that "
+            "contains it, or a neighbouring group the same kind of action "
+            "reaches), 'other' (no such link, or no group can be read from "
+            "the document). The place of the study never decides it. Null "
+            "only when the policy context is null."
+        )
+    )
+    outcome_tag: str | None = Field(
+        description=(
+            "A sorting label: the ONE entry of the policy context's outcomes "
+            "that this record bears on — its outcome is that outcome measured "
+            "in any way, or leads to it on a pathway — copied character for "
+            "character; 'other' only when it bears on no entry. Null only "
+            "when the policy context is null."
+        )
+    )
+    object_tag: ObjectTag | None = Field(
+        description=(
+            "A sorting label: 'plan_object' (the recorded intervention is the "
+            "thing the policy context's intended_change wants taken up — a "
+            "technology, a product, a practice — studied for how it "
+            "performs; never used when intended_change names no such thing), "
+            "'option' (something a government, a public body or a provider "
+            "does to bring the change about), 'neither' (a comparator arm, or "
+            "anything else). Null only when the policy context is null."
         )
     )
 
@@ -225,16 +260,89 @@ class TaggingContext:
         return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
+#: The outcome tag for a record whose outcome serves no plan outcome.
+OTHER_OUTCOME_TAG = "other"
+
+
+def _fold_outcome(text: str) -> str:
+    """Fold one outcome text for the tag match: case, whitespace, final full stop."""
+    folded = " ".join(text.split()).casefold()
+    return folded.removesuffix(".").rstrip()
+
+
+@dataclass(frozen=True)
+class TaggedRecord:
+    """One wire record after the tag rules, with whether its outcome tag was repaired.
+
+    Attributes:
+        record: The wire record with its three tags settled.
+        outcome_tag_repaired: True when the model's outcome tag matched no
+            plan outcome (nor ``other``) even folded, and became ``other``.
+    """
+
+    record: InterventionsRecordWire
+    outcome_tag_repaired: bool
+
+
+def apply_tagging_rules(
+    record: InterventionsRecordWire, context: TaggingContext | None
+) -> TaggedRecord:
+    """Settle one record's three plan-relative tags against the run's context.
+
+    Rules (task 046, S4): with no context the three tags are ``None``
+    whatever the model returned. With a context, an ``outcome_tag`` that is
+    exactly one of the context's outcomes, or ``other``, is kept; otherwise it
+    is matched with case and whitespace folded and a final full stop removed,
+    and takes the plan's own text; no match becomes ``other`` and is a
+    counted repair. A null tag stays null ("not tagged", as for the other
+    two tags). A ``comparator`` record's
+    ``object_tag`` is ``neither``. A tag never removes a record.
+
+    Args:
+        record: One wire record as the backend returned it.
+        context: The run's tagging context, or ``None``.
+
+    Returns:
+        The record with its tags settled, and whether the outcome tag was
+        repaired to ``other``.
+    """
+    if context is None:
+        return TaggedRecord(
+            record=record.model_copy(
+                update={"population_tag": None, "outcome_tag": None, "object_tag": None}
+            ),
+            outcome_tag_repaired=False,
+        )
+    update: dict[str, object] = {}
+    repaired = False
+    raw_outcome = record.outcome_tag
+    allowed = (*context.outcomes, OTHER_OUTCOME_TAG)
+    if raw_outcome is not None and raw_outcome not in allowed:
+        folded = _fold_outcome(raw_outcome)
+        matched = next(
+            (candidate for candidate in allowed if _fold_outcome(candidate) == folded), None
+        )
+        if matched is None:
+            matched = OTHER_OUTCOME_TAG
+            repaired = True
+        update["outcome_tag"] = matched
+    if record.role == "comparator" and record.object_tag != "neither":
+        update["object_tag"] = "neither"
+    return TaggedRecord(
+        record=record.model_copy(update=update) if update else record,
+        outcome_tag_repaired=repaired,
+    )
+
+
 class InterventionsRecordCarrier(InterventionsRecordWire):
     """One wire record with its document's ``covers_no_intervention`` attached.
 
     Pipeline-internal, never a model-facing schema: the shared extract
     pipeline handles records one by one, so the document-level flag rides on
     each record to reach the table, which carries it per row. The three
-    plan-relative tags (task 046, S5) ride here too, optional: the present
-    wire model does not ask for them (its prompt and response schema are
-    unchanged), so they stay ``None`` — "not tagged" — until a wire model
-    that emits them is switched on.
+    plan-relative tags (task 046, S5) ride here too, defaulted to ``None``
+    ("not tagged") so a record built without them stays valid; the window
+    adapter settles them by :func:`apply_tagging_rules` first.
     """
 
     covers_no_intervention: bool

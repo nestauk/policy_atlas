@@ -508,3 +508,27 @@ def strip_place(text: str, where_text: str | None) -> tuple[str, list[str]]:
     if not removed:
         return text, []
     return _tidy(cleaned), removed
+
+
+# --- A place in a setting (task 046, S11 setting pass) ------------------------
+
+_ANY_PLACE_RE = re.compile(rf"(?<![\w-])(?:{_PLACE})")
+
+
+def names_place(text: str | None) -> bool:
+    """Whether a text names a place the matcher knows, led or not.
+
+    A country or sub-national name, or an abbreviation ("UK"), anywhere in
+    the text; never a nationality adjective ("Scottish schools" names no
+    place) and never the head of a compound ("London-based"). The setting
+    pass in ``coverage`` reads a setting that names a place as a geography.
+
+    Args:
+        text: The text, or ``None``.
+
+    Returns:
+        True when a known place is named.
+    """
+    if not text:
+        return False
+    return _ANY_PLACE_RE.search(text) is not None

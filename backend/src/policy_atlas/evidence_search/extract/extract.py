@@ -2340,6 +2340,13 @@ def extract_scope(
     )
     if selection_free:
         summary["counts"]["title_only"] = title_only
+        # S4 (task 046): outcome tags that matched no plan outcome, even
+        # folded, and were set to ``other`` — counted on this run's calls.
+        summary["counts"]["outcome_tag_repairs"] = sum(
+            profile.backend.outcome_tag_repairs
+            for profile in profile_bundles
+            if isinstance(profile.backend, InterventionsWindowAdapter)
+        )
     # B2′ (ADR 0023): the sibling relevance annotator runs post-vetting,
     # post-write (it reads the persisted finding rows) and pre-roll-up. Gated on
     # steering — only when emphasis is present AND a backend is wired — and

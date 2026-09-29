@@ -111,6 +111,7 @@ from policy_atlas.options_scoping.design import OptionDesign
 from policy_atlas.options_scoping.labels import labels_for_snapshots
 from policy_atlas.options_scoping.longlist.coverage import (
     CoverageMember,
+    FoldedSeed,
     document_key,
     normalise_doi,
     option_coverage,
@@ -1158,6 +1159,65 @@ def _option_search_scopes(conn: Connection, *, task_id: uuid.UUID) -> list[uuid.
     return list(reversed(list(latest.values())))
 
 
+def _coverage_member(unit: _Unit, *, flagged: bool) -> CoverageMember:
+    """One unit as coverage reads it, its tag and intervention name included."""
+    intervention = unit.payload.get("intervention")
+    return CoverageMember(
+        unit_kind=unit.kind,
+        doc_key=unit.doc_key,
+        tss_id=unit.label_tss_id,
+        role=unit.role,
+        basis=unit.basis,
+        flagged=flagged,
+        population=unit.population,
+        setting=unit.setting,
+        outcome=unit.outcome,
+        study_geography=unit.study_geography,
+        intervention=intervention if isinstance(intervention, str) else None,
+        population_tag=unit.population_tag,
+    )
+
+
+def _folded_seeds(
+    conn: Connection,
+    *,
+    task_id: uuid.UUID,
+    option_ids: Sequence[uuid.UUID],
+    documents_of: Mapping[uuid.UUID, set[str]],
+) -> dict[uuid.UUID, list[FoldedSeed]]:
+    """The options folded into each of ``option_ids`` (task 046, AM20).
+
+    A folded seed is an option merged into the wider one
+    (``merged_into_option_id``) that the user did not name (origin not
+    ``added_by_you``). Its variant entry carries its name and its own member
+    documents, 0 when it has none.
+
+    Args:
+        conn: Open connection.
+        task_id: The scoping task.
+        option_ids: The wider options.
+        documents_of: The document keys of each option's members, as they
+            stand for this read.
+
+    Returns:
+        ``{option_id: [FoldedSeed, ...]}``; an option with none is absent.
+    """
+    if not option_ids:
+        return {}
+    folded: dict[uuid.UUID, list[FoldedSeed]] = {}
+    for row in conn.execute(
+        select(option.c.option_id, option.c.name, option.c.merged_into_option_id)
+        .where(option.c.task_id == task_id)
+        .where(option.c.merged_into_option_id.in_(list(option_ids)))
+        .where(option.c.origin != "added_by_you")
+        .order_by(option.c.option_id)
+    ):
+        folded.setdefault(row.merged_into_option_id, []).append(
+            FoldedSeed(name=row.name, documents=len(documents_of.get(row.option_id, set())))
+        )
+    return folded
+
+
 def membership_coverage(
     conn: Connection,
     *,
@@ -1196,18 +1256,22 @@ def membership_coverage(
     linked, _ = _linked_units(conn, task_id=task_id)
     by_key = {(u.kind, u.record_id): u for u in own + linked}
     members: dict[uuid.UUID, list[tuple[_Unit, bool]]] = {oid: [] for oid in option_ids}
+    # Every option's member documents as they stand, so a folded seed's own
+    # documents are counted too.
+    documents_of: dict[uuid.UUID, set[str]] = {}
     for row in conn.execute(
         select(
             option_membership.c.option_id,
             option_membership.c.unit_kind,
             option_membership.c.unit_id,
             option_membership.c.design_feature_not_stated,
-        )
-        .where(option_membership.c.task_id == task_id)
-        .where(option_membership.c.option_id.in_(list(option_ids)))
+        ).where(option_membership.c.task_id == task_id)
     ):
         unit = by_key.get((row.unit_kind, row.unit_id))
-        if unit is not None:
+        if unit is None:
+            continue
+        documents_of.setdefault(row.option_id, set()).add(unit.doc_key)
+        if row.option_id in members:
             members[row.option_id].append((unit, bool(row.design_feature_not_stated)))
     labels = labels_for_snapshots(
         conn,
@@ -1215,25 +1279,15 @@ def membership_coverage(
         tss_ids={u.label_tss_id for ms in members.values() for u, _ in ms if u.label_tss_id},
     )
     home = where_codes(where)
+    folded = _folded_seeds(
+        conn, task_id=task_id, option_ids=list(members), documents_of=documents_of
+    )
     return {
         str(oid): option_coverage(
-            [
-                CoverageMember(
-                    unit_kind=u.kind,
-                    doc_key=u.doc_key,
-                    tss_id=u.label_tss_id,
-                    role=u.role,
-                    basis=u.basis,
-                    flagged=flagged,
-                    population=u.population,
-                    setting=u.setting,
-                    outcome=u.outcome,
-                    study_geography=u.study_geography,
-                )
-                for u, flagged in ms
-            ],
+            [_coverage_member(u, flagged=flagged) for u, flagged in ms],
             labels=labels,
             home=home,
+            folded_seeds=folded.get(oid, ()),
         )
         for oid, ms in members.items()
     }
@@ -1392,25 +1446,20 @@ def longlist_scope(
     label_ids = {u.label_tss_id for u in units if u.label_tss_id is not None}
     labels = labels_for_snapshots(conn, task_id=task_id, tss_ids=label_ids)
     home = where_codes(plan.where.text)
+    # A folded seed's own documents are this build's: its earlier memberships
+    # are replaced by this build's writes.
+    folded = _folded_seeds(
+        conn,
+        task_id=task_id,
+        option_ids=[o.option_id for o in options],
+        documents_of={o.option_id: {u.doc_key for u in o.members} for o in options},
+    )
     coverage = {
         str(o.option_id): option_coverage(
-            [
-                CoverageMember(
-                    unit_kind=u.kind,
-                    doc_key=u.doc_key,
-                    tss_id=u.label_tss_id,
-                    role=u.role,
-                    basis=u.basis,
-                    flagged=_flagged(answers, u, o.label),
-                    population=u.population,
-                    setting=u.setting,
-                    outcome=u.outcome,
-                    study_geography=u.study_geography,
-                )
-                for u in o.members
-            ],
+            [_coverage_member(u, flagged=_flagged(answers, u, o.label)) for u in o.members],
             labels=labels,
             home=home,
+            folded_seeds=folded.get(o.option_id, ()),
         )
         for o in options
     }
