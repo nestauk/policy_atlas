@@ -325,3 +325,10 @@ against the saved file.
 | Coordination | The line is **"Coordination requirements"**, levels Lower · Middle · Higher. The question changes from the count of bodies to: "Which separate bodies must act together to set up and run the option, and how closely must they work together? Do not answer about what happens in one instance of delivery." The refine loop measures the overlap with delivery complexity. | "Yes, I think something like that for coordination could work, but obviously we'll see what the prompt refinement results look like" |
 | All prompts | Each goes through a refine loop; the one-off experiments are not the final quality. | "All the prompts should go through refine loops anyway so that should hopefully get rid of most snags compared to your one off experiments." |
 | Tints | Open. The lead's proposal: a pale tint of Nesta Violet for the higher level and of Nesta Aqua for the lower level, navy text. The owner decides on the built screen. | "We should use some nesta colours for tints" |
+
+## Topic 5 decided (2026-09-29): outcomes at the longlist
+
+| Item | Decision | The owner's words |
+|---|---|---|
+| What the option shows | **Counts only** (the smaller first step of Part C): how many documents evaluated the option, and how many report on each outcome of the plan. No direction of effect, no size, no verdict. C1's direction and basis, C3 and C4 are not built. The direction of an effect belongs to the shortlist assessment. | "I think 2 sounds good." |
+| Migration | **One alembic revision for the whole of amendment 2.** It holds every new column of the amendment, and the new fact of the record (the plan outcomes that the document reports on) is one of them. The plan's new fields are in the plan's JSON payload and need no column. | "We can do them as part of the migration we need to make for the plan anyway" |
