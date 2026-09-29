@@ -332,3 +332,12 @@ against the saved file.
 |---|---|---|
 | What the option shows | **Counts only** (the smaller first step of Part C): how many documents evaluated the option, and how many report on each outcome of the plan. No direction of effect, no size, no verdict. C1's direction and basis, C3 and C4 are not built. The direction of an effect belongs to the shortlist assessment. | "I think 2 sounds good." |
 | Migration | **One alembic revision for the whole of amendment 2.** It holds every new column of the amendment, and the new fact of the record (the plan outcomes that the document reports on) is one of them. The plan's new fields are in the plan's JSON payload and need no column. | "We can do them as part of the migration we need to make for the plan anyway" |
+
+## Topic 4 changed (2026-09-29): the card's "What it would take"
+
+| Item | Decision | The owner's words |
+|---|---|---|
+| Option card, "What it would take" | The section collapses like the card's other sections. **Collapsed:** the row of eight cells, the line name above and the level word below, no word for a line with no mark (variant C, without the sentence on demand). **Expanded:** all eight lines, the name and the mark on the left, the sentence on the right (variant B). This replaces "all eight lines, always open". | "I actually change my mind on the aspect variants on the card. Looking at it again, since the card's other sections are collapsible, I think variant C when collapsed, and B when expanded makes sense" |
+
+The final statement of amendment 2, with the answers to its 14 questions, is
+`amendment-2-final.md`.
