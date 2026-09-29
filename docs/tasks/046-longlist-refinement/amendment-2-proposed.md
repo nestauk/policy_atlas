@@ -445,3 +445,19 @@ The lead's corrections, which close gaps in the writing and change no decision:
 | Merges in constrain | A known limit: the marks were made with the duplicate on the list, and the kept option keeps its own lines. |
 | Items adopted "as written in the first proposal" | Their text is copied into the final document. |
 | The Task Agent's question on who can act | Stated as new behaviour of planning prompt v5. |
+
+## Eight build questions, settled by the lead (2026-09-29)
+
+These are data shapes and names, not product decisions. The lead settled
+them and told the owner. The owner can change each one.
+
+| Q | The lead's decision |
+|---|---|
+| 1 | A consideration's `aspect` is one of the eight line keys or `transferability`. A transferability consideration has no effect at the longlist. |
+| 2 | The aim is the plan's present field `intended_change`. No new field. |
+| 3 | `consideration` is checked at the shortlist. The authority label that constrain writes is a label, not a check. |
+| 4 | "Studied in" is not built in task 046. The record keeps its setting words in the database; no read-model field and no place on the screen. It goes to the later work. |
+| 5 | D1 is not in amendment 2, because constrain's exclusions do not change. |
+| 6 | The column is `longlist_result.option_profile`. The line keys are `cost`, `time_to_set_up`, `time_to_effect`, `workforce`, `who_decides`, `dependencies`, `coordination`, `delivery_complexity`. A mark is stored as `less`, `more` or null (no mark); the words on the screen come from the view. An option that is not profiled yet has no entry. Ambition's mark is stored the same way in `option.ambition`. |
+| 7 | The one-off script also rewrites the test statements about who can act as considerations on `who_decides`. The planning loop tests separately that prompt v5 gives the right kind. |
+| 8 | The keep-previous rule for one invalid typing moves with lever typing, as built. It is present behaviour, not a new rule. |
