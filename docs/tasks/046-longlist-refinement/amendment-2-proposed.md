@@ -410,3 +410,38 @@ it as "lead's recommendation, accepted by the owner", not as owner words.
 | Lever typing | **It moves to the profile step.** `longlist` makes the list (the options, their documents, the variants); `profile` holds all that is said about an option (lever type, ambition, the eight lines, the setting). The lead checked `longlist.py`: typing is its step 6 and no later part of `longlist` reads the result. `suggest` uses the list of lever types, not the typing, and does not change. | "Doesn't the lever type also conceptually belong more in profile?" · "1. yes" |
 | The component's name | `profile`. | "2. yes" |
 | The failure rule | **No special rule.** The lead's recommendation (the list shows with no profile, constrain runs with no labels) is withdrawn. The profile step fails as every other step of the walk fails; there is no code path for a list with no profile. A call that fails is tried again by the means that the model calls have now; if it still fails, the step fails. | "3. maybe, I just think this might be overly defensive programming" |
+
+## After the adversarial review (2026-09-29): six decisions and the lead's corrections
+
+Two reviewers read the amendment, the contract section and the rubric section
+(both Opus; the Codex job failed at the start on the workspace spend cap, so
+the second reviewer took its place, as a builder's dry run against the code).
+Both said that the build could not start from the documents. The lead checked
+three of their code claims (`ConstraintKind`, `TARGETED_CHAIN`, the docstring
+of `add_option`); they are correct.
+
+The lead put six decisions to the owner, each with a recommendation. The
+owner's answer to each, word for word, was "okay" ("1. okay" … "6. okay").
+
+| # | Decision (the lead's recommendation, accepted by the owner) | Replaces |
+|---|---|---|
+| 1 | **The add-one form is removed from task 046.** "Add an option" does not change: the added option gets its documents and its lines at the next rebuild of the list. Until then it shows with no lever type and no lines, as an added option shows with no lever type today. Building an added option in place belongs to task 3. | Q12's add-one form, R51 |
+| 2 | **One exception to "place never reaches constrain":** the line "who decides" names the body and the country that it assumes, from the plan's Where, and constrain reads that line. The rule stands for all else: evidence from another place is never excluded for its place. | — |
+| 3 | **At the longlist, "who decides" never excludes.** It gives the authority label only, and the reader can filter the list by the label. A consideration has no effect on exclusions. | Q20, and the hard / not-hard rule |
+| 4 | **The label "may not fit your limit" is removed from task 046.** The plan stores the limit; the option has its line. The shortlist step of task 3 reads both. | Q1's label, R50 |
+| 5 | **The kind `requirement` gets the name `boundary`.** The stored test plans (the replay clones) are corrected by a one-off script in the gitignored evidence folder. No product code reads the old name. | — |
+| 6 | **The component's name is `option_profile`.** "Profile" alone already means the intervention profile of a record and a stage of the replay tool. | the name `profile` |
+
+The lead's corrections, which close gaps in the writing and change no decision:
+
+| Gap | Correction |
+|---|---|
+| How the profile is stored | One new JSON column on `longlist_result`, keyed by option id, with the line keys equal to the keys that a consideration's `aspect` uses. This is the one alembic revision that the owner allowed. Ambition stays in the columns `option.ambition` and `option.ambition_reason`; the revision changes what values they hold only if a constraint requires it. |
+| Old ambition | The three bands, `ambition_bands` on the read model, "group by ambition" on the list and the ambition word on a list row are removed. The change to the read model is not additive; the contract's "additive" and rollback lines are corrected. |
+| The input of each line call | The plan (with Where for "who decides" only), the baseline, and for each option its design and at most 5 records ordered by role, as in the experiment. The caps are constants. The model is the judgment model. |
+| A failed call | No special rule (the owner, on the failure rule). The call is tried again by the means that exist; then the step fails. `option_profile` is a spine step. |
+| Outcome counts | Counted in documents, not records: a document counts for a plan outcome when one of its records that evaluates the option has that `outcome_tag`. A document with records on two outcomes counts for both. |
+| The stop rule of a loop | Each loop names one stop measure; the other measures are reported. |
+| Merges in constrain | A known limit: the marks were made with the duplicate on the list, and the kept option keeps its own lines. |
+| Items adopted "as written in the first proposal" | Their text is copied into the final document. |
+| The Task Agent's question on who can act | Stated as new behaviour of planning prompt v5. |
