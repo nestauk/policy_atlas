@@ -124,129 +124,142 @@ This file does not restate them.
 
 ## Amendment 2 (2026-09-29)
 
-Rulings R34–R52 are in [contract.md](contract.md) § Amendment 2; the design
+Rulings R34–R53 are in [contract.md](contract.md) § Amendment 2; the design
 detail and the loop checks are in [amendment-2-final.md](amendment-2-final.md)
-(cited below as "final"). R35 is withdrawn and has no box. The boxes above
-stay as written; where a box below and a box above differ, the box below
-wins for amendment 2's work.
+("final" below). R35, R50 and R51 are withdrawn. The boxes above stay as
+written; where a box below and a box above differ, the box below wins for
+amendment 2's work. Where a box measures, it names the threshold; a measure
+that is not a loop's stop measure is reported, not passed (R48, R49).
 
 ### Items (one box per group; each cites the contract's item numbers)
 
-24. [ ] **The plan (R34; R35 withdrawn).** In the plan model: the kind
-    `boundary` (the screen word stays "requirement") and the kind
-    `consideration` with `aspect` (any of the eight lines, "who decides"
-    included) and `hard`; no plan slot "Who decides". In the planning replay
-    record: a capacity statement is a consideration, never a preference; a
-    deadline names "time to set up", or "time to effect" when the user
-    speaks of results; a sentence that names several things gives one
-    consideration per line; the answer about who can act is a consideration
-    on "who decides"; the aim keeps the user's words and its outcomes are
-    tagged *assumed*.
-25. [ ] **The profile component (R37; Q19).** A component of its own
-    between `longlist` and `constrain`, not a spine step: the chain in
-    `runtime/scoping_plan.py`, the registry, the harness graph, the plan
-    mapping, a stage key on the run stream and the stage in
-    `runProgress.ts` all know it, as they know `theme`. It reads all options
-    of the latest longlist result and writes the profile into that result.
-    `longlist` writes no ambition. A test shows that a failed profile step
-    leaves the longlist with no profile and constrain with no labels.
-26. [ ] **"What it would take" (R36, R37).** Each option has eight lines:
-    cost, time to set up, time to effect, workforce requirements, who decides,
-    dependencies, coordination requirements, delivery complexity. Each line
-    has one sentence for every option; no "cannot judge" value (M10,
-    reported). One call per line reads the whole list. Marks follow way A
-    (only an option that clearly stands out has one); who decides and
-    dependencies have no mark. No basis mark is produced or stored.
-27. [ ] **Add an option (R51).** Adding an option makes the lines of the
-    new option only, one call per line, with the other options' sentences
-    and marks for that line as context. A test shows that no other option's
-    mark changes. The round record shows that the new option's marks agree
-    with a full whole-list run in most cases.
+24. [ ] **The plan (R34; R35 withdrawn).** In `runtime/scoping_plan.py`:
+    the kinds are `boundary`, `consideration` (with `aspect` whose values are
+    the eight line keys, and `hard`), `preference` and
+    `evidence_restriction`; no plan slot "Who decides". The plan read model
+    and the plan screen show `boundary` (screen word "requirement") and
+    `consideration`. In the planning-loop round record, on the seven
+    questions and the probe: every statement lands in the right kind and
+    line (a capacity → a consideration; a deadline → "time to set up", or
+    "time to effect" when the user speaks of results; one consideration per
+    line; the answer about who can act → a consideration on "who decides").
+    Threshold (the 9L stop measure): all, read by hand.
+25. [ ] **The component `option_profile` (R37).** A spine component between
+    `longlist` and `constrain`. The chain in `runtime/scoping_plan.py`, the
+    registry (`run_spec.py`), the harness graph, the plan mapping
+    (`task_plan.py`), `LLM_BEARING_COMPONENTS` (`runner.py`), the stage key
+    `option_profile` on the run stream and the stage in `runProgress.ts` all
+    know it, as they know `theme`. Lever typing is in `option_profile`;
+    `longlist` has no typing code and writes no ambition. There is no code
+    path for a built list with no profile; a failed call fails the step
+    after the existing retry (a test shows it). Each line call gets the plan
+    (Where only for "who decides"), the baseline, and per option its design
+    and at most 5 records by role; the caps are named constants; the model
+    is the judgment model.
+26. [ ] **"What it would take" (R36).** Each option has eight lines with a
+    sentence each: cost, time to set up, time to effect, workforce
+    requirements, who decides, dependencies, coordination requirements,
+    delivery complexity. One call per line reads the whole list. Marks follow
+    way A; who decides and dependencies have no mark. No "cannot judge"
+    value; no basis mark in the wire or the storage. M10 (every option has a
+    sentence on every line) is reported.
+27. [ ] *Withdrawn with R51 (the add-one form). The number is kept.*
 28. [ ] **Who decides and the authority label (R38).** The line names one
-    body with its full name and the place it assumes, and a legal means only
-    when the baseline or a document states it. Constrain gives the authority
-    label (*within your power* · *needs action by <body>* · *unclear*) from
-    a consideration on "who decides" that is not hard; with no such
-    consideration, no label. A hard one can exclude. The label is a filter
-    on the list, not the sort order.
-29. [ ] **Limits and exclusions (R50).** A hard consideration on any line
-    other than "who decides" never excludes: the option gets a limit label
-    ("may not fit your limit on …") with the line's sentence as the reason.
-    Every exclusion names a clear failure; mixed or missing information
-    keeps the option. No reasoned guess is written for a preference about
-    an aspect. Read on the hard-requirement test replay (M11, reported).
-30. [ ] **Ambition (R40).** Ambition is made by its own call over the whole
-    list, relative (Smaller · Bigger · no mark), with one sentence against
-    the baseline. No option is called "do minimum". Lever typing writes no
-    `ambition` and no `ambition_reason`. On the card, ambition is in "What it
-    is", after the lever line.
+    body by its full name and the country from the plan's Where, and a legal
+    means only when the baseline or a document states it (read on the
+    tuning set). Constrain reads that line and no other place text (its
+    other plan data stays stripped, `constrain.py:_plan_data`). Constrain
+    gives *within your power* · *needs action by <body>* · *unclear* from the
+    user's consideration on "who decides"; with none, no label. **No
+    exclusion comes from "who decides" or from any consideration** (a test,
+    and the 13L round record). The label is a filter on the list, not the
+    sort order. M11 on the hard-requirement data: threshold 9 of 10 options
+    (the 13L stop measure).
+29. [ ] *Withdrawn with R50 (the limit label). The number is kept.*
+30. [ ] **Ambition (R40).** One call over the whole list in
+    `option_profile`: relative (Smaller · Bigger · no mark) with one sentence
+    against the baseline; no option called "do minimum". Stored in
+    `option.ambition` and `option.ambition_reason`. Lever typing writes no
+    ambition. `ambition_bands`, the three bands, group by ambition and the
+    ambition word on a list row are gone from the read model, the repository
+    and the views. On the card, ambition is in "What it is", after the lever
+    line.
 31. [ ] **The delivery setting (R41).** One call over the whole list writes
     one main setting and at most one more per option, empty for a
-    system-level instrument. No fixed list of settings in code or prompt.
-    The Setting facet reads it; each document keeps its own words as
-    "studied in"; on the card it is in "What it is". M12 (reported).
-32. [ ] **Outcome counts (R42).** Per option: documents that evaluate it and,
-    among them, documents for each plan outcome, counted from the existing
-    `outcome_tag`. No new field, no change to the profile prompt. No
-    direction, size or verdict anywhere. The counts are in "What the
-    evidence base holds so far".
-33. [ ] **The reader and the words (R43, R44).** List rows carry no marks.
-    "What it would take" is collapsible and collapsed when the card opens:
-    collapsed, a row of eight cells (line name above, level word below; the
-    cells open nothing); expanded, the eight lines with name, mark and
-    sentence. A line with no mark shows no word. The grid's columns come
-    from the line the reader chooses; "Middle" appears only as a grid column
-    head. No compare table. The heading carries the estimate label; no
-    sentence ends with "a guess rather than evidence". **The words on the
-    screen are the decided words:** the line names of box 26 and the level
-    words Cheaper · Costlier, Quicker · Slower, Lower · Higher, Simpler ·
-    More complex, Smaller · Bigger; none of "less than most", "like most",
-    "more than most". Checked in the vitest tests and on the browser check.
+    system-level instrument; stored in the profile column. No fixed list of
+    settings in code or prompt. The Setting facet reads it; on the card it is
+    in "What it is". M12 (at most 10 labels, no place or body name) is
+    reported.
+32. [ ] **Outcome counts (R42).** Per option, in documents: the documents
+    that evaluate it and, among them, the documents for each plan outcome (a
+    document counts when one of its evaluating records has that
+    `outcome_tag`; a document with records on two outcomes counts for both).
+    A test pins this rule. No new field; `extract_interventions` unchanged;
+    no direction, size or verdict anywhere. Shown in "What the evidence base
+    holds so far".
+33. [ ] **The reader and the words (R43, R44).** List rows carry no marks and
+    no ambition word; the list groups by theme and lever type only. "What it
+    would take" is collapsible and collapsed when the card opens: collapsed,
+    a row of eight cells (line name above, level word below; the cells open
+    nothing); expanded, the eight lines with name, mark and sentence; hidden
+    for an added option before a rebuild. A line with no mark shows no word.
+    The grid's columns come from the line the reader chooses: lower word ·
+    Middle · higher word, and "Untagged" for an option with no profile. No
+    compare table. The heading carries the estimate label; no sentence ends
+    with "a guess rather than evidence". **The words on the screen are the
+    decided words:** the line names of box 26 and the level words Cheaper ·
+    Costlier, Quicker · Slower, Lower · Higher, Simpler · More complex,
+    Smaller · Bigger; none of "less than most", "like most", "more than
+    most". Checked in the vitest tests and on the browser check.
 34. [ ] **Out of the first version (R39).** No acceptability line, no
     burden line, no legal-change line and no "powers" line in code, prompt
     or screen.
+45. [ ] **The rename (R53).** No product code or prompt holds the kind
+    `requirement`. The one-off script is in the gitignored evidence folder,
+    and a round record shows the clones' test plans read as valid plans after
+    it ran.
 
 ### Cross-cutting
 
 35. [ ] **Every new or changed prompt went through a refine loop (R48).**
-    `task_agent_scoping_v5`, the line prompt(s), the add-one variant, the
-    ambition prompt, the setting prompt, `lever_typing_v3`, `constrain_v3`:
-    each has its rounds recorded in `evidence/rounds/` (the change, the
-    finding that caused it, the figures, the read-back), at most five
-    rounds, tuning set then one read of the check set, and a report to the
-    owner. Each is re-pinned in `scripts/prompt_hashes.json`.
-    `extract_interventions` is unchanged.
+    `task_agent_scoping_v5`, the line prompt(s), the ambition prompt, the
+    setting prompt, lever typing (moved), `constrain_v3`: each has its
+    rounds in `evidence/rounds/` (the change, the finding that caused it, the
+    figures, the read-back), names one stop measure, ran at most five
+    rounds, was tuned on the tuning set and read once on the check set, and
+    was reported to the owner. Each is re-pinned in
+    `scripts/prompt_hashes.json`. `extract_interventions` is unchanged.
 36. [ ] **No fixed lists, bands or anchor examples (R37).** No line,
     ambition or setting prompt holds a fixed list of answers, a
     low/medium/high band, or an example option from a named domain. The
     lead's three guards are not in the code.
-37. [ ] **The known faults were tested (final § 6.1).** A round record
-    reads each of the six faults (setting "none" where a setting exists; a
-    mark its sentence contradicts; no mark where the sentence lists much;
-    a law named by title and year; two bodies or an acronym in "who
-    decides"; a sentence that answers another question) and states the
-    result on the tuning set.
+37. [ ] **The known faults were tested (final § 6.1).** A 12L round record
+    reads each of the six faults on the tuning set and states the count.
+    Threshold (the 12L stop measure): none of the six, read by hand.
 38. [ ] **The overlap of coordination requirements with delivery complexity
-    was measured** with the decided coordination question, and the figure is
-    in `verification.md` beside the earlier figures of final § 6.3, each read
-    back from a saved file.
+    was measured** with the decided coordination question, and the figure
+    (same level; opposite) is in `verification.md` beside the figures of
+    final § 6.3, read back from a saved file. Reported.
 39. [ ] **No code handles old longlists (R52).** No branch, migration or
-    read-model rule for old ambition words or for a longlist with no
-    profile made by an earlier development iteration.
-40. [ ] **Migration (R45).** No alembic revision, or exactly one for the
-    whole amendment with its reason recorded in `verification.md`, a
-    round-trip test, and full `make verify` at its phase. No new table.
-41. [ ] **Measures and time (R46, R49).** M8, M10, M11, M12 and M14 are
-    reported in `verification.md`, read back from saved files; none is used
-    as a pass condition. The walk has no side branch.
+    read-model rule for old ambition words, old plan kinds or a longlist
+    with no profile made by an earlier development iteration.
+40. [ ] **Migration (R45).** Exactly one reversible alembic revision on
+    `d8f3b6a2c4e1`: one JSON column on `longlist_result`, keyed by option id
+    and design version; a round-trip test; full `make verify` at Phase 10.
+    No other schema change; no new table.
+41. [ ] **Measures and time (R46, R49).** M8, M10, M12 and M14 are reported
+    in `verification.md`, read back from saved files; M11 is the 13L stop
+    measure (box 28). The walk has no side branch.
 42. [ ] **Task 3 principle recorded, not built (R47).** The shortlist
     principle is in the spec-change list for the owner's wording; no
-    shortlist code is written. `docs/deferred.md` carries burden, a grounded
-    legal-change line, the outcome direction for task 3 and the two-outcome
-    count limit.
-43. [ ] **Spec changes of amendment 2**, the new component included, are
+    shortlist code and no limit label are written. `docs/deferred.md`
+    carries burden, a grounded legal-change line, the outcome direction and
+    the limits for task 3, and building an added option in place.
+43. [ ] **Spec changes of amendment 2**, `option_profile` included, are
     applied only with the owner's accepted wording, with one line each in
     `docs/specs/log.md`.
-44. [ ] **Gates.** Full `make verify` passes at Phase 9.0 and Phase 14; the
-    adversarial review of amendment 2 ran (owner: "not yet but we will
-    do."), and its findings are adjudicated in `verification.md`.
+44. [ ] **Gates.** Full `make verify` passes at Phases 9.0, 10 and 14.
+46. [ ] **The contract's corrected lines hold.** The OpenAPI diff shows the
+    removal of `ambition_bands` and the additions of final § 3 and nothing
+    else; `verification.md` records the rollback as the contract states it
+    (not additive) and the known limits of final § 2.10.

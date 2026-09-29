@@ -400,26 +400,26 @@ Gate: **full `make verify`** (step-6 exit). Commit.
 
 ## Amendment 2 (2026-09-29)
 
-Rulings R34–R52 are in [contract.md](contract.md) § Amendment 2; the design
-detail is in [amendment-2-final.md](amendment-2-final.md). This section adds
-phases 9 to 14 and changes no phase above.
+Rulings R34–R53 are in [contract.md](contract.md) § Amendment 2; the design
+detail is in [amendment-2-final.md](amendment-2-final.md) ("final" below).
+This section adds phases 9 to 14 and changes no phase above.
 
-> **Status:** written 2026-09-29 from amendment-2-final.md, which the owner
-> decided the same day. The adversarial review of the amendment is still to
-> come. Open for the owner to confirm (amendment-2-final.md § 7.1): the
-> failure rule of the profile component, which is the lead's recommendation;
-> the component's name (and stage key) is not in the record.
+> **Status:** written 2026-09-29 from the final document, which the owner
+> decided the same day after the adversarial review. The open questions are
+> in final § 7.3; phases 9, 12 and 13 build to their answers (Q1–Q3 and Q7
+> for Phase 9; Q6 and Q8 for Phases 10 and 12; Q5 for Phase 13).
 
 Executor marks as above: every prompt and its refine loop is `lead`
 (prompt-bearing work and adjudication); judgement-bearing code is
 `deep-reasoner`; mechanical work is `fast-worker`; taste-bearing frontend
-work and final words are `lead`, with the `impeccable` skill. Every new or
-changed prompt goes through § The loop (R48).
+work and final words are `lead`, with the `impeccable` skill. Every loop
+follows § The loop and names **one stop measure**; the other measures are
+reported (R48). The stop measures of 9L and 12L are proposed here; the lead
+confirms each at round 0.
 
-**Verify gates.** Full `make verify` at Phase 9.0 and Phase 14. A phase that
-adds a schema revision (only if R45's allowed revision is needed) also closes
-on full `make verify`. Other phases close on the gates named below. One green
-commit per phase, and one per loop round that changes a prompt.
+**Verify gates.** Full `make verify` at Phase 9.0, Phase 10 (the schema
+revision) and Phase 14. Other phases close on the gates named below. One
+green commit per phase, and one per loop round that changes a prompt.
 
 ### Phase 9.0 — Build-open baseline — `lead` (inline)
 
@@ -428,137 +428,146 @@ Reason: a one-command check. The tree changed after the step-6 exit gate
 
 Gate: **full `make verify`**.
 
-### Phase 9 — The plan (R34, R35 withdrawn)
+### Phase 9 — The plan (R34, R53; R35 withdrawn)
 
-**`deep-reasoner`** (plan model) · **`fast-worker`** (plan screen structure,
-read model fields). Kind `boundary` (renamed from `requirement`; the screen
-word stays "requirement"); kind `consideration` with `aspect` (any of the
-eight lines, "who decides" included) and `hard`; the stored transferability
-consideration. No plan slot "Who decides". Plan read model additive.
+**`deep-reasoner`** (plan model) · **`fast-worker`** (the one-off script,
+plan screen structure, read model fields). `requirement` → `boundary` in
+`ConstraintKind`, `CHECKED_AT_BY_KIND` (`runtime/scoping_plan.py:94`,
+`:99-105`) and the planning wire; the kind `consideration` with `aspect`
+(the line keys) and `hard`. No plan slot "Who decides". The one-off script
+in the gitignored evidence folder corrects the replay clones' test plans;
+it is not product code. No code for plans of an earlier iteration (R52).
 
 Gate: `make verify-fast` · `make prompt-guard` · `make drift-check`. Commit.
 
 ### Phase 9L — Planning loop — `lead`
 
-`task_agent_scoping_v5`: the five kinds; a capacity statement is a
-consideration; the deadline rule; one consideration per line for a sentence
-that names several things; the question about who can act, stored as a
-consideration on "who decides"; aims as the user's words plus *assumed*
-outcomes. Measure: the planning replay on the seven questions and the probe
-`9-plan-probe-temporary-accommodation.json`, read by hand against the checks
-of amendment-2-final.md § 6.
+`task_agent_scoping_v5`: the five kinds; A4–A6 as copied in final § 2.1; the
+deadline rule; one consideration per line for a sentence that names several
+things; the new question about who can act, stored as a consideration on
+"who decides"; B8 as a planning rule. Replay: the seven questions and the
+probe `9-plan-probe-temporary-accommodation.json`.
+
+Stop measure (proposed): every statement of the seven questions and the
+probe lands in the right kind and line, read by hand.
 
 Gate: `make verify-fast` · `make prompt-guard`. Commit. Report to the owner
 (R25).
 
-### Phase 10 — Outcome counts (R42) — `fast-worker`
+### Phase 10 — The schema revision (R45) — `deep-reasoner`
 
-Brief (exact rule from R42): in coverage, per option, the documents that
-evaluate the option and, among them, the documents for each plan outcome,
-from the existing `outcome_tag`. No schema, no prompt change.
+One reversible alembic revision on `d8f3b6a2c4e1`: one JSON column on
+`longlist_result` for the profile, keyed by option id and design version as
+`judgements` is. Round-trip test. No other schema change.
+
+Gate: **full `make verify`**. Commit.
+
+### Phase 11 — Outcome counts (R42) — `fast-worker`
+
+Brief (exact rule from R42): in coverage, per option, in documents: the
+documents that evaluate the option and, among them, the documents for each
+plan outcome (a document counts when one of its evaluating records has that
+`outcome_tag`). No schema, no prompt change.
 
 Gate: `make verify-fast` · `make drift-check`. Commit.
 
-### Phase 11 — The profile component (R36, R37, R40, R41, R51, R52; Q19)
+### Phase 12 — The component `option_profile` (R36, R37, R40, R41, R52)
 
-**`deep-reasoner`** (component, registration, storage, add-one path, failure
-rule) · **`fast-worker`** (replay stage wiring, stage key and progress label
-structure, tests from an exact list). Brief, the same kinds of work as
-S13a did for `theme`:
+**`deep-reasoner`** (component, the move of lever typing, storage) ·
+**`fast-worker`** (replay stage wiring, stage key and progress label
+structure, tests from an exact list). Brief, the same kinds of work as S13a
+did for `theme`:
 
-- A component of its own between `longlist` and `constrain`, not a spine
-  step: `LONGLIST_CHAIN` in `runtime/scoping_plan.py` becomes `… → longlist →
-  <profile> → constrain → theme` (`<profile>`: name not decided). Registered in `runtime/run_spec.py`,
-  `runtime/harness.py` and `runtime/task_plan.py`; a stage key in
+- A spine component between `longlist` and `constrain`: `LONGLIST_CHAIN` in
+  `runtime/scoping_plan.py` becomes `… → longlist → option_profile →
+  constrain → theme`. Registered in `runtime/run_spec.py`,
+  `runtime/harness.py`, `runtime/task_plan.py` and `LLM_BEARING_COMPONENTS`
+  (`runtime/runner.py:175-192`); stage key `option_profile` in
   `api/stage_vocabulary.py`; the stage in
-  `frontend/src/views/workspace/runProgress.ts`; its prompts in its own
-  package under `options_scoping/`, hashes pinned in
-  `scripts/prompt_hashes.json`.
-- It reads the latest `longlist_result` of the scope and all its options,
-  and writes the profile (lines, marks, setting, ambition) into that row.
-  Inside it: one call per line over the whole list, the ambition call and
-  the setting call, all at one time.
-- `longlist` makes the list and the lever type; lever typing stops writing
-  `ambition` and `ambition_reason`.
-- Failure: the walk goes on; the longlist shows with no profile, and
-  constrain runs with no labels (lead's recommendation, to be confirmed).
-- The add-one path for "Add an option": the new option only, with the other
-  options' sentences and marks for each line as context. A full rebuild
-  makes all lines again; a reader's exclusion or merge does not.
-- No code for stored values of an earlier development iteration.
-- The replay tool has the component as a stage.
+  `frontend/src/views/workspace/runProgress.ts`; its package under
+  `options_scoping/`, prompt hashes pinned in `scripts/prompt_hashes.json`.
+- Lever typing moves from `longlist` (its step 6) into `option_profile`,
+  with the R29 lever reason. `longlist` writes no typing and no ambition.
+  `suggest` does not change.
+- Inside it, at one time: one call per line over the whole list, the
+  ambition call and the setting call. Input per call: the plan (Where for
+  "who decides" only), the baseline, and per option its design and at most
+  5 records by role; the caps are constants; the judgment model.
+- Writes: the lines and the setting to the new column; the lever type and
+  ambition to the option columns. No special failure rule: a failed call is
+  tried again by the existing means, then the step fails.
+- A full rebuild makes all again. "Add an option" does not change.
+- The replay tool has `option_profile` as a stage.
 
-Tests: the chain order; the registry, the harness graph, the plan mapping
-and the run stream know the component; a failed profile step leaves the
-longlist and gives constrain no profile; `longlist` writes no ambition; the
-add-one path changes no other option's marks.
-
-Gate: `make verify-fast` · `make prompt-guard` · `make drift-check`; full
-`make verify` if a revision is added (R45). Commit.
-
-### Phase 11L — Profile loop — `lead`
-
-The line prompt(s), the add-one variant, the ambition prompt, the setting
-prompt, `lever_typing_v3`. Measures and checks: amendment-2-final.md § 6
-(the known faults, way A, stability, M10, M12, M14, the add-one agreement,
-the overlap of coordination with delivery complexity). Also the first read
-of the R29 lever reasons and the R31 designs, which no round has read.
-
-Gate: `make verify-fast` · `make prompt-guard`. Commit. Report to the owner
-(R25).
-
-### Phase 12 — Constrain (R38, R50) — `deep-reasoner`
-
-Constrain reads the profile; with no profile, it runs with no labels. The
-clear-failure rule (D1); a hard
-consideration on "who decides" can exclude; one that is not hard gives the
-authority label from the line "who decides"; no such consideration, no label;
-the limit label for a hard consideration on another line, with the line's
-sentence as the reason, never an exclusion; the reasoned guess removed for a
-preference about an aspect (B8). It lands with round 0 of `constrain_v3` from
-the lead.
+Tests: the chain order; the registry, the harness graph, the plan mapping,
+`LLM_BEARING_COMPONENTS` and the run stream know `option_profile`; `longlist`
+writes no typing and no ambition; a failed call fails the step.
 
 Gate: `make verify-fast` · `make prompt-guard` · `make drift-check`. Commit.
 
-### Phase 12L — Constrain loop — `lead`
+### Phase 12L — Profile loop — `lead`
 
-`constrain_v3` with the hard-requirement test
-(`9-constrain-hard-requirements.txt`, the three clones that hold its
-requirements). Measures: M11 (reported, R49); the exclusions and labels read
-one by one.
+The line prompt(s), the ambition prompt, the setting prompt, lever typing.
+Checks: final § 6. Also the first read of the R29 lever reasons and the R31
+designs, which no round has read.
+
+Stop measure (proposed): none of the six known faults of final § 6.1 on the
+tuning set, read by hand. Reported: M10, M12, M14, stability, the overlap of
+coordination with delivery complexity.
 
 Gate: `make verify-fast` · `make prompt-guard`. Commit. Report to the owner
 (R25).
 
-### Phase 13 — Read models and views (R43, R44)
+### Phase 13 — Constrain (R38) — `deep-reasoner`
 
-13.1 **Read models — `fast-worker`.** The additive fields of
-amendment-2-final.md § 3 "Contract parts that change"; `make openapi-sync`.
+Constrain reads `option_profile`. The authority label from the line "who
+decides" and the user's consideration on it; never an exclusion; no label
+without the consideration. The place exception: constrain reads that line;
+all other plan data stays place-stripped. The clear-failure rule (D1) if
+final § 7.3 Q5 keeps it. It lands with round 0 of `constrain_v3` from the
+lead.
 
-13.2 **Structure — `fast-worker`.** Plain rows; the authority-label filter;
-"What it is" with ambition after the lever line and the setting; the card
-block "What it would take", collapsed by default: collapsed a row of eight
-cells (name above, level word below), expanded the eight lines with
-sentences, no word for a line with no mark; the outcome counts in "What the
-evidence base holds so far"; the grid column chooser with "Middle" as the
-middle column head; the Setting facet from the option-level setting; the
-limit label; the plan screen's new kind; no compare table. Vitest tests.
+Gate: `make verify-fast` · `make prompt-guard` · `make drift-check`. Commit.
 
-13.3 **Design and words — `lead`.** Reason: taste-bearing surfaces and
-product copy. The block in both states, the heading label, the level words;
-the tints put to the owner on the built screen.
+### Phase 13L — Constrain loop — `lead`
+
+`constrain_v3` on the hard-requirement test data
+(`9-constrain-hard-requirements.txt`, the clones as Phase 9 left them).
+
+Stop measure: M11, the authority label right for at least 9 of 10 options,
+read by hand. Reported: no exclusion comes from "who decides".
+
+Gate: `make verify-fast` · `make prompt-guard`. Commit. Report to the owner
+(R25).
+
+### Phase 14a — Read models and views (R40, R43, R44)
+
+14a.1 **Read models — `fast-worker`.** Remove `ambition_bands` and the
+ambition group source; add the fields of final § 3 "Contract parts that
+change"; `make openapi-sync`.
+
+14a.2 **Structure — `fast-worker`.** Plain rows (no ambition word); grouping
+by theme and lever type only; the authority-label filter; "What it is" with
+ambition after the lever line and the setting; "What it would take"
+collapsed by default (a row of eight cells), expanded the eight lines,
+hidden for an added option before a rebuild; the outcome counts in "What the
+evidence base holds so far"; the grid column chooser with "Middle" and
+"Untagged"; the Setting facet from the option-level setting; the plan
+screen's kinds; no compare table. Vitest tests.
+
+14a.3 **Design and words — `lead`.** The block in both states, the heading
+label, the level words; the tints put to the owner on the built screen.
 
 Gate: `make verify-fast` · `make prompt-guard` · `make drift-check` ·
 `make frontend-verify`. Commit.
 
 ### Phase 14 — Live check, evidence, specs, exit — `lead`
 
-Reason: adjudication and the owner's words on spec changes. Three live rapid
-runs (obesity, refugees, caregiving); M1–M12 and M14 read back from saved
-files (M8, M10–M12 and M14 reported); spec changes with the owner's accepted
-wording; `docs/specs/log.md`; `docs/deferred.md` (burden, a grounded
-legal-change line, the outcome direction to task 3, the two-outcome count
-limit); `verification.md`.
+Three live rapid runs (obesity, refugees, caregiving); M1–M12 and M14 read
+back from saved files; spec changes with the owner's accepted wording
+(`option_profile` included); `docs/specs/log.md`; `docs/deferred.md`
+(burden, a grounded legal-change line, the outcome direction and the limits
+for task 3, building an added option in place); `verification.md`.
 
 Gate: **full `make verify`**. Commit.
 
