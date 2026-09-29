@@ -7,11 +7,13 @@ task 046 items 5, 7, 10, 11, 12, R4, R21, AM6, AM7.
    that is not merged, with its label, description, design features, origin
    and relations — made before the batches (``constrain_v2``'s distinct
    prompt). Each reported pair is checked: a pair naming an unknown id, the
-   same id twice, a duplicate already reported, or a chain (the kept option
-   is itself a duplicate) is dropped and counted. Of a pair, the option kept
-   is the user's or Evidence search's when exactly one of the two is
-   (:data:`_KEPT_FIRST_ORIGINS`; the pair is turned round when the call named
-   the other), otherwise the one the call named. The duplicate's *distinct*
+   same id twice, a duplicate already reported, or a chain (the option
+   named as kept is itself reported as a duplicate) is dropped and counted.
+   Code, not the call, decides which option of a duplicate group is kept
+   (the merge rule of 2026-09-24, components § 7): the user's option first,
+   then Evidence search's, then the earliest created
+   (:func:`_keep_order`), whichever side of a pair the call put it on. The
+   duplicate's *distinct*
    verdict is ``breaks`` with a reason naming the kept option; every other
    option ``passes``. A call that fails or stays malformed after its retry
    gives every option ``cannot_check`` on *distinct* and no merge.
@@ -119,8 +121,9 @@ PACKAGE_DISTINCT_REASON = "packages and their parts are shown together"
 DISTINCT_PASSES_REASON = "no other option on the longlist is the same kind of action"
 #: The *distinct* reason for a duplicate whose kept option left the list.
 DUPLICATE_KEPT_REASON = "the first of its duplicates on the longlist is kept"
-#: Origins a duplicate pair keeps first: the user's and Evidence search's own.
-_KEPT_FIRST_ORIGINS = frozenset({"added_by_you", "from_evidence_search"})
+#: Origins a duplicate group keeps first, in this order: the user's, then
+#: Evidence search's own (components § 7, the merge rule of 2026-09-24).
+_KEPT_FIRST_ORIGINS: tuple[str, ...] = ("added_by_you", "from_evidence_search")
 #: The ``judgements`` key of the deterministic in-scope record. Not
 #: ``"in_scope"``: that id is the *within scope* default screen's.
 IN_SCOPE_EVIDENCE_KEY = "in_scope_evidence"
@@ -536,8 +539,16 @@ class _Distinct:
     stats: dict[str, Any]
 
 
-def _kept_first(row: Any) -> bool:
-    return row.origin in _KEPT_FIRST_ORIGINS
+def _keep_order(row: Any) -> tuple[int, Any, str]:
+    """A duplicate group's keep order: the user's option, then Evidence
+    search's, then the earliest created, then the lowest id."""
+    origin = row.origin
+    rank = (
+        _KEPT_FIRST_ORIGINS.index(origin)
+        if origin in _KEPT_FIRST_ORIGINS
+        else len(_KEPT_FIRST_ORIGINS)
+    )
+    return (rank, row.created_at, str(row.option_id))
 
 
 def _distinct_verdicts(response: DistinctResponse, rows: Sequence[Any]) -> _Distinct:
@@ -545,19 +556,19 @@ def _distinct_verdicts(response: DistinctResponse, rows: Sequence[Any]) -> _Dist
 
     A reported pair is dropped (and counted) when it names an id not on the
     list (``unknown_id``), the same id twice (``same_id``), a duplicate an
-    earlier pair already reported (``repeated``), or a kept option that is
-    itself reported as a duplicate (``chain``). Of each remaining pair the
-    user's or Evidence search's option is kept when exactly one of the two is
-    one (the pair is turned round when the call named the other: ``turned``;
-    a turned pair whose new duplicate is already another pair's duplicate is
-    ``repeated``, and a pair that pointed at the new duplicate follows it to
-    its kept option); otherwise the kept option is the one the call named.
-    The duplicate of each pair ``breaks`` with a reason naming its kept
-    option; every other option ``passes``.
+    earlier pair already reported (``repeated``), or an option named as kept
+    that is itself reported as a duplicate (``chain``). The remaining pairs
+    form groups (an option named as kept with every option reported as its
+    duplicate). Code decides which member of a group is kept, by
+    :func:`_keep_order` — never the side of the pair the call put it on
+    (``turned`` counts the pairs whose kept option differs from the one the
+    call named). Every other member ``breaks`` with a reason naming the kept
+    option (its own pair's reason, or for the option the call named as kept,
+    the reason of the kept option's pair); every other option ``passes``.
     """
     by_id = {str(row.option_id): row for row in rows}
     dropped = dict.fromkeys(("unknown_id", "same_id", "repeated", "chain"), 0)
-    reported: dict[str, tuple[str, str]] = {}  # duplicate -> (kept, reason), as reported
+    reported: dict[str, tuple[str, str]] = {}  # duplicate -> (named kept, reason)
     for wire in response.duplicates:
         duplicate, kept = wire.option_id.strip(), wire.same_as_option_id.strip()
         if duplicate not in by_id or kept not in by_id:
@@ -571,23 +582,25 @@ def _distinct_verdicts(response: DistinctResponse, rows: Sequence[Any]) -> _Dist
     for duplicate in [d for d, (kept, _) in reported.items() if kept in reported]:
         dropped["chain"] += 1
         del reported[duplicate]
+    groups: dict[str, list[str]] = {}  # named kept -> its reported duplicates
+    for duplicate, (named, _) in reported.items():
+        groups.setdefault(named, []).append(duplicate)
+    pairs: dict[str, tuple[str, str]] = {}  # duplicate -> (kept, reason)
     turned = 0
-    pairs: dict[str, tuple[str, str]] = {}
-    for duplicate, (kept, reason) in reported.items():
-        if _kept_first(by_id[duplicate]) and not _kept_first(by_id[kept]):
-            duplicate, kept = kept, duplicate
-            turned += 1
-        if duplicate in pairs:
-            dropped["repeated"] += 1
-            continue
-        pairs[duplicate] = (kept, reason)
-    for duplicate, (kept, reason) in list(pairs.items()):
-        if kept in pairs:  # a turned pair made ``kept`` a duplicate: follow it
-            pairs[duplicate] = (pairs[kept][0], reason)
+    for named, duplicates in groups.items():
+        kept = min([named, *duplicates], key=lambda oid: _keep_order(by_id[oid]))
+        if kept != named:
+            turned += len(duplicates)
+            pairs[named] = (kept, reported[kept][1])
+        for duplicate in duplicates:
+            if duplicate != kept:
+                pairs[duplicate] = (kept, reported[duplicate][1])
     verdicts = {oid: _Verdict("passes", DISTINCT_PASSES_REASON) for oid in by_id}
     for duplicate, (kept, reason) in pairs.items():
-        named = f'The same as "{by_id[kept].name}"'
-        verdicts[duplicate] = _Verdict("breaks", f"{named}: {reason}" if reason else f"{named}.")
+        named_text = f'The same as "{by_id[kept].name}"'
+        verdicts[duplicate] = _Verdict(
+            "breaks", f"{named_text}: {reason}" if reason else f"{named_text}."
+        )
     return _Distinct(
         verdicts=verdicts,
         kept={duplicate: kept for duplicate, (kept, _) in pairs.items()},

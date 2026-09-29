@@ -351,7 +351,7 @@ def test_distinct_keeps_the_users_option_of_a_duplicate_group(conn: Connection) 
     walk.build(StubLonglistBackend())
     backend = StubLonglistBackend(
         distinct_responses=_pairs(
-            # The call keeps the wrong one: the pair is turned round.
+            # The call names another option as kept: code keeps the user's.
             (users, first, "The same offer as Youth guarantee."),
             (later, first, "Youth guarantee under a new name."),
         )
@@ -363,8 +363,7 @@ def test_distinct_keeps_the_users_option_of_a_duplicate_group(conn: Connection) 
     kept = _latest(walk).judgements[str(users)]["1"]["distinct"]
     assert (kept["verdict"], kept["reason"]) == ("passes", DISTINCT_PASSES_REASON)
     # Merged into the kept option, not excluded (owner ruling 2026-09-24);
-    # ``later`` named ``first``, which the turn made a duplicate: it follows
-    # ``first`` to ``users``.
+    # both pairs named ``first``: the group is kept at ``users``.
     for oid in (first, later):
         assert _row(walk, oid).merged_into_option_id == users
         assert (_row(walk, oid).state, _row(walk, oid).exclusion) == ("included", None)
@@ -374,7 +373,35 @@ def test_distinct_keeps_the_users_option_of_a_duplicate_group(conn: Connection) 
     assert summary["excluded"] == 0
     assert _latest(walk).counts["merged"] == 2
     stats = _latest(walk).provenance["constrain"]["distinct"]
-    assert (stats["pairs"], stats["turned"], stats["failed"]) == (2, 1, False)
+    assert (stats["pairs"], stats["turned"], stats["failed"]) == (2, 2, False)
+
+
+def test_code_keeps_the_earliest_whichever_option_the_call_names(conn: Connection) -> None:
+    """The merge rule of 2026-09-24: of two options of the same kind of origin,
+    the earliest created is kept, even when the call names the later one."""
+    walk = _walk(conn)
+    t0 = now()
+    earlier = walk.option("Youth guarantee", created_at=t0)
+    later = walk.option("Guarantee scheme", created_at=t0 + timedelta(seconds=1))
+    walk.build(StubLonglistBackend())
+    backend = StubLonglistBackend(
+        distinct_responses=_pairs((earlier, later, "The same offer."))
+    )
+
+    _, summary = _constrain(walk, backend)
+
+    assert _row(walk, later).merged_into_option_id == earlier
+    assert _row(walk, earlier).merged_into_option_id is None
+    distinct = _latest(walk).judgements[str(later)]["1"]["distinct"]
+    assert (distinct["verdict"], distinct["reason"]) == (
+        "breaks",
+        'The same as "Youth guarantee": The same offer.',
+    )
+    kept = _latest(walk).judgements[str(earlier)]["1"]["distinct"]
+    assert (kept["verdict"], kept["reason"]) == ("passes", DISTINCT_PASSES_REASON)
+    assert summary["excluded"] == 0
+    stats = _latest(walk).provenance["constrain"]["distinct"]
+    assert (stats["pairs"], stats["turned"]) == (1, 1)
 
 
 def _duplicate_pair(walk: _Walk, **dup_values: Any) -> tuple[uuid.UUID, uuid.UUID]:

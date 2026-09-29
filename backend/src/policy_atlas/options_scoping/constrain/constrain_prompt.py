@@ -140,9 +140,8 @@ class DistinctPairWire(BaseModel):
     )
     same_as_option_id: str = Field(
         description=(
-            "The option it duplicates, copied exactly. Of the two, this is "
-            "the one to keep: the user's own option if one of them is; "
-            "otherwise the wider or better specified one."
+            "The option it duplicates, copied exactly. Which of the two is "
+            "kept is decided by a fixed rule, not by you."
         )
     )
     reason: str = Field(
@@ -294,11 +293,11 @@ Instructions:
   versus voluntary).
 - An option marked PART OF another (a component of a package, or the
   package) is never a duplicate of it.
-- For each duplicate, name the one to keep in same_as_option_id: the
-  user's own option (origin 'added by you') if one of them is; otherwise
-  the wider or better specified one. Never chain: the option you keep
-  must not itself be reported as a duplicate. When three options are the
-  same, report two of them against the third.
+- Report each duplicate against the option it duplicates. Which of the
+  two stays on the list is decided by a fixed rule, not by you. Never
+  chain: an option you name in same_as_option_id must not itself be
+  reported as a duplicate. When three options are the same, report two of
+  them against the third.
 - When in doubt, they are distinct. An empty list is a correct answer.
 """
 
