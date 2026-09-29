@@ -193,3 +193,40 @@ New questions from the owner, to answer in the design:
 - **The bands.** "Will high/med/low even be interpretable by users or even by
   downstream AIs? … if those bands aren't calibrated across the option set
   then it wouldn't be useful for comparisons either."
+
+## The owner's second answers (2026-09-29)
+
+| Item | Answer | State |
+|---|---|---|
+| The plan kinds (Part A) | "the plan kinds look good" | **accepted** |
+| Acceptability (B3) | "Let's leave it out, it feels too shaky. Maybe burden could be a good substitute but I feel like we would have to test a range of domains to decide if it's right to include" | **out**; "burden" only after a test across domains |
+| The label on the heading (B7) | "Sounds good" | **accepted** |
+| Named answers for each aspect | "Again a fixed list, what you've outlined feels too rigid at least for some of the aspects. Would those really work for a broad variety of domains?" | **rejected as proposed** |
+| Anchor examples in the prompt | "Won't it be biased towards the domains that we name. When we're thinking about a generalised tool, I don't know how we can ensure we have good coverage of anchor examples" | **rejected as proposed** |
+| Comparison across the list | "sounds like it would be good. But again we would have to test it and also think about potential latency." | to test |
+| The reader | "needs more thought" | open |
+| Ambition | "should the 'ambition' label we're currently doing be based on these? How is it currently produced?" | open |
+| Outcomes | "adding outcomes based on the old version is quite complex since there are a lot of different aspects" | open |
+
+The owner asked to take the open topics one at a time.
+
+## Topic 1 decided (2026-09-29): how an aspect is expressed
+
+The owner: "I agree on topic 1".
+
+- **Each aspect is one plain sentence** that answers the aspect's question for
+  the option. No band, no fixed list of answers, no anchor examples in the
+  prompt.
+- **One call for each aspect reads the whole list.** It gets the aspect's
+  question, the plan, and the design and evidence records of every option. It
+  writes, for every option, the sentence and the option's **place** among the
+  options of this list (lower, middle, higher), and says if the list differs
+  much on the aspect (wide, narrow). The eight calls run at one time.
+- This replaces B1 (one pass in batches), B2's bands, B5's "take the harder
+  band", and the three guards that the lead first proposed (the owner: "we
+  should address the root clause, not apply a bandaid").
+- Evidence: `evidence/rounds/9-compare-experiment.txt` (the two-step form and
+  its fault), `9-aspect-pass-experiment.txt` (the accepted form).
+- Open from the test: the step takes about one minute; the places of two
+  aspects are less stable (dependencies, time to effect); the "basis" mark is
+  not reliable and is not shown until a test proves it.
