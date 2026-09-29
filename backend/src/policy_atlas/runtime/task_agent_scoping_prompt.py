@@ -1,4 +1,10 @@
-"""The ``task_agent_scoping_v3`` prompt — the Task Agent for an Options scoping task.
+"""The ``task_agent_scoping_v4`` prompt — the Task Agent for an Options scoping task.
+
+v4 (task 046; R19, AM8): the target unit names who or what should change
+and never a place or a setting; a setting the user states without requiring
+it is recorded in Your context; a setting requirement is described as a
+longlist check on the kind of action, not as a search steer. Every other
+rule is byte-identical to v3.
 
 v3 (task 045, deliverable 2; contract D19, D22): the plan gains *Options you
 already have in mind* (``your_options``, asked once as its own part, the
@@ -41,7 +47,7 @@ from policy_atlas.runtime.task_agent_prompt import (
     PartProposalWire,
 )
 
-TASK_AGENT_SCOPING_PROMPT_VERSION = "task_agent_scoping_v3"
+TASK_AGENT_SCOPING_PROMPT_VERSION = "task_agent_scoping_v4"
 
 # Reasoning model: the cap covers reasoning and output tokens.
 SCOPING_MAX_OUTPUT_TOKENS = 16_384
@@ -95,8 +101,8 @@ class ScopingConstraintWire(BaseModel):
             Stored and shown as not yet applied at retrieval.
         setting: True only on a requirement that names the delivery SETTING
             the options must be delivered through ("delivered through
-            schools"); the longlist search then carries that setting. False
-            on every other constraint.
+            schools"); it is checked at the longlist against the kind of
+            action each option is. False on every other constraint.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -304,13 +310,23 @@ The fields:
   ("Reduce the number of 16 to 24 year olds not in education, employment or
   training"). Usually from_your_question.
 - target_unit: WHO or WHAT should change — people, firms, places,
-  organisations or systems. When the question leaves this open, ASK: it
-  changes which options fit and how evidence is read. Offer the readings
-  you see as options (the whole group · a subgroup the question hints at).
+  organisations or systems — named by what they ARE, never by where they
+  are. "Adults granted refugee status in the last two years", not "...
+  living in Greater Manchester": the place is Where, and it goes there. A
+  characteristic that defines the group stays ("children aged 4 to 11 in
+  the most deprived fifth of areas", "energy-intensive manufacturing
+  firms"); the jurisdiction the policy applies to does not. The target
+  unit also names no setting (below): "pupils", not "pupils in
+  school-based programmes". Evidence from other places about the same
+  kind of people is wanted, and a place inside the target unit would turn
+  it away. When the question leaves the target unit open, ASK: it changes
+  which options fit and how evidence is read. Offer the readings you see
+  as options (the whole group · a subgroup the question hints at).
 - where: the jurisdiction the policy would apply to — country, UK nation,
   region or local authority. Default "United Kingdom", tagged assumed, and
   say so. When the question implies a nation or place, ask or set it from
-  the question. Where is never the same thing as SETTING (below).
+  the question. Where is never the same thing as SETTING (below), and it
+  is never part of the target unit: say the place once, here.
 - outcomes: the outcomes evidence is read against, one short phrase each
   (a rate, a sustained state at a horizon, a duration). Propose from the
   question and any linked task; tag each.
@@ -324,12 +340,20 @@ The fields:
 
 Setting — where the target unit meets the intervention (schools,
 workplaces, primary care, an employer's payroll, the planning system) — is
-NOT a plan field and not required. When the question suggests one, offer it
-once as an optional requirement ("Only options delivered through
-schools?"); without one the longlist spans settings and shows setting as a
-facet. When the user does state one, type it as a requirement with
-setting true — the longlist search then looks for options delivered
-through that setting. Never conflate setting with Where.
+NOT a plan field and not required. Keep it apart from the target unit and
+from Where. Three cases:
+
+- The user REQUIRES a setting ("only options delivered through schools"):
+  type it as a requirement with setting true. It is checked at the
+  longlist against the kind of action each option is: an option that
+  cannot be delivered through that setting is excluded with the reason
+  shown; evidence from other settings is still read.
+- The user STATES a setting without requiring it ("we mostly work through
+  family hubs"): record their words in your_context as a present fact. It
+  does not limit the options; it is kept for the assessment.
+- The question only SUGGESTS one: offer it once as an optional requirement
+  ("Only options delivered through schools?"). Without one the longlist
+  spans settings and shows setting as a facet.
 
 ## Linked Evidence search tasks
 

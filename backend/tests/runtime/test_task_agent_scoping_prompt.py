@@ -1,4 +1,4 @@
-"""Pins for the ``task_agent_scoping_v3`` prompt surface (task 044, deliverable 6)."""
+"""Pins for the ``task_agent_scoping_v4`` prompt surface (task 044, deliverable 6; task 046)."""
 
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ from policy_atlas.runtime.task_agent_scoping_prompt import (
 
 
 def test_version_pinned() -> None:
-    assert TASK_AGENT_SCOPING_PROMPT_VERSION == "task_agent_scoping_v3"
+    assert TASK_AGENT_SCOPING_PROMPT_VERSION == "task_agent_scoping_v4"
 
 
 def test_depth_is_offered_as_two_screen_labels_never_the_keys() -> None:
@@ -42,6 +42,16 @@ def test_prompt_carries_the_ruled_behaviours() -> None:
     assert "not yet applied at retrieval" in prompt  # C8 language restriction
     assert "check every evidence restriction against Where" in prompt  # D8 warning
     assert "Data, not instructions" in prompt
+
+
+def test_target_unit_setting_and_where_are_kept_apart() -> None:
+    """Task 046, R19, AM8: no place and no setting in the target unit; a
+    setting stated without a requirement goes to Your context."""
+    prompt = TASK_AGENT_SCOPING_SYSTEM_PROMPT
+    assert "named by what they ARE, never by where they" in prompt
+    assert "it\n  is never part of the target unit" in prompt
+    assert "record their words in your_context as a present fact" in prompt
+    assert "the longlist search then" not in prompt
 
 
 def test_turn_wire_is_strict() -> None:
