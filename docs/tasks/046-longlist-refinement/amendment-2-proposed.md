@@ -360,3 +360,10 @@ consideration. The consideration's `hard` flag carries "exclude only when the
 user says so": a hard consideration on "who decides" can exclude; one that is
 not hard gives the authority label. A limit on another line never excludes
 (Q1). With no such consideration, the option has no authority label (Q9).
+
+## Questions 19 and 20 decided (2026-09-29)
+
+| Q | Decision | The owner's words |
+|---|---|---|
+| 19 | **The profile is a step of its own**, a component between `longlist` and `constrain`, the same form as `theme`. `longlist` makes the list: which options there are, which documents belong to each, and the lever type. It no longer writes ambition. The lead's recommendation on failure, put to the owner in the same question: if the profile step fails, the longlist shows with no profile and constrain runs with no labels. | "I think it is its own step. But then what does the longlist step do?" |
+| 20 | A consideration on "who decides" that is hard can exclude an option; one that is not hard gives the authority label only. | "yea fine" |
