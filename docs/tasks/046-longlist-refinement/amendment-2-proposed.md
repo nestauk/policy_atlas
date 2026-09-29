@@ -167,3 +167,29 @@ whole list in one call.
 8. **E1:** the profile and the early signal may inform the shortlist cut (reopens rulings 12 and 19)?
 9. **F3:** may the walk get a side branch, if the simple way does not fit in 600 seconds?
 10. **Review:** an adversarial review of this amendment before the build?
+
+## The owner's first answers (2026-09-29)
+
+Quoted from the build conversation. Items still open stay proposals.
+
+| Decision | Answer | State |
+|---|---|---|
+| 1. The plan | "What is the consideration kind? Give me the five kinds for the new proposed plan" | open: explained in the conversation |
+| 2. Aspects | "I think the 8 aspects are better, as we said before composite assessments are more likely to be inaccurate than if we split up the assessments right? Also a broad complexity dimension feels a bit hard to interpret." · "7 or 8" | coordination and delivery complexity stay apart; 7 or 8 depends on acceptability |
+| 3. Acceptability | "Why recommend out?" | open |
+| 4. Wording | "Not sure what you mean by this" | open: explained in the conversation |
+| 5. Setting | "I think so, what's the difference between the option level, and the records?" | accepted in principle |
+| 6. Outcomes | "I think we need to think through the outcomes piece more." A review of the previous version (`../discovery_policy_atlas`) is asked for: "don't treat it as gospel, some things might be good/useful, but others might be subpar". | open; review running |
+| 7. Migration | "Yea we'll need a db migration" | **accepted** |
+| 8. Shortlist | "Yes the profile will" inform the cut. The early signal waits: "it's the remit of the next task". | **accepted** for the profile |
+| 9. The walk | "No. we can make it longer than 600 if needs be and optimise for latency afterwards." | **F3 rejected.** F4 is withdrawn: M8 stays a reported measure |
+| 10. Review | "not yet but we will do." | later |
+
+New questions from the owner, to answer in the design:
+
+- **The reader.** "8 would be a lot to take in for a reader though so we would
+  need to think about the UX, whether to even show all of them or to have
+  more of a condensed summary somehow".
+- **The bands.** "Will high/med/low even be interpretable by users or even by
+  downstream AIs? … if those bands aren't calibrated across the option set
+  then it wouldn't be useful for comparisons either."
