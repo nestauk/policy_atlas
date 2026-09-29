@@ -455,7 +455,7 @@ them and told the owner. The owner can change each one.
 |---|---|
 | 1 | A consideration's `aspect` is one of the eight line keys or `transferability`. A transferability consideration has no effect at the longlist. |
 | 2 | The aim is the plan's present field `intended_change`. No new field. |
-| 3 | `consideration` is checked at the shortlist. The authority label that constrain writes is a label, not a check. |
+| 3 | `consideration` is checked at `assessment`, the same stage as `preference` (`CheckedAt` has the values `longlist`, `assessment`, `retrieval`; no new value). The authority label that constrain writes is a label, not a check. |
 | 4 | "Studied in" is not built in task 046. The record keeps its setting words in the database; no read-model field and no place on the screen. It goes to the later work. |
 | 5 | D1 is not in amendment 2, because constrain's exclusions do not change. |
 | 6 | The column is `longlist_result.option_profile`. The line keys are `cost`, `time_to_set_up`, `time_to_effect`, `workforce`, `who_decides`, `dependencies`, `coordination`, `delivery_complexity`. A mark is stored as `less`, `more` or null (no mark); the words on the screen come from the view. An option that is not profiled yet has no entry. Ambition's mark is stored the same way in `option.ambition`. |
