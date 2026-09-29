@@ -286,3 +286,32 @@ option that just achieves the proposal's objectives", para 5.18).
 
 To state in the specification: the Green Book compares versions of one
 option; Policy Atlas compares kinds of action on one list.
+
+## Topic 4 decided in part (2026-09-29): the reader
+
+A wireframe from the real obesity run (24 options, the decided form) showed
+four screens. It is in the gitignored evidence folder
+(`evidence/mock/longlist-reader-mock.html`).
+
+| Item | Decision | The owner's words |
+|---|---|---|
+| List rows | **Plain.** No marks on a row. | "On the list, I prefer plain" |
+| Option card, "What it would take" | **All eight lines, always open:** the line name and its mark on the left, the sentence on the right (variant B). No summary paragraph (variant A), no row of cells (variant C). | "I don't like variant A in the option card. B looks pretty good. C feels too condensed and users would probably click through anyway" |
+| Compare table | **Dropped.** The grid, with columns that the reader chooses, is the comparison. | "The compare page looks too information dense and would be offputting to users, I don't like it. Unless there's a better way to easily compare then we should drop it." |
+| Mark colours | Tints from the Nesta palette. The two tints are open. | "We should use some nesta colours for tints" |
+| Words for the levels | Open. Not "less than most", "like most", "more than most". | "In the grid view, I don't like the 'like most', 'less than most', and 'more than most' terms." |
+
+### Known faults in the test data, for the build to test
+
+The builder of the wireframe read the sentences of the obesity run. These
+faults go to the prompt loops of the build. The lead has not yet checked them
+against the saved file.
+
+| Fault | Example | What in this amendment covers it |
+|---|---|---|
+| Setting "none" for an option that has a setting | front-of-pack labels, supermarket targets | B9, and the finding that the setting needs the whole list in one call. The test run used one call for each aspect. |
+| A mark that the sentence contradicts | lobbying controls: cost "less", the sentence says it needs legislation | Not covered. New check for the loop: the mark must agree with its sentence. |
+| A mark that is absent where the sentence lists much | active travel: no workforce mark | Not covered. Same check. |
+| "Who decides" names a law by title and year | school food standards | Topic 2: a legal means only when the baseline or a document states it. The loop must test it. |
+| "Who decides" names two bodies, or uses an acronym | children's meal standards; "DHSC" | Not covered. New rule for the prompt: one body, its full name. |
+| A sentence that answers another question | lobbying controls, time to effect | Not covered. New check for the loop: the sentence answers its line's question. |
