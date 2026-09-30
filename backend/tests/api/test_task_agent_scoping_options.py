@@ -419,6 +419,7 @@ def test_the_baseline_state_names_the_longlist_states(engine: Engine, tmp_path: 
                     coverage={},
                     judgements={},
                     guesses=[],
+                    option_profile={},
                     counts={},
                     provenance={},
                     created_at=_T0,

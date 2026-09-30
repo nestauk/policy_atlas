@@ -297,9 +297,9 @@ def test_the_remedy_clears_a_longlist_walk_and_its_records_then_the_downgrade_ru
         conn.execute(
             text(
                 "INSERT INTO longlist_result (longlist_result_id, task_id, evidence_scope_id, "
-                "run_id, plan_version, themes, coverage, judgements, guesses, counts, "
-                "provenance, created_at) VALUES (:l, :t, :s, :r, 1, '[]', '{}', '{}', '[]', "
-                "'{}', '{}', now())"
+                "run_id, plan_version, themes, coverage, judgements, guesses, option_profile, "
+                "counts, provenance, created_at) VALUES (:l, :t, :s, :r, 1, '[]', '{}', '{}', "
+                "'[]', '{}', '{}', '{}', now())"
             ),
             {"l": uuid.uuid4(), "t": task_id, "s": scope_id, "r": run_id},
         )

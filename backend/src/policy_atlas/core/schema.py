@@ -1716,6 +1716,9 @@ longlist_result = Table(
     # Keyed ``(option_id, design_version)`` so a changed design cannot inherit them.
     Column("judgements", JSONB, nullable=False),
     Column("guesses", JSONB, nullable=False),
+    # Keyed ``[option_id][design_version]``: the eight lines (sentence, mark)
+    # and the setting (task 046, R45).
+    Column("option_profile", JSONB, nullable=False),
     Column("counts", JSONB, nullable=False),
     Column("provenance", JSONB, nullable=False),
     Column("created_at", DateTime(timezone=True), nullable=False),

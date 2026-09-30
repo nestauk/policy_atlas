@@ -255,6 +255,7 @@ def test_has_longlist_is_the_existence_of_a_longlist_result(
                     coverage={},
                     judgements={},
                     guesses=[],
+                    option_profile={},
                     counts={},
                     provenance={},
                     created_at=_T0,

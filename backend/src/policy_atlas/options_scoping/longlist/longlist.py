@@ -2264,6 +2264,7 @@ def longlist_scope(
             coverage=coverage,
             judgements={},
             guesses={},
+            option_profile={},
             counts=counts,
             provenance=provenance,
             created_at=now,

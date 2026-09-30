@@ -256,6 +256,7 @@ def _write_longlist_result(engine: Engine, task_id: uuid.UUID, walk_id: uuid.UUI
                 coverage={},
                 judgements={},
                 guesses=[],
+                option_profile={},
                 counts={},
                 provenance={},
                 created_at=now(),
