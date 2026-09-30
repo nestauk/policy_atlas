@@ -544,7 +544,8 @@ def test_the_list_matches_the_stored_rows(engine: Engine, tmp_path: Path) -> Non
         }
         assert guarantee["settings"] == ["Jobcentres"]
         assert guarantee["primary_lever_type"] == "subsidise"
-        assert guarantee["ambition"] == "incremental"
+        # Ambition is the profile's own call (task 046, R40): the stub marks none.
+        assert guarantee["ambition"] is None
         assert guarantee["is_entrant_with_no_documents"] is False
 
         mentoring = by_name["Mentoring"]

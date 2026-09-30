@@ -26,22 +26,33 @@ from policy_atlas.api.routers import sse
 from policy_atlas.api.stage_vocabulary import STAGE_BY_REGISTRY, STAGE_PRESENTATION
 from policy_atlas.core import events
 from policy_atlas.core.schema import longlist_result, option
-from policy_atlas.options_scoping.longlist.lever_types import (
-    AMBITION_BANDS,
-    LEVER_TYPE_KEYS,
-    TAXONOMY_VERSION,
-)
+from policy_atlas.options_scoping.longlist.lever_types import LEVER_TYPE_KEYS, TAXONOMY_VERSION
 from policy_atlas.options_scoping.longlist.longlist_backend import StubLonglistBackend
+from policy_atlas.options_scoping.option_profile.lever_typing_prompt import (
+    build_lever_typing_messages,
+)
 from policy_atlas.options_scoping.option_profile.option_profile import (
     TYPING_INVALID_REASON,
     OptionProfileContext,
     OptionProfileFailure,
     option_profile_scope,
 )
+from policy_atlas.options_scoping.option_profile.option_profile_prompt import (
+    AmbitionResponse,
+    AmbitionWire,
+    MarkedLineResponse,
+    MarkedLineWire,
+    SettingResponse,
+    SettingWire,
+    StandsOut,
+    build_ambition_messages,
+    build_line_messages,
+    build_setting_messages,
+)
 from policy_atlas.runtime.harness import build_graph
 from policy_atlas.runtime.run_spec import COMPONENT_REGISTRY, Plan, compile
 from policy_atlas.runtime.runner import LLM_BEARING_COMPONENTS, NullIO, run_plan
-from policy_atlas.runtime.scoping_plan import LONGLIST_CHAIN
+from policy_atlas.runtime.scoping_plan import LONGLIST_CHAIN, PROFILE_LINE_KEYS
 from policy_atlas.runtime.task_plan import OPTIONS_SCOPING_STEPS, registry_component_for
 from tests.options_scoping.test_longlist import _Scripted, _Walk
 from tests.runtime.test_baseline_gate import (
@@ -105,8 +116,6 @@ def _snapshot(walk: _Walk, run_id: uuid.UUID) -> dict[str, Any]:
                 list(row.secondary_lever_types),
                 row.lever_none_fits_reason,
                 row.taxonomy_version,
-                row.ambition,
-                row.ambition_reason,
             ]
             for name, row in sorted(rows.items())
         },
@@ -161,7 +170,7 @@ def test_the_scripted_typing_and_the_keep_previous_rule_are_the_same(conn: Conne
         _Scripted(
             typings={
                 "Free bus passes": {"primary_lever_type": "make it so"},
-                "A new body": {"ambition_reason": "   "},
+                "A new body": {"primary_lever_type": None, "none_fits_reason": None},
                 "Blank reason": {
                     "lever_reason": "A grant to each household.",
                     "runner_up_lever_type": "regulate",
@@ -198,7 +207,8 @@ def test_typing_one_primary_or_none_fits_the_version_and_the_ambition(
     assert bus.primary_lever_type in LEVER_TYPE_KEYS
     assert bus.secondary_lever_types == ["inform"]
     assert bus.taxonomy_version == TAXONOMY_VERSION
-    assert bus.ambition in AMBITION_BANDS and bus.ambition_reason
+    # The ambition is the profile's own call now (R40): no mark from the stub.
+    assert (bus.ambition, bus.ambition_reason) == (None, "Stub ambition.")
     assert options["A new body"].primary_lever_type is None
     assert options["A new body"].lever_none_fits_reason == "It sets a mood."
     # An invalid typing leaves the columns as they were (task 046, S12): here
@@ -241,6 +251,8 @@ def test_a_failed_typing_call_is_counted_never_a_crash(conn: Connection) -> None
     row = walk.options()["Youth guarantee"]
     assert (row.lever_none_fits_reason, row.taxonomy_version) == (None, None)
     assert row.lever_none_fits_reason != TYPING_INVALID_REASON
+    # The step still succeeds: the profile is written (Phase 12b).
+    assert set(result.option_profile) == {str(row.option_id)}
 
 
 def test_typing_batches_run_in_parallel(conn: Connection) -> None:
@@ -346,7 +358,8 @@ def test_the_stub_backend_types_every_option(conn: Connection) -> None:
     options = walk.options()
     assert len(options) == 2
     assert all(row.primary_lever_type == "provide a service" for row in options.values())
-    assert all(row.ambition == "incremental" for row in options.values())
+    assert all(row.ambition is None for row in options.values())
+    assert all(row.ambition_reason == "Stub ambition." for row in options.values())
 
 
 # --- the component --------------------------------------------------------------------
@@ -393,7 +406,7 @@ def test_the_profile_merges_into_the_row_and_types_every_option_not_merged(
     before = walk.result(run_id)
     backend = _Scripted()
     profile_run, summary = _profile(walk, backend)
-    assert summary == {"options": 2, "typed": 2, "kept": 0, "invalid": 0}
+    assert summary == {"options": 2, "typed": 2, "kept": 0, "invalid": 0, "profiled": 2}
     typed = [option_["unit_id"] for call in backend.calls["type"] for option_ in call["options"]]
     assert typed == [str(first), str(excluded)]
     rows = {row.option_id: row for row in walk.options().values()}
@@ -401,16 +414,29 @@ def test_the_profile_merges_into_the_row_and_types_every_option_not_merged(
     assert rows[excluded].primary_lever_type == "subsidise"
     after = walk.result(run_id)
     assert after.coverage == before.coverage
-    assert after.counts == {**before.counts, "none_fits": 0, "typing_invalid": 0}
+    assert after.counts == {
+        **before.counts,
+        "none_fits": 0,
+        "typing_invalid": 0,
+        "profiled": 2,
+    }
     assert after.provenance["seed_ids"] == before.provenance["seed_ids"]
     assert after.provenance["prompt_versions"]["cluster"] == (
         before.provenance["prompt_versions"]["cluster"]
     )
     assert set(after.provenance["models"]) == {"discovery", "assignment", "typing"}
+    no_marks = {"less": 0, "more": 0, "none": 2}
     assert after.provenance["option_profile"] == {
         "run_id": str(profile_run),
         "backend_mode": "stub",
         "usage_totals": after.provenance["option_profile"]["usage_totals"],
+        "prompt_version": "option_profile_v1",
+        "model": "stub",
+        "records_max": 5,
+        "calls": 10,
+        "retries": 0,
+        "marks": dict.fromkeys(PROFILE_LINE_KEYS, no_marks),
+        "ambition_marks": no_marks,
     }
 
 
@@ -429,7 +455,7 @@ def test_kept_counts_only_an_option_that_was_typed_before(conn: Connection) -> N
     _, summary = _profile(walk, failing)
     # Both typings are invalid; only the option typed before keeps a typing,
     # the new one's lever columns stay null.
-    assert summary == {"options": 2, "typed": 0, "kept": 1, "invalid": 2}
+    assert summary == {"options": 2, "typed": 0, "kept": 1, "invalid": 2, "profiled": 2}
     assert walk.options()["A new option"].primary_lever_type is None
     assert walk.options()["Free bus passes"].primary_lever_type == "subsidise"
 
@@ -439,6 +465,356 @@ def test_option_profile_without_a_longlist_fails(conn: Connection) -> None:
     walk.option("Youth guarantee")
     with pytest.raises(OptionProfileFailure):
         _profile(walk, StubLonglistBackend())
+
+
+# --- the lines, the ambition and the setting (Phase 12b; R36, R40, R41, S16, S17) ------
+
+
+def _column(walk: _Walk, run_id: uuid.UUID) -> dict[str, Any]:
+    column: dict[str, Any] = walk.result(run_id).option_profile
+    return column
+
+
+def _marked(**marks: StandsOut) -> MarkedLineResponse:
+    """A marked line response; ``marks`` maps a short id to its ``stands_out``."""
+    return MarkedLineResponse(
+        options=[
+            MarkedLineWire(option_id=short_id, answer=f" Line for {short_id}. ", stands_out=mark)
+            for short_id, mark in marks.items()
+        ]
+    )
+
+
+def _three(walk: _Walk) -> dict[str, uuid.UUID]:
+    """Three options, o1 to o3 in created order."""
+    return {
+        "o1": walk.option("Free bus passes"),
+        "o2": walk.option("A new body"),
+        "o3": walk.option("Work trial"),
+    }
+
+
+def test_each_line_is_written_for_every_option_not_merged(conn: Connection) -> None:
+    walk = _Walk(conn)
+    first = walk.option("Youth guarantee")
+    excluded = walk.option("Wage subsidy", state="excluded")
+    merged = walk.option("Work trial", merged_into_option_id=first)
+    run_id, _ = walk.build(_Scripted())
+    _, summary = _profile(walk, StubLonglistBackend())
+    column = _column(walk, run_id)
+    # An excluded option gets its profile; a merged one gets none (final § 2.3).
+    assert set(column) == {str(first), str(excluded)}
+    assert str(merged) not in column
+    for option_id in (first, excluded):
+        entry = column[str(option_id)]
+        assert list(entry) == ["1"]  # the design version
+        lines = entry["1"]["lines"]
+        # JSONB keeps no key order: the reader orders by PROFILE_LINE_KEYS.
+        assert set(lines) == set(PROFILE_LINE_KEYS)
+        for line_key, line in lines.items():
+            assert line == {"sentence": f"Stub {line_key} sentence.", "mark": None}
+        assert entry["1"]["setting"] == {"main": "stub setting", "second": None}
+    result = walk.result(run_id)
+    assert summary["profiled"] == result.counts["profiled"] == 2
+
+
+def test_the_marks_are_stored_as_given_and_two_lines_never_carry_one(
+    conn: Connection,
+) -> None:
+    walk = _Walk(conn)
+    ids = _three(walk)
+    run_id, _ = walk.build(_Scripted())
+    everyone_more = _marked(o1="more", o2="more", o3="more")
+    backend = StubLonglistBackend(
+        line_responses={
+            "cost": _marked(o1="less", o2="more", o3="no"),
+            "who_decides": everyone_more,
+            "dependencies": everyone_more,
+        }
+    )
+    _profile(walk, backend)
+    column = _column(walk, run_id)
+    cost = {short: column[str(ids[short])]["1"]["lines"]["cost"] for short in ids}
+    assert cost == {
+        "o1": {"sentence": "Line for o1.", "mark": "less"},
+        "o2": {"sentence": "Line for o2.", "mark": "more"},
+        "o3": {"sentence": "Line for o3.", "mark": None},
+    }
+    for option_id in ids.values():
+        lines = column[str(option_id)]["1"]["lines"]
+        assert lines["who_decides"]["mark"] is None
+        assert lines["dependencies"]["mark"] is None
+    marks = walk.result(run_id).provenance["option_profile"]["marks"]
+    assert marks["cost"] == {"less": 1, "more": 1, "none": 1}
+    assert marks["who_decides"] == marks["dependencies"] == {"less": 0, "more": 0, "none": 3}
+    assert marks["workforce"] == {"less": 0, "more": 0, "none": 3}
+
+
+def test_the_ambition_is_less_more_or_null_with_the_reason_on_every_option(
+    conn: Connection,
+) -> None:
+    walk = _Walk(conn)
+    ids = _three(walk)
+    run_id, _ = walk.build(_Scripted())
+    backend = StubLonglistBackend(
+        ambition_responses=AmbitionResponse(
+            options=[
+                AmbitionWire(option_id="o1", reason=" A small change. ", stands_out="less"),
+                AmbitionWire(option_id="o2", reason="A new system.", stands_out="more"),
+                AmbitionWire(option_id="o3", reason="Something new beside.", stands_out="no"),
+            ]
+        )
+    )
+    _profile(walk, backend)
+    rows = {row.option_id: row for row in walk.options().values()}
+    assert [(rows[ids[s]].ambition, rows[ids[s]].ambition_reason) for s in ("o1", "o2", "o3")] == [
+        ("less", "A small change."),
+        ("more", "A new system."),
+        (None, "Something new beside."),
+    ]
+    provenance = walk.result(run_id).provenance["option_profile"]
+    assert provenance["ambition_marks"] == {"less": 1, "more": 1, "none": 1}
+
+
+def test_the_setting_is_lower_cased_and_a_null_main_setting_gives_two_nulls(
+    conn: Connection,
+) -> None:
+    walk = _Walk(conn)
+    ids = _three(walk)
+    run_id, _ = walk.build(_Scripted())
+    backend = StubLonglistBackend(
+        setting_responses=SettingResponse(
+            options=[
+                SettingWire(option_id="o1", main_setting=" School ", second_setting="Home"),
+                SettingWire(option_id="o2", main_setting=None, second_setting=None),
+                SettingWire(option_id="o3", main_setting="GP surgery", second_setting=None),
+            ]
+        )
+    )
+    _profile(walk, backend)
+    column = _column(walk, run_id)
+    assert [column[str(ids[s])]["1"]["setting"] for s in ("o1", "o2", "o3")] == [
+        {"main": "school", "second": "home"},
+        {"main": None, "second": None},
+        {"main": "gp surgery", "second": None},
+    ]
+
+
+def test_where_reaches_the_who_decides_call_and_no_other(conn: Connection) -> None:
+    where = "Powys"
+    walk = _Walk(conn, plan=scoping_plan(where={"text": where, "origin": "your_call"}))
+    walk.option("Youth guarantee")
+    walk.option("Wage subsidy")
+    walk.build(_Scripted())
+    profiler = StubLonglistBackend()
+    backend = _Scripted(profiler=profiler)
+    _profile(walk, backend)
+
+    assert sorted(profiler.line_calls) == sorted(PROFILE_LINE_KEYS)
+    assert {i["line_key"]: i["where"] for i in profiler.line_inputs} == {
+        line_key: (where if line_key == "who_decides" else None) for line_key in PROFILE_LINE_KEYS
+    }
+    # The built messages: Where is in the who_decides call and in no other.
+    by_line = {
+        i["line_key"]: build_line_messages(
+            line_key=i["line_key"],
+            plan=i["plan"],
+            where=i["where"],
+            baseline_sections=i["baseline_sections"],
+            options=i["options"],
+        )
+        for i in profiler.line_inputs
+    }
+    assert where in str(by_line.pop("who_decides"))
+    others: list[Any] = list(by_line.values())
+    others.append(build_ambition_messages(**profiler.ambition_inputs[0]))
+    others.append(build_setting_messages(**profiler.setting_inputs[0]))
+    others.extend(
+        build_lever_typing_messages(
+            options=call["options"], plan=call["plan"], baseline_sections=call["baseline_sections"]
+        )
+        for call in backend.calls["type"]
+    )
+    for messages in others:
+        assert where not in str(messages)
+
+
+def test_the_option_list_holds_only_the_named_keys_and_five_records_in_role_order(
+    conn: Connection,
+) -> None:
+    walk = _Walk(conn)
+    walk.option("Youth guarantee")
+    walk.option("Wage subsidy")
+    doc = walk.doc()
+    long_text = "youth guarantee " + "x" * 120
+    roles = ["mentioned", "recommended", "described", "evaluated", "mentioned", "evaluated"]
+    for index, role in enumerate(roles):
+        walk.record(
+            doc,
+            long_text if index == 3 else f"youth guarantee {index}",
+            role=role,
+            design_features=["a", "b", "c", "d"],
+            study_geography="Denmark",
+            population="young people",
+        )
+    walk.rollup(walk.scope_id, [doc])
+    routes = {f"youth guarantee {i}": ("Youth guarantee", False) for i in range(len(roles))}
+    routes[long_text] = ("Youth guarantee", False)
+    walk.build(_Scripted(routes=routes))
+    profiler = StubLonglistBackend()
+    _profile(walk, profiler)
+
+    inputs = [
+        *(i["options"] for i in profiler.line_inputs),
+        *(i["options"] for i in profiler.ambition_inputs),
+        *(i["options"] for i in profiler.setting_inputs),
+    ]
+    assert len(inputs) == 10
+    assert all(payload == inputs[0] for payload in inputs)  # one list for all ten calls
+    payload = inputs[0]
+    assert [o["option_id"] for o in payload] == ["o1", "o2"]
+    assert [o["label"] for o in payload] == ["Youth guarantee", "Wage subsidy"]
+    for option_ in payload:
+        assert set(option_) == {
+            "option_id",
+            "label",
+            "description",
+            "design_features",
+            "evidence_records",
+        }
+        for record in option_["evidence_records"]:
+            assert set(record) == {"intervention", "role", "features"}
+    records = payload[0]["evidence_records"]
+    assert [r["role"] for r in records] == [
+        "evaluated",
+        "evaluated",
+        "described",
+        "recommended",
+        "mentioned",
+    ]
+    assert records[0]["intervention"] == long_text[:100]
+    assert all(r["features"] == ["a", "b", "c"] for r in records)
+    assert payload[1]["evidence_records"] == []
+
+
+_BAD_LINES: dict[str, Any] = {
+    "a missing option": _marked(o1="no", o2="no"),
+    "an option twice": MarkedLineResponse(
+        options=[*_marked(o1="no", o2="no", o3="no").options, *_marked(o1="no").options]
+    ),
+    "another id": _marked(o1="no", o2="no", o3="no", o4="no"),
+    "a blank sentence": MarkedLineResponse(
+        options=[
+            MarkedLineWire(option_id=s, answer="  " if s == "o2" else "A line.", stands_out="no")
+            for s in ("o1", "o2", "o3")
+        ]
+    ),
+}
+
+
+@pytest.mark.parametrize("bad", list(_BAD_LINES))
+def test_a_line_call_malformed_twice_fails_the_step_and_writes_nothing(
+    conn: Connection, bad: str
+) -> None:
+    walk = _Walk(conn)
+    _three(walk)
+    run_id, _ = walk.build(_Scripted())
+    _profile(walk, StubLonglistBackend())
+    before_column = _column(walk, run_id)
+    before_rows = {name: tuple(row) for name, row in walk.options().items()}
+    before_result = walk.result(run_id)
+
+    backend = StubLonglistBackend(
+        line_responses={"coordination": _BAD_LINES[bad]},
+        ambition_responses=AmbitionResponse(
+            options=[
+                AmbitionWire(option_id=s, reason="Bigger.", stands_out="more")
+                for s in ("o1", "o2", "o3")
+            ]
+        ),
+    )
+    with pytest.raises(OptionProfileFailure, match="coordination"):
+        _profile(walk, backend)
+    assert backend.line_calls["coordination"] == 2
+    assert _column(walk, run_id) == before_column
+    assert {name: tuple(row) for name, row in walk.options().items()} == before_rows
+    after_result = walk.result(run_id)
+    assert (after_result.counts, after_result.provenance) == (
+        before_result.counts,
+        before_result.provenance,
+    )
+
+
+@pytest.mark.parametrize(
+    "bad_setting",
+    [
+        SettingWire(option_id="o3", main_setting="  ", second_setting=None),
+        SettingWire(option_id="o3", main_setting=None, second_setting="home"),
+        SettingWire(option_id="o3", main_setting="school", second_setting=" "),
+    ],
+)
+def test_a_malformed_setting_fails_the_step(conn: Connection, bad_setting: SettingWire) -> None:
+    walk = _Walk(conn)
+    _three(walk)
+    walk.build(_Scripted())
+    good = [
+        SettingWire(option_id=s, main_setting="school", second_setting=None) for s in ("o1", "o2")
+    ]
+    backend = StubLonglistBackend(
+        setting_responses=SettingResponse(options=[*good, bad_setting])
+    )
+    with pytest.raises(OptionProfileFailure, match="setting"):
+        _profile(walk, backend)
+    assert backend.setting_calls == 2
+
+
+def test_a_call_malformed_once_then_right_succeeds_with_the_retry_counted(
+    conn: Connection,
+) -> None:
+    walk = _Walk(conn)
+    ids = _three(walk)
+    run_id, _ = walk.build(_Scripted())
+    backend = StubLonglistBackend(
+        line_responses={
+            "cost": [_BAD_LINES["a missing option"], _marked(o1="less", o2="no", o3="no")]
+        }
+    )
+    _profile(walk, backend)
+    assert backend.line_calls["cost"] == 2
+    assert all(backend.line_calls[k] == 1 for k in PROFILE_LINE_KEYS if k != "cost")
+    assert walk.result(run_id).provenance["option_profile"]["retries"] == 1
+    assert _column(walk, run_id)[str(ids["o1"])]["1"]["lines"]["cost"]["mark"] == "less"
+
+
+def test_a_call_that_raises_once_is_tried_again(conn: Connection) -> None:
+    walk = _Walk(conn)
+    _three(walk)
+    run_id, _ = walk.build(_Scripted())
+
+    class _FlakyAmbition(StubLonglistBackend):
+        raised = False
+
+        def profile_ambition(self, **kwargs: Any) -> Any:
+            if not self.raised:
+                self.raised = True
+                raise RuntimeError("provider down")
+            return super().profile_ambition(**kwargs)
+
+    _profile(walk, _FlakyAmbition())
+    assert walk.result(run_id).provenance["option_profile"]["retries"] == 1
+
+
+def test_a_call_that_raises_twice_fails_the_step(conn: Connection) -> None:
+    walk = _Walk(conn)
+    _three(walk)
+    walk.build(_Scripted())
+
+    class _Down(StubLonglistBackend):
+        def profile_setting(self, **kwargs: Any) -> Any:
+            raise RuntimeError("provider down")
+
+    with pytest.raises(OptionProfileFailure, match="setting"):
+        _profile(walk, _Down())
 
 
 # --- the registries -------------------------------------------------------------------
@@ -531,16 +907,10 @@ def test_a_failed_option_profile_step_fails_the_walk(
         _cleanup(engine, task_id)
 
 
-# The literals, recorded on the code before the move (Phase 12a).
-_R = "A new scheme inside the present structure."
-_STUB_ROW: list[Any] = [
-    "provide a service",
-    [],
-    None,
-    "lever_types_v2",
-    "incremental",
-    "Stub ambition.",
-]
+# The literals, recorded on the code before the move (Phase 12a). Phase 12b
+# took the ambition columns out of them (ambition is the profile's own call,
+# R40) and moved the typing prompt to ``lever_typing_v3``.
+_STUB_ROW: list[Any] = ["provide a service", [], None, "lever_types_v2"]
 
 STUB_LITERAL: dict[str, Any] = {
     "options": {
@@ -564,7 +934,7 @@ STUB_LITERAL: dict[str, Any] = {
         "invalid": 0,
         "kept_ids": [],
     },
-    "prompt_versions.typing": "lever_typing_v2",
+    "prompt_versions.typing": "lever_typing_v3",
     "models.typing": "stub",
     "taxonomy_version": "lever_types_v2",
     "counts.typing_invalid": 0,
@@ -573,10 +943,10 @@ STUB_LITERAL: dict[str, Any] = {
 
 SCRIPTED_LITERAL: dict[str, Any] = {
     "options": {
-        "A new body": [None, ["inform"], "It sets a mood.", "lever_types_v2", "incremental", _R],
-        "Blank reason": ["subsidise", ["inform"], None, "lever_types_v2", "incremental", _R],
-        "Free bus passes": ["subsidise", ["inform"], None, "lever_types_v2", "incremental", _R],
-        "Garbled": ["subsidise", ["inform"], None, "lever_types_v2", "incremental", _R],
+        "A new body": [None, ["inform"], "It sets a mood.", "lever_types_v2"],
+        "Blank reason": ["subsidise", ["inform"], None, "lever_types_v2"],
+        "Free bus passes": ["subsidise", ["inform"], None, "lever_types_v2"],
+        "Garbled": ["subsidise", ["inform"], None, "lever_types_v2"],
     },
     "lever_reason": {
         "A new body": "The council pays for the scheme.",
@@ -596,7 +966,7 @@ SCRIPTED_LITERAL: dict[str, Any] = {
         "invalid": 2,
         "kept_ids": ["A new body", "Free bus passes"],
     },
-    "prompt_versions.typing": "lever_typing_v2",
+    "prompt_versions.typing": "lever_typing_v3",
     "models.typing": "stub",
     "taxonomy_version": "lever_types_v2",
     "counts.typing_invalid": 2,

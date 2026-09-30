@@ -15,6 +15,11 @@ backend (task 046, S20). Each call has one lead-authored prompt builder
 - ``type_options`` — one lever-typing batch, with the plan and the baseline
   (judgment model; batches run in a thread pool), the ``option_profile``
   step's (task 046, S20; its Langfuse name stays ``longlist:type``);
+- ``profile_line`` / ``profile_ambition`` / ``profile_setting`` — the
+  ``option_profile`` step's ten calls over the whole list: one per line of
+  "What it would take", the ambition and the delivery setting (judgment
+  model; task 046, R36, R40, R41;
+  :mod:`~policy_atlas.options_scoping.option_profile.option_profile_prompt`);
 - ``constrain`` — one constraint-judgement batch with the plan and the
   baseline (judgment model; batches run in a thread pool), the walk's
   ``constrain`` step (S9) on the same seam
@@ -31,7 +36,7 @@ from __future__ import annotations
 
 import threading
 import uuid
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from typing import Any, Protocol
 
 from langfuse import Langfuse
@@ -71,6 +76,22 @@ from policy_atlas.options_scoping.option_profile.lever_typing_prompt import (
     LeverTypingResponse,
     LeverTypingWire,
     build_lever_typing_messages,
+)
+from policy_atlas.options_scoping.option_profile.option_profile_prompt import (
+    OPTION_PROFILE_MAX_OUTPUT_TOKENS,
+    OPTION_PROFILE_PROMPT_VERSION,
+    AmbitionResponse,
+    AmbitionWire,
+    MarkedLineResponse,
+    MarkedLineWire,
+    PlainLineResponse,
+    PlainLineWire,
+    SettingResponse,
+    SettingWire,
+    build_ambition_messages,
+    build_line_messages,
+    build_setting_messages,
+    line_is_marked,
 )
 from policy_atlas.options_scoping.theme.longlist_theme_prompt import (
     LONGLIST_THEME_PROMPT_VERSION,
@@ -175,7 +196,7 @@ class LonglistBackend(Protocol):
         plan: dict[str, object],
         baseline_sections: list[tuple[str, str]],
     ) -> UsageResult[LeverTypingResponse]:
-        """Type one batch of options (lever type and ambition).
+        """Type one batch of options (the lever type).
 
         Called from a thread pool: one call per batch, several at once.
 
@@ -186,6 +207,65 @@ class LonglistBackend(Protocol):
 
         Returns:
             The parsed typings and token usage.
+        """
+        ...
+
+    def profile_line(
+        self,
+        *,
+        line_key: str,
+        plan: dict[str, object],
+        where: str | None,
+        baseline_sections: list[tuple[str, str]],
+        options: list[dict[str, object]],
+    ) -> UsageResult[MarkedLineResponse | PlainLineResponse]:
+        """Write one line of "What it would take" for every option (R36, S16).
+
+        One call over the whole list; the ten profile calls run at one time.
+
+        Args:
+            line_key: One of the eight line keys.
+            plan: The plan fields as data, place stripped.
+            where: The plan's Where for ``who_decides``; ``None`` otherwise.
+            baseline_sections: ``(title, markdown)`` per baseline section.
+            options: Every option as data, keyed by its short ``option_id``.
+
+        Returns:
+            A :class:`MarkedLineResponse` on a marked line, else a
+            :class:`PlainLineResponse`, and token usage.
+        """
+        ...
+
+    def profile_ambition(
+        self,
+        *,
+        plan: dict[str, object],
+        baseline_sections: list[tuple[str, str]],
+        options: list[dict[str, object]],
+    ) -> UsageResult[AmbitionResponse]:
+        """Write the ambition of every option (R40, S16).
+
+        Args:
+            plan: The plan fields as data, place stripped.
+            baseline_sections: ``(title, markdown)`` per baseline section.
+            options: Every option as data, keyed by its short ``option_id``.
+
+        Returns:
+            The parsed ambitions and token usage.
+        """
+        ...
+
+    def profile_setting(
+        self, *, plan: dict[str, object], options: list[dict[str, object]]
+    ) -> UsageResult[SettingResponse]:
+        """Name the delivery setting of every option (R41, S16).
+
+        Args:
+            plan: The plan fields as data, place stripped.
+            options: Every option as data, keyed by its short ``option_id``.
+
+        Returns:
+            The parsed settings and token usage.
         """
         ...
 
@@ -261,6 +341,7 @@ class OpenAILonglistBackend:
         max_output_tokens: int,
         name: str,
         prompt_version: str,
+        metadata: dict[str, str] | None = None,
     ) -> UsageResult[T]:
         def _update(span: Any, result: UsageResult[T]) -> None:
             parsed, usage = result
@@ -269,7 +350,11 @@ class OpenAILonglistBackend:
                 input={"messages": messages},
                 output=parsed.model_dump(),
                 model=model,
-                metadata={"prompt_version": prompt_version, **usage_metadata(usage)},
+                metadata={
+                    "prompt_version": prompt_version,
+                    **(metadata or {}),
+                    **usage_metadata(usage),
+                },
             )
 
         return tracing.traced_call(
@@ -378,6 +463,69 @@ class OpenAILonglistBackend:
             prompt_version=LEVER_TYPING_PROMPT_VERSION,
         )
 
+    def profile_line(
+        self,
+        *,
+        line_key: str,
+        plan: dict[str, object],
+        where: str | None,
+        baseline_sections: list[tuple[str, str]],
+        options: list[dict[str, object]],
+    ) -> UsageResult[MarkedLineResponse | PlainLineResponse]:
+        """One line call on the judgment model (see :class:`LonglistBackend`).
+
+        The Langfuse name is static; the line key rides in the metadata.
+        """
+        messages = build_line_messages(
+            line_key=line_key,
+            plan=plan,
+            where=where,
+            baseline_sections=baseline_sections,
+            options=options,
+        )
+        settings: dict[str, Any] = {
+            "model": LONGLIST_JUDGMENT_MODEL,
+            "max_output_tokens": OPTION_PROFILE_MAX_OUTPUT_TOKENS,
+            "name": "option_profile:line",
+            "prompt_version": OPTION_PROFILE_PROMPT_VERSION,
+            "metadata": {"line_key": line_key},
+        }
+        if line_is_marked(line_key):
+            return self._call(messages, response_format=MarkedLineResponse, **settings)
+        return self._call(messages, response_format=PlainLineResponse, **settings)
+
+    def profile_ambition(
+        self,
+        *,
+        plan: dict[str, object],
+        baseline_sections: list[tuple[str, str]],
+        options: list[dict[str, object]],
+    ) -> UsageResult[AmbitionResponse]:
+        """The ambition call on the judgment model (see :class:`LonglistBackend`)."""
+        return self._call(
+            build_ambition_messages(
+                plan=plan, baseline_sections=baseline_sections, options=options
+            ),
+            response_format=AmbitionResponse,
+            model=LONGLIST_JUDGMENT_MODEL,
+            max_output_tokens=OPTION_PROFILE_MAX_OUTPUT_TOKENS,
+            name="option_profile:ambition",
+            prompt_version=OPTION_PROFILE_PROMPT_VERSION,
+        )
+
+    def profile_setting(
+        self, *, plan: dict[str, object], options: list[dict[str, object]]
+    ) -> UsageResult[SettingResponse]:
+        """The setting call on the judgment model (see :class:`LonglistBackend`)."""
+        return self._call(
+            build_setting_messages(plan=plan, options=options),
+            response_format=SettingResponse,
+            model=LONGLIST_JUDGMENT_MODEL,
+            max_output_tokens=OPTION_PROFILE_MAX_OUTPUT_TOKENS,
+            name="option_profile:setting",
+            prompt_version=OPTION_PROFILE_PROMPT_VERSION,
+        )
+
     def constrain(
         self,
         *,
@@ -425,6 +573,10 @@ def _casefold(value: object) -> str:
     return " ".join(str(value).split()).casefold()
 
 
+#: A line call's response: marked on six lines, plain on two.
+type _LineResponse = MarkedLineResponse | PlainLineResponse
+
+
 class StubLonglistBackend:
     """Deterministic zero-egress longlist backend for tests and local runs.
 
@@ -436,8 +588,13 @@ class StubLonglistBackend:
       discovered option when it is listed, else ``ungroupable``.
     - ``discover_themes`` proposes :data:`STUB_THEME_LABEL`;
       ``assign_themes`` puts every option in it.
-    - ``type_options`` types every option ``provide a service`` /
-      ``incremental``.
+    - ``type_options`` types every option ``provide a service``.
+    - ``profile_line``, ``profile_ambition`` and ``profile_setting`` answer
+      from their own FIFO queues as ``constrain`` does (``profile_line`` has
+      one queue per line key). With none: every option gets the sentence
+      ``"Stub <line key> sentence."`` and no mark; the ambition reason
+      ``"Stub ambition."`` and no mark; the setting ``"stub setting"`` and no
+      second setting. Their calls and inputs are recorded under the lock.
     - ``constrain`` answers from a FIFO queue of canned responses (the last
       one repeats once the queue drains, the ``StubAgentBackend`` pattern);
       with none, every option passes every requirement and screen and every
@@ -453,6 +610,12 @@ class StubLonglistBackend:
             ``None`` for the deterministic default.
         distinct_responses: Canned :class:`DistinctResponse` value(s), or
             ``None`` for the deterministic default (no duplicate).
+        line_responses: Per line key, canned line response(s), or ``None``
+            for the deterministic default on every line.
+        ambition_responses: Canned :class:`AmbitionResponse` value(s), or
+            ``None`` for the deterministic default.
+        setting_responses: Canned :class:`SettingResponse` value(s), or
+            ``None`` for the deterministic default.
     """
 
     mode = "stub"
@@ -462,14 +625,28 @@ class StubLonglistBackend:
         *,
         constrain_responses: ConstrainResponse | list[ConstrainResponse] | None = None,
         distinct_responses: DistinctResponse | list[DistinctResponse] | None = None,
+        line_responses: Mapping[str, _LineResponse | list[_LineResponse]] | None = None,
+        ambition_responses: AmbitionResponse | list[AmbitionResponse] | None = None,
+        setting_responses: SettingResponse | list[SettingResponse] | None = None,
     ) -> None:
         self._constrain_queue: list[ConstrainResponse] = _queue(constrain_responses)
         self._distinct_queue: list[DistinctResponse] = _queue(distinct_responses)
+        self._line_queues: dict[str, list[_LineResponse]] = {
+            key: _queue(value) for key, value in (line_responses or {}).items()
+        }
+        self._ambition_queue: list[AmbitionResponse] = _queue(ambition_responses)
+        self._setting_queue: list[SettingResponse] = _queue(setting_responses)
         self._lock = threading.Lock()
         self.constrain_calls = 0
         self.constrain_inputs: list[dict[str, Any]] = []
         self.distinct_calls = 0
         self.distinct_inputs: list[list[dict[str, object]]] = []
+        self.line_calls: dict[str, int] = {}
+        self.line_inputs: list[dict[str, Any]] = []
+        self.ambition_calls = 0
+        self.ambition_inputs: list[dict[str, Any]] = []
+        self.setting_calls = 0
+        self.setting_inputs: list[dict[str, Any]] = []
 
     def discover(
         self,
@@ -552,7 +729,7 @@ class StubLonglistBackend:
         plan: dict[str, object],
         baseline_sections: list[tuple[str, str]],
     ) -> UsageResult[LeverTypingResponse]:
-        """Type every option ``provide a service`` / ``incremental``."""
+        """Type every option ``provide a service``."""
         del plan, baseline_sections
         return (
             LeverTypingResponse(
@@ -564,8 +741,6 @@ class StubLonglistBackend:
                         secondary_lever_types=[],
                         runner_up_lever_type=None,
                         none_fits_reason=None,
-                        ambition="incremental",
-                        ambition_reason="Stub ambition.",
                     )
                     for o in options
                 ]
@@ -607,6 +782,99 @@ class StubLonglistBackend:
             return _next_response(
                 self._distinct_queue, lambda: DistinctResponse(duplicates=[])
             ), None
+
+    def profile_line(
+        self,
+        *,
+        line_key: str,
+        plan: dict[str, object],
+        where: str | None,
+        baseline_sections: list[tuple[str, str]],
+        options: list[dict[str, object]],
+    ) -> UsageResult[MarkedLineResponse | PlainLineResponse]:
+        """Answer from the line's queue, else a stub sentence and no mark."""
+        with self._lock:
+            self.line_calls[line_key] = self.line_calls.get(line_key, 0) + 1
+            self.line_inputs.append(
+                {
+                    "line_key": line_key,
+                    "plan": plan,
+                    "where": where,
+                    "baseline_sections": list(baseline_sections),
+                    "options": list(options),
+                }
+            )
+            response = _next_response(
+                self._line_queues.setdefault(line_key, []),
+                lambda: _stub_line(line_key, options),
+            )
+        return response, None
+
+    def profile_ambition(
+        self,
+        *,
+        plan: dict[str, object],
+        baseline_sections: list[tuple[str, str]],
+        options: list[dict[str, object]],
+    ) -> UsageResult[AmbitionResponse]:
+        """Answer from the queue, else a stub reason and no mark."""
+        with self._lock:
+            self.ambition_calls += 1
+            self.ambition_inputs.append(
+                {
+                    "plan": plan,
+                    "baseline_sections": list(baseline_sections),
+                    "options": list(options),
+                }
+            )
+            return _next_response(
+                self._ambition_queue,
+                lambda: AmbitionResponse(
+                    options=[
+                        AmbitionWire(
+                            option_id=str(o["option_id"]),
+                            reason="Stub ambition.",
+                            stands_out="no",
+                        )
+                        for o in options
+                    ]
+                ),
+            ), None
+
+    def profile_setting(
+        self, *, plan: dict[str, object], options: list[dict[str, object]]
+    ) -> UsageResult[SettingResponse]:
+        """Answer from the queue, else ``stub setting`` and no second setting."""
+        with self._lock:
+            self.setting_calls += 1
+            self.setting_inputs.append({"plan": plan, "options": list(options)})
+            return _next_response(
+                self._setting_queue,
+                lambda: SettingResponse(
+                    options=[
+                        SettingWire(
+                            option_id=str(o["option_id"]),
+                            main_setting="stub setting",
+                            second_setting=None,
+                        )
+                        for o in options
+                    ]
+                ),
+            ), None
+
+
+def _stub_line(line_key: str, options: list[dict[str, object]]) -> _LineResponse:
+    sentence = f"Stub {line_key} sentence."
+    if line_is_marked(line_key):
+        return MarkedLineResponse(
+            options=[
+                MarkedLineWire(option_id=str(o["option_id"]), answer=sentence, stands_out="no")
+                for o in options
+            ]
+        )
+    return PlainLineResponse(
+        options=[PlainLineWire(option_id=str(o["option_id"]), answer=sentence) for o in options]
+    )
 
 
 def _queue[T](responses: T | list[T] | None) -> list[T]:

@@ -476,8 +476,8 @@ def _run_constrain(state: HarnessState) -> HarnessState:
 def _run_option_profile(state: HarnessState) -> HarnessState:
     """The option_profile step (task 046, R37): what is said about each option.
 
-    Rides the longlist backend's typing call (the same seam, S20). A spine
-    step: a failure fails the walk.
+    Rides the longlist backend's typing and profile calls (the same seam,
+    S20). A spine step: a failure fails the walk.
     """
     sources_fn = functools.partial(option_profile_scope, backend=state["longlist_backend"])
     return _run_scope_component(state, OptionProfileContext, sources_fn)

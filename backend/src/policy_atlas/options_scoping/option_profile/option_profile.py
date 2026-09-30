@@ -6,31 +6,48 @@ list, ``option_profile`` writes what is said about each option, ``constrain``
 makes verdicts, ``theme`` groups what a reader still sees. It is a spine step:
 an :class:`OptionProfileFailure` fails the walk.
 
-This phase holds one call, lever typing, moved out of ``longlist`` as built
-(S20). ``option_profile_scope`` reads the walk's latest ``longlist_result``
-and the task's options that are not merged, included or not (S16), in the
-order ``created_at, option_id``. Typing runs one call per
-:data:`~policy_atlas.options_scoping.option_profile.lever_typing_prompt.LEVER_TYPING_BATCH_SIZE`
-options, the batches in a thread pool of :data:`TYPING_MAX_CONCURRENT`, with
-the place-stripped plan and the baseline. An invalid or failed typing leaves
-the option's columns as they are and carries its runner-up and its lever
-reason forward from the latest earlier result (task 046, S12).
+``option_profile_scope`` reads the walk's latest ``longlist_result`` and the
+task's options that are not merged, included or not (S16), in the order
+``created_at, option_id``. Two kinds of call run at one time:
 
-Writes (S17), all after the last model call: the lever types and the
-ambition on each option row typed validly, and on the ``longlist_result`` row,
+- **Lever typing**, moved out of ``longlist`` as built (S20): one call per
+  :data:`~policy_atlas.options_scoping.option_profile.lever_typing_prompt.LEVER_TYPING_BATCH_SIZE`
+  options, the batches in a thread pool of :data:`TYPING_MAX_CONCURRENT`,
+  with the place-stripped plan and the baseline. An invalid or failed typing
+  leaves the option's columns as they are and carries its runner-up and its
+  lever reason forward from the latest earlier result (task 046, S12).
+- **The ten profile calls** (R36, R40, R41), each over the WHOLE list, in a
+  thread pool of :data:`OPTION_PROFILE_MAX_CONCURRENT`: one per line of
+  "What it would take" (:data:`~policy_atlas.runtime.scoping_plan.PROFILE_LINE_KEYS`),
+  the ambition and the delivery setting. Each reads the same option list
+  (S16): short ids ``o1 … oN``, the label, description and design features,
+  and at most :data:`OPTION_PROFILE_RECORDS_MAX` member records ordered by
+  role. The plan data is the place-stripped plan the typing reads; the
+  plan's Where reaches the ``who_decides`` call only. Each response is
+  checked fail-closed (every option once, no other id, a sentence); a call
+  that raises or answers malformed is tried once more; one that fails again
+  fails the step (:class:`OptionProfileFailure`) and nothing is written. The
+  model's marks are stored as given: no quota, no floor, no check of a mark
+  against its sentence.
+
+Writes (S17), all after the last model call: the lever types on each option
+row typed validly and the ambition (mark and sentence) on every option row;
+on the ``longlist_result`` row, the ``option_profile`` column replaced whole
+(per option id and design version: the eight lines and the setting), and,
 merged into its JSON as ``theme`` merges, the typing keys the read side reads
 (``provenance.runner_up``, ``provenance.lever_reason``,
 ``provenance.typing``, ``provenance.prompt_versions.typing``,
 ``provenance.models.typing``, ``provenance.taxonomy_version``,
-``counts.none_fits``, ``counts.typing_invalid``) and
+``counts.none_fits``, ``counts.typing_invalid``), ``counts.profiled`` and
 ``provenance.option_profile``.
 """
 
 from __future__ import annotations
 
 import uuid
+from collections import Counter
 from collections.abc import Callable, Mapping, Sequence
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
@@ -40,13 +57,14 @@ from sqlalchemy import select
 from sqlalchemy.engine import Connection
 
 from policy_atlas.core import tracing
-from policy_atlas.core.schema import longlist_result, option
-from policy_atlas.core.usage import UsageAccumulator, UsageResult
-from policy_atlas.options_scoping.longlist.lever_types import (
-    AMBITION_BANDS,
-    LEVER_TYPE_KEYS,
-    TAXONOMY_VERSION,
+from policy_atlas.core.schema import (
+    intervention_profile_record,
+    longlist_result,
+    option,
+    option_membership,
 )
+from policy_atlas.core.usage import TokenUsage, UsageAccumulator, UsageResult
+from policy_atlas.options_scoping.longlist.lever_types import LEVER_TYPE_KEYS, TAXONOMY_VERSION
 from policy_atlas.options_scoping.longlist.longlist import _seeds
 from policy_atlas.options_scoping.longlist.longlist_backend import (
     LONGLIST_JUDGMENT_MODEL,
@@ -58,7 +76,18 @@ from policy_atlas.options_scoping.option_profile.lever_typing_prompt import (
     LEVER_TYPING_PROMPT_VERSION,
     LeverTypingResponse,
 )
+from policy_atlas.options_scoping.option_profile.option_profile_prompt import (
+    OPTION_PROFILE_PROMPT_VERSION,
+    AmbitionResponse,
+    MarkedLineResponse,
+    MarkedLineWire,
+    PlainLineResponse,
+    PlainLineWire,
+    SettingResponse,
+    line_is_marked,
+)
 from policy_atlas.options_scoping.suggest.suggest import baseline_sections, walk_plan
+from policy_atlas.runtime.scoping_plan import PROFILE_LINE_KEYS
 
 log = structlog.get_logger()
 
@@ -68,10 +97,32 @@ TYPING_MAX_CONCURRENT = 4
 #: stored row can still carry it; the read models leave it out of *none
 #: fits*). A typing that fails now leaves the option's columns as they are.
 TYPING_INVALID_REASON = "typing invalid"
+#: The ten profile calls in flight at once: all of them (R37).
+OPTION_PROFILE_MAX_CONCURRENT = 10
+#: Attempts per profile call: the call and one retry (the pattern of
+#: constrain's distinct call).
+OPTION_PROFILE_CALL_ATTEMPTS = 2
+#: Member records each option carries into the profile calls (S16).
+OPTION_PROFILE_RECORDS_MAX = 5
+#: Design features each of those records carries (S16).
+OPTION_PROFILE_RECORD_FEATURES_MAX = 3
+#: The record's intervention text, cut to this many characters (S16).
+OPTION_PROFILE_INTERVENTION_MAX = 100
+#: The order the records are taken in (S16); a role not listed sorts last.
+OPTION_PROFILE_ROLE_ORDER: tuple[str, ...] = ("evaluated", "described", "recommended", "mentioned")
+#: The membership kind whose unit is an intervention profile record.
+_PROFILE_UNIT_KIND = "interventions"
+#: The name of the ambition call and of the setting call, as a failure names them.
+_AMBITION_CALL = "ambition"
+_SETTING_CALL = "setting"
 
 
 class OptionProfileFailure(Exception):
-    """The profile could not be written (no longlist exists for the walk)."""
+    """The profile could not be written.
+
+    No longlist exists for the walk, or a profile call (a line, the ambition
+    or the setting) failed twice.
+    """
 
 
 @dataclass
@@ -99,6 +150,8 @@ class _ProfiledOption:
     design_features: list[str]
     #: The option carries a typing already (its columns hold one).
     typed_before: bool
+    #: The design version the profile is keyed under (S17).
+    design_version: int
 
 
 @dataclass(frozen=True)
@@ -106,8 +159,6 @@ class _Typing:
     primary: str | None
     secondary: list[str]
     none_fits_reason: str | None
-    ambition: str
-    ambition_reason: str
     runner_up: str | None
     lever_reason: str | None = None
 
@@ -135,7 +186,7 @@ def _profiled_options(conn: Connection, *, task_id: uuid.UUID) -> list[_Profiled
     unique labels), so the typing call reads what it read inside ``longlist``.
     """
     rows = conn.execute(
-        select(option.c.option_id, option.c.taxonomy_version)
+        select(option.c.option_id, option.c.taxonomy_version, option.c.design_version)
         .where(option.c.task_id == task_id)
         .where(option.c.merged_into_option_id.is_(None))
         .order_by(option.c.created_at, option.c.option_id)
@@ -148,6 +199,7 @@ def _profiled_options(conn: Connection, *, task_id: uuid.UUID) -> list[_Profiled
             description=seeds[row.option_id].description,
             design_features=seeds[row.option_id].design_features,
             typed_before=row.taxonomy_version is not None,
+            design_version=int(row.design_version),
         )
         for row in rows
     ]
@@ -157,10 +209,6 @@ def _validated_typing(wire: Any) -> _Typing | None:
     """One wire typing, validated fail-closed (D8); ``None`` when unusable."""
     primary = wire.primary_lever_type
     reason = (wire.none_fits_reason or "").strip() or None
-    ambition = wire.ambition
-    ambition_reason = (wire.ambition_reason or "").strip() or None
-    if ambition not in AMBITION_BANDS or ambition_reason is None:
-        return None
     if primary is None:
         if reason is None:
             return None
@@ -178,8 +226,6 @@ def _validated_typing(wire: Any) -> _Typing | None:
         primary=primary,
         secondary=secondary,
         none_fits_reason=reason if primary is None else None,
-        ambition=ambition,
-        ambition_reason=ambition_reason,
         runner_up=runner_up if runner_up != primary else None,
         lever_reason=lever_reason,
     )
@@ -372,6 +418,272 @@ def _earlier_typing_entries[T](
     return found
 
 
+@dataclass(frozen=True)
+class _Line:
+    """One option's answer on one line, normalised."""
+
+    sentence: str
+    #: ``less``, ``more`` or ``None`` (no mark; always ``None`` on an unmarked line).
+    mark: str | None
+
+
+@dataclass(frozen=True)
+class _Setting:
+    """One option's delivery setting, normalised (lower case)."""
+
+    main: str | None
+    second: str | None
+
+
+@dataclass(frozen=True)
+class _CallOutcome:
+    """One profile call after its attempts: the checked value, or ``None``."""
+
+    name: str
+    value: Mapping[str, Any] | None
+    attempts: int
+    usages: list[TokenUsage | None]
+
+
+def _evidence_records(
+    conn: Connection, *, task_id: uuid.UUID, option_ids: Sequence[uuid.UUID]
+) -> dict[uuid.UUID, list[dict[str, object]]]:
+    """At most :data:`OPTION_PROFILE_RECORDS_MAX` member records per option (S16).
+
+    The option's intervention profile records, ordered by role
+    (:data:`OPTION_PROFILE_ROLE_ORDER`), then ``created_at``, then
+    ``record_id``. Each record carries its intervention (cut to
+    :data:`OPTION_PROFILE_INTERVENTION_MAX` characters), its role and at most
+    :data:`OPTION_PROFILE_RECORD_FEATURES_MAX` design features: no study
+    geography, no population, no place.
+
+    Args:
+        conn: Open connection.
+        task_id: The scoping task.
+        option_ids: The options read.
+
+    Returns:
+        ``{option_id: [{"intervention", "role", "features"}, ...]}``.
+    """
+    if not option_ids:
+        return {}
+    ipr = intervention_profile_record
+    om = option_membership
+    rows = conn.execute(
+        select(
+            om.c.option_id,
+            ipr.c.record_id,
+            ipr.c.intervention,
+            ipr.c.role,
+            ipr.c.design_features,
+            ipr.c.created_at,
+        )
+        .select_from(om.join(ipr, ipr.c.record_id == om.c.unit_id))
+        .where(om.c.task_id == task_id)
+        .where(om.c.unit_kind == _PROFILE_UNIT_KIND)
+        .where(om.c.option_id.in_(list(option_ids)))
+    ).all()
+    rank = {role: index for index, role in enumerate(OPTION_PROFILE_ROLE_ORDER)}
+    rows = sorted(
+        rows,
+        key=lambda r: (rank.get(r.role, len(rank)), r.created_at, str(r.record_id)),
+    )
+    records: dict[uuid.UUID, list[dict[str, object]]] = {}
+    for row in rows:
+        held = records.setdefault(row.option_id, [])
+        if len(held) >= OPTION_PROFILE_RECORDS_MAX:
+            continue
+        features = row.design_features if isinstance(row.design_features, list) else []
+        held.append(
+            {
+                "intervention": row.intervention[:OPTION_PROFILE_INTERVENTION_MAX],
+                "role": row.role,
+                "features": list(features[:OPTION_PROFILE_RECORD_FEATURES_MAX]),
+            }
+        )
+    return records
+
+
+def _profile_payload(
+    options: Sequence[_ProfiledOption], records: Mapping[uuid.UUID, list[dict[str, object]]]
+) -> tuple[list[dict[str, object]], dict[str, uuid.UUID]]:
+    """The one option list all ten profile calls read (S16).
+
+    Short ids ``o1 … oN`` in list order, mapped back to the option ids in
+    code.
+
+    Returns:
+        ``(payload, {short id: option id})``.
+    """
+    short_ids = {f"o{index}": o.option_id for index, o in enumerate(options, start=1)}
+    payload: list[dict[str, object]] = [
+        {
+            "option_id": short_id,
+            "label": o.label,
+            "description": o.description,
+            "design_features": list(o.design_features),
+            "evidence_records": records.get(o.option_id, []),
+        }
+        for short_id, o in zip(short_ids, options, strict=True)
+    ]
+    return payload, short_ids
+
+
+def _covers_the_list(answered: Sequence[str], short_ids: Mapping[str, uuid.UUID]) -> bool:
+    """Every option of the list exactly once, and no other id."""
+    return len(answered) == len(set(answered)) and set(answered) == set(short_ids)
+
+
+def _mark(stands_out: str) -> str | None:
+    return None if stands_out == "no" else stands_out
+
+
+def _checked_line(
+    line_key: str, response: Any, short_ids: Mapping[str, uuid.UUID]
+) -> dict[str, _Line] | None:
+    """One line response, checked fail-closed; ``None`` when malformed.
+
+    On ``who_decides`` and ``dependencies`` the mark is ``None`` whatever
+    the response holds (R36).
+    """
+    if not isinstance(response, MarkedLineResponse | PlainLineResponse):
+        return None
+    wires: Sequence[MarkedLineWire | PlainLineWire] = response.options
+    answered = [wire.option_id.strip() for wire in wires]
+    if not _covers_the_list(answered, short_ids):
+        return None
+    marked = line_is_marked(line_key)
+    lines: dict[str, _Line] = {}
+    for short_id, wire in zip(answered, wires, strict=True):
+        sentence = wire.answer.strip()
+        if not sentence:
+            return None
+        stands_out = getattr(wire, "stands_out", "no") if marked else "no"
+        lines[short_id] = _Line(sentence=sentence, mark=_mark(stands_out))
+    return lines
+
+
+def _checked_ambition(
+    response: Any, short_ids: Mapping[str, uuid.UUID]
+) -> dict[str, _Line] | None:
+    """The ambition response, checked fail-closed; ``None`` when malformed (R40)."""
+    if not isinstance(response, AmbitionResponse):
+        return None
+    answered = [wire.option_id.strip() for wire in response.options]
+    if not _covers_the_list(answered, short_ids):
+        return None
+    ambitions: dict[str, _Line] = {}
+    for short_id, wire in zip(answered, response.options, strict=True):
+        reason = wire.reason.strip()
+        if not reason:
+            return None
+        ambitions[short_id] = _Line(sentence=reason, mark=_mark(wire.stands_out))
+    return ambitions
+
+
+def _checked_setting(
+    response: Any, short_ids: Mapping[str, uuid.UUID]
+) -> dict[str, _Setting] | None:
+    """The setting response, checked fail-closed; ``None`` when malformed (R41).
+
+    A setting is null or a non-blank word, lower-cased; the second setting is
+    null when the main one is.
+    """
+    if not isinstance(response, SettingResponse):
+        return None
+    answered = [wire.option_id.strip() for wire in response.options]
+    if not _covers_the_list(answered, short_ids):
+        return None
+    settings: dict[str, _Setting] = {}
+    for short_id, wire in zip(answered, response.options, strict=True):
+        main = None if wire.main_setting is None else wire.main_setting.strip().lower()
+        second = None if wire.second_setting is None else wire.second_setting.strip().lower()
+        if main == "" or second == "" or (main is None and second is not None):
+            return None
+        settings[short_id] = _Setting(main=main, second=second)
+    return settings
+
+
+def _profile_call(
+    name: str,
+    call: Callable[[], UsageResult[Any]],
+    check: Callable[[Any], Mapping[str, Any] | None],
+) -> _CallOutcome:
+    """One profile call and one retry (R37; constrain's distinct pattern).
+
+    A call that raises or answers malformed is tried once more. Runs in the
+    thread pool; it never raises.
+    """
+    usages: list[TokenUsage | None] = []
+    for attempt in range(1, OPTION_PROFILE_CALL_ATTEMPTS + 1):
+        try:
+            response, usage = call()
+        except Exception as exc:  # fail-closed: tried again, then the step fails
+            log.warning(
+                "option_profile.call_failed",
+                call=name,
+                attempt=attempt,
+                error_type=type(exc).__name__,
+            )
+            continue
+        usages.append(usage)
+        value = check(response)
+        if value is not None:
+            return _CallOutcome(name=name, value=value, attempts=attempt, usages=usages)
+        log.warning("option_profile.call_malformed", call=name, attempt=attempt)
+    return _CallOutcome(
+        name=name, value=None, attempts=OPTION_PROFILE_CALL_ATTEMPTS, usages=usages
+    )
+
+
+def _profile_calls(
+    backend: LonglistBackend,
+    *,
+    plan: dict[str, object],
+    where: str,
+    baseline: list[tuple[str, str]],
+    payload: list[dict[str, object]],
+    short_ids: Mapping[str, uuid.UUID],
+) -> list[tuple[str, Callable[[], UsageResult[Any]], Callable[[Any], Mapping[str, Any] | None]]]:
+    """The ten profile calls: one per line, the ambition, the setting (R36, R40, R41).
+
+    Where reaches the ``who_decides`` call only.
+    """
+
+    def _line(line_key: str) -> Callable[[], UsageResult[Any]]:
+        return lambda: backend.profile_line(
+            line_key=line_key,
+            plan=plan,
+            where=where if line_key == "who_decides" else None,
+            baseline_sections=baseline,
+            options=payload,
+        )
+
+    def _line_check(line_key: str) -> Callable[[Any], Mapping[str, Any] | None]:
+        return lambda response: _checked_line(line_key, response, short_ids)
+
+    calls: list[
+        tuple[str, Callable[[], UsageResult[Any]], Callable[[Any], Mapping[str, Any] | None]]
+    ] = [(line_key, _line(line_key), _line_check(line_key)) for line_key in PROFILE_LINE_KEYS]
+    calls.append(
+        (
+            _AMBITION_CALL,
+            lambda: backend.profile_ambition(
+                plan=plan, baseline_sections=baseline, options=payload
+            ),
+            lambda response: _checked_ambition(response, short_ids),
+        )
+    )
+    calls.append(
+        (
+            _SETTING_CALL,
+            lambda: backend.profile_setting(plan=plan, options=payload),
+            lambda response: _checked_setting(response, short_ids),
+        )
+    )
+    return calls
+
+
 def option_profile_scope(
     conn: Connection,
     *,
@@ -382,37 +694,74 @@ def option_profile_scope(
 ) -> dict[str, Any]:
     """Write what is said about each option of the walk's list (S16, S17, S20).
 
-    Every model call happens before the first write; the writes — the lever
-    columns and the ambition of every option typed validly, then the typing
-    keys merged into the walk's latest ``longlist_result`` — share the
-    component transaction.
+    The typing batches and the ten profile calls run at one time; every
+    model call ends before the first write. The writes — the lever columns
+    of every option typed validly, the ambition of every option, the
+    ``option_profile`` column and the typing keys of the walk's latest
+    ``longlist_result`` — share the component transaction.
 
     Args:
         conn: Open connection inside the component transaction.
         task_id: The scoping task.
         run_id: This ``option_profile`` run.
         context: The walk's intent record.
-        backend: The model seam (the longlist backend's typing call).
+        backend: The model seam (the longlist backend's typing and profile calls).
 
     Returns:
-        ``{"options", "typed", "kept", "invalid"}``: the options read, those
-        typed validly, those whose earlier typing stands, and those with no
-        valid typing from this run (the kept ones and the never typed).
+        ``{"options", "typed", "kept", "invalid", "profiled"}``: the options
+        read, those typed validly, those whose earlier typing stands, those
+        with no valid typing from this run (the kept ones and the never
+        typed), and those profiled.
 
     Raises:
-        OptionProfileFailure: If the walk has no ``longlist_result``.
+        OptionProfileFailure: If the walk has no ``longlist_result``, or a
+            profile call failed twice (nothing is written).
     """
     plan = walk_plan(conn, task_id=task_id, run_id=run_id, scope_id=context.scope_id)
     result_row = _latest_longlist(conn, task_id=task_id, scope_id=context.scope_id)
     plan_data = longlist_plan_data(plan)
     baseline = baseline_sections(conn, task_id)
     options = _profiled_options(conn, task_id=task_id)
-
-    # Typing (S12): batches in parallel; a kept typing carries forward.
-    usage = UsageAccumulator()
-    typings, kept_typings, typing_stats = _type_options(
-        backend, options, usage, plan=plan_data, baseline=baseline
+    records = _evidence_records(conn, task_id=task_id, option_ids=[o.option_id for o in options])
+    payload, short_ids = _profile_payload(options, records)
+    calls = (
+        _profile_calls(
+            backend,
+            plan=plan_data,
+            where=plan.where.text,
+            baseline=baseline,
+            payload=payload,
+            short_ids=short_ids,
+        )
+        if options
+        else []
     )
+
+    # The ten profile calls and the typing batches, at one time.
+    usage = UsageAccumulator()
+    with ThreadPoolExecutor(max_workers=OPTION_PROFILE_MAX_CONCURRENT) as pool:
+        futures: list[Future[_CallOutcome]] = [
+            tracing.submit_with_context(pool, _profile_call, name, call, check)
+            for name, call, check in calls
+        ]
+        # Typing (S12): batches in parallel; a kept typing carries forward.
+        typings, kept_typings, typing_stats = _type_options(
+            backend, options, usage, plan=plan_data, baseline=baseline
+        )
+        outcomes = [future.result() for future in futures]
+    for outcome in outcomes:
+        for call_usage in outcome.usages:
+            usage.add(call_usage)
+    failed = [outcome.name for outcome in outcomes if outcome.value is None]
+    if failed:
+        log.warning("option_profile.failed", calls=failed)
+        raise OptionProfileFailure(
+            f"option_profile: the {', '.join(failed)} call failed after "
+            f"{OPTION_PROFILE_CALL_ATTEMPTS} attempts"
+        )
+    answers = {outcome.name: outcome.value for outcome in outcomes}
+    retries = sum(outcome.attempts - 1 for outcome in outcomes)
+
     runner_ups: dict[str, dict[str, Any]] = {
         str(option_id): {"lever_type": t.runner_up}
         for option_id, t in typings.items()
@@ -428,27 +777,33 @@ def option_profile_scope(
 
     # Writes, all after every model call.
     now = datetime.now(UTC)
-    for o in options:
+    ambitions: Mapping[str, _Line] = answers.get(_AMBITION_CALL) or {}
+    for short_id, o in zip(short_ids, options, strict=True):
+        values: dict[str, Any] = {
+            "ambition": ambitions[short_id].mark,
+            "ambition_reason": ambitions[short_id].sentence,
+            "updated_at": now,
+        }
         typing = typings.get(o.option_id)
-        if typing is None:
-            continue  # kept: the option's columns stay as they are (S12)
-        conn.execute(
-            option.update()
-            .where(option.c.option_id == o.option_id, option.c.task_id == task_id)
-            .values(
+        if typing is not None:  # else kept: the lever columns stay as they are (S12)
+            values.update(
                 primary_lever_type=typing.primary,
                 secondary_lever_types=typing.secondary,
                 lever_none_fits_reason=typing.none_fits_reason,
                 taxonomy_version=TAXONOMY_VERSION,
-                ambition=typing.ambition,
-                ambition_reason=typing.ambition_reason,
-                updated_at=now,
             )
+        conn.execute(
+            option.update()
+            .where(option.c.option_id == o.option_id, option.c.task_id == task_id)
+            .values(**values)
         )
+    profile = _profile_column(options, short_ids, answers)
 
     none_fits = sum(1 for t in typings.values() if t.primary is None)
     counts = dict(result_row.counts) if isinstance(result_row.counts, Mapping) else {}
-    counts.update(none_fits=none_fits, typing_invalid=typing_stats["invalid"])
+    counts.update(
+        none_fits=none_fits, typing_invalid=typing_stats["invalid"], profiled=len(profile)
+    )
     provenance = dict(result_row.provenance) if isinstance(result_row.provenance, Mapping) else {}
     live = backend.mode == "live"
     for key, value in (
@@ -466,6 +821,16 @@ def option_profile_scope(
             "run_id": str(run_id),
             "backend_mode": backend.mode,
             "usage_totals": usage.payload(),
+            "prompt_version": OPTION_PROFILE_PROMPT_VERSION,
+            "model": LONGLIST_JUDGMENT_MODEL if live else "stub",
+            "records_max": OPTION_PROFILE_RECORDS_MAX,
+            "calls": len(calls),
+            "retries": retries,
+            "marks": {
+                line_key: _mark_counts(answers.get(line_key) or {})
+                for line_key in PROFILE_LINE_KEYS
+            },
+            "ambition_marks": _mark_counts(ambitions),
         },
     )
     conn.execute(
@@ -474,7 +839,7 @@ def option_profile_scope(
             longlist_result.c.longlist_result_id == result_row.longlist_result_id,
             longlist_result.c.task_id == task_id,
         )
-        .values(counts=counts, provenance=provenance)
+        .values(counts=counts, provenance=provenance, option_profile=profile)
     )
     kept_ids = set(kept_typings)
     summary = {
@@ -482,6 +847,42 @@ def option_profile_scope(
         "typed": len(typings),
         "kept": sum(1 for o in options if o.option_id in kept_ids and o.typed_before),
         "invalid": typing_stats["invalid"],
+        "profiled": len(profile),
     }
     log.info("option_profile.done", none_fits=none_fits, **summary)
     return summary
+
+
+def _mark_counts(answers: Mapping[str, _Line]) -> dict[str, int]:
+    """The count of ``less``, ``more`` and no mark over one call's answers."""
+    marks = Counter(line.mark for line in answers.values())
+    return {"less": marks["less"], "more": marks["more"], "none": marks[None]}
+
+
+def _profile_column(
+    options: Sequence[_ProfiledOption],
+    short_ids: Mapping[str, uuid.UUID],
+    answers: Mapping[str, Mapping[str, Any] | None],
+) -> dict[str, dict[str, dict[str, Any]]]:
+    """The ``longlist_result.option_profile`` value (S17; final § 2.10).
+
+    ``{option_id: {design_version: {"lines": {line key: {"sentence",
+    "mark"}}, "setting": {"main", "second"}}}}`` for every option of the list,
+    the lines in :data:`~policy_atlas.runtime.scoping_plan.PROFILE_LINE_KEYS`
+    order.
+    """
+    settings: Mapping[str, _Setting] = answers.get(_SETTING_CALL) or {}
+    column: dict[str, dict[str, dict[str, Any]]] = {}
+    for short_id, o in zip(short_ids, options, strict=True):
+        lines: dict[str, dict[str, str | None]] = {}
+        for line_key in PROFILE_LINE_KEYS:
+            line: _Line = (answers.get(line_key) or {})[short_id]
+            lines[line_key] = {"sentence": line.sentence, "mark": line.mark}
+        setting = settings[short_id]
+        column[str(o.option_id)] = {
+            str(o.design_version): {
+                "lines": lines,
+                "setting": {"main": setting.main, "second": setting.second},
+            }
+        }
+    return column

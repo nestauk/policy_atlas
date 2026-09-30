@@ -120,8 +120,6 @@ def _typing(unit_id: str, **overrides: Any) -> LeverTypingWire:
         "secondary_lever_types": ["inform"],
         "runner_up_lever_type": None,
         "none_fits_reason": None,
-        "ambition": "incremental",
-        "ambition_reason": "A new scheme inside the present structure.",
     }
     values.update(overrides)
     return LeverTypingWire.model_validate(values)
@@ -133,7 +131,8 @@ class _Scripted:
 
     ``routes`` maps an intervention text to ``(label, design_feature_not_stated)``;
     an unrouted record is ``ungroupable``. ``typings`` maps an option label to
-    wire overrides.
+    wire overrides. The ``option_profile`` calls (lines, ambition, setting)
+    go to ``profiler``, a :class:`StubLonglistBackend` (task 046, R37).
     """
 
     discovered: list[DiscoveredOptionWire] = field(default_factory=list)
@@ -149,6 +148,7 @@ class _Scripted:
         default_factory=lambda: {"discover": [], "assign": [], "themes": [], "type": []}
     )
     mode: str = "stub"
+    profiler: StubLonglistBackend = field(default_factory=StubLonglistBackend)
 
     def discover(
         self,
@@ -243,6 +243,15 @@ class _Scripted:
             ),
             None,
         )
+
+    def profile_line(self, **kwargs: Any) -> Any:
+        return self.profiler.profile_line(**kwargs)
+
+    def profile_ambition(self, **kwargs: Any) -> Any:
+        return self.profiler.profile_ambition(**kwargs)
+
+    def profile_setting(self, **kwargs: Any) -> Any:
+        return self.profiler.profile_setting(**kwargs)
 
 
 # --- the fixture -------------------------------------------------------------------
