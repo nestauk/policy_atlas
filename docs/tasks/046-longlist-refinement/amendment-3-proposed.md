@@ -92,3 +92,31 @@ type and one level holds 1 to 4 options in most cases; at 4 the fold shows
 only in the larger cells. Owner: "I think it should be 3 instead" → after
 the lead's count, "If it's 1 to 4 in most cases, then maybe 4 is the right
 value for N."
+
+## Topic 6 decided: the option card
+
+An Opus subagent critiqued the built card on the live app (seven cards
+across the three runs, desktop and 390 px) and proposed a layout; the
+lead put seven decisions to the owner. Screenshots in the lead's scratchpad
+`shots/` (not kept). The critique's findings, in short: documents sorted by
+title and shown twice (bugs); a KPI-tile row of four boxes at the top
+(against DESIGN.md) that repeats the evidence section and the list row;
+"What it is" mixes seven kinds of content in five forms; the variants are
+mostly raw record phrases; the evidence section counts the same documents
+three ways in sentences; "What it is for" shows the same plan outcomes on
+almost every card; the checks section is the same filler on every card; an
+option with 0 documents shows three sentences about nothing; the collapsed
+"What it would take" row has mostly blank cells; "scoping pass" is jargon;
+two sentences are 14 px.
+
+| # | Decision | The owner's words |
+|---|---|---|
+| 1 | The four boxes and the "scoping pass" chip leave the header. The abstract-only fact becomes one grey note in the evidence section: "Read from titles and abstracts only". | "1. Yes" |
+| 2 | The lever line keeps its reason sentence and names the other levers. | "I think the reason is helpful. And if an option acts using multiple levers then that is useful information" |
+| 3 | "Variants" becomes **"Examples"**: named programmes, schemes or laws that the records describe, at most 5, or none; written as a new `examples` field by the clustering call (which reads all member records; the variants today are the records' intervention names, unjudged, so plain phrases land beside programme names); through the cluster prompt's refine loop. | "Yes to the rename." · "3. Sounds good" |
+| 4 | **One evidence table of outcomes**: a row for each plan outcome (with a "serves" mark, from the option design's pick) and a row for each other outcome kind that the records report (the folded "Measures" kinds of topic 2); columns: documents of any role, evaluated. "What it is for" as a section goes; the "Measures" line is this table. | "Maybe we don't just have to show only the plan outcomes that it is for. If there's other reported outcomes then it would also likely be useful to show" |
+| 5 | Collapsed "What it would take": eight cells, each with its word, **"Middle"** for the middle group; no blank cell unless the option has no profile. This replaces amendment 2's Q10 ("no word for no mark on the card"). | "Only the marked lines feels like it could give the user a biased view. If an aspect is in the middle group then maybe we should show that" · "5. sounds good" |
+| 6 | Checks: the user's considerations first, the verdict as a word with its colour; the three built-in checks fold into one line unless one fails; the transferability line goes. | "6. Yes." |
+| 7 | Documents: no duplicates; sorted evaluated first, then by quality; a linked title and one grey meta line (quality · type · role · place · year) instead of chips; five shown, then "Show all N"; with 0 documents the one line "No documents found yet." A click on a document opens the **source dossier sidebar** of Evidence search (document level), reused, not the citation provenance panel. The dossier gains a section for the option's own record of that document (the intervention profile: name, setting, population, outcome, place, design) when opened from an option card. Anything on the card that relates to one document can open the dossier. | "7. Yes." · "When the document is clicked rather than a citation, we have a source dossier sidebar, not the provenance panel … Which I think is more relavant here. In general if there's things in the option card that relate to individual documents then it might be useful to be able to click on the document to see the dosier, or maybe even the profile, since we're extracting that." |
+| Also from the critique, accepted by the lead | Ambition is the first row of "What it would take". The label reads "Policy Atlas's estimate" (the decided words). Section titles name, not explain (final words: lead, at build). No body sentence below 16 px. The origin section goes; origin and relations sit on one grey line under the description. Two code faults fixed: the sort by title, the duplicate documents (the same document with two snapshot ids), and the raw HTML entity in a title. | |
+| Layout, in order | Header (title, description, one grey line: lever · origin · relations · also found as; Exclude) → What it is (Lever with reason and other levers; Delivered through; design features ≤ 6; Examples ≤ 5) → What it would take, Policy Atlas's estimate (table: Ambition first, then the eight lines: name, word, sentence; collapsed: eight cells with words) → Evidence (the outcomes table; Roles; Where tried in two levels; Tried on; the abstracts note; the document list) → Checks. | |
