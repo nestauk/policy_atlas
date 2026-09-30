@@ -697,7 +697,7 @@ Gate: **full `make verify`**. Commit.
 ## Amendment 3 (2026-09-30)
 
 Rulings R54–R75 are in [contract.md](contract.md) § Amendment 3; the design
-detail, the loop checks and the answered questions (Q1–Q25, none open) are
+detail, the loop checks and the answered questions (Q1–Q26, none open) are
 in [amendment-3-final.md](amendment-3-final.md) ("final 3" below). This section adds phases 15 to 23 and changes no phase above.
 Rounds 2–5 of 12L (`evidence/rounds/12L-profile-loop.md`) are built and are
 not phases here.
@@ -890,8 +890,10 @@ kinds of site (PR3):
   same revision, reversible: rewrite the stored facet value `"population"`
   → `"unit"` in the plan payloads in production (`task_plan.payload`,
   `core/schema.py:1376-1408`, the `grouping_facets` list,
-  `runtime/task_plan.py:749`); the downgrade writes it back. Other stored
-  places of the facet name: Q26.
+  `runtime/task_plan.py:749`), the keys of `grouping_result.groups`
+  (`core/schema.py:1272`, read by `groups_out`, `repository.py:600-615`) and
+  the facet in `grouping_result.grouping_provenance` (`core/schema.py:1263-1267`)
+  (lead, Q26); no reader keeps an alias; the downgrade writes all three back.
 - **Payload keys sent to the models** (16W, word swap): `longlist.py:559`,
   `:745`; `synthesis_tools.py:2022`, `:2068`; `synthesise.py:1543`, `:1584`;
   `extract.py:2108`, `:2133`.
@@ -963,8 +965,10 @@ names, the payload keys and the prompt words stay as they are until 16R and
 
 Tests: round trip up and down; an old row reads null in the two new columns
 and keeps its text under `unit`; the union view returns `unit` from all
-three branches; a stored plan with `grouping_facets` holding `"population"`
-reads `"unit"` after the upgrade and `"population"` after the downgrade; a
+three branches; a stored plan with `grouping_facets` holding `"population"`,
+and a stored grouping result with a `"population"` key in `groups` and in
+`grouping_provenance`, read `"unit"` after the upgrade and `"population"`
+after the downgrade (Q26); a
 grouping run on the `unit` facet reads the view; the Evidence search tests
 pass unedited except for the field and facet name.
 
@@ -981,7 +985,8 @@ so their fingerprints and memo rows stay valid); the intervention record's v3
 key's data migration rewrites the stored plans of Evidence search tasks in
 production (owner, "The reach of the rename": "1."). Rollback on production:
 `alembic downgrade -1` reverses the three renames, writes `"population"`
-back into the stored plans and drops the two new columns; deploy the
+back into the three stored places (plan payloads, `grouping_result.groups`
+keys, `grouping_provenance`) and drops the two new columns; deploy the
 previous image. Tests run the downgrade on a finding row and on a stored
 plan and read the text back.
 

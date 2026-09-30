@@ -17,7 +17,7 @@
 > decisions); "Two more decisions (2026-09-30): no place list at all, and unit
 > throughout"; "Questions 20 to 25 of the final document" (Q24 the owner's,
 > the others the lead's); "The reach of the rename" (the owner's answer to
-> plan-review finding 3). The plan-stage review's 15 findings and the lead's
+> plan-review finding 3); "Q26, settled by the lead". The plan-stage review's 15 findings and the lead's
 > rules are in the lead's file `a3-plan-findings.md`; `plan.md` applies them. The lead's rule for each review finding (A1–A15, B1–B19) is in
 > the lead's scratchpad file `a3-review-findings.md`; this file applies each
 > one and names it. Precedence: a later decision wins over an earlier one;
@@ -247,7 +247,7 @@ Removed: `SnapshotCells` (`OptionCard.tsx:302-309`) and the chip (`:244`); the r
 | Storage | One alembic revision on `e9a4c1f7b3d2`: the two new nullable columns and the two renames on `intervention_profile_record` (`core/schema.py:1088-1135`), the rename on the two finding tables, and the union view recreated with `unit` |
 | The prompt | `extract_interventions` v3 (`PROMPT_VERSION`, `extract_interventions_prompt.py:44`) and a `SCHEMA_VERSION` bump (`interventions_records.py:28`); the new fields join `_NULLABLE_TEXT_FIELDS` (`:220`); all are components of the extraction fingerprint (`interventions_profile.py:99-110`), so the next run of a task re-extracts (Q19, lead; B1). The loop replays with the memo bypassed (`--fresh`), since the memo is per task (`extract.py:368-375`). One loop, up to five rounds; "one round" was the expected size, not a cap; a "not stated" round is a round of the same loop (lead, A5) |
 | Prompt guard | The guard takes only files named "*prompt*" (`scripts/prompt_hash_guard.py:39-43`); it gains an explicit extra-files list: `interventions_records.py`, `iof_records.py`, `icf_records.py`, `finding_references.py` (lead, B12; owner, Q24) and `synthesis/grounding_judge.py`, whose words change (owner, "The reach of the rename") |
-| The facet key and the words | "Population" is also the grouping facet key stored in the plans of Evidence search tasks in production (`GROUPING_FACETS`, `core/schema.py:1249`; `runtime/task_plan.py:49`; `api/contract/task_agent.py:54`; read at `group.py:1291`), a key in the data sent to the models (`longlist.py:559`, `:745`; `synthesis_tools.py:2022`, `:2068`; `synthesise.py:1543`, `:1584`; `extract.py:2108`, `:2133`) and a word in prompts (`longlist_cluster_prompt.py:269`, `synthesis_prompts_v6.py:148`, `grounding_judge.py:112`). The owner chose **all the way** ("1."): the facet key becomes `unit`, with a reversible data migration in the same revision that rewrites the stored facet value in production plans; the payload keys and the prompt words change as a like-for-like word swap under the 038 ruling (hashes re-pinned, the diff read as words only, no replay); the changed prompt files are in the hash guard. "Population" is then gone from the product |
+| The facet key and the words | "Population" is also the grouping facet key stored in the plans of Evidence search tasks in production (`GROUPING_FACETS`, `core/schema.py:1249`; `runtime/task_plan.py:49`; `api/contract/task_agent.py:54`; read at `group.py:1291`), a key in the data sent to the models (`longlist.py:559`, `:745`; `synthesis_tools.py:2022`, `:2068`; `synthesise.py:1543`, `:1584`; `extract.py:2108`, `:2133`) and a word in prompts (`longlist_cluster_prompt.py:269`, `synthesis_prompts_v6.py:148`, `grounding_judge.py:112`). The owner chose **all the way** ("1."): the facet key becomes `unit`, with a reversible data migration in the same revision that rewrites the stored facet value in production plans; the migration rewrites every stored place of the facet key — plan payloads (`task_plan.payload`, `grouping_facets`), `grouping_result.groups` keys and `grouping_provenance` — so no reader needs an alias (lead, Q26); the payload keys and the prompt words change as a like-for-like word swap under the 038 ruling (hashes re-pinned, the diff read as words only, no replay); the changed prompt files are in the hash guard. "Population" is then gone from the product |
 | Production | The revision runs on production without a re-extraction: the finding tables' rename carries no version change; the intervention record's v3 re-extracts options-scoping tasks only, on their next run (Q19, Q24). The facet-key data migration rewrites stored plans in production. Rollback: `alembic downgrade -1` reverses the renames, writes `"population"` back into the stored plans and drops the two columns, with the previous image |
 
 - Changed from the review's decision (the finding records "keep `population` for now"): the owner's later decision renames them in this amendment.
@@ -441,12 +441,9 @@ Closed: the country at the start of every "who decides" sentence — closed by l
 | Q23 | The country's short English name, fixed in the prompt; England, Scotland, Wales, Northern Ireland under the United Kingdom; the code folds case only | Lead |
 | Q24 | The finding records' rename stays in this amendment: plain column rename, reversible, no version change, no re-extraction on production; the four record files join the hash guard | Owner ("Keep in this amendment.") |
 | Q25 | The rule in words in every prompt that read the stripped text; the loop measures M4 and the screen's pass rate | Lead |
+| Q26 | The data migration rewrites every stored facet key — plan payloads, `grouping_result.groups` keys, `grouping_provenance` — from `population` to `unit`, reversibly; no reader needs an alias | Lead |
 
-**New question (plan review)**
-
-| Q | Question | Where |
-|---|---|---|
-| Q26 | **Other stored places of the facet name.** The owner's data migration rewrites the facet value in the stored plans. The facet name is also stored as a key of `grouping_result.groups` (read by `groups_out`, `repository.py:600-615`, which lists keys outside `GROUPING_FACETS` as extra facets) and in `grouping_result.grouping_provenance` ("facet + source", `core/schema.py:1263-1267`). Does the data migration rewrite those too, or do earlier grouping results keep "population" (R52 covers only options-scoping data)? | § 2.11 |
+No question is open.
 
 ### 7.3 Known limits (proposed)
 

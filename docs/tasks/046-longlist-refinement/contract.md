@@ -366,7 +366,7 @@ finding (the lead's file `a3-review-findings.md`, applied in final 3); the
 owner can change it. Q1, Q5, Q10, Q11, Q16 and the decisions after the
 review are the owner's, and so is Q24; Q20, Q22, Q23 and Q25 are the
 lead's; the answer to plan-review finding 3 ("The reach of the rename") is
-the owner's. What is still open is in final 3 § 7.1 and Q26 (§ 7.2). Rounds 2–5 of the profile loop
+the owner's. What is still open is in final 3 § 7.1; no question is open (Q26 settled by the lead). Rounds 2–5 of the profile loop
 (`evidence/rounds/12L-profile-loop.md`) were built after amendment 2 and are
 not part of this amendment; round 5 closes the "country in the sentence"
 item.
@@ -421,7 +421,7 @@ item.
 | R45 and § Stop conditions ("a migration beyond this one revision") | One more revision: two new columns and the renames (R71) |
 | § Constraints, Schema ("No other schema change") | The one revision of R71. **It runs on production without a re-extraction**: the finding tables' `population` → `unit` is a plain, reversible column rename with no version change on the finding records (owner, Q24: "Keep in this amendment."); the intervention record's v3 re-extracts options-scoping tasks only, on their next run. Rollback: `alembic downgrade -1` reverses the renames, writes the facet key back into the stored plans and drops the two columns; deploy the previous image |
 | § Constraints, prompt hash guard | The guard takes only files named "*prompt*"; it gains an explicit extra-files list: `interventions_records.py`, `iof_records.py`, `icf_records.py`, `finding_references.py` (owner, Q24) and `grounding_judge.py`, whose words change (owner, "The reach of the rename") |
-| § Constraints, Schema (the facet key) | The grouping facet key `"population"` becomes `"unit"` (`GROUPING_FACETS`, `GroupingFacet`, the API contract), with a **reversible data migration** in the same revision that rewrites the stored facet value in production plans; the downgrade writes it back. The payload keys sent to the models and the prompt words change as a like-for-like word swap under the 038 ruling (hashes re-pinned, the diff read as words only, no replay). Owner: "1." (R73) |
+| § Constraints, Schema (the facet key) | The grouping facet key `"population"` becomes `"unit"` (`GROUPING_FACETS`, `GroupingFacet`, the API contract), with a **reversible data migration** in the same revision that rewrites the stored facet value in production plans, and every other stored facet key: the keys of `grouping_result.groups` and the facet in `grouping_provenance` (lead, Q26), so no reader needs an alias; the downgrade writes all three back. The payload keys sent to the models and the prompt words change as a like-for-like word swap under the 038 ruling (hashes re-pinned, the diff read as words only, no replay). Owner: "1." (R73) |
 | § Constraints, Prompts | Also: two folding prompts (new), `extract_interventions` v3, the place rule in the screen criteria, tagging context, `constrain` and `option_design` (a loop), the IOF/ICF word swap (no replay) (R69, R74, R75); the cluster prompt unchanged for examples |
 | § Constraints, Public interface | Not additive: final 3 § 3 "Contract parts that change" |
 | § Acceptance checks, M4 | Measured again on the replays (18P) and the live runs (R74) |

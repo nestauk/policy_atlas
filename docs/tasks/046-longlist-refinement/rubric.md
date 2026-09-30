@@ -430,9 +430,11 @@ is reported, not passed (R69). Every question of final 3 § 7.2 is answered
     `intervention_outcome_finding` and `implementation_context_finding`; the
     union view recreated with `unit`; a round-trip test; full `make verify` at
     Phase 16. The same revision holds a **reversible data migration** of the
-    grouping facet key `"population"` → `"unit"` in the stored plan payloads
-    (`grouping_facets`), with tests up and down on a stored plan (owner,
-    "1."); `GROUPING_FACETS`, `GroupingFacet` and the API contract read
+    grouping facet key `"population"` → `"unit"` in every stored place — the
+    plan payloads (`grouping_facets`), the keys of `grouping_result.groups`
+    and the facet in `grouping_result.grouping_provenance` (lead, Q26) — with
+    tests up and down on a stored plan and a stored grouping result; no
+    reader keeps an alias for "population" (owner, "1."); `GROUPING_FACETS`, `GroupingFacet` and the API contract read
     `unit`. No other schema change; no new table. **Production:** the
     revision needs no re-extraction (no version change on the finding
     records, Q24); `verification.md` records the downgrade path for
