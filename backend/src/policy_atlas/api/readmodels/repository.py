@@ -33,6 +33,7 @@ from policy_atlas.api.contract import (
     DecisionOut,
     EvidenceItemOut,
     EvidenceProfileOut,
+    ExampleOut,
     ExclusionOut,
     FacetGroupsOut,
     FindingOut,
@@ -59,6 +60,7 @@ from policy_atlas.api.contract import (
     OptionSummaryOut,
     OutcomeCountOut,
     OutcomeCountsOut,
+    OutcomeKindOut,
     Page,
     PageMeta,
     ProfileLineOut,
@@ -72,7 +74,6 @@ from policy_atlas.api.contract import (
     ThemeRefOut,
     ThemeSourceOut,
     TriedOnOut,
-    VariantOut,
     WherePlaceOut,
     WhereTriedOut,
 )
@@ -2938,21 +2939,28 @@ def _tried_on_out(raw: object) -> list[TriedOnOut]:
     return out
 
 
-def _variants_out(raw: object) -> list[VariantOut]:
-    """Coverage's ``variants`` list, read defensively (an old stored record has none)."""
-    out: list[VariantOut] = []
+def _examples_out(raw: object) -> list[ExampleOut]:
+    """Coverage's ``examples`` list, read defensively (an old stored record has none)."""
+    out: list[ExampleOut] = []
     for item in raw if isinstance(raw, list) else []:
         entry = _as_mapping(item)
         name = entry.get("name")
         if isinstance(name, str) and name:
-            out.append(
-                VariantOut(
-                    name=name,
-                    documents=_count(entry.get("documents")),
-                    folded_seed=bool(entry.get("folded_seed")),
-                )
-            )
+            out.append(ExampleOut(name=name, documents=_count(entry.get("documents"))))
     return out
+
+
+def _found_as(merged: list[str] | None, folded: object) -> list[str]:
+    """The merged duplicates' names, then the folded seeds' (coverage ``folded``).
+
+    De-duplicated on the case-folded name, the first spelling kept (task 046,
+    amendment 3, R63).
+    """
+    names = [*(merged or []), *(_string_list(folded))]
+    out: dict[str, str] = {}
+    for name in names:
+        out.setdefault(name.casefold(), name)
+    return list(out.values())
 
 
 def _runner_up_lever_type(result: Any | None, option_id: uuid.UUID) -> str | None:
@@ -3184,10 +3192,29 @@ def _outcome_counts_out(raw: object) -> OutcomeCountsOut:
         outcome = entry.get("outcome")
         if isinstance(outcome, str) and outcome:
             by_outcome.append(
-                OutcomeCountOut(outcome=outcome, documents=_count(entry.get("documents")))
+                OutcomeCountOut(
+                    outcome=outcome,
+                    documents=_count(entry.get("documents")),
+                    evaluated=_count(entry.get("evaluated")),
+                )
+            )
+    other: list[OutcomeKindOut] = []
+    kinds = counts.get("other")
+    for item in kinds if isinstance(kinds, list) else []:
+        entry = _as_mapping(item)
+        kind = entry.get("kind")
+        if isinstance(kind, str) and kind:
+            other.append(
+                OutcomeKindOut(
+                    kind=kind,
+                    documents=_count(entry.get("documents")),
+                    evaluated=_count(entry.get("evaluated")),
+                )
             )
     return OutcomeCountsOut(
-        evaluating_documents=_count(counts.get("evaluating_documents")), by_outcome=by_outcome
+        evaluating_documents=_count(counts.get("evaluating_documents")),
+        by_outcome=by_outcome,
+        other=other,
     )
 
 
@@ -3239,7 +3266,7 @@ def _option_summary_fields(
         "is_entrant_with_no_documents": row.origin != "clustered" and documents == 0,
         "search_pending": search_pending,
         "from_section": from_section,
-        "also_found_as": list(also_found_as or []),
+        "also_found_as": _found_as(also_found_as, coverage.get("folded")),
         "tried_on": _tried_on_out(coverage.get("tried_on")),
     }
 
@@ -4089,5 +4116,5 @@ def option_out(conn: Connection, task_id: uuid.UUID, option_id: uuid.UUID) -> Op
         ),
         plan_version=int(result.plan_version) if result is not None else None,
         where_label=_where_label(plan),
-        variants=_variants_out(coverage.get("variants")),
+        examples=_examples_out(coverage.get("examples")),
     )

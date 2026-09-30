@@ -2319,6 +2319,20 @@ export interface components {
             where_tried?: components["schemas"]["WhereTriedOut"][];
         };
         /**
+         * ExampleOut
+         * @description One distinct programme name among the option's members (task 046, R63).
+         *
+         *     Args:
+         *         name: The programme's name (a member's ``programme_name``).
+         *         documents: Its documents (DOI-collapsed).
+         */
+        ExampleOut: {
+            /** Documents */
+            documents: number;
+            /** Name */
+            name: string;
+        };
+        /**
          * ExclusionOut
          * @description Why an option is excluded.
          *
@@ -3174,8 +3188,8 @@ export interface components {
          *         plan_version: The plan version that longlist was built from.
          *         where_label: The plan's Where (the transferability line).
          *         depth_label: The depth label every longlist surface carries.
-         *         variants: The option's distinct intervention names, folded seeds
-         *             first (task 046).
+         *         examples: The option's distinct programme names, most documents first,
+         *             at most five (task 046, amendment 3).
          */
         OptionOut: {
             /**
@@ -3218,6 +3232,8 @@ export interface components {
              */
             evaluated_count: number;
             evidence: components["schemas"]["EvidenceProfileOut"];
+            /** Examples */
+            examples?: components["schemas"]["ExampleOut"][];
             exclusion?: components["schemas"]["ExclusionOut"] | null;
             /** From Section */
             from_section?: string | null;
@@ -3287,8 +3303,6 @@ export interface components {
             transferability?: "checked at assessment" | null;
             /** Tried On */
             tried_on?: components["schemas"]["TriedOnOut"][];
-            /** Variants */
-            variants?: components["schemas"]["VariantOut"][];
             /** Where Label */
             where_label: string;
             /** Where Tried */
@@ -3500,15 +3514,21 @@ export interface components {
         };
         /**
          * OutcomeCountOut
-         * @description The documents of one plan outcome that evaluate the option.
+         * @description The documents of one plan outcome (task 046, amendment 3, R56).
          *
          *     Args:
          *         outcome: The plan's outcome, in its words.
-         *         documents: Documents that evaluate the option against it (DOI-collapsed).
+         *         documents: Documents of any role that report it (DOI-collapsed).
+         *         evaluated: Of those, the documents that evaluate the option against it.
          */
         OutcomeCountOut: {
             /** Documents */
             documents: number;
+            /**
+             * Evaluated
+             * @default 0
+             */
+            evaluated: number;
             /** Outcome */
             outcome: string;
         };
@@ -3519,6 +3539,8 @@ export interface components {
          *     Args:
          *         evaluating_documents: Documents that evaluate the option.
          *         by_outcome: The count for each plan outcome, in the plan's order.
+         *         other: The kinds of outcome that are not plan outcomes (empty until
+         *             the folding call of phase 20).
          */
         OutcomeCountsOut: {
             /** By Outcome */
@@ -3528,6 +3550,28 @@ export interface components {
              * @default 0
              */
             evaluating_documents: number;
+            /** Other */
+            other?: components["schemas"]["OutcomeKindOut"][];
+        };
+        /**
+         * OutcomeKindOut
+         * @description One kind of outcome that is not a plan outcome (filled from phase 20).
+         *
+         *     Args:
+         *         kind: The kind, in words.
+         *         documents: Documents of any role that report it (DOI-collapsed).
+         *         evaluated: Of those, the documents that evaluate the option against it.
+         */
+        OutcomeKindOut: {
+            /** Documents */
+            documents: number;
+            /**
+             * Evaluated
+             * @default 0
+             */
+            evaluated: number;
+            /** Kind */
+            kind: string;
         };
         /**
          * PageMeta
@@ -5362,26 +5406,6 @@ export interface components {
             msg: string;
             /** Error Type */
             type: string;
-        };
-        /**
-         * VariantOut
-         * @description One distinct intervention name among the option's members (task 046).
-         *
-         *     Args:
-         *         name: The variant's name (a member's intervention name, or a folded
-         *             seed's name).
-         *         documents: Its documents (DOI-collapsed; a folded seed shows the
-         *             larger of its own and a same-named member's count).
-         *         folded_seed: Whether this variant is an option discovery folded into
-         *             this one, listed first.
-         */
-        VariantOut: {
-            /** Documents */
-            documents: number;
-            /** Folded Seed */
-            folded_seed: boolean;
-            /** Name */
-            name: string;
         };
         /**
          * WaitlistSignup

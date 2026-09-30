@@ -1090,9 +1090,9 @@ export const mockLonglistOptionCards: Record<string, OptionOutFixture> = {
     where_label: MOCK_LONGLIST_WHERE_LABEL,
     depth_label: "scoping pass",
     tried_on: [{ population: "18-24 year-olds in Northern England", documents: 2 }],
-    variants: [
-      { name: "National sanctions regime", documents: 6, folded_seed: false },
-      { name: "Benefit sanctions pilot", documents: 2, folded_seed: true },
+    examples: [
+      { name: "National sanctions regime", documents: 6 },
+      { name: "Benefit sanctions pilot", documents: 2 },
     ],
     evidence: {
       documents: 6,
@@ -1112,7 +1112,7 @@ export const mockLonglistOptionCards: Record<string, OptionOutFixture> = {
       tried_on: [{ population: "18-24 year-olds in Northern England", documents: 2 }],
       outcome_counts: {
         evaluating_documents: 3,
-        by_outcome: [{ outcome: "NEET rate at 6 months", documents: 3 }],
+        by_outcome: [{ outcome: "NEET rate at 6 months", documents: 3, evaluated: 3 }],
       },
     },
     judgements: [

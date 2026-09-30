@@ -349,17 +349,10 @@ export function triedOnSentence(
   return `Tried on: ${parts.join(", ")}.`;
 }
 
-/** One variant row on the card (task 046, R2): the name, its documents, and
- *  the origin when it is a suggestion folded into this option. */
-export function variantLine(variant: {
-  name: string;
-  documents: number;
-  folded_seed: boolean;
-}): string {
-  const parts = [variant.name];
-  if (variant.documents > 0) parts.push(documentCount(variant.documents));
-  if (variant.folded_seed) parts.push("suggested by Policy Atlas");
-  return parts.join(" · ");
+/** One example row on the card (task 046, amendment 3, R63): a programme name
+ *  and its documents. */
+export function exampleLine(example: { name: string; documents: number }): string {
+  return example.documents > 0 ? `${example.name} · ${documentCount(example.documents)}` : example.name;
 }
 
 /** A judgement's verdict, rendered as prose ("breaks", "passes", "cannot

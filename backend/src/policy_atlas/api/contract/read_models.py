@@ -928,15 +928,31 @@ class AuthorityOut(BaseModel):
 
 
 class OutcomeCountOut(BaseModel):
-    """The documents of one plan outcome that evaluate the option.
+    """The documents of one plan outcome (task 046, amendment 3, R56).
 
     Args:
         outcome: The plan's outcome, in its words.
-        documents: Documents that evaluate the option against it (DOI-collapsed).
+        documents: Documents of any role that report it (DOI-collapsed).
+        evaluated: Of those, the documents that evaluate the option against it.
     """
 
     outcome: str
     documents: int
+    evaluated: int = 0
+
+
+class OutcomeKindOut(BaseModel):
+    """One kind of outcome that is not a plan outcome (filled from phase 20).
+
+    Args:
+        kind: The kind, in words.
+        documents: Documents of any role that report it (DOI-collapsed).
+        evaluated: Of those, the documents that evaluate the option against it.
+    """
+
+    kind: str
+    documents: int
+    evaluated: int = 0
 
 
 class OutcomeCountsOut(BaseModel):
@@ -945,10 +961,13 @@ class OutcomeCountsOut(BaseModel):
     Args:
         evaluating_documents: Documents that evaluate the option.
         by_outcome: The count for each plan outcome, in the plan's order.
+        other: The kinds of outcome that are not plan outcomes (empty until
+            the folding call of phase 20).
     """
 
     evaluating_documents: int = 0
     by_outcome: list[OutcomeCountOut] = Field(default_factory=list)
+    other: list[OutcomeKindOut] = Field(default_factory=list)
 
 
 class OptionSummaryOut(BaseModel):
@@ -1211,21 +1230,16 @@ class OptionDocumentOut(BaseModel):
     source_task_id: uuid.UUID | None = None
 
 
-class VariantOut(BaseModel):
-    """One distinct intervention name among the option's members (task 046).
+class ExampleOut(BaseModel):
+    """One distinct programme name among the option's members (task 046, R63).
 
     Args:
-        name: The variant's name (a member's intervention name, or a folded
-            seed's name).
-        documents: Its documents (DOI-collapsed; a folded seed shows the
-            larger of its own and a same-named member's count).
-        folded_seed: Whether this variant is an option discovery folded into
-            this one, listed first.
+        name: The programme's name (a member's ``programme_name``).
+        documents: Its documents (DOI-collapsed).
     """
 
     name: str
     documents: int
-    folded_seed: bool
 
 
 class OptionOut(OptionSummaryOut):
@@ -1247,8 +1261,8 @@ class OptionOut(OptionSummaryOut):
         plan_version: The plan version that longlist was built from.
         where_label: The plan's Where (the transferability line).
         depth_label: The depth label every longlist surface carries.
-        variants: The option's distinct intervention names, folded seeds
-            first (task 046).
+        examples: The option's distinct programme names, most documents first,
+            at most five (task 046, amendment 3).
     """
 
     design: OptionDesignOut
@@ -1264,7 +1278,7 @@ class OptionOut(OptionSummaryOut):
     plan_version: int | None = None
     where_label: str
     depth_label: Literal["scoping pass"] = "scoping pass"
-    variants: list[VariantOut] = Field(default_factory=list)
+    examples: list[ExampleOut] = Field(default_factory=list)
 
 
 class OptionAddIn(BaseModel):

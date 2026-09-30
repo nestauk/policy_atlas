@@ -53,11 +53,11 @@ def countries_named(study_country: str | None) -> tuple[list[str], bool]:
 
     Returns:
         ``(countries, multiple)``: the named countries as written, one per
-        case-folded name (the first spelling kept), in order, without
+        case-folded name (the smallest spelling kept), in order, without
         "multiple"; and whether any part is "multiple" (case folded).
     """
     countries: list[str] = []
-    seen: set[str] = set()
+    seen: dict[str, int] = {}
     multiple = False
     for part in (study_country or "").split(";"):
         name = _clean(part)
@@ -67,8 +67,12 @@ def countries_named(study_country: str | None) -> tuple[list[str], bool]:
         if key == _MULTIPLE:
             multiple = True
         elif key not in seen:
-            seen.add(key)
+            seen[key] = len(countries)
             countries.append(name)
+        else:
+            # One spelling per country, chosen without regard to row order (task 046,
+            # amendment 3): the smallest spelling wins ("United Kingdom" < "united kingdom").
+            countries[seen[key]] = min(countries[seen[key]], name)
     return countries, multiple
 
 
@@ -102,12 +106,12 @@ def document_where(
             document's records (DOI-collapsed twins together).
 
     Returns:
-        ``(top, countries)``: the top level (the one country as first
-        written, "multiple countries", "other" or "not stated") and every
+        ``(top, countries)``: the top level (the one country, its smallest
+        spelling, "multiple countries", "other" or "not stated") and every
         country its records name, one per case-folded name, in order.
     """
     countries: list[str] = []
-    seen: set[str] = set()
+    seen: dict[str, int] = {}
     multiple = False
     place = False
     for study_country, study_geography in records:
@@ -115,9 +119,12 @@ def document_where(
         multiple = multiple or group
         place = place or _clean(study_geography) is not None
         for name in named:
-            if name.casefold() not in seen:
-                seen.add(name.casefold())
+            key = name.casefold()
+            if key not in seen:
+                seen[key] = len(countries)
                 countries.append(name)
+            else:
+                countries[seen[key]] = min(countries[seen[key]], name)
     if multiple or len(countries) > 1:
         return MULTIPLE_COUNTRIES, countries
     if countries:

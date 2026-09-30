@@ -10,19 +10,20 @@ D11); ``abstract_only`` counted. Display and a later sort, never "how sure"
 (ruling 33).
 
 Task 046 (S11) adds the counts by population tag, *tried on* (the
-populations of the ``adjacent`` members), the *variants* (the members'
-distinct intervention names, folded seeds first) and the setting pass: on
+populations of the ``adjacent`` members), the *examples* (the members'
+distinct programme names), ``folded`` (the folded seeds' names) and the setting pass: on
 this read side only — the stored record is never rewritten — a setting that
 names a place is read as the record's study geography (when it has none) or
 left out of the facet, each a counted and logged repair, and the remaining
 settings' spelling variants are grouped into one facet label
 (:data:`SETTING_FOLDS`).
 
-The outcome counts (R42) give, in documents, how many evaluated the option
-(a member with role ``evaluated``) and, of those, how many have an evaluated
-member whose ``outcome_tag`` is each plan outcome (case and whitespace
-folded, as the longlist reads the tag); ``other`` and no tag count for no
-outcome. Counts only: no direction, no size.
+The outcome counts (R42, R56) give, in documents, how many evaluated the option
+(a member with role ``evaluated``) and, per plan outcome, how many documents of
+any role have a member whose ``outcome_tag`` is that outcome (case and
+whitespace folded, as the longlist reads the tag) and, separately, how many of
+those have an ``evaluated`` member with that tag; ``other`` and no tag count for
+no outcome. Counts only: no direction, no size.
 
 **Counting grain (D16, A8, A20).** Every count below except ``members`` and
 ``flagged_members`` is a count of *documents*, and documents are collapsed by
@@ -65,9 +66,11 @@ ROLE_BUCKETS: tuple[str, ...] = ("evaluated", "described", "recommended", "menti
 #: with no tag (a record from another tagging context, a linked finding).
 POPULATION_TAG_BUCKETS: tuple[str, ...] = ("on_target", "adjacent", "other", "not_tagged")
 
-#: At most this many *tried on* populations and variants per option (AM20).
+#: At most this many *tried on* populations per option (AM20).
 TRIED_ON_MAX = 8
-VARIANTS_MAX = 8
+
+#: At most this many *examples* (distinct programme names) per option (R63).
+EXAMPLES_MAX = 5
 
 #: The setting folds, applied in order to the whitespace-collapsed,
 #: case-folded setting to give the key its spellings are grouped under
@@ -151,7 +154,7 @@ class CoverageMember:
             ``None`` for a linked finding.
         study_country: The record's study country (task 046, amendment 3),
             ``None`` for a linked finding.
-        intervention: The record's intervention name (the *variants*).
+        intervention: The record's intervention name.
         unit_tag: The record's unit tag, ``None`` when not tagged
             (task 046).
         outcome_tag: The record's outcome tag (a plan outcome's text or
@@ -178,13 +181,12 @@ class CoverageMember:
 
 @dataclass(frozen=True)
 class FoldedSeed:
-    """An option folded into another by discovery, listed first among its variants.
+    """An option folded into another by discovery, listed under ``folded``.
 
     Attributes:
-        name: The folded option's name (the variant name).
+        name: The folded option's name.
         documents: The folded option's own member documents (0 when its
-            members now sit with the wider option). When members of the
-            wider option carry the same name, the larger count is shown.
+            members now sit with the wider option).
     """
 
     name: str
@@ -310,7 +312,7 @@ def option_coverage(
         members: The option's membership rows, as coverage reads them.
         labels: The label resolver's answer per ``tss_id``.
         folded_seeds: The options discovery folded into this one (task 046),
-            listed first among the variants.
+            named under ``folded``.
         plan_outcomes: The plan's outcome texts, in plan order (R42).
 
     Returns:
@@ -320,9 +322,13 @@ def option_coverage(
         ``{top, documents, places: [{place, documents}], countries}``, by
         documents descending then top; ``countries`` is empty except under
         "multiple countries") · ``populations`` · ``settings`` · ``outcomes`` ·
-        ``findings`` · ``population_tags`` · ``tried_on`` · ``variants`` ·
-        ``setting_repairs`` · ``outcome_counts`` — documents DOI-collapsed except the two member
-        counts and ``setting_repairs`` (one per member repaired).
+        ``findings`` · ``population_tags`` · ``tried_on`` ·
+        ``examples`` (``[{name, documents}]``, at most :data:`EXAMPLES_MAX`) ·
+        ``folded`` (the folded seeds' names) ·
+        ``setting_repairs`` · ``outcome_counts`` (``evaluating_documents``,
+        ``by_outcome``: ``[{outcome, documents, evaluated}]`` in plan order, and
+        ``other``: ``[]``, filled by the folding call of phase 20) — documents DOI-collapsed
+        except the two member counts and ``setting_repairs`` (one per member repaired).
     """
     by_doc: dict[str, list[CoverageMember]] = {}
     member_count = 0
@@ -366,13 +372,14 @@ def option_coverage(
     setting_spellings: dict[str, dict[str, int]] = {}
     tried_on: dict[str, set[str]] = {}
     tried_on_shown: dict[str, str] = {}
-    variants: dict[str, set[str]] = {}
-    variants_shown: dict[str, str] = {}
+    examples: dict[str, set[str]] = {}
+    examples_shown: dict[str, str] = {}
     flagged_documents = 0
     abstract_only = 0
     inherited_labels = 0
     evaluating_documents = 0
     outcome_documents = dict.fromkeys((_fold_tag(o) for o in plan_outcomes), 0)
+    outcome_evaluated = dict.fromkeys(outcome_documents, 0)
 
     for key in sorted(by_doc):
         doc_members = by_doc[key]
@@ -390,10 +397,14 @@ def option_coverage(
             role[role_key] += 1
         evaluated = [m for m in doc_members if m.role == "evaluated"]
         evaluating_documents += int(bool(evaluated))
-        for tag in {_fold_tag(m.outcome_tag) for m in evaluated if m.outcome_tag} & set(
+        for tag in {_fold_tag(m.outcome_tag) for m in doc_members if m.outcome_tag} & set(
             outcome_documents
         ):
             outcome_documents[tag] += 1
+        for tag in {_fold_tag(m.outcome_tag) for m in evaluated if m.outcome_tag} & set(
+            outcome_documents
+        ):
+            outcome_evaluated[tag] += 1
         # A document counts as flagged only when none of its members here
         # states the defining feature.
         flagged_documents += int(all(m.flagged for m in doc_members))
@@ -438,11 +449,11 @@ def option_coverage(
                 folded = population.casefold()
                 tried_on.setdefault(folded, set()).add(key)
                 _show(tried_on_shown, folded, population)
-            name = _clean(m.intervention)
+            name = _clean(m.programme_name)
             if name is not None:
                 folded = name.casefold()
-                variants.setdefault(folded, set()).add(key)
-                _show(variants_shown, folded, name)
+                examples.setdefault(folded, set()).add(key)
+                _show(examples_shown, folded, name)
 
     # One facet label per folded setting: its most frequent original spelling
     # among the members, then the shortest, then the first alphabetically.
@@ -453,29 +464,6 @@ def option_coverage(
             key=lambda text: (-counts_by_spelling[text], len(text), text),
         )
         settings[shown] = len(docs)
-
-    # Folded seeds first (by documents, then name), then the members' names.
-    # A member name that is a folded seed's is the seed's entry, which then
-    # counts the larger of the two document counts.
-    member_variants = _ranked(variants, variants_shown)
-    member_documents = {name.casefold(): documents for name, documents in member_variants}
-    seeds = sorted(
-        (
-            (name, max(seed.documents, member_documents.get(name.casefold(), 0)))
-            for seed in folded_seeds
-            for name in (_clean(seed.name) or seed.name,)
-        ),
-        key=lambda item: (-item[1], item[0]),
-    )
-    seed_keys = {name.casefold() for name, _ in seeds}
-    variant_list: list[dict[str, Any]] = [
-        {"name": name, "documents": documents, "folded_seed": True} for name, documents in seeds
-    ]
-    variant_list.extend(
-        {"name": name, "documents": documents, "folded_seed": False}
-        for name, documents in member_variants
-        if name.casefold() not in seed_keys
-    )
 
     return {
         "members": member_count,
@@ -513,13 +501,27 @@ def option_coverage(
             {"population": population, "documents": documents}
             for population, documents in _ranked(tried_on, tried_on_shown)[:TRIED_ON_MAX]
         ],
-        "variants": variant_list[:VARIANTS_MAX],
+        "examples": [
+            {"name": name, "documents": documents}
+            for name, documents in _ranked(examples, examples_shown)[:EXAMPLES_MAX]
+        ],
+        "folded": [
+            name
+            for name in dict.fromkeys(_clean(seed.name) or seed.name for seed in folded_seeds)
+        ],
         "setting_repairs": setting_repairs,
         "outcome_counts": {
             "evaluating_documents": evaluating_documents,
             "by_outcome": [
-                {"outcome": outcome, "documents": outcome_documents[_fold_tag(outcome)]}
+                {
+                    "outcome": outcome,
+                    "documents": outcome_documents[_fold_tag(outcome)],
+                    "evaluated": outcome_evaluated[_fold_tag(outcome)],
+                }
                 for outcome in plan_outcomes
             ],
+            # Each Measures kind that is not a plan outcome; filled by the
+            # folding call (phase 20).
+            "other": [],
         },
     }

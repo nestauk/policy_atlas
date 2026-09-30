@@ -1,7 +1,8 @@
 """Coverage additions of task 046 (S11; AM20; contract items 14 and 23).
 
 The counts by population tag, *tried on* (the adjacent members'
-populations), the *variants* (folded seeds first), and the setting code
+populations), the *examples* (the programme names) and
+``folded`` (the folded seeds' names), and the setting code
 pass on the read side: folded setting labels, and a setting that names a
 place read as the study geography (or left out of the facet), counted and
 logged. A tag sorts and never removes a record.
@@ -19,9 +20,9 @@ from structlog.testing import capture_logs
 
 from policy_atlas.core.schema import option, option_membership
 from policy_atlas.options_scoping.longlist.coverage import (
+    EXAMPLES_MAX,
     SETTING_FOLDS,
     TRIED_ON_MAX,
-    VARIANTS_MAX,
     CoverageMember,
     FoldedSeed,
     empty_coverage,
@@ -88,7 +89,9 @@ def test_an_option_with_no_member_has_every_new_key_empty() -> None:
         ("on_target", "adjacent", "other", "not_tagged"), 0
     )
     assert coverage["tried_on"] == []
-    assert coverage["variants"] == []
+    assert coverage["examples"] == []
+    assert coverage["folded"] == []
+    assert "variants" not in coverage
     assert coverage["setting_repairs"] == 0
 
 
@@ -106,6 +109,10 @@ def _by(counts: dict[str, Any]) -> dict[str, int]:
     return {item["outcome"]: item["documents"] for item in counts["by_outcome"]}
 
 
+def _evaluated_by(counts: dict[str, Any]) -> dict[str, int]:
+    return {item["outcome"]: item["evaluated"] for item in counts["by_outcome"]}
+
+
 def test_a_document_evaluating_two_outcomes_counts_for_both_and_once_overall() -> None:
     counts = _counts(
         [
@@ -117,10 +124,30 @@ def test_a_document_evaluating_two_outcomes_counts_for_both_and_once_overall() -
     assert _by(counts) == {"Reduce crime": 1, "Improve wellbeing": 1}
 
 
-def test_a_described_record_with_a_plan_outcome_tag_counts_for_nothing() -> None:
+def test_a_described_record_with_a_plan_outcome_tag_counts_in_documents_not_evaluated() -> None:
+    """R56: any role counts; the evaluated count is separate."""
     counts = _counts([_member("a", role="described", outcome_tag="Reduce crime")])
     assert counts["evaluating_documents"] == 0
-    assert _by(counts) == {"Reduce crime": 0, "Improve wellbeing": 0}
+    assert _by(counts) == {"Reduce crime": 1, "Improve wellbeing": 0}
+    assert _evaluated_by(counts) == {"Reduce crime": 0, "Improve wellbeing": 0}
+
+
+@pytest.mark.parametrize("role", ["recommended", "mentioned"])
+def test_a_recommended_or_mentioned_record_counts_in_documents(role: str) -> None:
+    counts = _counts([_member("a", role=role, outcome_tag="Improve wellbeing")])
+    assert _by(counts) == {"Reduce crime": 0, "Improve wellbeing": 1}
+    assert _evaluated_by(counts) == {"Reduce crime": 0, "Improve wellbeing": 0}
+
+
+def test_a_document_with_an_evaluated_and_a_described_member_counts_in_both() -> None:
+    counts = _counts(
+        [
+            _member("a", role="evaluated", outcome_tag="Reduce crime"),
+            _member("a", role="described", outcome_tag="Reduce crime"),
+        ]
+    )
+    assert _by(counts)["Reduce crime"] == 1
+    assert _evaluated_by(counts)["Reduce crime"] == 1
 
 
 def test_an_evaluating_record_tagged_other_counts_in_evaluating_documents_only() -> None:
@@ -143,13 +170,17 @@ def test_two_documents_with_the_same_doi_count_once_in_the_outcome_counts() -> N
 def test_every_plan_outcome_is_listed_in_plan_order_with_zero_where_none() -> None:
     counts = _counts([_member("a", outcome_tag="Improve wellbeing")])
     assert counts["by_outcome"] == [
-        {"outcome": "Reduce crime", "documents": 0},
-        {"outcome": "Improve wellbeing", "documents": 1},
+        {"outcome": "Reduce crime", "documents": 0, "evaluated": 0},
+        {"outcome": "Improve wellbeing", "documents": 1, "evaluated": 1},
     ]
 
 
 def test_empty_coverage_has_the_outcome_counts_key() -> None:
-    assert empty_coverage()["outcome_counts"] == {"evaluating_documents": 0, "by_outcome": []}
+    assert empty_coverage()["outcome_counts"] == {
+        "evaluating_documents": 0,
+        "by_outcome": [],
+        "other": [],
+    }
 
 
 # --- tried on ------------------------------------------------------------------------
@@ -186,44 +217,47 @@ def test_tried_on_is_capped_at_eight_by_documents_then_text() -> None:
     assert tried_on[0] == {"population": "group c", "documents": 3}
 
 
-# --- variants ------------------------------------------------------------------------
+# --- examples and folded ---------------------------------------------------------------
 
 
-def test_variants_are_distinct_folded_names_by_document() -> None:
+def test_examples_are_distinct_programme_names_by_document() -> None:
     coverage = _coverage(
         [
-            _member("a", intervention="Youth Guarantee"),
-            _member("b", intervention="youth  guarantee"),
-            _member("b", intervention="youth guarantee"),  # the same document
-            _member("c", intervention="wage subsidy"),
+            _member("a", programme_name="Youth Guarantee"),
+            _member("b", programme_name="youth  guarantee"),  # the same name, another spelling
+            _member("b", programme_name="youth guarantee"),  # the same document
+            _member("c", programme_name="Wage subsidy"),
+            _member("d"),  # no name: no example
+            _member("e", intervention="Youth Guarantee"),  # the intervention is not the example
         ]
     )
-    assert coverage["variants"] == [
-        {"name": "Youth Guarantee", "documents": 2, "folded_seed": False},
-        {"name": "wage subsidy", "documents": 1, "folded_seed": False},
+    assert coverage["examples"] == [
+        {"name": "Youth Guarantee", "documents": 2},
+        {"name": "Wage subsidy", "documents": 1},
     ]
+    assert "variants" not in coverage
 
 
-def test_folded_seeds_come_first_and_the_list_is_capped_at_eight() -> None:
+def test_examples_are_capped_at_five_by_documents_then_name() -> None:
     members = [
-        _member(f"{i}-{n}", intervention=f"variant {i}") for i in range(10) for n in range(i + 1)
+        _member(f"{i}-{n}", programme_name=f"programme {i}") for i in range(8) for n in range(i + 1)
     ]
+    examples = _coverage(members)["examples"]
+    assert len(examples) == EXAMPLES_MAX == 5
+    assert [e["name"] for e in examples] == [f"programme {i}" for i in (7, 6, 5, 4, 3)]
+    assert examples[0] == {"name": "programme 7", "documents": 8}
+
+
+def test_folded_seeds_are_listed_under_folded() -> None:
     coverage = _coverage(
-        members,
+        [_member("a", programme_name="Variant 3")],
         folded_seeds=[
-            FoldedSeed(name="Apprenticeship grants", documents=0),
-            # A member name too: one entry, with the larger count (4 documents).
+            FoldedSeed(name="Apprenticeship  grants", documents=0),
             FoldedSeed(name="Variant 3", documents=2),
         ],
     )
-    variants = coverage["variants"]
-    assert len(variants) == VARIANTS_MAX == 8
-    assert variants[:2] == [
-        {"name": "Variant 3", "documents": 4, "folded_seed": True},
-        {"name": "Apprenticeship grants", "documents": 0, "folded_seed": True},
-    ]
-    assert [v["name"] for v in variants[2:]] == [f"variant {i}" for i in (9, 8, 7, 6, 5, 4)]
-    assert all(not v["folded_seed"] for v in variants[2:])
+    assert coverage["folded"] == ["Apprenticeship grants", "Variant 3"]
+    assert coverage["examples"] == [{"name": "Variant 3", "documents": 1}]
 
 
 # --- the setting code pass -----------------------------------------------------------
@@ -367,6 +401,7 @@ def _tagged_walk(conn: Connection) -> tuple[_Walk, uuid.UUID, uuid.UUID]:
             walk,
             ser,
             intervention,
+            programme_name=intervention,
             unit=population,
             unit_tag=population_tag,
             outcome_tag="other",
@@ -402,9 +437,8 @@ def test_the_build_writes_the_new_keys_and_no_tag_removes_a_record(conn: Connect
         "not_tagged": 0,
     }
     assert kept_cov["tried_on"] == [{"population": "young adults", "documents": 1}]
-    assert kept_cov["variants"] == [
-        {"name": "youth guarantee", "documents": 2, "folded_seed": False}
-    ]
+    assert kept_cov["examples"] == [{"name": "youth guarantee", "documents": 2}]
+    assert kept_cov["folded"] == []
     # "schools" and "school settings", once each: the tie goes to the shortest.
     assert kept_cov["settings"] == {"schools": 2}
     assert duplicate_cov["setting_repairs"] == 1
@@ -436,11 +470,12 @@ def test_coverage_after_a_merge_recomputes_tried_on_and_lists_the_folded_seed(
         option_ids=[kept],
     )[str(kept)]
     assert coverage["tried_on"] == [{"population": "Young adults", "documents": 2}]
-    # The seed's own members moved, so its entry counts the moved members
-    # that carry its name.
-    assert coverage["variants"] == [
-        {"name": "Jobs guarantee", "documents": 2, "folded_seed": True},
-        {"name": "youth guarantee", "documents": 2, "folded_seed": False},
+    # The seed's own members moved: its name is under ``folded``, and the
+    # moved members' programme names are examples.
+    assert coverage["folded"] == ["Jobs guarantee"]
+    assert coverage["examples"] == [
+        {"name": "jobs guarantee", "documents": 2},
+        {"name": "youth guarantee", "documents": 2},
     ]
     assert coverage["setting_repairs"] == 1
 
@@ -458,11 +493,7 @@ def test_a_folded_seed_counts_its_own_member_documents(conn: Connection) -> None
         scope_id=walk.scope_id,
         option_ids=[kept],
     )[str(kept)]
-    assert coverage["variants"][0] == {
-        "name": "Jobs guarantee",
-        "documents": 2,
-        "folded_seed": True,
-    }
+    assert coverage["folded"] == ["Jobs guarantee"]
 
 
 def test_an_option_the_user_named_is_never_a_folded_seed(conn: Connection) -> None:
@@ -478,7 +509,7 @@ def test_an_option_the_user_named_is_never_a_folded_seed(conn: Connection) -> No
         scope_id=walk.scope_id,
         option_ids=[kept],
     )[str(kept)]
-    assert all(not v["folded_seed"] for v in coverage["variants"])
+    assert coverage["folded"] == []
 
 
 # --- the record's programme name and study country (task 046, amendment 3) ---------

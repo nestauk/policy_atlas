@@ -36,7 +36,7 @@ import {
   leverLine,
   runnerUpLine,
   triedOnSentence,
-  variantLine,
+  exampleLine,
   originLabel,
   originShort,
   outcomeCountItem,
@@ -383,12 +383,12 @@ export function OptionCard() {
         {ambitionLine !== "" && <p>{scrub(ambitionLine)}</p>}
         {deliveredLine !== "" && <p>{scrub(deliveredLine)}</p>}
         {item.authority != null && <p>{scrub(authorityLine(item.authority))}</p>}
-        {(item.variants ?? []).length > 0 && (
+        {(item.examples ?? []).length > 0 && (
           <div>
-            <p className="font-bold text-navy">Variants</p>
+            <p className="font-bold text-navy">Examples</p>
             <ul className="list-disc space-y-1 pl-5">
-              {(item.variants ?? []).map((variant, index) => (
-                <li key={index}>{scrub(variantLine(variant))}</li>
+              {(item.examples ?? []).map((example, index) => (
+                <li key={index}>{scrub(exampleLine(example))}</li>
               ))}
             </ul>
           </div>

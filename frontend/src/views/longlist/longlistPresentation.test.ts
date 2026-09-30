@@ -17,7 +17,7 @@ import {
   runnerUpLine,
   triedOnFacet,
   triedOnSentence,
-  variantLine,
+  exampleLine,
 } from "./longlistPresentation";
 
 // Task 046: the card's new lines and the lever definition by version.
@@ -48,11 +48,9 @@ describe("longlist presentation (task 046)", () => {
     ).toBe("Tried on: adolescents (2 documents), preschool children (1).");
   });
 
-  it("names a folded suggestion's origin and drops a zero count", () => {
-    expect(variantLine({ name: "HENRY", documents: 1, folded_seed: false })).toBe("HENRY · 1 document");
-    expect(variantLine({ name: "Breakfast clubs", documents: 0, folded_seed: true })).toBe(
-      "Breakfast clubs · suggested by Policy Atlas",
-    );
+  it("words an example with its documents and drops a zero count", () => {
+    expect(exampleLine({ name: "HENRY", documents: 1 })).toBe("HENRY · 1 document");
+    expect(exampleLine({ name: "Breakfast clubs", documents: 0 })).toBe("Breakfast clubs");
   });
 
   it("words the runner-up like the lever line", () => {

@@ -31,7 +31,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select, update
 from sqlalchemy.engine import Connection, Engine
 
-from policy_atlas.api.contract import OptionDocumentOut, TriedOnOut, VariantOut
+from policy_atlas.api.contract import ExampleOut, OptionDocumentOut, TriedOnOut
 from policy_atlas.api.deps import get_agent_backend, get_runner_backends
 from policy_atlas.api.readmodels import repository
 from policy_atlas.core.schema import (
@@ -776,7 +776,7 @@ def test_the_card_and_list_serve_the_lever_reason(conn: Connection) -> None:
     assert card.lever_reason == "The state pays employers to hire."
 
 
-def test_the_card_and_list_serve_tried_on_and_variants(conn: Connection) -> None:
+def test_the_card_and_list_serve_tried_on_and_examples(conn: Connection) -> None:
     walk = _Walk(conn)
     option_id = walk.option("Youth guarantee", origin="added_by_you")
     fingerprint = _current_fingerprint(walk)
@@ -788,7 +788,12 @@ def test_the_card_and_list_serve_tried_on_and_variants(conn: Connection) -> None
         doc = walk.doc()
         ser = _extraction(walk, doc, fingerprint=fingerprint)
         _record_under(
-            walk, ser, intervention, unit=population, unit_tag=population_tag
+            walk,
+            ser,
+            intervention,
+            programme_name="Youth Guarantee",
+            unit=population,
+            unit_tag=population_tag,
         )
         docs[doc] = ser
     _rollup_of(walk, walk.scope_id, docs)
@@ -804,7 +809,7 @@ def test_the_card_and_list_serve_tried_on_and_variants(conn: Connection) -> None
     assert card is not None
     assert card.tried_on == expected_tried_on
     assert card.evidence.tried_on == expected_tried_on
-    assert card.variants == [VariantOut(name="youth guarantee", documents=2, folded_seed=False)]
+    assert card.examples == [ExampleOut(name="Youth Guarantee", documents=2)]
 
 
 def test_the_list_serves_title_only_and_the_thinning_counts(conn: Connection) -> None:
@@ -858,10 +863,10 @@ def test_the_list_serves_every_lever_type_taxonomy_version(conn: Connection) -> 
         ]
 
 
-def test_an_added_option_s_own_search_serves_tried_on_and_variants(conn: Connection) -> None:
+def test_an_added_option_s_own_search_serves_tried_on_and_examples(conn: Connection) -> None:
     """Item 6: ``_search_coverage`` carries ``unit_tag`` and
-    ``intervention`` so an added option's own search fills ``tried_on`` and
-    ``variants`` too, not only a built option's coverage."""
+    ``programme_name`` so an added option's own search fills ``tried_on`` and
+    ``examples`` too, not only a built option's coverage."""
     walk = _Walk(conn)
     walk.option("Youth guarantee", origin="added_by_you")
     walk.build(_Scripted())
@@ -893,13 +898,19 @@ def test_an_added_option_s_own_search_serves_tried_on_and_variants(conn: Connect
         )
     )
     doc = walk.doc()
-    walk.record(doc, "Wage subsidy", unit="16 to 24 year olds", unit_tag="adjacent")
+    walk.record(
+        doc,
+        "Wage subsidy",
+        programme_name="Wage Subsidy Scheme",
+        unit="16 to 24 year olds",
+        unit_tag="adjacent",
+    )
     walk.rollup(scope_id, [doc])
 
     card = repository.option_out(conn, walk.task_id, added)
     assert card is not None
     assert card.tried_on == [TriedOnOut(population="16 to 24 year olds", documents=1)]
-    assert card.variants == [VariantOut(name="Wage subsidy", documents=1, folded_seed=False)]
+    assert card.examples == [ExampleOut(name="Wage Subsidy Scheme", documents=1)]
 
 
 def test_a_longlist_walk_s_child_search_never_hides_the_option_s_membership_evidence(
@@ -934,7 +945,7 @@ def test_a_longlist_walk_s_child_search_never_hides_the_option_s_membership_evid
 
 def test_an_old_stored_longlist_reads_with_every_new_field_defaulted(conn: Connection) -> None:
     """Item 8: a longlist stored before this slice has no ``tried_on``,
-    ``variants``, thinning counts or ``runner_up`` and was typed under
+    ``examples``, thinning counts or ``runner_up`` and was typed under
     ``lever_types_v1`` — every new field falls back to its default."""
     walk = _Walk(conn)
     option_id = walk.option("Youth guarantee", origin="added_by_you")
@@ -947,7 +958,7 @@ def test_an_old_stored_longlist_reads_with_every_new_field_defaulted(conn: Conne
         oid: {
             k: v
             for k, v in cov.items()
-            if k not in ("tried_on", "variants", "population_tags", "setting_repairs")
+            if k not in ("tried_on", "examples", "folded", "population_tags", "setting_repairs")
         }
         for oid, cov in stored.coverage.items()
     }
@@ -974,7 +985,8 @@ def test_an_old_stored_longlist_reads_with_every_new_field_defaulted(conn: Conne
 
     card = repository.option_out(conn, walk.task_id, option_id)
     assert card is not None
-    assert card.variants == []
+    assert card.examples == []
+    assert card.also_found_as == []
     assert card.evidence.tried_on == []
 
 
@@ -1114,9 +1126,10 @@ def test_the_outcome_counts_are_served_on_the_evidence_profile(conn: Connection)
     coverage[str(option_id)]["outcome_counts"] = {
         "evaluating_documents": 3,
         "by_outcome": [
-            {"outcome": "Employment", "documents": 2},
-            {"outcome": "Wellbeing", "documents": 0},
+            {"outcome": "Employment", "documents": 2, "evaluated": 1},
+            {"outcome": "Wellbeing", "documents": 0, "evaluated": 0},
         ],
+        "other": [],
     }
     conn.execute(
         update(longlist_result).where(longlist_result.c.run_id == run_id).values(coverage=coverage)
@@ -1126,9 +1139,10 @@ def test_the_outcome_counts_are_served_on_the_evidence_profile(conn: Connection)
     assert card.evidence.outcome_counts.model_dump() == {
         "evaluating_documents": 3,
         "by_outcome": [
-            {"outcome": "Employment", "documents": 2},
-            {"outcome": "Wellbeing", "documents": 0},
+            {"outcome": "Employment", "documents": 2, "evaluated": 1},
+            {"outcome": "Wellbeing", "documents": 0, "evaluated": 0},
         ],
+        "other": [],
     }
     late = walk.option("Wage subsidy", origin="added_by_you")
     late_card = repository.option_out(conn, walk.task_id, late)
@@ -1136,7 +1150,28 @@ def test_the_outcome_counts_are_served_on_the_evidence_profile(conn: Connection)
     assert late_card.evidence.outcome_counts.model_dump() == {
         "evaluating_documents": 0,
         "by_outcome": [],
+        "other": [],
     }
+
+
+def test_also_found_as_joins_a_merged_duplicate_and_a_folded_seed(conn: Connection) -> None:
+    """R63: the folded seeds' names (coverage ``folded``) join the merged duplicates',
+    de-duplicated on the case-folded name, in the card and the list."""
+    walk, option_id = _profiled(conn, profile=None)
+    walk.option("Jobs guarantee", merged_into_option_id=option_id)
+    latest = repository._latest_longlist_row(conn, walk.task_id)
+    assert latest is not None
+    stored = walk.result(latest.run_id)
+    coverage = {oid: dict(cov) for oid, cov in stored.coverage.items()}
+    coverage[str(option_id)]["folded"] = ["jobs guarantee", "Apprenticeship grants"]
+    conn.execute(
+        update(longlist_result)
+        .where(longlist_result.c.run_id == latest.run_id)
+        .values(coverage=coverage)
+    )
+    summary, card = _summary_and_card(conn, walk, option_id)
+    assert summary.also_found_as == ["Jobs guarantee", "Apprenticeship grants"]
+    assert card.also_found_as == ["Jobs guarantee", "Apprenticeship grants"]
 
 
 def test_the_longlist_has_no_ambition_bands(conn: Connection) -> None:

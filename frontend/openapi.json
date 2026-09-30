@@ -2180,6 +2180,25 @@
         "title": "EvidenceProfileOut",
         "type": "object"
       },
+      "ExampleOut": {
+        "description": "One distinct programme name among the option's members (task 046, R63).\n\nArgs:\n    name: The programme's name (a member's ``programme_name``).\n    documents: Its documents (DOI-collapsed).",
+        "properties": {
+          "documents": {
+            "title": "Documents",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "documents"
+        ],
+        "title": "ExampleOut",
+        "type": "object"
+      },
       "ExclusionOut": {
         "description": "Why an option is excluded.\n\nArgs:\n    constraint: The constraint it breaks, or \"your decision\".\n    reason: The reason, in words.\n    by: Who excluded it.",
         "properties": {
@@ -3899,7 +3918,7 @@
         "type": "object"
       },
       "OptionOut": {
-        "description": "The `option` read model: the option card, assembled (D15).\n\nArgs:\n    design: The specified design.\n    design_features: The design's defining features.\n    evidence: The source-quality profile.\n    judgements: The constraint judgements on the current design version.\n    guesses: The reasoned guesses on the current design version.\n    transferability: \"checked at assessment\" when the plan carries the\n        default transferability preference; `null` otherwise.\n    in_scope: The in-scope check, when the plan restricts the evidence.\n    documents: The documents behind it, one per membership row.\n    run_id: The longlist component run its coverage came from; `null`\n        before a longlist is built.\n    capability_run_id: The longlist walk that run belonged to.\n    plan_version: The plan version that longlist was built from.\n    where_label: The plan's Where (the transferability line).\n    depth_label: The depth label every longlist surface carries.\n    variants: The option's distinct intervention names, folded seeds\n        first (task 046).",
+        "description": "The `option` read model: the option card, assembled (D15).\n\nArgs:\n    design: The specified design.\n    design_features: The design's defining features.\n    evidence: The source-quality profile.\n    judgements: The constraint judgements on the current design version.\n    guesses: The reasoned guesses on the current design version.\n    transferability: \"checked at assessment\" when the plan carries the\n        default transferability preference; `null` otherwise.\n    in_scope: The in-scope check, when the plan restricts the evidence.\n    documents: The documents behind it, one per membership row.\n    run_id: The longlist component run its coverage came from; `null`\n        before a longlist is built.\n    capability_run_id: The longlist walk that run belonged to.\n    plan_version: The plan version that longlist was built from.\n    where_label: The plan's Where (the transferability line).\n    depth_label: The depth label every longlist surface carries.\n    examples: The option's distinct programme names, most documents first,\n        at most five (task 046, amendment 3).",
         "properties": {
           "abstract_only": {
             "default": false,
@@ -4004,6 +4023,13 @@
           },
           "evidence": {
             "$ref": "#/components/schemas/EvidenceProfileOut"
+          },
+          "examples": {
+            "items": {
+              "$ref": "#/components/schemas/ExampleOut"
+            },
+            "title": "Examples",
+            "type": "array"
           },
           "exclusion": {
             "anyOf": [
@@ -4236,13 +4262,6 @@
               "$ref": "#/components/schemas/TriedOnOut"
             },
             "title": "Tried On",
-            "type": "array"
-          },
-          "variants": {
-            "items": {
-              "$ref": "#/components/schemas/VariantOut"
-            },
-            "title": "Variants",
             "type": "array"
           },
           "where_label": {
@@ -4613,10 +4632,15 @@
         "type": "object"
       },
       "OutcomeCountOut": {
-        "description": "The documents of one plan outcome that evaluate the option.\n\nArgs:\n    outcome: The plan's outcome, in its words.\n    documents: Documents that evaluate the option against it (DOI-collapsed).",
+        "description": "The documents of one plan outcome (task 046, amendment 3, R56).\n\nArgs:\n    outcome: The plan's outcome, in its words.\n    documents: Documents of any role that report it (DOI-collapsed).\n    evaluated: Of those, the documents that evaluate the option against it.",
         "properties": {
           "documents": {
             "title": "Documents",
+            "type": "integer"
+          },
+          "evaluated": {
+            "default": 0,
+            "title": "Evaluated",
             "type": "integer"
           },
           "outcome": {
@@ -4632,7 +4656,7 @@
         "type": "object"
       },
       "OutcomeCountsOut": {
-        "description": "How many documents evaluate the option, and against which outcomes (R42).\n\nArgs:\n    evaluating_documents: Documents that evaluate the option.\n    by_outcome: The count for each plan outcome, in the plan's order.",
+        "description": "How many documents evaluate the option, and against which outcomes (R42).\n\nArgs:\n    evaluating_documents: Documents that evaluate the option.\n    by_outcome: The count for each plan outcome, in the plan's order.\n    other: The kinds of outcome that are not plan outcomes (empty until\n        the folding call of phase 20).",
         "properties": {
           "by_outcome": {
             "items": {
@@ -4645,9 +4669,40 @@
             "default": 0,
             "title": "Evaluating Documents",
             "type": "integer"
+          },
+          "other": {
+            "items": {
+              "$ref": "#/components/schemas/OutcomeKindOut"
+            },
+            "title": "Other",
+            "type": "array"
           }
         },
         "title": "OutcomeCountsOut",
+        "type": "object"
+      },
+      "OutcomeKindOut": {
+        "description": "One kind of outcome that is not a plan outcome (filled from phase 20).\n\nArgs:\n    kind: The kind, in words.\n    documents: Documents of any role that report it (DOI-collapsed).\n    evaluated: Of those, the documents that evaluate the option against it.",
+        "properties": {
+          "documents": {
+            "title": "Documents",
+            "type": "integer"
+          },
+          "evaluated": {
+            "default": 0,
+            "title": "Evaluated",
+            "type": "integer"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "documents"
+        ],
+        "title": "OutcomeKindOut",
         "type": "object"
       },
       "PageMeta": {
@@ -8510,30 +8565,6 @@
           "type"
         ],
         "title": "ValidationError",
-        "type": "object"
-      },
-      "VariantOut": {
-        "description": "One distinct intervention name among the option's members (task 046).\n\nArgs:\n    name: The variant's name (a member's intervention name, or a folded\n        seed's name).\n    documents: Its documents (DOI-collapsed; a folded seed shows the\n        larger of its own and a same-named member's count).\n    folded_seed: Whether this variant is an option discovery folded into\n        this one, listed first.",
-        "properties": {
-          "documents": {
-            "title": "Documents",
-            "type": "integer"
-          },
-          "folded_seed": {
-            "title": "Folded Seed",
-            "type": "boolean"
-          },
-          "name": {
-            "title": "Name",
-            "type": "string"
-          }
-        },
-        "required": [
-          "name",
-          "documents",
-          "folded_seed"
-        ],
-        "title": "VariantOut",
         "type": "object"
       },
       "WaitlistSignup": {

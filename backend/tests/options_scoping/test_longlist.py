@@ -1472,12 +1472,7 @@ def test_a_suggested_seed_folds_into_a_wider_option_and_shows_as_its_variant(
     offered = [o["label"] for o in backend.calls["assign"][0]["options"]]
     assert offered == ["School food provision"]
     result = walk.result(run_id)
-    variants = result.coverage[str(wider.option_id)]["variants"]
-    assert variants[0] == {
-        "name": "Named breakfast programme",
-        "documents": 0,
-        "folded_seed": True,
-    }
+    assert result.coverage[str(wider.option_id)]["folded"] == ["Named breakfast programme"]
     assert str(seed) not in result.coverage
     assert result.counts["folded"] == 1
     assert result.provenance["folds"]["accepted"] == [

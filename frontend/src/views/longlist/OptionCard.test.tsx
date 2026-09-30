@@ -208,17 +208,17 @@ describe("OptionCard", () => {
     expect(screen.queryByText(/Tried on:/)).not.toBeInTheDocument();
   });
 
-  // Task 046, contract item 2: the variants block, folded seeds marked "suggested by Policy Atlas".
-  it("shows the variants block, a folded seed row naming its origin", () => {
+  // Task 046, amendment 3 (R63): the Examples block, the programme names.
+  it("shows the Examples block, each programme name with its documents", () => {
     renderCard(MOCK_OPTION_ID_EXCLUDED);
-    expect(screen.getByText("Variants")).toBeInTheDocument();
+    expect(screen.getByText("Examples")).toBeInTheDocument();
     expect(screen.getByText("National sanctions regime · 6 documents")).toBeInTheDocument();
-    expect(screen.getByText("Benefit sanctions pilot · 2 documents · suggested by Policy Atlas")).toBeInTheDocument();
+    expect(screen.getByText("Benefit sanctions pilot · 2 documents")).toBeInTheDocument();
   });
 
-  it("shows no variants block when the option has none", () => {
+  it("shows no Examples block when the option has none", () => {
     renderCard(MOCK_OPTION_ID_NO_IN_SCOPE);
-    expect(screen.queryByText("Variants")).not.toBeInTheDocument();
+    expect(screen.queryByText("Examples")).not.toBeInTheDocument();
   });
 
   // Task 046, contract item 3: the runner-up lever type, beside the lever.
@@ -379,8 +379,8 @@ describe("OptionCard", () => {
         outcome_counts: {
           evaluating_documents: 1,
           by_outcome: [
-            { outcome: "Attendance", documents: 1 },
-            { outcome: "Wellbeing", documents: 0 },
+            { outcome: "Attendance", documents: 1, evaluated: 1 },
+            { outcome: "Wellbeing", documents: 0, evaluated: 0 },
           ],
         },
       },
@@ -390,7 +390,7 @@ describe("OptionCard", () => {
     expect(screen.getByText("Wellbeing: no documents")).toBeInTheDocument();
     first.unmount();
     renderCard(MOCK_OPTION_ID_EXCLUDED, {
-      evidence: { ...evidence, outcome_counts: { evaluating_documents: 0, by_outcome: [{ outcome: "Attendance", documents: 0 }] } },
+      evidence: { ...evidence, outcome_counts: { evaluating_documents: 0, by_outcome: [{ outcome: "Attendance", documents: 0, evaluated: 0 }] } },
     });
     expect(screen.queryByText(/evaluated this option/)).not.toBeInTheDocument();
     expect(screen.queryByText(/^Attendance:/)).not.toBeInTheDocument();
