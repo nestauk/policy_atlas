@@ -50,3 +50,12 @@ like local authorities then this would be more relevant" → "Yes leave as is".
 | The list facet | The top level, as chips, no counts. | (topic 2) |
 | The card | Both levels, with document counts; the form is decided under the option card topic. | |
 | The check for the build | Among records with "not stated", how many abstracts name the place of the study. A fault only where the abstract names it. | |
+
+## Topic 5 decided: the grid's cell limit
+
+`CELL_LIMIT` in `LonglistGrid.tsx` goes from 6 to **4**. With the round-3
+mark rule a column holds about a third of the list, so a cell for one lever
+type and one level holds 1 to 4 options in most cases; at 4 the fold shows
+only in the larger cells. Owner: "I think it should be 3 instead" → after
+the lead's count, "If it's 1 to 4 in most cases, then maybe 4 is the right
+value for N."
