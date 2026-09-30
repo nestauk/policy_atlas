@@ -10,10 +10,9 @@ from __future__ import annotations
 import pytest
 
 from policy_atlas.options_scoping.longlist.where_tried import (
-    countries_in,
+    SUBNATIONAL_PLACES,
+    names_place,
     strip_place,
-    where_codes,
-    where_group,
 )
 
 
@@ -23,7 +22,7 @@ def test_the_refugee_target_unit_loses_its_place_and_the_removal_is_recorded() -
     )
     assert cleaned == "refugees and asylum seekers"
     assert removed == ["living in Greater Manchester"]
-    assert countries_in(cleaned) == (frozenset(), False)
+    assert not names_place(cleaned)
 
 
 def test_in_the_uk_is_removed_with_its_article() -> None:
@@ -82,17 +81,12 @@ def test_us_the_pronoun_is_not_a_place() -> None:
     ],
 )
 def test_the_sub_national_table_resolves_a_place_to_its_country(place: str, code: str) -> None:
-    codes, _oecd = countries_in(place)
-    assert codes == frozenset({code})
-
-
-def test_a_sub_national_place_counts_as_where() -> None:
-    assert where_group(["Greater Manchester"], where_codes("United Kingdom")) == "where"
-    assert where_group(["Ontario"], where_codes("United Kingdom")) == "comparable"
+    assert names_place(place)
+    assert SUBNATIONAL_PLACES[place.removeprefix("the ").casefold()] == code
 
 
 def test_georgia_is_not_read_as_a_us_state() -> None:
-    assert countries_in("Georgia") == (frozenset(), False)
+    assert not names_place("Georgia")
 
 
 def test_an_origin_is_part_of_the_population_and_stays() -> None:

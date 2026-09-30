@@ -82,13 +82,13 @@ describe("OptionCard", () => {
   it("renders the evidence-base sentences, where tried, and the documents as source cards", () => {
     renderCard(MOCK_OPTION_ID_EXCLUDED);
     expect(screen.getByRole("heading", { name: "What the evidence base holds so far" })).toBeInTheDocument();
-    expect(screen.getByText("6 documents: 4 from United Kingdom, 2 from comparable systems (OECD).")).toBeInTheDocument();
+    expect(screen.queryByText(/comparable systems|OECD/)).not.toBeInTheDocument();
     expect(
       screen.getAllByText("6 documents name this option: 3 evaluated it, 2 described it and 1 mentioned it.").length,
     ).toBeGreaterThan(0);
     expect(screen.getByText("2 of the 6 were read from the abstract only.")).toBeInTheDocument();
     expect(screen.getByText("Benefit sanctions for young jobseekers: a systematic review")).toBeInTheDocument();
-    expect(screen.getByText("Strong · Systematic review · Evaluated it")).toBeInTheDocument();
+    expect(screen.getByText("Strong · Systematic review · Evaluated it · multiple countries")).toBeInTheDocument();
     expect(screen.queryByText("A mention is not support.")).not.toBeInTheDocument();
   });
 
@@ -137,15 +137,41 @@ describe("OptionCard", () => {
   it("shows each document with a linked or plain title and one meta line", () => {
     renderCard(MOCK_OPTION_ID_EXCLUDED, {
       documents: [
-        { task_source_snapshot_id: "doc-1", title: "Linked paper", role: "evaluated", evidence_type: "Systematic review", tier: "Strong", year: 2021, where_tried_group: "where" },
-        { task_source_snapshot_id: null, title: "Plain paper", role: "mentioned", evidence_type: null, tier: null, year: null, where_tried_group: "where" },
+        { task_source_snapshot_id: "doc-1", title: "Linked paper", role: "evaluated", evidence_type: "Systematic review", tier: "Strong", year: 2021, place: "United Kingdom" },
+        { task_source_snapshot_id: null, title: "Plain paper", role: "mentioned", evidence_type: null, tier: null, year: null, place: null },
       ],
     });
     expect(screen.getByRole("link", { name: "Linked paper" })).toHaveAttribute("href", `/tasks/${TASK_ID}/sources/all?source=doc-1`);
     expect(screen.getByText("Plain paper")).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Plain paper" })).not.toBeInTheDocument();
-    expect(screen.getByText("Strong · Systematic review · Evaluated it · 2021")).toBeInTheDocument();
+    // The place follows the role (task 046, amendment 3; R72).
+    expect(screen.getByText("Strong · Systematic review · Evaluated it · United Kingdom · 2021")).toBeInTheDocument();
     expect(screen.queryByText(/inherited from a linked task/)).not.toBeInTheDocument();
+  });
+
+  // Task 046, amendment 3 (R59, R72): where tried as two levels, with document counts.
+  it("shows where tried as the top levels with the places below, each with its documents", () => {
+    renderCard(MOCK_OPTION_ID_EXCLUDED);
+    const list = screen.getByRole("list", { name: "Where tried" });
+    const tops = within(list).getAllByRole("listitem").filter((item) => item.parentElement === list);
+    expect(tops.map((item) => item.firstChild?.textContent)).toEqual([
+      "United Kingdom · 4 documents",
+      "Multiple countries · 2 documents",
+    ]);
+    expect(within(tops[0]).getByText("England · 3 documents")).toBeInTheDocument();
+    expect(within(tops[0]).getByText("United Kingdom · 1 document")).toBeInTheDocument();
+    expect(within(tops[1]).getByText("12 high-income countries · 1 document")).toBeInTheDocument();
+  });
+
+  it("says the two non-country places as places on a document's meta line", () => {
+    renderCard(MOCK_OPTION_ID_EXCLUDED, {
+      documents: [
+        { task_source_snapshot_id: "doc-1", title: "Stated", role: "evaluated", evidence_type: null, tier: null, year: null, place: "other" },
+        { task_source_snapshot_id: "doc-2", title: "Unstated", role: "evaluated", evidence_type: null, tier: null, year: null, place: "not stated" },
+      ],
+    });
+    expect(screen.getByText("Evaluated it · other place")).toBeInTheDocument();
+    expect(screen.getByText("Evaluated it · place not stated")).toBeInTheDocument();
   });
 
   it("shows five documents, then all of them on request", async () => {
@@ -156,7 +182,7 @@ describe("OptionCard", () => {
       evidence_type: null,
       tier: null,
       year: null,
-      where_tried_group: "where",
+      place: null,
     }));
     renderCard(MOCK_OPTION_ID_EXCLUDED, { documents });
     expect(screen.getByText("Paper 4")).toBeInTheDocument();

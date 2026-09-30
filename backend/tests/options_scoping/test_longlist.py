@@ -795,12 +795,33 @@ def test_coverage_buckets_labels_roles_where_tried_settings_and_flags(conn: Conn
     walk.classify(uk_again, RCT, 4)
     walk.classify(danish, UNKNOWN)
     walk.classify(oecd, NON_EVIDENCE)
-    walk.record(uk, "youth guarantee", study_geography="England", setting="Jobcentres")
-    walk.record(uk_again, "youth guarantee", study_geography="United Kingdom")
     walk.record(
-        danish, "youth guarantee flagged", role="recommended", study_geography="Denmark"
+        uk,
+        "youth guarantee",
+        study_geography="England",
+        study_country="United Kingdom",
+        setting="Jobcentres",
     )
-    walk.record(oecd, "youth guarantee", role="described", study_geography="12 OECD countries")
+    walk.record(
+        uk_again,
+        "youth guarantee",
+        study_geography="United Kingdom",
+        study_country="United Kingdom",
+    )
+    walk.record(
+        danish,
+        "youth guarantee flagged",
+        role="recommended",
+        study_geography="Denmark",
+        study_country="Denmark",
+    )
+    walk.record(
+        oecd,
+        "youth guarantee",
+        role="described",
+        study_geography="12 OECD countries",
+        study_country="multiple",
+    )
     # A feature keeps the mention through thinning (task 046, S10).
     walk.record(
         nowhere,
@@ -826,14 +847,44 @@ def test_coverage_buckets_labels_roles_where_tried_settings_and_flags(conn: Conn
     assert coverage["evidence_type"] == {RCT: 1, UNKNOWN: 1, NON_EVIDENCE: 1, "not rated": 1}
     assert coverage["tier"] == {"not rated": 3, "4": 1}
     assert coverage["role"] == {"evaluated": 1, "described": 1, "recommended": 1, "mentioned": 1}
-    assert coverage["where_tried"] == {"where": 1, "comparable": 2, "other": 0, "unknown": 1}
-    assert coverage["countries"] == {"DK": 1, "GB": 1}
+    # Where tried from study_country (task 046, amendment 3; R59, R72): the
+    # DOI twins count once, both their places below.
+    assert coverage["where_tried"] == [
+        {
+            "top": "Denmark",
+            "documents": 1,
+            "places": [{"place": "Denmark", "documents": 1}],
+            "countries": [],
+        },
+        {
+            "top": "United Kingdom",
+            "documents": 1,
+            "places": [
+                {"place": "England", "documents": 1},
+                {"place": "United Kingdom", "documents": 1},
+            ],
+            "countries": [],
+        },
+        {
+            "top": "multiple countries",
+            "documents": 1,
+            "places": [{"place": "12 OECD countries", "documents": 1}],
+            "countries": [],
+        },
+        {
+            "top": "other",
+            "documents": 1,
+            "places": [{"place": "a large city", "documents": 1}],
+            "countries": [],
+        },
+    ]
+    assert "countries" not in coverage
     assert coverage["settings"] == {"Jobcentres": 1}
     assert coverage["flagged_members"] == 1 and coverage["flagged_documents"] == 1
     assert coverage["abstract_only"] == 4
     result = walk.result(run_id)
     assert result.counts["documents"] == 4
-    assert result.provenance["where_tried_labels"]["where"] == "United Kingdom"
+    assert "where_tried_labels" not in result.provenance
 
 
 def test_a_document_without_a_doi_counts_as_itself(conn: Connection) -> None:
@@ -1024,7 +1075,9 @@ def test_linked_findings_cluster_beside_profile_records(conn: Connection) -> Non
     coverage = walk.result(run_id).coverage[str(seed_id)]
     assert coverage["findings"] == {"iof": 1, "icf": 1}
     assert coverage["role"]["evaluated"] == 2  # the profile record and the IOF document
-    assert coverage["where_tried"]["where"] == 1  # Scotland
+    # A linked finding has no study_country: its stated place is "other".
+    where = {entry["top"]: entry for entry in coverage["where_tried"]}
+    assert where["other"]["places"] == [{"place": "Scotland", "documents": 1}]
     provenance = walk.result(run_id).provenance["links"]
     assert provenance == [
         {

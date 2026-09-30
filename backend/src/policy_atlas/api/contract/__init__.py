@@ -134,7 +134,7 @@ from .read_models import (
     ThemeSourceOut,
     TriedOnOut,
     VariantOut,
-    WhereTriedGroup,
+    WherePlaceOut,
     WhereTriedOut,
 )
 from .runs import RunCreate, RunOut, RunStatus
@@ -256,7 +256,7 @@ __all__ = [
     "RelationOut",
     "TriedOnOut",
     "VariantOut",
-    "WhereTriedGroup",
+    "WherePlaceOut",
     "WhereTriedOut",
     "CHAT_MESSAGE_MAX",
     "PAGE_SIZE_DEFAULT",

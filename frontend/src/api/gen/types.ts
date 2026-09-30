@@ -2259,7 +2259,7 @@ export interface components {
          *             non-evidence documents are their own keys, "not rated" when unclassified.
          *         by_tier: Documents per quality tier label, "not rated" when unappraised.
          *         by_role: Documents per role.
-         *         where_tried: Documents per where-tried group.
+         *         where_tried: Where it was tried: its top levels, most documents first.
          *         populations: Populations its documents name, most frequent first.
          *         settings: Settings its documents name, most frequent first.
          *         outcomes: Outcomes its documents measure, most frequent first.
@@ -2315,7 +2315,8 @@ export interface components {
             settings?: string[];
             /** Tried On */
             tried_on?: components["schemas"]["TriedOnOut"][];
-            where_tried: components["schemas"]["WhereTriedOut"];
+            /** Where Tried */
+            where_tried?: components["schemas"]["WhereTriedOut"][];
         };
         /**
          * ExclusionOut
@@ -2916,8 +2917,6 @@ export interface components {
          *         unthemed_option_ids: Options in no theme (including options added
          *             since the build).
          *         options: Every option of the task, themed ones first in theme order.
-         *         where_label: The words the `where` group is shown under (the plan's
-         *             Where).
          *         lever_types: The lever-type list the options were typed against, in
          *             order (the grid's rows).
          *         lever_type_definitions: The same list with each type's one-line
@@ -2965,8 +2964,6 @@ export interface components {
             themes?: components["schemas"]["LonglistThemeOut"][];
             /** Unthemed Option Ids */
             unthemed_option_ids?: string[];
-            /** Where Label */
-            where_label: string;
         };
         /**
          * LonglistThemeOut
@@ -3105,7 +3102,7 @@ export interface components {
          *         design_feature_not_stated: It covers the intervention without stating
          *             the feature that defines this option.
          *         year: Its publication year, when the metadata has one.
-         *         where_tried_group: Where it was studied, grouped against Where.
+         *         place: Where it was studied: its where-tried top level.
          *         source_task_id: The linked task the document or its labels came from,
          *             when inherited.
          */
@@ -3117,6 +3114,8 @@ export interface components {
             design_feature_not_stated: boolean;
             /** Evidence Type */
             evidence_type?: string | null;
+            /** Place */
+            place?: string | null;
             /**
              * Role
              * @enum {string}
@@ -3130,11 +3129,6 @@ export interface components {
             tier?: string | null;
             /** Title */
             title: string;
-            /**
-             * Where Tried Group
-             * @enum {string}
-             */
-            where_tried_group: "where" | "comparable" | "other" | "unknown";
             /** Year */
             year?: number | null;
         };
@@ -3178,7 +3172,7 @@ export interface components {
          *             before a longlist is built.
          *         capability_run_id: The longlist walk that run belonged to.
          *         plan_version: The plan version that longlist was built from.
-         *         where_label: The words the `where` group is shown under.
+         *         where_label: The plan's Where (the transferability line).
          *         depth_label: The depth label every longlist surface carries.
          *         variants: The option's distinct intervention names, folded seeds
          *             first (task 046).
@@ -3297,7 +3291,8 @@ export interface components {
             variants?: components["schemas"]["VariantOut"][];
             /** Where Label */
             where_label: string;
-            where_tried: components["schemas"]["WhereTriedOut"];
+            /** Where Tried */
+            where_tried?: components["schemas"]["WhereTriedOut"][];
         };
         /**
          * OptionProfileOut
@@ -3377,7 +3372,7 @@ export interface components {
          *         evaluated_count: Documents that evaluate it.
          *         settings: The option's delivery setting, from its profile (R41);
          *             empty when it has none.
-         *         where_tried: Documents per where-tried group.
+         *         where_tried: Where it was tried: its top levels, most documents first.
          *         relations: Its relations to other options.
          *         abstract_only: Every one of its documents was read from an abstract only.
          *         is_entrant_with_no_documents: Suggested, drawn from the Evidence
@@ -3483,7 +3478,8 @@ export interface components {
             taxonomy_version?: string | null;
             /** Tried On */
             tried_on?: components["schemas"]["TriedOnOut"][];
-            where_tried: components["schemas"]["WhereTriedOut"];
+            /** Where Tried */
+            where_tried?: components["schemas"]["WhereTriedOut"][];
         };
         /**
          * OrganisationRef
@@ -5439,36 +5435,41 @@ export interface components {
             entry_id: string;
         };
         /**
-         * WhereTriedOut
-         * @description Documents per where-tried group (DOI-collapsed).
+         * WherePlaceOut
+         * @description One place under a where-tried top level: a record's study geography as written.
          *
          *     Args:
-         *         where: Studied in the plan's Where.
-         *         comparable: Studied in a comparable system (OECD).
-         *         other: Studied in another named country.
-         *         unknown: No recognisable geography.
+         *         place: The study geography text.
+         *         documents: Its documents (DOI-collapsed).
+         */
+        WherePlaceOut: {
+            /** Documents */
+            documents: number;
+            /** Place */
+            place: string;
+        };
+        /**
+         * WhereTriedOut
+         * @description One where-tried top level with its documents (task 046, amendment 3; R59, R72).
+         *
+         *     Args:
+         *         top: The country the records name, "multiple countries", "other"
+         *             (a place stated with no country) or "not stated".
+         *         documents: Its documents (DOI-collapsed); each document counts
+         *             under one top level.
+         *         places: The records' study geographies under it, most documents first.
+         *         countries: Under "multiple countries", every country its documents'
+         *             records name (the facet filter reads it); empty otherwise.
          */
         WhereTriedOut: {
-            /**
-             * Comparable
-             * @default 0
-             */
-            comparable: number;
-            /**
-             * Other
-             * @default 0
-             */
-            other: number;
-            /**
-             * Unknown
-             * @default 0
-             */
-            unknown: number;
-            /**
-             * Where
-             * @default 0
-             */
-            where: number;
+            /** Countries */
+            countries?: string[];
+            /** Documents */
+            documents: number;
+            /** Places */
+            places?: components["schemas"]["WherePlaceOut"][];
+            /** Top */
+            top: string;
         };
         /**
          * YourContextOut

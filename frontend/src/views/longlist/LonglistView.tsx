@@ -34,14 +34,14 @@ import {
   instrumentsSummary,
   leverLabel,
   longlistTitle,
+  matchesWhereTried,
   rowMetaParts,
   themeSummary,
-  whereTriedFacetChips,
+  whereTriedFacet,
 } from "./longlistPresentation";
 
 type LonglistOut = components["schemas"]["LonglistOut"];
 type OptionSummaryOut = components["schemas"]["OptionSummaryOut"];
-type WhereTriedGroup = "where" | "comparable" | "other" | "unknown";
 type GroupBy = "theme" | "lever";
 type AuthorityLabel = NonNullable<OptionSummaryOut["authority"]>["label"];
 
@@ -53,7 +53,7 @@ const GROUP_BY: { key: GroupBy; label: string }[] = [
   { key: "lever", label: "Lever type" },
 ];
 
-/** The setting facet shows this many chips before "more". */
+/** The setting and where-tried facets show this many chips before "more". */
 const SETTING_FACET_LIMIT = 8;
 const ADD_OPTION_ANCHOR = "add-option";
 const EXCLUDED_ANCHOR = "excluded-options";
@@ -96,7 +96,7 @@ export function LonglistView({ taskId, longlist }: { taskId: string; longlist: L
   const includeOption = useIncludeOption(taskId);
 
   const [settingsFilter, setSettingsFilter] = useState<Set<string>>(new Set());
-  const [whereFilter, setWhereFilter] = useState<Set<WhereTriedGroup>>(new Set());
+  const [whereFilter, setWhereFilter] = useState<Set<string>>(new Set());
   const [authorityFilter, setAuthorityFilter] = useState<Set<AuthorityLabel>>(new Set());
   const [mode, setMode] = useState<"list" | "grid">("list");
   const [groupBy, setGroupBy] = useState<GroupBy>("theme");
@@ -137,7 +137,15 @@ export function LonglistView({ taskId, longlist }: { taskId: string; longlist: L
       ? allSettings
       : allSettings.filter((setting) => settingsFilter.has(setting) || allSettings.indexOf(setting) < SETTING_FACET_LIMIT);
   const hiddenSettings = allSettings.length - shownSettings.length;
-  const whereChips = whereTriedFacetChips(longlist.where_label);
+  // Where tried (task 046, amendment 3; R72): the top levels as chips, no
+  // counts, folded after the first few like the Setting facet.
+  const allWhere = whereTriedFacet(options);
+  const [allWhereShown, setAllWhereShown] = useState(false);
+  const shownWhere =
+    allWhereShown || allWhere.length <= SETTING_FACET_LIMIT
+      ? allWhere
+      : allWhere.filter((top) => whereFilter.has(top) || allWhere.indexOf(top) < SETTING_FACET_LIMIT);
+  const hiddenWhere = allWhere.length - shownWhere.length;
   const hasAuthority = options.some((option) => option.authority != null);
 
   const passesFilters = (option: OptionSummaryOut): boolean => {
@@ -146,8 +154,7 @@ export function LonglistView({ taskId, longlist }: { taskId: string; longlist: L
       if (![...settingsFilter].some((setting) => optionSettings.includes(setting))) return false;
     }
     if (whereFilter.size > 0) {
-      const whereTried = option.where_tried;
-      if (![...whereFilter].some((group) => (whereTried[group] ?? 0) > 0)) return false;
+      if (![...whereFilter].some((top) => matchesWhereTried(option.where_tried, top))) return false;
     }
     if (authorityFilter.size > 0) {
       if (option.authority == null || !authorityFilter.has(option.authority.label)) return false;
@@ -470,20 +477,40 @@ export function LonglistView({ taskId, longlist }: { taskId: string; longlist: L
             )}
           </div>
         )}
-        <div role="group" aria-label="Where tried" className="mt-2 flex flex-wrap items-start gap-1.5">
-          <span className={FACET_LABEL_CLASS}>Where tried</span>
-          {whereChips.map((chip) => (
-            <button
-              key={chip.group}
-              type="button"
-              aria-pressed={whereFilter.has(chip.group)}
-              onClick={() => setWhereFilter((current) => toggleInSet(current, chip.group))}
-              className={facetChipClass(whereFilter.has(chip.group))}
-            >
-              {scrub(chip.label)}
-            </button>
-          ))}
-        </div>
+        {allWhere.length > 0 && (
+          <div role="group" aria-label="Where tried" className="mt-2 flex flex-wrap items-start gap-1.5">
+            <span className={FACET_LABEL_CLASS}>Where tried</span>
+            {shownWhere.map((top) => (
+              <button
+                key={top}
+                type="button"
+                aria-pressed={whereFilter.has(top)}
+                onClick={() => setWhereFilter((current) => toggleInSet(current, top))}
+                className={facetChipClass(whereFilter.has(top))}
+              >
+                {capitalise(scrub(top))}
+              </button>
+            ))}
+            {hiddenWhere > 0 && (
+              <button
+                type="button"
+                onClick={() => setAllWhereShown(true)}
+                className="cursor-pointer px-1 py-1.5 text-meta font-semibold text-blue underline-offset-4 hover:underline"
+              >
+                +{hiddenWhere} more
+              </button>
+            )}
+            {allWhereShown && allWhere.length > SETTING_FACET_LIMIT && (
+              <button
+                type="button"
+                onClick={() => setAllWhereShown(false)}
+                className="cursor-pointer px-1 py-1.5 text-meta font-semibold text-blue underline-offset-4 hover:underline"
+              >
+                fewer
+              </button>
+            )}
+          </div>
+        )}
         {hasAuthority && (
           <div role="group" aria-label="Who can act" className="mt-2 flex flex-wrap items-start gap-1.5">
             <span className={FACET_LABEL_CLASS}>Who can act</span>

@@ -55,34 +55,62 @@ export function relationLabel(relation: RelationOut): string {
   return relation.kind === "part_of" ? `part of ${relation.other_name}` : `includes ${relation.other_name}`;
 }
 
-/** The where-tried facet's four chip labels (list view spec): the plan's
- *  own Where first, then the three fixed groups, Title Case. */
-export function whereTriedFacetChips(
-  whereLabel: string,
-): { group: "where" | "comparable" | "other" | "unknown"; label: string }[] {
-  return [
-    { group: "where", label: whereLabel },
-    { group: "comparable", label: "Comparable systems (OECD)" },
-    { group: "other", label: "Other" },
-    { group: "unknown", label: "Unknown" },
-  ];
+/** The top level a document or record reads under when it names two or
+ *  more countries (task 046, amendment 3; R59). */
+export const MULTIPLE_COUNTRIES = "multiple countries";
+
+const fold = (text: string): string => text.trim().toLowerCase();
+
+/** The Where tried facet's chips (R72): every top level on the list, no
+ *  counts — the most options first, then by name; case folded, the first
+ *  spelling kept. */
+export function whereTriedFacet(options: readonly { where_tried?: readonly WhereTriedOut[] }[]): string[] {
+  const counts = new Map<string, { label: string; options: number }>();
+  for (const option of options) {
+    const seen = new Set<string>();
+    for (const entry of option.where_tried ?? []) {
+      const key = fold(entry.top);
+      if (key === "" || seen.has(key)) continue;
+      seen.add(key);
+      const current = counts.get(key);
+      if (current === undefined) counts.set(key, { label: entry.top, options: 1 });
+      else current.options += 1;
+    }
+  }
+  return [...counts.values()]
+    .sort((a, b) => b.options - a.options || a.label.localeCompare(b.label))
+    .map((chip) => chip.label);
 }
 
-/** The card's "Where tried" sentence: the documents by place, zero groups
- *  dropped — "6 documents: 4 from United Kingdom, 2 from comparable
- *  systems (OECD)." */
-export function whereTriedSentence(whereTried: WhereTriedOut, whereLabel: string): string {
-  const total = whereTried.where + whereTried.comparable + whereTried.other + whereTried.unknown;
-  if (total === 0) return "No document says where it was tried.";
-  const parts = [
-    [whereTried.where, `from ${whereLabel}`],
-    [whereTried.comparable, "from comparable systems (OECD)"],
-    [whereTried.other, "from elsewhere"],
-    [whereTried.unknown, "with no place stated"],
-  ]
-    .filter(([n]) => (n as number) > 0)
-    .map(([n, where]) => `${n} ${where}`);
-  return `${total} ${total === 1 ? "document" : "documents"}: ${parts.join(", ")}.`;
+/** Whether an option passes one Where tried chip (R72; Q22): a top level of
+ *  its own, or — for a country — a "multiple countries" entry whose
+ *  countries include it. */
+export function matchesWhereTried(whereTried: readonly WhereTriedOut[] | undefined, chip: string): boolean {
+  const key = fold(chip);
+  return (whereTried ?? []).some(
+    (entry) =>
+      fold(entry.top) === key ||
+      (fold(entry.top) === MULTIPLE_COUNTRIES && (entry.countries ?? []).some((country) => fold(country) === key)),
+  );
+}
+
+/** One top level on the card: "United Kingdom · 4 documents". */
+export function whereTopLine(entry: { top: string; documents: number }): string {
+  return `${capitalise(entry.top)} · ${documentCount(entry.documents)}`;
+}
+
+/** One place under a top level on the card: "England · 2 documents". */
+export function wherePlaceLine(place: { place: string; documents: number }): string {
+  return `${place.place} · ${documentCount(place.documents)}`;
+}
+
+/** A document's place on its meta line: its top level, with the two
+ *  non-country values said as places. */
+export function documentPlaceLabel(place: string | null | undefined): string | null {
+  if (place == null || place.trim() === "") return null;
+  if (fold(place) === "not stated") return "place not stated";
+  if (fold(place) === "other") return "other place";
+  return place;
 }
 
 /** Join a `{label: count}` map as "{n} {label}, …" (the evidence-type and
@@ -332,23 +360,6 @@ export function variantLine(variant: {
   if (variant.documents > 0) parts.push(documentCount(variant.documents));
   if (variant.folded_seed) parts.push("suggested by Policy Atlas");
   return parts.join(" · ");
-}
-
-/** A document's where-tried group, as the card's document list words it. */
-export function whereTriedGroupLabel(
-  group: "where" | "comparable" | "other" | "unknown",
-  whereLabel: string,
-): string {
-  switch (group) {
-    case "where":
-      return whereLabel;
-    case "comparable":
-      return "comparable systems (OECD)";
-    case "other":
-      return "elsewhere";
-    case "unknown":
-      return "place not stated";
-  }
 }
 
 /** A judgement's verdict, rendered as prose ("breaks", "passes", "cannot

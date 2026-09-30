@@ -314,12 +314,24 @@ def _build(
             uk,
             "youth guarantee",
             study_geography="England",
+            study_country="United Kingdom",
             setting="Jobcentres",
             unit="16 to 24 year olds",
             outcome="employment",
         )
-        walk.record(preprint, "youth guarantee flagged", study_geography="United Kingdom")
-        walk.record(old, "mentoring", role="described", study_geography="Denmark")
+        walk.record(
+            preprint,
+            "youth guarantee flagged",
+            study_geography="United Kingdom",
+            study_country="United Kingdom",
+        )
+        walk.record(
+            old,
+            "mentoring",
+            role="described",
+            study_geography="Denmark",
+            study_country="Denmark",
+        )
         walk.record(
             uk, "guarantee package", is_bundle=True, components=["Youth guarantee", "mentoring"]
         )
@@ -513,7 +525,7 @@ def test_the_list_matches_the_stored_rows(engine: Engine, tmp_path: Path) -> Non
         assert body["plan_version"] == body["built_from_plan_version"] == 2
         assert body["current_plan_version"] == 2
         assert body["depth_label"] == "scoping pass"
-        assert body["where_label"] == "United Kingdom"
+        assert "where_label" not in body  # the facet shows the top levels (R72)
         assert body["lever_types"][0] == "regulate" and len(body["lever_types"]) == 10
         assert "ambition_bands" not in body
         counts = body["counts"]
@@ -537,11 +549,18 @@ def test_the_list_matches_the_stored_rows(engine: Engine, tmp_path: Path) -> Non
         assert guarantee["state"] == "included" and guarantee["exclusion"] is None
         assert guarantee["document_count"] == coverage["documents"] == 2
         assert guarantee["evaluated_count"] == coverage["role"]["evaluated"]
-        assert guarantee["where_tried"] == {
-            "where": coverage["where_tried"]["where"],
-            "comparable": coverage["where_tried"]["comparable"],
-            "other": coverage["where_tried"]["other"],
-            "unknown": coverage["where_tried"]["unknown"],
+        # Where tried, two levels (task 046, amendment 3; R59, R72): the DOI
+        # twins count once under their country, both texts below.
+        assert guarantee["where_tried"] == coverage["where_tried"]
+        uk_entry = next(e for e in guarantee["where_tried"] if e["top"] == "United Kingdom")
+        assert uk_entry == {
+            "top": "United Kingdom",
+            "documents": 1,
+            "places": [
+                {"place": "England", "documents": 1},
+                {"place": "United Kingdom", "documents": 1},
+            ],
+            "countries": [],
         }
         # The list's settings are the option-level setting of its profile (R41), not coverage.
         stored_profile = result.option_profile[str(built.options["Youth guarantee"])]
@@ -557,7 +576,14 @@ def test_the_list_matches_the_stored_rows(engine: Engine, tmp_path: Path) -> Non
         assert mentoring["restriction_text"] == RESTRICTION
         assert mentoring["primary_lever_type"] is None
         assert mentoring["lever_none_fits_reason"] == "Mentoring is delivered by volunteers."
-        assert mentoring["where_tried"]["comparable"] == 1  # Denmark
+        assert mentoring["where_tried"] == [
+            {
+                "top": "Denmark",
+                "documents": 1,
+                "places": [{"place": "Denmark", "documents": 1}],
+                "countries": [],
+            }
+        ]
 
         package = by_name["Guarantee package"]
         expected = {
@@ -635,7 +661,8 @@ def test_the_card_carries_every_section_and_never_how_sure(
         assert {d["evidence_type"] for d in inherited} == {RCT}
         assert all(d["task_source_snapshot_id"] is not None for d in inherited)
         evaluation = next(d for d in documents if d["title"] == "UK guarantee evaluation")
-        assert evaluation["tier"] == "Strong" and evaluation["where_tried_group"] == "where"
+        assert evaluation["tier"] == "Strong" and evaluation["place"] == "United Kingdom"
+        assert "where_tried_group" not in evaluation
         assert evaluation["source_task_id"] is None and evaluation["year"] == 2022
 
         mentoring = _card(client, built, "Mentoring", owner.headers).json()
@@ -687,12 +714,7 @@ def test_an_option_added_since_the_build_reads_with_an_empty_profile(conn: Conne
     card = repository.option_out(conn, walk.task_id, late)
     assert card is not None
     assert card.document_count == 0 and card.documents == []
-    assert card.evidence.where_tried.model_dump() == {
-        "where": 0,
-        "comparable": 0,
-        "other": 0,
-        "unknown": 0,
-    }
+    assert card.evidence.where_tried == []
 
 
 # --- task 046: the read models gain runner-up, tried on, variants, thinning --------
@@ -1454,9 +1476,23 @@ def test_an_added_option_reads_its_own_search_until_the_next_build(conn: Connect
     other = walk.doc({"title": "A Danish wage subsidy"})
     walk.classify(first, RCT, 4)
     walk.classify(twin, RCT, 4)
-    walk.record(first, "wage subsidy", study_geography="England", setting="Employers")
-    walk.record(twin, "wage subsidy", study_geography="United Kingdom")
-    walk.record(other, "wage subsidy", role="described", study_geography="Denmark")
+    walk.record(
+        first,
+        "wage subsidy",
+        study_geography="England",
+        study_country="United Kingdom",
+        setting="Employers",
+    )
+    walk.record(
+        twin, "wage subsidy", study_geography="United Kingdom", study_country="united kingdom"
+    )
+    walk.record(
+        other,
+        "wage subsidy",
+        role="described",
+        study_geography="Denmark",
+        study_country="Denmark",
+    )
     walk.record(other, "unemployment benefit", role="comparator")
     walk.rollup(scope_id, [first, twin, other])
     conn.execute(
@@ -1471,12 +1507,24 @@ def test_an_added_option_reads_its_own_search_until_the_next_build(conn: Connect
     assert card.is_entrant_with_no_documents is False
     assert card.document_count == 2  # the DOI twins count once
     assert card.evaluated_count == 1
-    assert card.where_tried.model_dump() == {
-        "where": 1,
-        "comparable": 1,
-        "other": 0,
-        "unknown": 0,
-    }
+    # The twins' countries differ in case only: one country, both texts below (R59).
+    assert [w.model_dump() for w in card.where_tried] == [
+        {
+            "top": "Denmark",
+            "documents": 1,
+            "places": [{"place": "Denmark", "documents": 1}],
+            "countries": [],
+        },
+        {
+            "top": "United Kingdom",
+            "documents": 1,
+            "places": [
+                {"place": "England", "documents": 1},
+                {"place": "United Kingdom", "documents": 1},
+            ],
+            "countries": [],
+        },
+    ]
     assert card.evidence.by_tier == {"Strong": 1, "not rated": 1}
     # An added option has no profile yet (R41): its list setting is empty; the
     # evidence profile keeps the records' own words.
@@ -1488,7 +1536,9 @@ def test_an_added_option_reads_its_own_search_until_the_next_build(conn: Connect
         "Wage subsidy trial",
     ]
     trial = next(d for d in card.documents if d.title == "Wage subsidy trial")
-    assert trial.tier == "Strong" and trial.where_tried_group == "where"
+    assert trial.tier == "Strong" and trial.place == "United Kingdom"
+    danish = next(d for d in card.documents if d.title == "A Danish wage subsidy")
+    assert danish.place == "Denmark"
     listed = repository.longlist_out(conn, walk.task_id)
     assert listed is not None
     summary = next(o for o in listed.options if o.option_id == added)
@@ -1568,22 +1618,33 @@ def test_a_document_with_no_row_here_takes_its_twin_s_own_row() -> None:
 
     own = uuid.uuid4()
 
-    def entry(tss_id: uuid.UUID | None, role: str, key: str) -> Any:
+    def entry(
+        tss_id: uuid.UUID | None,
+        role: str,
+        key: str,
+        place: tuple[str | None, str | None] = (None, None),
+    ) -> Any:
         doc = OptionDocumentOut(
-            task_source_snapshot_id=tss_id,
-            title="Same paper",
-            role=cast(Any, role),
-            where_tried_group="unknown",
+            task_source_snapshot_id=tss_id, title="Same paper", role=cast(Any, role)
         )
-        return (key, doc, None)
+        return (key, doc, None, place)
 
     out = _collapse_documents(
         [entry(None, "evaluated", "doi:10.1/x"), entry(own, "mentioned", "doi:10.1/x")]
     )
     assert len(out) == 1
     assert out[0].task_source_snapshot_id == own and out[0].role == "evaluated"
-    only = _collapse_documents([entry(None, "described", "doi:10.1/y")])
-    assert only[0].task_source_snapshot_id is None
+    assert out[0].place == "not stated"
+    only = _collapse_documents([entry(None, "described", "doi:10.1/y", (None, "a town"))])
+    assert only[0].task_source_snapshot_id is None and only[0].place == "other"
+    # A document's place reads all its records (R72): two countries between them.
+    twins = _collapse_documents(
+        [
+            entry(None, "evaluated", "doi:10.1/z", ("Germany", "Hamburg")),
+            entry(own, "described", "doi:10.1/z", ("France", None)),
+        ]
+    )
+    assert twins[0].place == "multiple countries"
 
 
 # --- step-7 fixes (A4, A5, S2, F3) ----------------------------------------------------

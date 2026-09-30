@@ -1,64 +1,279 @@
-"""Where tried (task 045, D20): study geography grouped against the plan's Where."""
+"""Where tried: two levels read from the record (task 046, amendment 3; R59, R72).
+
+The top level from ``study_country``, the level below from
+``study_geography`` as written; counts in documents, DOI-collapsed.
+"""
 
 from __future__ import annotations
 
+import re
+import uuid
+from pathlib import Path
+
 import pytest
 
-from policy_atlas.options_scoping.longlist.coverage import normalise_doi
+from policy_atlas.options_scoping.labels import DocumentLabels
+from policy_atlas.options_scoping.longlist import where_tried
+from policy_atlas.options_scoping.longlist.coverage import (
+    CoverageMember,
+    normalise_doi,
+    option_coverage,
+)
 from policy_atlas.options_scoping.longlist.where_tried import (
-    countries_in,
-    where_codes,
-    where_group,
-    where_labels,
+    MULTIPLE_COUNTRIES,
+    NOT_STATED,
+    OTHER_PLACE,
+    countries_named,
+    document_where,
+    record_where,
 )
 
-UK = where_codes("United Kingdom")
+_SRC = Path(__file__).resolve().parents[2] / "src" / "policy_atlas"
+
+
+def _member(
+    doc_key: str,
+    *,
+    country: str | None = None,
+    geography: str | None = None,
+    tss_id: uuid.UUID | None = None,
+) -> CoverageMember:
+    return CoverageMember(
+        unit_kind="interventions",
+        doc_key=doc_key,
+        tss_id=tss_id,
+        role="evaluated",
+        basis="abstract_only",
+        flagged=False,
+        unit=None,
+        setting=None,
+        outcome=None,
+        study_geography=geography,
+        study_country=country,
+    )
+
+
+# --- Per record ----------------------------------------------------------------
 
 
 @pytest.mark.parametrize(
-    ("geography", "group"),
+    ("country", "geography", "top"),
     [
-        ("England", "where"),
-        ("the UK", "where"),
-        ("Northern Ireland", "where"),
-        ("Denmark", "comparable"),
-        ("Danish municipalities", "comparable"),
-        ("12 OECD countries", "comparable"),
-        ("New South Wales", "comparable"),
-        ("Kenya", "other"),
-        ("a large city", "unknown"),
-        (None, "unknown"),
-        ("English-language studies", "unknown"),
+        ("Germany", "Hamburg", "Germany"),
+        ("Germany", None, "Germany"),
+        ("multiple", "12 high-income countries", MULTIPLE_COUNTRIES),
+        ("Multiple", None, MULTIPLE_COUNTRIES),
+        ("United Kingdom; United States", None, MULTIPLE_COUNTRIES),
+        ("United Kingdom; multiple", None, MULTIPLE_COUNTRIES),
+        (None, "a large city", OTHER_PLACE),
+        ("", "rural districts", OTHER_PLACE),
+        (None, None, NOT_STATED),
+        ("  ", " ", NOT_STATED),
     ],
 )
-def test_a_geography_is_grouped_against_where(geography: str | None, group: str) -> None:
-    assert where_group([geography], UK) == group
+def test_a_record_s_top_level(country: str | None, geography: str | None, top: str) -> None:
+    assert record_where(country, geography) == top
 
 
-def test_a_document_in_where_and_elsewhere_is_in_where() -> None:
-    assert where_group(["Kenya", "Wales"], UK) == "where"
+def test_the_same_country_twice_in_a_record_is_one_country() -> None:
+    assert record_where("United Kingdom; united kingdom", None) == "United Kingdom"
+    assert countries_named("United Kingdom;  united kingdom ; France") == (
+        ["United Kingdom", "France"],
+        False,
+    )
 
 
-def test_us_the_pronoun_is_not_the_united_states() -> None:
-    assert countries_in("studies that told us little") == (frozenset(), False)
-    assert countries_in("US states")[0] == frozenset({"US"})
+def test_countries_named_reads_multiple_apart() -> None:
+    assert countries_named("multiple") == ([], True)
+    assert countries_named(None) == ([], False)
 
 
-@pytest.mark.parametrize("geography", ["North Korea", "north Korean schools", "the DPRK"])
-def test_north_korea_is_not_the_oecd_member(geography: str) -> None:
-    assert countries_in(geography) == (frozenset({"KP"}), False)
-    assert where_group([geography], UK) == "other"
-    assert countries_in("South Korea")[0] == frozenset({"KR"})
+# --- Per document --------------------------------------------------------------
 
 
-def test_a_where_outside_the_mapping_leaves_the_where_group_empty() -> None:
-    assert where_codes("Atlantis") == frozenset()
-    assert where_group(["England"], frozenset()) == "comparable"
+def test_a_document_whose_records_agree_is_that_country() -> None:
+    assert document_where([("Germany", "Hamburg"), ("germany", None), (None, "Berlin")]) == (
+        "Germany",
+        ["Germany"],
+    )
 
 
-def test_the_labels_name_where_in_its_own_words() -> None:
-    assert where_labels("Scotland")["where"] == "Scotland"
-    assert where_labels("Scotland")["comparable"] == "comparable systems (OECD)"
+def test_a_document_whose_records_give_two_countries_is_multiple() -> None:
+    assert document_where([("United Kingdom", "Leeds"), ("France", "Lyon")]) == (
+        MULTIPLE_COUNTRIES,
+        ["United Kingdom", "France"],
+    )
+
+
+def test_a_document_with_a_multiple_record_is_multiple() -> None:
+    assert document_where([("Germany", None), ("multiple", None)]) == (
+        MULTIPLE_COUNTRIES,
+        ["Germany"],
+    )
+
+
+def test_a_document_with_a_place_and_no_country_is_other() -> None:
+    assert document_where([(None, None), (None, "a coastal town")]) == (OTHER_PLACE, [])
+
+
+def test_a_document_with_nothing_stated_is_not_stated() -> None:
+    assert document_where([(None, None)]) == (NOT_STATED, [])
+    assert document_where([]) == (NOT_STATED, [])
+
+
+# --- Coverage: the two levels, counted in documents ---------------------------
+
+
+def _where(members: list[CoverageMember]) -> list[dict[str, object]]:
+    where: list[dict[str, object]] = option_coverage(members, labels={})["where_tried"]
+    return where
+
+
+def test_coverage_counts_documents_under_one_top_level_each() -> None:
+    where = _where(
+        [
+            _member("doc:a", country="Germany", geography="Hamburg"),
+            _member("doc:a", country="Germany", geography="Hamburg"),
+            _member("doc:b", country="Germany", geography="Berlin"),
+            _member("doc:c", country="multiple", geography="12 high-income countries"),
+            _member("doc:d", geography="a coastal town"),
+            _member("doc:e"),
+        ]
+    )
+    assert where == [
+        {
+            "top": "Germany",
+            "documents": 2,
+            "places": [
+                {"place": "Berlin", "documents": 1},
+                {"place": "Hamburg", "documents": 1},
+            ],
+            "countries": [],
+        },
+        {
+            "top": "multiple countries",
+            "documents": 1,
+            "places": [{"place": "12 high-income countries", "documents": 1}],
+            "countries": [],
+        },
+        {"top": "not stated", "documents": 1, "places": [], "countries": []},
+        {
+            "top": "other",
+            "documents": 1,
+            "places": [{"place": "a coastal town", "documents": 1}],
+            "countries": [],
+        },
+    ]
+
+
+def test_multiple_countries_carries_its_component_countries() -> None:
+    where = _where(
+        [
+            _member("doc:a", country="United Kingdom; United States"),
+            _member("doc:b", country="France", geography="Lyon"),
+            _member("doc:b", country="united kingdom", geography="Leeds"),
+        ]
+    )
+    assert where == [
+        {
+            "top": "multiple countries",
+            "documents": 2,
+            "places": [
+                {"place": "Leeds", "documents": 1},
+                {"place": "Lyon", "documents": 1},
+            ],
+            "countries": ["France", "United Kingdom", "United States"],
+        }
+    ]
+
+
+def test_country_case_is_folded_and_one_spelling_is_shown() -> None:
+    where = _where(
+        [
+            _member("doc:a", country="united kingdom", geography="leeds"),
+            _member("doc:b", country="United Kingdom", geography="Leeds"),
+        ]
+    )
+    assert where == [
+        {
+            "top": "United Kingdom",
+            "documents": 2,
+            "places": [{"place": "Leeds", "documents": 2}],
+            "countries": [],
+        }
+    ]
+
+
+def test_doi_twins_count_once_under_where_tried() -> None:
+    doc = "doi:10.1/abc"
+    where = _where(
+        [
+            _member(doc, country="Canada", geography="Ontario", tss_id=uuid.uuid4()),
+            _member(doc, country="Canada", geography="Ontario", tss_id=uuid.uuid4()),
+        ]
+    )
+    assert where == [
+        {
+            "top": "Canada",
+            "documents": 1,
+            "places": [{"place": "Ontario", "documents": 1}],
+            "countries": [],
+        }
+    ]
+
+
+def test_an_option_with_no_member_has_no_where_tried() -> None:
+    coverage = option_coverage([], labels={})
+    assert coverage["where_tried"] == []
+    assert "countries" not in coverage
+
+
+# --- The old matcher is gone ---------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "where_group",
+        "where_codes",
+        "where_labels",
+        "countries_in",
+        "OECD_CODES",
+        "COMPARABLE_LABEL",
+        "WHERE_GROUPS",
+        "WhereGroup",
+        "COUNTRY_ADJECTIVES",
+        "COUNTRY_GROUPS",
+        "OECD_MARKERS",
+    ],
+)
+def test_the_old_matcher_is_not_importable(name: str) -> None:
+    assert not hasattr(where_tried, name)
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "options_scoping/longlist/where_tried.py",
+        "options_scoping/longlist/coverage.py",
+        "api/readmodels/repository.py",
+        "api/contract/read_models.py",
+    ],
+)
+def test_no_comparable_systems_or_oecd_label_remains(path: str) -> None:
+    text = (_SRC / path).read_text(encoding="utf-8")
+    assert not re.search(r"comparable systems", text, re.IGNORECASE)
+    assert "OECD" not in text
+
+
+def test_where_tried_reads_nothing_of_the_publisher() -> None:
+    text = (_SRC / "options_scoping/longlist/where_tried.py").read_text(encoding="utf-8")
+    code = text.split("# --- The place strip")[0].split('"""', 2)[2]
+    for word in ("publisher", "journal", "institution", "venue", "metadata"):
+        assert word not in code
+
+
+# --- Counting grain (kept from task 045) ---------------------------------------
 
 
 @pytest.mark.parametrize(
@@ -76,11 +291,6 @@ def test_the_doi_is_normalised_for_counting(metadata: dict[str, str], doi: str |
 
 @pytest.mark.parametrize("rated_first", [True, False])
 def test_doi_twins_take_the_rated_twin_s_labels_in_either_id_order(rated_first: bool) -> None:
-    import uuid
-
-    from policy_atlas.options_scoping.labels import DocumentLabels
-    from policy_atlas.options_scoping.longlist.coverage import CoverageMember, option_coverage
-
     low, high = sorted([uuid.uuid4(), uuid.uuid4()], key=str)
     rated, unrated = (low, high) if rated_first else (high, low)
     labels = {
@@ -109,7 +319,7 @@ def test_doi_twins_take_the_rated_twin_s_labels_in_either_id_order(rated_first: 
         )
         for tss, role in ((rated, "evaluated"), (unrated, "mentioned"))
     ]
-    coverage = option_coverage(members, labels=labels, home=frozenset())
+    coverage = option_coverage(members, labels=labels)
     assert coverage["documents"] == 1
     assert coverage["evidence_type"] == {"RCTs and Quasi-Experimental Studies": 1}
     assert coverage["tier"] == {"4": 1}

@@ -75,7 +75,7 @@ from policy_atlas.options_scoping.longlist.longlist_cluster_prompt import (
     DiscoveredOptionWire,
     OptionDiscoveryResponse,
 )
-from policy_atlas.options_scoping.longlist.where_tried import countries_in
+from policy_atlas.options_scoping.longlist.where_tried import names_place
 from policy_atlas.options_scoping.option_profile.option_profile import (
     OptionProfileContext,
     option_profile_scope,
@@ -1132,7 +1132,7 @@ def test_no_place_reaches_the_plan_data_and_the_removal_is_recorded(conn: Connec
         constraints=[_requirement(council)],
     )
     raw = json.dumps([plan.question, plan.intended_change.text])
-    assert countries_in(raw)[0]  # the plan names places ...
+    assert names_place(raw)  # the plan names places ...
     walk = _Walk(conn, plan)
     walk.option("Youth guarantee")
     walk.build(StubLonglistBackend())
@@ -1142,7 +1142,7 @@ def test_no_place_reaches_the_plan_data_and_the_removal_is_recorded(conn: Connec
 
     sent = backend.constrain_inputs[0]
     # ... and none reaches the prompt's plan data.
-    assert countries_in(json.dumps(sent["plan"], ensure_ascii=False)) == (frozenset(), False)
+    assert not names_place(json.dumps(sent["plan"], ensure_ascii=False))
     assert sent["plan"] == {
         "question": "What could reduce the number of young people not in work?",
         "target_unit": "16 to 24 year olds",
@@ -1509,7 +1509,7 @@ def test_the_batches_and_the_distinct_call_get_no_who_decides_line_and_no_where(
         assert text not in others
     assert where not in others
     assert "United Kingdom" not in others
-    assert countries_in(json.dumps(backend.constrain_inputs[0]["plan"])) == (frozenset(), False)
+    assert not names_place(json.dumps(backend.constrain_inputs[0]["plan"]))
 
 
 def test_an_authority_call_malformed_twice_gives_no_label_and_the_step_succeeds(

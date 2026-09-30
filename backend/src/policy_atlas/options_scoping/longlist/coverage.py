@@ -3,7 +3,8 @@
 Per option, from its membership alone — no model call, the same inputs always
 give the same JSON: documents by evidence type and quality tier (through the
 label resolver, :func:`~policy_atlas.options_scoping.labels.labels_for_snapshots`),
-by role, where tried (grouped against the plan's Where), populations,
+by role, where tried (two levels from the records' ``study_country`` and
+``study_geography``: :mod:`.where_tried`), populations,
 settings, outcomes; flagged members counted (``design_feature_not_stated``,
 D11); ``abstract_only`` counted. Display and a later sort, never "how sure"
 (ruling 33).
@@ -46,10 +47,9 @@ import structlog
 
 from policy_atlas.options_scoping.labels import DocumentLabels
 from policy_atlas.options_scoping.longlist.where_tried import (
-    WHERE_GROUPS,
-    countries_in,
+    MULTIPLE_COUNTRIES,
+    document_where,
     names_place,
-    where_group,
 )
 
 log = structlog.get_logger()
@@ -294,14 +294,13 @@ def empty_coverage() -> dict[str, Any]:
     Returns:
         Every key present, every count zero.
     """
-    return option_coverage([], labels={}, home=frozenset())
+    return option_coverage([], labels={})
 
 
 def option_coverage(
     members: Iterable[CoverageMember],
     *,
     labels: Mapping[uuid.UUID, DocumentLabels],
-    home: frozenset[str],
     folded_seeds: Sequence[FoldedSeed] = (),
     plan_outcomes: Sequence[str] = (),
 ) -> dict[str, Any]:
@@ -310,7 +309,6 @@ def option_coverage(
     Args:
         members: The option's membership rows, as coverage reads them.
         labels: The label resolver's answer per ``tss_id``.
-        home: The plan's Where as ISO codes.
         folded_seeds: The options discovery folded into this one (task 046),
             listed first among the variants.
         plan_outcomes: The plan's outcome texts, in plan order (R42).
@@ -318,8 +316,10 @@ def option_coverage(
     Returns:
         ``members`` · ``documents`` · ``flagged_members`` ·
         ``flagged_documents`` · ``abstract_only`` · ``inherited_labels`` ·
-        ``evidence_type`` · ``tier`` · ``role`` · ``where_tried`` ·
-        ``countries`` · ``populations`` · ``settings`` · ``outcomes`` ·
+        ``evidence_type`` · ``tier`` · ``role`` · ``where_tried`` (a list of
+        ``{top, documents, places: [{place, documents}], countries}``, by
+        documents descending then top; ``countries`` is empty except under
+        "multiple countries") · ``populations`` · ``settings`` · ``outcomes`` ·
         ``findings`` · ``population_tags`` · ``tried_on`` · ``variants`` ·
         ``setting_repairs`` · ``outcome_counts`` — documents DOI-collapsed except the two member
         counts and ``setting_repairs`` (one per member repaired).
@@ -352,8 +352,12 @@ def option_coverage(
     evidence_type: dict[str, int] = {}
     tier: dict[str, int] = {}
     role = dict.fromkeys(ROLE_BUCKETS, 0)
-    where_tried = dict.fromkeys(WHERE_GROUPS, 0)
-    countries: dict[str, int] = {}
+    where_docs: dict[str, set[str]] = {}
+    where_shown: dict[str, str] = {}
+    where_places: dict[str, dict[str, set[str]]] = {}
+    places_shown: dict[str, str] = {}
+    where_countries: dict[str, set[str]] = {}
+    countries_shown: dict[str, str] = {}
     populations: dict[str, int] = {}
     settings: dict[str, int] = {}
     outcomes: dict[str, int] = {}
@@ -394,13 +398,22 @@ def option_coverage(
         # states the defining feature.
         flagged_documents += int(all(m.flagged for m in doc_members))
         abstract_only += int(all(m.basis == "abstract_only" for m in doc_members))
-        geographies = [m.study_geography for m in doc_members]
-        where_tried[where_group(geographies, home)] += 1
-        doc_codes: set[str] = set()
-        for text in geographies:
-            doc_codes |= countries_in(text)[0]
-        for code in doc_codes:
-            _add(countries, code)
+        top, doc_countries = document_where(
+            (m.study_country, m.study_geography) for m in doc_members
+        )
+        top_key = top.casefold()
+        where_docs.setdefault(top_key, set()).add(key)
+        _show(where_shown, top_key, top)
+        places = where_places.setdefault(top_key, {})
+        for m in doc_members:
+            place = _clean(m.study_geography)
+            if place is not None:
+                places.setdefault(place.casefold(), set()).add(key)
+                _show(places_shown, place.casefold(), place)
+        if top == MULTIPLE_COUNTRIES:
+            for country in doc_countries:
+                where_countries.setdefault(top_key, set()).add(country.casefold())
+                _show(countries_shown, country.casefold(), country)
         for m in doc_members:
             if m.setting is not None:
                 folded_setting = fold_setting(m.setting)
@@ -474,8 +487,23 @@ def option_coverage(
         "evidence_type": _sorted(evidence_type),
         "tier": _sorted(tier),
         "role": role,
-        "where_tried": where_tried,
-        "countries": _sorted(countries),
+        "where_tried": [
+            {
+                "top": where_shown[top_key],
+                "documents": len(docs),
+                "places": [
+                    {"place": place, "documents": documents}
+                    for place, documents in _ranked(where_places[top_key], places_shown)
+                ],
+                "countries": sorted(
+                    (countries_shown[c] for c in where_countries.get(top_key, set())),
+                    key=lambda name: (name.casefold(), name),
+                ),
+            }
+            for top_key, docs in sorted(
+                where_docs.items(), key=lambda item: (-len(item[1]), where_shown[item[0]])
+            )
+        ],
         "populations": _sorted(populations),
         "settings": _sorted(settings),
         "outcomes": _sorted(outcomes),

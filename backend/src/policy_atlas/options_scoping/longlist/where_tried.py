@@ -1,59 +1,144 @@
-"""Where tried: an option's study geographies grouped against the plan's Where.
+"""Where tried: two levels read from the record (task 046, amendment 3; R59, R72).
 
-Task 045, D20 (ADR 0039 decision 10). Where is out of the longlist's
-retrieval chain; it comes back on the way out as *where tried*: the
-countries an option's documents were studied in, read from each record's
-``study_geography`` text, grouped against the plan's Where as
+The top level comes from the record's ``study_country`` (every country the
+study names, separated by ";", each its short English name); the level
+below is the record's ``study_geography`` as written. No fixed list of
+names decides the top level, and nothing else of the document (publisher,
+journal, institutions, publication country) is read.
 
-- ``where`` — a study in the plan's Where (shown under Where's own words,
-  usually "United Kingdom");
-- ``comparable`` — *comparable systems (OECD)*: a study in an OECD member
-  (``TIER1_GROUPS["OECD members"]``), or one that says it spans OECD
-  countries without naming them ("12 OECD countries");
-- ``other`` — a study in a named country outside both;
-- ``unknown`` — a geography that matches nothing below, or none stated.
+Per record (:func:`record_where`): one country → that country; two or more,
+or any part "multiple" → "multiple countries"; no country but a stated
+geography → "other"; nothing → "not stated". Per document
+(:func:`document_where`): one country when every record that has a country
+gives the same one; "multiple countries" when they give two or more between
+them, or any gives "multiple"; else "other" when any record states a place;
+else "not stated". Countries compare with case folded only.
 
-A facet and a card line; never a filter, never a verdict. Deterministic: the
-same text always gives the same group. The mapping is deliberately small and
-honest — a geography it does not know is ``unknown``, never guessed.
-
-The same names drive :func:`strip_place` (task 046, S6), which takes the
-place out of a plan text before it reaches the longlist: the country and
-sub-national names only, never the nationality adjectives.
+The name tables below drive :func:`strip_place` (task 046, S6), which takes
+the place out of a plan text before it reaches the longlist, and
+:func:`names_place` (the setting pass); they wait for Phase 18P.
 """
 
 from __future__ import annotations
 
 import re
 from collections.abc import Iterable
-from typing import Literal
 
-from policy_atlas.evidence_search.sourcing.country_filters import TIER1_GROUPS
+#: The top level of a record or document naming two or more countries.
+MULTIPLE_COUNTRIES = "multiple countries"
 
-WhereGroup = Literal["where", "comparable", "other", "unknown"]
+#: The top level of a stated place with no country.
+OTHER_PLACE = "other"
 
-#: The four groups in display order.
-WHERE_GROUPS: tuple[WhereGroup, ...] = ("where", "comparable", "other", "unknown")
+#: The top level when nothing is stated.
+NOT_STATED = "not stated"
 
-#: The fixed display labels; ``where`` is replaced by the plan's own words.
-COMPARABLE_LABEL = "comparable systems (OECD)"
+#: The ``study_country`` part that names a group of countries.
+_MULTIPLE = "multiple"
 
-OECD_CODES: frozenset[str] = frozenset(TIER1_GROUPS["OECD members"])
 
-#: Country names (lower case) → ISO-3166 alpha-2. Every OECD member, the
-#: United Kingdom and a short list of countries that recur in policy
-#: evidence. Multi-word entries that contain another entry ("north korea",
+def _clean(value: str | None) -> str | None:
+    if value is None:
+        return None
+    text = " ".join(value.split())
+    return text or None
+
+
+def countries_named(study_country: str | None) -> tuple[list[str], bool]:
+    """The countries a record's ``study_country`` names.
+
+    Args:
+        study_country: The record's ``study_country`` ("United Kingdom;
+            United States"), or ``None``.
+
+    Returns:
+        ``(countries, multiple)``: the named countries as written, one per
+        case-folded name (the first spelling kept), in order, without
+        "multiple"; and whether any part is "multiple" (case folded).
+    """
+    countries: list[str] = []
+    seen: set[str] = set()
+    multiple = False
+    for part in (study_country or "").split(";"):
+        name = _clean(part)
+        if name is None:
+            continue
+        key = name.casefold()
+        if key == _MULTIPLE:
+            multiple = True
+        elif key not in seen:
+            seen.add(key)
+            countries.append(name)
+    return countries, multiple
+
+
+def record_where(study_country: str | None, study_geography: str | None) -> str:
+    """One record's top level.
+
+    Args:
+        study_country: The record's ``study_country``.
+        study_geography: The record's ``study_geography``.
+
+    Returns:
+        The country (as written) when one is named; "multiple countries"
+        when two or more are, or any part is "multiple"; "other" when no
+        country is named but the geography is stated; else "not stated".
+    """
+    countries, multiple = countries_named(study_country)
+    if multiple or len(countries) > 1:
+        return MULTIPLE_COUNTRIES
+    if countries:
+        return countries[0]
+    return OTHER_PLACE if _clean(study_geography) is not None else NOT_STATED
+
+
+def document_where(
+    records: Iterable[tuple[str | None, str | None]],
+) -> tuple[str, list[str]]:
+    """One document's top level, from its records.
+
+    Args:
+        records: ``(study_country, study_geography)`` of each of the
+            document's records (DOI-collapsed twins together).
+
+    Returns:
+        ``(top, countries)``: the top level (the one country as first
+        written, "multiple countries", "other" or "not stated") and every
+        country its records name, one per case-folded name, in order.
+    """
+    countries: list[str] = []
+    seen: set[str] = set()
+    multiple = False
+    place = False
+    for study_country, study_geography in records:
+        named, group = countries_named(study_country)
+        multiple = multiple or group
+        place = place or _clean(study_geography) is not None
+        for name in named:
+            if name.casefold() not in seen:
+                seen.add(name.casefold())
+                countries.append(name)
+    if multiple or len(countries) > 1:
+        return MULTIPLE_COUNTRIES, countries
+    if countries:
+        return countries[0], countries
+    return (OTHER_PLACE if place else NOT_STATED), countries
+
+
+#: Country names (lower case) → ISO-3166 alpha-2: the United Kingdom, the
+#: high-income democracies and a short list of countries that recur in
+#: policy evidence. Multi-word entries that contain another entry ("north korea",
 #: "united states of america") are matched first, so the longer place wins.
 COUNTRY_NAMES: dict[str, str] = {
     # The United Kingdom.
     "united kingdom": "GB",
     "great britain": "GB",
     "britain": "GB",
-    # North Korea is not South Korea (the OECD member): matched before "korea".
+    # North Korea is not South Korea: matched before "korea".
     "north korea": "KP",
     "democratic people's republic of korea": "KP",
     "dprk": "KP",
-    # OECD members.
+    # High-income democracies.
     "australia": "AU",
     "austria": "AT",
     "belgium": "BE",
@@ -97,7 +182,7 @@ COUNTRY_NAMES: dict[str, str] = {
     "türkiye": "TR",
     "united states": "US",
     "united states of america": "US",
-    # Outside the OECD, recurring in policy evidence.
+    # Others recurring in policy evidence.
     "argentina": "AR",
     "bangladesh": "BD",
     "brazil": "BR",
@@ -251,62 +336,6 @@ SUBNATIONAL_PLACES: dict[str, str] = {
     "australian capital territory": "AU",
 }
 
-#: Nationality and country adjectives (lower case) → ISO-3166 alpha-2. They
-#: place a study ("a Danish cohort") but also name a population ("Polish
-#: migrant workers"), so the place strip never uses them. Adjectives that
-#: name a language or a wider region as often as a country ("English",
-#: "American", "Indian") are left out: they would guess.
-COUNTRY_ADJECTIVES: dict[str, str] = {
-    "british": "GB",
-    "scottish": "GB",
-    "welsh": "GB",
-    "north korean": "KP",
-    "australian": "AU",
-    "austrian": "AT",
-    "belgian": "BE",
-    "canadian": "CA",
-    "chilean": "CL",
-    "colombian": "CO",
-    "costa rican": "CR",
-    "czech": "CZ",
-    "danish": "DK",
-    "estonian": "EE",
-    "finnish": "FI",
-    "french": "FR",
-    "german": "DE",
-    "greek": "GR",
-    "hungarian": "HU",
-    "icelandic": "IS",
-    "irish": "IE",
-    "israeli": "IL",
-    "italian": "IT",
-    "japanese": "JP",
-    "korean": "KR",
-    "latvian": "LV",
-    "lithuanian": "LT",
-    "mexican": "MX",
-    "dutch": "NL",
-    "norwegian": "NO",
-    "polish": "PL",
-    "portuguese": "PT",
-    "slovak": "SK",
-    "slovenian": "SI",
-    "spanish": "ES",
-    "swedish": "SE",
-    "swiss": "CH",
-    "turkish": "TR",
-    "brazilian": "BR",
-    "chinese": "CN",
-}
-
-#: Every name the matcher reads a geography by: the places, then the
-#: adjectives. Longer entries are matched first, so the longer place wins.
-COUNTRY_GROUPS: dict[str, str] = {
-    **COUNTRY_NAMES,
-    **SUBNATIONAL_PLACES,
-    **COUNTRY_ADJECTIVES,
-}
-
 #: Upper-case abbreviations, matched case-sensitively ("us" is a pronoun).
 ABBREVIATIONS: dict[str, str] = {
     "UK": "GB",
@@ -317,105 +346,9 @@ ABBREVIATIONS: dict[str, str] = {
     "U.S.A.": "US",
 }
 
-#: Words that place a study in OECD countries without naming one.
-OECD_MARKERS: tuple[str, ...] = ("oecd",)
-
-
 def _alternation(phrases: Iterable[str]) -> str:
     ordered = sorted(phrases, key=lambda phrase: (-len(phrase), phrase))
     return "|".join(re.escape(phrase) for phrase in ordered)
-
-
-# Boundaries are look-arounds, not ``\b``: an abbreviation ends in a full stop.
-_NAMES_RE = re.compile(
-    rf"(?<![\w])({_alternation([*COUNTRY_GROUPS, *OECD_MARKERS])})(?![\w])",
-    re.IGNORECASE,
-)
-_ABBREVIATIONS_RE = re.compile(rf"(?<![\w.])({_alternation(ABBREVIATIONS)})(?![\w])")
-
-
-def countries_in(text: str | None) -> tuple[frozenset[str], bool]:
-    """Read the countries a geography text names.
-
-    Args:
-        text: A record's ``study_geography`` (or a plan's Where), or ``None``.
-
-    Returns:
-        ``(codes, oecd_marker)``: the ISO-3166 alpha-2 codes named, and
-        whether the text places the study in OECD countries without naming
-        them. Both empty when nothing matches.
-    """
-    if not text:
-        return frozenset(), False
-    codes: set[str] = set()
-    oecd = False
-    for match in _NAMES_RE.finditer(text):
-        phrase = match.group(1).casefold()
-        if phrase in OECD_MARKERS:
-            oecd = True
-        else:
-            codes.add(COUNTRY_GROUPS[phrase])
-    for match in _ABBREVIATIONS_RE.finditer(text):
-        codes.add(ABBREVIATIONS[match.group(1)])
-    return frozenset(codes), oecd
-
-
-def where_codes(where_text: str | None) -> frozenset[str]:
-    """The ISO codes a plan's Where names (empty when it names none this module knows).
-
-    Args:
-        where_text: The plan's Where.
-
-    Returns:
-        The codes; a Where that matches nothing leaves the ``where`` group empty.
-    """
-    codes, _oecd = countries_in(where_text)
-    return codes
-
-
-def where_group(geographies: Iterable[str | None], home: frozenset[str]) -> WhereGroup:
-    """Group one document's study geographies against the plan's Where.
-
-    Args:
-        geographies: The ``study_geography`` texts of the document's records.
-        home: The plan's Where as ISO codes (:func:`where_codes`).
-
-    Returns:
-        ``where`` when any named country is in Where; else ``comparable``
-        when any is an OECD member or the text says OECD; else ``other``
-        when any country is named; else ``unknown``.
-    """
-    codes: set[str] = set()
-    oecd = False
-    for text in geographies:
-        found, marker = countries_in(text)
-        codes |= found
-        oecd = oecd or marker
-    if codes & home:
-        return "where"
-    if codes & OECD_CODES or oecd:
-        return "comparable"
-    if codes:
-        return "other"
-    return "unknown"
-
-
-def where_labels(where_text: str | None) -> dict[str, str]:
-    """The display label of each group.
-
-    Args:
-        where_text: The plan's Where.
-
-    Returns:
-        ``{"where": <Where's words>, "comparable": "comparable systems (OECD)",
-        "other": "other", "unknown": "unknown"}``.
-    """
-    return {
-        "where": (where_text or "").strip() or "Where",
-        "comparable": COMPARABLE_LABEL,
-        "other": "other",
-        "unknown": "unknown",
-    }
 
 
 # --- The place strip (task 046, S6; PA11) -----------------------------------

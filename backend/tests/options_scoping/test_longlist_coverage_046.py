@@ -58,7 +58,7 @@ def _member(doc: str, **values: Any) -> CoverageMember:
 
 
 def _coverage(members: list[CoverageMember], **kwargs: Any) -> dict[str, Any]:
-    return option_coverage(members, labels={}, home=frozenset({"GB"}), **kwargs)
+    return option_coverage(members, labels={}, **kwargs)
 
 
 # --- counts by population tag ------------------------------------------------------
@@ -281,8 +281,15 @@ def test_a_setting_that_is_a_place_moves_to_an_empty_geography_and_is_logged() -
     with capture_logs() as logs:
         coverage = _coverage([_member("a", setting="Greater Manchester")])
     assert coverage["settings"] == {}
-    assert coverage["where_tried"]["where"] == 1
-    assert coverage["countries"] == {"GB": 1}
+    # No study_country: the moved place is "other", its text below (R59).
+    assert coverage["where_tried"] == [
+        {
+            "top": "other",
+            "documents": 1,
+            "places": [{"place": "Greater Manchester", "documents": 1}],
+            "countries": [],
+        }
+    ]
     assert coverage["setting_repairs"] == 1
     repairs = [log for log in logs if log["event"] == "longlist.coverage.setting_repair"]
     assert repairs == [
@@ -302,7 +309,8 @@ def test_a_place_setting_is_dropped_when_the_geography_is_stated() -> None:
             [_member("a", setting="schools in Leeds", study_geography="Denmark")]
         )
     assert coverage["settings"] == {}
-    assert coverage["countries"] == {"DK": 1}  # the stated geography stands
+    # The stated geography stands (no study_country: "other", Denmark below).
+    assert coverage["where_tried"][0]["places"] == [{"place": "Denmark", "documents": 1}]
     assert coverage["setting_repairs"] == 1
     assert [log["action"] for log in logs if "action" in log] == ["dropped"]
 
@@ -400,7 +408,10 @@ def test_the_build_writes_the_new_keys_and_no_tag_removes_a_record(conn: Connect
     # "schools" and "school settings", once each: the tie goes to the shortest.
     assert kept_cov["settings"] == {"schools": 2}
     assert duplicate_cov["setting_repairs"] == 1
-    assert duplicate_cov["where_tried"]["where"] == 1
+    assert {e["top"]: e["documents"] for e in duplicate_cov["where_tried"]} == {
+        "other": 1,
+        "not stated": 1,
+    }
     assert duplicate_cov["population_tags"]["other"] == 1
 
 
@@ -422,7 +433,6 @@ def test_coverage_after_a_merge_recomputes_tried_on_and_lists_the_folded_seed(
         conn,
         task_id=walk.task_id,
         scope_id=walk.scope_id,
-        where="United Kingdom",
         option_ids=[kept],
     )[str(kept)]
     assert coverage["tried_on"] == [{"population": "Young adults", "documents": 2}]
@@ -446,7 +456,6 @@ def test_a_folded_seed_counts_its_own_member_documents(conn: Connection) -> None
         conn,
         task_id=walk.task_id,
         scope_id=walk.scope_id,
-        where="United Kingdom",
         option_ids=[kept],
     )[str(kept)]
     assert coverage["variants"][0] == {
@@ -467,7 +476,6 @@ def test_an_option_the_user_named_is_never_a_folded_seed(conn: Connection) -> No
         conn,
         task_id=walk.task_id,
         scope_id=walk.scope_id,
-        where="United Kingdom",
         option_ids=[kept],
     )[str(kept)]
     assert all(not v["folded_seed"] for v in coverage["variants"])

@@ -728,11 +728,6 @@ ExclusionBy = Literal["constrain", "user"]
 #: count as membership, so they have no value here).
 OptionDocumentRole = Literal["evaluated", "described", "recommended", "mentioned"]
 
-#: A document's study geography grouped against the plan's Where: ``where``
-#: (in Where, shown under ``where_label``) · ``comparable`` (comparable
-#: systems, OECD) · ``other`` · ``unknown``.
-WhereTriedGroup = Literal["where", "comparable", "other", "unknown"]
-
 #: A constraint judgement's verdict.
 JudgementVerdict = Literal["passes", "breaks", "cannot_check"]
 
@@ -814,20 +809,35 @@ class ExclusionOut(BaseModel):
     by: ExclusionBy
 
 
-class WhereTriedOut(BaseModel):
-    """Documents per where-tried group (DOI-collapsed).
+class WherePlaceOut(BaseModel):
+    """One place under a where-tried top level: a record's study geography as written.
 
     Args:
-        where: Studied in the plan's Where.
-        comparable: Studied in a comparable system (OECD).
-        other: Studied in another named country.
-        unknown: No recognisable geography.
+        place: The study geography text.
+        documents: Its documents (DOI-collapsed).
     """
 
-    where: int = 0
-    comparable: int = 0
-    other: int = 0
-    unknown: int = 0
+    place: str
+    documents: int
+
+
+class WhereTriedOut(BaseModel):
+    """One where-tried top level with its documents (task 046, amendment 3; R59, R72).
+
+    Args:
+        top: The country the records name, "multiple countries", "other"
+            (a place stated with no country) or "not stated".
+        documents: Its documents (DOI-collapsed); each document counts
+            under one top level.
+        places: The records' study geographies under it, most documents first.
+        countries: Under "multiple countries", every country its documents'
+            records name (the facet filter reads it); empty otherwise.
+    """
+
+    top: str
+    documents: int
+    places: list[WherePlaceOut] = Field(default_factory=list)
+    countries: list[str] = Field(default_factory=list)
 
 
 class RelationOut(BaseModel):
@@ -974,7 +984,7 @@ class OptionSummaryOut(BaseModel):
         evaluated_count: Documents that evaluate it.
         settings: The option's delivery setting, from its profile (R41);
             empty when it has none.
-        where_tried: Documents per where-tried group.
+        where_tried: Where it was tried: its top levels, most documents first.
         relations: Its relations to other options.
         abstract_only: Every one of its documents was read from an abstract only.
         is_entrant_with_no_documents: Suggested, drawn from the Evidence
@@ -1019,7 +1029,7 @@ class OptionSummaryOut(BaseModel):
     document_count: int = 0
     evaluated_count: int = 0
     settings: list[str] = Field(default_factory=list)
-    where_tried: WhereTriedOut
+    where_tried: list[WhereTriedOut] = Field(default_factory=list)
     relations: list[RelationOut] = Field(default_factory=list)
     abstract_only: bool = False
     is_entrant_with_no_documents: bool = False
@@ -1056,8 +1066,6 @@ class LonglistOut(BaseModel):
         unthemed_option_ids: Options in no theme (including options added
             since the build).
         options: Every option of the task, themed ones first in theme order.
-        where_label: The words the `where` group is shown under (the plan's
-            Where).
         lever_types: The lever-type list the options were typed against, in
             order (the grid's rows).
         lever_type_definitions: The same list with each type's one-line
@@ -1078,7 +1086,6 @@ class LonglistOut(BaseModel):
     themes: list[LonglistThemeOut] = Field(default_factory=list)
     unthemed_option_ids: list[uuid.UUID] = Field(default_factory=list)
     options: list[OptionSummaryOut] = Field(default_factory=list)
-    where_label: str
     lever_types: list[str] = Field(default_factory=list)
     lever_type_definitions: list[LeverTypeOut] = Field(default_factory=list)
     lever_type_definitions_by_version: dict[str, list[LeverTypeOut]] = Field(
@@ -1099,7 +1106,7 @@ class EvidenceProfileOut(BaseModel):
             non-evidence documents are their own keys, "not rated" when unclassified.
         by_tier: Documents per quality tier label, "not rated" when unappraised.
         by_role: Documents per role.
-        where_tried: Documents per where-tried group.
+        where_tried: Where it was tried: its top levels, most documents first.
         populations: Populations its documents name, most frequent first.
         settings: Settings its documents name, most frequent first.
         outcomes: Outcomes its documents measure, most frequent first.
@@ -1118,7 +1125,7 @@ class EvidenceProfileOut(BaseModel):
     by_evidence_type: dict[str, int] = Field(default_factory=dict)
     by_tier: dict[str, int] = Field(default_factory=dict)
     by_role: dict[str, int] = Field(default_factory=dict)
-    where_tried: WhereTriedOut
+    where_tried: list[WhereTriedOut] = Field(default_factory=list)
     populations: list[str] = Field(default_factory=list)
     settings: list[str] = Field(default_factory=list)
     outcomes: list[str] = Field(default_factory=list)
@@ -1188,7 +1195,7 @@ class OptionDocumentOut(BaseModel):
         design_feature_not_stated: It covers the intervention without stating
             the feature that defines this option.
         year: Its publication year, when the metadata has one.
-        where_tried_group: Where it was studied, grouped against Where.
+        place: Where it was studied: its where-tried top level.
         source_task_id: The linked task the document or its labels came from,
             when inherited.
     """
@@ -1200,7 +1207,7 @@ class OptionDocumentOut(BaseModel):
     tier: str | None = None
     design_feature_not_stated: bool = False
     year: int | None = None
-    where_tried_group: WhereTriedGroup
+    place: str | None = None
     source_task_id: uuid.UUID | None = None
 
 
@@ -1238,7 +1245,7 @@ class OptionOut(OptionSummaryOut):
             before a longlist is built.
         capability_run_id: The longlist walk that run belonged to.
         plan_version: The plan version that longlist was built from.
-        where_label: The words the `where` group is shown under.
+        where_label: The plan's Where (the transferability line).
         depth_label: The depth label every longlist surface carries.
         variants: The option's distinct intervention names, folded seeds
             first (task 046).

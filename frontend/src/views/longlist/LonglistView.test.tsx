@@ -139,6 +139,44 @@ describe("LonglistView", () => {
     expect(screen.queryByText("Youth guarantee")).not.toBeInTheDocument();
   });
 
+  // Task 046, amendment 3 (R72): the top levels as chips, no counts.
+  it("shows the Where tried top levels as chips, most options first, with no count", () => {
+    renderLonglist();
+    const whereGroup = screen.getByRole("group", { name: "Where tried" });
+    const chips = within(whereGroup).getAllByRole("button").map((button) => button.textContent ?? "");
+    expect(chips).toEqual(["Multiple countries", "United Kingdom", "Australia", "Canada", "Germany", "Not stated", "Other"]);
+    for (const chip of chips) expect(chip).not.toMatch(/\d/);
+    expect(whereGroup).not.toHaveTextContent(/comparable|OECD/i);
+  });
+
+  // Q22: a country chip also matches an option whose "multiple countries" documents name it.
+  it("matches a country chip against the countries under multiple countries", async () => {
+    const user = userEvent.setup();
+    renderLonglist();
+    const whereGroup = screen.getByRole("group", { name: "Where tried" });
+    await user.click(within(whereGroup).getByRole("button", { name: "Canada" }));
+    expect(screen.getByText("School-based mentoring")).toBeInTheDocument(); // Canada, its own top level
+    expect(screen.getByText("Universal youth offer bundle")).toBeInTheDocument(); // Canada under multiple countries
+    expect(screen.queryByText("Youth guarantee")).not.toBeInTheDocument();
+    expect(screen.getByText("2 of 4 options match.")).toBeInTheDocument();
+  });
+
+  it("folds the Where tried facet after eight chips, like the Setting facet", async () => {
+    const user = userEvent.setup();
+    const tops = ["Austria", "Belgium", "Chile", "Denmark", "Estonia", "Finland", "Greece", "Hungary", "Iceland", "Japan"];
+    renderLonglist({}, (longlist) => {
+      const option = (longlist.options ?? []).find((o) => o.name === "Youth guarantee");
+      if (option) option.where_tried = tops.map((top) => ({ top, documents: 1, places: [], countries: [] }));
+    });
+    const whereGroup = screen.getByRole("group", { name: "Where tried" });
+    const pressable = () => within(whereGroup).getAllByRole("button").filter((b) => b.hasAttribute("aria-pressed"));
+    expect(pressable()).toHaveLength(8);
+    await user.click(within(whereGroup).getByRole("button", { name: /more$/ }));
+    expect(pressable()).toHaveLength(17);
+    await user.click(within(whereGroup).getByRole("button", { name: "fewer" }));
+    expect(pressable()).toHaveLength(8);
+  });
+
   // R43: the Who can act facet is a filter only.
   it("shows the Who can act facet with three chips in order, and only when an option has an authority", () => {
     const first = renderLonglist();

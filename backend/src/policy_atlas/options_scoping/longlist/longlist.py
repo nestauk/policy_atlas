@@ -147,7 +147,6 @@ from policy_atlas.options_scoping.longlist.longlist_cluster_prompt import (
     OPTION_LABEL_MAX,
     DiscoveredOptionWire,
 )
-from policy_atlas.options_scoping.longlist.where_tried import where_codes, where_labels
 from policy_atlas.options_scoping.longlist_intent import longlist_plan_data, plan_tagging_context
 from policy_atlas.options_scoping.suggest.suggest import baseline_sections, walk_plan
 from policy_atlas.runtime.capability_registry import OPTIONS_SCOPING, validate_plan
@@ -1466,7 +1465,6 @@ def membership_coverage(
     *,
     task_id: uuid.UUID,
     scope_id: uuid.UUID,
-    where: str,
     option_ids: Sequence[uuid.UUID],
     plan_outcomes: Sequence[str] = (),
 ) -> dict[str, dict[str, Any]]:
@@ -1482,7 +1480,6 @@ def membership_coverage(
         conn: Open connection.
         task_id: The scoping task.
         scope_id: The longlist walk's intent record.
-        where: The plan's *where* text (the home group).
         option_ids: The options to recompute.
         plan_outcomes: The plan's outcome texts, in plan order (R42).
 
@@ -1523,7 +1520,6 @@ def membership_coverage(
         task_id=task_id,
         tss_ids={u.label_tss_id for ms in members.values() for u, _ in ms if u.label_tss_id},
     )
-    home = where_codes(where)
     folded = _folded_seeds(
         conn, task_id=task_id, option_ids=list(members), documents_of=documents_of
     )
@@ -1531,7 +1527,6 @@ def membership_coverage(
         str(oid): option_coverage(
             [_coverage_member(u, flagged=flagged) for u, flagged in ms],
             labels=labels,
-            home=home,
             folded_seeds=folded.get(oid, ()),
             plan_outcomes=plan_outcomes,
         )
@@ -1811,7 +1806,6 @@ def longlist_scope(
     # 6. Coverage (deterministic).
     label_ids = {u.label_tss_id for u in units if u.label_tss_id is not None}
     labels = labels_for_snapshots(conn, task_id=task_id, tss_ids=label_ids)
-    home = where_codes(plan.where.text)
     # A folded seed's own documents are this build's: its earlier memberships
     # are replaced by this build's writes. This build's folds are not written
     # yet; they join the ones already stored, with no documents of their own.
@@ -1831,7 +1825,6 @@ def longlist_scope(
         str(o.option_id): option_coverage(
             [_coverage_member(u, flagged=_flagged(answers, u, o.label)) for u in o.members],
             labels=labels,
-            home=home,
             folded_seeds=folded.get(o.option_id, ()),
             plan_outcomes=plan_outcomes,
         )
@@ -1970,7 +1963,6 @@ def longlist_scope(
             "repeated_labels_dropped": clustering_backend.repeated_labels_dropped,
             "short_id_repairs": clustering_backend.short_id_repairs,
         },
-        "where_tried_labels": where_labels(plan.where.text),
         "usage_totals": usage.payload(),
     }
     conn.execute(

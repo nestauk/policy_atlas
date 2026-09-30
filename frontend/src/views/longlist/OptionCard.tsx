@@ -31,6 +31,7 @@ import {
   checksSummary,
   constraintLabel,
   deliveredThroughLine,
+  documentPlaceLabel,
   documentsSentence,
   leverLine,
   runnerUpLine,
@@ -44,7 +45,8 @@ import {
   relationLabel,
   roleLabel,
   verdictLabel,
-  whereTriedSentence,
+  wherePlaceLine,
+  whereTopLine,
 } from "./longlistPresentation";
 
 type OptionDocumentOut = components["schemas"]["OptionDocumentOut"];
@@ -52,9 +54,10 @@ type OptionDocumentOut = components["schemas"]["OptionDocumentOut"];
 /** Documents shown before "Show all N". */
 const DOCUMENTS_SHOWN = 5;
 
-/** The document's grey meta line: quality, type, role, year (task 046, amendment 3, R67). */
+/** The document's grey meta line: quality, type, role, place, year (task 046,
+ *  amendment 3, R67; the place is its where-tried top level, R72). */
 const documentMeta = (document: OptionDocumentOut): string =>
-  [document.tier, document.evidence_type, roleLabel(document.role), document.year]
+  [document.tier, document.evidence_type, roleLabel(document.role), documentPlaceLabel(document.place), document.year]
     .filter((part) => part !== null && part !== undefined && part !== "")
     .map((part) => scrub(String(part)))
     .join(" · ");
@@ -232,7 +235,7 @@ export function OptionCard() {
   const documentsLine = documentsSentence(evidence.documents, byRole);
   // One entry per document, evaluated first then by quality (the read model, R67).
   const documents = item.documents ?? [];
-  const whereLine = whereTriedSentence(item.where_tried, item.where_label);
+  const whereTried = item.where_tried ?? [];
   const outcomeCounts = evidence.outcome_counts;
   const outcomeCountsLine = outcomeCountsSentence(outcomeCounts);
   const profile = item.profile ?? null;
@@ -343,7 +346,6 @@ export function OptionCard() {
           cells={[
             ["Documents", String(item.document_count), null],
             ["Evaluated", `${item.evaluated_count} of ${item.document_count}`, null],
-            [`Tried in ${item.where_label}`, `${item.where_tried.where} of ${item.document_count}`, null],
             ["Origin", capitalise(originShort(item.origin) ?? "clustered from the search"), null],
           ]}
         />
@@ -452,7 +454,25 @@ export function OptionCard() {
 
       <CardSection id="evidence-base" summary={documentsLine}>
         <p>{documentsLine}</p>
-        <p>{whereLine}</p>
+        {whereTried.length > 0 && (
+          <div>
+            <p className="font-bold text-navy">Where tried</p>
+            <ul aria-label="Where tried" className="list-disc space-y-1 pl-5">
+              {whereTried.map((entry) => (
+                <li key={entry.top}>
+                  {scrub(whereTopLine(entry))}
+                  {(entry.places ?? []).length > 0 && (
+                    <ul className="list-[circle] space-y-0.5 pl-5 text-grey">
+                      {(entry.places ?? []).map((place) => (
+                        <li key={place.place}>{scrub(wherePlaceLine(place))}</li>
+                      ))}
+                    </ul>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
         {outcomeCountsLine !== "" && (
           <>
             <p>{outcomeCountsLine}</p>

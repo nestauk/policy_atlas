@@ -73,6 +73,7 @@ from policy_atlas.api.contract import (
     ThemeSourceOut,
     TriedOnOut,
     VariantOut,
+    WherePlaceOut,
     WhereTriedOut,
 )
 from policy_atlas.api.lifecycle import LIFECYCLE_EVENT_KINDS, both_generations
@@ -134,7 +135,7 @@ from policy_atlas.options_scoping.longlist.lever_types import (
     TAXONOMY_VERSION,
     lever_types_by_version,
 )
-from policy_atlas.options_scoping.longlist.where_tried import where_codes, where_group
+from policy_atlas.options_scoping.longlist.where_tried import document_where
 from policy_atlas.options_scoping.option_profile.option_profile import TYPING_INVALID_REASON
 from policy_atlas.runtime.capability_registry import OPTIONS_SCOPING, validate_plan
 from policy_atlas.runtime.scoping_plan import (
@@ -185,25 +186,32 @@ def _document_year(metadata: Mapping[str, Any]) -> int | None:
     return None
 
 
-def _collapse_documents(
-    entries: list[tuple[str, OptionDocumentOut, int | None]],
-) -> list[OptionDocumentOut]:
+#: One record behind a document: ``(document key, document, quality score,
+#: (study_country, study_geography))``.
+_DocumentEntry = tuple[str, OptionDocumentOut, int | None, tuple[str | None, str | None]]
+
+
+def _collapse_documents(entries: list[_DocumentEntry]) -> list[OptionDocumentOut]:
     """One entry per document (task 046, amendment 3, R67), best first.
 
     Args:
-        entries: ``(document key, document, quality score)`` per record.
+        entries: ``(document key, document, quality score, (study_country,
+            study_geography))`` per record.
 
     Returns:
         One document per key: the task's own row as its id when any record
-        has one, the highest role, ordered evaluated first, then quality
-        score descending (unrated last), then title and id.
+        has one, the highest role, the where-tried top level of all its
+        records (R59, R72), ordered evaluated first, then quality score
+        descending (unrated last), then title and id.
     """
     rank = {role: index for index, role in enumerate(ROLE_BUCKETS)}
     groups: dict[str, list[tuple[OptionDocumentOut, int | None]]] = {}
-    for key, document, score in entries:
+    places: dict[str, list[tuple[str | None, str | None]]] = {}
+    for key, document, score, place in entries:
         groups.setdefault(key, []).append((document, score))
+        places.setdefault(key, []).append(place)
     merged: list[tuple[OptionDocumentOut, int | None]] = []
-    for group in groups.values():
+    for key, group in groups.items():
         best_role = min((doc.role for doc, _ in group), key=lambda role: rank[role])
         own = [item for item in group if item[0].task_source_snapshot_id is not None]
         document, score = min(
@@ -214,7 +222,8 @@ def _collapse_documents(
                 str(item[0].task_source_snapshot_id or ""),
             ),
         )
-        merged.append((document.model_copy(update={"role": best_role}), score))
+        top, _countries = document_where(places[key])
+        merged.append((document.model_copy(update={"role": best_role, "place": top}), score))
     merged.sort(
         key=lambda item: (
             item[0].role != "evaluated",
@@ -2865,7 +2874,6 @@ _LEANINGS = frozenset({"likely_meets", "likely_falls_short", "cannot_say"})
 _DOCUMENT_ROLES = frozenset({"evaluated", "described", "recommended", "mentioned"})
 #: The role a linked finding's kind implies (the longlist component's rule).
 _LINKED_FINDING_ROLE: dict[str, str] = {"iof": "evaluated", "icf": "described"}
-_WHERE_GROUPS: tuple[str, ...] = ("where", "comparable", "other", "unknown")
 _PROFILE_MARKS = frozenset({"less", "more"})
 #: The two lines that state a fact, not a comparison: never marked (R37).
 _UNMARKED_LINES = frozenset({"who_decides", "dependencies"})
@@ -2887,9 +2895,36 @@ def _ranked(counts: object) -> dict[str, int]:
     return dict(sorted(items, key=lambda item: (-item[1], item[0])))
 
 
-def _where_tried_out(raw: object) -> WhereTriedOut:
-    counts = _as_mapping(raw)
-    return WhereTriedOut(**{group: _count(counts.get(group)) for group in _WHERE_GROUPS})
+def _where_tried_out(raw: object) -> list[WhereTriedOut]:
+    """Coverage's ``where_tried`` list, read defensively (task 046, amendment 3).
+
+    A stored record of the old shape (a mapping of groups) reads as none.
+    """
+    out: list[WhereTriedOut] = []
+    for item in raw if isinstance(raw, list) else []:
+        entry = _as_mapping(item)
+        top = entry.get("top")
+        if not isinstance(top, str) or not top:
+            continue
+        places = [
+            WherePlaceOut(place=place, documents=_count(place_entry.get("documents")))
+            for place_entry in (_as_mapping(p) for p in _list(entry.get("places")))
+            for place in (place_entry.get("place"),)
+            if isinstance(place, str) and place
+        ]
+        out.append(
+            WhereTriedOut(
+                top=top,
+                documents=_count(entry.get("documents")),
+                places=places,
+                countries=[c for c in _list(entry.get("countries")) if isinstance(c, str)],
+            )
+        )
+    return out
+
+
+def _list(value: object) -> list[Any]:
+    return value if isinstance(value, list) else []
 
 
 def _tried_on_out(raw: object) -> list[TriedOnOut]:
@@ -3253,11 +3288,8 @@ def _option_coverage(result: Any | None, option_id: uuid.UUID) -> Mapping[str, A
     return empty_coverage()
 
 
-def _where_label(result: Any | None, plan: ScopingPlan | None) -> str:
-    labels = _as_mapping(_as_mapping(result.provenance).get("where_tried_labels")) if result else {}
-    label = labels.get("where")
-    if isinstance(label, str) and label:
-        return label
+def _where_label(plan: ScopingPlan | None) -> str:
+    """The plan's Where, for the card's transferability line."""
     if plan is not None and plan.where.text.strip():
         return plan.where.text.strip()
     return "Where"
@@ -3493,7 +3525,6 @@ def _search_coverage(
     conn: Connection,
     task_id: uuid.UUID,
     search: _AddedSearch,
-    home: frozenset[str],
     plan_outcomes: Sequence[str] = (),
 ) -> Mapping[str, Any]:
     """An added option's coverage from its own search's records (DOI-collapsed)."""
@@ -3524,19 +3555,18 @@ def _search_coverage(
             for unit in search.units
         ],
         labels=labels,
-        home=home,
         plan_outcomes=plan_outcomes,
     )
 
 
 def _search_documents(
-    conn: Connection, task_id: uuid.UUID, search: _AddedSearch, home: frozenset[str]
+    conn: Connection, task_id: uuid.UUID, search: _AddedSearch
 ) -> list[OptionDocumentOut]:
     """An added option's documents from its own search, one per record."""
     labels = labels_for_snapshots(
         conn, task_id=task_id, tss_ids={unit.tss_id for unit in search.units}
     )
-    out: list[tuple[str, OptionDocumentOut, int | None]] = []
+    out: list[_DocumentEntry] = []
     for unit in search.units:
         label = labels.get(unit.tss_id)
         evidence_type, tier = _label_fields(label)
@@ -3552,7 +3582,6 @@ def _search_documents(
                     tier=tier,
                     design_feature_not_stated=False,
                     year=_document_year(unit.metadata),
-                    where_tried_group=where_group([unit.study_geography], home),
                     source_task_id=(
                         label.source_task_id
                         if label is not None and label.provenance == "inherited"
@@ -3560,13 +3589,10 @@ def _search_documents(
                     ),
                 ),
                 label.quality_score if label is not None else None,
+                (unit.study_country, unit.study_geography),
             )
         )
     return _collapse_documents(out)
-
-
-def _home(plan: ScopingPlan | None) -> frozenset[str]:
-    return where_codes(plan.where.text) if plan is not None else frozenset()
 
 
 def _plan_outcomes(plan: ScopingPlan | None) -> list[str]:
@@ -3627,7 +3653,6 @@ def longlist_out(conn: Connection, task_id: uuid.UUID) -> LonglistOut | None:
     searches = _added_searches(
         conn, task_id, _needs_search_read(rows, result, _members_by_option(conn, task_id))
     )
-    home = _home(built_from[1] if built_from else None)
     plan_outcomes = _plan_outcomes(built_from[1] if built_from else None)
     sections = _report_sections(conn, task_id, rows)
     merged = _also_found_as(conn, task_id)
@@ -3635,7 +3660,7 @@ def longlist_out(conn: Connection, task_id: uuid.UUID) -> LonglistOut | None:
     def coverage_of(oid: uuid.UUID) -> Mapping[str, Any]:
         search = searches.get(oid)
         if search is not None:
-            return _search_coverage(conn, task_id, search, home, plan_outcomes)
+            return _search_coverage(conn, task_id, search, plan_outcomes)
         return _option_coverage(result, oid)
 
     options = [
@@ -3690,7 +3715,6 @@ def longlist_out(conn: Connection, task_id: uuid.UUID) -> LonglistOut | None:
         themes=themes,
         unthemed_option_ids=unthemed,
         options=options,
-        where_label=_where_label(result, built_from[1] if built_from else None),
         lever_types=list(LEVER_TYPE_KEYS),
         lever_type_definitions=[
             LeverTypeOut(key=lever.key, definition=lever.definition) for lever in LEVER_TYPES
@@ -3805,7 +3829,7 @@ def _label_fields(label: DocumentLabels | None) -> tuple[str | None, str | None]
 
 
 def _option_documents(
-    conn: Connection, task_id: uuid.UUID, option_id: uuid.UUID, home: frozenset[str]
+    conn: Connection, task_id: uuid.UUID, option_id: uuid.UUID
 ) -> list[OptionDocumentOut]:
     """The documents behind an option, one per document (DOI twins collapsed, R67).
 
@@ -3832,6 +3856,7 @@ def _option_documents(
                     intervention_profile_record.c.record_id,
                     intervention_profile_record.c.role,
                     intervention_profile_record.c.study_geography,
+                    intervention_profile_record.c.study_country,
                 )
                 .where(intervention_profile_record.c.task_id == task_id)
                 .where(intervention_profile_record.c.record_id.in_(own_ids))
@@ -3931,7 +3956,7 @@ def _option_documents(
         conn, task_id=task_id, tss_ids=member_tss | set(own_by_snapshot.values())
     )
 
-    out: list[tuple[str, OptionDocumentOut, int | None]] = []
+    out: list[_DocumentEntry] = []
     for member in members:
         if member.unit_kind == "interventions":
             record = records.get(member.unit_id)
@@ -3946,6 +3971,7 @@ def _option_documents(
                 else None
             )
             role, geography = record.role, record.study_geography
+            country: str | None = record.study_country
             metadata, locator = _as_mapping(document.metadata), document.source_locator
             doc_id: uuid.UUID = tss_id
         else:
@@ -3956,6 +3982,7 @@ def _option_documents(
             label = labels.get(tss_id) if tss_id is not None else None
             source_task_id = member.unit_task_id
             role, geography = _LINKED_FINDING_ROLE[member.unit_kind], finding.study_geography
+            country = None  # a linked finding carries no study_country
             metadata, locator = _as_mapping(finding.metadata), finding.source_locator
             doc_id = tss_id if tss_id is not None else finding.source_snapshot_id
         evidence_type, tier = _label_fields(label)
@@ -3971,10 +3998,10 @@ def _option_documents(
                     tier=tier,
                     design_feature_not_stated=bool(member.design_feature_not_stated),
                     year=_document_year(metadata),
-                    where_tried_group=where_group([geography], home),
                     source_task_id=source_task_id,
                 ),
                 label.quality_score if label is not None else None,
+                (country, geography),
             )
         )
     return _collapse_documents(out)
@@ -4021,16 +4048,15 @@ def option_out(conn: Connection, task_id: uuid.UUID, option_id: uuid.UUID) -> Op
         conn, task_id, int(result.plan_version) if result is not None else None
     )
     plan = plan_row[1] if plan_row is not None else None
-    home = _home(plan)
     search = _added_searches(
         conn, task_id, _needs_search_read(rows, result, _members_by_option(conn, task_id))
     ).get(option_id)
     if search is not None:
-        coverage = _search_coverage(conn, task_id, search, home, _plan_outcomes(plan))
-        documents = _search_documents(conn, task_id, search, home)
+        coverage = _search_coverage(conn, task_id, search, _plan_outcomes(plan))
+        documents = _search_documents(conn, task_id, search)
     else:
         coverage = _option_coverage(result, option_id)
-        documents = _option_documents(conn, task_id, option_id, home)
+        documents = _option_documents(conn, task_id, option_id)
     design = _design_out(row)
     return OptionOut(
         **_option_summary_fields(
@@ -4062,6 +4088,6 @@ def option_out(conn: Connection, task_id: uuid.UUID, option_id: uuid.UUID) -> Op
             _walk_of_run(conn, task_id, result.run_id) if result is not None else None
         ),
         plan_version=int(result.plan_version) if result is not None else None,
-        where_label=_where_label(result, plan),
+        where_label=_where_label(plan),
         variants=_variants_out(coverage.get("variants")),
     )
