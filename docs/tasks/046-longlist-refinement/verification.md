@@ -4,8 +4,9 @@ Evidence for the build phase (steps 5 and 6) of task 046. Items, rulings
 (R1–R28), amendments (AM, PA), seams (S1–S15) and measures (M1–M9) are
 defined in [contract.md](contract.md) and [plan.md](plan.md).
 
-> **Status:** build complete 2026-09-29 · lead. Steps 5 and 6 only. The
-> review stack (step 7) has not run; it runs in a fresh conversation.
+> **Status:** build complete 2026-09-29 · lead; **amendment 2 build complete
+> 2026-09-30** (§ Amendment 2 below). Steps 5 and 6 only. The review stack
+> (step 7) has not run; it runs in a fresh conversation.
 > Every figure in this file was read back from a saved result file or a
 > database query; the file is named beside the figure. The read-backs, the
 > traces, the replay tool and the round records are in the gitignored
@@ -299,6 +300,355 @@ the lever reasons or the new designs by hand.
 
 Test data left in the dev database: the replay clones of refugees, obesity
 and energy hold the test requirements of R33 in their plans.
+
+## Amendment 2 (build 2026-09-30)
+
+Rulings R34–R53 are in [contract.md](contract.md) § Amendment 2; the design
+in [amendment-2-final.md](amendment-2-final.md) ("final"); the phases 9.0 to
+14 and the seams S16–S20 in [plan.md](plan.md) § Amendment 2. Steps 5 and 6
+only; the review stack runs in a fresh conversation. Every figure below was
+read back from a saved file or a database query, named beside it.
+
+### Commands run (the gates)
+
+The gate of each phase ran on a **snapshot of the git index** in a second
+worktree (`../policy_atlas-gate`, the `gate.sh` script in the session
+scratchpad), so that the next phase could be built while the gate ran. A
+commit was made only when the index tree equalled the gated tree. The full
+gate ran at Phase 9.0 and at the tree of Phases 9 + 10; Phase 14 carries the
+step-6 exit gate.
+
+| Gate | Result | Notes |
+|---|---:|---|
+| `make verify` (Phase 9.0, build-open baseline) | pass | backend 3325 passed (745 s); infra 46; frontend 87 files, 825 tests; prompt-guard 24 unchanged |
+| `make verify` (Phases 9 + 10, one tree) | pass | backend 3341; frontend 829; drift-check OK; prompt-guard 24 unchanged after the re-pin |
+| `make verify-fast` · `prompt-guard` (9L round 1) | pass | backend 3341 |
+| `make verify-fast` · `prompt-guard` · `drift-check` · `frontend-verify` (Phases 11 + 12a, one tree) | pass | backend 3357; frontend 830; the first `frontend-verify` failed on a `pnpm` purge prompt in the gate worktree (a symlinked `node_modules`); a real install and a second run passed |
+| `make verify-fast` · `prompt-guard` · `drift-check` (Phase 12b) | pass | backend 3384; prompt-guard 25 unchanged |
+| `make verify-fast` · `prompt-guard` (12L round 1) | pass | backend 3384 |
+| `make verify-fast` · `prompt-guard` · `drift-check` (Phase 13) | pass | backend 3394 |
+| `make verify-fast` · `prompt-guard` (13L round 1) | pass | backend 3394 |
+| `make verify-fast` · `prompt-guard` · `drift-check` · `frontend-verify` (Phase 14a) | pass | backend 3403; frontend 853 |
+| `make verify-fast` · `frontend-verify` (Phase 14a.3, the polish after the browser check) | pass | backend 3403; frontend 853 |
+| `make verify` (Phase 14, step-6 exit) | **pass** | backend 3403 passed (1000 s); infra 46; prompt-guard 25 unchanged; drift-check OK; frontend 87 files, 853 tests; exit 0. Run on the snapshot of this commit's tree with this one table line still unfilled; the line is the only change after the gate. |
+
+Red gates in the build: none from the code. One tooling red (the `pnpm`
+purge prompt above), not a test.
+
+### Commits on `task/046-longlist-refinement` (local, not pushed)
+
+| Commit | Phase |
+|---|---|
+| `461ef666` | 9 — the plan kinds `boundary` and `consideration`; planning prompt v5 round 0 |
+| `5b527867` | 10 — the revision `e9a4c1f7b3d2`: `longlist_result.option_profile` |
+| `56c5d96a` | 11A — ADR 0040 amended (decisions 9–15, the rollback) |
+| `43cfb768` | 9L round 1 |
+| `5f6f2b5a` | 11 — outcome counts in coverage |
+| `6940ca24` | 12a — the component `option_profile`, lever typing moved |
+| `8e1301b0` | 12b — the line, ambition and setting calls; `option_profile_v1`, `lever_typing_v3` round 0 |
+| `8f066d75` | 12L round 1 |
+| `f900a483` | 13 — the authority label; `constrain_v3` round 0 |
+| `854225ae` | 13L round 1 |
+| `9844111c` | 14a — read models and views |
+| `5ab7b342` | 14a.3 — the polish after the browser check |
+| the commit that adds this section | 14 — this file, `docs/deferred.md`, the spec-change proposals |
+
+Phases 9 and 10 were gated on one tree and committed as two commits (the
+Phase 10 files are disjoint); Phases 11 and 12a likewise (the Phase 11
+hunks were split out of the shared `longlist.py` diff). Each intermediate
+commit's own tree was not gated alone; the tree at each gate holds it.
+
+### Deterministic tests (the plan's test lists)
+
+| Plan phase | Where | Result |
+|---|---|---|
+| 9: the four kinds and their `checked_at`; a consideration needs an aspect; a boundary refuses one; wire → plan keeps `aspect` and `hard`; an unknown aspect fails closed; the API contract mirrors the vocabularies; a consideration reaches neither of constrain's lists nor suggest and excludes nothing | `tests/runtime/test_scoping_plan.py`, `tests/options_scoping/test_constrain.py`, `test_suggest.py` | pass |
+| 9: the plan screen shows a consideration with its line and sentence; a boundary shows the word "requirement" and no kind word | `PlanDocument.test.tsx`, `planVocabulary.test.ts` | pass |
+| 10: round trip of `e9a4c1f7b3d2`; an old row reads `{}` | `tests/core/test_migration_046_option_profile.py` | pass |
+| 11: a document on two outcomes counts for both; `described` counts for nothing; `other` counts in the total only; DOI collapse; every plan outcome listed in order | `tests/options_scoping/test_longlist_coverage_046.py` | pass |
+| 12a: the chain order; registry, graph, plan mapping, `LLM_BEARING_COMPONENTS`, stage keys, stage map and `runProgress` know `option_profile`; `longlist` writes no typing; **the equivalence test** (a stub run's lever columns and typing keys before and after the move, saved as literals before the move); a failed step fails the walk | `tests/options_scoping/test_option_profile.py`, `test_theme.py`, `tests/runtime/test_compose_by_purpose.py`, `runProgress.test.ts` | pass |
+| 12b: every line written for every option; `who_decides` and `dependencies` never marked; marks stored as `less` / `more` / null; ambition on every option; the setting lower-cased; Where in the `who_decides` input only; payload keys; at most 5 records by role; a call malformed twice fails the step and writes nothing; once then right succeeds with `retries` 1; a failed typing batch keeps the previous typing; an excluded option is profiled, a merged one not | `test_option_profile.py`, `test_option_profile_prompt.py` | pass |
+| 13: no consideration → no call, no entry; one call with every profiled option; the three labels with reason and body; **no exclusion from the label or from any consideration**; the batches and the distinct call get no `who_decides` line and no Where; a call malformed twice → no entry, the step succeeds; the read model lists the same judgements; an unprofiled option is not sent | `test_constrain.py` | pass |
+| 14a.1: the profile served in order; settings from the profile; no entry → `profile` null; the authority from `judgements` and absent from `JudgementOut`; ambition `less` / `more` / null, a stored band value served as null; `outcome_counts`; `LonglistOut` has no `ambition_bands` | `tests/api/test_longlist_routes.py` | pass |
+| 14a.2: the words (line names, the ten level words, no banned phrase, "Middle" in the grid only); the section collapsed on open and its `<dl>` after a click; absent without a profile; the Who can act facet filters and does not reorder; the column chooser; Untagged | `OptionCard.test.tsx`, `LonglistView.test.tsx`, `LonglistGrid.test.tsx`, `longlistPresentation.test.ts` | pass |
+
+### The refine loops (R48; rubric box 35)
+
+Round records: `evidence/rounds/9L-planning-loop.md`,
+`12L-profile-loop.md`, `13L-constrain-loop.md`, with the diffs
+(`*-r0.diff`, `*-r1.diff`), the figures and the read-backs beside them.
+
+| Loop | Prompt(s) | Rounds | Stop measure | Tuning set | Check set |
+|---|---|---|---|---|---|
+| 9L planning | `task_agent_scoping_v5` | 2 (r0, r1) | every statement in the right kind and line (probe + tuning set) — **met at r1** | probe: 8 of 8 statements right; refugees asks who can act; England / UK plans do not ask | NEET asks the target unit; heat pumps, cohesion right |
+| 12L profile | `option_profile_v1`, `lever_typing_v3` | 2 (r0, r1) | none of the six known faults of final § 6.1 — **met at r1** (r0: 3 who-decides lines named a regulation no baseline holds) | M10 0 missing on 4 lists; M12 1 to 10 setting labels; M14 passes on obesity and caregiving | 3 lists: no law, no acronym, no empty setting for an option that has one; 7 to 9 labels |
+| 13L constrain | `constrain_v3` | 2 (r0, r1) | M11 ≥ 9 of 10 — **met at r1**: refugees 22 of 23, obesity 22 of 24 (r0: about 4 of 23 and 20 of 24; the call matched names) | no exclusion from who decides (1 and 1 exclusions, both by a boundary) | none possible (only two clones hold such statements) |
+
+No loop ran more than two rounds. The prompts were tuned on the tuning set
+only. Each prompt is re-pinned in `scripts/prompt_hashes.json` (25 modules).
+The stored tasks are unchanged by the replays: `replay.py check-stored` after the loops and the live runs shows 18 of 19 tables of every stored task equal to the reference; the one changed table is `longlist_result`, whose rows gained the new column `option_profile` = `{}` from revision `e9a4c1f7b3d2` (their `created_at` and `run_id` are the old ones; the old reference is kept as `rounds/14-check-stored-reference-before-e9a4c1f7b3d2.json` and a new reference was saved after the check).
+
+**Reported measures (R49):** M10 0 missing sentences on 11 replays; M12 at
+most 10 labels per list, no place name, two body kinds ("council" on NEET,
+"public service" on cohesion); M14 a nudge below a clinical service on
+delivery complexity on obesity and caregiving; **the overlap of coordination
+with delivery complexity** (box 38), with the decided question, round 1:
+same level 12 of 24 (obesity), 19 of 23 (refugees), 14 of 22 (caregiving),
+7 of 19 (energy), opposite 1, 0, 2, 2; check set 15, 12, 13 of 25, opposite
+0, 1, 1 — beside the old-question figures of final § 6.3 (52 percent same
+on seven lists; 14 of 24 on the live obesity list). Source:
+`12L-profile-r1-*.json`, `12L-profile-check-*.json`.
+
+**Marks on a split list.** On the obesity replay about two thirds of the
+options carry a cost mark at r0 and r1 (17 of 24), because the list holds
+rules (cheap, slow to set up) and programmes (costly, quick) that stand out
+against each other; on energy the count fell from 13 to 7 of 19 with round
+1. The lead did not tune on the count: the owner accepted the way-A rule
+and its stability, and a cap would be a quota. For the owner (R25).
+
+**The owner's stage decisions (R25) are open**, as in the first build: no
+owner was present. Each loop record ends with its report.
+
+### Live check (Phase 14): three rapid runs on new tasks
+
+Run through the local API on the final backend code (the tree of
+Phases 9–14a; the frontend polish of 14a.3 changed no backend file), not
+attended, with `drive_live.py`. Tasks (dev database): obesity `8d73e096`,
+caregiving `161ac3d5`, refugees `1409ae63`. Every longlist walk ended
+`succeeded`. Sources: `evidence/rounds/14-live-runs.log`,
+`14-live-metrics-<slug>.txt`, `14-live-profile-<slug>.json` and
+`-read-<slug>.txt`, `14-live-cost.txt`, `14-live-refugees-rebuild.log`,
+`pre-contract-runs/live-out/<slug>/longlist-read*.json`.
+
+The refugees plan did not ask who can act on this run (it did on the two
+replays and on the first live attempt, which the driver could not answer:
+the turn response carries no `part`). After the first walk the lead added
+the consideration "Only options that the council can act on itself are of
+use to us. It cannot change national law." (`who_decides`, hard) through
+`PATCH /plan` and confirmed on plan version 2, which opened a **rebuild**:
+the second walk ran the whole chain again (601 s) and labelled every
+option. This is also the first live rebuild of the slice.
+
+| # | Measure | Obesity | Caregiving | Refugees (rebuild) | Pass |
+|---|---|---|---|---|---|
+| M1 | Options per run (13 to 25) | 25 | 25 | 24 | **pass** |
+| M2 | Rows that are one named trial | none | none | none | **pass** |
+| M4 | Exclusions with place or population overlap as the reason | 0 (0 exclusions) | 0 (1 exclusion, "Paid family leave for new parents" by the setting boundary) | 0 (0 exclusions) | **pass** |
+| M5 | Setting labels in the top 8 that are a country, region or body | none (school, retail, community venue, home, food outlet, clinic, street, park) | none (clinic, home, family hub, hospital, workplace) | none (home, college, housing office, workplace, employment office, government office, community centre, welfare office) | **pass** |
+| M6 | Adjacent evidence shown as tried on | 22 of 25 options | 18 of 25 | 11 of 24 | **pass** |
+| M10 | Every option has a sentence on every line | 25 of 25 | 25 of 25 | 24 of 24 | reported |
+| M11 | The authority label right (read by hand) | no consideration; no label | no consideration; no label | 24 labelled: 20 within your power, 4 needs action by (the Parliament of the United Kingdom ×2, the NHS Greater Manchester Integrated Care Board, the Equality and Human Rights Commission); 24 of 24 defensible | reported (live) |
+| M12 | Setting labels per list; place or body names | 10; none | 5; none | 9; "government office", "welfare office" are kinds of body | reported |
+| M14 | A nudge below a clinical service on delivery complexity | campaigns `less`, family weight management `more` | self-guided materials `less`, perinatal mental health treatment pathways `more` | — | reported |
+
+The setting facet now reads the option-level setting (R41): the M5 fault
+of the first build (a named location in the caregiving top 8) cannot
+recur from the records.
+
+Reported (M7–M9), beside the first build's live runs of 2026-09-29:
+
+| Measure | Obesity 2026-09-29 → now | Caregiving → now | Refugees → now |
+|---|---|---|---|
+| M7 cost per task (Langfuse, USD) | 4.32 → 5.56 | 4.24 → 5.64 | 3.29 → 9.20 (two walks: the build and the rebuild) |
+| M7 of which `option_profile` | — → 1.60 | — → 1.62 | — → 3.24 (two walks) |
+| M7 of which screen | 1.29 → 1.22 | 0.97 → 0.95 | 0.85 → 2.03 (two walks) |
+| M8 longlist walk, seconds | 622 → 638 | 569 → 634 | 531 → 501 (first walk), 601 (rebuild) |
+| M8 `option_profile` step, seconds | — → 62 | — → 56 | — → 67 (first walk), 72 (rebuild) |
+| M8 baseline, seconds | 227 → 212 | 213 → 242 | 228 → 197 |
+| M9 pool (documents) | 334 → 327 | 249 → 245 | 234 → 223 |
+| M9 relevant in the longlist scope | 190 → 181 | 173 → 174 | 102 → 77 |
+| M9 screen rows per document, longlist scope | 1.00 → 1.00 (327 of 327) | 1.00 → 1.00 | 1.00 → 1.00 |
+| M9 documents with no screen row | 0 → 0 | 0 → 0 | 0 → 0 |
+| M9 duplicate titles | 22 → 20 | 24 → 27 | 34 → 16 |
+| Options excluded | 0 → 0 | 0 → 1 | 0 → 0 |
+| The user's own options with no member | — | — | 2 of 2 → 2 of 2 (as in the first build) |
+
+Step times of the live obesity walk, seconds: suggest 48, acquire 23,
+screen 90, classify 60, appraise 1, profile 127, longlist 141,
+`option_profile` 62, constrain 23, theme 30 (from
+`14-live-metrics-obesity.txt`). The option profile adds about one minute
+and 1.60 USD to a walk (R46: no time limit is a pass condition).
+
+Marks on the live lists (options marked, of 25 / 25 / 24): cost 15 / 5 /
+14; workforce 14 / 11 / 13; delivery complexity 14 / 13 / 12; ambition
+9 / 5 / 5 (`14-live-profile-<slug>.json`). Who-decides lines: no law, no
+acronym; one body each (obesity: "A local authority in England" 8, "The
+Department of Health and Social Care in England" 6, "The Department for
+Education in England" 6, "The Parliament of the United Kingdom" 2, "A
+local planning authority in England" 1; caregiving: "The National Health
+Service Commissioning Board in England" for a maternity policy).
+
+### Browser check (rubric box 33)
+
+Live obesity (desktop 1440 and phone 390), with Playwright on the dev
+server against the local API, and live refugees for the filter.
+Screenshots: `evidence/live-shots/a3-*.png`. Read from the page:
+
+- The card: "What it is" carries "Ambition: Smaller. This adds remote
+  parent coaching …", "Delivered through: home"; "What it would take" with
+  the label "Estimate, before assessment" opens **collapsed** as a row of
+  eight cells (Cost · Cheaper; Workforce requirements · Lower;
+  Coordination requirements · Lower; the other five with no word); after
+  a click it shows the eight lines with their sentences in a definition
+  list; "What the evidence base holds so far" carries "4 documents
+  evaluated this option." and the counts per plan outcome ("… at
+  reception: 2 documents", "… at year 6: 1 document", "… gap …: no
+  documents").
+- The list: rows carry the lever only; Group by Theme · Lever type; the
+  Setting facet shows the option-level settings.
+- The grid: "Columns: Cost" gives Cheaper · Middle · Costlier (no Untagged:
+  every option has a profile); "Middle" appears only there.
+- Refugees (after the rebuild): the "Who can act" facet with its three
+  chips; "Needs action by another body" pressed shows "4 of 24 options
+  match"; a labelled card shows "Needs action by The Parliament of the
+  United Kingdom. …".
+- The first round found two defects, fixed in 14a.3: the eight cells in
+  one row overlapped their names at desktop width (now four columns); the
+  heading label broke the heading at phone width (now on its own line on
+  phones). One confirmation round passed.
+- No console error was checked by hand; the dev server reported none in
+  its log.
+
+### Diff summary (amendment 2)
+
+Against `74729ba7`: 70 files outside `docs/`, about 6,250 lines added and 1,000 removed (through 14a.3).
+
+- **The plan.** `ConstraintKind` is `boundary` · `consideration` ·
+  `preference` · `evidence_restriction`; a consideration carries `aspect`
+  (one of the eight line keys or `transferability`) and `hard`, is checked
+  at assessment, reaches neither constrain's lists nor suggest, and never
+  changes an option's state. No plan slot "who decides". No code reads
+  `requirement`. `PROFILE_LINE_KEYS` lives in `runtime/scoping_plan.py`.
+- **The walk** is `… → longlist → option_profile → constrain → theme`.
+  `option_profile` (new package) is a spine step: lever typing moved in as
+  built (same prompt text at round 0, `lever_typing_v3` without ambition at
+  12b); ten calls over the whole list at one time (eight lines, ambition,
+  setting) on the judgment model; a call malformed twice fails the step
+  before any write. Writes: `longlist_result.option_profile` (one JSON
+  column, revision `e9a4c1f7b3d2`), `option.ambition` (`less` · `more` ·
+  null) and `option.ambition_reason`, the typing keys as before.
+- **Constrain** makes one authority call when the plan holds a
+  consideration on who decides, and writes one entry per option under the
+  key `authority` in `judgements`; never an exclusion. The guess wording
+  loses its suffix.
+- **Coverage** carries `outcome_counts` (documents that evaluate the option;
+  per plan outcome).
+- **Read models**, not additive: `ambition_bands` and `AmbitionBandOut`
+  removed; `profile`, `authority` on the option models; `outcome_counts` on
+  the evidence profile; `settings` from the option-level setting. OpenAPI
+  diff: `evidence/rounds/14a-openapi.diff`.
+- **Views.** Plain rows; group by theme and lever type; the Who can act
+  facet; the card's "What it is" with ambition, delivery setting and the
+  authority line; "What it would take" collapsed on open (a row of eight
+  cells; expanded, a definition list), with the label "Estimate, before
+  assessment"; the outcome counts; the grid's column chooser (seven lines,
+  Ambition by default) with Middle and Untagged; no compare table. Level
+  words tinted (pale aqua lower, pale violet higher, navy text): the lead's
+  proposal for the owner's decision on the built screen.
+- **Prompts**: `task_agent_scoping_v5`, `option_profile_v1` (new),
+  `lever_typing_v3`, `constrain_v3`; `extract_interventions` unchanged.
+
+### Deviations, flagged (amendment 2)
+
+| # | Deviation | Why | Size |
+|---|---|---|---|
+| D14 | The plan screen shows no kind word for a boundary ("Requirement" was built, then dropped). A consideration shows "Consideration · <line>" and "Stated limit". | The effect sentence already says what a boundary is; just enough text. | minor |
+| D15 | The who-can-act question is asked as a part `who_can_act` with two buttons ("Only what <the body> can adopt" · "Also options that need national action"), not in the exact words of A2 ("Should I keep only options…"). | "Keep only" would promise an exclusion the label never makes; the reply says every option stays and is labelled. | minor |
+| D16 | The heading label reads "Estimate, before assessment", not "Policy Atlas's estimate before assessment". | The long form overflowed the heading row at phone width; the short form keeps the meaning. Final § 7.1 left the exact words open. | minor |
+| D17 | The gates ran on index snapshots in a second worktree, and two pairs of phases (9 + 10, 11 + 12a) shared one gate tree. | So that building and gating could overlap; the plan's gate classes were not reduced. | process |
+| D18 | The `option_profile` column loses the line order in storage (JSONB sorts keys); the read model orders by `PROFILE_LINE_KEYS`. | Postgres. | minor |
+| D19 | `kept` in the `option_profile` summary counts only options that had a typing before; `invalid` counts every option with no valid typing from this run. | The two numbers were otherwise always equal. Agent decision, accepted. | minor |
+| D20 | The typing usage moves from `longlist`'s `usage_totals` to `provenance.option_profile.usage_totals`. | It is the profile's call now. | minor |
+| D21 | The authority call runs for the duplicates a run will merge; their labels are dropped at write time. | Which options merge is known only after the batches. | minor |
+| D22 | The spec changes of amendment 2 are **not applied**; the wording is proposed in [spec-changes-proposed.md](spec-changes-proposed.md) § Amendment 2 (items 10–17). | The owner has not accepted any wording. | open |
+| D23 | The tints of the level words are built as the lead's proposal (final § 7.1 item 1). | The owner decides on the built screen. | open |
+
+### Existing tests edited (amendment 2; rubric box 19)
+
+No test was deleted or skipped. `test_option_profile.py` holds the typing
+tests moved out of `test_longlist.py` with their assertions unchanged. Edits
+that follow a behaviour the amendment changes: the kind literal
+`requirement` → `boundary` (seven backend test files); `ambition` no longer
+`incremental` from the stub (`test_longlist_routes.py`, `test_option_profile.py`);
+the guess text without its suffix (`test_constrain.py`); summaries without
+`none_fits` (`test_longlist.py`); the chain lists with `option_profile`
+(`test_theme.py`, `test_compose_by_purpose.py`, `test_acquire_only_walk.py`,
+`test_option_search.py`, `test_longlist_start.py`); `ambition_bands` gone
+and `settings` from the profile (`test_longlist_routes.py`); the ambition
+group and the band words gone from the vitest files.
+
+### Rubric status (amendment 2 boxes)
+
+| Box | State at the end of the build |
+|---|---|
+| 24 The plan | built; 9L stop measure met (probe 8 of 8) |
+| 25 `option_profile` | built; the equivalence test; a failed call fails the step |
+| 26 What it would take | built; M10 0 missing |
+| 28 Who decides and the label | built; M11 22 of 23 and 22 of 24; no exclusion from a consideration (test + 13L) |
+| 30 Ambition | built; bands removed everywhere |
+| 31 The delivery setting | built; M12 reported |
+| 32 Outcome counts | built; the rule pinned by a test |
+| 33 The reader and the words | built; built; the browser check on live obesity and refugees (both states of the block, the grid with a chosen line, the plain rows, the Who can act filter) |
+| 34 Out of the first version | holds: no acceptability, burden, legal-change or powers line |
+| 45 The rename | holds; `9-rename-boundary.txt` |
+| 35 Every prompt through a loop | holds; four loops of two rounds, one stop measure each |
+| 36 No fixed lists, bands or anchors | holds (the prompts hold none; the code has no guard on the marks) |
+| 37 The known faults tested | holds; 12L r1: none of the six on the tuning set |
+| 38 The overlap measured | holds; figures above |
+| 39 No code for old longlists | holds (a stored band value is served as null by the generic rule, no mapping) |
+| 40 Migration | holds: `e9a4c1f7b3d2`, round trip, full verify at its gate |
+| 41 Measures and time | M8, M10, M12, M14 reported |
+| 42 Task 3 principle recorded | `docs/deferred.md` § Amendment 2; spec item 15 proposed |
+| 43 Spec changes of amendment 2 | **not applied** (D22) |
+| 44 Gates | full verify at 9.0 and 14 (and at 9 + 10); 9 and 12a passed `openapi-sync` and `frontend-verify`; ADR amended in its own commit before 12a |
+| 46 The corrected lines | the OpenAPI diff removes `ambition_bands` and adds the fields of final § 3; the rollback and the known limits are in ADR 0040 § Rollback and § Amendment 2 |
+
+### Known unverified items (amendment 2)
+
+1. The spec changes are not applied (D22).
+2. The owner's stage decisions for the three loops (R25), the tints (D23)
+   and the count of marks on a split list.
+3. The deadline rule and the answer "also options that need national
+   action" have no replay case (9L).
+4. M11 has no check-set read (only two clones hold who-can-act statements).
+5. One run per replay; the model varies between runs (in 12L r0 → r1 the
+   caregiving who-decides body changed from "the relevant local authority"
+   to the Department of Health and Social Care on every option, with no
+   prompt change to that rule).
+6. The live refugees plan did not ask who can act on this run (the
+   replays and the first live attempt did); the label was reached through
+   a plan edit and a rebuild.
+7. The driver's `pipeline` reused stale run ids from the previous state
+   file until the state was reset; the first attempt polled a run that did
+   not exist. Recorded as a knowledge candidate.
+8. The live check did not run "Add an option" and did not run the chat.
+
+### Knowledge candidates (amendment 2)
+
+- Gating an index snapshot in a second worktree lets the next phase build
+  while the gate runs; `git write-tree` + `git commit-tree` + `git
+  update-ref` make the commit from the gated tree. `pnpm` refuses a
+  symlinked `node_modules` without a TTY (`CI=true` and a real install).
+- A subagent's targeted pytest and the gate on the same test database
+  deadlock; give each agent its own `*_test` database
+  (`make reset-test-db TEST_DATABASE_URL=…`).
+- The drive script's `put_state` merges: a new `create` on a slug keeps the
+  old run ids, and `pipeline` then polls a run that does not exist (404,
+  for ever). Delete the slug's state before a new live run.
+- JSONB sorts object keys: an ordered set of lines must be ordered by the
+  reader, never by the writer.
+- A model that is told the body that "usually" decides matches names; ask
+  it about powers and it reasons about powers ("a name is not a reason").
+- A relative mark on a list split in two kinds of action marks two thirds of
+  the list; "most of the list" has no centre there.
+- A prompt that names a law from its own knowledge does so only when it
+  has no rule against it; "no Act, regulation or year unless the data holds
+  the name" removed all three cases in one round.
+- A frontend agent given exact words and told to add no style ships
+  structure the lead can polish in one pass; the label beside a heading
+  needs a phone-width check before the words are fixed.
+- The planning prompt's five-kind sort needed one rule for a sentence that
+  is both an aim and a boundary ("prevention alongside existing duties").
 
 ## Review findings
 

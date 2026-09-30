@@ -282,3 +282,174 @@ and 10. ADR 0039's text is not rewritten (merged ADRs are never rewritten).
 
 No change to the Evidence search specs. No change to a frozen source under
 `docs/specs/sources/`.
+
+---
+
+# Amendment 2 (proposed 2026-09-30; for the owner's decision)
+
+> **Status:** proposed 2026-09-30 · lead. Nothing in `docs/specs/` is changed
+> by this file. Each item is applied only after the owner accepts its wording
+> (rubric box 43). The numbers continue the list above. The rulings are R34
+> to R53 in `contract.md` § Amendment 2.
+
+## 10 — OS components § 1 plan, and plan-as-object (R34, R38, R53)
+
+**10a. Five kinds of statement.** In "§ 1 — plan", replace
+
+> constraints (each tagged *from your question* / *assumed* / *your call*;
+> each tagged *scope-shaped* / *effect- or cost-shaped, checked after
+> assessment* / *evidence-scope*)
+
+with
+
+> constraints (each tagged *from your question* / *assumed* / *your call*),
+> of four kinds: **boundary** (what the option is or must not be; can
+> exclude at the longlist; shown as "requirement"), **consideration** (what
+> the adopter has or lacks, who can act, or how far evidence from elsewhere
+> applies; it names the line of "What it would take" it speaks of and
+> whether the user stated a limit; it never excludes; read at the shortlist
+> and the assessment), **preference** (what the option achieves; checked at
+> assessment) and **evidence restriction** (where evidence may come from).
+> A statement of who can act is a consideration on the line "who decides";
+> there is no plan slot for it (task 046 amendment 2, R34, R53; owner: "Yes
+> these 5 kinds feel right." · "Maybe we should just have it sit in
+> consideration rather than necessitating a who decide slot?").
+
+**10b. The aim.** Add after 10a:
+
+> The user's words for what they want are the intended change; the Task
+> Agent proposes outcomes that evidence can be read against, tagged
+> *assumed* (A5). When Where is below national level the Task Agent asks
+> once who can act and stores the answer as a consideration on "who
+> decides" (R38).
+
+## 11 — OS components: `option_profile` as a component (R37, R40, R41)
+
+**11a. The diagram and the component table.** Where the walk reads
+`longlist → constrain → theme`, it reads `longlist → option_profile →
+constrain → theme`. In the component table, after `6 — longlist`, add the
+row `6a — option_profile (new) — in: every option of the list, its design
+and a few of its records; the plan; the baseline — out: the lever type, the
+ambition, the eight lines of "What it would take", the delivery setting`.
+
+**11b. § 6 — longlist.** Remove the words that say `longlist` types the
+options or judges their ambition (the lever typing bullet), and add:
+
+> `longlist` makes the list: the options, their documents and their
+> variants. It writes no lever type and no ambition; `option_profile` does
+> (task 046 amendment 2, R37; owner: "I think it is its own step. But then
+> what does the longlist step do?" · "Doesn't the lever type also
+> conceptually belong more in profile?").
+
+**11c. A new section "6a — option_profile (new)"**, after § 6:
+
+> - **In:** every option of the list that is not merged (included or not),
+>   each with its specified design and at most five of its records by role;
+>   the plan (Where reaches the line "who decides" only); the baseline.
+>   **Out:** per option the lever type (the typing of § 6 moved here, as
+>   built), the **ambition** (how big a proposal the option is against what
+>   the baseline says is in place: one sentence and a relative mark, Smaller
+>   · Bigger · no mark), the eight lines of **"What it would take"** (cost ·
+>   time to set up · time to effect · workforce requirements · who decides ·
+>   dependencies · coordination requirements · delivery complexity; one
+>   plain sentence each, and on six of them a relative mark when the option
+>   clearly stands out from most of the list; who decides and dependencies
+>   carry no mark), and the **delivery setting** (one main kind of place and
+>   at most one more, empty for a system-level instrument).
+> - ✅ **One call per line over the whole list**, the ambition call and the
+>   setting call at one time, on the judgment model, so the same words mean
+>   the same thing across the list. No fixed bands, no fixed list of answers,
+>   no anchor examples, no guard in code on top of the prompt, no "cannot
+>   judge" value, no basis mark (R36, R37; owner: "Again a fixed list, what
+>   you've outlined feels too rigid" · "Won't it be biased towards the
+>   domains that we name").
+> - ✅ **A spine step**, the same form as `theme`. A failure fails the walk.
+>   It runs before `constrain`, on the whole list, so an excluded option has
+>   its profile (owner: "Why don't we just run profile before constrain").
+> - ✅ **The marks are not added, weighted or ranked.** The list does not
+>   sort by a line; the grid, whose columns the reader chooses, is the
+>   comparison (R43).
+> - ✅ **Known limits.** The list shows no lever type, ambition or lines from
+>   the end of `longlist` to the end of `option_profile`; an added option
+>   has none until the next rebuild; the marks of a merged pair are the kept
+>   option's own.
+
+**11d. Ambition's meaning (concept).** Wherever the ambition tag is
+described as *do minimum · incremental · structural*, replace with:
+
+> **Ambition** is how big a proposal the option is: how much it sets out to
+> change, compared with what the baseline says is in place now, judged on
+> the kind of action as if adopted in full. It is relative to the list
+> (Smaller · Bigger · no mark) and never the size of the studies or whether
+> the option works. No option is called "do minimum" at the longlist (R40;
+> owner: "I think relative levels are quite good, it would make a better
+> grid view"). The Green Book compares versions of one option; Policy Atlas
+> compares kinds of action on one list.
+
+## 12 — OS components § 7 constrain (R34, R38)
+
+Add to § 7:
+
+> ✅ **The authority label** (task 046 amendment 2, R38). When the plan
+> holds a consideration on "who decides", `constrain` compares each
+> option's line "who decides" with it and labels the option *within your
+> power* · *needs action by <body>* · *unclear*, judging whether the user's
+> body could adopt this kind of action by itself. The label never excludes;
+> the reader can filter the list by it; with no such consideration there is
+> no label (owner: "authority would sort and label, and exclude only when
+> the user says so." · review decision 3: "okay"). This is the one
+> exception to "place never reaches constrain": the line names the body and
+> the country it assumes. **A consideration never changes an option's
+> state.** A consideration about cost, time or staff gets no reasoned
+> guess: the profile answers it (B8).
+
+## 13 — OS capability § Output structure (Longlist) (R36, R40–R43)
+
+Add to the option card's description:
+
+> "What it is" carries the lever type, the ambition (Smaller · Bigger, with
+> its sentence) and the delivery setting. **"What it would take"** is a
+> collapsible block, collapsed when the card opens: collapsed, a row of
+> eight cells (the line name above, the level word below; a line with no
+> mark shows no word); expanded, the eight lines with their sentences. Its
+> heading says that it is an estimate before assessment. Level words:
+> Cheaper · Costlier, Quicker · Slower, Lower · Higher, Simpler · More
+> complex. "What the evidence base holds so far" carries the **outcome
+> counts**: the documents that evaluated the option and, among them, the
+> documents for each plan outcome; counts only, no direction (R42). List
+> rows are plain; the list groups by theme and lever type and filters by
+> the authority label; the grid's columns come from the line the reader
+> chooses (lower word · Middle · higher word · Untagged) (R43; owner: "On
+> the list, I prefer plain" · "The compare page looks too information dense
+> ... we should drop it").
+
+## 14 — OS trust § Reasoned guesses (R44)
+
+Replace `("cost: likely low, a guess rather than evidence")` with `("cost:
+likely low")` and add:
+
+> The label that says a guess or an estimate is not evidence sits on the
+> block's heading ("Estimate, before assessment"), not at the end of each
+> sentence (task 046 amendment 2, R44; owner: "we don't need 'a guess, not
+> evidence', it sounds too LLM-generated.").
+
+## 15 — OS capability § Pipeline and gates: the shortlist principle (R47)
+
+Add:
+
+> 🟡 **For task 3:** the shortlist cut reads the limits the plan stores (the
+> considerations with a stated limit) together with each option's lines of
+> "What it would take"; the direction of reported outcomes waits for the
+> assessment (owner: "the guesses are useful for how the shortlist selects.
+> It needs something to decide how to cut the longlist down"). This reopens
+> rulings 12 and 19 for the profile only.
+
+## 16 — `vocabulary.md`
+
+Add: **boundary**, **consideration**, **line** (one row of "What it would
+take"), **mark** (the level word an option gets on a line when it stands
+out), **option profile**, **authority label**, **delivery setting**.
+
+## 17 — `docs/specs/log.md`
+
+One line per accepted item above.

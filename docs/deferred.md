@@ -2756,6 +2756,37 @@ Recorded by the task 046 contract, plan and build (`docs/tasks/046-longlist-refi
   a preference); the option-search pool is shared by every task in the process; OpenAlex
   returned nothing for 27 to 47 of 50 to 60 generated option-search queries.
 
+### Amendment 2 (2026-09-30)
+
+Recorded by the task 046 amendment 2 build (`amendment-2-final.md` § 4 and § 2.10).
+
+- **A "burden" line** on "What it would take" — only after a test across a range of domains
+  (R39; owner: "Maybe burden could be a good substitute but I feel like we would have to test a
+  range of domains to decide if it's right to include").
+- **A grounded legal-change line.** Out of the first version: a line that says whether a new
+  law is needed rests on the model's knowledge; a form grounded in the baseline or a document is
+  later work (R38, R39).
+- **The direction of reported outcomes, and the outcome-count limits, for task 3.** The
+  longlist shows counts only (R42). A record carries one plan outcome, so a record that reports
+  on two counts for one; a document counts for each outcome it has an evaluating record on.
+  The direction of an effect belongs to the shortlist assessment.
+- **Building an added option in place (task 3).** "Add an option" does not change: the added
+  option has no lever type, no ambition, no lines and no setting until the next rebuild of the
+  list, and the card hides "What it would take" for it (R51 withdrawn).
+- **"Studied in" on each document.** The record keeps its setting words in the database; no
+  read-model field and no place on the screen (B4).
+- **The list shows no lever type, no ambition and no lines from the end of `longlist` to the
+  end of `option_profile`** (44 to 77 s in the replays), as it shows no themes until `theme`
+  ends.
+- **The marks of a merged pair.** The lines were written with the duplicate on the list; the
+  kept option keeps its own lines (final § 2.8).
+- **Marks on a list split in two kinds of action.** On the obesity list about two thirds of
+  the options carry a cost mark, because rules and programmes stand out against each other. A
+  rule that caps the count would be a quota; the owner reads the built screen (loop 12L).
+- **The authority label reads the user's powers from the line "who decides".** Two doubts in
+  the loop read: NHS commissioning and school food enforcement, where a council has a part but
+  not the whole (loop 13L).
+
 ## System-level cost and latency (deferred by task 046, R16; owner 2026-09-28)
 
 Cost changes that edit an Evidence search component are not made inside a capability slice.
