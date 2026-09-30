@@ -15,3 +15,13 @@
 | Removed from the card | The "Populations" line and the record-level "Settings" line of the evidence section. | "2. yes" |
 | The words | "Tried on" stays. | "3. yes" |
 | Unchanged | The record tags (on target · adjacent · other) and the counts that use them. |
+
+## Topic 2 decided: outcomes measured, and the mechanism for both facets
+
+| Item | Decision | The owner's words |
+|---|---|---|
+| The fault | "Outcomes measured" on the card shows every record's outcome words: 87 / 77 / 57 distinct labels on the three live lists, up to 21 on one option. The amendment 2 counts by plan outcome (R42) count evaluating documents only, and the median option has 0 or 1 of them: only 11 / 8 / 2 options of about 25 have a count above zero. | "Perhaps outcomes also need to have a similar treatment, but check first" |
+| The mechanism, for outcomes and for tried on | **One folding call per facet** over the list's distinct record words (not the records), the mini model, with the plan's outcomes and target unit as reference: word → kind, in the field's words, the plan's words where they match, few kinds, no fixed list. The code counts documents per kind per option. This replaces the profile-line mechanism written under topic 1 (a profile line reads at most 5 records per option, so it cannot give counts). | "yes to all" |
+| The counts by plan outcome | Count every document that reports on the plan outcome, of any role; the evaluated count stays its own figure. This replaces the lead's amendment 2 decision "evaluating documents only". | "yes to all" |
+| The list | The facets (Setting, Tried on, and Measures if shown) show labels without counts, as the Setting facet does. Counts are on the card only. | "We don't need the counts in the list view, as we don't have counts for the settings" |
+| The card | How the counts show on the card is decided under the option card topic. | "I think we will refine the documents count in the option card refinement step anyway" |
