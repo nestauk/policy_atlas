@@ -697,16 +697,16 @@ Gate: **full `make verify`**. Commit.
 ## Amendment 3 (2026-09-30)
 
 Rulings R54–R75 are in [contract.md](contract.md) § Amendment 3; the design
-detail, the loop checks, the answered questions and the open ones (Q20,
-Q22–Q25) are in [amendment-3-final.md](amendment-3-final.md) ("final 3"
-below). This section adds phases 15 to 23 and changes no phase above.
+detail, the loop checks and the answered questions (Q1–Q25, none open) are
+in [amendment-3-final.md](amendment-3-final.md) ("final 3" below). This section adds phases 15 to 23 and changes no phase above.
 Rounds 2–5 of 12L (`evidence/rounds/12L-profile-loop.md`) are built and are
 not phases here.
 
 > **Status:** written 2026-09-30 from final 3; updated the same day with the
 > 18 answers, the adversarial review (34 findings, the lead's rules and the
-> owner's decisions) and the owner's two later decisions (no place list;
-> `unit` in the finding records). The seams S21–S28 are **proposals for the
+> owner's decisions), the owner's two later decisions (no place list;
+> `unit` in the finding records) and the answers to Q20–Q25 (Q24 the
+> owner's). The seams S21–S28 are **proposals for the
 > lead to confirm at the plan gate**; none is the owner's. The plan-stage
 > adversarial pass runs on this section before 15.0.
 
@@ -778,15 +778,18 @@ the prompt hash guard's list (`scripts/prompt_hash_guard.py`). Coverage:
 (`coverage.py:68-70`, `:422-459`); "also found as" joins `_also_found_as`
 (`repository.py:2949-2959`) and `folded`; served as `examples` in place of
 `variants` (`read_models.py:1205-1219`, `:1258`; `repository.py:2849-2863`,
-`:3997`). The cluster prompt does not change.
+`:3997`). The cluster prompt does not change for examples; its discovery prompt takes the place rule (R74, Q25).
 
 S23. **Where tried from `study_country`** (R59, R72; lead, B6, A3). Per
-record: `study_country` a country → that country; "multiple" → "multiple
-countries"; empty with `study_geography` stated → "other"; both empty → "not
+record: `study_country` holds every named country, separated ("United
+Kingdom; United States"), each as its short English name (Q22, Q23); one
+country → that country; two or more, or "multiple" (a group) → "multiple
+countries", derived in code; case folded only; empty with `study_geography` stated → "other"; both empty → "not
 stated". Per document (B6 applied): one country if every record with a
 country gives the same one; "multiple countries" if two or more, or any
 "multiple"; else "other" if any record states a place; else "not stated".
-The level below: `study_geography` as written. Coverage's `where_tried`
+The level below: `study_geography` as written. The country filter matches a
+document under "multiple countries" whose countries include it (Q22). Coverage's `where_tried`
 (`coverage.py:349`, `:391-392`, `:471`) becomes a list of `{top, documents,
 places: [{place, documents}]}`; the `countries` key (`:350`, `:393-397`) and
 the `home` argument go. Removed in Phase 18: `WhereGroup`, `WHERE_GROUPS`,
@@ -884,9 +887,13 @@ holds: delete `strip_place` and its helpers (`where_tried.py:421-510`), the
 name tables and `ABBREVIATIONS` (`:47-318`), `names_place` and the setting
 pass (`:513-534`; `coverage.py:203-219`), `where_codes` (`:363-373`;
 `longlist.py:1520`, `:1808`; `repository.py:3503`); the module
-`where_tried.py` goes if nothing is left. `longlist_plan_data`
-(`longlist_intent.py:125-148`) also strips place for discovery and the
-profile calls (`longlist.py:1648`, `option_profile.py:722`): Q25.
+`where_tried.py` goes if nothing is left. Q25 (lead): every prompt that read
+the stripped text takes the rule — also those fed by `longlist_plan_data`
+(`longlist_intent.py:125-148`): discovery (`longlist_cluster_prompt.py`,
+`DISCOVERY_SYSTEM_PROMPT`, via `longlist.py:1648`), lever typing
+(`option_profile/lever_typing_prompt.py`), the eight lines and ambition
+(`option_profile/option_profile_prompt.py`), and the folding calls (their
+new module), via `option_profile.py:722`.
 
 ### Phase 15.0 — Build-open baseline — `lead` (inline)
 
@@ -915,6 +922,16 @@ Tests: round trip up and down; an old row reads null in the two new columns
 and keeps its text under `unit`; the union view returns `unit` from all
 three branches; the Evidence search tests pass unedited except for the
 field name.
+
+**Production** (owner, Q24: "Keep in this amendment."): Evidence search is
+live, so the revision reaches production data. It must run there without a
+re-extraction: the finding tables' rename is a plain column rename with no
+version change on the finding records (their schema and prompt versions stay,
+so their fingerprints and memo rows stay valid); the intervention record's v3
+(16R) re-extracts options-scoping tasks only, on their next run. Rollback on
+production: `alembic downgrade -1` reverses the three renames and drops the
+two new columns; deploy the previous image. A test runs the downgrade on a
+finding row and reads the text back.
 
 Gate: **full `make verify`**. Commit.
 
@@ -950,7 +967,11 @@ definition (`finding_references.py:37`; the prompt texts `iof_prompt.py`,
 (`read_models.py:277`, `:294`); the findings view label
 (`frontend/src/views/FindingsView.tsx:172`, `:215`, `:288`). Hashes
 re-pinned; the diff read as words only and recorded; no replay (the owner's
-038 ruling). Versions and the guard's file list per Q24.
+038 ruling). **No version change** on the finding records (owner, Q24), so
+no document is extracted again; `iof_records.py`, `icf_records.py` and
+`finding_references.py` join the hash guard's file list
+(`scripts/prompt_hash_guard.py`) and are hashed in
+`scripts/prompt_hashes.json`.
 
 Gate: `make verify-fast` · `make prompt-guard` · `make drift-check` ·
 `make openapi-sync` · `make frontend-verify`. Commit.
@@ -986,14 +1007,21 @@ Gate: `make verify-fast` · `make drift-check` · `make openapi-sync` ·
 
 ### Phase 18P — The place rule loop (R74; S28) — `lead` · `fast-worker`
 
-`lead`: the rule in words in the screen criteria and intent, the tagging
-context, `constrain` (v4) and `option_design` (v3), as round 0; then rounds.
+`lead`: the rule in words, as round 0, in every prompt that read the
+stripped text (Q25): the screen criteria and intent (`longlist_intent.py:77`,
+`:100`), the tagging context (`:150`), `constrain` (v4,
+`constrain_prompt.py:53`), `option_design` (v3,
+`runtime/option_design_prompt.py:26`), discovery
+(`longlist_cluster_prompt.py:37`, v3), lever typing
+(`option_profile/lever_typing_prompt.py`), the line and ambition prompts
+(`option_profile/option_profile_prompt.py`) and the folding prompts; then
+rounds.
 Replays: `replay.py stage <stage> <slug> --fresh` for the screen, profile,
 constrain and suggest stages on the tuning set (the energy and cohesion
 clones included, where M4 was read in stage 1, AM18), one read of the check
 set. Stop measure: **M4** — no exclusion and no screen failure because of
 place, read by hand. Reported: M1, M2, the screen's pass counts beside the
-last loop's.
+last loop's (Q25).
 
 `fast-worker`, only if M4 holds: delete the strip and its helpers, the name
 tables, `names_place` and the setting pass, `where_codes` (S28), and their

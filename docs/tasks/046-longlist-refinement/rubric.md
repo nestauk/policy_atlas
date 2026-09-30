@@ -298,8 +298,8 @@ descriptions and the place rule (R69, R74, R75); box 30's "ambition is in
 'What it is'" (R68); box 32's rule on evaluating documents (R56); box 33's
 "a line with no mark shows no word" and eight cells (R65). Where a box
 measures, it names the threshold; a measure that is not a loop's stop measure
-is reported, not passed (R69). A box that depends on an open question of
-final 3 § 7.2a (Q20, Q22–Q25) is checked against its answer.
+is reported, not passed (R69). Every question of final 3 § 7.2 is answered
+(Q24 by the owner, Q20, Q22, Q23, Q25 by the lead).
 
 ### Items
 
@@ -337,8 +337,10 @@ final 3 § 7.2a (Q20, Q22–Q25) is checked against its answer.
     nothing" test replaced with a written reason).
 50. [ ] **The list's facets (R57).** Setting, Tried on and Where tried carry
     labels only (vitest: no digit in a chip); Tried on and Where tried (top
-    level) filter the list as Setting does; each folds after 8 chips; no
-    Measures facet (vitest).
+    level) filter the list as Setting does; a country chip also matches a
+    document under "multiple countries" whose `study_country` holds that
+    country (lead, Q22; a vitest); each folds after 8 chips; no Measures
+    facet (vitest).
 51. [ ] **The authority label's rule unchanged (R58).** The label shows only
     with a consideration on who can act; box 28's tests are edited for the
     label's new place (`OptionCard.test.tsx:241-259`) and listed in
@@ -351,7 +353,9 @@ final 3 § 7.2a (Q20, Q22–Q25) is checked against its answer.
     Coverage gives per document one top level from `study_country`: a country
     · "multiple countries" · "other" · "not stated", and the level below as
     `study_geography` as written. Tests pin: one country → that country;
-    `study_country` "multiple" → "multiple countries"; a place stated with an
+    two or more countries in `study_country` ("United Kingdom; United
+    States") or "multiple" → "multiple countries" (derived in code, Q22);
+    case folded only ("united kingdom" = "United Kingdom", Q23); a place stated with an
     empty `study_country` → "other"; nothing stated → "not stated"; a document
     whose records give two countries → "multiple countries", both texts
     below; no read of publisher, journal, institution or publication country.
@@ -423,15 +427,22 @@ final 3 § 7.2a (Q20, Q22–Q25) is checked against its answer.
     `intervention_profile_record`; `population` → `unit` on
     `intervention_outcome_finding` and `implementation_context_finding`; the
     union view recreated with `unit`; a round-trip test; full `make verify` at
-    Phase 16. No other schema change; no new table.
+    Phase 16. No other schema change; no new table. **Production:** the
+    revision needs no re-extraction (no version change on the finding
+    records, Q24); `verification.md` records the downgrade path for
+    production (`alembic downgrade -1`, the previous image).
 68. [ ] **The authority label beside "Who decides" (R70).** In "What it
     would take", the "Who decides" row carries the label word with its colour,
     then the sentence, only when the option has an authority entry; no
     authority line in "What it is"; the Who can act facet unchanged (vitest).
-69. [ ] **`study_country` (R72).** The record wire, the writer and the column
-    carry `study_country`; the 16R read on the tuning set: the country of the
-    stated place ("Hamburg" → Germany), "multiple" for a group, empty when
-    nothing is stated. Threshold: all records read, no wrong country. Records
+69. [ ] **`study_country` (R72; lead, Q22, Q23).** The record wire, the
+    writer and the column carry `study_country`; the prompt fixes the form:
+    every named country, separated, each as its short English name
+    ("United Kingdom", not "UK"), England, Scotland, Wales and Northern
+    Ireland as "United Kingdom". The 16R read on the tuning set: the country
+    of the stated place ("Hamburg" → Germany), every named country listed,
+    "multiple" for a group, empty when nothing is stated, no short form or
+    UK nation as a country. Threshold: all records read, no wrong country. Records
     by `study_country` value reported per list.
 70. [ ] **`unit` throughout (R73, R75).** No product code, wire, prompt or
     read model uses `population` or `population_tag` for the intervention
@@ -441,12 +452,18 @@ final 3 § 7.2a (Q20, Q22–Q25) is checked against its answer.
     delivered to: people, organisations, sites or things"; the IOF/ICF
     prompts carry the same definition; the findings view label reads the
     new word. The 16W diff is words only, read by the lead and recorded;
-    hashes re-pinned; no replay.
+    hashes re-pinned; no replay; **no version change** on the finding records
+    (their schema and prompt versions as before), so the revision runs on
+    production without a re-extraction; the downgrade reverses the rename
+    (round-trip test on a finding row) (owner, Q24).
 71. [ ] **The place rule in words (R74).** The screen criteria, the tagging
     context, `constrain` and `option_design` carry "the place in the question
     is the user's place, not a criterion; judge as if the question named no
-    place". **M4** on the replays (18P stop measure): no exclusion and no
-    screen failure because of place, read by hand. Threshold: none. If M4
+    place", and so does every other prompt that read the stripped text:
+    discovery, typing, the eight lines and the folding calls (lead, Q25).
+    **M4** on the replays (18P stop measure): no exclusion and no screen
+    failure because of place, read by hand. Threshold: none. The screen's
+    pass rate reported beside the last loop's. If M4
     holds, `strip_place`, its name tables, `names_place` and `where_codes`
     are gone from product code; if it fails, they stay and `verification.md`
     and final 3 say so. M4 on the live runs reported.
@@ -462,10 +479,12 @@ final 3 § 7.2a (Q20, Q22–Q25) is checked against its answer.
     read-back), one stop measure, at most five rounds, tuned on the tuning
     set and read once on the check set, reported to the owner, re-pinned in
     `scripts/prompt_hashes.json`; `interventions_records.py` is in the guard's
-    file list (lead, B12). Folding stop measure (20L): on the tuning set, no
+    file list with `iof_records.py`, `icf_records.py` and
+    `finding_references.py` (lead, B12; owner, Q24), each hashed in
+    `scripts/prompt_hashes.json`. Folding stop measure (20L): on the tuning set, no
     two kinds on one list name the same kind, and at most 12 kinds per list
     per facet (lead, A6); kinds per list and plan-word matches reported. The
-    16W word swap is not a loop (R75). The cluster prompt is unchanged.
+    16W word swap is not a loop (R75). The cluster prompt is unchanged for examples; its discovery prompt takes the place rule (18P).
 64. [ ] **Gates (lead, A14).** Full `make verify` at 15.0, 16 (the schema)
     and 23; `prompt-guard` at 16R, 16W, 18P, 20 and 20L (and 18C if a round
     runs); `openapi-sync` at 16W, 17, 18 and 21; `frontend-verify` at 16W,
