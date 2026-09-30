@@ -62,8 +62,11 @@ LINE_QUESTIONS: dict[str, str] = {
     ),
     "who_decides": (
         "Which ONE body must decide to adopt this option? Name that body by "
-        "its full name, never an acronym, and the country you assume, taken "
-        "from Where in the data, and say what that body must decide: to "
+        "the name that its country's government publications use for it: "
+        "letters that are part of that name stay, but never an acronym in "
+        "place of the name, and never a legal name that the public does not "
+        "use. Name the country you assume, taken from Where in the data, and "
+        "say what that body must decide: to "
         "fund, to commission, to legislate, to set a rule. When several "
         "bodies have a part, name the one whose decision the option cannot "
         "go ahead without. Name no Act, regulation, statutory instrument or "
