@@ -3928,7 +3928,7 @@
         "type": "object"
       },
       "OptionOut": {
-        "description": "The `option` read model: the option card, assembled (D15).\n\nArgs:\n    design: The specified design.\n    design_features: The design's defining features.\n    evidence: The source-quality profile.\n    judgements: The constraint judgements on the current design version.\n    guesses: The reasoned guesses on the current design version.\n    transferability: \"checked at assessment\" when the plan carries the\n        default transferability preference; `null` otherwise.\n    in_scope: The in-scope check, when the plan restricts the evidence.\n    documents: The documents behind it, one per membership row.\n    run_id: The longlist component run its coverage came from; `null`\n        before a longlist is built.\n    capability_run_id: The longlist walk that run belonged to.\n    plan_version: The plan version that longlist was built from.\n    where_label: The plan's Where (the transferability line).\n    depth_label: The depth label every longlist surface carries.\n    examples: The option's distinct programme names, most documents first,\n        at most five (task 046, amendment 3).",
+        "description": "The `option` read model: the option card, assembled (D15).\n\nArgs:\n    design: The specified design.\n    design_features: The design's defining features.\n    evidence: The source-quality profile.\n    judgements: The constraint judgements on the current design version.\n    guesses: The reasoned guesses on the current design version.\n    in_scope: The in-scope check, when the plan restricts the evidence.\n    documents: The documents behind it, one per membership row.\n    run_id: The longlist component run its coverage came from; `null`\n        before a longlist is built.\n    capability_run_id: The longlist walk that run belonged to.\n    plan_version: The plan version that longlist was built from.\n    examples: The option's distinct programme names, most documents first,\n        at most five (task 046, amendment 3).",
         "properties": {
           "abstract_only": {
             "default": false,
@@ -3989,12 +3989,6 @@
               }
             ],
             "title": "Capability Run Id"
-          },
-          "depth_label": {
-            "const": "scoping pass",
-            "default": "scoping pass",
-            "title": "Depth Label",
-            "type": "string"
           },
           "description": {
             "title": "Description",
@@ -4206,17 +4200,6 @@
             ],
             "title": "Run Id"
           },
-          "runner_up_lever_type": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Runner Up Lever Type"
-          },
           "search_pending": {
             "default": false,
             "title": "Search Pending",
@@ -4255,28 +4238,12 @@
             ],
             "title": "Taxonomy Version"
           },
-          "transferability": {
-            "anyOf": [
-              {
-                "const": "checked at assessment",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Transferability"
-          },
           "tried_on": {
             "items": {
               "$ref": "#/components/schemas/TriedOnOut"
             },
             "title": "Tried On",
             "type": "array"
-          },
-          "where_label": {
-            "title": "Where Label",
-            "type": "string"
           },
           "where_tried": {
             "items": {
@@ -4294,8 +4261,7 @@
           "state",
           "design_version",
           "design",
-          "evidence",
-          "where_label"
+          "evidence"
         ],
         "title": "OptionOut",
         "type": "object"
@@ -4323,6 +4289,92 @@
           "settings"
         ],
         "title": "OptionProfileOut",
+        "type": "object"
+      },
+      "OptionRecordOut": {
+        "description": "One intervention profile record of a document, under one option (R67).\n\nThe record in its own words, as the extraction wrote it: the source\ndossier's slot shows it in place of findings on an options-scoping task\n(task 046, amendment 3).\n\nArgs:\n    option_id: The option the record is a member of.\n    option_name: That option's name.\n    record_id: The intervention profile record.\n    intervention: The intervention, as the document names it.\n    setting: Where it was delivered, as the document says.\n    unit: What it was tried on (the unit), as the document says.\n    outcome: The outcomes measured, as the document says.\n    study_geography: Where it was studied, as the document says.\n    role: What the document does with the intervention.",
+        "properties": {
+          "intervention": {
+            "title": "Intervention",
+            "type": "string"
+          },
+          "option_id": {
+            "format": "uuid",
+            "title": "Option Id",
+            "type": "string"
+          },
+          "option_name": {
+            "title": "Option Name",
+            "type": "string"
+          },
+          "outcome": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Outcome"
+          },
+          "record_id": {
+            "format": "uuid",
+            "title": "Record Id",
+            "type": "string"
+          },
+          "role": {
+            "enum": [
+              "evaluated",
+              "described",
+              "recommended",
+              "mentioned"
+            ],
+            "title": "Role",
+            "type": "string"
+          },
+          "setting": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Setting"
+          },
+          "study_geography": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Study Geography"
+          },
+          "unit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unit"
+          }
+        },
+        "required": [
+          "option_id",
+          "option_name",
+          "record_id",
+          "intervention",
+          "role"
+        ],
+        "title": "OptionRecordOut",
         "type": "object"
       },
       "OptionResponse": {
@@ -4360,7 +4412,7 @@
         "type": "object"
       },
       "OptionSummaryOut": {
-        "description": "One option as the list view and the grid show it.\n\nArgs:\n    option_id: Stable option identity.\n    name: Option name.\n    description: One-sentence description.\n    outcomes_served: The plan's outcomes the option serves.\n    origin: Where it came from.\n    state: Included or excluded.\n    exclusion: Why it is excluded; `null` when included.\n    no_in_scope_evidence: Included, but none of its documents passes the\n        plan's evidence restriction.\n    restriction_text: The restriction none of its documents passes, when\n        `no_in_scope_evidence`.\n    primary_lever_type: The primary lever type; `null` when none fits or\n        the option is not typed yet.\n    lever_none_fits_reason: Why no lever type fits.\n    secondary_lever_types: The other lever types it also touches.\n    ambition: `less` \u00b7 `more` \u00b7 `null`: how big a proposal the option is\n        against the baseline, compared with the other options of the list;\n        `null` when it does not stand out or is not profiled yet.\n    ambition_reason: The one-line justification.\n    profile: What the option would take (task 046); `null` when the\n        option has no complete profile.\n    authority: Who can act on it (task 046, R43); `null` when none was\n        recorded.\n    taxonomy_version: The lever-type list version it was typed under.\n    design_version: The specified design's version.\n    document_count: Its documents (DOI-collapsed).\n    evaluated_count: Documents that evaluate it.\n    settings: The option's delivery setting, from its profile (R41);\n        empty when it has none.\n    where_tried: Where it was tried: its top levels, most documents first.\n    relations: Its relations to other options.\n    abstract_only: Every one of its documents was read from an abstract only.\n    is_entrant_with_no_documents: Suggested, drawn from the Evidence\n        search or added by the user, and no document has joined it.\n    search_pending: An option added since the build whose own option\n        search is still running or paused; its counts read zero until it ends.\n    from_section: The Evidence search report section a *from your\n        evidence search* option was drawn from; `null` for any other\n        origin, or when the section was not recorded (task 045, F3).\n    also_found_as: The names of the duplicates merged into this option\n        (their documents are its documents); empty when none.\n    runner_up_lever_type: The lever type the typing pass came closest to\n        besides the primary, when one was recorded; `null` otherwise\n        (task 046).\n    lever_reason: One sentence on why the option has its lever type,\n        when the typing pass recorded one; `null` otherwise (task 046,\n        R29).\n    tried_on: The kinds of people, organisations or things its evidence\n        covers, the plan's target unit first, then most documents first\n        (task 046, amendment 3).",
+        "description": "One option as the list view and the grid show it.\n\nArgs:\n    option_id: Stable option identity.\n    name: Option name.\n    description: One-sentence description.\n    outcomes_served: The plan's outcomes the option serves.\n    origin: Where it came from.\n    state: Included or excluded.\n    exclusion: Why it is excluded; `null` when included.\n    no_in_scope_evidence: Included, but none of its documents passes the\n        plan's evidence restriction.\n    restriction_text: The restriction none of its documents passes, when\n        `no_in_scope_evidence`.\n    primary_lever_type: The primary lever type; `null` when none fits or\n        the option is not typed yet.\n    lever_none_fits_reason: Why no lever type fits.\n    secondary_lever_types: The other lever types it also touches.\n    ambition: `less` \u00b7 `more` \u00b7 `null`: how big a proposal the option is\n        against the baseline, compared with the other options of the list;\n        `null` when it does not stand out or is not profiled yet.\n    ambition_reason: The one-line justification.\n    profile: What the option would take (task 046); `null` when the\n        option has no complete profile.\n    authority: Who can act on it (task 046, R43); `null` when none was\n        recorded.\n    taxonomy_version: The lever-type list version it was typed under.\n    design_version: The specified design's version.\n    document_count: Its documents (DOI-collapsed).\n    evaluated_count: Documents that evaluate it.\n    settings: The option's delivery setting, from its profile (R41);\n        empty when it has none.\n    where_tried: Where it was tried: its top levels, most documents first.\n    relations: Its relations to other options.\n    abstract_only: Every one of its documents was read from an abstract only.\n    is_entrant_with_no_documents: Suggested, drawn from the Evidence\n        search or added by the user, and no document has joined it.\n    search_pending: An option added since the build whose own option\n        search is still running or paused; its counts read zero until it ends.\n    from_section: The Evidence search report section a *from your\n        evidence search* option was drawn from; `null` for any other\n        origin, or when the section was not recorded (task 045, F3).\n    also_found_as: The names of the duplicates merged into this option\n        (their documents are its documents); empty when none.\n    lever_reason: One sentence on why the option has its lever type,\n        when the typing pass recorded one; `null` otherwise (task 046,\n        R29).\n    tried_on: The kinds of people, organisations or things its evidence\n        covers, the plan's target unit first, then most documents first\n        (task 046, amendment 3).",
         "properties": {
           "abstract_only": {
             "default": false,
@@ -4545,17 +4597,6 @@
               }
             ],
             "title": "Restriction Text"
-          },
-          "runner_up_lever_type": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Runner Up Lever Type"
           },
           "search_pending": {
             "default": false,
@@ -7152,6 +7193,28 @@
           "cited"
         ],
         "title": "SourceDossierOut",
+        "type": "object"
+      },
+      "SourceRecordsOut": {
+        "description": "The `source records` read model: a document's records under the options.\n\nOne entry per (option, record), the document's DOI twins in this task\nincluded; empty when no record of the document is a member of an option\n(the dossier then shows the document's findings, B8).\n\nArgs:\n    task_source_snapshot_id: The document row the dossier opened.\n    records: The records, options by name, then by role, then oldest first.",
+        "properties": {
+          "records": {
+            "items": {
+              "$ref": "#/components/schemas/OptionRecordOut"
+            },
+            "title": "Records",
+            "type": "array"
+          },
+          "task_source_snapshot_id": {
+            "format": "uuid",
+            "title": "Task Source Snapshot Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "task_source_snapshot_id"
+        ],
+        "title": "SourceRecordsOut",
         "type": "object"
       },
       "SourceTagOut": {
@@ -11846,6 +11909,82 @@
           }
         ],
         "summary": "Source Dossier",
+        "tags": [
+          "read-models"
+        ]
+      }
+    },
+    "/api/v1/tasks/{task_id}/sources/{source_id}/records": {
+      "get": {
+        "description": "Return a document's intervention profile records under the options (R67).\n\nThe dossier's slot on an options-scoping task (task 046, amendment 3).\nScoped as the sibling dossier route: an unreadable task is the\nindistinguishable 404; every read below is keyed by ``task_id``, so an\n``option_id`` or ``source_id`` of another task yields an empty list.",
+        "operationId": "source_records_api_v1_tasks__task_id__sources__source_id__records_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Task Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "source_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Source Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "option_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Option Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourceRecordsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Source Records",
         "tags": [
           "read-models"
         ]

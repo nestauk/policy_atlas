@@ -18,7 +18,6 @@ import { SectionDisclosure, type SidebarEntry } from "../ArtefactOutline";
 import { LIFECYCLE_PAGE_CLASS } from "../listPageChrome";
 import { REPORT_TITLE_CLASS, ReportKindRow, ReportPage, SnapshotCells } from "../reportPage";
 import {
-  SCOPING_PASS_SENTENCE,
   abstractOnlySentence,
   actionFailedNotice,
   LEVEL_WORD_CLASS,
@@ -34,7 +33,6 @@ import {
   documentPlaceLabel,
   documentsSentence,
   leverLine,
-  runnerUpLine,
   triedOnSentence,
   exampleLine,
   originLabel,
@@ -64,7 +62,15 @@ const documentMeta = (document: OptionDocumentOut): string =>
 
 /** The option's documents: a linked title (plain when this task holds no row),
  *  one grey meta line each, five shown then "Show all N". */
-function DocumentList({ taskId, documents }: { taskId: string | undefined; documents: OptionDocumentOut[] }) {
+function DocumentList({
+  taskId,
+  optionId,
+  documents,
+}: {
+  taskId: string | undefined;
+  optionId: string;
+  documents: OptionDocumentOut[];
+}) {
   const [showAll, setShowAll] = useState(false);
   if (documents.length === 0) return <p className="text-grey">No documents found yet.</p>;
   const shown = showAll ? documents : documents.slice(0, DOCUMENTS_SHOWN);
@@ -77,7 +83,7 @@ function DocumentList({ taskId, documents }: { taskId: string | undefined; docum
               {document.task_source_snapshot_id != null && taskId !== undefined ? (
                 <Link
                   className="underline underline-offset-2"
-                  to={`/tasks/${taskId}/sources/all?source=${document.task_source_snapshot_id}`}
+                  to={`/tasks/${taskId}/sources/all?source=${document.task_source_snapshot_id}&option=${optionId}`}
                 >
                   {scrub(document.title)}
                 </Link>
@@ -281,7 +287,7 @@ export function OptionCard() {
       </nav>
 
       <header className="mb-8">
-        <ReportKindRow kind="Option" tag={<Chip tone="blue" title={SCOPING_PASS_SENTENCE}>{scrub(item.depth_label)}</Chip>}>
+        <ReportKindRow kind="Option">
           <div className="print-hide flex items-center gap-2">
             {excluded ? (
               <Button
@@ -376,7 +382,6 @@ export function OptionCard() {
           </ul>
         )}
         <p>{leverLine(item.primary_lever_type, item.secondary_lever_types, item.lever_none_fits_reason, item.lever_reason)}</p>
-        {item.runner_up_lever_type != null && <p>{runnerUpLine(item.runner_up_lever_type)}</p>}
         {ambitionLine !== "" && <p>{scrub(ambitionLine)}</p>}
         {deliveredLine !== "" && <p>{scrub(deliveredLine)}</p>}
         {item.authority != null && <p>{scrub(authorityLine(item.authority))}</p>}
@@ -480,7 +485,7 @@ export function OptionCard() {
             </ul>
           </>
         )}
-        <DocumentList taskId={taskId} documents={documents} />
+        <DocumentList taskId={taskId} optionId={item.option_id} documents={documents} />
         {(evidence.tried_on ?? []).length > 0 && <p>{scrub(triedOnSentence(evidence.tried_on ?? []))}</p>}
         <p className="text-meta text-grey">{abstractOnlySentence(evidence.abstract_only, evidence.documents)}</p>
       </CardSection>
@@ -500,12 +505,6 @@ export function OptionCard() {
               <span className="text-grey">{scrub(guess.guess)}</span>
             </li>
           ))}
-          {item.transferability != null && (
-            <li>
-              <span className="font-semibold text-navy">Transferable to {scrub(item.where_label)}:</span>{" "}
-              <span className="text-grey">{item.transferability}.</span>
-            </li>
-          )}
           {item.no_in_scope_evidence && item.in_scope != null && (
             <li>
               No in-scope evidence: none of the {item.in_scope.documents} documents pass{" "}

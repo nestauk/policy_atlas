@@ -714,6 +714,31 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
     }
     return json(page(rows));
   }
+  // Task 046, amendment 3 (R67): the dossier's records on a scoping task,
+  // derived from the option cards' documents (one per option holding it).
+  const sourceRecordsMatch = path.match(new RegExp(`/api/v1/tasks/${MOCK_TASK_ID}/sources/([^/]+)/records$`));
+  if (method === "GET" && sourceRecordsMatch) {
+    const sourceId = sourceRecordsMatch[1];
+    const optionId = url.searchParams.get("option_id");
+    const records = Object.values(mockLonglistOptionCards)
+      .filter((card) => optionId === null || card.option_id === optionId)
+      .flatMap((card) =>
+        (card.documents ?? [])
+          .filter((document) => document.task_source_snapshot_id === sourceId)
+          .map((document) => ({
+            option_id: card.option_id,
+            option_name: card.name,
+            record_id: `${card.option_id}-${sourceId}`,
+            intervention: card.name,
+            setting: card.settings?.[0] ?? null,
+            unit: card.tried_on?.[0]?.kind ?? null,
+            outcome: card.outcomes_served?.[0] ?? null,
+            study_geography: document.place ?? null,
+            role: document.role,
+          })),
+      );
+    return json({ task_source_snapshot_id: sourceId, records });
+  }
   if (method === "GET" && path.includes(`/api/v1/tasks/${MOCK_TASK_ID}/sources/`)) {
     const sourceId = path.split("/").at(-1) ?? "";
     const source = mockSourceDossiers[sourceId];

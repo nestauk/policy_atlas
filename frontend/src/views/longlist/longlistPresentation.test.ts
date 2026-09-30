@@ -14,7 +14,6 @@ import {
   leverLine,
   outcomeCountItem,
   outcomeCountsSentence,
-  runnerUpLine,
   triedOnFacet,
   triedOnSentence,
   exampleLine,
@@ -51,10 +50,6 @@ describe("longlist presentation (task 046)", () => {
   it("words an example with its documents and drops a zero count", () => {
     expect(exampleLine({ name: "HENRY", documents: 1 })).toBe("HENRY · 1 document");
     expect(exampleLine({ name: "Breakfast clubs", documents: 0 })).toBe("Breakfast clubs");
-  });
-
-  it("words the runner-up like the lever line", () => {
-    expect(runnerUpLine("regulate")).toBe("Runner-up lever type: Regulate.");
   });
 
   // Task 046, R29: the reason follows the lever sentence, as with the ambition.

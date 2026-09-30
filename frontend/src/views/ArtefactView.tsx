@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import { Link, useParams, useSearchParams } from "react-router";
 
 import type { components } from "../api/gen/types";
-import { useApiClient, useArtefact, useConversations, useEvidence, useFindings, useLandscape, useLonglist, useTask, useSourceDossier } from "../api/queries";
+import { useApiClient, useArtefact, useConversations, useEvidence, useFindings, useLandscape, useLonglist, useTask, useSourceDossier, useSourceRecords } from "../api/queries";
 import { useQuery } from "@tanstack/react-query";
 import {
   cardEvidenceMeta,
@@ -1034,12 +1034,17 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 export function SourceDossier({
   taskId,
   sourceRef,
+  optionId = null,
   onClose,
 }: {
   taskId: string;
   /** A source id (citations carry one) or a display title (references,
    *  theme members — the legacy title-keyed path). */
   sourceRef: string;
+  /** The option whose card opened the dossier (the `option` search
+   *  parameter): on an options-scoping task the slot then reads "In this
+   *  option" (task 046, amendment 3, R67). */
+  optionId?: string | null;
   onClose: () => void;
 }) {
   const byId = UUID_RE.test(sourceRef);
@@ -1053,6 +1058,9 @@ export function SourceDossier({
     taskId,
     sourceId !== null ? { page_size: 200, source_id: sourceId } : undefined,
   );
+  const task = useTask(taskId);
+  const scoping = task.data?.capability === "options_scoping";
+  const records = useSourceRecords(taskId, sourceId, optionId, { enabled: scoping });
   return (
     <Sheet
       open
@@ -1072,7 +1080,16 @@ export function SourceDossier({
           </p>
         )}
         {dossier.isError && <p role="alert" className="text-body text-navy">This source dossier couldn't be loaded.</p>}
-        {dossier.data && <SourceDossierBody source={dossier.data} findings={findings.data?.data} findingsPending={findings.isPending} />}
+        {dossier.data && (
+          <SourceDossierBody
+            source={dossier.data}
+            findings={findings.data?.data}
+            findingsPending={findings.isPending}
+            records={scoping ? records.data?.records : undefined}
+            recordsPending={scoping && records.isPending}
+            fromOption={optionId !== null}
+          />
+        )}
         {!byId && evidence.data !== undefined && source === undefined && (
           <p className="text-body text-grey">This source isn't in the evidence list yet.</p>
         )}
@@ -1399,6 +1416,7 @@ function ArtefactReport() {
   const stream = useRunStream(taskId);
   const [searchParams, setSearchParams] = useSearchParams();
   const dossierSource = searchParams.get("source");
+  const dossierOption = searchParams.get("option");
   const [detailClaim, setDetailClaim] = useState<ClaimLike | null>(null);
   // Task 044 (deliverable 9): an options-scoping task's Result is the
   // baseline, not a report. It is headed "Baseline" and nothing else; the
@@ -1411,6 +1429,7 @@ function ArtefactReport() {
     setSearchParams((current) => {
       const next = new URLSearchParams(current);
       next.set("source", title);
+      next.delete("option");
       return next;
     });
   };
@@ -1418,6 +1437,7 @@ function ArtefactReport() {
     setSearchParams((current) => {
       const next = new URLSearchParams(current);
       next.delete("source");
+      next.delete("option");
       return next;
     });
   };
@@ -1732,7 +1752,7 @@ function ArtefactReport() {
       />
 
       {dossierSource !== null && (
-        <SourceDossier taskId={taskId} sourceRef={dossierSource} onClose={closeDossier} />
+        <SourceDossier taskId={taskId} sourceRef={dossierSource} optionId={dossierOption} onClose={closeDossier} />
       )}
     </ReportPage>
   );

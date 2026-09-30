@@ -616,8 +616,9 @@ def test_the_card_carries_every_section_and_never_how_sure(
         card = response.json()
         assert card["design"]["name"] == "Youth guarantee"
         assert card["design_features"] == ["Youth guarantee feature"]
-        assert card["transferability"] == "checked at assessment"
-        assert card["depth_label"] == "scoping pass"
+        # Task 046, amendment 3 (R61, R66): no depth label, transferability or
+        # Where label on the card.
+        assert not {"transferability", "depth_label", "where_label"} & card.keys()
         assert card["run_id"] == str(built.run_id) and card["plan_version"] == 2
         # Judgements: the requirement, then the three screens; the guess on the
         # preference; no guess for the transferability preference.
@@ -685,24 +686,6 @@ def test_the_card_carries_every_section_and_never_how_sure(
             assert "how sure" not in body.lower()
 
 
-def test_the_transferability_row_follows_the_plan(conn: Connection) -> None:
-    """No default preference on the plan: the card carries no transferability row."""
-    plan = _plan()
-    stripped = plan.model_copy(
-        update={
-            "constraints": [c for c in plan.constraints if c.default is None],
-            "removed_defaults": ["transferability"],
-        }
-    )
-    walk = _Walk(conn, stripped)
-    option_id = walk.option("Youth guarantee", origin="added_by_you")
-    walk.build(_Scripted())
-    card = repository.option_out(conn, walk.task_id, option_id)
-    assert card is not None
-    assert card.transferability is None
-    assert card.document_count == 0 and card.is_entrant_with_no_documents is True
-
-
 def test_the_in_scope_key_is_constrains(conn: Connection) -> None:
     assert repository.LONGLIST_IN_SCOPE_KEY == IN_SCOPE_EVIDENCE_KEY
 
@@ -724,7 +707,8 @@ def test_an_option_added_since_the_build_reads_with_an_empty_profile(conn: Conne
 # --- task 046: the read models gain runner-up, tried on, variants, thinning --------
 
 
-def test_the_card_and_list_serve_the_runner_up_lever_type(conn: Connection) -> None:
+def test_the_card_and_list_serve_no_runner_up_lever_type(conn: Connection) -> None:
+    """Task 046, amendment 3 (B13): the runner-up stays in provenance, off the read models."""
     walk = _Walk(conn)
     walk.option("Youth guarantee", origin="added_by_you")
     doc = walk.doc()
@@ -741,11 +725,11 @@ def test_the_card_and_list_serve_the_runner_up_lever_type(conn: Connection) -> N
     listed = repository.longlist_out(conn, walk.task_id)
     assert listed is not None
     summary = next(o for o in listed.options if o.option_id == option_id)
-    assert summary.runner_up_lever_type == "inform"
+    assert "runner_up_lever_type" not in summary.model_dump()
 
     card = repository.option_out(conn, walk.task_id, option_id)
     assert card is not None
-    assert card.runner_up_lever_type == "inform"
+    assert "runner_up_lever_type" not in card.model_dump()
 
 
 def test_the_card_and_list_serve_the_lever_reason(conn: Connection) -> None:
@@ -1014,7 +998,6 @@ def test_an_old_stored_longlist_reads_with_every_new_field_defaulted(conn: Conne
     assert listed.counts.thinned_capped == 0
     summary = next(o for o in listed.options if o.option_id == option_id)
     assert summary.tried_on == []
-    assert summary.runner_up_lever_type is None
 
     card = repository.option_out(conn, walk.task_id, option_id)
     assert card is not None

@@ -324,12 +324,6 @@ export function triedOnFacet(
   return { shown: all.slice(0, limit), hidden: Math.max(all.length - limit, 0) };
 }
 
-/** The runner-up lever line (task 046, item 7): the type the typing named
- *  as a close second, in the lever line's own shape. */
-export function runnerUpLine(runnerUp: string): string {
-  return `Runner-up lever type: ${capitalise(runnerUp)}.`;
-}
-
 /** "{n} document(s)", the unit the card counts evidence in. */
 export function documentCount(n: number): string {
   return `${n} ${n === 1 ? "document" : "documents"}`;

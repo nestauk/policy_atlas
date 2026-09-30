@@ -1032,6 +1032,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/tasks/{task_id}/sources/{source_id}/records": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Source Records
+         * @description Return a document's intervention profile records under the options (R67).
+         *
+         *     The dossier's slot on an options-scoping task (task 046, amendment 3).
+         *     Scoped as the sibling dossier route: an unreadable task is the
+         *     indistinguishable 404; every read below is keyed by ``task_id``, so an
+         *     ``option_id`` or ``source_id`` of another task yields an empty list.
+         */
+        get: operations["source_records_api_v1_tasks__task_id__sources__source_id__records_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/tasks/{task_id}/task-agent-turns": {
         parameters: {
             query?: never;
@@ -3194,16 +3219,12 @@ export interface components {
          *         evidence: The source-quality profile.
          *         judgements: The constraint judgements on the current design version.
          *         guesses: The reasoned guesses on the current design version.
-         *         transferability: "checked at assessment" when the plan carries the
-         *             default transferability preference; `null` otherwise.
          *         in_scope: The in-scope check, when the plan restricts the evidence.
          *         documents: The documents behind it, one per membership row.
          *         run_id: The longlist component run its coverage came from; `null`
          *             before a longlist is built.
          *         capability_run_id: The longlist walk that run belonged to.
          *         plan_version: The plan version that longlist was built from.
-         *         where_label: The plan's Where (the transferability line).
-         *         depth_label: The depth label every longlist surface carries.
          *         examples: The option's distinct programme names, most documents first,
          *             at most five (task 046, amendment 3).
          */
@@ -3222,12 +3243,6 @@ export interface components {
             authority?: components["schemas"]["AuthorityOut"] | null;
             /** Capability Run Id */
             capability_run_id?: string | null;
-            /**
-             * Depth Label
-             * @default scoping pass
-             * @constant
-             */
-            depth_label: "scoping pass";
             /** Description */
             description: string;
             design: components["schemas"]["OptionDesignOut"];
@@ -3297,8 +3312,6 @@ export interface components {
             restriction_text?: string | null;
             /** Run Id */
             run_id?: string | null;
-            /** Runner Up Lever Type */
-            runner_up_lever_type?: string | null;
             /**
              * Search Pending
              * @default false
@@ -3315,12 +3328,8 @@ export interface components {
             state: "included" | "excluded";
             /** Taxonomy Version */
             taxonomy_version?: string | null;
-            /** Transferability */
-            transferability?: "checked at assessment" | null;
             /** Tried On */
             tried_on?: components["schemas"]["TriedOnOut"][];
-            /** Where Label */
-            where_label: string;
             /** Where Tried */
             where_tried?: components["schemas"]["WhereTriedOut"][];
         };
@@ -3340,6 +3349,54 @@ export interface components {
             lines: components["schemas"]["ProfileLineOut"][];
             /** Settings */
             settings: string[];
+        };
+        /**
+         * OptionRecordOut
+         * @description One intervention profile record of a document, under one option (R67).
+         *
+         *     The record in its own words, as the extraction wrote it: the source
+         *     dossier's slot shows it in place of findings on an options-scoping task
+         *     (task 046, amendment 3).
+         *
+         *     Args:
+         *         option_id: The option the record is a member of.
+         *         option_name: That option's name.
+         *         record_id: The intervention profile record.
+         *         intervention: The intervention, as the document names it.
+         *         setting: Where it was delivered, as the document says.
+         *         unit: What it was tried on (the unit), as the document says.
+         *         outcome: The outcomes measured, as the document says.
+         *         study_geography: Where it was studied, as the document says.
+         *         role: What the document does with the intervention.
+         */
+        OptionRecordOut: {
+            /** Intervention */
+            intervention: string;
+            /**
+             * Option Id
+             * Format: uuid
+             */
+            option_id: string;
+            /** Option Name */
+            option_name: string;
+            /** Outcome */
+            outcome?: string | null;
+            /**
+             * Record Id
+             * Format: uuid
+             */
+            record_id: string;
+            /**
+             * Role
+             * @enum {string}
+             */
+            role: "evaluated" | "described" | "recommended" | "mentioned";
+            /** Setting */
+            setting?: string | null;
+            /** Study Geography */
+            study_geography?: string | null;
+            /** Unit */
+            unit?: string | null;
         };
         /**
          * OptionResponse
@@ -3414,9 +3471,6 @@ export interface components {
          *             origin, or when the section was not recorded (task 045, F3).
          *         also_found_as: The names of the duplicates merged into this option
          *             (their documents are its documents); empty when none.
-         *         runner_up_lever_type: The lever type the typing pass came closest to
-         *             besides the primary, when one was recorded; `null` otherwise
-         *             (task 046).
          *         lever_reason: One sentence on why the option has its lever type,
          *             when the typing pass recorded one; `null` otherwise (task 046,
          *             R29).
@@ -3489,8 +3543,6 @@ export interface components {
             relations?: components["schemas"]["RelationOut"][];
             /** Restriction Text */
             restriction_text?: string | null;
-            /** Runner Up Lever Type */
-            runner_up_lever_type?: string | null;
             /**
              * Search Pending
              * @default false
@@ -4685,6 +4737,27 @@ export interface components {
             venue?: string | null;
             /** Year */
             year?: number | null;
+        };
+        /**
+         * SourceRecordsOut
+         * @description The `source records` read model: a document's records under the options.
+         *
+         *     One entry per (option, record), the document's DOI twins in this task
+         *     included; empty when no record of the document is a member of an option
+         *     (the dossier then shows the document's findings, B8).
+         *
+         *     Args:
+         *         task_source_snapshot_id: The document row the dossier opened.
+         *         records: The records, options by name, then by role, then oldest first.
+         */
+        SourceRecordsOut: {
+            /** Records */
+            records?: components["schemas"]["OptionRecordOut"][];
+            /**
+             * Task Source Snapshot Id
+             * Format: uuid
+             */
+            task_source_snapshot_id: string;
         };
         /**
          * SourceTagOut
@@ -7038,6 +7111,40 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SourceDossierOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    source_records_api_v1_tasks__task_id__sources__source_id__records_get: {
+        parameters: {
+            query?: {
+                option_id?: string | null;
+            };
+            header?: never;
+            path: {
+                task_id: string;
+                source_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourceRecordsOut"];
                 };
             };
             /** @description Validation Error */

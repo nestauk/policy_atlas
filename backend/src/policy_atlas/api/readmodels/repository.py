@@ -58,6 +58,7 @@ from policy_atlas.api.contract import (
     OptionDocumentOut,
     OptionOut,
     OptionProfileOut,
+    OptionRecordOut,
     OptionSummaryOut,
     OutcomeCountOut,
     OutcomeCountsOut,
@@ -69,6 +70,7 @@ from policy_atlas.api.contract import (
     RelationOut,
     SectionOut,
     SourceDossierOut,
+    SourceRecordsOut,
     SourceTagOut,
     ThemeOut,
     ThemeRefItemOut,
@@ -144,9 +146,7 @@ from policy_atlas.options_scoping.option_profile.option_profile import TYPING_IN
 from policy_atlas.runtime.capability_registry import OPTIONS_SCOPING, validate_plan
 from policy_atlas.runtime.scoping_plan import (
     PROFILE_LINE_KEYS,
-    TRANSFERABILITY_DEFAULT,
     ScopingPlan,
-    find_default,
 )
 from policy_atlas.runtime.steering_events import canonical_actor
 from policy_atlas.runtime.steering_history import steering_history
@@ -2574,6 +2574,131 @@ def source_dossier_out(
     )
 
 
+def source_records_out(
+    conn: Connection,
+    task_id: uuid.UUID,
+    source_id: uuid.UUID,
+    *,
+    option_id: uuid.UUID | None = None,
+) -> SourceRecordsOut:
+    """A document's intervention profile records under the options (R67).
+
+    The source dossier's slot on an options-scoping task (task 046,
+    amendment 3): every record of the document that is a member of an option
+    of this task, one entry per (option, record), in the record's own words.
+    The document's DOI twins among this task's member documents count as the
+    document (the documents list collapses them, R67). Every read is keyed by
+    ``task_id``, so a source row, an option or a record of another task
+    yields nothing; the route's read grade has already decided the task.
+
+    Args:
+        conn: Open database connection. Read-only.
+        task_id: The task, already authorised by the route.
+        source_id: This task's document row (``task_source_snapshot_id``).
+        option_id: Only this option's records, when given. A merged
+            duplicate's id reads as its kept option, as the card does.
+
+    Returns:
+        The records; empty when the document has none under the option(s),
+        when ``source_id`` is not this task's row, or when ``option_id`` is not
+        an option of this task.
+    """
+    empty = SourceRecordsOut(task_source_snapshot_id=source_id)
+    if option_id is not None:
+        found = conn.execute(
+            select(option.c.option_id, option.c.merged_into_option_id).where(
+                option.c.task_id == task_id, option.c.option_id == option_id
+            )
+        ).one_or_none()
+        if found is None:
+            return empty
+        option_id = found.merged_into_option_id or found.option_id
+    tss, om, ipr = task_source_snapshot, option_membership, intervention_profile_record
+    with_metadata = tss.join(
+        source_snapshot, source_snapshot.c.source_snapshot_id == tss.c.source_snapshot_id
+    )
+    opened = conn.execute(
+        select(source_snapshot.c.metadata)
+        .select_from(with_metadata)
+        .where(tss.c.task_id == task_id, tss.c.task_source_snapshot_id == source_id)
+    ).one_or_none()
+    if opened is None:
+        return empty
+    documents = {source_id}
+    doi = normalise_doi(_as_mapping(opened.metadata))
+    if doi is not None:
+        members = (
+            select(om.c.task_source_snapshot_id)
+            .where(om.c.task_id == task_id, om.c.unit_kind == "interventions")
+            .scalar_subquery()
+        )
+        documents.update(
+            row.task_source_snapshot_id
+            for row in conn.execute(
+                select(tss.c.task_source_snapshot_id, source_snapshot.c.metadata)
+                .select_from(with_metadata)
+                .where(tss.c.task_id == task_id, tss.c.task_source_snapshot_id.in_(members))
+            )
+            if normalise_doi(_as_mapping(row.metadata)) == doi
+        )
+    query = (
+        select(
+            om.c.option_id,
+            option.c.name,
+            ipr.c.record_id,
+            ipr.c.intervention,
+            ipr.c.setting,
+            ipr.c.unit,
+            ipr.c.outcome,
+            ipr.c.study_geography,
+            ipr.c.role,
+            ipr.c.created_at,
+        )
+        .select_from(
+            om.join(ipr, (ipr.c.record_id == om.c.unit_id) & (ipr.c.task_id == om.c.task_id))
+            .join(
+                option,
+                (option.c.option_id == om.c.option_id) & (option.c.task_id == om.c.task_id),
+            )
+        )
+        .where(om.c.task_id == task_id)
+        .where(om.c.unit_kind == "interventions")
+        .where(om.c.task_source_snapshot_id.in_(documents))
+        .where(option.c.merged_into_option_id.is_(None))
+        .where(ipr.c.role.in_(ROLE_BUCKETS))
+    )
+    if option_id is not None:
+        query = query.where(om.c.option_id == option_id)
+    rank = {role: index for index, role in enumerate(ROLE_BUCKETS)}
+    rows = sorted(
+        conn.execute(query),
+        key=lambda r: (
+            r.name.casefold(),
+            str(r.option_id),
+            rank[r.role],
+            r.created_at,
+            str(r.record_id),
+        ),
+    )
+    return SourceRecordsOut(
+        task_source_snapshot_id=source_id,
+        records=[
+            OptionRecordOut(
+                option_id=r.option_id,
+                option_name=r.name,
+                record_id=r.record_id,
+                intervention=r.intervention,
+                setting=r.setting,
+                unit=r.unit,
+                outcome=r.outcome,
+                study_geography=r.study_geography,
+                role=cast(Any, r.role),
+            )
+            for r in rows
+        ],
+    )
+
+
 def _source_cited_in(
     conn: Connection, task_id: uuid.UUID, source_id: uuid.UUID
 ) -> list[CitedInOut]:
@@ -2868,9 +2993,6 @@ LONGLIST_IN_SCOPE_KEY = "in_scope_evidence"
 #: a test.
 LONGLIST_AUTHORITY_KEY = "authority"
 
-#: What the option card shows for the default transferability preference (D22).
-TRANSFERABILITY_AT_ASSESSMENT: Literal["checked at assessment"] = "checked at assessment"
-
 #: The default screens' ids, in the order the card lists them.
 _SCREEN_ORDER: tuple[str, ...] = ("relevant", "distinct", "in_scope")
 _VERDICTS = frozenset({"passes", "breaks", "cannot_check"})
@@ -2981,21 +3103,6 @@ def _found_as(merged: list[str] | None, folded: object) -> list[str]:
     for name in names:
         out.setdefault(name.casefold(), name)
     return list(out.values())
-
-
-def _runner_up_lever_type(result: Any | None, option_id: uuid.UUID) -> str | None:
-    """The runner-up lever type the longlist provenance recorded for an option.
-
-    ``provenance["runner_up"]`` is ``{option_id: {"lever_type", ...}}``, written
-    by the longlist component (an entry can carry ``carried_forward: true``
-    when a kept typing's runner-up came from an earlier build) — task 046.
-    """
-    if result is None:
-        return None
-    runner_ups = _as_mapping(_as_mapping(result.provenance).get("runner_up"))
-    entry = _as_mapping(runner_ups.get(str(option_id)))
-    lever = entry.get("lever_type")
-    return lever if isinstance(lever, str) else None
 
 
 def _lever_reason(result: Any | None, option_id: uuid.UUID) -> str | None:
@@ -3248,7 +3355,6 @@ def _option_summary_fields(
     search_pending: bool = False,
     from_section: str | None = None,
     also_found_as: list[str] | None = None,
-    runner_up_lever_type: str | None = None,
     lever_reason: str | None = None,
 ) -> dict[str, Any]:
     documents = _count(coverage.get("documents"))
@@ -3268,7 +3374,6 @@ def _option_summary_fields(
         ),
         "primary_lever_type": row.primary_lever_type,
         "lever_none_fits_reason": row.lever_none_fits_reason,
-        "runner_up_lever_type": runner_up_lever_type,
         "lever_reason": lever_reason,
         "secondary_lever_types": _string_list(row.secondary_lever_types),
         "ambition": row.ambition if row.ambition in _PROFILE_MARKS else None,
@@ -3333,13 +3438,6 @@ def _option_coverage(result: Any | None, option_id: uuid.UUID) -> Mapping[str, A
         if isinstance(coverage, Mapping):
             return coverage
     return empty_coverage()
-
-
-def _where_label(plan: ScopingPlan | None) -> str:
-    """The plan's Where, for the card's transferability line."""
-    if plan is not None and plan.where.text.strip():
-        return plan.where.text.strip()
-    return "Where"
 
 
 def _walk_of_run(conn: Connection, task_id: uuid.UUID, run_id: uuid.UUID) -> uuid.UUID | None:
@@ -3741,7 +3839,6 @@ def longlist_out(conn: Connection, task_id: uuid.UUID) -> LonglistOut | None:
                 search_pending=oid in searches and searches[oid].pending,
                 from_section=sections.get(oid),
                 also_found_as=merged.get(oid),
-                runner_up_lever_type=_runner_up_lever_type(result, oid),
                 lever_reason=_lever_reason(result, oid),
             )
         )
@@ -4140,7 +4237,6 @@ def option_out(conn: Connection, task_id: uuid.UUID, option_id: uuid.UUID) -> Op
             search_pending=search is not None and search.pending,
             from_section=_report_sections(conn, task_id, rows).get(option_id),
             also_found_as=_also_found_as(conn, task_id).get(option_id),
-            runner_up_lever_type=_runner_up_lever_type(result, option_id),
             lever_reason=_lever_reason(result, option_id),
         ),
         design=design,
@@ -4148,11 +4244,6 @@ def option_out(conn: Connection, task_id: uuid.UUID, option_id: uuid.UUID) -> Op
         evidence=_evidence_profile(coverage),
         judgements=_judgements_out(judgements),
         guesses=_guesses_out(_design_record(result, "guesses", row)),
-        transferability=(
-            TRANSFERABILITY_AT_ASSESSMENT
-            if plan is not None and find_default(plan, TRANSFERABILITY_DEFAULT) is not None
-            else None
-        ),
         in_scope=_in_scope_out(judgements),
         documents=documents,
         run_id=result.run_id if result is not None else None,
@@ -4160,6 +4251,5 @@ def option_out(conn: Connection, task_id: uuid.UUID, option_id: uuid.UUID) -> Op
             _walk_of_run(conn, task_id, result.run_id) if result is not None else None
         ),
         plan_version=int(result.plan_version) if result is not None else None,
-        where_label=_where_label(plan),
         examples=_examples_out(coverage.get("examples")),
     )

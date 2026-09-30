@@ -25,6 +25,7 @@ from policy_atlas.api.contract import (
     LandscapeOut,
     Page,
     SourceDossierOut,
+    SourceRecordsOut,
 )
 from policy_atlas.api.deps import get_conn, get_current_user, get_optional_user
 from policy_atlas.api.readmodels import repository
@@ -165,6 +166,25 @@ def source_dossier(
     if result is None:
         raise HTTPException(status_code=404, detail="resource not found")
     return result
+
+
+@router.get("/{task_id}/sources/{source_id}/records", response_model=SourceRecordsOut)
+def source_records(
+    task_id: uuid.UUID,
+    source_id: uuid.UUID,
+    user: Annotated[AuthenticatedUser | None, Depends(get_optional_user)],
+    conn: Annotated[Connection, Depends(get_conn)],
+    option_id: Annotated[uuid.UUID | None, Query()] = None,
+) -> SourceRecordsOut:
+    """Return a document's intervention profile records under the options (R67).
+
+    The dossier's slot on an options-scoping task (task 046, amendment 3).
+    Scoped as the sibling dossier route: an unreadable task is the
+    indistinguishable 404; every read below is keyed by ``task_id``, so an
+    ``option_id`` or ``source_id`` of another task yields an empty list.
+    """
+    _readable(conn, task_id, user)
+    return repository.source_records_out(conn, task_id, source_id, option_id=option_id)
 
 
 @router.get("/{task_id}/decisions", response_model=Page[DecisionOut])

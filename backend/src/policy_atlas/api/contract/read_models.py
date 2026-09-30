@@ -1032,9 +1032,6 @@ class OptionSummaryOut(BaseModel):
             origin, or when the section was not recorded (task 045, F3).
         also_found_as: The names of the duplicates merged into this option
             (their documents are its documents); empty when none.
-        runner_up_lever_type: The lever type the typing pass came closest to
-            besides the primary, when one was recorded; `null` otherwise
-            (task 046).
         lever_reason: One sentence on why the option has its lever type,
             when the typing pass recorded one; `null` otherwise (task 046,
             R29).
@@ -1054,7 +1051,6 @@ class OptionSummaryOut(BaseModel):
     restriction_text: str | None = None
     primary_lever_type: str | None = None
     lever_none_fits_reason: str | None = None
-    runner_up_lever_type: str | None = None
     lever_reason: str | None = None
     secondary_lever_types: list[str] = Field(default_factory=list)
     ambition: ProfileMark | None = None
@@ -1246,6 +1242,52 @@ class OptionDocumentOut(BaseModel):
     source_task_id: uuid.UUID | None = None
 
 
+class OptionRecordOut(BaseModel):
+    """One intervention profile record of a document, under one option (R67).
+
+    The record in its own words, as the extraction wrote it: the source
+    dossier's slot shows it in place of findings on an options-scoping task
+    (task 046, amendment 3).
+
+    Args:
+        option_id: The option the record is a member of.
+        option_name: That option's name.
+        record_id: The intervention profile record.
+        intervention: The intervention, as the document names it.
+        setting: Where it was delivered, as the document says.
+        unit: What it was tried on (the unit), as the document says.
+        outcome: The outcomes measured, as the document says.
+        study_geography: Where it was studied, as the document says.
+        role: What the document does with the intervention.
+    """
+
+    option_id: uuid.UUID
+    option_name: str
+    record_id: uuid.UUID
+    intervention: str
+    setting: str | None = None
+    unit: str | None = None
+    outcome: str | None = None
+    study_geography: str | None = None
+    role: OptionDocumentRole
+
+
+class SourceRecordsOut(BaseModel):
+    """The `source records` read model: a document's records under the options.
+
+    One entry per (option, record), the document's DOI twins in this task
+    included; empty when no record of the document is a member of an option
+    (the dossier then shows the document's findings, B8).
+
+    Args:
+        task_source_snapshot_id: The document row the dossier opened.
+        records: The records, options by name, then by role, then oldest first.
+    """
+
+    task_source_snapshot_id: uuid.UUID
+    records: list[OptionRecordOut] = Field(default_factory=list)
+
+
 class ExampleOut(BaseModel):
     """One distinct programme name among the option's members (task 046, R63).
 
@@ -1267,16 +1309,12 @@ class OptionOut(OptionSummaryOut):
         evidence: The source-quality profile.
         judgements: The constraint judgements on the current design version.
         guesses: The reasoned guesses on the current design version.
-        transferability: "checked at assessment" when the plan carries the
-            default transferability preference; `null` otherwise.
         in_scope: The in-scope check, when the plan restricts the evidence.
         documents: The documents behind it, one per membership row.
         run_id: The longlist component run its coverage came from; `null`
             before a longlist is built.
         capability_run_id: The longlist walk that run belonged to.
         plan_version: The plan version that longlist was built from.
-        where_label: The plan's Where (the transferability line).
-        depth_label: The depth label every longlist surface carries.
         examples: The option's distinct programme names, most documents first,
             at most five (task 046, amendment 3).
     """
@@ -1286,14 +1324,11 @@ class OptionOut(OptionSummaryOut):
     evidence: EvidenceProfileOut
     judgements: list[JudgementOut] = Field(default_factory=list)
     guesses: list[GuessOut] = Field(default_factory=list)
-    transferability: Literal["checked at assessment"] | None = None
     in_scope: InScopeOut | None = None
     documents: list[OptionDocumentOut] = Field(default_factory=list)
     run_id: uuid.UUID | None = None
     capability_run_id: uuid.UUID | None = None
     plan_version: int | None = None
-    where_label: str
-    depth_label: Literal["scoping pass"] = "scoping pass"
     examples: list[ExampleOut] = Field(default_factory=list)
 
 

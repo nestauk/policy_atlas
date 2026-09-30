@@ -63,14 +63,15 @@ beforeEach(() => {
 });
 
 describe("OptionCard", () => {
-  it("renders the breadcrumb, title, depth tag and What it is", () => {
+  it("renders the breadcrumb, title and What it is, with no depth tag", () => {
     renderCard(MOCK_OPTION_ID_EXCLUDED);
     expect(screen.getByRole("link", { name: "Longlist" })).toHaveAttribute(
       "href",
       `/tasks/${TASK_ID}/result?view=longlist`,
     );
     expect(screen.getByRole("heading", { name: "National sanctions regime" })).toBeInTheDocument();
-    expect(screen.getByText("scoping pass")).toBeInTheDocument();
+    // Task 046, amendment 3 (R61): the "scoping pass" chip leaves the card.
+    expect(screen.queryByText("scoping pass")).not.toBeInTheDocument();
     expect(screen.getByText("A duty to withdraw benefits on refusal of an offer")).toBeInTheDocument();
     // Task 046, R29: the lever line is followed by its reason.
     expect(screen.getByText(/^Primary lever type: Enforce existing powers; it also touches Regulate\./)).toBeInTheDocument();
@@ -92,10 +93,10 @@ describe("OptionCard", () => {
     expect(screen.queryByText("A mention is not support.")).not.toBeInTheDocument();
   });
 
-  it("renders the transferability row and the no-in-scope-evidence row where they apply", () => {
+  // Task 046, amendment 3 (R66): the transferability line goes.
+  it("renders the no-in-scope-evidence row where it applies and no transferability row", () => {
     renderCard(MOCK_OPTION_ID_NO_IN_SCOPE);
-    expect(screen.getByText("Transferable to United Kingdom:")).toBeInTheDocument();
-    expect(screen.getByText("checked at assessment.")).toBeInTheDocument();
+    expect(screen.queryByText(/Transferable to/)).not.toBeInTheDocument();
     expect(
       screen.getByText(
         "No in-scope evidence: none of the 4 documents pass Evidence from the UK and other high-income countries only.",
@@ -141,7 +142,10 @@ describe("OptionCard", () => {
         { task_source_snapshot_id: null, title: "Plain paper", role: "mentioned", evidence_type: null, tier: null, year: null, place: null },
       ],
     });
-    expect(screen.getByRole("link", { name: "Linked paper" })).toHaveAttribute("href", `/tasks/${TASK_ID}/sources/all?source=doc-1`);
+    expect(screen.getByRole("link", { name: "Linked paper" })).toHaveAttribute(
+      "href",
+      `/tasks/${TASK_ID}/sources/all?source=doc-1&option=${MOCK_OPTION_ID_EXCLUDED}`,
+    );
     expect(screen.getByText("Plain paper")).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Plain paper" })).not.toBeInTheDocument();
     // The place follows the role (task 046, amendment 3; R72).
@@ -229,12 +233,6 @@ describe("OptionCard", () => {
     expect(screen.queryByText("Examples")).not.toBeInTheDocument();
   });
 
-  // Task 046, contract item 3: the runner-up lever type, beside the lever.
-  it("shows the runner-up lever type when one is recorded", () => {
-    renderCard(MOCK_OPTION_ID_EXCLUDED);
-    expect(screen.getByText("Runner-up lever type: Regulate.")).toBeInTheDocument();
-  });
-
   // Task 046, R29: the lever line carries the reason, as the ambition line does;
   // the section summary (shown when collapsed) keeps the short form.
   it("follows the lever line with its reason, the summary without it", async () => {
@@ -258,8 +256,9 @@ describe("OptionCard", () => {
     ).toBeInTheDocument();
   });
 
-  it("shows no runner-up line when none is recorded", () => {
-    renderCard(MOCK_OPTION_ID_NO_IN_SCOPE);
+  // Task 046, amendment 3 (B13): no runner-up line (the field left the read model).
+  it("shows no runner-up line", () => {
+    renderCard(MOCK_OPTION_ID_EXCLUDED);
     expect(screen.queryByText(/Runner-up lever type:/)).not.toBeInTheDocument();
   });
 

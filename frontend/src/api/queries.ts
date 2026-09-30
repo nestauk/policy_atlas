@@ -39,6 +39,8 @@ export const queryKeys = {
   artefact: (taskId: string) => ["tasks", taskId, "artefact"] as const,
   sourceDossier: (taskId: string, sourceId: string) =>
     ["tasks", taskId, "source-dossier", sourceId] as const,
+  sourceRecords: (taskId: string, sourceId: string, optionId?: string | null) =>
+    ["tasks", taskId, "source-records", sourceId, optionId ?? null] as const,
   /** Prefix shared by every filtered variant below — invalidate with this,
    *  not the filtered key, so a mutation clears every consumer's cache
    *  regardless of which `kind`/`status` it queried with (partial match
@@ -366,6 +368,37 @@ export function useFindings(taskId: string, query?: FindingsQuery) {
       return data;
     },
     enabled: Boolean(taskId),
+  });
+}
+
+/** `GET /api/v1/tasks/{task_id}/sources/{source_id}/records` — on an
+ *  options-scoping task, the document's intervention profile records under
+ *  the options, one per (option, record); one option's only with `optionId`
+ *  (task 046, amendment 3, R67). Enable it only on a scoping task. */
+export function useSourceRecords(
+  taskId: string,
+  sourceId: string | null,
+  optionId?: string | null,
+  options?: { enabled?: boolean },
+) {
+  const client = useApiClient();
+  return useQuery({
+    queryKey: queryKeys.sourceRecords(taskId, sourceId ?? "", optionId),
+    queryFn: async () => {
+      if (!sourceId) return undefined;
+      const { data, error } = await client.GET(
+        "/api/v1/tasks/{task_id}/sources/{source_id}/records",
+        {
+          params: {
+            path: { task_id: taskId, source_id: sourceId },
+            query: optionId ? { option_id: optionId } : undefined,
+          },
+        },
+      );
+      if (error) throw error;
+      return data;
+    },
+    enabled: Boolean(taskId && sourceId) && (options?.enabled ?? true),
   });
 }
 

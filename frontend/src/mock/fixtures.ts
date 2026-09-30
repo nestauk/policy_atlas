@@ -993,7 +993,6 @@ export const MOCK_OPTION_ID_ADDED_BY_YOU = "a0000000-0000-4000-8000-000000000012
 export const MOCK_OPTION_ID_PACKAGE = "a0000000-0000-4000-8000-000000000013";
 const MOCK_LONGLIST_LINKED_TASK_ID = "a0000000-0000-4000-8000-000000000099";
 
-export const MOCK_LONGLIST_WHERE_LABEL = "United Kingdom";
 const MOCK_LONGLIST_RESTRICTION_TEXT = "Evidence from the UK and other high-income countries only";
 const MOCK_LONGLIST_FUNDING_CONSTRAINT = "Only include options a local authority can fund directly";
 const MOCK_LONGLIST_COST_PREFERENCE = "Prefer options with a lower cost per participant";
@@ -1061,7 +1060,6 @@ export const mockLonglistOptionCards: Record<string, OptionOutFixture> = {
     restriction_text: null,
     primary_lever_type: "enforce existing powers",
     lever_none_fits_reason: null,
-    runner_up_lever_type: "regulate",
     lever_reason: "The council withholds a benefit payment when a young person refuses an offer.",
     secondary_lever_types: ["regulate"],
     ambition: "more",
@@ -1087,8 +1085,6 @@ export const mockLonglistOptionCards: Record<string, OptionOutFixture> = {
     run_id: MOCK_LONGLIST_RUN_ID,
     capability_run_id: MOCK_LONGLIST_WALK_ID,
     plan_version: 1,
-    where_label: MOCK_LONGLIST_WHERE_LABEL,
-    depth_label: "scoping pass",
     tried_on: [{ kind: "18-24 year-olds in Northern England", documents: 2 }],
     examples: [
       { name: "National sanctions regime", documents: 6 },
@@ -1125,7 +1121,6 @@ export const mockLonglistOptionCards: Record<string, OptionOutFixture> = {
     guesses: [
       { constraint_id: "pref-1", constraint_text: MOCK_LONGLIST_COST_PREFERENCE, guess: "likely a low cost per participant", leaning: "likely_meets" },
     ],
-    transferability: "checked at assessment",
     in_scope: null,
     documents: [
       { task_source_snapshot_id: "mock-doc-a1", title: "Conditionality and NEET outcomes: a local authority review", role: "evaluated", evidence_type: "Local evaluation", tier: "Moderate", design_feature_not_stated: false, place: "United Kingdom", source_task_id: null },
@@ -1181,8 +1176,6 @@ export const mockLonglistOptionCards: Record<string, OptionOutFixture> = {
     run_id: MOCK_LONGLIST_RUN_ID,
     capability_run_id: MOCK_LONGLIST_WALK_ID,
     plan_version: 1,
-    where_label: MOCK_LONGLIST_WHERE_LABEL,
-    depth_label: "scoping pass",
     evidence: {
       documents: 4,
       by_evidence_type: { "Local evaluation": 3, "Policy analysis": 1 },
@@ -1207,7 +1200,6 @@ export const mockLonglistOptionCards: Record<string, OptionOutFixture> = {
     guesses: [
       { constraint_id: "pref-1", constraint_text: MOCK_LONGLIST_COST_PREFERENCE, guess: "likely a low cost per participant", leaning: "likely_meets" },
     ],
-    transferability: "checked at assessment",
     in_scope: { restriction: MOCK_LONGLIST_RESTRICTION_TEXT, in_scope_documents: 0, documents: 4 },
     documents: [
       { task_source_snapshot_id: "mock-doc-b1", title: "Peer mentoring for at-risk pupils in Ontario schools", role: "evaluated", evidence_type: "Local evaluation", tier: "Moderate", design_feature_not_stated: false, place: "Canada", source_task_id: null },
@@ -1263,8 +1255,6 @@ export const mockLonglistOptionCards: Record<string, OptionOutFixture> = {
     run_id: MOCK_LONGLIST_RUN_ID,
     capability_run_id: MOCK_LONGLIST_WALK_ID,
     plan_version: 1,
-    where_label: MOCK_LONGLIST_WHERE_LABEL,
-    depth_label: "scoping pass",
     evidence: {
       documents: 0,
       by_evidence_type: {},
@@ -1277,7 +1267,6 @@ export const mockLonglistOptionCards: Record<string, OptionOutFixture> = {
     },
     judgements: [],
     guesses: [],
-    transferability: "checked at assessment",
     in_scope: null,
     documents: [],
   },
@@ -1324,8 +1313,6 @@ export const mockLonglistOptionCards: Record<string, OptionOutFixture> = {
     run_id: MOCK_LONGLIST_RUN_ID,
     capability_run_id: MOCK_LONGLIST_WALK_ID,
     plan_version: 1,
-    where_label: MOCK_LONGLIST_WHERE_LABEL,
-    depth_label: "scoping pass",
     evidence: {
       documents: 9,
       by_evidence_type: { "Systematic review": 4, "Local evaluation": 3, "Policy analysis": 2 },
@@ -1349,7 +1336,6 @@ export const mockLonglistOptionCards: Record<string, OptionOutFixture> = {
     guesses: [
       { constraint_id: "pref-1", constraint_text: MOCK_LONGLIST_COST_PREFERENCE, guess: "cannot say on cost from the design alone", leaning: "cannot_say" },
     ],
-    transferability: "checked at assessment",
     in_scope: null,
     documents: [
       { task_source_snapshot_id: "mock-doc-d1", title: "Single-application youth guarantees: a systematic review", role: "evaluated", evidence_type: "Systematic review", tier: "Very strong", design_feature_not_stated: false, place: "United Kingdom", source_task_id: null },
@@ -1374,7 +1360,6 @@ function toLonglistOptionSummary(option: OptionOutFixture): OptionSummaryOutFixt
     restriction_text: option.restriction_text,
     primary_lever_type: option.primary_lever_type,
     lever_none_fits_reason: option.lever_none_fits_reason,
-    runner_up_lever_type: option.runner_up_lever_type,
     lever_reason: option.lever_reason,
     secondary_lever_types: option.secondary_lever_types,
     ambition: option.ambition,
@@ -1444,8 +1429,6 @@ export function buildMockAddedOption(text: string): OptionOutFixture {
     run_id: MOCK_LONGLIST_RUN_ID,
     capability_run_id: MOCK_LONGLIST_WALK_ID,
     plan_version: 1,
-    where_label: MOCK_LONGLIST_WHERE_LABEL,
-    depth_label: "scoping pass",
     evidence: {
       documents: 0,
       by_evidence_type: {},
@@ -1458,7 +1441,6 @@ export function buildMockAddedOption(text: string): OptionOutFixture {
     },
     judgements: [],
     guesses: [],
-    transferability: "checked at assessment",
     in_scope: null,
     documents: [],
   };
