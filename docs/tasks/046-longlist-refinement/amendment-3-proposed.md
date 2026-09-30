@@ -231,3 +231,10 @@ change as a like-for-like word swap under the owner's 038 ruling (hashes
 re-pinned, the diff read as words only, no replay); the record files and the
 synthesis prompt files that change are in the hash guard. "Population" is
 then gone from the product.
+
+### Q26, settled by the lead: the data migration rewrites every stored facet key
+
+The facet name is stored in plan payloads, in `grouping_result.groups` keys
+and in `grouping_provenance`. The data migration of the one revision
+rewrites all three from `population` to `unit`, reversibly, so that no
+reader needs an alias. Consistent with the owner's "all the way".
