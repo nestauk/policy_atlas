@@ -813,6 +813,7 @@ def constrain_scope(
             scope_id=context.scope_id,
             where=plan.where.text,
             option_ids=sorted(set(merged_into.values()), key=str),
+            plan_outcomes=[outcome.text for outcome in plan.outcomes],
         )
         if merged_into
         else {}

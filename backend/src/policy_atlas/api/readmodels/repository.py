@@ -3140,6 +3140,7 @@ class _SearchUnit:
     locator: str
     population_tag: str | None = None
     intervention: str | None = None
+    outcome_tag: str | None = None
 
 
 @dataclass(frozen=True)
@@ -3256,6 +3257,7 @@ def _added_searches(
                 ipr.c.outcome,
                 ipr.c.study_geography,
                 ipr.c.population_tag,
+                ipr.c.outcome_tag,
                 ipr.c.intervention,
                 source_extraction_record.c.task_source_snapshot_id,
                 source_extraction_record.c.basis,
@@ -3299,6 +3301,7 @@ def _added_searches(
                 metadata=_as_mapping(row.metadata),
                 locator=row.source_locator,
                 population_tag=row.population_tag,
+                outcome_tag=row.outcome_tag,
                 intervention=row.intervention,
             )
             for scope in scopes_of[row.extraction_record_id]:
@@ -3336,7 +3339,11 @@ def _needs_search_read(
 
 
 def _search_coverage(
-    conn: Connection, task_id: uuid.UUID, search: _AddedSearch, home: frozenset[str]
+    conn: Connection,
+    task_id: uuid.UUID,
+    search: _AddedSearch,
+    home: frozenset[str],
+    plan_outcomes: Sequence[str] = (),
 ) -> Mapping[str, Any]:
     """An added option's coverage from its own search's records (DOI-collapsed)."""
     if not search.units:
@@ -3359,11 +3366,13 @@ def _search_coverage(
                 study_geography=unit.study_geography,
                 intervention=unit.intervention,
                 population_tag=unit.population_tag,
+                outcome_tag=unit.outcome_tag,
             )
             for unit in search.units
         ],
         labels=labels,
         home=home,
+        plan_outcomes=plan_outcomes,
     )
 
 
@@ -3404,6 +3413,10 @@ def _search_documents(
 
 def _home(plan: ScopingPlan | None) -> frozenset[str]:
     return where_codes(plan.where.text) if plan is not None else frozenset()
+
+
+def _plan_outcomes(plan: ScopingPlan | None) -> list[str]:
+    return [outcome.text for outcome in plan.outcomes] if plan is not None else []
 
 
 def longlist_out(conn: Connection, task_id: uuid.UUID) -> LonglistOut | None:
@@ -3461,13 +3474,14 @@ def longlist_out(conn: Connection, task_id: uuid.UUID) -> LonglistOut | None:
         conn, task_id, _needs_search_read(rows, result, _members_by_option(conn, task_id))
     )
     home = _home(built_from[1] if built_from else None)
+    plan_outcomes = _plan_outcomes(built_from[1] if built_from else None)
     sections = _report_sections(conn, task_id, rows)
     merged = _also_found_as(conn, task_id)
 
     def coverage_of(oid: uuid.UUID) -> Mapping[str, Any]:
         search = searches.get(oid)
         if search is not None:
-            return _search_coverage(conn, task_id, search, home)
+            return _search_coverage(conn, task_id, search, home, plan_outcomes)
         return _option_coverage(result, oid)
 
     options = [
@@ -3859,7 +3873,7 @@ def option_out(conn: Connection, task_id: uuid.UUID, option_id: uuid.UUID) -> Op
         conn, task_id, _needs_search_read(rows, result, _members_by_option(conn, task_id))
     ).get(option_id)
     if search is not None:
-        coverage = _search_coverage(conn, task_id, search, home)
+        coverage = _search_coverage(conn, task_id, search, home, _plan_outcomes(plan))
         documents = _search_documents(conn, task_id, search, home)
     else:
         coverage = _option_coverage(result, option_id)

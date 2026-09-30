@@ -24,6 +24,7 @@ from policy_atlas.options_scoping.longlist.coverage import (
     VARIANTS_MAX,
     CoverageMember,
     FoldedSeed,
+    empty_coverage,
     fold_setting,
     option_coverage,
 )
@@ -89,6 +90,66 @@ def test_an_option_with_no_member_has_every_new_key_empty() -> None:
     assert coverage["tried_on"] == []
     assert coverage["variants"] == []
     assert coverage["setting_repairs"] == 0
+
+
+# --- outcome counts (R42) ------------------------------------------------------------
+
+PLAN = ["Reduce crime", "Improve wellbeing"]
+
+
+def _counts(members: list[CoverageMember], plan: list[str] = PLAN) -> dict[str, Any]:
+    counts: dict[str, Any] = _coverage(members, plan_outcomes=plan)["outcome_counts"]
+    return counts
+
+
+def _by(counts: dict[str, Any]) -> dict[str, int]:
+    return {item["outcome"]: item["documents"] for item in counts["by_outcome"]}
+
+
+def test_a_document_evaluating_two_outcomes_counts_for_both_and_once_overall() -> None:
+    counts = _counts(
+        [
+            _member("a", outcome_tag="Reduce crime"),
+            _member("a", outcome_tag="Improve wellbeing"),
+        ]
+    )
+    assert counts["evaluating_documents"] == 1
+    assert _by(counts) == {"Reduce crime": 1, "Improve wellbeing": 1}
+
+
+def test_a_described_record_with_a_plan_outcome_tag_counts_for_nothing() -> None:
+    counts = _counts([_member("a", role="described", outcome_tag="Reduce crime")])
+    assert counts["evaluating_documents"] == 0
+    assert _by(counts) == {"Reduce crime": 0, "Improve wellbeing": 0}
+
+
+def test_an_evaluating_record_tagged_other_counts_in_evaluating_documents_only() -> None:
+    counts = _counts([_member("a", outcome_tag="other"), _member("b")])
+    assert counts["evaluating_documents"] == 2
+    assert _by(counts) == {"Reduce crime": 0, "Improve wellbeing": 0}
+
+
+def test_two_documents_with_the_same_doi_count_once_in_the_outcome_counts() -> None:
+    counts = _counts(
+        [
+            _member("a", doc_key="doi:10.1/x", outcome_tag="Reduce crime"),
+            _member("b", doc_key="doi:10.1/x", outcome_tag="Reduce crime"),
+        ]
+    )
+    assert counts["evaluating_documents"] == 1
+    assert _by(counts)["Reduce crime"] == 1
+
+
+def test_every_plan_outcome_is_listed_in_plan_order_with_zero_where_none() -> None:
+    counts = _counts([_member("a", outcome_tag="Improve wellbeing")])
+    assert counts["by_outcome"] == [
+        {"outcome": "Reduce crime", "documents": 0},
+        {"outcome": "Improve wellbeing", "documents": 1},
+    ]
+
+
+def test_empty_coverage_has_the_outcome_counts_key() -> None:
+    assert empty_coverage()["outcome_counts"] == {"evaluating_documents": 0, "by_outcome": []}
 
 
 # --- tried on ------------------------------------------------------------------------

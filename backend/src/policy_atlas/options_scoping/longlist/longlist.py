@@ -1660,6 +1660,7 @@ def _coverage_member(unit: _Unit, *, flagged: bool) -> CoverageMember:
         study_geography=unit.study_geography,
         intervention=intervention if isinstance(intervention, str) else None,
         population_tag=unit.population_tag,
+        outcome_tag=unit.outcome_tag if unit.kind == "interventions" else None,
     )
 
 
@@ -1710,6 +1711,7 @@ def membership_coverage(
     scope_id: uuid.UUID,
     where: str,
     option_ids: Sequence[uuid.UUID],
+    plan_outcomes: Sequence[str] = (),
 ) -> dict[str, dict[str, Any]]:
     """The options' coverage recomputed from their membership rows as they stand.
 
@@ -1725,6 +1727,7 @@ def membership_coverage(
         scope_id: The longlist walk's intent record.
         where: The plan's *where* text (the home group).
         option_ids: The options to recompute.
+        plan_outcomes: The plan's outcome texts, in plan order (R42).
 
     Returns:
         ``{option_id: coverage}`` for each of ``option_ids``.
@@ -1773,6 +1776,7 @@ def membership_coverage(
             labels=labels,
             home=home,
             folded_seeds=folded.get(oid, ()),
+            plan_outcomes=plan_outcomes,
         )
         for oid, ms in members.items()
     }
@@ -2086,6 +2090,7 @@ def longlist_scope(
             labels=labels,
             home=home,
             folded_seeds=folded.get(o.option_id, ()),
+            plan_outcomes=plan_outcomes,
         )
         for o in options
     }

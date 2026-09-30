@@ -17,6 +17,12 @@ left out of the facet, each a counted and logged repair, and the remaining
 settings' spelling variants are grouped into one facet label
 (:data:`SETTING_FOLDS`).
 
+The outcome counts (R42) give, in documents, how many evaluated the option
+(a member with role ``evaluated``) and, of those, how many have an evaluated
+member whose ``outcome_tag`` is each plan outcome (case and whitespace
+folded, as the longlist reads the tag); ``other`` and no tag count for no
+outcome. Counts only: no direction, no size.
+
 **Counting grain (D16, A8, A20).** Every count below except ``members`` and
 ``flagged_members`` is a count of *documents*, and documents are collapsed by
 DOI: two documents whose normalised DOI is the same count once; a document
@@ -144,6 +150,9 @@ class CoverageMember:
         intervention: The record's intervention name (the *variants*).
         population_tag: The record's population tag, ``None`` when not
             tagged (task 046).
+        outcome_tag: The record's outcome tag (a plan outcome's text or
+            ``other``), ``None`` when not tagged and for a linked finding
+            (R42).
     """
 
     unit_kind: str
@@ -158,6 +167,7 @@ class CoverageMember:
     study_geography: str | None
     intervention: str | None = None
     population_tag: str | None = None
+    outcome_tag: str | None = None
 
 
 @dataclass(frozen=True)
@@ -233,6 +243,11 @@ def _clean(value: str | None) -> str | None:
     return text or None
 
 
+def _fold_tag(value: str) -> str:
+    """An outcome tag or plan outcome as compared (case and whitespace folded)."""
+    return " ".join(value.split()).casefold()
+
+
 def _add(counts: dict[str, int], key: str) -> None:
     counts[key] = counts.get(key, 0) + 1
 
@@ -282,6 +297,7 @@ def option_coverage(
     labels: Mapping[uuid.UUID, DocumentLabels],
     home: frozenset[str],
     folded_seeds: Sequence[FoldedSeed] = (),
+    plan_outcomes: Sequence[str] = (),
 ) -> dict[str, Any]:
     """Compute one option's source-quality profile.
 
@@ -291,6 +307,7 @@ def option_coverage(
         home: The plan's Where as ISO codes.
         folded_seeds: The options discovery folded into this one (task 046),
             listed first among the variants.
+        plan_outcomes: The plan's outcome texts, in plan order (R42).
 
     Returns:
         ``members`` · ``documents`` · ``flagged_members`` ·
@@ -298,7 +315,7 @@ def option_coverage(
         ``evidence_type`` · ``tier`` · ``role`` · ``where_tried`` ·
         ``countries`` · ``populations`` · ``settings`` · ``outcomes`` ·
         ``findings`` · ``population_tags`` · ``tried_on`` · ``variants`` ·
-        ``setting_repairs`` — documents DOI-collapsed except the two member
+        ``setting_repairs`` · ``outcome_counts`` — documents DOI-collapsed except the two member
         counts and ``setting_repairs`` (one per member repaired).
     """
     by_doc: dict[str, list[CoverageMember]] = {}
@@ -344,6 +361,8 @@ def option_coverage(
     flagged_documents = 0
     abstract_only = 0
     inherited_labels = 0
+    evaluating_documents = 0
+    outcome_documents = dict.fromkeys((_fold_tag(o) for o in plan_outcomes), 0)
 
     for key in sorted(by_doc):
         doc_members = by_doc[key]
@@ -359,6 +378,12 @@ def option_coverage(
             inherited_labels += int(label.provenance == "inherited")
         for role_key in {m.role for m in doc_members if m.role in role}:
             role[role_key] += 1
+        evaluated = [m for m in doc_members if m.role == "evaluated"]
+        evaluating_documents += int(bool(evaluated))
+        for tag in {_fold_tag(m.outcome_tag) for m in evaluated if m.outcome_tag} & set(
+            outcome_documents
+        ):
+            outcome_documents[tag] += 1
         # A document counts as flagged only when none of its members here
         # states the defining feature.
         flagged_documents += int(all(m.flagged for m in doc_members))
@@ -456,4 +481,11 @@ def option_coverage(
         ],
         "variants": variant_list[:VARIANTS_MAX],
         "setting_repairs": setting_repairs,
+        "outcome_counts": {
+            "evaluating_documents": evaluating_documents,
+            "by_outcome": [
+                {"outcome": outcome, "documents": outcome_documents[_fold_tag(outcome)]}
+                for outcome in plan_outcomes
+            ],
+        },
     }
