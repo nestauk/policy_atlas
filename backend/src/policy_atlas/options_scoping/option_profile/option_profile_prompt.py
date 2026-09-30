@@ -69,7 +69,10 @@ LINE_QUESTIONS: dict[str, str] = {
         "say what that body must decide: to "
         "fund, to commission, to legislate, to set a rule. When several "
         "bodies have a part, name the one whose decision the option cannot "
-        "go ahead without. Name no Act, regulation, statutory instrument or "
+        "go ahead without. The body is always one in the place of Where, "
+        "never a body in the country of a study: an option tried elsewhere "
+        "is named to the body that would adopt it where the user is. Name "
+        "no Act, regulation, statutory instrument or "
         "year unless the baseline or an evidence record in the data holds "
         "that name; when in doubt, name no law."
     ),
