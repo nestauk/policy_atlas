@@ -162,3 +162,12 @@ settled the technical ones; four with a visible effect go to the owner
 | 16 | In this amendment only the document list opens the dossier. |
 | 17 | A known limit: words that no folding call saw have no kind until the next rebuild, as an added option has no lines. |
 | 18 | A fault found by the "not stated" check goes to a refine round of the existing record prompt (`extract_interventions`), which is allowed: it is not a new extraction. |
+
+### The owner's answers on the four questions (2026-09-30)
+
+| Q | Decision | The owner's words |
+|---|---|---|
+| 1 | **Examples at the root.** The record extraction (`extract_interventions`) gains one field, `programme_name`: the proper name of the programme, scheme or law that the abstract gives for this intervention, or null. Examples on the card = the distinct programme names of the option's records, with document counts, at most 5. No folding call for examples. One nullable column on `intervention_profile_record`, in **one alembic revision** for amendment 3 (allowed by the owner). One refine round of the record prompt. This replaces the lead's answer to Q1 above and the "clustering call" of topic 6. | "I think your recommendation makes sense, but will that pass have enough context to name the examples correctly? And is it better to address it at the root?" → the lead: the root, with a migration → "1. yes" |
+| 5 | Seven cells in the collapsed row: Ambition, then the six marked lines. | "5. Fine" |
+| 10 | The runner-up line goes. The lever line takes the form "**Lever:** Subsidise, with Regulate and Provide a service." and the reason sentence under it. "also touches" goes. The final words are the lead's at build. | "10. Sounds good. But the wording of the reason needs to be refined. I don't like how it uses 'also touches'" → "2. yes" |
+| 11 | The authority label (within your power · needs action by · unclear) shows beside the "Who decides" row of "What it would take", as a word with its colour, then the sentence; only when the plan holds the consideration. | "11. What is the label?" → the lead's description → accepted with the answers above |
