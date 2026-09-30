@@ -47,7 +47,7 @@ CONTEXT = TaggingContext(
     intended_change="Reduce the number of young people not in work",
 )
 
-_TAGS = ("population_tag", "outcome_tag", "object_tag")
+_TAGS = ("unit_tag", "outcome_tag", "object_tag")
 
 
 def _record(**over: Any) -> InterventionsRecordWire:
@@ -58,12 +58,14 @@ def _record(**over: Any) -> InterventionsRecordWire:
         "is_bundle": False,
         "components": [],
         "outcome": "employment rate",
-        "population": "young people",
+        "unit": "young people",
+        "programme_name": None,
         "setting": None,
         "study_geography": None,
+        "study_country": None,
         "study_design": None,
         "quote": "youth guarantee",
-        "population_tag": "on_target",
+        "unit_tag": "on_target",
         "outcome_tag": "employment rate at 12 months",
         "object_tag": "option",
     }
@@ -129,7 +131,7 @@ def test_the_adapter_counts_repairs_and_keeps_every_record() -> None:
             records = [
                 _record(outcome_tag="wellbeing"),
                 _record(intervention="standard support", role="comparator", outcome_tag="x"),
-                _record(intervention="wage subsidy", population_tag="other",
+                _record(intervention="wage subsidy", unit_tag="other",
                         object_tag="neither"),
             ]
             return InterventionsResponse(records=records, covers_no_intervention=False), None
@@ -172,10 +174,10 @@ def _profile(
 
 _STUB = [
     _wire("peer-led walking programme", "peer-led walking programme",
-          population_tag="adjacent", outcome_tag="Employment rate at 12 months.",
+          unit_tag="adjacent", outcome_tag="Employment rate at 12 months.",
           object_tag="option"),
     _wire("usual care", "usual care", role="comparator",
-          population_tag="on_target", outcome_tag="physical activity", object_tag="option"),
+          unit_tag="on_target", outcome_tag="physical activity", object_tag="option"),
 ]
 
 
@@ -183,9 +185,7 @@ def _stored(conn: Connection, task_id: uuid.UUID) -> dict[str, tuple[Any, ...]]:
     rows = conn.execute(
         select(intervention_profile_record).where(intervention_profile_record.c.task_id == task_id)
     ).all()
-    # The wire's ``population_tag`` is stored as ``unit_tag`` (task 046, amendment 3, R71).
-    columns = tuple("unit_tag" if tag == "population_tag" else tag for tag in _TAGS)
-    return {row.intervention: tuple(getattr(row, c) for c in columns) for row in rows}
+    return {row.intervention: tuple(getattr(row, c) for c in _TAGS) for row in rows}
 
 
 def test_extract_stores_the_settled_tags_and_counts_the_repairs(conn: Connection) -> None:

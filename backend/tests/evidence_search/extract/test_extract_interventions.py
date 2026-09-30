@@ -543,8 +543,8 @@ def test_the_intervention_fingerprint_names_its_components() -> None:
     digest, components = interventions_fingerprint("stub", retry_cap=1)
     assert len(digest) == 64
     assert components["profile"] == INTERVENTIONS_PROFILE_ID
-    assert components["schema"] == "interventions_v1"
-    assert components["prompt"] == "extract_interventions_v2"
+    assert components["schema"] == "interventions_v2"
+    assert components["prompt"] == "extract_interventions_v3"
     assert components["finding_vetter"] is None
     assert "window" not in components
     assert digest != interventions_fingerprint("live", retry_cap=1)[0]
@@ -664,8 +664,9 @@ def test_the_runner_knows_the_component_and_its_backend() -> None:
 def test_validation_coerces_null_like_text_and_keeps_an_empty_quote() -> None:
     wire = InterventionsRecordCarrier(
         intervention=" youth guarantee ", role="evaluated", design_features=["", "universal"],
-        is_bundle=False, components=[], outcome="None", population=None, setting="unknown",
-        study_geography="Denmark", study_design=None, quote="", covers_no_intervention=False,
+        is_bundle=False, components=[], outcome="None", unit=None, programme_name=None,
+        setting="unknown", study_geography="Denmark", study_country=None, study_design=None,
+        quote="", covers_no_intervention=False,
     )
     validated = validate_interventions_record(wire)
     assert validated.grain_invalid is False
@@ -677,8 +678,10 @@ def test_validation_coerces_null_like_text_and_keeps_an_empty_quote() -> None:
     assert sorted(validated.coerced_null_fields) == ["outcome", "setting"]
     assert validated.field_coverage == {
         "outcome": "not_extracted",
-        "population": "not_extracted",
+        "unit": "not_extracted",
+        "programme_name": "not_extracted",
         "setting": "not_extracted",
+        "study_country": "not_extracted",
         "study_design": "not_extracted",
     }
 
@@ -687,8 +690,9 @@ def test_dedup_keeps_distinct_stated_designs_apart() -> None:
     def _stored(**over: Any) -> Any:
         base: dict[str, Any] = {
             "intervention": "youth guarantee", "role": "evaluated", "design_features": [],
-            "is_bundle": False, "components": [], "outcome": None, "population": None,
-            "setting": None, "study_geography": None, "study_design": None, "quote": "q",
+            "is_bundle": False, "components": [], "outcome": None, "unit": None,
+            "programme_name": None, "setting": None, "study_geography": None,
+            "study_country": None, "study_design": None, "quote": "q",
             "covers_no_intervention": False,
         }
         base.update(over)
@@ -802,3 +806,56 @@ def test_a_sibling_walk_s_memo_row_is_reused_not_a_failed_transaction(
     ).scalar_one() == 1
     # The losing write's records rolled back with its savepoint.
     assert [row.intervention for row in _records(conn, task_id)] == ["free swimming"]
+
+
+# --- the record's programme name and study country (task 046, amendment 3) --------
+
+
+def _carrier(**over: Any) -> InterventionsRecordCarrier:
+    base: dict[str, Any] = {
+        "intervention": "free school meals", "role": "evaluated", "design_features": [],
+        "is_bundle": False, "components": [], "outcome": None, "unit": None,
+        "programme_name": None, "setting": None, "study_geography": None,
+        "study_country": None, "study_design": None, "quote": "q",
+        "covers_no_intervention": False,
+    }
+    base.update(over)
+    return InterventionsRecordCarrier(**base)
+
+
+def test_the_schema_version_names_the_second_record_shape() -> None:
+    from policy_atlas.evidence_search.extract.interventions_records import SCHEMA_VERSION
+
+    assert SCHEMA_VERSION == "interventions_v2"
+
+
+def test_a_record_with_a_programme_name_and_one_without() -> None:
+    named = validate_interventions_record(
+        _carrier(programme_name=" Magic Breakfast ", study_country="United Kingdom")
+    ).record
+    unnamed = validate_interventions_record(_carrier()).record
+    assert named is not None and unnamed is not None
+    assert named.programme_name == "Magic Breakfast"
+    assert named.study_country == "United Kingdom"
+    assert unnamed.programme_name is None and unnamed.study_country is None
+
+
+def test_blank_programme_name_and_study_country_become_null() -> None:
+    validated = validate_interventions_record(_carrier(programme_name="  ", study_country="n/a"))
+    assert validated.record is not None
+    assert validated.record.programme_name is None
+    assert validated.record.study_country is None
+    assert validated.field_coverage["programme_name"] == "not_extracted"
+    assert validated.field_coverage["study_country"] == "not_extracted"
+    assert sorted(validated.coerced_null_fields) == ["programme_name", "study_country"]
+
+
+def test_the_unit_tag_values_are_unchanged() -> None:
+    from typing import get_args
+
+    from policy_atlas.evidence_search.extract.interventions_records import UnitTag
+
+    assert get_args(UnitTag) == ("on_target", "adjacent", "other")
+    for tag in ("on_target", "adjacent", "other"):
+        record = validate_interventions_record(_carrier(unit_tag=tag)).record
+        assert record is not None and record.unit_tag == tag

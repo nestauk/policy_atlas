@@ -385,13 +385,15 @@ _INTERVENTIONS_RECORD_DEFAULTS: dict[str, Any] = {
     "is_bundle": False,
     "components": [],
     "outcome": None,
-    "population": None,
+    "unit": None,
+    "programme_name": None,
     "setting": None,
     "study_geography": None,
+    "study_country": None,
     "study_design": None,
     # The plan-relative tags (task 046, S4): a sentinel record may omit them;
     # absent is "not tagged", the context-free value.
-    "population_tag": None,
+    "unit_tag": None,
     "outcome_tag": None,
     "object_tag": None,
 }

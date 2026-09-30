@@ -147,6 +147,10 @@ class CoverageMember:
         setting: The record's setting text.
         outcome: The record's outcome text.
         study_geography: The record's study geography text.
+        programme_name: The record's programme name (task 046, amendment 3),
+            ``None`` for a linked finding.
+        study_country: The record's study country (task 046, amendment 3),
+            ``None`` for a linked finding.
         intervention: The record's intervention name (the *variants*).
         unit_tag: The record's unit tag, ``None`` when not tagged
             (task 046).
@@ -168,6 +172,8 @@ class CoverageMember:
     intervention: str | None = None
     unit_tag: str | None = None
     outcome_tag: str | None = None
+    programme_name: str | None = None
+    study_country: str | None = None
 
 
 @dataclass(frozen=True)

@@ -3229,6 +3229,8 @@ class _SearchUnit:
     unit_tag: str | None = None
     intervention: str | None = None
     outcome_tag: str | None = None
+    programme_name: str | None = None
+    study_country: str | None = None
 
 
 @dataclass(frozen=True)
@@ -3347,6 +3349,8 @@ def _added_searches(
                 ipr.c.unit_tag,
                 ipr.c.outcome_tag,
                 ipr.c.intervention,
+                ipr.c.programme_name,
+                ipr.c.study_country,
                 source_extraction_record.c.task_source_snapshot_id,
                 source_extraction_record.c.basis,
                 source_snapshot.c.metadata,
@@ -3391,6 +3395,8 @@ def _added_searches(
                 unit_tag=row.unit_tag,
                 outcome_tag=row.outcome_tag,
                 intervention=row.intervention,
+                programme_name=row.programme_name,
+                study_country=row.study_country,
             )
             for scope in scopes_of[row.extraction_record_id]:
                 units_by_scope.setdefault(scope, []).append(unit)
@@ -3455,6 +3461,8 @@ def _search_coverage(
                 intervention=unit.intervention,
                 unit_tag=unit.unit_tag,
                 outcome_tag=unit.outcome_tag,
+                programme_name=unit.programme_name,
+                study_country=unit.study_country,
             )
             for unit in search.units
         ],

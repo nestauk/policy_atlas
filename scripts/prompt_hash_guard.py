@@ -35,12 +35,18 @@ HASH_LIST_PATH = Path(__file__).resolve().parent / "prompt_hashes.json"
 PROMPT_ROOT = Path(__file__).resolve().parent.parent / "backend" / "src" / "policy_atlas"
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
+#: Files that carry model-facing prompt text without "prompt" in the name (repo-relative).
+EXTRA_FILES: tuple[str, ...] = (
+    # The intervention record's Field descriptions are the model's schema (task 046, amendment 3).
+    "backend/src/policy_atlas/evidence_search/extract/interventions_records.py",
+)
+
 
 def prompt_files() -> list[Path]:
-    """Every file under backend/src/policy_atlas whose name contains "prompt"."""
-    return sorted(
-        path for path in PROMPT_ROOT.rglob("*.py") if "prompt" in path.name.lower()
-    )
+    """Every file under backend/src/policy_atlas whose name contains "prompt", plus EXTRA_FILES."""
+    found = {path for path in PROMPT_ROOT.rglob("*.py") if "prompt" in path.name.lower()}
+    found.update(REPO_ROOT / extra for extra in EXTRA_FILES)
+    return sorted(found)
 
 
 def rel(path: Path) -> str:

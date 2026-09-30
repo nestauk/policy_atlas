@@ -25,7 +25,7 @@ from policy_atlas.evidence_search.extract.finding_references import render_field
 from policy_atlas.evidence_search.extract.quote_verify import NULL_LIKE_STRINGS
 
 PROFILE_ID = "os_interventions_base_v1"
-SCHEMA_VERSION = "interventions_v1"
+SCHEMA_VERSION = "interventions_v2"
 
 InterventionRole = Literal["evaluated", "described", "recommended", "comparator", "mentioned"]
 
@@ -33,10 +33,10 @@ InterventionRole = Literal["evaluated", "described", "recommended", "comparator"
 assert get_args(InterventionRole) == INTERVENTION_ROLES
 
 #: The plan-relative tags (task 046, S5). Null on a record means "not tagged".
-PopulationTag = Literal["on_target", "adjacent", "other"]
+UnitTag = Literal["on_target", "adjacent", "other"]
 ObjectTag = Literal["plan_object", "option", "neither"]
 
-assert get_args(PopulationTag) == UNIT_TAGS
+assert get_args(UnitTag) == UNIT_TAGS
 assert get_args(ObjectTag) == OBJECT_TAGS
 
 
@@ -98,9 +98,20 @@ class InterventionsRecordWire(BaseModel):
             "treats as primary."
         )
     )
-    population: str | None = Field(
+    unit: str | None = Field(
         description=(
-            "The population this intervention was delivered to, as the abstract names it, or null."
+            "Who or what this intervention was delivered to (people, organisations, "
+            "sites or things), as the abstract names them ('adults aged 60 to 70', "
+            "'small manufacturing firms', 'primary schools', 'social housing flats'), "
+            "or null."
+        )
+    )
+    programme_name: str | None = Field(
+        description=(
+            "The proper name the abstract gives for THIS intervention: a programme, "
+            "scheme, law or service with a name of its own ('Sure Start', 'Soft Drinks "
+            "Industry Levy'), or null. Never the name of a strategy, fund or wider "
+            "programme it sits within; never a common-noun phrase."
         )
     )
     setting: str | None = Field(
@@ -123,6 +134,17 @@ class InterventionsRecordWire(BaseModel):
             "authors."
         )
     )
+    study_country: str | None = Field(
+        description=(
+            "The country of the place where the evidence about this intervention was "
+            "gathered, from the stated place and where that place is ('Hamburg' gives "
+            "'Germany'): every country the abstract names, separated by '; ', each as "
+            "its short English name ('United Kingdom', never 'UK'; England, Scotland, "
+            "Wales and Northern Ireland give 'United Kingdom'); 'multiple' for a group "
+            "named without its countries ('12 OECD countries'); null when no place is "
+            "stated. Never from the publisher, journal or authors."
+        )
+    )
     study_design: str | None = Field(
         description=(
             "The study design the abstract states ('cluster randomised trial', "
@@ -137,15 +159,14 @@ class InterventionsRecordWire(BaseModel):
             "two places."
         )
     )
-    population_tag: PopulationTag | None = Field(
+    unit_tag: UnitTag | None = Field(
         description=(
-            "A sorting label against the policy context's target_unit: "
-            "'on_target' (the same kind of people or bodies as the target "
-            "unit, or a part of them), 'adjacent' (a wider group that "
-            "contains it, or a neighbouring group the same kind of action "
-            "reaches), 'other' (no such link, or no group can be read from "
-            "the document). The place of the study never decides it. Null "
-            "only when the policy context is null."
+            "A sorting label against the policy context's target_unit: 'on_target' (the "
+            "same kind of people, organisations or things as the target unit, or a part "
+            "of them), 'adjacent' (a wider group that contains it, or a neighbouring "
+            "group the same kind of action reaches), 'other' (no such link, or no unit "
+            "can be read from the document). The place of the study never decides it. "
+            "Null only when the policy context is null."
         )
     )
     outcome_tag: str | None = Field(
@@ -217,7 +238,15 @@ def render_interventions_field_docs() -> str:
 #: The field-rule set the validator below applies; a fingerprint component.
 INTERVENTIONS_FIELD_RULES_VERSION = "interventions_rules_v1"
 
-_NULLABLE_TEXT_FIELDS = ("outcome", "population", "setting", "study_geography", "study_design")
+_NULLABLE_TEXT_FIELDS = (
+    "outcome",
+    "unit",
+    "programme_name",
+    "setting",
+    "study_geography",
+    "study_country",
+    "study_design",
+)
 
 
 @dataclass(frozen=True)
@@ -309,7 +338,7 @@ def apply_tagging_rules(
     if context is None:
         return TaggedRecord(
             record=record.model_copy(
-                update={"population_tag": None, "outcome_tag": None, "object_tag": None}
+                update={"unit_tag": None, "outcome_tag": None, "object_tag": None}
             ),
             outcome_tag_repaired=False,
         )
@@ -346,7 +375,7 @@ class InterventionsRecordCarrier(InterventionsRecordWire):
     """
 
     covers_no_intervention: bool
-    population_tag: PopulationTag | None = None
+    unit_tag: UnitTag | None = None
     outcome_tag: str | None = None
     object_tag: ObjectTag | None = None
 
@@ -362,13 +391,15 @@ class InterventionsRecord(BaseModel):
     is_bundle: bool
     components: list[str]
     outcome: str | None
-    population: str | None
+    unit: str | None
+    programme_name: str | None
     setting: str | None
     study_geography: str | None
+    study_country: str | None
     study_design: str | None
     quote: str
     covers_no_intervention: bool
-    population_tag: PopulationTag | None = None
+    unit_tag: UnitTag | None = None
     outcome_tag: str | None = None
     object_tag: ObjectTag | None = None
 
@@ -462,13 +493,15 @@ def validate_interventions_record(
         is_bundle=wire.is_bundle,
         components=_clean_list(wire.components),
         outcome=text_values["outcome"],
-        population=text_values["population"],
+        unit=text_values["unit"],
+        programme_name=text_values["programme_name"],
         setting=text_values["setting"],
         study_geography=text_values["study_geography"],
+        study_country=text_values["study_country"],
         study_design=text_values["study_design"],
         quote=wire.quote,
         covers_no_intervention=wire.covers_no_intervention,
-        population_tag=wire.population_tag,
+        unit_tag=wire.unit_tag,
         outcome_tag=_coerce(wire.outcome_tag),
         object_tag=wire.object_tag,
     )

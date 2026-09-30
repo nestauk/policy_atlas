@@ -64,11 +64,12 @@ from tests.runtime.test_baseline_gate import scoping_plan
 
 #: The intervention profile's fingerprint with no tagging context, pinned so a
 #: context-free run keeps reusing every stored record. Re-pinned for the
-#: prompt version ``extract_interventions_v2`` (task 046 Phase 4): the prompt
-#: version is a fingerprint component, so the v1 values no longer apply.
+#: prompt version ``extract_interventions_v3`` and schema ``interventions_v2``
+#: (task 046, amendment 3, Phase 16R): both are fingerprint components, so the
+#: earlier values no longer apply.
 PINNED_NO_CONTEXT = {
-    "stub": "12529134d686dea40879dce125826286deeb2bf826a9803fd9361266976ca9a9",
-    "live": "c325937a04e248bc01dfff80a6cbbf77875f38fb17207fe7bfde0d2abdc51f71",
+    "stub": "130fbbc1e817f950bd5cc489ae414881b3daf7891db0c996788dda9c35105f7a",
+    "live": "4e4284db0c516cbfc84715451b979a6e05b8bf22d449eb7c28429d6ae450394a",
 }
 
 CONTEXT = TaggingContext(
@@ -323,8 +324,8 @@ def test_a_present_profile_stores_null_tags_that_read_back_as_none(conn: Connect
 def _stored_record(**tags: Any) -> InterventionsRecord:
     return InterventionsRecord(
         intervention="Youth guarantee", role="evaluated", design_features=[],
-        is_bundle=False, components=[], outcome=None, population=None, setting=None,
-        study_geography=None, study_design=None, quote="Youth guarantee",
+        is_bundle=False, components=[], outcome=None, unit=None, programme_name=None, setting=None,
+        study_geography=None, study_country=None, study_design=None, quote="Youth guarantee",
         covers_no_intervention=False, **tags,
     )
 
@@ -347,7 +348,7 @@ def test_the_writer_stores_the_tags_and_nulls(conn: Connection) -> None:
     record_id = _extraction_record(conn, task_id)
     write_interventions_record(
         conn, task_id, record_id,
-        _stored_record(population_tag="adjacent", outcome_tag="employment rate",
+        _stored_record(unit_tag="adjacent", outcome_tag="employment rate",
                        object_tag="option"),
         [], {}, now(),
     )
@@ -385,26 +386,27 @@ def test_the_closed_tags_are_checked(conn: Connection, column: str, constraint: 
 def test_validation_carries_the_tags_and_coerces_a_null_like_outcome_tag() -> None:
     base: dict[str, Any] = {
         "intervention": "youth guarantee", "role": "evaluated", "design_features": [],
-        "is_bundle": False, "components": [], "outcome": None, "population": None,
-        "setting": None, "study_geography": None, "study_design": None,
+        "is_bundle": False, "components": [], "outcome": None, "unit": None,
+        "programme_name": None, "setting": None, "study_geography": None,
+        "study_country": None, "study_design": None,
         "quote": "youth guarantee", "covers_no_intervention": False,
     }
     tagged = validate_interventions_record(InterventionsRecordCarrier(
-        **base, population_tag="on_target", outcome_tag=" employment rate ",
+        **base, unit_tag="on_target", outcome_tag=" employment rate ",
         object_tag="plan_object",
     ))
     assert tagged.record is not None
     assert (
-        tagged.record.population_tag, tagged.record.outcome_tag, tagged.record.object_tag
+        tagged.record.unit_tag, tagged.record.outcome_tag, tagged.record.object_tag
     ) == ("on_target", "employment rate", "plan_object")
-    assert "population_tag" not in tagged.field_coverage
+    assert "unit_tag" not in tagged.field_coverage
 
     untagged = validate_interventions_record(
         InterventionsRecordCarrier(**base, outcome_tag="n/a")
     )
     assert untagged.record is not None
     assert (
-        untagged.record.population_tag, untagged.record.outcome_tag, untagged.record.object_tag
+        untagged.record.unit_tag, untagged.record.outcome_tag, untagged.record.object_tag
     ) == (None, None, None)
 
 

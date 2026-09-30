@@ -471,3 +471,33 @@ def test_an_option_the_user_named_is_never_a_folded_seed(conn: Connection) -> No
         option_ids=[kept],
     )[str(kept)]
     assert all(not v["folded_seed"] for v in coverage["variants"])
+
+
+# --- the record's programme name and study country (task 046, amendment 3) ---------
+
+
+def test_coverage_members_carry_the_programme_name_and_study_country(
+    conn: Connection,
+) -> None:
+    from policy_atlas.options_scoping.longlist.longlist import _coverage_member, _own_units
+
+    walk = _Walk(conn)
+    fingerprint = _current_fingerprint(walk)
+    doc = walk.doc()
+    ser = _extraction(walk, doc, fingerprint=fingerprint)
+    _record_under(
+        walk, ser, "free school meals",
+        programme_name="Magic Breakfast", study_country="United Kingdom",
+    )
+    _rollup_of(walk, walk.scope_id, {doc: ser})
+    own = _own_units(
+        conn,
+        task_id=walk.task_id,
+        scope_ids=[walk.scope_id],
+        current_fingerprints=frozenset({fingerprint}),
+    )
+    (unit,) = own.units
+    member = _coverage_member(unit, flagged=False)
+    assert member.programme_name == "Magic Breakfast"
+    assert member.study_country == "United Kingdom"
+    assert _member("x").programme_name is None and _member("x").study_country is None

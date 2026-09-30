@@ -261,6 +261,8 @@ class _Unit:
     unit_tag: str | None = None
     outcome_tag: str | None = None
     object_tag: str | None = None
+    programme_name: str | None = None
+    study_country: str | None = None
 
 
 def _bound(value: object, limit: int = UNIT_TEXT_MAX) -> str | None:
@@ -585,6 +587,8 @@ def _own_units(
                 unit_tag=unit_tag,
                 outcome_tag=outcome_tag,
                 object_tag=object_tag,
+                programme_name=row.programme_name,
+                study_country=row.study_country,
             )
         )
     return _OwnUnits(
@@ -1412,6 +1416,8 @@ def _coverage_member(unit: _Unit, *, flagged: bool) -> CoverageMember:
         intervention=intervention if isinstance(intervention, str) else None,
         unit_tag=unit.unit_tag,
         outcome_tag=unit.outcome_tag if unit.kind == "interventions" else None,
+        programme_name=unit.programme_name,
+        study_country=unit.study_country,
     )
 
 

@@ -41,7 +41,7 @@ from policy_atlas.evidence_search.extract.interventions_records import (
 )
 from policy_atlas.evidence_search.extract.iof_prompt import UNCLASSIFIED_EVIDENCE_TYPE
 
-PROMPT_VERSION = "extract_interventions_v2"
+PROMPT_VERSION = "extract_interventions_v3"
 
 # The mini model, as the contract's model route states: about 3,000 prompt
 # tokens per document, one call per screened-in document.
@@ -85,16 +85,18 @@ EXAMPLE_RESPONSE = InterventionsResponse(
             is_bundle=False,
             components=[],
             outcome="employment rates",
-            population="young people not in education, employment or training",
+            unit="young people not in education, employment or training",
+            programme_name=None,
             setting=None,
             study_geography="eight European countries",
+            study_country="multiple",
             study_design="systematic review of 14 studies",
             quote=(
                 "youth guarantee schemes, which offer every young person an "
                 "offer of work, training or education within four months of "
                 "leaving school or becoming unemployed"
             ),
-            population_tag="on_target",
+            unit_tag="on_target",
             outcome_tag="employment rate at 12 months",
             object_tag="option",
         ),
@@ -105,12 +107,14 @@ EXAMPLE_RESPONSE = InterventionsResponse(
             is_bundle=False,
             components=[],
             outcome="employment rates",
-            population="young people not in education, employment or training",
+            unit="young people not in education, employment or training",
+            programme_name=None,
             setting="Jobcentres",
             study_geography="eight European countries",
+            study_country="multiple",
             study_design="systematic review of 14 studies",
             quote="young people receiving standard Jobcentre support",
-            population_tag="on_target",
+            unit_tag="on_target",
             outcome_tag="employment rate at 12 months",
             object_tag="neither",
         ),
@@ -121,12 +125,14 @@ EXAMPLE_RESPONSE = InterventionsResponse(
             is_bundle=False,
             components=[],
             outcome=None,
-            population=None,
+            unit=None,
+            programme_name=None,
             setting=None,
             study_geography=None,
+            study_country=None,
             study_design=None,
             quote="pairing the guarantee with employer wage subsidies",
-            population_tag="other",
+            unit_tag="other",
             outcome_tag="other",
             object_tag="option",
         ),
@@ -239,6 +245,17 @@ Design features — stated, never guessed:
 
 Reference fields — copied, never inferred:
 - outcome is a base measure with no direction word.
+- unit is who or what the intervention was delivered to: people,
+  organisations, sites or things, as the abstract names them ('children
+  aged 6 to 11', 'general practices', 'rented homes'). Not only people: a
+  rule on firms has firms as its unit; a retrofit of homes has homes.
+- programme_name is the proper name the abstract gives for THIS
+  intervention: a programme, scheme, law or service with a name of its
+  own ('Sure Start', 'the Soft Drinks Industry Levy'). Null when the
+  abstract gives none, when the intervention is described in common nouns
+  only, and when the only name is of something the intervention sits
+  within (a strategy, a fund, a wider programme): that is its name, not
+  this one's.
 - setting is the KIND of place where recipients meet the intervention:
   school, home, workplace, primary care, hospital, community venue, online.
   A common noun, as the abstract has it. Never a country, region, city or
@@ -253,6 +270,15 @@ Reference fields — copied, never inferred:
   abstract states it. Never infer it from the publisher, the journal or the
   authors — a US-published journal can carry a Kenyan trial. Null when the
   abstract does not say.
+- study_country is the country of the stated place, from the abstract's
+  words and where that place is: 'Hamburg' gives 'Germany'; 'Bristol'
+  gives 'United Kingdom'. Every country the abstract names, separated by
+  '; '. Each as its short English name: 'United Kingdom', never 'UK' or
+  'Britain'; 'United States', never 'US'. England, Scotland, Wales and
+  Northern Ireland give 'United Kingdom'. 'multiple' when the abstract
+  names a group without its countries ('12 OECD countries', 'eight
+  European countries'). Null when the abstract states no place — never
+  from the publisher, the journal or the authors.
 - study_design is the design the abstract states, or null.
 
 Tags — sorting labels against the policy question, never content:
@@ -263,13 +289,15 @@ tag fields ONLY. It never changes what you record: the intervention, its
 role, its features and every reference field come from the title and
 abstract alone, exactly as they would with no policy context. A record is
 never added or left out because of the policy context; an intervention for
-another population or another outcome is still a record, tagged so.
+another unit or another outcome is still a record, tagged so.
 The tags sort records for a reader; they are read generously, from the
 whole title and abstract, and 'other' is the answer only when nothing
 closer is true.
-- population_tag: who this intervention is for in this document, against
-  target_unit. Use the record's population; when the record has none,
-  use the people or bodies the title and abstract are about.
+- unit_tag: who or what this intervention is for in this document,
+  against target_unit. Use the record's unit; when the record has none,
+  use the people, organisations or things the title and abstract are
+  about. A place named in target_unit or intended_change is the user's
+  place, not a criterion: tag as if the context named no place.
   - 'on_target': the same kind of people or bodies as the target unit, or
     a part of them. An exact match of age band or wording is not needed:
     for a target unit "children aged 4 to 11 in the most deprived fifth of
@@ -283,7 +311,7 @@ closer is true.
   - 'other': a group with no such link (adults in a workplace study, for
     a plan about children), or no group can be read from the document.
   The country or place of the study never decides this tag: refugees in
-  Australia are on_target for a plan about refugees.
+  Australia are on_target for a plan about refugees in England.
 - outcome_tag: which entry of outcomes this record bears on. Copy that ONE
   entry character for character. It bears on an entry when its outcome
   - IS that outcome, measured in any way (for "prevalence of obesity at
