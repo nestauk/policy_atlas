@@ -24,14 +24,14 @@ import uuid
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select, update
 from sqlalchemy.engine import Connection, Engine
 
-from policy_atlas.api.contract import TriedOnOut, VariantOut
+from policy_atlas.api.contract import OptionDocumentOut, TriedOnOut, VariantOut
 from policy_atlas.api.deps import get_agent_backend, get_runner_backends
 from policy_atlas.api.readmodels import repository
 from policy_atlas.core.schema import (
@@ -617,7 +617,7 @@ def test_the_card_carries_every_section_and_never_how_sure(
         assert evidence["flagged_not_stated"] == 0  # the DOI twin states the feature
         assert evidence["by_role"]["evaluated"] >= 1
         assert evidence["populations"] == ["16 to 24 year olds"]
-        # The documents: one per membership row, never DOI-collapsed.
+        # The documents: one per document, DOI twins collapsed (R67).
         documents = card["documents"]
         with engine.connect() as conn:
             members = conn.execute(
@@ -625,25 +625,18 @@ def test_the_card_carries_every_section_and_never_how_sure(
                     option_membership.c.option_id == built.options["Youth guarantee"]
                 )
             ).all()
-        assert len(documents) == len(members) == 4
+        assert len(members) == 4 and len(documents) == 2
         titles = sorted(d["title"] for d in documents)
-        assert titles == [
-            "A deep read",
-            "A deep read",
-            "UK guarantee evaluation",
-            "UK guarantee preprint",
-        ]
+        assert titles == ["A deep read", "UK guarantee evaluation"]
         inherited = [d for d in documents if d["title"] == "A deep read"]
         assert {d["source_task_id"] for d in inherited} == {str(built.source_task_id)}
-        assert {d["role"] for d in inherited} == {"evaluated", "described"}
+        assert {d["role"] for d in inherited} == {"evaluated"}
         # The label came through the link, read by the resolver.
         assert {d["evidence_type"] for d in inherited} == {RCT}
         assert all(d["task_source_snapshot_id"] is not None for d in inherited)
         evaluation = next(d for d in documents if d["title"] == "UK guarantee evaluation")
         assert evaluation["tier"] == "Strong" and evaluation["where_tried_group"] == "where"
-        assert evaluation["source_task_id"] is None
-        preprint = next(d for d in documents if d["title"] == "UK guarantee preprint")
-        assert preprint["design_feature_not_stated"] is True
+        assert evaluation["source_task_id"] is None and evaluation["year"] == 2022
 
         mentoring = _card(client, built, "Mentoring", owner.headers).json()
         assert mentoring["in_scope"] == {
@@ -1489,11 +1482,10 @@ def test_an_added_option_reads_its_own_search_until_the_next_build(conn: Connect
     # evidence profile keeps the records' own words.
     assert card.settings == []
     assert card.evidence.settings == ["Employers"]
-    # One per record, never collapsed; the comparator is not a document.
+    # One per document, the DOI twins collapsed; the comparator is not a document.
     assert sorted(d.title for d in card.documents) == [
         "A Danish wage subsidy",
         "Wage subsidy trial",
-        "Wage subsidy trial (preprint)",
     ]
     trial = next(d for d in card.documents if d.title == "Wage subsidy trial")
     assert trial.tier == "Strong" and trial.where_tried_group == "where"
@@ -1504,6 +1496,94 @@ def test_an_added_option_reads_its_own_search_until_the_next_build(conn: Connect
     # A build-assigned option is untouched by the rule.
     seeded = next(o for o in listed.options if o.name == "Youth guarantee")
     assert seeded.search_pending is False
+
+
+def _added_option_search(conn: Connection) -> tuple[_Walk, uuid.UUID, uuid.UUID]:
+    """An added option with a succeeded option search; returns the walk, option and scope."""
+    walk = _Walk(conn)
+    walk.option("Youth guarantee", origin="added_by_you")
+    walk.build(_Scripted())
+    added = walk.option("Wage subsidy", origin="added_by_you")
+    scope_id = uuid.uuid4()
+    conn.execute(
+        evidence_scope.insert().values(
+            evidence_scope_id=scope_id,
+            task_id=walk.task_id,
+            intent="Wage subsidy.",
+            context={"capability": "options_scoping", "option_id": str(added)},
+            created_at=now(),
+            purpose="targeted",
+            plan_id=walk.plan_id,
+        )
+    )
+    conn.execute(
+        capability_run.insert().values(
+            capability_run_id=uuid.uuid4(),
+            task_id=walk.task_id,
+            evidence_scope_id=scope_id,
+            capability="options_scoping",
+            plan_id=walk.plan_id,
+            plan_version=2,
+            status="succeeded",
+            started_at=now(),
+            ended_at=now(),
+            parent_capability_run_id=None,
+        )
+    )
+    return walk, added, scope_id
+
+
+def test_the_documents_are_one_per_document_best_first_with_a_year(conn: Connection) -> None:
+    """Task 046, amendment 3 (R67): DOI twins collapse to one entry with the highest
+    role; evaluated first, then quality descending; year from the metadata; entities
+    decoded in the title."""
+    walk, added, scope_id = _added_option_search(conn)
+    first = walk.doc({"title": "Wage subsidy trial", "doi": "10.9/ws", "publication_year": 2021})
+    twin = walk.doc({"title": "Wage subsidy trial (preprint)", "doi": "https://doi.org/10.9/WS"})
+    strong = walk.doc({"title": "Strong description", "publication_date": "2018-05-01"})
+    weak = walk.doc({"title": "Weak description", "publication_year": 2010})
+    entity = walk.doc({"title": "R&amp;D credits", "publication_year": 2019})
+    for doc, score in ((first, 3), (twin, 3), (strong, 5), (weak, 2), (entity, 5)):
+        walk.classify(doc, RCT, score)
+    walk.record(first, "wage subsidy", role="mentioned")
+    walk.record(twin, "wage subsidy", role="evaluated")
+    walk.record(strong, "wage subsidy", role="described")
+    walk.record(weak, "wage subsidy", role="described")
+    walk.record(entity, "wage subsidy", role="described")
+    walk.rollup(scope_id, [first, twin, strong, weak, entity])
+
+    card = repository.option_out(conn, walk.task_id, added)
+    assert card is not None
+    assert [(d.title, d.role, d.year) for d in card.documents] == [
+        ("Wage subsidy trial", "evaluated", 2021),
+        ("R&D credits", "described", 2019),
+        ("Strong description", "described", 2018),
+        ("Weak description", "described", 2010),
+    ]
+    assert card.documents[0].task_source_snapshot_id in {first, twin}
+
+
+def test_a_document_with_no_row_here_takes_its_twin_s_own_row() -> None:
+    from policy_atlas.api.readmodels.repository import _collapse_documents
+
+    own = uuid.uuid4()
+
+    def entry(tss_id: uuid.UUID | None, role: str, key: str) -> Any:
+        doc = OptionDocumentOut(
+            task_source_snapshot_id=tss_id,
+            title="Same paper",
+            role=cast(Any, role),
+            where_tried_group="unknown",
+        )
+        return (key, doc, None)
+
+    out = _collapse_documents(
+        [entry(None, "evaluated", "doi:10.1/x"), entry(own, "mentioned", "doi:10.1/x")]
+    )
+    assert len(out) == 1
+    assert out[0].task_source_snapshot_id == own and out[0].role == "evaluated"
+    only = _collapse_documents([entry(None, "described", "doi:10.1/y")])
+    assert only[0].task_source_snapshot_id is None
 
 
 # --- step-7 fixes (A4, A5, S2, F3) ----------------------------------------------------

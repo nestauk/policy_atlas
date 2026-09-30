@@ -1177,7 +1177,7 @@ class InScopeOut(BaseModel):
 
 
 class OptionDocumentOut(BaseModel):
-    """One document behind an option ("Show the documents"), one per membership row.
+    """One document behind an option ("Show the documents"), one per document.
 
     Args:
         task_source_snapshot_id: This task's document row, when the task holds one.
@@ -1187,6 +1187,7 @@ class OptionDocumentOut(BaseModel):
         tier: Its quality tier label, when appraised.
         design_feature_not_stated: It covers the intervention without stating
             the feature that defines this option.
+        year: Its publication year, when the metadata has one.
         where_tried_group: Where it was studied, grouped against Where.
         source_task_id: The linked task the document or its labels came from,
             when inherited.
@@ -1198,6 +1199,7 @@ class OptionDocumentOut(BaseModel):
     evidence_type: str | None = None
     tier: str | None = None
     design_feature_not_stated: bool = False
+    year: int | None = None
     where_tried_group: WhereTriedGroup
     source_task_id: uuid.UUID | None = None
 

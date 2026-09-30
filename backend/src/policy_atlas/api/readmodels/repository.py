@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import html
+import re
 import uuid
 from collections import Counter
 from collections.abc import Collection, Iterable, Mapping, Sequence
@@ -119,6 +121,7 @@ from policy_atlas.evidence_search.extract.interventions_records import (
 from policy_atlas.evidence_search.extract.quote_verify import build_basis, locate_unique_span
 from policy_atlas.options_scoping.labels import DocumentLabels, labels_for_snapshots
 from policy_atlas.options_scoping.longlist.coverage import (
+    ROLE_BUCKETS,
     CoverageMember,
     document_key,
     empty_coverage,
@@ -150,7 +153,8 @@ def _metadata_text(metadata: Mapping[str, Any], key: str) -> str | None:
 
 
 def _title(metadata: Mapping[str, Any], locator: str) -> str:
-    return _metadata_text(metadata, "title") or locator
+    title = _metadata_text(metadata, "title")
+    return html.unescape(title) if title else locator
 
 
 def _abstract_fields(
@@ -167,6 +171,59 @@ def _abstract_fields(
 def _year(metadata: Mapping[str, Any]) -> int | None:
     value = metadata.get("publication_year", metadata.get("year"))
     return value if isinstance(value, int) and not isinstance(value, bool) else None
+
+
+def _document_year(metadata: Mapping[str, Any]) -> int | None:
+    """The four-digit year of a document's metadata, or ``None``."""
+    year = _year(metadata)
+    if year is not None:
+        return year
+    for key in ("publication_year", "year", "publication_date", "published"):
+        value = metadata.get(key)
+        if isinstance(value, str) and re.match(r"\d{4}", value.strip()):
+            return int(value.strip()[:4])
+    return None
+
+
+def _collapse_documents(
+    entries: list[tuple[str, OptionDocumentOut, int | None]],
+) -> list[OptionDocumentOut]:
+    """One entry per document (task 046, amendment 3, R67), best first.
+
+    Args:
+        entries: ``(document key, document, quality score)`` per record.
+
+    Returns:
+        One document per key: the task's own row as its id when any record
+        has one, the highest role, ordered evaluated first, then quality
+        score descending (unrated last), then title and id.
+    """
+    rank = {role: index for index, role in enumerate(ROLE_BUCKETS)}
+    groups: dict[str, list[tuple[OptionDocumentOut, int | None]]] = {}
+    for key, document, score in entries:
+        groups.setdefault(key, []).append((document, score))
+    merged: list[tuple[OptionDocumentOut, int | None]] = []
+    for group in groups.values():
+        best_role = min((doc.role for doc, _ in group), key=lambda role: rank[role])
+        own = [item for item in group if item[0].task_source_snapshot_id is not None]
+        document, score = min(
+            own or group,
+            key=lambda item: (
+                -(item[1] if item[1] is not None else -1),
+                item[0].title.casefold(),
+                str(item[0].task_source_snapshot_id or ""),
+            ),
+        )
+        merged.append((document.model_copy(update={"role": best_role}), score))
+    merged.sort(
+        key=lambda item: (
+            item[0].role != "evaluated",
+            -(item[1] if item[1] is not None else -1),
+            item[0].title.casefold(),
+            str(item[0].task_source_snapshot_id or ""),
+        )
+    )
+    return [document for document, _ in merged]
 
 
 def _venue(metadata: Mapping[str, Any]) -> str | None:
@@ -3479,15 +3536,14 @@ def _search_documents(
     labels = labels_for_snapshots(
         conn, task_id=task_id, tss_ids={unit.tss_id for unit in search.units}
     )
-    out: list[tuple[str, str, OptionDocumentOut]] = []
-    for index, unit in enumerate(search.units):
+    out: list[tuple[str, OptionDocumentOut, int | None]] = []
+    for unit in search.units:
         label = labels.get(unit.tss_id)
         evidence_type, tier = _label_fields(label)
         title = _title(unit.metadata, unit.locator)
         out.append(
             (
-                title.casefold(),
-                f"{index:06d}",
+                document_key(doi=normalise_doi(unit.metadata), document_id=unit.tss_id),
                 OptionDocumentOut(
                     task_source_snapshot_id=unit.tss_id,
                     title=title,
@@ -3495,6 +3551,7 @@ def _search_documents(
                     evidence_type=evidence_type,
                     tier=tier,
                     design_feature_not_stated=False,
+                    year=_document_year(unit.metadata),
                     where_tried_group=where_group([unit.study_geography], home),
                     source_task_id=(
                         label.source_task_id
@@ -3502,9 +3559,10 @@ def _search_documents(
                         else None
                     ),
                 ),
+                label.quality_score if label is not None else None,
             )
         )
-    return [document for _, _, document in sorted(out, key=lambda item: item[:2])]
+    return _collapse_documents(out)
 
 
 def _home(plan: ScopingPlan | None) -> frozenset[str]:
@@ -3749,7 +3807,7 @@ def _label_fields(label: DocumentLabels | None) -> tuple[str | None, str | None]
 def _option_documents(
     conn: Connection, task_id: uuid.UUID, option_id: uuid.UUID, home: frozenset[str]
 ) -> list[OptionDocumentOut]:
-    """The documents behind an option, one per membership row (never DOI-collapsed).
+    """The documents behind an option, one per document (DOI twins collapsed, R67).
 
     Own records resolve through this task's document row; a linked task's
     finding resolves through the source task's document row (the reach the
@@ -3873,7 +3931,7 @@ def _option_documents(
         conn, task_id=task_id, tss_ids=member_tss | set(own_by_snapshot.values())
     )
 
-    out: list[tuple[str, str, OptionDocumentOut]] = []
+    out: list[tuple[str, OptionDocumentOut, int | None]] = []
     for member in members:
         if member.unit_kind == "interventions":
             record = records.get(member.unit_id)
@@ -3889,6 +3947,7 @@ def _option_documents(
             )
             role, geography = record.role, record.study_geography
             metadata, locator = _as_mapping(document.metadata), document.source_locator
+            doc_id: uuid.UUID = tss_id
         else:
             finding = findings.get((member.unit_task_id, member.unit_id))
             if finding is None:
@@ -3898,12 +3957,12 @@ def _option_documents(
             source_task_id = member.unit_task_id
             role, geography = _LINKED_FINDING_ROLE[member.unit_kind], finding.study_geography
             metadata, locator = _as_mapping(finding.metadata), finding.source_locator
+            doc_id = tss_id if tss_id is not None else finding.source_snapshot_id
         evidence_type, tier = _label_fields(label)
         title = _title(metadata, locator)
         out.append(
             (
-                title.casefold(),
-                str(member.membership_id),
+                document_key(doi=normalise_doi(metadata), document_id=doc_id),
                 OptionDocumentOut(
                     task_source_snapshot_id=tss_id,
                     title=title,
@@ -3911,12 +3970,14 @@ def _option_documents(
                     evidence_type=evidence_type,
                     tier=tier,
                     design_feature_not_stated=bool(member.design_feature_not_stated),
+                    year=_document_year(metadata),
                     where_tried_group=where_group([geography], home),
                     source_task_id=source_task_id,
                 ),
+                label.quality_score if label is not None else None,
             )
         )
-    return [document for _, _, document in sorted(out, key=lambda item: item[:2])]
+    return _collapse_documents(out)
 
 
 def option_out(conn: Connection, task_id: uuid.UUID, option_id: uuid.UUID) -> OptionOut | None:

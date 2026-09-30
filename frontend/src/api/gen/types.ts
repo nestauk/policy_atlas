@@ -3094,7 +3094,7 @@ export interface components {
         };
         /**
          * OptionDocumentOut
-         * @description One document behind an option ("Show the documents"), one per membership row.
+         * @description One document behind an option ("Show the documents"), one per document.
          *
          *     Args:
          *         task_source_snapshot_id: This task's document row, when the task holds one.
@@ -3104,6 +3104,7 @@ export interface components {
          *         tier: Its quality tier label, when appraised.
          *         design_feature_not_stated: It covers the intervention without stating
          *             the feature that defines this option.
+         *         year: Its publication year, when the metadata has one.
          *         where_tried_group: Where it was studied, grouped against Where.
          *         source_task_id: The linked task the document or its labels came from,
          *             when inherited.
@@ -3134,6 +3135,8 @@ export interface components {
              * @enum {string}
              */
             where_tried_group: "where" | "comparable" | "other" | "unknown";
+            /** Year */
+            year?: number | null;
         };
         /**
          * OptionExcludeIn

@@ -88,7 +88,7 @@ describe("OptionCard", () => {
     ).toBeGreaterThan(0);
     expect(screen.getByText("2 of the 6 were read from the abstract only.")).toBeInTheDocument();
     expect(screen.getByText("Benefit sanctions for young jobseekers: a systematic review")).toBeInTheDocument();
-    expect(screen.getAllByText("Evaluated it").length).toBe(2);
+    expect(screen.getByText("Strong · Systematic review · Evaluated it")).toBeInTheDocument();
     expect(screen.queryByText("A mention is not support.")).not.toBeInTheDocument();
   });
 
@@ -133,13 +133,42 @@ describe("OptionCard", () => {
     expect(screen.queryByText(/Also found as/)).not.toBeInTheDocument();
   });
 
-  it("shows the documents behind an option, including an inherited one", () => {
-    renderCard(MOCK_OPTION_ID_EXCLUDED);
-    expect(screen.getByText("National activation policy briefing")).toBeInTheDocument();
-    expect(screen.getByText(/inherited from a linked task/)).toBeInTheDocument();
-    // Task 046, R30: the flag is true for almost every document, so the card
-    // no longer shows it (the fixture's briefing carries it).
-    expect(screen.queryByText(/not stated in the abstract/)).not.toBeInTheDocument();
+  // Task 046, amendment 3 (R67): one linked title (plain without a row), one grey meta line.
+  it("shows each document with a linked or plain title and one meta line", () => {
+    renderCard(MOCK_OPTION_ID_EXCLUDED, {
+      documents: [
+        { task_source_snapshot_id: "doc-1", title: "Linked paper", role: "evaluated", evidence_type: "Systematic review", tier: "Strong", year: 2021, where_tried_group: "where" },
+        { task_source_snapshot_id: null, title: "Plain paper", role: "mentioned", evidence_type: null, tier: null, year: null, where_tried_group: "where" },
+      ],
+    });
+    expect(screen.getByRole("link", { name: "Linked paper" })).toHaveAttribute("href", `/tasks/${TASK_ID}/sources/all?source=doc-1`);
+    expect(screen.getByText("Plain paper")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Plain paper" })).not.toBeInTheDocument();
+    expect(screen.getByText("Strong · Systematic review · Evaluated it · 2021")).toBeInTheDocument();
+    expect(screen.queryByText(/inherited from a linked task/)).not.toBeInTheDocument();
+  });
+
+  it("shows five documents, then all of them on request", async () => {
+    const documents = Array.from({ length: 7 }, (_, index) => ({
+      task_source_snapshot_id: `doc-${index}`,
+      title: `Paper ${index}`,
+      role: "described",
+      evidence_type: null,
+      tier: null,
+      year: null,
+      where_tried_group: "where",
+    }));
+    renderCard(MOCK_OPTION_ID_EXCLUDED, { documents });
+    expect(screen.getByText("Paper 4")).toBeInTheDocument();
+    expect(screen.queryByText("Paper 5")).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Show all 7" }));
+    expect(screen.getByText("Paper 6")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Show all/ })).not.toBeInTheDocument();
+  });
+
+  it("says so when no documents are found", () => {
+    renderCard(MOCK_OPTION_ID_EXCLUDED, { documents: [] });
+    expect(screen.getByText("No documents found yet.")).toBeInTheDocument();
   });
 
   // Task 046, contract item 1: the tried-on line, from the evidence profile.

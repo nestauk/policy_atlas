@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from "react";
 import { Link, useParams } from "react-router";
 
+import type { components } from "../../api/gen/types";
 import { useExcludeOption, useIncludeOption } from "../../api/mutations";
 import { useOption, useTask } from "../../api/queries";
 import { errorCode } from "../../lib/errors";
@@ -14,7 +15,6 @@ import { cn } from "../../ui/brand/cn";
 import { ReauthRedirect } from "../../ui/feedback";
 import { REPORT_BODY_CLASS } from "../artefactPresentation";
 import { SectionDisclosure, type SidebarEntry } from "../ArtefactOutline";
-import { AppraisalChip } from "../ArtefactView";
 import { LIFECYCLE_PAGE_CLASS } from "../listPageChrome";
 import { REPORT_TITLE_CLASS, ReportKindRow, ReportPage, SnapshotCells } from "../reportPage";
 import {
@@ -44,9 +44,56 @@ import {
   relationLabel,
   roleLabel,
   verdictLabel,
-  whereTriedGroupLabel,
   whereTriedSentence,
 } from "./longlistPresentation";
+
+type OptionDocumentOut = components["schemas"]["OptionDocumentOut"];
+
+/** Documents shown before "Show all N". */
+const DOCUMENTS_SHOWN = 5;
+
+/** The document's grey meta line: quality, type, role, year (task 046, amendment 3, R67). */
+const documentMeta = (document: OptionDocumentOut): string =>
+  [document.tier, document.evidence_type, roleLabel(document.role), document.year]
+    .filter((part) => part !== null && part !== undefined && part !== "")
+    .map((part) => scrub(String(part)))
+    .join(" · ");
+
+/** The option's documents: a linked title (plain when this task holds no row),
+ *  one grey meta line each, five shown then "Show all N". */
+function DocumentList({ taskId, documents }: { taskId: string | undefined; documents: OptionDocumentOut[] }) {
+  const [showAll, setShowAll] = useState(false);
+  if (documents.length === 0) return <p className="text-grey">No documents found yet.</p>;
+  const shown = showAll ? documents : documents.slice(0, DOCUMENTS_SHOWN);
+  return (
+    <>
+      <ul role="list" className="grid gap-3">
+        {shown.map((document, index) => (
+          <li key={document.task_source_snapshot_id ?? `${document.title}-${index}`}>
+            <p className={`${REPORT_BODY_CLASS} font-bold`}>
+              {document.task_source_snapshot_id != null && taskId !== undefined ? (
+                <Link
+                  className="underline underline-offset-2"
+                  to={`/tasks/${taskId}/sources/all?source=${document.task_source_snapshot_id}`}
+                >
+                  {scrub(document.title)}
+                </Link>
+              ) : (
+                scrub(document.title)
+              )}
+            </p>
+            <p className="text-meta text-grey">{documentMeta(document)}</p>
+          </li>
+        ))}
+      </ul>
+      {!showAll && documents.length > DOCUMENTS_SHOWN && (
+        <Button variant="secondary" onClick={() => setShowAll(true)}>
+          Show all {documents.length}
+        </Button>
+      )}
+    </>
+  );
+}
 
 const PAGE_CLASS = `${LIFECYCLE_PAGE_CLASS} py-8`;
 
@@ -183,15 +230,8 @@ export function OptionCard() {
   const excluded = item.state === "excluded";
   const judgements = item.judgements ?? [];
   const documentsLine = documentsSentence(evidence.documents, byRole);
-  // The read model can repeat a document once per mention (issue #75): one
-  // card per document, the first mention's role.
-  const seen = new Set<string>();
-  const documents = (item.documents ?? []).filter((document) => {
-    const key = document.task_source_snapshot_id ?? document.title;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
+  // One entry per document, evaluated first then by quality (the read model, R67).
+  const documents = item.documents ?? [];
   const whereLine = whereTriedSentence(item.where_tried, item.where_label);
   const outcomeCounts = evidence.outcome_counts;
   const outcomeCountsLine = outcomeCountsSentence(outcomeCounts);
@@ -423,22 +463,7 @@ export function OptionCard() {
             </ul>
           </>
         )}
-        {documents.length > 0 && (
-          <ul role="list" className="grid gap-3">
-            {documents.map((document, index) => (
-              <li key={document.task_source_snapshot_id ?? index} className="border border-line p-4">
-                <p className={`${REPORT_BODY_CLASS} font-bold`}>{scrub(document.title)}</p>
-                <div className="mt-2 flex flex-wrap gap-1.5">
-                  {document.tier != null && <AppraisalChip label={document.tier} evidenceType={document.evidence_type} />}
-                  {document.evidence_type != null && <Chip tone="soft">{scrub(document.evidence_type)}</Chip>}
-                  <Chip tone="soft">{roleLabel(document.role)}</Chip>
-                  <Chip tone="soft">{scrub(whereTriedGroupLabel(document.where_tried_group, item.where_label))}</Chip>
-                  {document.source_task_id != null && <Chip tone="soft">inherited from a linked task</Chip>}
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
+        <DocumentList taskId={taskId} documents={documents} />
         {populationsSentence !== "" && <p>Populations: {populationsSentence}.</p>}
         {(evidence.tried_on ?? []).length > 0 && <p>{scrub(triedOnSentence(evidence.tried_on ?? []))}</p>}
         {settingsSentence !== "" && <p>Settings: {settingsSentence}.</p>}

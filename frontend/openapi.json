@@ -3765,7 +3765,7 @@
         "type": "object"
       },
       "OptionDocumentOut": {
-        "description": "One document behind an option (\"Show the documents\"), one per membership row.\n\nArgs:\n    task_source_snapshot_id: This task's document row, when the task holds one.\n    title: The document's title.\n    role: What the document does with the intervention.\n    evidence_type: Its evidence type, when classified.\n    tier: Its quality tier label, when appraised.\n    design_feature_not_stated: It covers the intervention without stating\n        the feature that defines this option.\n    where_tried_group: Where it was studied, grouped against Where.\n    source_task_id: The linked task the document or its labels came from,\n        when inherited.",
+        "description": "One document behind an option (\"Show the documents\"), one per document.\n\nArgs:\n    task_source_snapshot_id: This task's document row, when the task holds one.\n    title: The document's title.\n    role: What the document does with the intervention.\n    evidence_type: Its evidence type, when classified.\n    tier: Its quality tier label, when appraised.\n    design_feature_not_stated: It covers the intervention without stating\n        the feature that defines this option.\n    year: Its publication year, when the metadata has one.\n    where_tried_group: Where it was studied, grouped against Where.\n    source_task_id: The linked task the document or its labels came from,\n        when inherited.",
         "properties": {
           "design_feature_not_stated": {
             "default": false,
@@ -3841,6 +3841,17 @@
             ],
             "title": "Where Tried Group",
             "type": "string"
+          },
+          "year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Year"
           }
         },
         "required": [
