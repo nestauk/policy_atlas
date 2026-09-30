@@ -382,6 +382,7 @@ Round records: `evidence/rounds/9L-planning-loop.md`,
 |---|---|---|---|---|---|
 | 9L planning | `task_agent_scoping_v5` | 2 (r0, r1) | every statement in the right kind and line (probe + tuning set) — **met at r1** | probe: 8 of 8 statements right; refugees asks who can act; England / UK plans do not ask | NEET asks the target unit; heat pumps, cohesion right |
 | 12L profile | `option_profile_v1`, `lever_typing_v3` | 2 (r0, r1) | none of the six known faults of final § 6.1 — **met at r1** (r0: 3 who-decides lines named a regulation no baseline holds) | M10 0 missing on 4 lists; M12 1 to 10 setting labels; M14 passes on obesity and caregiving | 3 lists: no law, no acronym, no empty setting for an option that has one; 7 to 9 labels |
+| 12L profile, rounds 2–3 (after the build, 2026-09-30, lead) | `option_profile_v1` | 2 more (r2, r3) | r2: body names as government publications use them (no legal or expanded names) — **met**; r3: the owner's R25 ruling on the spread of the marks — about a third in each level where the data supports it, never forced — **met**, stability 82–88% same mark on two runs (old rule 83%) | r2: obesity, caregiving; r3: obesity, caregiving, refugees, two runs each | none (all three lists used); figures in `12L-profile-loop.md` § Round 2, § Round 3 |
 | 13L constrain | `constrain_v3` | 2 (r0, r1) | M11 ≥ 9 of 10 — **met at r1**: refugees 22 of 23, obesity 22 of 24 (r0: about 4 of 23 and 20 of 24; the call matched names) | no exclusion from who decides (1 and 1 exclusions, both by a boundary) | none possible (only two clones hold such statements) |
 
 No loop ran more than two rounds. The prompts were tuned on the tuning set
@@ -406,8 +407,7 @@ against each other; on energy the count fell from 13 to 7 of 19 with round
 1. The lead did not tune on the count: the owner accepted the way-A rule
 and its stability, and a cap would be a quota. For the owner (R25).
 
-**The owner's stage decisions (R25) are open**, as in the first build: no
-owner was present. Each loop record ends with its report.
+**The owner's stage decisions (R25):** after the build the owner read the live runs and ruled on the spread of the marks ("about a third in each band, although only if the data supports it, the tool shouldn't force that by rule"); round 3 of 12L applies it. The other stage decisions stay open. Each loop record ends with its report.
 
 ### Live check (Phase 14): three rapid runs on new tasks
 
