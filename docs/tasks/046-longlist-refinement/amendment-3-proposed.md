@@ -213,3 +213,21 @@ consolidation pass. The decisions that were the owner's:
 | 23 | Lead: the prompt fixes the form — the country's short English name ("United Kingdom", not "UK"); England, Scotland, Wales and Northern Ireland are places under the United Kingdom, in the level below; the code folds case only. |
 | 24 | **Owner.** The finding records' rename stays in this amendment although it reaches production data (Evidence search is live): a plain column rename, reversible, no version change on the finding records, so no document is extracted again; hashes re-pinned; `iof_records.py`, `icf_records.py`, `finding_references.py` and `interventions_records.py` join the hash guard. The owner's words: "Keep in this amendment." |
 | 25 | Lead: every prompt that read the stripped text gets the rule in words when the strip goes (the screen, the tagging context, constrain, the design, discovery, typing, the lines, the folding calls); the loop measures M4 and the screen's pass rate. |
+
+### The reach of the rename (2026-09-30)
+
+The plan review found that "population" is also the grouping facet key
+stored in the plans of Evidence search tasks in production
+(`GROUPING_FACETS`, `schema.py:1249`; `task_plan.py:49`; `task_agent.py:54`;
+read at `group.py:1291`), a key in the data sent to the models
+(`longlist.py:559, 745`; `synthesis_tools.py:2022, 2068`;
+`synthesise.py:1543, 1584`; `extract.py:2108, 2133`) and a word in prompts
+(`longlist_cluster_prompt.py:269`, `synthesis_prompts_v6.py:148`,
+`grounding_judge.py:112`). The lead put two ways to the owner; the owner
+chose **all the way** ("1."): the facet key becomes `unit`, with a
+reversible data migration in the same revision that rewrites the stored
+facet value in production plans; the payload keys and the prompt words
+change as a like-for-like word swap under the owner's 038 ruling (hashes
+re-pinned, the diff read as words only, no replay); the record files and the
+synthesis prompt files that change are in the hash guard. "Population" is
+then gone from the product.
