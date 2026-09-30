@@ -109,7 +109,7 @@ Instructions:
     made, contradiction, or unwarranted synthesis.
 - Be permissive about legitimate inference, strict about attribution
   fidelity: the claim must preserve the cited evidence's scope, caveats,
-  population, intervention, comparator, outcome, direction, magnitude,
+  unit, intervention, comparator, outcome, direction, magnitude,
   uncertainty and context. A claim that overstates any of these is
   unsupported_mis_cited, however plausible it sounds.
 - Topical relevance is not support: a cited passage about the claim's topic

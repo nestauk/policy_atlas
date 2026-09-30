@@ -29,20 +29,20 @@ def test_icf_coercion_and_non_valid_only_coverage() -> None:
     result = validate_icf_record(
         make_icf_wire_record(
             outcome=None,
-            population="N/A",
+            unit="N/A",
             setting="primary care",
             resource_requirements=None,
         )
     )
 
     assert result.record is not None
-    assert result.record.population is None
+    assert result.record.unit is None
     assert result.record.setting == "primary care"
-    assert result.field_coverage["population"] == "not_extracted"
+    assert result.field_coverage["unit"] == "not_extracted"
     assert result.field_coverage["outcome"] == "not_extracted"
     assert result.field_coverage["resource_requirements"] == "not_extracted"
     assert "setting" not in result.field_coverage
-    assert result.coerced_null_fields == ["population"]
+    assert result.coerced_null_fields == ["unit"]
 
 
 @pytest.mark.parametrize("token", ["n/a", "none", ""])

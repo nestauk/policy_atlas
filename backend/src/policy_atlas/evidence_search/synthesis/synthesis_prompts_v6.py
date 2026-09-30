@@ -145,7 +145,7 @@ The claim types:
 
 Rules for every claim:
 - Claim only what the cited evidence supports as worded: preserve scope,
-  caveats, population, intervention, comparator, outcome, direction,
+  caveats, unit, intervention, comparator, outcome, direction,
   magnitude and uncertainty. Under-claim rather than over-claim.
 - Counts and spreads exactly as given or tool-read, never invented or
   adjusted. Mixed and unclear findings are reported as mixed or unclear,

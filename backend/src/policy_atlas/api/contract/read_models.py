@@ -274,7 +274,7 @@ class IofFindingOut(FindingBaseOut):
     stratum_qualifiers: list[dict[str, str]] = Field(default_factory=list)
     effect_basis: str | None = None
     study_geography: str | None = None
-    population: str | None = None
+    unit: str | None = None
     setting: str | None = None
     study_design: str | None = None
     quote: str | None = None
@@ -291,7 +291,7 @@ class IcfFindingOut(FindingBaseOut):
     context_label: str | None = None
     intervention: str
     outcome: str | None = None
-    population: str | None = None
+    unit: str | None = None
     setting: str | None = None
     study_geography: str | None = None
     study_design: str | None = None

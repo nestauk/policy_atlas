@@ -27,7 +27,7 @@ def _valid_wire_record() -> dict[str, Any]:
     return IOFRecordWire(
         intervention="structured home-visiting programmes",
         outcome="unplanned child hospital admissions",
-        population=None,
+        unit=None,
         setting=None,
         comparator="usual care",
         effect_direction="decrease",

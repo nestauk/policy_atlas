@@ -24,9 +24,9 @@ from policy_atlas.core.schema import (
 )
 from policy_atlas.evidence_search.extract.finding_references import (
     INTERVENTION_DESC,
-    POPULATION_DESC,
     STUDY_DESIGN_DESC,
     STUDY_GEOGRAPHY_DESC,
+    UNIT_DESC,
     render_field_sections,
 )
 
@@ -149,8 +149,8 @@ class IOFRecordWire(BaseModel):
             "belong in stratum_qualifiers."
         )
     )
-    population: str | None = Field(
-        description=POPULATION_DESC
+    unit: str | None = Field(
+        description=UNIT_DESC
     )
     setting: str | None = Field(
         description=(
@@ -311,7 +311,7 @@ class IOFRecord(BaseModel):
 
     intervention: str = Field(min_length=1)
     outcome: str = Field(min_length=1)
-    population: str | None
+    unit: str | None
     setting: str | None
     comparator: str | None
     effect_direction: EffectDirection

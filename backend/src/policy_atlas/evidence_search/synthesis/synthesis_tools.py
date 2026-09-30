@@ -214,7 +214,7 @@ class FindingRecord(TypedDict):
     document_title: str
     intervention: str
     outcome: str
-    population: str | None
+    unit: str | None
     setting: str | None
     comparator: str | None
     effect_direction: str
@@ -250,7 +250,7 @@ class ICFFindingRecord(TypedDict):
     claim: str
     intervention: str
     outcome: str | None
-    population: str | None
+    unit: str | None
     setting: str | None
     study_geography: str | None
     study_design: str | None
@@ -2019,7 +2019,7 @@ def _finding_record(row: Any) -> FindingRecord:
         "document_title": _metadata_title(metadata, tss_id),
         "intervention": cast("str", row.intervention),
         "outcome": cast("str", row.outcome),
-        "population": cast("str | None", row.unit),
+        "unit": cast("str | None", row.unit),
         "setting": cast("str | None", row.setting),
         "comparator": cast("str | None", row.comparator),
         "effect_direction": cast("str", row.effect_direction),
@@ -2065,7 +2065,7 @@ def _icf_finding_record(row: Any) -> ICFFindingRecord:
         "claim": cast("str", row.claim),
         "intervention": cast("str", row.intervention),
         "outcome": cast("str | None", row.outcome),
-        "population": cast("str | None", row.unit),
+        "unit": cast("str | None", row.unit),
         "setting": cast("str | None", row.setting),
         "study_geography": cast("str | None", row.study_geography),
         "study_design": cast("str | None", row.study_design),

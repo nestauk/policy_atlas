@@ -2714,17 +2714,6 @@
             ],
             "title": "Outcome"
           },
-          "population": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Population"
-          },
           "profile": {
             "const": "icf",
             "default": "icf",
@@ -2824,6 +2813,17 @@
               }
             ],
             "title": "Study Geography"
+          },
+          "unit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unit"
           },
           "workforce_requirements": {
             "anyOf": [
@@ -2967,17 +2967,6 @@
             "title": "Outcome",
             "type": "string"
           },
-          "population": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Population"
-          },
           "profile": {
             "const": "iof",
             "default": "iof",
@@ -3079,6 +3068,17 @@
               }
             ],
             "title": "Study Geography"
+          },
+          "unit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unit"
           }
         },
         "required": [

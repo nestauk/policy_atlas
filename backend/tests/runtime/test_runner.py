@@ -70,7 +70,7 @@ def _record(
     return {
         "intervention": intervention,
         "outcome": outcome,
-        "population": "low-income households",
+        "unit": "low-income households",
         "comparator": None,
         "effect_direction": "increase",
         "estimate_level": "study",

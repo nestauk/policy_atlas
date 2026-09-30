@@ -1236,7 +1236,7 @@ def _write_iof_finding(
             extraction_record_id=record_id,
             intervention=record.intervention,
             outcome=record.outcome,
-            unit=record.population,
+            unit=record.unit,
             setting=record.setting,
             comparator=record.comparator,
             effect_direction=record.effect_direction,
@@ -1279,7 +1279,7 @@ def _write_icf_finding(
             context_label=record.context_label,
             intervention=record.intervention,
             outcome=record.outcome,
-            unit=record.population,
+            unit=record.unit,
             setting=record.setting,
             study_geography=record.study_geography,
             study_design=record.study_design,
@@ -2083,7 +2083,7 @@ def _load_relevance_digests(
 
     Reads the persisted finding rows directly (never the doc/profile roll-up):
     ``finding_id`` plus the subject fields the mark needs (intervention,
-    outcome, population, setting; claim/context for ICF). Deterministic order.
+    outcome, unit, setting; claim/context for ICF). Deterministic order.
     """
     digests: list[dict[str, Any]] = []
     if iof_record_ids:
@@ -2105,7 +2105,7 @@ def _load_relevance_digests(
                 "kind": "iof",
                 "intervention": row.intervention,
                 "outcome": row.outcome,
-                "population": row.unit,
+                "unit": row.unit,
                 "setting": row.setting,
             })
     if icf_record_ids:
@@ -2130,7 +2130,7 @@ def _load_relevance_digests(
                 "claim": row.claim,
                 "intervention": row.intervention,
                 "setting": row.setting,
-                "population": row.unit,
+                "unit": row.unit,
             })
     return digests
 

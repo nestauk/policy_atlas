@@ -2583,8 +2583,6 @@ export interface components {
             level?: string | null;
             /** Outcome */
             outcome?: string | null;
-            /** Population */
-            population?: string | null;
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -2613,6 +2611,8 @@ export interface components {
             study_design?: string | null;
             /** Study Geography */
             study_geography?: string | null;
+            /** Unit */
+            unit?: string | null;
             /** Workforce Requirements */
             workforce_requirements?: string | null;
         };
@@ -2665,8 +2665,6 @@ export interface components {
             is_primary?: boolean | null;
             /** Outcome */
             outcome: string;
-            /** Population */
-            population?: string | null;
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -2698,6 +2696,8 @@ export interface components {
             study_design?: string | null;
             /** Study Geography */
             study_geography?: string | null;
+            /** Unit */
+            unit?: string | null;
         };
         /**
          * IofStatisticsOut

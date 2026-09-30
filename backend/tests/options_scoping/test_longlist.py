@@ -1297,10 +1297,8 @@ def test_a_record_tagged_under_another_context_reads_as_not_tagged(conn: Connect
     walk = _Walk(conn)
     walk.option("Youth guarantee", origin="added_by_you")
     current_doc, stale_doc = walk.doc(), walk.doc()
-    # ``tags`` are the payload keys the model reads; the column is ``unit_tag``
-    # (task 046, amendment 3, R71) until the payload word changes.
-    tags = {"population_tag": "adjacent", "outcome_tag": "the NEET rate", "object_tag": "option"}
-    stored = {("unit_tag" if k == "population_tag" else k): v for k, v in tags.items()}
+    tags = {"unit_tag": "adjacent", "outcome_tag": "the NEET rate", "object_tag": "option"}
+    stored = tags
     current = _extraction(walk, current_doc, fingerprint=_current_fingerprint(walk))
     _record_under(walk, current, "youth guarantee", **stored)
     stale = _extraction(walk, stale_doc, fingerprint="older plan")

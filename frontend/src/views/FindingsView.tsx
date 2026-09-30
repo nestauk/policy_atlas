@@ -169,7 +169,7 @@ function IofExpansion({ finding, taskId }: { finding: IofFinding; taskId: string
               value={findingLabel(EFFECT_BASIS_LABEL, finding.effect_basis)}
             />
             <DefinitionRow label="Geography" value={finding.study_geography ?? null} />
-            <DefinitionRow label="Population" value={finding.population ?? null} />
+            <DefinitionRow label="Unit" value={finding.unit ?? null} />
             <DefinitionRow label="Setting" value={finding.setting ?? null} />
             <DefinitionRow label="Study design" value={finding.study_design ?? null} />
           </dl>
@@ -212,7 +212,7 @@ function IcfExpansion({ finding, taskId }: { finding: IcfFinding; taskId: string
             label="Claim basis"
             value={findingLabel(CLAIM_BASIS_LABEL, finding.claim_basis)}
           />
-          <DefinitionRow label="Population" value={finding.population ?? null} />
+          <DefinitionRow label="Unit" value={finding.unit ?? null} />
           <DefinitionRow label="Setting" value={finding.setting ?? null} />
           <DefinitionRow label="Geography" value={finding.study_geography ?? null} />
           <DefinitionRow label="Study design" value={finding.study_design ?? null} />
@@ -285,7 +285,7 @@ function FindingRow({
             <Tooltip
               content={
                 <span className="text-caption">
-                  {[finding.population, finding.study_design]
+                  {[finding.unit, finding.study_design]
                     .filter((value): value is string => typeof value === "string" && value !== "")
                     .map((value) => scrub(value))
                     .join(" · ") || "No detail reported"}

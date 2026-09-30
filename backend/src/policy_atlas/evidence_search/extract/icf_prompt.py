@@ -67,7 +67,7 @@ ICF_EXAMPLE_RESPONSE = ICFExtractionResponse(
             context_label="Caseload pressure",
             intervention="structured home-visiting programme",
             outcome=None,
-            population=None,
+            unit=None,
             setting="families' homes",
             study_geography="Denmark",
             study_design="process evaluation",
@@ -96,7 +96,7 @@ ICF_EXAMPLE_RESPONSE = ICFExtractionResponse(
             context_label=None,
             intervention="structured home-visiting programme",
             outcome=None,
-            population=None,
+            unit=None,
             setting="families' homes",
             study_geography="Denmark",
             study_design="process evaluation",
@@ -126,7 +126,7 @@ ICF_EXAMPLE_RESPONSE = ICFExtractionResponse(
             context_label=None,
             intervention="structured home-visiting programme",
             outcome="engagement with the programme",
-            population="families",
+            unit="families",
             setting="families' homes",
             study_geography="Denmark",
             study_design="process evaluation",
@@ -254,7 +254,7 @@ Dimensions — the source side only, exactly as the source states it:
 - resource_requirements and workforce_requirements carry only what the
   source reports (costs, funding, materials; staffing, skills, training) —
   exactly as reported, never estimated, totalled or graded by you.
-- All reference fields (intervention, outcome, population, setting,
+- All reference fields (intervention, outcome, unit, setting,
   study_geography, study_design) are source-named: this document's own
   words, never a standardised or canonical term.
 - context_label is filled ONLY when the document itself provides a short

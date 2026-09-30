@@ -39,6 +39,12 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 EXTRA_FILES: tuple[str, ...] = (
     # The intervention record's Field descriptions are the model's schema (task 046, amendment 3).
     "backend/src/policy_atlas/evidence_search/extract/interventions_records.py",
+    # The finding records' Field descriptions and their shared texts (R75), and the
+    # grounding judge's field list (R73).
+    "backend/src/policy_atlas/evidence_search/extract/iof_records.py",
+    "backend/src/policy_atlas/evidence_search/extract/icf_records.py",
+    "backend/src/policy_atlas/evidence_search/extract/finding_references.py",
+    "backend/src/policy_atlas/evidence_search/synthesis/grounding_judge.py",
 )
 
 

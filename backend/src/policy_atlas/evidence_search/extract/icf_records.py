@@ -15,9 +15,9 @@ from pydantic import BaseModel, ConfigDict, Field
 from policy_atlas.core.schema import CLAIM_BASES, CLAIM_LEVELS, CONTEXT_LEVELS, CONTEXT_TYPES
 from policy_atlas.evidence_search.extract.finding_references import (
     INTERVENTION_DESC,
-    POPULATION_DESC,
     STUDY_DESIGN_DESC,
     STUDY_GEOGRAPHY_DESC,
+    UNIT_DESC,
     render_field_sections,
 )
 from policy_atlas.evidence_search.extract.iof_records import IOFAnchor, IOFAnchorWire
@@ -94,8 +94,8 @@ class ICFRecordWire(BaseModel):
             "and conditions name none."
         )
     )
-    population: str | None = Field(
-        description=POPULATION_DESC
+    unit: str | None = Field(
+        description=UNIT_DESC
     )
     setting: str | None = Field(
         description=(
@@ -190,7 +190,7 @@ class ICFRecord(BaseModel):
     context_label: str | None
     intervention: str = Field(min_length=1)
     outcome: str | None
-    population: str | None
+    unit: str | None
     setting: str | None
     study_geography: str | None
     study_design: str | None

@@ -1137,7 +1137,7 @@ def findings_page(
                     stratum_qualifiers=cast(list[dict[str, str]], row["stratum_qualifiers"]),
                     effect_basis=row["effect_basis"],
                     study_geography=row["study_geography"],
-                    population=row["unit"],
+                    unit=row["unit"],
                     setting=row["setting"],
                     study_design=row["study_design"],
                 )
@@ -1151,7 +1151,7 @@ def findings_page(
                     context_label=row["context_label"],
                     intervention=row["intervention"],
                     outcome=row["outcome"],
-                    population=row["unit"],
+                    unit=row["unit"],
                     setting=row["setting"],
                     study_geography=row["study_geography"],
                     study_design=row["study_design"],
