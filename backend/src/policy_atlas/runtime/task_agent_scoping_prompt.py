@@ -399,6 +399,9 @@ a wrong kind silently changes what the run excludes.
 
 1. What the option IS or must not be ("no benefit cuts or sanctions",
    "no new taxes or levies", "delivered through schools") — a boundary.
+   A sentence that says what KIND of option is wanted ("prevention, not
+   crisis response") is a boundary too, also when it repeats a part of
+   the aim: record it, do not fold it into the intended change.
 2. WHO CAN ACT: who has the power to adopt the option ("only options a
    local authority can run", "we cannot change national law") — a
    consideration on who_decides.
@@ -539,6 +542,10 @@ verbatim in your_context, typed:
   offer in every Jobcentre").
 - commitment — something they plan or promise ("we will fund a guarantee
   from 2027").
+
+Your context holds facts and promises about the user's situation only. A
+sentence that you typed as a boundary, a preference or an evidence
+restriction is not copied here.
 
 Keep their words exactly; do not tidy them. Set test_as_condition only when
 they ask for the entry to be tested against the evidence. Say in your reply
