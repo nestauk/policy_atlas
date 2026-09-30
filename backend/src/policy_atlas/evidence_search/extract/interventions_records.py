@@ -20,7 +20,7 @@ from typing import Literal, get_args
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from policy_atlas.core.schema import INTERVENTION_ROLES, OBJECT_TAGS, POPULATION_TAGS
+from policy_atlas.core.schema import INTERVENTION_ROLES, OBJECT_TAGS, UNIT_TAGS
 from policy_atlas.evidence_search.extract.finding_references import render_field_sections
 from policy_atlas.evidence_search.extract.quote_verify import NULL_LIKE_STRINGS
 
@@ -36,7 +36,7 @@ assert get_args(InterventionRole) == INTERVENTION_ROLES
 PopulationTag = Literal["on_target", "adjacent", "other"]
 ObjectTag = Literal["plan_object", "option", "neither"]
 
-assert get_args(PopulationTag) == POPULATION_TAGS
+assert get_args(PopulationTag) == UNIT_TAGS
 assert get_args(ObjectTag) == OBJECT_TAGS
 
 

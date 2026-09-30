@@ -102,7 +102,7 @@ def test_doi_twins_take_the_rated_twin_s_labels_in_either_id_order(rated_first: 
             role=role,
             basis="abstract_only",
             flagged=False,
-            population=None,
+            unit=None,
             setting=None,
             outcome=None,
             study_geography=None,

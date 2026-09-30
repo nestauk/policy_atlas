@@ -121,7 +121,7 @@ def _icf_values(
         "claim": "Training gaps slowed delivery.",
         "intervention": "Coaching",
         "outcome": None,
-        "population": None,
+        "unit": None,
         "setting": "primary care",
         "study_geography": "England",
         "study_design": "process evaluation",

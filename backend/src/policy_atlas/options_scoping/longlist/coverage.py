@@ -143,13 +143,13 @@ class CoverageMember:
             finding describes implementation).
         basis: The extraction basis (``abstract_only`` or ``full_text``).
         flagged: ``design_feature_not_stated``.
-        population: The record's population text.
+        unit: The record's unit text (who or what it was delivered to).
         setting: The record's setting text.
         outcome: The record's outcome text.
         study_geography: The record's study geography text.
         intervention: The record's intervention name (the *variants*).
-        population_tag: The record's population tag, ``None`` when not
-            tagged (task 046).
+        unit_tag: The record's unit tag, ``None`` when not tagged
+            (task 046).
         outcome_tag: The record's outcome tag (a plan outcome's text or
             ``other``), ``None`` when not tagged and for a linked finding
             (R42).
@@ -161,12 +161,12 @@ class CoverageMember:
     role: str | None
     basis: str | None
     flagged: bool
-    population: str | None
+    unit: str | None
     setting: str | None
     outcome: str | None
     study_geography: str | None
     intervention: str | None = None
-    population_tag: str | None = None
+    unit_tag: str | None = None
     outcome_tag: str | None = None
 
 
@@ -402,19 +402,19 @@ def option_coverage(
                 spellings = setting_spellings.setdefault(folded_setting, {})
                 spellings[m.setting] = spellings.get(m.setting, 0) + 1
         for field, counts in (
-            ("population", populations),
+            ("unit", populations),
             ("outcome", outcomes),
         ):
             for value in {_clean(getattr(m, field)) for m in doc_members} - {None}:
                 assert value is not None
                 _add(counts, value)
         for tag in {
-            m.population_tag if m.population_tag in POPULATION_TAG_BUCKETS else "not_tagged"
+            m.unit_tag if m.unit_tag in POPULATION_TAG_BUCKETS else "not_tagged"
             for m in doc_members
         }:
             population_tags[tag] += 1
         for m in doc_members:
-            population = _clean(m.population) if m.population_tag == "adjacent" else None
+            population = _clean(m.unit) if m.unit_tag == "adjacent" else None
             if population is not None:
                 folded = population.casefold()
                 tried_on.setdefault(folded, set()).add(key)

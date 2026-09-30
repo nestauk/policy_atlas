@@ -956,7 +956,8 @@ intervention_outcome_finding = Table(
     # Source-named references — never canonical entities (data-model findings layer).
     Column("intervention", Text, nullable=False),
     Column("outcome", Text, nullable=False),  # base measure only; qualifiers are stratum
-    Column("population", Text, nullable=True),
+    # Who or what the intervention was delivered to (task 046, amendment 3, R71).
+    Column("unit", Text, nullable=True),
     Column("setting", Text, nullable=True),
     Column("comparator", Text, nullable=True),
     Column("effect_direction", Text, nullable=False),  # a reported null result is a finding
@@ -1016,7 +1017,7 @@ implementation_context_finding = Table(
     # Source-named references — shared meaning with IOF; requiredness is per schema.
     Column("intervention", Text, nullable=False),
     Column("outcome", Text, nullable=True),
-    Column("population", Text, nullable=True),
+    Column("unit", Text, nullable=True),
     Column("setting", Text, nullable=True),
     Column("study_geography", Text, nullable=True),
     Column("study_design", Text, nullable=True),
@@ -1074,11 +1075,11 @@ INTERVENTION_ROLES: tuple[str, ...] = (
 )
 _INTERVENTION_ROLES_SQL = ", ".join(f"'{r}'" for r in INTERVENTION_ROLES)
 
-#: How a record's population stands to the plan's target unit (task 046, S5):
-#: the target unit itself, a wider or adjacent population, or neither. Null
+#: How a record's unit stands to the plan's target unit (task 046, S5):
+#: the target unit itself, a wider or adjacent unit, or neither. Null
 #: means "not tagged" (a record profiled before the tagging context existed).
-POPULATION_TAGS: tuple[str, ...] = ("on_target", "adjacent", "other")
-_POPULATION_TAGS_SQL = ", ".join(f"'{t}'" for t in POPULATION_TAGS)
+UNIT_TAGS: tuple[str, ...] = ("on_target", "adjacent", "other")
+_UNIT_TAGS_SQL = ", ".join(f"'{t}'" for t in UNIT_TAGS)
 
 #: Whether a record names the plan's object of change, an option, or neither
 #: (task 046, S5). Null means "not tagged".
@@ -1100,15 +1101,19 @@ intervention_profile_record = Table(
     # The bundle's parts when ``is_bundle``, as a JSON array.
     Column("components", JSONB, nullable=False),
     Column("outcome", Text, nullable=True),
-    Column("population", Text, nullable=True),
+    Column("unit", Text, nullable=True),
     Column("setting", Text, nullable=True),
     Column("study_geography", Text, nullable=True),
     Column("study_design", Text, nullable=True),
+    # The programme's own name and the countries of the stated place (task 046,
+    # amendment 3, R71); null on a record written before that revision.
+    Column("programme_name", Text, nullable=True),
+    Column("study_country", Text, nullable=True),
     # Document level, carried on each record: the abstract covers no intervention.
     Column("covers_no_intervention", Boolean, nullable=False, server_default=text("false")),
     # The plan-relative tags (task 046, S5): null is "not tagged".
     # ``outcome_tag`` is free text — a plan outcome's text, or ``other``.
-    Column("population_tag", Text, nullable=True),
+    Column("unit_tag", Text, nullable=True),
     Column("outcome_tag", Text, nullable=True),
     Column("object_tag", Text, nullable=True),
     Column("field_coverage", JSONB, nullable=False),
@@ -1125,8 +1130,8 @@ intervention_profile_record = Table(
     ),
     CheckConstraint(f"role IN ({_INTERVENTION_ROLES_SQL})", name="ck_ipr_role"),
     CheckConstraint(
-        f"population_tag IS NULL OR population_tag IN ({_POPULATION_TAGS_SQL})",
-        name="ck_ipr_population_tag",
+        f"unit_tag IS NULL OR unit_tag IN ({_UNIT_TAGS_SQL})",
+        name="ck_ipr_unit_tag",
     ),
     CheckConstraint(
         f"object_tag IS NULL OR object_tag IN ({_OBJECT_TAGS_SQL})",
@@ -1151,7 +1156,7 @@ SELECT
     task_id,
     intervention,
     outcome,
-    population,
+    unit,
     setting,
     study_geography,
     study_design
@@ -1164,7 +1169,7 @@ SELECT
     task_id,
     intervention,
     outcome,
-    population,
+    unit,
     setting,
     study_geography,
     study_design
@@ -1177,7 +1182,7 @@ SELECT
     task_id,
     intervention,
     outcome,
-    population,
+    unit,
     setting,
     study_geography,
     study_design
@@ -1193,7 +1198,7 @@ finding_reference_union = Table(
     Column("task_id", UUID(as_uuid=True)),
     Column("intervention", Text),
     Column("outcome", Text),
-    Column("population", Text),
+    Column("unit", Text),
     Column("setting", Text),
     Column("study_geography", Text),
     Column("study_design", Text),
@@ -1246,7 +1251,7 @@ extraction_result = Table(
 GROUPING_FACETS: tuple[str, ...] = (
     "intervention",
     "outcome",
-    "population",
+    "unit",
     "barrier_theme",
     "enabler_theme",
     "mechanism_theme",

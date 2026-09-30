@@ -1283,7 +1283,7 @@ def test_a_document_profiled_in_two_scopes_counts_once_under_the_current_context
     current = _extraction(
         walk, doc, fingerprint=_current_fingerprint(walk), created_at=now() - timedelta(hours=1)
     )
-    kept = _record_under(walk, current, "youth guarantee", population_tag="on_target")
+    kept = _record_under(walk, current, "youth guarantee", unit_tag="on_target")
     _rollup_of(walk, walk.scope_id, {doc: current})
     backend = _Scripted(routes={"youth guarantee": ("Youth guarantee", False)})
     run_id, summary = walk.build(backend)
@@ -1297,11 +1297,14 @@ def test_a_record_tagged_under_another_context_reads_as_not_tagged(conn: Connect
     walk = _Walk(conn)
     walk.option("Youth guarantee", origin="added_by_you")
     current_doc, stale_doc = walk.doc(), walk.doc()
+    # ``tags`` are the payload keys the model reads; the column is ``unit_tag``
+    # (task 046, amendment 3, R71) until the payload word changes.
     tags = {"population_tag": "adjacent", "outcome_tag": "the NEET rate", "object_tag": "option"}
+    stored = {("unit_tag" if k == "population_tag" else k): v for k, v in tags.items()}
     current = _extraction(walk, current_doc, fingerprint=_current_fingerprint(walk))
-    _record_under(walk, current, "youth guarantee", **tags)
+    _record_under(walk, current, "youth guarantee", **stored)
     stale = _extraction(walk, stale_doc, fingerprint="older plan")
-    _record_under(walk, stale, "wage subsidy", **tags)
+    _record_under(walk, stale, "wage subsidy", **stored)
     _rollup_of(walk, walk.scope_id, {current_doc: current, stale_doc: stale})
     backend = _Scripted(discovered=[_discovered("Wage subsidy")])
     walk.build(backend)
@@ -1666,7 +1669,7 @@ def test_each_thinning_rule_with_its_count_and_never_on_a_tag(conn: Connection) 
         walk,
         tagged_doc,
         "other-tagged",
-        population_tag="other",
+        unit_tag="other",
         outcome_tag="other",
         object_tag="neither",
     )

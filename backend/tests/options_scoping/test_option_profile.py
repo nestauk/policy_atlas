@@ -655,7 +655,7 @@ def test_the_option_list_holds_only_the_named_keys_and_five_records_in_role_orde
             role=role,
             design_features=["a", "b", "c", "d"],
             study_geography="Denmark",
-            population="young people",
+            unit="young people",
         )
     walk.rollup(walk.scope_id, [doc])
     routes = {f"youth guarantee {i}": ("Youth guarantee", False) for i in range(len(roles))}

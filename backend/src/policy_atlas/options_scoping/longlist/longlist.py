@@ -251,14 +251,14 @@ class _Unit:
     doc_key: str
     role: str | None
     basis: str | None
-    population: str | None
+    unit: str | None
     setting: str | None
     outcome: str | None
     study_geography: str | None
     payload: dict[str, object]
     # The record's three tags (task 046), ``None`` when the record was written
     # under another tagging context than the current plan's (S3 a).
-    population_tag: str | None = None
+    unit_tag: str | None = None
     outcome_tag: str | None = None
     object_tag: str | None = None
 
@@ -546,7 +546,7 @@ def _own_units(
         if row.record_id not in kept:
             continue
         tagged = row.extraction_fingerprint in current_fingerprints
-        population_tag = row.population_tag if tagged else None
+        unit_tag = row.unit_tag if tagged else None
         outcome_tag = row.outcome_tag if tagged else None
         object_tag = row.object_tag if tagged else None
         unit_id = str(row.record_id)
@@ -556,11 +556,11 @@ def _own_units(
             "role": row.role,
             "design_features": _string_list(row.design_features),
             "outcome": _bound(row.outcome),
-            "population": _bound(row.population),
+            "population": _bound(row.unit),
             "setting": _bound(row.setting),
             "study_geography": _bound(row.study_geography),
             "quote": _first_quote(row.grounding),
-            "population_tag": population_tag,
+            "population_tag": unit_tag,
             "outcome_tag": outcome_tag,
             "object_tag": object_tag,
         }
@@ -577,12 +577,12 @@ def _own_units(
                 ),
                 role=row.role,
                 basis=row.basis,
-                population=row.population,
+                unit=row.unit,
                 setting=row.setting,
                 outcome=row.outcome,
                 study_geography=row.study_geography,
                 payload=payload,
-                population_tag=population_tag,
+                unit_tag=unit_tag,
                 outcome_tag=outcome_tag,
                 object_tag=object_tag,
             )
@@ -742,7 +742,7 @@ def _finding_units(
             "intervention": _bound(row.intervention),
             "role": role,
             "outcome": _bound(row.outcome),
-            "population": _bound(row.population),
+            "population": _bound(row.unit),
             "setting": _bound(row.setting),
             "study_geography": _bound(row.study_geography),
             "study_design": _bound(row.study_design),
@@ -770,7 +770,7 @@ def _finding_units(
                 ),
                 role=role,
                 basis=row.basis,
-                population=row.population,
+                unit=row.unit,
                 setting=row.setting,
                 outcome=row.outcome,
                 study_geography=row.study_geography,
@@ -1405,12 +1405,12 @@ def _coverage_member(unit: _Unit, *, flagged: bool) -> CoverageMember:
         role=unit.role,
         basis=unit.basis,
         flagged=flagged,
-        population=unit.population,
+        unit=unit.unit,
         setting=unit.setting,
         outcome=unit.outcome,
         study_geography=unit.study_geography,
         intervention=intervention if isinstance(intervention, str) else None,
-        population_tag=unit.population_tag,
+        unit_tag=unit.unit_tag,
         outcome_tag=unit.outcome_tag if unit.kind == "interventions" else None,
     )
 

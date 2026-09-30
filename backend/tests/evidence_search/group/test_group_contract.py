@@ -243,7 +243,7 @@ def _seed_one_doc_extraction(
 # --- 1. Schema constraints on grouping_result --------------------------------
 
 
-@pytest.mark.parametrize("facet", ["intervention", "outcome", "population"])
+@pytest.mark.parametrize("facet", ["intervention", "outcome", "unit"])
 def test_grr_per_facet_payload_key_accepted(conn: Connection, facet: str) -> None:
     """Sanctioned shape change: facet is now the persisted JSON key, not a row column."""
     task_id, _ = seed_task_and_run(conn)

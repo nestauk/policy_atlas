@@ -642,7 +642,7 @@ def test_adjustment_writes_new_plan_version_and_changes_not_yet_run_group_direct
             plan=plan,
         )
         io = ScriptedIO(
-            [Adjust(directive_deltas={"group": {"grouping": {"facets": ["population"]}}})]
+            [Adjust(directive_deltas={"group": {"grouping": {"facets": ["unit"]}}})]
         )
 
         outcome = run_plan(
@@ -679,8 +679,8 @@ def test_adjustment_writes_new_plan_version_and_changes_not_yet_run_group_direct
             (1, "superseded", "task_agent"),
             (2, "approved", "user"),
         ]
-        assert rows[1].payload["grouping_facets"] == ["population"]
-        assert facets == ["population"]
+        assert rows[1].payload["grouping_facets"] == ["unit"]
+        assert facets == ["unit"]
     finally:
         _cleanup_task(engine, task_id)
 
@@ -1732,7 +1732,7 @@ def test_pending_group_split_maps_facets_and_overlays_granularity_guidance(
         delta = {
             "group": {
                 "grouping": {
-                    "facets": ["population"],
+                    "facets": ["unit"],
                     "granularity": "coarser",
                     "guidance": guidance,
                 }
@@ -1761,7 +1761,7 @@ def test_pending_group_split_maps_facets_and_overlays_granularity_guidance(
                 .order_by(task_plan.c.version.desc())
                 .limit(1)
             ).scalar_one()
-        assert latest["grouping_facets"] == ["population"]
+        assert latest["grouping_facets"] == ["unit"]
 
         # The overlay echoes ONLY granularity + guidance (facets are NOT overlaid).
         group_compiled = _compiled_by_component(engine, task_id)["group"]
@@ -1773,7 +1773,7 @@ def test_pending_group_split_maps_facets_and_overlays_granularity_guidance(
         grouping_ctx = _scope_context(engine, scope_id)["grouping"]
         assert grouping_ctx["granularity"] == "coarser"
         assert grouping_ctx["guidance"] == guidance
-        assert grouping_ctx["facets"] == ["population"]
+        assert grouping_ctx["facets"] == ["unit"]
     finally:
         _cleanup_task(engine, task_id)
 

@@ -412,7 +412,7 @@ def _finding_values(
         "extraction_record_id": extraction_record_id,
         "intervention": "Alpha service",
         "outcome": "Health outcome",
-        "population": "Adults",
+        "unit": "Adults",
         "comparator": None,
         "effect_direction": "increase",
         "estimate_level": "study",
@@ -444,7 +444,7 @@ def _icf_values(
         "context_label": None,
         "intervention": "Alpha service",
         "outcome": "Attendance",
-        "population": "Adults",
+        "unit": "Adults",
         "setting": None,
         "study_geography": None,
         "study_design": None,
@@ -834,7 +834,7 @@ def test_zero_findings_writes_empty_rollup_without_backend_call(conn: Connection
     }
 
 
-def test_all_null_population_goes_to_no_value_without_backend_call(conn: Connection) -> None:
+def test_all_null_unit_goes_to_no_value_without_backend_call(conn: Connection) -> None:
     task_id, _ = seed_task_and_run(conn)
     scope_id = seed_scope(conn, task_id)
     seeded = seed_extraction(
@@ -848,13 +848,13 @@ def test_all_null_population_goes_to_no_value_without_backend_call(conn: Connect
                     {
                         "intervention": "Alpha service",
                         "outcome": "Outcome A",
-                        "population": None,
+                        "unit": None,
                         "effect_direction": "increase",
                     },
                     {
                         "intervention": "Beta service",
                         "outcome": "Outcome B",
-                        "population": None,
+                        "unit": None,
                         "effect_direction": "decrease",
                     },
                 ],
@@ -868,19 +868,19 @@ def test_all_null_population_goes_to_no_value_without_backend_call(conn: Connect
         task_id,
         scope_id,
         seeded.run_id,
-        context={"grouping": {"facets": ["population"]}},
+        context={"grouping": {"facets": ["unit"]}},
         backend=backend,
     )
     row = _group_row(conn, task_id, group_run_id)
 
     assert backend.calls == []
-    assert summary["facet"] == "population"
+    assert summary["facet"] == "unit"
     assert summary["facet_source"] == "scope_context"
-    assert summary["flags"]["population"]["status"] == "succeeded"
-    assert summary["counts"]["population"]["no_value"] == 2
-    assert summary["counts"]["population"]["groups"] == 0
-    assert summary["residuals"]["population"]["no_value"]["finding_count"] == 2
-    assert row["groups"].keys() == {"population"}
+    assert summary["flags"]["unit"]["status"] == "succeeded"
+    assert summary["counts"]["unit"]["no_value"] == 2
+    assert summary["counts"]["unit"]["groups"] == 0
+    assert summary["residuals"]["unit"]["no_value"]["finding_count"] == 2
+    assert row["groups"].keys() == {"unit"}
     assert _payload_finding_ids(cast("dict[str, Any]", row["groups"])) == {
         str(finding_id) for finding_id in seeded.finding_ids
     }
@@ -995,7 +995,7 @@ def test_group_membership_spans_iof_and_icf_with_iof_only_spread(
                 finding_id=iof_finding_id,
                 intervention="Alpha service",
                 outcome="Attendance",
-                population="Adults",
+                unit="Adults",
                 effect_direction="increase",
             )
         )
@@ -1009,7 +1009,7 @@ def test_group_membership_spans_iof_and_icf_with_iof_only_spread(
             claim="Training gaps slowed Alpha service delivery.",
             intervention="Alpha service",
             outcome="Attendance",
-            population="Adults",
+            unit="Adults",
             setting=None,
             study_geography=None,
             study_design=None,
@@ -1147,7 +1147,7 @@ def test_value_reference_loader_matches_old_two_table_projection(
                 "finding_id": uuid.UUID(int=21),
                 "intervention": "Alpha service",
                 "outcome": "Attendance",
-                "population": "Adults",
+                "unit": "Adults",
             }
         ],
         icf_findings=[
@@ -1157,7 +1157,7 @@ def test_value_reference_loader_matches_old_two_table_projection(
                 "claim": "Staffing slowed Alpha service.",
                 "intervention": "Alpha service",
                 "outcome": "Attendance",
-                "population": "Adults",
+                "unit": "Adults",
             }
         ],
     )
@@ -1177,7 +1177,7 @@ def test_value_reference_loader_matches_old_two_table_projection(
             "kind": row["kind"],
             "intervention": row["intervention"],
             "outcome": row["outcome"],
-            "population": row["population"],
+            "unit": row["unit"],
         }
         for row in loaded
     ]
@@ -1187,14 +1187,14 @@ def test_value_reference_loader_matches_old_two_table_projection(
             "kind": "iof",
             "intervention": "Alpha service",
             "outcome": "Attendance",
-            "population": "Adults",
+            "unit": "Adults",
         },
         {
             "finding_id": str(uuid.UUID(int=22)),
             "kind": "icf",
             "intervention": "Alpha service",
             "outcome": "Attendance",
-            "population": "Adults",
+            "unit": "Adults",
         },
     ]
 

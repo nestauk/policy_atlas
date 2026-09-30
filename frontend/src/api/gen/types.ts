@@ -3751,7 +3751,7 @@ export interface components {
              * Grouping Facets
              * @default null
              */
-            grouping_facets: ("intervention" | "outcome" | "population" | "barrier_theme" | "enabler_theme" | "mechanism_theme")[] | null;
+            grouping_facets: ("intervention" | "outcome" | "unit" | "barrier_theme" | "enabler_theme" | "mechanism_theme")[] | null;
             /**
              * Question
              * @default null

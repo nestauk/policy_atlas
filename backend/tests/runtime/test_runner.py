@@ -1265,7 +1265,7 @@ def test_directive_application_replaces_only_top_level_delta_keys(
                 "selection": {"old": "removed by top-level replacement"},
             },
         )
-        plan = _base_plan(grouping_facets=["population"])
+        plan = _base_plan(grouping_facets=["unit"])
 
         outcome = run_plan(
             engine,
@@ -1294,6 +1294,6 @@ def test_directive_application_replaces_only_top_level_delta_keys(
         }
         assert context["selection"] == {"budget": 25}
         assert context["extraction"] == {"profiles": list(KNOWN_PROFILE_IDS)}
-        assert context["grouping"] == {"facets": ["population"]}
+        assert context["grouping"] == {"facets": ["unit"]}
     finally:
         _cleanup(engine, task_id)

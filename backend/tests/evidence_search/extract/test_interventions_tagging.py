@@ -317,7 +317,7 @@ def test_a_present_profile_stores_null_tags_that_read_back_as_none(conn: Connect
         select(intervention_profile_record)
         .where(intervention_profile_record.c.task_id == task_id)
     ).one()
-    assert (row.population_tag, row.outcome_tag, row.object_tag) == (None, None, None)
+    assert (row.unit_tag, row.outcome_tag, row.object_tag) == (None, None, None)
 
 
 def _stored_record(**tags: Any) -> InterventionsRecord:
@@ -355,7 +355,7 @@ def test_the_writer_stores_the_tags_and_nulls(conn: Connection) -> None:
 
     rows = conn.execute(
         select(
-            intervention_profile_record.c.population_tag,
+            intervention_profile_record.c.unit_tag,
             intervention_profile_record.c.outcome_tag,
             intervention_profile_record.c.object_tag,
         ).where(intervention_profile_record.c.extraction_record_id == record_id)
@@ -368,7 +368,7 @@ def test_the_writer_stores_the_tags_and_nulls(conn: Connection) -> None:
 
 @pytest.mark.parametrize(
     ("column", "constraint"),
-    [("population_tag", "ck_ipr_population_tag"), ("object_tag", "ck_ipr_object_tag")],
+    [("unit_tag", "ck_ipr_unit_tag"), ("object_tag", "ck_ipr_object_tag")],
 )
 def test_the_closed_tags_are_checked(conn: Connection, column: str, constraint: str) -> None:
     task_id, _ = seed_task_and_run(conn)

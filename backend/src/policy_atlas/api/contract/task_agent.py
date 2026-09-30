@@ -51,7 +51,7 @@ DiscretionaryComponent = Literal[
 GroupingFacet = Literal[
     "intervention",
     "outcome",
-    "population",
+    "unit",
     "barrier_theme",
     "enabler_theme",
     "mechanism_theme",

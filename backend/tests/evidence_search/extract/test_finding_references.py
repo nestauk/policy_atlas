@@ -131,13 +131,18 @@ def test_shared_reference_descriptions_are_byte_identical(
     assert iof_description == icf_description
 
 
+# The wire field ``population`` is stored in the ``unit`` column (task 046,
+# amendment 3, R71) until the wire word changes.
+_COLUMN_FOR_FIELD = {"population": "unit"}
+
+
 @pytest.mark.parametrize("field_name", SHARED_REFERENCE_FIELDS)
 def test_shared_reference_columns_are_text_with_pinned_nullability(field_name: str) -> None:
     for schema_name, table in (
         ("iof", intervention_outcome_finding),
         ("icf", implementation_context_finding),
     ):
-        column = table.c[field_name]
+        column = table.c[_COLUMN_FOR_FIELD.get(field_name, field_name)]
         assert isinstance(column.type, Text)
         assert column.nullable is (not REFERENCE_REQUIREDNESS[field_name][schema_name])
 

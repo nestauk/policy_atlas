@@ -146,9 +146,9 @@ def test_grouping_score_summary_reads_facet_counts_shape() -> None:
     tracing.grouping_score_summary(
         cast("Any", client),
         {
-            "facets": ["population"],
+            "facets": ["unit"],
             "counts": {
-                "population": {
+                "unit": {
                     "eligible_base": 10,
                     "findings_total": 10,
                     "grouped": 7,

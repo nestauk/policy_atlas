@@ -48,7 +48,7 @@ def _member(doc: str, **values: Any) -> CoverageMember:
         "role": "evaluated",
         "basis": "abstract_only",
         "flagged": False,
-        "population": None,
+        "unit": None,
         "setting": None,
         "outcome": None,
         "study_geography": None,
@@ -67,10 +67,10 @@ def _coverage(members: list[CoverageMember], **kwargs: Any) -> dict[str, Any]:
 def test_population_tags_are_counted_by_document_with_not_tagged() -> None:
     coverage = _coverage(
         [
-            _member("a", population_tag="on_target"),
-            _member("a", population_tag="on_target"),  # one document
-            _member("b", population_tag="adjacent"),
-            _member("c", population_tag="other"),
+            _member("a", unit_tag="on_target"),
+            _member("a", unit_tag="on_target"),  # one document
+            _member("b", unit_tag="adjacent"),
+            _member("c", unit_tag="other"),
             _member("d"),  # another context, or a linked finding
         ]
     )
@@ -158,13 +158,13 @@ def test_empty_coverage_has_the_outcome_counts_key() -> None:
 def test_tried_on_lists_adjacent_populations_by_document_folded() -> None:
     coverage = _coverage(
         [
-            _member("a", population="Young  adults", population_tag="adjacent"),
-            _member("a", population="young adults", population_tag="adjacent"),  # same doc
-            _member("b", population="YOUNG ADULTS", population_tag="adjacent"),
-            _member("c", population="older workers", population_tag="adjacent"),
-            _member("d", population="young people not in work", population_tag="on_target"),
-            _member("e", population="firms", population_tag="other"),
-            _member("f", population=None, population_tag="adjacent"),
+            _member("a", unit="Young  adults", unit_tag="adjacent"),
+            _member("a", unit="young adults", unit_tag="adjacent"),  # same doc
+            _member("b", unit="YOUNG ADULTS", unit_tag="adjacent"),
+            _member("c", unit="older workers", unit_tag="adjacent"),
+            _member("d", unit="young people not in work", unit_tag="on_target"),
+            _member("e", unit="firms", unit_tag="other"),
+            _member("f", unit=None, unit_tag="adjacent"),
         ]
     )
     assert coverage["tried_on"] == [
@@ -175,7 +175,7 @@ def test_tried_on_lists_adjacent_populations_by_document_folded() -> None:
 
 def test_tried_on_is_capped_at_eight_by_documents_then_text() -> None:
     members = [
-        _member(f"{name}-{n}", population=name, population_tag="adjacent")
+        _member(f"{name}-{n}", unit=name, unit_tag="adjacent")
         for index, name in enumerate(f"group {chr(97 + i)}" for i in range(10))
         for n in range(1 + index % 3)
     ]
@@ -359,8 +359,8 @@ def _tagged_walk(conn: Connection) -> tuple[_Walk, uuid.UUID, uuid.UUID]:
             walk,
             ser,
             intervention,
-            population=population,
-            population_tag=population_tag,
+            unit=population,
+            unit_tag=population_tag,
             outcome_tag="other",
             object_tag=object_tag,
             setting=setting,

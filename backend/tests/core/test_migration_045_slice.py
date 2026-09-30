@@ -493,7 +493,7 @@ def test_the_union_view_carries_profile_records_as_the_third_kind(conn: Connecti
     assert row["task_id"] == task_id
     assert row["intervention"] == "Youth guarantee"
     assert row["study_geography"] == "Finland"
-    assert row["population"] is None
+    assert row["unit"] is None
 
 
 @pytest.mark.parametrize(

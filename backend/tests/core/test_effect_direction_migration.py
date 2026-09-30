@@ -67,11 +67,14 @@ def _seed_finding(
         records = legacy_table(connection, "source_extraction_record")
         findings = legacy_table(connection, "intervention_outcome_finding")
         task_key, snapshot_key = "project_id", "project_source_snapshot_id"
+        unit_key = "population"
     else:
         snapshots = task_source_snapshot
         records = source_extraction_record
         findings = intervention_outcome_finding
         task_key, snapshot_key = "task_id", "task_source_snapshot_id"
+        # Renamed at head (task 046, amendment 3, R71).
+        unit_key = "unit"
 
     connection.execute(
         source_snapshot.insert().values(
@@ -115,7 +118,7 @@ def _seed_finding(
             "extraction_record_id": extraction_record_id,
             "intervention": "Coaching",
             "outcome": "Test scores",
-            "population": None,
+            unit_key: None,
             "comparator": None,
             "effect_direction": effect_direction,
             "estimate_level": "study",

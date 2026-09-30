@@ -1137,7 +1137,7 @@ def findings_page(
                     stratum_qualifiers=cast(list[dict[str, str]], row["stratum_qualifiers"]),
                     effect_basis=row["effect_basis"],
                     study_geography=row["study_geography"],
-                    population=row["population"],
+                    population=row["unit"],
                     setting=row["setting"],
                     study_design=row["study_design"],
                 )
@@ -1151,7 +1151,7 @@ def findings_page(
                     context_label=row["context_label"],
                     intervention=row["intervention"],
                     outcome=row["outcome"],
-                    population=row["population"],
+                    population=row["unit"],
                     setting=row["setting"],
                     study_geography=row["study_geography"],
                     study_design=row["study_design"],
@@ -3220,13 +3220,13 @@ class _SearchUnit:
     tss_id: uuid.UUID
     role: str
     basis: str | None
-    population: str | None
+    unit: str | None
     setting: str | None
     outcome: str | None
     study_geography: str | None
     metadata: Mapping[str, Any]
     locator: str
-    population_tag: str | None = None
+    unit_tag: str | None = None
     intervention: str | None = None
     outcome_tag: str | None = None
 
@@ -3340,11 +3340,11 @@ def _added_searches(
                 ipr.c.record_id,
                 ipr.c.extraction_record_id,
                 ipr.c.role,
-                ipr.c.population,
+                ipr.c.unit,
                 ipr.c.setting,
                 ipr.c.outcome,
                 ipr.c.study_geography,
-                ipr.c.population_tag,
+                ipr.c.unit_tag,
                 ipr.c.outcome_tag,
                 ipr.c.intervention,
                 source_extraction_record.c.task_source_snapshot_id,
@@ -3382,13 +3382,13 @@ def _added_searches(
                 tss_id=row.task_source_snapshot_id,
                 role=row.role,
                 basis=row.basis,
-                population=row.population,
+                unit=row.unit,
                 setting=row.setting,
                 outcome=row.outcome,
                 study_geography=row.study_geography,
                 metadata=_as_mapping(row.metadata),
                 locator=row.source_locator,
-                population_tag=row.population_tag,
+                unit_tag=row.unit_tag,
                 outcome_tag=row.outcome_tag,
                 intervention=row.intervention,
             )
@@ -3448,12 +3448,12 @@ def _search_coverage(
                 role=unit.role,
                 basis=unit.basis,
                 flagged=False,
-                population=unit.population,
+                unit=unit.unit,
                 setting=unit.setting,
                 outcome=unit.outcome,
                 study_geography=unit.study_geography,
                 intervention=unit.intervention,
-                population_tag=unit.population_tag,
+                unit_tag=unit.unit_tag,
                 outcome_tag=unit.outcome_tag,
             )
             for unit in search.units

@@ -1236,7 +1236,7 @@ def _write_iof_finding(
             extraction_record_id=record_id,
             intervention=record.intervention,
             outcome=record.outcome,
-            population=record.population,
+            unit=record.population,
             setting=record.setting,
             comparator=record.comparator,
             effect_direction=record.effect_direction,
@@ -1279,7 +1279,7 @@ def _write_icf_finding(
             context_label=record.context_label,
             intervention=record.intervention,
             outcome=record.outcome,
-            population=record.population,
+            unit=record.population,
             setting=record.setting,
             study_geography=record.study_geography,
             study_design=record.study_design,
@@ -2092,7 +2092,7 @@ def _load_relevance_digests(
                 intervention_outcome_finding.c.finding_id,
                 intervention_outcome_finding.c.intervention,
                 intervention_outcome_finding.c.outcome,
-                intervention_outcome_finding.c.population,
+                intervention_outcome_finding.c.unit,
                 intervention_outcome_finding.c.setting,
             )
             .where(intervention_outcome_finding.c.task_id == task_id)
@@ -2105,7 +2105,7 @@ def _load_relevance_digests(
                 "kind": "iof",
                 "intervention": row.intervention,
                 "outcome": row.outcome,
-                "population": row.population,
+                "population": row.unit,
                 "setting": row.setting,
             })
     if icf_record_ids:
@@ -2116,7 +2116,7 @@ def _load_relevance_digests(
                 implementation_context_finding.c.claim,
                 implementation_context_finding.c.intervention,
                 implementation_context_finding.c.setting,
-                implementation_context_finding.c.population,
+                implementation_context_finding.c.unit,
             )
             .where(implementation_context_finding.c.task_id == task_id)
             .where(implementation_context_finding.c.extraction_record_id.in_(icf_record_ids))
@@ -2130,7 +2130,7 @@ def _load_relevance_digests(
                 "claim": row.claim,
                 "intervention": row.intervention,
                 "setting": row.setting,
-                "population": row.population,
+                "population": row.unit,
             })
     return digests
 

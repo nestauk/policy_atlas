@@ -183,7 +183,9 @@ def _stored(conn: Connection, task_id: uuid.UUID) -> dict[str, tuple[Any, ...]]:
     rows = conn.execute(
         select(intervention_profile_record).where(intervention_profile_record.c.task_id == task_id)
     ).all()
-    return {row.intervention: tuple(getattr(row, tag) for tag in _TAGS) for row in rows}
+    # The wire's ``population_tag`` is stored as ``unit_tag`` (task 046, amendment 3, R71).
+    columns = tuple("unit_tag" if tag == "population_tag" else tag for tag in _TAGS)
+    return {row.intervention: tuple(getattr(row, c) for c in columns) for row in rows}
 
 
 def test_extract_stores_the_settled_tags_and_counts_the_repairs(conn: Connection) -> None:

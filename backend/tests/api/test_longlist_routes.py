@@ -315,7 +315,7 @@ def _build(
             "youth guarantee",
             study_geography="England",
             setting="Jobcentres",
-            population="16 to 24 year olds",
+            unit="16 to 24 year olds",
             outcome="employment",
         )
         walk.record(preprint, "youth guarantee flagged", study_geography="United Kingdom")
@@ -773,7 +773,7 @@ def test_the_card_and_list_serve_tried_on_and_variants(conn: Connection) -> None
         doc = walk.doc()
         ser = _extraction(walk, doc, fingerprint=fingerprint)
         _record_under(
-            walk, ser, intervention, population=population, population_tag=population_tag
+            walk, ser, intervention, unit=population, unit_tag=population_tag
         )
         docs[doc] = ser
     _rollup_of(walk, walk.scope_id, docs)
@@ -844,7 +844,7 @@ def test_the_list_serves_every_lever_type_taxonomy_version(conn: Connection) -> 
 
 
 def test_an_added_option_s_own_search_serves_tried_on_and_variants(conn: Connection) -> None:
-    """Item 6: ``_search_coverage`` carries ``population_tag`` and
+    """Item 6: ``_search_coverage`` carries ``unit_tag`` and
     ``intervention`` so an added option's own search fills ``tried_on`` and
     ``variants`` too, not only a built option's coverage."""
     walk = _Walk(conn)
@@ -878,7 +878,7 @@ def test_an_added_option_s_own_search_serves_tried_on_and_variants(conn: Connect
         )
     )
     doc = walk.doc()
-    walk.record(doc, "Wage subsidy", population="16 to 24 year olds", population_tag="adjacent")
+    walk.record(doc, "Wage subsidy", unit="16 to 24 year olds", unit_tag="adjacent")
     walk.rollup(scope_id, [doc])
 
     card = repository.option_out(conn, walk.task_id, added)
