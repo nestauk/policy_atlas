@@ -28,6 +28,7 @@ from policy_atlas.core import events
 from policy_atlas.core.schema import longlist_result, option
 from policy_atlas.options_scoping.longlist.lever_types import LEVER_TYPE_KEYS, TAXONOMY_VERSION
 from policy_atlas.options_scoping.longlist.longlist_backend import StubLonglistBackend
+from policy_atlas.options_scoping.option_profile.folding_prompt import FoldingResponse, FoldWire
 from policy_atlas.options_scoping.option_profile.lever_typing_prompt import (
     build_lever_typing_messages,
 )
@@ -251,8 +252,9 @@ def test_a_failed_typing_call_is_counted_never_a_crash(conn: Connection) -> None
     row = walk.options()["Youth guarantee"]
     assert (row.lever_none_fits_reason, row.taxonomy_version) == (None, None)
     assert row.lever_none_fits_reason != TYPING_INVALID_REASON
-    # The step still succeeds: the profile is written (Phase 12b).
-    assert set(result.option_profile) == {str(row.option_id)}
+    # The step still succeeds: the profile is written (Phase 12b), and the
+    # folding maps at list level (task 046, amendment 3, S21).
+    assert set(result.option_profile) == {str(row.option_id), "folds"}
 
 
 def test_typing_batches_run_in_parallel(conn: Connection) -> None:
@@ -413,7 +415,15 @@ def test_the_profile_merges_into_the_row_and_types_every_option_not_merged(
     assert rows[merged].primary_lever_type is None
     assert rows[excluded].primary_lever_type == "subsidise"
     after = walk.result(run_id)
-    assert after.coverage == before.coverage
+    # The folded keys are merged into each option's coverage (S21); the
+    # rest is as the build wrote it.
+    folded_keys = {"tried_on_kinds", "measures_kinds", "outcome_counts"}
+    assert set(after.coverage) == set(before.coverage)
+    for option_id, entry in after.coverage.items():
+        assert {k: v for k, v in entry.items() if k not in folded_keys} == {
+            k: v for k, v in before.coverage[option_id].items() if k not in folded_keys
+        }
+        assert folded_keys <= set(entry)
     assert after.counts == {
         **before.counts,
         "none_fits": 0,
@@ -437,7 +447,9 @@ def test_the_profile_merges_into_the_row_and_types_every_option_not_merged(
         "retries": 0,
         "marks": dict.fromkeys(PROFILE_LINE_KEYS, no_marks),
         "ambition_marks": no_marks,
+        "folding": after.provenance["option_profile"]["folding"],
     }
+    assert after.provenance["option_profile"]["folding"]["prompt_version"] == "folding_v1"
 
 
 def test_kept_counts_only_an_option_that_was_typed_before(conn: Connection) -> None:
@@ -503,7 +515,8 @@ def test_each_line_is_written_for_every_option_not_merged(conn: Connection) -> N
     _, summary = _profile(walk, StubLonglistBackend())
     column = _column(walk, run_id)
     # An excluded option gets its profile; a merged one gets none (final § 2.3).
-    assert set(column) == {str(first), str(excluded)}
+    # The folding maps sit beside them, at list level (S21).
+    assert set(column) == {str(first), str(excluded), "folds"}
     assert str(merged) not in column
     for option_id in (first, excluded):
         entry = column[str(option_id)]
@@ -973,3 +986,237 @@ SCRIPTED_LITERAL: dict[str, Any] = {
     # Counted over this build's valid typings: the kept none-fits is not.
     "counts.none_fits": 0,
 }
+
+
+# --- the folding calls (task 046, amendment 3, R54, R55; S21) -------------------------
+
+
+def _folding_walk(walk: _Walk) -> dict[str, uuid.UUID]:
+    """Two options; seven records under the first (more than the profile's five),
+    one under the second. Units and outcomes as the folding calls read them."""
+    ids = {"yg": walk.option("Youth guarantee"), "ws": walk.option("Wage subsidy")}
+    first, second, third = walk.doc(), walk.doc(), walk.doc()
+    rows: list[tuple[uuid.UUID, str, str | None, str | None, str | None, str]] = [
+        (first, "youth guarantee 0", "16 to 24 Year Olds", "NEET rate", "other", "evaluated"),
+        (first, "youth guarantee 1", "young adults", "neet status", None, "evaluated"),
+        (first, "youth guarantee 2", "Young adults", "employment", "other", "described"),
+        (second, "youth guarantee 3", "school leavers", "employment", "other", "evaluated"),
+        (second, "youth guarantee 4", "parents", "wellbeing", "the NEET rate", "described"),
+        (second, "youth guarantee 5", "employers", None, None, "mentioned"),
+        (second, "youth guarantee 6", "graduates", "earnings", "other", "recommended"),
+        (third, "wage subsidy", "firms", "the neet rate", "other", "evaluated"),
+    ]
+    for doc, intervention, unit, outcome, outcome_tag, role in rows:
+        walk.record(
+            doc, intervention, unit=unit, outcome=outcome, outcome_tag=outcome_tag, role=role
+        )
+    walk.rollup(walk.scope_id, [first, second, third])
+    return ids
+
+
+def _folding_routes() -> _Scripted:
+    routes = {f"youth guarantee {i}": ("Youth guarantee", False) for i in range(7)}
+    routes["wage subsidy"] = ("Wage subsidy", False)
+    return _Scripted(routes=routes)
+
+
+def _fold_response(**kinds: str) -> FoldingResponse:
+    return FoldingResponse(
+        folds=[FoldWire(word_id=word_id, kind=kind) for word_id, kind in kinds.items()]
+    )
+
+
+def test_the_folding_calls_read_every_member_s_words_not_five(conn: Connection) -> None:
+    walk = _Walk(conn)
+    _folding_walk(walk)
+    backend = _folding_routes()
+    walk.build(backend)
+    _profile(walk, backend)
+    inputs = {i["facet"]: i for i in backend.profiler.fold_inputs}
+    assert backend.profiler.fold_calls == {"tried_on": 1, "measures": 1}
+    # Every member of every option, sorted, one spelling per case-folded word;
+    # the bare mention ("employers") is thinned away, so it is no member.
+    assert inputs["tried_on"]["words"] == {
+        "w1": "16 to 24 Year Olds",
+        "w2": "firms",
+        "w3": "graduates",
+        "w4": "parents",
+        "w5": "school leavers",
+        "w6": "Young adults",
+    }
+    assert inputs["measures"]["words"] == {
+        "w1": "earnings",
+        "w2": "employment",
+        "w3": "NEET rate",
+        "w4": "neet status",
+        "w5": "the neet rate",
+        "w6": "wellbeing",
+    }
+    # The plan as the other calls read it (place stripped): target unit and outcomes.
+    assert inputs["measures"]["plan"]["target_unit"] == "16 to 24 year olds"
+    assert inputs["measures"]["plan"]["outcomes"] == ["the NEET rate"]
+
+
+def test_the_stub_folds_each_word_to_itself_lower_cased_or_to_its_plan_text() -> None:
+    backend = StubLonglistBackend()
+    plan: dict[str, object] = {"target_unit": "16 to 24 year olds", "outcomes": ["the NEET rate"]}
+    words = {"w1": "16 To 24 Year Olds", "w2": "Young Adults", "w3": "THE neet RATE"}
+    response, _ = backend.fold(facet="tried_on", plan=plan, words=words)
+    assert [(f.word_id, f.kind) for f in response.folds] == [
+        ("w1", "16 to 24 year olds"),
+        ("w2", "young adults"),
+        ("w3", "the NEET rate"),
+    ]
+    again, _ = backend.fold(facet="tried_on", plan=plan, words=words)
+    assert again == response
+
+
+def test_the_maps_are_stored_at_list_level_and_the_kinds_merged_into_coverage(
+    conn: Connection,
+) -> None:
+    walk = _Walk(conn)
+    ids = _folding_walk(walk)
+    backend = _folding_routes()
+    run_id, _ = walk.build(backend)
+    before = walk.result(run_id)
+    _profile(walk, backend)
+    after = walk.result(run_id)
+    column = after.option_profile
+    assert set(column) == {str(ids["yg"]), str(ids["ws"]), "folds"}
+    # The stub: each word lower-cased, a plan text where one matches.
+    assert column["folds"] == {
+        "tried_on": {
+            "16 to 24 Year Olds": "16 to 24 year olds",
+            "firms": "firms",
+            "graduates": "graduates",
+            "parents": "parents",
+            "school leavers": "school leavers",
+            "Young adults": "young adults",
+        },
+        "measures": {
+            "earnings": "earnings",
+            "employment": "employment",
+            "NEET rate": "neet rate",
+            "neet status": "neet status",
+            "the neet rate": "the NEET rate",
+            "wellbeing": "wellbeing",
+        },
+    }
+    coverage = after.coverage[str(ids["yg"])]
+    # The old keys stay as the build wrote them (constrain reads them).
+    for key in ("tried_on", "populations", "settings", "population_tags", "outcomes"):
+        assert coverage[key] == before.coverage[str(ids["yg"])][key]
+    # Target unit first; two words of one kind in one document count once.
+    assert coverage["tried_on_kinds"] == [
+        {"kind": "16 to 24 year olds", "documents": 1},
+        {"kind": "graduates", "documents": 1},
+        {"kind": "parents", "documents": 1},
+        {"kind": "school leavers", "documents": 1},
+        {"kind": "young adults", "documents": 1},
+    ]
+    assert coverage["measures_kinds"] == [
+        {"kind": "employment", "documents": 2, "evaluated": 1},
+        {"kind": "earnings", "documents": 1, "evaluated": 0},
+        {"kind": "neet rate", "documents": 1, "evaluated": 1},
+        {"kind": "neet status", "documents": 1, "evaluated": 1},
+        {"kind": "wellbeing", "documents": 1, "evaluated": 0},
+    ]
+    # These records carry no tag of this plan's context (read as not tagged):
+    # every kind that is not the plan outcome is an ``other`` row.
+    assert coverage["outcome_counts"]["by_outcome"] == [
+        {"outcome": "the NEET rate", "documents": 0, "evaluated": 0}
+    ]
+    assert coverage["outcome_counts"]["other"] == coverage["measures_kinds"]
+    wage = after.coverage[str(ids["ws"])]
+    # An ``other`` record whose kind is the plan outcome counts on its row, not
+    # under ``other``.
+    assert wage["outcome_counts"]["by_outcome"] == [
+        {"outcome": "the NEET rate", "documents": 1, "evaluated": 1}
+    ]
+    assert wage["outcome_counts"]["other"] == []
+    assert wage["tried_on_kinds"] == [{"kind": "firms", "documents": 1}]
+    folding = after.provenance["option_profile"]["folding"]
+    assert folding == {
+        "prompt_version": "folding_v1",
+        "model": "stub",
+        "calls": 2,
+        "retries": 0,
+        "words": {"tried_on": 6, "measures": 6},
+        "kinds": {"tried_on": 6, "measures": 6},
+    }
+
+
+def test_a_missing_word_keeps_its_text_an_unknown_id_is_dropped_and_a_plan_kind_is_exact(
+    conn: Connection,
+) -> None:
+    walk = _Walk(conn)
+    _folding_walk(walk)
+    routes = _folding_routes()
+    run_id, _ = walk.build(routes)
+    profiler = StubLonglistBackend(
+        fold_responses={
+            # w1 is left out; w9 is not in the input; the plan outcome comes
+            # back in another case.
+            "measures": _fold_response(
+                w2="Jobs", w3="THE NEET RATE", w4="the neet rate", w9="made up"
+            ),
+        }
+    )
+    _profile(walk, _Scripted(routes=routes.routes, profiler=profiler))
+    folds = walk.result(run_id).option_profile["folds"]["measures"]
+    assert folds == {
+        "earnings": "earnings",
+        "employment": "Jobs",
+        "NEET rate": "the NEET rate",
+        "neet status": "the NEET rate",
+        # Left out, and the plan outcome in its own words: the plan's text.
+        "the neet rate": "the NEET rate",
+        "wellbeing": "wellbeing",
+    }
+    assert "made up" not in folds.values()
+
+
+def test_a_folding_call_invalid_twice_fails_the_step_and_writes_nothing(
+    conn: Connection,
+) -> None:
+    walk = _Walk(conn)
+    _folding_walk(walk)
+    routes = _folding_routes()
+    run_id, _ = walk.build(routes)
+    _profile(walk, routes)
+    before = walk.result(run_id)
+    before_rows = {name: tuple(row) for name, row in walk.options().items()}
+    # One id, two kinds: invalid; so is an answer with no input id.
+    conflicting = FoldingResponse(
+        folds=[FoldWire(word_id="w1", kind="a"), FoldWire(word_id="w1", kind="b")]
+    )
+    profiler = StubLonglistBackend(
+        fold_responses={"tried_on": [conflicting, _fold_response(w99="b")]}
+    )
+    with pytest.raises(OptionProfileFailure, match="tried_on folding"):
+        _profile(walk, _Scripted(routes=routes.routes, profiler=profiler))
+    assert profiler.fold_calls["tried_on"] == 2
+    after = walk.result(run_id)
+    assert (after.option_profile, after.coverage, after.provenance, after.counts) == (
+        before.option_profile,
+        before.coverage,
+        before.provenance,
+        before.counts,
+    )
+    assert {name: tuple(row) for name, row in walk.options().items()} == before_rows
+
+
+def test_a_folding_call_invalid_once_then_right_succeeds(conn: Connection) -> None:
+    walk = _Walk(conn)
+    _folding_walk(walk)
+    routes = _folding_routes()
+    run_id, _ = walk.build(routes)
+    profiler = StubLonglistBackend(
+        fold_responses={"measures": [_fold_response(w42="x"), _fold_response(w2="jobs")]}
+    )
+    _profile(walk, _Scripted(routes=routes.routes, profiler=profiler))
+    assert profiler.fold_calls["measures"] == 2
+    result = walk.result(run_id)
+    assert result.option_profile["folds"]["measures"]["employment"] == "jobs"
+    assert result.provenance["option_profile"]["folding"]["retries"] == 1
+    assert result.provenance["option_profile"]["retries"] == 0

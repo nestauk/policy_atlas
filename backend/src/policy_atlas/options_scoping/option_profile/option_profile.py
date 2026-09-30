@@ -29,6 +29,14 @@ task's options that are not merged, included or not (S16), in the order
   fails the step (:class:`OptionProfileFailure`) and nothing is written. The
   model's marks are stored as given: no quota, no floor, no check of a mark
   against its sentence.
+- **The two folding calls** (task 046, amendment 3, R54, R55; S21), in the
+  same pool, on the mini model: one per facet over the DISTINCT record words
+  of the whole list — every member of every option, not the profile calls'
+  records — the ``unit`` words for Tried on, the ``outcome`` words for
+  Measures, keyed ``w1 … wN``; word → kind. One retry; an invalid answer
+  after it fails the step. A word the answer leaves out keeps its own text as
+  its kind; a kind for an id not in the input is dropped; a kind equal
+  (case-folded) to a plan outcome or to the target unit is that plan text.
 
 Writes (S17), all after the last model call: the lever types on each option
 row typed validly and the ambition (mark and sentence) on every option row;
@@ -39,7 +47,11 @@ merged into its JSON as ``theme`` merges, the typing keys the read side reads
 ``provenance.typing``, ``provenance.prompt_versions.typing``,
 ``provenance.models.typing``, ``provenance.taxonomy_version``,
 ``counts.none_fits``, ``counts.typing_invalid``), ``counts.profiled`` and
-``provenance.option_profile``.
+``provenance.option_profile``; the folding maps at list level in the
+``option_profile`` column under ``folds``, and each option's coverage keys
+``tried_on_kinds``, ``measures_kinds`` and ``outcome_counts`` recomputed from
+its members through the maps (a database read, no model call) and merged
+into the row's ``coverage``.
 """
 
 from __future__ import annotations
@@ -64,13 +76,24 @@ from policy_atlas.core.schema import (
     option_membership,
 )
 from policy_atlas.core.usage import TokenUsage, UsageAccumulator, UsageResult
+from policy_atlas.options_scoping.longlist.coverage import FOLD_FIELDS, distinct_words
 from policy_atlas.options_scoping.longlist.lever_types import LEVER_TYPE_KEYS, TAXONOMY_VERSION
-from policy_atlas.options_scoping.longlist.longlist import _seeds
+from policy_atlas.options_scoping.longlist.longlist import (
+    MembershipRead,
+    _seeds,
+    read_membership,
+)
 from policy_atlas.options_scoping.longlist.longlist_backend import (
+    LONGLIST_ASSIGNMENT_MODEL,
     LONGLIST_JUDGMENT_MODEL,
     LonglistBackend,
 )
 from policy_atlas.options_scoping.longlist_intent import longlist_plan_data
+from policy_atlas.options_scoping.option_profile.folding_prompt import (
+    FOLDING_PROMPT_VERSION,
+    Facet,
+    FoldingResponse,
+)
 from policy_atlas.options_scoping.option_profile.lever_typing_prompt import (
     LEVER_TYPING_BATCH_SIZE,
     LEVER_TYPING_PROMPT_VERSION,
@@ -97,8 +120,9 @@ TYPING_MAX_CONCURRENT = 4
 #: stored row can still carry it; the read models leave it out of *none
 #: fits*). A typing that fails now leaves the option's columns as they are.
 TYPING_INVALID_REASON = "typing invalid"
-#: The ten profile calls in flight at once: all of them (R37).
-OPTION_PROFILE_MAX_CONCURRENT = 10
+#: The ten profile calls and the two folding calls in flight at once: all
+#: of them (R37; task 046, amendment 3, S21).
+OPTION_PROFILE_MAX_CONCURRENT = 12
 #: Attempts per profile call: the call and one retry (the pattern of
 #: constrain's distinct call).
 OPTION_PROFILE_CALL_ATTEMPTS = 2
@@ -115,13 +139,15 @@ _PROFILE_UNIT_KIND = "interventions"
 #: The name of the ambition call and of the setting call, as a failure names them.
 _AMBITION_CALL = "ambition"
 _SETTING_CALL = "setting"
+#: The coverage keys the folding maps recompute and merge (S21, S24).
+FOLDED_COVERAGE_KEYS: tuple[str, ...] = ("tried_on_kinds", "measures_kinds", "outcome_counts")
 
 
 class OptionProfileFailure(Exception):
     """The profile could not be written.
 
-    No longlist exists for the walk, or a profile call (a line, the ambition
-    or the setting) failed twice.
+    No longlist exists for the walk, or a profile call (a line, the ambition,
+    the setting or a folding call) failed twice.
     """
 
 
@@ -684,6 +710,92 @@ def _profile_calls(
     return calls
 
 
+def _fold_call_name(facet: str) -> str:
+    """A folding call's name, as a failure names it."""
+    return f"{facet} folding"
+
+
+def _folding_words(read: MembershipRead) -> dict[str, dict[str, str]]:
+    """Per facet, the list's distinct words keyed ``w1 … wN`` (S21).
+
+    Over every member of every option read, sorted, de-duplicated
+    case-folded (:func:`~policy_atlas.options_scoping.longlist.coverage.distinct_words`).
+    """
+    members = [member for held in read.members.values() for member in held]
+    return {
+        facet: {
+            f"w{index}": word
+            for index, word in enumerate(distinct_words(members, facet), start=1)
+        }
+        for facet in FOLD_FIELDS
+    }
+
+
+def _checked_folds(
+    response: Any, words: Mapping[str, str], references: Sequence[str]
+) -> dict[str, str] | None:
+    """One folding response mapped back to ``{word: kind}``; ``None`` when invalid.
+
+    Invalid: not a :class:`FoldingResponse`; one input id given two different
+    kinds; or not one input id answered. Otherwise every input word is in the
+    map: a word left out, or given a blank kind, keeps its own text; an id
+    not in the input is dropped (B10); a kind equal, case-folded, to one of
+    ``references`` (the plan outcomes, or the target unit) is that plan text
+    exactly (A4).
+    """
+    if not isinstance(response, FoldingResponse):
+        return None
+    answered: dict[str, str] = {}
+    for wire in response.folds:
+        word_id = wire.word_id.strip()
+        kind = " ".join(wire.kind.split())
+        if word_id not in words or not kind:
+            continue
+        if answered.get(word_id, kind) != kind:
+            return None
+        answered[word_id] = kind
+    if words and not answered:
+        return None
+    by_key = {
+        " ".join(text.split()).casefold(): text for text in references if text and text.strip()
+    }
+    folds: dict[str, str] = {}
+    for word_id, word in words.items():
+        kind = answered.get(word_id, word)
+        folds[word] = by_key.get(kind.casefold(), kind)
+    return folds
+
+
+def _folding_calls(
+    backend: LonglistBackend,
+    *,
+    plan: dict[str, object],
+    words: Mapping[str, dict[str, str]],
+) -> list[tuple[str, Callable[[], UsageResult[Any]], Callable[[Any], Mapping[str, Any] | None]]]:
+    """The two folding calls, one per facet with words (R54, R55; S21)."""
+    outcomes = plan.get("outcomes")
+    target_unit = plan.get("target_unit")
+    references: dict[str, list[str]] = {
+        "tried_on": [target_unit] if isinstance(target_unit, str) else [],
+        "measures": (
+            [o for o in outcomes if isinstance(o, str)] if isinstance(outcomes, list) else []
+        ),
+    }
+
+    def _call(facet: Facet) -> Callable[[], UsageResult[Any]]:
+        return lambda: backend.fold(facet=facet, plan=plan, words=dict(words[facet]))
+
+    def _check(facet: Facet) -> Callable[[Any], Mapping[str, Any] | None]:
+        return lambda response: _checked_folds(response, words[facet], references[facet])
+
+    facets: tuple[Facet, ...] = ("tried_on", "measures")
+    return [
+        (_fold_call_name(facet), _call(facet), _check(facet))
+        for facet in facets
+        if words.get(facet)
+    ]
+
+
 def option_profile_scope(
     conn: Connection,
     *,
@@ -715,7 +827,7 @@ def option_profile_scope(
 
     Raises:
         OptionProfileFailure: If the walk has no ``longlist_result``, or a
-            profile call failed twice (nothing is written).
+            profile call or a folding call failed twice (nothing is written).
     """
     plan = walk_plan(conn, task_id=task_id, run_id=run_id, scope_id=context.scope_id)
     result_row = _latest_longlist(conn, task_id=task_id, scope_id=context.scope_id)
@@ -724,6 +836,15 @@ def option_profile_scope(
     options = _profiled_options(conn, task_id=task_id)
     records = _evidence_records(conn, task_id=task_id, option_ids=[o.option_id for o in options])
     payload, short_ids = _profile_payload(options, records)
+    # The folding calls read the distinct words of every member (S21).
+    membership = read_membership(
+        conn,
+        task_id=task_id,
+        scope_id=context.scope_id,
+        option_ids=[o.option_id for o in options],
+    )
+    words = _folding_words(membership)
+    fold_calls = _folding_calls(backend, plan=plan_data, words=words)
     calls = (
         _profile_calls(
             backend,
@@ -737,22 +858,30 @@ def option_profile_scope(
         else []
     )
 
-    # The ten profile calls and the typing batches, at one time.
+    # The ten profile calls, the two folding calls and the typing batches,
+    # at one time.
     usage = UsageAccumulator()
     with ThreadPoolExecutor(max_workers=OPTION_PROFILE_MAX_CONCURRENT) as pool:
         futures: list[Future[_CallOutcome]] = [
             tracing.submit_with_context(pool, _profile_call, name, call, check)
             for name, call, check in calls
         ]
+        fold_futures: list[Future[_CallOutcome]] = [
+            tracing.submit_with_context(pool, _profile_call, name, call, check)
+            for name, call, check in fold_calls
+        ]
         # Typing (S12): batches in parallel; a kept typing carries forward.
         typings, kept_typings, typing_stats = _type_options(
             backend, options, usage, plan=plan_data, baseline=baseline
         )
         outcomes = [future.result() for future in futures]
-    for outcome in outcomes:
+        fold_outcomes = [future.result() for future in fold_futures]
+    for outcome in [*outcomes, *fold_outcomes]:
         for call_usage in outcome.usages:
             usage.add(call_usage)
-    failed = [outcome.name for outcome in outcomes if outcome.value is None]
+    failed = [
+        outcome.name for outcome in [*outcomes, *fold_outcomes] if outcome.value is None
+    ]
     if failed:
         log.warning("option_profile.failed", calls=failed)
         raise OptionProfileFailure(
@@ -761,6 +890,10 @@ def option_profile_scope(
         )
     answers = {outcome.name: outcome.value for outcome in outcomes}
     retries = sum(outcome.attempts - 1 for outcome in outcomes)
+    folded = {outcome.name: outcome.value for outcome in fold_outcomes}
+    folds: dict[str, dict[str, str]] = {
+        facet: dict(folded.get(_fold_call_name(facet)) or {}) for facet in FOLD_FIELDS
+    }
 
     runner_ups: dict[str, dict[str, Any]] = {
         str(option_id): {"lever_type": t.runner_up}
@@ -798,6 +931,7 @@ def option_profile_scope(
             .values(**values)
         )
     profile = _profile_column(options, short_ids, answers)
+    coverage = _folded_coverage(result_row.coverage, membership, plan_data, folds)
 
     none_fits = sum(1 for t in typings.values() if t.primary is None)
     counts = dict(result_row.counts) if isinstance(result_row.counts, Mapping) else {}
@@ -831,6 +965,17 @@ def option_profile_scope(
                 for line_key in PROFILE_LINE_KEYS
             },
             "ambition_marks": _mark_counts(ambitions),
+            "folding": {
+                "prompt_version": FOLDING_PROMPT_VERSION,
+                "model": LONGLIST_ASSIGNMENT_MODEL if live else "stub",
+                "calls": len(fold_calls),
+                "retries": sum(outcome.attempts - 1 for outcome in fold_outcomes),
+                "words": {facet: len(words[facet]) for facet in FOLD_FIELDS},
+                "kinds": {
+                    facet: len({kind.casefold() for kind in folds[facet].values()})
+                    for facet in FOLD_FIELDS
+                },
+            },
         },
     )
     conn.execute(
@@ -839,7 +984,12 @@ def option_profile_scope(
             longlist_result.c.longlist_result_id == result_row.longlist_result_id,
             longlist_result.c.task_id == task_id,
         )
-        .values(counts=counts, provenance=provenance, option_profile=profile)
+        .values(
+            counts=counts,
+            provenance=provenance,
+            option_profile={**profile, "folds": folds},
+            coverage=coverage,
+        )
     )
     kept_ids = set(kept_typings)
     summary = {
@@ -851,6 +1001,39 @@ def option_profile_scope(
     }
     log.info("option_profile.done", none_fits=none_fits, **summary)
     return summary
+
+
+def _folded_coverage(
+    stored: Any,
+    membership: MembershipRead,
+    plan: Mapping[str, object],
+    folds: Mapping[str, Mapping[str, str]],
+) -> dict[str, Any]:
+    """The row's coverage with each option's folded keys recomputed (S21, S24).
+
+    Each option the stored coverage holds and the membership read covers gets
+    :data:`FOLDED_COVERAGE_KEYS` from its members through the maps; every
+    other key, and every other option (an option added since, read from its
+    own search at read time), is left as it is.
+    """
+    coverage = dict(stored) if isinstance(stored, Mapping) else {}
+    outcomes = plan.get("outcomes")
+    target_unit = plan.get("target_unit")
+    recomputed = membership.coverage(
+        plan_outcomes=[o for o in outcomes if isinstance(o, str)]
+        if isinstance(outcomes, list)
+        else [],
+        folds=folds,
+        target_unit=target_unit if isinstance(target_unit, str) else None,
+    )
+    for option_id, fresh in recomputed.items():
+        entry = coverage.get(option_id)
+        if isinstance(entry, Mapping):
+            coverage[option_id] = {
+                **entry,
+                **{key: fresh[key] for key in FOLDED_COVERAGE_KEYS},
+            }
+    return coverage
 
 
 def _mark_counts(answers: Mapping[str, _Line]) -> dict[str, int]:

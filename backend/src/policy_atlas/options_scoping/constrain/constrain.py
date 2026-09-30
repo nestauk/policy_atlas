@@ -119,6 +119,7 @@ from policy_atlas.options_scoping.constrain.constrain_prompt import (
     DistinctResponse,
 )
 from policy_atlas.options_scoping.constrain.in_scope import in_scope_evidence
+from policy_atlas.options_scoping.longlist.coverage import stored_folds
 from policy_atlas.options_scoping.longlist.longlist import (
     ON_THE_LIST,
     ORIGIN_WORDS,
@@ -994,6 +995,10 @@ def constrain_scope(
             scope_id=context.scope_id,
             option_ids=sorted(set(merged_into.values()), key=str),
             plan_outcomes=[outcome.text for outcome in plan.outcomes],
+            # The list's folding maps, applied again to the merged members
+            # (task 046, amendment 3, S21).
+            folds=stored_folds(profile),
+            target_unit=str(plan_data["target_unit"]),
         )
         if merged_into
         else {}

@@ -2095,7 +2095,7 @@
         "type": "object"
       },
       "EvidenceProfileOut": {
-        "description": "An option's source-quality profile \u2014 what the evidence base holds so far.\n\nEvery count is of documents, DOI-collapsed. Display only; never a verdict.\n\nArgs:\n    documents: Its documents.\n    by_evidence_type: Documents per evidence type; \"Unknown\" and\n        non-evidence documents are their own keys, \"not rated\" when unclassified.\n    by_tier: Documents per quality tier label, \"not rated\" when unappraised.\n    by_role: Documents per role.\n    where_tried: Where it was tried: its top levels, most documents first.\n    populations: Populations its documents name, most frequent first.\n    settings: Settings its documents name, most frequent first.\n    outcomes: Outcomes its documents measure, most frequent first.\n    flagged_not_stated: Documents that cover the intervention without\n        stating the feature that defines this option.\n    inherited_labels: Documents whose type and tier were read from a\n        linked task.\n    abstract_only: Documents read from an abstract only.\n    tried_on: The populations its adjacent evidence was tried on, most\n        documents first (task 046).\n    outcome_counts: The documents that evaluate the option, by plan\n        outcome (task 046, R42).",
+        "description": "An option's source-quality profile \u2014 what the evidence base holds so far.\n\nEvery count is of documents, DOI-collapsed. Display only; never a verdict.\n\nArgs:\n    documents: Its documents.\n    by_evidence_type: Documents per evidence type; \"Unknown\" and\n        non-evidence documents are their own keys, \"not rated\" when unclassified.\n    by_tier: Documents per quality tier label, \"not rated\" when unappraised.\n    by_role: Documents per role.\n    where_tried: Where it was tried: its top levels, most documents first.\n    flagged_not_stated: Documents that cover the intervention without\n        stating the feature that defines this option.\n    inherited_labels: Documents whose type and tier were read from a\n        linked task.\n    abstract_only: Documents read from an abstract only.\n    tried_on: The kinds of people, organisations or things its evidence\n        covers, the plan's target unit first, then most documents first\n        (task 046, amendment 3).\n    measures: The kinds of outcome its evidence measures, most documents\n        first (task 046, amendment 3).\n    outcome_counts: The documents that evaluate the option, by plan\n        outcome, and the other kinds of outcome (task 046, R42, A4).",
         "properties": {
           "abstract_only": {
             "default": 0,
@@ -2138,29 +2138,15 @@
             "title": "Inherited Labels",
             "type": "integer"
           },
+          "measures": {
+            "items": {
+              "$ref": "#/components/schemas/MeasureKindOut"
+            },
+            "title": "Measures",
+            "type": "array"
+          },
           "outcome_counts": {
             "$ref": "#/components/schemas/OutcomeCountsOut"
-          },
-          "outcomes": {
-            "items": {
-              "type": "string"
-            },
-            "title": "Outcomes",
-            "type": "array"
-          },
-          "populations": {
-            "items": {
-              "type": "string"
-            },
-            "title": "Populations",
-            "type": "array"
-          },
-          "settings": {
-            "items": {
-              "type": "string"
-            },
-            "title": "Settings",
-            "type": "array"
           },
           "tried_on": {
             "items": {
@@ -3674,6 +3660,30 @@
         "title": "MeOut",
         "type": "object"
       },
+      "MeasureKindOut": {
+        "description": "One kind of outcome the option's evidence measures (task 046, amendment 3, R55).\n\nArgs:\n    kind: The kind, in words.\n    documents: Documents of any role that measure it (DOI-collapsed).\n    evaluated: Of those, the documents that evaluate the option.",
+        "properties": {
+          "documents": {
+            "title": "Documents",
+            "type": "integer"
+          },
+          "evaluated": {
+            "default": 0,
+            "title": "Evaluated",
+            "type": "integer"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "documents"
+        ],
+        "title": "MeasureKindOut",
+        "type": "object"
+      },
       "MostRelevantNoteOut": {
         "description": "A grounded one-liner note for a top cited source.\n\nArgs:\n    source_id: The task source identity.\n    note: One-sentence note restating only supplied evidence.",
         "properties": {
@@ -4350,7 +4360,7 @@
         "type": "object"
       },
       "OptionSummaryOut": {
-        "description": "One option as the list view and the grid show it.\n\nArgs:\n    option_id: Stable option identity.\n    name: Option name.\n    description: One-sentence description.\n    outcomes_served: The plan's outcomes the option serves.\n    origin: Where it came from.\n    state: Included or excluded.\n    exclusion: Why it is excluded; `null` when included.\n    no_in_scope_evidence: Included, but none of its documents passes the\n        plan's evidence restriction.\n    restriction_text: The restriction none of its documents passes, when\n        `no_in_scope_evidence`.\n    primary_lever_type: The primary lever type; `null` when none fits or\n        the option is not typed yet.\n    lever_none_fits_reason: Why no lever type fits.\n    secondary_lever_types: The other lever types it also touches.\n    ambition: `less` \u00b7 `more` \u00b7 `null`: how big a proposal the option is\n        against the baseline, compared with the other options of the list;\n        `null` when it does not stand out or is not profiled yet.\n    ambition_reason: The one-line justification.\n    profile: What the option would take (task 046); `null` when the\n        option has no complete profile.\n    authority: Who can act on it (task 046, R43); `null` when none was\n        recorded.\n    taxonomy_version: The lever-type list version it was typed under.\n    design_version: The specified design's version.\n    document_count: Its documents (DOI-collapsed).\n    evaluated_count: Documents that evaluate it.\n    settings: The option's delivery setting, from its profile (R41);\n        empty when it has none.\n    where_tried: Where it was tried: its top levels, most documents first.\n    relations: Its relations to other options.\n    abstract_only: Every one of its documents was read from an abstract only.\n    is_entrant_with_no_documents: Suggested, drawn from the Evidence\n        search or added by the user, and no document has joined it.\n    search_pending: An option added since the build whose own option\n        search is still running or paused; its counts read zero until it ends.\n    from_section: The Evidence search report section a *from your\n        evidence search* option was drawn from; `null` for any other\n        origin, or when the section was not recorded (task 045, F3).\n    also_found_as: The names of the duplicates merged into this option\n        (their documents are its documents); empty when none.\n    runner_up_lever_type: The lever type the typing pass came closest to\n        besides the primary, when one was recorded; `null` otherwise\n        (task 046).\n    lever_reason: One sentence on why the option has its lever type,\n        when the typing pass recorded one; `null` otherwise (task 046,\n        R29).\n    tried_on: The populations its adjacent evidence was tried on, most\n        documents first (task 046).",
+        "description": "One option as the list view and the grid show it.\n\nArgs:\n    option_id: Stable option identity.\n    name: Option name.\n    description: One-sentence description.\n    outcomes_served: The plan's outcomes the option serves.\n    origin: Where it came from.\n    state: Included or excluded.\n    exclusion: Why it is excluded; `null` when included.\n    no_in_scope_evidence: Included, but none of its documents passes the\n        plan's evidence restriction.\n    restriction_text: The restriction none of its documents passes, when\n        `no_in_scope_evidence`.\n    primary_lever_type: The primary lever type; `null` when none fits or\n        the option is not typed yet.\n    lever_none_fits_reason: Why no lever type fits.\n    secondary_lever_types: The other lever types it also touches.\n    ambition: `less` \u00b7 `more` \u00b7 `null`: how big a proposal the option is\n        against the baseline, compared with the other options of the list;\n        `null` when it does not stand out or is not profiled yet.\n    ambition_reason: The one-line justification.\n    profile: What the option would take (task 046); `null` when the\n        option has no complete profile.\n    authority: Who can act on it (task 046, R43); `null` when none was\n        recorded.\n    taxonomy_version: The lever-type list version it was typed under.\n    design_version: The specified design's version.\n    document_count: Its documents (DOI-collapsed).\n    evaluated_count: Documents that evaluate it.\n    settings: The option's delivery setting, from its profile (R41);\n        empty when it has none.\n    where_tried: Where it was tried: its top levels, most documents first.\n    relations: Its relations to other options.\n    abstract_only: Every one of its documents was read from an abstract only.\n    is_entrant_with_no_documents: Suggested, drawn from the Evidence\n        search or added by the user, and no document has joined it.\n    search_pending: An option added since the build whose own option\n        search is still running or paused; its counts read zero until it ends.\n    from_section: The Evidence search report section a *from your\n        evidence search* option was drawn from; `null` for any other\n        origin, or when the section was not recorded (task 045, F3).\n    also_found_as: The names of the duplicates merged into this option\n        (their documents are its documents); empty when none.\n    runner_up_lever_type: The lever type the typing pass came closest to\n        besides the primary, when one was recorded; `null` otherwise\n        (task 046).\n    lever_reason: One sentence on why the option has its lever type,\n        when the typing pass recorded one; `null` otherwise (task 046,\n        R29).\n    tried_on: The kinds of people, organisations or things its evidence\n        covers, the plan's target unit first, then most documents first\n        (task 046, amendment 3).",
         "properties": {
           "abstract_only": {
             "default": false,
@@ -4656,7 +4666,7 @@
         "type": "object"
       },
       "OutcomeCountsOut": {
-        "description": "How many documents evaluate the option, and against which outcomes (R42).\n\nArgs:\n    evaluating_documents: Documents that evaluate the option.\n    by_outcome: The count for each plan outcome, in the plan's order.\n    other: The kinds of outcome that are not plan outcomes (empty until\n        the folding call of phase 20).",
+        "description": "How many documents evaluate the option, and against which outcomes (R42).\n\nArgs:\n    evaluating_documents: Documents that evaluate the option.\n    by_outcome: The count for each plan outcome, in the plan's order.\n    other: The kinds of outcome that are not plan outcomes, counting only\n        records tagged `other` or not tagged, most documents first.",
         "properties": {
           "by_outcome": {
             "items": {
@@ -4682,7 +4692,7 @@
         "type": "object"
       },
       "OutcomeKindOut": {
-        "description": "One kind of outcome that is not a plan outcome (filled from phase 20).\n\nArgs:\n    kind: The kind, in words.\n    documents: Documents of any role that report it (DOI-collapsed).\n    evaluated: Of those, the documents that evaluate the option against it.",
+        "description": "One kind of outcome that is not a plan outcome (task 046, amendment 3, A4).\n\nArgs:\n    kind: The kind, in words.\n    documents: Documents of any role that report it (DOI-collapsed).\n    evaluated: Of those, the documents that evaluate the option against it.",
         "properties": {
           "documents": {
             "title": "Documents",
@@ -8421,19 +8431,19 @@
         "type": "object"
       },
       "TriedOnOut": {
-        "description": "One population the option's adjacent evidence was tried on (task 046).\n\nArgs:\n    population: The population text (its facet label).\n    documents: Its documents (DOI-collapsed).",
+        "description": "One kind of people, organisations or things the option's evidence covers.\n\nTask 046, amendment 3 (R54): the records' unit words folded into kinds\nover the whole list.\n\nArgs:\n    kind: The kind, in words (its facet label).\n    documents: Its documents (DOI-collapsed).",
         "properties": {
           "documents": {
             "title": "Documents",
             "type": "integer"
           },
-          "population": {
-            "title": "Population",
+          "kind": {
+            "title": "Kind",
             "type": "string"
           }
         },
         "required": [
-          "population",
+          "kind",
           "documents"
         ],
         "title": "TriedOnOut",

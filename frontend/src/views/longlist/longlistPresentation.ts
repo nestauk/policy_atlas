@@ -307,17 +307,17 @@ export function leverDefinitionFor(
   return typed === undefined ? current : definitionSentence(typed.definition);
 }
 
-/** The list's Tried on facet (task 046, item 23): the populations of the
- *  options' adjacent evidence, counted by option, the most common first,
- *  at most `limit` shown. A count only: it never filters. */
+/** The list's Tried on facet (task 046, amendment 3, R54): the kinds the
+ *  options' evidence covers, ordered by how many options carry each, the most
+ *  common first, at most `limit` shown. The chips are labels: no count. */
 export function triedOnFacet(
-  options: readonly { tried_on?: readonly { population: string }[] | null }[],
+  options: readonly { tried_on?: readonly { kind: string }[] | null }[],
   limit: number,
 ): { shown: [string, number][]; hidden: number } {
   const counts = new Map<string, number>();
   for (const option of options) {
     for (const entry of option.tried_on ?? []) {
-      counts.set(entry.population, (counts.get(entry.population) ?? 0) + 1);
+      counts.set(entry.kind, (counts.get(entry.kind) ?? 0) + 1);
     }
   }
   const all = [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
@@ -335,16 +335,16 @@ export function documentCount(n: number): string {
   return `${n} ${n === 1 ? "document" : "documents"}`;
 }
 
-/** The card's "Tried on" sentence (task 046, item 23): the populations an
- *  option's adjacent evidence studied, the unit said once — "Tried on:
- *  adolescents (2 documents), preschool children (1)." */
+/** The card's "Tried on" sentence (task 046, amendment 3, R54): the kinds an
+ *  option's evidence covers, the plan's target unit first, the unit said
+ *  once — "Tried on: adolescents (2 documents), preschool children (1)." */
 export function triedOnSentence(
-  triedOn: readonly { population: string; documents: number }[],
+  triedOn: readonly { kind: string; documents: number }[],
 ): string {
   const parts = triedOn.map((entry, index) =>
     index === 0
-      ? `${entry.population} (${documentCount(entry.documents)})`
-      : `${entry.population} (${entry.documents})`,
+      ? `${entry.kind} (${documentCount(entry.documents)})`
+      : `${entry.kind} (${entry.documents})`,
   );
   return `Tried on: ${parts.join(", ")}.`;
 }

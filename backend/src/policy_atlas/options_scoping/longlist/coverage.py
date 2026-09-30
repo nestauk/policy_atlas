@@ -25,6 +25,18 @@ whitespace folded, as the longlist reads the tag) and, separately, how many of
 those have an ``evaluated`` member with that tag; ``other`` and no tag count for
 no outcome. Counts only: no direction, no size.
 
+**The folded kinds (task 046, amendment 3, R54, R55; S21, S24).** Given the
+list's two folding maps (word → kind, stored by ``option_profile`` at list
+level), the coverage carries ``tried_on_kinds`` (documents per kind of the
+records' ``unit`` words, the plan's target unit's kind first) and
+``measures_kinds`` (documents and evaluated documents per kind of the
+records' ``outcome`` words). A word the map lacks keeps its own text as its
+kind; two words of one kind in one document count one document. A plan
+outcome's row also counts the documents whose records are tagged ``other``
+or not tagged and whose Measures kind is that outcome's own text (A4), and
+``outcome_counts.other`` lists the other kinds, counting only such records.
+Without the maps both lists and ``other`` are empty.
+
 **Counting grain (D16, A8, A20).** Every count below except ``members`` and
 ``flagged_members`` is a count of *documents*, and documents are collapsed by
 DOI: two documents whose normalised DOI is the same count once; a document
@@ -71,6 +83,12 @@ TRIED_ON_MAX = 8
 
 #: At most this many *examples* (distinct programme names) per option (R63).
 EXAMPLES_MAX = 5
+
+#: The two folded facets and the record field each folds (R54, R55).
+FOLD_FIELDS: dict[str, str] = {"tried_on": "unit", "measures": "outcome"}
+
+#: The outcome tag of a record whose outcome is not a plan outcome.
+OTHER_OUTCOME_TAG = "other"
 
 #: The setting folds, applied in order to the whitespace-collapsed,
 #: case-folded setting to give the key its spellings are grouped under
@@ -290,6 +308,86 @@ def _pick_label(candidates: list[DocumentLabels]) -> DocumentLabels | None:
     )[1]
 
 
+def distinct_words(members: Iterable[CoverageMember], facet: str) -> list[str]:
+    """The distinct words of one folded facet over ``members`` (S21).
+
+    Whitespace collapsed, de-duplicated case-folded, sorted; each word shown
+    in the first spelling of that order.
+
+    Args:
+        members: Membership rows, as coverage reads them.
+        facet: ``"tried_on"`` (the ``unit`` words) or ``"measures"`` (the
+            ``outcome`` words).
+
+    Returns:
+        The distinct words.
+    """
+    field = FOLD_FIELDS[facet]
+    cleaned = {
+        word for member in members if (word := _clean(getattr(member, field))) is not None
+    }
+    out: list[str] = []
+    seen: set[str] = set()
+    for word in sorted(cleaned, key=lambda text: (text.casefold(), text)):
+        if word.casefold() not in seen:
+            seen.add(word.casefold())
+            out.append(word)
+    return out
+
+
+def stored_folds(option_profile: object) -> dict[str, dict[str, str]] | None:
+    """The list's folding maps as ``option_profile`` stored them (S21).
+
+    Args:
+        option_profile: A ``longlist_result.option_profile`` value.
+
+    Returns:
+        ``{"tried_on": {word: kind}, "measures": {word: kind}}``, or ``None``
+        when the row holds no maps (a row the profile step has not run on).
+    """
+    raw = option_profile.get("folds") if isinstance(option_profile, Mapping) else None
+    if not isinstance(raw, Mapping):
+        return None
+    out: dict[str, dict[str, str]] = {}
+    for facet in FOLD_FIELDS:
+        stored = raw.get(facet)
+        out[facet] = {
+            word: kind
+            for word, kind in (stored.items() if isinstance(stored, Mapping) else ())
+            if isinstance(word, str) and isinstance(kind, str)
+        }
+    return out
+
+
+def _fold_lookup(
+    folds: Mapping[str, Mapping[str, str]] | None, facet: str
+) -> dict[str, str] | None:
+    """One facet's stored map, keyed case-folded; ``None`` without maps."""
+    if folds is None:
+        return None
+    stored = folds.get(facet)
+    lookup: dict[str, str] = {}
+    for word, kind in (stored if isinstance(stored, Mapping) else {}).items():
+        clean_word = _clean(word) if isinstance(word, str) else None
+        clean_kind = _clean(kind) if isinstance(kind, str) else None
+        if clean_word is not None and clean_kind is not None:
+            lookup.setdefault(_fold_tag(clean_word), clean_kind)
+    return lookup
+
+
+def _kind(lookup: Mapping[str, str], text: str | None) -> str | None:
+    """A record word's kind: the map's, else the word itself; ``None`` for no word."""
+    word = _clean(text)
+    if word is None:
+        return None
+    return lookup.get(_fold_tag(word), word)
+
+
+def _untagged(member: CoverageMember) -> bool:
+    """A record tagged ``other`` or not tagged (A4)."""
+    return not member.outcome_tag or _fold_tag(member.outcome_tag) == OTHER_OUTCOME_TAG
+
+
 def empty_coverage() -> dict[str, Any]:
     """The coverage of an option with no member (a seed nothing was assigned to).
 
@@ -305,6 +403,8 @@ def option_coverage(
     labels: Mapping[uuid.UUID, DocumentLabels],
     folded_seeds: Sequence[FoldedSeed] = (),
     plan_outcomes: Sequence[str] = (),
+    folds: Mapping[str, Mapping[str, str]] | None = None,
+    target_unit: str | None = None,
 ) -> dict[str, Any]:
     """Compute one option's source-quality profile.
 
@@ -314,6 +414,11 @@ def option_coverage(
         folded_seeds: The options discovery folded into this one (task 046),
             named under ``folded``.
         plan_outcomes: The plan's outcome texts, in plan order (R42).
+        folds: The list's folding maps, ``{"tried_on": {word: kind},
+            "measures": {word: kind}}`` (S21); ``None`` leaves the kinds and
+            ``outcome_counts.other`` empty.
+        target_unit: The plan's target unit as the folding call read it
+            (place stripped): its kind leads ``tried_on_kinds``.
 
     Returns:
         ``members`` · ``documents`` · ``flagged_members`` ·
@@ -327,8 +432,12 @@ def option_coverage(
         ``folded`` (the folded seeds' names) ·
         ``setting_repairs`` · ``outcome_counts`` (``evaluating_documents``,
         ``by_outcome``: ``[{outcome, documents, evaluated}]`` in plan order, and
-        ``other``: ``[]``, filled by the folding call of phase 20) — documents DOI-collapsed
-        except the two member counts and ``setting_repairs`` (one per member repaired).
+        ``other``: ``[{kind, documents, evaluated}]``, the Measures kinds that
+        are not plan outcomes, counting only records tagged ``other`` or not
+        tagged) · ``tried_on_kinds`` (``[{kind, documents}]``) ·
+        ``measures_kinds`` (``[{kind, documents, evaluated}]``) — documents
+        DOI-collapsed except the two member counts and ``setting_repairs``
+        (one per member repaired).
     """
     by_doc: dict[str, list[CoverageMember]] = {}
     member_count = 0
@@ -380,6 +489,15 @@ def option_coverage(
     evaluating_documents = 0
     outcome_documents = dict.fromkeys((_fold_tag(o) for o in plan_outcomes), 0)
     outcome_evaluated = dict.fromkeys(outcome_documents, 0)
+    tried_lookup = _fold_lookup(folds, "tried_on")
+    measures_lookup = _fold_lookup(folds, "measures")
+    tried_kinds: dict[str, set[str]] = {}
+    tried_kinds_shown: dict[str, str] = {}
+    measure_kinds: dict[str, set[str]] = {}
+    measure_kinds_evaluated: dict[str, set[str]] = {}
+    measure_kinds_shown: dict[str, str] = {}
+    other_kinds: dict[str, set[str]] = {}
+    other_kinds_evaluated: dict[str, set[str]] = {}
 
     for key in sorted(by_doc):
         doc_members = by_doc[key]
@@ -397,13 +515,40 @@ def option_coverage(
             role[role_key] += 1
         evaluated = [m for m in doc_members if m.role == "evaluated"]
         evaluating_documents += int(bool(evaluated))
-        for tag in {_fold_tag(m.outcome_tag) for m in doc_members if m.outcome_tag} & set(
-            outcome_documents
-        ):
+        doc_outcomes = {_fold_tag(m.outcome_tag) for m in doc_members if m.outcome_tag}
+        doc_outcomes_evaluated = {_fold_tag(m.outcome_tag) for m in evaluated if m.outcome_tag}
+        if tried_lookup is not None:
+            for m in doc_members:
+                kind = _kind(tried_lookup, m.unit)
+                if kind is not None:
+                    tried_kinds.setdefault(_fold_tag(kind), set()).add(key)
+                    _show(tried_kinds_shown, _fold_tag(kind), kind)
+        if measures_lookup is not None:
+            for m in doc_members:
+                kind = _kind(measures_lookup, m.outcome)
+                if kind is None:
+                    continue
+                kind_key = _fold_tag(kind)
+                measure_kinds.setdefault(kind_key, set()).add(key)
+                _show(measure_kinds_shown, kind_key, kind)
+                if m.role == "evaluated":
+                    measure_kinds_evaluated.setdefault(kind_key, set()).add(key)
+                if not _untagged(m):
+                    continue
+                # A4: a record tagged other (or not tagged) whose kind is a
+                # plan outcome counts on that outcome's row; any other kind
+                # counts under ``other``.
+                if kind_key in outcome_documents:
+                    doc_outcomes.add(kind_key)
+                    if m.role == "evaluated":
+                        doc_outcomes_evaluated.add(kind_key)
+                else:
+                    other_kinds.setdefault(kind_key, set()).add(key)
+                    if m.role == "evaluated":
+                        other_kinds_evaluated.setdefault(kind_key, set()).add(key)
+        for tag in doc_outcomes & set(outcome_documents):
             outcome_documents[tag] += 1
-        for tag in {_fold_tag(m.outcome_tag) for m in evaluated if m.outcome_tag} & set(
-            outcome_documents
-        ):
+        for tag in doc_outcomes_evaluated & set(outcome_documents):
             outcome_evaluated[tag] += 1
         # A document counts as flagged only when none of its members here
         # states the defining feature.
@@ -465,6 +610,34 @@ def option_coverage(
         )
         settings[shown] = len(docs)
 
+    target_key = _fold_tag(target_unit) if target_unit and target_unit.strip() else None
+    tried_on_kinds = [
+        {"kind": tried_kinds_shown[kind_key], "documents": len(docs)}
+        for kind_key, docs in sorted(
+            tried_kinds.items(),
+            key=lambda item: (
+                item[0] != target_key,
+                -len(item[1]),
+                tried_kinds_shown[item[0]],
+            ),
+        )
+    ]
+
+    def _kind_rows(
+        docs_by_kind: dict[str, set[str]], evaluated_by_kind: dict[str, set[str]]
+    ) -> list[dict[str, Any]]:
+        return [
+            {
+                "kind": measure_kinds_shown[kind_key],
+                "documents": len(docs),
+                "evaluated": len(evaluated_by_kind.get(kind_key, set())),
+            }
+            for kind_key, docs in sorted(
+                docs_by_kind.items(),
+                key=lambda item: (-len(item[1]), measure_kinds_shown[item[0]]),
+            )
+        ]
+
     return {
         "members": member_count,
         "documents": len(by_doc),
@@ -520,8 +693,10 @@ def option_coverage(
                 }
                 for outcome in plan_outcomes
             ],
-            # Each Measures kind that is not a plan outcome; filled by the
-            # folding call (phase 20).
-            "other": [],
+            # Each Measures kind that is not a plan outcome, counting only
+            # records tagged other or not tagged (A4).
+            "other": _kind_rows(other_kinds, other_kinds_evaluated),
         },
+        "tried_on_kinds": tried_on_kinds,
+        "measures_kinds": _kind_rows(measure_kinds, measure_kinds_evaluated),
     }

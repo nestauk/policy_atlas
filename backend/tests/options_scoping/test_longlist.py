@@ -131,8 +131,8 @@ class _Scripted:
 
     ``routes`` maps an intervention text to ``(label, design_feature_not_stated)``;
     an unrouted record is ``ungroupable``. ``typings`` maps an option label to
-    wire overrides. The ``option_profile`` calls (lines, ambition, setting)
-    go to ``profiler``, a :class:`StubLonglistBackend` (task 046, R37).
+    wire overrides. The ``option_profile`` calls (lines, ambition, setting,
+    the folding calls) go to ``profiler``, a :class:`StubLonglistBackend` (task 046, R37).
     """
 
     discovered: list[DiscoveredOptionWire] = field(default_factory=list)
@@ -252,6 +252,9 @@ class _Scripted:
 
     def profile_setting(self, **kwargs: Any) -> Any:
         return self.profiler.profile_setting(**kwargs)
+
+    def fold(self, **kwargs: Any) -> Any:
+        return self.profiler.fold(**kwargs)
 
 
 # --- the fixture -------------------------------------------------------------------

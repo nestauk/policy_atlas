@@ -52,6 +52,7 @@ from policy_atlas.api.contract import (
     LonglistCountsOut,
     LonglistOut,
     LonglistThemeOut,
+    MeasureKindOut,
     MostRelevantNoteOut,
     OptionDesignOut,
     OptionDocumentOut,
@@ -129,6 +130,7 @@ from policy_atlas.options_scoping.longlist.coverage import (
     empty_coverage,
     normalise_doi,
     option_coverage,
+    stored_folds,
 )
 from policy_atlas.options_scoping.longlist.lever_types import (
     LEVER_TYPE_KEYS,
@@ -137,6 +139,7 @@ from policy_atlas.options_scoping.longlist.lever_types import (
     lever_types_by_version,
 )
 from policy_atlas.options_scoping.longlist.where_tried import document_where
+from policy_atlas.options_scoping.longlist_intent import longlist_plan_data
 from policy_atlas.options_scoping.option_profile.option_profile import TYPING_INVALID_REASON
 from policy_atlas.runtime.capability_registry import OPTIONS_SCOPING, validate_plan
 from policy_atlas.runtime.scoping_plan import (
@@ -2929,13 +2932,30 @@ def _list(value: object) -> list[Any]:
 
 
 def _tried_on_out(raw: object) -> list[TriedOnOut]:
-    """Coverage's ``tried_on`` list, read defensively (an old stored record has none)."""
+    """Coverage's ``tried_on_kinds`` list, read defensively (an old stored record has none)."""
     out: list[TriedOnOut] = []
     for item in raw if isinstance(raw, list) else []:
         entry = _as_mapping(item)
-        population = entry.get("population")
-        if isinstance(population, str) and population:
-            out.append(TriedOnOut(population=population, documents=_count(entry.get("documents"))))
+        kind = entry.get("kind")
+        if isinstance(kind, str) and kind:
+            out.append(TriedOnOut(kind=kind, documents=_count(entry.get("documents"))))
+    return out
+
+
+def _measures_out(raw: object) -> list[MeasureKindOut]:
+    """Coverage's ``measures_kinds`` list, read defensively (an old stored record has none)."""
+    out: list[MeasureKindOut] = []
+    for item in raw if isinstance(raw, list) else []:
+        entry = _as_mapping(item)
+        kind = entry.get("kind")
+        if isinstance(kind, str) and kind:
+            out.append(
+                MeasureKindOut(
+                    kind=kind,
+                    documents=_count(entry.get("documents")),
+                    evaluated=_count(entry.get("evaluated")),
+                )
+            )
     return out
 
 
@@ -3267,7 +3287,7 @@ def _option_summary_fields(
         "search_pending": search_pending,
         "from_section": from_section,
         "also_found_as": _found_as(also_found_as, coverage.get("folded")),
-        "tried_on": _tried_on_out(coverage.get("tried_on")),
+        "tried_on": _tried_on_out(coverage.get("tried_on_kinds")),
     }
 
 
@@ -3553,8 +3573,14 @@ def _search_coverage(
     task_id: uuid.UUID,
     search: _AddedSearch,
     plan_outcomes: Sequence[str] = (),
+    *,
+    folds: Mapping[str, Mapping[str, str]] | None = None,
+    target_unit: str | None = None,
 ) -> Mapping[str, Any]:
-    """An added option's coverage from its own search's records (DOI-collapsed)."""
+    """An added option's coverage from its own search's records (DOI-collapsed).
+
+    The list's stored folding maps give its kinds (task 046, amendment 3, S21).
+    """
     if not search.units:
         return empty_coverage()
     labels = labels_for_snapshots(
@@ -3583,6 +3609,8 @@ def _search_coverage(
         ],
         labels=labels,
         plan_outcomes=plan_outcomes,
+        folds=folds,
+        target_unit=target_unit,
     )
 
 
@@ -3624,6 +3652,14 @@ def _search_documents(
 
 def _plan_outcomes(plan: ScopingPlan | None) -> list[str]:
     return [outcome.text for outcome in plan.outcomes] if plan is not None else []
+
+
+def _plan_target_unit(plan: ScopingPlan | None) -> str | None:
+    """The plan's target unit as the folding call read it (place stripped)."""
+    if plan is None:
+        return None
+    target_unit = longlist_plan_data(plan)["target_unit"]
+    return target_unit if isinstance(target_unit, str) else None
 
 
 def longlist_out(conn: Connection, task_id: uuid.UUID) -> LonglistOut | None:
@@ -3681,13 +3717,17 @@ def longlist_out(conn: Connection, task_id: uuid.UUID) -> LonglistOut | None:
         conn, task_id, _needs_search_read(rows, result, _members_by_option(conn, task_id))
     )
     plan_outcomes = _plan_outcomes(built_from[1] if built_from else None)
+    target_unit = _plan_target_unit(built_from[1] if built_from else None)
+    folds = stored_folds(result.option_profile)
     sections = _report_sections(conn, task_id, rows)
     merged = _also_found_as(conn, task_id)
 
     def coverage_of(oid: uuid.UUID) -> Mapping[str, Any]:
         search = searches.get(oid)
         if search is not None:
-            return _search_coverage(conn, task_id, search, plan_outcomes)
+            return _search_coverage(
+                conn, task_id, search, plan_outcomes, folds=folds, target_unit=target_unit
+            )
         return _option_coverage(result, oid)
 
     options = [
@@ -3825,13 +3865,11 @@ def _evidence_profile(coverage: Mapping[str, Any]) -> EvidenceProfileOut:
             for role in ("evaluated", "described", "recommended", "mentioned")
         },
         where_tried=_where_tried_out(coverage.get("where_tried")),
-        populations=list(_ranked(coverage.get("populations"))),
-        settings=list(_ranked(coverage.get("settings"))),
-        outcomes=list(_ranked(coverage.get("outcomes"))),
         flagged_not_stated=_count(coverage.get("flagged_documents")),
         inherited_labels=_count(coverage.get("inherited_labels")),
         abstract_only=_count(coverage.get("abstract_only")),
-        tried_on=_tried_on_out(coverage.get("tried_on")),
+        tried_on=_tried_on_out(coverage.get("tried_on_kinds")),
+        measures=_measures_out(coverage.get("measures_kinds")),
         outcome_counts=_outcome_counts_out(coverage.get("outcome_counts")),
     )
 
@@ -4079,7 +4117,14 @@ def option_out(conn: Connection, task_id: uuid.UUID, option_id: uuid.UUID) -> Op
         conn, task_id, _needs_search_read(rows, result, _members_by_option(conn, task_id))
     ).get(option_id)
     if search is not None:
-        coverage = _search_coverage(conn, task_id, search, _plan_outcomes(plan))
+        coverage = _search_coverage(
+            conn,
+            task_id,
+            search,
+            _plan_outcomes(plan),
+            folds=stored_folds(result.option_profile if result is not None else None),
+            target_unit=_plan_target_unit(plan),
+        )
         documents = _search_documents(conn, task_id, search)
     else:
         coverage = _option_coverage(result, option_id)

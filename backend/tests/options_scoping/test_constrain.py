@@ -515,6 +515,59 @@ def test_a_duplicate_is_merged_into_the_kept_option_with_its_documents(
         longlist_actions._locked_option(conn, task_id=walk.task_id, option_id=dup)
 
 
+def test_a_merge_recomputes_the_kinds_from_the_stored_maps_and_keeps_the_old_keys(
+    conn: Connection,
+) -> None:
+    """Task 046, amendment 3 (R54, R55; S21): the merge recompute applies the
+    list's folding maps, stored by the profile step; constrain's own keys stay."""
+    walk = _walk(conn)
+    t0 = now()
+    kept = walk.option("Youth guarantee", created_at=t0)
+    dup = walk.option("Guarantee scheme", created_at=t0 + timedelta(seconds=1))
+    docs = [walk.doc(), walk.doc()]
+    walk.record(
+        docs[0], "Youth guarantee", unit="young people aged 16 to 24", outcome="NEET status"
+    )
+    walk.record(docs[1], "Guarantee scheme", unit="16 to 24s", outcome="neet rates")
+    walk.rollup(walk.scope_id, docs)
+    walk.build(StubLonglistBackend())
+    _run_profile(walk)
+    # The profile step's maps, as a folding call might have written them.
+    profile = dict(_latest(walk).option_profile)
+    profile["folds"] = {
+        "tried_on": {
+            "young people aged 16 to 24": "16 to 24 year olds",
+            "16 to 24s": "16 to 24 year olds",
+        },
+        "measures": {"NEET status": "the NEET rate", "neet rates": "the NEET rate"},
+    }
+    conn.execute(
+        update(longlist_result)
+        .where(longlist_result.c.longlist_result_id == _latest(walk).longlist_result_id)
+        .values(option_profile=profile)
+    )
+    backend = _duplicate_breach(kept, dup)
+
+    _constrain(walk, backend)
+
+    coverage = _latest(walk).coverage[str(kept)]
+    assert coverage["documents"] == 2
+    assert coverage["tried_on_kinds"] == [{"kind": "16 to 24 year olds", "documents": 2}]
+    assert coverage["measures_kinds"] == [
+        {"kind": "the NEET rate", "documents": 2, "evaluated": 2}
+    ]
+    # Not tagged under this plan's context: both count on the plan outcome's row.
+    assert coverage["outcome_counts"]["by_outcome"] == [
+        {"outcome": "the NEET rate", "documents": 2, "evaluated": 2}
+    ]
+    assert coverage["outcome_counts"]["other"] == []
+    # The old keys constrain reads stay in the coverage, and in its payload.
+    for key in ("tried_on", "populations", "settings", "population_tags"):
+        assert key in coverage
+    sent = backend.constrain_inputs[0]["options"][0]["coverage"]
+    assert set(sent) == {"documents", "evaluated", "roles", "tried_on", "settings"}
+
+
 def test_a_user_held_duplicate_is_never_merged(conn: Connection) -> None:
     walk = _walk(conn)
     kept, dup = _duplicate_pair(

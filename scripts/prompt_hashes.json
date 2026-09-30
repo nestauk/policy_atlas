@@ -18,6 +18,7 @@
   "backend/src/policy_atlas/evidence_search/synthesis/voice_prompt.py": "6dea6f2e552b6fa1775bc5394b9478d8c254982c505699f31b7223eef1e5384a",
   "backend/src/policy_atlas/options_scoping/constrain/constrain_prompt.py": "d3decf352d1480f590ac4b6eb2f9db7bb36a3f572e374cbc06620c662658d37b",
   "backend/src/policy_atlas/options_scoping/longlist/longlist_cluster_prompt.py": "c994de38ba7fa02c58c549d7a3c43b5782b567c526b9ef2df90911140151b7b8",
+  "backend/src/policy_atlas/options_scoping/option_profile/folding_prompt.py": "dabb1bdd0cc4785848333da83c159b906a6e294a80357d00fa53381cf737a8c9",
   "backend/src/policy_atlas/options_scoping/option_profile/lever_typing_prompt.py": "e14402378ebc0d65be4db84c11edfcfdf68bd3f97986c17665e737bf6e424536",
   "backend/src/policy_atlas/options_scoping/option_profile/option_profile_prompt.py": "ced1312f06452b381f35bde3ef519aacae85369a54ab22208e74d0d1f10eb80d",
   "backend/src/policy_atlas/options_scoping/suggest/suggest_prompt.py": "6c1919c880775d0ce551fa1f50cfb2caed7e4d6ef90ab3901556f17eccd77dcf",

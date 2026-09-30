@@ -31,7 +31,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select, update
 from sqlalchemy.engine import Connection, Engine
 
-from policy_atlas.api.contract import ExampleOut, OptionDocumentOut, TriedOnOut
+from policy_atlas.api.contract import ExampleOut, MeasureKindOut, OptionDocumentOut, TriedOnOut
 from policy_atlas.api.deps import get_agent_backend, get_runner_backends
 from policy_atlas.api.readmodels import repository
 from policy_atlas.core.schema import (
@@ -642,7 +642,11 @@ def test_the_card_carries_every_section_and_never_how_sure(
         assert evidence["inherited_labels"] == 1
         assert evidence["flagged_not_stated"] == 0  # the DOI twin states the feature
         assert evidence["by_role"]["evaluated"] >= 1
-        assert evidence["populations"] == ["16 to 24 year olds"]
+        # The record-level lists are gone (B13); Tried on and Measures are
+        # the kinds the folding calls give (task 046, amendment 3).
+        assert not {"populations", "settings", "outcomes"} & set(evidence)
+        assert evidence["tried_on"] == [{"kind": "16 to 24 year olds", "documents": 1}]
+        assert isinstance(evidence["measures"], list)
         # The documents: one per document, DOI twins collapsed (R67).
         documents = card["documents"]
         with engine.connect() as conn:
@@ -777,13 +781,17 @@ def test_the_card_and_list_serve_the_lever_reason(conn: Connection) -> None:
 
 
 def test_the_card_and_list_serve_tried_on_and_examples(conn: Connection) -> None:
+    """Task 046, amendment 3 (R54, R55): Tried on and Measures are the kinds
+    the folding calls give (the stub: each word lower-cased, the plan's text
+    where one matches), the target unit's kind first."""
     walk = _Walk(conn)
     option_id = walk.option("Youth guarantee", origin="added_by_you")
     fingerprint = _current_fingerprint(walk)
     docs: dict[uuid.UUID, uuid.UUID] = {}
-    for intervention, population, population_tag in (
-        ("youth guarantee", "young people aged 16 to 24", "on_target"),
-        ("youth guarantee", "young adults", "adjacent"),
+    for intervention, population, population_tag, outcome in (
+        ("youth guarantee", "16 to 24 Year Olds", "on_target", "The NEET rate"),
+        ("youth guarantee", "young adults", "adjacent", "earnings"),
+        ("youth guarantee", "Young adults", "adjacent", "earnings"),
     ):
         doc = walk.doc()
         ser = _extraction(walk, doc, fingerprint=fingerprint)
@@ -794,12 +802,22 @@ def test_the_card_and_list_serve_tried_on_and_examples(conn: Connection) -> None
             programme_name="Youth Guarantee",
             unit=population,
             unit_tag=population_tag,
+            outcome=outcome,
         )
         docs[doc] = ser
     _rollup_of(walk, walk.scope_id, docs)
-    walk.build(_Scripted(routes={"youth guarantee": ("Youth guarantee", False)}))
+    backend = _Scripted(routes={"youth guarantee": ("Youth guarantee", False)})
+    walk.build(backend)
 
-    expected_tried_on = [TriedOnOut(population="young adults", documents=1)]
+    # Before the profile step has run, the list holds no maps: no kinds.
+    card = repository.option_out(conn, walk.task_id, option_id)
+    assert card is not None and card.tried_on == [] and card.evidence.measures == []
+
+    _profile(walk, backend)
+    expected_tried_on = [
+        TriedOnOut(kind="16 to 24 year olds", documents=1),
+        TriedOnOut(kind="young adults", documents=2),
+    ]
     listed = repository.longlist_out(conn, walk.task_id)
     assert listed is not None
     summary = next(o for o in listed.options if o.option_id == option_id)
@@ -809,7 +827,13 @@ def test_the_card_and_list_serve_tried_on_and_examples(conn: Connection) -> None
     assert card is not None
     assert card.tried_on == expected_tried_on
     assert card.evidence.tried_on == expected_tried_on
-    assert card.examples == [ExampleOut(name="Youth Guarantee", documents=2)]
+    assert card.evidence.measures == [
+        MeasureKindOut(kind="earnings", documents=2, evaluated=2),
+        MeasureKindOut(kind="the NEET rate", documents=1, evaluated=1),
+    ]
+    assert card.examples == [ExampleOut(name="Youth Guarantee", documents=3)]
+    served = card.evidence.model_dump()
+    assert not {"populations", "settings", "outcomes"} & set(served)
 
 
 def test_the_list_serves_title_only_and_the_thinning_counts(conn: Connection) -> None:
@@ -869,7 +893,14 @@ def test_an_added_option_s_own_search_serves_tried_on_and_examples(conn: Connect
     ``examples`` too, not only a built option's coverage."""
     walk = _Walk(conn)
     walk.option("Youth guarantee", origin="added_by_you")
-    walk.build(_Scripted())
+    first = walk.doc()
+    walk.record(first, "youth guarantee", unit="school leavers")
+    walk.rollup(walk.scope_id, [first])
+    backend = _Scripted(routes={"youth guarantee": ("Youth guarantee", False)})
+    walk.build(backend)
+    # The profile step stores the list's maps; the added option's read-time
+    # coverage applies them (task 046, amendment 3, S21).
+    _profile(walk, backend)
     added = walk.option("Wage subsidy", origin="added_by_you")
     scope_id = uuid.uuid4()
     conn.execute(
@@ -902,14 +933,16 @@ def test_an_added_option_s_own_search_serves_tried_on_and_examples(conn: Connect
         doc,
         "Wage subsidy",
         programme_name="Wage Subsidy Scheme",
-        unit="16 to 24 year olds",
+        unit="SCHOOL LEAVERS",
         unit_tag="adjacent",
     )
     walk.rollup(scope_id, [doc])
 
     card = repository.option_out(conn, walk.task_id, added)
     assert card is not None
-    assert card.tried_on == [TriedOnOut(population="16 to 24 year olds", documents=1)]
+    # The stored map folds its word ("school leavers", from the build's own
+    # record) to the list's kind.
+    assert card.tried_on == [TriedOnOut(kind="school leavers", documents=1)]
     assert card.examples == [ExampleOut(name="Wage Subsidy Scheme", documents=1)]
 
 
@@ -1063,8 +1096,8 @@ def test_the_summary_settings_come_from_the_profile_not_from_coverage(conn: Conn
     walk, option_id = _profiled(conn, profile=_stored_profile(main="Libraries", second=None))
     summary, card = _summary_and_card(conn, walk, option_id)
     assert summary.settings == ["Libraries"]
-    # The evidence profile keeps the records' own words.
-    assert card.evidence.settings != ["Libraries"]
+    # The evidence profile has no record-level settings (B13).
+    assert "settings" not in card.evidence.model_dump()
 
 
 def test_an_option_without_a_profile_entry_or_with_an_incomplete_one_has_none(
@@ -1564,7 +1597,7 @@ def test_an_added_option_reads_its_own_search_until_the_next_build(conn: Connect
     # An added option has no profile yet (R41): its list setting is empty; the
     # evidence profile keeps the records' own words.
     assert card.settings == []
-    assert card.evidence.settings == ["Employers"]
+    assert "settings" not in card.evidence.model_dump()
     # One per document, the DOI twins collapsed; the comparator is not a document.
     assert sorted(d.title for d in card.documents) == [
         "A Danish wage subsidy",

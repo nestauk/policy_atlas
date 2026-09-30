@@ -28,7 +28,12 @@ backend (task 046, S20). Each call has one lead-authored prompt builder
   (judgment model; task 046, S13);
 - ``authority`` — the constrain step's one authority-label call over the
   whole list, made only when the plan holds a consideration on "who decides"
-  (judgment model; task 046, R38, S18).
+  (judgment model; task 046, R38, S18);
+- ``fold`` — one of the ``option_profile`` step's two folding calls over the
+  list's distinct record words, one per facet (Tried on: the ``unit`` words;
+  Measures: the ``outcome`` words), word → kind (mini model; task 046,
+  amendment 3, R54, R55;
+  :mod:`~policy_atlas.options_scoping.option_profile.folding_prompt`).
 
 Backends parse structurally and return the wire; the component and the shared
 clustering engine own every semantic check. :class:`StubLonglistBackend` is
@@ -77,6 +82,13 @@ from policy_atlas.options_scoping.longlist.longlist_cluster_prompt import (
     build_longlist_assignment_messages,
     build_longlist_discovery_messages,
 )
+from policy_atlas.options_scoping.option_profile.folding_prompt import (
+    FOLDING_PROMPT_VERSION,
+    Facet,
+    FoldingResponse,
+    FoldWire,
+    build_folding_messages,
+)
 from policy_atlas.options_scoping.option_profile.lever_typing_prompt import (
     LEVER_TYPING_MAX_OUTPUT_TOKENS,
     LEVER_TYPING_PROMPT_VERSION,
@@ -116,6 +128,8 @@ from policy_atlas.runtime.agent_backend import AGENT_MODEL
 #: (assignment) — contract § Model route, the Task Agent's tiers.
 LONGLIST_JUDGMENT_MODEL = AGENT_MODEL
 LONGLIST_ASSIGNMENT_MODEL = SCREEN_MODEL
+#: The output ceiling of one folding call (one short entry per distinct word).
+FOLDING_MAX_OUTPUT_TOKENS = 16_000
 
 
 class LonglistBackend(Protocol):
@@ -273,6 +287,23 @@ class LonglistBackend(Protocol):
 
         Returns:
             The parsed settings and token usage.
+        """
+        ...
+
+    def fold(
+        self, *, facet: Facet, plan: dict[str, object], words: dict[str, str]
+    ) -> UsageResult[FoldingResponse]:
+        """Fold the list's distinct words of one facet into kinds (R54, R55; S21).
+
+        Args:
+            facet: ``"tried_on"`` (the records' ``unit`` words) or
+                ``"measures"`` (their ``outcome`` words).
+            plan: The plan fields as data, place stripped (``target_unit``
+                and ``outcomes`` are read).
+            words: Short id (``w1`` … ``wN``) → distinct word.
+
+        Returns:
+            The parsed word → kind entries and token usage.
         """
         ...
 
@@ -550,6 +581,23 @@ class OpenAILonglistBackend:
             prompt_version=OPTION_PROFILE_PROMPT_VERSION,
         )
 
+    def fold(
+        self, *, facet: Facet, plan: dict[str, object], words: dict[str, str]
+    ) -> UsageResult[FoldingResponse]:
+        """One folding call on the mini model (see :class:`LonglistBackend`).
+
+        The Langfuse name is static; the facet rides in the metadata.
+        """
+        return self._call(
+            build_folding_messages(facet=facet, plan=plan, words=words),
+            response_format=FoldingResponse,
+            model=LONGLIST_ASSIGNMENT_MODEL,
+            max_output_tokens=FOLDING_MAX_OUTPUT_TOKENS,
+            name="option_profile:fold",
+            prompt_version=FOLDING_PROMPT_VERSION,
+            metadata={"facet": facet},
+        )
+
     def constrain(
         self,
         *,
@@ -644,6 +692,10 @@ class StubLonglistBackend:
     - ``authority`` answers the same way from its own queue; with none, every
       option is ``unclear`` with no body and the reason ``"Stub: unclear."``.
       Its calls and inputs are recorded under the lock.
+    - ``fold`` answers from its facet's own FIFO queue the same way; with
+      none, each word's kind is its own text lower-cased, except a word that
+      equals (case-folded) a plan outcome or the plan's target unit, whose
+      kind is that plan text. Its calls and inputs are recorded under the lock.
 
     Args:
         constrain_responses: Canned :class:`ConstrainResponse` value(s), or
@@ -658,6 +710,8 @@ class StubLonglistBackend:
             ``None`` for the deterministic default.
         setting_responses: Canned :class:`SettingResponse` value(s), or
             ``None`` for the deterministic default.
+        fold_responses: Per facet, canned :class:`FoldingResponse` value(s),
+            or ``None`` for the deterministic default on both facets.
     """
 
     mode = "stub"
@@ -671,6 +725,7 @@ class StubLonglistBackend:
         line_responses: Mapping[str, _LineResponse | list[_LineResponse]] | None = None,
         ambition_responses: AmbitionResponse | list[AmbitionResponse] | None = None,
         setting_responses: SettingResponse | list[SettingResponse] | None = None,
+        fold_responses: Mapping[str, FoldingResponse | list[FoldingResponse]] | None = None,
     ) -> None:
         self._constrain_queue: list[ConstrainResponse] = _queue(constrain_responses)
         self._distinct_queue: list[DistinctResponse] = _queue(distinct_responses)
@@ -680,6 +735,9 @@ class StubLonglistBackend:
         }
         self._ambition_queue: list[AmbitionResponse] = _queue(ambition_responses)
         self._setting_queue: list[SettingResponse] = _queue(setting_responses)
+        self._fold_queues: dict[str, list[FoldingResponse]] = {
+            key: _queue(value) for key, value in (fold_responses or {}).items()
+        }
         self._lock = threading.Lock()
         self.constrain_calls = 0
         self.constrain_inputs: list[dict[str, Any]] = []
@@ -693,6 +751,8 @@ class StubLonglistBackend:
         self.ambition_inputs: list[dict[str, Any]] = []
         self.setting_calls = 0
         self.setting_inputs: list[dict[str, Any]] = []
+        self.fold_calls: dict[str, int] = {}
+        self.fold_inputs: list[dict[str, Any]] = []
 
     def discover(
         self,
@@ -931,6 +991,34 @@ class StubLonglistBackend:
                     ]
                 ),
             ), None
+
+    def fold(
+        self, *, facet: Facet, plan: dict[str, object], words: dict[str, str]
+    ) -> UsageResult[FoldingResponse]:
+        """Answer from the facet's queue, else each word lower-cased or its plan text."""
+        with self._lock:
+            self.fold_calls[facet] = self.fold_calls.get(facet, 0) + 1
+            self.fold_inputs.append({"facet": facet, "plan": plan, "words": dict(words)})
+            return _next_response(
+                self._fold_queues.setdefault(facet, []),
+                lambda: _stub_folds(plan, words),
+            ), None
+
+
+def _stub_folds(plan: dict[str, object], words: dict[str, str]) -> FoldingResponse:
+    outcomes = plan.get("outcomes")
+    references = [
+        text
+        for text in [plan.get("target_unit"), *(outcomes if isinstance(outcomes, list) else [])]
+        if isinstance(text, str) and text.strip()
+    ]
+    by_key = {_casefold(text): text for text in references}
+    return FoldingResponse(
+        folds=[
+            FoldWire(word_id=word_id, kind=by_key.get(_casefold(word), word.lower()))
+            for word_id, word in words.items()
+        ]
+    )
 
 
 def _stub_line(line_key: str, options: list[dict[str, object]]) -> _LineResponse:

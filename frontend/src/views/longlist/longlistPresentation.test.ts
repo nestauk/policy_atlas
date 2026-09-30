@@ -42,8 +42,8 @@ describe("longlist presentation (task 046)", () => {
   it("says the unit of the tried-on counts once", () => {
     expect(
       triedOnSentence([
-        { population: "adolescents", documents: 2 },
-        { population: "preschool children", documents: 1 },
+        { kind: "adolescents", documents: 2 },
+        { kind: "preschool children", documents: 1 },
       ]),
     ).toBe("Tried on: adolescents (2 documents), preschool children (1).");
   });
@@ -68,8 +68,8 @@ describe("longlist presentation (task 046)", () => {
 
   it("limits the Tried on facet and counts what it hides", () => {
     const options = [
-      { tried_on: [{ population: "adolescents" }, { population: "families" }] },
-      { tried_on: [{ population: "adolescents" }, { population: "parents" }] },
+      { tried_on: [{ kind: "adolescents" }, { kind: "families" }] },
+      { tried_on: [{ kind: "adolescents" }, { kind: "parents" }] },
       { tried_on: null },
     ];
     expect(triedOnFacet(options, 2)).toEqual({

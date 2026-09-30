@@ -126,7 +126,7 @@ from policy_atlas.evidence_search.extract.interventions_records import (
 )
 from policy_atlas.evidence_search.extract.iof_records import PROFILE_ID as IOF_PROFILE_ID
 from policy_atlas.options_scoping.design import OptionDesign
-from policy_atlas.options_scoping.labels import labels_for_snapshots
+from policy_atlas.options_scoping.labels import DocumentLabels, labels_for_snapshots
 from policy_atlas.options_scoping.longlist.coverage import (
     ROLE_BUCKETS,
     CoverageMember,
@@ -1460,31 +1460,72 @@ def _folded_seeds(
     return folded
 
 
-def membership_coverage(
+@dataclass(frozen=True)
+class MembershipRead:
+    """The options' membership as it stands, as coverage reads it.
+
+    Attributes:
+        members: Per option, its membership rows as coverage members.
+        labels: The label resolver's answer per ``tss_id`` of those members.
+        folded: Per option, the seeds folded into it.
+    """
+
+    members: dict[uuid.UUID, list[CoverageMember]]
+    labels: Mapping[uuid.UUID, DocumentLabels]
+    folded: dict[uuid.UUID, list[FoldedSeed]]
+
+    def coverage(
+        self,
+        *,
+        plan_outcomes: Sequence[str] = (),
+        folds: Mapping[str, Mapping[str, str]] | None = None,
+        target_unit: str | None = None,
+    ) -> dict[str, dict[str, Any]]:
+        """Each option's coverage (:func:`option_coverage`).
+
+        Args:
+            plan_outcomes: The plan's outcome texts, in plan order (R42).
+            folds: The list's folding maps (task 046, amendment 3, S21), or
+                ``None``.
+            target_unit: The plan's target unit, place stripped.
+
+        Returns:
+            ``{option_id: coverage}``.
+        """
+        return {
+            str(oid): option_coverage(
+                ms,
+                labels=self.labels,
+                folded_seeds=self.folded.get(oid, ()),
+                plan_outcomes=plan_outcomes,
+                folds=folds,
+                target_unit=target_unit,
+            )
+            for oid, ms in self.members.items()
+        }
+
+
+def read_membership(
     conn: Connection,
     *,
     task_id: uuid.UUID,
     scope_id: uuid.UUID,
     option_ids: Sequence[uuid.UUID],
-    plan_outcomes: Sequence[str] = (),
-) -> dict[str, dict[str, Any]]:
-    """The options' coverage recomputed from their membership rows as they stand.
+) -> MembershipRead:
+    """The options' membership rows as they stand, as coverage reads them.
 
-    For constrain's *distinct* merge, which moves a duplicate's memberships
-    to the kept option after the build wrote its coverage. The units are
-    loaded exactly as :func:`longlist_scope` loads them (the walk's scope,
-    the add-walk searches, the links); a membership whose unit no longer loads
-    is skipped.
+    The units are loaded exactly as :func:`longlist_scope` loads them (the
+    walk's scope, the add-walk searches, the links); a membership whose unit
+    no longer loads is skipped.
 
     Args:
         conn: Open connection.
         task_id: The scoping task.
         scope_id: The longlist walk's intent record.
-        option_ids: The options to recompute.
-        plan_outcomes: The plan's outcome texts, in plan order (R42).
+        option_ids: The options read.
 
     Returns:
-        ``{option_id: coverage}`` for each of ``option_ids``.
+        The members, their labels and the folded seeds.
     """
     search_scopes = _option_search_scopes(conn, task_id=task_id)
     own = _own_units(
@@ -1523,15 +1564,47 @@ def membership_coverage(
     folded = _folded_seeds(
         conn, task_id=task_id, option_ids=list(members), documents_of=documents_of
     )
-    return {
-        str(oid): option_coverage(
-            [_coverage_member(u, flagged=flagged) for u, flagged in ms],
-            labels=labels,
-            folded_seeds=folded.get(oid, ()),
-            plan_outcomes=plan_outcomes,
-        )
-        for oid, ms in members.items()
-    }
+    return MembershipRead(
+        members={
+            oid: [_coverage_member(u, flagged=flagged) for u, flagged in ms]
+            for oid, ms in members.items()
+        },
+        labels=labels,
+        folded=folded,
+    )
+
+
+def membership_coverage(
+    conn: Connection,
+    *,
+    task_id: uuid.UUID,
+    scope_id: uuid.UUID,
+    option_ids: Sequence[uuid.UUID],
+    plan_outcomes: Sequence[str] = (),
+    folds: Mapping[str, Mapping[str, str]] | None = None,
+    target_unit: str | None = None,
+) -> dict[str, dict[str, Any]]:
+    """The options' coverage recomputed from their membership rows as they stand.
+
+    For constrain's *distinct* merge, which moves a duplicate's memberships
+    to the kept option after the build wrote its coverage (:func:`read_membership`).
+
+    Args:
+        conn: Open connection.
+        task_id: The scoping task.
+        scope_id: The longlist walk's intent record.
+        option_ids: The options to recompute.
+        plan_outcomes: The plan's outcome texts, in plan order (R42).
+        folds: The list's stored folding maps (task 046, amendment 3, S21),
+            applied to the kinds; ``None`` leaves them empty.
+        target_unit: The plan's target unit, place stripped.
+
+    Returns:
+        ``{option_id: coverage}`` for each of ``option_ids``.
+    """
+    return read_membership(
+        conn, task_id=task_id, scope_id=scope_id, option_ids=option_ids
+    ).coverage(plan_outcomes=plan_outcomes, folds=folds, target_unit=target_unit)
 
 
 def _title_only(conn: Connection, *, task_id: uuid.UUID, scope_id: uuid.UUID) -> int:

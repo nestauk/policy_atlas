@@ -856,15 +856,32 @@ class RelationOut(BaseModel):
 
 
 class TriedOnOut(BaseModel):
-    """One population the option's adjacent evidence was tried on (task 046).
+    """One kind of people, organisations or things the option's evidence covers.
+
+    Task 046, amendment 3 (R54): the records' unit words folded into kinds
+    over the whole list.
 
     Args:
-        population: The population text (its facet label).
+        kind: The kind, in words (its facet label).
         documents: Its documents (DOI-collapsed).
     """
 
-    population: str
+    kind: str
     documents: int
+
+
+class MeasureKindOut(BaseModel):
+    """One kind of outcome the option's evidence measures (task 046, amendment 3, R55).
+
+    Args:
+        kind: The kind, in words.
+        documents: Documents of any role that measure it (DOI-collapsed).
+        evaluated: Of those, the documents that evaluate the option.
+    """
+
+    kind: str
+    documents: int
+    evaluated: int = 0
 
 
 ProfileLineKey = Literal[
@@ -942,7 +959,7 @@ class OutcomeCountOut(BaseModel):
 
 
 class OutcomeKindOut(BaseModel):
-    """One kind of outcome that is not a plan outcome (filled from phase 20).
+    """One kind of outcome that is not a plan outcome (task 046, amendment 3, A4).
 
     Args:
         kind: The kind, in words.
@@ -961,8 +978,8 @@ class OutcomeCountsOut(BaseModel):
     Args:
         evaluating_documents: Documents that evaluate the option.
         by_outcome: The count for each plan outcome, in the plan's order.
-        other: The kinds of outcome that are not plan outcomes (empty until
-            the folding call of phase 20).
+        other: The kinds of outcome that are not plan outcomes, counting only
+            records tagged `other` or not tagged, most documents first.
     """
 
     evaluating_documents: int = 0
@@ -1021,8 +1038,9 @@ class OptionSummaryOut(BaseModel):
         lever_reason: One sentence on why the option has its lever type,
             when the typing pass recorded one; `null` otherwise (task 046,
             R29).
-        tried_on: The populations its adjacent evidence was tried on, most
-            documents first (task 046).
+        tried_on: The kinds of people, organisations or things its evidence
+            covers, the plan's target unit first, then most documents first
+            (task 046, amendment 3).
     """
 
     option_id: uuid.UUID
@@ -1126,18 +1144,18 @@ class EvidenceProfileOut(BaseModel):
         by_tier: Documents per quality tier label, "not rated" when unappraised.
         by_role: Documents per role.
         where_tried: Where it was tried: its top levels, most documents first.
-        populations: Populations its documents name, most frequent first.
-        settings: Settings its documents name, most frequent first.
-        outcomes: Outcomes its documents measure, most frequent first.
         flagged_not_stated: Documents that cover the intervention without
             stating the feature that defines this option.
         inherited_labels: Documents whose type and tier were read from a
             linked task.
         abstract_only: Documents read from an abstract only.
-        tried_on: The populations its adjacent evidence was tried on, most
-            documents first (task 046).
+        tried_on: The kinds of people, organisations or things its evidence
+            covers, the plan's target unit first, then most documents first
+            (task 046, amendment 3).
+        measures: The kinds of outcome its evidence measures, most documents
+            first (task 046, amendment 3).
         outcome_counts: The documents that evaluate the option, by plan
-            outcome (task 046, R42).
+            outcome, and the other kinds of outcome (task 046, R42, A4).
     """
 
     documents: int = 0
@@ -1145,13 +1163,11 @@ class EvidenceProfileOut(BaseModel):
     by_tier: dict[str, int] = Field(default_factory=dict)
     by_role: dict[str, int] = Field(default_factory=dict)
     where_tried: list[WhereTriedOut] = Field(default_factory=list)
-    populations: list[str] = Field(default_factory=list)
-    settings: list[str] = Field(default_factory=list)
-    outcomes: list[str] = Field(default_factory=list)
     flagged_not_stated: int = 0
     inherited_labels: int = 0
     abstract_only: int = 0
     tried_on: list[TriedOnOut] = Field(default_factory=list)
+    measures: list[MeasureKindOut] = Field(default_factory=list)
     outcome_counts: OutcomeCountsOut = Field(default_factory=OutcomeCountsOut)
 
 

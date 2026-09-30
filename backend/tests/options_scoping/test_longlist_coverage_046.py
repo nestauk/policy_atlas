@@ -25,9 +25,11 @@ from policy_atlas.options_scoping.longlist.coverage import (
     TRIED_ON_MAX,
     CoverageMember,
     FoldedSeed,
+    distinct_words,
     empty_coverage,
     fold_setting,
     option_coverage,
+    stored_folds,
 )
 from policy_atlas.options_scoping.longlist.longlist import membership_coverage
 from policy_atlas.options_scoping.longlist.where_tried import names_place
@@ -93,6 +95,8 @@ def test_an_option_with_no_member_has_every_new_key_empty() -> None:
     assert coverage["folded"] == []
     assert "variants" not in coverage
     assert coverage["setting_repairs"] == 0
+    assert coverage["tried_on_kinds"] == []
+    assert coverage["measures_kinds"] == []
 
 
 # --- outcome counts (R42) ------------------------------------------------------------
@@ -540,3 +544,176 @@ def test_coverage_members_carry_the_programme_name_and_study_country(
     assert member.programme_name == "Magic Breakfast"
     assert member.study_country == "United Kingdom"
     assert _member("x").programme_name is None and _member("x").study_country is None
+
+
+# --- the folded kinds (task 046, amendment 3, R54, R55; S21, S24, A4) ----------------
+
+FOLDS: dict[str, dict[str, str]] = {
+    "tried_on": {
+        "16 to 24 year olds": "16 to 24 year olds",
+        "young people aged 16 to 24": "16 to 24 year olds",
+        "Young adults": "young adults",
+        "parents": "parents",
+    },
+    "measures": {
+        "arrests": "Reduce crime",
+        "reoffending": "Reduce crime",
+        "life satisfaction": "wellbeing",
+        "earnings": "earnings",
+    },
+}
+
+
+def test_without_the_maps_the_kinds_and_other_are_empty() -> None:
+    coverage = _coverage(
+        [_member("a", unit="parents", outcome="arrests", outcome_tag="other")],
+        plan_outcomes=PLAN,
+    )
+    assert coverage["tried_on_kinds"] == []
+    assert coverage["measures_kinds"] == []
+    assert coverage["outcome_counts"]["other"] == []
+    assert coverage["outcome_counts"]["by_outcome"][0]["documents"] == 0
+
+
+def test_two_words_of_one_kind_in_one_document_count_one_document() -> None:
+    coverage = _coverage(
+        [
+            _member("a", unit="16 to 24 year olds"),
+            _member("a", unit="YOUNG people aged 16 to 24"),  # the map is case-folded
+            _member("b", unit="young people aged  16 to 24"),
+        ],
+        folds=FOLDS,
+    )
+    assert coverage["tried_on_kinds"] == [{"kind": "16 to 24 year olds", "documents": 2}]
+
+
+def test_a_word_the_map_lacks_keeps_its_own_text() -> None:
+    coverage = _coverage(
+        [_member("a", unit="teachers", outcome="attendance", role="described")],
+        folds=FOLDS,
+    )
+    assert coverage["tried_on_kinds"] == [{"kind": "teachers", "documents": 1}]
+    assert coverage["measures_kinds"] == [{"kind": "attendance", "documents": 1, "evaluated": 0}]
+
+
+def test_the_target_unit_s_kind_comes_first_then_documents_then_kind() -> None:
+    coverage = _coverage(
+        [
+            _member("a", unit="parents"),
+            _member("b", unit="parents"),
+            _member("c", unit="Young adults"),
+            _member("d", unit="young people aged 16 to 24"),
+        ],
+        folds=FOLDS,
+        target_unit="16 to 24 Year Olds",
+    )
+    assert coverage["tried_on_kinds"] == [
+        {"kind": "16 to 24 year olds", "documents": 1},
+        {"kind": "parents", "documents": 2},
+        {"kind": "young adults", "documents": 1},
+    ]
+
+
+def test_a_record_tagged_other_whose_kind_is_a_plan_outcome_counts_on_that_row_once() -> None:
+    coverage = _coverage(
+        [
+            # One document: a tagged record and two ``other`` records of the
+            # plan outcome's kind count it once on the row.
+            _member("a", outcome="arrests", outcome_tag="Reduce crime"),
+            _member("a", outcome="reoffending", outcome_tag="other"),
+            _member("a", outcome="arrests", outcome_tag=None, role="described"),
+            # Not tagged, the plan outcome's kind, evaluated.
+            _member("b", outcome="reoffending"),
+            # Described only: counted in documents, not evaluated.
+            _member("c", outcome="arrests", outcome_tag="other", role="described"),
+        ],
+        plan_outcomes=PLAN,
+        folds=FOLDS,
+    )
+    counts = coverage["outcome_counts"]
+    assert _by(counts) == {"Reduce crime": 3, "Improve wellbeing": 0}
+    assert _evaluated_by(counts) == {"Reduce crime": 2, "Improve wellbeing": 0}
+    assert counts["other"] == []
+    assert coverage["measures_kinds"] == [
+        {"kind": "Reduce crime", "documents": 3, "evaluated": 2}
+    ]
+
+
+def test_a_kind_row_counts_only_records_tagged_other_or_not_tagged() -> None:
+    coverage = _coverage(
+        [
+            # Tagged with a plan outcome: its kind is not an ``other`` row.
+            _member("a", outcome="earnings", outcome_tag="Improve wellbeing"),
+            _member("b", outcome="earnings", outcome_tag="other", role="described"),
+            _member("c", outcome="life satisfaction"),
+            _member("c", outcome="earnings", outcome_tag="OTHER"),
+        ],
+        plan_outcomes=PLAN,
+        folds=FOLDS,
+    )
+    counts = coverage["outcome_counts"]
+    assert counts["other"] == [
+        {"kind": "earnings", "documents": 2, "evaluated": 1},
+        {"kind": "wellbeing", "documents": 1, "evaluated": 1},
+    ]
+    # "wellbeing" is not the plan's text "Improve wellbeing": no cross row.
+    assert _by(counts) == {"Reduce crime": 0, "Improve wellbeing": 1}
+    # The Measures kinds count every record, whatever its tag.
+    assert coverage["measures_kinds"] == [
+        {"kind": "earnings", "documents": 3, "evaluated": 2},
+        {"kind": "wellbeing", "documents": 1, "evaluated": 1},
+    ]
+
+
+def test_distinct_words_fold_case_and_space_and_keep_the_first_spelling() -> None:
+    members = [
+        _member("a", unit="Young adults", outcome="arrests"),
+        _member("b", unit="young  adults", outcome=None),
+        _member("c", unit="parents", outcome="Arrests"),
+        _member("d", unit=None, outcome="  "),
+    ]
+    assert distinct_words(members, "tried_on") == ["parents", "Young adults"]
+    assert distinct_words(members, "measures") == ["Arrests"]
+
+
+def test_stored_folds_read_the_column_defensively() -> None:
+    assert stored_folds({}) is None
+    assert stored_folds(None) is None
+    assert stored_folds({"folds": {"tried_on": {"a": "b", "c": 1}}}) == {
+        "tried_on": {"a": "b"},
+        "measures": {},
+    }
+
+
+def test_a_merge_recomputes_the_kinds_through_the_maps(conn: Connection) -> None:
+    walk, kept, duplicate = _tagged_walk(conn)
+    walk.build(_routes())
+    conn.execute(
+        update(option_membership)
+        .where(option_membership.c.option_id == duplicate)
+        .values(option_id=kept)
+    )
+    folds = {
+        "tried_on": {
+            "young people aged 16 to 24": "16 to 24 year olds",
+            "young adults": "young adults",
+            "long-term unemployed adults": "unemployed adults",
+        },
+        "measures": {},
+    }
+    coverage = membership_coverage(
+        conn,
+        task_id=walk.task_id,
+        scope_id=walk.scope_id,
+        option_ids=[kept],
+        folds=folds,
+        target_unit="16 to 24 year olds",
+    )[str(kept)]
+    assert coverage["tried_on_kinds"] == [
+        {"kind": "16 to 24 year olds", "documents": 1},
+        {"kind": "young adults", "documents": 2},
+        {"kind": "unemployed adults", "documents": 1},
+    ]
+    # The old keys stay for constrain.
+    assert coverage["tried_on"] == [{"population": "Young adults", "documents": 2}]
+    assert "populations" in coverage and "settings" in coverage

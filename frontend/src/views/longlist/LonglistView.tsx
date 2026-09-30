@@ -530,9 +530,9 @@ export function LonglistView({ taskId, longlist }: { taskId: string; longlist: L
         {triedOn.shown.length > 0 && (
           <div role="group" aria-label="Tried on" className="mt-2 flex flex-wrap items-start gap-1.5">
             <span className={FACET_LABEL_CLASS}>Tried on</span>
-            {triedOn.shown.map(([population, count]) => (
-              <span key={population} className={facetChipClass(false)}>
-                {scrub(population)} ({count})
+            {triedOn.shown.map(([kind]) => (
+              <span key={kind} className={facetChipClass(false)}>
+                {scrub(kind)}
               </span>
             ))}
             {triedOn.hidden > 0 && (

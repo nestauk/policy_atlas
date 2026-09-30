@@ -227,9 +227,6 @@ export function OptionCard() {
   const item = option.data;
   const evidence = item.evidence;
   const byRole = evidence.by_role ?? {};
-  const populationsSentence = (evidence.populations ?? []).join(", ");
-  const settingsSentence = (evidence.settings ?? []).join(", ");
-  const measuredSentence = (evidence.outcomes ?? []).join(", ");
   const excluded = item.state === "excluded";
   const judgements = item.judgements ?? [];
   const documentsLine = documentsSentence(evidence.documents, byRole);
@@ -484,10 +481,7 @@ export function OptionCard() {
           </>
         )}
         <DocumentList taskId={taskId} documents={documents} />
-        {populationsSentence !== "" && <p>Populations: {populationsSentence}.</p>}
         {(evidence.tried_on ?? []).length > 0 && <p>{scrub(triedOnSentence(evidence.tried_on ?? []))}</p>}
-        {settingsSentence !== "" && <p>Settings: {settingsSentence}.</p>}
-        {measuredSentence !== "" && <p>Outcomes measured: {measuredSentence}.</p>}
         <p className="text-meta text-grey">{abstractOnlySentence(evidence.abstract_only, evidence.documents)}</p>
       </CardSection>
 

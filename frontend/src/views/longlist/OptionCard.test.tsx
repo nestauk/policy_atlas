@@ -203,6 +203,14 @@ describe("OptionCard", () => {
     expect(screen.getByText("Tried on: 18-24 year-olds in Northern England (2 documents).")).toBeInTheDocument();
   });
 
+  // Task 046, amendment 3 (B13): the record-level lines are gone.
+  it("shows no Populations, Settings or Outcomes measured line", () => {
+    renderCard(MOCK_OPTION_ID_EXCLUDED);
+    expect(screen.queryByText(/^Populations:/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/^Settings:/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/^Outcomes measured:/)).not.toBeInTheDocument();
+  });
+
   it("shows no tried-on line when the evidence profile carries none", () => {
     renderCard(MOCK_OPTION_ID_NO_IN_SCOPE, { evidence: { ...mockLonglistOptionCards[MOCK_OPTION_ID_NO_IN_SCOPE].evidence, tried_on: [] } });
     expect(screen.queryByText(/Tried on:/)).not.toBeInTheDocument();
