@@ -998,6 +998,35 @@ const MOCK_LONGLIST_RESTRICTION_TEXT = "Evidence from the UK and other high-inco
 const MOCK_LONGLIST_FUNDING_CONSTRAINT = "Only include options a local authority can fund directly";
 const MOCK_LONGLIST_COST_PREFERENCE = "Prefer options with a lower cost per participant";
 
+type ProfileFixture = NonNullable<OptionOutFixture["profile"]>;
+
+/** One eight-line profile for a longlist fixture: a sentence per line and a
+ *  mark where the option stands out (`who_decides` and `dependencies` never
+ *  carry one). */
+function mockProfile(
+  marks: Partial<Record<"cost" | "time_to_set_up" | "time_to_effect" | "workforce" | "coordination" | "delivery_complexity", "less" | "more">>,
+  settings: string[],
+): ProfileFixture {
+  const line = (key: ProfileFixture["lines"][number]["key"], sentence: string) => ({
+    key,
+    sentence,
+    mark: key === "who_decides" || key === "dependencies" ? null : (marks[key] ?? null),
+  });
+  return {
+    lines: [
+      line("cost", "Costs are mostly staff time; no capital spend is reported."),
+      line("time_to_set_up", "Local teams could start within a year using existing contracts."),
+      line("time_to_effect", "Effects on the NEET rate show after about two years."),
+      line("workforce", "Needs trained advisers in every area, drawn from current staff."),
+      line("who_decides", "The local authority decides, with the Department for Work and Pensions consulted."),
+      line("dependencies", "Depends on shared data between schools and Jobcentre Plus."),
+      line("coordination", "Schools, Jobcentres and councils must agree who refers whom."),
+      line("delivery_complexity", "One referral route; few moving parts once the data is shared."),
+    ],
+    settings,
+  };
+}
+
 /** One full `OptionOut` (the card) per longlist option, keyed by id — the
  *  single source both `GET /options/{id}` and the two GETs' summaries
  *  project from, and the exclude/include/add handlers mutate in place. */
@@ -1035,8 +1064,14 @@ export const mockLonglistOptionCards: Record<string, OptionOutFixture> = {
     runner_up_lever_type: "regulate",
     lever_reason: "The council withholds a benefit payment when a young person refuses an offer.",
     secondary_lever_types: ["regulate"],
-    ambition: "structural",
+    ambition: "more",
     ambition_reason: "Changes who is entitled to a national benefit, not just how it is delivered.",
+    profile: mockProfile({ cost: "less", time_to_effect: "more", coordination: "more" }, ["Jobcentre", "Secondary school"]),
+    authority: {
+      label: "needs_action_by",
+      body: "the Department for Work and Pensions",
+      reason: "The benefit is set nationally, so a council cannot change it alone.",
+    },
     taxonomy_version: "lever-types-v1",
     document_count: 6,
     evaluated_count: 3,
@@ -1069,6 +1104,10 @@ export const mockLonglistOptionCards: Record<string, OptionOutFixture> = {
       inherited_labels: 1,
       abstract_only: 2,
       tried_on: [{ population: "18-24 year-olds in Northern England", documents: 2 }],
+      outcome_counts: {
+        evaluating_documents: 3,
+        by_outcome: [{ outcome: "NEET rate at 6 months", documents: 3 }],
+      },
     },
     judgements: [
       { constraint_id: "relevant", constraint_text: "Relevant to the stated outcomes", verdict: "passes", reason: "Targets the NEET rate directly." },
@@ -1077,7 +1116,7 @@ export const mockLonglistOptionCards: Record<string, OptionOutFixture> = {
       { constraint_id: "req-1", constraint_text: MOCK_LONGLIST_FUNDING_CONSTRAINT, verdict: "breaks", reason: "A local authority cannot withdraw a national benefit directly." },
     ],
     guesses: [
-      { constraint_id: "pref-1", constraint_text: MOCK_LONGLIST_COST_PREFERENCE, guess: "likely a low cost per participant, a guess rather than evidence", leaning: "likely_meets" },
+      { constraint_id: "pref-1", constraint_text: MOCK_LONGLIST_COST_PREFERENCE, guess: "likely a low cost per participant", leaning: "likely_meets" },
     ],
     transferability: "checked at assessment",
     in_scope: null,
@@ -1110,8 +1149,14 @@ export const mockLonglistOptionCards: Record<string, OptionOutFixture> = {
     primary_lever_type: "provide a service",
     lever_none_fits_reason: null,
     secondary_lever_types: [],
-    ambition: "incremental",
+    ambition: null,
     ambition_reason: "Adds support alongside the existing offer rather than changing who runs it.",
+    profile: mockProfile({ workforce: "more", time_to_set_up: "less" }, ["Secondary school"]),
+    authority: {
+      label: "within_your_power",
+      body: null,
+      reason: "A council can commission mentors through its existing school contracts.",
+    },
     taxonomy_version: "lever-types-v1",
     document_count: 4,
     evaluated_count: 2,
@@ -1146,7 +1191,7 @@ export const mockLonglistOptionCards: Record<string, OptionOutFixture> = {
       { constraint_id: "req-1", constraint_text: MOCK_LONGLIST_FUNDING_CONSTRAINT, verdict: "passes", reason: "Delivered through the school's existing budget." },
     ],
     guesses: [
-      { constraint_id: "pref-1", constraint_text: MOCK_LONGLIST_COST_PREFERENCE, guess: "likely a low cost per participant, a guess rather than evidence", leaning: "likely_meets" },
+      { constraint_id: "pref-1", constraint_text: MOCK_LONGLIST_COST_PREFERENCE, guess: "likely a low cost per participant", leaning: "likely_meets" },
     ],
     transferability: "checked at assessment",
     in_scope: { restriction: MOCK_LONGLIST_RESTRICTION_TEXT, in_scope_documents: 0, documents: 4 },
@@ -1190,6 +1235,8 @@ export const mockLonglistOptionCards: Record<string, OptionOutFixture> = {
     secondary_lever_types: [],
     ambition: null,
     ambition_reason: null,
+    profile: null,
+    authority: null,
     taxonomy_version: "lever-types-v1",
     document_count: 0,
     evaluated_count: 0,
@@ -1246,8 +1293,10 @@ export const mockLonglistOptionCards: Record<string, OptionOutFixture> = {
     primary_lever_type: "regulate",
     lever_none_fits_reason: null,
     secondary_lever_types: ["provide a service"],
-    ambition: "do_minimum",
+    ambition: "less",
     ambition_reason: "Reorganises the existing offer into one application rather than adding anything new.",
+    profile: mockProfile({ cost: "less", delivery_complexity: "more", time_to_set_up: "less" }, ["Jobcentre", "Community centre"]),
+    authority: { label: "unclear", body: null, reason: "The sources do not say who could merge the application routes." },
     taxonomy_version: "lever-types-v1",
     document_count: 9,
     evaluated_count: 5,
@@ -1314,6 +1363,8 @@ function toLonglistOptionSummary(option: OptionOutFixture): OptionSummaryOutFixt
     secondary_lever_types: option.secondary_lever_types,
     ambition: option.ambition,
     ambition_reason: option.ambition_reason,
+    profile: option.profile,
+    authority: option.authority,
     taxonomy_version: option.taxonomy_version,
     design_version: option.design_version,
     document_count: option.document_count,
@@ -1363,6 +1414,8 @@ export function buildMockAddedOption(text: string): OptionOutFixture {
     secondary_lever_types: [],
     ambition: null,
     ambition_reason: null,
+    profile: null,
+    authority: null,
     taxonomy_version: "lever-types-v1",
     document_count: 0,
     evaluated_count: 0,
@@ -1534,11 +1587,6 @@ export function mockLonglist(): components["schemas"]["LonglistOut"] {
         },
       ],
     },
-    ambition_bands: [
-      { key: "do_minimum", label: "Do minimum", definition: "adjusts, extends, enforces or better funds what already exists; the arrangement stays" },
-      { key: "incremental", label: "Incremental", definition: "adds a new scheme, service, rule, charge or offer inside the present structure" },
-      { key: "structural", label: "Structural", definition: "changes the structure itself: who is entitled, who runs it, how it is funded, or what the system is" },
-    ],
     taxonomy_version: "lever-types-v1",
     depth_label: "scoping pass",
   };

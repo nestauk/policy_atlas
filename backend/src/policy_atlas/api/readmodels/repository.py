@@ -9,13 +9,14 @@ from dataclasses import dataclass
 from functools import cmp_to_key
 from typing import Any, Literal, cast
 
+import structlog
 from sqlalchemy import func, select
 from sqlalchemy.engine import Connection
 
 from policy_atlas.api.contract import (
     EVIDENCE_STATUS_INCLUDED,
-    AmbitionBandOut,
     ArtefactOut,
+    AuthorityOut,
     AuthorshipOut,
     BlockOut,
     CaseStudyCardOut,
@@ -52,9 +53,13 @@ from policy_atlas.api.contract import (
     OptionDesignOut,
     OptionDocumentOut,
     OptionOut,
+    OptionProfileOut,
     OptionSummaryOut,
+    OutcomeCountOut,
+    OutcomeCountsOut,
     Page,
     PageMeta,
+    ProfileLineOut,
     ReferenceOut,
     RelationOut,
     SectionOut,
@@ -121,9 +126,6 @@ from policy_atlas.options_scoping.longlist.coverage import (
     option_coverage,
 )
 from policy_atlas.options_scoping.longlist.lever_types import (
-    AMBITION_BANDS,
-    AMBITION_DEFINITIONS,
-    AMBITION_LABELS,
     LEVER_TYPE_KEYS,
     LEVER_TYPES,
     TAXONOMY_VERSION,
@@ -132,7 +134,12 @@ from policy_atlas.options_scoping.longlist.lever_types import (
 from policy_atlas.options_scoping.longlist.where_tried import where_codes, where_group
 from policy_atlas.options_scoping.option_profile.option_profile import TYPING_INVALID_REASON
 from policy_atlas.runtime.capability_registry import OPTIONS_SCOPING, validate_plan
-from policy_atlas.runtime.scoping_plan import TRANSFERABILITY_DEFAULT, ScopingPlan, find_default
+from policy_atlas.runtime.scoping_plan import (
+    PROFILE_LINE_KEYS,
+    TRANSFERABILITY_DEFAULT,
+    ScopingPlan,
+    find_default,
+)
 from policy_atlas.runtime.steering_events import canonical_actor
 from policy_atlas.runtime.steering_history import steering_history
 
@@ -2802,6 +2809,11 @@ _DOCUMENT_ROLES = frozenset({"evaluated", "described", "recommended", "mentioned
 #: The role a linked finding's kind implies (the longlist component's rule).
 _LINKED_FINDING_ROLE: dict[str, str] = {"iof": "evaluated", "icf": "described"}
 _WHERE_GROUPS: tuple[str, ...] = ("where", "comparable", "other", "unknown")
+_PROFILE_MARKS = frozenset({"less", "more"})
+#: The two lines that state a fact, not a comparison: never marked (R37).
+_UNMARKED_LINES = frozenset({"who_decides", "dependencies"})
+_AUTHORITY_LABELS = frozenset({"within_your_power", "needs_action_by", "unclear"})
+log = structlog.get_logger()
 
 
 def _as_mapping(value: object) -> Mapping[str, Any]:
@@ -3020,11 +3032,79 @@ def _string_list(value: object) -> list[str]:
     return [item for item in value if isinstance(item, str)] if isinstance(value, list) else []
 
 
+def _profile_out(entry: Mapping[str, Any], option_id: uuid.UUID) -> OptionProfileOut | None:
+    """The option's profile from its ``option_profile`` entry (R36, R37, R41).
+
+    Served only when the entry holds all eight lines, each with a sentence;
+    otherwise ``None`` and a warning. A mark that is not ``less`` or ``more``
+    is ``None``; ``who_decides`` and ``dependencies`` never carry one.
+    """
+    if not entry:
+        return None
+    stored = _as_mapping(entry.get("lines"))
+    lines: list[ProfileLineOut] = []
+    for key in PROFILE_LINE_KEYS:
+        line = _as_mapping(stored.get(key))
+        sentence = line.get("sentence")
+        if not isinstance(sentence, str) or not sentence.strip():
+            log.warning("readmodel.option_profile_incomplete", option_id=str(option_id))
+            return None
+        mark = line.get("mark")
+        lines.append(
+            ProfileLineOut(
+                key=cast(Any, key),
+                sentence=sentence,
+                mark=cast(Any, mark)
+                if mark in _PROFILE_MARKS and key not in _UNMARKED_LINES
+                else None,
+            )
+        )
+    setting = _as_mapping(entry.get("setting"))
+    settings = [
+        value
+        for value in (setting.get("main"), setting.get("second"))
+        if isinstance(value, str) and value.strip()
+    ]
+    return OptionProfileOut(lines=lines, settings=settings)
+
+
+def _authority_out(record: Mapping[str, Any]) -> AuthorityOut | None:
+    """The authority label constrain wrote under ``judgements`` (R43), or ``None``."""
+    entry = _as_mapping(record.get(LONGLIST_AUTHORITY_KEY))
+    label = entry.get("label")
+    if label not in _AUTHORITY_LABELS:
+        return None
+    body, reason = entry.get("body"), entry.get("reason")
+    return AuthorityOut(
+        label=cast(Any, label),
+        body=body if isinstance(body, str) and body.strip() else None,
+        reason=reason if isinstance(reason, str) and reason.strip() else None,
+    )
+
+
+def _outcome_counts_out(raw: object) -> OutcomeCountsOut:
+    """Coverage's ``outcome_counts``, read defensively (R42)."""
+    counts = _as_mapping(raw)
+    by_outcome: list[OutcomeCountOut] = []
+    listed = counts.get("by_outcome")
+    for item in listed if isinstance(listed, list) else []:
+        entry = _as_mapping(item)
+        outcome = entry.get("outcome")
+        if isinstance(outcome, str) and outcome:
+            by_outcome.append(
+                OutcomeCountOut(outcome=outcome, documents=_count(entry.get("documents")))
+            )
+    return OutcomeCountsOut(
+        evaluating_documents=_count(counts.get("evaluating_documents")), by_outcome=by_outcome
+    )
+
+
 def _option_summary_fields(
     row: Any,
     coverage: Mapping[str, Any],
     relations: list[RelationOut],
     record: Mapping[str, Any],
+    profile_entry: Mapping[str, Any],
     *,
     search_pending: bool = False,
     from_section: str | None = None,
@@ -3034,6 +3114,7 @@ def _option_summary_fields(
 ) -> dict[str, Any]:
     documents = _count(coverage.get("documents"))
     in_scope = _in_scope_out(record)
+    profile = _profile_out(profile_entry, row.option_id)
     return {
         "option_id": row.option_id,
         "name": row.name,
@@ -3051,13 +3132,15 @@ def _option_summary_fields(
         "runner_up_lever_type": runner_up_lever_type,
         "lever_reason": lever_reason,
         "secondary_lever_types": _string_list(row.secondary_lever_types),
-        "ambition": row.ambition,
+        "ambition": row.ambition if row.ambition in _PROFILE_MARKS else None,
         "ambition_reason": row.ambition_reason,
+        "profile": profile,
+        "authority": _authority_out(record),
         "taxonomy_version": row.taxonomy_version,
         "design_version": int(row.design_version),
         "document_count": documents,
         "evaluated_count": _count(_as_mapping(coverage.get("role")).get("evaluated")),
-        "settings": list(_ranked(coverage.get("settings"))),
+        "settings": list(profile.settings) if profile is not None else [],
         "where_tried": _where_tried_out(coverage.get("where_tried")),
         "relations": relations,
         "abstract_only": documents > 0 and _count(coverage.get("abstract_only")) == documents,
@@ -3496,6 +3579,7 @@ def longlist_out(conn: Connection, task_id: uuid.UUID) -> LonglistOut | None:
                 coverage_of(oid),
                 relations.get(oid, []),
                 _design_record(result, "judgements", by_id[oid]),
+                _design_record(result, "option_profile", by_id[oid]),
                 search_pending=oid in searches and searches[oid].pending,
                 from_section=sections.get(oid),
                 also_found_as=merged.get(oid),
@@ -3549,12 +3633,6 @@ def longlist_out(conn: Connection, task_id: uuid.UUID) -> LonglistOut | None:
             version: [LeverTypeOut(key=lever.key, definition=lever.definition) for lever in levers]
             for version, levers in lever_types_by_version().items()
         },
-        ambition_bands=[
-            AmbitionBandOut(
-                key=band, label=AMBITION_LABELS[band], definition=AMBITION_DEFINITIONS.get(band)
-            )
-            for band in AMBITION_BANDS
-        ],
         taxonomy_version=taxonomy if isinstance(taxonomy, str) else TAXONOMY_VERSION,
     )
 
@@ -3637,6 +3715,7 @@ def _evidence_profile(coverage: Mapping[str, Any]) -> EvidenceProfileOut:
         inherited_labels=_count(coverage.get("inherited_labels")),
         abstract_only=_count(coverage.get("abstract_only")),
         tried_on=_tried_on_out(coverage.get("tried_on")),
+        outcome_counts=_outcome_counts_out(coverage.get("outcome_counts")),
     )
 
 
@@ -3890,6 +3969,7 @@ def option_out(conn: Connection, task_id: uuid.UUID, option_id: uuid.UUID) -> Op
             coverage,
             relations,
             judgements,
+            _design_record(result, "option_profile", row),
             search_pending=search is not None and search.pending,
             from_section=_report_sections(conn, task_id, rows).get(option_id),
             also_found_as=_also_found_as(conn, task_id).get(option_id),

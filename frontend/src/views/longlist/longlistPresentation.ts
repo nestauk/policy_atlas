@@ -1,5 +1,6 @@
 import type { components } from "../../api/gen/types";
 import { conflictSentences, isConflictCode } from "../../lib/errors";
+import { PROFILE_LINE_LABELS } from "../workspace/planVocabulary";
 
 /**
  * Presentation helpers shared by the longlist's three surfaces (list view,
@@ -13,9 +14,9 @@ type WhereTriedOut = components["schemas"]["WhereTriedOut"];
 type RelationOut = components["schemas"]["RelationOut"];
 type OptionSummaryOut = components["schemas"]["OptionSummaryOut"];
 
-/** Capitalise a lever-type or ambition-band key's first letter only — the
- *  keys are already natural lowercase phrases ("tax or charge", "do
- *  minimum"), so nothing else needs changing. */
+/** Capitalise a lever-type key's first letter only — the keys are already
+ *  natural lowercase phrases ("tax or charge"), so nothing else needs
+ *  changing. */
 export function capitalise(value: string): string {
   return value.length === 0 ? value : value[0].toUpperCase() + value.slice(1);
 }
@@ -217,12 +218,10 @@ export function byLeverThenName(leverTypes: readonly string[]) {
   };
 }
 
-/** A row's lever and ambition, as the first thing after its name:
- *  "Provide a service · Incremental". */
-export function leverAmbitionLabel(option: OptionSummaryOut): string {
-  const parts = [option.primary_lever_type == null ? "No lever fits" : capitalise(option.primary_lever_type)];
-  if (option.ambition != null) parts.push(ambitionLabel(option.ambition));
-  return parts.join(" · ");
+/** A row's lever, as the first thing after its name: "Provide a service".
+ *  A row carries no mark and no ambition word (R40, R44). */
+export function leverLabel(option: OptionSummaryOut): string {
+  return option.primary_lever_type == null ? "No lever fits" : capitalise(option.primary_lever_type);
 }
 
 /** A taxonomy definition as a heading's line: capitalised, one full stop. */
@@ -399,17 +398,123 @@ export function outcomesSentence(outcomes: string[] | undefined): string {
   return `For ${joined}.`;
 }
 
-/** An ambition band's stored key as its label: "do_minimum" → "Do minimum"
- *  (the backend's AMBITION_LABELS, derived rather than fetched because the
- *  option card has no longlist read in hand). */
-export function ambitionLabel(ambition: string): string {
-  return capitalise(ambition.replace(/_/g, " "));
+type ProfileLineKey = components["schemas"]["ProfileLineOut"]["key"];
+type Mark = "less" | "more";
+type AuthorityOut = components["schemas"]["AuthorityOut"];
+type OutcomeCountsOut = components["schemas"]["OutcomeCountsOut"];
+
+/** The eight profile lines, in display order (R37); the ninth entry of the
+ *  shared vocabulary, transferability, is read at assessment and not listed. */
+export const PROFILE_LINE_KEYS = (Object.keys(PROFILE_LINE_LABELS) as string[]).filter(
+  (key): key is ProfileLineKey => key !== "transferability",
+);
+
+/** The name of a profile line or of ambition (R40). */
+export const LINE_NAMES: Record<ProfileLineKey | "ambition", string> = {
+  cost: PROFILE_LINE_LABELS.cost,
+  time_to_set_up: PROFILE_LINE_LABELS.time_to_set_up,
+  time_to_effect: PROFILE_LINE_LABELS.time_to_effect,
+  workforce: PROFILE_LINE_LABELS.workforce,
+  who_decides: PROFILE_LINE_LABELS.who_decides,
+  dependencies: PROFILE_LINE_LABELS.dependencies,
+  coordination: PROFILE_LINE_LABELS.coordination,
+  delivery_complexity: PROFILE_LINE_LABELS.delivery_complexity,
+  ambition: "Ambition",
+};
+
+/** The level word each mark takes on each line (R40, R44); `null` where the
+ *  line never carries a mark. */
+export const LEVEL_WORDS: Record<ProfileLineKey | "ambition", Record<Mark, string | null>> = {
+  cost: { less: "Cheaper", more: "Costlier" },
+  time_to_set_up: { less: "Quicker", more: "Slower" },
+  time_to_effect: { less: "Quicker", more: "Slower" },
+  workforce: { less: "Lower", more: "Higher" },
+  who_decides: { less: null, more: null },
+  dependencies: { less: null, more: null },
+  coordination: { less: "Lower", more: "Higher" },
+  delivery_complexity: { less: "Simpler", more: "More complex" },
+  ambition: { less: "Smaller", more: "Bigger" },
+};
+
+/** The lines the grid can put in its columns: the seven that carry a mark,
+ *  ambition first (R41). */
+export const GRID_COLUMN_LINES: readonly (ProfileLineKey | "ambition")[] = [
+  "ambition",
+  "cost",
+  "time_to_set_up",
+  "time_to_effect",
+  "workforce",
+  "coordination",
+  "delivery_complexity",
+];
+
+/** The tint behind a level word: pale aqua for the lower level, pale violet
+ *  for the higher one; navy text on both (the lead's proposal, for the owner
+ *  to decide on the built screen). */
+export const LEVEL_WORD_CLASS: Record<Mark, string> = {
+  less: "inline-block bg-aqua-tint px-1.5 py-0.5 text-meta font-semibold leading-tight text-navy",
+  more: "inline-block bg-violet-tint px-1.5 py-0.5 text-meta font-semibold leading-tight text-navy",
+};
+
+/** The level word for a mark on a line, or null when there is none to show. */
+export function levelWord(line: ProfileLineKey | "ambition", mark: Mark | null | undefined): string | null {
+  return mark == null ? null : LEVEL_WORDS[line][mark];
 }
 
-/** The ambition line on the option card: "Ambition: {band}. {reason}" */
-export function ambitionLine(ambition: string, reason: string | null | undefined): string {
+/** The authority labels' words (R43); a null body reads "another body". */
+export const AUTHORITY_LABELS: Record<AuthorityOut["label"], string> = {
+  within_your_power: "Within your power",
+  needs_action_by: "Needs action by another body",
+  unclear: "Unclear who can act",
+};
+
+/** The label's words for one option's authority: "Needs action by {body}"
+ *  when the body is known. */
+export function authorityWords(authority: AuthorityOut): string {
+  const body = (authority.body ?? "").trim();
+  return authority.label === "needs_action_by" && body !== ""
+    ? `Needs action by ${body}`
+    : AUTHORITY_LABELS[authority.label];
+}
+
+/** The card's authority line: "{label words}. {reason}" (R43). */
+export function authorityLine(authority: AuthorityOut): string {
+  const why = (authority.reason ?? "").trim();
+  return why === "" ? `${authorityWords(authority)}.` : `${authorityWords(authority)}. ${why}`;
+}
+
+/** The card's ambition line (R44): the level word and the reason, the reason
+ *  alone when there is no level, nothing when both are empty. */
+export function ambitionSentence(
+  ambition: Mark | null | undefined,
+  reason: string | null | undefined,
+): string {
   const why = (reason ?? "").trim();
-  return why === "" ? `Ambition: ${ambitionLabel(ambition)}.` : `Ambition: ${ambitionLabel(ambition)}. ${why}`;
+  if (ambition != null) {
+    const word = LEVEL_WORDS.ambition[ambition];
+    return why === "" ? `Ambition: ${word}.` : `Ambition: ${word}. ${why}`;
+  }
+  return why === "" ? "" : `Ambition: ${why}`;
+}
+
+/** The card's delivery-setting line (R41): "Delivered through: a · b". */
+export function deliveredThroughLine(settings: readonly string[] | undefined): string {
+  return (settings ?? []).length === 0 ? "" : `Delivered through: ${(settings ?? []).join(" · ")}`;
+}
+
+/** The outcome counts' lead sentence (R42): "3 documents evaluated this
+ *  option." */
+export function outcomeCountsSentence(counts: OutcomeCountsOut | undefined): string {
+  const n = counts?.evaluating_documents ?? 0;
+  if (n === 0) return "";
+  return `${n} ${n === 1 ? "document" : "documents"} evaluated this option.`;
+}
+
+/** One plan outcome's count (R42): "{outcome}: 2 documents", "1 document",
+ *  "no documents". */
+export function outcomeCountItem(outcome: string, documents: number): string {
+  const count = documents === 0 ? "no documents" : `${documents} ${documents === 1 ? "document" : "documents"}`;
+  return `${outcome}: ${count}`;
 }
 
 /** The constraints section's collapsed line: "2 break, 1 passes, 1 cannot

@@ -21,10 +21,16 @@ import {
   SCOPING_PASS_SENTENCE,
   abstractOnlySentence,
   actionFailedNotice,
-  ambitionLine,
+  LEVEL_WORD_CLASS,
+  LEVEL_WORDS,
+  LINE_NAMES,
+  PROFILE_LINE_KEYS,
+  ambitionSentence,
+  authorityLine,
   capitalise,
   checksSummary,
   constraintLabel,
+  deliveredThroughLine,
   documentsSentence,
   leverLine,
   runnerUpLine,
@@ -32,6 +38,8 @@ import {
   variantLine,
   originLabel,
   originShort,
+  outcomeCountItem,
+  outcomeCountsSentence,
   outcomesSentence,
   relationLabel,
   roleLabel,
@@ -47,24 +55,48 @@ const PAGE_CLASS = `${LIFECYCLE_PAGE_CLASS} py-8`;
 const SECTIONS = [
   { id: "what-it-is", title: "What it is" },
   { id: "what-it-is-for", title: "What it is for" },
+  { id: "what-it-would-take", title: "What it would take" },
   { id: "evidence-base", title: "What the evidence base holds so far" },
   { id: "constraints", title: "Constraints and guesses" },
   { id: "origin", title: "Where it came from and what it relates to" },
 ] as const;
 type SectionId = (typeof SECTIONS)[number]["id"];
 
-const SIDEBAR_ENTRIES: SidebarEntry[] = SECTIONS.map(({ id, title }) => ({ id, title }));
+/** The sidebar lists the sections the card shows: "What it would take" is
+ *  absent for an option with no profile (R37). */
+const sidebarEntries = (hasProfile: boolean): SidebarEntry[] =>
+  SECTIONS.filter(({ id }) => hasProfile || id !== "what-it-would-take").map(({ id, title }) => ({ id, title }));
+
+/** The label beside the profile section's heading, in both states (R37). */
+const ESTIMATE_LABEL = "Estimate, before assessment";
 
 /** A card section on the report's disclosure (EB as-is): the heading row
- *  toggles, `summary` is the one line shown while collapsed. */
-function CardSection({ id, summary, children }: { id: SectionId; summary: string; children: ReactNode }) {
+ *  toggles, `summary` is the one line shown while collapsed. `summaryNode`
+ *  replaces that line with a node (the profile's row of cells only). */
+function CardSection({
+  id,
+  summary,
+  children,
+  defaultOpen = true,
+  meta,
+  summaryNode,
+}: {
+  id: SectionId;
+  summary: string;
+  children: ReactNode;
+  defaultOpen?: boolean;
+  meta?: ReactNode;
+  summaryNode?: ReactNode;
+}) {
   const { title } = SECTIONS.find((section) => section.id === id) ?? { title: id };
   return (
     <SectionDisclosure
       id={id}
       section={{ title, role: "standard", blocks: summary === "" ? null : [{ prose: summary }] }}
-      defaultOpen
+      defaultOpen={defaultOpen}
       collapsible
+      meta={meta}
+      summaryNode={summaryNode}
     >
       <div className={`max-w-prose-measure space-y-3 ${REPORT_BODY_CLASS}`}>{children}</div>
     </SectionDisclosure>
@@ -161,6 +193,12 @@ export function OptionCard() {
     return true;
   });
   const whereLine = whereTriedSentence(item.where_tried, item.where_label);
+  const outcomeCounts = evidence.outcome_counts;
+  const outcomeCountsLine = outcomeCountsSentence(outcomeCounts);
+  const profile = item.profile ?? null;
+  const ambitionLine = ambitionSentence(item.ambition, item.ambition_reason);
+  const deliveredLine = deliveredThroughLine(profile?.settings);
+  const profileLines = profile === null ? [] : PROFILE_LINE_KEYS.map((key) => ({ key, line: profile.lines.find((line) => line.key === key) }));
   const checksLine = checksSummary(judgements.map((judgement) => judgement.verdict));
   const originSentence = `${capitalise(
     [originLabel(item.origin, item.document_count, item.from_section), ...(item.relations ?? []).map(relationLabel)].join(" · "),
@@ -193,7 +231,7 @@ export function OptionCard() {
   };
 
   return (
-    <ReportPage entries={SIDEBAR_ENTRIES}>
+    <ReportPage entries={sidebarEntries(item.profile != null)}>
       <nav aria-label="Breadcrumb" className="print-hide mb-4 text-meta text-grey">
         <Link to={`/tasks/${taskId}/result?view=longlist`} className="font-semibold text-blue underline-offset-4 hover:underline">
           Longlist
@@ -300,7 +338,9 @@ export function OptionCard() {
         )}
         <p>{leverLine(item.primary_lever_type, item.secondary_lever_types, item.lever_none_fits_reason, item.lever_reason)}</p>
         {item.runner_up_lever_type != null && <p>{runnerUpLine(item.runner_up_lever_type)}</p>}
-        {item.ambition != null && <p>{ambitionLine(item.ambition, item.ambition_reason)}</p>}
+        {ambitionLine !== "" && <p>{scrub(ambitionLine)}</p>}
+        {deliveredLine !== "" && <p>{scrub(deliveredLine)}</p>}
+        {item.authority != null && <p>{scrub(authorityLine(item.authority))}</p>}
         {(item.variants ?? []).length > 0 && (
           <div>
             <p className="font-bold text-navy">Variants</p>
@@ -325,9 +365,64 @@ export function OptionCard() {
         )}
       </CardSection>
 
+      {profile !== null && (
+        <CardSection
+          id="what-it-would-take"
+          summary=""
+          defaultOpen={false}
+          meta={ESTIMATE_LABEL}
+          summaryNode={
+            <ul role="list" className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-4 lg:grid-cols-8">
+              {profileLines.map(({ key, line }) => {
+                const mark = line?.mark ?? null;
+                const word = mark === null ? null : LEVEL_WORDS[key][mark];
+                return (
+                  <li key={key}>
+                    <span className="block text-caption uppercase tracking-[0.06em] text-grey">{LINE_NAMES[key]}</span>
+                    <span className="mt-1 block min-h-6">
+                      {word !== null && mark !== null && <span className={LEVEL_WORD_CLASS[mark]}>{word}</span>}
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+          }
+        >
+          <dl className="divide-y divide-line">
+            {profileLines.map(({ key, line }) => {
+              const mark = line?.mark ?? null;
+              const word = mark === null ? null : LEVEL_WORDS[key][mark];
+              return (
+                <div key={key} className="grid grid-cols-[12rem_1fr] gap-x-6 py-2.5 max-md:grid-cols-1 max-md:gap-y-1">
+                  <dt>
+                    <span className="block font-semibold text-navy">{LINE_NAMES[key]}</span>
+                    {word !== null && mark !== null && (
+                      <span className="mt-1 block">
+                        <span className={LEVEL_WORD_CLASS[mark]}>{word}</span>
+                      </span>
+                    )}
+                  </dt>
+                  <dd className="max-w-prose-measure">{line === undefined ? "" : scrub(line.sentence)}</dd>
+                </div>
+              );
+            })}
+          </dl>
+        </CardSection>
+      )}
+
       <CardSection id="evidence-base" summary={documentsLine}>
         <p>{documentsLine}</p>
         <p>{whereLine}</p>
+        {outcomeCountsLine !== "" && (
+          <>
+            <p>{outcomeCountsLine}</p>
+            <ul className="list-disc space-y-1 pl-5">
+              {(outcomeCounts?.by_outcome ?? []).map((entry) => (
+                <li key={entry.outcome}>{scrub(outcomeCountItem(entry.outcome, entry.documents))}</li>
+              ))}
+            </ul>
+          </>
+        )}
         {documents.length > 0 && (
           <ul role="list" className="grid gap-3">
             {documents.map((document, index) => (

@@ -17,36 +17,6 @@
         "title": "AbortResponse",
         "type": "object"
       },
-      "AmbitionBandOut": {
-        "description": "One ambition band, a column of the reduced grid.\n\nArgs:\n    key: The stored value.\n    label: The display label.\n    definition: One line saying what the band means, for a group heading.",
-        "properties": {
-          "definition": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Definition"
-          },
-          "key": {
-            "title": "Key",
-            "type": "string"
-          },
-          "label": {
-            "title": "Label",
-            "type": "string"
-          }
-        },
-        "required": [
-          "key",
-          "label"
-        ],
-        "title": "AmbitionBandOut",
-        "type": "object"
-      },
       "AnswerPayloadOut": {
         "description": "The cited half of one grounded answer, shared by every turn that has one.\n\nThese are the citation fields ``ChatTurnOut`` has always carried, named\nonce so a Task Agent turn that answers from the evidence (task 044) can\ncarry the same shape instead of a second, drifting copy. Every field keeps\nits chat default, so a turn with no answer serialises exactly as before.\n\nArgs:\n    claims: Structured claims backing the prose.\n    citations: Resolved citations, each with its read-time source facts.\n    enrichment: Downstream enrichment status for those citations.\n    warning_not_evidence_checked: Whether the evidence check could not run.\n    handoff: The handoff hint, when the answer held no evidence.\n    stopped_before_evidence_check: Whether the answer was stopped early.",
         "properties": {
@@ -342,6 +312,47 @@
           "sections"
         ],
         "title": "ArtefactSkeletonFrame",
+        "type": "object"
+      },
+      "AuthorityOut": {
+        "description": "Who can act on the option (task 046, R43): a label, not a verdict.\n\nArgs:\n    label: `within_your_power` \u00b7 `needs_action_by` \u00b7 `unclear`.\n    body: The body that must act, when the label is `needs_action_by`.\n    reason: Why, in one sentence.",
+        "properties": {
+          "body": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Body"
+          },
+          "label": {
+            "enum": [
+              "within_your_power",
+              "needs_action_by",
+              "unclear"
+            ],
+            "title": "Label",
+            "type": "string"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "required": [
+          "label"
+        ],
+        "title": "AuthorityOut",
         "type": "object"
       },
       "AuthorshipOut": {
@@ -2084,7 +2095,7 @@
         "type": "object"
       },
       "EvidenceProfileOut": {
-        "description": "An option's source-quality profile \u2014 what the evidence base holds so far.\n\nEvery count is of documents, DOI-collapsed. Display only; never a verdict.\n\nArgs:\n    documents: Its documents.\n    by_evidence_type: Documents per evidence type; \"Unknown\" and\n        non-evidence documents are their own keys, \"not rated\" when unclassified.\n    by_tier: Documents per quality tier label, \"not rated\" when unappraised.\n    by_role: Documents per role.\n    where_tried: Documents per where-tried group.\n    populations: Populations its documents name, most frequent first.\n    settings: Settings its documents name, most frequent first.\n    outcomes: Outcomes its documents measure, most frequent first.\n    flagged_not_stated: Documents that cover the intervention without\n        stating the feature that defines this option.\n    inherited_labels: Documents whose type and tier were read from a\n        linked task.\n    abstract_only: Documents read from an abstract only.\n    tried_on: The populations its adjacent evidence was tried on, most\n        documents first (task 046).",
+        "description": "An option's source-quality profile \u2014 what the evidence base holds so far.\n\nEvery count is of documents, DOI-collapsed. Display only; never a verdict.\n\nArgs:\n    documents: Its documents.\n    by_evidence_type: Documents per evidence type; \"Unknown\" and\n        non-evidence documents are their own keys, \"not rated\" when unclassified.\n    by_tier: Documents per quality tier label, \"not rated\" when unappraised.\n    by_role: Documents per role.\n    where_tried: Documents per where-tried group.\n    populations: Populations its documents name, most frequent first.\n    settings: Settings its documents name, most frequent first.\n    outcomes: Outcomes its documents measure, most frequent first.\n    flagged_not_stated: Documents that cover the intervention without\n        stating the feature that defines this option.\n    inherited_labels: Documents whose type and tier were read from a\n        linked task.\n    abstract_only: Documents read from an abstract only.\n    tried_on: The populations its adjacent evidence was tried on, most\n        documents first (task 046).\n    outcome_counts: The documents that evaluate the option, by plan\n        outcome (task 046, R42).",
         "properties": {
           "abstract_only": {
             "default": 0,
@@ -2126,6 +2137,9 @@
             "default": 0,
             "title": "Inherited Labels",
             "type": "integer"
+          },
+          "outcome_counts": {
+            "$ref": "#/components/schemas/OutcomeCountsOut"
           },
           "outcomes": {
             "items": {
@@ -3448,15 +3462,8 @@
         "type": "object"
       },
       "LonglistOut": {
-        "description": "The `longlist` read model: the options grouped by theme, with their states.\n\nArgs:\n    run_id: The longlist component run the longlist came from.\n    capability_run_id: The longlist walk that run belonged to.\n    plan_version: The plan version the longlist was built from.\n    built_from_plan_version: The same number, named for the plan\n        document's \"built from plan version N\".\n    current_plan_version: The task's current approved plan version.\n    counts: The header counts.\n    themes: The themes, in display order.\n    unthemed_option_ids: Options in no theme (including options added\n        since the build).\n    options: Every option of the task, themed ones first in theme order.\n    where_label: The words the `where` group is shown under (the plan's\n        Where).\n    lever_types: The lever-type list the options were typed against, in\n        order (the grid's rows).\n    lever_type_definitions: The same list with each type's one-line\n        definition (the list view's group headings).\n    lever_type_definitions_by_version: Every lever-type taxonomy version's\n        definitions, keyed by version, so an option typed under an\n        earlier version can show that version's wording (task 046).\n    ambition_bands: The ambition bands, in order (the grid's columns).\n    taxonomy_version: The lever-type list version.\n    depth_label: The depth label every longlist surface carries.",
+        "description": "The `longlist` read model: the options grouped by theme, with their states.\n\nArgs:\n    run_id: The longlist component run the longlist came from.\n    capability_run_id: The longlist walk that run belonged to.\n    plan_version: The plan version the longlist was built from.\n    built_from_plan_version: The same number, named for the plan\n        document's \"built from plan version N\".\n    current_plan_version: The task's current approved plan version.\n    counts: The header counts.\n    themes: The themes, in display order.\n    unthemed_option_ids: Options in no theme (including options added\n        since the build).\n    options: Every option of the task, themed ones first in theme order.\n    where_label: The words the `where` group is shown under (the plan's\n        Where).\n    lever_types: The lever-type list the options were typed against, in\n        order (the grid's rows).\n    lever_type_definitions: The same list with each type's one-line\n        definition (the list view's group headings).\n    lever_type_definitions_by_version: Every lever-type taxonomy version's\n        definitions, keyed by version, so an option typed under an\n        earlier version can show that version's wording (task 046).\n    taxonomy_version: The lever-type list version.\n    depth_label: The depth label every longlist surface carries.",
         "properties": {
-          "ambition_bands": {
-            "items": {
-              "$ref": "#/components/schemas/AmbitionBandOut"
-            },
-            "title": "Ambition Bands",
-            "type": "array"
-          },
           "built_from_plan_version": {
             "title": "Built From Plan Version",
             "type": "integer"
@@ -3902,6 +3909,10 @@
           "ambition": {
             "anyOf": [
               {
+                "enum": [
+                  "less",
+                  "more"
+                ],
                 "type": "string"
               },
               {
@@ -3920,6 +3931,16 @@
               }
             ],
             "title": "Ambition Reason"
+          },
+          "authority": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AuthorityOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "capability_run_id": {
             "anyOf": [
@@ -4102,6 +4123,16 @@
             ],
             "title": "Primary Lever Type"
           },
+          "profile": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OptionProfileOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "relations": {
             "items": {
               "$ref": "#/components/schemas/RelationOut"
@@ -4230,6 +4261,31 @@
         "title": "OptionOut",
         "type": "object"
       },
+      "OptionProfileOut": {
+        "description": "What the option would take, in eight lines and its delivery setting.\n\nPolicy Atlas's estimate before assessment, not a finding.\n\nArgs:\n    lines: The eight lines, in display order.\n    settings: The delivery setting, main first, then the second; empty\n        when none is named (R41).",
+        "properties": {
+          "lines": {
+            "items": {
+              "$ref": "#/components/schemas/ProfileLineOut"
+            },
+            "title": "Lines",
+            "type": "array"
+          },
+          "settings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Settings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "lines",
+          "settings"
+        ],
+        "title": "OptionProfileOut",
+        "type": "object"
+      },
       "OptionResponse": {
         "additionalProperties": false,
         "description": "Response picking a canonical or authored option.\n\nArgs:\n    kind: Discriminator.\n    option_id: The picked option's id.\n    params: Fill-in for `requires_user_input` options. The spec does\n        not name per-option param shapes, so this stays a constrained\n        free-form mapping rather than a per-option union.",
@@ -4265,7 +4321,7 @@
         "type": "object"
       },
       "OptionSummaryOut": {
-        "description": "One option as the list view and the grid show it.\n\nArgs:\n    option_id: Stable option identity.\n    name: Option name.\n    description: One-sentence description.\n    outcomes_served: The plan's outcomes the option serves.\n    origin: Where it came from.\n    state: Included or excluded.\n    exclusion: Why it is excluded; `null` when included.\n    no_in_scope_evidence: Included, but none of its documents passes the\n        plan's evidence restriction.\n    restriction_text: The restriction none of its documents passes, when\n        `no_in_scope_evidence`.\n    primary_lever_type: The primary lever type; `null` when none fits or\n        the option is not typed yet.\n    lever_none_fits_reason: Why no lever type fits.\n    secondary_lever_types: The other lever types it also touches.\n    ambition: `do_minimum` \u00b7 `incremental` \u00b7 `structural`, as described,\n        not measured.\n    ambition_reason: The one-line justification.\n    taxonomy_version: The lever-type list version it was typed under.\n    design_version: The specified design's version.\n    document_count: Its documents (DOI-collapsed).\n    evaluated_count: Documents that evaluate it.\n    settings: The settings its documents name, most frequent first.\n    where_tried: Documents per where-tried group.\n    relations: Its relations to other options.\n    abstract_only: Every one of its documents was read from an abstract only.\n    is_entrant_with_no_documents: Suggested, drawn from the Evidence\n        search or added by the user, and no document has joined it.\n    search_pending: An option added since the build whose own option\n        search is still running or paused; its counts read zero until it ends.\n    from_section: The Evidence search report section a *from your\n        evidence search* option was drawn from; `null` for any other\n        origin, or when the section was not recorded (task 045, F3).\n    also_found_as: The names of the duplicates merged into this option\n        (their documents are its documents); empty when none.\n    runner_up_lever_type: The lever type the typing pass came closest to\n        besides the primary, when one was recorded; `null` otherwise\n        (task 046).\n    lever_reason: One sentence on why the option has its lever type,\n        when the typing pass recorded one; `null` otherwise (task 046,\n        R29).\n    tried_on: The populations its adjacent evidence was tried on, most\n        documents first (task 046).",
+        "description": "One option as the list view and the grid show it.\n\nArgs:\n    option_id: Stable option identity.\n    name: Option name.\n    description: One-sentence description.\n    outcomes_served: The plan's outcomes the option serves.\n    origin: Where it came from.\n    state: Included or excluded.\n    exclusion: Why it is excluded; `null` when included.\n    no_in_scope_evidence: Included, but none of its documents passes the\n        plan's evidence restriction.\n    restriction_text: The restriction none of its documents passes, when\n        `no_in_scope_evidence`.\n    primary_lever_type: The primary lever type; `null` when none fits or\n        the option is not typed yet.\n    lever_none_fits_reason: Why no lever type fits.\n    secondary_lever_types: The other lever types it also touches.\n    ambition: `less` \u00b7 `more` \u00b7 `null`: how big a proposal the option is\n        against the baseline, compared with the other options of the list;\n        `null` when it does not stand out or is not profiled yet.\n    ambition_reason: The one-line justification.\n    profile: What the option would take (task 046); `null` when the\n        option has no complete profile.\n    authority: Who can act on it (task 046, R43); `null` when none was\n        recorded.\n    taxonomy_version: The lever-type list version it was typed under.\n    design_version: The specified design's version.\n    document_count: Its documents (DOI-collapsed).\n    evaluated_count: Documents that evaluate it.\n    settings: The option's delivery setting, from its profile (R41);\n        empty when it has none.\n    where_tried: Documents per where-tried group.\n    relations: Its relations to other options.\n    abstract_only: Every one of its documents was read from an abstract only.\n    is_entrant_with_no_documents: Suggested, drawn from the Evidence\n        search or added by the user, and no document has joined it.\n    search_pending: An option added since the build whose own option\n        search is still running or paused; its counts read zero until it ends.\n    from_section: The Evidence search report section a *from your\n        evidence search* option was drawn from; `null` for any other\n        origin, or when the section was not recorded (task 045, F3).\n    also_found_as: The names of the duplicates merged into this option\n        (their documents are its documents); empty when none.\n    runner_up_lever_type: The lever type the typing pass came closest to\n        besides the primary, when one was recorded; `null` otherwise\n        (task 046).\n    lever_reason: One sentence on why the option has its lever type,\n        when the typing pass recorded one; `null` otherwise (task 046,\n        R29).\n    tried_on: The populations its adjacent evidence was tried on, most\n        documents first (task 046).",
         "properties": {
           "abstract_only": {
             "default": false,
@@ -4282,6 +4338,10 @@
           "ambition": {
             "anyOf": [
               {
+                "enum": [
+                  "less",
+                  "more"
+                ],
                 "type": "string"
               },
               {
@@ -4300,6 +4360,16 @@
               }
             ],
             "title": "Ambition Reason"
+          },
+          "authority": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AuthorityOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "description": {
             "title": "Description",
@@ -4409,6 +4479,16 @@
             ],
             "title": "Primary Lever Type"
           },
+          "profile": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OptionProfileOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "relations": {
             "items": {
               "$ref": "#/components/schemas/RelationOut"
@@ -4517,6 +4597,44 @@
           "name"
         ],
         "title": "OrganisationRef",
+        "type": "object"
+      },
+      "OutcomeCountOut": {
+        "description": "The documents of one plan outcome that evaluate the option.\n\nArgs:\n    outcome: The plan's outcome, in its words.\n    documents: Documents that evaluate the option against it (DOI-collapsed).",
+        "properties": {
+          "documents": {
+            "title": "Documents",
+            "type": "integer"
+          },
+          "outcome": {
+            "title": "Outcome",
+            "type": "string"
+          }
+        },
+        "required": [
+          "outcome",
+          "documents"
+        ],
+        "title": "OutcomeCountOut",
+        "type": "object"
+      },
+      "OutcomeCountsOut": {
+        "description": "How many documents evaluate the option, and against which outcomes (R42).\n\nArgs:\n    evaluating_documents: Documents that evaluate the option.\n    by_outcome: The count for each plan outcome, in the plan's order.",
+        "properties": {
+          "by_outcome": {
+            "items": {
+              "$ref": "#/components/schemas/OutcomeCountOut"
+            },
+            "title": "By Outcome",
+            "type": "array"
+          },
+          "evaluating_documents": {
+            "default": 0,
+            "title": "Evaluating Documents",
+            "type": "integer"
+          }
+        },
+        "title": "OutcomeCountsOut",
         "type": "object"
       },
       "PageMeta": {
@@ -5454,6 +5572,50 @@
           "version"
         ],
         "title": "PlanUpdatedFrame",
+        "type": "object"
+      },
+      "ProfileLineOut": {
+        "description": "One line of an option's profile (task 046, R37).\n\nArgs:\n    key: The line: cost, time to set up, time to effect, workforce, who\n        decides, dependencies, coordination or delivery complexity.\n    sentence: The line, in one sentence.\n    mark: `less` \u00b7 `more` when the option stands out on this line against\n        the other options of the list; `null` otherwise, and always for\n        `who_decides` and `dependencies`.",
+        "properties": {
+          "key": {
+            "enum": [
+              "cost",
+              "time_to_set_up",
+              "time_to_effect",
+              "workforce",
+              "who_decides",
+              "dependencies",
+              "coordination",
+              "delivery_complexity"
+            ],
+            "title": "Key",
+            "type": "string"
+          },
+          "mark": {
+            "anyOf": [
+              {
+                "enum": [
+                  "less",
+                  "more"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mark"
+          },
+          "sentence": {
+            "title": "Sentence",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "sentence"
+        ],
+        "title": "ProfileLineOut",
         "type": "object"
       },
       "ProgressEvent": {

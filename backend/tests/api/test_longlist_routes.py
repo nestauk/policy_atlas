@@ -57,7 +57,12 @@ from policy_atlas.options_scoping.longlist.lever_types import lever_types_by_ver
 from policy_atlas.options_scoping.longlist.longlist_backend import StubLonglistBackend
 from policy_atlas.runtime.agent_backend import StubAgentBackend
 from policy_atlas.runtime.option_design_prompt import OptionDesignWire
-from policy_atlas.runtime.scoping_plan import CHECKED_AT_BY_KIND, ScopingConstraint, ScopingPlan
+from policy_atlas.runtime.scoping_plan import (
+    CHECKED_AT_BY_KIND,
+    PROFILE_LINE_KEYS,
+    ScopingConstraint,
+    ScopingPlan,
+)
 from tests.api.org_support import (
     Principal,
     make_org,
@@ -510,11 +515,7 @@ def test_the_list_matches_the_stored_rows(engine: Engine, tmp_path: Path) -> Non
         assert body["depth_label"] == "scoping pass"
         assert body["where_label"] == "United Kingdom"
         assert body["lever_types"][0] == "regulate" and len(body["lever_types"]) == 10
-        assert [band["key"] for band in body["ambition_bands"]] == [
-            "do_minimum",
-            "incremental",
-            "structural",
-        ]
+        assert "ambition_bands" not in body
         counts = body["counts"]
         assert counts["options"] == len(rows) == 3
         assert counts["themes"] == len(result.themes)
@@ -542,7 +543,10 @@ def test_the_list_matches_the_stored_rows(engine: Engine, tmp_path: Path) -> Non
             "other": coverage["where_tried"]["other"],
             "unknown": coverage["where_tried"]["unknown"],
         }
-        assert guarantee["settings"] == ["Jobcentres"]
+        # The list's settings are the option-level setting of its profile (R41), not coverage.
+        stored_profile = result.option_profile[str(built.options["Youth guarantee"])]
+        (profile_entry,) = stored_profile.values()
+        assert guarantee["settings"] == [profile_entry["setting"]["main"]] == ["stub setting"]
         assert guarantee["primary_lever_type"] == "subsidise"
         # Ambition is the profile's own call (task 046, R40): the stub marks none.
         assert guarantee["ambition"] is None
@@ -959,6 +963,175 @@ def test_an_old_stored_longlist_reads_with_every_new_field_defaulted(conn: Conne
     assert card.evidence.tried_on == []
 
 
+# --- task 046 phase 14a: the profile, the authority label, the outcome counts ------
+
+
+def _stored_profile(
+    main: str | None = "Jobcentres", second: str | None = "Schools"
+) -> dict[str, Any]:
+    lines = {
+        key: {"sentence": f"The {key} sentence.", "mark": "more" if key == "cost" else None}
+        for key in PROFILE_LINE_KEYS
+    }
+    # A mark on a fact line is never served.
+    lines["who_decides"]["mark"] = "less"
+    return {"lines": lines, "setting": {"main": main, "second": second}}
+
+
+def _profiled(
+    conn: Connection, *, profile: dict[str, Any] | None, authority: dict[str, Any] | None = None
+) -> tuple[_Walk, uuid.UUID]:
+    """One built option with a stored profile and authority entry on its design version."""
+    walk = _Walk(conn)
+    option_id = walk.option("Youth guarantee", origin="added_by_you")
+    run_id, _ = walk.build(_Scripted())
+    version = str(walk.options()["Youth guarantee"].design_version)
+    stored = walk.result(run_id)
+    judgements = {k: dict(v) for k, v in (stored.judgements or {}).items()}
+    if authority is not None:
+        judgements.setdefault(str(option_id), {}).setdefault(version, {})[
+            repository.LONGLIST_AUTHORITY_KEY
+        ] = authority
+    conn.execute(
+        update(longlist_result)
+        .where(longlist_result.c.run_id == run_id)
+        .values(
+            option_profile={str(option_id): {version: profile}} if profile is not None else {},
+            judgements=judgements,
+        )
+    )
+    return walk, option_id
+
+
+def _summary_and_card(conn: Connection, walk: _Walk, option_id: uuid.UUID) -> tuple[Any, Any]:
+    listed = repository.longlist_out(conn, walk.task_id)
+    assert listed is not None
+    card = repository.option_out(conn, walk.task_id, option_id)
+    assert card is not None
+    return next(o for o in listed.options if o.option_id == option_id), card
+
+
+def test_a_stored_profile_is_served_with_its_marks_and_settings(conn: Connection) -> None:
+    walk, option_id = _profiled(conn, profile=_stored_profile())
+    for out in _summary_and_card(conn, walk, option_id):
+        assert out.profile is not None
+        assert [line.key for line in out.profile.lines] == list(PROFILE_LINE_KEYS)
+        by_key = {line.key: line for line in out.profile.lines}
+        assert by_key["cost"].mark == "more"
+        assert by_key["time_to_set_up"].mark is None
+        assert by_key["who_decides"].mark is None and by_key["dependencies"].mark is None
+        assert out.profile.settings == ["Jobcentres", "Schools"]
+        assert out.settings == ["Jobcentres", "Schools"]
+
+
+def test_the_settings_follow_what_the_profile_names(conn: Connection) -> None:
+    walk, option_id = _profiled(conn, profile=_stored_profile(second=None))
+    assert _summary_and_card(conn, walk, option_id)[0].settings == ["Jobcentres"]
+    walk, option_id = _profiled(conn, profile=_stored_profile(main=None, second=None))
+    summary, card = _summary_and_card(conn, walk, option_id)
+    assert summary.profile is not None and summary.settings == [] == card.settings
+
+
+def test_the_summary_settings_come_from_the_profile_not_from_coverage(conn: Connection) -> None:
+    walk, option_id = _profiled(conn, profile=_stored_profile(main="Libraries", second=None))
+    summary, card = _summary_and_card(conn, walk, option_id)
+    assert summary.settings == ["Libraries"]
+    # The evidence profile keeps the records' own words.
+    assert card.evidence.settings != ["Libraries"]
+
+
+def test_an_option_without_a_profile_entry_or_with_an_incomplete_one_has_none(
+    conn: Connection,
+) -> None:
+    walk, option_id = _profiled(conn, profile=None)
+    summary, card = _summary_and_card(conn, walk, option_id)
+    assert summary.profile is None and card.profile is None and summary.settings == []
+    incomplete = _stored_profile()
+    del incomplete["lines"]["coordination"]
+    walk, option_id = _profiled(conn, profile=incomplete)
+    assert _summary_and_card(conn, walk, option_id)[0].profile is None
+    blank = _stored_profile()
+    blank["lines"]["cost"]["sentence"] = "  "
+    walk, option_id = _profiled(conn, profile=blank)
+    assert _summary_and_card(conn, walk, option_id)[1].profile is None
+
+
+def test_the_authority_label_is_served_and_is_not_a_judgement(conn: Connection) -> None:
+    entry = {
+        "label": "needs_action_by",
+        "body": "the Treasury",
+        "reason": "It sets the funding.",
+        "consideration_text": "Nothing here.",
+    }
+    walk, option_id = _profiled(conn, profile=None, authority=entry)
+    for out in _summary_and_card(conn, walk, option_id):
+        assert out.authority is not None
+        assert out.authority.model_dump() == {
+            "label": "needs_action_by",
+            "body": "the Treasury",
+            "reason": "It sets the funding.",
+        }
+    card = _summary_and_card(conn, walk, option_id)[1]
+    assert repository.LONGLIST_AUTHORITY_KEY not in [j.constraint_id for j in card.judgements]
+
+
+def test_an_option_without_an_authority_entry_has_none(conn: Connection) -> None:
+    walk, option_id = _profiled(conn, profile=None)
+    for out in _summary_and_card(conn, walk, option_id):
+        assert out.authority is None
+
+
+def test_the_ambition_is_less_more_or_null(conn: Connection) -> None:
+    walk, option_id = _profiled(conn, profile=None)
+    for stored, served in (("less", "less"), ("more", "more"), (None, None), ("incremental", None)):
+        conn.execute(update(option).where(option.c.option_id == option_id).values(ambition=stored))
+        summary, card = _summary_and_card(conn, walk, option_id)
+        assert summary.ambition == served and card.ambition == served
+
+
+def test_the_outcome_counts_are_served_on_the_evidence_profile(conn: Connection) -> None:
+    walk, option_id = _profiled(conn, profile=None)
+    latest = repository._latest_longlist_row(conn, walk.task_id)
+    assert latest is not None
+    run_id = latest.run_id
+    stored = walk.result(run_id)
+    coverage = {oid: dict(cov) for oid, cov in stored.coverage.items()}
+    coverage[str(option_id)]["outcome_counts"] = {
+        "evaluating_documents": 3,
+        "by_outcome": [
+            {"outcome": "Employment", "documents": 2},
+            {"outcome": "Wellbeing", "documents": 0},
+        ],
+    }
+    conn.execute(
+        update(longlist_result).where(longlist_result.c.run_id == run_id).values(coverage=coverage)
+    )
+    card = repository.option_out(conn, walk.task_id, option_id)
+    assert card is not None
+    assert card.evidence.outcome_counts.model_dump() == {
+        "evaluating_documents": 3,
+        "by_outcome": [
+            {"outcome": "Employment", "documents": 2},
+            {"outcome": "Wellbeing", "documents": 0},
+        ],
+    }
+    late = walk.option("Wage subsidy", origin="added_by_you")
+    late_card = repository.option_out(conn, walk.task_id, late)
+    assert late_card is not None
+    assert late_card.evidence.outcome_counts.model_dump() == {
+        "evaluating_documents": 0,
+        "by_outcome": [],
+    }
+
+
+def test_the_longlist_has_no_ambition_bands(conn: Connection) -> None:
+    walk, _ = _profiled(conn, profile=None)
+    listed = repository.longlist_out(conn, walk.task_id)
+    assert listed is not None
+    assert "ambition_bands" not in type(listed).model_fields
+    assert "ambition_bands" not in listed.model_dump()
+
+
 # --- the buttons -------------------------------------------------------------------
 
 
@@ -1312,7 +1485,10 @@ def test_an_added_option_reads_its_own_search_until_the_next_build(conn: Connect
         "unknown": 0,
     }
     assert card.evidence.by_tier == {"Strong": 1, "not rated": 1}
-    assert card.settings == ["Employers"]
+    # An added option has no profile yet (R41): its list setting is empty; the
+    # evidence profile keeps the records' own words.
+    assert card.settings == []
+    assert card.evidence.settings == ["Employers"]
     # One per record, never collapsed; the comparator is not a document.
     assert sorted(d.title for d in card.documents) == [
         "A Danish wage subsidy",

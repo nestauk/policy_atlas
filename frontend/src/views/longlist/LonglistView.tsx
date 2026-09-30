@@ -21,6 +21,7 @@ import { isRunActive } from "../scopingActivity";
 import { FILTER_CHIP_CLASS } from "../sourcesPresentation";
 import { LonglistGrid } from "./LonglistGrid";
 import {
+  AUTHORITY_LABELS,
   SCOPING_PASS_SENTENCE,
   actionFailedNotice,
   byLeverThenName,
@@ -31,7 +32,7 @@ import {
   leverDefinitionFor,
   triedOnFacet,
   instrumentsSummary,
-  leverAmbitionLabel,
+  leverLabel,
   longlistTitle,
   rowMetaParts,
   themeSummary,
@@ -41,12 +42,15 @@ import {
 type LonglistOut = components["schemas"]["LonglistOut"];
 type OptionSummaryOut = components["schemas"]["OptionSummaryOut"];
 type WhereTriedGroup = "where" | "comparable" | "other" | "unknown";
-type GroupBy = "theme" | "lever" | "ambition";
+type GroupBy = "theme" | "lever";
+type AuthorityLabel = NonNullable<OptionSummaryOut["authority"]>["label"];
+
+/** The Who can act facet's chips, in order (R43). */
+const AUTHORITY_CHIPS: AuthorityLabel[] = ["within_your_power", "needs_action_by", "unclear"];
 
 const GROUP_BY: { key: GroupBy; label: string }[] = [
   { key: "theme", label: "Theme" },
   { key: "lever", label: "Lever type" },
-  { key: "ambition", label: "Ambition" },
 ];
 
 /** The setting facet shows this many chips before "more". */
@@ -93,6 +97,7 @@ export function LonglistView({ taskId, longlist }: { taskId: string; longlist: L
 
   const [settingsFilter, setSettingsFilter] = useState<Set<string>>(new Set());
   const [whereFilter, setWhereFilter] = useState<Set<WhereTriedGroup>>(new Set());
+  const [authorityFilter, setAuthorityFilter] = useState<Set<AuthorityLabel>>(new Set());
   const [mode, setMode] = useState<"list" | "grid">("list");
   const [groupBy, setGroupBy] = useState<GroupBy>("theme");
   const [showExcludedInGrid, setShowExcludedInGrid] = useState(false);
@@ -133,6 +138,7 @@ export function LonglistView({ taskId, longlist }: { taskId: string; longlist: L
       : allSettings.filter((setting) => settingsFilter.has(setting) || allSettings.indexOf(setting) < SETTING_FACET_LIMIT);
   const hiddenSettings = allSettings.length - shownSettings.length;
   const whereChips = whereTriedFacetChips(longlist.where_label);
+  const hasAuthority = options.some((option) => option.authority != null);
 
   const passesFilters = (option: OptionSummaryOut): boolean => {
     if (settingsFilter.size > 0) {
@@ -142,6 +148,9 @@ export function LonglistView({ taskId, longlist }: { taskId: string; longlist: L
     if (whereFilter.size > 0) {
       const whereTried = option.where_tried;
       if (![...whereFilter].some((group) => (whereTried[group] ?? 0) > 0)) return false;
+    }
+    if (authorityFilter.size > 0) {
+      if (option.authority == null || !authorityFilter.has(option.authority.label)) return false;
     }
     return true;
   };
@@ -242,7 +251,7 @@ export function LonglistView({ taskId, longlist }: { taskId: string; longlist: L
             <Chip tone="red">excluded: breaks "{constraintLabel(scrub(option.exclusion.constraint))}"</Chip>
           )}
           {option.no_in_scope_evidence && <Chip tone="yellow">no in-scope evidence</Chip>}
-          <span className={cn("font-semibold", excluded ? "text-grey" : "text-navy")}>{scrub(leverAmbitionLabel(option))}</span>
+          <span className={cn("font-semibold", excluded ? "text-grey" : "text-navy")}>{scrub(leverLabel(option))}</span>
           {[
             ...(groupBy !== "theme" || excluded ? [themeOfOption.get(option.option_id) ?? "No theme"] : []),
             ...rowMetaParts(option),
@@ -321,7 +330,7 @@ export function LonglistView({ taskId, longlist }: { taskId: string; longlist: L
     })),
     { key: "no-theme", name: "No theme", summary: "", description: "", options: collect(longlist.unthemed_option_ids ?? []) },
   ];
-  // A lever or ambition group's description is the taxonomy's own one-line
+  // A lever group's description is the taxonomy's own one-line
   // definition; the heading's meta adds how many themes the group spans.
   const withDefinition = <T extends { options: OptionSummaryOut[] }>(group: T, definition: string) => ({
     ...group,
@@ -352,23 +361,7 @@ export function LonglistView({ taskId, longlist }: { taskId: string; longlist: L
       "Options that no lever type on the list names; each says what it does instead.",
     ),
   ];
-  const byAmbition = [
-    ...(longlist.ambition_bands ?? []).map((band) =>
-      withDefinition(
-        {
-          key: band.key,
-          name: band.label,
-          options: includedOptions.filter((option) => option.ambition === band.key).sort(sortRows),
-        },
-        definitionSentence(band.definition),
-      ),
-    ),
-    withDefinition(
-      { key: "untagged", name: "Untagged", options: includedOptions.filter((option) => option.ambition == null).sort(sortRows) },
-      "Options without an ambition band yet.",
-    ),
-  ];
-  const themeGroups = (groupBy === "theme" ? byTheme : groupBy === "lever" ? byLever : byAmbition)
+  const themeGroups = (groupBy === "theme" ? byTheme : byLever)
     .filter((group) => group.options.length > 0)
     .map((group, index) => ({ ...group, id: sectionAnchor(group.name, index) }));
   const excludedOptions = options.filter((option) => option.state === "excluded").filter(passesFilters);
@@ -383,7 +376,7 @@ export function LonglistView({ taskId, longlist }: { taskId: string; longlist: L
         ];
 
   const shownCount = includedOptions.length;
-  const filtersActive = settingsFilter.size > 0 || whereFilter.size > 0;
+  const filtersActive = settingsFilter.size > 0 || whereFilter.size > 0 || authorityFilter.size > 0;
   // A filter opens the sections it narrowed; the key remounts them with the
   // matching default. A new grouping remounts them closed.
   const sectionKey = (key: string) => `${groupBy}-${key}-${filtersActive ? "filtered" : "all"}`;
@@ -491,6 +484,22 @@ export function LonglistView({ taskId, longlist }: { taskId: string; longlist: L
             </button>
           ))}
         </div>
+        {hasAuthority && (
+          <div role="group" aria-label="Who can act" className="mt-2 flex flex-wrap items-start gap-1.5">
+            <span className={FACET_LABEL_CLASS}>Who can act</span>
+            {AUTHORITY_CHIPS.map((label) => (
+              <button
+                key={label}
+                type="button"
+                aria-pressed={authorityFilter.has(label)}
+                onClick={() => setAuthorityFilter((current) => toggleInSet(current, label))}
+                className={facetChipClass(authorityFilter.has(label))}
+              >
+                {AUTHORITY_LABELS[label]}
+              </button>
+            ))}
+          </div>
+        )}
         {triedOn.shown.length > 0 && (
           <div role="group" aria-label="Tried on" className="mt-2 flex flex-wrap items-start gap-1.5">
             <span className={FACET_LABEL_CLASS}>Tried on</span>

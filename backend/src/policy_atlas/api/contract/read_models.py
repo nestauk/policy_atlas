@@ -857,6 +857,90 @@ class TriedOnOut(BaseModel):
     documents: int
 
 
+ProfileLineKey = Literal[
+    "cost",
+    "time_to_set_up",
+    "time_to_effect",
+    "workforce",
+    "who_decides",
+    "dependencies",
+    "coordination",
+    "delivery_complexity",
+]
+ProfileMark = Literal["less", "more"]
+AuthorityLabel = Literal["within_your_power", "needs_action_by", "unclear"]
+
+
+class ProfileLineOut(BaseModel):
+    """One line of an option's profile (task 046, R37).
+
+    Args:
+        key: The line: cost, time to set up, time to effect, workforce, who
+            decides, dependencies, coordination or delivery complexity.
+        sentence: The line, in one sentence.
+        mark: `less` · `more` when the option stands out on this line against
+            the other options of the list; `null` otherwise, and always for
+            `who_decides` and `dependencies`.
+    """
+
+    key: ProfileLineKey
+    sentence: str
+    mark: ProfileMark | None = None
+
+
+class OptionProfileOut(BaseModel):
+    """What the option would take, in eight lines and its delivery setting.
+
+    Policy Atlas's estimate before assessment, not a finding.
+
+    Args:
+        lines: The eight lines, in display order.
+        settings: The delivery setting, main first, then the second; empty
+            when none is named (R41).
+    """
+
+    lines: list[ProfileLineOut]
+    settings: list[str]
+
+
+class AuthorityOut(BaseModel):
+    """Who can act on the option (task 046, R43): a label, not a verdict.
+
+    Args:
+        label: `within_your_power` · `needs_action_by` · `unclear`.
+        body: The body that must act, when the label is `needs_action_by`.
+        reason: Why, in one sentence.
+    """
+
+    label: AuthorityLabel
+    body: str | None = None
+    reason: str | None = None
+
+
+class OutcomeCountOut(BaseModel):
+    """The documents of one plan outcome that evaluate the option.
+
+    Args:
+        outcome: The plan's outcome, in its words.
+        documents: Documents that evaluate the option against it (DOI-collapsed).
+    """
+
+    outcome: str
+    documents: int
+
+
+class OutcomeCountsOut(BaseModel):
+    """How many documents evaluate the option, and against which outcomes (R42).
+
+    Args:
+        evaluating_documents: Documents that evaluate the option.
+        by_outcome: The count for each plan outcome, in the plan's order.
+    """
+
+    evaluating_documents: int = 0
+    by_outcome: list[OutcomeCountOut] = Field(default_factory=list)
+
+
 class OptionSummaryOut(BaseModel):
     """One option as the list view and the grid show it.
 
@@ -876,14 +960,20 @@ class OptionSummaryOut(BaseModel):
             the option is not typed yet.
         lever_none_fits_reason: Why no lever type fits.
         secondary_lever_types: The other lever types it also touches.
-        ambition: `do_minimum` · `incremental` · `structural`, as described,
-            not measured.
+        ambition: `less` · `more` · `null`: how big a proposal the option is
+            against the baseline, compared with the other options of the list;
+            `null` when it does not stand out or is not profiled yet.
         ambition_reason: The one-line justification.
+        profile: What the option would take (task 046); `null` when the
+            option has no complete profile.
+        authority: Who can act on it (task 046, R43); `null` when none was
+            recorded.
         taxonomy_version: The lever-type list version it was typed under.
         design_version: The specified design's version.
         document_count: Its documents (DOI-collapsed).
         evaluated_count: Documents that evaluate it.
-        settings: The settings its documents name, most frequent first.
+        settings: The option's delivery setting, from its profile (R41);
+            empty when it has none.
         where_tried: Documents per where-tried group.
         relations: Its relations to other options.
         abstract_only: Every one of its documents was read from an abstract only.
@@ -920,8 +1010,10 @@ class OptionSummaryOut(BaseModel):
     runner_up_lever_type: str | None = None
     lever_reason: str | None = None
     secondary_lever_types: list[str] = Field(default_factory=list)
-    ambition: str | None = None
+    ambition: ProfileMark | None = None
     ambition_reason: str | None = None
+    profile: OptionProfileOut | None = None
+    authority: AuthorityOut | None = None
     taxonomy_version: str | None = None
     design_version: int
     document_count: int = 0
@@ -935,20 +1027,6 @@ class OptionSummaryOut(BaseModel):
     from_section: str | None = None
     also_found_as: list[str] = Field(default_factory=list)
     tried_on: list[TriedOnOut] = Field(default_factory=list)
-
-
-class AmbitionBandOut(BaseModel):
-    """One ambition band, a column of the reduced grid.
-
-    Args:
-        key: The stored value.
-        label: The display label.
-        definition: One line saying what the band means, for a group heading.
-    """
-
-    key: str
-    label: str
-    definition: str | None = None
 
 
 class LeverTypeOut(BaseModel):
@@ -987,7 +1065,6 @@ class LonglistOut(BaseModel):
         lever_type_definitions_by_version: Every lever-type taxonomy version's
             definitions, keyed by version, so an option typed under an
             earlier version can show that version's wording (task 046).
-        ambition_bands: The ambition bands, in order (the grid's columns).
         taxonomy_version: The lever-type list version.
         depth_label: The depth label every longlist surface carries.
     """
@@ -1007,7 +1084,6 @@ class LonglistOut(BaseModel):
     lever_type_definitions_by_version: dict[str, list[LeverTypeOut]] = Field(
         default_factory=dict
     )
-    ambition_bands: list[AmbitionBandOut] = Field(default_factory=list)
     taxonomy_version: str | None = None
     depth_label: Literal["scoping pass"] = "scoping pass"
 
@@ -1034,6 +1110,8 @@ class EvidenceProfileOut(BaseModel):
         abstract_only: Documents read from an abstract only.
         tried_on: The populations its adjacent evidence was tried on, most
             documents first (task 046).
+        outcome_counts: The documents that evaluate the option, by plan
+            outcome (task 046, R42).
     """
 
     documents: int = 0
@@ -1048,6 +1126,7 @@ class EvidenceProfileOut(BaseModel):
     inherited_labels: int = 0
     abstract_only: int = 0
     tried_on: list[TriedOnOut] = Field(default_factory=list)
+    outcome_counts: OutcomeCountsOut = Field(default_factory=OutcomeCountsOut)
 
 
 class JudgementOut(BaseModel):

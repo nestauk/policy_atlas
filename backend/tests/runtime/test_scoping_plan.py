@@ -231,6 +231,7 @@ def test_the_api_contract_mirrors_the_plan_vocabularies() -> None:
     assert get_args(contract.ConstraintKind) == get_args(ConstraintKind)
     assert get_args(contract.CheckedAt) == get_args(CheckedAt)
     assert get_args(contract.ConsiderationAspect) == get_args(ConsiderationAspect)
+    assert get_args(contract.ProfileLineKey) == PROFILE_LINE_KEYS
     assert get_args(contract.Origin) == get_args(Origin)
     assert get_args(contract.DefaultPreference) == get_args(DefaultPreference)
     out_fields = set(contract.ScopingConstraintOut.model_fields)

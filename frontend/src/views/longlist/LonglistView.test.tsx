@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { MOCK_OPTION_ID_EXCLUDED, MOCK_OPTION_ID_NO_IN_SCOPE, mockLonglist } from "../../mock/fixtures";
 import { LonglistView } from "./LonglistView";
-import { ambitionLabel, checksSummary, rowMetaParts } from "./longlistPresentation";
+import { checksSummary, rowMetaParts } from "./longlistPresentation";
 import * as queries from "../../api/queries";
 import * as mutations from "../../api/mutations";
 
@@ -26,7 +26,10 @@ vi.mock("../../api/mutations", () => ({
 
 const TASK_ID = "11111111-1111-1111-1111-111111111111";
 
-function renderLonglist(taskOverrides: Partial<{ active_run: unknown }> = {}) {
+function renderLonglist(
+  taskOverrides: Partial<{ active_run: unknown }> = {},
+  adjust?: (longlist: ReturnType<typeof mockLonglist>) => void,
+) {
   vi.mocked(queries.useTask).mockReturnValue(
     {
       data: { name: "NEET task", capability: "options_scoping", active_run: taskOverrides.active_run ?? null },
@@ -47,6 +50,7 @@ function renderLonglist(taskOverrides: Partial<{ active_run: unknown }> = {}) {
     { mutate: addMutate, isPending: false } as unknown as ReturnType<typeof mutations.useAddOption>,
   );
   const longlist = mockLonglist();
+  adjust?.(longlist);
   return render(
     <MemoryRouter initialEntries={[`/tasks/${TASK_ID}/result`]}>
       <Routes>
@@ -92,16 +96,17 @@ describe("LonglistView", () => {
     expect(screen.getByText("National sanctions regime")).toBeInTheDocument();
   });
 
-  it("tags each row with its lever and ambition and names the theme's instruments", async () => {
+  it("tags each row with its lever only, no mark and no ambition word, and names the theme's instruments", async () => {
     const user = userEvent.setup();
     renderLonglist();
     expect(screen.getByRole("button", { name: /A universal offer.*1 option · regulation only/ })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Expand all" }));
     const row = screen.getByText("Universal youth offer bundle").closest("li") as HTMLElement;
-    expect(within(row).getByText("Regulate · Do minimum")).toBeInTheDocument();
+    expect(within(row).getByText("Regulate")).toBeInTheDocument();
+    expect(row).not.toHaveTextContent(/Smaller|Bigger|Cheaper|Costlier|Middle|Do minimum|Incremental|Structural/);
   });
 
-  it("groups by lever type and by ambition, with the theme on each row", async () => {
+  it("groups by lever type, with the theme on each row, and offers no ambition grouping", async () => {
     const user = userEvent.setup();
     renderLonglist();
     await user.click(within(screen.getByRole("group", { name: "Group by" })).getByRole("button", { name: "Lever type" }));
@@ -111,10 +116,9 @@ describe("LonglistView", () => {
     await user.click(screen.getByRole("button", { name: "Expand all" }));
     const row = screen.getByText("School-based mentoring").closest("li") as HTMLElement;
     expect(within(row).getByText("Conditionality and support")).toBeInTheDocument();
-    await user.click(within(screen.getByRole("group", { name: "Group by" })).getByRole("button", { name: "Ambition" }));
-    expect(screen.getByRole("button", { name: /^Incremental/ })).toBeInTheDocument();
-    expect(screen.getByText(/^Adds a new scheme, service, rule, charge or offer inside the present structure\./)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /^Untagged/ })).toBeInTheDocument();
+    const groupBy = screen.getByRole("group", { name: "Group by" });
+    expect(within(groupBy).getAllByRole("button").map((button) => button.textContent)).toEqual(["Theme", "Lever type"]);
+    expect(screen.queryByRole("button", { name: /^Untagged/ })).not.toBeInTheDocument();
   });
 
   it("filters rows with the Setting facet", async () => {
@@ -133,6 +137,60 @@ describe("LonglistView", () => {
     await user.click(within(whereGroup).getByRole("button", { name: "Other" }));
     expect(screen.getByText("School-based mentoring")).toBeInTheDocument();
     expect(screen.queryByText("Youth guarantee")).not.toBeInTheDocument();
+  });
+
+  // R43: the Who can act facet is a filter only.
+  it("shows the Who can act facet with three chips in order, and only when an option has an authority", () => {
+    const first = renderLonglist();
+    const group = screen.getByRole("group", { name: "Who can act" });
+    expect(within(group).getAllByRole("button").map((button) => button.textContent)).toEqual([
+      "Within your power",
+      "Needs action by another body",
+      "Unclear who can act",
+    ]);
+    for (const button of within(group).getAllByRole("button")) expect(button).toHaveAttribute("aria-pressed", "false");
+    first.unmount();
+    renderLonglist({}, (longlist) => {
+      for (const option of longlist.options ?? []) option.authority = null;
+    });
+    expect(screen.queryByRole("group", { name: "Who can act" })).not.toBeInTheDocument();
+  });
+
+  it("filters by Who can act without reordering, and an unlabelled option does not pass", async () => {
+    const user = userEvent.setup();
+    renderLonglist();
+    await user.click(screen.getByRole("button", { name: "Expand all" }));
+    const tracked = ["School-based mentoring", "Universal youth offer bundle", "Youth guarantee"];
+    const rowNames = () =>
+      screen
+        .getAllByRole("link")
+        .map((link) => link.textContent ?? "")
+        .filter((name) => tracked.includes(name));
+    const before = rowNames();
+    expect(before).toContain("Youth guarantee");
+    const group = screen.getByRole("group", { name: "Who can act" });
+    await user.click(within(group).getByRole("button", { name: "Within your power" }));
+    await user.click(within(group).getByRole("button", { name: "Unclear who can act" }));
+    expect(within(group).getByRole("button", { name: "Within your power" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.queryByText("Youth guarantee")).not.toBeInTheDocument();
+    expect(rowNames()).toEqual(before.filter((name) => name !== "Youth guarantee"));
+    expect(rowNames()).toHaveLength(2);
+    // The option that needs action elsewhere is filtered out, not moved to the excluded section.
+    expect(screen.queryByText("National sanctions regime")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Excluded options/ })).not.toBeInTheDocument();
+    await user.click(within(group).getByRole("button", { name: "Within your power" }));
+    await user.click(within(group).getByRole("button", { name: "Unclear who can act" }));
+    await user.click(screen.getByRole("button", { name: "Expand all" }));
+    expect(screen.getByText("Youth guarantee")).toBeInTheDocument();
+  });
+
+  it("keeps the retired words and 'Middle' out of the list", async () => {
+    const user = userEvent.setup();
+    const { container } = renderLonglist();
+    await user.click(screen.getByRole("button", { name: "Expand all" }));
+    for (const banned of [/less than most/i, /like most/i, /more than most/i, /do minimum/i, /incremental/i, /structural/i, /Middle/]) {
+      expect(container).not.toHaveTextContent(banned);
+    }
   });
 
   // Task 046, contract item 5: a plain grouped count beside Where tried,
@@ -275,7 +333,7 @@ describe("LonglistView", () => {
     const user = userEvent.setup();
     renderLonglist();
     await user.click(screen.getByRole("button", { name: "Grid" }));
-    expect(screen.getByRole("columnheader", { name: "Do minimum" })).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "Smaller" })).toBeInTheDocument();
     expect(screen.queryByText("Conditionality and support")).not.toBeInTheDocument();
     expect(screen.queryByText("National sanctions regime")).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /Show excluded/ }));
@@ -284,8 +342,7 @@ describe("LonglistView", () => {
 });
 
 describe("longlistPresentation", () => {
-  it("labels the stored ambition key and agrees the verdict verb with the count", () => {
-    expect(ambitionLabel("do_minimum")).toBe("Do minimum");
+  it("agrees the verdict verb with the count", () => {
     expect(checksSummary(["passes"])).toBe("1 passes.");
     expect(checksSummary(["breaks", "breaks", "passes", "cannot_check"])).toBe(
       "2 break, 1 passes, 1 cannot be checked yet.",

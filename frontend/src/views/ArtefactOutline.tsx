@@ -333,6 +333,7 @@ export function SectionDisclosure({
   defaultOpen,
   collapsible,
   meta,
+  summaryNode,
   children,
 }: {
   id: string;
@@ -341,6 +342,9 @@ export function SectionDisclosure({
   collapsible: boolean;
   /** Small text after the title in the heading row (a theme's option count). */
   meta?: React.ReactNode;
+  /** Shown while collapsed in place of the summary sentence (the option
+   *  card's "What it would take" row of cells). */
+  summaryNode?: React.ReactNode;
   children: React.ReactNode;
 }) {
   const [open, setOpen] = useState(defaultOpen);
@@ -379,7 +383,8 @@ export function SectionDisclosure({
       {/* Fallback (first-sentence) summaries render unmarked — the checked/
           fallback distinction is provenance for reviewers, not users
           (owner, 2026-08-05). */}
-      {!expanded && summary !== null && (
+      {!expanded && summaryNode !== undefined && <div className="mt-2">{summaryNode}</div>}
+      {!expanded && summaryNode === undefined && summary !== null && (
         <p className="mt-1.5 max-w-prose-measure text-lead text-grey max-md:text-body">{scrub(summary.text)}</p>
       )}
       {!expanded && <MobileDisclosureToggle expanded={false} onToggle={() => setOpen(true)} />}

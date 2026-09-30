@@ -1167,23 +1167,6 @@ export interface components {
             kind: "abort";
         };
         /**
-         * AmbitionBandOut
-         * @description One ambition band, a column of the reduced grid.
-         *
-         *     Args:
-         *         key: The stored value.
-         *         label: The display label.
-         *         definition: One line saying what the band means, for a group heading.
-         */
-        AmbitionBandOut: {
-            /** Definition */
-            definition?: string | null;
-            /** Key */
-            key: string;
-            /** Label */
-            label: string;
-        };
-        /**
          * AnswerPayloadOut
          * @description The cited half of one grounded answer, shared by every turn that has one.
          *
@@ -1352,6 +1335,26 @@ export interface components {
              * @enum {string}
              */
             type: "artefact.skeleton";
+        };
+        /**
+         * AuthorityOut
+         * @description Who can act on the option (task 046, R43): a label, not a verdict.
+         *
+         *     Args:
+         *         label: `within_your_power` · `needs_action_by` · `unclear`.
+         *         body: The body that must act, when the label is `needs_action_by`.
+         *         reason: Why, in one sentence.
+         */
+        AuthorityOut: {
+            /** Body */
+            body?: string | null;
+            /**
+             * Label
+             * @enum {string}
+             */
+            label: "within_your_power" | "needs_action_by" | "unclear";
+            /** Reason */
+            reason?: string | null;
         };
         /**
          * AuthorshipOut
@@ -2267,6 +2270,8 @@ export interface components {
          *         abstract_only: Documents read from an abstract only.
          *         tried_on: The populations its adjacent evidence was tried on, most
          *             documents first (task 046).
+         *         outcome_counts: The documents that evaluate the option, by plan
+         *             outcome (task 046, R42).
          */
         EvidenceProfileOut: {
             /**
@@ -2301,6 +2306,7 @@ export interface components {
              * @default 0
              */
             inherited_labels: number;
+            outcome_counts?: components["schemas"]["OutcomeCountsOut"];
             /** Outcomes */
             outcomes?: string[];
             /** Populations */
@@ -2919,13 +2925,10 @@ export interface components {
          *         lever_type_definitions_by_version: Every lever-type taxonomy version's
          *             definitions, keyed by version, so an option typed under an
          *             earlier version can show that version's wording (task 046).
-         *         ambition_bands: The ambition bands, in order (the grid's columns).
          *         taxonomy_version: The lever-type list version.
          *         depth_label: The depth label every longlist surface carries.
          */
         LonglistOut: {
-            /** Ambition Bands */
-            ambition_bands?: components["schemas"]["AmbitionBandOut"][];
             /** Built From Plan Version */
             built_from_plan_version: number;
             /** Capability Run Id */
@@ -3186,9 +3189,10 @@ export interface components {
             /** Also Found As */
             also_found_as?: string[];
             /** Ambition */
-            ambition?: string | null;
+            ambition?: ("less" | "more") | null;
             /** Ambition Reason */
             ambition_reason?: string | null;
+            authority?: components["schemas"]["AuthorityOut"] | null;
             /** Capability Run Id */
             capability_run_id?: string | null;
             /**
@@ -3257,6 +3261,7 @@ export interface components {
             plan_version?: number | null;
             /** Primary Lever Type */
             primary_lever_type?: string | null;
+            profile?: components["schemas"]["OptionProfileOut"] | null;
             /** Relations */
             relations?: components["schemas"]["RelationOut"][];
             /** Restriction Text */
@@ -3290,6 +3295,23 @@ export interface components {
             /** Where Label */
             where_label: string;
             where_tried: components["schemas"]["WhereTriedOut"];
+        };
+        /**
+         * OptionProfileOut
+         * @description What the option would take, in eight lines and its delivery setting.
+         *
+         *     Policy Atlas's estimate before assessment, not a finding.
+         *
+         *     Args:
+         *         lines: The eight lines, in display order.
+         *         settings: The delivery setting, main first, then the second; empty
+         *             when none is named (R41).
+         */
+        OptionProfileOut: {
+            /** Lines */
+            lines: components["schemas"]["ProfileLineOut"][];
+            /** Settings */
+            settings: string[];
         };
         /**
          * OptionResponse
@@ -3338,14 +3360,20 @@ export interface components {
          *             the option is not typed yet.
          *         lever_none_fits_reason: Why no lever type fits.
          *         secondary_lever_types: The other lever types it also touches.
-         *         ambition: `do_minimum` · `incremental` · `structural`, as described,
-         *             not measured.
+         *         ambition: `less` · `more` · `null`: how big a proposal the option is
+         *             against the baseline, compared with the other options of the list;
+         *             `null` when it does not stand out or is not profiled yet.
          *         ambition_reason: The one-line justification.
+         *         profile: What the option would take (task 046); `null` when the
+         *             option has no complete profile.
+         *         authority: Who can act on it (task 046, R43); `null` when none was
+         *             recorded.
          *         taxonomy_version: The lever-type list version it was typed under.
          *         design_version: The specified design's version.
          *         document_count: Its documents (DOI-collapsed).
          *         evaluated_count: Documents that evaluate it.
-         *         settings: The settings its documents name, most frequent first.
+         *         settings: The option's delivery setting, from its profile (R41);
+         *             empty when it has none.
          *         where_tried: Documents per where-tried group.
          *         relations: Its relations to other options.
          *         abstract_only: Every one of its documents was read from an abstract only.
@@ -3376,9 +3404,10 @@ export interface components {
             /** Also Found As */
             also_found_as?: string[];
             /** Ambition */
-            ambition?: string | null;
+            ambition?: ("less" | "more") | null;
             /** Ambition Reason */
             ambition_reason?: string | null;
+            authority?: components["schemas"]["AuthorityOut"] | null;
             /** Description */
             description: string;
             /** Design Version */
@@ -3426,6 +3455,7 @@ export interface components {
             outcomes_served?: string[];
             /** Primary Lever Type */
             primary_lever_type?: string | null;
+            profile?: components["schemas"]["OptionProfileOut"] | null;
             /** Relations */
             relations?: components["schemas"]["RelationOut"][];
             /** Restriction Text */
@@ -3468,6 +3498,37 @@ export interface components {
              * Format: uuid
              */
             org_id: string;
+        };
+        /**
+         * OutcomeCountOut
+         * @description The documents of one plan outcome that evaluate the option.
+         *
+         *     Args:
+         *         outcome: The plan's outcome, in its words.
+         *         documents: Documents that evaluate the option against it (DOI-collapsed).
+         */
+        OutcomeCountOut: {
+            /** Documents */
+            documents: number;
+            /** Outcome */
+            outcome: string;
+        };
+        /**
+         * OutcomeCountsOut
+         * @description How many documents evaluate the option, and against which outcomes (R42).
+         *
+         *     Args:
+         *         evaluating_documents: Documents that evaluate the option.
+         *         by_outcome: The count for each plan outcome, in the plan's order.
+         */
+        OutcomeCountsOut: {
+            /** By Outcome */
+            by_outcome?: components["schemas"]["OutcomeCountOut"][];
+            /**
+             * Evaluating Documents
+             * @default 0
+             */
+            evaluating_documents: number;
         };
         /**
          * PageMeta
@@ -3860,6 +3921,29 @@ export interface components {
             type: "plan.updated";
             /** Version */
             version: number;
+        };
+        /**
+         * ProfileLineOut
+         * @description One line of an option's profile (task 046, R37).
+         *
+         *     Args:
+         *         key: The line: cost, time to set up, time to effect, workforce, who
+         *             decides, dependencies, coordination or delivery complexity.
+         *         sentence: The line, in one sentence.
+         *         mark: `less` · `more` when the option stands out on this line against
+         *             the other options of the list; `null` otherwise, and always for
+         *             `who_decides` and `dependencies`.
+         */
+        ProfileLineOut: {
+            /**
+             * Key
+             * @enum {string}
+             */
+            key: "cost" | "time_to_set_up" | "time_to_effect" | "workforce" | "who_decides" | "dependencies" | "coordination" | "delivery_complexity";
+            /** Mark */
+            mark?: ("less" | "more") | null;
+            /** Sentence */
+            sentence: string;
         };
         /**
          * ProgressEvent
