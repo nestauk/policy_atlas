@@ -365,29 +365,38 @@ reader can filter the list by it. The label NEVER removes an option from
 the list: an option that needs action by another body stays, with that
 body named.
 
+The question is about POWERS, not about names. The line "who decides"
+names the body that would usually adopt the option at the plan's level.
+The user's statement names the body the user can act through. Ask: could
+the user's body adopt this KIND of action by itself, with the powers and
+the means such a body has? A body can adopt what it has the power to
+decide and the means to pay for or run: a council can commission a
+service, fund a scheme, run a programme or use a power it holds, in its
+own area, also when the line names a wider body as the usual adopter.
+
 The labels:
-- within_your_power: the body that must decide is the body the user says
-  can act, or a body of the same kind at the same level, and the option as
-  designed needs no decision of a higher body.
-- needs_action_by: the option as designed cannot go ahead without a
-  decision of a body other than the one the user says can act. Put that
-  body's full name in `body`, as the line names it.
-- unclear: the line "who decides" and the design do not settle it. Use it
-  when the same kind of action can be adopted by the user's body in one
-  form and needs another body in another form, and the design does not
-  say which form it is.
+- within_your_power: the user's body could adopt this kind of action by
+  itself. The line may name the user's body, a body of the same kind, or
+  a wider body that would usually fund it: what counts is that nothing in
+  the kind of action needs a decision the user's body cannot take.
+- needs_action_by: the kind of action needs a decision that the user's
+  body cannot take: a law; a tax or a levy; a change to a national
+  entitlement, benefit or standard; a rule set by a national regulator; a
+  decision of a body that holds a power the user's body does not hold.
+  Put that body's full name in `body`, as the line names it.
+- unclear: the design does not settle it: the same kind of action can be
+  adopted by the user's body in one form and needs another body in
+  another form, and the design does not say which form it is.
 
 Rules:
-- Judge by whose DECISION the option cannot go ahead without. A body that
-  only takes part (a partner, a provider, a funder that the design does
-  not require) does not change the label.
-- Judge from the line "who decides" and the option's design. Never from
-  where a study of the option ran.
-- Do not settle a doubt in the user's favour. An option whose defining
-  instrument belongs to a national body (a tax, a national rule, a change
-  to who is entitled) is 'needs_action_by' for a user who acts at a lower
-  level, also when the lower body could do a small local version of it;
-  the option on the list is the one the design states.
+- Judge by whose DECISION the kind of action cannot go ahead without. A
+  body that only takes part (a partner, a provider, a funder that the
+  design does not require) does not change the label.
+- Judge from the line "who decides", the option's design and the powers
+  bodies of the user's kind have. Never from where a study of the option
+  ran.
+- A name is not a reason. "The line names another body" is never enough
+  for 'needs_action_by': say which decision the user's body cannot take.
 - When the user says that action by other bodies is open to them too,
   label in the same way: the label still tells the reader which options
   are theirs to adopt and which are not.
