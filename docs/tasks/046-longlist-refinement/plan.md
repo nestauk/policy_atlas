@@ -696,18 +696,19 @@ Gate: **full `make verify`**. Commit.
 
 ## Amendment 3 (2026-09-30)
 
-Rulings R54–R69 are in [contract.md](contract.md) § Amendment 3; the design
-detail, the loop checks and the questions Q1–Q18 are in
-[amendment-3-final.md](amendment-3-final.md) ("final 3" below). This section
-adds phases 15 to 23 and changes no phase above. Rounds 2–4 of 12L
+Rulings R54–R71 are in [contract.md](contract.md) § Amendment 3; the design
+detail, the loop checks and the answered questions Q1–Q18 (and the open Q19)
+are in [amendment-3-final.md](amendment-3-final.md) ("final 3" below). This
+section adds phases 15 to 23 and changes no phase above. Rounds 2–4 of 12L
 (`evidence/rounds/12L-profile-loop.md`) are built and are not phases here.
 
-> **Status:** written 2026-09-30 from final 3. The seams S21–S26 are
+> **Status:** written 2026-09-30 from final 3; updated the same day with the
+> answers to the 18 build questions (Q1, Q5, Q10, Q11 by the owner; the
+> others by the lead, who the owner can overrule). The seams S21–S26 are
 > **proposals for the lead to confirm at the plan gate**; none is the
-> owner's. Phases 20 and parts of 17, 21, 22a wait on the owner's answers to
-> the questions named in them. The adversarial passes (record, build list
-> item 6) run on final 3, the contract items and the rubric, then on this
-> section, before Phase 15.0.
+> owner's. Q19 (the record prompt's version) is open and touches Phase 16R
+> only. The adversarial passes (record, build list item 6) run on final 3,
+> the contract items and the rubric, then on this section, before 15.0.
 
 Executor marks: prompts and their loops are `lead`; judgement-bearing code is
 `deep-reasoner`; mechanical work is `fast-worker`; the card's final words and
@@ -716,115 +717,133 @@ and names **one stop measure**; the others are reported (R69). A prompt
 change that a code phase needs lands as round 0 of its loop in the same
 commit as that code.
 
-**Verify gates.** Full `make verify` at 15.0 and at 23, and at any phase that
-changes the schema (none is planned: S21–S26 use JSON columns that exist).
-Elsewhere `make verify-fast`, plus `make prompt-guard` where a prompt
-changes, `make drift-check` and `make openapi-sync` where the API changes,
-`make frontend-verify` where the frontend changes. One green commit per
-phase, and one per loop round that changes a prompt.
+**Verify gates.** Full `make verify` at 15.0, at 16 (the one schema revision,
+R71) and at 23. Elsewhere `make verify-fast`, plus `make prompt-guard` where
+a prompt changes, `make drift-check` and `make openapi-sync` where the API
+changes, `make frontend-verify` where the frontend changes. One green commit
+per phase, and one per loop round that changes a prompt.
 
 ### Decisions proposed here, amendment 3 (lead seam design, to confirm)
 
 Checked against the code at `685c7157`.
 
-S21. **The folding calls** (R54, R55). *Input:* for each facet, the distinct
-words of the list's member records — `population` for Tried on, `outcome` for
-Measures (`CoverageMember`, `coverage.py:146-148`) — keyed whitespace-collapsed
-and case-folded (`_clean`, `coverage.py:239-243`), over the options
-`option_profile` loads (not merged, `option_profile.py:181-205`) and their
-units as `membership_coverage` reads them (`longlist.py:1458-1535`); short ids
-`w1 … wN`, mapped back in code, as the profile calls' `o1 … oN`
+S21. **The folding calls** (R54, R55; Q4, Q17). *Input:* for each facet, the
+distinct words of the list's member records — `population` for Tried on,
+`outcome` for Measures (`CoverageMember`, `coverage.py:146-148`) — keyed
+whitespace-collapsed and case-folded (`_clean`, `coverage.py:239-243`), over
+the options `option_profile` loads (not merged, `option_profile.py:181-205`)
+and their units as `membership_coverage` reads them (`longlist.py:1458-1535`);
+short ids `w1 … wN`, mapped back in code, as the profile calls' `o1 … oN`
 (`option_profile.py:507-529`); the plan's target unit and outcomes from the
 place-stripped plan data (`option_profile.py:722`). *Output:* each word id
-once, with its kind; each kind may name the plan text it matches (the target
-unit or one outcome, copied), so the code can put the target unit first and
-match plan outcome rows (Q4). *Run:* two more calls in the profile step's
-pool (`OPTION_PROFILE_MAX_CONCURRENT`, `option_profile.py:101`), the mini
-model (`LONGLIST_ASSIGNMENT_MODEL`, `longlist_backend.py:117-118`), one
-retry, then the step fails, as the other profile calls
-(`_profile_call`, `option_profile.py:607-636`); backend methods, stubs and
-Langfuse names beside `profile_setting` (`longlist_backend.py:540-551`,
-stub near `:914`). *Store:* the map in
-`longlist_result.provenance.option_profile.folds` (`{"tried_on": {word:
-kind}, "measures": {word: kind}}`, written with the provenance at
-`option_profile.py:815-843`). *Count:* `option_coverage` (`coverage.py:294`)
-takes the map and writes per option `tried_on` and `measures` as kinds with
-documents (DOI-collapsed); `option_profile` rewrites those keys of each
-option's `longlist_result.coverage` entry after its calls; constrain's merge
-recompute (`constrain.py:985-1000`) and an added option's read-time coverage
-(`repository.py:3431-3465`) pass the stored map. A word not in the map counts
-under no kind (Q17). No schema change.
+once, with its kind; a kind that matches the plan names the plan text it
+matches (the target unit or one outcome, copied), so the code puts the target
+unit first and a kind equal to a plan outcome makes no separate row (Q4).
+*Run:* two more calls in the profile step's pool
+(`OPTION_PROFILE_MAX_CONCURRENT`, `option_profile.py:101`), the mini model
+(`LONGLIST_ASSIGNMENT_MODEL`, `longlist_backend.py:117-118`), one retry, then
+the step fails, as the other profile calls (`_profile_call`,
+`option_profile.py:607-636`); backend methods, stubs and Langfuse names beside
+`profile_setting` (`longlist_backend.py:540-551`, stub near `:914`).
+*Store:* the map in `longlist_result.provenance.option_profile.folds`
+(`{"tried_on": {word: kind}, "measures": {word: kind}}`, written with the
+provenance at `option_profile.py:815-843`). *Count:* `option_coverage`
+(`coverage.py:294`) takes the map and writes per option the kinds with
+documents (DOI-collapsed) under new keys; `option_profile` rewrites those
+keys of each option's `longlist_result.coverage` entry after its calls;
+constrain's merge recompute (`constrain.py:985-1000`) and an added option's
+read-time coverage (`repository.py:3431-3465`) pass the stored map; a word
+not in the map counts under no kind (Q17, a known limit). The old
+`tried_on` and record `settings` keys stay in coverage for constrain
+(`constrain.py:360-384`; Q9). No schema change.
 
-S22. **The `examples` field** (R63). **Waits on Q1 and Q3** (which call
-writes it; where it is stored). Fixed whichever the answer: at most 5 per
-option, empty allowed; served on the option read model in place of
+S22. **`programme_name` and Examples** (R63, R71; Q1–Q3). The record wire
+gains `programme_name: str | None` beside `study_geography`
+(`evidence_search/extract/interventions_records.py:118`), the nullable text
+fields (`:220`), the record (`:367`) and the writer (`:467`); the column on
+`intervention_profile_record` (`core/schema.py:1088-1135`); the prompt text
+beside the `study_geography` rule (`extract_interventions_prompt.py:252`),
+the lead's. Coverage: `CoverageMember` gains `programme_name`
+(`coverage.py:133-170`), filled by `_coverage_member` (`longlist.py:1398-1415`)
+and by `_search_coverage` (`repository.py:3442-3465`); `examples` = the
+distinct programme names (case-folded key, the smallest spelling shown, as
+`_show`, `coverage.py:232-236`) with documents, at most 5 (a constant), by
+documents then name; `variants`, `VARIANTS_MAX` and the folded-seed list go
+(`coverage.py:68-70`, `:422-459`); served as `examples` in place of
 `variants` (`read_models.py:1205-1219`, `:1258`; `repository.py:2849-2863`,
-`:3997`); coverage stops computing `variants` (`coverage.py:68-70`,
-`:422-459`). The prompt is `longlist_cluster_v3` (`longlist_cluster_prompt.py:37`),
-the lead's.
+`:3997`). The cluster prompt does not change.
 
-S23. **Where tried in coverage** (R59). Per record, from `study_geography`
-after the setting pass (`coverage.py:203-219`): `countries_in`
-(`where_tried.py:337-360`) gives one code and no group marker → that
-country's name (a new code → name table beside `COUNTRY_NAMES`, `:47-133`);
-two or more codes, or a group marker → "multiple countries"; an empty text →
-"not stated"; a text that matches nothing → **Q6**. The level below follows
-**Q6**; the document grain follows **Q7**. Coverage's `where_tried`
-(`coverage.py:349`, `:391-392`, `:471`) becomes a list of `{top, documents,
-places: [{place, documents}]}`. Removed: `WhereGroup`, `WHERE_GROUPS`,
-`COMPARABLE_LABEL`, `OECD_CODES`, `where_group`, `where_labels`
-(`where_tried.py:33-41`, `:376-418`); the provenance key
-`where_tried_labels` (`longlist.py:1967`); `WhereTriedGroup`, `WhereTriedOut`
-(`read_models.py:734`, `:817-830`); `_WHERE_GROUPS`, `_where_tried_out`,
-`_where_label` (`repository.py:2810`, `:2833-2835`, `:3199-3202`) where
-nothing else reads them. Kept: `countries_in`, `strip_place`, `names_place`
-and the name tables. Constrain's summary carries no where tried
-(`constrain.py:363`) and does not change.
+S23. **Where tried in coverage** (R59; Q6, Q7). Per record, from
+`study_geography` after the setting pass (`coverage.py:203-219`):
+`countries_in` (`where_tried.py:337-360`) gives one code and no group word →
+that country's name (a new code → name table beside `COUNTRY_NAMES`,
+`:47-133`); two or more codes, or a group word → "multiple countries"; a
+non-empty text that matches nothing → "other places"; an empty text → "not
+stated". The group words: `OECD_MARKERS` (`:321`) becomes "oecd", "europe",
+"european", "north america", "nordic", "countries" (Q6). The level below is
+the record's text as written. Per document: all its records name one country
+→ that country; two countries → "multiple countries", both texts below (Q7);
+the precedence between "other places" and "not stated" across a document's
+records is the lead's at build. Coverage's `where_tried` (`coverage.py:349`,
+`:391-392`, `:471`) becomes a list of `{top, documents, places: [{place,
+documents}]}`. Removed: `WhereGroup`, `WHERE_GROUPS`, `COMPARABLE_LABEL`,
+`OECD_CODES`, `where_group`, `where_labels` (`where_tried.py:33-41`,
+`:376-418`); the provenance key `where_tried_labels` (`longlist.py:1967`);
+`WhereTriedGroup`, `WhereTriedOut` (`read_models.py:734`, `:817-830`);
+`_WHERE_GROUPS`, `_where_tried_out`, `_where_label` (`repository.py:2810`,
+`:2833-2835`, `:3199-3202`) where nothing else reads them. Kept:
+`countries_in`, `strip_place`, `names_place` and the name tables. Constrain's
+summary carries no where tried (`constrain.py:363`) and does not change.
 
-S24. **The outcomes table's data** (R56, R64). `outcome_counts`
+S24. **The outcomes table's data** (R56, R64; Q4). `outcome_counts`
 (`coverage.py:381-386`, `:484-490`): each plan outcome carries `documents`
-(members of any role with that `outcome_tag`, or the matching Measures kind
-if the owner so answers **Q4**) and `evaluated` (members with role
-`evaluated`); a list `other` carries each Measures kind that matches no plan
-outcome, with `documents` and `evaluated`. The "serves" mark reads
+(members of any role with that `outcome_tag`) and `evaluated` (members with
+role `evaluated`); a list `other` carries each Measures kind that matches no
+plan outcome, with `documents` and `evaluated`. The "serves" mark reads
 `outcomes_served` (`repository.py:3122`). Read model: `OutcomeCountOut` and
 `OutcomeCountsOut` (`read_models.py:920-941`) gain `evaluated` and `other`;
 `EvidenceProfileOut` loses `populations`, `settings`, `outcomes`, and
 `tried_on` becomes the kinds (`read_models.py:1122-1128`); the same on
-`OptionSummaryOut.tried_on` (`read_models.py:1029`). Coverage keeps
-`populations`, record-level `settings` and the old `tried_on` input to
-constrain (`constrain.py:360-384`) until the owner answers **Q9**.
+`OptionSummaryOut.tried_on` (`read_models.py:1029`). The card's runner-up line
+goes (Q10); `runner_up_lever_type` (`repository.py:2866`, `:3132`, `:3586`)
+leaves the read model when nothing else reads it.
 
-S25. **The documents** (R67, R68). `_option_documents`
+S25. **The documents** (R67, R68; Q13, Q15). `_option_documents`
 (`repository.py:3741-3911`) and `_search_documents` (`:3467-3499`): one entry
 per document, keyed by coverage's `document_key(doi=normalise_doi(…))`
-(`coverage.py:94-130`); order evaluated first, then quality score
-descending, then a stable key (the lead's choice at build); the title through
-an HTML-entity decode in `_title` (`repository.py:152`). `OptionDocumentOut`
-(`read_models.py:1179-1202`) loses `where_tried_group` and gains the year and
-the place and role of **Q13**. The card's own de-duplication
-(`OptionCard.tsx:186-194`) goes.
+(`coverage.py:94-130`); **role** = the document's highest role under this
+option (evaluated, then described, then the rest); order evaluated first,
+then quality score descending, then a stable key (the lead's at build);
+**place** = the document's top level (S23); **`year`** from the snapshot
+metadata (`source_snapshot.metadata`, read at `repository.py:3846-3848`); the
+title through an HTML-entity decode in `_title` (`repository.py:152`).
+`OptionDocumentOut` (`read_models.py:1179-1202`) loses `where_tried_group`
+and gains `year` and `place`. A document with no row in this task
+(`task_source_snapshot_id` null, `read_models.py:1195`) shows its title as
+plain text (Q15). The card's own de-duplication (`OptionCard.tsx:186-194`)
+goes.
 
-S26. **The dossier's slot on a scoping task** (R67, refined). A new read
-route beside `GET /tasks/{task_id}/sources/{source_id}`
+S26. **The dossier's slot on a scoping task** (R67 refined; Q14, Q16). A new
+read route beside `GET /tasks/{task_id}/sources/{source_id}`
 (`routers/read_models.py:155-167`), for example
 `GET /tasks/{task_id}/sources/{source_id}/records?option_id=`, owner-scoped
 as `_readable` does: the intervention profile records of that document that
 are members of an option (`option_membership` ⋈ `intervention_profile_record`,
 `core/schema.py:1635`, `:1088`, the join `_evidence_records` uses,
-`option_profile.py:470-485`), each with the option id and name, intervention
-name, setting, tried on and outcomes measured (the record's words or kind:
-**Q14**), where, role; filtered to one option when `option_id` is given; the
-DOI twins of S25 included. Frontend: a hook beside `useFindings`
+`option_profile.py:470-485`), each with the option id and name and the
+record's own words: intervention name, setting, tried on (`population`),
+outcomes measured (`outcome`), where (`study_geography`), role; every record,
+several per document (Q14); filtered to one option when `option_id` is given;
+the DOI twins of S25 included. Frontend: a hook beside `useFindings`
 (`queries.ts:357-370`); `SourceDossierBody` (`SourcesView.tsx:962`) shows the
 records in the findings slot (`:1055-1064`) under "In this option" (from a
 card) or its scoping name (from Sources) when `task.capability ===
-"options_scoping"` (`api/contract/tasks.py:232`), else as today; the card
-opens the exported `SourceDossier` (`ArtefactView.tsx:1034-1082`) with the
-option id, through the `source` search parameter as the report does
-(`ArtefactView.tsx:1401-1416`); the Sources tab's own copy
-(`SourcesView.tsx:884-910`, used at `:418`) passes no option. A document with
-no row in this task: **Q15**.
+"options_scoping"` (`api/contract/tasks.py:232`), else as today; the card's
+document list — and nothing else on the card (Q16) — opens the exported
+`SourceDossier` (`ArtefactView.tsx:1034-1082`) with the option id, through
+the `source` search parameter as the report does (`ArtefactView.tsx:1401-1416`);
+the Sources tab's own copy (`SourcesView.tsx:884-910`, used at `:418`) passes
+no option.
 
 ### Phase 15.0 — Build-open baseline — `lead` (inline)
 
@@ -834,105 +853,128 @@ Gate: **full `make verify`**.
 
 ADR 0040 (`docs/adr/0040-options-scoping-longlist-refinement.md`, § Amendment
 2 at `:204`) gains § Amendment 3: the folding calls in `option_profile` on
-the mini model (S21); where tried as countries in two levels, superseding
-ADR 0039 decision 10 (S23); Examples from the clustering step (S22, after
-Q1); the rollback (previous image; no schema change). Own commit before
-Phase 18.
+the mini model (S21); where tried as countries in two levels, four top-level
+values, superseding ADR 0039 decision 10 (S23); `programme_name` on the
+record and Examples from it (S22); the revision and its rollback
+(`alembic downgrade -1`). Own commit before Phase 16.
 
 Gate: `make verify-fast`. Commit.
 
-### Phase 16 — The documents (R67, R68; S25) — `fast-worker`
+### Phase 16 — The schema revision (R71) — `deep-reasoner`
 
-Brief (exact rules from S25): one entry per document by DOI key; the order;
-the entity decode; the new fields (year; place and role after Q13); the
-removal of `where_tried_group` waits for Phase 17. `make openapi-sync`.
+One reversible alembic revision on `e9a4c1f7b3d2`
+(`backend/alembic/versions/e9a4c1f7b3d2_longlist_option_profile.py`): the
+nullable Text column `intervention_profile_record.programme_name`, and the
+column in `core/schema.py` (`:1088-1135`). Round-trip test; an old row reads
+null. No other schema change.
 
-Tests: the same DOI under two snapshot ids gives one entry; evaluated before
-described; a higher quality score first among equals; `&amp;` in a stored
-title reads `&`.
+Gate: **full `make verify`**. Commit.
+
+### Phase 16R — The record prompt round (R63, R69; S22) — `lead` · `fast-worker`
+
+`fast-worker`: the wire field, the nullable-field list, the record and the
+writer (S22), with tests from an exact list (a record with and without a
+name; blank → null). `lead`: the prompt text for `programme_name` ("the
+proper name of the programme, scheme or law that the abstract gives for this
+intervention, or null") as round 0 in the same commit; the version per the
+owner's answer to **Q19**; then one refine round.
+Replay: `replay.py stage profile <slug> --fresh`
+(`evidence/pre-contract-runs/replay.py:77-90`) on the tuning set, one read
+of the check set.
+
+Stop measure (proposed): on the tuning set, every non-null `programme_name`
+is a proper name the abstract gives, and none is a plain phrase, read by
+hand. Reported: records with a name per list; the other fields and tags
+unchanged in kind (a sample read); options with no example.
+
+Gate: `make verify-fast` · `make prompt-guard`. Commit. Report to the owner
+(R25).
+
+### Phase 17 — The documents (R67, R68; S25) — `fast-worker`
+
+Brief (exact rules from S25): one entry per document by DOI key; the highest
+role; the order; `year`; the entity decode; plain-text title for a document
+with no row here. `place` and the removal of `where_tried_group` land in
+Phase 18. `make openapi-sync`.
+
+Tests: the same DOI under two snapshot ids gives one entry; a document with
+an `evaluated` and a `mentioned` record reads `evaluated`; evaluated before
+described; a higher quality score first among equals; `year` from metadata;
+`&amp;` in a stored title reads `&`.
 
 Gate: `make verify-fast` · `make drift-check` · `make openapi-sync` ·
 `make frontend-verify`. Commit.
 
-### Phase 17 — Where tried (R59; S23)
+### Phase 18 — Where tried (R59; S23)
 
-**`deep-reasoner`** (the per-record rule and the document grain, after Q6
-and Q7) · **`fast-worker`** (the removal sites of S23, the read model,
-OpenAPI, the frontend types and the facet's data source).
+**`deep-reasoner`** (the per-record rule, the group words, the document
+grain) · **`fast-worker`** (the removal sites of S23, the read model,
+`place` on a document, OpenAPI, the frontend types and the facet's data).
 
 Tests: one country named alone → that country; two countries → "multiple
-countries"; "12 OECD countries" → "multiple countries"; empty → "not
-stated"; the setting pass still moves a place into an empty geography; no
-code reads the publisher, journal, institutions or publication country;
-the counts are in documents, DOI-collapsed.
+countries"; "12 OECD countries", "Europe", "Nordic countries" → "multiple
+countries"; a place the matcher does not know → "other places", its text
+below; empty → "not stated"; a document whose records name two countries →
+"multiple countries" with both texts; the setting pass still moves a place
+into an empty geography; no code reads the publisher, journal, institutions
+or publication country; counts in documents, DOI-collapsed.
 
 Gate: `make verify-fast` · `make drift-check` · `make openapi-sync` ·
 `make frontend-verify`. Commit.
 
-### Phase 17C — The "not stated" check (R59) — `lead`
+### Phase 18C — The "not stated" check (R59; Q18) — `lead`
 
 On the three live lists of Phase 14 (tasks `8d73e096`, `161ac3d5`,
 `1409ae63`), the records whose top level is "not stated": how many abstracts
 name the place of the study, read by hand; a fault only where the abstract
-names it. Round record `evidence/rounds/17C-not-stated.md`: counts only, no
-abstract text. Reported; what follows a fault is **Q18**.
+names it. Round record `evidence/rounds/18C-not-stated.md`: counts only, no
+abstract text. A fault leads to a refine round of `extract_interventions`
+(Q18), recorded as a 16R round.
 
-### Phase 18 — Outcome counts over any role (R56; S24) — `fast-worker`
+Gate: the round record; `make verify-fast` · `make prompt-guard` if a round
+runs. Commit.
 
-Brief (exact rule): a plan outcome's `documents` counts documents with a
+### Phase 19 — Outcome counts and Examples in coverage (R56, R63; S22, S24) — `fast-worker`
+
+Brief (exact rules): a plan outcome's `documents` counts documents with a
 member of any role whose `outcome_tag` is that outcome; `evaluated` counts
 documents with an `evaluated` member with it; `evaluating_documents` stays.
-The `other` list waits for Phase 19. The existing test "described counts for
-nothing" (`test_longlist_coverage_046.py`) is replaced, with the reason in
-the commit.
+`examples` from `programme_name` as S22; `variants` removed. The `other` list
+waits for Phase 20. The existing test "described counts for nothing"
+(`test_longlist_coverage_046.py`) is replaced, with the reason in the commit.
+
+Tests: a `described` member counts in `documents`, not in `evaluated`; at
+most 5 examples; two spellings of one name are one example; no `variants`
+key.
 
 Gate: `make verify-fast` · `make drift-check`. Commit.
 
-### Phase 19 — The folding calls (R54, R55; S21)
+### Phase 20 — The folding calls (R54, R55; S21)
 
 **`deep-reasoner`** (the calls, the map, the counts, the coverage rewrite,
-the merge and added-option paths) · **`lead`** (19L round 0 in the same
+the merge and added-option paths) · **`lead`** (20L round 0 in the same
 commit: the Tried on and Measures folding prompts, in a new prompt module
 under `options_scoping/option_profile/`).
 
 Tests: every word id once or the call is malformed; a malformed call twice
 fails the step and writes nothing; two words of one kind in one document
-count one document; the target unit's kind first; a constrain merge
-recomputes the kinds from the stored map; a word not in the map counts under
-no kind; the stub gives a deterministic map.
+count one document; the target unit's kind first; a kind equal to a plan
+outcome makes no `other` row; a constrain merge recomputes the kinds from the
+stored map; a word not in the map counts under no kind; constrain still gets
+its old `tried_on` and `settings` keys; the stub gives a deterministic map.
 
 Gate: `make verify-fast` · `make prompt-guard` · `make drift-check`. Commit.
 
-### Phase 19L — Folding loops — `lead`
+### Phase 20L — Folding loops — `lead`
 
 The Tried on and Measures prompts; `replay.py stage option_profile <slug>
---fresh` (`evidence/pre-contract-runs/replay.py:77-90`). Checks: final 3 § 6.
+--fresh`. Checks: final 3 § 6.
 
 Stop measure (proposed; confirmed at round 0): on the tuning set, no two
 kinds on one list name the same kind, read by hand. Reported: kinds per list
 for each facet; the kinds that use the plan's words; the target unit first;
-the words that fell under no kind.
-
-Gate: `make verify-fast` · `make prompt-guard`. Commit. Report to the owner
-(R25).
-
-### Phase 20 — Examples (R63; S22) — waits on Q1 and Q3
-
-**`deep-reasoner`** (the field, its storage, the removal of variants) ·
-**`lead`** (20L round 0 in the same commit: `longlist_cluster_v3`).
-
-Tests: at most 5 examples; empty allowed; no `variants` in coverage or the
-read model; `make openapi-sync`.
-
-Gate: `make verify-fast` · `make prompt-guard` · `make drift-check` ·
-`make openapi-sync`. Commit.
-
-### Phase 20L — Cluster loop (`examples`) — `lead`
-
-`replay.py stage longlist <slug> --fresh`. Stop measure (proposed): every
-example on the tuning set is a named programme, scheme or law that a member
-record describes, read by hand. Reported: M1 and M2 (the list does not
-regress), options with no example, examples per option.
+the words that fell under no kind; M6's replacement (Tried on shows kinds
+beyond the target unit where the evidence has them).
 
 Gate: `make verify-fast` · `make prompt-guard`. Commit. Report to the owner
 (R25).
@@ -940,13 +982,13 @@ Gate: `make verify-fast` · `make prompt-guard`. Commit. Report to the owner
 ### Phase 21 — Read models and the dossier's records (S24, S26) — `fast-worker`
 
 The fields of S24 (the outcomes table, the kinds for Tried on and Measures,
-the removals); the route and read model of S26 (the record fields after
-Q14); `make openapi-sync`.
+the removals, `runner_up_lever_type` if nothing else reads it); `examples`;
+the route and read model of S26; `make openapi-sync`.
 
 Tests: the table's rows (plan outcomes in plan order with `serves`, then
-`other`); a scoping document's records, one per option, and filtered by
-option; an Evidence search task's findings route unchanged; owner scoping
-(an unreadable task is 404).
+`other`); a scoping document's records, one per option, each in its own
+words, and filtered by option; an Evidence search task's findings route
+unchanged; owner scoping (an unreadable task is 404).
 
 Gate: `make verify-fast` · `make drift-check` · `make openapi-sync` ·
 `make frontend-verify`. Commit.
@@ -955,16 +997,21 @@ Gate: `make verify-fast` · `make drift-check` · `make openapi-sync` ·
 
 From final 3 § 2.5 with the exact words of the record: the header's grey
 line and no `SnapshotCells` or chip (`OptionCard.tsx:244`, `:302-309`); "What
-it is" (lever line with reason and other levers per Q10; delivered through;
-design features ≤ 6; Examples); "What it would take" with Ambition first and
-the collapsed row with "Middle" (`OptionCard.tsx:368-411`; Q5); the evidence
-section in order (outcomes table; roles; where tried two levels; tried on;
+it is": the lever line "Lever: <primary>, with <secondary types>." with the
+reason under it, no runner-up line (`:340`), no authority line (`:343`),
+delivered through, design features ≤ 6, Examples; "What it would take" with
+Ambition first, the authority label beside "Who decides" (word with colour,
+then the sentence, only with an entry), and the collapsed row of **seven
+cells** with "Middle" (`OptionCard.tsx:368-411`); the evidence section in
+order (outcomes table; roles; where tried two levels; tried on, all kinds;
 the note "Read from titles and abstracts only"; the document list: linked
-title, meta line, five then "Show all N", "No documents found yet."); checks
-(user's first, built-ins in one line unless one fails, no transferability
-line, `OptionCard.tsx:449-477`; Q12); no "What it is for" and no origin
-section (`:356-366`, `:479-481`); the authority line per Q11. Facets without
-counts: Setting, Tried on, Where tried top level, Measures if Q8 says so
+title or plain text, meta line, five then "Show all N", "No documents found
+yet."); checks (the user's boundaries and preferences first, built-ins in one
+line unless one fails, no transferability line, `OptionCard.tsx:449-477`); no
+"What it is for" and no origin section (`:356-366`, `:479-481`). Facets
+without counts: Setting, Tried on, Where tried (top level); Tried on and
+Where tried filter as Setting does (`LonglistView.tsx:143-156`); each folds
+after 8 chips (`SETTING_FACET_LIMIT`, `:57`); no Measures facet
 (`LonglistView.tsx:438-515`; `triedOnFacet`, `longlistPresentation.ts:285`).
 `CELL_LIMIT` 4 (`LonglistGrid.tsx:29`). The dossier: the card's documents
 open `SourceDossier`; the slot of S26. Vitest tests for each.
@@ -973,26 +1020,30 @@ Gate: `make verify-fast` · `make frontend-verify`. Commit.
 
 ### Phase 22b — Card design and final words — `lead` (`impeccable`)
 
-Section titles (name, not explain); the label "Policy Atlas's estimate"
-(`OptionCard.tsx:71`), checked at 390 px (the reason for D16); the grey
-lines at 16 px; the table; the collapsed row; the tints put to the owner.
+Section titles (name, not explain); the lever line's final words (no "also
+touches"); the label "Policy Atlas's estimate" (`OptionCard.tsx:71`), checked
+at 390 px (the reason for D16); the grey lines at 16 px; the table; the
+seven cells; the authority word's colour; the tints put to the owner.
 
 Gate: `make verify-fast` · `make frontend-verify`. Commit.
 
 ### Phase 23 — Live check, evidence, exit — `lead`
 
-- Three live rapid runs (obesity, caregiving, refugees); M1–M10, M12 and M14
-  read back from saved files; new figures: kinds per folding facet per list,
-  the top-level where values per list; M6 per the answer to Q9.
-- The browser check (desktop and 390 px): the card top to bottom; the
-  collapsed row; the outcomes table; where tried both levels; a document
-  opening the dossier with "In this option"; the Sources tab's dossier on
-  the same task; an Evidence search task's dossier unchanged; the facets;
-  the grid with a cell of five or more.
+- Three live rapid runs (obesity, caregiving, refugees), on records made
+  after the revision (Q19); M1–M5, M7–M10, M12 and M14 read back from saved
+  files (M6 retired); new figures: kinds per folding facet per list, the
+  top-level where values per list, records with a `programme_name`, options
+  with examples.
+- The browser check (desktop and 390 px): the card top to bottom; the seven
+  cells; the authority label beside "Who decides" (refugees); the outcomes
+  table; where tried both levels; a document opening the dossier with "In
+  this option"; the Sources tab's dossier on the same task; an Evidence
+  search task's dossier unchanged; the facets filtering; the grid with a cell
+  of five or more.
 - `verification.md` § Amendment 3: gates, commits, round records, the OpenAPI
-  diff, the known limits of final 3 § 7.3, and a line naming rounds 2–4 of
-  12L as built before this amendment. Spec-change proposals (the owner
-  decides the wording); `docs/deferred.md`.
+  diff, the revision and its rollback, the known limits of final 3 § 7.3, and
+  a line naming rounds 2–4 of 12L as built before this amendment.
+  Spec-change proposals (the owner decides the wording); `docs/deferred.md`.
 
 Gate: **full `make verify`**. Commit.
 

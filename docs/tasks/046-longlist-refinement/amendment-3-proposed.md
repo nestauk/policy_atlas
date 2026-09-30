@@ -171,3 +171,11 @@ settled the technical ones; four with a visible effect go to the owner
 | 5 | Seven cells in the collapsed row: Ambition, then the six marked lines. | "5. Fine" |
 | 10 | The runner-up line goes. The lever line takes the form "**Lever:** Subsidise, with Regulate and Provide a service." and the reason sentence under it. "also touches" goes. The final words are the lead's at build. | "10. Sounds good. But the wording of the reason needs to be refined. I don't like how it uses 'also touches'" → "2. yes" |
 | 11 | The authority label (within your power · needs action by · unclear) shows beside the "Who decides" row of "What it would take", as a word with its colour, then the sentence; only when the plan holds the consideration. | "11. What is the label?" → the lead's description → accepted with the answers above |
+
+### Q19, settled by the lead: the record prompt version
+
+`extract_interventions` moves to v3 for `programme_name`. The version is part
+of the extraction fingerprint, so the next run of a task re-extracts its
+documents, which is the correct behaviour for a new field. Older records
+have no `programme_name` and their options show no examples until the task
+runs again; no code handles them (the owner's rule on unstaged data).

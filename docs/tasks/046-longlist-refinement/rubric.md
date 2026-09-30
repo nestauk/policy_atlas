@@ -284,15 +284,15 @@ that is not a loop's stop measure is reported, not passed (R48, R49).
 
 ## Amendment 3
 
-Rulings R54–R69 are in [contract.md](contract.md) § Amendment 3; the design
+Rulings R54–R71 are in [contract.md](contract.md) § Amendment 3; the design
 detail, the loop checks and the open questions are in
 [amendment-3-final.md](amendment-3-final.md) ("final 3" below). The boxes
 above stay as written; where a box below and a box above differ, the box
 below wins for amendment 3's work (it replaces box 32's rule on evaluating
 documents, and box 33's "a line with no mark shows no word"). Where a box
 measures, it names the threshold; a measure that is not a loop's stop measure
-is reported, not passed (R69). A box that depends on an open question of
-final 3 § 7.2 is checked against the owner's answer to it.
+is reported, not passed (R69). The 18 build questions are answered (final 3
+§ 7.2); a box that depends on Q19 is checked against the owner's answer.
 
 ### Items
 
@@ -303,10 +303,16 @@ final 3 § 7.2 is checked against the owner's answer to it.
     a fixture: two words of one kind in one document count one document).
     The card shows one "Tried on" line, target unit first, with counts; no
     "Populations" line, no record-level "Settings" or "Tried on" line. The
-    record tags and `population_tags` counts are unchanged. No fixed list of
-    kinds in code or prompt.
+    record tags and `population_tags` counts are unchanged; the card shows
+    all kinds; coverage keeps the old `tried_on` and record `settings` keys
+    that constrain reads (`constrain.py:360-384`), and no read model serves
+    them. No fixed list of kinds in code or prompt. **M6's replacement**
+    (M6 retired, lead Q9): on the live runs, Tried on shows kinds beyond the
+    plan's target unit where the evidence has them (read by hand; reported).
 48. [ ] **Measures and the outcomes table (R55, R56, R64).** A second folding
-    call writes word → kind for the records' outcome words. The card's
+    call writes word → kind for the records' outcome words; a word that
+    matches a plan outcome is labelled with it, and a kind equal to a plan
+    outcome is no separate row (a plan row counts from `outcome_tag`). The card's
     evidence section holds one table: a row per plan outcome with its
     "serves" mark from `outcomes_served`, and a row per other Measures kind;
     columns "documents of any role" and "evaluated". No "What it is for"
@@ -317,54 +323,69 @@ final 3 § 7.2 is checked against the owner's answer to it.
     members only; DOI collapse as before (tests in
     `test_longlist_coverage_046.py` or its successor, the old "described
     counts for nothing" case replaced with a written reason).
-50. [ ] **No counts on the list's facets (R57).** The Setting, Tried on and
-    (if shown) Measures facets carry labels only (vitest: no digit in a chip
-    of these facets).
+50. [ ] **The list's facets (R57).** Setting, Tried on and Where tried carry
+    labels only (vitest: no digit in a chip); Tried on and Where tried (top
+    level) filter the list as Setting does; each folds after 8 chips; no
+    Measures facet (vitest).
 51. [ ] **The authority label unchanged (R58).** The amendment 2 tests of box
     28 pass unedited; the facet shows only when an option has a label.
 52. [ ] **Where tried (R59).** No `WHERE_GROUPS`, `COMPARABLE_LABEL`,
     `OECD_CODES`, `where_group` or `where_labels` in product code, and no
     "comparable" or "OECD" word on the screen. Coverage gives per option the
-    top level (country · "multiple countries" · "not stated") and the level
-    below, in documents, from `study_geography` only (the setting pass
-    kept). Tests pin: one country named alone → that country; two countries
-    or a group → "multiple countries"; empty → "not stated"; no read of
-    publisher, journal, institution or publication country. The facet shows
+    top level, **four values** (a country · "multiple countries" · "other
+    places" · "not stated"), and the level below as the record's text as
+    written, in documents, from `study_geography` only (the setting pass
+    kept). Tests pin: one country named alone → that country; two countries,
+    or a group word ("OECD", "Europe", "European", "North America",
+    "Nordic", "countries") → "multiple countries"; a stated place the matcher
+    does not know → "other places", as written; empty → "not stated"; a
+    document whose records name two countries → "multiple countries" with
+    both texts below; no read of publisher, journal, institution or
+    publication country. The facet shows
     the top level with no counts; the card both levels with counts.
 53. [ ] **The "not stated" check (R59).** A round record gives, on the three
     live lists, the records with "not stated", how many abstracts name the
-    place of the study, and the count of faults (read by hand). Reported.
+    place of the study, and the count of faults (read by hand). Reported. A
+    fault leads to a refine round of `extract_interventions` (box 63).
 54. [ ] **Grid (R60).** `CELL_LIMIT` is 4 in `LonglistGrid.tsx`; a vitest
     shows the fold at 5 options in a cell.
 55. [ ] **Header (R61).** No `SnapshotCells` and no depth chip on the card;
     the evidence section carries the grey note "Read from titles and
     abstracts only".
-56. [ ] **Lever line (R62).** The line keeps its reason and names the other
-    levers (vitest).
-57. [ ] **Examples (R63).** A new `examples` field, at most 5 per option,
-    empty allowed, written by the clustering step and served on the option;
-    no `variants` in coverage, the read model or the card; the card heading
-    is "Examples". 20L stop measure: every example on the tuning set is a
-    named programme, scheme or law that a member record describes, read by
-    hand. Threshold: all.
-58. [ ] **Collapsed row (R65).** Collapsed, every cell shows a word; an
-    unmarked line shows "Middle" (who decides and dependencies: as the
-    owner answers final 3 Q5); a blank cell only for an option with no
+56. [ ] **Lever line (R62).** "Lever:" with the primary type, "with" the
+    secondary types, the reason sentence under it; no "also touches"; no
+    runner-up line on the card (vitest).
+57. [ ] **Examples from `programme_name` (R63).** `extract_interventions`
+    writes `programme_name` (the proper name the abstract gives, or null) on
+    each record; coverage lists the option's distinct programme names with
+    document counts, at most 5, empty allowed; served as `examples`; no
+    `variants` in coverage, the read model or the card; folded seeds only
+    under "also found as"; the card heading is "Examples"; no folding call and
+    no cluster-prompt change for examples. The 16R round reads, on the
+    tuning set, every non-null `programme_name` as a proper name the abstract
+    gives, read by hand. Threshold: all.
+58. [ ] **Collapsed row (R65).** Collapsed, **seven cells**: Ambition, then
+    cost, time to set up, time to effect, workforce, coordination, delivery
+    complexity; no cell for who decides or dependencies; every cell shows a
+    word, "Middle" for no mark; a blank cell only for an option with no
     profile (vitest). Expanded, the table's first row is Ambition.
 59. [ ] **Checks (R66).** The user's checks first, each verdict as a word
     with its colour; the three built-in checks as one line when all pass, in
     full when one fails; no transferability line (vitest).
 60. [ ] **Documents (R67, R68).** The option read model returns one entry per
     document (a test: the same DOI under two snapshot ids gives one entry);
-    evaluated first, then by quality; no HTML entity in a title (a test);
+    evaluated first, then by quality; the highest role under the option,
+    the top-level place and `year` (from the snapshot metadata) on
+    `OptionDocumentOut`; no HTML entity in a title (a test);
     the card shows a linked title and one grey meta line, five documents then
     "Show all N", and "No documents found yet." with none (vitest).
 61. [ ] **The dossier from the card (R67).** A document title on the card
     opens the Evidence search source dossier (`SourceDossier`), not the
-    citation panel (vitest). On an options-scoping task the findings slot is
+    citation panel (vitest); a document with no row in this task shows its
+    title as plain text; nothing else on the card opens the dossier. On an options-scoping task the findings slot is
     named "In this option" when opened from a card and shows that option's
     record (intervention name, setting, tried on, outcomes measured, where,
-    role); opened from the Sources tab it shows the document's records, one
+    role), each record in its own words, several records each shown; opened from the Sources tab it shows the document's records, one
     per option holding it. On an Evidence search task the slot is unchanged:
     "Findings from this source" and its findings (a vitest for each case, and
     the browser check).
@@ -377,20 +398,29 @@ final 3 § 7.2 is checked against the owner's answer to it.
 ### Cross-cutting
 
 63. [ ] **Every new or changed prompt went through a refine loop (R69).** The
-    Tried on and Measures folding prompts and `longlist_cluster_v3`: rounds
+    Tried on and Measures folding prompts and `extract_interventions`
+    (`programme_name`; and any round the "not stated" check calls for): rounds
     in `evidence/rounds/` (change, finding, figures, read-back), one stop
     measure each, at most five rounds, tuned on the tuning set and read once
     on the check set, reported to the owner, re-pinned in
-    `scripts/prompt_hashes.json`. Folding stop measure (19L): on the tuning
+    `scripts/prompt_hashes.json`. Folding stop measure (20L): on the tuning
     set, no two kinds on one list name the same kind, read by hand; kinds per
-    list and plan-word matches reported. `extract_interventions` unchanged.
-64. [ ] **Gates.** Full `make verify` at 15.0 and 23 (and at any phase that
-    changes the schema); `openapi-sync` and `frontend-verify` pass at 16, 17,
-    20 and 21; ADR 0040 amended in its own commit before Phase 18.
+    list and plan-word matches reported. The cluster prompt is unchanged. The
+    record prompt's version follows the owner's answer to Q19.
+64. [ ] **Gates.** Full `make verify` at 15.0, 16 (the schema) and 23;
+    `openapi-sync` and `frontend-verify` pass at 17, 18 and 21; ADR 0040
+    amended in its own commit before Phase 16.
 65. [ ] **The contract's lines hold.** The OpenAPI diff shows only the
-    removals and additions of final 3 § 3; no schema revision unless the
-    owner allowed one; `verification.md` records the known limits of final 3
-    § 7.3, M1 and M2 on the live runs (not regressed by the cluster prompt),
+    removals and additions of final 3 § 3; `verification.md` records the known limits of final 3
+    § 7.3, M1 and M2 on the live runs (not regressed by the record prompt),
     and names rounds 2–4 of 12L as built before this amendment.
 66. [ ] **Spec changes of amendment 3** are applied only with the owner's
     accepted wording, one line each in `docs/specs/log.md`.
+67. [ ] **Migration (R71).** Exactly one reversible alembic revision on
+    `e9a4c1f7b3d2`: one nullable Text column
+    `intervention_profile_record.programme_name`; a round-trip test; full
+    `make verify` at Phase 16. No other schema change; no new table.
+68. [ ] **The authority label beside "Who decides" (R70).** In "What it
+    would take", the "Who decides" row carries the label word with its colour,
+    then the sentence, only when the option has an authority entry; no
+    authority line in "What it is"; the Who can act facet unchanged (vitest).
