@@ -160,12 +160,8 @@ export function joinAnd(parts: readonly string[]): string {
   return `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}`;
 }
 
-/** "{k} of the {n} were read from the abstract only." / "All {n} were …" */
-export function abstractOnlySentence(abstractOnly: number, documents: number): string {
-  if (abstractOnly === 0) return "None was read from the abstract only.";
-  if (abstractOnly >= documents) return `All ${documents} were read from the abstract only.`;
-  return `${abstractOnly} of the ${documents} were read from the abstract only.`;
-}
+/** The card's grey note on how the documents were read (task 046, amendment 3). */
+export const ABSTRACTS_NOTE = "Read from titles and abstracts only";
 
 /** The short origin: the count says "clustered"; the other three origins
  *  are the tag itself (the snapshot cell and the row meta). */
@@ -264,31 +260,16 @@ export function themeSummary(description: string): string {
   return description.trim();
 }
 
-/** The lever line on the option card: the primary type and what it also
- *  touches, or the none-fits reason (contract deliverable 9; the board's
- *  sentence shape). With `reason` (task 046, R29), the typing's sentence on
- *  why follows, as the ambition reason follows the ambition. */
-export function leverLine(
-  primary: string | null | undefined,
-  secondary: string[] | undefined,
-  noneFitsReason: string | null | undefined,
-  reason?: string | null,
-): string {
-  const why = (reason ?? "").trim();
-  const withReason = (line: string) => (why === "" ? line : `${line} ${why}`);
-  if (primary == null) {
-    // One reason only: the none-fits reason says what the option does instead.
-    const noneFits = (noneFitsReason ?? "").trim();
-    return noneFits === ""
-      ? withReason("Primary lever type: none fits.")
-      : `Primary lever type: none fits. ${noneFits}`;
-  }
+/** The lever line on the option card (task 046, amendment 3, § 2.5): "Lever:
+ *  Subsidise, with Regulate and Provide a service." — the primary type and the
+ *  secondary types, or "Lever: none fits." when no type fits. The reason is a
+ *  separate sentence under it. */
+export function leverLine(primary: string | null | undefined, secondary: string[] | undefined): string {
+  if (primary == null) return "Lever: none fits.";
   const also = (secondary ?? []).map((type) => capitalise(type));
-  return withReason(
-    also.length > 0
-      ? `Primary lever type: ${capitalise(primary)}; it also touches ${also.join(", ")}.`
-      : `Primary lever type: ${capitalise(primary)}.`,
-  );
+  return also.length > 0
+    ? `Lever: ${capitalise(primary)}, with ${also.join(" and ")}.`
+    : `Lever: ${capitalise(primary)}.`;
 }
 
 /** A lever group's definition (task 046, AM19): the definition of the
@@ -344,9 +325,9 @@ export function triedOnSentence(
 }
 
 /** One example row on the card (task 046, amendment 3, R63): a programme name
- *  and its documents. */
+ *  and its documents, "Name (3 documents)". */
 export function exampleLine(example: { name: string; documents: number }): string {
-  return example.documents > 0 ? `${example.name} · ${documentCount(example.documents)}` : example.name;
+  return example.documents > 0 ? `${example.name} (${documentCount(example.documents)})` : example.name;
 }
 
 /** A judgement's verdict, rendered as prose ("breaks", "passes", "cannot
@@ -388,18 +369,9 @@ export function longlistTitle(
   return "Longlist";
 }
 
-/** The row's outcomes, as one sentence: "For {a}, {b} and {c}." */
-export function outcomesSentence(outcomes: string[] | undefined): string {
-  const list = (outcomes ?? []).filter((outcome) => outcome.trim() !== "");
-  if (list.length === 0) return "";
-  const joined = list.length === 1 ? list[0] : `${list.slice(0, -1).join(", ")} and ${list[list.length - 1]}`;
-  return `For ${joined}.`;
-}
-
 type ProfileLineKey = components["schemas"]["ProfileLineOut"]["key"];
 type Mark = "less" | "more";
 type AuthorityOut = components["schemas"]["AuthorityOut"];
-type OutcomeCountsOut = components["schemas"]["OutcomeCountsOut"];
 
 /** The eight profile lines, in display order (R37); the ninth entry of the
  *  shared vocabulary, transferability, is read at assessment and not listed. */
@@ -475,44 +447,21 @@ export function authorityWords(authority: AuthorityOut): string {
     : AUTHORITY_LABELS[authority.label];
 }
 
-/** The card's authority line: "{label words}. {reason}" (R43). */
-export function authorityLine(authority: AuthorityOut): string {
-  const why = (authority.reason ?? "").trim();
-  return why === "" ? `${authorityWords(authority)}.` : `${authorityWords(authority)}. ${why}`;
-}
+/** The word for a line with no mark, in the collapsed cells and the table (§ 2.9). */
+export const MIDDLE_WORD = "Middle";
 
-/** The card's ambition line (R44): the level word and the reason, the reason
- *  alone when there is no level, nothing when both are empty. */
-export function ambitionSentence(
-  ambition: Mark | null | undefined,
-  reason: string | null | undefined,
-): string {
-  const why = (reason ?? "").trim();
-  if (ambition != null) {
-    const word = LEVEL_WORDS.ambition[ambition];
-    return why === "" ? `Ambition: ${word}.` : `Ambition: ${word}. ${why}`;
-  }
-  return why === "" ? "" : `Ambition: ${why}`;
+/** The ids of the three built-in checks among an option's judgements. */
+export const BUILT_IN_CHECK_IDS: readonly string[] = ["relevant", "distinct", "in_scope"];
+
+/** Whether the option's design picked this plan outcome (case and spacing folded). */
+export function servesOutcome(served: readonly string[] | undefined, outcome: string): boolean {
+  const key = outcome.trim().toLowerCase();
+  return (served ?? []).some((name) => name.trim().toLowerCase() === key);
 }
 
 /** The card's delivery-setting line (R41): "Delivered through: a · b". */
 export function deliveredThroughLine(settings: readonly string[] | undefined): string {
   return (settings ?? []).length === 0 ? "" : `Delivered through: ${(settings ?? []).join(" · ")}`;
-}
-
-/** The outcome counts' lead sentence (R42): "3 documents evaluated this
- *  option." */
-export function outcomeCountsSentence(counts: OutcomeCountsOut | undefined): string {
-  const n = counts?.evaluating_documents ?? 0;
-  if (n === 0) return "";
-  return `${n} ${n === 1 ? "document" : "documents"} evaluated this option.`;
-}
-
-/** One plan outcome's count (R42): "{outcome}: 2 documents", "1 document",
- *  "no documents". */
-export function outcomeCountItem(outcome: string, documents: number): string {
-  const count = documents === 0 ? "no documents" : `${documents} ${documents === 1 ? "document" : "documents"}`;
-  return `${outcome}: ${count}`;
 }
 
 /** The constraints section's collapsed line: "2 break, 1 passes, 1 cannot

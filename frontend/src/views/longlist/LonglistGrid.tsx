@@ -26,7 +26,7 @@ const HEADER_CELL_CLASS =
   "border-b border-navy px-3 py-2 text-meta font-semibold text-navy";
 
 /** A cell shows this many options before folding the rest behind "+N more". */
-const CELL_LIMIT = 6;
+const CELL_LIMIT = 4;
 
 /**
  * The reduced grid (D12, contract deliverable 9): rows the lever types in

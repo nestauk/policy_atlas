@@ -6,14 +6,12 @@ import {
   LEVEL_WORDS,
   LINE_NAMES,
   PROFILE_LINE_KEYS,
-  ambitionSentence,
-  authorityLine,
+  authorityWords,
+  servesOutcome,
   deliveredThroughLine,
   leverDefinitionFor,
   leverLabel,
   leverLine,
-  outcomeCountItem,
-  outcomeCountsSentence,
   triedOnFacet,
   triedOnSentence,
   exampleLine,
@@ -48,17 +46,17 @@ describe("longlist presentation (task 046)", () => {
   });
 
   it("words an example with its documents and drops a zero count", () => {
-    expect(exampleLine({ name: "HENRY", documents: 1 })).toBe("HENRY · 1 document");
+    expect(exampleLine({ name: "HENRY", documents: 1 })).toBe("HENRY (1 document)");
     expect(exampleLine({ name: "Breakfast clubs", documents: 0 })).toBe("Breakfast clubs");
   });
 
-  // Task 046, R29: the reason follows the lever sentence, as with the ambition.
-  it("appends the lever reason after the lever sentence when present", () => {
-    expect(leverLine("subsidise", ["inform"], null, " The council pays the fares. ")).toBe(
-      "Primary lever type: Subsidise; it also touches Inform. The council pays the fares.",
-    );
-    expect(leverLine("subsidise", [], null, "  ")).toBe("Primary lever type: Subsidise.");
-    expect(leverLine("subsidise", [], null)).toBe("Primary lever type: Subsidise.");
+  // Task 046, amendment 3 (§ 2.5): the lever line, the secondary types after "with".
+  it("words the lever line with its secondary types joined by and", () => {
+    expect(leverLine("subsidise", ["inform", "provide a service"])).toBe("Lever: Subsidise, with Inform and Provide a service.");
+    expect(leverLine("subsidise", ["inform"])).toBe("Lever: Subsidise, with Inform.");
+    expect(leverLine("subsidise", [])).toBe("Lever: Subsidise.");
+    expect(leverLine("subsidise", undefined)).toBe("Lever: Subsidise.");
+    expect(leverLine(null, [])).toBe("Lever: none fits.");
   });
 
   it("limits the Tried on facet and counts what it hides", () => {
@@ -74,12 +72,6 @@ describe("longlist presentation (task 046)", () => {
       ],
       hidden: 1,
     });
-  });
-
-  it("shows one reason when no lever type fits", () => {
-    expect(leverLine(null, [], "It changes a court process.", "Who acts is unclear.")).toBe(
-      "Primary lever type: none fits. It changes a court process.",
-    );
   });
 });
 
@@ -133,32 +125,22 @@ describe("longlist presentation (amendment 2 words)", () => {
       needs_action_by: "Needs action by another body",
       unclear: "Unclear who can act",
     });
-    expect(authorityLine({ label: "needs_action_by", body: "the Treasury", reason: "It sets the rate." })).toBe(
-      "Needs action by the Treasury. It sets the rate.",
+    expect(authorityWords({ label: "needs_action_by", body: "the Treasury", reason: "It sets the rate." })).toBe(
+      "Needs action by the Treasury",
     );
-    expect(authorityLine({ label: "needs_action_by", body: null, reason: null })).toBe(
-      "Needs action by another body.",
-    );
-    expect(authorityLine({ label: "unclear", reason: "Not stated." })).toBe("Unclear who can act. Not stated.");
+    expect(authorityWords({ label: "needs_action_by", body: null, reason: null })).toBe("Needs action by another body");
+    expect(authorityWords({ label: "unclear", reason: "Not stated." })).toBe("Unclear who can act");
   });
 
-  it("words the ambition line with a level, a reason alone, or nothing", () => {
-    expect(ambitionSentence("more", "It changes who is entitled.")).toBe("Ambition: Bigger. It changes who is entitled.");
-    expect(ambitionSentence("less", "  ")).toBe("Ambition: Smaller.");
-    expect(ambitionSentence(null, "Adds support alongside the offer.")).toBe("Ambition: Adds support alongside the offer.");
-    expect(ambitionSentence(null, "")).toBe("");
-    expect(ambitionSentence(undefined, null)).toBe("");
+  it("matches a served outcome with case and spacing folded", () => {
+    expect(servesOutcome(["NEET rate at 6 months"], " neet rate at 6 months ")).toBe(true);
+    expect(servesOutcome(["Attendance"], "Wellbeing")).toBe(false);
+    expect(servesOutcome(undefined, "Wellbeing")).toBe(false);
   });
 
-  it("words the delivery setting and the outcome counts", () => {
+  it("words the delivery setting", () => {
     expect(deliveredThroughLine(["Jobcentre", "School"])).toBe("Delivered through: Jobcentre · School");
     expect(deliveredThroughLine([])).toBe("");
-    expect(outcomeCountsSentence({ evaluating_documents: 1, by_outcome: [] })).toBe("1 document evaluated this option.");
-    expect(outcomeCountsSentence({ evaluating_documents: 4, by_outcome: [] })).toBe("4 documents evaluated this option.");
-    expect(outcomeCountsSentence({ evaluating_documents: 0, by_outcome: [] })).toBe("");
-    expect(outcomeCountItem("Attendance", 2)).toBe("Attendance: 2 documents");
-    expect(outcomeCountItem("Attendance", 1)).toBe("Attendance: 1 document");
-    expect(outcomeCountItem("Attendance", 0)).toBe("Attendance: no documents");
   });
 
   it("labels a row with its lever only", () => {

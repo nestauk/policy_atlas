@@ -138,11 +138,32 @@ describe("LonglistGrid", () => {
         <LonglistGrid taskId={TASK_ID} longlist={longlist} />
       </MemoryRouter>,
     );
-    expect(screen.getAllByRole("link", { name: /Crowd option/ })).toHaveLength(6);
-    await user.click(screen.getByRole("button", { name: "+3 more" }));
+    expect(screen.getAllByRole("link", { name: /Crowd option/ })).toHaveLength(4);
+    await user.click(screen.getByRole("button", { name: "+5 more" }));
     expect(screen.getAllByRole("link", { name: /Crowd option/ })).toHaveLength(9);
     await user.click(screen.getByRole("button", { name: "Show fewer −" }));
-    expect(screen.getAllByRole("link", { name: /Crowd option/ })).toHaveLength(6);
+    expect(screen.getAllByRole("link", { name: /Crowd option/ })).toHaveLength(4);
+  });
+
+  it("folds a cell of five options to four, with +1 more", () => {
+    const longlist = mockLonglist();
+    const base = longlist.options![0];
+    longlist.options = Array.from({ length: 5 }, (_, i) => ({
+      ...base,
+      option_id: `five-${i}`,
+      name: `Five option ${i}`,
+      state: "included" as const,
+      primary_lever_type: "regulate",
+      ambition: "less" as const,
+      profile: { lines: [], settings: [] },
+    }));
+    render(
+      <MemoryRouter>
+        <LonglistGrid taskId={TASK_ID} longlist={longlist} />
+      </MemoryRouter>,
+    );
+    expect(screen.getAllByRole("link", { name: /Five option/ })).toHaveLength(4);
+    expect(screen.getByRole("button", { name: "+1 more" })).toBeInTheDocument();
   });
 
   it("has no shortlist action", () => {

@@ -231,18 +231,46 @@ describe("LonglistView", () => {
     }
   });
 
-  // Task 046, amendment 3 (R54): the Tried on facet shows the kinds as
-  // labels, no counts (the filter is a later phase).
-  it("shows the Tried on facet as labels without counts that never filter", async () => {
+  // Task 046, amendment 3 (R54): the Tried on facet: labels, no counts, and it filters.
+  it("shows the Tried on facet as chips without counts, and filters like Setting", async () => {
     const user = userEvent.setup();
-    renderLonglist();
+    renderLonglist({}, (longlist) => {
+      const mentoring = (longlist.options ?? []).find((o) => o.name === "School-based mentoring");
+      if (mentoring) mentoring.tried_on = [{ kind: "preschool children", documents: 1 }];
+    });
     const triedOnGroup = screen.getByRole("group", { name: "Tried on" });
-    expect(within(triedOnGroup).getByText("18-24 year-olds in Northern England")).toBeInTheDocument();
-    expect(within(triedOnGroup).queryByText(/\(\d+\)/)).not.toBeInTheDocument();
-    expect(within(triedOnGroup).queryByRole("button")).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Expand all" }));
+    const chips = within(triedOnGroup).getAllByRole("button").map((button) => button.textContent ?? "");
+    expect(chips).toContain("18-24 year-olds in Northern England");
+    for (const chip of chips) expect(chip).not.toMatch(/\d+\)|\(\d/);
+    await user.click(within(triedOnGroup).getByRole("button", { name: "preschool children" }));
     expect(screen.getByText("School-based mentoring")).toBeInTheDocument();
+    expect(screen.queryByText("Youth guarantee")).not.toBeInTheDocument();
+    await user.click(within(triedOnGroup).getByRole("button", { name: "preschool children" }));
+    await user.click(screen.getByRole("button", { name: "Expand all" }));
     expect(screen.getByText("Youth guarantee")).toBeInTheDocument();
+  });
+
+  it("folds the Tried on facet after eight chips", async () => {
+    const user = userEvent.setup();
+    const kinds = ["a1", "b2", "c3", "d4", "e5", "f6", "g7", "h8", "i9", "j10"];
+    renderLonglist({}, (longlist) => {
+      const option = (longlist.options ?? []).find((o) => o.name === "Youth guarantee");
+      if (option) option.tried_on = kinds.map((kind) => ({ kind, documents: 1 }));
+    });
+    const group = screen.getByRole("group", { name: "Tried on" });
+    const pressable = () => within(group).getAllByRole("button").filter((b) => b.hasAttribute("aria-pressed"));
+    expect(pressable()).toHaveLength(8);
+    await user.click(within(group).getByRole("button", { name: /more$/ }));
+    expect(pressable()).toHaveLength(11);
+    await user.click(within(group).getByRole("button", { name: "fewer" }));
+    expect(pressable()).toHaveLength(8);
+  });
+
+  it("has no Measures facet and no digit in any Setting chip", () => {
+    renderLonglist();
+    expect(screen.queryByRole("group", { name: "Measures" })).not.toBeInTheDocument();
+    const group = screen.getByRole("group", { name: "Setting" });
+    for (const button of within(group).getAllByRole("button")) expect(button.textContent).not.toMatch(/\d/);
   });
 
   it("summarises a collapsed theme with its description and option names, plus a No theme section", () => {

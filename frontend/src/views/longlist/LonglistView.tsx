@@ -30,7 +30,6 @@ import {
   countsLine,
   definitionSentence,
   leverDefinitionFor,
-  triedOnFacet,
   instrumentsSummary,
   leverLabel,
   longlistTitle,
@@ -39,6 +38,7 @@ import {
   themeSummary,
   whereTriedFacet,
 } from "./longlistPresentation";
+import { matchesTriedOn, triedOnKinds } from "./longlistFacets";
 
 type LonglistOut = components["schemas"]["LonglistOut"];
 type OptionSummaryOut = components["schemas"]["OptionSummaryOut"];
@@ -97,6 +97,7 @@ export function LonglistView({ taskId, longlist }: { taskId: string; longlist: L
 
   const [settingsFilter, setSettingsFilter] = useState<Set<string>>(new Set());
   const [whereFilter, setWhereFilter] = useState<Set<string>>(new Set());
+  const [triedOnFilter, setTriedOnFilter] = useState<Set<string>>(new Set());
   const [authorityFilter, setAuthorityFilter] = useState<Set<AuthorityLabel>>(new Set());
   const [mode, setMode] = useState<"list" | "grid">("list");
   const [groupBy, setGroupBy] = useState<GroupBy>("theme");
@@ -130,7 +131,6 @@ export function LonglistView({ taskId, longlist }: { taskId: string; longlist: L
   const allSettings = [...settingCounts.entries()]
     .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
     .map(([setting]) => setting);
-  const triedOn = triedOnFacet(options, SETTING_FACET_LIMIT);
   const [allSettingsShown, setAllSettingsShown] = useState(false);
   const shownSettings =
     allSettingsShown || allSettings.length <= SETTING_FACET_LIMIT
@@ -146,6 +146,13 @@ export function LonglistView({ taskId, longlist }: { taskId: string; longlist: L
       ? allWhere
       : allWhere.filter((top) => whereFilter.has(top) || allWhere.indexOf(top) < SETTING_FACET_LIMIT);
   const hiddenWhere = allWhere.length - shownWhere.length;
+  const allTriedOn = triedOnKinds(options);
+  const [allTriedOnShown, setAllTriedOnShown] = useState(false);
+  const shownTriedOn =
+    allTriedOnShown || allTriedOn.length <= SETTING_FACET_LIMIT
+      ? allTriedOn
+      : allTriedOn.filter((kind) => triedOnFilter.has(kind) || allTriedOn.indexOf(kind) < SETTING_FACET_LIMIT);
+  const hiddenTriedOn = allTriedOn.length - shownTriedOn.length;
   const hasAuthority = options.some((option) => option.authority != null);
 
   const passesFilters = (option: OptionSummaryOut): boolean => {
@@ -155,6 +162,9 @@ export function LonglistView({ taskId, longlist }: { taskId: string; longlist: L
     }
     if (whereFilter.size > 0) {
       if (![...whereFilter].some((top) => matchesWhereTried(option.where_tried, top))) return false;
+    }
+    if (triedOnFilter.size > 0) {
+      if (![...triedOnFilter].some((kind) => matchesTriedOn(option.tried_on, kind))) return false;
     }
     if (authorityFilter.size > 0) {
       if (option.authority == null || !authorityFilter.has(option.authority.label)) return false;
@@ -383,7 +393,7 @@ export function LonglistView({ taskId, longlist }: { taskId: string; longlist: L
         ];
 
   const shownCount = includedOptions.length;
-  const filtersActive = settingsFilter.size > 0 || whereFilter.size > 0 || authorityFilter.size > 0;
+  const filtersActive = settingsFilter.size > 0 || whereFilter.size > 0 || triedOnFilter.size > 0 || authorityFilter.size > 0;
   // A filter opens the sections it narrowed; the key remounts them with the
   // matching default. A new grouping remounts them closed.
   const sectionKey = (key: string) => `${groupBy}-${key}-${filtersActive ? "filtered" : "all"}`;
@@ -527,16 +537,37 @@ export function LonglistView({ taskId, longlist }: { taskId: string; longlist: L
             ))}
           </div>
         )}
-        {triedOn.shown.length > 0 && (
+        {allTriedOn.length > 0 && (
           <div role="group" aria-label="Tried on" className="mt-2 flex flex-wrap items-start gap-1.5">
             <span className={FACET_LABEL_CLASS}>Tried on</span>
-            {triedOn.shown.map(([kind]) => (
-              <span key={kind} className={facetChipClass(false)}>
+            {shownTriedOn.map((kind) => (
+              <button
+                key={kind}
+                type="button"
+                aria-pressed={triedOnFilter.has(kind)}
+                onClick={() => setTriedOnFilter((current) => toggleInSet(current, kind))}
+                className={facetChipClass(triedOnFilter.has(kind))}
+              >
                 {scrub(kind)}
-              </span>
+              </button>
             ))}
-            {triedOn.hidden > 0 && (
-              <span className="px-1 py-1.5 text-meta text-grey">+{triedOn.hidden} more on the option cards</span>
+            {hiddenTriedOn > 0 && (
+              <button
+                type="button"
+                onClick={() => setAllTriedOnShown(true)}
+                className="cursor-pointer px-1 py-1.5 text-meta font-semibold text-blue underline-offset-4 hover:underline"
+              >
+                +{hiddenTriedOn} more
+              </button>
+            )}
+            {allTriedOnShown && allTriedOn.length > SETTING_FACET_LIMIT && (
+              <button
+                type="button"
+                onClick={() => setAllTriedOnShown(false)}
+                className="cursor-pointer px-1 py-1.5 text-meta font-semibold text-blue underline-offset-4 hover:underline"
+              >
+                fewer
+              </button>
             )}
           </div>
         )}

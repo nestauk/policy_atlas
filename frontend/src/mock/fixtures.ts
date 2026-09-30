@@ -1110,6 +1110,7 @@ export const mockLonglistOptionCards: Record<string, OptionOutFixture> = {
       outcome_counts: {
         evaluating_documents: 3,
         by_outcome: [{ outcome: "NEET rate at 6 months", documents: 3, evaluated: 3 }],
+        other: [{ kind: "earnings", documents: 1, evaluated: 0 }],
       },
     },
     judgements: [
