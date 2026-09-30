@@ -368,7 +368,7 @@ export function SectionDisclosure({
         >
           <h2 className={`flex-1 ${REPORT_SECTION_HEADING_CLASS}`}>
             {scrub(section.title)}
-            {meta !== undefined && <span className="ml-2 whitespace-nowrap text-meta font-normal text-grey">{meta}</span>}
+            {meta !== undefined && <span className="ml-2 whitespace-nowrap text-meta font-normal text-grey max-md:ml-0 max-md:block">{meta}</span>}
           </h2>
           <span aria-hidden="true" className={`${SECTION_EXPAND_LINK_CLASS} max-md:hidden`}>
             {expanded ? "Collapse −" : "Expand +"}
@@ -377,7 +377,7 @@ export function SectionDisclosure({
       ) : (
         <h2 className={REPORT_SECTION_HEADING_CLASS}>
           {scrub(section.title)}
-          {meta !== undefined && <span className="ml-2 whitespace-nowrap text-meta font-normal text-grey">{meta}</span>}
+          {meta !== undefined && <span className="ml-2 whitespace-nowrap text-meta font-normal text-grey max-md:ml-0 max-md:block">{meta}</span>}
         </h2>
       )}
       {/* Fallback (first-sentence) summaries render unmarked — the checked/

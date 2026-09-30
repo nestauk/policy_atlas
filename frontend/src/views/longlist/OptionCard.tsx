@@ -372,13 +372,13 @@ export function OptionCard() {
           defaultOpen={false}
           meta={ESTIMATE_LABEL}
           summaryNode={
-            <ul role="list" className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-4 lg:grid-cols-8">
+            <ul role="list" className="grid grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-4">
               {profileLines.map(({ key, line }) => {
                 const mark = line?.mark ?? null;
                 const word = mark === null ? null : LEVEL_WORDS[key][mark];
                 return (
                   <li key={key}>
-                    <span className="block text-caption uppercase tracking-[0.06em] text-grey">{LINE_NAMES[key]}</span>
+                    <span className="block text-meta text-grey">{LINE_NAMES[key]}</span>
                     <span className="mt-1 block min-h-6">
                       {word !== null && mark !== null && <span className={LEVEL_WORD_CLASS[mark]}>{word}</span>}
                     </span>
