@@ -2785,6 +2785,11 @@ def _chunk_metadata(
 #: because that module's in-scope check imports :func:`publication_country`
 #: from here. Pinned equal by a test.
 LONGLIST_IN_SCOPE_KEY = "in_scope_evidence"
+#: The ``judgements`` key of constrain's authority label (task 046, S18) —
+#: ``options_scoping.constrain.constrain.AUTHORITY_KEY``, not imported for the
+#: same reason. It holds no verdict and is never a judgement. Pinned equal by
+#: a test.
+LONGLIST_AUTHORITY_KEY = "authority"
 
 #: What the option card shows for the default transferability preference (D22).
 TRANSFERABILITY_AT_ASSESSMENT: Literal["checked at assessment"] = "checked at assessment"
@@ -3569,7 +3574,7 @@ def _constraint_order(constraint_id: str) -> tuple[int, int, str]:
 def _judgements_out(record: Mapping[str, Any]) -> list[JudgementOut]:
     out: list[JudgementOut] = []
     for constraint_id in sorted(record, key=_constraint_order):
-        if constraint_id == LONGLIST_IN_SCOPE_KEY:
+        if constraint_id in (LONGLIST_IN_SCOPE_KEY, LONGLIST_AUTHORITY_KEY):
             continue
         entry = _as_mapping(record[constraint_id])
         verdict = entry.get("verdict")

@@ -39,6 +39,7 @@ from policy_atlas.core.schema import longlist_result, option, option_relation, t
 from policy_atlas.core.usage import UsageResult
 from policy_atlas.options_scoping.constrain import constrain as constrain_module
 from policy_atlas.options_scoping.constrain.constrain import (
+    AUTHORITY_KEY,
     DISTINCT_PASSES_REASON,
     DUPLICATE_KEPT_REASON,
     IN_SCOPE_EVIDENCE_KEY,
@@ -53,6 +54,9 @@ from policy_atlas.options_scoping.constrain.constrain_prompt import (
     CONSTRAIN_BATCH_SIZE,
     DEFAULT_SCREENS,
     DISTINCT_SCREEN,
+    AuthorityLabel,
+    AuthorityResponse,
+    AuthorityWire,
     ConstrainResponse,
     ConstraintJudgementWire,
     DistinctPairWire,
@@ -72,6 +76,10 @@ from policy_atlas.options_scoping.longlist.longlist_cluster_prompt import (
     OptionDiscoveryResponse,
 )
 from policy_atlas.options_scoping.longlist.where_tried import countries_in
+from policy_atlas.options_scoping.option_profile.option_profile import (
+    OptionProfileContext,
+    option_profile_scope,
+)
 from policy_atlas.runtime.scoping_plan import TRANSFERABILITY_DEFAULT, find_default
 from tests.helpers import now
 from tests.options_scoping.test_longlist import _Walk
@@ -146,7 +154,7 @@ def _response(
                 guesses=[
                     ReasonedGuessWire(
                         constraint_id=pid,
-                        guess="Likely low cost, a guess rather than evidence.",
+                        guess="Likely low cost.",
                         leaning=leaning,
                     )
                     for pid in preference_ids or []
@@ -727,7 +735,7 @@ def test_every_preference_but_transferability_yields_one_guess(conn: Connection)
     for oid in (first, second):
         assert guesses[str(oid)]["1"] == {
             "pref-1": {
-                "guess": "May or may not meet it, a guess rather than evidence.",
+                "guess": "May or may not meet it.",
                 "leaning": "cannot_say",
                 "constraint_text": "Prefer low cost per participant",
             }
@@ -1285,3 +1293,348 @@ def test_the_batches_run_in_parallel(conn: Connection) -> None:
     assert backend.constrain_calls == 3
     assert summary["options"] == 2 * CONSTRAIN_BATCH_SIZE + 1
     assert _latest(walk).provenance["constrain"]["failed_batches"] == 0
+
+
+# --- task 046, amendment 2: the authority label (R38, S18) --------------------------------
+
+WHO_CAN_ACT = "Only the council can act; it cannot change national law"
+
+
+def _who_decides(text: str = WHO_CAN_ACT, *, hard: bool = True) -> dict[str, Any]:
+    return _consideration(text, aspect="who_decides", hard=hard)
+
+
+def _run_profile(walk: _Walk) -> None:
+    """One ``option_profile`` run on the stub: every option not merged gets the
+    ``who_decides`` sentence ``"Stub who_decides sentence."``."""
+    option_profile_scope(
+        walk.conn,
+        task_id=walk.task_id,
+        run_id=walk.run(),
+        context=OptionProfileContext(scope_id=walk.scope_id, intent="longlist intent", context={}),
+        backend=StubLonglistBackend(),
+    )
+
+
+def _set_who_decides(walk: _Walk, sentences: dict[uuid.UUID, tuple[int, str]]) -> None:
+    """Write the latest row's ``option_profile``: per option, ``(design version,
+    who_decides sentence)``; the other lines are left out (constrain reads one)."""
+    profile = {
+        str(oid): {str(version): {"lines": {"who_decides": {"sentence": text, "mark": None}}}}
+        for oid, (version, text) in sentences.items()
+    }
+    walk.conn.execute(
+        update(longlist_result)
+        .where(longlist_result.c.longlist_result_id == _latest(walk).longlist_result_id)
+        .values(option_profile=profile)
+    )
+
+
+def _labels(
+    *entries: tuple[uuid.UUID, AuthorityLabel, str | None, str],
+) -> AuthorityResponse:
+    """An authority answer: ``(option, label, body, reason)`` per option."""
+    return AuthorityResponse(
+        options=[
+            AuthorityWire(option_id=str(oid), label=label, body=body, reason=reason)
+            for oid, label, body, reason in entries
+        ]
+    )
+
+
+def test_no_consideration_on_who_decides_makes_no_call_and_no_label(conn: Connection) -> None:
+    walk = _walk(conn, _consideration("At most £2m a year", aspect="cost", hard=True))
+    oids = [walk.option("Youth guarantee"), walk.option("Wage subsidy")]
+    walk.build(StubLonglistBackend())
+    _run_profile(walk)
+    backend = StubLonglistBackend()
+
+    _constrain(walk, backend)
+
+    assert backend.authority_calls == 0
+    latest = _latest(walk)
+    assert all(AUTHORITY_KEY not in latest.judgements[str(oid)]["1"] for oid in oids)
+    assert latest.provenance["constrain"]["authority"] == {"calls": 0}
+    assert latest.counts["authority_labelled"] == 0
+
+
+def test_one_authority_call_holds_every_profiled_option_and_the_users_texts(
+    conn: Connection,
+) -> None:
+    second = "The combined authority can also act"
+    walk = _walk(conn, _who_decides(), _who_decides(second, hard=False))
+    oids = [walk.option(f"Option {i}") for i in range(CONSTRAIN_BATCH_SIZE + 2)]
+    walk.build(StubLonglistBackend())
+    _run_profile(walk)
+    backend = StubLonglistBackend()
+
+    _, summary = _constrain(walk, backend)
+
+    assert backend.authority_calls == 1  # one call over the whole list, never per batch
+    sent = backend.authority_inputs[0]
+    assert sent["considerations"] == [WHO_CAN_ACT, second]
+    assert sorted(o["option_id"] for o in sent["options"]) == sorted(str(o) for o in oids)
+    for entry in sent["options"]:
+        assert set(entry) == {
+            "option_id",
+            "label",
+            "description",
+            "design_features",
+            "who_decides",
+        }
+        assert entry["who_decides"] == "Stub who_decides sentence."
+    latest = _latest(walk)
+    for oid in oids:
+        assert latest.judgements[str(oid)]["1"][AUTHORITY_KEY] == {
+            "label": "unclear",
+            "body": None,
+            "reason": "Stub: unclear.",
+            "consideration_text": f"{WHO_CAN_ACT} · {second}",
+        }
+    assert latest.counts["authority_labelled"] == len(oids)
+    assert latest.provenance["constrain"]["authority"] == {
+        "calls": 1,
+        "retries": 0,
+        "failed": False,
+        "options": len(oids),
+        "labels": {"within_your_power": 0, "needs_action_by": 0, "unclear": len(oids)},
+    }
+    # The label is not a check: the summary reads as it did.
+    assert summary["cannot_check"] == 0 and summary["excluded"] == 0
+
+
+def test_each_label_is_stored_with_its_reason_and_a_body_only_when_needed(
+    conn: Connection,
+) -> None:
+    walk = _walk(conn, _who_decides())
+    ours = walk.option("Council youth hub")
+    theirs = walk.option("National sugar tax")
+    unknown = walk.option("Wage subsidy")
+    walk.build(StubLonglistBackend())
+    _set_who_decides(
+        walk,
+        {
+            ours: (1, "The local council decides."),
+            theirs: (1, "HM Treasury decides, in the United Kingdom."),
+            unknown: (1, "A council or the national government could decide."),
+        },
+    )
+    backend = StubLonglistBackend(
+        authority_responses=_labels(
+            # A body on another label is dropped.
+            (ours, "within_your_power", "The council", "The council decides."),
+            (theirs, "needs_action_by", " HM Treasury ", "HM Treasury sets the tax."),
+            (unknown, "unclear", None, "Either body could run it."),
+        )
+    )
+
+    _constrain(walk, backend)
+
+    judgements = _latest(walk).judgements
+    stored = {oid: judgements[str(oid)]["1"][AUTHORITY_KEY] for oid in (ours, theirs, unknown)}
+    assert {oid: (e["label"], e["body"], e["reason"]) for oid, e in stored.items()} == {
+        ours: ("within_your_power", None, "The council decides."),
+        theirs: ("needs_action_by", "HM Treasury", "HM Treasury sets the tax."),
+        unknown: ("unclear", None, "Either body could run it."),
+    }
+    assert {e["consideration_text"] for e in stored.values()} == {WHO_CAN_ACT}
+    assert _latest(walk).provenance["constrain"]["authority"]["labels"] == {
+        "within_your_power": 1,
+        "needs_action_by": 1,
+        "unclear": 1,
+    }
+
+
+def test_no_exclusion_comes_from_the_label_or_from_any_consideration(conn: Connection) -> None:
+    walk = _walk(
+        conn,
+        _who_decides(hard=True),
+        _consideration("A budget of at most £2m a year", aspect="cost", hard=True),
+    )
+    oids = [walk.option("National sugar tax"), walk.option("Universal credit uplift")]
+    walk.build(StubLonglistBackend())
+    _run_profile(walk)
+    backend = StubLonglistBackend(
+        authority_responses=_labels(
+            *((oid, "needs_action_by", "HM Treasury", "Needs HM Treasury.") for oid in oids)
+        )
+    )
+
+    _, summary = _constrain(walk, backend)
+
+    assert all(_row(walk, oid).state == "included" for oid in oids)
+    assert all(_row(walk, oid).exclusion is None for oid in oids)
+    latest = _latest(walk)
+    assert summary["excluded"] == 0 and latest.counts["excluded"] == 0
+    assert latest.counts["included"] == len(oids)
+    assert latest.counts["authority_labelled"] == len(oids)
+    # Neither consideration is a requirement: the batches judge the screens only.
+    assert backend.constrain_inputs[0]["requirements"] == [
+        {"id": key, "text": label} for key, label in DEFAULT_SCREENS
+    ]
+
+
+def test_the_batches_and_the_distinct_call_get_no_who_decides_line_and_no_where(
+    conn: Connection,
+) -> None:
+    where = "Scotland"
+    plan = scoping_plan(
+        where={"text": where, "origin": "your_call"},
+        question="What could reduce the number of young people not in work in Scotland?",
+        constraints=[_who_decides()],
+    )
+    walk = _Walk(conn, plan)
+    first = walk.option("Youth guarantee")
+    second = walk.option("Wage subsidy")
+    walk.build(StubLonglistBackend())
+    sentences = {
+        first: (1, "The Scottish Government decides, in Scotland."),
+        second: (1, "HM Treasury decides, in the United Kingdom."),
+    }
+    _set_who_decides(walk, sentences)
+    backend = StubLonglistBackend()
+
+    _constrain(walk, backend)
+
+    # The authority call reads the line (the one place exception) ...
+    assert {o["who_decides"] for o in backend.authority_inputs[0]["options"]} == {
+        text for _, text in sentences.values()
+    }
+    # ... and nothing else does.
+    others = json.dumps(
+        [backend.constrain_inputs, backend.distinct_inputs], ensure_ascii=False, default=str
+    )
+    assert "who_decides" not in others
+    for _, text in sentences.values():
+        assert text not in others
+    assert where not in others
+    assert "United Kingdom" not in others
+    assert countries_in(json.dumps(backend.constrain_inputs[0]["plan"])) == (frozenset(), False)
+
+
+def test_an_authority_call_malformed_twice_gives_no_label_and_the_step_succeeds(
+    conn: Connection,
+) -> None:
+    walk = _walk(conn, _requirement("No benefit sanctions"), _who_decides())
+    kept = walk.option("Youth guarantee")
+    broken = walk.option("Sanctioned work search")
+    walk.build(StubLonglistBackend())
+    _run_profile(walk)
+    missing_option = _labels((kept, "unclear", None, "Either body."))
+    no_body = _labels(
+        (kept, "within_your_power", None, "The council decides."),
+        (broken, "needs_action_by", "  ", "Another body decides."),
+    )
+    backend = StubLonglistBackend(
+        authority_responses=[missing_option, no_body],
+        constrain_responses=_response(
+            [kept, broken], ["req-1", *SCREEN_IDS], verdicts={(broken, "req-1"): "breaks"}
+        ),
+    )
+
+    _, summary = _constrain(walk, backend)
+
+    assert backend.authority_calls == 2  # the call and its one retry
+    latest = _latest(walk)
+    assert all(AUTHORITY_KEY not in latest.judgements[str(oid)]["1"] for oid in (kept, broken))
+    authority = latest.provenance["constrain"]["authority"]
+    assert (authority["calls"], authority["retries"], authority["failed"]) == (2, 1, True)
+    assert latest.counts["authority_labelled"] == 0
+    # The verdicts are stored and act as before.
+    assert latest.judgements[str(broken)]["1"]["req-1"]["verdict"] == "breaks"
+    assert _row(walk, broken).state == "excluded"
+    assert _row(walk, kept).state == "included"
+    assert summary["excluded"] == 1
+
+
+def test_an_authority_call_that_raises_is_tried_once_more(conn: Connection) -> None:
+    walk = _walk(conn, _who_decides())
+    oid = walk.option("Youth guarantee")
+    walk.build(StubLonglistBackend())
+    _run_profile(walk)
+
+    class _Flaky(StubLonglistBackend):
+        def authority(self, **kwargs: Any) -> Any:
+            if self.authority_calls == 0:
+                self.authority_calls += 1
+                raise RuntimeError("provider down")
+            return super().authority(**kwargs)
+
+    backend = _Flaky()
+
+    _constrain(walk, backend)
+
+    assert backend.authority_calls == 2
+    assert _latest(walk).judgements[str(oid)]["1"][AUTHORITY_KEY]["label"] == "unclear"
+    authority = _latest(walk).provenance["constrain"]["authority"]
+    assert (authority["retries"], authority["failed"]) == (1, False)
+
+
+def test_the_option_read_model_lists_the_same_judgements_with_a_label(conn: Connection) -> None:
+    assert repository.LONGLIST_AUTHORITY_KEY == AUTHORITY_KEY
+    walk = _walk(conn, _requirement("No benefit sanctions"), _who_decides())
+    oid = walk.option("Youth guarantee")
+    walk.build(StubLonglistBackend())
+    _run_profile(walk)
+    _constrain(walk, StubLonglistBackend())
+    latest = _latest(walk)
+    assert AUTHORITY_KEY in latest.judgements[str(oid)]["1"]
+
+    with_label = repository.option_out(conn, walk.task_id, oid)
+    listed = repository.longlist_out(conn, walk.task_id)
+    stripped = {
+        key: {"1": {k: v for k, v in record["1"].items() if k != AUTHORITY_KEY}}
+        for key, record in latest.judgements.items()
+    }
+    conn.execute(
+        update(longlist_result)
+        .where(longlist_result.c.longlist_result_id == latest.longlist_result_id)
+        .values(judgements=stripped)
+    )
+    without_label = repository.option_out(conn, walk.task_id, oid)
+
+    assert with_label is not None and without_label is not None
+    assert with_label.judgements == without_label.judgements
+    assert [j.constraint_id for j in with_label.judgements] == ["req-1", *STORED_SCREEN_IDS]
+    assert listed is not None and listed.options[0].option_id == oid
+
+
+def test_an_option_with_no_profile_entry_is_not_sent_and_gets_no_label(
+    conn: Connection,
+) -> None:
+    walk = _walk(conn, _who_decides())
+    profiled = walk.option("Youth guarantee")
+    added = walk.option("Added by you", origin="added_by_you")
+    redesigned = walk.option("Wage subsidy", design_version=2)
+    walk.build(StubLonglistBackend())
+    # ``added`` has no entry; ``redesigned`` has one for an older design only.
+    _set_who_decides(
+        walk,
+        {profiled: (1, "The council decides."), redesigned: (1, "The council decides.")},
+    )
+    backend = StubLonglistBackend()
+
+    _constrain(walk, backend)
+
+    assert [o["option_id"] for o in backend.authority_inputs[0]["options"]] == [str(profiled)]
+    judgements = _latest(walk).judgements
+    assert AUTHORITY_KEY in judgements[str(profiled)]["1"]
+    assert AUTHORITY_KEY not in judgements[str(added)]["1"]
+    assert AUTHORITY_KEY not in judgements[str(redesigned)]["2"]
+    assert _latest(walk).counts["authority_labelled"] == 1
+
+
+def test_a_duplicate_merged_in_this_run_gets_no_label(conn: Connection) -> None:
+    walk = _walk(conn, _who_decides())
+    kept, dup = _duplicate_pair(walk)
+    walk.build(StubLonglistBackend())
+    _run_profile(walk)
+    backend = _duplicate_breach(kept, dup)
+
+    _constrain(walk, backend)
+
+    assert _row(walk, dup).merged_into_option_id == kept
+    judgements = _latest(walk).judgements
+    assert AUTHORITY_KEY in judgements[str(kept)]["1"]
+    assert AUTHORITY_KEY not in judgements[str(dup)]["1"]
+    assert _latest(walk).counts["authority_labelled"] == 1

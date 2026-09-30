@@ -1,7 +1,7 @@
-"""The ``constrain`` component: the longlist walk's last step (task 045, S9; task 046, S6, S13).
+"""The ``constrain`` component: verdicts on the longlist (task 045, S9; task 046, S6, S13, S18).
 
 Contract deliverable 7, D9, D10, D21, D22; ADR 0039 decisions 7 and 10;
-task 046 items 5, 7, 10, 11, 12, R4, R21, AM6, AM7.
+task 046 items 5, 7, 10, 11, 12, R4, R21, R38, AM6, AM7.
 
 1. **Distinct** (task 046, S13). One call over the whole list — every option
    that is not merged, with its label, description, design features, origin
@@ -20,7 +20,7 @@ task 046 items 5, 7, 10, 11, 12, R4, R21, AM6, AM7.
 2. **Judgements.** Every option of the task — included and excluded — is
    judged, one call per :data:`CONSTRAIN_BATCH_SIZE` options on the judgment
    model, the batches in a thread pool of :data:`CONSTRAIN_MAX_CONCURRENT`,
-   against the plan's ``requirement`` constraints (a setting requirement
+   against the plan's ``boundary`` constraints (a setting requirement
    among them, D21, verbatim, AM7) followed by the :data:`DEFAULT_SCREENS`
    (*relevant*, *within scope*), on the option's specified design, a compact
    coverage summary (no ``where_tried``: AM7) and the baseline. The plan
@@ -62,13 +62,33 @@ task 046 items 5, 7, 10, 11, 12, R4, R21, AM6, AM7.
    default transferability preference removed before the call (D22: no guess
    before assessment). A guess never changes state.
 5. **No in-scope evidence** (:mod:`.in_scope`), deterministic, no model call.
-6. **Writes.** ``longlist_result.judgements`` and ``.guesses`` of the walk's
+6. **The authority label** (task 046, R38, S18). Made only when the plan
+   holds a consideration on ``who_decides``; with none there is no call and
+   no label (``provenance.constrain.authority == {"calls": 0}``). With one
+   or more: ONE call over the whole list — every option that is not merged
+   and that has an entry for its current design version in the latest
+   row's ``option_profile`` — run at the same time as the distinct call and
+   the batches. It reads the considerations' texts and, per option, its id,
+   label, description, design features and the sentence of its line
+   ``who_decides``. That sentence can name a country: it is the ONE place
+   text constrain reads (amendment 2 § 2.4). The plan data, the batches and
+   the distinct call still get no place and no profile line. The answer is
+   checked fail-closed (every option sent exactly once, no other id, a
+   reason, a body for ``needs_action_by``); a raised or malformed call is
+   tried once more, and one that fails again gives no option a label
+   (``authority.failed``) — never a crash, never an exclusion. The label is
+   stored in the option's judgement record under :data:`AUTHORITY_KEY`,
+   never in ``option_profile``. It has no verdict: it is never a check, it
+   never excludes, and no consideration changes an option's state. A
+   duplicate merged in this run, and an option with no profile entry (added
+   after the build), get no label.
+7. **Writes.** ``longlist_result.judgements`` and ``.guesses`` of the walk's
    latest longlist row, keyed ``[option_id][design_version]`` (D10), its
    ``counts`` (and, after a merge, the kept options' ``coverage``) updated;
    the option rows' ``state``, ``exclusion``, ``no_in_scope_evidence``,
    ``merged_into_option_id`` and ``updated_at``; a merged duplicate's
-   memberships. Every model call — the distinct call and every batch —
-   happens before the first write.
+   memberships. Every model call — the distinct call, every batch and the
+   authority call — happens before the first write.
 """
 
 from __future__ import annotations
@@ -93,6 +113,8 @@ from policy_atlas.options_scoping.constrain.constrain_prompt import (
     CONSTRAIN_PROMPT_VERSION,
     DEFAULT_SCREENS,
     DISTINCT_SCREEN,
+    AuthorityLabel,
+    AuthorityResponse,
     ConstrainResponse,
     DistinctResponse,
 )
@@ -127,6 +149,15 @@ _KEPT_FIRST_ORIGINS: tuple[str, ...] = ("added_by_you", "from_evidence_search")
 #: The ``judgements`` key of the deterministic in-scope record. Not
 #: ``"in_scope"``: that id is the *within scope* default screen's.
 IN_SCOPE_EVIDENCE_KEY = "in_scope_evidence"
+#: The ``judgements`` key of the authority label (task 046, S18). It holds no
+#: verdict: nothing that reads the checks reads it.
+AUTHORITY_KEY = "authority"
+#: The consideration aspect the authority label answers (R38).
+WHO_DECIDES = "who_decides"
+#: Joins the considerations' texts in the stored ``consideration_text``.
+CONSIDERATION_JOIN = " · "
+#: The labels, in the order the provenance counts them.
+AUTHORITY_LABELS: tuple[AuthorityLabel, ...] = ("within_your_power", "needs_action_by", "unclear")
 #: Setting texts shown per option in the coverage summary.
 COVERAGE_SETTINGS_MAX = 5
 
@@ -159,6 +190,12 @@ class ConstrainBackend(Protocol):
 
     def distinct(self, *, options: list[dict[str, object]]) -> UsageResult[DistinctResponse]:
         """Report the duplicates over the whole list (see ``LonglistBackend.distinct``)."""
+        ...
+
+    def authority(
+        self, *, considerations: list[str], options: list[dict[str, object]]
+    ) -> UsageResult[AuthorityResponse]:
+        """Label every option by who can adopt it (see ``LonglistBackend.authority``)."""
         ...
 
 
@@ -682,6 +719,123 @@ def _move_memberships(
     )
 
 
+def who_decides_considerations(plan: ScopingPlan) -> list[str]:
+    """The texts of the plan's considerations on who decides, in plan order (R38).
+
+    Args:
+        plan: The validated scoping plan.
+
+    Returns:
+        The texts; empty when the plan holds none.
+    """
+    return [
+        c.text for c in plan.constraints if c.kind == "consideration" and c.aspect == WHO_DECIDES
+    ]
+
+
+def _who_decides_sentence(profile: Mapping[str, Any], row: Any) -> str | None:
+    """The option's ``who_decides`` sentence for its current design version, if any."""
+    entry = _mapping(_mapping(profile.get(str(row.option_id))).get(str(row.design_version)))
+    sentence = _mapping(_mapping(entry.get("lines")).get(WHO_DECIDES)).get("sentence")
+    return sentence.strip() if isinstance(sentence, str) and sentence.strip() else None
+
+
+def _authority_option_data(row: Any, who_decides: str) -> dict[str, object]:
+    """One option as the authority call reads it: no coverage, no records, no other line."""
+    return {
+        "option_id": str(row.option_id),
+        "label": row.name,
+        "description": row.description,
+        "design_features": _design_features(row),
+        "who_decides": who_decides,
+    }
+
+
+def _validated_authority(
+    response: AuthorityResponse, option_ids: Sequence[str]
+) -> dict[str, dict[str, Any]] | None:
+    """The labels per option id, or ``None`` when the response is malformed.
+
+    Every option sent exactly once and no other id; a non-blank reason; a
+    non-blank body on ``needs_action_by`` (the body is dropped on any other
+    label).
+    """
+    if sorted(wire.option_id for wire in response.options) != sorted(option_ids):
+        return None
+    out: dict[str, dict[str, Any]] = {}
+    for wire in response.options:
+        reason = wire.reason.strip()
+        body = (wire.body or "").strip()
+        if not reason or (wire.label == "needs_action_by" and not body):
+            return None
+        out[wire.option_id] = {
+            "label": wire.label,
+            "body": body if wire.label == "needs_action_by" else None,
+            "reason": reason,
+        }
+    return out
+
+
+@dataclass
+class _Authority:
+    """The authority call's checked answer (built in a worker thread).
+
+    Attributes:
+        labels: The label entry per option id (empty when the call failed).
+        usages: Every call's token usage, added to the step's total by the caller.
+        stats: ``calls``, ``retries``, ``failed`` and ``options`` (sent).
+    """
+
+    labels: dict[str, dict[str, Any]] = field(default_factory=dict)
+    usages: list[TokenUsage | None] = field(default_factory=list)
+    stats: dict[str, Any] = field(default_factory=dict)
+
+
+def _authority(
+    backend: ConstrainBackend, *, considerations: list[str], options: list[dict[str, object]]
+) -> _Authority:
+    """The one authority call over the whole list, and one retry (R38, S18).
+
+    Runs in a worker thread: it touches no connection and no shared state.
+    A call that raises or stays malformed after its retry gives no label
+    (``failed``): never a crash, never an exclusion.
+    """
+    outcome = _Authority()
+    option_ids = [str(o["option_id"]) for o in options]
+    calls = 0
+    labels: dict[str, dict[str, Any]] | None = None
+    if options:
+        for attempt in range(BATCH_ATTEMPTS):
+            calls += 1
+            try:
+                response, call_usage = backend.authority(
+                    considerations=considerations, options=options
+                )
+            except Exception as exc:  # fail-closed: no label on a failed call
+                log.warning(
+                    "constrain.authority_call_failed",
+                    attempt=attempt,
+                    error_type=type(exc).__name__,
+                )
+                continue
+            outcome.usages.append(call_usage)
+            labels = _validated_authority(response, option_ids)
+            if labels is not None:
+                break
+            log.warning("constrain.authority_malformed", attempt=attempt, options=len(options))
+    failed = bool(options) and labels is None
+    if failed:
+        log.warning("constrain.authority_failed", calls=calls, options=len(options))
+    outcome.labels = labels or {}
+    outcome.stats = {
+        "calls": calls,
+        "retries": max(calls - 1, 0),
+        "failed": failed,
+        "options": len(options),
+    }
+    return outcome
+
+
 def constrain_scope(
     conn: Connection,
     *,
@@ -731,22 +885,49 @@ def constrain_scope(
     if place_removed:
         log.info("constrain.place_removed", spans=len(place_removed))
 
-    # 1. Every model call, before any write: the distinct call over the whole
-    # list first, then the batches in parallel.
+    considerations = who_decides_considerations(plan)
+    profile = _mapping(result_row.option_profile)
+    authority_options = [
+        _authority_option_data(row, sentence)
+        for row in rows
+        if (sentence := _who_decides_sentence(profile, row)) is not None
+    ]
+
+    # 1. Every model call, before any write: the authority call (only with a
+    # consideration on who decides) in a worker at the same time as the
+    # distinct call over the whole list, then the batches in parallel.
     usage = UsageAccumulator()
-    distinct = _distinct(backend, rows=rows, relations=relations, usage=usage)
-    judged, stats, failed = _judge(
-        backend,
-        plan=plan_data,
-        baseline=baseline_sections(conn, task_id),
-        requirements=requirements,
-        preferences=preferences,
-        options=[
-            _option_data(row, relations.get(row.option_id, []), coverage.get(str(row.option_id)))
-            for row in rows
-        ],
-        usage=usage,
-    )
+    with ThreadPoolExecutor(max_workers=1) as authority_pool:
+        authority_future = (
+            tracing.submit_with_context(
+                authority_pool,
+                _authority,
+                backend,
+                considerations=considerations,
+                options=authority_options,
+            )
+            if considerations
+            else None
+        )
+        distinct = _distinct(backend, rows=rows, relations=relations, usage=usage)
+        judged, stats, failed = _judge(
+            backend,
+            plan=plan_data,
+            baseline=baseline_sections(conn, task_id),
+            requirements=requirements,
+            preferences=preferences,
+            options=[
+                _option_data(
+                    row, relations.get(row.option_id, []), coverage.get(str(row.option_id))
+                )
+                for row in rows
+            ],
+            usage=usage,
+        )
+        authority = authority_future.result() if authority_future is not None else None
+    if authority is not None:
+        for call_usage in authority.usages:
+            usage.add(call_usage)
     # 2. Verdicts -> state or merge, every kept option before the duplicates,
     # so a duplicate's kept option is settled before it. No write yet.
     ordered = sorted(
@@ -833,6 +1014,8 @@ def constrain_scope(
     cannot_check = 0
     guess_count = 0
     no_in_scope = 0
+    labelled: Counter[str] = Counter()
+    consideration_text = CONSIDERATION_JOIN.join(considerations)
     for row, verdicts, state, values in decided:
         oid = str(row.option_id)
         version = str(row.design_version)
@@ -868,6 +1051,11 @@ def constrain_scope(
             no_in_scope += int(marked)
             values["no_in_scope_evidence"] = marked
             states[state] += 1
+            label = authority.labels.get(oid) if authority is not None else None
+            if label is not None:
+                # No verdict: never a check, never an exclusion (S18).
+                record[AUTHORITY_KEY] = {**label, "consideration_text": consideration_text}
+                labelled[label["label"]] += 1
         judgements[oid] = {version: record}
         conn.execute(
             option.update()
@@ -885,6 +1073,7 @@ def constrain_scope(
         no_in_scope_evidence=no_in_scope,
         cannot_check=cannot_check,
         guesses=guess_count,
+        authority_labelled=sum(labelled.values()),
     )
     live = backend.mode == "live"
     provenance["constrain"] = {
@@ -899,6 +1088,11 @@ def constrain_scope(
         "place_removed": place_removed,
         "requirements": len(requirements) - len(DEFAULT_SCREENS),
         "preferences": len(preferences),
+        "authority": (
+            {**authority.stats, "labels": {key: labelled[key] for key in AUTHORITY_LABELS}}
+            if authority is not None
+            else {"calls": 0}
+        ),
         "usage_totals": usage.payload(),
     }
     conn.execute(
@@ -927,5 +1121,6 @@ def constrain_scope(
         **summary,
         merged=len(merged_into),
         failed_batches=stats["failed_batches"],
+        authority_labelled=sum(labelled.values()),
     )
     return summary

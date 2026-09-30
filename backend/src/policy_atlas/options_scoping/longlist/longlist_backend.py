@@ -25,7 +25,10 @@ backend (task 046, S20). Each call has one lead-authored prompt builder
   ``constrain`` step (S9) on the same seam
   (:mod:`~policy_atlas.options_scoping.constrain.constrain_prompt`);
 - ``distinct`` — the constrain step's one duplicate check over the whole list
-  (judgment model; task 046, S13).
+  (judgment model; task 046, S13);
+- ``authority`` — the constrain step's one authority-label call over the
+  whole list, made only when the plan holds a consideration on "who decides"
+  (judgment model; task 046, R38, S18).
 
 Backends parse structurally and return the wire; the component and the shared
 clustering engine own every semantic check. :class:`StubLonglistBackend` is
@@ -48,14 +51,18 @@ from policy_atlas.core.openai_client import parse_structured, resolve_openai_cli
 from policy_atlas.core.usage import UsageResult, usage_details, usage_metadata
 from policy_atlas.evidence_search.assess.screen_prompt import SCREEN_MODEL
 from policy_atlas.options_scoping.constrain.constrain_prompt import (
+    AUTHORITY_MAX_OUTPUT_TOKENS,
     CONSTRAIN_MAX_OUTPUT_TOKENS,
     CONSTRAIN_PROMPT_VERSION,
     DISTINCT_MAX_OUTPUT_TOKENS,
+    AuthorityResponse,
+    AuthorityWire,
     ConstrainResponse,
     ConstraintJudgementWire,
     DistinctResponse,
     OptionConstrainWire,
     ReasonedGuessWire,
+    build_authority_messages,
     build_constrain_messages,
     build_distinct_messages,
 )
@@ -302,6 +309,23 @@ class LonglistBackend(Protocol):
 
         Returns:
             The parsed duplicate pairs and token usage.
+        """
+        ...
+
+    def authority(
+        self, *, considerations: list[str], options: list[dict[str, object]]
+    ) -> UsageResult[AuthorityResponse]:
+        """Label every option by who can adopt it, over the whole list (R38, S18).
+
+        Args:
+            considerations: The texts of the plan's considerations on "who
+                decides", in plan order; never empty.
+            options: Every option on the list that is not merged and that has
+                a profile, as data: ``option_id``, ``label``,
+                ``description``, ``design_features`` and ``who_decides``.
+
+        Returns:
+            The parsed labels and token usage.
         """
         ...
 
@@ -562,6 +586,19 @@ class OpenAILonglistBackend:
             prompt_version=CONSTRAIN_PROMPT_VERSION,
         )
 
+    def authority(
+        self, *, considerations: list[str], options: list[dict[str, object]]
+    ) -> UsageResult[AuthorityResponse]:
+        """The authority call on the judgment model (see :class:`LonglistBackend`)."""
+        return self._call(
+            build_authority_messages(considerations=considerations, options=options),
+            response_format=AuthorityResponse,
+            model=LONGLIST_JUDGMENT_MODEL,
+            max_output_tokens=AUTHORITY_MAX_OUTPUT_TOKENS,
+            name="longlist:authority",
+            prompt_version=CONSTRAIN_PROMPT_VERSION,
+        )
+
 
 #: The stub's one discovered option.
 STUB_DISCOVERED_LABEL = "Stub discovered option"
@@ -604,12 +641,17 @@ class StubLonglistBackend:
       order.
     - ``distinct`` answers the same way from its own queue; with none, it
       reports no duplicate. Its calls and inputs are recorded.
+    - ``authority`` answers the same way from its own queue; with none, every
+      option is ``unclear`` with no body and the reason ``"Stub: unclear."``.
+      Its calls and inputs are recorded under the lock.
 
     Args:
         constrain_responses: Canned :class:`ConstrainResponse` value(s), or
             ``None`` for the deterministic default.
         distinct_responses: Canned :class:`DistinctResponse` value(s), or
             ``None`` for the deterministic default (no duplicate).
+        authority_responses: Canned :class:`AuthorityResponse` value(s), or
+            ``None`` for the deterministic default (every option unclear).
         line_responses: Per line key, canned line response(s), or ``None``
             for the deterministic default on every line.
         ambition_responses: Canned :class:`AmbitionResponse` value(s), or
@@ -625,12 +667,14 @@ class StubLonglistBackend:
         *,
         constrain_responses: ConstrainResponse | list[ConstrainResponse] | None = None,
         distinct_responses: DistinctResponse | list[DistinctResponse] | None = None,
+        authority_responses: AuthorityResponse | list[AuthorityResponse] | None = None,
         line_responses: Mapping[str, _LineResponse | list[_LineResponse]] | None = None,
         ambition_responses: AmbitionResponse | list[AmbitionResponse] | None = None,
         setting_responses: SettingResponse | list[SettingResponse] | None = None,
     ) -> None:
         self._constrain_queue: list[ConstrainResponse] = _queue(constrain_responses)
         self._distinct_queue: list[DistinctResponse] = _queue(distinct_responses)
+        self._authority_queue: list[AuthorityResponse] = _queue(authority_responses)
         self._line_queues: dict[str, list[_LineResponse]] = {
             key: _queue(value) for key, value in (line_responses or {}).items()
         }
@@ -641,6 +685,8 @@ class StubLonglistBackend:
         self.constrain_inputs: list[dict[str, Any]] = []
         self.distinct_calls = 0
         self.distinct_inputs: list[list[dict[str, object]]] = []
+        self.authority_calls = 0
+        self.authority_inputs: list[dict[str, Any]] = []
         self.line_calls: dict[str, int] = {}
         self.line_inputs: list[dict[str, Any]] = []
         self.ambition_calls = 0
@@ -783,6 +829,30 @@ class StubLonglistBackend:
                 self._distinct_queue, lambda: DistinctResponse(duplicates=[])
             ), None
 
+    def authority(
+        self, *, considerations: list[str], options: list[dict[str, object]]
+    ) -> UsageResult[AuthorityResponse]:
+        """Answer from the queue, else every option ``unclear``."""
+        with self._lock:
+            self.authority_calls += 1
+            self.authority_inputs.append(
+                {"considerations": list(considerations), "options": list(options)}
+            )
+            return _next_response(
+                self._authority_queue,
+                lambda: AuthorityResponse(
+                    options=[
+                        AuthorityWire(
+                            option_id=str(o["option_id"]),
+                            reason="Stub: unclear.",
+                            label="unclear",
+                            body=None,
+                        )
+                        for o in options
+                    ]
+                ),
+            ), None
+
     def profile_line(
         self,
         *,
@@ -911,7 +981,7 @@ def _pass_everything(
                 guesses=[
                     ReasonedGuessWire(
                         constraint_id=p["id"],
-                        guess="May or may not meet it, a guess rather than evidence.",
+                        guess="May or may not meet it.",
                         leaning="cannot_say",
                     )
                     for p in preferences
