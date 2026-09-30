@@ -86,7 +86,7 @@ describe("OptionCard", () => {
 
   it("renders the evidence-base sentences, where tried, and the documents as source cards", () => {
     renderCard(MOCK_OPTION_ID_EXCLUDED);
-    expect(screen.getByRole("heading", { name: "What the evidence base holds so far" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Evidence" })).toBeInTheDocument();
     expect(screen.queryByText(/comparable systems|OECD/)).not.toBeInTheDocument();
     expect(
       screen.getAllByText("6 documents name this option: 3 evaluated it, 2 described it and 1 mentioned it.").length,
@@ -360,7 +360,7 @@ describe("OptionCard", () => {
     const headings = screen.getAllByRole("heading", { level: 2 }).map((heading) => heading.textContent);
     const at = (title: string) => headings.findIndex((text) => text?.startsWith(title));
     expect(at("What it is")).toBeLessThan(at("What it would take"));
-    expect(at("What it would take")).toBeLessThan(at("What the evidence base holds so far"));
+    expect(at("What it would take")).toBeLessThan(at("Evidence"));
     const toggle = screen.getByRole("button", { name: /What it would take/ });
     expect(toggle).toHaveAttribute("aria-expanded", "false");
     expect(toggle).toHaveTextContent("Policy Atlas's estimate");
@@ -420,9 +420,11 @@ describe("OptionCard", () => {
     await user.click(screen.getByRole("button", { name: /What it would take/ }));
     const who = screen.getByRole("rowheader", { name: "Who decides" }).closest("tr") as HTMLElement;
     expect(within(who).getByText("Needs action by the Department for Work and Pensions")).toBeInTheDocument();
+    // The line's own sentence follows the word; the constrain reason stays off the card (22b).
     expect(
-      within(who).getByText("The benefit is set nationally, so a council cannot change it alone."),
+      within(who).getByText("The local authority decides, with the Department for Work and Pensions consulted."),
     ).toBeInTheDocument();
+    expect(within(who).queryByText(/set nationally/)).not.toBeInTheDocument();
     const dependencies = screen.getByRole("rowheader", { name: "Dependencies" }).closest("tr") as HTMLElement;
     expect(dependencies).not.toHaveTextContent(/Needs action by/);
   });
@@ -434,7 +436,8 @@ describe("OptionCard", () => {
     });
     await user.click(screen.getByRole("button", { name: /What it would take/ }));
     expect(screen.getByText("Needs action by another body")).toBeInTheDocument();
-    expect(screen.getByText("It is national.")).toBeInTheDocument();
+    // The row keeps the line's own sentence; the constrain reason stays off the card (22b).
+    expect(screen.queryByText("It is national.")).not.toBeInTheDocument();
     first.unmount();
     renderCard(MOCK_OPTION_ID_EXCLUDED, { authority: null });
     await user.click(screen.getByRole("button", { name: /What it would take/ }));
@@ -457,7 +460,7 @@ describe("OptionCard", () => {
     expect(headers).toEqual(["Outcome", "Documents", "Evaluated"]);
     const rows = within(table).getAllByRole("row").slice(1);
     expect(rows.map((row) => row.textContent)).toEqual([
-      "NEET rate at 6 months · serves33",
+      "NEET rate at 6 monthsserves33",
       "earnings10",
     ]);
   });
@@ -479,7 +482,7 @@ describe("OptionCard", () => {
     });
     const table = within(document.getElementById("evidence-base") as HTMLElement).getAllByRole("table")[0];
     const rows = within(table).getAllByRole("row").slice(1);
-    expect(rows.map((row) => row.textContent)).toEqual(["Attendance00", "NEET rate at 6 months · serves11"]);
+    expect(rows.map((row) => row.textContent)).toEqual(["Attendance00", "NEET rate at 6 monthsserves11"]);
   });
 
   it("shows no outcomes table when the option has no outcome counts", () => {

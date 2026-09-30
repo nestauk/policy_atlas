@@ -113,8 +113,8 @@ const PAGE_CLASS = `${LIFECYCLE_PAGE_CLASS} py-8`;
 const SECTIONS = [
   { id: "what-it-is", title: "What it is" },
   { id: "what-it-would-take", title: "What it would take" },
-  { id: "evidence-base", title: "What the evidence base holds so far" },
-  { id: "constraints", title: "Constraints and guesses" },
+  { id: "evidence-base", title: "Evidence" },
+  { id: "constraints", title: "Checks" },
 ] as const;
 type SectionId = (typeof SECTIONS)[number]["id"];
 
@@ -158,6 +158,13 @@ function CardSection({
     </SectionDisclosure>
   );
 }
+
+/** The authority word's tint beside "Who decides" (R70): pale tint, dark text, as the level words. */
+const AUTHORITY_WORD_CLASS: Record<"within_your_power" | "needs_action_by" | "unclear", string> = {
+  within_your_power: "inline-block bg-green-tint px-1.5 py-0.5 text-meta font-semibold leading-tight text-navy",
+  needs_action_by: "inline-block bg-yellow-tint px-1.5 py-0.5 text-meta font-semibold leading-tight text-navy",
+  unclear: "inline-block bg-paper-2 px-1.5 py-0.5 text-meta font-semibold leading-tight text-grey",
+};
 
 const VERDICT_CLASS: Record<"passes" | "breaks" | "cannot_check", string> = {
   passes: "text-navy",
@@ -443,22 +450,19 @@ export function OptionCard() {
                 const mark = line?.mark ?? null;
                 const marked = LEVEL_WORDS[key].less !== null;
                 const authority = key === "who_decides" ? item.authority : null;
-                const authorityReason = (authority?.reason ?? "").trim();
                 return (
                   <tr key={key}>
                     <th scope="row" className="w-48 py-2.5 pr-4 align-top font-semibold text-navy">{LINE_NAMES[key]}</th>
                     <td className="w-40 py-2.5 pr-4 align-top">
                       {authority != null ? (
-                        <span className="font-semibold text-navy">{authorityWords(authority)}</span>
+                        <span className={AUTHORITY_WORD_CLASS[authority.label]}>{authorityWords(authority)}</span>
                       ) : marked && mark === null ? (
                         <span className="font-semibold text-navy">{MIDDLE_WORD}</span>
                       ) : marked && mark !== null ? (
                         <span className={LEVEL_WORD_CLASS[mark]}>{LEVEL_WORDS[key][mark]}</span>
                       ) : null}
                     </td>
-                    <td className="py-2.5 align-top">
-                      {scrub(authority != null && authorityReason !== "" ? authorityReason : (line?.sentence ?? ""))}
-                    </td>
+                    <td className="py-2.5 align-top">{scrub(line?.sentence ?? "")}</td>
                   </tr>
                 );
               })}
@@ -482,7 +486,9 @@ export function OptionCard() {
                 <tr key={`plan-${entry.outcome}`}>
                   <th scope="row" className="py-2 pr-4 align-top font-normal">
                     {scrub(entry.outcome)}
-                    {servesOutcome(item.outcomes_served, entry.outcome) && <span className="text-grey"> · serves</span>}
+                    {servesOutcome(item.outcomes_served, entry.outcome) && (
+                      <span className="ml-2 align-middle text-caption font-bold uppercase tracking-wide text-blue">serves</span>
+                    )}
                   </th>
                   <td className="py-2 pr-4 align-top">{entry.documents}</td>
                   <td className="py-2 align-top">{entry.evaluated}</td>
