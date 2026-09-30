@@ -30,6 +30,7 @@ import {
   axesForResearchApproach,
   CONSTRAINT_CHECKED_AT_LABEL,
   constraintEffectLines,
+  constraintKindLines,
   DEFAULT_CONSTRAINT_RIDER,
   RESEARCH_APPROACH_CUSTOM,
   RESEARCH_APPROACH_HINT,
@@ -483,6 +484,19 @@ function ScopingSettingsSection({
   );
 }
 
+/** Plan order, except that a transferability consideration sits directly
+ *  under the default "Transferable to <Where>" preference when the plan has
+ *  one. */
+function orderConstraints(constraints: ScopingConstraintOut[]): ScopingConstraintOut[] {
+  const isTransfer = (c: ScopingConstraintOut) => c.kind === "consideration" && c.aspect === "transferability";
+  const moved = constraints.filter(isTransfer);
+  const anchor = constraints.findIndex((c) => c.default === "transferability");
+  if (moved.length === 0 || anchor < 0) return constraints;
+  const rest = constraints.filter((c) => !isTransfer(c));
+  const at = rest.findIndex((c) => c.default === "transferability");
+  return [...rest.slice(0, at + 1), ...moved, ...rest.slice(at + 1)];
+}
+
 /** "Constraints and preferences": what was asked for, the fixed effect
  *  sentence for its kind, and when it is checked. */
 function ConstraintsSection({
@@ -514,13 +528,18 @@ function ConstraintsSection({
               </tr>
             </thead>
             <tbody>
-              {constraints.map((constraint, index) => (
+              {orderConstraints(constraints).map((constraint, index) => (
                 <tr
                   key={`${constraint.kind}-${constraint.text}-${index}`}
                   className="border-t border-white/10 align-top"
                 >
                   <td className="py-2 pr-3">
                     {scrub(constraint.text)}
+                    {constraintKindLines(constraint).map((line) => (
+                      <span key={line} className={cn("block", panelHintClass)}>
+                        {line}
+                      </span>
+                    ))}
                     {constraint.default != null && DEFAULT_CONSTRAINT_RIDER[constraint.default] != null && (
                       <span className={cn("block", panelHintClass)}>
                         {DEFAULT_CONSTRAINT_RIDER[constraint.default]}

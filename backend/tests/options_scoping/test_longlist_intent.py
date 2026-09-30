@@ -51,7 +51,7 @@ def _plan(*constraints: ScopingConstraintWire, outcomes: list[str] | None = None
 def _setting() -> ScopingConstraintWire:
     return ScopingConstraintWire(
         text="Delivered through schools",
-        kind="requirement",
+        kind="boundary",
         origin="your_call",
         checked_at="longlist",
         setting=True,
@@ -61,7 +61,7 @@ def _setting() -> ScopingConstraintWire:
 def _requirement() -> ScopingConstraintWire:
     return ScopingConstraintWire(
         text="No new legislation",
-        kind="requirement",
+        kind="boundary",
         origin="your_call",
         checked_at="longlist",
     )
@@ -144,7 +144,7 @@ def _manchester_plan() -> ScopingPlan:
             constraints=[
                 ScopingConstraintWire(
                     text="Delivered through job centres",
-                    kind="requirement",
+                    kind="boundary",
                     origin="your_call",
                     checked_at="longlist",
                     setting=True,

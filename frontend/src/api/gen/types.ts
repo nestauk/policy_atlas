@@ -4187,12 +4187,16 @@ export interface components {
          *         kind: What the constraint is about.
          *         origin: Where it came from.
          *         checked_at: When it bites; fixed by `kind`.
+         *         aspect: The line a consideration speaks of; required on a
+         *             consideration, `null` on every other kind.
+         *         hard: True on a consideration that states a limit; false on every
+         *             other kind.
          *         country_group: Source-origin restriction, when there is one.
          *         published_after: ISO date floor, when there is one.
          *         published_before: ISO date ceiling, when there is one.
          *         languages: Language names. Stored and shown as not yet applied at
          *             retrieval — the search grammar has no language filter.
-         *         setting: True on a requirement naming the delivery setting the
+         *         setting: True on a boundary naming the delivery setting the
          *             options must be delivered through; the longlist search carries it.
          *         default: `transferability` on the default transferability preference
          *             every scoping plan carries (checked at assessment, assumed, follows
@@ -4200,6 +4204,11 @@ export interface components {
          *             Omitting the default from a patch removes it.
          */
         ScopingConstraintOut: {
+            /**
+             * Aspect
+             * @default null
+             */
+            aspect: ("cost" | "time_to_set_up" | "time_to_effect" | "workforce" | "who_decides" | "dependencies" | "coordination" | "delivery_complexity" | "transferability") | null;
             /**
              * Checked At
              * @enum {string}
@@ -4213,10 +4222,15 @@ export interface components {
              */
             default: "transferability" | null;
             /**
+             * Hard
+             * @default false
+             */
+            hard: boolean;
+            /**
              * Kind
              * @enum {string}
              */
-            kind: "requirement" | "preference" | "evidence_restriction";
+            kind: "boundary" | "consideration" | "preference" | "evidence_restriction";
             /**
              * Languages
              * @default null

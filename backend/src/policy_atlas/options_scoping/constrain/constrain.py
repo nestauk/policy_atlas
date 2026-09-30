@@ -246,10 +246,14 @@ def _checks(requirements: list[dict[str, str]]) -> list[dict[str, str]]:
 def _constraint_lists(
     plan: ScopingPlan,
 ) -> tuple[list[dict[str, str]], list[dict[str, str]]]:
-    """``(requirements + default screens, preferences minus transferability)``."""
+    """``(requirements + default screens, preferences minus transferability)``.
+
+    The requirements are the plan's boundaries. A consideration is in
+    neither list: it never excludes an option (R34).
+    """
     requirements = [
         {"id": f"req-{i}", "text": c.text}
-        for i, c in enumerate((c for c in plan.constraints if c.kind == "requirement"), start=1)
+        for i, c in enumerate((c for c in plan.constraints if c.kind == "boundary"), start=1)
     ]
     requirements += [{"id": key, "text": label} for key, label in DEFAULT_SCREENS]
     preferences = [

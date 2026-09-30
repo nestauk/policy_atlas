@@ -212,8 +212,22 @@ class PlanDraft(BaseModel):
 #: Where a scoping plan field came from. Mirrors `scoping_plan.Origin`.
 Origin = Literal["from_your_question", "assumed", "your_call"]
 
-#: What a constraint is about. Mirrors `scoping_plan.ConstraintKind`.
-ConstraintKind = Literal["requirement", "preference", "evidence_restriction"]
+#: What a constraint is about. Mirrors `scoping_plan.ConstraintKind`. A
+#: `boundary` is what the screen calls a requirement.
+ConstraintKind = Literal["boundary", "consideration", "preference", "evidence_restriction"]
+
+#: The line a consideration speaks of. Mirrors `scoping_plan.ConsiderationAspect`.
+ConsiderationAspect = Literal[
+    "cost",
+    "time_to_set_up",
+    "time_to_effect",
+    "workforce",
+    "who_decides",
+    "dependencies",
+    "coordination",
+    "delivery_complexity",
+    "transferability",
+]
 
 #: When a constraint bites. Mirrors `scoping_plan.CheckedAt`.
 CheckedAt = Literal["longlist", "assessment", "retrieval"]
@@ -248,12 +262,16 @@ class ScopingConstraintOut(BaseModel):
         kind: What the constraint is about.
         origin: Where it came from.
         checked_at: When it bites; fixed by `kind`.
+        aspect: The line a consideration speaks of; required on a
+            consideration, `null` on every other kind.
+        hard: True on a consideration that states a limit; false on every
+            other kind.
         country_group: Source-origin restriction, when there is one.
         published_after: ISO date floor, when there is one.
         published_before: ISO date ceiling, when there is one.
         languages: Language names. Stored and shown as not yet applied at
             retrieval — the search grammar has no language filter.
-        setting: True on a requirement naming the delivery setting the
+        setting: True on a boundary naming the delivery setting the
             options must be delivered through; the longlist search carries it.
         default: `transferability` on the default transferability preference
             every scoping plan carries (checked at assessment, assumed, follows
@@ -265,6 +283,8 @@ class ScopingConstraintOut(BaseModel):
     kind: ConstraintKind
     origin: Origin
     checked_at: CheckedAt
+    aspect: ConsiderationAspect | None = None
+    hard: bool = False
     country_group: CountryGroupDraft | None = None
     published_after: str | None = None
     published_before: str | None = None

@@ -33,7 +33,7 @@ if TYPE_CHECKING:
 def setting_requirements(plan: ScopingPlan) -> list[str]:
     """Return the texts of the plan's setting requirements, in plan order.
 
-    A setting requirement is a ``requirement`` constraint the Task Agent
+    A setting requirement is a ``boundary`` constraint the Task Agent
     marked ``setting=True`` (it names the delivery setting the options must
     be delivered through). This is how code knows one exists (D21).
 
@@ -43,7 +43,7 @@ def setting_requirements(plan: ScopingPlan) -> list[str]:
     Returns:
         The requirement texts; empty when the plan states no setting.
     """
-    return [c.text for c in plan.constraints if c.kind == "requirement" and c.setting]
+    return [c.text for c in plan.constraints if c.kind == "boundary" and c.setting]
 
 
 def _slot(text: str) -> str:

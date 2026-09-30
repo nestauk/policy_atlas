@@ -5953,8 +5953,31 @@
         "type": "object"
       },
       "ScopingConstraintOut": {
-        "description": "One typed constraint or preference on a scoping plan.\n\nArgs:\n    text: The user's ask.\n    kind: What the constraint is about.\n    origin: Where it came from.\n    checked_at: When it bites; fixed by `kind`.\n    country_group: Source-origin restriction, when there is one.\n    published_after: ISO date floor, when there is one.\n    published_before: ISO date ceiling, when there is one.\n    languages: Language names. Stored and shown as not yet applied at\n        retrieval \u2014 the search grammar has no language filter.\n    setting: True on a requirement naming the delivery setting the\n        options must be delivered through; the longlist search carries it.\n    default: `transferability` on the default transferability preference\n        every scoping plan carries (checked at assessment, assumed, follows\n        Where until edited); `null` on a constraint the user asked for.\n        Omitting the default from a patch removes it.",
+        "description": "One typed constraint or preference on a scoping plan.\n\nArgs:\n    text: The user's ask.\n    kind: What the constraint is about.\n    origin: Where it came from.\n    checked_at: When it bites; fixed by `kind`.\n    aspect: The line a consideration speaks of; required on a\n        consideration, `null` on every other kind.\n    hard: True on a consideration that states a limit; false on every\n        other kind.\n    country_group: Source-origin restriction, when there is one.\n    published_after: ISO date floor, when there is one.\n    published_before: ISO date ceiling, when there is one.\n    languages: Language names. Stored and shown as not yet applied at\n        retrieval \u2014 the search grammar has no language filter.\n    setting: True on a boundary naming the delivery setting the\n        options must be delivered through; the longlist search carries it.\n    default: `transferability` on the default transferability preference\n        every scoping plan carries (checked at assessment, assumed, follows\n        Where until edited); `null` on a constraint the user asked for.\n        Omitting the default from a patch removes it.",
         "properties": {
+          "aspect": {
+            "anyOf": [
+              {
+                "enum": [
+                  "cost",
+                  "time_to_set_up",
+                  "time_to_effect",
+                  "workforce",
+                  "who_decides",
+                  "dependencies",
+                  "coordination",
+                  "delivery_complexity",
+                  "transferability"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Aspect"
+          },
           "checked_at": {
             "enum": [
               "longlist",
@@ -5988,9 +6011,15 @@
             "default": null,
             "title": "Default"
           },
+          "hard": {
+            "default": false,
+            "title": "Hard",
+            "type": "boolean"
+          },
           "kind": {
             "enum": [
-              "requirement",
+              "boundary",
+              "consideration",
               "preference",
               "evidence_restriction"
             ],

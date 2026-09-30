@@ -46,6 +46,7 @@ from policy_atlas.options_scoping.constrain.constrain import (
     PACKAGE_DISTINCT_REASON,
     ConstrainContext,
     ConstrainFailure,
+    _constraint_lists,
     constrain_scope,
 )
 from policy_atlas.options_scoping.constrain.constrain_prompt import (
@@ -86,7 +87,7 @@ STORED_SCREEN_TEXT = {**dict(DEFAULT_SCREENS), DISTINCT_SCREEN[0]: DISTINCT_SCRE
 def _requirement(text: str, *, setting: bool = False) -> dict[str, Any]:
     return {
         "text": text,
-        "kind": "requirement",
+        "kind": "boundary",
         "checked_at": "longlist",
         "origin": "your_call",
         "setting": setting,
@@ -254,6 +255,45 @@ def test_a_setting_requirement_is_judged_like_any_requirement(conn: Connection) 
         {"id": "req-2", "text": "Delivered through schools"},
     ]
     assert _row(walk, elsewhere).exclusion["constraint"] == "Delivered through schools"
+
+
+def _consideration(text: str, *, aspect: str, hard: bool) -> dict[str, Any]:
+    return {
+        "text": text,
+        "kind": "consideration",
+        "checked_at": "assessment",
+        "origin": "your_call",
+        "aspect": aspect,
+        "hard": hard,
+    }
+
+
+def test_a_consideration_reaches_neither_list_and_excludes_nothing(conn: Connection) -> None:
+    """Task 046, R34: a consideration, even a hard one, is never a requirement
+    or a preference at the longlist; it never excludes an option."""
+    base = (_requirement("No benefit sanctions"), _preference("Low cost"))
+    hard_limit = _consideration("A budget of at most £2m a year", aspect="cost", hard=True)
+    without_plan = scoping_plan(constraints=list(base))
+    with_plan = scoping_plan(constraints=[*base, hard_limit])
+    assert [c.kind for c in with_plan.constraints].count("consideration") == 1
+    assert _constraint_lists(with_plan) == _constraint_lists(without_plan)
+
+    walk = _walk(conn, *base, hard_limit)
+    first = walk.option("Youth guarantee")
+    second = walk.option("Costly national programme")
+    walk.build(StubLonglistBackend())
+    backend = StubLonglistBackend()
+
+    _, summary = _constrain(walk, backend)
+
+    requirements, preferences = _constraint_lists(without_plan)
+    sent = backend.constrain_inputs[0]
+    assert sent["requirements"] == requirements
+    assert sent["preferences"] == preferences
+    assert all(hard_limit["text"] not in json.dumps(value, default=str) for value in sent.values())
+    assert summary["excluded"] == 0
+    assert _row(walk, first).state == "included"
+    assert _row(walk, second).state == "included"
 
 
 def test_the_default_screens_run_and_cite(conn: Connection) -> None:

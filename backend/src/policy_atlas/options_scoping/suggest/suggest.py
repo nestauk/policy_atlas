@@ -195,8 +195,9 @@ def suggest_plan_context(
             propose again; empty on a first build.
 
     Returns:
-        The question, intended change, target unit, outcomes, the requirement
-        constraints' texts, Your context's texts, the user's own options as
+        The question, intended change, target unit, outcomes, the boundary
+        constraints' texts (the screen's requirements; a consideration never
+        reaches suggest), Your context's texts, the user's own options as
         ``{text, design}`` data and the existing options.
     """
     return SuggestPlanContext(
@@ -204,7 +205,7 @@ def suggest_plan_context(
         intended_change=plan.intended_change.text,
         target_unit=plan.target_unit.text,
         outcomes=[outcome.text for outcome in plan.outcomes],
-        requirements=[c.text for c in plan.constraints if c.kind == "requirement"],
+        requirements=[c.text for c in plan.constraints if c.kind == "boundary"],
         your_context=[entry.text for entry in plan.your_context],
         your_options=[
             {

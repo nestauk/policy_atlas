@@ -154,9 +154,9 @@ def _plan() -> ScopingPlan:
     extra = [
         ScopingConstraint(
             text=REQUIREMENT,
-            kind="requirement",
+            kind="boundary",
             origin="your_call",
-            checked_at=CHECKED_AT_BY_KIND["requirement"],
+            checked_at=CHECKED_AT_BY_KIND["boundary"],
         ),
         ScopingConstraint(
             text=PREFERENCE,

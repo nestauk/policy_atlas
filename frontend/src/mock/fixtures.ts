@@ -608,7 +608,7 @@ export const mockScopingPlanReady: components["schemas"]["ScopingPlanDraft"] = {
   constraints: [
     {
       text: "Only include options a local authority can fund directly",
-      kind: "requirement",
+      kind: "boundary",
       origin: "your_call",
       checked_at: "longlist",
       country_group: null,
@@ -617,10 +617,12 @@ export const mockScopingPlanReady: components["schemas"]["ScopingPlanDraft"] = {
       languages: null,
       setting: false,
       default: null,
+      aspect: null,
+      hard: false,
     },
     {
       text: "Prefer options with a lower cost per participant",
-      kind: "preference",
+      kind: "consideration",
       origin: "your_call",
       checked_at: "assessment",
       country_group: null,
@@ -629,6 +631,8 @@ export const mockScopingPlanReady: components["schemas"]["ScopingPlanDraft"] = {
       languages: null,
       setting: false,
       default: null,
+      aspect: "cost",
+      hard: false,
     },
     {
       text: "Evidence from the UK and other high-income countries only",
@@ -641,6 +645,8 @@ export const mockScopingPlanReady: components["schemas"]["ScopingPlanDraft"] = {
       languages: ["English"],
       setting: false,
       default: null,
+      aspect: null,
+      hard: false,
     },
     {
       text: "Transferable to United Kingdom",
@@ -653,6 +659,8 @@ export const mockScopingPlanReady: components["schemas"]["ScopingPlanDraft"] = {
       languages: null,
       setting: false,
       default: "transferability",
+      aspect: null,
+      hard: false,
     },
   ],
   your_options: [

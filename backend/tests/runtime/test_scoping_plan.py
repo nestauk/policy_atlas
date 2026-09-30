@@ -9,10 +9,12 @@ refuses to store one untagged, unpinned or unpaired.
 from __future__ import annotations
 
 import uuid
+from typing import get_args
 
 import pytest
 from pydantic import ValidationError
 
+from policy_atlas.api import contract
 from policy_atlas.runtime.capability_registry import (
     EVIDENCE_SEARCH,
     OPTIONS_SCOPING,
@@ -24,10 +26,19 @@ from policy_atlas.runtime.capability_registry import (
 from policy_atlas.runtime.scoping_plan import (
     BASELINE_CONFIRM,
     BASELINE_TIME_BAND,
+    CHECKED_AT_BY_KIND,
+    PROFILE_LINE_KEYS,
     SCOPING_STEER_POINTS,
     SCOPING_STEPS,
+    CheckedAt,
+    ConsiderationAspect,
+    ConstraintKind,
+    DefaultPreference,
+    Origin,
+    ScopingConstraint,
     ScopingPlan,
     build_scoping_plan,
+    wire_draft_from_plan,
 )
 from policy_atlas.runtime.task_agent_scoping_prompt import (
     ScopingConstraintWire,
@@ -127,7 +138,7 @@ def test_a_constraint_kind_pins_when_it_is_checked() -> None:
                 constraints=[
                     ScopingConstraintWire(
                         text="no benefit cuts",
-                        kind="requirement",
+                        kind="boundary",
                         origin="from_your_question",
                         checked_at="retrieval",
                     )
@@ -152,18 +163,163 @@ def test_an_unknown_constraint_kind_is_refused() -> None:
         )
 
 
-def test_a_requirement_may_not_carry_retrieval_fields() -> None:
-    """A design requirement that claimed to filter retrieval would not filter it."""
+def test_a_boundary_may_not_carry_retrieval_fields() -> None:
+    """A design boundary that claimed to filter retrieval would not filter it."""
     with pytest.raises(ValidationError, match="evidence_restriction"):
         build_scoping_plan(
             _ready_draft(
                 constraints=[
                     ScopingConstraintWire(
                         text="delivered through schools",
-                        kind="requirement",
+                        kind="boundary",
                         origin="from_your_question",
                         checked_at="longlist",
                         published_after="2015-01-01",
+                    )
+                ]
+            )
+        )
+
+
+@pytest.mark.parametrize(
+    ("kind", "checked_at", "extra"),
+    [
+        ("boundary", "longlist", {}),
+        ("consideration", "assessment", {"aspect": "cost"}),
+        ("preference", "assessment", {}),
+        ("evidence_restriction", "retrieval", {}),
+    ],
+)
+def test_the_four_kinds_and_where_each_is_checked(
+    kind: str, checked_at: str, extra: dict[str, object]
+) -> None:
+    """Task 046, R34, B3: four kinds; a consideration is checked at assessment."""
+    assert CHECKED_AT_BY_KIND[kind] == checked_at  # type: ignore[index]
+    constraint = ScopingConstraint.model_validate(
+        {"text": "x", "kind": kind, "origin": "your_call", "checked_at": checked_at, **extra}
+    )
+    assert constraint.checked_at == checked_at
+
+
+def test_the_kinds_are_exactly_four() -> None:
+    assert set(get_args(ConstraintKind)) == set(CHECKED_AT_BY_KIND) == {
+        "boundary",
+        "consideration",
+        "preference",
+        "evidence_restriction",
+    }
+    assert set(get_args(CheckedAt)) == {"longlist", "assessment", "retrieval"}
+
+
+def test_the_aspects_are_the_eight_lines_and_transferability() -> None:
+    """B1: a consideration speaks of one of the eight lines or transferability."""
+    assert get_args(ConsiderationAspect) == (*PROFILE_LINE_KEYS, "transferability")
+    assert PROFILE_LINE_KEYS == (
+        "cost",
+        "time_to_set_up",
+        "time_to_effect",
+        "workforce",
+        "who_decides",
+        "dependencies",
+        "coordination",
+        "delivery_complexity",
+    )
+
+
+def test_the_api_contract_mirrors_the_plan_vocabularies() -> None:
+    """The API package imports no runtime module; its copies must not drift."""
+    assert get_args(contract.ConstraintKind) == get_args(ConstraintKind)
+    assert get_args(contract.CheckedAt) == get_args(CheckedAt)
+    assert get_args(contract.ConsiderationAspect) == get_args(ConsiderationAspect)
+    assert get_args(contract.Origin) == get_args(Origin)
+    assert get_args(contract.DefaultPreference) == get_args(DefaultPreference)
+    out_fields = set(contract.ScopingConstraintOut.model_fields)
+    assert out_fields == set(ScopingConstraint.model_fields)
+
+
+def test_a_consideration_without_an_aspect_is_refused() -> None:
+    with pytest.raises(ValidationError, match="aspect"):
+        ScopingConstraint.model_validate(
+            {
+                "text": "We have no spare staff",
+                "kind": "consideration",
+                "origin": "your_call",
+                "checked_at": "assessment",
+            }
+        )
+
+
+def test_a_boundary_with_an_aspect_is_refused() -> None:
+    with pytest.raises(ValidationError, match="only a consideration may carry an aspect"):
+        ScopingConstraint.model_validate(
+            {
+                "text": "No benefit sanctions",
+                "kind": "boundary",
+                "origin": "your_call",
+                "checked_at": "longlist",
+                "aspect": "cost",
+            }
+        )
+
+
+def test_a_hard_preference_is_refused() -> None:
+    with pytest.raises(ValidationError, match="only a consideration may be hard"):
+        ScopingConstraint.model_validate(
+            {
+                "text": "Low cost",
+                "kind": "preference",
+                "origin": "your_call",
+                "checked_at": "assessment",
+                "hard": True,
+            }
+        )
+
+
+def test_a_consideration_may_not_name_a_setting() -> None:
+    with pytest.raises(ValidationError, match="only a boundary may name a setting"):
+        ScopingConstraint.model_validate(
+            {
+                "text": "Schools can act",
+                "kind": "consideration",
+                "origin": "your_call",
+                "checked_at": "assessment",
+                "aspect": "who_decides",
+                "setting": True,
+            }
+        )
+
+
+def test_the_wire_keeps_a_considerations_aspect_and_hard() -> None:
+    wire = ScopingConstraintWire(
+        text="A budget of at most £2m a year",
+        kind="consideration",
+        origin="from_your_question",
+        checked_at="assessment",
+        aspect="cost",
+        hard=True,
+    )
+    plan = build_scoping_plan(_ready_draft(constraints=[wire]))
+    [consideration] = [c for c in plan.constraints if c.kind == "consideration"]
+    assert (consideration.aspect, consideration.hard) == ("cost", True)
+    # ... and back onto the wire draft the successor conversation is seeded from.
+    [drafted] = [
+        c for c in wire_draft_from_plan(plan)["constraints"] if c["kind"] == "consideration"
+    ]
+    assert (drafted["aspect"], drafted["hard"]) == ("cost", True)
+    assert ScopingConstraintWire.model_validate(drafted) == wire
+
+
+def test_an_unknown_aspect_is_refused() -> None:
+    with pytest.raises(ValueError, match="not a known aspect"):
+        build_scoping_plan(
+            _ready_draft(
+                constraints=[
+                    ScopingConstraintWire(
+                        text="Needs the mayor",
+                        kind="consideration",
+                        origin="your_call",
+                        checked_at="assessment",
+                        aspect="politics",
                     )
                 ]
             )

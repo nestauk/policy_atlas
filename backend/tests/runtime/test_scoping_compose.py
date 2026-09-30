@@ -181,13 +181,13 @@ def test_a_language_restriction_is_on_the_plan_and_not_in_the_search(  # C8
     assert "filters" not in _delta(plan, "acquire")["search"]
 
 
-def test_a_requirement_never_reaches_the_search() -> None:
+def test_a_boundary_never_reaches_the_search() -> None:
     """Requirements bite at the longlist, which this release does not run."""
     plan = _plan(
         constraints=[
             ScopingConstraintWire(
                 text="only options a local authority can run",
-                kind="requirement",
+                kind="boundary",
                 origin="from_your_question",
                 checked_at="longlist",
             )

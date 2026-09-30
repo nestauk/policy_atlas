@@ -31,7 +31,11 @@ from policy_atlas.core.schema import (
     task_source_snapshot,
 )
 from policy_atlas.options_scoping.design import OptionDesign
-from policy_atlas.options_scoping.suggest.suggest import SuggestContext, suggest_options
+from policy_atlas.options_scoping.suggest.suggest import (
+    SuggestContext,
+    suggest_options,
+    suggest_plan_context,
+)
 from policy_atlas.options_scoping.suggest.suggest_prompt import (
     SUGGEST_BOUND,
     SuggestedOptionWire,
@@ -63,7 +67,7 @@ def _plan(**updates: Any) -> ScopingPlan:
         constraints=[
             {
                 "text": "Delivered through schools",
-                "kind": "requirement",
+                "kind": "boundary",
                 "checked_at": "longlist",
                 "origin": "your_call",
             }
@@ -532,3 +536,26 @@ def test_a_failed_suggestion_call_still_leaves_the_user_s_own_options(
         ("added_by_you", "Youth guarantee"),
         ("added_by_you", "free bus passes for apprentices"),
     ]
+
+
+def test_a_consideration_never_reaches_the_suggest_requirements() -> None:
+    """Task 046, R34: suggest reads the boundaries alone as requirements."""
+    plan = scoping_plan(
+        constraints=[
+            {
+                "text": "Delivered through schools",
+                "kind": "boundary",
+                "checked_at": "longlist",
+                "origin": "your_call",
+            },
+            {
+                "text": "Only the council can act",
+                "kind": "consideration",
+                "checked_at": "assessment",
+                "origin": "your_call",
+                "aspect": "who_decides",
+                "hard": True,
+            },
+        ]
+    )
+    assert suggest_plan_context(plan).requirements == ["Delivered through schools"]

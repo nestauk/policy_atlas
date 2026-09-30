@@ -180,7 +180,7 @@ def test_the_wire_draft_carries_the_options_words_only() -> None:
 # --- the setting flag -----------------------------------------------------------
 
 
-def test_only_a_requirement_may_name_a_setting() -> None:
+def test_only_a_boundary_may_name_a_setting() -> None:
     with pytest.raises(ValidationError):
         build_scoping_plan(
             _draft(
@@ -203,7 +203,7 @@ def test_the_setting_flag_survives_the_wire_round_trip() -> None:
             constraints=[
                 ScopingConstraintWire(
                     text="Delivered through schools",
-                    kind="requirement",
+                    kind="boundary",
                     origin="your_call",
                     checked_at="longlist",
                     setting=True,
@@ -212,7 +212,7 @@ def test_the_setting_flag_survives_the_wire_round_trip() -> None:
         )
     )
     again = build_scoping_plan(ScopingPlanDraftWire.model_validate(wire_draft_from_plan(plan)))
-    assert [c.setting for c in again.constraints if c.kind == "requirement"] == [True]
+    assert [c.setting for c in again.constraints if c.kind == "boundary"] == [True]
 
 
 # --- the default transferability preference -------------------------------------
@@ -296,7 +296,7 @@ def test_the_default_is_a_preference_only() -> None:
     with pytest.raises(ValidationError):
         ScopingConstraint(
             text="Transferable to Wales",
-            kind="requirement",
+            kind="boundary",
             origin="assumed",
             checked_at="longlist",
             default=TRANSFERABILITY_DEFAULT,
