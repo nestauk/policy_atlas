@@ -179,3 +179,20 @@ of the extraction fingerprint, so the next run of a task re-extracts its
 documents, which is the correct behaviour for a new field. Older records
 have no `programme_name` and their options show no examples until the task
 runs again; no code handles them (the owner's rule on unstaged data).
+
+## After the adversarial review (2026-09-30): the owner's decisions and the lead's rules
+
+Two Opus passes (fidelity; the builder's dry run) gave 34 findings on the
+amendment, the contract section and the rubric section. All owner quotes were
+found word for word. The lead's rule for each finding is in the lead's
+scratchpad file `a3-review-findings.md` and is applied to the documents by the
+consolidation pass. The decisions that were the owner's:
+
+| Item | Decision | The owner's words |
+|---|---|---|
+| The dossier | Only the document list opens the dossier in this amendment. | "1. Okay if only the document list opens the dossier for now." |
+| Where tried, a fourth value | "Other" is allowed as a top-level value, for a stated place with no country. | "I guess we could have 'other'." |
+| The country of a stated place, at the root | The record gains **`study_country`**: the country of the stated place ("Hamburg" → Germany), from the abstract and the model's knowledge; "multiple" for a group; empty when nothing is stated. The where-tried matcher and its fixed lists of country and place names go. (The place strip on the plan's target unit and the design names keeps its list for now: a later slice, on the deferred list.) | "But the hamburg one isn't a good example because that should be under Germany, no?" · "Why do we even need a fixed list?" |
+| "Middle" | Stays, also when a line has few or no marks. | "2. yea keep" |
+| The unit concept in the record | The intervention profile record's `population` becomes **`unit`** ("who or what the intervention was delivered to: people, organisations, sites or things") and `population_tag` becomes **`unit_tag`**, in the same migration and prompt round. The record is shared with Evidence search, so it is one definition for both. The two finding records (intervention-outcome, implementation-context) keep `population` for now: a rename slice of their own, on the deferred list with the owner's words. | "Why is there still a population field, I thought we didn't want to use the population concept in favour of unit?" · "Will this also be an update to the evidence search fields. I don't really want there to be one definition in options scoping and another in evidence search. The unit concept is better and should be used throughout" |
+| The one migration of amendment 3 | `programme_name`, `study_country`, and the rename `population` → `unit`, `population_tag` → `unit_tag`, in one alembic revision. | |
