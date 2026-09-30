@@ -1,9 +1,42 @@
 # Amendment 3 — refinements after the amendment 2 live runs (2026-09-30)
 
-> **Status:** under discussion, topic by topic. Nothing here is built. The
-> owner read the live runs of amendment 2 (Phase 14) and the four rounds of
-> the profile loop that followed, and raised six points. Each is decided
-> here in turn, with the owner's words.
+> **Status:** topics 1 to 5 decided (2026-09-30); topic 6 (the option
+> card) in work: an Opus subagent critiques the built card and proposes a
+> layout. Nothing here is built. The owner read the live runs of amendment
+> 2 (Phase 14) and the rounds of the profile loop that followed, and raised
+> six points. Each is decided here in turn, with the owner's words.
+
+## Conclusions so far
+
+### Done before this amendment, after the build (committed, in the loop record `evidence/rounds/12L-profile-loop.md`)
+
+| Round | Change to `option_profile_v1` | Result |
+|---|---|---|
+| 2 | "Who decides" names the body as its country's government publications do; never an acronym in place of a name, never a legal name the public does not use | No expanded or legal names ("National Health Service Commissioning Board" gone); one body each |
+| 3 | The mark rule for the eight lines and ambition: order the options on the line; lower part "less", upper part "more", middle none; about a third each where the data spreads, fewer marks where the options are alike; never forced (the owner's R25 ruling) | Spread near thirds where the data supports it; stability 82–88% same mark on two runs, the same as the old rule; no opposite marks |
+| 4 | The body is always one in the place of Where, never in the country of a study | Unchanged behaviour on England; a Where of New South Wales names only Australian bodies (with errors on the state/federal split); a real non-UK task stays a known unverified item |
+
+### The decisions of this amendment
+
+| # | Topic | Decision in one line |
+|---|---|---|
+| 1 | Tried on | One option-level "Tried on" replaces "Populations" and the record-level "Tried on" and "Settings" lines; the concept is the plan's target unit (people, organisations or things), not "population" |
+| 2 | Outcomes | "Outcomes measured" folds into kinds the same way; both facets are made by **one folding call per facet** over the list's distinct record words (mini model), and the code counts documents per kind per option; the counts by plan outcome count documents of any role, with the evaluated count separate; no counts on the list's facets |
+| 3 | Authority label | Unchanged: shown only when the plan holds a consideration on who can act |
+| 4 | Where tried | Countries replace the four groups and the OECD rule; two levels (country / "multiple countries" / "not stated", then the places as listed); from the record's `study_geography` as the abstract states it; no fallback to the publisher or authors; no comparability label at the longlist (task 3, transferability) |
+| 5 | Grid | Cell limit 4 |
+| 6 | Option card | Open: ambition moves into "What it would take" as its first line; the four top figures repeat the evidence section; more to come from the critique |
+
+### What the build of this amendment must do (a first list, before the card topic)
+
+1. A folding call for each of the two facets (tried on, measures) in the profile step, the mini model, a prompt each, a refine loop each (lead), with the check "same word for the same kind; few kinds; the plan's words where they match".
+2. The counts by plan outcome from documents of any role.
+3. "Where tried" in two levels from `study_geography`, in code; the OECD rule and the four groups removed; the facet on the top level.
+4. The check on "not stated" geographies against the abstracts (a fault only where the abstract names the place).
+5. The card and the facets: the three verbatim lines leave; the new lines come in; the grid cell limit 4; the rest from topic 6.
+6. Adversarial passes on this amendment, the contract items and the rubric, then on the plan, as for amendment 2.
+
+Open for the owner after this: the tints (on the built screen); the spec wording (one rewrite after the build); the country at the start of every "who decides" sentence ("In England, …").
 
 ## Topic 1 decided: "tried on" at option level
 
