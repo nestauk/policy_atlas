@@ -283,7 +283,129 @@ decisions above stand, except where a decision below names one.
     plan outcome, from the existing outcome tag. No direction of effect,
     no size and no verdict; those belong to the assessment.
 
+## Amendment 3 (2026-09-30)
+
+The rulings are R54 to R75 in the contract's § Amendment 3; the design
+detail is in `docs/tasks/046-longlist-refinement/amendment-3-final.md`. The
+decisions above stand, except where a decision below names one.
+
+16. **Tried on and Measures are folded kinds, one call per facet over the
+    list.** (Amends the "tried on" of decision 6's tags as a card line.) The
+    record words of `unit` (Tried on) and `outcome` (Measures) are folded to
+    a few kinds per list by one call each on the mini model, in
+    `option_profile`, over the distinct words of the whole list's coverage,
+    with the plan's target unit and outcomes as reference: word → kind, the
+    plan's own words where they match, few kinds, no fixed list. The maps
+    are stored at list level in `longlist_result.option_profile` under
+    `folds`. The code, not a model, counts documents per kind per option and
+    writes them into the coverage (`tried_on_kinds`, `measures_kinds`); the
+    coverage builder applies the stored maps on a merge and for an added
+    option. An invalid response after one retry fails the step; a word the
+    output leaves out keeps its own text as its kind; a kind not built from
+    input words is dropped. The record tags of decision 6 stay in the
+    coverage for `constrain` and are not shown.
+
+    *Rejected:* a profile line for Tried on (a line reads at most five
+    records, so it cannot count); a folding call for examples; a fixed list
+    of kinds; counts on the list's facets.
+
+17. **Outcome counts cover documents of any role; one outcomes table.**
+    (Amends decision 15.) A plan outcome counts every document that reports
+    on it, of any role; the evaluated count is its own figure. The card
+    shows one table: a row per plan outcome with the option design's
+    "serves" mark, and a row per other Measures kind the records report;
+    columns "documents" and "evaluated". A plan-outcome row counts records
+    tagged with that outcome and records tagged `other` or null whose
+    folded kind is that outcome's own text; a kind row counts only
+    `other`/null records; a document counts once on one row.
+
+18. **Where tried is two levels from the record, not a matcher.**
+    (Supersedes ADR 0039 decision 10 and task 045 D20.) The record gains
+    `study_country`: the country of the stated place, from the abstract
+    and the model's knowledge, every named country as its short English
+    name, "multiple" for a group, empty when nothing is stated. The top
+    level per document is one of: a country, "multiple countries" (derived
+    in code from two or more countries, or "multiple"), "other" (a place
+    stated with no country) and "not stated"; the level below is
+    `study_geography` as written. The four groups, the OECD rule, the
+    where-tried matcher and its fixed lists of country and place names are
+    removed, with `where_codes` and `home`. No fallback to the publisher,
+    journal, authors or publication country. No comparability label at the
+    longlist: that is transferability, at the assessment.
+
+    *Rejected:* a fallback to the publication country (not defensible: a
+    US-published journal carries a Kenyan trial); a model judgement of
+    comparability at the longlist (cost, and a verdict the longlist does
+    not need); a code → name table.
+
+19. **`unit` is the one concept, for options scoping and Evidence search.**
+    The intervention profile record's `population` becomes `unit` ("who or
+    what the intervention was delivered to: people, organisations, sites or
+    things") and `population_tag` becomes `unit_tag`, with the same values.
+    The intervention-outcome and implementation-context finding records and
+    their prompts take `unit` too, as a like-for-like word swap with no
+    version change, so no document is extracted again. The grouping facet
+    key `population` becomes `unit` everywhere it is stored: the plan
+    payloads, the keys of `grouping_result.groups` and the grouping
+    provenance, rewritten by a reversible data migration; no reader keeps
+    an alias. The record also gains `programme_name` (the proper name of the
+    programme, scheme or law the abstract gives for this intervention, or
+    null); the card's Examples are the option's distinct programme names,
+    with counts, at most five, and replace the variants. `extract_interventions`
+    goes to v3 with a schema version bump, so an options-scoping task
+    re-extracts on its next run.
+
+    *Rejected:* one definition in options scoping and another in Evidence
+    search; examples written by the clustering call or by a folding call;
+    keeping `population` on the finding records "for now"; an alias for the
+    old facet key in the readers.
+
+20. **The place rule is words in the prompts, not a list in code.** (Amends
+    the mechanism of decision 7; its rule stands: place is never a
+    criterion.) Every prompt that read the place-stripped plan text (the
+    screen criteria, the record tagging context, `constrain`, the option
+    design, discovery, lever typing, the eight lines and the folding calls)
+    carries the rule "the place in the question is the user's place, not a
+    criterion; judge as if the question named no place". The place strip,
+    its name tables and the record-level setting pass are deleted only if
+    M4 (no exclusion and no screen failure because of place) holds on the
+    replays; if M4 fails, the list stays and the verification says so.
+
+21. **One revision and one card.** One reversible alembic revision on
+    `e9a4c1f7b3d2` carries the two new nullable columns, the renames on
+    the three tables, the union view recreated with `unit`, and the
+    facet-key data migration; no other schema change; no new table. The
+    option card is rebuilt (no header boxes; the lever line with its
+    secondary types; "What it would take" with Ambition first, the
+    authority label beside "Who decides" and seven collapsed cells with
+    "Middle"; the evidence section as the outcomes table, roles, where
+    tried in two levels, tried on, the abstracts note and a de-duplicated
+    document list sorted evaluated first then by quality; checks with the
+    user's considerations first). A document on the card opens the Evidence
+    search source dossier; on an options-scoping task the dossier's
+    findings slot shows the intervention profile records through one new
+    owner-scoped read route. The list's facets carry no counts; Tried on
+    and Where tried filter; the grid's cell limit is four.
+
 ## Rollback
+
+**Amendment 3** adds a third reversible revision, and it is the first of
+this task's revisions that reaches production data (Evidence search is
+live). `alembic downgrade -1` reverses the three column renames
+(`unit` → `population` on the intervention profile record and the two
+finding tables, `unit_tag` → `population_tag` with its check constraint),
+recreates the union view with the old name, writes the facet key
+`"population"` back into the stored plan payloads, the `grouping_result`
+group keys and the grouping provenance, and drops `programme_name` and
+`study_country`; deploy the previous image. The finding records carry no
+version change, so their memo rows and fingerprints stay valid both ways;
+no document is extracted again. The intervention record's v3 prompt
+re-extracts options-scoping tasks only, on their next run. The read-model
+change of amendment 3 is not additive (the four where-tried groups, the
+variants, the populations and the runner-up lever leave the option read
+models), so a longlist built by amendment 3 is not guaranteed to read
+cleanly under the previous image. To remove all three revisions, run
+`alembic downgrade -3`.
 
 **Amendment 2** adds a second reversible revision. `alembic downgrade -1`
 drops `longlist_result.option_profile`; deploy the previous image. The
