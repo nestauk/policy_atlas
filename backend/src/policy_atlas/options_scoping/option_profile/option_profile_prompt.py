@@ -63,10 +63,12 @@ LINE_QUESTIONS: dict[str, str] = {
     "who_decides": (
         "Which ONE body must decide to adopt this option? Name that body by "
         "its full name, never an acronym, and the country you assume, taken "
-        "from Where in the data. When several bodies have a part, name the "
-        "one whose decision the option cannot go ahead without. Name a legal "
-        "means (a power, a duty, an Act) only when the baseline or an "
-        "evidence record in the data states it; otherwise name no law."
+        "from Where in the data, and say what that body must decide: to "
+        "fund, to commission, to legislate, to set a rule. When several "
+        "bodies have a part, name the one whose decision the option cannot "
+        "go ahead without. Name no Act, regulation, statutory instrument or "
+        "year unless the baseline or an evidence record in the data holds "
+        "that name; when in doubt, name no law."
     ),
     "dependencies": (
         "Name the one or two things OUTSIDE the adopting body's control that "
@@ -258,9 +260,13 @@ _MARK_RULES = """\
 The mark (stands_out):
 - Write the sentence first. Then compare this option with the OTHER options
   of this list, on this line only.
-- 'less' only when the option clearly takes less than most of the list;
-  'more' only when it clearly takes more than most; 'no' for every other
-  option.
+- Before you mark anything, form a view of what the TYPICAL option of this
+  list takes on this line. An option is marked only when it is clearly
+  apart from that typical option: 'less' when it clearly takes less,
+  'more' when it clearly takes more. 'no' for every other option, and for
+  every option that is near the typical one or that you are unsure about.
+- A mark is the exception, not the rule. An option that takes a little
+  less or a little more than the typical one has no mark.
 - The mark must agree with the sentence beside it. A sentence that names a
   large demand cannot carry 'less'. A sentence that names much more than the
   other sentences of the list name carries 'more'.
