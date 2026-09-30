@@ -248,14 +248,35 @@ Reference fields — copied, never inferred:
 - unit is who or what the intervention was delivered to: people,
   organisations, sites or things, as the abstract names them ('children
   aged 6 to 11', 'general practices', 'rented homes'). Not only people: a
-  rule on firms has firms as its unit; a retrofit of homes has homes.
-- programme_name is the proper name the abstract gives for THIS
-  intervention: a programme, scheme, law or service with a name of its
-  own ('Sure Start', 'the Soft Drinks Industry Levy'). Null when the
-  abstract gives none, when the intervention is described in common nouns
-  only, and when the only name is of something the intervention sits
-  within (a strategy, a fund, a wider programme): that is its name, not
-  this one's.
+  rule on firms has firms as its unit; a retrofit of homes has homes. A
+  noun phrase for the recipients, and nothing else: never a place ('the
+  UK', 'Bavaria'), a policy, a cost or bill ('consumer bills'), an outcome
+  ('energy costs'), a process, a topic, a date, a pronoun ('these
+  refugees') or the intervention itself. For an instrument that acts on a
+  system (a tax, a price rule, a levy), the unit is who pays or who is
+  bound by it (households, firms, generators), not the thing taxed. Leave
+  the place out of the unit ('refugees', not 'refugees in Jordan'): the
+  place is study_geography.
+- programme_name is the proper name of the thing delivered: the
+  programme, scheme, service, law, levy or fund that IS this intervention
+  ('Sure Start', 'Soft Drinks Industry Levy'), as the abstract gives it.
+  Null when the abstract gives no such name, and null when the only name
+  near the intervention belongs to something else: the study, trial,
+  cohort or dataset that studied it; the organisation, company, team,
+  unit, centre, ministry or committee that delivers, funds or reviews it;
+  a toolkit, plan, strategy, guideline, review or report it sits within;
+  a survey, measure, scale, registry, register, dataset, report,
+  framework or IT system. The name must belong to this intervention
+  itself: when the intervention is a change to, a part of, a tier of, a
+  tool for, or a study of a named scheme, or is delivered by a named body,
+  and has no name of its own, leave it null — never copy the parent's or
+  the provider's name onto it. A capitalised generic label ('Neonatal
+  Outreach Team', 'Home Visitation Programs', 'Child Health Care Unit') is
+  not a proper name, nor is a generic service name with a place or
+  organisation attached ('Buckinghamshire Perinatal Mental Health Team').
+  Write the full name as the abstract gives it, with the acronym in
+  brackets after it, never the acronym alone; no leading 'the'; the same
+  spelling for the same name in every record.
 - setting is the KIND of place where recipients meet the intervention:
   school, home, workplace, primary care, hospital, community venue, online.
   A common noun, as the abstract has it. Never a country, region, city or
@@ -266,19 +287,41 @@ Reference fields — copied, never inferred:
   study design (a birth cohort). Null for an instrument that acts on a
   whole system and meets nobody in a place: a tax, a price rule, a
   national regulation, a levy.
-- study_geography is where the evidence was gathered, exactly as the
-  abstract states it. Never infer it from the publisher, the journal or the
-  authors — a US-published journal can carry a Kenyan trial. Null when the
-  abstract does not say.
-- study_country is the country of the stated place, from the abstract's
-  words and where that place is: 'Hamburg' gives 'Germany'; 'Bristol'
-  gives 'United Kingdom'. Every country the abstract names, separated by
-  '; '. Each as its short English name: 'United Kingdom', never 'UK' or
-  'Britain'; 'United States', never 'US'. England, Scotland, Wales and
-  Northern Ireland give 'United Kingdom'. 'multiple' when the abstract
-  names a group without its countries ('12 OECD countries', 'eight
-  European countries'). Null when the abstract states no place — never
-  from the publisher, the journal or the authors.
+- study_geography is where the evidence was gathered, or where the
+  intervention the document describes applies, exactly as the title or
+  abstract states it. A place is stated by a country, region, city or
+  town; by a nationality word ('a Scottish scheme', 'Dutch municipalities');
+  and by a named body whose place is plain (a council, a hospital trust, a
+  national government or ministry, a parliament or its committee): copy
+  the words as written. Read the title too. It is always a place: never a
+  date, a trial register or registry, a person's name, a funding
+  programme, or a place cited only as an example from elsewhere. Never
+  infer it from the publisher, the journal or the authors — a US-published
+  journal can carry a Kenyan trial. Null when the title and abstract state
+  no place. Every record of one document carries the document's stated
+  place, unless the abstract ties a record to a different one.
+- study_country is the country of the stated place, from the words of
+  study_geography and where that place is: 'Hamburg' gives 'Germany';
+  'Bristol' gives 'United Kingdom'; 'the Scottish Government' gives
+  'United Kingdom'; 'House of Commons' gives 'United Kingdom'. Every
+  country the stated place names, separated by '; ', each once. Each as
+  its short English name in common use: 'United Kingdom', never 'UK' or
+  'Britain'; 'United States', never 'US'; 'Czech Republic'; 'Turkey'.
+  England, Scotland, Wales and Northern Ireland give 'United Kingdom'.
+  A region, county, canton, city, town, hospital, site, or a list of
+  several sites inside one country gives that country: 'Aargau' gives
+  'Switzerland', 'Styria' gives 'Austria', 'three hospital sites in
+  England' gives 'United Kingdom', '24 local authorities' in an English
+  trial gives 'United Kingdom'. One named country gives that country.
+  'multiple', once and alone, ONLY when the stated place is a named group
+  of countries and the title and abstract list none of its members ('12
+  OECD countries', 'the EU', 'Europe', 'high-income countries'); when the
+  countries are listed anywhere in the title or abstract, write each one
+  instead. 'multiple' is never a fallback: a place you cannot put in a
+  country leaves study_country null, with the place kept in
+  study_geography. Null whenever study_geography is null — never the
+  countries the authors, the cited scholars or the publisher come from,
+  and never a country supplied from your own knowledge of a programme.
 - study_design is the design the abstract states, or null.
 
 Tags — sorting labels against the policy question, never content:

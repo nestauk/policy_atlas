@@ -2,7 +2,7 @@
   "backend/src/policy_atlas/core/prompt_fields.py": "677f70ecdc7188754020ad71a3f7648a4cd17012b77d3bab3c6fac18a18d7f16",
   "backend/src/policy_atlas/evidence_search/assess/classify_prompt.py": "96b3e53f70ba18b646c3bec264976955585b40947419a17c0183da0bfda85d31",
   "backend/src/policy_atlas/evidence_search/assess/screen_prompt.py": "b9149b235b786e09c212fec852a5d649538d41d70011698b878613a42151d67b",
-  "backend/src/policy_atlas/evidence_search/extract/extract_interventions_prompt.py": "c5eea18bb82d1e9afe97225b4f6d8cdeeacd2d85a4b0d18d055cb7f9986bfd86",
+  "backend/src/policy_atlas/evidence_search/extract/extract_interventions_prompt.py": "4d2e88be561e289adf0b313792bd726519a7fbda84adb4557a235e37f9a7ae1d",
   "backend/src/policy_atlas/evidence_search/extract/finding_references.py": "072329752bcf272c48e231cdd7514b04991d97998d036642c4bff381968be942",
   "backend/src/policy_atlas/evidence_search/extract/icf_prompt.py": "22b75e547757a12c7b5bd2209e582e0f5ad0f230aae4b26509b9a2e06176e268",
   "backend/src/policy_atlas/evidence_search/extract/icf_records.py": "5bb5e493b7a88b576a80a19fa6e9021754300a45ad05c596832b245b3482ba63",
