@@ -120,3 +120,18 @@ two sentences are 14 px.
 | 7 | Documents: no duplicates; sorted evaluated first, then by quality; a linked title and one grey meta line (quality · type · role · place · year) instead of chips; five shown, then "Show all N"; with 0 documents the one line "No documents found yet." A click on a document opens the **source dossier sidebar** of Evidence search (document level), reused, not the citation provenance panel. The dossier gains a section for the option's own record of that document (the intervention profile: name, setting, population, outcome, place, design) when opened from an option card. Anything on the card that relates to one document can open the dossier. | "7. Yes." · "When the document is clicked rather than a citation, we have a source dossier sidebar, not the provenance panel … Which I think is more relavant here. In general if there's things in the option card that relate to individual documents then it might be useful to be able to click on the document to see the dosier, or maybe even the profile, since we're extracting that." |
 | Also from the critique, accepted by the lead | Ambition is the first row of "What it would take". The label reads "Policy Atlas's estimate" (the decided words). Section titles name, not explain (final words: lead, at build). No body sentence below 16 px. The origin section goes; origin and relations sit on one grey line under the description. Two code faults fixed: the sort by title, the duplicate documents (the same document with two snapshot ids), and the raw HTML entity in a title. | |
 | Layout, in order | Header (title, description, one grey line: lever · origin · relations · also found as; Exclude) → What it is (Lever with reason and other levers; Delivered through; design features ≤ 6; Examples ≤ 5) → What it would take, Policy Atlas's estimate (table: Ambition first, then the eight lines: name, word, sentence; collapsed: eight cells with words) → Evidence (the outcomes table; Roles; Where tried in two levels; Tried on; the abstracts note; the document list) → Checks. | |
+
+### Topic 6, decision 7 refined: the dossier's findings slot
+
+The dossier's section "Findings from this source" shows the Evidence search
+findings (intervention-outcome and implementation-context, from full text).
+At longlist depth no full text is read, so on a scoping task it shows "No
+findings extracted from this source" on every document. Decision: on an
+options-scoping task that slot shows the **intervention profile records**
+instead, with its own name — opened from an option card, "In this option":
+the record for that option (intervention name, setting, tried on, outcomes
+measured, where, role); opened from the Sources tab, the document's records,
+one for each option that holds it. Evidence search tasks are unchanged. Owner:
+"In the evidence search dossier, there is a section for extracted findings
+anyway, so I suppose the profile is that?" → the lead's proposal above →
+"Sounds good".
