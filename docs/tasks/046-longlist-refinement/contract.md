@@ -347,6 +347,65 @@ the lead's decision (data shape or name); the owner can change it; none is the o
 | § Known limits accepted | Added: the window from the end of `longlist` to the end of `option_profile`; an added option has no lines until the next rebuild; a record on two plan outcomes counts for one; the marks of a merged pair (final § 2.10) |
 | § Spec changes | New items in final § 3 "Contract parts that change"; wording to the owner |
 
+## Amendment 3 (2026-09-30)
+
+The owner and the lead discussed a third amendment after the amendment 2
+live runs, one topic at a time. The record is
+[amendment-3-proposed.md](amendment-3-proposed.md). The final statement, with
+the design detail, is [amendment-3-final.md](amendment-3-final.md) ("final 3"
+below). **Decided by the owner 2026-09-30. The adversarial passes have not run
+yet.** Nothing of it is built. Each ruling supersedes the matching words
+above; the text above is kept as written.
+
+Quoted words are the owner's. R68 is the lead's (the record marks it
+"accepted by the lead"); the owner can change it. What is still open is in
+final 3 § 7.1; the numbered questions are in final 3 § 7.2. Rounds 2–4 of the
+profile loop (`evidence/rounds/12L-profile-loop.md`) were built after
+amendment 2 and are not part of this amendment.
+
+| # | Reopens | Ruling |
+|---|---|---|
+| R54 | Terms, **tried on**; surface map item 23 | **Tried on at option level.** One option-level line "Tried on" replaces "Populations" and the record-level "Tried on" and "Settings" lines of the card. The concept is the plan's target unit (people, organisations or things), not "population": the kinds the option's evidence covers, the target unit first, with document counts; the same word for the same kind across the list; few labels; no fixed list. The list's Tried on facet reads it. The record tags and their counts do not change. Owner: "the population/tried on list has similar issues to what the settings used to have before refinement, there's a lot of values and a lot of them overlap" · "is population the right concept to use given that policy atlas should work on a broad range of policy domains" · "1. yes" · "2. yes" · "3. yes" |
+| R55 | — | **One folding call per facet.** Tried on and Measures are each made by one call over the list's distinct record words (not the records), on the mini model, in the profile step, with the plan's outcomes and target unit as reference: word → kind, in the field's words, the plan's words where they match, few kinds, no fixed list. The code counts documents per kind per option. This replaces the profile-line mechanism of topic 1. Owner: "Perhaps outcomes also need to have a similar treatment, but check first" · "yes to all" |
+| R56 | R42 | **Counts by plan outcome over documents of any role.** Every document that reports on the plan outcome counts, of any role; the evaluated count stays its own figure. Owner: "yes to all" |
+| R57 | — | **No counts on the list's facets.** Setting, Tried on, and Measures if shown, show labels only; counts are on the card. Owner: "We don't need the counts in the list view, as we don't have counts for the settings" · "I think we will refine the documents count in the option card refinement step anyway" |
+| R58 | — | **The authority label stays as it is**: shown only when the plan holds a consideration on who can act. Owner: "I'm not sure about the 'within in your power' part. Is this always shown. Most users will be in parliament or civil service, so won't most things be in their organisational power. I acknowledge that for things like local authorities then this would be more relevant" → "Yes leave as is" |
+| R59 | Task 045 D20 (ADR 0039 decision 10); surface map item 26 (the groups) | **Where tried as countries, in two levels.** From the record's `study_geography` as the abstract states it; no fallback to publisher, journal, authors or publication country; no comparability label at the longlist (transferability, task 3). Top level: the country, "multiple countries" (several countries or a group), or "not stated"; level below: the places as listed in the text. A record counts under one named country only when its own text names that country alone. The facet shows the top level as chips, no counts; the card shows both levels with document counts. The four groups and the OECD rule are removed. The build checks, among "not stated" records, how many abstracts name the place. Owner: "The where tried only lists the users location, then Comparable systems other and unknown. Is this granularity even useful?" · "that OECD rule feels weak" · "just because a document is published in one country, it doesn't necessarily mean that's where the option was tried" · "Should we fall back to publication country when the country isn't stated, is that defensible?" (the lead answered no; recorded as accepted) · "How much cost/latency would it add if we judged comparable with LLM calls. Would the quality of that even be sufficient?" · "Maybe then it would be a top level "multiple countries" and then the level below would be the countries as listed underneath, like in your example for Hamburg" |
+| R60 | — | **Grid cell limit 4** (`CELL_LIMIT`, was 6). Owner: "I think it should be 3 instead" → "If it's 1 to 4 in most cases, then maybe 4 is the right value for N." |
+| R61 | The card's top cells (task 045 card) | **No boxes in the header.** The four boxes and the "scoping pass" chip leave the header. The abstract-only fact becomes one grey note in the evidence section: "Read from titles and abstracts only". Owner: "1. Yes" |
+| R62 | — | **The lever line keeps its reason and names the other levers.** Owner: "I think the reason is helpful. And if an option acts using multiple levers then that is useful information" |
+| R63 | R2 and AM20; Terms, **variant** | **Examples replace the variants.** Named programmes, schemes or laws that the records describe, at most 5, or none; a new `examples` field written by the clustering call; through the cluster prompt's refine loop. Owner: "Yes to the rename." · "3. Sounds good" |
+| R64 | R42 (the place on the card); the section "What it is for" | **One evidence table of outcomes.** A row for each plan outcome (with a "serves" mark, from the option design's pick) and a row for each other outcome kind the records report (the folded Measures kinds); columns: documents of any role, evaluated. "What it is for" as a section goes; the "Measures" line is this table. Owner: "Maybe we don't just have to show only the plan outcomes that it is for. If there's other reported outcomes then it would also likely be useful to show" |
+| R65 | R43 and Q10 of amendment 2 | **The collapsed row shows "Middle".** Eight cells, each with its word, "Middle" for the middle group; no blank cell unless the option has no profile. Owner: "Only the marked lines feels like it could give the user a biased view. If an aspect is in the middle group then maybe we should show that" · "5. sounds good" |
+| R66 | 045 D22 (the transferability line on the card) | **Checks.** The user's considerations first, the verdict as a word with its colour; the three built-in checks fold into one line unless one fails; the transferability line goes. Owner: "6. Yes." |
+| R67 | `OptionDocumentOut` "one per membership row"; the document chips | **Documents and the source dossier.** No duplicates; evaluated first, then by quality; a linked title and one grey meta line (quality · type · role · place · year) instead of chips; five shown, then "Show all N"; with 0 documents the one line "No documents found yet." A click opens the source dossier sidebar of Evidence search (document level), reused, not the citation provenance panel. Anything on the card that relates to one document can open the dossier. On an options-scoping task the dossier's slot "Findings from this source" shows the intervention profile records instead, under its own name: from an option card, "In this option" (that option's record: intervention name, setting, tried on, outcomes measured, where, role); from the Sources tab, the document's records, one for each option that holds it. Evidence search tasks are unchanged. Owner: "7. Yes." · "When the document is clicked rather than a citation, we have a source dossier sidebar, not the provenance panel … Which I think is more relavant here. In general if there's things in the option card that relate to individual documents then it might be useful to be able to click on the document to see the dosier, or maybe even the profile, since we're extracting that." · "In the evidence search dossier, there is a section for extracted findings anyway, so I suppose the profile is that?" → (the lead's proposal) → "Sounds good" |
+| R68 | R40 (ambition in "What it is"); R44 and D16 (the label words) | **The card's layout and the critique's items** (the lead's; the owner can change them). Layout in order: header (title, description, one grey line: lever · origin · relations · also found as; Exclude) → What it is (lever with reason and other levers; delivered through; design features ≤ 6; Examples ≤ 5) → What it would take, Policy Atlas's estimate (Ambition first, then the eight lines: name, word, sentence; collapsed: eight cells with words) → Evidence (the outcomes table; roles; where tried in two levels; tried on; the abstracts note; the document list) → Checks. The label reads "Policy Atlas's estimate". Section titles name, not explain (final words: the lead, at build). No body sentence below 16 px. The origin section goes. Fixed: the sort by title, the duplicate documents, the raw HTML entity in a title. No owner words |
+| R69 | R48 (for amendment 3's prompts) | **Every new or changed prompt of amendment 3 goes through a refine loop** on the replay tool, one stop measure each, the others reported: the two folding prompts and the cluster prompt with `examples`. The folding loops check "same word for the same kind; few kinds; the plan's words where they match". Owner (amendment 2, R48): "All the prompts should go through refine loops anyway so that should hopefully get rid of most snags compared to your one off experiments." |
+
+### Earlier items that amendment 3 changes
+
+| Earlier item | What replaces it |
+|---|---|
+| Terms, **tried on** ("the populations an option's adjacent-tagged members studied"); surface map item 23 | Option-level kinds of the target unit from a folding call (R54, R55) |
+| Terms, **variant**; R2; AM20 (at most 8, folded seeds first) | Examples, at most 5, from the clustering call (R63) |
+| R42 ("documents that evaluated the option; among them …"; the lead's "evaluating documents only") | Any role; the evaluated count separate (R56); shown in one outcomes table (R64) |
+| R43 and Q10 ("a line with no mark shows no word"; "Middle" only a grid column head) | "Middle" in the collapsed row (R65) |
+| R40 and Q4 (ambition in "What it is", after the lever line) | Ambition is the first row of "What it would take" (R68) |
+| R44 / verification D16 (label "Estimate, before assessment") | "Policy Atlas's estimate" (R68) |
+| Task 045 D20, ADR 0039 decision 10 (where tried grouped against Where; comparable = OECD) | Countries in two levels; no comparability label (R59) |
+| The card's four top cells and the depth chip | Removed; the abstracts note in the evidence section (R61) |
+| The card's sections "What it is for" and "Where it came from and what it relates to" | Removed (R64, R68) |
+| The card's "Populations", record-level "Settings" and "Outcomes measured" lines | Removed (R54, R64) |
+| 045 D22 (the transferability line on the card) | Removed (R66) |
+| `OptionDocumentOut` one per membership row, sorted by title; the document chips | One per document, evaluated first then quality, one meta line (R67) |
+| `CELL_LIMIT` 6 | 4 (R60) |
+| § Constraints, Prompts | Also: two folding prompts (new), `longlist_cluster_v3` (examples), each through a refine loop (R69) |
+| § Constraints, Public interface | Not additive: final 3 § 3 "Contract parts that change" |
+| § Constraints, Schema | No revision planned; a column would need the owner first (final 3 § 3) |
+| § Acceptance checks, M6 ("adjacent-population evidence shown as *tried on*") | Open: final 3 Q9 |
+| § Known limits accepted | Added: final 3 § 7.3 |
+| § Spec changes | New items in final 3 § 3; wording to the owner |
+
 ## Compile constants
 
 | Constant | Value | Source |
