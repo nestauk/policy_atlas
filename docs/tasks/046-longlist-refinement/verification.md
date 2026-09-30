@@ -605,6 +605,8 @@ group and the band words gone from the vitest files.
 
 ### Known unverified items (amendment 2)
 
+- **A user outside the UK.** "Who decides" is the model's estimate from the plan's Where and the baseline, not from the abstracts. A replay of the obesity clone with Where = "New South Wales, Australia" named only Australian bodies, but put three federal matters under the state parliament, and the clone's baseline was England's. No real non-UK task has been run (`12L-profile-loop.md` § Feasibility check, round 4).
+
 1. The spec changes are not applied (D22).
 2. The owner's stage decisions for the three loops (R25), the tints (D23)
    and the count of marks on a split list.
