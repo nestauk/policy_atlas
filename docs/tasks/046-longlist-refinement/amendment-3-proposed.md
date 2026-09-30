@@ -37,3 +37,16 @@ change. Owner: "I'm not sure about the 'within in your power' part. Is this
 always shown. Most users will be in parliament or civil service, so won't
 most things be in their organisational power. I acknowledge that for things
 like local authorities then this would be more relevant" → "Yes leave as is".
+
+## Topic 4 decided: "where tried" as countries, no comparability at the longlist
+
+| Item | Decision | The owner's words |
+|---|---|---|
+| The fault | The four groups (the user's place · comparable systems (OECD) · other · unknown) hide the fact. On the live runs "unknown" is 58 / 74 / 52 percent and "other" is 0 / 2 / 0 percent. "Comparable" is a fixed OECD-membership rule in code. | "The where tried only lists the users location, then Comparable systems other and unknown. Is this granularity even useful?" · "that OECD rule feels weak" |
+| The source | The record's `study_geography`, per intervention record, "exactly as the abstract states it", never the publisher, journal or authors. No new extraction: the field exists, and the setting pass already moves a stripped place name into it. | "just because a document is published in one country, it doesn't necessarily mean that's where the option was tried" |
+| No fallback | No fallback to the publication country or the author institutions (OpenAlex gives institution countries for about a third of records, Overton the publisher's country for about half; neither is the place of the study). "Not stated" stays "not stated". | "Should we fall back to publication country when the country isn't stated, is that defensible?" → the lead: no; accepted |
+| No comparability label | Neither the OECD rule nor a model judgement at the longlist. A model call would be cheap (one per list, seconds, cents) but its quality from country names alone is not sufficient; the judgement belongs to transferability at the assessment (task 3), with full text and the plan's transferability considerations. | "How much cost/latency would it add if we judged comparable with LLM calls. Would the quality of that even be sufficient?" |
+| Two levels | **Top level:** the country, or "multiple countries" when the record's text names several countries or a group ("12 OECD countries"), or "not stated". **Level below:** the places as listed in the text — the city or region under its country ("Germany: Hamburg"), the countries under "multiple countries" ("Europe and North America"; "Sweden, Denmark, Finland"). A record counts under one named country only when its own text names that country alone. | "Maybe then it would be a top level "multiple countries" and then the level below would be the countries as listed underneath, like in your example for Hamburg" |
+| The list facet | The top level, as chips, no counts. | (topic 2) |
+| The card | Both levels, with document counts; the form is decided under the option card topic. | |
+| The check for the build | Among records with "not stated", how many abstracts name the place of the study. A fault only where the abstract names it. | |
