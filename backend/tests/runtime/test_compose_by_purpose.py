@@ -116,6 +116,7 @@ def test_the_longlist_chain_and_its_spine() -> None:
         "appraise",
         "extract_interventions",
         "longlist",
+        "option_profile",
         "constrain",
         "theme",
     ]
@@ -329,6 +330,7 @@ def test_a_walk_under_a_longlist_intent_record_runs_the_longlist_chain(
             ("appraise", "succeeded"),
             ("extract_interventions", "succeeded"),
             ("longlist", "succeeded"),
+            ("option_profile", "succeeded"),
             ("constrain", "succeeded"),
             ("theme", "succeeded"),
         ]

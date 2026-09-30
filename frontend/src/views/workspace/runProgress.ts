@@ -49,6 +49,7 @@ const LONGLIST_STAGES = new Set([
   "option_searches",
   "extract_interventions",
   "longlist",
+  "option_profile",
   "constrain",
   "theme",
 ]);
@@ -372,6 +373,10 @@ export function beatSentence(
       if (themes === null) return null;
       return `${count(themes, "theme", "themes")}`;
     }
+    // Task 046 (R37): the step's label, "Writing what each option would
+    // take", is its only sentence; it shows no count.
+    case "option_profile":
+      return null;
     default:
       return null;
   }

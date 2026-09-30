@@ -78,6 +78,7 @@ PlanStageKey = Literal[
     "option_searches",
     "extract_interventions",
     "longlist",
+    "option_profile",
     "constrain",
     "theme",
 ]

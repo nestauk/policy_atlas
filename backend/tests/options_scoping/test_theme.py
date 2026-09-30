@@ -170,7 +170,12 @@ def test_the_registry_the_graph_the_plan_mapping_and_the_stream_know_theme() -> 
         "Clustering into options",
         "Records grouped into options.",
     )
-    assert [c for c, _ in LONGLIST_CHAIN][-3:] == ["longlist", "constrain", "theme"]
+    assert [c for c, _ in LONGLIST_CHAIN][-4:] == [
+        "longlist",
+        "option_profile",
+        "constrain",
+        "theme",
+    ]
     assert dict(LONGLIST_CHAIN)["theme"] is False
 
 

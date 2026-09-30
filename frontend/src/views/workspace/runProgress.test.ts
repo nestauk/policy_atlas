@@ -58,6 +58,11 @@ describe("beatSentence", () => {
     expect(beatSentence("longlist", { options: 3 })).toBe("3 options");
   });
 
+  it("option_profile: no beat, whatever its summary counts", () => {
+    expect(beatSentence("option_profile", {})).toBeNull();
+    expect(beatSentence("option_profile", { options: 6, typed: 5, kept: 1, invalid: 1 })).toBeNull();
+  });
+
   it("theme: null on missing themes, else the theme count", () => {
     expect(beatSentence("theme", {})).toBeNull();
     expect(beatSentence("theme", { themes: 2, no_theme: 1 })).toBe("2 themes");

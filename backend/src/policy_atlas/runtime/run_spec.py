@@ -31,6 +31,8 @@ COMPONENT_REGISTRY: dict[str, dict[str, list[str]]] = {
     "suggest": {"requires": ["evidence_scope_id"]},
     "extract_interventions": {"requires": ["evidence_scope_id"]},
     "longlist": {"requires": ["evidence_scope_id"]},
+    # Task 046 (R37): what is said about each option, after longlist.
+    "option_profile": {"requires": ["evidence_scope_id"]},
     "constrain": {"requires": ["evidence_scope_id"]},
     # Task 046 (R28): the included options grouped into themes, after constrain.
     "theme": {"requires": ["evidence_scope_id"]},

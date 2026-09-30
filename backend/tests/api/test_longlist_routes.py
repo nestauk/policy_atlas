@@ -78,6 +78,7 @@ from tests.options_scoping.test_longlist import (
     _Scripted,
     _Walk,
 )
+from tests.options_scoping.test_option_profile import _profile
 from tests.runtime.test_baseline_gate import scoping_plan
 from tests.runtime.test_runner import _runner_backends
 
@@ -339,6 +340,8 @@ def _build(
             },
         )
         run_id, _ = walk.build(backend)
+        # The walk's next step types the options (task 046, S20).
+        _profile(walk, backend)
         # The longlist mints no package (task 046, item 4); ``part_of`` rows
         # are the user's, so the fixture writes the package's two as a user.
         by_name = {
@@ -708,6 +711,7 @@ def test_the_card_and_list_serve_the_runner_up_lever_type(conn: Connection) -> N
         typings={"Youth guarantee": {"runner_up_lever_type": "inform"}},
     )
     walk.build(backend)
+    _profile(walk, backend)
     option_id = walk.options()["Youth guarantee"].option_id
 
     listed = repository.longlist_out(conn, walk.task_id)
@@ -736,6 +740,7 @@ def test_the_card_and_list_serve_the_lever_reason(conn: Connection) -> None:
         },
     )
     walk.build(backend)
+    _profile(walk, backend)
     options = walk.options()
 
     listed = repository.longlist_out(conn, walk.task_id)

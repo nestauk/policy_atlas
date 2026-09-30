@@ -1,9 +1,11 @@
-"""The longlist component's model seam (task 045, S8).
+"""The longlist walk's model seam (task 045, S8), shared by its components.
 
-Five calls, each one lead-authored prompt builder
+``longlist``, ``option_profile``, ``constrain`` and ``theme`` share this one
+backend (task 046, S20). Each call has one lead-authored prompt builder
 (:mod:`~policy_atlas.options_scoping.longlist.longlist_cluster_prompt`,
 :mod:`~policy_atlas.options_scoping.theme.longlist_theme_prompt`,
-:mod:`~policy_atlas.options_scoping.longlist.lever_typing_prompt`):
+:mod:`~policy_atlas.options_scoping.option_profile.lever_typing_prompt`,
+:mod:`~policy_atlas.options_scoping.constrain.constrain_prompt`):
 
 - ``discover`` — seeded option discovery over the plan, the baseline, the
   seeds and the corpus digest (judgment model);
@@ -11,7 +13,8 @@ Five calls, each one lead-authored prompt builder
 - ``discover_themes`` / ``assign_themes`` — themes over the options
   (judgment model; the contract's model route puts theme grouping there);
 - ``type_options`` — one lever-typing batch, with the plan and the baseline
-  (judgment model; batches run in a thread pool);
+  (judgment model; batches run in a thread pool), the ``option_profile``
+  step's (task 046, S20; its Langfuse name stays ``longlist:type``);
 - ``constrain`` — one constraint-judgement batch with the plan and the
   baseline (judgment model; batches run in a thread pool), the walk's
   ``constrain`` step (S9) on the same seam
@@ -51,13 +54,6 @@ from policy_atlas.options_scoping.constrain.constrain_prompt import (
     build_constrain_messages,
     build_distinct_messages,
 )
-from policy_atlas.options_scoping.longlist.lever_typing_prompt import (
-    LEVER_TYPING_MAX_OUTPUT_TOKENS,
-    LEVER_TYPING_PROMPT_VERSION,
-    LeverTypingResponse,
-    LeverTypingWire,
-    build_lever_typing_messages,
-)
 from policy_atlas.options_scoping.longlist.longlist_cluster_prompt import (
     ASSIGNMENT_MAX_OUTPUT_TOKENS,
     DISCOVERY_MAX_OUTPUT_TOKENS,
@@ -68,6 +64,13 @@ from policy_atlas.options_scoping.longlist.longlist_cluster_prompt import (
     OptionDiscoveryResponse,
     build_longlist_assignment_messages,
     build_longlist_discovery_messages,
+)
+from policy_atlas.options_scoping.option_profile.lever_typing_prompt import (
+    LEVER_TYPING_MAX_OUTPUT_TOKENS,
+    LEVER_TYPING_PROMPT_VERSION,
+    LeverTypingResponse,
+    LeverTypingWire,
+    build_lever_typing_messages,
 )
 from policy_atlas.options_scoping.theme.longlist_theme_prompt import (
     LONGLIST_THEME_PROMPT_VERSION,

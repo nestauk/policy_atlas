@@ -44,12 +44,10 @@ decisions 7 and 8. The longlist walk's clustering step:
 5. **Themes** are not built here: the ``theme`` component groups the
    included options after ``constrain`` (task 046, R28); this component
    writes ``themes = []`` and no theme counts.
-6. **Typing**: one call per :data:`LEVER_TYPING_BATCH_SIZE` options, the
-   batches in a thread pool of :data:`TYPING_MAX_CONCURRENT`, with the plan
-   and the baseline; lever types and the ambition tag on the option row, the
-   runner-up in ``longlist_result.provenance`` (D8). An invalid or failed
-   typing leaves the option's columns as they are and carries its runner-up
-   forward (task 046, S12).
+6. **Typing** is not done here: the ``option_profile`` component types every
+   option after this one (task 046, R37, S20). This component writes no
+   lever column, no ambition and no typing key; its ``longlist_result`` row
+   holds none until ``option_profile`` has run.
 7. **Coverage** (:mod:`.coverage`), deterministic, DOI-collapsed.
 8. **``longlist_result``**, written last (the 010 pattern).
 
@@ -75,8 +73,7 @@ import re
 import threading
 import unicodedata
 import uuid
-from collections.abc import Callable, Iterable, Mapping, Sequence
-from concurrent.futures import ThreadPoolExecutor
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any, Literal
@@ -86,7 +83,6 @@ from pydantic import ValidationError
 from sqlalchemy import and_, select
 from sqlalchemy.engine import Connection
 
-from policy_atlas.core import tracing
 from policy_atlas.core.schema import (
     capability_run,
     evidence_scope,
@@ -139,16 +135,6 @@ from policy_atlas.options_scoping.longlist.coverage import (
     normalise_doi,
     option_coverage,
 )
-from policy_atlas.options_scoping.longlist.lever_types import (
-    AMBITION_BANDS,
-    LEVER_TYPE_KEYS,
-    TAXONOMY_VERSION,
-)
-from policy_atlas.options_scoping.longlist.lever_typing_prompt import (
-    LEVER_TYPING_BATCH_SIZE,
-    LEVER_TYPING_PROMPT_VERSION,
-    LeverTypingResponse,
-)
 from policy_atlas.options_scoping.longlist.longlist_backend import (
     LONGLIST_ASSIGNMENT_MODEL,
     LONGLIST_JUDGMENT_MODEL,
@@ -191,16 +177,10 @@ LONGLIST_HARD_CEILING = 25
 RECORDS_PER_DOCUMENT_MAX = 8
 #: The corpus digest's names, at most (task 046, S8).
 DIGEST_NAMES_MAX = 400
-#: Typing batches in flight at once (task 046, S12).
-TYPING_MAX_CONCURRENT = 4
 
 #: A unit payload's free-text bound (the quote, a claim, each reference).
 UNIT_TEXT_MAX = 240
 UNIT_FEATURES_MAX = 8
-#: The reason an unusable typing was recorded under before task 046 (a
-#: stored row can still carry it; the read models leave it out of *none
-#: fits*). A typing that fails now leaves the option's columns as they are.
-TYPING_INVALID_REASON = "typing invalid"
 
 #: Seeds are offered in entrant order, then the clustered options (D14).
 _SEED_ORIGIN_ORDER = ("added_by_you", "from_evidence_search", "suggested", "clustered")
@@ -1281,7 +1261,7 @@ def _engine_stats(result: ClusteringResult | None) -> dict[str, Any]:
     }
 
 
-# --- options, typing ------------------------------------------------------
+# --- options ---------------------------------------------------------------
 
 
 @dataclass
@@ -1295,235 +1275,6 @@ class _Option:
     wire: DiscoveredOptionWire | None = None
     design: OptionDesign | None = None
     members: list[_Unit] = field(default_factory=list)
-
-
-@dataclass(frozen=True)
-class _Typing:
-    primary: str | None
-    secondary: list[str]
-    none_fits_reason: str | None
-    ambition: str
-    ambition_reason: str
-    runner_up: str | None
-    lever_reason: str | None = None
-
-
-def _validated_typing(wire: Any) -> _Typing | None:
-    """One wire typing, validated fail-closed (D8); ``None`` when unusable."""
-    primary = wire.primary_lever_type
-    reason = (wire.none_fits_reason or "").strip() or None
-    ambition = wire.ambition
-    ambition_reason = (wire.ambition_reason or "").strip() or None
-    if ambition not in AMBITION_BANDS or ambition_reason is None:
-        return None
-    if primary is None:
-        if reason is None:
-            return None
-    elif primary not in LEVER_TYPE_KEYS:
-        return None
-    secondary: list[str] = []
-    for key in wire.secondary_lever_types:
-        if key in LEVER_TYPE_KEYS and key != primary and key not in secondary:
-            secondary.append(key)
-    runner_up = wire.runner_up_lever_type if wire.runner_up_lever_type in LEVER_TYPE_KEYS else None
-    # R29: the reader's sentence for the lever type; a blank one is not
-    # shown, and never makes the typing invalid.
-    lever_reason = (wire.lever_reason or "").strip() or None
-    return _Typing(
-        primary=primary,
-        secondary=secondary,
-        none_fits_reason=reason if primary is None else None,
-        ambition=ambition,
-        ambition_reason=ambition_reason,
-        runner_up=runner_up if runner_up != primary else None,
-        lever_reason=lever_reason,
-    )
-
-
-def _type_options(
-    backend: LonglistBackend,
-    options: list[_Option],
-    usage: UsageAccumulator,
-    *,
-    plan: dict[str, object],
-    baseline: list[tuple[str, str]],
-) -> tuple[dict[uuid.UUID, _Typing], list[uuid.UUID], dict[str, Any]]:
-    """Type every option, one call per batch, the batches in a thread pool (S12).
-
-    Returns:
-        ``(valid typings, kept option ids, stats)``: an option whose typing
-        is invalid, missing or in a failed batch is *kept* — its columns are
-        left as they are.
-    """
-    batches = [
-        options[start : start + LEVER_TYPING_BATCH_SIZE]
-        for start in range(0, len(options), LEVER_TYPING_BATCH_SIZE)
-    ]
-    typings: dict[uuid.UUID, _Typing] = {}
-    answered: set[uuid.UUID] = set()
-    failed_batches = 0
-    with ThreadPoolExecutor(max_workers=TYPING_MAX_CONCURRENT) as pool:
-        futures = [
-            tracing.submit_with_context(
-                pool,
-                backend.type_options,
-                options=[
-                    {
-                        "unit_id": str(o.option_id),
-                        "label": o.label,
-                        "description": o.description,
-                        "design_features": o.design_features,
-                    }
-                    for o in batch
-                ],
-                plan=plan,
-                baseline_sections=baseline,
-            )
-            for batch in batches
-        ]
-        results: list[UsageResult[LeverTypingResponse] | None] = []
-        for future in futures:
-            try:
-                results.append(future.result())
-            except Exception as exc:  # fail-closed: the batch's options are kept
-                failed_batches += 1
-                log.warning("longlist.typing_batch_failed", error_type=type(exc).__name__)
-                results.append(None)
-    for batch, result in zip(batches, results, strict=True):
-        if result is None:
-            continue
-        response, call_usage = result
-        usage.add(call_usage)
-        by_unit = {str(o.option_id): o for o in batch}
-        for wire in response.typings:
-            target = by_unit.get(wire.unit_id)
-            if target is None or target.option_id in answered:
-                continue
-            answered.add(target.option_id)
-            typing = _validated_typing(wire)
-            if typing is not None:
-                typings[target.option_id] = typing
-    kept = [o.option_id for o in options if o.option_id not in typings]
-    return typings, kept, {
-        "calls": len(batches),
-        "batch_size": LEVER_TYPING_BATCH_SIZE,
-        "max_concurrent": TYPING_MAX_CONCURRENT,
-        "failed_batches": failed_batches,
-        "invalid": len(kept),
-        "kept_ids": [str(option_id) for option_id in kept],
-    }
-
-
-def _earlier_runner_ups(
-    conn: Connection, *, task_id: uuid.UUID, option_ids: Sequence[uuid.UUID]
-) -> dict[str, dict[str, Any]]:
-    """The runner-up a kept typing carries forward (S12).
-
-    Per option, the runner-up of the latest earlier ``longlist_result`` of
-    the task that records one for it. A result that typed the option validly
-    with no runner-up (it lists the option among its options and not among
-    its ``typing.kept_ids``) ends the search: the typing that stands has none.
-
-    Args:
-        conn: Open connection.
-        task_id: The scoping task.
-        option_ids: The options whose typing was kept.
-
-    Returns:
-        ``{option_id: {"lever_type", "carried_forward": True}}``.
-    """
-
-    def _runner_up(entry: Any) -> dict[str, Any] | None:
-        lever = entry.get("lever_type") if isinstance(entry, Mapping) else None
-        if isinstance(lever, str) and lever in LEVER_TYPE_KEYS:
-            return {"lever_type": lever, "carried_forward": True}
-        return None
-
-    return _earlier_typing_entries(
-        conn, task_id=task_id, option_ids=option_ids, key="runner_up", read=_runner_up
-    )
-
-
-def _earlier_lever_reasons(
-    conn: Connection, *, task_id: uuid.UUID, option_ids: Sequence[uuid.UUID]
-) -> dict[str, str]:
-    """The lever reason a kept typing carries forward (R29), as the runner-up does.
-
-    Args:
-        conn: Open connection.
-        task_id: The scoping task.
-        option_ids: The options whose typing was kept.
-
-    Returns:
-        ``{option_id: reason}``.
-    """
-
-    def _reason(entry: Any) -> str | None:
-        return (entry.strip() or None) if isinstance(entry, str) else None
-
-    return _earlier_typing_entries(
-        conn, task_id=task_id, option_ids=option_ids, key="lever_reason", read=_reason
-    )
-
-
-def _earlier_typing_entries[T](
-    conn: Connection,
-    *,
-    task_id: uuid.UUID,
-    option_ids: Sequence[uuid.UUID],
-    key: str,
-    read: Callable[[Any], T | None],
-) -> dict[str, T]:
-    """Per kept option, one typing entry of the latest earlier result that has it.
-
-    Walks the task's ``longlist_result`` rows newest first and reads
-    ``provenance[key][option_id]`` through ``read``. A result that typed the
-    option validly without the entry (it lists the option among its options
-    and not among its ``typing.kept_ids``) ends the search: the typing that
-    stands has none.
-
-    Args:
-        conn: Open connection.
-        task_id: The scoping task.
-        option_ids: The options whose typing was kept.
-        key: The provenance key (``runner_up``, ``lever_reason``).
-        read: Returns the usable value of a stored entry, or ``None``.
-
-    Returns:
-        ``{option_id: value}`` for each option an earlier result supplies.
-    """
-    wanted = {str(option_id) for option_id in option_ids}
-    found: dict[str, T] = {}
-    if not wanted:
-        return found
-    settled: set[str] = set()
-    for (provenance,) in conn.execute(
-        select(longlist_result.c.provenance)
-        .where(longlist_result.c.task_id == task_id)
-        .order_by(
-            longlist_result.c.created_at.desc(), longlist_result.c.longlist_result_id.desc()
-        )
-    ):
-        record = provenance if isinstance(provenance, Mapping) else {}
-        entries = record.get(key)
-        entries = entries if isinstance(entries, Mapping) else {}
-        typing = record.get("typing")
-        kept_ids = typing.get("kept_ids") if isinstance(typing, Mapping) else None
-        listed = {
-            str(option_id)
-            for list_key in ("seed_ids", "discovered_ids")
-            for option_id in (record.get(list_key) or [])
-        }
-        for option_id in wanted - settled:
-            value = read(entries.get(option_id))
-            if value is not None:
-                found[option_id] = value
-                settled.add(option_id)
-            elif isinstance(kept_ids, list) and option_id in listed and option_id not in kept_ids:
-                settled.add(option_id)
-        if settled >= wanted:
-            break
-    return found
 
 
 def _member_outcomes(members: Sequence[_Unit], plan_outcomes: Sequence[str]) -> list[str]:
@@ -1869,10 +1620,11 @@ def longlist_scope(
 ) -> dict[str, Any]:
     """Build the longlist for one longlist walk.
 
-    Every model call (discovery, assignment, the residual pass, typing)
-    happens before the first write; the writes — new option rows, the folds'
-    merges, the task's memberships replaced, typing on every option typed
-    validly, and ``longlist_result`` last — share the component transaction.
+    Every model call (discovery, assignment, the residual pass) happens
+    before the first write; the writes — new option rows, the folds' merges,
+    the task's memberships replaced, and ``longlist_result`` last — share the
+    component transaction. No typing: ``option_profile`` types the options
+    after this step (task 046, S20).
 
     Args:
         conn: Open connection inside the component transaction.
@@ -1883,7 +1635,7 @@ def longlist_scope(
 
     Returns:
         The component summary: ``options``, ``unclustered``,
-        ``not_an_option``, ``none_fits`` and ``units``.
+        ``not_an_option`` and ``units``.
 
     Raises:
         LonglistFailure: If clustering fails or the exhaustiveness invariant
@@ -2048,22 +1800,7 @@ def longlist_scope(
     if residual_clustering is not None:
         usage.add_payload(residual_clustering.usage_totals)
 
-    # 5. Typing (S12): batches in parallel; a kept typing carries forward.
-    typings, kept_typings, typing_stats = _type_options(
-        backend, options, usage, plan=plan_data, baseline=baseline
-    )
-    runner_ups: dict[str, dict[str, Any]] = {
-        str(option_id): {"lever_type": t.runner_up}
-        for option_id, t in typings.items()
-        if t.runner_up is not None
-    }
-    runner_ups.update(_earlier_runner_ups(conn, task_id=task_id, option_ids=kept_typings))
-    lever_reasons: dict[str, str] = {
-        str(option_id): t.lever_reason
-        for option_id, t in typings.items()
-        if t.lever_reason is not None
-    }
-    lever_reasons.update(_earlier_lever_reasons(conn, task_id=task_id, option_ids=kept_typings))
+    # 5. Typing is the ``option_profile`` component's, after this one (S20).
 
     # 6. Coverage (deterministic).
     label_ids = {u.label_tss_id for u in units if u.label_tss_id is not None}
@@ -2148,23 +1885,6 @@ def longlist_scope(
     ]
     if membership_rows:
         conn.execute(option_membership.insert(), membership_rows)
-    for o in options:
-        typing = typings.get(o.option_id)
-        if typing is None:
-            continue  # kept: the option's columns stay as they are (S12)
-        conn.execute(
-            option.update()
-            .where(option.c.option_id == o.option_id, option.c.task_id == task_id)
-            .values(
-                primary_lever_type=typing.primary,
-                secondary_lever_types=typing.secondary,
-                lever_none_fits_reason=typing.none_fits_reason,
-                taxonomy_version=TAXONOMY_VERSION,
-                ambition=typing.ambition,
-                ambition_reason=typing.ambition_reason,
-                updated_at=now,
-            )
-        )
 
     states = [
         row.state
@@ -2174,7 +1894,6 @@ def longlist_scope(
             .where(option.c.merged_into_option_id.is_(None))
         )
     ]
-    none_fits = sum(1 for t in typings.values() if t.primary is None)
     documents = {u.doc_key for u in units}
     counts = {
         "options": len(options),
@@ -2183,8 +1902,6 @@ def longlist_scope(
         "no_in_scope_evidence": 0,
         "unclustered": len(unclustered),
         "not_an_option": len(not_an_option),
-        "none_fits": none_fits,
-        "typing_invalid": typing_stats["invalid"],
         "units": len(units),
         "members": member_count,
         "documents": len(documents),
@@ -2202,16 +1919,11 @@ def longlist_scope(
     live = backend.mode == "live"
     provenance: dict[str, Any] = {
         "backend_mode": backend.mode,
-        "prompt_versions": {
-            "cluster": LONGLIST_CLUSTER_PROMPT_VERSION,
-            "typing": LEVER_TYPING_PROMPT_VERSION,
-        },
+        "prompt_versions": {"cluster": LONGLIST_CLUSTER_PROMPT_VERSION},
         "models": {
             "discovery": LONGLIST_JUDGMENT_MODEL if live else "stub",
             "assignment": LONGLIST_ASSIGNMENT_MODEL if live else "stub",
-            "typing": LONGLIST_JUDGMENT_MODEL if live else "stub",
         },
-        "taxonomy_version": TAXONOMY_VERSION,
         "ceiling": {
             "target_size": LONGLIST_TARGET_SIZE,
             "hard_ceiling": LONGLIST_HARD_CEILING,
@@ -2252,9 +1964,6 @@ def longlist_scope(
             "repeated_labels_dropped": clustering_backend.repeated_labels_dropped,
             "short_id_repairs": clustering_backend.short_id_repairs,
         },
-        "typing": typing_stats,
-        "runner_up": runner_ups,
-        "lever_reason": lever_reasons,
         "where_tried_labels": where_labels(plan.where.text),
         "usage_totals": usage.payload(),
     }
@@ -2283,13 +1992,11 @@ def longlist_scope(
         residual_pass=residual_record["ran"],
         unclustered=len(unclustered),
         not_an_option=len(not_an_option),
-        none_fits=none_fits,
     )
     return {
         "options": len(options),
         "unclustered": len(unclustered),
         "not_an_option": len(not_an_option),
-        "none_fits": none_fits,
         "units": len(units),
     }
 

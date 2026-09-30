@@ -3,10 +3,9 @@
 The contract's longlist bullet: every record lands in one option, unclustered
 or not an option (code-enforced); a document with three records can belong to
 three options; a bundle is one option and no *part of* row is written (task
-046, item 4); each option has
-one primary lever type from the list or *none fits* with a reason, the
-taxonomy version and an ambition tag with its justification; the runner-up is
-in ``longlist_result`` and not on the option row; coverage buckets Unknown and
+046, item 4); the longlist writes no typing (task 046, S20: lever typing is
+the ``option_profile`` component's, tested in ``test_option_profile``);
+coverage buckets Unknown and
 Non-evidence separately, shows the role funnel, where tried grouped against
 Where, settings, and counts flagged members; two documents sharing a DOI count
 once and stay two membership rows; seeds are assigned against and survive with
@@ -14,14 +13,13 @@ zero members; linked findings cluster beside profile records (D5); the
 rebuild keeps ids and user state and deletes nothing; comparator records never
 become members. Task 046 (items 1, 2, 4, 6, 7, 15, 26): the target size and the
 hard ceiling, the corpus digest, folds and their guards, the residual pass,
-short ids, outcomes at mint time, typing in parallel with the keep-previous
-rule, and the thinning rules. Seeded on the transactional ``conn`` fixture,
-with a scripted backend standing in for the model.
+short ids, outcomes at mint time, and the thinning rules. Seeded on the
+transactional ``conn`` fixture, with a scripted backend standing in for the
+model.
 """
 
 from __future__ import annotations
 
-import threading
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
@@ -59,20 +57,10 @@ from policy_atlas.evidence_search.extract.interventions_records import (
 )
 from policy_atlas.evidence_search.extract.iof_records import PROFILE_ID as IOF_PROFILE_ID
 from policy_atlas.options_scoping.design import OptionDesign
-from policy_atlas.options_scoping.longlist.lever_types import (
-    AMBITION_BANDS,
-    LEVER_TYPE_KEYS,
-    TAXONOMY_VERSION,
-)
-from policy_atlas.options_scoping.longlist.lever_typing_prompt import (
-    LeverTypingResponse,
-    LeverTypingWire,
-)
 from policy_atlas.options_scoping.longlist.longlist import (
     LONGLIST_HARD_CEILING,
     LONGLIST_TARGET_SIZE,
     RECORDS_PER_DOCUMENT_MAX,
-    TYPING_INVALID_REASON,
     LonglistContext,
     LonglistFailure,
     corpus_digest,
@@ -91,6 +79,10 @@ from policy_atlas.options_scoping.longlist.longlist_cluster_prompt import (
     OptionAssignmentsResponse,
     OptionAssignmentWire,
     OptionDiscoveryResponse,
+)
+from policy_atlas.options_scoping.option_profile.lever_typing_prompt import (
+    LeverTypingResponse,
+    LeverTypingWire,
 )
 from policy_atlas.options_scoping.theme.longlist_theme_prompt import (
     ThemeAssignmentsResponse,
@@ -599,7 +591,6 @@ def test_every_record_lands_in_one_option_unclustered_or_not_an_option(
         "options": 3,
         "unclustered": 1,
         "not_an_option": 1,
-        "none_fits": 0,
         "units": 5,
     }
     members = walk.memberships()
@@ -778,77 +769,6 @@ def test_seeds_over_the_ceiling_that_can_fold_still_get_one_call_and_no_new_opti
     ceiling = walk.result(run_id).provenance["ceiling"]
     assert (ceiling["over_ceiling_dropped"], ceiling["excess"]) == (1, 1)
     assert "Something new" not in walk.options()
-
-
-# --- typing -----------------------------------------------------------------------
-
-
-def test_typing_one_primary_or_none_fits_the_version_and_the_ambition(
-    conn: Connection,
-) -> None:
-    walk = _Walk(conn)
-    walk.option("Free bus passes")
-    walk.option("A new body")
-    walk.option("Garbled")
-    walk.option("Wrong band")
-    backend = _Scripted(
-        typings={
-            "Free bus passes": {"runner_up_lever_type": "provide a service"},
-            "A new body": {"primary_lever_type": None, "none_fits_reason": "It sets a mood."},
-            "Garbled": {"primary_lever_type": "make it so"},
-            "Wrong band": {"primary_lever_type": None, "none_fits_reason": None},
-        }
-    )
-    run_id, summary = walk.build(backend)
-    options = walk.options()
-    bus = options["Free bus passes"]
-    assert bus.primary_lever_type in LEVER_TYPE_KEYS
-    assert bus.secondary_lever_types == ["inform"]
-    assert bus.taxonomy_version == TAXONOMY_VERSION
-    assert bus.ambition in AMBITION_BANDS and bus.ambition_reason
-    assert options["A new body"].primary_lever_type is None
-    assert options["A new body"].lever_none_fits_reason == "It sets a mood."
-    # An invalid typing leaves the columns as they were (task 046, S12): here
-    # never typed, so still empty.
-    for name in ("Garbled", "Wrong band"):
-        assert options[name].primary_lever_type is None
-        assert options[name].lever_none_fits_reason is None
-        assert options[name].taxonomy_version is None
-        assert options[name].ambition is None
-    # The two invalid typings count once, under typing_invalid (F14).
-    assert summary["none_fits"] == 1
-    result = walk.result(run_id)
-    assert result.counts["none_fits"] == 1
-    assert result.counts["typing_invalid"] == 2
-    # The runner-up is in the record only; the wire has no reasons for it.
-    assert result.provenance["runner_up"] == {
-        str(bus.option_id): {"lever_type": "provide a service"}
-    }
-    # The typing prompt receives the plan and the baseline (item 9).
-    typed = backend.calls["type"][0]
-    assert typed["plan"]["target_unit"] == "16 to 24 year olds"
-    assert typed["baseline_sections"] == []
-    assert "runner_up" not in dict(bus._mapping)
-    assert "provide a service" not in bus.secondary_lever_types
-
-
-def test_a_failed_typing_call_is_counted_never_a_crash(conn: Connection) -> None:
-    walk = _Walk(conn)
-    walk.option("Youth guarantee")
-
-    class _Broken(_Scripted):
-        def type_options(self, **kwargs: Any) -> Any:
-            raise RuntimeError("provider down")
-
-    run_id, summary = walk.build(_Broken())
-    assert summary["none_fits"] == 0
-    result = walk.result(run_id)
-    assert result.counts["typing_invalid"] == 1
-    assert result.provenance["typing"]["failed_batches"] == 1
-    # The option's columns are left as they were (task 046, S12).
-    row = walk.options()["Youth guarantee"]
-    assert (row.lever_none_fits_reason, row.taxonomy_version) == (None, None)
-    assert row.lever_none_fits_reason != TYPING_INVALID_REASON
 
 
 # --- coverage ---------------------------------------------------------------------
@@ -1197,8 +1117,10 @@ def test_the_stub_backend_matches_seeds_by_name_and_discovers_one(conn: Connecti
     options = walk.options()
     assert options[STUB_DISCOVERED_LABEL].origin == "clustered"
     assert options["Youth guarantee"].option_id == seed_id
-    assert all(row.primary_lever_type == "provide a service" for row in options.values())
-    assert all(row.ambition == "incremental" for row in options.values())
+    # Typing is the ``option_profile`` component's (task 046, S20): none here
+    # (test_option_profile types these options on the stub).
+    assert all(row.primary_lever_type is None for row in options.values())
+    assert all(row.ambition is None for row in options.values())
     # Themes are the ``theme`` component's (task 046, R28): none written here.
     assert walk.result(run_id).themes == []
 
@@ -1224,7 +1146,6 @@ def test_the_harness_runs_longlist_on_the_stub_backends(conn: Connection) -> Non
         "options": 1,
         "unclustered": 0,
         "not_an_option": 0,
-        "none_fits": 0,
         "units": 0,
     }
     assert walk.result(run_id).coverage[str(seed_id)]["members"] == 0
@@ -1612,7 +1533,6 @@ def test_the_residual_pass_runs_once_over_the_unclustered_units(conn: Connection
         "options": 2,
         "unclustered": 1,
         "not_an_option": 1,
-        "none_fits": 0,
         "units": 4,
     }
     wage = walk.options()["Wage subsidy"]
@@ -1712,97 +1632,6 @@ def test_a_discovered_option_s_outcomes_are_the_plan_outcomes_its_members_name(
     # A seed keeps its design's outcomes.
     assert options["Youth guarantee"].option_id == seed
     assert options["Youth guarantee"].outcomes == ["the NEET rate"]
-
-
-def test_typing_batches_run_in_parallel(conn: Connection) -> None:
-    walk = _Walk(conn)
-    for i in range(41):  # three batches of at most 20
-        walk.option(f"Seed option {i}", origin="added_by_you")
-    barrier = threading.Barrier(3, timeout=10)
-
-    class _Together(_Scripted):
-        def type_options(self, **kwargs: Any) -> Any:
-            barrier.wait()  # only passes when the three batches are in flight at once
-            return super().type_options(**kwargs)
-
-    backend = _Together()
-    run_id, _ = walk.build(backend)
-    typing = walk.result(run_id).provenance["typing"]
-    assert (typing["calls"], typing["failed_batches"], typing["invalid"]) == (3, 0, 0)
-    assert all(row.primary_lever_type == "subsidise" for row in walk.options().values())
-
-
-def test_an_invalid_typing_keeps_the_previous_values_version_and_runner_up(
-    conn: Connection,
-) -> None:
-    walk = _Walk(conn)
-    walk.option("Free bus passes")
-    walk.build(_Scripted(typings={"Free bus passes": {"runner_up_lever_type": "inform"}}))
-    before = walk.options()["Free bus passes"]
-    # Typed under the earlier list: the version must survive a failed typing.
-    conn.execute(
-        option.update()
-        .where(option.c.option_id == before.option_id)
-        .values(taxonomy_version="lever_types_v1")
-    )
-    run_id, _ = walk.build(
-        _Scripted(typings={"Free bus passes": {"primary_lever_type": "make it so"}})
-    )
-    after = walk.options()["Free bus passes"]
-    assert (after.primary_lever_type, after.ambition, after.ambition_reason) == (
-        before.primary_lever_type,
-        before.ambition,
-        before.ambition_reason,
-    )
-    assert after.secondary_lever_types == before.secondary_lever_types
-    assert after.taxonomy_version == "lever_types_v1"
-    result = walk.result(run_id)
-    assert result.counts["typing_invalid"] == 1
-    assert result.provenance["typing"]["kept_ids"] == [str(before.option_id)]
-    assert result.provenance["runner_up"] == {
-        str(before.option_id): {"lever_type": "inform", "carried_forward": True}
-    }
-
-
-def test_the_lever_reason_is_stored_and_a_kept_typing_carries_it_forward(
-    conn: Connection,
-) -> None:
-    """R29: each option's lever reason sits beside the runner-up, kept like it."""
-    walk = _Walk(conn)
-    walk.option("Free bus passes")
-    walk.option("Blank reason")
-    walk.option("Garbled")
-    first = walk.build(
-        _Scripted(
-            typings={
-                "Free bus passes": {"lever_reason": " The council pays the fares. "},
-                "Blank reason": {"lever_reason": "   "},
-                "Garbled": {"primary_lever_type": "make it so"},
-            }
-        )
-    )[0]
-    ids = {name: str(row.option_id) for name, row in walk.options().items()}
-    # A blank reason is not stored and never makes the typing invalid; an
-    # invalid typing stores none.
-    assert walk.result(first).provenance["lever_reason"] == {
-        ids["Free bus passes"]: "The council pays the fares."
-    }
-    assert walk.options()["Blank reason"].primary_lever_type == "subsidise"
-    # The next build's typing fails for bus passes: its earlier reason stays.
-    # A new valid reason replaces the old one.
-    second = walk.build(
-        _Scripted(
-            typings={
-                "Free bus passes": {"primary_lever_type": "make it so"},
-                "Blank reason": {"lever_reason": "A grant to each household."},
-                "Garbled": {"primary_lever_type": "make it so"},
-            }
-        )
-    )[0]
-    assert walk.result(second).provenance["lever_reason"] == {
-        ids["Free bus passes"]: "The council pays the fares.",
-        ids["Blank reason"]: "A grant to each household.",
-    }
 
 
 def test_each_thinning_rule_with_its_count_and_never_on_a_tag(conn: Connection) -> None:

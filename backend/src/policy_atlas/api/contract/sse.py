@@ -37,6 +37,7 @@ StageKey = Literal[
     "option_searches",
     "extract_interventions",
     "longlist",
+    "option_profile",
     "constrain",
     "theme",
 ]
@@ -57,6 +58,7 @@ STAGE_KEYS: tuple[StageKey, ...] = (
     "option_searches",
     "extract_interventions",
     "longlist",
+    "option_profile",
     "constrain",
     "theme",
 )

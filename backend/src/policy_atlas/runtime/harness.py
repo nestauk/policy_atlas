@@ -110,6 +110,10 @@ from policy_atlas.options_scoping.longlist.longlist_backend import (
     StubLonglistBackend,
 )
 from policy_atlas.options_scoping.longlist_intent import plan_tagging_context
+from policy_atlas.options_scoping.option_profile.option_profile import (
+    OptionProfileContext,
+    option_profile_scope,
+)
 from policy_atlas.options_scoping.suggest.suggest import (
     SuggestBackend,
     SuggestContext,
@@ -455,7 +459,7 @@ def _run_suggest(state: HarnessState) -> HarnessState:
 
 
 def _run_longlist(state: HarnessState) -> HarnessState:
-    """The longlist step (task 045, S8): records clustered into options, and typing."""
+    """The longlist step (task 045, S8): records clustered into options."""
     sources_fn = functools.partial(longlist_scope, backend=state["longlist_backend"])
     return _run_scope_component(state, LonglistContext, sources_fn)
 
@@ -467,6 +471,16 @@ def _run_constrain(state: HarnessState) -> HarnessState:
     """
     sources_fn = functools.partial(constrain_scope, backend=state["longlist_backend"])
     return _run_scope_component(state, ConstrainContext, sources_fn)
+
+
+def _run_option_profile(state: HarnessState) -> HarnessState:
+    """The option_profile step (task 046, R37): what is said about each option.
+
+    Rides the longlist backend's typing call (the same seam, S20). A spine
+    step: a failure fails the walk.
+    """
+    sources_fn = functools.partial(option_profile_scope, backend=state["longlist_backend"])
+    return _run_scope_component(state, OptionProfileContext, sources_fn)
 
 
 def _run_theme(state: HarnessState) -> HarnessState:
@@ -690,6 +704,7 @@ def build_graph() -> Any:
     g.add_node("inherit", _run_inherit)
     g.add_node("suggest", _run_suggest)
     g.add_node("longlist", _run_longlist)
+    g.add_node("option_profile", _run_option_profile)
     g.add_node("constrain", _run_constrain)
     g.add_node("theme", _run_theme)
     g.add_node("group", _run_group)
@@ -713,6 +728,7 @@ def build_graph() -> Any:
             "inherit": "inherit",
             "suggest": "suggest",
             "longlist": "longlist",
+            "option_profile": "option_profile",
             "constrain": "constrain",
             "theme": "theme",
             "group": "group",
@@ -731,6 +747,7 @@ def build_graph() -> Any:
     g.add_edge("inherit", "finish")
     g.add_edge("suggest", "finish")
     g.add_edge("longlist", "finish")
+    g.add_edge("option_profile", "finish")
     g.add_edge("constrain", "finish")
     g.add_edge("theme", "finish")
     g.add_edge("group", "finish")
@@ -878,9 +895,9 @@ def run_harness(
             defaults to ``StubGroundingJudgeBackend()`` — no default egress.
         suggest_backend: Judgment-model seam for the suggest component (task
             045); defaults to ``StubAgentBackend()`` — no default egress.
-        longlist_backend: Model seam for the longlist and constrain
-            components (task 045); defaults to ``StubLonglistBackend()`` — no
-            default egress.
+        longlist_backend: Model seam for the longlist, option_profile,
+            constrain and theme components (task 045; task 046, S20);
+            defaults to ``StubLonglistBackend()`` — no default egress.
 
     Returns:
         Harness outcome with ``summary`` populated only after successful

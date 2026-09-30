@@ -17,7 +17,8 @@ The chain it compiles to is chosen by the intent record's ``purpose`` (task
 - ``baseline`` (or no purpose): ``acquire → screen_abstract → classify →
   appraise → ingest_full_text → synthesise``, with synthesise in baseline mode;
 - ``longlist``: ``inherit → suggest → acquire → screen_abstract → classify →
-  appraise → extract_interventions → longlist → constrain → theme`` — the
+  appraise → extract_interventions → longlist → option_profile → constrain →
+  theme`` — the
   option searches are dispatched and joined (before ``screen_abstract``) by
   the runner, not by a component (task 046, ADR 0040 decision 1);
 - ``targeted``: an option search a longlist walk dispatched carries
@@ -217,9 +218,11 @@ SCOPING_SPINE: tuple[str, ...] = (
 
 #: The longlist walk's chain, with each step's spine flag (A6, P16b; owner:
 #: "inherit non-spine"). ``inherit``, ``suggest`` and ``theme`` degrade the walk
-#: when they fail; every other step fails it. ``theme`` runs after
-#: ``constrain`` has committed, so its failure cannot touch the verdicts (task
-#: 046, R28). No step ingests full text (R13).
+#: when they fail; every other step fails it. ``option_profile`` runs between
+#: ``longlist`` and ``constrain``: ``longlist`` makes the list,
+#: ``option_profile`` writes what is said about each option (task 046, R37).
+#: ``theme`` runs after ``constrain`` has committed, so its failure cannot
+#: touch the verdicts (task 046, R28). No step ingests full text (R13).
 LONGLIST_CHAIN: tuple[tuple[str, bool], ...] = (
     ("inherit", False),
     ("suggest", False),
@@ -229,6 +232,7 @@ LONGLIST_CHAIN: tuple[tuple[str, bool], ...] = (
     ("appraise", True),
     ("extract_interventions", True),
     ("longlist", True),
+    ("option_profile", True),
     ("constrain", True),
     ("theme", False),
 )

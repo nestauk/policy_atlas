@@ -68,6 +68,7 @@ def test_the_three_chains_are_the_plan_s() -> None:
         ("appraise", True),
         ("extract_interventions", True),
         ("longlist", True),
+        ("option_profile", True),
         ("constrain", True),
         ("theme", False),
     )

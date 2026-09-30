@@ -277,6 +277,7 @@ def test_a_stub_longlist_walk_fans_out_after_suggest_and_joins_before_the_screen
             "appraise",
             "extract_interventions",
             "longlist",
+            "option_profile",
             "constrain",
             "theme",
         ]
@@ -576,7 +577,7 @@ def test_a_failing_child_degrades_the_parent(
     def phase_five_stands_in(engine_: Engine, **kwargs: Any) -> Any:
         # The Phase 5 steps are not what this test is about: they succeed, so
         # the only thing that can degrade the walk is the children.
-        if kwargs["step"].component in {"longlist", "constrain"}:
+        if kwargs["step"].component in {"longlist", "option_profile", "constrain"}:
             return runner_module._AttemptOutcome(
                 run_id=uuid.uuid4(),
                 status="succeeded",

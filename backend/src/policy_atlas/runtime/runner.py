@@ -189,6 +189,8 @@ LLM_BEARING_COMPONENTS = frozenset(
         "constrain",
         # Task 046: theme makes the discovery and assignment calls over options.
         "theme",
+        # Task 046 (R37): option_profile makes the lever-typing calls.
+        "option_profile",
     }
 )
 SPINE_COMPONENTS = frozenset(SPINE)

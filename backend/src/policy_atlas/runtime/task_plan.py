@@ -122,6 +122,7 @@ OPTIONS_SCOPING_STEPS: tuple[str, ...] = (
     "suggest",
     "extract_interventions",
     "longlist",
+    "option_profile",
     "constrain",
     "theme",
 )

@@ -458,6 +458,7 @@ describe("walk kinds (task 045)", () => {
     expect(walkKind("evidence_search", [])).toBe("evidence_search");
     expect(walkKind("options_scoping", [])).toBe("baseline");
     expect(walkKind("options_scoping", [{ stage: "suggest", label: "Suggesting options", status: "completed" } as never])).toBe("longlist");
+    expect(walkKind("options_scoping", [{ stage: "option_profile", label: "Writing what each option would take", status: "started" } as never])).toBe("longlist");
   });
 
   // A7: an added option's own search is parentless but not the baseline.

@@ -129,8 +129,8 @@ from policy_atlas.options_scoping.longlist.lever_types import (
     TAXONOMY_VERSION,
     lever_types_by_version,
 )
-from policy_atlas.options_scoping.longlist.longlist import TYPING_INVALID_REASON
 from policy_atlas.options_scoping.longlist.where_tried import where_codes, where_group
+from policy_atlas.options_scoping.option_profile.option_profile import TYPING_INVALID_REASON
 from policy_atlas.runtime.capability_registry import OPTIONS_SCOPING, validate_plan
 from policy_atlas.runtime.scoping_plan import TRANSFERABILITY_DEFAULT, ScopingPlan, find_default
 from policy_atlas.runtime.steering_events import canonical_actor

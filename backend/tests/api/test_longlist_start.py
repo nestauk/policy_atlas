@@ -945,7 +945,7 @@ def test_a_longlist_walk_never_parks_even_under_frequent(
 
     def phase_five_stands_in(engine_: Engine, **kwargs: Any) -> Any:
         # The Phase 5 steps succeed here, so the walk's end is about pausing.
-        if kwargs["step"].component in {"longlist", "constrain"}:
+        if kwargs["step"].component in {"longlist", "option_profile", "constrain"}:
             return runner_module._AttemptOutcome(
                 run_id=uuid.uuid4(),
                 status="succeeded",

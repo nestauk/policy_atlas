@@ -1,7 +1,8 @@
 """The ``theme`` component: the included options grouped into themes (task 046, R28).
 
-ADR 0040 decision 5. The longlist walk ends ``longlist → constrain → theme``:
-``longlist`` makes options, ``constrain`` makes verdicts, ``theme`` groups the
+ADR 0040 decision 5. The longlist walk ends ``longlist → option_profile →
+constrain → theme``: ``longlist`` makes options, ``option_profile`` writes what
+is said about each, ``constrain`` makes verdicts, ``theme`` groups the
 options a reader still sees. It is the Evidence search characterise's theme
 machine, modified: its unit is the option. The clustering engine runs
 unchanged — one unseeded :func:`~policy_atlas.evidence_search.clustering_engine.cluster_units`
