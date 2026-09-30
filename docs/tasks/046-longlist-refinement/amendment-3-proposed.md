@@ -25,3 +25,15 @@
 | The counts by plan outcome | Count every document that reports on the plan outcome, of any role; the evaluated count stays its own figure. This replaces the lead's amendment 2 decision "evaluating documents only". | "yes to all" |
 | The list | The facets (Setting, Tried on, and Measures if shown) show labels without counts, as the Setting facet does. Counts are on the card only. | "We don't need the counts in the list view, as we don't have counts for the settings" |
 | The card | How the counts show on the card is decided under the option card topic. | "I think we will refine the documents count in the option card refinement step anyway" |
+
+## Topic 3 decided: the authority label stays as it is
+
+The label and its filter show only when the plan holds a consideration on
+who can act, which the Task Agent asks for only when Where is below
+national level. On the live runs: obesity and caregiving (England) show no
+label; refugees (Greater Manchester) shows 20 within your power and 4 needs
+action by. A national user can still state it as a consideration. No
+change. Owner: "I'm not sure about the 'within in your power' part. Is this
+always shown. Most users will be in parliament or civil service, so won't
+most things be in their organisational power. I acknowledge that for things
+like local authorities then this would be more relevant" → "Yes leave as is".
