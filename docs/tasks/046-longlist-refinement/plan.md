@@ -706,9 +706,11 @@ not phases here.
 > 18 answers, the adversarial review (34 findings, the lead's rules and the
 > owner's decisions), the owner's two later decisions (no place list;
 > `unit` in the finding records) and the answers to Q20–Q25 (Q24 the
-> owner's). The seams S21–S28 are **proposals for the
-> lead to confirm at the plan gate**; none is the owner's. The plan-stage
-> adversarial pass runs on this section before 15.0.
+> owner's), then with the plan-stage adversarial review (15 findings, the
+> lead's file `a3-plan-findings.md`, all accepted; finding 3 decided by the
+> owner, record § "The reach of the rename"). The seams S21–S28 are
+> **proposals for the lead to confirm at the plan gate**; none is the
+> owner's. "(PRn)" names the plan-review finding a change closes.
 
 Executor marks: prompts and their loops are `lead`; judgement-bearing code is
 `deep-reasoner`; mechanical work is `fast-worker`; the card's final words and
@@ -720,10 +722,14 @@ commit as that code.
 **Verify gates** (lead, A14). Full `make verify` at 15.0, at 16 (the one
 schema revision, R71) and at 23. Elsewhere `make verify-fast`, plus
 `make prompt-guard` at 16R, 16W, 18P, 20, 20L (and 18C if a round runs),
-`make drift-check` and `make openapi-sync` where the API changes (16W, 17,
-18, 21), `make frontend-verify` where the frontend changes (16W, 17, 18, 21,
-22a, 22b). One green commit per phase, and one per loop round that changes a
-prompt.
+`make drift-check` and `make openapi-sync` where the API changes (16, 16W,
+17, 18, 21), `make frontend-verify` where the frontend changes (16, 16W, 17,
+18, 21, 22a, 22c, 22b). Each phase that removes an API field deletes, in the
+same commit, the frontend lines and fixtures that read it (`OptionCard.tsx`,
+`LonglistView.tsx`, `longlistPresentation.ts`, `mock/fixtures.ts`,
+`mock/api.ts`), so `frontend-verify` stays green (PR6). Phase 21's new read
+route is marked for `/security-review` (PR13). One green commit per phase,
+and one per loop round that changes a prompt.
 
 ### Decisions proposed here, amendment 3 (lead seam design, to confirm)
 
@@ -791,7 +797,9 @@ country gives the same one; "multiple countries" if two or more, or any
 The level below: `study_geography` as written. The country filter matches a
 document under "multiple countries" whose countries include it (Q22). Coverage's `where_tried`
 (`coverage.py:349`, `:391-392`, `:471`) becomes a list of `{top, documents,
-places: [{place, documents}]}`; the `countries` key (`:350`, `:393-397`) and
+places: [{place, documents}]}`; a "multiple countries" entry also carries
+`countries` (its component countries, from `study_country` split on ";",
+case-folded), which the filter reads (PR5); the `countries` key (`:350`, `:393-397`) and
 the `home` argument go. Removed in Phase 18: `WhereGroup`, `WHERE_GROUPS`,
 `COMPARABLE_LABEL`, `OECD_CODES`, `COUNTRY_ADJECTIVES`, `COUNTRY_GROUPS`,
 `OECD_MARKERS`, `countries_in`, `where_group`, `where_labels`
@@ -799,8 +807,11 @@ the `home` argument go. Removed in Phase 18: `WhereGroup`, `WHERE_GROUPS`,
 `where_tried_labels` (`longlist.py:1967`); `WhereTriedGroup`, `WhereTriedOut`
 (`read_models.py:734`, `:817-830`); `_WHERE_GROUPS`, `_where_tried_out`,
 `_where_label` (`repository.py:2810`, `:2833-2835`, `:3199-3202`) where
-nothing else reads them. The name tables the place strip uses
-(`COUNTRY_NAMES`, `SUBNATIONAL_PLACES`, `ABBREVIATIONS`) wait for Phase 18P.
+nothing else reads them; and, whatever M4 shows, `where_codes`
+(`where_tried.py:363-373`, which calls `countries_in` at `:372`) and its only
+use, `home` (`longlist.py:1520`, `:1808`; `_home`, `repository.py:3502-3503`)
+(PR4). The name tables the place strip uses (`COUNTRY_NAMES`,
+`SUBNATIONAL_PLACES`, `ABBREVIATIONS`) wait for Phase 18P.
 
 S24. **The outcomes table's data** (R56, R64; lead, A4). `outcome_counts`
 (`coverage.py:381-386`, `:484-490`): each plan outcome carries `documents`
@@ -832,7 +843,8 @@ loses `where_tried_group` and gains `year` and `place`. No row in this task
 The card's own de-duplication (`OptionCard.tsx:186-194`) and chips
 (`:431-437`, the "inherited" chip included) go.
 
-S26. **The dossier's slot on a scoping task** (R67; lead, Q14, B8). A new read
+S26. **The dossier's slot on a scoping task** (R67; lead, Q14, B8). Owner-scoped:
+built by `deep-reasoner`, marked for `/security-review` (PR13). A new read
 route beside `GET /tasks/{task_id}/sources/{source_id}`
 (`routers/read_models.py:155-167`), for example
 `GET /tasks/{task_id}/sources/{source_id}/records?option_id=`, owner-scoped
@@ -853,25 +865,49 @@ with the option id, through the `source` search parameter
 (`ArtefactView.tsx:1401-1416`); the Sources tab's copy (`SourcesView.tsx:884-910`,
 used at `:418`) passes no option.
 
-S27. **The revision and the rename sites** (R71, R73, R75). One revision on
-`e9a4c1f7b3d2` (`backend/alembic/versions/e9a4c1f7b3d2_longlist_option_profile.py`):
-add `programme_name`, `study_country`; rename `population` → `unit` and
-`population_tag` → `unit_tag` on `intervention_profile_record`
-(`core/schema.py:1103`, `:1111`, the check `ck_ipr_population_tag` and its
-constants `:1077-1080`, `:1127-1129`); rename `population` → `unit` on
-`intervention_outcome_finding` (`:959`) and `implementation_context_finding`
-(`:1019`); drop and recreate `finding_reference_union` with `unit`
-(`FINDING_REFERENCE_UNION_SQL`, `:1145-1185`); the downgrade reverses all.
-Code readers (grep `population` again at build start): `coverage.py`,
-`longlist.py`, `constrain.py`, `repository.py`, `extract.py:1239`, `:1282`,
-`:2095-2133`, `extraction_backend.py:388`, `:394`, `quote_verify.py:78`,
-`:616`, `:646`, `:701`, `:736`, `:803`, `finding_references.py:37`, `:56`,
-`:66`, `group/facet_values.py:20`, `group/group.py:1187`,
-`synthesis/synthesis_tools.py:217`, `:253`, `:2022`, `:2068`, `:2112`,
-`:2196`, `synthesise.py`. The wire names and descriptions are prompt text:
-the intervention record's in 16R, the finding records' in 16W. Stored JSON
-keys of earlier records (`field_coverage`, grounding) are not rewritten
-(R52).
+S27. **The revision and the rename sites** (R71, R73, R75; owner, "The reach
+of the rename"). One revision on `e9a4c1f7b3d2`
+(`backend/alembic/versions/e9a4c1f7b3d2_longlist_option_profile.py`). Four
+kinds of site (PR3):
+
+- **Columns** (the revision): add `programme_name`, `study_country`; rename
+  `population` → `unit` and `population_tag` → `unit_tag` on
+  `intervention_profile_record` (`core/schema.py:1103`, `:1111`, the check
+  `ck_ipr_population_tag` and its constants `:1077-1080`, `:1127-1129`);
+  rename `population` → `unit` on `intervention_outcome_finding` (`:959`)
+  and `implementation_context_finding` (`:1019`); drop and recreate
+  `finding_reference_union` with `unit` (`:1145-1185`). Code readers of the
+  columns: `coverage.py`, `longlist.py`, `constrain.py`, `repository.py`
+  (`:3343`, `:3385`, `:3451`), `extract.py:1239`, `:1282`, `:2095-2133`,
+  `extraction_backend.py:388`, `:394`, `quote_verify.py:78`, `:616`, `:646`,
+  `:701`, `:736`, `:803`, `group/group.py:1187`,
+  `synthesis/synthesis_tools.py:217`, `:253`, `:2112`, `:2196`.
+- **The facet key** (the revision, with a data migration): `"population"`
+  → `"unit"` in `GROUPING_FACETS` (`core/schema.py:1249`), `GroupingFacet`
+  (`runtime/task_plan.py:49`), the API contract (`api/contract/task_agent.py:54`),
+  `group/facet_values.py:20`; `group.py:1291` reads `row[facet]` from the
+  view, so the key and the view change together. **Data migration**, in the
+  same revision, reversible: rewrite the stored facet value `"population"`
+  → `"unit"` in the plan payloads in production (`task_plan.payload`,
+  `core/schema.py:1376-1408`, the `grouping_facets` list,
+  `runtime/task_plan.py:749`); the downgrade writes it back. Other stored
+  places of the facet name: Q26.
+- **Payload keys sent to the models** (16W, word swap): `longlist.py:559`,
+  `:745`; `synthesis_tools.py:2022`, `:2068`; `synthesise.py:1543`, `:1584`;
+  `extract.py:2108`, `:2133`.
+- **Prompt words** (16W, word swap): the record wires' names and
+  descriptions (the intervention record's in 16R); `finding_references.py:37`,
+  `:56`, `:66`; `longlist_cluster_prompt.py:269`;
+  `synthesis/synthesis_prompts_v6.py:148`; `synthesis/grounding_judge.py:112`.
+
+Grep `population` again at build start; after 16W the word is gone from the
+product (the record). Stored JSON keys of earlier records (`field_coverage`,
+grounding) are not rewritten (R52). The evidence scripts that read the
+renamed columns or keys are updated in 16 (`evidence/pre-contract-runs/
+live_metrics.py:32`, `readback.py:84`, `:89`, `analyse_profile.py`,
+`analyse_longlist.py`); `replay.py check-stored` hashes rows as text
+(`replay.py:470-479`), so the stored-task reference is saved again right
+after the migration and recorded in `verification.md` (PR9).
 
 S28. **The place rule in words** (R74). The rule "the place in the question
 is the user's place, not a criterion; judge as if the question named no
@@ -885,15 +921,20 @@ constrain's plan data and prompt (`constrain.py:245-261`, `constrain_prompt.py`,
 `option_design_v2` → v3) and its placeless pass (`design.py:162-163`). If M4
 holds: delete `strip_place` and its helpers (`where_tried.py:421-510`), the
 name tables and `ABBREVIATIONS` (`:47-318`), `names_place` and the setting
-pass (`:513-534`; `coverage.py:203-219`), `where_codes` (`:363-373`;
-`longlist.py:1520`, `:1808`; `repository.py:3503`); the module
-`where_tried.py` goes if nothing is left. Q25 (lead): every prompt that read
+pass (`:513-534`; `coverage.py:203-219`); the module `where_tried.py` goes
+if nothing is left (`where_codes` goes in Phase 18, PR4). Callers of the
+strip (PR11): `longlist_intent.py:73`, `:139-141`, `:165-166`
+(`screen_target_unit`, `longlist_plan_data`); `api/longlist_start.py:54`,
+`:218` (the scope's `place_removed`); `constrain.py:259-261`, `:884-886`,
+`:1088`; `design.py:162-163`; the replay tool (`replay.py:73`, `:160`); tests
+`test_longlist_intent`, `test_constrain`, `test_longlist_start`,
+`test_strip_place` (retired tests listed under edited tests). Q25 (lead): every prompt that read
 the stripped text takes the rule — also those fed by `longlist_plan_data`
 (`longlist_intent.py:125-148`): discovery (`longlist_cluster_prompt.py`,
 `DISCOVERY_SYSTEM_PROMPT`, via `longlist.py:1648`), lever typing
 (`option_profile/lever_typing_prompt.py`), the eight lines and ambition
-(`option_profile/option_profile_prompt.py`), and the folding calls (their
-new module), via `option_profile.py:722`.
+(`option_profile/option_profile_prompt.py`), via `option_profile.py:722`;
+the folding prompts take the rule in Phase 20's round 0 (PR2).
 
 ### Phase 15.0 — Build-open baseline — `lead` (inline)
 
@@ -913,39 +954,56 @@ Gate: `make verify-fast`. Commit.
 
 ### Phase 16 — The schema revision and the rename sites (R71; S27)
 
-**`deep-reasoner`** (the revision, the view, the downgrade) · **`fast-worker`**
-(the code readers of S27 from an exact list; tests that hold the literal).
-The wire names stay as they are until 16R and 16W; the writer maps them to
-the new columns.
+**`deep-reasoner`** (the revision, the view, the facet-key data migration,
+the downgrade) · **`fast-worker`** (the column readers and the facet-key
+sites of S27 from an exact list; the frontend reads of the facet key and
+their fixtures; the evidence scripts; tests that hold the literal). The wire
+names, the payload keys and the prompt words stay as they are until 16R and
+16W; the writer maps the wire to the new columns (PR3).
 
 Tests: round trip up and down; an old row reads null in the two new columns
 and keeps its text under `unit`; the union view returns `unit` from all
-three branches; the Evidence search tests pass unedited except for the
-field name.
+three branches; a stored plan with `grouping_facets` holding `"population"`
+reads `"unit"` after the upgrade and `"population"` after the downgrade; a
+grouping run on the `unit` facet reads the view; the Evidence search tests
+pass unedited except for the field and facet name.
+
+After the migration on the dev database: `replay.py check-stored` reports
+the new columns as a change; the stored-task reference is saved again and
+the step is recorded in `verification.md` (PR9).
 
 **Production** (owner, Q24: "Keep in this amendment."): Evidence search is
 live, so the revision reaches production data. It must run there without a
 re-extraction: the finding tables' rename is a plain column rename with no
 version change on the finding records (their schema and prompt versions stay,
 so their fingerprints and memo rows stay valid); the intervention record's v3
-(16R) re-extracts options-scoping tasks only, on their next run. Rollback on
-production: `alembic downgrade -1` reverses the three renames and drops the
-two new columns; deploy the previous image. A test runs the downgrade on a
-finding row and reads the text back.
+(16R) re-extracts options-scoping tasks only, on their next run. The facet
+key's data migration rewrites the stored plans of Evidence search tasks in
+production (owner, "The reach of the rename": "1."). Rollback on production:
+`alembic downgrade -1` reverses the three renames, writes `"population"`
+back into the stored plans and drops the two new columns; deploy the
+previous image. Tests run the downgrade on a finding row and on a stored
+plan and read the text back.
 
-Gate: **full `make verify`**. Commit.
+Gate: **full `make verify`** (with `make openapi-sync` and
+`make frontend-verify` inside it: the facet key is in the API). Commit.
 
 ### Phase 16R — The record prompt loop (R63, R69, R72, R73; S22) — `lead` · `fast-worker`
 
 `fast-worker`: the wire fields, the nullable-field list, the record, the
-writer, `SCHEMA_VERSION`, the guard's file list (S22), with tests from an
-exact list (a record with and without a name; blank → null; `unit_tag`
+writer, `SCHEMA_VERSION`; `CoverageMember` gaining `programme_name` and
+`study_country` and its loaders (`longlist.py:1398-1415`;
+`repository.py:3343`, `:3385`, `:3451`) (PR10); an explicit extra-files list
+in `scripts/prompt_hash_guard.py` (today it takes only files named
+"*prompt*", `:39-43`), holding `interventions_records.py` (PR8); tests from
+an exact list (a record with and without a name; blank → null; `unit_tag`
 values unchanged). `lead`: the prompt text for `programme_name`,
 `study_country` and `unit` (the wider definition), v3, as round 0 in the same
 commit; then rounds. Replay: `replay.py stage profile <slug> --fresh`
 (`evidence/pre-contract-runs/replay.py:77-90`; `--fresh` bypasses the memo,
 which is per task, `extract.py:368-375`) on the tuning set, one read of the
-check set; at most five rounds (A5).
+check set; at most five rounds (A5). At the last round, `replay.py stage
+longlist <slug> --fresh` on the tuning set reads M1 and M2 (PR14).
 
 Stop measure (proposed): on the tuning set, every non-null `programme_name`
 is a proper name the abstract gives for this intervention, not one it sits
@@ -958,9 +1016,13 @@ other fields and tags unchanged in kind (a sample read).
 Gate: `make verify-fast` · `make prompt-guard`. Commit. Report to the owner
 (R25).
 
-### Phase 16W — The word swap in the finding records (R75; S27) — `lead`
+### Phase 16W — The word swap: finding records, payload keys, prompt words (R73, R75; S27) — `lead`
 
-The IOF and ICF wire fields `population` → `unit` (`iof_records.py:152`,
+The word swap of S27 (owner, "The reach of the rename": "1."), like for like
+under the 038 ruling. The payload keys sent to the models (`longlist.py:559`,
+`:745`; `synthesis_tools.py:2022`, `:2068`; `synthesise.py:1543`, `:1584`;
+`extract.py:2108`, `:2133`); the prompt words (`longlist_cluster_prompt.py:269`,
+`synthesis_prompts_v6.py:148`, `grounding_judge.py:112`); the IOF and ICF wire fields `population` → `unit` (`iof_records.py:152`,
 `:314`; `icf_records.py:97`, `:193`) and their descriptions with the wider
 definition (`finding_references.py:37`; the prompt texts `iof_prompt.py`,
 `icf_prompt.py:257`, their examples); `IofFindingOut`, `IcfFindingOut`
@@ -969,9 +1031,10 @@ definition (`finding_references.py:37`; the prompt texts `iof_prompt.py`,
 re-pinned; the diff read as words only and recorded; no replay (the owner's
 038 ruling). **No version change** on the finding records (owner, Q24), so
 no document is extracted again; `iof_records.py`, `icf_records.py` and
-`finding_references.py` join the hash guard's file list
-(`scripts/prompt_hash_guard.py`) and are hashed in
-`scripts/prompt_hashes.json`.
+`finding_references.py`, and `grounding_judge.py` (not named "*prompt*"),
+join the extra-files list of `scripts/prompt_hash_guard.py` that 16R added,
+and are hashed in `scripts/prompt_hashes.json` (PR8). After 16W, a grep of
+`backend/src` and `frontend/src` finds no "population" in product code.
 
 Gate: `make verify-fast` · `make prompt-guard` · `make drift-check` ·
 `make openapi-sync` · `make frontend-verify`. Commit.
@@ -992,8 +1055,10 @@ Gate: `make verify-fast` · `make drift-check` · `make openapi-sync` ·
 ### Phase 18 — Where tried from `study_country` (R59, R72; S23)
 
 **`deep-reasoner`** (the per-record and per-document rule) ·
-**`fast-worker`** (the removal sites of S23, the read model, `place` on a
-document, OpenAPI, the frontend types and the facet's data).
+**`fast-worker`** (the removal sites of S23, `where_codes` and `home`
+whatever M4 shows (PR4), the read model, `place` and the multiple-country
+`countries` (PR5), OpenAPI, and the frontend reads of `where_tried` and
+`where_tried_group` with their fixtures, in this commit (PR6)).
 
 Tests: a country → that country; "multiple" → "multiple countries"; a place
 with an empty `study_country` → "other", its text below; nothing →
@@ -1007,6 +1072,15 @@ Gate: `make verify-fast` · `make drift-check` · `make openapi-sync` ·
 
 ### Phase 18P — The place rule loop (R74; S28) — `lead` · `fast-worker`
 
+**18P.0 — the screen reset** (`fast-worker`, the gitignored replay tool)
+(PR1): the replay tool refuses `--fresh` for the screen
+(`replay.py:90`, `:353-354`), a second screen run screens 0 documents
+(`replay-out/refugees-toolbuild/screen-rerun.json`) and the scope's intent is
+fixed at clone time (`replay.py:156-160`). The tool gains a screen reset for
+a clone: a new replay scope per round with the round's intent and criteria,
+or the clone's stage-1 rows moved aside; M4 and the screen's pass count are
+read from it. It never touches a stored task (`guard_clone`).
+
 `lead`: the rule in words, as round 0, in every prompt that read the
 stripped text (Q25): the screen criteria and intent (`longlist_intent.py:77`,
 `:100`), the tagging context (`:150`), `constrain` (v4,
@@ -1014,18 +1088,22 @@ stripped text (Q25): the screen criteria and intent (`longlist_intent.py:77`,
 `runtime/option_design_prompt.py:26`), discovery
 (`longlist_cluster_prompt.py:37`, v3), lever typing
 (`option_profile/lever_typing_prompt.py`), the line and ambition prompts
-(`option_profile/option_profile_prompt.py`) and the folding prompts; then
-rounds.
-Replays: `replay.py stage <stage> <slug> --fresh` for the screen, profile,
-constrain and suggest stages on the tuning set (the energy and cohesion
-clones included, where M4 was read in stage 1, AM18), one read of the check
-set. Stop measure: **M4** — no exclusion and no screen failure because of
+(`option_profile/option_profile_prompt.py`); then rounds. The folding
+prompts do not exist yet: they take the rule in Phase 20's round 0 (PR2).
+Replays, for every stage that reads the plan (PR2): the screen (through
+18P.0), `longlist` (discovery and typing), `option_profile`, `constrain` and
+`suggest`, on the tuning set (obesity, refugees, caregiving, energy; energy
+is where M4 was read in stage 1, AM18); one read of the check set (NEET,
+heat pumps, cohesion; cohesion is check only, PR12). Stop measure: **M4** — no exclusion and no screen failure because of
 place, read by hand. Reported: M1, M2, the screen's pass counts beside the
 last loop's (Q25).
 
 `fast-worker`, only if M4 holds: delete the strip and its helpers, the name
-tables, `names_place` and the setting pass, `where_codes` (S28), and their
-tests' literals. If M4 fails, nothing is deleted and the round record and
+tables, `names_place` and the setting pass (S28), the callers' uses named in
+S28 (`api/longlist_start.py:54`, `:218`; `constrain.py:884-886`, `:1088`;
+`replay.py:73`, `:160`) and their tests' literals; retired tests
+(`test_strip_place`) listed under edited tests (PR11). (`where_codes` went in
+Phase 18.) If M4 fails, nothing is deleted and the round record and
 `verification.md` say so (R74).
 
 Gate: `make verify-fast` · `make prompt-guard`. Commit. Report to the owner
@@ -1033,8 +1111,8 @@ Gate: `make verify-fast` · `make prompt-guard`. Commit. Report to the owner
 
 ### Phase 18C — The "not stated" check (R59; Q18) — `lead`
 
-On the three live lists of Phase 14 (tasks `8d73e096`, `161ac3d5`,
-`1409ae63`) after a run on v3 records: the records whose top level is "not
+On the replay clones after 16R (v3 records), and again on Phase 23's live
+lists; no extra live run (PR7). The records whose top level is "not
 stated": how many abstracts name the place of the study, read by hand, with
 `study_geography` and `study_country` beside; a fault only where the abstract
 names it. Round record `evidence/rounds/18C-not-stated.md`: counts only, no
@@ -1062,7 +1140,8 @@ Gate: `make verify-fast` · `make drift-check`. Commit.
 **`deep-reasoner`** (the calls, the maps at list level, the counts into
 `tried_on_kinds` and `measures_kinds`, `option_coverage` applying the maps,
 the merge and added-option paths, A4's cross-rows) · **`lead`** (20L round 0
-in the same commit: the two folding prompts, in a new prompt module under
+in the same commit: the two folding prompts, with the place rule of R74 in
+them (PR2), in a new prompt module under
 `options_scoping/option_profile/`).
 
 Tests: an invalid response twice fails the step and writes nothing; a word
@@ -1088,21 +1167,28 @@ target unit first; words kept as their own text; M6's replacement.
 Gate: `make verify-fast` · `make prompt-guard`. Commit. Report to the owner
 (R25).
 
-### Phase 21 — Read models and the dossier's records (S24, S26) — `fast-worker`
+### Phase 21 — Read models and the dossier's records (S24, S26)
 
-The fields of S24 and the removals (B13); `examples`; the route and read
-model of S26; `make openapi-sync`.
+**`fast-worker`** (the fields of S24 and the removals, B13; `examples`; the
+frontend lines and fixtures that read each removed field — `variants`,
+`populations`, `runner_up_lever_type`, `transferability`, `depth_label` — in
+`OptionCard.tsx`, `LonglistView.tsx`, `longlistPresentation.ts`,
+`mock/fixtures.ts`, `mock/api.ts`, in this commit, PR6) · **`deep-reasoner`**
+(the owner-scoped route and read model of S26, **marked for
+`/security-review`**, PR13). `make openapi-sync`.
 
 Tests: the table's rows (plan outcomes in plan order with `serves`, then
 `other`); a scoping document's records, one per option, each in its own
 words, and filtered by option; a document with no record under the option
 reads its findings; an Evidence search task's findings route unchanged;
-owner scoping (an unreadable task is 404).
+owner scoping (an unreadable task is 404; another owner's option id gives
+nothing).
 
 Gate: `make verify-fast` · `make drift-check` · `make openapi-sync` ·
-`make frontend-verify`. Commit.
+`make frontend-verify`; `/security-review` on the route before the commit.
+Commit.
 
-### Phase 22a — Card, facets, grid, dossier slot: structure — `fast-worker`
+### Phase 22a — The card: structure — `fast-worker`
 
 From final 3 § 2.5 with the exact words of the record: the header's grey
 line; no `SnapshotCells` or chip (`OptionCard.tsx:244`, `:302-309`); "What it
@@ -1117,14 +1203,22 @@ abstracts only"; the document list: linked title or plain text, meta line,
 five then "Show all N", "No documents found yet."); checks (the user's
 boundaries and preferences first, built-ins in one line unless one fails, no
 transferability line, `:449-477`); no "What it is for" and no origin section
-(`:356-366`, `:479-481`); the 16 px sentences of A10. Facets without counts:
-Setting, Tried on, Where tried (top level); Tried on and Where tried filter
-as Setting does (`LonglistView.tsx:143-156`); each folds after 8 chips
-(`SETTING_FACET_LIMIT`, `:57`); no Measures facet (`:438-515`;
-`triedOnFacet`, `longlistPresentation.ts:285`). `CELL_LIMIT` 4
-(`LonglistGrid.tsx:29`). The dossier: only the document list opens
-`SourceDossier`; the slot of S26. Box 28's card tests edited for the label's
-place (`OptionCard.test.tsx:241-259`, B14). Vitest tests for each.
+(`:356-366`, `:479-481`); the 16 px sentences of A10. Box 28's card tests
+edited for the label's place (`OptionCard.test.tsx:241-259`, B14). Vitest
+tests for each.
+
+Gate: `make verify-fast` · `make frontend-verify`. Commit.
+
+### Phase 22c — Facets, grid, dossier slot: structure — `fast-worker` (PR15)
+
+Facets without counts: Setting, Tried on, Where tried (top level); Tried on
+and Where tried filter as Setting does (`LonglistView.tsx:143-156`), a
+country chip also matching "multiple countries" documents through their
+`countries`; each folds after 8 chips (`SETTING_FACET_LIMIT`, `:57`); no
+Measures facet (`:438-515`; `triedOnFacet`, `longlistPresentation.ts:285`).
+`CELL_LIMIT` 4 (`LonglistGrid.tsx:29`). The dossier: only the card's
+document list opens `SourceDossier`; the slot of S26 in `SourceDossierBody`
+(`SourcesView.tsx:962`, `:1055-1064`). Vitest tests for each.
 
 Gate: `make verify-fast` · `make frontend-verify`. Commit.
 
@@ -1143,15 +1237,19 @@ Gate: `make verify-fast` · `make frontend-verify`. Commit.
   M1–M5, M7–M10, M12 and M14 read back from saved files (M6 retired; M4
   beside the 18P result); new figures: kinds per folding facet per list, the
   top-level where values per list, records with a `programme_name` and by
-  `study_country` value, options with examples.
+  `study_country` value, options with examples; the 18C "not stated" read
+  on these lists (PR7).
 - The browser check (desktop and 390 px): the card top to bottom; the seven
   cells; the authority label beside "Who decides" (refugees); the outcomes
   table; where tried both levels; a document opening the dossier with "In
   this option"; the Sources tab's dossier on the same task; an Evidence
-  search task's dossier and findings view (the word `unit`); the facets
+  search task's dossier, findings view and grouping by the `unit` facet (the
+  word "population" nowhere); the facets
   filtering; the grid with a cell of five or more.
 - `verification.md` § Amendment 3: gates, commits, round records, the 16W
-  diff read, the OpenAPI diff, the revision and its rollback, the edited
+  diff read, the OpenAPI diff, the revision and its rollback (the facet-key
+  data migration included), the stored-task reference saved again after the
+  migration (PR9), the edited
   tests, the known limits of final 3 § 7.3, the 18P outcome (list deleted or
   kept), and a line naming rounds 2–5 of 12L as built before this amendment.
   Spec-change proposals (the owner decides the wording); `docs/deferred.md`.

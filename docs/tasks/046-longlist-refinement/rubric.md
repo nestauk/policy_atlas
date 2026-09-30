@@ -339,7 +339,8 @@ is reported, not passed (R69). Every question of final 3 § 7.2 is answered
     labels only (vitest: no digit in a chip); Tried on and Where tried (top
     level) filter the list as Setting does; a country chip also matches a
     document under "multiple countries" whose `study_country` holds that
-    country (lead, Q22; a vitest); each folds after 8 chips; no Measures
+    country, read from the `countries` that each "multiple countries" entry
+    of the coverage carries (lead, Q22; plan review 5; a test and a vitest); each folds after 8 chips; no Measures
     facet (vitest).
 51. [ ] **The authority label's rule unchanged (R58).** The label shows only
     with a consideration on who can act; box 28's tests are edited for the
@@ -350,6 +351,7 @@ is reported, not passed (R69). Every question of final 3 § 7.2 is answered
     `OECD_CODES`, `OECD_MARKERS`, `countries_in`, `where_group` or
     `where_labels` in product code; no "comparable" or "OECD" as a group label
     or heading (the level below may show the record's text: lead, A3).
+    `where_codes` and `home` are gone whatever M4 shows (plan review 4).
     Coverage gives per document one top level from `study_country`: a country
     · "multiple countries" · "other" · "not stated", and the level below as
     `study_geography` as written. Tests pin: one country → that country;
@@ -427,10 +429,16 @@ is reported, not passed (R69). Every question of final 3 § 7.2 is answered
     `intervention_profile_record`; `population` → `unit` on
     `intervention_outcome_finding` and `implementation_context_finding`; the
     union view recreated with `unit`; a round-trip test; full `make verify` at
-    Phase 16. No other schema change; no new table. **Production:** the
+    Phase 16. The same revision holds a **reversible data migration** of the
+    grouping facet key `"population"` → `"unit"` in the stored plan payloads
+    (`grouping_facets`), with tests up and down on a stored plan (owner,
+    "1."); `GROUPING_FACETS`, `GroupingFacet` and the API contract read
+    `unit`. No other schema change; no new table. **Production:** the
     revision needs no re-extraction (no version change on the finding
     records, Q24); `verification.md` records the downgrade path for
-    production (`alembic downgrade -1`, the previous image).
+    production (`alembic downgrade -1`, which also writes the facet key back;
+    the previous image) and the stored-task reference saved again after the
+    migration (plan review 9).
 68. [ ] **The authority label beside "Who decides" (R70).** In "What it
     would take", the "Who decides" row carries the label word with its colour,
     then the sentence, only when the option has an authority entry; no
@@ -451,7 +459,10 @@ is reported, not passed (R69). Every question of final 3 § 7.2 is answered
     record's `unit` description reads "who or what the intervention was
     delivered to: people, organisations, sites or things"; the IOF/ICF
     prompts carry the same definition; the findings view label reads the
-    new word. The 16W diff is words only, read by the lead and recorded;
+    new word. The 16W word swap also covers the payload keys sent to the
+    models and the prompt words (`longlist_cluster_prompt.py:269`,
+    `synthesis_prompts_v6.py:148`, `grounding_judge.py:112`) (owner, "1.").
+    The 16W diff is words only, read by the lead and recorded;
     hashes re-pinned; no replay; **no version change** on the finding records
     (their schema and prompt versions as before), so the revision runs on
     production without a re-extraction; the downgrade reverses the rename
@@ -464,7 +475,7 @@ is reported, not passed (R69). Every question of final 3 § 7.2 is answered
     **M4** on the replays (18P stop measure): no exclusion and no screen
     failure because of place, read by hand. Threshold: none. The screen's
     pass rate reported beside the last loop's. If M4
-    holds, `strip_place`, its name tables, `names_place` and `where_codes`
+    holds, `strip_place`, its name tables and `names_place`
     are gone from product code; if it fails, they stay and `verification.md`
     and final 3 say so. M4 on the live runs reported.
 
@@ -478,18 +489,21 @@ is reported, not passed (R69). Every question of final 3 § 7.2 is answered
     (18P). Each: rounds in `evidence/rounds/` (change, finding, figures,
     read-back), one stop measure, at most five rounds, tuned on the tuning
     set and read once on the check set, reported to the owner, re-pinned in
-    `scripts/prompt_hashes.json`; `interventions_records.py` is in the guard's
-    file list with `iof_records.py`, `icf_records.py` and
-    `finding_references.py` (lead, B12; owner, Q24), each hashed in
-    `scripts/prompt_hashes.json`. Folding stop measure (20L): on the tuning set, no
+    `scripts/prompt_hashes.json`; `scripts/prompt_hash_guard.py` has an
+    explicit extra-files list (it takes only "*prompt*" files by name) holding
+    `interventions_records.py`, `iof_records.py`, `icf_records.py`,
+    `finding_references.py` and `grounding_judge.py` (lead, B12; owner, Q24,
+    "1."; plan review 8), each hashed in `scripts/prompt_hashes.json`. Folding stop measure (20L): on the tuning set, no
     two kinds on one list name the same kind, and at most 12 kinds per list
     per facet (lead, A6); kinds per list and plan-word matches reported. The
     16W word swap is not a loop (R75). The cluster prompt is unchanged for examples; its discovery prompt takes the place rule (18P).
-64. [ ] **Gates (lead, A14).** Full `make verify` at 15.0, 16 (the schema)
-    and 23; `prompt-guard` at 16R, 16W, 18P, 20 and 20L (and 18C if a round
-    runs); `openapi-sync` at 16W, 17, 18 and 21; `frontend-verify` at 16W,
-    17, 18, 21, 22a and 22b; ADR 0040 amended in its own commit before
-    Phase 16.
+64. [ ] **Gates (lead, A14; plan review).** Full `make verify` at 15.0, 16
+    (the schema) and 23; `prompt-guard` at 16R, 16W, 18P, 20 and 20L (and 18C
+    if a round runs); `openapi-sync` at 16, 16W, 17, 18 and 21;
+    `frontend-verify` at 16, 16W, 17, 18, 21, 22a, 22c and 22b, each removal
+    phase deleting the frontend readers and fixtures of the field it removes;
+    `/security-review` on the new route of Phase 21; ADR 0040 amended in its
+    own commit before Phase 16.
 65. [ ] **The contract's lines hold.** The OpenAPI diff shows only the
     removals and additions of final 3 § 3; `verification.md` records the
     known limits of final 3 § 7.3, M1, M2 and M4 on the live runs, records
