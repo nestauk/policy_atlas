@@ -2,7 +2,9 @@
 
 - **Status:** Accepted — 2026-09-28 (owner, at the task 046 plan gate; the
   decisions below were ruled one by one in the contract interview, the
-  contract-stage review and the plan-stage review the same day)
+  contract-stage review and the plan-stage review the same day).
+  **Amended 2026-09-30** by § Amendment 2 (task 046 amendment 2; the owner
+  decided its rulings R34 to R53 on 2026-09-29)
 - **Date:** 2026-09-28
 - **Task:** 046-longlist-refinement (contract, rubric and plan under
   `docs/tasks/046-longlist-refinement/`)
@@ -199,7 +201,97 @@ later system-level task.
    verbs prompt are not. A prompt changes only on a finding from a round.
    The replay tool is a development script and is not product code.
 
+## Amendment 2 (2026-09-30)
+
+The rulings are R34 to R53 in the contract's § Amendment 2; the design
+detail is in `docs/tasks/046-longlist-refinement/amendment-2-final.md`. The
+decisions above stand, except where a decision below names one.
+
+9. **`option_profile` is a component of its own, between `longlist` and
+   `constrain`.** (Amends decision 5.) The walk ends `longlist →
+   option_profile → constrain → theme`. It stays a line: no side branch.
+   `longlist` makes the list: the options, their documents, the variants.
+   `option_profile` writes all that is said about an option: the lever
+   type, the ambition, eight lines of "what it would take" and the
+   delivery setting. It has the same form as `theme`, but it is a spine
+   step: a failure fails the walk, as a failure of `longlist` or
+   `constrain` does. There is no code path for a built list with no
+   profile. One stage key, `option_profile`, joins the run stream. It runs
+   before `constrain`, on the whole list, so an excluded option has its
+   profile and "include again" needs no special case. From the end of
+   `longlist` to the end of `option_profile` the list shows no lever type,
+   no ambition and no lines; this is accepted.
+
+   *Rejected:* the profile after `constrain`, on the included options only
+   (owner: "This seems like added complexity for not much gain. Why don't
+   we just run profile before constrain."); the profile inside `longlist`
+   (owner: "I think it is its own step."); a special failure rule that
+   keeps a list with no profile (owner: "I just think this might be overly
+   defensive programming"); the name `profile` (it already means the
+   intervention profile of a record).
+
+10. **Lever typing is in `option_profile`.** (Amends decision 7, where
+    typing was a part of `longlist`.) It moves as built: the same prompt,
+    the same batches, and the same rule that a failed or invalid typing
+    batch keeps the previous typing. Its data stays in the same keys of the
+    same `longlist_result` row, so the read side does not change. Lever
+    typing no longer writes the ambition.
+
+11. **A line is one call over the whole list.** Each of the eight lines,
+    the ambition and the setting is one call on the judgment model that
+    reads every option of the list, so that the same words mean the same
+    thing across the list. The calls run at one time. An option gets one
+    plain sentence per line. On six lines an option that clearly stands
+    out from most of the list also gets a relative mark (less or more);
+    "who decides" and "dependencies" have no mark. Ambition is how big a
+    proposal the option is against the baseline, with the same relative
+    mark. The marks are not added, weighted or ranked.
+
+    *Rejected:* fixed bands (low, medium, high), a fixed list of answers,
+    anchor examples in the prompt, guards in code on top of the prompt, a
+    "cannot judge" value, a basis mark, ambition derived from the line
+    marks, the three fixed ambition bands of task 045.
+
+12. **One JSON column stores the profile.** `longlist_result.option_profile`,
+    keyed by option id and design version, as `judgements` is. Per option:
+    for each line key the sentence and the mark (`less`, `more` or null),
+    and the setting. The lever type and the ambition stay in the option's
+    columns. One reversible alembic revision on `d8f3b6a2c4e1`; no other
+    schema change.
+
+13. **The plan keeps five kinds of user statement apart.** The constraint
+    kind `requirement` is renamed `boundary`. A new kind, `consideration`,
+    holds what the adopter has or lacks, who can act, and how far evidence
+    from elsewhere applies; it names the line it speaks of and carries
+    `hard` for a stated limit. It is checked at assessment. **A
+    consideration never excludes an option.** There is no plan slot "who
+    decides": who can act is a consideration on that line.
+
+14. **One exception to "place never reaches constrain".** (Amends decision
+    7.) The line "who decides" names the body that must adopt the option
+    and the country it assumes, from the plan's Where. `constrain` reads
+    that line and the user's consideration on "who decides", and writes an
+    authority label (*within your power* · *needs action by <body>* ·
+    *unclear*) into `longlist_result.judgements`. The label never excludes;
+    the reader can filter by it. With no such consideration there is no
+    label. The rule stands for all else: `constrain`'s plan data is still
+    place-stripped, and evidence from another place is never excluded for
+    its place.
+
+15. **Outcomes at the longlist are counts, in documents.** Per option: the
+    documents that evaluate it and, among them, the documents for each
+    plan outcome, from the existing outcome tag. No direction of effect,
+    no size and no verdict; those belong to the assessment.
+
 ## Rollback
+
+**Amendment 2** adds a second reversible revision. `alembic downgrade -1`
+drops `longlist_result.option_profile`; deploy the previous image. The
+read-model change of amendment 2 is not additive (`ambition_bands` is
+removed; the ambition values change), so a longlist built by amendment 2 is
+not guaranteed to read cleanly under the previous image. Nothing of this
+feature is staged. The text below describes the first revision
+(`d8f3b6a2c4e1`); to remove both, run `alembic downgrade -2`.
 
 One alembic revision, reversible, with no value rewrite. Quiesce the API.
 `alembic downgrade -1` drops `population_tag`, `outcome_tag` and
