@@ -135,3 +135,30 @@ one for each option that holds it. Evidence search tasks are unchanged. Owner:
 "In the evidence search dossier, there is a section for extracted findings
 anyway, so I suppose the profile is that?" → the lead's proposal above →
 "Sounds good".
+
+## Eighteen build questions from the final document (2026-09-30)
+
+The consolidation found 18 gaps (`amendment-3-final.md` § 7.2). The lead
+settled the technical ones; four with a visible effect go to the owner
+(marked "owner").
+
+| Q | The lead's decision |
+|---|---|
+| 1 | **Owner.** No clustering call reads all member records, so `examples` cannot come from it. Instead: a **folding-style call** over the list's distinct record intervention names (the source of today's variants, from all members): the mini model marks which are proper names of a programme, scheme or law and folds spellings; the code lists at most 5 per option, by document count. Same mechanism as the two facets. |
+| 2 | Folded seeds show under "also found as" only; they are not examples. |
+| 3 | `examples` is stored in the coverage, as the variants are; remade on a rebuild. |
+| 4 | A plan-outcome row counts from `outcome_tag` (R56). The folding call gets the plan's outcomes as reference and labels a matching word with the plan outcome; a folded kind that equals a plan outcome is not a separate row. Other rows count from the folded kinds. |
+| 5 | **Owner.** "Who decides" and "dependencies" have no level, so they have no cell. The collapsed row has **seven cells**: Ambition first, then the six marked lines. |
+| 6 | Top level has four values: a country · "multiple countries" · "other places" (a stated place that the matcher does not know, as written) · "not stated". The level below is the record's text as written. The group words gain "Europe", "European", "North America", "Nordic", "countries". |
+| 7 | A document whose records name two countries counts under "multiple countries", with both texts below. |
+| 8 | Tried on and Where tried (top level) filter the list, as Setting does; each facet folds after 8 chips. No Measures facet on the list. The card shows all kinds. |
+| 9 | M6 is retired; its rubric box becomes "Tried on shows kinds beyond the plan's target unit where the evidence has them". Constrain keeps reading the coverage keys it reads today (`tried_on`, record `settings`); they stay in the coverage, hidden from the reader. |
+| 10 | **Owner.** "The other levers" = the secondary lever types. The runner-up line goes. |
+| 11 | **Owner.** The authority label shows beside the "Who decides" row of "What it would take": the word with its colour, then the sentence. |
+| 12 | "The user's considerations" in the checks = the user's boundaries and preferences, which are judged. The kind `consideration` is not judged at the longlist and does not show there. |
+| 13 | The meta line: quality · type · role (the document's highest role under this option: evaluated, then described, then the rest) · place (top level) · year. `OptionDocumentOut` gains `year` from the snapshot metadata. |
+| 14 | The dossier shows each record with its own words (it is the record, not the fold); several records per document each show. |
+| 15 | A document with no row in this task shows its title as plain text, not a link. |
+| 16 | In this amendment only the document list opens the dossier. |
+| 17 | A known limit: words that no folding call saw have no kind until the next rebuild, as an added option has no lines. |
+| 18 | A fault found by the "not stated" check goes to a refine round of the existing record prompt (`extract_interventions`), which is allowed: it is not a new extraction. |
