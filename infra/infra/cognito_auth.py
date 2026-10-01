@@ -31,6 +31,17 @@ class CognitoAuth(Construct):
             sign_in_aliases=cognito.SignInAliases(email=True),
             auto_verify=cognito.AutoVerifiedAttrs(email=True),
             account_recovery=cognito.AccountRecovery.EMAIL_ONLY,
+            # Character rules restate Cognito's defaults: once a policy is sent,
+            # any rule it omits is off. 30 days because `--invite manual` hands
+            # passwords over out of band, which routinely outlasts the 7-day default.
+            password_policy=cognito.PasswordPolicy(
+                min_length=8,
+                require_lowercase=True,
+                require_uppercase=True,
+                require_digits=True,
+                require_symbols=True,
+                temp_password_validity=Duration.days(30),
+            ),
             removal_policy=RemovalPolicy.RETAIN,
         )
 

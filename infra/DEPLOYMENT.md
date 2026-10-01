@@ -264,7 +264,7 @@ synth-time context query and must not run before the VPC exists.
      swallow), add `INVITE=manual` (CLI: `--invite manual`): the email is
      suppressed and the CLI **mints** a single-use temporary password, printed
      once for out-of-band handover — the person sets their own at first
-     sign-in (`FORCE_CHANGE_PASSWORD`, 7-day validity). The CLI still accepts
+     sign-in (`FORCE_CHANGE_PASSWORD`, 30-day validity). The CLI still accepts
      no password from anyone, and the mode needs no IAM beyond
      `AdminCreateUser`. The durable fix is SES-backed pool email
      (docs/deferred.md § Organisations — SES entry).

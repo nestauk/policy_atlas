@@ -178,7 +178,7 @@ class Enrolment(Record):
             )
         if self.temporary_password is not None:
             line += (
-                f"\ntemporary password (single-use, 7-day expiry, they set their "
+                f"\ntemporary password (single-use, 30-day expiry, they set their "
                 f"own at first sign-in): {self.temporary_password}"
             )
         return line
@@ -506,7 +506,7 @@ def create_user(
         # existing addresses — losing it here would strand the account.
         kept_password = (
             f" Its single-use temporary password is: {minted} (printed once, "
-            f"7-day expiry)." if minted is not None else ""
+            f"30-day expiry)." if minted is not None else ""
         )
         raise OpsError(
             f"the Cognito account for {email} was created and has been KEPT, but the "
