@@ -1,7 +1,8 @@
 """What each operator command actually does, as functions over one connection.
 
 Every function here takes an open :class:`~sqlalchemy.engine.Connection` and,
-where it needs one, a Cognito client. It writes rows and returns a small record
+where it needs one, a Cognito client (``user reissue`` touches Cognito only, so
+takes no connection). It writes rows and returns a small record
 describing what it did; it never opens a transaction, never prints, and never
 exits. :mod:`policy_atlas.ops.cli` supplies the transaction and renders the
 record. That shape is what lets the phase-6 SSE suite drive a *real*
@@ -13,10 +14,11 @@ than re-implementing the write it believes the CLI performs.
 *The identity provider is asked first, and only about identity.* ``sub`` is the
 key (contract § 3b) and only Cognito can turn an address into one, so
 ``user create``, ``user enrol`` and ``user resync`` call ``ListUsers`` /
-``AdminCreateUser``. ``admin grant``, ``admin revoke``, ``user de-enrol`` and
-``rows assign`` resolve entirely in the database and make no AWS call at all —
-which is also why operator IAM needs nothing beyond ``ListUsers`` and
-``AdminCreateUser`` (contract § 9).
+``AdminCreateUser``, and ``user reissue`` calls ``ListUsers`` /
+``AdminSetUserPassword``. ``admin grant``, ``admin revoke``, ``user de-enrol``
+and ``rows assign`` resolve entirely in the database and make no AWS call at
+all — which is also why operator IAM needs nothing beyond ``ListUsers``,
+``AdminCreateUser`` and ``AdminSetUserPassword`` (contract § 9).
 
 *Compare and refuse under the row lock.* Every write to ``app_user`` reads the
 row ``FOR UPDATE`` first and refuses when the state is not what the operator was
@@ -54,7 +56,7 @@ from datetime import UTC, datetime
 
 from botocore.exceptions import ClientError
 from mypy_boto3_cognito_idp.client import CognitoIdentityProviderClient
-from mypy_boto3_cognito_idp.type_defs import AttributeTypeTypeDef
+from mypy_boto3_cognito_idp.type_defs import AttributeTypeTypeDef, UserTypeTypeDef
 from sqlalchemy import and_, case, delete, insert, or_, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.engine import Connection, RowMapping
@@ -241,6 +243,30 @@ class Resync(Record):
         return (
             f"updated the stored address for {self.user_id}: "
             f"{self.previous_email or '(none)'} -> {self.email}"
+        )
+
+
+@dataclass(frozen=True)
+class Reissue(Record):
+    """A fresh temporary password for an account that never completed first sign-in.
+
+    Attributes:
+        user_id: The Cognito subject.
+        email: The address the subject resolved from.
+        temporary_password: The minted credential. Rendered once in the summary
+            for out-of-band handover, never logged.
+    """
+
+    user_id: str
+    email: str
+    temporary_password: str
+
+    def summary(self) -> str:
+        """Render the reissue line, carrying the password once."""
+        return (
+            f"reissued {self.email} ({self.user_id})\ntemporary password "
+            f"(single-use, 30-day expiry, they set their own at first sign-in): "
+            f"{self.temporary_password}"
         )
 
 
@@ -515,6 +541,60 @@ def create_user(
             f"--org {org.name!r} --display-name {display_name!r}`"
         ) from error
     return replace(enrolment, temporary_password=minted)
+
+
+def reissue_temporary_password(
+    cognito: CognitoIdentityProviderClient, *, pool_id: str, email: str
+) -> Reissue:
+    """Replace the expired or lost temporary password of a never-signed-in account.
+
+    **Only ``FORCE_CHANGE_PASSWORD`` accounts.** Anyone who has set their own
+    password recovers it themselves with "Forgot password"; an operator setting
+    one for them would lock them out of a password they know and hand the
+    operator a working credential for their account. The new password is set
+    non-permanent, so the person still chooses their own at first sign-in.
+
+    Touches Cognito only: the account's enrolment, if any, is unchanged, and an
+    account kept after a failed ``user create`` database write is reissuable.
+
+    Args:
+        cognito: Client bound to the verified pool.
+        pool_id: The verified user pool.
+        email: The account's address.
+
+    Returns:
+        The reissue, carrying the minted temporary password.
+
+    Raises:
+        OpsError: If the pool holds no such address, the account is not
+            awaiting first sign-in, or Cognito refuses the change.
+    """
+    _require_filter_safe(email)
+    user = _find_user_by_email(cognito, pool_id=pool_id, email=email)
+    if user is None:
+        raise OpsError(f"no account in the pool for {email}")
+    status = user.get("UserStatus")
+    if status != "FORCE_CHANGE_PASSWORD":
+        raise OpsError(
+            f"{email} is {status}, not FORCE_CHANGE_PASSWORD: only an account that has "
+            "never signed in can be reissued. Nothing was changed. If they have "
+            "forgotten their own password, they reset it from the sign-in page."
+        )
+    minted = _mint_temporary_password()
+    try:
+        cognito.admin_set_user_password(
+            UserPoolId=pool_id, Username=user["Username"], Password=minted, Permanent=False
+        )
+    except ClientError as error:
+        code = error.response.get("Error", {}).get("Code", "") or "ClientError"
+        raise OpsError(
+            f"Cognito refused to reissue {email} ({code}). Nothing was changed."
+        ) from error
+    return Reissue(
+        user_id=_sub_of(user.get("Attributes", [])),
+        email=email,
+        temporary_password=minted,
+    )
 
 
 def enrol_user(
@@ -1172,13 +1252,24 @@ def _find_sub_by_email(
     against an account created as ``alice@x`` finds nothing, and ``user create``
     goes on to try to mint a second identity for the same person.
     """
+    user = _find_user_by_email(cognito, pool_id=pool_id, email=email)
+    if user is None:
+        return None
+    return _sub_of(user.get("Attributes", [])) or None
+
+
+def _find_user_by_email(
+    cognito: CognitoIdentityProviderClient, *, pool_id: str, email: str
+) -> UserTypeTypeDef | None:
+    """Return the Cognito user behind an address, or ``None``.
+
+    The same exact-match lookup :func:`_find_sub_by_email` relies on; see there.
+    """
     response = cognito.list_users(
         UserPoolId=pool_id, Filter=f'email = "{email}"', Limit=1
     )
     users = response.get("Users") or []
-    if not users:
-        return None
-    return _sub_of(users[0].get("Attributes", [])) or None
+    return users[0] if users else None
 
 
 def _sub_of(attributes: Sequence[AttributeTypeTypeDef]) -> str:
