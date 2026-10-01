@@ -17,6 +17,7 @@ import uuid
 from typing import Any, get_args
 
 import pytest
+from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.engine import Connection, Engine
 
@@ -440,7 +441,7 @@ def test_the_profile_merges_into_the_row_and_types_every_option_not_merged(
         "run_id": str(profile_run),
         "backend_mode": "stub",
         "usage_totals": after.provenance["option_profile"]["usage_totals"],
-        "prompt_version": "option_profile_v1",
+        "prompt_version": "option_profile_v2",
         "model": "stub",
         "records_max": 5,
         "calls": 10,
@@ -449,7 +450,7 @@ def test_the_profile_merges_into_the_row_and_types_every_option_not_merged(
         "ambition_marks": no_marks,
         "folding": after.provenance["option_profile"]["folding"],
     }
-    assert after.provenance["option_profile"]["folding"]["prompt_version"] == "folding_v1"
+    assert after.provenance["option_profile"]["folding"]["prompt_version"] == "folding_v5"
 
 
 def test_kept_counts_only_an_option_that_was_typed_before(conn: Connection) -> None:
@@ -947,7 +948,7 @@ STUB_LITERAL: dict[str, Any] = {
         "invalid": 0,
         "kept_ids": [],
     },
-    "prompt_versions.typing": "lever_typing_v3",
+    "prompt_versions.typing": "lever_typing_v4",
     "models.typing": "stub",
     "taxonomy_version": "lever_types_v2",
     "counts.typing_invalid": 0,
@@ -979,7 +980,7 @@ SCRIPTED_LITERAL: dict[str, Any] = {
         "invalid": 2,
         "kept_ids": ["A new body", "Free bus passes"],
     },
-    "prompt_versions.typing": "lever_typing_v3",
+    "prompt_versions.typing": "lever_typing_v4",
     "models.typing": "stub",
     "taxonomy_version": "lever_types_v2",
     "counts.typing_invalid": 2,
@@ -1021,8 +1022,14 @@ def _folding_routes() -> _Scripted:
 
 
 def _fold_response(**kinds: str) -> FoldingResponse:
+    """A folding answer (the ``folding_v3`` wire): the distinct kinds listed
+    once, each word answered by its kind's index."""
+    listed = list(dict.fromkeys(kinds.values()))
     return FoldingResponse(
-        folds=[FoldWire(word_id=word_id, kind=kind) for word_id, kind in kinds.items()]
+        kinds=listed,
+        folds=[
+            FoldWire(word_id=word_id, kind=listed.index(kind)) for word_id, kind in kinds.items()
+        ],
     )
 
 
@@ -1062,11 +1069,8 @@ def test_the_stub_folds_each_word_to_itself_lower_cased_or_to_its_plan_text() ->
     plan: dict[str, object] = {"target_unit": "16 to 24 year olds", "outcomes": ["the NEET rate"]}
     words = {"w1": "16 To 24 Year Olds", "w2": "Young Adults", "w3": "THE neet RATE"}
     response, _ = backend.fold(facet="tried_on", plan=plan, words=words)
-    assert [(f.word_id, f.kind) for f in response.folds] == [
-        ("w1", "16 to 24 year olds"),
-        ("w2", "young adults"),
-        ("w3", "the NEET rate"),
-    ]
+    assert response.kinds == ["16 to 24 year olds", "young adults", "the NEET rate"]
+    assert [(f.word_id, f.kind) for f in response.folds] == [("w1", 0), ("w2", 1), ("w3", 2)]
     again, _ = backend.fold(facet="tried_on", plan=plan, words=words)
     assert again == response
 
@@ -1137,12 +1141,13 @@ def test_the_maps_are_stored_at_list_level_and_the_kinds_merged_into_coverage(
     assert wage["tried_on_kinds"] == [{"kind": "firms", "documents": 1}]
     folding = after.provenance["option_profile"]["folding"]
     assert folding == {
-        "prompt_version": "folding_v1",
+        "prompt_version": "folding_v5",
         "model": "stub",
         "calls": 2,
         "retries": 0,
         "words": {"tried_on": 6, "measures": 6},
         "kinds": {"tried_on": 6, "measures": 6},
+        "kinds_returned": {"tried_on": 6, "measures": 6},
     }
 
 
@@ -1186,9 +1191,10 @@ def test_a_folding_call_invalid_twice_fails_the_step_and_writes_nothing(
     _profile(walk, routes)
     before = walk.result(run_id)
     before_rows = {name: tuple(row) for name, row in walk.options().items()}
-    # One id, two kinds: invalid; so is an answer with no input id.
+    # One id, two indexes: invalid; so is an answer with no input id.
     conflicting = FoldingResponse(
-        folds=[FoldWire(word_id="w1", kind="a"), FoldWire(word_id="w1", kind="b")]
+        kinds=["a", "b"],
+        folds=[FoldWire(word_id="w1", kind=0), FoldWire(word_id="w1", kind=1)],
     )
     profiler = StubLonglistBackend(
         fold_responses={"tried_on": [conflicting, _fold_response(w99="b")]}
@@ -1220,3 +1226,41 @@ def test_a_folding_call_invalid_once_then_right_succeeds(conn: Connection) -> No
     assert result.option_profile["folds"]["measures"]["employment"] == "jobs"
     assert result.provenance["option_profile"]["folding"]["retries"] == 1
     assert result.provenance["option_profile"]["retries"] == 0
+
+
+def test_an_index_out_of_range_or_a_blank_kind_keeps_the_word_s_text(conn: Connection) -> None:
+    walk = _Walk(conn)
+    _folding_walk(walk)
+    routes = _folding_routes()
+    run_id, _ = walk.build(routes)
+    answer = FoldingResponse(
+        kinds=["jobs", "  "],
+        folds=[
+            FoldWire(word_id="w1", kind=7),  # out of range
+            FoldWire(word_id="w2", kind=0),
+            FoldWire(word_id="w6", kind=1),  # a blank kind
+            FoldWire(word_id="w4", kind=-1),  # out of range
+        ],
+    )
+    profiler = StubLonglistBackend(fold_responses={"measures": answer})
+    _profile(walk, _Scripted(routes=routes.routes, profiler=profiler))
+    folds = walk.result(run_id).option_profile["folds"]["measures"]
+    assert folds == {
+        "earnings": "earnings",
+        "employment": "jobs",
+        "NEET rate": "NEET rate",
+        "neet status": "neet status",
+        "the neet rate": "the NEET rate",
+        "wellbeing": "wellbeing",
+    }
+
+
+def test_an_answer_over_twelve_kinds_is_refused_by_the_wire() -> None:
+    """20L round 3: the ceiling is a schema constraint (``kinds`` at most 12), not a rule the
+    model may ignore; an answer with 13 kinds never parses, so the call is retried as invalid."""
+    with pytest.raises(ValidationError):
+        FoldingResponse(
+            kinds=[f"kind {i}" for i in range(13)],
+            folds=[FoldWire(word_id=f"w{i}", kind=i) for i in range(1, 7)],
+        )
+    assert FoldingResponse.model_fields["kinds"].metadata[0].max_length == 12

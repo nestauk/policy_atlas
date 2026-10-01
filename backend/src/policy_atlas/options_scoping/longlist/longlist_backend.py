@@ -695,7 +695,9 @@ class StubLonglistBackend:
     - ``fold`` answers from its facet's own FIFO queue the same way; with
       none, each word's kind is its own text lower-cased, except a word that
       equals (case-folded) a plan outcome or the plan's target unit, whose
-      kind is that plan text. Its calls and inputs are recorded under the lock.
+      kind is that plan text; the kinds listed once each in first-seen order,
+      each word answered by its kind's index. Its calls and inputs are
+      recorded under the lock.
 
     Args:
         constrain_responses: Canned :class:`ConstrainResponse` value(s), or
@@ -1013,12 +1015,14 @@ def _stub_folds(plan: dict[str, object], words: dict[str, str]) -> FoldingRespon
         if isinstance(text, str) and text.strip()
     ]
     by_key = {_casefold(text): text for text in references}
-    return FoldingResponse(
-        folds=[
-            FoldWire(word_id=word_id, kind=by_key.get(_casefold(word), word.lower()))
-            for word_id, word in words.items()
-        ]
-    )
+    kinds: list[str] = []
+    folds: list[FoldWire] = []
+    for word_id, word in words.items():
+        kind = by_key.get(_casefold(word), word.lower())
+        if kind not in kinds:
+            kinds.append(kind)
+        folds.append(FoldWire(word_id=word_id, kind=kinds.index(kind)))
+    return FoldingResponse(kinds=kinds, folds=folds)
 
 
 def _stub_line(line_key: str, options: list[dict[str, object]]) -> _LineResponse:

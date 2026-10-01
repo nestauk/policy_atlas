@@ -139,6 +139,9 @@ _PROFILE_UNIT_KIND = "interventions"
 #: The name of the ambition call and of the setting call, as a failure names them.
 _AMBITION_CALL = "ambition"
 _SETTING_CALL = "setting"
+#: The kinds a folding answer should hold at most (the prompt's ceiling, A6);
+#: more is kept and logged, never invalid.
+FOLDING_KINDS_MAX = 12
 #: The coverage keys the folding maps recompute and merge (S21, S24).
 FOLDED_COVERAGE_KEYS: tuple[str, ...] = ("tried_on_kinds", "measures_kinds", "outcome_counts")
 
@@ -733,37 +736,52 @@ def _folding_words(read: MembershipRead) -> dict[str, dict[str, str]]:
 
 def _checked_folds(
     response: Any, words: Mapping[str, str], references: Sequence[str]
-) -> dict[str, str] | None:
+) -> dict[str, Any] | None:
     """One folding response mapped back to ``{word: kind}``; ``None`` when invalid.
 
-    Invalid: not a :class:`FoldingResponse`; one input id given two different
-    kinds; or not one input id answered. Otherwise every input word is in the
-    map: a word left out, or given a blank kind, keeps its own text; an id
+    The wire (``folding_v3``) lists the kinds first, then each word's kind
+    as a 0-based index into them. Invalid: not a :class:`FoldingResponse`;
+    one input id given two different indexes; or not one input id answered.
+    Otherwise every input word is in the map: a word left out, or whose
+    index is out of range or names a blank kind, keeps its own text; an id
     not in the input is dropped (B10); a kind equal, case-folded, to one of
     ``references`` (the plan outcomes, or the target unit) is that plan text
-    exactly (A4).
+    exactly (A4). More than :data:`FOLDING_KINDS_MAX` kinds is kept, and
+    logged (the refine loop measures it).
+
+    Returns:
+        ``{"folds": {word: kind}, "kinds_returned": <length of the answer's
+        kinds>}``, or ``None``.
     """
     if not isinstance(response, FoldingResponse):
         return None
-    answered: dict[str, str] = {}
+    indexes: dict[str, int] = {}
     for wire in response.folds:
         word_id = wire.word_id.strip()
-        kind = " ".join(wire.kind.split())
-        if word_id not in words or not kind:
+        if word_id not in words:
             continue
-        if answered.get(word_id, kind) != kind:
+        if indexes.get(word_id, wire.kind) != wire.kind:
             return None
-        answered[word_id] = kind
-    if words and not answered:
+        indexes[word_id] = wire.kind
+    if words and not indexes:
         return None
+    if len(response.kinds) > FOLDING_KINDS_MAX:
+        log.warning(
+            "option_profile.folding_kinds_over_max",
+            kinds=len(response.kinds),
+            max_kinds=FOLDING_KINDS_MAX,
+        )
+    kinds = [" ".join(kind.split()) for kind in response.kinds]
     by_key = {
         " ".join(text.split()).casefold(): text for text in references if text and text.strip()
     }
     folds: dict[str, str] = {}
     for word_id, word in words.items():
-        kind = answered.get(word_id, word)
+        index = indexes.get(word_id)
+        kind = kinds[index] if index is not None and 0 <= index < len(kinds) else ""
+        kind = kind or word
         folds[word] = by_key.get(kind.casefold(), kind)
-    return folds
+    return {"folds": folds, "kinds_returned": len(response.kinds)}
 
 
 def _folding_calls(
@@ -890,9 +908,14 @@ def option_profile_scope(
         )
     answers = {outcome.name: outcome.value for outcome in outcomes}
     retries = sum(outcome.attempts - 1 for outcome in outcomes)
-    folded = {outcome.name: outcome.value for outcome in fold_outcomes}
+    folded = {outcome.name: outcome.value or {} for outcome in fold_outcomes}
     folds: dict[str, dict[str, str]] = {
-        facet: dict(folded.get(_fold_call_name(facet)) or {}) for facet in FOLD_FIELDS
+        facet: dict(folded.get(_fold_call_name(facet), {}).get("folds") or {})
+        for facet in FOLD_FIELDS
+    }
+    kinds_returned = {
+        facet: int(folded.get(_fold_call_name(facet), {}).get("kinds_returned") or 0)
+        for facet in FOLD_FIELDS
     }
 
     runner_ups: dict[str, dict[str, Any]] = {
@@ -975,6 +998,7 @@ def option_profile_scope(
                     facet: len({kind.casefold() for kind in folds[facet].values()})
                     for facet in FOLD_FIELDS
                 },
+                "kinds_returned": kinds_returned,
             },
         },
     )
