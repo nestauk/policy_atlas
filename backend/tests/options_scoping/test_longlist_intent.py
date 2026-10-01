@@ -72,7 +72,7 @@ def test_the_intent_carries_the_target_unit_and_outcomes_and_never_where() -> No
     intent = compile_longlist_intent(plan)
     assert "16 to 24 year olds" in intent
     assert "the NEET rate" in intent and "earnings at 25" in intent
-    assert _WHERE not in intent
+    assert intent.count(_WHERE) == 1 and "is the user's place, not a criterion" in intent  # 18P
     # The default transferability preference names Where; it stays out too.
     assert "Transferable" not in intent
 
@@ -97,7 +97,7 @@ def test_the_criteria_carry_target_unit_and_outcomes_and_no_place() -> None:
     joined = " ".join(criteria)
     assert "16 to 24 year olds" in joined
     assert "the NEET rate" in joined
-    assert _WHERE not in joined
+    assert joined.count(_WHERE) == 1  # 18P
     assert len(criteria) == 2
 
 
@@ -107,13 +107,13 @@ def test_the_criteria_never_carry_the_setting() -> None:
     assert criteria == longlist_screening_criteria(_plan())
     assert len(criteria) == 2
     assert "Delivered through schools" not in " ".join(criteria)
-    assert _WHERE not in " ".join(criteria)
+    assert " ".join(criteria).count(_WHERE) == 1  # 18P
 
 
 def test_the_criteria_compose_under_the_screen_ceiling() -> None:
     composed = compose_longlist_screen_intent(_plan(_setting()))
     assert len(composed) <= SCREEN_INTENT_MAX
-    assert _WHERE not in composed
+    assert composed.count(_WHERE) == 2  # 18P: once in the intent, once in criterion 1
 
 
 def test_an_over_long_plan_is_refused_not_truncated() -> None:
@@ -156,8 +156,12 @@ def _manchester_plan() -> ScopingPlan:
 
 def test_the_screen_criteria_are_the_two_lead_authored_sentences() -> None:
     assert longlist_screening_criteria(_manchester_plan()) == [
-        "The document evaluates, describes or proposes an intervention, programme or "
-        "policy aimed at refugees and asylum seekers, or at a wider or adjacent population.",
+        "The user works in United Kingdom: that place, and any place named in the group "
+        "above, is the user's place, not a criterion. A study in another country, region "
+        "or city passes; judge the document as if no place were named. The document "
+        "evaluates, describes or proposes an intervention, programme or policy aimed at "
+        "refugees and asylum seekers, or at a wider or adjacent group, anywhere in the "
+        "world.",
         "It bears on at least one of these outcomes: The employment rate; "
         "Earnings after a year.",
     ]
@@ -170,15 +174,20 @@ def test_the_screen_input_holds_no_setting_no_place_and_no_option_design() -> No
     composed = compose_longlist_screen_intent(plan)
     for text in (intent, *criteria, composed):
         assert "Greater Manchester" not in text
-        assert "United Kingdom" not in text
         assert "Delivered through job centres" not in text
         assert "Setting" not in text
         assert ".." not in text
+    # 18P: the plan's Where is named once per text, inside the rule sentence only.
+    assert intent.count("United Kingdom") == 1 and criteria[0].count("United Kingdom") == 1
+    assert "United Kingdom" not in criteria[1]
     # No option design: the intent is the plan's slots only.
     assert intent == (
         "Interventions for refugees and asylum seekers. "
         "Intervention: any intervention, programme or policy (left open). "
-        "Outcomes: The employment rate; Earnings after a year."
+        "Outcomes: The employment rate; Earnings after a year. "
+        "The user works in United Kingdom: that place, and any place named in the group "
+        "above, is the user's place, not a criterion. A study in another country, region "
+        "or city passes; judge the document as if no place were named."
     )
     assert len(composed) <= SCREEN_INTENT_MAX
     # The setting requirement stays for constrain.

@@ -50,7 +50,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from policy_atlas.options_scoping.suggest.suggest_prompt import render_baseline_blocks
 
-CONSTRAIN_PROMPT_VERSION = "constrain_v3"
+CONSTRAIN_PROMPT_VERSION = "constrain_v4"
 
 CONSTRAIN_MAX_OUTPUT_TOKENS = 16_384
 DISTINCT_MAX_OUTPUT_TOKENS = 16_384
@@ -278,7 +278,10 @@ Requirements:
 
 Never a reason:
 - Place. No verdict rests on a country, a region or a city, and no reason
-  names one except in the words of a requirement the user wrote.
+  names one except in the words of a requirement the user wrote. The
+  plan's question, target unit or intended change may name a place: that
+  is the user's place, not a criterion; judge as if the plan named no
+  place.
 - Thin evidence. An option with no documents, or with documents that only
   mention it, passes every screen its design passes. Coverage never
   decides a verdict.
@@ -436,7 +439,7 @@ def build_constrain_messages(
 
     Args:
         plan: The plan fields as data: ``question``, ``target_unit``,
-            ``intended_change``, ``outcomes``, place stripped.
+            ``intended_change``, ``outcomes``, as the plan states them.
         baseline_sections: ``(title, markdown)`` per baseline section, in
             document order.
         requirements: The requirement constraints followed by the default

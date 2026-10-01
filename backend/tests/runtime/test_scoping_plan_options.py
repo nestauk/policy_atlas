@@ -331,4 +331,6 @@ def test_the_longlist_and_targeted_screens_carry_the_criteria_without_where(
     criteria = screen.directive_delta["screening"]["criteria"]
     assert any("16 to 24 year olds" in c for c in criteria)
     assert any("the NEET rate" in c for c in criteria)
-    assert all("Northumberland" not in c for c in criteria)
+    # 18P (R74): the plan's Where is named once, inside the rule sentence of criterion 1.
+    assert sum("Northumberland" in c for c in criteria) == 1
+    assert any("is the user's place, not a criterion" in c for c in criteria)

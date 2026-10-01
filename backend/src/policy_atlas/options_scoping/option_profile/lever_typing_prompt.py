@@ -36,7 +36,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from policy_atlas.options_scoping.longlist.lever_types import lever_types_as_data
 from policy_atlas.options_scoping.suggest.suggest_prompt import render_baseline_blocks
 
-LEVER_TYPING_PROMPT_VERSION = "lever_typing_v3"
+LEVER_TYPING_PROMPT_VERSION = "lever_typing_v4"
 
 LEVER_TYPING_MAX_OUTPUT_TOKENS = 16_384
 # Options per call.
@@ -102,7 +102,9 @@ one list serves every domain because it names the instrument, not the
 subject. The user sees the primary type on each option and a grid whose
 rows are the lever types. Nothing here judges merit. The user message
 carries the plan and the baseline — a sourced account of what is in place
-now. They tell you who acts in this field.
+now. They tell you who acts in this field. A place named in the plan is
+the user's place, not a criterion: type the option as if the plan named
+no place.
 
 Lever type:
 - The primary type is the one WITHOUT WHICH the option is not that option.
@@ -170,7 +172,7 @@ def build_lever_typing_messages(
         options: The batch's options as data, keyed by ``unit_id``, with
             ``label``, ``description`` and ``design_features``.
         plan: The plan fields as data: ``question``, ``intended_change``,
-            ``target_unit``, ``outcomes``, place stripped.
+            ``target_unit``, ``outcomes``, as the plan states them.
         baseline_sections: ``(title, markdown)`` per baseline section, in
             document order.
 

@@ -33,7 +33,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from policy_atlas.options_scoping.suggest.suggest_prompt import render_baseline_blocks
 
-OPTION_PROFILE_PROMPT_VERSION = "option_profile_v1"
+OPTION_PROFILE_PROMPT_VERSION = "option_profile_v2"
 
 OPTION_PROFILE_MAX_OUTPUT_TOKENS = 16_384
 
@@ -240,7 +240,9 @@ Each option is one KIND of action a government could take, with a specified
 design. A senior decision maker reads the longlist and chooses about five
 options to assess. What you write is shown on each option as Policy Atlas's
 estimate before assessment. It is not a finding, and nothing here judges
-whether an option would work.
+whether an option would work. A place named in the plan is the user's
+place, not a criterion: judge as if the plan named no place. Only the
+line "who decides" reads Where, and its data says so.
 """
 
 _SENTENCE_RULES = """\
@@ -465,7 +467,7 @@ def build_line_messages(
     Args:
         line_key: One of the eight line keys.
         plan: The plan fields as data: ``question``, ``intended_change``,
-            ``target_unit``, ``outcomes``, place stripped.
+            ``target_unit``, ``outcomes``, as the plan states them.
         where: The plan's Where, for ``who_decides`` only; ``None`` for
             every other line.
         baseline_sections: ``(title, markdown)`` per baseline section.
@@ -519,7 +521,7 @@ def build_ambition_messages(
     """Assemble the ambition call's prompt over the whole list.
 
     Args:
-        plan: The plan fields as data, place stripped.
+        plan: The plan fields as data, as the plan states them.
         baseline_sections: ``(title, markdown)`` per baseline section.
         options: Every option as data, as for a line call.
 
@@ -545,7 +547,7 @@ def build_setting_messages(
     """Assemble the setting call's prompt over the whole list.
 
     Args:
-        plan: The plan fields as data, place stripped.
+        plan: The plan fields as data, as the plan states them.
         options: Every option as data, as for a line call.
 
     Returns:

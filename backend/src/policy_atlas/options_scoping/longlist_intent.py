@@ -74,6 +74,28 @@ def screen_target_unit(plan: ScopingPlan) -> tuple[str, list[str]]:
     return _slot(cleaned), removed
 
 
+def _place_sentence(plan: ScopingPlan) -> str:
+    """The place rule in words, naming the user's place from the plan's Where (R74, 18P).
+
+    The strip stays (M4 did not hold on the replays without it: the round record of 18P);
+    this sentence is the rule the prompts carry beside it. No list of names: the plan's
+    Where field is the only text used.
+
+    Args:
+        plan: The validated scoping plan.
+
+    Returns:
+        One sentence: the user's place is not a criterion; a study anywhere passes.
+    """
+    where = _slot(plan.where.text) if plan.where.text.strip() else ""
+    named = f"The user works in {where}: that place," if where else "A place named above,"
+    return (
+        f"{named} and any place named in the group above, is the user's place, not a "
+        "criterion. A study in another country, region or city passes; judge the document "
+        "as if no place were named."
+    )
+
+
 def compile_longlist_intent(plan: ScopingPlan) -> str:
     """Compile the longlist intent record's text from the plan (PICO-shaped).
 
@@ -93,6 +115,7 @@ def compile_longlist_intent(plan: ScopingPlan) -> str:
             f"Interventions for {target_unit}.",
             "Intervention: any intervention, programme or policy (left open).",
             f"Outcomes: {_outcomes(plan)}.",
+            _place_sentence(plan),
         ]
     )
 
@@ -116,8 +139,9 @@ def longlist_screening_criteria(plan: ScopingPlan) -> list[str]:
     """
     target_unit, _ = screen_target_unit(plan)
     return [
-        "The document evaluates, describes or proposes an intervention, programme or "
-        f"policy aimed at {target_unit}, or at a wider or adjacent population.",
+        f"{_place_sentence(plan)} The document evaluates, describes or proposes an "
+        f"intervention, programme or policy aimed at {target_unit}, or at a wider or "
+        "adjacent group, anywhere in the world.",
         f"It bears on at least one of these outcomes: {_outcomes(plan)}.",
     ]
 
