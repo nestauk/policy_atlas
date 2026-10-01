@@ -95,6 +95,40 @@ def expect_lookup(stubber: Stubber, *, email: str, sub: str | None) -> None:
     )
 
 
+def expect_status_lookup(stubber: Stubber, *, email: str, sub: str, status: str) -> None:
+    """Queue one ``ListUsers`` by address answering with an account in ``status``.
+
+    ``Username`` is the subject, as it is in a pool whose sign-in alias is the
+    email: the reissue must address the account by it, not by the address.
+    """
+    stubber.add_response(
+        "list_users",
+        {
+            "Users": [
+                {
+                    "Username": sub,
+                    "UserStatus": status,
+                    "Attributes": [{"Name": "sub", "Value": sub}],
+                }
+            ]
+        },
+        {"UserPoolId": POOL_ID, "Filter": f'email = "{email}"', "Limit": 1},
+    )
+
+
+def expect_reissue(stubber: Stubber, *, sub: str) -> None:
+    """Queue the ``AdminSetUserPassword`` of ``user reissue``.
+
+    ``Password`` is ``ANY`` because the CLI mints it; ``Permanent: False`` is
+    exact-matched, so a reissue that skipped the forced change fails here.
+    """
+    stubber.add_response(
+        "admin_set_user_password",
+        {},
+        {"UserPoolId": POOL_ID, "Username": sub, "Password": ANY, "Permanent": False},
+    )
+
+
 def expect_create_manual(stubber: Stubber, *, email: str, sub: str) -> None:
     """Queue the suppressed-invitation ``AdminCreateUser`` of ``--invite manual``.
 

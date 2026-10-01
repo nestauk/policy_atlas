@@ -8,6 +8,7 @@ The command tree, with every global option before the subcommand::
       user  create    --email E --display-name D --org ORG
       user  enrol     --email E --display-name D --org ORG
       user  resync    --email E
+      user  reissue   --email E
       user  de-enrol  (--email E | --sub SUB)
       rows  assign    (--task ID | --project ID) --org ORG
       admin grant     (--email E | --sub SUB)
@@ -248,6 +249,15 @@ def build_parser() -> argparse.ArgumentParser:
         "--email", required=True, type=_email, help="the address as it stands NOW"
     )
 
+    user_reissue = user.add_parser(
+        "reissue",
+        help=(
+            "mint and print a new single-use temporary password for an account that "
+            "has never signed in (FORCE_CHANGE_PASSWORD) — it never accepts one"
+        ),
+    )
+    user_reissue.add_argument("--email", required=True, type=_email)
+
     user_de_enrol = user.add_parser("de-enrol", help="remove a person from their organisation")
     de_enrol_subject = user_de_enrol.add_mutually_exclusive_group(required=True)
     de_enrol_subject.add_argument("--email", type=_email)
@@ -390,6 +400,10 @@ def _dispatch(
         if args.command == "resync":
             return commands.resync_user(
                 conn, cognito, pool_id=target.user_pool_id, email=args.email
+            )
+        if args.command == "reissue":
+            return commands.reissue_temporary_password(
+                cognito, pool_id=target.user_pool_id, email=args.email
             )
         if args.command == "de-enrol":
             return commands.de_enrol_user(conn, email=args.email, sub=args.sub)

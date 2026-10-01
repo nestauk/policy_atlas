@@ -2157,9 +2157,9 @@ omissions.
   `/api/v1/projects/*` and every bookmarked URL; the frontend and the e2e specs are the
   only consumers. Until it lands, `frontend/src/lib/vocabulary.ts` stays the single place
   the mapping is written down.
-- **MFA on the Cognito pool** — the pool is `MfaConfiguration: None` and sets no explicit
-  password policy (`Policies: null`, so Cognito's account defaults apply: 8 characters,
-  upper/lower/number/symbol). That was proportionate while every account could read only
+- **MFA on the Cognito pool** — the pool is `MfaConfiguration: None` and its password
+  policy restates Cognito's defaults (8 characters, upper/lower/number/symbol; explicit
+  since 2026-10-01, when temporary-password validity went to 30 days). That was proportionate while every account could read only
   its owner's work. 033's `is_admin` (owner call (f)) changes the calculus: an admin
   account reads every row in every organisation, `private` included, behind a password
   alone. **Owner ruling 2026-08-24: recorded as a known accepted risk, not fixed in 033** —

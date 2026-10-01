@@ -56,7 +56,7 @@ setup:
 ops-require = $(foreach v,$(1),$(if $($(v)),,$(error $(v)=... is required for this target)))
 OPS_COMMON = $(if $(OPERATOR),--operator "$(OPERATOR)")
 
-.PHONY: org-create user-create user-enrol user-resync user-de-enrol rows-assign admin-grant admin-revoke
+.PHONY: org-create user-create user-enrol user-resync user-reissue user-de-enrol rows-assign admin-grant admin-revoke
 
 org-create:
 	@$(call ops-require,ENV NAME) scripts/ops_run.sh $(ENV) $(OPS_COMMON) org create --name "$(NAME)"
@@ -66,6 +66,8 @@ user-enrol:
 	@$(call ops-require,ENV EMAIL NAME ORG) scripts/ops_run.sh $(ENV) $(OPS_COMMON) user enrol --email "$(EMAIL)" --display-name "$(NAME)" --org "$(ORG)"
 user-resync:
 	@$(call ops-require,ENV EMAIL) scripts/ops_run.sh $(ENV) $(OPS_COMMON) user resync --email "$(EMAIL)"
+user-reissue:
+	@$(call ops-require,ENV EMAIL) scripts/ops_run.sh $(ENV) $(OPS_COMMON) user reissue --email "$(EMAIL)"
 user-de-enrol:
 	@$(call ops-require,ENV) scripts/ops_run.sh $(ENV) $(OPS_COMMON) user de-enrol $(if $(EMAIL),--email "$(EMAIL)") $(if $(SUB),--sub "$(SUB)")
 rows-assign:
