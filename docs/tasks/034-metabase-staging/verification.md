@@ -36,6 +36,39 @@ Allowlist extension verified locally on 2026-09-16.
 The final build emitted only the repository's existing font-resolution and
 frontend chunk-size warnings.
 
+## PR review pass (2026-09-30)
+
+Changes made in response to the PR review, verified locally:
+
+- Validator rejects IPv6 CIDRs (the shared ALB is IPv4-only) and reports entry
+  positions instead of addresses; `deploy.sh` gates now surface stderr on
+  failure (12-digit account ids redacted) instead of discarding it.
+- New post-deploy gate: after `cdk deploy`, `deploy.sh` reads the live rule on
+  the shared HTTPS listener and fails if its source-IP set differs from the SSM
+  parameter (`infra.metabase_allowlist verify-rule`). The reviewer's claim that
+  an unchanged template skips the analytics stack was checked against the
+  pinned CLI (`aws-cdk@2.1133.0`, `ParameterValues.hasChanges` returns `"ssm"`
+  for any `AWS::SSM::Parameter::*` template parameter, and `canSkipDeploy` then
+  never skips) and against CloudFormation's documented SSM-parameter behaviour
+  ("use previous value" keeps the key and always fetches the latest value). The
+  gate makes that observable instead of assumed. **Not yet exercised live**;
+  the deploy role needs `elasticloadbalancing:DescribeRules`.
+- `MetabaseEncryptionSecret` no longer has a fixed name (still `Retain`), so
+  destroy + redeploy cannot fail on a name collision; the snapshot-restore path
+  is documented in `infra/DEPLOYMENT.md`.
+- Health-check grace period widened from 5 to 10 minutes for Metabase's
+  first-start migration.
+- Shared-ALB import block factored into `infra/infra/components/shared_alb.py`
+  and used by both consumer stacks; the synthesized `PaV3AppStack` template is
+  byte-identical (key order included) before and after.
+- Aurora 5432 ingress invariant test now enumerates every stack, including the
+  analytics template's rule into the Aurora security group.
+- `make -C infra test` equivalent (`pytest tests/`) — **pass**, 83 tests
+  (65 before this pass). `bash scripts/deploy.sh check` for `staging` and
+  `prod` — **pass**. `scripts/test_deploy_build_guard.sh` — **pass**.
+- `reportlab` declared for the task-035 diagram script
+  (`docs/tasks/035-infrastructure-diagram/requirements.txt`).
+
 ## Source checks
 
 - Metabase's current documentation recommends PostgreSQL for the application

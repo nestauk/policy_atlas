@@ -150,8 +150,11 @@ Download source:
 ## Rebuild
 
 Run `make -C docs/tasks/035-infrastructure-diagram render` from the repository
-root. Set `PYTHON` to a runtime containing ReportLab and `PDFTOPPM` to Poppler if
-they are not available on PATH. No application dependencies are changed.
+root. `build_diagram.py` depends on ReportLab, pinned in this directory's
+`requirements.txt` (`make -C docs/tasks/035-infrastructure-diagram setup`
+installs it into `PYTHON`). Set `PYTHON` to a runtime containing ReportLab and
+`PDFTOPPM` to Poppler if they are not available on PATH. No application
+dependencies are changed.
 
 If a bundled Poppler reports a missing Fontconfig configuration or unwritable
 cache, set `FONTCONFIG_FILE` to a local Fontconfig file that points to the

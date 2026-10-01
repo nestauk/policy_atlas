@@ -205,13 +205,32 @@ session. Once gate B passes, GitHub Actions owns steady-state `deploy-update` ru
      --overwrite
    ```
 
-   Supply one to three canonical IPv4 and/or IPv6 CIDRs, separated by commas
-   with no spaces. Universal `/0` ranges are rejected because they do not form
-   an allowlist. The deployment validates the type and CIDRs without printing
-   their values. The ALB compares the address that connects directly to it, not
-   `X-Forwarded-For`; for users behind a VPN or proxy, allowlist its egress CIDR.
-   After changing the parameter, run the normal staging deployment so
-   CloudFormation resolves and applies the latest value.
+   Supply one to three canonical **IPv4** CIDRs, separated by commas with no
+   spaces. IPv6 entries are rejected: the shared ALB is IPv4-only (IPv4 security
+   group ingress, an `A` alias record, default address type), so an IPv6 entry
+   could never match a client and an IPv6-only list would lock everyone out
+   with a silent 404. Universal `/0` ranges are rejected because they do not
+   form an allowlist. The deployment validates the type and CIDRs without
+   printing their values; failures name the entry's position, not its address.
+   The ALB compares the address that connects directly to it, not
+   `X-Forwarded-For`; for users behind a VPN or proxy, allowlist its egress
+   CIDR.
+
+   **How a change reaches the ALB rule.** The synthesized template carries only
+   the parameter *name*, as an `AWS::SSM::Parameter::Value<List<String>>`
+   template parameter; CloudFormation resolves the value at every stack
+   create/update ("use previous value" keeps the key, not the value), and the
+   pinned CDK CLI never skips a stack whose template carries an SSM-typed
+   parameter, even when the template itself is unchanged. So editing the
+   parameter alone changes nothing — a removed address keeps access until the
+   next deploy — and the normal staging deployment (`make deploy-update
+   DEPLOY_ENV=staging`) is what applies it. Rather than rely on that CLI
+   behaviour, `deploy.sh` verifies it: after `cdk deploy` it reads the live rule
+   on the shared HTTPS listener and fails the deploy if the rule's source-IP set
+   differs from the parameter (`elasticloadbalancing:DescribeRules` is required
+   by the deploy role). To confirm the effect by hand, look at the analytics
+   stack's **Parameters** tab in CloudFormation: it shows the resolved value the
+   rule was last deployed with.
 
 ## 3. First deploy (staged bootstrap)
 
@@ -299,7 +318,14 @@ owner-safe analytics views (or equivalent row-level controls), stored in Secrets
 Manager. Configure that connection with SSL after the data-access change is
 approved. The Metabase connection-details encryption key is retained in Secrets
 Manager because losing or replacing it makes stored source credentials
-unreadable.
+unreadable. The secret has a CloudFormation-generated name (no fixed name), so
+`cdk destroy` followed by a redeploy creates a fresh key rather than failing on
+a name collision with the retained one. That fresh key cannot read a database
+restored from the destroyed instance's snapshot: to restore, copy the retained
+secret's value into the new secret (`aws secretsmanager put-secret-value`)
+before the service first starts against the restored database, then delete the
+orphaned secret. With no data source connected yet, a lost key costs only the
+re-entry of source credentials.
 
 ## 4. Steady-state deploys + the deploy invariant
 
@@ -370,12 +396,15 @@ bash scripts/deploy.sh update        # migrate → scale → publish on the fres
   replaced under the same name, run `npx cdk context --reset` (or delete
   `infra/cdk.context.json`) before the next synth — a stale cache pins
   consumer stacks to deleted resource IDs without any error.
-- **SSM-coupled stack references resolve at deploy time only.** The app stack
-  consumes ALB/DB/SG identifiers via constant SSM parameter names. If a
-  network/database resource is replaced (new physical ID, same parameter
-  name), the app stack template is byte-identical and a `cdk deploy` of it is
-  a no-op — redeploy the app stack with a forcing change (or `--force`) after
-  any replacement of an SSM-exported resource.
+- **SSM-coupled stack references resolve at deploy time only.** The app and
+  analytics stacks consume ALB/DB/SG identifiers via constant SSM parameter
+  names. If a network/database resource is replaced (new physical ID, same
+  parameter name), the consumer template is byte-identical; the pinned CDK CLI
+  still submits it because it never skips a stack carrying SSM-typed template
+  parameters, and CloudFormation re-resolves the new IDs. Nothing outside a
+  deploy re-resolves them, though, so always redeploy the consumer stacks after
+  replacing an SSM-exported resource; `--force` is a harmless belt-and-braces
+  on that path and the Aurora encryption runbook above keeps it.
 
 ## 5. Env & secret map
 

@@ -33,14 +33,22 @@ Deploy a staging-only Metabase service at `metabase.v3.policyatlas.uk`. Metabase
 - The Metabase listener rule requires both its hostname and a source CIDR from
   `/policy_atlas_v3/metabase/allowed_cidrs`; the Policy Atlas listener rule is
   unchanged.
-- The allowlist contains one to three IPv4 and/or IPv6 CIDRs. AWS evaluates the
+- The allowlist contains one to three IPv4 CIDRs. IPv6 entries are rejected
+  because the shared ALB is IPv4-only, so they could never match a client (review
+  amendment, 2026-09-30; originally "IPv4 and/or IPv6"). AWS evaluates the
   address that connects to the ALB, not `X-Forwarded-For`, so proxied users must
   allowlist the proxy's egress range. Universal `/0` ranges are rejected.
+- The deploy verifies, after `cdk deploy`, that the live listener rule's source-IP
+  set equals the SSM parameter, so an allowlist edit is confirmed applied rather
+  than assumed (review amendment, 2026-09-30).
 - The Metabase database receives traffic only from the Metabase service security group.
 - The Metabase application database requires TLS and the client explicitly requests it.
 - The Policy Atlas database receives a port-5432 rule from the Metabase service security group, but no credentials or permissions are created.
 - First-admin setup is an attended staging operation immediately after deployment.
 - Removing the stack snapshots the database and retains the encryption secret.
+  The secret has no fixed name, so a redeploy after removal cannot collide with
+  the retained copy; restoring the snapshot means copying the retained key into
+  the new secret first (review amendment, 2026-09-30).
 
 ## Known follow-up
 

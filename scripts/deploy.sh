@@ -57,6 +57,7 @@ if deploy_analytics and env_name != "staging":
 
 analytics = None
 analytics_allowlist_parameter = "-"
+metabase_domain = "-"
 if deploy_analytics:
     analytics = environment_config("metabase_config.json")
 
@@ -93,6 +94,7 @@ if analytics is not None:
         r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?", subdomain
     ) is None:
         raise SystemExit("FAIL: metabase_subdomain must be a valid DNS label")
+    metabase_domain = f"{subdomain}.{public_domain}"
     analytics_allowlist_parameter = analytics.get(
         "allowed_cidrs_parameter_name"
     )
@@ -186,14 +188,15 @@ values = [
     required["backend_subdomain"],
     required["backend.secret_name"],
     analytics_allowlist_parameter,
+    metabase_domain,
 ]
 if any("\t" in value or "\n" in value for value in values):
     raise SystemExit("FAIL: deployment config values may not contain tabs or newlines")
 print("\t".join(values))
 PY
 )"
-IFS=$'\t' read -r DEPLOY_REGION PUBLIC_DOMAIN BACKEND_SUBDOMAIN APP_SECRET_NAME METABASE_ALLOWLIST_PARAMETER <<< "$deploy_config"
-readonly DEPLOY_REGION PUBLIC_DOMAIN BACKEND_SUBDOMAIN APP_SECRET_NAME METABASE_ALLOWLIST_PARAMETER
+IFS=$'\t' read -r DEPLOY_REGION PUBLIC_DOMAIN BACKEND_SUBDOMAIN APP_SECRET_NAME METABASE_ALLOWLIST_PARAMETER METABASE_DOMAIN <<< "$deploy_config"
+readonly DEPLOY_REGION PUBLIC_DOMAIN BACKEND_SUBDOMAIN APP_SECRET_NAME METABASE_ALLOWLIST_PARAMETER METABASE_DOMAIN
 readonly API_BASE_URL="https://${BACKEND_SUBDOMAIN}.${PUBLIC_DOMAIN}"
 
 readonly SSM_CLUSTER_ARN="/policy_atlas_v3/deploy/cluster_arn"
@@ -206,6 +209,7 @@ readonly SSM_DISTRIBUTION_ID="/policy_atlas_v3/deploy/distribution_id"
 readonly SSM_USER_POOL_ID="/policy_atlas_v3/auth/user_pool_id"
 readonly SSM_OIDC_ISSUER="/policy_atlas_v3/auth/issuer"
 readonly SSM_OIDC_CLIENT_ID="/policy_atlas_v3/auth/client_id"
+readonly SSM_SHARED_LISTENER_ARN="/policy_atlas_v3/shared_alb/https_listener_arn"
 
 usage() {
     echo "Usage: $0 {bootstrap|update|check}" >&2
@@ -216,13 +220,22 @@ fail() {
     exit 1
 }
 
+# Checks echo looked-up values on stdout, so stdout is discarded; stderr carries
+# the reason a check failed and is shown so a failed gate is diagnosable from
+# the log. Deploy logs are public for this repository, so any 12-digit account
+# id an AWS error message may carry (e.g. AccessDenied principal ARNs) is
+# redacted first, and the allowlist validator itself never prints addresses.
 gate_check() {
     local description="$1"
     shift
+    local diagnostics
 
-    if "$@" >/dev/null 2>&1; then
+    if diagnostics="$("$@" 2>&1 >/dev/null)"; then
         echo "PASS: ${description}"
     else
+        if [[ -n "$diagnostics" ]]; then
+            printf '%s\n' "$diagnostics" | sed -E 's/[0-9]{12}/<account-id>/g' >&2
+        fi
         fail "${description}"
     fi
 }
@@ -297,6 +310,26 @@ check_metabase_allowlist_parameter() {
         PYTHONPATH="$REPO_ROOT/infra" python3 -m infra.metabase_allowlist
 }
 
+# The listener rule reads the allowlist through an AWS::SSM::Parameter::Value
+# template parameter, so its CIDRs are re-resolved by CloudFormation on every
+# stack update (the CDK CLI never skips a stack that carries such a parameter,
+# even when the template is unchanged). This check turns that assumption into
+# an observed post-condition: after the CDK deploy, the rule on the shared
+# listener must match the parameter exactly. It prints counts, never addresses.
+check_metabase_listener_rule_matches_allowlist() {
+    local listener_arn allowlist_value
+    listener_arn="$(ssm_value "$SSM_SHARED_LISTENER_ARN")"
+    allowlist_value="$(ssm_value "$METABASE_ALLOWLIST_PARAMETER")"
+    aws elbv2 describe-rules \
+        --region "$DEPLOY_REGION" \
+        --listener-arn "$listener_arn" \
+        --query Rules \
+        --output json | \
+        METABASE_ALLOWLIST_VALUE="$allowlist_value" \
+        PYTHONPATH="$REPO_ROOT/infra" python3 -m infra.metabase_allowlist \
+            verify-rule --host "$METABASE_DOMAIN"
+}
+
 check_fonts_uploaded() {
     local listing
     listing="$(aws s3 ls "s3://${FONTS_BUCKET}/")"
@@ -350,6 +383,20 @@ deploy_all_stacks() {
         # app.py requires env_name; stage=all is explicit for reproducible deploys.
         run_cdk deploy -c "env_name=${ENV_NAME}" -c stage=all --all
     )
+    verify_metabase_allowlist_applied
+}
+
+# Removing an address from the allowlist only takes effect once a deploy has
+# re-resolved the SSM parameter into the listener rule; fail loudly if the rule
+# the deploy left behind differs from the parameter.
+verify_metabase_allowlist_applied() {
+    if [[ "$METABASE_ALLOWLIST_PARAMETER" == "-" ]]; then
+        return 0
+    fi
+    echo "Postconditions gate: Metabase allowlist"
+    gate_check \
+        "Metabase listener rule source-ip condition matches the SSM allowlist" \
+        check_metabase_listener_rule_matches_allowlist
 }
 
 bootstrap() {
@@ -594,7 +641,7 @@ fi
 
 if [[ "$METABASE_ALLOWLIST_PARAMETER" != "-" ]]; then
     gate_check \
-        "Metabase allowlist SSM parameter contains one to three valid CIDRs" \
+        "Metabase allowlist SSM parameter contains one to three valid IPv4 CIDRs" \
         check_metabase_allowlist_parameter
 fi
 

@@ -17,6 +17,8 @@ from aws_cdk import (
 )
 from constructs import Construct
 
+from infra.components.shared_alb import import_shared_alb
+
 
 class PaV3AnalyticsStack(Stack):
     """Deploy a private Metabase service and its application database.
@@ -78,55 +80,7 @@ class PaV3AnalyticsStack(Stack):
             domain_name=domain_name,
         )
 
-        shared_alb_arn = ssm.StringParameter.value_for_string_parameter(
-            self,
-            parameter_name="/policy_atlas_v3/shared_alb/arn",
-        )
-        shared_alb_sg_id = ssm.StringParameter.value_for_string_parameter(
-            self,
-            parameter_name="/policy_atlas_v3/shared_alb/security_group_id",
-        )
-        shared_alb_dns = ssm.StringParameter.value_for_string_parameter(
-            self,
-            parameter_name="/policy_atlas_v3/shared_alb/dns_name",
-        )
-        shared_alb_zone_id = ssm.StringParameter.value_for_string_parameter(
-            self,
-            parameter_name=(
-                "/policy_atlas_v3/shared_alb/canonical_hosted_zone_id"
-            ),
-        )
-        shared_listener_arn = ssm.StringParameter.value_for_string_parameter(
-            self,
-            parameter_name="/policy_atlas_v3/shared_alb/https_listener_arn",
-        )
-
-        shared_alb_sg = ec2.SecurityGroup.from_security_group_id(
-            self,
-            "SharedALBSG",
-            security_group_id=shared_alb_sg_id,
-            allow_all_outbound=False,
-        )
-        shared_alb = (
-            elbv2.ApplicationLoadBalancer
-            .from_application_load_balancer_attributes(
-                self,
-                "SharedALB",
-                load_balancer_arn=shared_alb_arn,
-                security_group_id=shared_alb_sg_id,
-                load_balancer_dns_name=shared_alb_dns,
-                load_balancer_canonical_hosted_zone_id=shared_alb_zone_id,
-            )
-        )
-        shared_listener = (
-            elbv2.ApplicationListener
-            .from_application_listener_attributes(
-                self,
-                "SharedHTTPSListener",
-                listener_arn=shared_listener_arn,
-                security_group=shared_alb_sg,
-            )
-        )
+        shared_alb = import_shared_alb(self)
 
         metabase_security_group = ec2.SecurityGroup(
             self,
@@ -136,7 +90,7 @@ class PaV3AnalyticsStack(Stack):
             allow_all_outbound=True,
         )
         metabase_security_group.add_ingress_rule(
-            shared_alb_sg,
+            shared_alb.security_group,
             ec2.Port.tcp(container_port),
             "Allow the shared ALB to reach Metabase",
         )
@@ -214,10 +168,16 @@ class PaV3AnalyticsStack(Stack):
         if metabase_database.secret is None:
             raise ValueError("Metabase database credentials secret was not created")
 
+        # No fixed secret name: the secret is retained on stack removal, and a
+        # fixed name would make the next deploy fail on "already exists" while
+        # the only way to unblock it would be deleting the retained key. A
+        # generated name lets destroy + redeploy succeed; restoring the old
+        # Metabase database from its snapshot then means copying the retained
+        # secret's value into the new secret before the service first starts
+        # (see infra/DEPLOYMENT.md, staging Metabase first-admin setup).
         encryption_secret = secretsmanager.Secret(
             self,
             "MetabaseEncryptionSecret",
-            secret_name=f"policy_atlas_v3/metabase/{env_name}/encryption",
             description="Metabase key for encrypting stored connection details",
             generate_secret_string=secretsmanager.SecretStringGenerator(
                 exclude_punctuation=True,
@@ -319,7 +279,11 @@ class PaV3AnalyticsStack(Stack):
             availability_zone_rebalancing=(
                 ecs.AvailabilityZoneRebalancing.DISABLED
             ),
-            health_check_grace_period=Duration.minutes(5),
+            # Metabase's first start runs its full application-database
+            # migration on 1 vCPU, which can exceed five minutes; the circuit
+            # breaker would otherwise roll the first deploy back before the
+            # target ever turns healthy.
+            health_check_grace_period=Duration.minutes(10),
             circuit_breaker=ecs.DeploymentCircuitBreaker(rollback=True),
             security_groups=[metabase_security_group],
             assign_public_ip=False,
@@ -353,7 +317,7 @@ class PaV3AnalyticsStack(Stack):
                 )
             ],
         )
-        shared_listener.add_target_groups(
+        shared_alb.listener.add_target_groups(
             "MetabaseTargetGroupAttachment",
             target_groups=[metabase_target_group],
             priority=20,
@@ -369,6 +333,6 @@ class PaV3AnalyticsStack(Stack):
             zone=hosted_zone,
             record_name=metabase_config["metabase_subdomain"],
             target=r53.RecordTarget.from_alias(
-                r53_targets.LoadBalancerTarget(shared_alb)
+                r53_targets.LoadBalancerTarget(shared_alb.load_balancer)
             ),
         )

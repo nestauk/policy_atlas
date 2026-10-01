@@ -293,6 +293,9 @@ def test_metabase_task_uses_logs_and_secrets_without_plaintext_credentials():
         if logical_id.startswith("MetabaseEncryptionSecret")
     )
     assert encryption_secret["DeletionPolicy"] == "Retain"
+    # A fixed Name plus Retain would make destroy + redeploy fail on "already
+    # exists", and deleting the orphan to unblock it would lose the key.
+    assert "Name" not in encryption_secret["Properties"]
     generator = encryption_secret["Properties"]["GenerateSecretString"]
     assert generator["PasswordLength"] == 64
     assert generator["ExcludePunctuation"] is True
@@ -304,7 +307,9 @@ def test_metabase_service_is_private_and_avoids_overlapping_migrations():
     properties = service["Properties"]
     assert properties["DesiredCount"] == 1
     assert properties["AvailabilityZoneRebalancing"] == "DISABLED"
-    assert properties["HealthCheckGracePeriodSeconds"] == 300
+    # Ten minutes: Metabase's first-start migration on 1 vCPU can outlast the
+    # previous five, and the circuit breaker would roll the deploy back.
+    assert properties["HealthCheckGracePeriodSeconds"] == 600
     deployment = properties["DeploymentConfiguration"]
     assert deployment["DeploymentCircuitBreaker"] == {
         "Enable": True,
@@ -399,9 +404,22 @@ def test_metabase_has_bounded_log_retention_and_no_source_credentials():
 
 
 def test_aurora_security_group_has_only_expected_5432_ingress():
-    database_rules = _port_5432_ingress(TEMPLATES["database"])
-    app_rules = _port_5432_ingress(TEMPLATES["app"])
-    assert len(database_rules) + len(app_rules) == 3
+    # Every stack is enumerated: a new 5432 consumer anywhere must be added
+    # here explicitly rather than slip past a sum over two templates.
+    rules_by_stack = {
+        stack_name: _port_5432_ingress(template)
+        for stack_name, template in TEMPLATES.items()
+    }
+    assert {name: len(rules) for name, rules in rules_by_stack.items()} == {
+        "network": 0,
+        "database": 2,
+        "cert": 0,
+        "app": 1,
+        "analytics": 2,
+    }
+    database_rules = rules_by_stack["database"]
+    app_rules = rules_by_stack["app"]
+    analytics_rules = rules_by_stack["analytics"]
 
     db_security_group_id = next(
         logical_id
@@ -424,12 +442,53 @@ def test_aurora_security_group_has_only_expected_5432_ingress():
         for rule in database_rules
     )
 
-    assert len(app_rules) == 1
+    # Consumer stacks reach the Aurora security group through its SSM export.
+    aurora_reference = "SsmParameterValuepolicyatlasv3dbsecuritygroupid"
     api_rule = app_rules[0]
-    assert "SsmParameterValuepolicyatlasv3dbsecuritygroupid" in json.dumps(
-        api_rule["GroupId"]
-    )
+    assert aurora_reference in json.dumps(api_rule["GroupId"])
     assert "BackendSG" in json.dumps(api_rule["SourceSecurityGroupId"])
+
+    # The analytics stack opens 5432 twice: once into its own Metabase
+    # application database, once into Aurora for the future curated read
+    # role. Both rules come only from the Metabase service security group.
+    metabase_sg_id = next(
+        logical_id
+        for logical_id, _ in _resources(TEMPLATES["analytics"], "AWS::EC2::SecurityGroup")
+        if logical_id.startswith("MetabaseSecurityGroup")
+    )
+    metabase_db_sg_id = next(
+        logical_id
+        for logical_id, _ in _resources(TEMPLATES["analytics"], "AWS::EC2::SecurityGroup")
+        if logical_id.startswith("MetabaseDatabaseSecurityGroup")
+    )
+    metabase_source = {"Fn::GetAtt": [metabase_sg_id, "GroupId"]}
+    assert all(rule["SourceSecurityGroupId"] == metabase_source for rule in analytics_rules)
+    aurora_rules = [
+        rule for rule in analytics_rules if aurora_reference in json.dumps(rule["GroupId"])
+    ]
+    assert len(aurora_rules) == 1
+    metabase_db_rules = [rule for rule in analytics_rules if rule not in aurora_rules]
+    assert len(metabase_db_rules) == 1
+    assert metabase_db_rules[0]["GroupId"] == {
+        "Fn::GetAtt": [metabase_db_sg_id, "GroupId"]
+    }
+
+
+def test_consumer_stacks_import_the_shared_alb_from_the_same_ssm_exports():
+    shared_alb_exports = {
+        "/policy_atlas_v3/shared_alb/arn",
+        "/policy_atlas_v3/shared_alb/security_group_id",
+        "/policy_atlas_v3/shared_alb/dns_name",
+        "/policy_atlas_v3/shared_alb/canonical_hosted_zone_id",
+        "/policy_atlas_v3/shared_alb/https_listener_arn",
+    }
+    for stack_name in ("app", "analytics"):
+        ssm_defaults = {
+            parameter["Default"]
+            for parameter in TEMPLATES[stack_name]["Parameters"].values()
+            if parameter["Type"] == "AWS::SSM::Parameter::Value<String>"
+        }
+        assert shared_alb_exports <= ssm_defaults, stack_name
 
 
 def test_backend_to_aurora_route_is_vpc_local_and_nat_independent():
