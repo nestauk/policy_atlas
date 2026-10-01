@@ -46,7 +46,11 @@ reps + the stage-2 full-text confirmation on deep profiles) and classify (gpt-5.
 fixture-corpus live chain ≈ $0.2, see the 014 verification cost note; task 015 promotes
 `httpx` to a declared dep (no new packages — it was already transitive) and makes
 **live search** available: `OPENALEX_API_KEY` + `OVERTON_API_KEY` in `.env` switch the
-skeleton's search backends live (both required together, checked loudly); the same
+skeleton's search backends live (both required together, checked loudly); task 046
+adds two **optional, eval-only** keys, `SEMANTIC_SCHOLAR_API_KEY` (free) and
+`CONSENSUS_API_KEY` (paid, $0.05 per call, fetched once into the git-ignored
+`scripts/evals/search/results/cache/`), read only by `scripts/evals/search/baseline_recall.py`
+and never by the product; the same
 `OPENAI_API_KEY` drives the three search-generation surfaces; a live rapid+deep check
 lands in low single-digit dollars, see the 015 verification cost note; task 016
 promotes `httpcore` to a declared dep (no new packages — httpx's own transitive) and
