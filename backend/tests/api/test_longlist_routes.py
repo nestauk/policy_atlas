@@ -645,7 +645,7 @@ def test_the_card_carries_every_section_and_never_how_sure(
         assert evidence["by_role"]["evaluated"] >= 1
         # The record-level lists are gone (B13); Tried on and Measures are
         # the kinds the folding calls give (task 046, amendment 3).
-        assert not {"populations", "settings", "outcomes"} & set(evidence)
+        assert not {"units", "settings", "outcomes"} & set(evidence)
         assert evidence["tried_on"] == [{"kind": "16 to 24 year olds", "documents": 1}]
         assert isinstance(evidence["measures"], list)
         # The documents: one per document, DOI twins collapsed (R67).
@@ -817,7 +817,7 @@ def test_the_card_and_list_serve_tried_on_and_examples(conn: Connection) -> None
     ]
     assert card.examples == [ExampleOut(name="Youth Guarantee", documents=3)]
     served = card.evidence.model_dump()
-    assert not {"populations", "settings", "outcomes"} & set(served)
+    assert not {"units", "settings", "outcomes"} & set(served)
 
 
 def test_the_list_serves_title_only_and_the_thinning_counts(conn: Connection) -> None:
@@ -975,7 +975,7 @@ def test_an_old_stored_longlist_reads_with_every_new_field_defaulted(conn: Conne
         oid: {
             k: v
             for k, v in cov.items()
-            if k not in ("tried_on", "examples", "folded", "population_tags", "setting_repairs")
+            if k not in ("tried_on", "examples", "folded", "unit_tags", "setting_repairs")
         }
         for oid, cov in stored.coverage.items()
     }

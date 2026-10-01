@@ -166,6 +166,12 @@ const AUTHORITY_WORD_CLASS: Record<"within_your_power" | "needs_action_by" | "un
   unclear: "inline-block bg-paper-2 px-1.5 py-0.5 text-meta font-semibold leading-tight text-grey",
 };
 
+/** The profile table's cells: three columns from `sm` up; stacked blocks below it, so the
+ *  sentence keeps the full width at 390 px (22b, after the browser check). */
+const PROFILE_NAME_CELL = "block pt-2.5 pr-4 align-top font-semibold text-navy sm:w-48 sm:table-cell sm:py-2.5";
+const PROFILE_WORD_CELL = "block pr-4 align-top sm:w-40 sm:table-cell sm:py-2.5";
+const PROFILE_SENTENCE_CELL = "block pb-2.5 align-top sm:table-cell sm:py-2.5";
+
 const VERDICT_CLASS: Record<"passes" | "breaks" | "cannot_check", string> = {
   passes: "text-navy",
   breaks: "text-red",
@@ -436,15 +442,15 @@ export function OptionCard() {
           <table className="w-full border-collapse text-left">
             <tbody className="divide-y divide-line">
               <tr>
-                <th scope="row" className="w-48 py-2.5 pr-4 align-top font-semibold text-navy">{LINE_NAMES.ambition}</th>
-                <td className="w-40 py-2.5 pr-4 align-top">
+                <th scope="row" className={PROFILE_NAME_CELL}>{LINE_NAMES.ambition}</th>
+                <td className={PROFILE_WORD_CELL}>
                   {ambitionMark === null ? (
                     <span className="font-semibold text-navy">{MIDDLE_WORD}</span>
                   ) : (
                     <span className={LEVEL_WORD_CLASS[ambitionMark]}>{LEVEL_WORDS.ambition[ambitionMark]}</span>
                   )}
                 </td>
-                <td className="py-2.5 align-top">{scrub(item.ambition_reason ?? "")}</td>
+                <td className={PROFILE_SENTENCE_CELL}>{scrub(item.ambition_reason ?? "")}</td>
               </tr>
               {profileLines.map(({ key, line }) => {
                 const mark = line?.mark ?? null;
@@ -452,8 +458,8 @@ export function OptionCard() {
                 const authority = key === "who_decides" ? item.authority : null;
                 return (
                   <tr key={key}>
-                    <th scope="row" className="w-48 py-2.5 pr-4 align-top font-semibold text-navy">{LINE_NAMES[key]}</th>
-                    <td className="w-40 py-2.5 pr-4 align-top">
+                    <th scope="row" className={PROFILE_NAME_CELL}>{LINE_NAMES[key]}</th>
+                    <td className={PROFILE_WORD_CELL}>
                       {authority != null ? (
                         <span className={AUTHORITY_WORD_CLASS[authority.label]}>{authorityWords(authority)}</span>
                       ) : marked && mark === null ? (
@@ -462,7 +468,7 @@ export function OptionCard() {
                         <span className={LEVEL_WORD_CLASS[mark]}>{LEVEL_WORDS[key][mark]}</span>
                       ) : null}
                     </td>
-                    <td className="py-2.5 align-top">{scrub(line?.sentence ?? "")}</td>
+                    <td className={PROFILE_SENTENCE_CELL}>{scrub(line?.sentence ?? "")}</td>
                   </tr>
                 );
               })}
@@ -512,9 +518,9 @@ export function OptionCard() {
               {whereTried.map((entry) => (
                 <li key={entry.top}>
                   {scrub(whereTopLine(entry))}
-                  {(entry.places ?? []).length > 0 && (
+                  {(entry.places ?? []).some((place) => place.place.trim().toLowerCase() !== entry.top.trim().toLowerCase()) && (
                     <ul className="list-[circle] space-y-0.5 pl-5 text-grey">
-                      {(entry.places ?? []).map((place) => (
+                      {(entry.places ?? []).filter((place) => place.place.trim().toLowerCase() !== entry.top.trim().toLowerCase()).map((place) => (
                         <li key={place.place}>{scrub(wherePlaceLine(place))}</li>
                       ))}
                     </ul>

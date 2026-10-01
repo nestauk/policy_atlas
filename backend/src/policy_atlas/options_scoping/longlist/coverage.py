@@ -4,13 +4,13 @@ Per option, from its membership alone — no model call, the same inputs always
 give the same JSON: documents by evidence type and quality tier (through the
 label resolver, :func:`~policy_atlas.options_scoping.labels.labels_for_snapshots`),
 by role, where tried (two levels from the records' ``study_country`` and
-``study_geography``: :mod:`.where_tried`), populations,
+``study_geography``: :mod:`.where_tried`), units,
 settings, outcomes; flagged members counted (``design_feature_not_stated``,
 D11); ``abstract_only`` counted. Display and a later sort, never "how sure"
 (ruling 33).
 
-Task 046 (S11) adds the counts by population tag, *tried on* (the
-populations of the ``adjacent`` members), the *examples* (the members'
+Task 046 (S11) adds the counts by unit tag, *tried on* (the
+units of the ``adjacent`` members), the *examples* (the members'
 distinct programme names), ``folded`` (the folded seeds' names) and the setting pass: on
 this read side only — the stored record is never rewritten — a setting that
 names a place is read as the record's study geography (when it has none) or
@@ -74,11 +74,11 @@ NOT_RATED = "not rated"
 #: membership, so it has no bucket).
 ROLE_BUCKETS: tuple[str, ...] = ("evaluated", "described", "recommended", "mentioned")
 
-#: The population-tag buckets, in display order; ``not_tagged`` is a member
+#: The unit-tag buckets, in display order; ``not_tagged`` is a member
 #: with no tag (a record from another tagging context, a linked finding).
-POPULATION_TAG_BUCKETS: tuple[str, ...] = ("on_target", "adjacent", "other", "not_tagged")
+UNIT_TAG_BUCKETS: tuple[str, ...] = ("on_target", "adjacent", "other", "not_tagged")
 
-#: At most this many *tried on* populations per option (AM20).
+#: At most this many *tried on* units per option (AM20).
 TRIED_ON_MAX = 8
 
 #: At most this many *examples* (distinct programme names) per option (R63).
@@ -426,8 +426,8 @@ def option_coverage(
         ``evidence_type`` · ``tier`` · ``role`` · ``where_tried`` (a list of
         ``{top, documents, places: [{place, documents}], countries}``, by
         documents descending then top; ``countries`` is empty except under
-        "multiple countries") · ``populations`` · ``settings`` · ``outcomes`` ·
-        ``findings`` · ``population_tags`` · ``tried_on`` ·
+        "multiple countries") · ``units`` · ``settings`` · ``outcomes`` ·
+        ``findings`` · ``unit_tags`` · ``tried_on`` ·
         ``examples`` (``[{name, documents}]``, at most :data:`EXAMPLES_MAX`) ·
         ``folded`` (the folded seeds' names) ·
         ``setting_repairs`` · ``outcome_counts`` (``evaluating_documents``,
@@ -473,10 +473,10 @@ def option_coverage(
     places_shown: dict[str, str] = {}
     where_countries: dict[str, set[str]] = {}
     countries_shown: dict[str, str] = {}
-    populations: dict[str, int] = {}
+    units: dict[str, int] = {}
     settings: dict[str, int] = {}
     outcomes: dict[str, int] = {}
-    population_tags = dict.fromkeys(POPULATION_TAG_BUCKETS, 0)
+    unit_tags = dict.fromkeys(UNIT_TAG_BUCKETS, 0)
     setting_docs: dict[str, set[str]] = {}
     setting_spellings: dict[str, dict[str, int]] = {}
     tried_on: dict[str, set[str]] = {}
@@ -577,23 +577,23 @@ def option_coverage(
                 spellings = setting_spellings.setdefault(folded_setting, {})
                 spellings[m.setting] = spellings.get(m.setting, 0) + 1
         for field, counts in (
-            ("unit", populations),
+            ("unit", units),
             ("outcome", outcomes),
         ):
             for value in {_clean(getattr(m, field)) for m in doc_members} - {None}:
                 assert value is not None
                 _add(counts, value)
         for tag in {
-            m.unit_tag if m.unit_tag in POPULATION_TAG_BUCKETS else "not_tagged"
+            m.unit_tag if m.unit_tag in UNIT_TAG_BUCKETS else "not_tagged"
             for m in doc_members
         }:
-            population_tags[tag] += 1
+            unit_tags[tag] += 1
         for m in doc_members:
-            population = _clean(m.unit) if m.unit_tag == "adjacent" else None
-            if population is not None:
-                folded = population.casefold()
+            unit = _clean(m.unit) if m.unit_tag == "adjacent" else None
+            if unit is not None:
+                folded = unit.casefold()
                 tried_on.setdefault(folded, set()).add(key)
-                _show(tried_on_shown, folded, population)
+                _show(tried_on_shown, folded, unit)
             name = _clean(m.programme_name)
             if name is not None:
                 folded = name.casefold()
@@ -665,14 +665,14 @@ def option_coverage(
                 where_docs.items(), key=lambda item: (-len(item[1]), where_shown[item[0]])
             )
         ],
-        "populations": _sorted(populations),
+        "units": _sorted(units),
         "settings": _sorted(settings),
         "outcomes": _sorted(outcomes),
         "findings": findings,
-        "population_tags": population_tags,
+        "unit_tags": unit_tags,
         "tried_on": [
-            {"population": population, "documents": documents}
-            for population, documents in _ranked(tried_on, tried_on_shown)[:TRIED_ON_MAX]
+            {"unit": unit, "documents": documents}
+            for unit, documents in _ranked(tried_on, tried_on_shown)[:TRIED_ON_MAX]
         ],
         "examples": [
             {"name": name, "documents": documents}

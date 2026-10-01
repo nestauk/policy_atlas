@@ -562,7 +562,7 @@ def test_a_merge_recomputes_the_kinds_from_the_stored_maps_and_keeps_the_old_key
     ]
     assert coverage["outcome_counts"]["other"] == []
     # The old keys constrain reads stay in the coverage, and in its payload.
-    for key in ("tried_on", "populations", "settings", "population_tags"):
+    for key in ("tried_on", "units", "settings", "unit_tags"):
         assert key in coverage
     sent = backend.constrain_inputs[0]["options"][0]["coverage"]
     assert set(sent) == {"documents", "evaluated", "roles", "tried_on", "settings"}

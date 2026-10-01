@@ -1,7 +1,7 @@
 """Coverage additions of task 046 (S11; AM20; contract items 14 and 23).
 
-The counts by population tag, *tried on* (the adjacent members'
-populations), the *examples* (the programme names) and
+The counts by unit tag, *tried on* (the adjacent members'
+units), the *examples* (the programme names) and
 ``folded`` (the folded seeds' names), and the setting code
 pass on the read side: folded setting labels, and a setting that names a
 place read as the study geography (or left out of the facet), counted and
@@ -67,7 +67,7 @@ def _coverage(members: list[CoverageMember], **kwargs: Any) -> dict[str, Any]:
 # --- counts by population tag ------------------------------------------------------
 
 
-def test_population_tags_are_counted_by_document_with_not_tagged() -> None:
+def test_unit_tags_are_counted_by_document_with_not_tagged() -> None:
     coverage = _coverage(
         [
             _member("a", unit_tag="on_target"),
@@ -77,7 +77,7 @@ def test_population_tags_are_counted_by_document_with_not_tagged() -> None:
             _member("d"),  # another context, or a linked finding
         ]
     )
-    assert coverage["population_tags"] == {
+    assert coverage["unit_tags"] == {
         "on_target": 1,
         "adjacent": 1,
         "other": 1,
@@ -87,7 +87,7 @@ def test_population_tags_are_counted_by_document_with_not_tagged() -> None:
 
 def test_an_option_with_no_member_has_every_new_key_empty() -> None:
     coverage = _coverage([])
-    assert coverage["population_tags"] == dict.fromkeys(
+    assert coverage["unit_tags"] == dict.fromkeys(
         ("on_target", "adjacent", "other", "not_tagged"), 0
     )
     assert coverage["tried_on"] == []
@@ -190,7 +190,7 @@ def test_empty_coverage_has_the_outcome_counts_key() -> None:
 # --- tried on ------------------------------------------------------------------------
 
 
-def test_tried_on_lists_adjacent_populations_by_document_folded() -> None:
+def test_tried_on_lists_adjacent_units_by_document_folded() -> None:
     coverage = _coverage(
         [
             _member("a", unit="Young  adults", unit_tag="adjacent"),
@@ -203,8 +203,8 @@ def test_tried_on_lists_adjacent_populations_by_document_folded() -> None:
         ]
     )
     assert coverage["tried_on"] == [
-        {"population": "YOUNG ADULTS", "documents": 2},
-        {"population": "older workers", "documents": 1},
+        {"unit": "YOUNG ADULTS", "documents": 2},
+        {"unit": "older workers", "documents": 1},
     ]
 
 
@@ -218,7 +218,7 @@ def test_tried_on_is_capped_at_eight_by_documents_then_text() -> None:
     assert len(tried_on) == TRIED_ON_MAX == 8
     documents = [entry["documents"] for entry in tried_on]
     assert documents == sorted(documents, reverse=True)
-    assert tried_on[0] == {"population": "group c", "documents": 3}
+    assert tried_on[0] == {"unit": "group c", "documents": 3}
 
 
 # --- examples and folded ---------------------------------------------------------------
@@ -434,13 +434,13 @@ def test_the_build_writes_the_new_keys_and_no_tag_removes_a_record(conn: Connect
     assert len(walk.memberships()) == 4
     coverage = walk.result(run_id).coverage
     kept_cov, duplicate_cov = coverage[str(kept)], coverage[str(duplicate)]
-    assert kept_cov["population_tags"] == {
+    assert kept_cov["unit_tags"] == {
         "on_target": 1,
         "adjacent": 1,
         "other": 0,
         "not_tagged": 0,
     }
-    assert kept_cov["tried_on"] == [{"population": "young adults", "documents": 1}]
+    assert kept_cov["tried_on"] == [{"unit": "young adults", "documents": 1}]
     assert kept_cov["examples"] == [{"name": "youth guarantee", "documents": 2}]
     assert kept_cov["folded"] == []
     # "schools" and "school settings", once each: the tie goes to the shortest.
@@ -450,7 +450,7 @@ def test_the_build_writes_the_new_keys_and_no_tag_removes_a_record(conn: Connect
         "other": 1,
         "not stated": 1,
     }
-    assert duplicate_cov["population_tags"]["other"] == 1
+    assert duplicate_cov["unit_tags"]["other"] == 1
 
 
 def test_coverage_after_a_merge_recomputes_tried_on_and_lists_the_folded_seed(
@@ -473,7 +473,7 @@ def test_coverage_after_a_merge_recomputes_tried_on_and_lists_the_folded_seed(
         scope_id=walk.scope_id,
         option_ids=[kept],
     )[str(kept)]
-    assert coverage["tried_on"] == [{"population": "Young adults", "documents": 2}]
+    assert coverage["tried_on"] == [{"unit": "Young adults", "documents": 2}]
     # The seed's own members moved: its name is under ``folded``, and the
     # moved members' programme names are examples.
     assert coverage["folded"] == ["Jobs guarantee"]
@@ -715,5 +715,5 @@ def test_a_merge_recomputes_the_kinds_through_the_maps(conn: Connection) -> None
         {"kind": "unemployed adults", "documents": 1},
     ]
     # The old keys stay for constrain.
-    assert coverage["tried_on"] == [{"population": "Young adults", "documents": 2}]
-    assert "populations" in coverage and "settings" in coverage
+    assert coverage["tried_on"] == [{"unit": "Young adults", "documents": 2}]
+    assert "units" in coverage and "settings" in coverage

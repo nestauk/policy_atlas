@@ -362,7 +362,7 @@ def _coverage_summary(coverage: object) -> dict[str, object]:
     """A compact coverage summary: context for the screens, never an exclusion input.
 
     No ``where_tried`` (AM7: place never reaches the prompt); the counts by
-    role and the *tried on* populations stay.
+    role and the *tried on* units stay.
     """
     cov = _mapping(coverage)
     roles = _mapping(cov.get("role"))
@@ -375,7 +375,7 @@ def _coverage_summary(coverage: object) -> dict[str, object]:
         "roles": {str(k): int(v or 0) for k, v in roles.items()},
         "tried_on": [
             {
-                "population": str(entry.get("population") or ""),
+                "unit": str(entry.get("unit") or ""),
                 "documents": int(entry.get("documents") or 0),
             }
             for entry in (tried_on if isinstance(tried_on, list) else [])

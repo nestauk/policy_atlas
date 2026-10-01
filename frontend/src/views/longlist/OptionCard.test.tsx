@@ -168,7 +168,8 @@ describe("OptionCard", () => {
       "Multiple countries · 2 documents",
     ]);
     expect(within(tops[0]).getByText("England · 3 documents")).toBeInTheDocument();
-    expect(within(tops[0]).getByText("United Kingdom · 1 document")).toBeInTheDocument();
+    // A place that repeats its top level is not listed below it (22b, after the browser check).
+    expect(within(tops[0]).queryByText("United Kingdom · 1 document")).not.toBeInTheDocument();
     expect(within(tops[1]).getByText("12 high-income countries · 1 document")).toBeInTheDocument();
   });
 

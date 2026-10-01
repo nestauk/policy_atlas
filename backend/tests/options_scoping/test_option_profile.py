@@ -1108,7 +1108,7 @@ def test_the_maps_are_stored_at_list_level_and_the_kinds_merged_into_coverage(
     }
     coverage = after.coverage[str(ids["yg"])]
     # The old keys stay as the build wrote them (constrain reads them).
-    for key in ("tried_on", "populations", "settings", "population_tags", "outcomes"):
+    for key in ("tried_on", "units", "settings", "unit_tags", "outcomes"):
         assert coverage[key] == before.coverage[str(ids["yg"])][key]
     # Target unit first; two words of one kind in one document count once.
     assert coverage["tried_on_kinds"] == [

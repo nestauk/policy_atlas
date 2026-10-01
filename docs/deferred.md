@@ -2787,6 +2787,45 @@ Recorded by the task 046 amendment 2 build (`amendment-2-final.md` § 4 and § 2
   the loop read: NHS commissioning and school food enforcement, where a council has a part but
   not the whole (loop 13L).
 
+### Amendment 3 (2026-10-01)
+
+Recorded by the task 046 amendment 3 build (`amendment-3-final.md` § 7.3; the round records
+`16R-record-prompt-loop.md`, `18P-place-rule-loop.md`, `20L-folding-loop.md`).
+
+- **The place list's deletion is an owner decision.** With the rule in words in every prompt
+  the replays still showed one clear place-based screen rejection in 175 documents on the
+  hardest list (refugees) after three rounds, so `strip_place`, its name tables and
+  `names_place` stay (R74). The loop's texts and figures are on the record; deleting the list
+  is the owner's call at review, or a later round on a stronger screen model.
+- **The folding calls' tail.** On the mini model, "the same word for the same kind" holds for
+  the large kinds and fails in the tail (obesity's "BMI measures" beside the plan outcome;
+  NEET's three employment kinds); a list with more than ~120 distinct unit words can collapse
+  into one catch-all kind under the schema cap of 12 (cohesion's Tried on). Follow-ups: a code
+  guard (a kind holding more than half the words → one retry with the count named), and the
+  judgment model for the folding calls on long lists, both costed in the system-level cost and
+  latency task.
+- **`programme_name` and `study_country` on the mini model** (rubric boxes 57 and 69, not met
+  at "all"): 13–32 per cent of programme names are the name of the study, provider, fund or
+  parent scheme; "not stated" hides a stated place on 4 to 34 records per list. A stronger
+  record model, or a second pass over the named records only, is later work.
+- **The replay tool's stage order.** Running `suggest --fresh` before `longlist --fresh` on a
+  clone makes the clone's earlier options count as seeds, so the longlist fills its ceiling
+  with seeds. A clone reset per round (18P.0 does it for the screen) for the option stages too.
+- **Stored run history keeps the old facet key.** The data migration rewrites every place a
+  reader resolves (plans, groups, counts, flags, provenance, annotations, synthesis blocks);
+  `synthesis_result.synthesis_provenance`, `counts.groups_unsectioned_by_facet` and
+  `event_log` payloads keep `population` as history (R52).
+- **The screen's `not_relevant_naming_place` flag is a keyword.** It over-matches (OECD
+  country notes); reading whether place was the reason stays a hand read. A structured reason
+  code from the screen would make M4 a count.
+- **`OptionOut.where_label`** left the option read model; `LonglistOut.depth_label` stays for
+  the longlist header (R61 takes the chip off the card only).
+- **The constrain reason on the "Who decides" row** is served and not shown (22b: the row
+  keeps the line's own sentence; "just enough text"); the owner may want it back.
+- **The old revision `c7e2a9f4b1d8` and the new one both freeze / import the union view's SQL**:
+  the next revision that changes `finding_reference_union` must freeze a copy in
+  `f1b6d3a8c2e5` as `c7e2a9f4b1d8` now does.
+
 ## System-level cost and latency (deferred by task 046, R16; owner 2026-09-28)
 
 Cost changes that edit an Evidence search component are not made inside a capability slice.
