@@ -1,5 +1,10 @@
 # Knowledge update log
 
+## 2026-10-05 (task 046, mini-dataset runs)
+* **Update**: [langfuse-dataset-run-name-reuse-appends](langfuse-dataset-run-name-reuse-appends.md) —
+  corrected from "appends" to "upserts per dataset item" after a verified full re-run of
+  one arm under an existing label; `delete_run` is 404 on this instance.
+
 ## 2026-09-25 (task 046 step 8)
 * **Creation**: Added
   [consensus-api-paging-and-billing](consensus-api-paging-and-billing.md) — zero-indexed

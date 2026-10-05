@@ -221,10 +221,12 @@ same recall formula. Because every key in the ground truth is a DOI today, all t
 the baselines' and the pipeline's, are **scholarly recall**: a government report the review
 cites cannot be found by anyone.
 
-Two things differ between arms on purpose and are written into the notes in `history.md`:
+Three things differ between arms on purpose and are written into the notes in `history.md`:
 Semantic Scholar matches nothing on hyphenated words, so hyphens are sent as spaces for that
-arm only; and Consensus filters dates by month, so it may include papers from up to 30 days
-after the cutoff day.
+arm only; OpenAlex reads `?` and `*` as wildcards and answers HTTP 400 to them in a normal
+search, so a question-shaped intent loses its trailing question mark for that arm only; and
+Consensus filters dates by month, so it may include papers from up to 30 days after the
+cutoff day.
 
 ### How it runs: fetch once, score from the cache
 

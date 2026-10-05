@@ -505,3 +505,19 @@ carry question-shaped intents. The baseline cache compares intents, so those row
 the next run (Consensus: $2 on the mini, $20 on the full). Self-checks `test_gap_map_question`
 and `test_intent_column_wins_over_title`; `make eval-check` green.
 
+## Question-intent re-run on the mini dataset (2026-10-05, label `mini-q-2026-10-05`)
+
+Re-run after D18: all four baseline arms over the fifteen (eleven rows from the cache, the
+four gap-map rows refetched; Consensus $2.00), pipeline rapid over the fifteen ($0.01) and
+standard over the four gap-map rows only ($4.09). Two defects surfaced and were fixed in the
+same pass: the preflight "N review(s) need a fetch" count ignored intent and cutoff changes
+(printed 0, then fetched four); and OpenAlex answers HTTP 400 to a `?` in a stemmed search,
+so every question-shaped intent failed on that arm. `openalex_query` now strips a trailing
+question mark (second allowed intent change after D1), the arm was re-run over all fifteen
+under the same label and the run items were replaced (which also corrected the knowledge
+concept on run-name reuse: upsert per item, not append). Results on the four gap-map rows at
+the ceiling: snippet 4.5% -> 4.5% (same studies), Consensus 3.1% -> 6.7%, OpenAlex 1.4% ->
+0.9%, keyword 0 -> 0; rapid 1.0% -> 0.0%, standard 0.5% -> 0.0%. Fifteen-row figures after:
+snippet 11.7%, Consensus 11.7%, OpenAlex 5.1%, rapid 2.2%, standard 4.8% (spliced: four
+re-run rows plus eleven kept). Rows and notes in `results/history.md`.
+

@@ -608,6 +608,12 @@ def test_baseline_paging_openalex() -> None:
     short = fetch_openalex_raw(
         "q", "2020-01-01", get=_baseline_get([{"results": [{}]}], seen)
     )
+    # A question-shaped intent loses its "?" for OpenAlex only (a wildcard there, HTTP 400).
+    asked = []
+    fetch_openalex_raw(
+        "What works for X?", "2020-01-01", get=_baseline_get([{"results": [{}]}], asked)
+    )
+    assert asked[0]["search"] == "What works for X"
     assert (
         len(short.pages) == 1
         and seen[0]["per-page"] == "200"

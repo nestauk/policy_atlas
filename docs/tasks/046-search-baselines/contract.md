@@ -539,7 +539,9 @@ section 7 for the reader-facing version.
   theme>?", words lower-cased except acronyms, " / " as " or ", " + " as " and ". The
   uploader sends `intent` when filled, else the cleaned title (D12 stands for the title
   and the identifier). A hand-written question may overwrite the cell. Owner-directed;
-  the baseline cache refetches a row whose intent changed.
+  the baseline cache refetches a row whose intent changed. Second allowed change to the
+  intent text (after D1's hyphen rule): OpenAlex reads `?` as a wildcard and answers HTTP
+  400, so the OpenAlex arm strips a trailing question mark (`openalex_query`).
 
 ### Scope (added)
 

@@ -416,6 +416,17 @@ def fetch_consensus(intent: str, cutoff: str, *, get: Getter, api_key: str) -> F
     return Fetched(pages, request, echoed_first, 0, True, _now())
 
 
+def openalex_query(intent: str) -> str:
+    """Apply OpenAlex's documented wildcard rule: a trailing ``?`` would be read as a wildcard.
+
+    OpenAlex's stemmed ``search`` answers HTTP 400 to a query containing ``?`` or ``*``
+    ("Wildcards require exact (no-stem) search"), so a question-shaped intent loses its
+    question mark here. The second allowed change to the intent text, after the Semantic
+    Scholar hyphen rule (D1).
+    """
+    return intent.rstrip("?").rstrip()
+
+
 def fetch_openalex_raw(intent: str, cutoff: str, *, get: Getter) -> Fetched:
     """Fetch OpenAlex raw-search pages through the 1,000-record ceiling.
 
@@ -429,7 +440,7 @@ def fetch_openalex_raw(intent: str, cutoff: str, *, get: Getter) -> Fetched:
     """
     pages: list[dict[str, Any]] = []
     request = {
-        "search": intent,
+        "search": openalex_query(intent),
         "select": "id,doi,display_name,publication_date",
         "per-page": "200",
         "page": "1",
@@ -843,7 +854,13 @@ def main() -> None:
         needed = sum(
             cached is None or not cached.complete or args.refresh
             for item in items
-            for cached in [read_cache(cache_path(arm, str(item.id)))]
+            for cached in [
+                read_cache(
+                    cache_path(arm, str(item.id)),
+                    intent=item.input["intent"],
+                    cutoff=item.input["published_before"],
+                )
+            ]
         )
         print(f"{arm}: {needed} review(s) need a fetch; {ceilings[arm]}")
     for arm in args.arms:
