@@ -31,6 +31,30 @@ One request to a semantic search engine beats the whole pipeline. Semantic Schol
 | rapid | 2.2% |
 | standard (spliced: 4 re-run + 11 kept) | 4.8% |
 
+### 1a. Like for like: rapid against the baselines at cap 100
+
+Rapid keeps up to 50 candidates per backend, about 100 per review, so the fair neighbours are the cap-100 baseline rows. At the same number of candidates, one semantic request finds two and a half to three times what eighteen generated OpenAlex and Overton queries find, and one plain OpenAlex search finds about the same as rapid does.
+
+| experiment | recall (15 reviews) | candidates kept per review | cost per review |
+|---|---|---|---|
+| rapid | 2.2% | 100 | $0.0010 |
+| openalex-raw-cap100 | 2.5% | 100 | $0.0001 |
+| semantic-scholar-cap100 | 0.5% | 29 | $0.00 |
+| semantic-scholar-snippet-cap100 | 5.7% | 99 | $0.00 |
+| consensus-cap100 | 7.3% | 100 | $0.15 |
+
+### 1b. Like for like: standard against the baselines at cap 200
+
+Standard adds a screening pass and a second search round and held about 330 candidates per review here, between the cap-200 and cap-1000 baseline rows; cap 200 is the nearer and fairer comparison. At a third fewer candidates and no language-model cost, both semantic engines beat it; its cost per review is roughly twice Consensus's and a thousand times the free arms'.
+
+| experiment | recall (15 reviews) | candidates kept per review | cost per review |
+|---|---|---|---|
+| standard (spliced: 4 re-run + 11 kept) | 4.8% | 321 | $1.05 |
+| openalex-raw-cap200 | 3.1% | 200 | $0.0001 |
+| semantic-scholar-cap200 | 1.0% | 55 | $0.00 |
+| semantic-scholar-snippet-cap200 | 7.9% | 198 | $0.00 |
+| consensus-cap200 | 8.9% | 199 | $0.15 |
+
 ## 2. Recall per experiment, by source
 
 The order of the engines is the same within every source, but the level differs a lot by source. The 3ie and YEF gap-map rows stay near zero for every engine and for the pipeline, even after their intents were rewritten as questions, which points at the corpus (these are development and youth-justice studies, thinly indexed by scholarly services) rather than at the wording. The four hand-made reviews score highest on both semantic engines. The Campbell and SR4ALL columns look low partly because of the 50% ceiling explained above: 12% to 14% there means roughly a quarter of what could be found.

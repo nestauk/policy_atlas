@@ -36,6 +36,8 @@ from typing import Any
 
 import _bootstrap  # noqa: F401
 
+from evals_search_utils import usd
+
 from policy_atlas.core import tracing
 
 DATASET = "retrieval-ground-truth-mini"
@@ -96,6 +98,7 @@ def run_scores(
         out[run_item.dataset_item_id] = {
             s.name: float(s.value) for s in scores if s.value is not None
         }
+        out[run_item.dataset_item_id]["_trace"] = run_item.trace_id  # type: ignore[assignment]
     return out
 
 
@@ -173,6 +176,41 @@ document.querySelectorAll("th").forEach((th, i) => th.addEventListener("click", 
         + "\n".join(body)
         + f"<script>{script}</script></body></html>\n"
     )
+
+
+def per_review_cost(client: Any, run: str, scores: dict[str, dict[str, Any]]) -> float:
+    """Mean cost per review: the computed api price for a baseline, the model spend for the pipeline."""
+    if run in ("rapid", "standard"):
+        total = sum(
+            (getattr(client.api.trace.get(sc["_trace"]), "total_cost", 0.0) or 0.0)
+            for sc in scores.values()
+        )
+    else:
+        total = sum(sc.get("api_cost_usd", 0.0) for sc in scores.values())
+    return total / len(scores)
+
+
+def like_for_like(
+    client: Any,
+    current: dict[str, dict[str, dict[str, Any]]],
+    pipeline: str,
+    cap: int,
+    label_of: Any,
+) -> list[str]:
+    """One table: a pipeline depth beside the baseline arms at the nearest cap."""
+    rows = [pipeline] + [r for r in RUNS if r.endswith(f"-cap{cap}")]
+    out = [
+        "| experiment | recall (15 reviews) | candidates kept per review | cost per review |",
+        "|---|---|---|---|",
+    ]
+    for run in rows:
+        sc = current[run]
+        kept = sum(v.get("n_candidates_kept", 0.0) for v in sc.values()) / len(sc)
+        out.append(
+            f"| {label_of(run)} | {pct(mean_recall(sc, set(sc)))} | {kept:.0f} | "
+            f"{usd(per_review_cost(client, run, sc))} |"
+        )
+    return out
 
 
 def main() -> None:
@@ -265,6 +303,25 @@ def main() -> None:
     for run in RUNS:
         lines.append(f"| {label(run)} | {pct(mean_recall(current[run], set(items)))} |")
     lines += [
+        "",
+        "### 1a. Like for like: rapid against the baselines at cap 100",
+        "",
+        "Rapid keeps up to 50 candidates per backend, about 100 per review, so the fair neighbours "
+        "are the cap-100 baseline rows. At the same number of candidates, one semantic request "
+        "finds two and a half to three times what eighteen generated OpenAlex and Overton queries "
+        "find, and one plain OpenAlex search finds about the same as rapid does.",
+        "",
+        *like_for_like(client, current, "rapid", 100, label),
+        "",
+        "### 1b. Like for like: standard against the baselines at cap 200",
+        "",
+        "Standard adds a screening pass and a second search round and held about 330 candidates "
+        "per review here, between the cap-200 and cap-1000 baseline rows; cap 200 is the nearer and "
+        "fairer comparison. At a third fewer candidates and no language-model cost, both semantic "
+        "engines beat it; its cost per review is roughly twice Consensus's and a thousand times "
+        "the free arms'.",
+        "",
+        *like_for_like(client, current, "standard", 200, label),
         "",
         "## 2. Recall per experiment, by source",
         "",

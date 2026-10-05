@@ -24,6 +24,24 @@
 <tr><td>rapid</td><td>2.2%</td></tr>
 <tr><td>standard (spliced: 4 re-run + 11 kept)</td><td>4.8%</td></tr>
 </tbody></table>
+<p>### 1a. Like for like: rapid against the baselines at cap 100</p>
+<p>Rapid keeps up to 50 candidates per backend, about 100 per review, so the fair neighbours are the cap-100 baseline rows. At the same number of candidates, one semantic request finds two and a half to three times what eighteen generated OpenAlex and Overton queries find, and one plain OpenAlex search finds about the same as rapid does.</p>
+<table><thead><tr><th>experiment</th><th>recall (15 reviews)</th><th>candidates kept per review</th><th>cost per review</th></tr></thead><tbody>
+<tr><td>rapid</td><td>2.2%</td><td>100</td><td>$0.0010</td></tr>
+<tr><td>openalex-raw-cap100</td><td>2.5%</td><td>100</td><td>$0.0001</td></tr>
+<tr><td>semantic-scholar-cap100</td><td>0.5%</td><td>29</td><td>$0.00</td></tr>
+<tr><td>semantic-scholar-snippet-cap100</td><td>5.7%</td><td>99</td><td>$0.00</td></tr>
+<tr><td>consensus-cap100</td><td>7.3%</td><td>100</td><td>$0.15</td></tr>
+</tbody></table>
+<p>### 1b. Like for like: standard against the baselines at cap 200</p>
+<p>Standard adds a screening pass and a second search round and held about 330 candidates per review here, between the cap-200 and cap-1000 baseline rows; cap 200 is the nearer and fairer comparison. At a third fewer candidates and no language-model cost, both semantic engines beat it; its cost per review is roughly twice Consensus&#x27;s and a thousand times the free arms&#x27;.</p>
+<table><thead><tr><th>experiment</th><th>recall (15 reviews)</th><th>candidates kept per review</th><th>cost per review</th></tr></thead><tbody>
+<tr><td>standard (spliced: 4 re-run + 11 kept)</td><td>4.8%</td><td>321</td><td>$1.05</td></tr>
+<tr><td>openalex-raw-cap200</td><td>3.1%</td><td>200</td><td>$0.0001</td></tr>
+<tr><td>semantic-scholar-cap200</td><td>1.0%</td><td>55</td><td>$0.00</td></tr>
+<tr><td>semantic-scholar-snippet-cap200</td><td>7.9%</td><td>198</td><td>$0.00</td></tr>
+<tr><td>consensus-cap200</td><td>8.9%</td><td>199</td><td>$0.15</td></tr>
+</tbody></table>
 <h2>2. Recall per experiment, by source</h2>
 <p>The order of the engines is the same within every source, but the level differs a lot by source. The 3ie and YEF gap-map rows stay near zero for every engine and for the pipeline, even after their intents were rewritten as questions, which points at the corpus (these are development and youth-justice studies, thinly indexed by scholarly services) rather than at the wording. The four hand-made reviews score highest on both semantic engines. The Campbell and SR4ALL columns look low partly because of the 50% ceiling explained above: 12% to 14% there means roughly a quarter of what could be found.</p>
 <table><thead><tr><th>experiment</th><th>campbell (3)</th><th>3ie (3)</th><th>sr4all (4)</th><th>yef (1)</th><th>hand-made (4)</th></tr></thead><tbody>
