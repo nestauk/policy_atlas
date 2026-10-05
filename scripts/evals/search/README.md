@@ -128,7 +128,7 @@ scripts/evals/search/
 │   ├── sweep_record_cap.py
 │   ├── engine.py           runs one intent through the real search (no command line)
 │   └── inspect_run.py      tables of one run's raw output (no command line)
-├── tests/                  self-checks, no network and no database
+├── tests                   self-checks, no network and no database
 ├── input/                  the 4 hand-made reviews as CSV (git-ignored; from the labelling repo)
 └── results/                outputs (git-ignored, except history.md and analyses/)
     ├── history.md          the headline results, kept by hand
