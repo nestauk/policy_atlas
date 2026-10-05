@@ -1,15 +1,15 @@
 ---
 type: Invariant
 title: The continuation reducer's plan selection is correct by fencing, not by custody
-description: continuation_state.build() picks the latest APPROVED plan project-wide with no join to the specific walk — that is only the parked walk's own lineage because steering amendments supersede within-lineage and planning turns 409 run_active while a walk is running/parked. Remove the fence and plans cross-contaminate silently.
+description: continuation_state.build() picks the latest APPROVED plan task-wide with no join to the specific walk — that is only the parked walk's own lineage because steering amendments supersede within-lineage and planning turns 409 run_active while a walk is running/parked. Remove the fence and plans cross-contaminate silently.
 tags: [continuation, planning, invariant, review-lesson]
 timestamp: 2026-07-21
 ---
 
 # Rule
 
-`continuation_state.build()` selects the latest `orchestration_plan` row with
-`status == "approved"` (`ORDER BY version DESC LIMIT 1`) for the project — with
+`continuation_state.build()` selects the latest `plan` row with
+`status == "approved"` (`ORDER BY version DESC LIMIT 1`) for the task — with
 **no join or filter tying that row to the specific parked capability_run**. This
 query is only correct because two invariants fence it, enforced in two different
 files with no code-level link between them:
@@ -18,7 +18,7 @@ files with no code-level link between them:
    own lineage** — never branch to an unrelated plan (`continuation.py`'s
    `apply_adjustment` / `apply_replacement_rerun` paths).
 2. `planning.py`'s `create_planning_turn` returns 409 `run_active` whenever a walk
-   is `running` or `paused` for the project, so no unrelated planning conversation
+   is `running` or `paused` for the task, so no unrelated planning conversation
    can approve a new plan version while a walk is parked.
 
 Together, these make "latest approved" provably equal to "this walk's lineage."

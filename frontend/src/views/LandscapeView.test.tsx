@@ -7,27 +7,27 @@ import { LandscapeView } from "./LandscapeView";
 import * as queries from "../api/queries";
 
 vi.mock("../api/queries", () => ({
-  useProject: vi.fn(),
+  useTask: vi.fn(),
   useLandscape: vi.fn(),
   useFunnel: vi.fn(),
   useGroups: vi.fn(),
 }));
 
-const PROJECT_ID = "11111111-1111-1111-1111-111111111111";
+const TASK_ID = "11111111-1111-1111-1111-111111111111";
 
 function renderLandscape() {
   return render(
-    <MemoryRouter initialEntries={[`/projects/${PROJECT_ID}/sources/landscape`]}>
+    <MemoryRouter initialEntries={[`/tasks/${TASK_ID}/sources/landscape`]}>
       <Routes>
-        <Route path="/projects/:projectId/sources/landscape" element={<LandscapeView />} />
+        <Route path="/tasks/:taskId/sources/landscape" element={<LandscapeView />} />
       </Routes>
     </MemoryRouter>,
   );
 }
 
 beforeEach(() => {
-  vi.mocked(queries.useProject).mockReturnValue(
-    { data: { name: "Tower Hamlets project" } } as unknown as ReturnType<typeof queries.useProject>,
+  vi.mocked(queries.useTask).mockReturnValue(
+    { data: { name: "Tower Hamlets task" } } as unknown as ReturnType<typeof queries.useTask>,
   );
 });
 

@@ -1,8 +1,8 @@
-import { act, render, screen } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
-import { ContentsSidebar, SectionDisclosure, sectionSummary } from "./ArtefactOutline";
+import { ContentsSidebar, FullReportExpandAllButton, FullReportExpandProvider, SectionDisclosure, sectionSummary, useScrollWhenNavigated } from "./ArtefactOutline";
 import { TooltipProvider } from "../ui/radix/Tooltip";
 import { AnnotatedProse } from "./ArtefactView";
 
@@ -31,6 +31,9 @@ describe("sectionSummary", () => {
 });
 
 describe("SectionDisclosure", () => {
+  // The heading row and the mobile trailing button both carry aria-expanded
+  // (040 review) — heading queries pin on the title in the accessible name.
+  const headingName = /What the evidence shows/;
   const section = {
     title: "What the evidence shows",
     role: "standard" as const,
@@ -46,11 +49,29 @@ describe("SectionDisclosure", () => {
         <p>Full cited prose.</p>
       </SectionDisclosure>,
     );
-    const toggle = screen.getByRole("button", { expanded: false });
+    const toggle = screen.getByRole("button", { name: headingName, expanded: false });
     expect(screen.getByText("The takeaway.")).toBeInTheDocument();
     expect(screen.queryByText("Full cited prose.")).toBeNull();
     await user.click(toggle);
-    expect(screen.getByRole("button", { expanded: true })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: headingName, expanded: true })).toBeInTheDocument();
+    expect(screen.getByText("Full cited prose.")).toBeInTheDocument();
+  });
+
+  it("collapsed sections show both the heading-row label and a mobile trailing Expand button", async () => {
+    const user = userEvent.setup();
+    render(
+      <SectionDisclosure id="s5" section={section} collapsible defaultOpen={false}>
+        <p>Full cited prose.</p>
+      </SectionDisclosure>,
+    );
+    const toggle = screen.getByRole("button", { name: headingName, expanded: false });
+    expect(within(toggle).getByText("Expand +")).toBeInTheDocument();
+
+    const trailing = screen.getByRole("button", { name: "Expand +" });
+    expect(trailing).toHaveAttribute("aria-expanded", "false");
+    await user.click(trailing);
+    expect(screen.getByRole("button", { name: headingName, expanded: true })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Collapse −" })).toHaveAttribute("aria-expanded", "true");
     expect(screen.getByText("Full cited prose.")).toBeInTheDocument();
   });
 
@@ -119,10 +140,10 @@ describe("SectionDisclosure", () => {
     );
     expect(screen.getByRole("button", { name: /raised uptake/ })).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { expanded: true }));
+    await user.click(screen.getByRole("button", { name: headingName, expanded: true }));
     expect(screen.queryByRole("button", { name: /raised uptake/ })).toBeNull();
 
-    await user.click(screen.getByRole("button", { expanded: false }));
+    await user.click(screen.getByRole("button", { name: headingName, expanded: false }));
     expect(screen.getByRole("button", { name: /raised uptake/ })).toBeInTheDocument();
   });
 
@@ -143,7 +164,7 @@ describe("SectionDisclosure", () => {
     expect(screen.queryByText("Full cited prose.")).toBeNull();
     await user.click(screen.getByRole("link", { name: section.title }));
     expect(screen.getByText("Full cited prose.")).toBeInTheDocument();
-    expect(screen.getByRole("button", { expanded: true })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: headingName, expanded: true })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: section.title })).toHaveAttribute(
       "aria-current",
       "location",
@@ -169,6 +190,81 @@ describe("SectionDisclosure", () => {
     await user.click(screen.getByRole("link", { name: section.title }));
     expect(scrollIntoView.mock.calls.length + scrollTo.mock.calls.length).toBeGreaterThan(0);
     history.replaceState(null, "", window.location.pathname);
+  });
+
+  it("scrolls always-visible sections such as case studies and most relevant sources", async () => {
+    const user = userEvent.setup();
+    const scrollIntoView = vi.fn();
+    const scrollTo = vi.fn();
+    HTMLElement.prototype.scrollIntoView = scrollIntoView;
+    HTMLElement.prototype.scrollTo = scrollTo;
+
+    function AlwaysVisibleSection({ id, label }: { id: string; label: string }) {
+      useScrollWhenNavigated(id);
+      return (
+        <section id={id}>
+          <h2>{label}</h2>
+        </section>
+      );
+    }
+
+    render(
+      <>
+        <ContentsSidebar
+          entries={[
+            { id: "case-studies", title: "Case studies" },
+            { id: "sources", title: "Most relevant sources" },
+          ]}
+        />
+        <AlwaysVisibleSection id="case-studies" label="Case studies" />
+        <AlwaysVisibleSection id="sources" label="Most relevant sources" />
+      </>,
+    );
+
+    await user.click(screen.getByRole("link", { name: "Case studies" }));
+    expect(scrollIntoView.mock.calls.length + scrollTo.mock.calls.length).toBeGreaterThan(0);
+    scrollIntoView.mockClear();
+    scrollTo.mockClear();
+
+    await user.click(screen.getByRole("link", { name: "Most relevant sources" }));
+    expect(scrollIntoView.mock.calls.length + scrollTo.mock.calls.length).toBeGreaterThan(0);
+    history.replaceState(null, "", window.location.pathname);
+  });
+
+  it("expands every collapsible full-report section when Expand all is clicked", async () => {
+    const user = userEvent.setup();
+    render(
+      <FullReportExpandProvider>
+        <FullReportExpandAllButton />
+        <SectionDisclosure id="s1" section={section} collapsible defaultOpen={false}>
+          <p>First section prose.</p>
+        </SectionDisclosure>
+        <SectionDisclosure id="s2" section={{ ...section, title: "Second" }} collapsible defaultOpen={false}>
+          <p>Second section prose.</p>
+        </SectionDisclosure>
+      </FullReportExpandProvider>,
+    );
+    expect(screen.queryByText("First section prose.")).toBeNull();
+    expect(screen.queryByText("Second section prose.")).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Expand all" }));
+    expect(screen.getByText("First section prose.")).toBeInTheDocument();
+    expect(screen.getByText("Second section prose.")).toBeInTheDocument();
+  });
+
+  it("collapses every collapsible full-report section when Collapse all is clicked", async () => {
+    const user = userEvent.setup();
+    render(
+      <FullReportExpandProvider>
+        <FullReportExpandAllButton />
+        <SectionDisclosure id="s1" section={section} collapsible defaultOpen>
+          <p>First section prose.</p>
+        </SectionDisclosure>
+      </FullReportExpandProvider>,
+    );
+    expect(screen.getByText("First section prose.")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Expand all" }));
+    await user.click(screen.getByRole("button", { name: "Collapse all" }));
+    expect(screen.queryByText("First section prose.")).toBeNull();
   });
 });
 
@@ -216,5 +312,51 @@ describe("AnnotatedProse bullets (fork B)", () => {
     expect(screen.getAllByRole("listitem")).toHaveLength(2);
     const anchored = screen.getByRole("button");
     expect(anchored.textContent ?? "").toContain("second");
+  });
+
+  it("bolds the lead before the first colon-space and leaves no-colon bullets unbolded", () => {
+    const prose =
+      "- Universal breakfast helped: eleven of fifteen evaluations reported higher uptake.\n- No colon on this line.";
+    render(
+      <TooltipProvider>
+        <AnnotatedProse
+          block={{ block_id: "b-lead", prose, claims: [] }}
+          onOpenClaim={vi.fn()}
+        />
+      </TooltipProvider>,
+    );
+    const items = screen.getAllByRole("listitem");
+    expect(items).toHaveLength(2);
+    expect(items[0].querySelector("strong")?.textContent).toBe("Universal breakfast helped:");
+    expect(items[0].textContent).toContain("eleven of fifteen");
+    expect(items[1].querySelector("strong")).toBeNull();
+    expect(items[1].textContent).toContain("No colon on this line.");
+  });
+
+  it("marks a gap bullet distinctly from an evidence bullet", () => {
+    const prose = "- No rural trials: the coverage record is empty.";
+    const text = "No rural trials: the coverage record is empty.";
+    render(
+      <TooltipProvider>
+        <AnnotatedProse
+          block={{
+            block_id: "b-gap",
+            prose,
+            claims: [
+              {
+                claim_id: "g1",
+                claim_type: "gap" as const,
+                text,
+                span: [2, 2 + text.length] as [number, number],
+                citations: [],
+              },
+            ],
+          }}
+          onOpenClaim={vi.fn()}
+        />
+      </TooltipProvider>,
+    );
+    const marker = screen.getByRole("listitem").querySelector("[aria-hidden]");
+    expect(marker?.className).toContain("bg-yellow");
   });
 });

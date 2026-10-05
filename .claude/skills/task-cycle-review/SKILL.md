@@ -168,7 +168,8 @@ Verify-and-clean only — **commits nothing, opens no PR** (2026-07-03, user dec
 - Delete any temporary scratchpad; confirm merge and delete the local task branch (a
   squash-merged branch's tip is never an ancestor of dev — check content, and expect the
   `-d` warning).
-- `AGENTS.md` **Current phase** moves with the *next* slice (design step 1), not here.
+- The next slice's identity is its branch name and contract `Status` line (design step 1);
+  nothing in `AGENTS.md` changes at close-out.
 
 ## Codex plumbing (code reviews)
 

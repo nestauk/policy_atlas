@@ -33,6 +33,7 @@ the fixture corpus are intentionally omitted from the deployed task.
 | `POLICY_ATLAS_PLANNER_MODEL` | omitted (development tuning; application default) | `runtime/planner.py` |
 | `POLICY_ATLAS_RELEVANCE_MODEL` | omitted (development tuning; application default) | `evidence_base/extract/relevance_annotator.py` |
 | `POLICY_ATLAS_SEARCH_CACHE_TTL_S` | omitted (development tuning; application default) | `evidence_base/sourcing/search_live.py` |
+| `POLICY_ATLAS_SYNTHESIS_MODEL` | omitted (development tuning; application default `gpt-5.6-terra`) | `evidence_base/synthesis/synthesis_backend.py` |
 | `RUN_EXECUTOR_MAX` | config value: `backend.run_executor_max` | `api/settings.py` |
 | `SSE_HEARTBEAT_SECONDS` | omitted (application default: 15) | `api/settings.py` |
 | `SSE_POLL_INTERVAL_SECONDS` | omitted (application default: 0.4) | `api/settings.py` |

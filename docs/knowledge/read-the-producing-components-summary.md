@@ -24,7 +24,7 @@ cannot disagree — not because a test forces them to match, but because there i
 
 Task 031's defect 1a was a card whose backend line was permanently zero: `p1_bundle` summed
 `backends[].count` off the coverage record, a key acquire never writes. The obvious fix —
-recount the run's new sources from `project_source_snapshot` rows — would have made the
+recount the run's new sources from `task_source_snapshot` rows — would have made the
 line non-zero and *still* left two independent derivations of "how many did this round
 acquire", which is the failure mode the whole slice existed to remove.
 
@@ -51,7 +51,7 @@ rule: no recomputation of anything a component already computed.
   test — otherwise a later change quietly narrows the other caller.
 - **When one read path feeds both an aggregate and the records behind it, the records set
   the grain** (031). `_backend_details` returns `results` *and* `queries[]`. Whether the
-  hit count should span the whole project or one question is genuinely arguable; whether
+  hit count should span the whole task or one question is genuinely arguable; whether
   the card should print a superseded question's search strings is not. Pick the grain the
   itemised list needs, then the aggregate is automatically defensible — the reverse is not
   true.

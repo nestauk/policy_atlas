@@ -9,22 +9,22 @@ import jwt
 from sqlalchemy import update
 from sqlalchemy.engine import Engine
 
-from policy_atlas.core.schema import capability_run, project
-from tests.api.resource_support import api_client, create_project
+from policy_atlas.core.schema import capability_run, task
+from tests.api.resource_support import api_client, create_task
 from tests.api.test_continuation_protocol import _park_walk
 from tests.runtime.test_runner import _cleanup
 
 
 def test_check_ins_are_owner_scoped_and_empty_before_a_walk_parks(tmp_path: Path) -> None:
-    """Expose no transport-memory check-ins for a project with no parked run."""
+    """Expose no transport-memory check-ins for a task with no parked run."""
     with api_client(tmp_path) as (client, owner, other):
-        project_id = create_project(client, owner)
-        pending = client.get(f"/api/v1/projects/{project_id}/check-ins", headers=owner)
+        task_id = create_task(client, owner)
+        pending = client.get(f"/api/v1/tasks/{task_id}/check-ins", headers=owner)
         assert pending.status_code == 200
         assert pending.json()["data"] == []
 
-        absent = client.get(f"/api/v1/projects/{uuid.uuid4()}/check-ins", headers=other)
-        cross_owner = client.get(f"/api/v1/projects/{project_id}/check-ins", headers=other)
+        absent = client.get(f"/api/v1/tasks/{uuid.uuid4()}/check-ins", headers=other)
+        cross_owner = client.get(f"/api/v1/tasks/{task_id}/check-ins", headers=other)
         assert absent.status_code == cross_owner.status_code == 404
         assert absent.json() == cross_owner.json()
 
@@ -43,17 +43,17 @@ def test_pending_requires_parked_walk_never_a_phantom_card(
     `pending` requires the latest walk to actually be `paused`). The durable
     `all` history must still carry the pause.
     """
-    project_id: uuid.UUID | None = None
+    task_id: uuid.UUID | None = None
     try:
         with api_client(tmp_path) as (client, owner, _other):
             owner_sub = jwt.decode(
                 owner["Authorization"].split(" ", 1)[1], options={"verify_signature": False}
             )["sub"]
-            project_id, _scope_id, capability_run_id, _check_in_id = _park_walk(engine)
+            task_id, _scope_id, capability_run_id, _check_in_id = _park_walk(engine)
             with engine.begin() as conn:
                 conn.execute(
-                    update(project)
-                    .where(project.c.project_id == project_id)
+                    update(task)
+                    .where(task.c.task_id == task_id)
                     .values(owner_user_id=owner_sub)
                 )
             # Simulate the sweep having classified this walk as interrupted
@@ -67,15 +67,15 @@ def test_pending_requires_parked_walk_never_a_phantom_card(
                 )
 
             pending = client.get(
-                f"/api/v1/projects/{project_id}/check-ins", headers=owner
+                f"/api/v1/tasks/{task_id}/check-ins", headers=owner
             )
             assert pending.status_code == 200
             assert pending.json()["data"] == []
 
             history = client.get(
-                f"/api/v1/projects/{project_id}/check-ins?status=all", headers=owner
+                f"/api/v1/tasks/{task_id}/check-ins?status=all", headers=owner
             )
             assert history.status_code == 200
             assert len(history.json()["data"]) == 1
     finally:
-        _cleanup(engine, project_id)
+        _cleanup(engine, task_id)

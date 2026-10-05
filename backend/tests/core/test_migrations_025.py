@@ -1,10 +1,14 @@
-"""Migration roundtrip for task 025 project lifecycle and capability-run states.
+"""Migration roundtrip for task 025 Task lifecycle and capability-run states.
 
 The test deliberately walks the real Alembic chain from its task-024 head,
 with committed pre-025 fixtures between DDL operations. It proves the exact
-project backfill and capability-run downgrade mappings, including deletion of
+Task backfill and capability-run downgrade mappings, including deletion of
 the new run-less lifecycle audit rows before ``event_log.run_id`` becomes
 NOT NULL again.
+
+Two catalog generations (plan D9): below revision c1a7f4e9b0d2 the Task is the
+table ``project`` and the plan is ``orchestration_plan``, so the seeds reflect
+the live shape; at head they use ``core.schema``'s post-rename metadata.
 """
 
 import os
@@ -17,14 +21,9 @@ from sqlalchemy import create_engine, inspect, select, text, update
 from sqlalchemy.engine import Connection, Engine
 from sqlalchemy.engine.url import make_url
 
-from policy_atlas.core.schema import (
-    capability_run,
-    event_log,
-    evidence_scope,
-    orchestration_plan,
-    project,
-)
+from policy_atlas.core.schema import capability_run, event_log, task
 from tests.conftest import _alembic_cfg
+from tests.core.legacy_catalog import legacy_table
 
 PRE_025_REVISION = "a3c6f9e2b7d4"
 
@@ -34,35 +33,55 @@ def _timestamp(offset: int) -> datetime:
     return datetime(2026, 7, 21, tzinfo=UTC) + timedelta(minutes=offset)
 
 
-def _seed_project(connection: Connection, project_id: uuid.UUID, created_at: datetime) -> None:
-    """Insert the pre-025 shape of a project row."""
-    connection.execute(project.insert().values(project_id=project_id, created_at=created_at))
+def _seed_legacy_task(
+    connection: Connection, task_id: uuid.UUID, created_at: datetime
+) -> None:
+    """Insert the pre-025 shape of a Task row (table ``project`` back there)."""
+    connection.execute(
+        legacy_table(connection, "project").insert().values(
+            project_id=task_id, created_at=created_at
+        )
+    )
 
 
 def _seed_capability_run(
     connection: Connection,
     *,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     scope_id: uuid.UUID,
     status: str,
     ended_at: datetime | None,
+    legacy: bool = False,
 ) -> uuid.UUID:
-    """Insert a capability run with the supplied status and completion time."""
+    """Insert a capability run with the supplied status and completion time.
+
+    Args:
+        connection: Open connection on the revision being exercised.
+        task_id: Task the walk belongs to.
+        scope_id: Evidence scope the walk opened on.
+        status: Walk status to store.
+        ended_at: Completion time, or ``None`` for an open walk.
+        legacy: Seed BELOW revision c1a7f4e9b0d2 — the column is ``project_id``
+            and the capability's stored value is still ``evidence_base``.
+
+    Returns:
+        The new walk's ``capability_run_id``.
+    """
     capability_run_id = uuid.uuid4()
-    connection.execute(
-        capability_run.insert().values(
-            capability_run_id=capability_run_id,
-            project_id=project_id,
-            evidence_scope_id=scope_id,
-            capability="evidence_base",
-            plan_id=uuid.uuid4(),
-            plan_version=1,
-            status=status,
-            session_id=None,
-            started_at=_timestamp(5),
-            ended_at=ended_at,
-        )
-    )
+    table = legacy_table(connection, "capability_run") if legacy else capability_run
+    values: dict[str, object] = {
+        "capability_run_id": capability_run_id,
+        "project_id" if legacy else "task_id": task_id,
+        "evidence_scope_id": scope_id,
+        "capability": "evidence_base" if legacy else "evidence_search",
+        "plan_id": uuid.uuid4(),
+        "plan_version": 1,
+        "status": status,
+        "session_id": None,
+        "started_at": _timestamp(5),
+        "ended_at": ended_at,
+    }
+    connection.execute(table.insert().values(**values))
     return capability_run_id
 
 
@@ -74,7 +93,7 @@ def test_025_migrations_roundtrip_with_populated_predecessor(
     Runs against a per-test SCRATCH database, never the shared test DB: each
     add/drop-column cycle permanently consumes tuple-descriptor slots
     (Postgres counts dropped columns toward its 1600-column table limit), and
-    walking six `project` columns up and down on the shared DB every suite
+    walking six Task columns up and down on the shared DB every suite
     run exhausted that limit in practice. The scratch DB is created from the
     shared engine, migrated from zero, and dropped afterwards.
     """
@@ -88,8 +107,8 @@ def test_025_migrations_roundtrip_with_populated_predecessor(
     engine = create_engine(scratch_url)
 
     cfg = _alembic_cfg()
-    plan_project_id = uuid.uuid4()
-    planless_project_id = uuid.uuid4()
+    plan_task_id = uuid.uuid4()
+    planless_task_id = uuid.uuid4()
     scope_id = uuid.uuid4()
     paused_run_id: uuid.UUID | None = None
     interrupted_run_id: uuid.UUID | None = None
@@ -101,21 +120,23 @@ def test_025_migrations_roundtrip_with_populated_predecessor(
     try:
         plan_created_at = _timestamp(1)
         planless_created_at = _timestamp(2)
-        _seed_project(connection, plan_project_id, plan_created_at)
-        _seed_project(connection, planless_project_id, planless_created_at)
+        _seed_legacy_task(connection, plan_task_id, plan_created_at)
+        _seed_legacy_task(connection, planless_task_id, planless_created_at)
+        legacy_scope = legacy_table(connection, "evidence_scope")
+        legacy_plan = legacy_table(connection, "orchestration_plan")
         connection.execute(
-            evidence_scope.insert().values(
+            legacy_scope.insert().values(
                 evidence_scope_id=scope_id,
-                project_id=plan_project_id,
+                project_id=plan_task_id,
                 intent="Migration fixture",
                 context={},
                 created_at=_timestamp(3),
             )
         )
         connection.execute(
-            orchestration_plan.insert().values(
+            legacy_plan.insert().values(
                 plan_id=uuid.uuid4(),
-                project_id=plan_project_id,
+                project_id=plan_task_id,
                 evidence_scope_id=None,
                 version=1,
                 status="approved",
@@ -126,9 +147,9 @@ def test_025_migrations_roundtrip_with_populated_predecessor(
             )
         )
         connection.execute(
-            orchestration_plan.insert().values(
+            legacy_plan.insert().values(
                 plan_id=uuid.uuid4(),
-                project_id=plan_project_id,
+                project_id=plan_task_id,
                 evidence_scope_id=None,
                 version=2,
                 status="approved",
@@ -147,10 +168,11 @@ def test_025_migrations_roundtrip_with_populated_predecessor(
         }.items():
             legacy_run_ids[status] = _seed_capability_run(
                 connection,
-                project_id=plan_project_id,
+                task_id=plan_task_id,
                 scope_id=scope_id,
                 status=status,
                 ended_at=ended_at,
+                legacy=True,
             )
         transaction.commit()
     finally:
@@ -163,13 +185,13 @@ def test_025_migrations_roundtrip_with_populated_predecessor(
         try:
             plan_row = connection.execute(
                 select(
-                    project.c.name,
-                    project.c.question,
-                    project.c.status,
-                    project.c.created_at,
-                    project.c.updated_at,
-                    project.c.owner_user_id,
-                ).where(project.c.project_id == plan_project_id)
+                    task.c.name,
+                    task.c.question,
+                    task.c.status,
+                    task.c.created_at,
+                    task.c.updated_at,
+                    task.c.owner_user_id,
+                ).where(task.c.task_id == plan_task_id)
             ).one()
             assert plan_row.name == "Latest plan"
             assert plan_row.question == "Latest question"
@@ -179,13 +201,13 @@ def test_025_migrations_roundtrip_with_populated_predecessor(
 
             planless_row = connection.execute(
                 select(
-                    project.c.name,
-                    project.c.question,
-                    project.c.status,
-                    project.c.created_at,
-                    project.c.updated_at,
-                    project.c.owner_user_id,
-                ).where(project.c.project_id == planless_project_id)
+                    task.c.name,
+                    task.c.question,
+                    task.c.status,
+                    task.c.created_at,
+                    task.c.updated_at,
+                    task.c.owner_user_id,
+                ).where(task.c.task_id == planless_task_id)
             ).one()
             assert planless_row.name == "Untitled project"
             assert planless_row.question is None
@@ -195,31 +217,31 @@ def test_025_migrations_roundtrip_with_populated_predecessor(
 
             paused_run_id = _seed_capability_run(
                 connection,
-                project_id=plan_project_id,
+                task_id=plan_task_id,
                 scope_id=scope_id,
                 status="paused",
                 ended_at=None,
             )
             interrupted_run_id = _seed_capability_run(
                 connection,
-                project_id=plan_project_id,
+                task_id=plan_task_id,
                 scope_id=scope_id,
                 status="interrupted",
                 ended_at=None,
             )
             archived_at = _timestamp(10)
             connection.execute(
-                update(project)
-                .where(project.c.project_id == planless_project_id)
+                update(task)
+                .where(task.c.task_id == planless_task_id)
                 .values(status="archived", archived_at=archived_at, updated_at=archived_at)
             )
             connection.execute(
                 event_log.insert().values(
                     event_id=uuid.uuid4(),
                     run_id=None,
-                    project_id=plan_project_id,
+                    task_id=plan_task_id,
                     sequence=1,
-                    event_type="project.archived",
+                    event_type="task.archived",
                     occurred_at=archived_at,
                     payload={"actor": "user"},
                 )
@@ -262,8 +284,9 @@ def test_025_migrations_roundtrip_with_populated_predecessor(
             assert connection.execute(select(event_log.c.event_id)).all() == []
 
             inspector = inspect(connection)
-            project_columns = {column["name"] for column in inspector.get_columns("project")}
-            assert project_columns == {"project_id", "created_at"}
+            # Below the 038 revision the Task table is still named `project`.
+            task_columns = {column["name"] for column in inspector.get_columns("project")}
+            assert task_columns == {"project_id", "created_at"}
             event_log_columns = {
                 column["name"]: column for column in inspector.get_columns("event_log")
             }
@@ -277,10 +300,10 @@ def test_025_migrations_roundtrip_with_populated_predecessor(
         transaction = connection.begin()
         try:
             assert connection.execute(
-                select(project.c.name).where(project.c.project_id == plan_project_id)
+                select(task.c.name).where(task.c.task_id == plan_task_id)
             ).scalar_one() == "Latest plan"
             assert connection.execute(
-                select(project.c.name).where(project.c.project_id == planless_project_id)
+                select(task.c.name).where(task.c.task_id == planless_task_id)
             ).scalar_one() == "Untitled project"
         finally:
             transaction.rollback()

@@ -3,7 +3,7 @@ type: Testing convention
 title: Tests run against a dedicated test database, each test in a rolled-back transaction
 description: Tests use a separate policy_atlas_test database on the same local container; the conn fixture also rolls back each test. conftest refuses to run against the dev DB.
 tags: [testing, database, pitfall]
-timestamp: 2026-06-24
+timestamp: 2026-09-08
 ---
 
 # Rule
@@ -32,14 +32,30 @@ test target — it's a separate `DATABASE_URL` with secrets-manager credentials.
 **The test DB is a shared resource — parallel-lane file fences must include it** (023, twice).
 Concurrent DB-backed pytest runs contaminate each other: an interrupted migration roundtrip leaves
 committed rows that break downgrades across *sessions* (conftest migrates but never wipes), and any
-ad-hoc run that commits (e.g. the manual orchestrate smoke) re-contaminates it. Symptoms:
+ad-hoc run that commits (e.g. the manual agent smoke) re-contaminates it. Symptoms:
 `CheckViolation` on downgrade in an apparently-clean session. Fix is `dropdb`+`createdb` (seconds);
 prevention is one-DB-user-at-a-time — a build lane's "fence" covers done-check resources, not just
 files. If parallel lanes become routine, see deferred.md's per-lane `DATABASE_URL` entry.
+Confirmed again at 033's build-open: a delegated agent ran pytest while the main suite was mid-run
+and the baseline showed 45 scattered failures. And again at 037's review phase: a background
+`make verify` raced a review lane's own pytest session — 72 failures, all
+`UndefinedTable: relation "project" does not exist` (the other session's conftest mid-recreate).
+Review lanes count as DB users too: sequence the verify run after the lanes, or fence it. **The delegation brief must state the fence
+explicitly** — "do not run pytest while another suite runs" — because the collision presents as
+dozens of unreproducible failures, not as an obvious lock error.
 
 Corollary (026): any harness that *persists* real rows (the FE↔API smoke, manual poking) must own a
 disposable per-harness DB (`policy_atlas_smoke`, recreated per run, dropped at teardown) — reusing
 `policy_atlas_test` broke 4 migration round-trip tests and looked like a schema bug.
+
+**Cross-checkout variant (039 review stack): other checkouts of this repo are DB users too.** A
+second working copy (e.g. `policy_atlas-frontend-opt`) shares the same localhost Postgres and the
+same default `policy_atlas_test` name — its `make test` `dropdb`s the DB mid-flight through yours
+(039: 86 failures in untouched steering tests, each passing in isolation). Remedy when another
+checkout may be active: run the gate against a private DB via the environment override —
+`TEST_DATABASE_URL=postgresql+psycopg://policy_atlas:policy_atlas@localhost:5432/policy_atlas_<slice>_test make verify`
+— `reset-test-db` creates any `*_test` name it's given (and refuses names that don't end in
+`_test`).
 
 # Citations
 

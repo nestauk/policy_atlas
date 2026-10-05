@@ -17,16 +17,15 @@ from sqlalchemy import select, update
 from sqlalchemy.engine import Engine
 
 from policy_atlas.core import events
-from policy_atlas.core.schema import extraction_result, orchestration_plan
-from policy_atlas.evidence_base.synthesis.synthesis_backend import StubSynthesisBackend
-from policy_atlas.evidence_base.synthesis.synthesis_tools import parse_synthesis_directive
+from policy_atlas.core.schema import extraction_result, task_plan
+from policy_atlas.evidence_search.synthesis.synthesis_backend import StubSynthesisBackend
+from policy_atlas.evidence_search.synthesis.synthesis_tools import parse_synthesis_directive
 from policy_atlas.runtime import runner as runner_module
 from policy_atlas.runtime import steering_bundles
-from policy_atlas.runtime.orchestration_plan import compose
 from policy_atlas.runtime.runner import run_plan
 from policy_atlas.runtime.steering import (
     DEEPENING_SELECTION,
-    EVIDENCE_BASE_COVERAGE,
+    EVIDENCE_SEARCH_COVERAGE,
     FINDING_GROUPS,
     LATTICE_POINTS,
     SEARCH_EXCEPTION,
@@ -36,12 +35,13 @@ from policy_atlas.runtime.steering import (
     build_steer_point_options,
     generic_floor_options,
 )
-from tests.runtime.test_runner import _base_plan, _runner_backends, _seed_project
-from tests.runtime.test_steering import ScriptedIO, _cleanup_project, _insert_plan_row
+from policy_atlas.runtime.task_plan import compose
+from tests.runtime.test_runner import _base_plan, _runner_backends, _seed_task
+from tests.runtime.test_steering import ScriptedIO, _cleanup_task, _insert_plan_row
 
 _ALL_POINTS = [
     SEARCH_EXCEPTION,
-    EVIDENCE_BASE_COVERAGE,
+    EVIDENCE_SEARCH_COVERAGE,
     DEEPENING_SELECTION,
     FINDING_GROUPS,
     SYNTHESIS_SHAPE,
@@ -84,9 +84,9 @@ def test_lattice_mode_policy_is_applied_at_every_runner_boundary(
     pause surfaces prove the policy after the runner has read the point, its
     triggers, and the mode together.  A deep plan visits all five points.
     """
-    project_id: uuid.UUID | None = None
+    task_id: uuid.UUID | None = None
     try:
-        project_id, scope_id = _seed_project(engine)
+        task_id, scope_id = _seed_task(engine)
         monkeypatch.setattr(
             runner_module,
             "_lattice_triggers",
@@ -95,11 +95,11 @@ def test_lattice_mode_policy_is_applied_at_every_runner_boundary(
             ),
         )
         plan = _base_plan(steering_mode=mode, steer_point_defaults=[])
-        plan_id = _insert_plan_row(engine, project_id=project_id, scope_id=scope_id, plan=plan)
+        plan_id = _insert_plan_row(engine, task_id=task_id, scope_id=scope_id, plan=plan)
         io = ScriptedIO()
         outcome = run_plan(
             engine,
-            project_id=project_id,
+            task_id=task_id,
             evidence_scope_id=scope_id,
             plan=plan,
             plan_id=plan_id,
@@ -116,7 +116,7 @@ def test_lattice_mode_policy_is_applied_at_every_runner_boundary(
         }
         assert paused == expected
     finally:
-        _cleanup_project(engine, project_id)
+        _cleanup_task(engine, task_id)
 
 
 def test_each_lattice_point_exposes_its_landed_floor_only() -> None:
@@ -130,7 +130,7 @@ def test_each_lattice_point_exposes_its_landed_floor_only() -> None:
             "guide_queries",
             "abort",
         },
-        EVIDENCE_BASE_COVERAGE: {
+        EVIDENCE_SEARCH_COVERAGE: {
             "continue",
             "search_more",
             "adjust_criteria_rescreen",
@@ -209,8 +209,8 @@ def test_every_canonical_option_delta_compiles() -> None:
             seen.add(f"{point}:{option['id']}")
     # The owner-ruled P2/P3 re-home and new Groups point are all present.
     assert "deepening_selection:deepen_clusters" in seen
-    assert "evidence_base_coverage:scope_strata" in seen
-    assert "evidence_base_coverage:adjust_criteria_rescreen" in seen
+    assert "evidence_search_coverage:scope_strata" in seen
+    assert "evidence_search_coverage:adjust_criteria_rescreen" in seen
     assert "finding_groups:regroup_granularity" in seen
 
 
@@ -229,13 +229,13 @@ def test_unknown_steer_point_rejected() -> None:
 # --- Bundles: deterministic renders over persisted rows --------------------
 
 
-def _walk(engine: Engine, project_id: uuid.UUID, scope_id: uuid.UUID) -> dict[str, uuid.UUID]:
+def _walk(engine: Engine, task_id: uuid.UUID, scope_id: uuid.UUID) -> dict[str, uuid.UUID]:
     """Run a moderate deep plan to completion (NullIO) and return run ids by component."""
     plan = _base_plan()  # moderate, deep chain
-    plan_id = _insert_plan_row(engine, project_id=project_id, scope_id=scope_id, plan=plan)
+    plan_id = _insert_plan_row(engine, task_id=task_id, scope_id=scope_id, plan=plan)
     outcome = run_plan(
         engine,
-        project_id=project_id,
+        task_id=task_id,
         evidence_scope_id=scope_id,
         plan=plan,
         plan_id=plan_id,
@@ -249,16 +249,16 @@ def _walk(engine: Engine, project_id: uuid.UUID, scope_id: uuid.UUID) -> dict[st
 
 
 def test_p3_bundle_shape_and_determinism(engine: Engine) -> None:
-    project_id: uuid.UUID | None = None
+    task_id: uuid.UUID | None = None
     try:
-        project_id, scope_id = _seed_project(engine)
-        runs_by = _walk(engine, project_id, scope_id)
+        task_id, scope_id = _seed_task(engine)
+        runs_by = _walk(engine, task_id, scope_id)
         with engine.connect() as conn:
             bundle = steering_bundles.p3_bundle(
-                conn, project_id=project_id, selection_run_id=runs_by["select"]
+                conn, task_id=task_id, selection_run_id=runs_by["select"]
             )
             again = steering_bundles.p3_bundle(
-                conn, project_id=project_id, selection_run_id=runs_by["select"]
+                conn, task_id=task_id, selection_run_id=runs_by["select"]
             )
         assert bundle == again  # deterministic
         assert bundle["bundle_version"] == "v1"
@@ -279,7 +279,7 @@ def test_p3_bundle_shape_and_determinism(engine: Engine) -> None:
         assert len(bundle["selection_preview"]) <= steering_bundles.SELECTION_PREVIEW_N
         for entry in bundle["selection_preview"]:
             assert set(entry) == {
-                "pss_id",
+                "tss_id",
                 "title",
                 "stratum",
                 "evidence_type",
@@ -294,24 +294,24 @@ def test_p3_bundle_shape_and_determinism(engine: Engine) -> None:
             "unmatched_boosts",
         }
     finally:
-        _cleanup_project(engine, project_id)
+        _cleanup_task(engine, task_id)
 
 
 def test_p2_bundle_shape_and_determinism(engine: Engine) -> None:
-    project_id: uuid.UUID | None = None
+    task_id: uuid.UUID | None = None
     try:
-        project_id, scope_id = _seed_project(engine)
-        runs_by = _walk(engine, project_id, scope_id)
+        task_id, scope_id = _seed_task(engine)
+        runs_by = _walk(engine, task_id, scope_id)
         with engine.connect() as conn:
             bundle = steering_bundles.p2_bundle(
                 conn,
-                project_id=project_id,
+                task_id=task_id,
                 evidence_scope_id=scope_id,
                 characterisation_run_id=runs_by.get("characterise"),
             )
             again = steering_bundles.p2_bundle(
                 conn,
-                project_id=project_id,
+                task_id=task_id,
                 evidence_scope_id=scope_id,
                 characterisation_run_id=runs_by.get("characterise"),
             )
@@ -337,15 +337,15 @@ def test_p2_bundle_shape_and_determinism(engine: Engine) -> None:
             key=lambda e: (e["status"], e["screen_stage"], e["screen_generation"]),
         )
     finally:
-        _cleanup_project(engine, project_id)
+        _cleanup_task(engine, task_id)
 
 
 def _acquire_completion_payload(
-    engine: Engine, project_id: uuid.UUID, run_id: uuid.UUID
+    engine: Engine, task_id: uuid.UUID, run_id: uuid.UUID
 ) -> dict[str, Any]:
     """The acquire run's ``component.completed`` payload — the headline's own source."""
     with engine.connect() as conn:
-        entries = events.read_for_run(conn, project_id, run_id)
+        entries = events.read_for_run(conn, task_id, run_id)
     payload = next(
         entry["payload"]
         for entry in reversed(entries)
@@ -363,18 +363,18 @@ def test_p1_bundle_backend_counts_sum_to_the_acquired_headline(engine: Engine) -
     record, a key acquire never writes — so the line was permanently zero
     (defect 1a). It now reads the acquire run's own ``by_backend`` counts.
 
-    The walk's stub search returns records the seeded project already holds, so
+    The walk's stub search returns records the seeded task already holds, so
     its real headline is an honest 0. A later completion payload with a non-zero
     headline is appended on the same run to make the invariant bite; acquire
     defines that headline as the sum of the same ``by_backend`` values
     (acquire.py), which is what the assertion checks.
     """
-    project_id: uuid.UUID | None = None
+    task_id: uuid.UUID | None = None
     try:
-        project_id, scope_id = _seed_project(engine)
-        runs_by = _walk(engine, project_id, scope_id)
+        task_id, scope_id = _seed_task(engine)
+        runs_by = _walk(engine, task_id, scope_id)
         acquire_run_id = runs_by["acquire"]
-        real = _acquire_completion_payload(engine, project_id, acquire_run_id)
+        real = _acquire_completion_payload(engine, task_id, acquire_run_id)
         assert "by_backend" in real, "acquire must persist per-backend counts"
         assert real["acquired"] == sum(
             stats["acquired"] for stats in real["by_backend"].values()
@@ -385,7 +385,7 @@ def test_p1_bundle_backend_counts_sum_to_the_acquired_headline(engine: Engine) -
         with engine.begin() as conn:
             events.append(
                 conn,
-                project_id=project_id,
+                task_id=task_id,
                 run_id=acquire_run_id,
                 event_type="component.completed",
                 payload={"component": "acquire", "acquired": headline, "by_backend": by_backend},
@@ -394,7 +394,7 @@ def test_p1_bundle_backend_counts_sum_to_the_acquired_headline(engine: Engine) -
         with engine.connect() as conn:
             bundle = steering_bundles.p1_bundle(
                 conn,
-                project_id=project_id,
+                task_id=task_id,
                 evidence_scope_id=scope_id,
                 acquire_run_id=acquire_run_id,
             )
@@ -404,7 +404,7 @@ def test_p1_bundle_backend_counts_sum_to_the_acquired_headline(engine: Engine) -
             {"backend": "overton", "count": 2},
         ]
     finally:
-        _cleanup_project(engine, project_id)
+        _cleanup_task(engine, task_id)
 
 
 def test_p1_bundle_scopes_queries_to_one_run_while_p2_spans_every_round(
@@ -417,10 +417,10 @@ def test_p1_bundle_scopes_queries_to_one_run_while_p2_spans_every_round(
     ``_executed_queries`` is shared, and spanning every round stays correct for
     P2's coverage picture — that half is the regression guard.
     """
-    project_id: uuid.UUID | None = None
+    task_id: uuid.UUID | None = None
     try:
-        project_id, scope_id = _seed_project(engine)
-        runs_by = _walk(engine, project_id, scope_id)
+        task_id, scope_id = _seed_task(engine)
+        runs_by = _walk(engine, task_id, scope_id)
         acquire_run_id = runs_by["acquire"]
         other_round_run_id = runs_by["screen_abstract"]
         assert other_round_run_id != acquire_run_id
@@ -432,7 +432,7 @@ def test_p1_bundle_scopes_queries_to_one_run_while_p2_spans_every_round(
             ):
                 events.append(
                     conn,
-                    project_id=project_id,
+                    task_id=task_id,
                     run_id=run_id,
                     event_type="search.executed",
                     payload={
@@ -454,12 +454,12 @@ def test_p1_bundle_scopes_queries_to_one_run_while_p2_spans_every_round(
         with engine.connect() as conn:
             p1 = steering_bundles.p1_bundle(
                 conn,
-                project_id=project_id,
+                task_id=task_id,
                 evidence_scope_id=scope_id,
                 acquire_run_id=acquire_run_id,
             )
             p2 = steering_bundles.p2_bundle(
-                conn, project_id=project_id, evidence_scope_id=scope_id
+                conn, task_id=task_id, evidence_scope_id=scope_id
             )
         assert "this round query" in p1["queries"]
         assert "other round query" not in p1["queries"]
@@ -467,29 +467,29 @@ def test_p1_bundle_scopes_queries_to_one_run_while_p2_spans_every_round(
         assert "this round query" in p2_queries
         assert "other round query" in p2_queries
     finally:
-        _cleanup_project(engine, project_id)
+        _cleanup_task(engine, task_id)
 
 
 def test_p1_bundle_without_an_acquire_run_reports_absence_not_zeros(
     engine: Engine,
 ) -> None:
     """No acquire run recorded: empty counts and queries, never numbers from another round."""
-    project_id: uuid.UUID | None = None
+    task_id: uuid.UUID | None = None
     try:
-        project_id, scope_id = _seed_project(engine)
-        _walk(engine, project_id, scope_id)
+        task_id, scope_id = _seed_task(engine)
+        _walk(engine, task_id, scope_id)
         with engine.connect() as conn:
             bundle = steering_bundles.p1_bundle(
                 conn,
-                project_id=project_id,
+                task_id=task_id,
                 evidence_scope_id=scope_id,
                 acquire_run_id=None,
             )
         assert bundle["backends"] == []
         assert bundle["queries"] == []
-        assert bundle["sample_titles"], "titles come from PSS and do not need the run id"
+        assert bundle["sample_titles"], "titles come from TSS and do not need the run id"
     finally:
-        _cleanup_project(engine, project_id)
+        _cleanup_task(engine, task_id)
 
 
 def test_p1_bundle_is_empty_when_the_boundary_run_is_not_the_successful_acquire(
@@ -502,16 +502,16 @@ def test_p1_bundle_is_empty_when_the_boundary_run_is_not_the_successful_acquire(
     round 2's P1 would render round 1's counts and queries under round 2's
     label — defect 1b inverted, and harder to spot than the zeros it replaced.
     """
-    project_id: uuid.UUID | None = None
+    task_id: uuid.UUID | None = None
     try:
-        project_id, scope_id = _seed_project(engine)
-        runs_by = _walk(engine, project_id, scope_id)
+        task_id, scope_id = _seed_task(engine)
+        runs_by = _walk(engine, task_id, scope_id)
         succeeded = runs_by["acquire"]
         failed_later_round = uuid.uuid4()
         with engine.begin() as conn:
             events.append(
                 conn,
-                project_id=project_id,
+                task_id=task_id,
                 run_id=succeeded,
                 event_type="component.completed",
                 payload={
@@ -522,7 +522,7 @@ def test_p1_bundle_is_empty_when_the_boundary_run_is_not_the_successful_acquire(
             )
             events.append(
                 conn,
-                project_id=project_id,
+                task_id=task_id,
                 run_id=succeeded,
                 event_type="search.executed",
                 payload={
@@ -537,7 +537,7 @@ def test_p1_bundle_is_empty_when_the_boundary_run_is_not_the_successful_acquire(
         stale = runner_module._build_bundle(
             engine,
             name=SEARCH_EXCEPTION,
-            project_id=project_id,
+            task_id=task_id,
             evidence_scope_id=scope_id,
             successful_runs={"acquire": succeeded},
             backends=_runner_backends(),
@@ -552,7 +552,7 @@ def test_p1_bundle_is_empty_when_the_boundary_run_is_not_the_successful_acquire(
         current = runner_module._build_bundle(
             engine,
             name=SEARCH_EXCEPTION,
-            project_id=project_id,
+            task_id=task_id,
             evidence_scope_id=scope_id,
             successful_runs={"acquire": succeeded},
             backends=_runner_backends(),
@@ -563,22 +563,22 @@ def test_p1_bundle_is_empty_when_the_boundary_run_is_not_the_successful_acquire(
         assert current["queries"] == ["round one query"]
         assert current["backends"] == [{"backend": "openalex", "count": 4}]
     finally:
-        _cleanup_project(engine, project_id)
+        _cleanup_task(engine, task_id)
 
 
 def test_p2_bundle_parses_executed_and_zero_result_queries(engine: Engine) -> None:
     """Executed/zero-result queries come from seeded search.executed event payloads."""
-    project_id: uuid.UUID | None = None
+    task_id: uuid.UUID | None = None
     try:
-        project_id, scope_id = _seed_project(engine)
-        runs_by = _walk(engine, project_id, scope_id)
+        task_id, scope_id = _seed_task(engine)
+        runs_by = _walk(engine, task_id, scope_id)
         acquire_run_id = runs_by["acquire"]
         # Seed two search.executed events on the acquire run (the N1 payload keys).
         with engine.begin() as conn:
             for query, count in (("childhood obesity policy", 7), ("rare edge subtopic", 0)):
                 events.append(
                     conn,
-                    project_id=project_id,
+                    task_id=task_id,
                     run_id=acquire_run_id,
                     event_type="search.executed",
                     payload={
@@ -598,7 +598,7 @@ def test_p2_bundle_parses_executed_and_zero_result_queries(engine: Engine) -> No
                 )
         with engine.connect() as conn:
             bundle = steering_bundles.p2_bundle(
-                conn, project_id=project_id, evidence_scope_id=scope_id
+                conn, task_id=task_id, evidence_scope_id=scope_id
             )
         queries = [entry["query"] for entry in bundle["executed_queries"]]
         assert queries == ["childhood obesity policy", "rare edge subtopic"]
@@ -607,7 +607,7 @@ def test_p2_bundle_parses_executed_and_zero_result_queries(engine: Engine) -> No
             {"query": "rare edge subtopic", "backend": "openalex"}
         ]
     finally:
-        _cleanup_project(engine, project_id)
+        _cleanup_task(engine, task_id)
 
 
 def test_p2_bundle_screened_event_counts_reflect_latest_generation_only(
@@ -616,10 +616,10 @@ def test_p2_bundle_screened_event_counts_reflect_latest_generation_only(
     """A criteria re-screen bumps ``screen_generation`` scope-wide; the P2
     ``screened_event_counts`` tally must reflect the current generation only —
     not an inflated sum across a stale generation and the current one."""
-    project_id: uuid.UUID | None = None
+    task_id: uuid.UUID | None = None
     try:
-        project_id, scope_id = _seed_project(engine)
-        runs_by = _walk(engine, project_id, scope_id)
+        task_id, scope_id = _seed_task(engine)
+        runs_by = _walk(engine, task_id, scope_id)
         screen_run_id = runs_by["screen_full"]
         with engine.begin() as conn:
             for status, generation in (
@@ -632,7 +632,7 @@ def test_p2_bundle_screened_event_counts_reflect_latest_generation_only(
             ):
                 events.append(
                     conn,
-                    project_id=project_id,
+                    task_id=task_id,
                     run_id=screen_run_id,
                     event_type="source.screened",
                     payload={
@@ -643,23 +643,23 @@ def test_p2_bundle_screened_event_counts_reflect_latest_generation_only(
                 )
         with engine.connect() as conn:
             bundle = steering_bundles.p2_bundle(
-                conn, project_id=project_id, evidence_scope_id=scope_id
+                conn, task_id=task_id, evidence_scope_id=scope_id
             )
         # Only the max-generation (1) events count — generation 0 is superseded.
         assert bundle["screened_event_counts"] == {"included": 3}
     finally:
-        _cleanup_project(engine, project_id)
+        _cleanup_task(engine, task_id)
 
 
 def test_p4_bundle_wires_propose_synthesis_plan(engine: Engine) -> None:
-    project_id: uuid.UUID | None = None
+    task_id: uuid.UUID | None = None
     try:
-        project_id, scope_id = _seed_project(engine)
-        runs_by = _walk(engine, project_id, scope_id)
+        task_id, scope_id = _seed_task(engine)
+        runs_by = _walk(engine, task_id, scope_id)
         with engine.connect() as conn:
             context = runner_module._synthesise_context(  # the walk's real inputs
                 conn,
-                project_id=project_id,
+                task_id=task_id,
                 evidence_scope_id=scope_id,
                 successful_runs=runs_by,
             )
@@ -667,7 +667,7 @@ def test_p4_bundle_wires_propose_synthesis_plan(engine: Engine) -> None:
             backend = StubSynthesisBackend()
             bundle = steering_bundles.p4_bundle(
                 conn,
-                project_id=project_id,
+                task_id=task_id,
                 context=context,
                 synthesis_backend=backend,
                 group_run_id=runs_by.get("group"),
@@ -682,11 +682,11 @@ def test_p4_bundle_wires_propose_synthesis_plan(engine: Engine) -> None:
         assert isinstance(bundle["grouping_flags"], dict)
         assert bundle["priority_counts"] is None
     finally:
-        _cleanup_project(engine, project_id)
+        _cleanup_task(engine, task_id)
 
 
 def _walk_no_group(
-    engine: Engine, project_id: uuid.UUID, scope_id: uuid.UUID
+    engine: Engine, task_id: uuid.UUID, scope_id: uuid.UUID
 ) -> dict[str, uuid.UUID]:
     """Run a moderate deep plan through extract but with no group step configured."""
     plan = _base_plan(
@@ -699,10 +699,10 @@ def _walk_no_group(
         },
         grouping_facets=None,
     )
-    plan_id = _insert_plan_row(engine, project_id=project_id, scope_id=scope_id, plan=plan)
+    plan_id = _insert_plan_row(engine, task_id=task_id, scope_id=scope_id, plan=plan)
     outcome = run_plan(
         engine,
-        project_id=project_id,
+        task_id=task_id,
         evidence_scope_id=scope_id,
         plan=plan,
         plan_id=plan_id,
@@ -719,10 +719,10 @@ def test_p4_bundle_priority_counts_ungrouped_totals_without_group_step(engine: E
     """Fix C: extract carries B2' relevance annotations but no group step ran —
     priority_counts must report the ungrouped totals, not None (which would be
     indistinguishable from "no annotations")."""
-    project_id: uuid.UUID | None = None
+    task_id: uuid.UUID | None = None
     try:
-        project_id, scope_id = _seed_project(engine)
-        runs_by = _walk_no_group(engine, project_id, scope_id)
+        task_id, scope_id = _seed_task(engine)
+        runs_by = _walk_no_group(engine, task_id, scope_id)
         assert "group" not in runs_by
         extract_run_id = runs_by["extract"]
         with engine.begin() as conn:
@@ -742,14 +742,14 @@ def test_p4_bundle_priority_counts_ungrouped_totals_without_group_step(engine: E
         with engine.connect() as conn:
             context = runner_module._synthesise_context(
                 conn,
-                project_id=project_id,
+                task_id=task_id,
                 evidence_scope_id=scope_id,
                 successful_runs=runs_by,
             )
             assert context is not None
             bundle = steering_bundles.p4_bundle(
                 conn,
-                project_id=project_id,
+                task_id=task_id,
                 context=context,
                 synthesis_backend=StubSynthesisBackend(),
                 group_run_id=runs_by.get("group"),
@@ -757,17 +757,17 @@ def test_p4_bundle_priority_counts_ungrouped_totals_without_group_step(engine: E
         assert bundle["grouping_flags"] is None
         assert bundle["priority_counts"] == {"priority": 2, "normal": 1}
     finally:
-        _cleanup_project(engine, project_id)
+        _cleanup_task(engine, task_id)
 
 
 # --- Pause-event payloads carry the lattice surface ------------------------
 
 
-def _pause_events(engine: Engine, project_id: uuid.UUID) -> list[dict[str, Any]]:
+def _pause_events(engine: Engine, task_id: uuid.UUID) -> list[dict[str, Any]]:
     with engine.connect() as conn:
         return [
             entry
-            for entry in events.read(conn, project_id)
+            for entry in events.read(conn, task_id)
             if entry["event_type"] == "steering.pause"
         ]
 
@@ -775,11 +775,11 @@ def _pause_events(engine: Engine, project_id: uuid.UUID) -> list[dict[str, Any]]
 def test_lattice_pause_events_carry_steer_point_options_triggers_and_bundle(
     engine: Engine,
 ) -> None:
-    project_id: uuid.UUID | None = None
+    task_id: uuid.UUID | None = None
     try:
-        project_id, scope_id = _seed_project(engine)
-        _walk(engine, project_id, scope_id)  # moderate run, all pauses Continue
-        pauses = _pause_events(engine, project_id)
+        task_id, scope_id = _seed_task(engine)
+        _walk(engine, task_id, scope_id)  # moderate run, all pauses Continue
+        pauses = _pause_events(engine, task_id)
         steer_pauses = {
             entry["payload"]["steer_point"]: entry["payload"]
             for entry in pauses
@@ -787,30 +787,30 @@ def test_lattice_pause_events_carry_steer_point_options_triggers_and_bundle(
         }
         # Moderate always pauses at P2/P3/P4; every lattice pause carries its
         # steer_point name, options and fired triggers.
-        assert {EVIDENCE_BASE_COVERAGE, DEEPENING_SELECTION, SYNTHESIS_SHAPE} <= set(steer_pauses)
+        assert {EVIDENCE_SEARCH_COVERAGE, DEEPENING_SELECTION, SYNTHESIS_SHAPE} <= set(steer_pauses)
         for name, payload in steer_pauses.items():
             assert payload["steer_point"] == name
             assert isinstance(payload["options"], list) and payload["options"]
             assert "triggers" in payload
         # P2/P3/P4 attach their deterministic bundle (the durable record).
-        for name in (EVIDENCE_BASE_COVERAGE, DEEPENING_SELECTION, SYNTHESIS_SHAPE):
+        for name in (EVIDENCE_SEARCH_COVERAGE, DEEPENING_SELECTION, SYNTHESIS_SHAPE):
             assert steer_pauses[name].get("bundle", {}).get("bundle_version") == "v1"
     finally:
-        _cleanup_project(engine, project_id)
+        _cleanup_task(engine, task_id)
 
 
 # --- Minimal's named behaviour change: deepening_selection is fired-only ---
 
 
 def _minimal_run_steer_points(
-    engine: Engine, project_id: uuid.UUID, scope_id: uuid.UUID
+    engine: Engine, task_id: uuid.UUID, scope_id: uuid.UUID
 ) -> list[str]:
     plan = _base_plan(steering_mode="minimal")
-    plan_id = _insert_plan_row(engine, project_id=project_id, scope_id=scope_id, plan=plan)
+    plan_id = _insert_plan_row(engine, task_id=task_id, scope_id=scope_id, plan=plan)
     io = ScriptedIO()
     run_plan(
         engine,
-        project_id=project_id,
+        task_id=task_id,
         evidence_scope_id=scope_id,
         plan=plan,
         plan_id=plan_id,
@@ -831,33 +831,33 @@ def test_minimal_deepening_selection_is_fired_only(
 ) -> None:
     """Named change: pre-024 Minimal always paused at deepening_selection; now it
     pauses there only when the S0 select triggers fire."""
-    project_id: uuid.UUID | None = None
+    task_id: uuid.UUID | None = None
     try:
-        project_id, scope_id = _seed_project(engine)
+        task_id, scope_id = _seed_task(engine)
         # No S0 triggers -> Minimal does NOT pause at deepening_selection.
         monkeypatch.setattr(runner_module, "steer_point_triggers", lambda *a, **k: [])
-        without = _minimal_run_steer_points(engine, project_id, scope_id)
+        without = _minimal_run_steer_points(engine, task_id, scope_id)
         assert DEEPENING_SELECTION not in without
     finally:
-        _cleanup_project(engine, project_id)
+        _cleanup_task(engine, task_id)
 
 
 def test_minimal_deepening_selection_pauses_when_fired(
     engine: Engine, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    project_id: uuid.UUID | None = None
+    task_id: uuid.UUID | None = None
     try:
-        project_id, scope_id = _seed_project(engine)
+        task_id, scope_id = _seed_task(engine)
         # A fired S0 trigger -> Minimal pauses at deepening_selection.
         monkeypatch.setattr(
             runner_module,
             "steer_point_triggers",
             lambda *a, **k: [{"trigger": "thin_base", "detail": {}}],
         )
-        fired = _minimal_run_steer_points(engine, project_id, scope_id)
+        fired = _minimal_run_steer_points(engine, task_id, scope_id)
         assert DEEPENING_SELECTION in fired
     finally:
-        _cleanup_project(engine, project_id)
+        _cleanup_task(engine, task_id)
 
 
 # --- Authority order: user answer beats a standing declared rule (review m1) -
@@ -866,10 +866,10 @@ def test_minimal_deepening_selection_pauses_when_fired(
 def test_user_answer_beats_standing_declared_rule(engine: Engine) -> None:
     """At an attended pause a live user answer applies; the standing
     steer_point_defaults rule for that point does not decide (Task 12 pins
-    rules > orchestrator; here user > declared rules)."""
-    project_id: uuid.UUID | None = None
+    rules > agent; here user > declared rules)."""
+    task_id: uuid.UUID | None = None
     try:
-        project_id, scope_id = _seed_project(engine)
+        task_id, scope_id = _seed_task(engine)
         # A standing rule for deepening_selection is present in the plan.
         plan = _base_plan(
             steering_mode="moderate",
@@ -878,7 +878,7 @@ def test_user_answer_beats_standing_declared_rule(engine: Engine) -> None:
             ],
         )
         assert plan.steer_point_defaults  # the rule stands in the plan
-        plan_id = _insert_plan_row(engine, project_id=project_id, scope_id=scope_id, plan=plan)
+        plan_id = _insert_plan_row(engine, task_id=task_id, scope_id=scope_id, plan=plan)
         # The user answers differently at the P3 pause: a reselect.
         io = ScriptedIO(
             by_steer_point={
@@ -893,7 +893,7 @@ def test_user_answer_beats_standing_declared_rule(engine: Engine) -> None:
         )
         outcome = run_plan(
             engine,
-            project_id=project_id,
+            task_id=task_id,
             evidence_scope_id=scope_id,
             plan=plan,
             plan_id=plan_id,
@@ -906,16 +906,16 @@ def test_user_answer_beats_standing_declared_rule(engine: Engine) -> None:
         # The user's reselect applied — a new user-attributed plan version.
         with engine.connect() as conn:
             versions = conn.execute(
-                select(orchestration_plan.c.version, orchestration_plan.c.created_by)
-                .where(orchestration_plan.c.project_id == project_id)
-                .order_by(orchestration_plan.c.version)
+                select(task_plan.c.version, task_plan.c.created_by)
+                .where(task_plan.c.task_id == task_id)
+                .order_by(task_plan.c.version)
             ).all()
         assert (2, "user") in [(row.version, row.created_by) for row in versions]
         # The decision was decided_by the user, not the standing default.
         with engine.connect() as conn:
             decisions = [
                 entry["payload"]
-                for entry in events.read(conn, project_id)
+                for entry in events.read(conn, task_id)
                 if entry["event_type"] == "steering.decision"
             ]
         reselect = next(d for d in decisions if d.get("rerun_mode") == "replacement")
@@ -927,4 +927,4 @@ def test_user_answer_beats_standing_declared_rule(engine: Engine) -> None:
             flag.get("status") == "auto_resolved" for flag in outcome.flagged_events
         )
     finally:
-        _cleanup_project(engine, project_id)
+        _cleanup_task(engine, task_id)

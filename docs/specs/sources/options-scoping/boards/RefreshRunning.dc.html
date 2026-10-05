@@ -1,0 +1,135 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700&family=Archivo:wght@600;700&display=swap">
+  <style>  body { margin:0; background:#f4f4f5; color:#1c1c1e; font-family:"Manrope","Mulish",system-ui,sans-serif; font-size:16px; line-height:1.55; }
+  .eyebrow { font-size:14px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; color:#646363; }
+  a { color:#0000ff; } a:hover { color:#0f294a; }
+  h1,h2,h3 { margin:0; font-family:"Archivo","Manrope",system-ui,sans-serif; color:#0f294a; }
+  .board { width:1440px; height:var(--h, 900px); display:flex; flex-direction:column; overflow:hidden; background:#f4f4f5; }
+  .nav { height:48px; display:flex; align-items:center; gap:28px; padding:0 32px; background:#ffffff; border-bottom:1px solid #d4d4d8; }
+  .nav .mark { font-family:"Archivo",sans-serif; font-weight:700; color:#0f294a; font-size:16px; margin-right:12px; }
+  .nav .item { color:#646363; font-weight:600; font-size:16px; }
+  .nav .item.on { color:#0f294a; border-bottom:2px solid #0000ff; padding-bottom:2px; }
+  .taskbar { height:52px; display:flex; align-items:center; gap:16px; padding:0 32px; background:#f4f4f5; border-bottom:1px solid #d4d4d8; }
+  .taskbar .title { font-size:19px; font-weight:600; color:#0f294a; }
+  .badge { display:inline; font-size:16px; font-weight:400; color:#646363; }
+  .badge.blue { color:#0000ff; font-weight:600; }
+  .badge.soft { color:#646363; }
+  .badge.warn { color:#646363; }
+  .badge.ok { color:#0e6b5a; }
+  .main { flex:1; display:flex; min-height:0; }
+  .thread { width:820px; flex-shrink:0; display:flex; flex-direction:column; border-right:1px solid #d4d4d8; background:#ffffff; min-height:0; }
+  .thread .scroll { flex:1; overflow:hidden; padding:24px 32px; display:flex; flex-direction:column; gap:18px; }
+  .turn { display:flex; flex-direction:column; gap:6px; max-width:640px; }
+  .turn .who { font-size:14px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; color:#646363; }
+  .turn.user { align-self:flex-end; align-items:flex-end; }
+  .turn.user .bubble { background:#ececff; border:1px solid #0000ff; }
+  .bubble { padding:10px 14px; border:1px solid #d4d4d8; background:#ffffff; font-size:16px; line-height:1.55; }
+  .sys { font-size:16px; color:#646363; display:flex; gap:8px; align-items:center; }
+  .sys .tick { width:8px; height:8px; background:#0000ff; display:inline-block; }
+  .sys .dot { width:8px; height:8px; border:1px solid #646363; display:inline-block; }
+  .composer { height:64px; border-top:1px solid #d4d4d8; display:flex; align-items:center; gap:12px; padding:0 32px; }
+  .composer .input { flex:1; height:44px; border:1px solid #c9c9ce; display:flex; align-items:center; padding:0 12px; color:#9a9aa0; font-size:16px; }
+  .btn { display:inline-flex; align-items:center; justify-content:center; white-space:nowrap; height:40px; padding:0 16px; font-weight:700; font-size:16px; color:#ffffff; background:#0f294a; clip-path:polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 10px 100%, 0 calc(100% - 10px)); }
+  .btn.blue { background:#0000ff; }
+  .btn.ghost { background:#ffffff; color:#0f294a; border:1px solid #0f294a; clip-path:none; }
+  .btn.sm { height:36px; padding:0 12px; font-size:16px; }
+  .rail { flex:1; min-width:0; display:flex; flex-direction:column; background:#f4f4f5; min-height:0; }
+  .rail .head { height:44px; display:flex; align-items:center; justify-content:space-between; padding:0 20px; border-bottom:1px solid #d4d4d8; font-size:14px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; color:#646363; }
+  .sec { border-bottom:1px solid #d4d4d8; background:#ffffff; }
+  .sec .hdr { display:flex; align-items:center; gap:10px; padding:10px 20px; min-height:44px; }
+  .sec .hdr .name { font-weight:700; color:#0f294a; font-size:16px; width:120px; flex-shrink:0; }
+  .sec .hdr .take { flex:1; color:#646363; font-size:16px; }
+  .sec .hdr .take.empty { color:#9a9aa0; font-style:italic; }
+  .sec.open .hdr { background:#ececff; border-bottom:1px solid #d4d4d8; }
+  .sec.open .hdr .take { color:#0f294a; }
+  .sec .body { padding:14px 20px; display:flex; flex-direction:column; gap:10px; }
+  .kv { display:grid; grid-template-columns: 130px 1fr 110px; gap:8px 12px; align-items:start; font-size:16px; }
+  .kv .k { color:#646363; font-weight:600; }
+  .kv .v { color:#1c1c1e; }
+  .chips { display:flex; flex-wrap:wrap; gap:6px; }
+  .chip { font-size:16px; padding:2px 10px; border:1px solid #c9c9ce; color:#1c1c1e; background:#ffffff; }
+  .chip.on { border-color:#0000ff; color:#0000ff; background:#ececff; }
+  .chip.off { color:#9a9aa0; text-decoration:line-through; }
+  .list { display:flex; flex-direction:column; }
+  .row { display:flex; align-items:center; gap:10px; padding:8px 0; border-top:1px solid #ececee; font-size:16px; }
+  .row:first-child { border-top:0; }
+  .row .t { flex:1; }
+  .row .m { color:#646363; font-size:16px; }
+  .theme { font-size:16px; font-weight:700; color:#0f294a; padding:8px 0 2px; }
+  .ph { border:1px dashed #a1a1aa; color:#646363; display:flex; align-items:center; justify-content:center; font-size:16px; text-align:center; padding:6px; }
+  .note { font-size:16px; color:#646363; }
+  table { border-collapse:collapse; width:100%; font-size:16px; }
+  th { text-align:left; font-size:14px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; color:#646363; padding:8px 10px; border-bottom:1px solid #0f294a; vertical-align:bottom; }
+  td { padding:6px 8px; border-bottom:1px solid #e4e4e7; vertical-align:top; }
+  .prov { font-size:16px; color:#646363; }
+  .prov.blue { color:#0000ff; }
+  .prov.empty { color:#9a9aa0; font-style:italic; }
+  .ico { width:16px; height:16px; flex-shrink:0; }
+  .m { color:#646363; }
+  .prose p { margin:0 0 12px; max-width:44em; }
+  .prose h3 { font-size:19px; margin:20px 0 8px; }
+  .prose ul { margin:0 0 12px; padding-left:22px; max-width:44em; }
+  .prose li { margin:0 0 4px; }
+  .contents { display:flex; flex-direction:column; gap:4px; margin:0 0 16px; }
+  .contents a { border-left:2px solid #d4d4d8; padding-left:12px; text-decoration:none; color:#0f294a; }
+</style>
+</helmet>
+<div class="board" style="--h:1680px; height:1680px;">
+  <div class="nav">
+    <span class="mark">Policy Atlas</span>
+    <span class="item ">New</span>
+    <span class="item on">Tasks</span>
+    <span class="item">Projects</span>
+  </div>
+  <div class="taskbar"><span class="title">Young people NEET, 16–24 — options</span><span class="badge blue">Options scoping</span><span class="badge soft">Standard</span></div>
+  <nav aria-label="Task" style="display:flex; align-items:center; gap:24px; padding:0 32px; border-bottom:1px solid #d4d4d8; background:#ffffff; font-weight:600; color:#646363;"><span style="padding:12px 0; ">Agent</span><span style="padding:12px 0; color:#0f294a; border-bottom:2px solid #0000ff;">Result</span><span style="padding:12px 0; ">Sources</span><span style="padding:12px 0; ">Share</span><span style="padding:12px 0; ">History</span><span class="btn ghost sm" style="margin-left:auto;">Hide chat</span></nav><nav aria-label="Result views" style="display:flex; align-items:center; gap:24px; padding:0 32px; border-bottom:1px solid #d4d4d8; background:#ffffff; font-weight:600; color:#646363;"><span style="padding:12px 0; color:#0f294a; border-bottom:2px solid #0000ff;">Report</span><span style="padding:12px 0; ">Baseline</span><span style="padding:12px 0; ">Longlist</span></nav>
+  <div class="main">
+    <div class="thread" style="width:400px;"><div class="scroll" style="padding:20px 24px; gap:14px;"><div class="turn user"><span class="who">You</span><div class="bubble">Focus the next round on economically inactive young people.</div></div><div class="turn"><span class="who">Policy Atlas</span><div class="bubble">Plan updated: the population is now economically inactive young people aged 16 to 24. The report keeps its previous population label until the affected evidence and verdicts are refreshed; population fit and transferability are what change. Your shortlist, your exclusions and History are retained.</div></div><div class="sys"><span class="dot"></span><span>Refreshing population fit and transferability for 7 assessed options</span></div></div><div class="composer" style="padding:0 24px;"><div class="input">Ask about the report…</div><span class="btn blue">Send</span></div></div>
+    <div style="flex:1; background:#ffffff; padding:24px 40px; overflow:hidden; display:flex; gap:24px; align-items:flex-start;">
+    <nav aria-label="Contents" style="width:224px; flex-shrink:0; padding-right:16px;"><p class="eyebrow" style="margin:0;">Contents</p><ul style="list-style:none; margin:8px 0 0; padding:0; border-left:1px solid #e4e4e7; display:flex; flex-direction:column; gap:4px;"><li><a href="#" style="display:block; border-left:2px solid #0000ff; margin-left:-1px; padding:2px 0 2px 12px; line-height:1.3; text-decoration:none; color:#0f294a; font-weight:600;">Top line</a></li><li><a href="#" style="display:block; border-left:2px solid transparent; margin-left:-1px; padding:2px 0 2px 12px; line-height:1.3; text-decoration:none; color:#646363; font-weight:400;">The problem and what is contested</a></li><li><a href="#" style="display:block; border-left:2px solid transparent; margin-left:-1px; padding:2px 0 2px 12px; line-height:1.3; text-decoration:none; color:#646363; font-weight:400;">The approaches</a></li><li><a href="#" style="display:block; border-left:2px solid transparent; margin-left:-1px; padding:2px 0 2px 12px; line-height:1.3; text-decoration:none; color:#646363; font-weight:400;">What the evidence base holds</a></li><li><a href="#" style="display:block; border-left:2px solid transparent; margin-left:-1px; padding:2px 0 2px 12px; line-height:1.3; text-decoration:none; color:#646363; font-weight:400;">Transferability and assumptions</a></li><li><a href="#" style="display:block; border-left:2px solid transparent; margin-left:-1px; padding:2px 0 2px 12px; line-height:1.3; text-decoration:none; color:#646363; font-weight:400;">What needs deciding or commissioning next</a></li><li><a href="#" style="display:block; border-left:2px solid transparent; margin-left:-1px; padding:2px 0 2px 12px; line-height:1.3; text-decoration:none; color:#646363; font-weight:400;">What was searched and not searched</a></li></ul></nav>
+    <div class="prose" style="flex:1; min-width:0;">
+      <p class="m" style="margin-bottom:8px;">Previous report · all young people who are NEET · needs refresh</p>
+      <div style="padding:12px 16px; border:1px solid #0f294a; background:#fbf6ea; margin:0 0 16px; max-width:none;"><p style="margin:0 0 6px; max-width:none;"><strong>Refreshing affected results.</strong> Population: all young people who are NEET, now economically inactive young people aged 16 to 24.</p><p style="margin:0 0 8px; max-width:none;">The report below uses the previous population. Recheck population fit and transferability before relying on it for the new question. Your shortlist, your exclusions and History are retained.</p><p style="margin:0; max-width:none;"><span class="btn sm" style="background:#9a9aa0;">Refreshing population fit…</span> <a href="#" style="margin-left:10px;">Undo the plan change</a></p></div>
+      <h2 style="font-size:24px; margin-bottom:4px;">Options for reducing the number of 16 to 24 year olds who are NEET</h2>
+      <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap; padding:12px 0 4px;"><span class="btn blue sm">Export</span><span class="btn ghost sm">Compare in a table</span><span class="btn ghost sm">Open longlist</span><a href="#">Change the plan</a></div>
+      <section style="margin:0 0 28px;">
+      <div style="display:flex; align-items:baseline; gap:12px;"><h3 style="flex:1; margin:0;">Top line</h3><span style="flex-shrink:0; font-size:14px; font-weight:700; color:#0000ff;">Collapse −</span></div>
+      <div style="margin-top:12px;">
+      <p><strong>Caseworker support and wage subsidies have the strongest evidence in this reading set, and their populations differ from the group driving the rise.</strong> The caseworker findings concern the long-term unemployed; the wage-subsidy findings concern the job-ready. <a href="#">See the option verdicts</a>.</p>
+      <p><strong>A youth guarantee stays conditional on funded local delivery.</strong> No matching implementation was found for the sanction-free variant. <a href="#">Inspect the profile</a>.</p>
+      <p><strong>The next decision is whether to keep the broad target or focus further work on economically inactive young people.</strong> This is Policy Atlas's reasoning from the population mismatch, not a measured effect. Reported costs do not support a common cost comparison.</p>
+      <p class="m">7 options reviewed at standard depth · 5 with outcome evidence · 1 with implementation evidence only · 1 where assessment was attempted and no matching evidence was found. Seven other included options were not assessed; one was excluded. Each effect is stated against its own comparator, population and period; the options are not compared with each other or with the UK baseline, which this scoping does not forecast.</p>
+      </div>
+    </section><section style="margin:0 0 28px;">
+      <div style="display:flex; align-items:baseline; gap:12px;"><h3 style="flex:1; margin:0;">The problem and what is contested</h3><span style="flex-shrink:0; font-size:14px; font-weight:700; color:#0000ff;">Expand +</span></div>
+      <p class="m" style="margin:6px 0 0; max-width:44em;">About one in eight 16 to 24 year olds is NEET, rising since 2022, the rise in inactivity; three disagreements between sources.</p>
+    </section><section style="margin:0 0 28px;">
+      <div style="display:flex; align-items:baseline; gap:12px;"><h3 style="flex:1; margin:0;">The approaches</h3><span style="flex-shrink:0; font-size:14px; font-weight:700; color:#0000ff;">Expand +</span></div>
+      <p class="m" style="margin:6px 0 0; max-width:44em;">Six themes, fifteen options, one excluded, one variant, one package.</p>
+    </section><section style="margin:0 0 28px;">
+      <div style="display:flex; align-items:baseline; gap:12px;"><h3 style="flex:1; margin:0;">What the evidence base holds</h3><span style="flex-shrink:0; font-size:14px; font-weight:700; color:#0000ff;">Expand +</span></div>
+      <p class="m" style="margin:6px 0 0; max-width:44em;"></p>
+    </section><section style="margin:0 0 28px;">
+      <div style="display:flex; align-items:baseline; gap:12px;"><h3 style="flex:1; margin:0;">Transferability and assumptions</h3><span style="flex-shrink:0; font-size:14px; font-weight:700; color:#0000ff;">Expand +</span></div>
+      <p class="m" style="margin:6px 0 0; max-width:44em;"></p>
+    </section><section style="margin:0 0 28px;">
+      <div style="display:flex; align-items:baseline; gap:12px;"><h3 style="flex:1; margin:0;">What needs deciding or commissioning next</h3><span style="flex-shrink:0; font-size:14px; font-weight:700; color:#0000ff;">Expand +</span></div>
+      <p class="m" style="margin:6px 0 0; max-width:44em;"></p>
+    </section><section style="margin:0 0 28px;">
+      <div style="display:flex; align-items:baseline; gap:12px;"><h3 style="flex:1; margin:0;">What was searched and not searched</h3><span style="flex-shrink:0; font-size:14px; font-weight:700; color:#0000ff;">Expand +</span></div>
+      <p class="m" style="margin:6px 0 0; max-width:44em;">412 documents screened in; full text read for 38; 23 set aside under the evidence scope; 19 not read under the cap.</p>
+    </section></div>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

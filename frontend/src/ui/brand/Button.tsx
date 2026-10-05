@@ -11,7 +11,7 @@ import { cn } from "./cn";
  * - labels are sentence case and action-oriented; disabled is visible, inert
  */
 const buttonVariants = cva(
-  "inline-flex cursor-pointer items-center gap-2 font-sans leading-none " +
+  "pressable inline-flex cursor-pointer items-center gap-2 font-sans leading-none " +
     "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue " +
     "disabled:cursor-default",
   {
@@ -41,7 +41,7 @@ const buttonVariants = cva(
   },
 );
 
-export type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> &
+type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> &
   VariantProps<typeof buttonVariants>;
 
 /** Nesta-language button: 0 radius, primary carries the 45° cutout. */

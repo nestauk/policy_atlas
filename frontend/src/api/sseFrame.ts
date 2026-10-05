@@ -13,7 +13,7 @@ const SSE_FRAME_TYPES: ReadonlySet<SseFrame["type"]> = new Set([
   "checkin.pending",
   "checkin.resolved",
   "plan.updated",
-  "project.updated",
+  "task.updated",
   "tick",
 ] satisfies SseFrame["type"][]);
 

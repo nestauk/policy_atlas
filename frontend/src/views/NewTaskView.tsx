@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 
-import { usePortfolios } from "../api/queries";
+import { useProjects } from "../api/queries";
 import { useCreateTask } from "../api/mutations";
 import { CAPABILITIES } from "../lib/capabilities";
 import { useDocumentTitle } from "../lib/title";
@@ -21,7 +21,7 @@ function CapabilityList({ onPick }: { onPick: () => void }) {
             <button
               type="button"
               onClick={onPick}
-              className="flex w-full cursor-pointer items-center justify-between gap-4 border-b border-line px-0.5 py-3.5 text-left text-lead font-normal leading-[25px] text-navy hover:text-blue focus-visible:outline-2 focus-visible:outline-blue"
+              className="flex w-full cursor-pointer items-center justify-between gap-4 border-b border-line px-0.5 py-3.5 text-left text-lead font-normal leading-[25px] text-navy max-md:text-body max-md:leading-snug hover:text-blue focus-visible:outline-2 focus-visible:outline-blue"
             >
               <span>{capability.name}</span>
               <span aria-hidden="true" className="shrink-0 text-blue">
@@ -37,7 +37,7 @@ function CapabilityList({ onPick }: { onPick: () => void }) {
               aria-disabled="true"
               className="flex items-center justify-between gap-4 border-b border-line px-0.5 py-3.5 select-none"
             >
-              <span className="text-lead font-normal leading-[25px] text-grey">{capability.name}</span>
+              <span className="text-lead font-normal leading-[25px] text-grey max-md:text-body max-md:leading-snug">{capability.name}</span>
               <span className="shrink-0 text-caption font-semibold uppercase tracking-[0.06em] text-grey">
                 {COPY.comingSoon}
               </span>
@@ -49,7 +49,7 @@ function CapabilityList({ onPick }: { onPick: () => void }) {
   );
 }
 
-type PortfolioOption = { portfolio_id: string; name: string };
+type ProjectOption = { project_id: string; name: string };
 
 /** Project picker — Popover menu styled like the app chrome, not a native select. */
 function ProjectPicker({
@@ -60,15 +60,15 @@ function ProjectPicker({
 }: {
   id: string;
   value: string;
-  options: readonly PortfolioOption[];
-  onChange: (portfolioId: string) => void;
+  options: readonly ProjectOption[];
+  onChange: (projectId: string) => void;
 }) {
   const [open, setOpen] = useState(false);
-  const selected = options.find((portfolio) => portfolio.portfolio_id === value);
+  const selected = options.find((project) => project.project_id === value);
   const label = selected?.name ?? COPY.noProject;
 
-  const pick = (portfolioId: string) => {
-    onChange(portfolioId);
+  const pick = (projectId: string) => {
+    onChange(projectId);
     setOpen(false);
   };
 
@@ -113,19 +113,19 @@ function ProjectPicker({
               {COPY.noProject}
             </button>
           </li>
-          {options.map((portfolio) => (
-            <li key={portfolio.portfolio_id} role="none">
+          {options.map((project) => (
+            <li key={project.project_id} role="none">
               <button
                 type="button"
                 role="option"
-                aria-selected={value === portfolio.portfolio_id}
-                onClick={() => pick(portfolio.portfolio_id)}
+                aria-selected={value === project.project_id}
+                onClick={() => pick(project.project_id)}
                 className={cn(
                   "block w-full cursor-pointer px-3 py-2 text-left text-body font-normal text-navy hover:bg-blue-tint-2 hover:text-blue",
-                  value === portfolio.portfolio_id && "bg-blue-tint-2 font-medium",
+                  value === project.project_id && "bg-blue-tint-2 font-medium",
                 )}
               >
-                {portfolio.name}
+                {project.name}
               </button>
             </li>
           ))}
@@ -138,10 +138,15 @@ function ProjectPicker({
 /** Step two: the question, and as little else as possible beside it. */
 function QuestionForm() {
   const [searchParams] = useSearchParams();
-  const presetPortfolio = searchParams.get("portfolio") ?? "";
+  const presetProject = searchParams.get("project") ?? "";
   const [question, setQuestion] = useState("");
-  const [portfolioId, setPortfolioId] = useState(presetPortfolio);
-  const portfolios = usePortfolios();
+  const [projectId, setProjectId] = useState(presetProject);
+  const projects = useProjects();
+  // Every task this caller can read is a valid target: assignment
+  // resolves under the colleague-mutation grade (owner ruling 2026-08-27),
+  // so a colleague may add their task to an org-visible task they did
+  // not create. The listing is already scoped to what the caller may read.
+  const assignableProjects = projects.data?.data ?? [];
   const create = useCreateTask();
   const navigate = useNavigate();
   const canSend = question.trim().length > 0 && !create.isPending;
@@ -149,8 +154,8 @@ function QuestionForm() {
   const submit = () => {
     if (!canSend) return;
     create.mutate(
-      { question, portfolioId: portfolioId === "" ? null : portfolioId },
-      { onSuccess: (project) => void navigate(`/projects/${project.project_id}`) },
+      { question, projectId: projectId === "" ? null : projectId },
+      { onSuccess: (task) => void navigate(`/tasks/${task.task_id}`) },
     );
   };
 
@@ -161,13 +166,13 @@ function QuestionForm() {
         submit();
       }}
     >
-      <p className="text-body font-semibold uppercase tracking-[0.06em] text-grey">
+      <p className="text-body font-semibold uppercase tracking-[0.06em] text-grey max-md:text-meta">
         Evidence search
       </p>
-      <h1 className="mt-2 text-display font-extrabold tracking-[-0.5px] text-navy text-pretty">
+      <h1 className="mt-2 text-display font-extrabold tracking-[-0.5px] text-navy text-pretty max-md:text-title">
         What do you need evidence on?
       </h1>
-      <p className="mt-3 max-w-prose text-lead font-normal leading-[25px] text-grey text-pretty">
+      <p className="mt-3 max-w-prose text-lead font-normal leading-[25px] text-grey text-pretty max-md:text-body max-md:leading-snug">
       Ask a policy question. Policy Atlas will clarify what you need, draft a search plan for your review, then find the evidence.
       </p>
 
@@ -203,16 +208,16 @@ function QuestionForm() {
         Enter to send · Shift+Enter for a new line
       </p>
 
-      {(portfolios.data?.data.length ?? 0) > 0 && (
+      {assignableProjects.length > 0 && (
         <div className="mt-8 flex flex-wrap items-center gap-3">
-          <label className="text-meta font-normal text-grey" htmlFor="new-task-portfolio">
+          <label className="text-meta font-normal text-grey" htmlFor="new-task-project">
             Add to a {PROJECT.lower}
           </label>
           <ProjectPicker
-            id="new-task-portfolio"
-            value={portfolioId}
-            options={portfolios.data?.data ?? []}
-            onChange={setPortfolioId}
+            id="new-task-project"
+            value={projectId}
+            options={assignableProjects}
+            onChange={setProjectId}
           />
         </div>
       )}
@@ -231,25 +236,25 @@ export function NewTaskView() {
   useDocumentTitle(COPY.newTask);
   const [searchParams, setSearchParams] = useSearchParams();
   // The chosen capability is URL-addressable, like every other view state.
-  const picked = searchParams.get("capability") === "evidence_base";
+  const picked = searchParams.get("capability") === "evidence_search";
 
   return (
-    <main className="mx-auto flex max-w-[1180px] justify-center px-6 py-9">
-      <div className="w-full max-w-[50vw] min-w-0">
+    <main className="mx-auto flex max-w-[1180px] justify-center px-6 py-9 max-md:px-4 max-md:py-6">
+      <div className="w-full max-w-[50vw] min-w-0 max-md:max-w-full">
         {picked ? (
           <QuestionForm />
         ) : (
           <>
-            <p className="text-body font-semibold uppercase tracking-[0.06em] text-grey">
+            <p className="text-body font-semibold uppercase tracking-[0.06em] text-grey max-md:text-meta">
               {COPY.newTask}
             </p>
-            <h1 className="mt-2 text-display font-extrabold tracking-[-0.5px] text-navy text-pretty">
+            <h1 className="mt-2 text-display font-extrabold tracking-[-0.5px] text-navy text-pretty max-md:text-title">
               {COPY.newTaskPrompt}
             </h1>
             <CapabilityList
               onPick={() => {
                 const next = new URLSearchParams(searchParams);
-                next.set("capability", "evidence_base");
+                next.set("capability", "evidence_search");
                 setSearchParams(next);
               }}
             />

@@ -1,4 +1,4 @@
-"""Planner backend seam for the ``planner_v1`` orchestration-planning call.
+"""Planner backend seam for the ``planner_v1`` planning call.
 
 Mirrors the ``screening_backend.py`` / ``classification_backend.py`` pattern:
 a live OpenAI structured-output backend with tracing inside the backend, and a
@@ -20,8 +20,8 @@ from openai.types.chat import ChatCompletionMessageParam
 from policy_atlas.core import tracing
 from policy_atlas.core.openai_client import parse_structured, resolve_openai_client
 from policy_atlas.core.prompt_fields import scrub_nul
-from policy_atlas.core.usage import UsageResult, usage_metadata
-from policy_atlas.evidence_base.extract.extract import _scrub_nul
+from policy_atlas.core.usage import UsageResult, usage_details, usage_metadata
+from policy_atlas.evidence_search.extract.extract import _scrub_nul
 from policy_atlas.runtime.planner_prompt import (
     PLANNER_MAX_OUTPUT_TOKENS,
     PLANNER_PROMPT_VERSION,
@@ -55,6 +55,7 @@ class PlannerBackend(Protocol):
         previous_draft: dict[str, object] | None,
         *,
         session_id: uuid.UUID | None = None,
+        conversation_id: uuid.UUID | None = None,
     ) -> PlannerTurnWire:
         """Advance the planning conversation by one turn.
 
@@ -63,7 +64,11 @@ class PlannerBackend(Protocol):
                 ``{"role": "user"|"planner", "text": ...}`` dicts.
             previous_draft: The prior turn's plan draft dump, or ``None`` on
                 the first turn.
-            session_id: Optional Langfuse session id shared by the conversation.
+            session_id: Optional Langfuse session id shared by the Task's
+                traces (task 038, V9: no longer the conversation id).
+            conversation_id: Optional planning-conversation id recorded in
+                trace metadata, so one chat is still filterable now that
+                ``session_id`` groups by task.
 
         Returns:
             One parsed planner turn.
@@ -177,6 +182,7 @@ class OpenAIPlannerBackend:
         previous_draft: dict[str, object] | None,
         *,
         session_id: uuid.UUID | None = None,
+        conversation_id: uuid.UUID | None = None,
     ) -> PlannerTurnWire:
         """Advance the planning conversation through structured OpenAI output.
 
@@ -185,7 +191,11 @@ class OpenAIPlannerBackend:
                 ``{"role": "user"|"planner", "text": ...}`` dicts.
             previous_draft: The prior turn's plan draft dump, or ``None`` on
                 the first turn.
-            session_id: Optional Langfuse session id shared by the conversation.
+            session_id: Optional Langfuse session id shared by the Task's
+                traces (task 038, V9: no longer the conversation id).
+            conversation_id: Optional planning-conversation id recorded in
+                trace metadata, so one chat is still filterable now that
+                ``session_id`` groups by task.
 
         Returns:
             One parsed planner turn, with suggestions degraded if malformed.
@@ -202,19 +212,23 @@ class OpenAIPlannerBackend:
             result: UsageResult[PlannerTurnWire],
         ) -> None:
             turn, usage = result
+            conversation_id_str = str(conversation_id) if conversation_id is not None else None
             span.update(
+                usage_details=usage_details(usage),
                 input={"messages": messages},
                 output=turn.model_dump(),
                 model=PLANNER_MODEL,
                 metadata={
                     "prompt_version": PLANNER_PROMPT_VERSION,
+                    "conversation_id": conversation_id_str,
+                    "turn_number": turn_number,
                     **usage_metadata(usage),
                 },
             )
 
         turn, _usage = tracing.traced_call(
             langfuse_client,
-            name=f"planner:turn{turn_number}",
+            name="planner:turn",
             as_type="generation",
             call=lambda: self._parse_once(messages),
             session_id=session_id,
@@ -249,6 +263,7 @@ class StubPlannerBackend:
         previous_draft: dict[str, object] | None,
         *,
         session_id: uuid.UUID | None = None,
+        conversation_id: uuid.UUID | None = None,
     ) -> PlannerTurnWire:
         """Return a deterministic planner turn.
 
@@ -259,11 +274,13 @@ class StubPlannerBackend:
             previous_draft: Accepted for protocol compatibility; ignored by
                 the stub, which derives its output from ``turns`` alone.
             session_id: Accepted for tracing compatibility; ignored by the stub.
+            conversation_id: Accepted for tracing compatibility; ignored by
+                the stub.
 
         Returns:
             A deterministic planner turn.
         """
-        del previous_draft, session_id
+        del previous_draft, session_id, conversation_id
         if len(turns) <= 1:
             intent = turns[0]["text"] if turns else ""
             return PlannerTurnWire(
@@ -310,7 +327,7 @@ class StubPlannerBackend:
                 # 018 regrade: select/extract/group are deep-only now, so this
                 # full-chain stub draft (it requests all five discretionary
                 # components, with grouping) must be depth "deep", not
-                # "standard", to stay a valid OrchestrationPlan.
+                # "standard", to stay a valid TaskPlan.
                 analysis_depth="deep",
                 components=components,
                 component_rationale={

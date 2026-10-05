@@ -20,8 +20,8 @@ describe("Button", () => {
   it("primary keeps white text alongside the type-scale size token", () => {
     // tailwind-merge treated the unknown text-meta scale token as a text
     // COLOUR and stripped text-white — ink-on-blue buttons live (028).
-    render(<Button>New project</Button>);
-    const className = screen.getByRole("button", { name: "New project" }).className;
+    render(<Button>New task</Button>);
+    const className = screen.getByRole("button", { name: "New task" }).className;
     expect(className).toContain("text-white");
     expect(className).toContain("text-meta");
   });

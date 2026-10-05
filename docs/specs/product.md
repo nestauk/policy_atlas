@@ -14,7 +14,7 @@ spec + `docs/adr/` are canonical ([ADR 0002](../adr/0002-spec-governance.md)); i
 ## What the product is
 
 Policy Atlas v3 is an **evidence-led policy-analysis workspace**, not a document generator
-and not a chatbot. A project is a **policy workstream**, and its terminal product is an
+and not a chatbot. A task is a **policy workstream**, and its terminal product is an
 **inspectable decision-support body**: artefacts produced by capabilities, the evidence
 corpus behind them, claim provenance, comments, versions, dependencies and a decision log.
 Humans use that body to brief, advise, write, clear and publish **outside** the tool. The
@@ -23,7 +23,7 @@ tool supports policy judgement; it does not replace it.
 ## The shape of a v3.0 run (the EB journey)
 
 ```
-project landing → empty workspace → planning conversation → plan ready
+task landing → empty workspace → planning conversation → plan ready
 → build with check-ins → Evidence Base artefact summary → progressive detail
 → evidence table (stub) → comments mode → rerun as new version → re-entry with catch-me-up
 ```

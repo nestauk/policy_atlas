@@ -16,14 +16,14 @@ from policy_atlas.core.schema import (
     conversation,
     implementation_context_finding,
     intervention_outcome_finding,
-    project_source_snapshot,
-    pss_owns_snapshot,
     source_extraction_record,
     source_snapshot,
+    task_source_snapshot,
+    tss_owns_snapshot,
 )
 from policy_atlas.core.schema import chunk as chunk_table
-from policy_atlas.evidence_base.extract.quote_verify import QuoteMatcher, build_basis
-from policy_atlas.evidence_base.synthesis.grounding_judge import (
+from policy_atlas.evidence_search.extract.quote_verify import QuoteMatcher, build_basis
+from policy_atlas.evidence_search.synthesis.grounding_judge import (
     ENVELOPE_VERSION,
     JUDGE_MODEL,
     JUDGE_PROMPT_VERSION,
@@ -62,13 +62,13 @@ def _parse_ids(raw_ids: set[str]) -> set[uuid.UUID]:
 
 
 def _load_chunks(
-    conn: Connection, chunk_ids: set[str], *, project_id: uuid.UUID
+    conn: Connection, chunk_ids: set[str], *, task_id: uuid.UUID
 ) -> dict[str, dict[str, Any]]:
     """Fetch cited chunks' immutable content and envelope metadata by durable id.
 
-    Scoped to the turn's project (defense-in-depth): a chunk id resolves DB-wide
+    Scoped to the turn's task (defense-in-depth): a chunk id resolves DB-wide
     otherwise, safe today only because the floor's citable set is already
-    project-scoped — a chunk never ingested into this project resolves as
+    task-scoped — a chunk never ingested into this task resolves as
     missing, the same as a fabricated id.
     """
     if not chunk_ids:
@@ -87,14 +87,14 @@ def _load_chunks(
                 source_snapshot,
                 chunk_table.c.source_snapshot_id == source_snapshot.c.source_snapshot_id,
             ).join(
-                project_source_snapshot,
-                pss_owns_snapshot(chunk_table.c.source_snapshot_id),
+                task_source_snapshot,
+                tss_owns_snapshot(chunk_table.c.source_snapshot_id),
             )
         )
         .where(chunk_table.c.chunk_id.in_(parsed_ids))
-        .where(project_source_snapshot.c.project_id == project_id)
+        .where(task_source_snapshot.c.task_id == task_id)
     ).mappings()
-    # A full-text chunk's snapshot can match the project_source_snapshot join via
+    # A full-text chunk's snapshot can match the task_source_snapshot join via
     # either arm; the dict build below dedupes by chunk_id (last row wins), so a
     # duplicate row from matching both arms never surfaces as two chunks.
     chunks = {
@@ -114,13 +114,13 @@ def _load_chunks(
 
 
 def _load_finding_rows(
-    conn: Connection, finding_ids: set[str], *, project_id: uuid.UUID
+    conn: Connection, finding_ids: set[str], *, task_id: uuid.UUID
 ) -> dict[str, dict[str, Any]]:
     """Load finding grounding and frozen-source provenance for judge anchors.
 
-    Scoped to the turn's project (defense-in-depth, mirroring ``_load_chunks``):
+    Scoped to the turn's task (defense-in-depth, mirroring ``_load_chunks``):
     a finding id resolves DB-wide otherwise, safe today only because the
-    floor's citable set is already project-scoped.
+    floor's citable set is already task-scoped.
     """
     if not finding_ids:
         return {}
@@ -148,7 +148,7 @@ def _load_finding_rows(
                 )
             )
             .where(table.c.finding_id.in_(parsed_ids))
-            .where(table.c.project_id == project_id)
+            .where(table.c.task_id == task_id)
         ).mappings()
         for row in rows:
             found[str(row["finding_id"])] = {
@@ -164,10 +164,10 @@ def _load_finding_rows(
 
 
 def _finding_anchors(
-    conn: Connection, finding_ids: set[str], *, project_id: uuid.UUID
+    conn: Connection, finding_ids: set[str], *, task_id: uuid.UUID
 ) -> tuple[dict[str, list[dict[str, Any]]], dict[str, dict[str, Any]]]:
     """Mirror synthesis finding-anchor resolution for the existing judge envelope."""
-    findings = _load_finding_rows(conn, finding_ids, project_id=project_id)
+    findings = _load_finding_rows(conn, finding_ids, task_id=task_id)
     snapshot_ids = {record["source_snapshot_id"] for record in findings.values()}
     parsed_snapshots = _parse_ids(snapshot_ids)
     chunk_rows = conn.execute(
@@ -281,7 +281,7 @@ def _shape_envelope(
     payload: dict[str, Any],
     answer: str,
     intent: str,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
 ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     """Mint chat claim ids and shape floored claims into ``synthesis_envelope_v2``."""
     raw_claims = payload.get("claims")
@@ -314,7 +314,7 @@ def _shape_envelope(
                 if isinstance(citation_id, str):
                     cited_finding_ids.add(citation_id)
     anchors_by_finding, anchor_chunks = _finding_anchors(
-        conn, cited_finding_ids, project_id=project_id
+        conn, cited_finding_ids, task_id=task_id
     )
 
     envelope_claims: list[dict[str, Any]] = []
@@ -364,7 +364,7 @@ def _shape_envelope(
 
     if not envelope_claims:
         raise ChatEnrichmentError("cited chat turn has no claim-to-citation mapping")
-    direct_chunks = _load_chunks(conn, direct_chunk_ids, project_id=project_id)
+    direct_chunks = _load_chunks(conn, direct_chunk_ids, task_id=task_id)
     chunks = [
         {key: value for key, value in record.items() if key != "source_snapshot_id"}
         for record in sorted(
@@ -503,7 +503,7 @@ def enrich_chat_turn(
     with engine.connect() as conn:
         row = (
             conn.execute(
-                select(chat_turn, conversation.c.project_id)
+                select(chat_turn, conversation.c.task_id)
                 .select_from(
                     chat_turn.join(conversation, chat_turn.c.conversation_id == conversation.c.id)
                 )
@@ -535,7 +535,7 @@ def enrich_chat_turn(
                 payload=payload,
                 answer=row["answer"] if isinstance(row["answer"], str) else "",
                 intent=row["user_message"],
-                project_id=row["project_id"],
+                task_id=row["task_id"],
             )
         except Exception as exc:
             payload["enrichment"] = _audit(status="failed")

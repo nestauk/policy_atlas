@@ -10,30 +10,37 @@ from typing import Any, cast
 
 from policy_atlas.core import tracing
 from policy_atlas.core.usage import TokenUsage, UsageResult
-from policy_atlas.evidence_base.assess.classify import _ClassifyDoc, _run_classification_calls
-from policy_atlas.evidence_base.assess.classify_prompt import ClassifyEnvelopePayload, ClassifyWire
-from policy_atlas.evidence_base.assess.screen import _run_stage1_reps, _run_stage2_reps, _Stage1Doc
-from policy_atlas.evidence_base.assess.screen_prompt import (
+from policy_atlas.evidence_search.assess.classify import _ClassifyDoc, _run_classification_calls
+from policy_atlas.evidence_search.assess.classify_prompt import (
+    ClassifyEnvelopePayload,
+    ClassifyWire,
+)
+from policy_atlas.evidence_search.assess.screen import (
+    _run_stage1_reps,
+    _run_stage2_reps,
+    _Stage1Doc,
+)
+from policy_atlas.evidence_search.assess.screen_prompt import (
     ScreenEnvelopePayload,
     ScreenFullTextPayload,
     ScreenRepWire,
 )
-from policy_atlas.evidence_base.clustering_engine import (
+from policy_atlas.evidence_search.clustering_engine import (
     CallBudget,
     ClusteringPolicy,
     ClusterLabel,
     ClusterUnit,
 )
-from policy_atlas.evidence_base.clustering_engine import (
+from policy_atlas.evidence_search.clustering_engine import (
     run_first_assignment_round as engine_run_first_assignment_round,
 )
-from policy_atlas.evidence_base.corpus.ranking import RankedDoc
-from policy_atlas.evidence_base.corpus.select import SelectionCandidate, _rerank_infos, _SignalDoc
-from policy_atlas.evidence_base.corpus.theme_grouping import GroupingDoc
-from policy_atlas.evidence_base.extract.extract import _Doc, _iof_profile, _run_windows
-from policy_atlas.evidence_base.extract.icf_records import PROFILE_ID as ICF_PROFILE_ID
-from policy_atlas.evidence_base.extract.iof_records import PROFILE_ID as IOF_PROFILE_ID
-from policy_atlas.evidence_base.extract.iof_records import ExtractionWindowPayload
+from policy_atlas.evidence_search.corpus.ranking import RankedDoc
+from policy_atlas.evidence_search.corpus.select import SelectionCandidate, _rerank_infos, _SignalDoc
+from policy_atlas.evidence_search.corpus.theme_grouping import GroupingDoc
+from policy_atlas.evidence_search.extract.extract import _Doc, _iof_profile, _run_windows
+from policy_atlas.evidence_search.extract.icf_records import PROFILE_ID as ICF_PROFILE_ID
+from policy_atlas.evidence_search.extract.iof_records import PROFILE_ID as IOF_PROFILE_ID
+from policy_atlas.evidence_search.extract.iof_records import ExtractionWindowPayload
 
 _WORKER_CONTEXT: contextvars.ContextVar[str] = contextvars.ContextVar(
     "worker_context", default="missing"
@@ -42,6 +49,28 @@ _WORKER_CONTEXT: contextvars.ContextVar[str] = contextvars.ContextVar(
 
 def _read_context() -> str:
     return _WORKER_CONTEXT.get()
+
+
+def test_trace_scope_propagates_user_id_and_nested_session_keeps_it() -> None:
+    """Exercises the REAL ``propagate_attributes``: a user-only scope sets the
+    user id in the OTel context, and a nested session-only scope adds the
+    session id WITHOUT dropping the outer user id — the property slice 1's
+    entry-point wrapping relies on."""
+    from opentelemetry import context as otel_context_api
+
+    user_key = "langfuse.propagated.user_id"
+    session_key = "langfuse.propagated.session_id"
+    session_id = uuid.uuid4()
+    assert otel_context_api.get_value(user_key) is None
+
+    with tracing.trace_scope(user_id="cognito-sub-123"):
+        assert otel_context_api.get_value(user_key) == "cognito-sub-123"
+        with tracing.trace_scope(session_id=session_id):
+            assert otel_context_api.get_value(session_key) == str(session_id)
+            assert otel_context_api.get_value(user_key) == "cognito-sub-123"
+
+    assert otel_context_api.get_value(user_key) is None
+    assert otel_context_api.get_value(session_key) is None
 
 
 def test_submit_with_context_propagates_contextvar_into_worker() -> None:
@@ -69,7 +98,7 @@ class _ContextExtractionBackend:
 def test_extract_window_fanout_propagates_context() -> None:
     backend = _ContextExtractionBackend()
     doc = _Doc(
-        pss_id=uuid.uuid4(),
+        tss_id=uuid.uuid4(),
         text_basis="abstract_only",
         envelope_snapshot_id=uuid.uuid4(),
         full_text_snapshot_id=None,
@@ -79,7 +108,7 @@ def test_extract_window_fanout_propagates_context() -> None:
         extractable=True,
         window_payloads=[
             ExtractionWindowPayload(
-                pss_id="pss",
+                tss_id="tss",
                 window_index=0,
                 title="Title",
                 abstract="Abstract",
@@ -108,6 +137,114 @@ class _ScoreClient:
     ) -> None:
         assert data_type == "NUMERIC"
         self.scores[name] = value
+
+
+def test_grouping_score_summary_reads_facet_counts_shape() -> None:
+    """Feeds the shape group.py's ``_build_group_counts`` returns per facet."""
+    client = _ScoreClient()
+
+    tracing.grouping_score_summary(
+        cast("Any", client),
+        {
+            "facets": ["population"],
+            "counts": {
+                "population": {
+                    "eligible_base": 10,
+                    "findings_total": 10,
+                    "grouped": 7,
+                    "ungrouped": 2,
+                    "no_value": 1,
+                    "distinct_values": 4,
+                    "groups": 3,
+                },
+            },
+        },
+    )
+
+    assert client.scores == {
+        "partition_valid": 1.0,
+        "ungrouped_share": 0.2,
+        "no_value_share": 0.1,
+        "group_count": 3.0,
+    }
+
+
+def test_synthesis_score_summary_reads_counts_shape() -> None:
+    """Feeds the shape synthesise.py's counts block returns."""
+    client = _ScoreClient()
+
+    tracing.synthesis_score_summary(
+        cast("Any", client),
+        {
+            "artefact_id": "artefact",
+            "counts": {
+                "claims_total": {"finding": 5, "chunk": 2},
+                "claims_by_verdict_lane": {"unsupported_mis_cited": 1},
+                "anchors_verified": 8,
+                "anchors_unverified": 2,
+                "chunk_claims_rejected": 1,
+            },
+        },
+    )
+
+    assert client.scores == {
+        "claims_valid_share": 6 / 7,
+        "unsupported_share": 1 / 7,
+        "citation_verified_share": 0.8,
+        "chunk_rejection_share": 1 / 3,
+    }
+
+
+def test_screening_score_summary_reads_both_stage_shapes() -> None:
+    """Stage-1 and stage-2 screen summaries emit their stage-specific scores."""
+    stage1 = _ScoreClient()
+    tracing.screening_score_summary(
+        cast("Any", stage1),
+        {
+            "relevant": 6,
+            "not_relevant": 3,
+            "failed": 1,
+            "non_unanimous": 2,
+            "tie_broken": 1,
+        },
+    )
+    assert stage1.scores == {
+        "screen_failure_count": 1.0,
+        "non_unanimous_share": 2 / 9,
+        "tie_broken_count": 1.0,
+    }
+
+    stage2 = _ScoreClient()
+    tracing.screening_score_summary(
+        cast("Any", stage2),
+        {"failed": 0, "stage2_screened": 5, "demoted": 2},
+    )
+    assert stage2.scores == {
+        "screen_failure_count": 0.0,
+        "stage2_demoted_share": 0.4,
+        "stage2_failure_count": 0.0,
+    }
+
+
+def test_classification_score_summary_reads_counts_shape() -> None:
+    """Feeds the shape classify.py's summary returns."""
+    client = _ScoreClient()
+
+    tracing.classification_score_summary(
+        cast("Any", client),
+        {
+            "classified": 4,
+            "failed": 0,
+            "by_type": {"Unknown / Insufficient information": 1},
+            "tags_rejected": 2,
+        },
+    )
+
+    assert client.scores == {
+        "classify_failure_count": 0.0,
+        "unknown_share": 0.25,
+        "tags_rejected_count": 2.0,
+    }
 
 
 def test_extraction_score_summary_reads_profile_shape() -> None:
@@ -178,12 +315,12 @@ class _ContextScreeningBackend:
 def test_screening_fanouts_propagate_context() -> None:
     backend = _ContextScreeningBackend()
     stage1_doc = _Stage1Doc(
-        pss_id=uuid.uuid4(),
+        tss_id=uuid.uuid4(),
         source_snapshot_id=uuid.uuid4(),
         metadata={},
         basis="title_abstract",
         payload=ScreenEnvelopePayload(
-            pss_id="pss",
+            tss_id="tss",
             title="Title",
             abstract="Abstract",
             abstract_source=None,
@@ -191,7 +328,7 @@ def test_screening_fanouts_propagate_context() -> None:
         ),
     )
     stage2_payload = ScreenFullTextPayload(
-        pss_id="pss",
+        tss_id="tss",
         title="Title",
         intent="Intent",
         window_index=0,
@@ -233,11 +370,11 @@ def test_classify_fanout_propagates_context() -> None:
     backend = _ContextClassificationBackend()
     docs = [
         _ClassifyDoc(
-            pss_id=uuid.uuid4(),
+            tss_id=uuid.uuid4(),
             source_snapshot_id=uuid.uuid4(),
             metadata={},
             payload=ClassifyEnvelopePayload(
-                pss_id="pss",
+                tss_id="tss",
                 title="Title",
                 abstract="Abstract",
                 priors={},
@@ -330,17 +467,17 @@ class _ContextRankingBackend:
         ], None
 
 
-def _signal_doc(pss_id: uuid.UUID) -> _SignalDoc:
-    from policy_atlas.evidence_base.corpus.characterise import ScreenedSource
+def _signal_doc(tss_id: uuid.UUID) -> _SignalDoc:
+    from policy_atlas.evidence_search.corpus.characterise import ScreenedSource
 
     source = ScreenedSource(
-        pss_id=pss_id,
+        tss_id=tss_id,
         source_snapshot_id=uuid.uuid4(),
         full_text_snapshot_id=None,
         origin="upload",
         full_text_status="not_requested",
         full_text_error=None,
-        metadata={"title": f"Doc {pss_id}"},
+        metadata={"title": f"Doc {tss_id}"},
         source_locator="doc.txt",
         text_basis="abstract_only",
         screen_basis="title_abstract",
@@ -362,7 +499,7 @@ def _signal_doc(pss_id: uuid.UUID) -> _SignalDoc:
 def test_select_rerank_fanout_propagates_context() -> None:
     backend = _ContextRankingBackend()
     contested_ids = [uuid.uuid4(), uuid.uuid4()]
-    signal_docs = {pss_id: _signal_doc(pss_id) for pss_id in contested_ids}
+    signal_docs = {tss_id: _signal_doc(tss_id) for tss_id in contested_ids}
 
     token = _WORKER_CONTEXT.set("select-context")
     try:
@@ -376,3 +513,63 @@ def test_select_rerank_fanout_propagates_context() -> None:
         _WORKER_CONTEXT.reset(token)
 
     assert backend.seen == ["select-context"]
+
+
+def test_traced_embedding_backend_records_provider_prompt_tokens_as_usage() -> None:
+    from policy_atlas.core import embeddings
+
+    class _Span:
+        def __init__(self) -> None:
+            self.updates: list[dict[str, Any]] = []
+
+        def update(self, **payload: Any) -> None:
+            self.updates.append(payload)
+
+    class _Observation:
+        def __init__(self, span: _Span) -> None:
+            self.span = span
+
+        def __enter__(self) -> _Span:
+            return self.span
+
+        def __exit__(self, *exc: Any) -> None:
+            return None
+
+    class _Client:
+        def __init__(self) -> None:
+            self.spans: list[_Span] = []
+
+        def start_as_current_observation(self, *, name: str, as_type: str) -> _Observation:
+            assert (name, as_type) == ("embed:batch", "embedding")
+            span = _Span()
+            self.spans.append(span)
+            return _Observation(span)
+
+    class _LiveLike:
+        mode = "live"
+
+        def embed_texts(self, texts: list[str]) -> list[list[float]]:
+            embeddings._last_usage.prompt_tokens = 7  # what the OpenAI backend parks
+            return [[0.0] * embeddings.EMBEDDING_DIMENSIONS for _ in texts]
+
+    client = _Client()
+    traced = tracing.TracedEmbeddingBackend(cast(Any, _LiveLike()), cast(Any, client))
+    traced.embed_texts(["a", "b"])
+    update = client.spans[0].updates[0]
+    assert update["usage_details"] == {"input": 7, "total": 7}
+    assert update["model"] == embeddings.EMBEDDING_MODEL
+    assert update["metadata"]["batch_index"] == 1
+    assert embeddings.take_last_prompt_tokens() is None  # consumed, not re-read
+
+
+def test_trace_root_sets_trace_level_input_and_output_when_the_span_supports_it() -> None:
+    calls: list[tuple[str, dict[str, Any]]] = []
+    span = SimpleNamespace(
+        update=lambda **kw: calls.append(("update", kw)),
+        set_trace_io=lambda **kw: calls.append(("set_trace_io", kw)),
+    )
+    tracing._trace_root(span, input={"component": "x"}, output={"n": 1})
+    assert calls == [
+        ("update", {"input": {"component": "x"}, "output": {"n": 1}}),
+        ("set_trace_io", {"input": {"component": "x"}, "output": {"n": 1}}),
+    ]

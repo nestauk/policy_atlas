@@ -17,9 +17,9 @@ that work — landing concurrently in ``runner.py`` /
 (c) NullIO walks (the harness/test default) never block or park — they
     auto-continue through every attended pause and finish synchronously.
 
-Walk-scripting idioms are reused from ``tests/runtime/test_orchestrate.py``
+Walk-scripting idioms are reused from ``tests/runtime/test_agent.py``
 (``ScriptedConsole``, ``main``) and ``tests/runtime/test_runner.py``
-(``_base_plan``, ``_seed_project``, ``_runner_backends``).
+(``_base_plan``, ``_seed_task``, ``_runner_backends``).
 """
 
 from __future__ import annotations
@@ -31,12 +31,12 @@ from sqlalchemy import select
 from sqlalchemy.engine import Engine
 
 from policy_atlas.core.schema import capability_run
-from policy_atlas.runtime.orchestrate import CliIO, main
+from policy_atlas.runtime.agent import CliIO, main
 from policy_atlas.runtime.runner import NullIO, run_plan
 from policy_atlas.runtime.steering import build_steer_point_options
-from tests.runtime.test_orchestrate import ScriptedConsole, _stub_backends
-from tests.runtime.test_orchestrate import _cleanup as _orchestrate_cleanup
-from tests.runtime.test_runner import _base_plan, _runner_backends, _seed_project
+from tests.runtime.test_agent import ScriptedConsole, _stub_backends
+from tests.runtime.test_agent import _cleanup as _agent_cleanup
+from tests.runtime.test_runner import _base_plan, _runner_backends, _seed_task
 from tests.runtime.test_runner import _cleanup as _runner_cleanup
 
 # --- (a) byte-identical blocking-pause render ------------------------------
@@ -72,7 +72,7 @@ _GOLDEN_PAUSE_MENU = "\n".join(
 def _known_pause_payload() -> dict[str, Any]:
     """A pause payload shaped exactly as the runner assembles it (2409
     ``_pause_payload``) for the "synthesis_shape" steer point — the same
-    shape ``test_orchestrate._steer_point_payload`` builds."""
+    shape ``test_agent._steer_point_payload`` builds."""
     return {
         "kind": "steer_point",
         "steer_point": "synthesis_shape",
@@ -130,10 +130,10 @@ def test_cli_blocking_pause_header_and_options_substrings() -> None:
 # --- (b) pause -> Continue completes; capability_run never "paused" -------
 
 
-def _capability_run_statuses(engine: Engine, project_id: uuid.UUID) -> list[str]:
+def _capability_run_statuses(engine: Engine, task_id: uuid.UUID) -> list[str]:
     with engine.connect() as conn:
         rows = conn.execute(
-            select(capability_run.c.status).where(capability_run.c.project_id == project_id)
+            select(capability_run.c.status).where(capability_run.c.task_id == task_id)
         ).fetchall()
     return [row.status for row in rows]
 
@@ -168,14 +168,14 @@ def test_cli_pause_continue_completes_succeeded_no_paused_status(engine: Engine)
         assert result.exit_code == 0
         assert result.outcome is not None
         assert result.outcome.status == "succeeded"
-        assert result.project_id is not None
+        assert result.task_id is not None
 
-        statuses = _capability_run_statuses(engine, result.project_id)
+        statuses = _capability_run_statuses(engine, result.task_id)
         assert statuses, "expected a capability_run row for the walk"
         assert "paused" not in statuses
         assert all(status == "succeeded" for status in statuses)
     finally:
-        _orchestrate_cleanup(engine, result.project_id if result else None)
+        _agent_cleanup(engine, result.task_id if result else None)
 
 
 # --- (c) NullIO walks never pause/park -------------------------------------
@@ -186,12 +186,12 @@ def test_nullio_walk_never_pauses_and_never_parks(engine: Engine) -> None:
     pause on a moderate-mode plan (which has attended lattice points) and
     completes synchronously to "succeeded" — it never blocks for input and
     never leaves capability_run at "paused"."""
-    project_id, scope_id = _seed_project(engine)
+    task_id, scope_id = _seed_task(engine)
     plan = _base_plan()  # steering_mode="moderate" -> has attended pause points
     try:
         outcome = run_plan(
             engine,
-            project_id=project_id,
+            task_id=task_id,
             evidence_scope_id=scope_id,
             plan=plan,
             plan_id=uuid.uuid4(),
@@ -202,9 +202,9 @@ def test_nullio_walk_never_pauses_and_never_parks(engine: Engine) -> None:
         )
 
         assert outcome.status == "succeeded"
-        statuses = _capability_run_statuses(engine, project_id)
+        statuses = _capability_run_statuses(engine, task_id)
         assert statuses, "expected a capability_run row for the walk"
         assert "paused" not in statuses
         assert all(status == "succeeded" for status in statuses)
     finally:
-        _runner_cleanup(engine, project_id)
+        _runner_cleanup(engine, task_id)

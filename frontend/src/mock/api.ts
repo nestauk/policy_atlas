@@ -1,6 +1,7 @@
 import type { SseFrame } from "../api/sseFrame";
 import type { AuthApi } from "../auth/types";
 import type { components } from "../api/gen/types";
+import { PROJECT, TASK } from "../lib/vocabulary";
 import type { EvidenceSortField } from "../views/sourcesPresentation";
 import {
   mockArtefact,
@@ -15,9 +16,10 @@ import {
   mockFunnel,
   mockGroups,
   mockLandscape,
+  mockMeUnenrolled,
   mockPlanReady,
-  mockPortfolios,
   mockProject,
+  mockTask,
   mockSourceDossiers,
   seedPlanningTurns,
   MOCK_CHAT_ANSWER_DELTAS,
@@ -29,9 +31,13 @@ import {
   MOCK_CHECK_IN_ID,
   MOCK_PLAN_ID,
   MOCK_PLANNING_CONVERSATION_ID,
-  MOCK_PROJECT_ID,
+  MOCK_TASK_ID,
   MOCK_RUN_ID,
+  mockAuthorships,
 } from "./fixtures";
+
+type MeOut = components["schemas"]["MeOut"];
+type ProjectOut = components["schemas"]["ProjectOut"];
 
 type RunOut = components["schemas"]["RunOut"];
 type PlanningTranscriptTurnOut = components["schemas"]["PlanningTranscriptTurnOut"];
@@ -141,12 +147,12 @@ let nextTurnIndex = 4; // the seed transcript occupies turn_index 1-3
 // --- Chat conversations + turns (task 029 phase G3 mock) -----------------
 // Follow-up chats are created on demand. The planning conversation is
 // pre-seeded so the chats overlay (G14) has a planning row in mock mode,
-// matching a real project that already has a plan lineage.
+// matching a real task that already has a plan lineage.
 function seedConversations(): ConversationOut[] {
   return [
     {
       id: MOCK_PLANNING_CONVERSATION_ID,
-      project_id: MOCK_PROJECT_ID,
+      task_id: MOCK_TASK_ID,
       kind: "planning",
       title: "Planning",
       status: "active",
@@ -167,19 +173,34 @@ let chatTurnsByConversation = new Map<string, ChatTurnOut[]>();
 let chatTurnEnrichmentReads = new Map<string, number>();
 let currentPlan: components["schemas"]["PlanDraft"] = { ...mockPlanReady };
 
+// --- Identity + projects (task 033 phase 10a) --------------------------
+// `currentMe` defaults to the unenrolled fixture — dark launch: every
+// pre-033 mock journey sees `organisation: null` and stays unchanged. Tests
+// that need the enrolled/org-scoped journeys call `setMockMe(mockMeEnrolled)`.
+let currentMe: MeOut = { ...mockMeUnenrolled };
+let mockProjects: ProjectOut[] = [{ ...mockProject }];
+const mockWaitlistEmails = new Set<string>();
+
+/** Test helper: switch the mock's `/me` identity (e.g. to `mockMeEnrolled`). */
+export function setMockMe(me: MeOut) {
+  currentMe = { ...me };
+}
+
 /** Reset every scripted scenario; useful for isolated mock tests. */
 export function resetMockScenario() {
   checkInAnswer = createDeferred();
   checkInAnswered = false;
   runStarted = createDeferred();
   currentRun = null;
-  mockProject.latest_run = null;
+  mockTask.latest_run = null;
   planningTurns = seedPlanningTurns();
   nextTurnIndex = 4;
   chatConversations = seedConversations();
   chatTurnsByConversation = new Map();
   chatTurnEnrichmentReads = new Map();
   currentPlan = { ...mockPlanReady };
+  currentMe = { ...mockMeUnenrolled };
+  mockProjects = [{ ...mockProject }];
 }
 
 function currentMockScenario(requestUrl: URL): MockScenario {
@@ -194,12 +215,35 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
   const method = init?.method ?? request?.method ?? "GET";
   const path = url.pathname;
 
-  if (method === "GET" && path.endsWith(`/api/v1/projects/${MOCK_PROJECT_ID}/events`)) {
+  if (method === "POST" && path.endsWith("/api/v1/waitlist")) {
+    const body = await requestBody(request, init);
+    if (!isRecord(body) || typeof body.email !== "string" || typeof body.name !== "string") {
+      return json({ error: { code: "validation_error", message: "Invalid waitlist body" } }, 422);
+    }
+    const email = String(body.email).trim().toLowerCase();
+    if (mockWaitlistEmails.has(email)) {
+      return json(
+        { error: { code: "already_registered", message: "This email is already on the waitlist." } },
+        409,
+      );
+    }
+    mockWaitlistEmails.add(email);
+    return json(
+      {
+        entry_id: crypto.randomUUID(),
+        email,
+        created_at: new Date().toISOString(),
+      },
+      201,
+    );
+  }
+
+  if (method === "GET" && path.endsWith(`/api/v1/tasks/${MOCK_TASK_ID}/events`)) {
     return new Response(createMockEventStream(currentMockScenario(url)), {
       headers: { "Content-Type": "text/event-stream", "Cache-Control": "no-cache" },
     });
   }
-  if (method === "POST" && path.endsWith(`/api/v1/projects/${MOCK_PROJECT_ID}/check-ins/${MOCK_CHECK_IN_ID}/response`)) {
+  if (method === "POST" && path.endsWith(`/api/v1/tasks/${MOCK_TASK_ID}/check-ins/${MOCK_CHECK_IN_ID}/response`)) {
     const body = await requestBody(request, init);
     checkInAnswer.resolve();
     checkInAnswered = true;
@@ -213,29 +257,45 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
   }
 
   // --- Project lifecycle (landing rename/archive, contract strand 8) ------
-  if (method === "PATCH" && path.endsWith(`/api/v1/projects/${MOCK_PROJECT_ID}`)) {
+  if (method === "PATCH" && path.endsWith(`/api/v1/tasks/${MOCK_TASK_ID}`)) {
     const body = await requestBody(request, init);
-    if (isRecord(body) && typeof body.name === "string") mockProject.name = body.name;
-    if (isRecord(body) && typeof body.question === "string") mockProject.question = body.question;
-    if (isRecord(body) && Array.isArray(body.portfolio_ids)) {
-      mockProject.portfolio_ids = body.portfolio_ids.filter(
+    // Task 033 phase 10b: i.5 — a Task's own visibility can't be set while
+    // it's in a Project (project membership). The mock mirrors the real
+    // 409 `visibility_conflict` so the control's error line is exercisable
+    // in mock mode too, not just against a live backend. Checked before any
+    // field is assigned, matching the real API's all-or-nothing conflict —
+    // a 409 must leave every field (including a same-body rename) untouched.
+    if (
+      isRecord(body) &&
+      (body.visibility === "org" || body.visibility === "private") &&
+      (mockTask.project_ids?.length ?? 0) > 0
+    ) {
+      return json({ error: { code: "visibility_conflict", message: `${TASK.one} is in a ${PROJECT.one}.` } }, 409);
+    }
+    if (isRecord(body) && typeof body.name === "string") mockTask.name = body.name;
+    if (isRecord(body) && typeof body.question === "string") mockTask.question = body.question;
+    if (isRecord(body) && (body.visibility === "org" || body.visibility === "private")) {
+      mockTask.visibility = body.visibility;
+    }
+    if (isRecord(body) && Array.isArray(body.project_ids)) {
+      mockTask.project_ids = body.project_ids.filter(
         (value): value is string => typeof value === "string",
       );
     }
-    mockProject.updated_at = new Date().toISOString();
-    return json(mockProject);
+    mockTask.updated_at = new Date().toISOString();
+    return json(mockTask);
   }
-  if (method === "POST" && path.endsWith(`/api/v1/projects/${MOCK_PROJECT_ID}/archive`)) {
-    mockProject.status = "archived";
-    mockProject.archived_at = new Date().toISOString();
-    return json(mockProject);
+  if (method === "POST" && path.endsWith(`/api/v1/tasks/${MOCK_TASK_ID}/archive`)) {
+    mockTask.status = "archived";
+    mockTask.archived_at = new Date().toISOString();
+    return json(mockTask);
   }
 
   // --- Durable planning transcript (contract strand 12) -------------------
-  if (method === "GET" && path.endsWith(`/api/v1/projects/${MOCK_PROJECT_ID}/planning-turns`)) {
+  if (method === "GET" && path.endsWith(`/api/v1/tasks/${MOCK_TASK_ID}/planning-turns`)) {
     return json(page(planningTurns));
   }
-  if (method === "POST" && path.endsWith(`/api/v1/projects/${MOCK_PROJECT_ID}/planning-turns`)) {
+  if (method === "POST" && path.endsWith(`/api/v1/tasks/${MOCK_TASK_ID}/planning-turns`)) {
     const body = await requestBody(request, init);
     const clientTurnId = isRecord(body) && typeof body.client_turn_id === "string" ? body.client_turn_id : crypto.randomUUID();
     const message = isRecord(body) && typeof body.message === "string" ? body.message : "";
@@ -268,10 +328,10 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
 
   // --- Plan (a resumed session: the transcript above already reached
   // `ready` — see mockPlanReady) ------------------------------------------
-  if (method === "GET" && path.endsWith(`/api/v1/projects/${MOCK_PROJECT_ID}/plan`)) {
+  if (method === "GET" && path.endsWith(`/api/v1/tasks/${MOCK_TASK_ID}/plan`)) {
     return json({ plan: currentPlan, version: 1, status: "approved" });
   }
-  if (method === "PATCH" && path.endsWith(`/api/v1/projects/${MOCK_PROJECT_ID}/plan`)) {
+  if (method === "PATCH" && path.endsWith(`/api/v1/tasks/${MOCK_TASK_ID}/plan`)) {
     const body = await requestBody(request, init);
     if (isRecord(body)) {
       if (typeof body.question === "string") currentPlan = { ...currentPlan, question: body.question };
@@ -294,27 +354,27 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
     return json({ plan: currentPlan, version: 2, status: "approved" });
   }
 
-  if (method === "GET" && path.endsWith(`/api/v1/projects/${MOCK_PROJECT_ID}/groups`)) {
+  if (method === "GET" && path.endsWith(`/api/v1/tasks/${MOCK_TASK_ID}/groups`)) {
     return json(mockGroups);
   }
 
   // --- Runs: gate the event stream behind an actual start (the plan pane's
   // "Start the analysis" CTA), rather than a run appearing pre-started. ----
-  if (method === "POST" && path.endsWith(`/api/v1/projects/${MOCK_PROJECT_ID}/runs`)) {
+  if (method === "POST" && path.endsWith(`/api/v1/tasks/${MOCK_TASK_ID}/runs`)) {
     if (currentRun !== null && (currentRun.status === "running" || currentRun.status === "paused")) {
       return json({ error: { code: "run_active", message: "An analysis is already running." } }, 409);
     }
     const now = new Date().toISOString();
     currentRun = {
       capability_run_id: MOCK_RUN_ID,
-      project_id: MOCK_PROJECT_ID,
+      task_id: MOCK_TASK_ID,
       plan_id: MOCK_PLAN_ID,
       plan_version: 1,
       status: "running",
       started_at: now,
       ended_at: null,
     };
-    mockProject.latest_run = {
+    mockTask.latest_run = {
       capability_run_id: currentRun.capability_run_id,
       status: currentRun.status,
       started_at: currentRun.started_at,
@@ -323,22 +383,58 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
     runStarted.resolve();
     return json(currentRun, 201);
   }
-  if (method === "GET" && path.endsWith(`/api/v1/projects/${MOCK_PROJECT_ID}/runs`)) {
+  if (method === "GET" && path.endsWith(`/api/v1/tasks/${MOCK_TASK_ID}/runs`)) {
     return json(page(currentRun ? [currentRun] : []));
   }
 
-  if (method === "GET" && path.endsWith(`/api/v1/projects/${MOCK_PROJECT_ID}/check-ins`)) {
+  if (method === "GET" && path.endsWith(`/api/v1/tasks/${MOCK_TASK_ID}/check-ins`)) {
     const status = url.searchParams.get("status");
     const rows = status === "pending" && checkInAnswered ? [] : [mockCheckIn];
     return json(page(rows));
   }
 
-  if (method === "GET" && path.endsWith("/api/v1/portfolios")) return json(page(mockPortfolios));
-  if (method === "GET" && path.endsWith("/api/v1/projects")) return json(page([mockProject]));
-  if (method === "GET" && path.endsWith(`/api/v1/projects/${MOCK_PROJECT_ID}`)) return json(mockProject);
-  if (method === "GET" && path.endsWith(`/api/v1/projects/${MOCK_PROJECT_ID}/funnel`)) return json(mockFunnel);
-  if (method === "GET" && path.endsWith(`/api/v1/projects/${MOCK_PROJECT_ID}/landscape`)) return json(mockLandscape);
-  if (method === "GET" && path.endsWith(`/api/v1/projects/${MOCK_PROJECT_ID}/evidence`)) {
+  // --- Identity + projects (task 033 phase 10a) -------------------------
+  if (method === "GET" && path.endsWith("/api/v1/me")) return json(currentMe);
+  if (method === "GET" && path.endsWith("/api/v1/projects")) return json(page(mockProjects));
+  const projectDetailMatch = /\/api\/v1\/projects\/([^/]+)$/.exec(path);
+  if (method === "GET" && projectDetailMatch) {
+    const found = mockProjects.find((project) => project.project_id === projectDetailMatch[1]);
+    return found !== undefined ? json(found) : json({ detail: "resource not found" }, 404);
+  }
+  // Task 033 phase 10b: the visibility control's cascade (i.4) — the mock's
+  // one task is the project's only member, so "every member follows"
+  // is a single assignment, but the shape (mutate both rows, return the
+  // updated `task_count`) matches what the visibility-outcome copy reads.
+  if (method === "PATCH" && projectDetailMatch) {
+    const found = mockProjects.find((project) => project.project_id === projectDetailMatch[1]);
+    if (found === undefined) return json({ detail: "resource not found" }, 404);
+    const body = await requestBody(request, init);
+    if (isRecord(body) && typeof body.name === "string") found.name = body.name;
+    if (isRecord(body) && typeof body.description === "string") found.description = body.description;
+    if (isRecord(body) && (body.visibility === "org" || body.visibility === "private")) {
+      found.visibility = body.visibility;
+      if (mockTask.project_ids?.includes(found.project_id) === true) {
+        mockTask.visibility = body.visibility;
+      }
+    }
+    return json(found);
+  }
+
+  // `project_id` narrows to one project's members, server-side — mirrors
+  // the real list's filter (contract task 033 phase 10a: `ProjectDetailView`
+  // no longer filters the global page client-side).
+  if (method === "GET" && path.endsWith("/api/v1/tasks")) {
+    const projectId = url.searchParams.get("project_id");
+    const rows =
+      projectId === null || mockTask.project_ids?.includes(projectId) === true
+        ? [mockTask]
+        : [];
+    return json(page(rows));
+  }
+  if (method === "GET" && path.endsWith(`/api/v1/tasks/${MOCK_TASK_ID}`)) return json(mockTask);
+  if (method === "GET" && path.endsWith(`/api/v1/tasks/${MOCK_TASK_ID}/funnel`)) return json(mockFunnel);
+  if (method === "GET" && path.endsWith(`/api/v1/tasks/${MOCK_TASK_ID}/landscape`)) return json(mockLandscape);
+  if (method === "GET" && path.endsWith(`/api/v1/tasks/${MOCK_TASK_ID}/evidence`)) {
     const statuses = url.searchParams.getAll("status");
     const cited = url.searchParams.get("cited");
     const theme = url.searchParams.get("theme");
@@ -374,12 +470,12 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
     }
     return json(page(rows));
   }
-  if (method === "GET" && path.includes(`/api/v1/projects/${MOCK_PROJECT_ID}/sources/`)) {
+  if (method === "GET" && path.includes(`/api/v1/tasks/${MOCK_TASK_ID}/sources/`)) {
     const sourceId = path.split("/").at(-1) ?? "";
     const source = mockSourceDossiers[sourceId];
     return source ? json(source) : json({ detail: "resource not found" }, 404);
   }
-  if (method === "GET" && path.includes(`/api/v1/projects/${MOCK_PROJECT_ID}/chunks/`) && path.endsWith("/context")) {
+  if (method === "GET" && path.includes(`/api/v1/tasks/${MOCK_TASK_ID}/chunks/`) && path.endsWith("/context")) {
     // Chat citations carry a durable chunk id (never the artefact citation
     // table's id) — its own read path, sharing the same clamped-context
     // fixture text as the artefact citation above since both cite the same
@@ -394,9 +490,10 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
       span_end: context.length,
       year: 2022,
       venue: "BMJ Open",
+      authorships: mockAuthorships,
     });
   }
-  if (method === "GET" && path.includes(`/api/v1/projects/${MOCK_PROJECT_ID}/citations/`) && path.endsWith("/context")) {
+  if (method === "GET" && path.includes(`/api/v1/tasks/${MOCK_TASK_ID}/citations/`) && path.endsWith("/context")) {
     // One clamped chunk-context fixture (strand 5): its text literally
     // contains the citation quote used in `mockArtefact`, so the exact-match
     // highlight rung renders rather than the honest degrade.
@@ -410,9 +507,10 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
       span_end: context.length,
       year: 2022,
       venue: "BMJ Open",
+      authorships: mockAuthorships,
     });
   }
-  if (method === "GET" && path.endsWith(`/api/v1/projects/${MOCK_PROJECT_ID}/findings`)) {
+  if (method === "GET" && path.endsWith(`/api/v1/tasks/${MOCK_TASK_ID}/findings`)) {
     const sourceId = url.searchParams.get("source_id");
     const profile = url.searchParams.get("profile");
     const facet = url.searchParams.get("facet");
@@ -425,12 +523,12 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
     });
     return json(page(rows));
   }
-  if (method === "GET" && path.endsWith(`/api/v1/projects/${MOCK_PROJECT_ID}/decisions`)) return json(page(mockDecisions));
-  if (method === "GET" && path.endsWith(`/api/v1/projects/${MOCK_PROJECT_ID}/artefact`)) return json(mockArtefact);
-  if (method === "GET" && path.endsWith(`/api/v1/projects/${MOCK_PROJECT_ID}/coverage`)) return json(mockCoverage);
+  if (method === "GET" && path.endsWith(`/api/v1/tasks/${MOCK_TASK_ID}/decisions`)) return json(page(mockDecisions));
+  if (method === "GET" && path.endsWith(`/api/v1/tasks/${MOCK_TASK_ID}/artefact`)) return json(mockArtefact);
+  if (method === "GET" && path.endsWith(`/api/v1/tasks/${MOCK_TASK_ID}/coverage`)) return json(mockCoverage);
 
   // --- Conversations + chat turns (task 029 phase G3 mock) ---------------
-  if (method === "GET" && path.endsWith(`/api/v1/projects/${MOCK_PROJECT_ID}/conversations`)) {
+  if (method === "GET" && path.endsWith(`/api/v1/tasks/${MOCK_TASK_ID}/conversations`)) {
     const kind = url.searchParams.get("kind");
     const status = url.searchParams.get("status");
     const rows = chatConversations
@@ -439,13 +537,13 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
       .sort((a, b) => b.created_at.localeCompare(a.created_at));
     return json(page(rows));
   }
-  if (method === "POST" && path.endsWith(`/api/v1/projects/${MOCK_PROJECT_ID}/conversations`)) {
+  if (method === "POST" && path.endsWith(`/api/v1/tasks/${MOCK_TASK_ID}/conversations`)) {
     const body = await requestBody(request, init);
     const entryArtefactId = isRecord(body) && typeof body.entry_artefact_id === "string" ? body.entry_artefact_id : null;
     const now = new Date().toISOString();
     const conversation: ConversationOut = {
       id: crypto.randomUUID(),
-      project_id: MOCK_PROJECT_ID,
+      task_id: MOCK_TASK_ID,
       kind: "chat",
       title: "New chat",
       status: "active",
@@ -533,7 +631,7 @@ function conversationListItem(conversation: ConversationOut): ConversationListIt
         : null;
   return {
     id: conversation.id,
-    project_id: conversation.project_id,
+    task_id: conversation.task_id,
     kind: conversation.kind,
     title: conversation.title,
     status: conversation.status,
@@ -678,7 +776,7 @@ function createMockEventStream(scenario: MockScenario): ReadableStream<Uint8Arra
       emit(stageCompleted("appraise", "Appraising quality", { quality_checked: 31 }, nextSequence()));
       emit(stageStarted("characterise", "Characterising findings", "Extracting implementation conditions", nextSequence()));
       emit(stageCompleted("characterise", "Characterising findings", { findings: 34 }, nextSequence()));
-      emit(stageStarted("synthesise", "Synthesising the evidence", "Preparing a decision-ready evidence base", nextSequence()));
+      emit(stageStarted("synthesise", "Writing the report", "Preparing a decision-ready evidence base", nextSequence()));
       // The run genuinely parks at this boundary (028 pause salience: paused
       // must read distinct from executing on every tab) — an explicit
       // `run.status` frame, not just the pending check-in itself.
@@ -732,7 +830,7 @@ function createMockEventStream(scenario: MockScenario): ReadableStream<Uint8Arra
           occurred_at: FRAME_TIME,
           sequence: nextSequence(),
         });
-        emit(stageFailed("synthesise", "Synthesising the evidence", "The write-up run hit an unrecoverable error.", nextSequence()));
+        emit(stageFailed("synthesise", "Writing the report", "The write-up run hit an unrecoverable error.", nextSequence()));
         finishRun("failed");
         emit(runStatus("failed", nextSequence()));
         controller.close();
@@ -747,7 +845,7 @@ function createMockEventStream(scenario: MockScenario): ReadableStream<Uint8Arra
         occurred_at: FRAME_TIME,
         sequence: nextSequence(),
       });
-      emit(stageCompleted("synthesise", "Synthesising the evidence", { cited: 12, sections: 2 }, nextSequence()));
+      emit(stageCompleted("synthesise", "Writing the report", { cited: 12, sections: 2 }, nextSequence()));
       finishRun("succeeded");
       emit(runStatus("succeeded", nextSequence()));
       controller.close();
@@ -755,14 +853,14 @@ function createMockEventStream(scenario: MockScenario): ReadableStream<Uint8Arra
   });
 }
 
-/** Keep the REST-visible run/project state in step with the stream's
+/** Keep the REST-visible run/task state in step with the stream's
  *  terminal frame, so the landing card and nav badge stop claiming
  *  "Analysing…" once the scripted run has actually finished. */
 function finishRun(status: "succeeded" | "failed") {
   if (currentRun === null) return;
   const endedAt = new Date().toISOString();
   currentRun = { ...currentRun, status, ended_at: endedAt };
-  mockProject.latest_run = {
+  mockTask.latest_run = {
     capability_run_id: currentRun.capability_run_id,
     status: currentRun.status,
     started_at: currentRun.started_at,

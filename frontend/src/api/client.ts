@@ -21,18 +21,6 @@ export function apiBaseUrl(): string {
 }
 
 /**
- * Build a typed `openapi-fetch` client bound to the generated `paths`.
- *
- * @param baseUrl - API base URL. Defaults to `VITE_API_BASE_URL`, falling
- *   back to same-origin ("") in its absence.
- * @returns An `openapi-fetch` client whose request/response shapes are
- *   inferred from the generated OpenAPI types — one schema drives both ends.
- */
-export function createApiClient(baseUrl: string = apiBaseUrl()) {
-  return createClient<paths>({ baseUrl });
-}
-
-/**
  * Build a typed `openapi-fetch` client with the auth middleware wired in —
  * every request carries `Authorization: Bearer <token>` from `auth`, and a
  * 401 triggers exactly one silent-refresh-then-retry before surfacing.

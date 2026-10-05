@@ -24,12 +24,12 @@ from sqlalchemy.exc import IntegrityError
 
 from policy_atlas.core.schema import (
     intervention_outcome_finding,
-    project_source_snapshot,
     source_extraction_record,
     source_snapshot,
 )
 from tests.conftest import _alembic_cfg
-from tests.helpers import delete_project_data, now, seed_project_and_run
+from tests.core.legacy_catalog import legacy_table, seed_legacy_task_and_run
+from tests.helpers import delete_task_data, now
 
 # The revision below 0f4e2d8c9b1a (the task-020 v2 columns) — the pre-migration
 # state this test exercises.
@@ -37,7 +37,7 @@ PRE_MIGRATION_REVISION = "b7f3d9a2c5e1"
 
 
 def _seed_v1_finding(
-    connection: Connection, *, project_id: uuid.UUID, run_id: uuid.UUID
+    connection: Connection, *, task_id: uuid.UUID, run_id: uuid.UUID
 ) -> tuple[uuid.UUID, uuid.UUID]:
     """Seed the FK chain (abstract-basis doc -> extraction record -> finding).
 
@@ -46,12 +46,25 @@ def _seed_v1_finding(
     ``.values()``, so the generated INSERT never references them and this
     seed works identically pre- and post-migration.
 
-    Returns (extraction_record_id, finding_id).
+    Runs only BELOW revision c1a7f4e9b0d2, where the catalog still says
+    ``project_id`` / ``project_source_snapshot`` — so the three renamed tables
+    are reflected rather than taken from ``core.schema`` (plan D9).
+
+    Args:
+        connection: Open connection on the pre-migration revision.
+        task_id: Task the chain hangs off (stored in ``project_id`` there).
+        run_id: Run that produced the extraction record.
+
+    Returns:
+        ``(extraction_record_id, finding_id)``.
     """
     envelope_snap = uuid.uuid4()
-    pss_id = uuid.uuid4()
+    tss_id = uuid.uuid4()
     extraction_record_id = uuid.uuid4()
     finding_id = uuid.uuid4()
+    snapshots = legacy_table(connection, "project_source_snapshot")
+    records = legacy_table(connection, "source_extraction_record")
+    findings = legacy_table(connection, "intervention_outcome_finding")
 
     connection.execute(
         source_snapshot.insert().values(
@@ -64,9 +77,9 @@ def _seed_v1_finding(
         )
     )
     connection.execute(
-        project_source_snapshot.insert().values(
-            project_source_snapshot_id=pss_id,
-            project_id=project_id,
+        snapshots.insert().values(
+            project_source_snapshot_id=tss_id,
+            project_id=task_id,
             source_snapshot_id=envelope_snap,
             origin="acquired",
             run_id=None,
@@ -74,11 +87,11 @@ def _seed_v1_finding(
         )
     )
     connection.execute(
-        source_extraction_record.insert().values(
+        records.insert().values(
             extraction_record_id=extraction_record_id,
-            project_id=project_id,
+            project_id=task_id,
             source_snapshot_id=envelope_snap,
-            project_source_snapshot_id=pss_id,
+            project_source_snapshot_id=tss_id,
             extraction_fingerprint="fp-v2-migration-test",
             status="extracted",
             basis="abstract_only",
@@ -89,9 +102,9 @@ def _seed_v1_finding(
         )
     )
     connection.execute(
-        intervention_outcome_finding.insert().values(
+        findings.insert().values(
             finding_id=finding_id,
-            project_id=project_id,
+            project_id=task_id,
             extraction_record_id=extraction_record_id,
             intervention="Coaching",
             outcome="Test scores",
@@ -130,9 +143,9 @@ def test_extract_schema_v2_migration_roundtrip(engine: Engine) -> None:
 
     connection = engine.connect()
     trans = connection.begin()
-    project_id, run_id = seed_project_and_run(connection)
+    task_id, run_id = seed_legacy_task_and_run(connection)
     extraction_record_id, finding_id = _seed_v1_finding(
-        connection, project_id=project_id, run_id=run_id
+        connection, task_id=task_id, run_id=run_id
     )
     trans.commit()
     connection.close()
@@ -256,7 +269,7 @@ def test_extract_schema_v2_migration_roundtrip(engine: Engine) -> None:
         connection = engine.connect()
         trans = connection.begin()
         try:
-            delete_project_data(connection, project_id)
+            delete_task_data(connection, task_id)
             trans.commit()
         finally:
             connection.close()

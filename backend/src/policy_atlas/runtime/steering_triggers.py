@@ -4,8 +4,8 @@ Pure read functions over persisted state only — SELECTs on result tables and
 ``event_log`` payloads. No LLM, no recomputation of anything a component
 already computed: every number here was written by the component's own run,
 read back verbatim or aggregated by a plain ``COUNT``/``GROUP BY``. This is
-the floor the orchestrator watch can never suppress (steerability-refinement
-§ "The orchestrator watch", discipline 1): the watch may add escalations, it
+the floor the agent watch can never suppress (steerability-refinement
+§ "The agent watch", discipline 1): the watch may add escalations, it
 may never remove one of these.
 
 Each public trigger function returns the ``steer_point_triggers`` shape —
@@ -38,7 +38,7 @@ from policy_atlas.core.schema import (
     source_appraisal_result,
     source_classification_result,
 )
-from policy_atlas.evidence_base.assess.screen import effective_screen_rows
+from policy_atlas.evidence_search.assess.screen import effective_screen_rows
 from policy_atlas.runtime.steering import steer_point_triggers
 
 __all__ = [
@@ -123,7 +123,7 @@ _DOWNSTREAM_EVENT_TYPES = ("component.skipped", "component.failed")
 
 
 def p1_coverage_triggers(
-    conn: Connection, *, project_id: uuid.UUID, acquire_run_id: uuid.UUID
+    conn: Connection, *, task_id: uuid.UUID, acquire_run_id: uuid.UUID
 ) -> list[dict[str, Any]]:
     """Fired coverage triggers from the acquire run's `search_coverage_record`.
 
@@ -134,7 +134,7 @@ def p1_coverage_triggers(
 
     Args:
         conn: Open read connection.
-        project_id: Owning project.
+        task_id: Owning task.
         acquire_run_id: The acquire run whose coverage record to read.
 
     Returns:
@@ -145,7 +145,7 @@ def p1_coverage_triggers(
             search_coverage_record.c.adequacy_verdict,
             search_coverage_record.c.stop_condition,
         )
-        .where(search_coverage_record.c.project_id == project_id)
+        .where(search_coverage_record.c.task_id == task_id)
         .where(search_coverage_record.c.acquired_by_run_id == acquire_run_id)
     ).first()
     if row is None:
@@ -172,7 +172,7 @@ def p1_coverage_triggers(
 
 
 def screened_relevant_floor_trigger(
-    conn: Connection, *, project_id: uuid.UUID, evidence_scope_id: uuid.UUID
+    conn: Connection, *, task_id: uuid.UUID, evidence_scope_id: uuid.UUID
 ) -> list[dict[str, Any]]:
     """Fire when the scope's effective screened-relevant count is below the floor.
 
@@ -182,7 +182,7 @@ def screened_relevant_floor_trigger(
 
     Args:
         conn: Open read connection.
-        project_id: Owning project.
+        task_id: Owning task.
         evidence_scope_id: The scope to count relevant rows for.
 
     Returns:
@@ -192,7 +192,7 @@ def screened_relevant_floor_trigger(
     count = conn.execute(
         sa_select(func.count())
         .select_from(effective)
-        .where(effective.c.project_id == project_id)
+        .where(effective.c.task_id == task_id)
         .where(effective.c.evidence_scope_id == evidence_scope_id)
         .where(effective.c.status == "relevant")
     ).scalar_one()
@@ -210,7 +210,7 @@ def screened_relevant_floor_trigger(
 
 
 def classification_collapse_trigger(
-    conn: Connection, *, project_id: uuid.UUID, evidence_scope_id: uuid.UUID
+    conn: Connection, *, task_id: uuid.UUID, evidence_scope_id: uuid.UUID
 ) -> list[dict[str, Any]]:
     """Fire on document-type-mix collapse or an Unknown-share breach.
 
@@ -222,7 +222,7 @@ def classification_collapse_trigger(
 
     Args:
         conn: Open read connection.
-        project_id: Owning project.
+        task_id: Owning task.
         evidence_scope_id: The scope to aggregate classified rows for.
 
     Returns:
@@ -236,7 +236,7 @@ def classification_collapse_trigger(
             source_classification_result.c.primary_evidence_type,
             func.count().label("n"),
         )
-        .where(source_classification_result.c.project_id == project_id)
+        .where(source_classification_result.c.task_id == task_id)
         .where(source_classification_result.c.evidence_scope_id == evidence_scope_id)
         .group_by(source_classification_result.c.primary_evidence_type)
     ).all()
@@ -277,7 +277,7 @@ def classification_collapse_trigger(
 
 
 def appraisal_collapse_trigger(
-    conn: Connection, *, project_id: uuid.UUID, evidence_scope_id: uuid.UUID
+    conn: Connection, *, task_id: uuid.UUID, evidence_scope_id: uuid.UUID
 ) -> list[dict[str, Any]]:
     """Fire when weak scores (<= QUALITY_COLLAPSE_SCORE_MAX) dominate appraisal.
 
@@ -287,7 +287,7 @@ def appraisal_collapse_trigger(
 
     Args:
         conn: Open read connection.
-        project_id: Owning project.
+        task_id: Owning task.
         evidence_scope_id: The scope to aggregate appraised rows for.
 
     Returns:
@@ -296,7 +296,7 @@ def appraisal_collapse_trigger(
     """
     rows = conn.execute(
         sa_select(source_appraisal_result.c.quality_score, func.count().label("n"))
-        .where(source_appraisal_result.c.project_id == project_id)
+        .where(source_appraisal_result.c.task_id == task_id)
         .where(source_appraisal_result.c.evidence_scope_id == evidence_scope_id)
         .group_by(source_appraisal_result.c.quality_score)
     ).all()
@@ -323,7 +323,7 @@ def appraisal_collapse_trigger(
 
 
 def grouping_flag_triggers(
-    conn: Connection, *, project_id: uuid.UUID, group_run_id: uuid.UUID
+    conn: Connection, *, task_id: uuid.UUID, group_run_id: uuid.UUID
 ) -> list[dict[str, Any]]:
     """Fire on any per-facet flag `grouping_result.flags` already persists.
 
@@ -334,7 +334,7 @@ def grouping_flag_triggers(
 
     Args:
         conn: Open read connection.
-        project_id: Owning project.
+        task_id: Owning task.
         group_run_id: The group run whose `grouping_result` row to read.
 
     Returns:
@@ -344,7 +344,7 @@ def grouping_flag_triggers(
     """
     row = conn.execute(
         sa_select(grouping_result.c.flags)
-        .where(grouping_result.c.project_id == project_id)
+        .where(grouping_result.c.task_id == task_id)
         .where(grouping_result.c.run_id == group_run_id)
     ).first()
     if row is None:
@@ -369,7 +369,7 @@ def grouping_flag_triggers(
 
 
 def screen_quality_collapse_trigger(
-    conn: Connection, *, project_id: uuid.UUID, run_id: uuid.UUID
+    conn: Connection, *, task_id: uuid.UUID, run_id: uuid.UUID
 ) -> list[dict[str, Any]]:
     """Fire on quorum-failure spikes or a stage-2 demote spike.
 
@@ -384,7 +384,7 @@ def screen_quality_collapse_trigger(
 
     Args:
         conn: Open read connection.
-        project_id: Owning project.
+        task_id: Owning task.
         run_id: The screen run whose `component.completed` payload to read.
 
     Returns:
@@ -393,7 +393,7 @@ def screen_quality_collapse_trigger(
     """
     row = conn.execute(
         sa_select(event_log.c.payload)
-        .where(event_log.c.project_id == project_id)
+        .where(event_log.c.task_id == task_id)
         .where(event_log.c.run_id == run_id)
         .where(event_log.c.event_type == "component.completed")
         .order_by(event_log.c.sequence.desc())
@@ -450,7 +450,7 @@ def screen_quality_collapse_trigger(
 
 
 def extraction_spike_triggers(
-    conn: Connection, *, project_id: uuid.UUID, extract_run_id: uuid.UUID
+    conn: Connection, *, task_id: uuid.UUID, extract_run_id: uuid.UUID
 ) -> list[dict[str, Any]]:
     """Fire on a per-profile extraction-failure or vetting-failed spike.
 
@@ -461,7 +461,7 @@ def extraction_spike_triggers(
 
     Args:
         conn: Open read connection.
-        project_id: Owning project.
+        task_id: Owning task.
         extract_run_id: The extract run whose `extraction_result` row to read.
 
     Returns:
@@ -470,7 +470,7 @@ def extraction_spike_triggers(
     """
     row = conn.execute(
         sa_select(extraction_result.c.counts)
-        .where(extraction_result.c.project_id == project_id)
+        .where(extraction_result.c.task_id == task_id)
         .where(extraction_result.c.run_id == extract_run_id)
     ).first()
     if row is None:
@@ -519,7 +519,7 @@ def extraction_spike_triggers(
 
 
 def downstream_capability_reduced_triggers(
-    conn: Connection, *, project_id: uuid.UUID, run_ids: Iterable[uuid.UUID]
+    conn: Connection, *, task_id: uuid.UUID, run_ids: Iterable[uuid.UUID]
 ) -> list[dict[str, Any]]:
     """Fire once per `component.skipped`/`component.failed` event in the walk.
 
@@ -532,7 +532,7 @@ def downstream_capability_reduced_triggers(
 
     Args:
         conn: Open read connection.
-        project_id: Owning project.
+        task_id: Owning task.
         run_ids: The walk's attempted run ids to scan.
 
     Returns:
@@ -545,7 +545,7 @@ def downstream_capability_reduced_triggers(
         return []
     rows = conn.execute(
         sa_select(event_log.c.event_type, event_log.c.payload)
-        .where(event_log.c.project_id == project_id)
+        .where(event_log.c.task_id == task_id)
         .where(event_log.c.run_id.in_(ids))
         .where(event_log.c.event_type.in_(_DOWNSTREAM_EVENT_TYPES))
         .order_by(event_log.c.sequence)
@@ -590,7 +590,7 @@ FLOOR_BOUNDARY_FOR_COMPONENT: dict[str, FloorBoundary] = {
 def floor_triggers(
     conn: Connection,
     *,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     boundary_component: FloorBoundary,
     evidence_scope_id: uuid.UUID,
     run_ids: dict[str, uuid.UUID],
@@ -609,7 +609,7 @@ def floor_triggers(
 
     Args:
         conn: Open read connection.
-        project_id: Owning project.
+        task_id: Owning task.
         boundary_component: Which boundary the caller is at.
         evidence_scope_id: The scope (for the scope-wide readers: pre-select,
             after-classify, after-appraise).
@@ -628,42 +628,42 @@ def floor_triggers(
     triggers: list[dict[str, Any]] = []
     if boundary_component == "after_acquire":
         triggers += p1_coverage_triggers(
-            conn, project_id=project_id, acquire_run_id=run_ids["acquire"]
+            conn, task_id=task_id, acquire_run_id=run_ids["acquire"]
         )
     elif boundary_component == "pre_select":
         triggers += screened_relevant_floor_trigger(
-            conn, project_id=project_id, evidence_scope_id=evidence_scope_id
+            conn, task_id=task_id, evidence_scope_id=evidence_scope_id
         )
         triggers += classification_collapse_trigger(
-            conn, project_id=project_id, evidence_scope_id=evidence_scope_id
+            conn, task_id=task_id, evidence_scope_id=evidence_scope_id
         )
         triggers += appraisal_collapse_trigger(
-            conn, project_id=project_id, evidence_scope_id=evidence_scope_id
+            conn, task_id=task_id, evidence_scope_id=evidence_scope_id
         )
     elif boundary_component == "after_screen":
         triggers += screen_quality_collapse_trigger(
-            conn, project_id=project_id, run_id=run_ids["screen"]
+            conn, task_id=task_id, run_id=run_ids["screen"]
         )
     elif boundary_component == "after_classify":
         triggers += classification_collapse_trigger(
-            conn, project_id=project_id, evidence_scope_id=evidence_scope_id
+            conn, task_id=task_id, evidence_scope_id=evidence_scope_id
         )
     elif boundary_component == "after_appraise":
         triggers += appraisal_collapse_trigger(
-            conn, project_id=project_id, evidence_scope_id=evidence_scope_id
+            conn, task_id=task_id, evidence_scope_id=evidence_scope_id
         )
     elif boundary_component == "after_group":
         triggers += grouping_flag_triggers(
-            conn, project_id=project_id, group_run_id=run_ids["group"]
+            conn, task_id=task_id, group_run_id=run_ids["group"]
         )
     elif boundary_component == "after_extract":
         triggers += extraction_spike_triggers(
-            conn, project_id=project_id, extract_run_id=run_ids["extract"]
+            conn, task_id=task_id, extract_run_id=run_ids["extract"]
         )
     else:
         raise ValueError(f"unknown floor boundary_component: {boundary_component!r}")
 
     triggers += downstream_capability_reduced_triggers(
-        conn, project_id=project_id, run_ids=run_ids.values()
+        conn, task_id=task_id, run_ids=run_ids.values()
     )
     return triggers

@@ -1,0 +1,105 @@
+Unused files (1)
+playwright.fe-api-smoke.config.ts
+Unused exports (52)
+createApiClient                              function  src/api/client.ts:31:17                          
+App                                          function  src/App.tsx:69:17                                
+seedComposer                                 function  src/lib/composerSeed.ts:18:17                    
+MOCK_ORGANISATION_ID                                   src/mock/fixtures.ts:10:14                       
+MOCK_PLANNING_TURN_IDS                                 src/mock/fixtures.ts:428:14                      
+MOCK_CHECK_IN_ID                                       src/mock/index.ts:2:10                           
+MOCK_RUN_ID                                            src/mock/index.ts:2:42                           
+ChatStreamInterruptedError                   class     src/store/conversations.ts:184:14                
+reduceRunStreamFrame                  store            src/store/index.ts:1:42                          
+initialOptimisticTranscriptState      store            src/store/index.ts:3:3                           
+reduceOptimisticTranscript            store            src/store/index.ts:4:3                           
+retryInputForOptimisticTurn           store            src/store/index.ts:5:3                           
+transcriptRows                        store            src/store/index.ts:6:3                           
+chatTranscriptRows                    store            src/store/index.ts:11:3                          
+consumeChatStream                     store            src/store/index.ts:12:3                          
+initialOptimisticChatTranscriptState  store            src/store/index.ts:13:3                          
+reduceOptimisticChatTranscript        store            src/store/index.ts:14:3                          
+retryInputForOptimisticChatTurn       store            src/store/index.ts:15:3                          
+RUN_STREAM_INVALIDATE_DEBOUNCE_MS     store            src/store/index.ts:21:3                          
+GLOBAL_LIVENESS_KEY                   store            src/store/index.ts:26:3                          
+H                                                      src/ui/brand/foldMark.ts:17:14                   
+MID                                                    src/ui/brand/foldMark.ts:19:14                   
+CORNERS                                                src/ui/brand/foldMark.ts:26:14                   
+OUTER                                                  src/ui/brand/foldMark.ts:28:14                   
+ALL                                                    src/ui/brand/foldMark.ts:35:14                   
+SAND                                                   src/ui/brand/foldMark.ts:49:14                   
+TEAL                                                   src/ui/brand/foldMark.ts:50:14                   
+SALMON                                                 src/ui/brand/foldMark.ts:51:14                   
+PINK                                                   src/ui/brand/foldMark.ts:52:14                   
+NAV_BAR_HEIGHT_PX                                      src/ui/brand/Nav.tsx:15:14                       
+errorCode                                              src/ui/feedback/index.ts:1:10                    
+fieldErrorsFromEnvelope                                src/ui/feedback/index.ts:1:21                    
+conflictSentences                                      src/ui/feedback/index.ts:1:46                    
+isConflictCode                                         src/ui/feedback/index.ts:1:65                    
+ErrorBoundary                                          src/ui/feedback/index.ts:3:10                    
+PopoverAnchor                                          src/ui/radix/Popover.tsx:13:14                   
+SheetClose                                             src/ui/radix/Sheet.tsx:14:14                     
+DECISION_DETAIL_LABELS                                 src/views/decisionsPresentation.ts:7:14          
+statRows                                     function  src/views/FindingsView.tsx:37:17                 
+STALE_AFTER_MONTHS                                     src/views/landingPresentation.ts:11:14           
+PAGE_COLUMN_MAX_W                                      src/views/listPageChrome.ts:2:14                 
+humanReason                                  function  src/views/sourcesPresentation.ts:102:17          
+SPLASH_FEATURES                                        src/views/splash/SplashFeatureSteps.tsx:5:14     
+BACKEND_LABELS                                         src/views/workspace/checkInPresentation.ts:7:14  
+CHECK_IN_COUNT_LABELS                                  src/views/workspace/checkInPresentation.ts:44:14 
+TRIGGER_COPY                                           src/views/workspace/checkInPresentation.ts:104:14
+FUNNEL_STAGES                                          src/views/workspace/journey/presentation.ts:19:14
+yearFromIso                                  function  src/views/workspace/planOverlay.ts:29:17         
+geographyFromConstraints                     function  src/views/workspace/planOverlay.ts:35:17         
+RESEARCH_APPROACH_PRESETS                              src/views/workspace/planVocabulary.ts:68:14      
+TIME_BANDS                                             src/views/workspace/planVocabulary.ts:119:14     
+currentStepLabel                             function  src/views/workspace/runProgress.ts:222:17        
+Unused exported types (47)
+webhooks                                 type       src/api/gen/types.ts:974:13                     
+$defs                                    type       src/api/gen/types.ts:3742:13                    
+TasksQuery                      queries  interface  src/api/queries.ts:61:18                        
+ProjectsQuery                   queries  interface  src/api/queries.ts:70:18                        
+FindingsQuery                   queries  interface  src/api/queries.ts:111:18                       
+ConversationQuery               queries  interface  src/api/queries.ts:120:18                       
+ConnectEventStreamOptions                interface  src/api/sse.ts:12:18                            
+EventStreamConnection                    interface  src/api/sse.ts:50:18                            
+AuthUser                                 type       src/auth/index.ts:3:36                          
+CapabilityKey                            type       src/lib/capabilities.ts:30:13                   
+ConflictCode                             type       src/lib/errors.ts:6:13                          
+OptimisticChatTranscriptState   store    interface  src/store/conversations.ts:26:18                
+OptimisticChatTranscriptAction  store    type       src/store/conversations.ts:30:13                
+ChatStreamEvent                 store    type       src/store/conversations.ts:163:13               
+CheckInOut                      store    type       src/store/index.ts:29:3                         
+PlanState                       store    type       src/store/index.ts:32:3                         
+TaskSummary                     store    type       src/store/index.ts:33:3                         
+RunRef                          store    type       src/store/index.ts:35:3                         
+StageLiveness                   store    type       src/store/index.ts:39:3                         
+StageName                       store    type       src/store/index.ts:40:3                         
+OptimisticTranscriptAction      store    type       src/store/index.ts:45:3                         
+OptimisticTranscriptState       store    type       src/store/index.ts:46:3                         
+PlanningTranscriptTurn          store    type       src/store/index.ts:47:3                         
+ChatStreamEvent                 store    type       src/store/index.ts:51:3                         
+OptimisticChatTranscriptAction  store    type       src/store/index.ts:53:3                         
+OptimisticChatTranscriptState   store    type       src/store/index.ts:54:3                         
+SessionAnsweredCheckIn                   interface  src/store/thread.ts:7:18                        
+OptimisticTranscriptState       store    interface  src/store/transcript.ts:22:18                   
+OptimisticTranscriptAction      store    type       src/store/transcript.ts:26:13                   
+ButtonProps                              type       src/ui/brand/Button.tsx:44:13                   
+Corner                                   type       src/ui/brand/foldMark.ts:8:13                   
+Point                                    type       src/ui/brand/foldMark.ts:9:13                   
+FoldFrame                                type       src/ui/brand/foldMark.ts:55:13                  
+SplashPathsResult                        interface  src/ui/brand/foldMark.ts:271:18                 
+LifecycleBarItem                         type       src/ui/brand/LifecycleBar.tsx:6:13              
+ConflictCode                             type       src/ui/feedback/index.ts:2:15                   
+FieldErrorMap                            type       src/ui/feedback/index.ts:2:29                   
+SpanSegment                              type       src/views/ArtefactView.tsx:783:13               
+FriendlyDetail                           type       src/views/decisionsPresentation.ts:33:13        
+PresentedDecision                        type       src/views/decisionsPresentation.ts:46:13        
+HistoryRow                               type       src/views/historyPresentation.ts:5:13           
+RunPresentation                          type       src/views/landingPresentation.ts:13:13          
+TaskListItem                             type       src/views/TaskListPanel.tsx:15:13               
+PresentedCheckInRender                   interface  src/views/workspace/checkInPresentation.ts:67:18
+RailState                                interface  src/views/workspace/rail.tsx:13:18              
+RunningCardTone                          type       src/views/workspace/runProgress.ts:6:13         
+StageSignpost                            type       src/views/workspace/runProgress.ts:19:13        
+Duplicate exports (1)
+App|default  src/App.tsx

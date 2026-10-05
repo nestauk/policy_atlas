@@ -29,11 +29,11 @@ export const SOURCE_SORT_COLUMNS: ReadonlyArray<{
 
 /** Status/cited/kind chips on All sources and Findings — same size as table headers. */
 export const FILTER_CHIP_CLASS =
-  "cursor-pointer border px-3 py-1.5 text-meta font-semibold focus-visible:outline-2 focus-visible:outline-blue";
+  "cursor-pointer border px-3 py-1.5 text-meta font-semibold focus-visible:outline-2 focus-visible:outline-blue max-md:px-2 max-md:py-1 max-md:text-caption";
 
 /** All-caps table header type — matches `PaneHeading` / `text-meta`. */
 export const TABLE_HEADER_TEXT_CLASS =
-  "text-meta font-extrabold uppercase tracking-[0.06em] text-grey";
+  "text-meta font-extrabold uppercase tracking-[0.06em] text-grey max-md:text-caption";
 
 /** Cycle a sources-table header click: none → the column's own default
  *  direction → the opposite direction → none. */
@@ -99,7 +99,7 @@ const HUMAN_REASON: Record<string, string> = {
 
 /** Humanize a backend reason code; unknown snake_case codes de-snake rather
  *  than render as variables, anything else passes through untouched. */
-export function humanReason(code: string): string {
+function humanReason(code: string): string {
   if (HUMAN_REASON[code] !== undefined) return HUMAN_REASON[code];
   if (/^[a-z0-9_]+$/.test(code)) {
     const phrase = code.replaceAll("_", " ");
@@ -141,7 +141,7 @@ const STATUS_LABELS: Record<EvidenceItem["status"], string> = {
   selected: "Shortlisted",
   read_in_full: "Read in full",
   findings_extracted: "Findings extracted",
-  cited: "Cited in the evidence base",
+  cited: "Cited in the report",
   unavailable: "Included — abstract only",
 };
 

@@ -20,18 +20,18 @@ from policy_atlas.core.schema import (
     event_log,
     evidence_scope,
     extraction_result,
-    project,
     runs,
     source_snapshot,
+    task,
 )
-from policy_atlas.evidence_base.assess.screen import ScreenContext, screen_sources
-from policy_atlas.evidence_base.corpus.characterise import CharacteriseFailure
-from policy_atlas.evidence_base.extract.extract import KNOWN_PROFILE_IDS
-from policy_atlas.evidence_base.sourcing.ingest_upload import ingest_upload
+from policy_atlas.evidence_search.assess.screen import ScreenContext, screen_sources
+from policy_atlas.evidence_search.corpus.characterise import CharacteriseFailure
+from policy_atlas.evidence_search.extract.extract import KNOWN_PROFILE_IDS
+from policy_atlas.evidence_search.sourcing.ingest_upload import ingest_upload
 from policy_atlas.runtime import harness
-from policy_atlas.runtime.orchestration_plan import ComponentStep, OrchestrationPlan, compose
 from policy_atlas.runtime.runner import RunnerBackends, run_plan
-from tests.helpers import delete_project_data, now
+from policy_atlas.runtime.task_plan import ComponentStep, TaskPlan, compose
+from tests.helpers import delete_task_data, now
 
 FULL_COMPONENTS = ["screen_full", "characterise", "select", "extract", "group"]
 IOF_PROFILE_ID, ICF_PROFILE_ID = KNOWN_PROFILE_IDS
@@ -84,7 +84,7 @@ def _record(
     }
 
 
-def _base_plan(**overrides: Any) -> OrchestrationPlan:
+def _base_plan(**overrides: Any) -> TaskPlan:
     payload: dict[str, Any] = {
         "title": "Housing affordability evidence",
         "question": "What policies address housing affordability?",
@@ -113,7 +113,7 @@ def _base_plan(**overrides: Any) -> OrchestrationPlan:
         "assumptions": ["Publisher geography is publication geography"],
     }
     payload.update(overrides)
-    return OrchestrationPlan.model_validate(payload)
+    return TaskPlan.model_validate(payload)
 
 
 def _with_search_rounds(components: list[str], *, rounds: int = 2) -> list[str]:
@@ -134,7 +134,7 @@ def _with_search_rounds(components: list[str], *, rounds: int = 2) -> list[str]:
 def _seed_source_with_finding(
     conn: Connection,
     *,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     source_locator: str,
     title: str,
     chunks: list[str],
@@ -146,7 +146,7 @@ def _seed_source_with_finding(
 ) -> None:
     snapshot_id = ingest_upload(
         conn,
-        project_id=project_id,
+        task_id=task_id,
         chunks=chunks,
         source_locator=source_locator,
         metadata={
@@ -187,26 +187,26 @@ def _seed_source_with_finding(
     )
 
 
-def _seed_project(
+def _seed_task(
     engine: Engine,
     *,
     context: dict[str, Any] | None = None,
 ) -> tuple[uuid.UUID, uuid.UUID]:
-    project_id = uuid.uuid4()
+    task_id = uuid.uuid4()
     scope_id = uuid.uuid4()
     with engine.begin() as conn:
         conn.execute(
-            project.insert().values(
-                project_id=project_id,
+            task.insert().values(
+                task_id=task_id,
                 created_at=now(),
-                name="Test project",
+                name="Test task",
                 status="active",
                 updated_at=now(),
             )
         )
         _seed_source_with_finding(
             conn,
-            project_id=project_id,
+            task_id=task_id,
             source_locator="syn-001",
             title="Synthetic audit-trail review",
             chunks=list(get_source("syn-001").chunks),
@@ -218,7 +218,7 @@ def _seed_project(
         )
         _seed_source_with_finding(
             conn,
-            project_id=project_id,
+            task_id=task_id,
             source_locator="syn-002",
             title="Synthetic review of housing affordability policies",
             chunks=list(get_source("syn-002").chunks),
@@ -231,20 +231,20 @@ def _seed_project(
         conn.execute(
             evidence_scope.insert().values(
                 evidence_scope_id=scope_id,
-                project_id=project_id,
+                task_id=task_id,
                 intent="What policies address housing affordability?",
                 context=context or {"theme": "housing"},
                 created_at=now(),
             )
         )
-    return project_id, scope_id
+    return task_id, scope_id
 
 
-def _cleanup(engine: Engine, project_id: uuid.UUID | None) -> None:
-    if project_id is None:
+def _cleanup(engine: Engine, task_id: uuid.UUID | None) -> None:
+    if task_id is None:
         return
     with engine.begin() as conn:
-        delete_project_data(conn, project_id)
+        delete_task_data(conn, task_id)
 
 
 def _runner_backends() -> RunnerBackends:
@@ -254,7 +254,7 @@ def _runner_backends() -> RunnerBackends:
 def _single_component_attempt(
     engine: Engine,
     *,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     scope_id: uuid.UUID,
     component: str,
 ) -> Any:
@@ -265,9 +265,9 @@ def _single_component_attempt(
         conn.execute(
             capability_run.insert().values(
                 capability_run_id=capability_run_id,
-                project_id=project_id,
+                task_id=task_id,
                 evidence_scope_id=scope_id,
-                capability="evidence_base",
+                capability="evidence_search",
                 plan_id=plan_id,
                 plan_version=1,
                 status="running",
@@ -276,7 +276,7 @@ def _single_component_attempt(
         )
     return runner_module._run_step_attempt(
         engine,
-        project_id=project_id,
+        task_id=task_id,
         evidence_scope_id=scope_id,
         plan=_base_plan(),
         plan_id=plan_id,
@@ -290,21 +290,21 @@ def _single_component_attempt(
     )
 
 
-def _plan_compiled_events(engine: Engine, project_id: uuid.UUID) -> list[dict[str, Any]]:
+def _plan_compiled_events(engine: Engine, task_id: uuid.UUID) -> list[dict[str, Any]]:
     with engine.connect() as conn:
         return [
             entry
-            for entry in events.read(conn, project_id)
+            for entry in events.read(conn, task_id)
             if entry["event_type"] == "plan.compiled"
         ]
 
 
 def _payloads_by_component(
     engine: Engine,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
 ) -> dict[str, list[dict[str, Any]]]:
     payloads: dict[str, list[dict[str, Any]]] = {}
-    for entry in _plan_compiled_events(engine, project_id):
+    for entry in _plan_compiled_events(engine, task_id):
         payload = entry["payload"]
         payloads.setdefault(payload["component"], []).append(payload)
     return payloads
@@ -312,26 +312,26 @@ def _payloads_by_component(
 
 def _component_failed_payloads(
     engine: Engine,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     run_id: uuid.UUID,
 ) -> list[dict[str, Any]]:
     with engine.connect() as conn:
         return [
             entry["payload"]
-            for entry in events.read(conn, project_id)
+            for entry in events.read(conn, task_id)
             if entry["run_id"] == run_id and entry["event_type"] == "component.failed"
         ]
 
 
 def _component_timing_payloads(
     engine: Engine,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     run_id: uuid.UUID,
 ) -> list[dict[str, Any]]:
     with engine.connect() as conn:
         return [
             entry["payload"]
-            for entry in events.read(conn, project_id)
+            for entry in events.read(conn, task_id)
             if entry["run_id"] == run_id and entry["event_type"] == "component.timing"
         ]
 
@@ -339,7 +339,7 @@ def _component_timing_payloads(
 def _abort_current_transaction(
     conn: Connection,
     *,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     run_id: uuid.UUID,
 ) -> None:
     violated = False
@@ -347,7 +347,7 @@ def _abort_current_transaction(
         conn.execute(
             runs.insert().values(
                 run_id=run_id,
-                project_id=project_id,
+                task_id=task_id,
                 status="running",
                 started_at=now(),
             )
@@ -361,7 +361,7 @@ def _abort_current_transaction(
 def _commit_existing_component_failed_event(
     conn: Connection,
     *,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     run_id: uuid.UUID,
     component: str,
     sequence: int,
@@ -371,7 +371,7 @@ def _commit_existing_component_failed_event(
             event_log.insert().values(
                 event_id=uuid.uuid4(),
                 run_id=run_id,
-                project_id=project_id,
+                task_id=task_id,
                 sequence=sequence,
                 event_type="component.failed",
                 occurred_at=datetime.now(UTC),
@@ -382,9 +382,9 @@ def _commit_existing_component_failed_event(
 
 def test_full_stub_chain_commits_each_step_and_checks_in(engine: Engine) -> None:
     """Full step-by-step chain commits one run and check-in per step."""
-    project_id: uuid.UUID | None = None
+    task_id: uuid.UUID | None = None
     try:
-        project_id, scope_id = _seed_project(engine)
+        task_id, scope_id = _seed_task(engine)
         # deep depth: the assertions below exercise select/extract/group,
         # which are deep-only after the 018 regrade.
         plan = _base_plan(search_effort="standard", analysis_depth="deep")
@@ -394,7 +394,7 @@ def test_full_stub_chain_commits_each_step_and_checks_in(engine: Engine) -> None
 
         outcome = run_plan(
             engine,
-            project_id=project_id,
+            task_id=task_id,
             evidence_scope_id=scope_id,
             plan=plan,
             plan_id=plan_id,
@@ -413,12 +413,12 @@ def test_full_stub_chain_commits_each_step_and_checks_in(engine: Engine) -> None
 
         with engine.connect() as conn:
             run_rows = conn.execute(
-                select(runs.c.run_id, runs.c.status).where(runs.c.project_id == project_id)
+                select(runs.c.run_id, runs.c.status).where(runs.c.task_id == task_id)
             ).fetchall()
-            log_entries = events.read(conn, project_id)
+            log_entries = events.read(conn, task_id)
             extraction_rollup = conn.execute(
                 select(extraction_result.c.counts, extraction_result.c.extraction_provenance)
-                .where(extraction_result.c.project_id == project_id)
+                .where(extraction_result.c.task_id == task_id)
                 .where(
                     extraction_result.c.run_id
                     == next(step.run_id for step in outcome.steps if step.component == "extract")
@@ -442,7 +442,7 @@ def test_full_stub_chain_commits_each_step_and_checks_in(engine: Engine) -> None
             assert step.run_id is not None
             assert "run.started" in event_types_by_run[step.run_id]
             assert "plan.compiled" in event_types_by_run[step.run_id]
-            timing_payloads = _component_timing_payloads(engine, project_id, step.run_id)
+            timing_payloads = _component_timing_payloads(engine, task_id, step.run_id)
             assert len(timing_payloads) == 1
             timing_payload = timing_payloads[0]
             assert timing_payload["component"] == step.component
@@ -462,7 +462,7 @@ def test_full_stub_chain_commits_each_step_and_checks_in(engine: Engine) -> None
         ]
         assert {payload["session_id"] for payload in started_payloads} == {str(session_id)}
 
-        payloads = _payloads_by_component(engine, project_id)
+        payloads = _payloads_by_component(engine, task_id)
         assert payloads["acquire"][0]["plan_id"] == str(plan_id)
         assert payloads["acquire"][0]["plan_version"] == 3
         assert payloads["screen_full"][0]["registry_component"] == "screen"
@@ -476,16 +476,16 @@ def test_full_stub_chain_commits_each_step_and_checks_in(engine: Engine) -> None
             next(step.run_id for step in outcome.steps if step.component == "extract")
         )
     finally:
-        _cleanup(engine, project_id)
+        _cleanup(engine, task_id)
 
 
 def test_landscape_chain_omits_deep_components_and_synthesises_from_characterisation(
     engine: Engine,
 ) -> None:
     """Landscape plan omits select/extract/group and synthesises from characterise."""
-    project_id: uuid.UUID | None = None
+    task_id: uuid.UUID | None = None
     try:
-        project_id, scope_id = _seed_project(engine)
+        task_id, scope_id = _seed_task(engine)
         plan = _base_plan(
             analysis_depth="landscape",
             components=["characterise"],
@@ -494,7 +494,7 @@ def test_landscape_chain_omits_deep_components_and_synthesises_from_characterisa
 
         outcome = run_plan(
             engine,
-            project_id=project_id,
+            task_id=task_id,
             evidence_scope_id=scope_id,
             plan=plan,
             plan_id=uuid.uuid4(),
@@ -509,13 +509,13 @@ def test_landscape_chain_omits_deep_components_and_synthesises_from_characterisa
         assert "select" not in components
         assert "extract" not in components
         assert "group" not in components
-        synth_payload = _payloads_by_component(engine, project_id)["synthesise"][0]
+        synth_payload = _payloads_by_component(engine, task_id)["synthesise"][0]
         char_run_id = next(
             step.run_id for step in outcome.steps if step.component == "characterise"
         )
         assert synth_payload["characterisation_run_id"] == str(char_run_id)
     finally:
-        _cleanup(engine, project_id)
+        _cleanup(engine, task_id)
 
 
 def test_standard_depth_composes_select_and_synthesises_referencing_it(
@@ -527,9 +527,9 @@ def test_standard_depth_composes_select_and_synthesises_referencing_it(
     construction — the same reference-walk code path deep already exercises,
     just with extract/group absent from ``successful_runs``.
     """
-    project_id: uuid.UUID | None = None
+    task_id: uuid.UUID | None = None
     try:
-        project_id, scope_id = _seed_project(engine)
+        task_id, scope_id = _seed_task(engine)
         plan = _base_plan(
             search_effort="standard",
             analysis_depth="standard",
@@ -539,7 +539,7 @@ def test_standard_depth_composes_select_and_synthesises_referencing_it(
 
         outcome = run_plan(
             engine,
-            project_id=project_id,
+            task_id=task_id,
             evidence_scope_id=scope_id,
             plan=plan,
             plan_id=uuid.uuid4(),
@@ -566,32 +566,32 @@ def test_standard_depth_composes_select_and_synthesises_referencing_it(
         assert "extract" not in components
         assert "group" not in components
 
-        select_payload = _payloads_by_component(engine, project_id)["select"][0]
+        select_payload = _payloads_by_component(engine, task_id)["select"][0]
         assert select_payload["characterisation_run_id"] == str(
             next(step.run_id for step in outcome.steps if step.component == "characterise")
         )
 
-        synth_payload = _payloads_by_component(engine, project_id)["synthesise"][0]
+        synth_payload = _payloads_by_component(engine, task_id)["synthesise"][0]
         select_run_id = next(step.run_id for step in outcome.steps if step.component == "select")
         assert synth_payload["selection_run_id"] == str(select_run_id)
         assert "extraction_run_id" not in synth_payload
         assert "grouping_run_id" not in synth_payload
     finally:
-        _cleanup(engine, project_id)
+        _cleanup(engine, task_id)
 
 
 def test_reference_threading_uses_group_then_deepest_available_reference(
     engine: Engine,
 ) -> None:
     """Synthesise references group when present, else the deepest successful run."""
-    full_project: uuid.UUID | None = None
-    drop_project: uuid.UUID | None = None
+    full_task: uuid.UUID | None = None
+    drop_task: uuid.UUID | None = None
     try:
-        full_project, full_scope = _seed_project(engine)
+        full_task, full_scope = _seed_task(engine)
         full_plan = _base_plan()
         full_outcome = run_plan(
             engine,
-            project_id=full_project,
+            task_id=full_task,
             evidence_scope_id=full_scope,
             plan=full_plan,
             plan_id=uuid.uuid4(),
@@ -600,19 +600,19 @@ def test_reference_threading_uses_group_then_deepest_available_reference(
             io=RecordingIO(),
         )
 
-        full_synth = _payloads_by_component(engine, full_project)["synthesise"][0]
+        full_synth = _payloads_by_component(engine, full_task)["synthesise"][0]
         group_run_id = next(step.run_id for step in full_outcome.steps if step.component == "group")
         assert full_synth["grouping_run_id"] == str(group_run_id)
         assert "extraction_run_id" not in full_synth
 
-        drop_project, drop_scope = _seed_project(engine)
+        drop_task, drop_scope = _seed_task(engine)
         drop_plan = _base_plan(
             components=["characterise", "select", "extract"],
             grouping_facets=None,
         )
         drop_outcome = run_plan(
             engine,
-            project_id=drop_project,
+            task_id=drop_task,
             evidence_scope_id=drop_scope,
             plan=drop_plan,
             plan_id=uuid.uuid4(),
@@ -621,15 +621,15 @@ def test_reference_threading_uses_group_then_deepest_available_reference(
             io=RecordingIO(),
         )
 
-        drop_synth = _payloads_by_component(engine, drop_project)["synthesise"][0]
+        drop_synth = _payloads_by_component(engine, drop_task)["synthesise"][0]
         extract_run_id = next(
             step.run_id for step in drop_outcome.steps if step.component == "extract"
         )
         assert drop_synth["extraction_run_id"] == str(extract_run_id)
         assert "selection_run_id" not in drop_synth
     finally:
-        _cleanup(engine, full_project)
-        _cleanup(engine, drop_project)
+        _cleanup(engine, full_task)
+        _cleanup(engine, drop_task)
 
 
 def test_spine_component_retries_once_then_continues(
@@ -637,13 +637,13 @@ def test_spine_component_retries_once_then_continues(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A transient screen component failure creates a fresh retry run and succeeds."""
-    project_id: uuid.UUID | None = None
+    task_id: uuid.UUID | None = None
     calls = 0
 
     def scripted_screen_sources(
         conn: Connection,
         *,
-        project_id: uuid.UUID,
+        task_id: uuid.UUID,
         run_id: uuid.UUID,
         context: ScreenContext,
         screening_backend: Any = None,
@@ -654,7 +654,7 @@ def test_spine_component_retries_once_then_continues(
             raise RuntimeError("forced transient screen failure")
         return screen_sources(
             conn,
-            project_id=project_id,
+            task_id=task_id,
             run_id=run_id,
             context=context,
             screening_backend=screening_backend,
@@ -662,7 +662,7 @@ def test_spine_component_retries_once_then_continues(
 
     monkeypatch.setattr(harness, "screen_sources", scripted_screen_sources)
     try:
-        project_id, scope_id = _seed_project(engine)
+        task_id, scope_id = _seed_task(engine)
         plan = _base_plan(
             analysis_depth="landscape",
             components=["characterise"],
@@ -671,7 +671,7 @@ def test_spine_component_retries_once_then_continues(
 
         outcome = run_plan(
             engine,
-            project_id=project_id,
+            task_id=task_id,
             evidence_scope_id=scope_id,
             plan=plan,
             plan_id=uuid.uuid4(),
@@ -696,7 +696,7 @@ def test_spine_component_retries_once_then_continues(
             ).scalars().all()
         assert statuses == ["failed", "succeeded"]
     finally:
-        _cleanup(engine, project_id)
+        _cleanup(engine, task_id)
 
 
 def test_spine_failure_after_retry_stops_without_downstream_runs(
@@ -704,22 +704,22 @@ def test_spine_failure_after_retry_stops_without_downstream_runs(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A persistent spine failure fails honestly and creates no downstream runs."""
-    project_id: uuid.UUID | None = None
+    task_id: uuid.UUID | None = None
 
     def failing_screen_sources(
         conn: Connection,
         *,
-        project_id: uuid.UUID,
+        task_id: uuid.UUID,
         run_id: uuid.UUID,
         context: ScreenContext,
         screening_backend: Any = None,
     ) -> dict[str, Any]:
-        del conn, project_id, run_id, context, screening_backend
+        del conn, task_id, run_id, context, screening_backend
         raise RuntimeError("forced persistent screen failure")
 
     monkeypatch.setattr(harness, "screen_sources", failing_screen_sources)
     try:
-        project_id, scope_id = _seed_project(engine)
+        task_id, scope_id = _seed_task(engine)
         plan = _base_plan(
             analysis_depth="landscape",
             components=["characterise"],
@@ -728,7 +728,7 @@ def test_spine_failure_after_retry_stops_without_downstream_runs(
 
         outcome = run_plan(
             engine,
-            project_id=project_id,
+            task_id=task_id,
             evidence_scope_id=scope_id,
             plan=plan,
             plan_id=uuid.uuid4(),
@@ -744,7 +744,7 @@ def test_spine_failure_after_retry_stops_without_downstream_runs(
         assert screen_outcome.retried is True
         assert len(screen_outcome.attempt_run_ids) == 2
         for attempt_run_id in screen_outcome.attempt_run_ids:
-            timing_payloads = _component_timing_payloads(engine, project_id, attempt_run_id)
+            timing_payloads = _component_timing_payloads(engine, task_id, attempt_run_id)
             assert len(timing_payloads) == 1
             assert timing_payloads[0]["component"] == "screen_abstract"
             assert timing_payloads[0]["registry_component"] == "screen"
@@ -754,7 +754,7 @@ def test_spine_failure_after_retry_stops_without_downstream_runs(
             # unknown, and unknown is None, never a zero that reads as "free".
             assert timing_payloads[0]["usage_totals"] is None
         compiled_components = [
-            event["payload"]["component"] for event in _plan_compiled_events(engine, project_id)
+            event["payload"]["component"] for event in _plan_compiled_events(engine, task_id)
         ]
         assert compiled_components == [
             "acquire",
@@ -762,7 +762,7 @@ def test_spine_failure_after_retry_stops_without_downstream_runs(
             "screen_abstract",
         ]
     finally:
-        _cleanup(engine, project_id)
+        _cleanup(engine, task_id)
 
 
 def test_db_abort_backstop_records_failure_event_and_fails_spine_plan(
@@ -770,7 +770,7 @@ def test_db_abort_backstop_records_failure_event_and_fails_spine_plan(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """An escaped DB-abort screen failure is repaired in a fresh transaction."""
-    project_id: uuid.UUID | None = None
+    task_id: uuid.UUID | None = None
     original_run_harness = harness.run_harness
     escaped_message = f"forced db abort {'x' * 250} tail-marker"
 
@@ -778,24 +778,24 @@ def test_db_abort_backstop_records_failure_event_and_fails_spine_plan(
         conn: Connection,
         *,
         config: Any,
-        project_id: uuid.UUID,
+        task_id: uuid.UUID,
         run_id: uuid.UUID,
         **kwargs: Any,
     ) -> dict[str, Any]:
         if config.component == "screen":
-            _abort_current_transaction(conn, project_id=project_id, run_id=run_id)
+            _abort_current_transaction(conn, task_id=task_id, run_id=run_id)
             raise RuntimeError(escaped_message)
         return original_run_harness(
             conn,
             config=config,
-            project_id=project_id,
+            task_id=task_id,
             run_id=run_id,
             **kwargs,
         )
 
     monkeypatch.setattr(runner_module, "run_harness", aborting_screen_harness)
     try:
-        project_id, scope_id = _seed_project(engine)
+        task_id, scope_id = _seed_task(engine)
         plan = _base_plan(
             analysis_depth="landscape",
             components=["characterise"],
@@ -804,7 +804,7 @@ def test_db_abort_backstop_records_failure_event_and_fails_spine_plan(
 
         outcome = run_plan(
             engine,
-            project_id=project_id,
+            task_id=task_id,
             evidence_scope_id=scope_id,
             plan=plan,
             plan_id=uuid.uuid4(),
@@ -833,14 +833,14 @@ def test_db_abort_backstop_records_failure_event_and_fails_spine_plan(
         assert run_row.ended_at is not None
 
         failed_payloads = _component_failed_payloads(
-            engine, project_id, screen_outcome.run_id
+            engine, task_id, screen_outcome.run_id
         )
         assert len(failed_payloads) == 1
         assert failed_payloads[0]["component"] == "screen"
         assert failed_payloads[0]["error"].startswith("RuntimeError: forced db abort ")
         assert "tail-marker" not in failed_payloads[0]["error"]
     finally:
-        _cleanup(engine, project_id)
+        _cleanup(engine, task_id)
 
 
 def test_backstop_idempotent_after_harness_component_failed_then_crash(
@@ -848,7 +848,7 @@ def test_backstop_idempotent_after_harness_component_failed_then_crash(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A later crash does not duplicate an already-present component.failed event."""
-    project_id: uuid.UUID | None = None
+    task_id: uuid.UUID | None = None
     original_run_harness = harness.run_harness
     committed_failures = 0
 
@@ -860,7 +860,7 @@ def test_backstop_idempotent_after_harness_component_failed_then_crash(
         conn: Connection,
         *,
         config: Any,
-        project_id: uuid.UUID,
+        task_id: uuid.UUID,
         run_id: uuid.UUID,
         **kwargs: Any,
     ) -> dict[str, Any]:
@@ -868,7 +868,7 @@ def test_backstop_idempotent_after_harness_component_failed_then_crash(
         result = original_run_harness(
             conn,
             config=config,
-            project_id=project_id,
+            task_id=task_id,
             run_id=run_id,
             **kwargs,
         )
@@ -876,7 +876,7 @@ def test_backstop_idempotent_after_harness_component_failed_then_crash(
             committed_failures += 1
             _commit_existing_component_failed_event(
                 conn,
-                project_id=project_id,
+                task_id=task_id,
                 run_id=run_id,
                 component="characterise",
                 sequence=1_000_000 + committed_failures * 100,
@@ -887,12 +887,12 @@ def test_backstop_idempotent_after_harness_component_failed_then_crash(
     monkeypatch.setattr(harness, "characterise_scope", failing_characterise_scope)
     monkeypatch.setattr(runner_module, "run_harness", crash_after_failed_harness)
     try:
-        project_id, scope_id = _seed_project(engine)
+        task_id, scope_id = _seed_task(engine)
         plan = _base_plan(components=["characterise", "select", "extract", "group"])
 
         outcome = run_plan(
             engine,
-            project_id=project_id,
+            task_id=task_id,
             evidence_scope_id=scope_id,
             plan=plan,
             plan_id=uuid.uuid4(),
@@ -908,7 +908,7 @@ def test_backstop_idempotent_after_harness_component_failed_then_crash(
         assert characterise_outcome.status == "failed"
         assert characterise_outcome.run_id is not None
         failed_payloads = _component_failed_payloads(
-            engine, project_id, characterise_outcome.run_id
+            engine, task_id, characterise_outcome.run_id
         )
         assert len(failed_payloads) == 1
         assert failed_payloads[0]["component"] == "characterise"
@@ -919,7 +919,7 @@ def test_backstop_idempotent_after_harness_component_failed_then_crash(
             ).one()
         assert run_row.status == "failed"
     finally:
-        _cleanup(engine, project_id)
+        _cleanup(engine, task_id)
 
 
 def test_backstop_failure_attempt_retries_and_succeeds(
@@ -927,7 +927,7 @@ def test_backstop_failure_attempt_retries_and_succeeds(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A transient DB-abort failure consumes one retry, then the next screen run succeeds."""
-    project_id: uuid.UUID | None = None
+    task_id: uuid.UUID | None = None
     original_run_harness = harness.run_harness
     screen_calls = 0
 
@@ -935,7 +935,7 @@ def test_backstop_failure_attempt_retries_and_succeeds(
         conn: Connection,
         *,
         config: Any,
-        project_id: uuid.UUID,
+        task_id: uuid.UUID,
         run_id: uuid.UUID,
         **kwargs: Any,
     ) -> dict[str, Any]:
@@ -943,19 +943,19 @@ def test_backstop_failure_attempt_retries_and_succeeds(
         if config.component == "screen":
             screen_calls += 1
             if screen_calls == 1:
-                _abort_current_transaction(conn, project_id=project_id, run_id=run_id)
+                _abort_current_transaction(conn, task_id=task_id, run_id=run_id)
                 raise RuntimeError("transient db abort on screen")
         return original_run_harness(
             conn,
             config=config,
-            project_id=project_id,
+            task_id=task_id,
             run_id=run_id,
             **kwargs,
         )
 
     monkeypatch.setattr(runner_module, "run_harness", abort_first_screen_harness)
     try:
-        project_id, scope_id = _seed_project(engine)
+        task_id, scope_id = _seed_task(engine)
         plan = _base_plan(
             analysis_depth="landscape",
             components=["characterise"],
@@ -964,7 +964,7 @@ def test_backstop_failure_attempt_retries_and_succeeds(
 
         outcome = run_plan(
             engine,
-            project_id=project_id,
+            task_id=task_id,
             evidence_scope_id=scope_id,
             plan=plan,
             plan_id=uuid.uuid4(),
@@ -990,14 +990,14 @@ def test_backstop_failure_attempt_retries_and_succeeds(
             ).scalars().all()
         assert statuses == ["failed", "succeeded"]
     finally:
-        _cleanup(engine, project_id)
+        _cleanup(engine, task_id)
 
 
 def test_component_started_commits_before_the_component_transaction(
     engine: Engine,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    project_id: uuid.UUID | None = None
+    task_id: uuid.UUID | None = None
     entered = threading.Event()
     release = threading.Event()
     outcomes: list[Any] = []
@@ -1019,14 +1019,14 @@ def test_component_started_commits_before_the_component_transaction(
 
     monkeypatch.setattr(runner_module, "run_harness", blocking_harness)
     try:
-        project_id, scope_id = _seed_project(engine)
+        task_id, scope_id = _seed_task(engine)
 
         def run_attempt() -> None:
             try:
                 outcomes.append(
                     _single_component_attempt(
                         engine,
-                        project_id=project_id,
+                        task_id=task_id,
                         scope_id=scope_id,
                         component="acquire",
                     )
@@ -1038,7 +1038,7 @@ def test_component_started_commits_before_the_component_transaction(
         worker.start()
         assert entered.wait(timeout=2)
         with engine.connect() as conn:
-            in_flight = events.read(conn, project_id)
+            in_flight = events.read(conn, task_id)
         assert [entry["event_type"] for entry in in_flight] == [
             "run.started",
             "plan.compiled",
@@ -1050,21 +1050,21 @@ def test_component_started_commits_before_the_component_transaction(
         assert failures == []
         assert outcomes[0].status == "succeeded"
         with engine.connect() as conn:
-            terminal = events.read(conn, project_id)
+            terminal = events.read(conn, task_id)
         completed = next(
             entry for entry in terminal if entry["event_type"] == "component.completed"
         )
         assert completed["payload"] == {"component": "acquire", "sources_added": 1}
     finally:
         release.set()
-        _cleanup(engine, project_id)
+        _cleanup(engine, task_id)
 
 
 def test_component_rollback_retains_started_then_backstop_failed_pair(
     engine: Engine,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    project_id: uuid.UUID | None = None
+    task_id: uuid.UUID | None = None
 
     def rollback_harness(conn: Connection, **kwargs: Any) -> dict[str, Any]:
         del conn, kwargs
@@ -1072,13 +1072,13 @@ def test_component_rollback_retains_started_then_backstop_failed_pair(
 
     monkeypatch.setattr(runner_module, "run_harness", rollback_harness)
     try:
-        project_id, scope_id = _seed_project(engine)
+        task_id, scope_id = _seed_task(engine)
         outcome = _single_component_attempt(
-            engine, project_id=project_id, scope_id=scope_id, component="acquire"
+            engine, task_id=task_id, scope_id=scope_id, component="acquire"
         )
         assert outcome.status == "failed"
         with engine.connect() as conn:
-            rows = events.read(conn, project_id)
+            rows = events.read(conn, task_id)
         component_events = [
             row
             for row in rows
@@ -1094,14 +1094,14 @@ def test_component_rollback_retains_started_then_backstop_failed_pair(
             "error": "RuntimeError: forced unhandled component rollback",
         }
     finally:
-        _cleanup(engine, project_id)
+        _cleanup(engine, task_id)
 
 
 def test_synthesis_progress_survives_rolled_back_component_before_terminal_events(
     engine: Engine,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    project_id: uuid.UUID | None = None
+    task_id: uuid.UUID | None = None
 
     def fail_after_one_streamed_section(
         conn: Connection,
@@ -1118,13 +1118,13 @@ def test_synthesis_progress_survives_rolled_back_component_before_terminal_event
 
     monkeypatch.setattr(runner_module, "run_harness", fail_after_one_streamed_section)
     try:
-        project_id, scope_id = _seed_project(engine)
+        task_id, scope_id = _seed_task(engine)
         outcome = _single_component_attempt(
-            engine, project_id=project_id, scope_id=scope_id, component="synthesise"
+            engine, task_id=task_id, scope_id=scope_id, component="synthesise"
         )
         assert outcome.status == "failed"
         with engine.connect() as conn:
-            rows = events.read(conn, project_id)
+            rows = events.read(conn, task_id)
         event_types = [row["event_type"] for row in rows]
         assert event_types[:7] == [
             "run.started",
@@ -1143,7 +1143,7 @@ def test_synthesis_progress_survives_rolled_back_component_before_terminal_event
             "prose": "Completed before failure.",
         }
     finally:
-        _cleanup(engine, project_id)
+        _cleanup(engine, task_id)
 
 
 def test_discretionary_failure_degrades_and_synthesises_without_reference(
@@ -1151,7 +1151,7 @@ def test_discretionary_failure_degrades_and_synthesises_without_reference(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A characterise failure skips dependent discretionary steps but still synthesises."""
-    project_id: uuid.UUID | None = None
+    task_id: uuid.UUID | None = None
 
     def failing_characterise_scope(*args: Any, **kwargs: Any) -> dict[str, Any]:
         del args, kwargs
@@ -1159,12 +1159,12 @@ def test_discretionary_failure_degrades_and_synthesises_without_reference(
 
     monkeypatch.setattr(harness, "characterise_scope", failing_characterise_scope)
     try:
-        project_id, scope_id = _seed_project(engine)
+        task_id, scope_id = _seed_task(engine)
         plan = _base_plan(components=["characterise", "select", "extract", "group"])
 
         outcome = run_plan(
             engine,
-            project_id=project_id,
+            task_id=task_id,
             evidence_scope_id=scope_id,
             plan=plan,
             plan_id=uuid.uuid4(),
@@ -1184,7 +1184,7 @@ def test_discretionary_failure_degrades_and_synthesises_without_reference(
         assert any(flag["status"] == "failed" for flag in outcome.flagged_events)
         assert sum(1 for flag in outcome.flagged_events if flag["status"] == "skipped") == 3
 
-        synth_payload = _payloads_by_component(engine, project_id)["synthesise"][0]
+        synth_payload = _payloads_by_component(engine, task_id)["synthesise"][0]
         for key in (
             "characterisation_run_id",
             "selection_run_id",
@@ -1193,7 +1193,7 @@ def test_discretionary_failure_degrades_and_synthesises_without_reference(
         ):
             assert key not in synth_payload
     finally:
-        _cleanup(engine, project_id)
+        _cleanup(engine, task_id)
 
 
 def test_failed_discretionary_run_id_never_feeds_downstream(
@@ -1201,7 +1201,7 @@ def test_failed_discretionary_run_id_never_feeds_downstream(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Failed characterise attempts are not threaded into downstream reference payloads."""
-    project_id: uuid.UUID | None = None
+    task_id: uuid.UUID | None = None
 
     def failing_characterise_scope(*args: Any, **kwargs: Any) -> dict[str, Any]:
         del args, kwargs
@@ -1209,12 +1209,12 @@ def test_failed_discretionary_run_id_never_feeds_downstream(
 
     monkeypatch.setattr(harness, "characterise_scope", failing_characterise_scope)
     try:
-        project_id, scope_id = _seed_project(engine)
+        task_id, scope_id = _seed_task(engine)
         plan = _base_plan(components=["characterise", "select", "extract", "group"])
 
         outcome = run_plan(
             engine,
-            project_id=project_id,
+            task_id=task_id,
             evidence_scope_id=scope_id,
             plan=plan,
             plan_id=uuid.uuid4(),
@@ -1233,7 +1233,7 @@ def test_failed_discretionary_run_id_never_feeds_downstream(
         assert by_component["extract"].skipped is True
         assert by_component["group"].skipped is True
 
-        synth_payload = _payloads_by_component(engine, project_id)["synthesise"][0]
+        synth_payload = _payloads_by_component(engine, task_id)["synthesise"][0]
         reference_keys = (
             "characterisation_run_id",
             "selection_run_id",
@@ -1244,21 +1244,21 @@ def test_failed_discretionary_run_id_never_feeds_downstream(
             assert key not in synth_payload
 
         with engine.connect() as conn:
-            payloads = [entry["payload"] for entry in events.read(conn, project_id)]
+            payloads = [entry["payload"] for entry in events.read(conn, task_id)]
         for payload in payloads:
             for key in reference_keys:
                 assert payload.get(key) not in failed_run_ids
     finally:
-        _cleanup(engine, project_id)
+        _cleanup(engine, task_id)
 
 
 def test_directive_application_replaces_only_top_level_delta_keys(
     engine: Engine,
 ) -> None:
     """Applied directives survive in scope context while unrelated keys remain."""
-    project_id: uuid.UUID | None = None
+    task_id: uuid.UUID | None = None
     try:
-        project_id, scope_id = _seed_project(
+        task_id, scope_id = _seed_task(
             engine,
             context={
                 "preexisting": {"survives": True},
@@ -1269,7 +1269,7 @@ def test_directive_application_replaces_only_top_level_delta_keys(
 
         outcome = run_plan(
             engine,
-            project_id=project_id,
+            task_id=task_id,
             evidence_scope_id=scope_id,
             plan=plan,
             plan_id=uuid.uuid4(),
@@ -1296,4 +1296,4 @@ def test_directive_application_replaces_only_top_level_delta_keys(
         assert context["extraction"] == {"profiles": list(KNOWN_PROFILE_IDS)}
         assert context["grouping"] == {"facets": ["population"]}
     finally:
-        _cleanup(engine, project_id)
+        _cleanup(engine, task_id)

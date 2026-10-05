@@ -26,17 +26,17 @@ from policy_atlas.core.schema import (
     characterisation_result,
     extraction_result,
     grouping_result,
-    project_source_snapshot,
     search_coverage_record,
     selection_result,
     source_appraisal_result,
     source_classification_result,
     source_snapshot,
+    task_source_snapshot,
 )
-from policy_atlas.evidence_base.assess.screen import effective_screen_rows
-from policy_atlas.evidence_base.synthesis.synthesis_backend import SynthesisBackend
-from policy_atlas.evidence_base.synthesis.synthesis_tools import priority_counts_by_group
-from policy_atlas.evidence_base.synthesis.synthesise import (
+from policy_atlas.evidence_search.assess.screen import effective_screen_rows
+from policy_atlas.evidence_search.synthesis.synthesis_backend import SynthesisBackend
+from policy_atlas.evidence_search.synthesis.synthesis_tools import priority_counts_by_group
+from policy_atlas.evidence_search.synthesis.synthesise import (
     SynthesiseContext,
     _grouping_summary,
     _relevance_annotations,
@@ -52,13 +52,13 @@ SELECTION_PREVIEW_N = 10
 DROPPED_DIGEST_CAP = 5
 
 
-# --- P2: evidence-base coverage --------------------------------------------
+# --- P2: evidence-search coverage --------------------------------------------
 
 
 def p1_bundle(
     conn: Connection,
     *,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     evidence_scope_id: uuid.UUID,
     acquire_run_id: uuid.UUID | None = None,
 ) -> dict[str, Any]:
@@ -76,7 +76,7 @@ def p1_bundle(
 
     Args:
         conn: Open read connection.
-        project_id: Owning project.
+        task_id: Owning task.
         evidence_scope_id: Scope whose search records are displayed.
         acquire_run_id: The acquire run that just finished. ``None`` means no
             acquire run is recorded, and yields empty counts and queries rather
@@ -88,10 +88,10 @@ def p1_bundle(
     counts: dict[str, int] = {}
     query_text: list[str] = []
     if acquire_run_id is not None:
-        counts = _acquired_by_backend(conn, project_id=project_id, run_id=acquire_run_id)
+        counts = _acquired_by_backend(conn, task_id=task_id, run_id=acquire_run_id)
         queries, _ = _executed_queries(
             conn,
-            project_id=project_id,
+            task_id=task_id,
             evidence_scope_id=evidence_scope_id,
             run_id=acquire_run_id,
         )
@@ -99,11 +99,11 @@ def p1_bundle(
     title_rows = conn.execute(
         sa_select(source_snapshot.c.metadata)
         .join(
-            project_source_snapshot,
-            project_source_snapshot.c.source_snapshot_id == source_snapshot.c.source_snapshot_id,
+            task_source_snapshot,
+            task_source_snapshot.c.source_snapshot_id == source_snapshot.c.source_snapshot_id,
         )
-        .where(project_source_snapshot.c.project_id == project_id)
-        .order_by(project_source_snapshot.c.ingested_at.desc())
+        .where(task_source_snapshot.c.task_id == task_id)
+        .order_by(task_source_snapshot.c.ingested_at.desc())
         .limit(5)
     ).all()
     titles = [
@@ -122,7 +122,7 @@ def p1_bundle(
 def p2_bundle(
     conn: Connection,
     *,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     evidence_scope_id: uuid.UUID,
     characterisation_run_id: uuid.UUID | None = None,
 ) -> dict[str, Any]:
@@ -135,7 +135,7 @@ def p2_bundle(
 
     Args:
         conn: Open read connection.
-        project_id: Owning project.
+        task_id: Owning task.
         evidence_scope_id: Scope the coverage picture is over.
         characterisation_run_id: The characterisation run whose coverage/themes to
             read, or ``None`` when characterise did not run (coverage/themes are
@@ -150,7 +150,7 @@ def p2_bundle(
     if characterisation_run_id is not None:
         row = conn.execute(
             sa_select(characterisation_result.c.coverage, characterisation_result.c.themes)
-            .where(characterisation_result.c.project_id == project_id)
+            .where(characterisation_result.c.task_id == task_id)
             .where(characterisation_result.c.run_id == characterisation_run_id)
         ).first()
         if row is not None:
@@ -178,7 +178,7 @@ def p2_bundle(
             search_coverage_record.c.stop_condition,
             search_coverage_record.c.backends,
         )
-        .where(search_coverage_record.c.project_id == project_id)
+        .where(search_coverage_record.c.task_id == task_id)
         .where(search_coverage_record.c.evidence_scope_id == evidence_scope_id)
         .order_by(search_coverage_record.c.created_at, search_coverage_record.c.acquired_by_run_id)
     ).all()
@@ -200,7 +200,7 @@ def p2_bundle(
             effective.c.screen_generation,
             func.count().label("n"),
         )
-        .where(effective.c.project_id == project_id)
+        .where(effective.c.task_id == task_id)
         .where(effective.c.evidence_scope_id == evidence_scope_id)
         .group_by(effective.c.status, effective.c.screen_stage, effective.c.screen_generation)
     ).all()
@@ -218,10 +218,10 @@ def p2_bundle(
     )
 
     executed_queries, zero_result_queries = _executed_queries(
-        conn, project_id=project_id, evidence_scope_id=evidence_scope_id
+        conn, task_id=task_id, evidence_scope_id=evidence_scope_id
     )
     screened_event_counts = _source_screened_counts(
-        conn, project_id=project_id, evidence_scope_id=evidence_scope_id
+        conn, task_id=task_id, evidence_scope_id=evidence_scope_id
     )
 
     return {
@@ -238,7 +238,7 @@ def p2_bundle(
 
 
 def _acquired_by_backend(
-    conn: Connection, *, project_id: uuid.UUID, run_id: uuid.UUID
+    conn: Connection, *, task_id: uuid.UUID, run_id: uuid.UUID
 ) -> dict[str, int]:
     """Per-backend new-source counts from one acquire run's completion payload.
 
@@ -250,7 +250,7 @@ def _acquired_by_backend(
 
     Args:
         conn: Open read connection.
-        project_id: Owning project.
+        task_id: Owning task.
         run_id: The acquire run whose completion payload to read.
 
     Returns:
@@ -259,7 +259,7 @@ def _acquired_by_backend(
     payload = next(
         (
             entry["payload"]
-            for entry in reversed(events.read_for_run(conn, project_id, run_id))
+            for entry in reversed(events.read_for_run(conn, task_id, run_id))
             if entry["event_type"] == "component.completed"
             and isinstance(entry["payload"], dict)
             and entry["payload"].get("component") == "acquire"
@@ -281,7 +281,7 @@ def _acquired_by_backend(
 def _executed_queries(
     conn: Connection,
     *,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     evidence_scope_id: uuid.UUID,
     run_id: uuid.UUID | None = None,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
@@ -294,7 +294,7 @@ def _executed_queries(
 
     Args:
         conn: Open read connection.
-        project_id: Owning project.
+        task_id: Owning task.
         evidence_scope_id: Scope whose search calls to read.
         run_id: When given, restrict the read to this one acquire run. ``None``
             (default) spans every round, which is what the P2 coverage picture
@@ -303,7 +303,7 @@ def _executed_queries(
     """
     executed: list[dict[str, Any]] = []
     zero_result: list[dict[str, Any]] = []
-    for entry in events.read(conn, project_id, event_types=["search.executed"]):
+    for entry in events.read(conn, task_id, event_types=["search.executed"]):
         payload = entry["payload"]
         if not isinstance(payload, dict):
             continue
@@ -328,7 +328,7 @@ def _executed_queries(
 
 
 def _source_screened_counts(
-    conn: Connection, *, project_id: uuid.UUID, evidence_scope_id: uuid.UUID
+    conn: Connection, *, task_id: uuid.UUID, evidence_scope_id: uuid.UUID
 ) -> dict[str, int]:
     """Tally the scope's *current* ``source.screened`` event payloads by status.
 
@@ -341,7 +341,7 @@ def _source_screened_counts(
     """
     scoped_payloads = [
         payload
-        for entry in events.read(conn, project_id, event_types=["source.screened"])
+        for entry in events.read(conn, task_id, event_types=["source.screened"])
         if isinstance(payload := entry["payload"], dict)
         and payload.get("evidence_scope_id") == str(evidence_scope_id)
     ]
@@ -368,12 +368,12 @@ def _source_screened_counts(
 
 
 def groups_bundle(
-    conn: Connection, *, project_id: uuid.UUID, group_run_id: uuid.UUID
+    conn: Connection, *, task_id: uuid.UUID, group_run_id: uuid.UUID
 ) -> dict[str, Any]:
     """Build the scrubbed deep-run finding-groups card bundle."""
     row = conn.execute(
         sa_select(grouping_result.c.groups)
-        .where(grouping_result.c.project_id == project_id)
+        .where(grouping_result.c.task_id == task_id)
         .where(grouping_result.c.run_id == group_run_id)
     ).first()
     summary = _grouping_summary({"groups": row.groups}) if row is not None else None
@@ -391,7 +391,7 @@ def groups_bundle(
 def p3_bundle(
     conn: Connection,
     *,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     selection_run_id: uuid.UUID,
 ) -> dict[str, Any]:
     """Build the P3 selection bundle (after select).
@@ -404,7 +404,7 @@ def p3_bundle(
 
     Args:
         conn: Open read connection.
-        project_id: Owning project.
+        task_id: Owning task.
         selection_run_id: The select run whose ``selection_result`` to read.
 
     Returns:
@@ -421,7 +421,7 @@ def p3_bundle(
             selection_result.c.flags,
             selection_result.c.selection_provenance,
         )
-        .where(selection_result.c.project_id == project_id)
+        .where(selection_result.c.task_id == task_id)
         .where(selection_result.c.run_id == selection_run_id)
     ).first()
     if row is None:
@@ -445,23 +445,23 @@ def p3_bundle(
     flags = row.flags if isinstance(row.flags, dict) else {}
     provenance = row.selection_provenance if isinstance(row.selection_provenance, dict) else {}
 
-    # Preview: top-N by composite score (desc), pss_id tie-break for determinism.
+    # Preview: top-N by composite score (desc), tss_id tie-break for determinism.
     ordered = sorted(
         (entry for entry in selected if isinstance(entry, dict)),
-        key=lambda e: (-_as_float(e.get("composite")), str(e.get("pss_id"))),
+        key=lambda e: (-_as_float(e.get("composite")), str(e.get("tss_id"))),
     )
     preview_entries = ordered[:SELECTION_PREVIEW_N]
-    preview_pss_ids = [str(e.get("pss_id")) for e in preview_entries]
+    preview_tss_ids = [str(e.get("tss_id")) for e in preview_entries]
     metadata = _doc_metadata(
-        conn, project_id=project_id, evidence_scope_id=scope_id, pss_ids=preview_pss_ids
+        conn, task_id=task_id, evidence_scope_id=scope_id, tss_ids=preview_tss_ids
     )
     selection_preview = [
         {
-            "pss_id": str(entry.get("pss_id")),
-            "title": metadata.get(str(entry.get("pss_id")), {}).get("title"),
+            "tss_id": str(entry.get("tss_id")),
+            "title": metadata.get(str(entry.get("tss_id")), {}).get("title"),
             "stratum": entry.get("stratum"),
-            "evidence_type": metadata.get(str(entry.get("pss_id")), {}).get("evidence_type"),
-            "quality_tier": metadata.get(str(entry.get("pss_id")), {}).get("quality_tier"),
+            "evidence_type": metadata.get(str(entry.get("tss_id")), {}).get("evidence_type"),
+            "quality_tier": metadata.get(str(entry.get("tss_id")), {}).get("quality_tier"),
             "reason": entry.get("reason"),
             "text_basis": entry.get("text_basis"),
         }
@@ -492,11 +492,11 @@ def p3_bundle(
             "ranked_below_cut": reason_counts.get("ranked_below_cut", 0),
         }
 
-    # Full-text availability of the selected set, by pss full_text_status.
+    # Full-text availability of the selected set, by tss full_text_status.
     full_text_availability = _full_text_status_counts(
         conn,
-        project_id=project_id,
-        pss_ids=[str(e.get("pss_id")) for e in selected if isinstance(e, dict)],
+        task_id=task_id,
+        tss_ids=[str(e.get("tss_id")) for e in selected if isinstance(e, dict)],
     )
 
     # Ranking-trust signals from provenance.
@@ -510,17 +510,17 @@ def p3_bundle(
     # Notable exclusions digest (capped, with titles) — never the full list.
     notable = excluded.get("notable")
     notable = notable if isinstance(notable, list) else []
-    notable_pss_ids = [
-        str(item.get("pss_id")) for item in notable[:DROPPED_DIGEST_CAP] if isinstance(item, dict)
+    notable_tss_ids = [
+        str(item.get("tss_id")) for item in notable[:DROPPED_DIGEST_CAP] if isinstance(item, dict)
     ]
     notable_metadata = _doc_metadata(
-        conn, project_id=project_id, evidence_scope_id=scope_id, pss_ids=notable_pss_ids
+        conn, task_id=task_id, evidence_scope_id=scope_id, tss_ids=notable_tss_ids
     )
     notable_exclusions = [
         {
-            "pss_id": str(item.get("pss_id")),
+            "tss_id": str(item.get("tss_id")),
             "flag": item.get("flag"),
-            "title": notable_metadata.get(str(item.get("pss_id")), {}).get("title"),
+            "title": notable_metadata.get(str(item.get("tss_id")), {}).get("title"),
         }
         for item in notable[:DROPPED_DIGEST_CAP]
         if isinstance(item, dict)
@@ -558,53 +558,53 @@ def _as_float(value: Any) -> float:
 def _doc_metadata(
     conn: Connection,
     *,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     evidence_scope_id: uuid.UUID,
-    pss_ids: list[str],
+    tss_ids: list[str],
 ) -> dict[str, dict[str, Any]]:
-    """Return ``{pss_id: {title, evidence_type, quality_tier, full_text_status}}``.
+    """Return ``{tss_id: {title, evidence_type, quality_tier, full_text_status}}``.
 
-    Joins ``project_source_snapshot`` → ``source_snapshot`` (title from metadata
+    Joins ``task_source_snapshot`` → ``source_snapshot`` (title from metadata
     with a source-locator fallback) and left-joins classification/appraisal for
     the scope. Only the requested ids are read.
     """
-    if not pss_ids:
+    if not tss_ids:
         return {}
-    ids = [uuid.UUID(pss_id) for pss_id in pss_ids]
+    ids = [uuid.UUID(tss_id) for tss_id in tss_ids]
     rows = conn.execute(
         sa_select(
-            project_source_snapshot.c.project_source_snapshot_id,
-            project_source_snapshot.c.full_text_status,
+            task_source_snapshot.c.task_source_snapshot_id,
+            task_source_snapshot.c.full_text_status,
             source_snapshot.c.metadata,
             source_snapshot.c.source_locator,
             source_classification_result.c.primary_evidence_type,
             source_appraisal_result.c.quality_score,
         )
         .select_from(
-            project_source_snapshot.join(
+            task_source_snapshot.join(
                 source_snapshot,
-                project_source_snapshot.c.source_snapshot_id
+                task_source_snapshot.c.source_snapshot_id
                 == source_snapshot.c.source_snapshot_id,
             )
             .outerjoin(
                 source_classification_result,
                 (
-                    source_classification_result.c.project_source_snapshot_id
-                    == project_source_snapshot.c.project_source_snapshot_id
+                    source_classification_result.c.task_source_snapshot_id
+                    == task_source_snapshot.c.task_source_snapshot_id
                 )
                 & (source_classification_result.c.evidence_scope_id == evidence_scope_id),
             )
             .outerjoin(
                 source_appraisal_result,
                 (
-                    source_appraisal_result.c.project_source_snapshot_id
-                    == project_source_snapshot.c.project_source_snapshot_id
+                    source_appraisal_result.c.task_source_snapshot_id
+                    == task_source_snapshot.c.task_source_snapshot_id
                 )
                 & (source_appraisal_result.c.evidence_scope_id == evidence_scope_id),
             )
         )
-        .where(project_source_snapshot.c.project_id == project_id)
-        .where(project_source_snapshot.c.project_source_snapshot_id.in_(ids))
+        .where(task_source_snapshot.c.task_id == task_id)
+        .where(task_source_snapshot.c.task_source_snapshot_id.in_(ids))
     ).all()
     result: dict[str, dict[str, Any]] = {}
     for row in rows:
@@ -612,7 +612,7 @@ def _doc_metadata(
         title = metadata.get("title")
         if not isinstance(title, str) or not title:
             title = row.source_locator
-        result[str(row.project_source_snapshot_id)] = {
+        result[str(row.task_source_snapshot_id)] = {
             "title": title,
             "evidence_type": row.primary_evidence_type,
             "quality_tier": (str(row.quality_score) if row.quality_score is not None else None),
@@ -622,20 +622,20 @@ def _doc_metadata(
 
 
 def _full_text_status_counts(
-    conn: Connection, *, project_id: uuid.UUID, pss_ids: list[str]
+    conn: Connection, *, task_id: uuid.UUID, tss_ids: list[str]
 ) -> dict[str, int]:
-    """Tally ``project_source_snapshot.full_text_status`` for the given pss ids."""
-    if not pss_ids:
+    """Tally ``task_source_snapshot.full_text_status`` for the given tss ids."""
+    if not tss_ids:
         return {}
-    ids = [uuid.UUID(pss_id) for pss_id in pss_ids]
+    ids = [uuid.UUID(tss_id) for tss_id in tss_ids]
     rows = conn.execute(
         sa_select(
-            project_source_snapshot.c.full_text_status,
+            task_source_snapshot.c.full_text_status,
             func.count().label("n"),
         )
-        .where(project_source_snapshot.c.project_id == project_id)
-        .where(project_source_snapshot.c.project_source_snapshot_id.in_(ids))
-        .group_by(project_source_snapshot.c.full_text_status)
+        .where(task_source_snapshot.c.task_id == task_id)
+        .where(task_source_snapshot.c.task_source_snapshot_id.in_(ids))
+        .group_by(task_source_snapshot.c.full_text_status)
     ).all()
     return dict(sorted((row.full_text_status, row.n) for row in rows))
 
@@ -646,7 +646,7 @@ def _full_text_status_counts(
 def p4_bundle(
     conn: Connection,
     *,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     context: SynthesiseContext,
     synthesis_backend: SynthesisBackend,
     group_run_id: uuid.UUID | None = None,
@@ -660,7 +660,7 @@ def p4_bundle(
 
     Args:
         conn: Open read connection.
-        project_id: Owning project.
+        task_id: Owning task.
         context: The synthesise context (scope, intent, run references) — the
             same bundle ``synthesise_scope`` resolves, so P4's inputs never drift.
         synthesis_backend: The proposal backend seam (stub or live).
@@ -682,7 +682,7 @@ def p4_bundle(
     """
     proposal = propose_synthesis_plan(
         conn,
-        project_id=project_id,
+        task_id=task_id,
         context=context,
         synthesis_backend=synthesis_backend,
         section_budget=section_budget,
@@ -692,7 +692,7 @@ def p4_bundle(
     if group_run_id is not None:
         group_row = conn.execute(
             sa_select(grouping_result.c.flags, grouping_result.c.groups)
-            .where(grouping_result.c.project_id == project_id)
+            .where(grouping_result.c.task_id == task_id)
             .where(grouping_result.c.run_id == group_run_id)
         ).first()
         if group_row is not None:
@@ -708,7 +708,7 @@ def p4_bundle(
     if context.extraction_run_id is not None:
         extraction_row = conn.execute(
             sa_select(extraction_result.c.extraction_provenance)
-            .where(extraction_result.c.project_id == project_id)
+            .where(extraction_result.c.task_id == task_id)
             .where(extraction_result.c.run_id == context.extraction_run_id)
         ).first()
         annotations = _relevance_annotations(

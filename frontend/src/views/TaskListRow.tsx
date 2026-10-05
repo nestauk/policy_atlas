@@ -6,48 +6,58 @@ import { scrub } from "../lib/scrub";
 import { StatusDot } from "../ui/brand/Card";
 import { Chip } from "../ui/brand/Chip";
 import { taskStatus } from "./landingPresentation";
-import { taskListRowGridClass } from "./listPageChrome";
+import { taskListRowGridClass, taskListRowGridClassWithOwner } from "./listPageChrome";
 
-type LatestRun = components["schemas"]["ProjectOut"]["latest_run"];
+type LatestRun = components["schemas"]["TaskOut"]["latest_run"];
 
 type TaskListRowProps = {
   to: string;
   name: string;
   capabilityKey?: string | null;
-  portfolioName?: string | null;
+  projectName?: string | null;
   showProjectPrefix?: boolean;
   sourceCount?: number | null;
   updatedAt?: string | null;
   latestRun?: LatestRun;
+  /** Task 033 phase 10b: render the owner column, and the string to show
+   *  when `owner_display` is null (`"—"`, or the admin-wide-list's "No
+   *  organisation" — the caller decides which, this row just renders it). */
+  ownerDisplay?: string | null;
+  ownerlessLabel?: string;
 };
 
-/** One task row: name (optional project prefix), capability, aligned status, sources, date. */
+/** One task row: name (optional task prefix), capability, aligned status, [owner], sources, date. */
 export function TaskListRow({
   to,
   name,
   capabilityKey,
-  portfolioName,
+  projectName,
   showProjectPrefix = false,
   sourceCount,
   updatedAt,
   latestRun,
+  ownerDisplay,
+  ownerlessLabel = "—",
 }: TaskListRowProps) {
   const status = taskStatus(latestRun);
   const safeName = scrub(name);
-  const safePortfolio = portfolioName != null ? scrub(portfolioName) : null;
+  const safeProject = projectName != null ? scrub(projectName) : null;
   const ariaLabel =
-    showProjectPrefix && safePortfolio != null ? `${safePortfolio}, ${safeName}` : safeName;
+    showProjectPrefix && safeProject != null ? `${safeProject}, ${safeName}` : safeName;
+  const showOwner = ownerDisplay !== undefined;
 
   return (
     <Link
       to={to}
       aria-label={ariaLabel}
-      className={`${taskListRowGridClass} px-4 py-3.5 no-underline hover:bg-blue-tint-2`}
+      className={`${showOwner ? taskListRowGridClassWithOwner : taskListRowGridClass} px-4 py-3.5 no-underline hover:bg-blue-tint-2`}
     >
-      <span className="min-w-0 truncate text-body">
-        {showProjectPrefix && safePortfolio != null && (
+      {/* Below md the row is a wrapping flex line: the name takes the whole
+          first line, the metadata flows onto the line(s) below. */}
+      <span className="min-w-0 truncate text-body max-md:w-full">
+        {showProjectPrefix && safeProject != null && (
           <>
-            <span className="font-normal text-grey">{safePortfolio}</span>
+            <span className="font-normal text-grey">{safeProject}</span>
             <span aria-hidden="true" className="mx-1.5 font-normal text-line-2">
               /
             </span>
@@ -62,6 +72,11 @@ export function TaskListRow({
         <StatusDot tone={status.dot} />
         <span className="truncate">{status.label}</span>
       </span>
+      {showOwner && (
+        <span className="truncate text-right text-meta text-grey">
+          {ownerDisplay !== null ? scrub(ownerDisplay) : ownerlessLabel}
+        </span>
+      )}
       <span className="text-right text-meta tabular-nums text-grey">
         {/* null and 0 differ: null means no run has asked yet. */}
         {sourceCount != null

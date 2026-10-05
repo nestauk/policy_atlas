@@ -39,7 +39,7 @@ def api_client(
         os.environ["DATABASE_URL"],
     )
     # Unique subs per client: the test DB is shared across the suite, and
-    # owner-scoped listings would otherwise see other tests' projects.
+    # owner-scoped listings would otherwise see other tests' tasks.
     owner = mint_token(
         f"owner-{uuid.uuid4()}", settings.oidc_issuer, settings.oidc_client_id, 60, key_dir
     )
@@ -53,12 +53,12 @@ def api_client(
         yield client, {"Authorization": f"Bearer {owner}"}, {"Authorization": f"Bearer {other}"}
 
 
-def create_project(client: TestClient, headers: dict[str, str]) -> str:
-    """Create one ordinary project and return its public identity."""
+def create_task(client: TestClient, headers: dict[str, str]) -> str:
+    """Create one ordinary task and return its public identity."""
     response = client.post(
-        "/api/v1/projects",
+        "/api/v1/tasks",
         headers=headers,
-        json={"name": "Test project", "question": "What works?"},
+        json={"name": "Test task", "question": "What works?"},
     )
     assert response.status_code == 201, response.text
-    return cast(str, response.json()["project_id"])
+    return cast(str, response.json()["task_id"])

@@ -1,4 +1,10 @@
-"""Roundtrip coverage for the task 029 conversation-model migration."""
+"""Roundtrip coverage for the task 029 conversation-model migration.
+
+Two catalog generations (plan D9): below revision c1a7f4e9b0d2 the Task is the
+table ``project``, its key is ``project_id`` and the plan table is
+``orchestration_plan``, so the seeds reflect the live shape; at head the same
+rows are addressed through ``core.schema``'s post-rename metadata.
+"""
 
 from __future__ import annotations
 
@@ -15,15 +21,13 @@ from sqlalchemy.exc import IntegrityError
 
 from policy_atlas.core.schema import (
     artefact,
-    capability_run,
     chat_turn,
     conversation,
-    evidence_scope,
-    orchestration_plan,
     planning_transcript,
-    project,
+    task,
 )
 from tests.conftest import _alembic_cfg
+from tests.core.legacy_catalog import legacy_table
 
 PRE_029_REVISION = "f4a8c2d7e1b9"
 _BASE_TIME = datetime(2026, 8, 1, tzinfo=UTC)
@@ -47,40 +51,51 @@ def _drop_scratch_database(engine: Engine, scratch: Engine, scratch_url: URL) ->
         admin.execute(text(f'DROP DATABASE IF EXISTS "{scratch_url.database}" WITH (FORCE)'))
 
 
-def _seed_project(
-    conn: Connection, *, archived: bool = False
+def _seed_task(
+    conn: Connection, *, archived: bool = False, legacy: bool = True
 ) -> uuid.UUID:
-    """Insert a pre-029 project and return its id."""
-    project_id = uuid.uuid4()
+    """Insert a pre-029 Task and return its id.
+
+    Args:
+        conn: Open connection on the revision being exercised.
+        archived: Seed the archived lifecycle state.
+        legacy: Seed BELOW revision c1a7f4e9b0d2, where the Task table is still
+            named ``project`` and its key ``project_id`` (plan D9).
+
+    Returns:
+        The new Task's id.
+    """
+    task_id = uuid.uuid4()
     created_at = _BASE_TIME
+    table = legacy_table(conn, "project") if legacy else task
     conn.execute(
-        project.insert().values(
-            project_id=project_id,
-            created_at=created_at,
-            name=f"Project {project_id}",
-            question=None,
-            status="archived" if archived else "active",
-            updated_at=created_at,
-            archived_at=created_at if archived else None,
-            owner_user_id="migration-test-owner",
-        )
+        table.insert().values(**{
+            "project_id" if legacy else "task_id": task_id,
+            "created_at": created_at,
+            "name": f"Task {task_id}",
+            "question": None,
+            "status": "archived" if archived else "active",
+            "updated_at": created_at,
+            "archived_at": created_at if archived else None,
+            "owner_user_id": "migration-test-owner",
+        })
     )
-    return project_id
+    return task_id
 
 
 def _seed_planning_turn(
     conn: Connection,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     *,
     created_at: datetime,
     status: str = "completed",
 ) -> uuid.UUID:
-    """Insert a pre-029 planning turn and return its id."""
+    """Insert a pre-029 planning turn (below the 038 revision) and return its id."""
     turn_id = uuid.uuid4()
     conn.execute(
-        planning_transcript.insert().values(
+        legacy_table(conn, "planning_transcript").insert().values(
             id=turn_id,
-            project_id=project_id,
+            project_id=task_id,
             client_turn_id=uuid.uuid4(),
             turn_index=created_at.day,
             user_message="Legacy planning turn",
@@ -99,28 +114,28 @@ def _seed_planning_turn(
 
 def _seed_capability_run(
     conn: Connection,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     *,
     status: str,
     started_at: datetime,
     ended_at: datetime | None,
 ) -> uuid.UUID:
-    """Insert a pre-029 capability run and return its id."""
+    """Insert a pre-029 capability run (below the 038 revision) and return its id."""
     scope_id = uuid.uuid4()
     run_id = uuid.uuid4()
     conn.execute(
-        evidence_scope.insert().values(
+        legacy_table(conn, "evidence_scope").insert().values(
             evidence_scope_id=scope_id,
-            project_id=project_id,
+            project_id=task_id,
             intent="Migration test scope",
             context={},
             created_at=started_at,
         )
     )
     conn.execute(
-        capability_run.insert().values(
+        legacy_table(conn, "capability_run").insert().values(
             capability_run_id=run_id,
-            project_id=project_id,
+            project_id=task_id,
             evidence_scope_id=scope_id,
             capability="evidence_base",
             plan_id=uuid.uuid4(),
@@ -135,14 +150,14 @@ def _seed_capability_run(
 
 
 def _seed_plan(
-    conn: Connection, project_id: uuid.UUID, *, status: str, version: int
+    conn: Connection, task_id: uuid.UUID, *, status: str, version: int
 ) -> uuid.UUID:
-    """Insert a pre-029 orchestration-plan version and return its id."""
+    """Insert a pre-029 plan version (table ``orchestration_plan``) and return its id."""
     plan_id = uuid.uuid4()
     conn.execute(
-        orchestration_plan.insert().values(
+        legacy_table(conn, "orchestration_plan").insert().values(
             plan_id=plan_id,
-            project_id=project_id,
+            project_id=task_id,
             evidence_scope_id=None,
             version=version,
             status=status,
@@ -155,12 +170,12 @@ def _seed_plan(
     return plan_id
 
 
-def _conversations_for(conn: Connection, project_id: uuid.UUID) -> list[RowMapping]:
-    """Return a project's migrated conversations in creation order."""
+def _conversations_for(conn: Connection, task_id: uuid.UUID) -> list[RowMapping]:
+    """Return a Task's migrated conversations in creation order (read at head)."""
     return list(
         conn.execute(
             select(conversation)
-            .where(conversation.c.project_id == project_id)
+            .where(conversation.c.task_id == task_id)
             .order_by(conversation.c.created_at)
         ).mappings()
     )
@@ -169,7 +184,7 @@ def _conversations_for(conn: Connection, project_id: uuid.UUID) -> list[RowMappi
 def test_029_backfill_follows_the_approved_truth_table(
     engine: Engine, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Backfill every required project/run state into its planning conversation(s)."""
+    """Backfill every required Task/run state into its planning conversation(s)."""
     shared = engine
     scratch, scratch_url = _scratch_database(shared, monkeypatch)
     cfg = _alembic_cfg()
@@ -177,55 +192,55 @@ def test_029_backfill_follows_the_approved_truth_table(
     try:
         command.upgrade(cfg, PRE_029_REVISION)
         with scratch.begin() as conn:
-            no_run_project = _seed_project(conn)
+            no_run_task = _seed_task(conn)
             no_run_turns = [
-                _seed_planning_turn(conn, no_run_project, created_at=_BASE_TIME),
+                _seed_planning_turn(conn, no_run_task, created_at=_BASE_TIME),
                 _seed_planning_turn(
-                    conn, no_run_project, created_at=_BASE_TIME + timedelta(days=1)
+                    conn, no_run_task, created_at=_BASE_TIME + timedelta(days=1)
                 ),
             ]
 
-            running_project = _seed_project(conn)
-            _seed_planning_turn(conn, running_project, created_at=_BASE_TIME)
+            running_task = _seed_task(conn)
+            _seed_planning_turn(conn, running_task, created_at=_BASE_TIME)
             _seed_capability_run(
                 conn,
-                running_project,
+                running_task,
                 status="running",
                 started_at=_BASE_TIME + timedelta(days=2),
                 ended_at=None,
             )
 
-            completed_project = _seed_project(conn)
-            _seed_planning_turn(conn, completed_project, created_at=_BASE_TIME)
+            completed_task = _seed_task(conn)
+            _seed_planning_turn(conn, completed_task, created_at=_BASE_TIME)
             completed_ended_at = _BASE_TIME + timedelta(days=3)
             _seed_capability_run(
                 conn,
-                completed_project,
+                completed_task,
                 status="succeeded",
                 started_at=_BASE_TIME + timedelta(days=2),
                 ended_at=completed_ended_at,
             )
 
-            mid_replan_project = _seed_project(conn)
+            mid_replan_task = _seed_task(conn)
             pre_run_turn = _seed_planning_turn(
-                conn, mid_replan_project, created_at=_BASE_TIME
+                conn, mid_replan_task, created_at=_BASE_TIME
             )
             mid_replan_ended_at = _BASE_TIME + timedelta(days=3)
             post_run_turns = [
                 _seed_planning_turn(
                     conn,
-                    mid_replan_project,
+                    mid_replan_task,
                     created_at=_BASE_TIME + timedelta(days=4),
                 ),
                 _seed_planning_turn(
                     conn,
-                    mid_replan_project,
+                    mid_replan_task,
                     created_at=_BASE_TIME + timedelta(days=5),
                 ),
             ]
             _seed_capability_run(
                 conn,
-                mid_replan_project,
+                mid_replan_task,
                 status="succeeded",
                 started_at=_BASE_TIME + timedelta(days=2),
                 ended_at=mid_replan_ended_at,
@@ -235,63 +250,63 @@ def test_029_backfill_follows_the_approved_truth_table(
             # no completed turn after it, but where EVERY turn postdates the run's
             # own ended_at (no turns exist before the boundary at all) — the
             # mid-replan split's pre-run half would own zero turns.
-            no_pre_run_split_project = _seed_project(conn)
+            no_pre_run_split_task = _seed_task(conn)
             no_pre_run_split_ended_at = _BASE_TIME + timedelta(days=3)
             _seed_capability_run(
                 conn,
-                no_pre_run_split_project,
+                no_pre_run_split_task,
                 status="succeeded",
                 started_at=_BASE_TIME + timedelta(days=2),
                 ended_at=no_pre_run_split_ended_at,
             )
             post_only_turn = _seed_planning_turn(
                 conn,
-                no_pre_run_split_project,
+                no_pre_run_split_task,
                 created_at=_BASE_TIME + timedelta(days=4),
             )
 
             # Edge: a succeeded run whose ended_at is NULL (data-integrity smell) —
             # closing honestly must not leave closed_at NULL too.
-            succeeded_null_ended_project = _seed_project(conn)
+            succeeded_null_ended_task = _seed_task(conn)
             succeeded_null_ended_started_at = _BASE_TIME + timedelta(days=2)
-            _seed_planning_turn(conn, succeeded_null_ended_project, created_at=_BASE_TIME)
+            _seed_planning_turn(conn, succeeded_null_ended_task, created_at=_BASE_TIME)
             _seed_capability_run(
                 conn,
-                succeeded_null_ended_project,
+                succeeded_null_ended_task,
                 status="succeeded",
                 started_at=succeeded_null_ended_started_at,
                 ended_at=None,
             )
 
-            failed_project = _seed_project(conn)
-            _seed_planning_turn(conn, failed_project, created_at=_BASE_TIME)
+            failed_task = _seed_task(conn)
+            _seed_planning_turn(conn, failed_task, created_at=_BASE_TIME)
             _seed_capability_run(
                 conn,
-                failed_project,
+                failed_task,
                 status="failed",
                 started_at=_BASE_TIME + timedelta(days=2),
                 ended_at=_BASE_TIME + timedelta(days=3),
             )
 
-            abandoned_project = _seed_project(conn)
-            _seed_planning_turn(conn, abandoned_project, created_at=_BASE_TIME)
+            abandoned_task = _seed_task(conn)
+            _seed_planning_turn(conn, abandoned_task, created_at=_BASE_TIME)
             _seed_capability_run(
                 conn,
-                abandoned_project,
+                abandoned_task,
                 status="failed",
                 started_at=_BASE_TIME + timedelta(days=2),
                 ended_at=_BASE_TIME + timedelta(days=3),
             )
-            _seed_plan(conn, abandoned_project, status="abandoned", version=1)
+            _seed_plan(conn, abandoned_task, status="abandoned", version=1)
 
-            archived_project = _seed_project(conn, archived=True)
-            _seed_planning_turn(conn, archived_project, created_at=_BASE_TIME)
+            archived_task = _seed_task(conn, archived=True)
+            _seed_planning_turn(conn, archived_task, created_at=_BASE_TIME)
 
-            zero_turn_project = _seed_project(conn)
+            zero_turn_task = _seed_task(conn)
 
         command.upgrade(cfg, "head")
         with scratch.connect() as conn:
-            no_run_conversation = _conversations_for(conn, no_run_project)
+            no_run_conversation = _conversations_for(conn, no_run_task)
             assert len(no_run_conversation) == 1
             assert no_run_conversation[0]["status"] == "active"
             assert set(
@@ -302,14 +317,14 @@ def test_029_backfill_follows_the_approved_truth_table(
                 ).scalars()
             ) == set(no_run_turns)
 
-            assert _conversations_for(conn, running_project)[0]["status"] == "active"
+            assert _conversations_for(conn, running_task)[0]["status"] == "active"
 
-            completed_conversation = _conversations_for(conn, completed_project)
+            completed_conversation = _conversations_for(conn, completed_task)
             assert len(completed_conversation) == 1
             assert completed_conversation[0]["status"] == "closed"
             assert completed_conversation[0]["closed_at"] == completed_ended_at
 
-            mid_replan_conversations = _conversations_for(conn, mid_replan_project)
+            mid_replan_conversations = _conversations_for(conn, mid_replan_task)
             assert [row["status"] for row in mid_replan_conversations] == ["closed", "active"]
             assert mid_replan_conversations[0]["closed_at"] == mid_replan_ended_at
             assert set(
@@ -328,7 +343,7 @@ def test_029_backfill_follows_the_approved_truth_table(
             ) == set(post_run_turns)
             assert sum(row["status"] == "active" for row in mid_replan_conversations) == 1
 
-            no_pre_run_split_conversations = _conversations_for(conn, no_pre_run_split_project)
+            no_pre_run_split_conversations = _conversations_for(conn, no_pre_run_split_task)
             assert len(no_pre_run_split_conversations) == 1
             assert no_pre_run_split_conversations[0]["status"] == "active"
             assert set(
@@ -341,7 +356,7 @@ def test_029_backfill_follows_the_approved_truth_table(
             ) == {post_only_turn}
 
             succeeded_null_ended_conversation = _conversations_for(
-                conn, succeeded_null_ended_project
+                conn, succeeded_null_ended_task
             )
             assert len(succeeded_null_ended_conversation) == 1
             assert succeeded_null_ended_conversation[0]["status"] == "closed"
@@ -350,16 +365,16 @@ def test_029_backfill_follows_the_approved_truth_table(
                 == succeeded_null_ended_started_at
             )
 
-            assert _conversations_for(conn, failed_project)[0]["status"] == "active"
-            abandoned_conversation = _conversations_for(conn, abandoned_project)[0]
+            assert _conversations_for(conn, failed_task)[0]["status"] == "active"
+            abandoned_conversation = _conversations_for(conn, abandoned_task)[0]
             assert abandoned_conversation["status"] == "closed"
             assert abandoned_conversation["closed_at"] is not None
 
-            archived_conversation = _conversations_for(conn, archived_project)[0]
+            archived_conversation = _conversations_for(conn, archived_task)[0]
             assert archived_conversation["status"] == "active"
             assert archived_conversation["archived_at"] is None
 
-            assert _conversations_for(conn, zero_turn_project) == []
+            assert _conversations_for(conn, zero_turn_task) == []
     finally:
         _drop_scratch_database(shared, scratch, scratch_url)
 
@@ -377,11 +392,11 @@ def test_029_migration_roundtrip_preserves_legacy_rows_and_enforces_new_invarian
     try:
         command.upgrade(cfg, PRE_029_REVISION)
         with scratch.begin() as conn:
-            project_id = _seed_project(conn)
+            task_id = _seed_task(conn)
             conn.execute(
-                artefact.insert().values(
+                legacy_table(conn, "artefact").insert().values(
                     artefact_id=artefact_id,
-                    project_id=project_id,
+                    project_id=task_id,
                     title="Legacy artefact",
                     created_at=_BASE_TIME,
                     summary=None,
@@ -389,7 +404,7 @@ def test_029_migration_roundtrip_preserves_legacy_rows_and_enforces_new_invarian
                 )
             )
             transcript_id = _seed_planning_turn(
-                conn, project_id, created_at=_BASE_TIME, status="pending"
+                conn, task_id, created_at=_BASE_TIME, status="pending"
             )
 
         command.upgrade(cfg, "head")
@@ -400,7 +415,7 @@ def test_029_migration_roundtrip_preserves_legacy_rows_and_enforces_new_invarian
                 column["name"] for column in inspector.get_columns("planning_transcript")
             }
             assert {"conversation_id"} <= {
-                column["name"] for column in inspector.get_columns("orchestration_plan")
+                column["name"] for column in inspector.get_columns("plan")
             }
             assert {"capability_run_id"} <= {
                 column["name"] for column in inspector.get_columns("artefact")
@@ -413,12 +428,12 @@ def test_029_migration_roundtrip_preserves_legacy_rows_and_enforces_new_invarian
                 for constraint in inspector.get_unique_constraints("chat_turn")
             }
 
-            constraint_project_id = _seed_project(conn)
+            constraint_task_id = _seed_task(conn, legacy=False)
             planning_id = uuid.uuid4()
             conn.execute(
                 conversation.insert().values(
                     id=planning_id,
-                    project_id=constraint_project_id,
+                    task_id=constraint_task_id,
                     kind="planning",
                     title="Planning",
                     entry_artefact_id=None,
@@ -432,7 +447,7 @@ def test_029_migration_roundtrip_preserves_legacy_rows_and_enforces_new_invarian
                 conn.execute(
                     conversation.insert().values(
                         id=uuid.uuid4(),
-                        project_id=constraint_project_id,
+                        task_id=constraint_task_id,
                         kind="planning",
                         title="Second planning conversation",
                         entry_artefact_id=None,
@@ -449,7 +464,7 @@ def test_029_migration_roundtrip_preserves_legacy_rows_and_enforces_new_invarian
             conn.execute(
                 conversation.insert().values(
                     id=chat_id,
-                    project_id=project_id,
+                    task_id=task_id,
                     kind="chat",
                     title="A chat",
                     entry_artefact_id=artefact_id,

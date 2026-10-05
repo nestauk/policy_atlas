@@ -16,7 +16,7 @@ from sqlalchemy.engine import Engine
 import policy_atlas.runtime.runner as runner_module
 from policy_atlas.core import events
 from policy_atlas.core.schema import capability_run
-from policy_atlas.evidence_base.corpus.characterise import CharacteriseFailure
+from policy_atlas.evidence_search.corpus.characterise import CharacteriseFailure
 from policy_atlas.runtime import harness, steering_events
 from policy_atlas.runtime.continuation_state import ContinuationState, ResumeDecision, build
 from policy_atlas.runtime.runner import NullIO, WalkParked, run_plan
@@ -27,7 +27,7 @@ from policy_atlas.runtime.steering import (
     ReEnterSegment,
     render_collation,
 )
-from tests.runtime.test_runner import _base_plan, _cleanup, _runner_backends, _seed_project
+from tests.runtime.test_runner import _base_plan, _cleanup, _runner_backends, _seed_task
 from tests.runtime.test_segment_reentry import _AMENDMENT, _boundary_state
 from tests.runtime.test_steering import _insert_plan_row, _walk_to_completion
 
@@ -179,7 +179,7 @@ def _capture_live_state(point: dict[str, Any]) -> tuple[ContinuationState, dict[
         "pause_header": runner_module._watch_header(runner_state),
         "digest": runner_module._watch_digest(
             local["engine"],
-            project_id=local["project_id"],
+            task_id=local["task_id"],
             capability_run_id=state.capability_run_id,
         ),
         "canonical_options": point.get("options", []),
@@ -393,28 +393,28 @@ def _assert_parity(
 
 def test_parked_continue_rebuilds_the_runner_state_from_durable_rows(engine: Engine) -> None:
     """A parked walk resumes with the same component outcomes as an unbroken walk."""
-    parked_project_id: uuid.UUID | None = None
-    unbroken_project_id: uuid.UUID | None = None
+    parked_task_id: uuid.UUID | None = None
+    unbroken_task_id: uuid.UUID | None = None
     try:
-        parked_project_id, parked_scope_id = _seed_project(engine)
-        unbroken_project_id, unbroken_scope_id = _seed_project(engine)
+        parked_task_id, parked_scope_id = _seed_task(engine)
+        unbroken_task_id, unbroken_scope_id = _seed_task(engine)
         plan = _base_plan(steering_mode="frequent", search_effort="standard")
         parked_plan_id = _insert_plan_row(
             engine,
-            project_id=parked_project_id,
+            task_id=parked_task_id,
             scope_id=parked_scope_id,
             plan=plan,
         )
         unbroken_plan_id = _insert_plan_row(
             engine,
-            project_id=unbroken_project_id,
+            task_id=unbroken_task_id,
             scope_id=unbroken_scope_id,
             plan=plan,
         )
         parked_io = _ParkOnceIO()
         parked = run_plan(
             engine,
-            project_id=parked_project_id,
+            task_id=parked_task_id,
             evidence_scope_id=parked_scope_id,
             plan=plan,
             plan_id=parked_plan_id,
@@ -427,7 +427,7 @@ def test_parked_continue_rebuilds_the_runner_state_from_durable_rows(engine: Eng
         assert parked.capability_run_id is not None
         state = build(
             engine,
-            project_id=parked_project_id,
+            task_id=parked_task_id,
             capability_run_id=parked.capability_run_id,
         )
         assert state.step_outcomes == parked.steps
@@ -440,7 +440,7 @@ def test_parked_continue_rebuilds_the_runner_state_from_durable_rows(engine: Eng
         _assert_parity(parked_io.live_state, parked_io.surface, state, parked_io.surface)
         resumed = run_plan(
             engine,
-            project_id=parked_project_id,
+            task_id=parked_task_id,
             evidence_scope_id=parked_scope_id,
             plan=plan,
             plan_id=parked_plan_id,
@@ -454,7 +454,7 @@ def test_parked_continue_rebuilds_the_runner_state_from_durable_rows(engine: Eng
         unbroken_io = _CaptureContinueIO()
         unbroken = run_plan(
             engine,
-            project_id=unbroken_project_id,
+            task_id=unbroken_task_id,
             evidence_scope_id=unbroken_scope_id,
             plan=plan,
             plan_id=unbroken_plan_id,
@@ -478,21 +478,21 @@ def test_parked_continue_rebuilds_the_runner_state_from_durable_rows(engine: Eng
             ).scalar_one()
         assert status == resumed.status
     finally:
-        _cleanup(engine, parked_project_id)
-        _cleanup(engine, unbroken_project_id)
+        _cleanup(engine, parked_task_id)
+        _cleanup(engine, unbroken_task_id)
 
 
 def test_before_boundary_park_continue_runs_the_pending_component(engine: Engine) -> None:
     """A decided parked before-boundary is not presented again on continuation."""
-    project_id: uuid.UUID | None = None
+    task_id: uuid.UUID | None = None
     try:
-        project_id, scope_id = _seed_project(engine)
+        task_id, scope_id = _seed_task(engine)
         plan = _base_plan(steering_mode="frequent", search_effort="standard")
-        plan_id = _insert_plan_row(engine, project_id=project_id, scope_id=scope_id, plan=plan)
+        plan_id = _insert_plan_row(engine, task_id=task_id, scope_id=scope_id, plan=plan)
         parked_io = _BeforeBoundaryParkIO("select")
         parked = run_plan(
             engine,
-            project_id=project_id,
+            task_id=task_id,
             evidence_scope_id=scope_id,
             plan=plan,
             plan_id=plan_id,
@@ -503,14 +503,14 @@ def test_before_boundary_park_continue_runs_the_pending_component(engine: Engine
         )
         assert parked.status == "paused"
         assert parked.capability_run_id is not None
-        state = build(engine, project_id=project_id, capability_run_id=parked.capability_run_id)
+        state = build(engine, task_id=task_id, capability_run_id=parked.capability_run_id)
         assert state.parked_boundary == "before_component"
         assert state.parked_component == "select"
         with engine.connect() as conn:
-            resume_sequence = events.read(conn, project_id)[-1]["sequence"]
+            resume_sequence = events.read(conn, task_id)[-1]["sequence"]
         resumed = run_plan(
             engine,
-            project_id=project_id,
+            task_id=task_id,
             evidence_scope_id=scope_id,
             plan=plan,
             plan_id=plan_id,
@@ -525,7 +525,7 @@ def test_before_boundary_park_continue_runs_the_pending_component(engine: Engine
         with engine.connect() as conn:
             resumed_events = [
                 entry
-                for entry in events.read(conn, project_id)
+                for entry in events.read(conn, task_id)
                 if entry["sequence"] > resume_sequence
             ]
         assert any(
@@ -540,21 +540,21 @@ def test_before_boundary_park_continue_runs_the_pending_component(engine: Engine
             for entry in resumed_events
         )
     finally:
-        _cleanup(engine, project_id)
+        _cleanup(engine, task_id)
 
 
 def test_after_boundary_park_continue_evaluates_the_next_before_boundary(
     engine: Engine,
 ) -> None:
     """An after-component decision does not decide the next before-boundary."""
-    project_id: uuid.UUID | None = None
+    task_id: uuid.UUID | None = None
     try:
-        project_id, scope_id = _seed_project(engine)
+        task_id, scope_id = _seed_task(engine)
         plan = _base_plan(steering_mode="frequent", search_effort="standard")
-        plan_id = _insert_plan_row(engine, project_id=project_id, scope_id=scope_id, plan=plan)
+        plan_id = _insert_plan_row(engine, task_id=task_id, scope_id=scope_id, plan=plan)
         parked = run_plan(
             engine,
-            project_id=project_id,
+            task_id=task_id,
             evidence_scope_id=scope_id,
             plan=plan,
             plan_id=plan_id,
@@ -565,14 +565,14 @@ def test_after_boundary_park_continue_evaluates_the_next_before_boundary(
         )
         assert parked.status == "paused"
         assert parked.capability_run_id is not None
-        state = build(engine, project_id=project_id, capability_run_id=parked.capability_run_id)
+        state = build(engine, task_id=task_id, capability_run_id=parked.capability_run_id)
         assert state.parked_boundary == "after_component"
         assert state.parked_component == "characterise"
         with engine.connect() as conn:
-            resume_sequence = events.read(conn, project_id)[-1]["sequence"]
+            resume_sequence = events.read(conn, task_id)[-1]["sequence"]
         run_plan(
             engine,
-            project_id=project_id,
+            task_id=task_id,
             evidence_scope_id=scope_id,
             plan=plan,
             plan_id=plan_id,
@@ -586,7 +586,7 @@ def test_after_boundary_park_continue_evaluates_the_next_before_boundary(
         with engine.connect() as conn:
             resumed_events = [
                 entry
-                for entry in events.read(conn, project_id)
+                for entry in events.read(conn, task_id)
                 if entry["sequence"] > resume_sequence
             ]
         assert any(
@@ -596,20 +596,20 @@ def test_after_boundary_park_continue_evaluates_the_next_before_boundary(
             for entry in resumed_events
         )
     finally:
-        _cleanup(engine, project_id)
+        _cleanup(engine, task_id)
 
 
 def test_class9_sees_failed_replacement_rerun_from_runner_attempted_map(
     engine: Engine, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """G3: a failed replacement re-run feeds class 9 at the next boundary scan."""
-    project_id: uuid.UUID | None = None
+    task_id: uuid.UUID | None = None
     try:
-        project_id, scope_id = _seed_project(engine)
+        task_id, scope_id = _seed_task(engine)
         plan = _base_plan()
-        plan_id = _insert_plan_row(engine, project_id=project_id, scope_id=scope_id, plan=plan)
+        plan_id = _insert_plan_row(engine, task_id=task_id, scope_id=scope_id, plan=plan)
         outcome, successful_runs, state = _walk_to_completion(
-            engine, project_id=project_id, scope_id=scope_id, plan=plan, plan_id=plan_id
+            engine, task_id=task_id, scope_id=scope_id, plan=plan, plan_id=plan_id
         )
         base = steering_events.base_payload(
             capability_run_id=outcome.capability_run_id,
@@ -620,7 +620,7 @@ def test_class9_sees_failed_replacement_rerun_from_runner_attempted_map(
         )
         rerun_state, directive = runner_module._apply_replacement_rerun(
             engine,
-            project_id=project_id,
+            task_id=task_id,
             state=state,
             adjustment=Adjust(
                 directive_deltas={"characterise": {"characterise": {"themes": "more"}}}
@@ -641,7 +641,7 @@ def test_class9_sees_failed_replacement_rerun_from_runner_attempted_map(
         _, failed_run_id = runner_module._run_component_rerun(
             engine,
             NullIO(),
-            project_id=project_id,
+            task_id=task_id,
             evidence_scope_id=scope_id,
             state=rerun_state,
             component="characterise",
@@ -659,7 +659,7 @@ def test_class9_sees_failed_replacement_rerun_from_runner_attempted_map(
         triggers = runner_module._floor_boundary_triggers(
             engine,
             boundary="after_screen",
-            project_id=project_id,
+            task_id=task_id,
             evidence_scope_id=scope_id,
             attempted_runs=attempted_runs,
         )
@@ -669,20 +669,20 @@ def test_class9_sees_failed_replacement_rerun_from_runner_attempted_map(
             for trigger in triggers
         )
     finally:
-        _cleanup(engine, project_id)
+        _cleanup(engine, task_id)
 
 
 def test_class9_sees_failed_segment_rewalk_from_runner_attempted_map(
     engine: Engine, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """G3: a failed segment re-walk feeds class 9 at the next boundary scan."""
-    project_id: uuid.UUID | None = None
+    task_id: uuid.UUID | None = None
     try:
-        project_id, scope_id = _seed_project(engine)
+        task_id, scope_id = _seed_task(engine)
         plan = _base_plan()
-        plan_id = _insert_plan_row(engine, project_id=project_id, scope_id=scope_id, plan=plan)
+        plan_id = _insert_plan_row(engine, task_id=task_id, scope_id=scope_id, plan=plan)
         outcome, successful_runs, state, completed = _boundary_state(
-            engine, project_id=project_id, scope_id=scope_id, plan=plan, plan_id=plan_id
+            engine, task_id=task_id, scope_id=scope_id, plan=plan, plan_id=plan_id
         )
 
         def fail_screen(*args: Any, **kwargs: Any) -> dict[str, Any]:
@@ -694,7 +694,7 @@ def test_class9_sees_failed_segment_rewalk_from_runner_attempted_map(
         result = runner_module._run_segment_reentry(
             engine,
             NullIO(),
-            project_id=project_id,
+            task_id=task_id,
             evidence_scope_id=scope_id,
             state=state,
             segment_start="acquire",
@@ -715,7 +715,7 @@ def test_class9_sees_failed_segment_rewalk_from_runner_attempted_map(
         triggers = runner_module._floor_boundary_triggers(
             engine,
             boundary="after_screen",
-            project_id=project_id,
+            task_id=task_id,
             evidence_scope_id=scope_id,
             attempted_runs=attempted_runs,
         )
@@ -725,30 +725,30 @@ def test_class9_sees_failed_segment_rewalk_from_runner_attempted_map(
             for trigger in triggers
         )
     finally:
-        _cleanup(engine, project_id)
+        _cleanup(engine, task_id)
 
 
 def test_segment_reentry_parity_reparks_at_the_represented_boundary(engine: Engine) -> None:
     """G3 parity: additive resume re-walks and parks at its one re-presentation."""
-    parked_project_id: uuid.UUID | None = None
-    unbroken_project_id: uuid.UUID | None = None
+    parked_task_id: uuid.UUID | None = None
+    unbroken_task_id: uuid.UUID | None = None
     amendment = {"acquire": {"search": {"guidance": ["focus on UK policy"]}}}
     try:
-        parked_project_id, parked_scope_id = _seed_project(engine)
-        unbroken_project_id, unbroken_scope_id = _seed_project(engine)
+        parked_task_id, parked_scope_id = _seed_task(engine)
+        unbroken_task_id, unbroken_scope_id = _seed_task(engine)
         plan = _base_plan(steering_mode="frequent")
         parked_plan_id = _insert_plan_row(
-            engine, project_id=parked_project_id, scope_id=parked_scope_id, plan=plan
+            engine, task_id=parked_task_id, scope_id=parked_scope_id, plan=plan
         )
         unbroken_plan_id = _insert_plan_row(
-            engine, project_id=unbroken_project_id, scope_id=unbroken_scope_id, plan=plan
+            engine, task_id=unbroken_task_id, scope_id=unbroken_scope_id, plan=plan
         )
         unbroken_io = _BoundaryResponseIO(
             "characterise", ReEnterSegment(segment_start="acquire", directive_deltas=amendment)
         )
         unbroken = run_plan(
             engine,
-            project_id=unbroken_project_id,
+            task_id=unbroken_task_id,
             evidence_scope_id=unbroken_scope_id,
             plan=plan,
             plan_id=unbroken_plan_id,
@@ -760,7 +760,7 @@ def test_segment_reentry_parity_reparks_at_the_represented_boundary(engine: Engi
         parked_io = _BoundaryParkIO("characterise")
         parked = run_plan(
             engine,
-            project_id=parked_project_id,
+            task_id=parked_task_id,
             evidence_scope_id=parked_scope_id,
             plan=plan,
             plan_id=parked_plan_id,
@@ -771,7 +771,7 @@ def test_segment_reentry_parity_reparks_at_the_represented_boundary(engine: Engi
         )
         assert parked.capability_run_id is not None
         initial = build(
-            engine, project_id=parked_project_id, capability_run_id=parked.capability_run_id
+            engine, task_id=parked_task_id, capability_run_id=parked.capability_run_id
         )
         assert unbroken_io.live_state is not None
         assert unbroken_io.surface is not None
@@ -780,7 +780,7 @@ def test_segment_reentry_parity_reparks_at_the_represented_boundary(engine: Engi
         _assert_parity(unbroken_io.live_state, unbroken_io.surface, initial, parked_io.surface)
         reparking = run_plan(
             engine,
-            project_id=parked_project_id,
+            task_id=parked_task_id,
             evidence_scope_id=parked_scope_id,
             plan=initial.plan,
             plan_id=initial.plan_id,
@@ -802,36 +802,36 @@ def test_segment_reentry_parity_reparks_at_the_represented_boundary(engine: Engi
         assert parked_io.presentations == 2
         reparking_state = build(
             engine,
-            project_id=parked_project_id,
+            task_id=parked_task_id,
             capability_run_id=parked.capability_run_id,
         )
         assert reparking_state.attempted_runs["characterise"] != initial.attempted_runs[
             "characterise"
         ]
     finally:
-        _cleanup(engine, parked_project_id)
-        _cleanup(engine, unbroken_project_id)
+        _cleanup(engine, parked_task_id)
+        _cleanup(engine, unbroken_task_id)
 
 
 def test_adjust_answer_parity_reads_the_amended_plan(engine: Engine) -> None:
     """An adjust persisted at the parked answer is read as the next plan version."""
-    parked_project_id: uuid.UUID | None = None
-    unbroken_project_id: uuid.UUID | None = None
+    parked_task_id: uuid.UUID | None = None
+    unbroken_task_id: uuid.UUID | None = None
     delta = {"screen_abstract": {"screening": {"criteria": ["Include policy trials"]}}}
     try:
-        parked_project_id, parked_scope_id = _seed_project(engine)
-        unbroken_project_id, unbroken_scope_id = _seed_project(engine)
+        parked_task_id, parked_scope_id = _seed_task(engine)
+        unbroken_task_id, unbroken_scope_id = _seed_task(engine)
         plan = _base_plan(steering_mode="frequent")
         parked_plan_id = _insert_plan_row(
-            engine, project_id=parked_project_id, scope_id=parked_scope_id, plan=plan
+            engine, task_id=parked_task_id, scope_id=parked_scope_id, plan=plan
         )
         unbroken_plan_id = _insert_plan_row(
-            engine, project_id=unbroken_project_id, scope_id=unbroken_scope_id, plan=plan
+            engine, task_id=unbroken_task_id, scope_id=unbroken_scope_id, plan=plan
         )
         unbroken_io = _BoundaryResponseIO("acquire", Adjust(directive_deltas=delta))
         unbroken = run_plan(
             engine,
-            project_id=unbroken_project_id,
+            task_id=unbroken_task_id,
             evidence_scope_id=unbroken_scope_id,
             plan=plan,
             plan_id=unbroken_plan_id,
@@ -843,7 +843,7 @@ def test_adjust_answer_parity_reads_the_amended_plan(engine: Engine) -> None:
         parked_io = _BoundaryParkIO("acquire")
         parked = run_plan(
             engine,
-            project_id=parked_project_id,
+            task_id=parked_task_id,
             evidence_scope_id=parked_scope_id,
             plan=plan,
             plan_id=parked_plan_id,
@@ -854,7 +854,7 @@ def test_adjust_answer_parity_reads_the_amended_plan(engine: Engine) -> None:
         )
         assert parked.capability_run_id is not None
         state = build(
-            engine, project_id=parked_project_id, capability_run_id=parked.capability_run_id
+            engine, task_id=parked_task_id, capability_run_id=parked.capability_run_id
         )
         assert unbroken_io.live_state is not None
         assert unbroken_io.surface is not None
@@ -878,7 +878,7 @@ def test_adjust_answer_parity_reads_the_amended_plan(engine: Engine) -> None:
         )
         runner_module._apply_runner_adjustment(
             engine,
-            project_id=parked_project_id,
+            task_id=parked_task_id,
             state=runner_state,
             adjustment=Adjust(directive_deltas=delta),
             completed_components=state.completed_components,
@@ -886,11 +886,11 @@ def test_adjust_answer_parity_reads_the_amended_plan(engine: Engine) -> None:
             event_run_id=state.most_recent_attempted_run_id,
         )
         amended = build(
-            engine, project_id=parked_project_id, capability_run_id=state.capability_run_id
+            engine, task_id=parked_task_id, capability_run_id=state.capability_run_id
         )
         resumed = run_plan(
             engine,
-            project_id=parked_project_id,
+            task_id=parked_task_id,
             evidence_scope_id=parked_scope_id,
             plan=amended.plan,
             plan_id=amended.plan_id,
@@ -904,20 +904,20 @@ def test_adjust_answer_parity_reads_the_amended_plan(engine: Engine) -> None:
         assert amended.plan.screening_criteria == delta["screen_abstract"]["screening"]["criteria"]
         assert resumed.status == unbroken.status == "succeeded"
     finally:
-        _cleanup(engine, parked_project_id)
-        _cleanup(engine, unbroken_project_id)
+        _cleanup(engine, parked_task_id)
+        _cleanup(engine, unbroken_task_id)
 
 
 def test_freetext_multifragment_overlay_parity_replays_compiled_deltas(engine: Engine) -> None:
     """G5 replays the exact confirmed fan-out ``compiled[].delta`` event shape."""
-    project_id: uuid.UUID | None = None
+    task_id: uuid.UUID | None = None
     try:
-        project_id, scope_id = _seed_project(engine)
+        task_id, scope_id = _seed_task(engine)
         plan = _base_plan(steering_mode="frequent")
-        plan_id = _insert_plan_row(engine, project_id=project_id, scope_id=scope_id, plan=plan)
+        plan_id = _insert_plan_row(engine, task_id=task_id, scope_id=scope_id, plan=plan)
         parked = run_plan(
             engine,
-            project_id=project_id,
+            task_id=task_id,
             evidence_scope_id=scope_id,
             plan=plan,
             plan_id=plan_id,
@@ -927,7 +927,7 @@ def test_freetext_multifragment_overlay_parity_replays_compiled_deltas(engine: E
             io=_BoundaryParkIO("acquire"),
         )
         assert parked.capability_run_id is not None
-        state = build(engine, project_id=project_id, capability_run_id=parked.capability_run_id)
+        state = build(engine, task_id=task_id, capability_run_id=parked.capability_run_id)
         fragments = [
             {
                 "fragment_text": "focus rural themes",
@@ -947,7 +947,7 @@ def test_freetext_multifragment_overlay_parity_replays_compiled_deltas(engine: E
         with engine.begin() as conn:
             events.append(
                 conn,
-                project_id=project_id,
+                task_id=task_id,
                 run_id=state.most_recent_attempted_run_id,
                 event_type=steering_events.STEERING_DECISION,
                 payload={
@@ -967,7 +967,7 @@ def test_freetext_multifragment_overlay_parity_replays_compiled_deltas(engine: E
                     "interpreted_action": {"compiled": fragments, "refused": [], "summary": ""},
                 },
             )
-        rebuilt = build(engine, project_id=project_id, capability_run_id=state.capability_run_id)
+        rebuilt = build(engine, task_id=task_id, capability_run_id=state.capability_run_id)
         expected: dict[str, dict[str, Any]] = {}
         for fragment in fragments:
             component_name = fragment["component"]
@@ -979,20 +979,20 @@ def test_freetext_multifragment_overlay_parity_replays_compiled_deltas(engine: E
             )
         assert rebuilt.pending_overlays == expected
     finally:
-        _cleanup(engine, project_id)
+        _cleanup(engine, task_id)
 
 
 def test_failed_then_successful_rerun_parity_clears_stale_discretion_block(
     engine: Engine, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """G4 replacement rerun moves the reference and clears its old failure block."""
-    project_id: uuid.UUID | None = None
+    task_id: uuid.UUID | None = None
     try:
-        project_id, scope_id = _seed_project(engine)
+        task_id, scope_id = _seed_task(engine)
         plan = _base_plan()
-        plan_id = _insert_plan_row(engine, project_id=project_id, scope_id=scope_id, plan=plan)
+        plan_id = _insert_plan_row(engine, task_id=task_id, scope_id=scope_id, plan=plan)
         outcome, successful_runs, state = _walk_to_completion(
-            engine, project_id=project_id, scope_id=scope_id, plan=plan, plan_id=plan_id
+            engine, task_id=task_id, scope_id=scope_id, plan=plan, plan_id=plan_id
         )
         base = steering_events.base_payload(
             capability_run_id=outcome.capability_run_id,
@@ -1003,7 +1003,7 @@ def test_failed_then_successful_rerun_parity_clears_stale_discretion_block(
         )
         rerun_state, directive = runner_module._apply_replacement_rerun(
             engine,
-            project_id=project_id,
+            task_id=task_id,
             state=state,
             adjustment=Adjust(
                 directive_deltas={"characterise": {"characterise": {"themes": "more"}}}
@@ -1026,7 +1026,7 @@ def test_failed_then_successful_rerun_parity_clears_stale_discretion_block(
         runner_module._run_component_rerun(
             engine,
             NullIO(),
-            project_id=project_id,
+            task_id=task_id,
             evidence_scope_id=scope_id,
             state=rerun_state,
             component="characterise",
@@ -1046,7 +1046,7 @@ def test_failed_then_successful_rerun_parity_clears_stale_discretion_block(
         _, successful_run_id = runner_module._run_component_rerun(
             engine,
             NullIO(),
-            project_id=project_id,
+            task_id=task_id,
             evidence_scope_id=scope_id,
             state=rerun_state,
             component="characterise",
@@ -1065,7 +1065,7 @@ def test_failed_then_successful_rerun_parity_clears_stale_discretion_block(
         assert successful_runs["characterise"] == successful_run_id
         assert "characterise" not in blocked
     finally:
-        _cleanup(engine, project_id)
+        _cleanup(engine, task_id)
 
 
 def test_interleaved_canonical_and_freetext_overlays_fold_in_sequence_order(
@@ -1074,14 +1074,14 @@ def test_interleaved_canonical_and_freetext_overlays_fold_in_sequence_order(
     """A canonical adjust and a confirmed free-text fragment on the SAME component
     fold in durable sequence order — the one merge shape the original five parity
     cases never interleaved (review finding adv-m5, 2026-07-21)."""
-    project_id: uuid.UUID | None = None
+    task_id: uuid.UUID | None = None
     try:
-        project_id, scope_id = _seed_project(engine)
+        task_id, scope_id = _seed_task(engine)
         plan = _base_plan(steering_mode="frequent")
-        plan_id = _insert_plan_row(engine, project_id=project_id, scope_id=scope_id, plan=plan)
+        plan_id = _insert_plan_row(engine, task_id=task_id, scope_id=scope_id, plan=plan)
         parked = run_plan(
             engine,
-            project_id=project_id,
+            task_id=task_id,
             evidence_scope_id=scope_id,
             plan=plan,
             plan_id=plan_id,
@@ -1091,7 +1091,7 @@ def test_interleaved_canonical_and_freetext_overlays_fold_in_sequence_order(
             io=_BoundaryParkIO("acquire"),
         )
         assert parked.capability_run_id is not None
-        state = build(engine, project_id=project_id, capability_run_id=parked.capability_run_id)
+        state = build(engine, task_id=task_id, capability_run_id=parked.capability_run_id)
         canonical_delta = {"characterise": {"guidance": ["prioritise rural coverage"]}}
         fragment_delta = {"guidance": ["then contrast urban areas"]}
 
@@ -1115,14 +1115,14 @@ def test_interleaved_canonical_and_freetext_overlays_fold_in_sequence_order(
         with engine.begin() as conn:
             events.append(
                 conn,
-                project_id=project_id,
+                task_id=task_id,
                 run_id=state.most_recent_attempted_run_id,
                 event_type=steering_events.STEERING_DECISION,
                 payload=_decision_payload({"directive_deltas": canonical_delta}),
             )
             events.append(
                 conn,
-                project_id=project_id,
+                task_id=task_id,
                 run_id=state.most_recent_attempted_run_id,
                 event_type=steering_events.STEERING_DECISION,
                 payload=_decision_payload(
@@ -1141,7 +1141,7 @@ def test_interleaved_canonical_and_freetext_overlays_fold_in_sequence_order(
                     }
                 ),
             )
-        rebuilt = build(engine, project_id=project_id, capability_run_id=state.capability_run_id)
+        rebuilt = build(engine, task_id=task_id, capability_run_id=state.capability_run_id)
         expected = runner_module._extend_overlays({}, canonical_delta)
         expected = runner_module._extend_overlays(expected, {"characterise": fragment_delta})
         assert rebuilt.pending_overlays == expected
@@ -1150,4 +1150,4 @@ def test_interleaved_canonical_and_freetext_overlays_fold_in_sequence_order(
         reversed_fold = runner_module._extend_overlays(reversed_fold, canonical_delta)
         assert rebuilt.pending_overlays != reversed_fold
     finally:
-        _cleanup(engine, project_id)
+        _cleanup(engine, task_id)

@@ -25,7 +25,7 @@ every subsequent statement fails with "current transaction is aborted" until a r
 A fan-out over N documents where one throws (network timeout, malformed model output once a real
 inference call replaces the stub) must not abort processing of the other N-1. Per
 [system/execution-orchestration.md](../specs/system/execution-orchestration.md) and
-[capabilities/evidence-base/components.md](../specs/capabilities/evidence-base/components.md),
+[capabilities/evidence-search/components.md](../specs/capabilities/evidence-search/components.md),
 screen/classify/appraise are all declared "per-document fan-out" — the harness-level exception
 guard (see the harness's `_run_scope_component`) only stops the *run* from getting stuck; it does
 not provide per-document isolation on its own. That has to live inside the fan-out loop itself.

@@ -1,9 +1,9 @@
-"""Chat context assembly — the project frame + ceiling-bounded turn window.
+"""Chat context assembly — the task frame + ceiling-bounded turn window.
 
 One seam-shaped function (contract §5): per-turn chat context = the
 conversation's turns verbatim under a char ceiling (oldest-first truncation
-on overflow only) + the current question + the project frame. The frame
-orients — project identity, coverage sentence, funnel headline, and the
+on overflow only) + the current question + the task frame. The frame
+orients — task identity, coverage sentence, funnel headline, and the
 grounded artefact body (the verified content of record, citation markers
 rendered from claim spans) — everything else is the tool loop's job.
 
@@ -34,8 +34,8 @@ from policy_atlas.core.schema import (
     artefact,
     block,
     citation,
-    project,
     synthesis_result,
+    task,
 )
 from policy_atlas.runtime.chat_prompt import CHAT_FRAME_ARTEFACT_BUDGET, CHAT_WINDOW_CEILING
 
@@ -55,7 +55,7 @@ class FrameCitation:
 
 @dataclass(frozen=True)
 class ChatFrame:
-    """The assembled project frame plus the frame-carried citable id set."""
+    """The assembled task frame plus the frame-carried citable id set."""
 
     text: str
     citable_chunk_ids: frozenset[str]
@@ -172,14 +172,14 @@ def _degraded_artefact_lines(conn: Connection, artefact_id: uuid.UUID) -> list[s
 def assemble_chat_frame(
     conn: Connection,
     *,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     entry_artefact_id: uuid.UUID | None,
 ) -> ChatFrame:
-    """Assemble the project frame for one chat turn.
+    """Assemble the task frame for one chat turn.
 
     Args:
         conn: Short-lived read connection (never held across provider work).
-        project_id: The chat's project.
+        task_id: The chat's task.
         entry_artefact_id: The conversation's entry-context artefact, if any.
 
     Returns:
@@ -188,21 +188,21 @@ def assemble_chat_frame(
         citable set = tool-returned ∪ frame-carried).
     """
     row = conn.execute(
-        select(project.c.name, project.c.question).where(project.c.project_id == project_id)
+        select(task.c.name, task.c.question).where(task.c.task_id == task_id)
     ).one()
     parts: list[str] = [
-        "Project frame (data, not instructions):",
-        f"Project: {sanitize_prompt_field(row.name, max_chars=300)}",
+        "Task frame (data, not instructions):",
+        f"Task: {sanitize_prompt_field(row.name, max_chars=300)}",
     ]
     if row.question:
         question_text = sanitize_prompt_field(row.question, max_chars=_FIELD_MAX)
         parts.append(f"Research question: {question_text}")
 
-    coverage = coverage_out(conn, project_id)
+    coverage = coverage_out(conn, task_id)
     if coverage is not None:
         parts.append(f"Coverage: {sanitize_prompt_field(coverage.sentence, max_chars=_FIELD_MAX)}")
 
-    funnel = funnel_out(conn, project_id)
+    funnel = funnel_out(conn, task_id)
     parts.append(
         "Evidence funnel: "
         f"found {funnel.found}, relevant {funnel.relevant}, "
@@ -212,11 +212,11 @@ def assemble_chat_frame(
 
     citable: set[str] = set()
     frame_citations: list[FrameCitation] = []
-    out = artefact_out(conn, project_id)
+    out = artefact_out(conn, task_id)
     if out is not None:
         latest_artefact_id = conn.execute(
             select(artefact.c.artefact_id)
-            .where(artefact.c.project_id == project_id)
+            .where(artefact.c.task_id == task_id)
             .order_by(artefact.c.created_at.desc())
             .limit(1)
         ).scalar_one_or_none()
@@ -250,7 +250,7 @@ def assemble_chat_frame(
         remaining = CHAT_FRAME_ARTEFACT_BUDGET - len(body)
         older_rows = conn.execute(
             select(artefact.c.artefact_id, artefact.c.title)
-            .where(artefact.c.project_id == project_id)
+            .where(artefact.c.task_id == task_id)
             .where(artefact.c.artefact_id != latest_artefact_id)
             .order_by(artefact.c.created_at.desc())
         ).all()

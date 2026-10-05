@@ -23,11 +23,11 @@ export interface OptimisticChatTurn {
 
 export type ChatConversationRow = ChatTurn | OptimisticChatTurn;
 
-export interface OptimisticChatTranscriptState {
+interface OptimisticChatTranscriptState {
   turns: ChatConversationRow[];
 }
 
-export type OptimisticChatTranscriptAction =
+type OptimisticChatTranscriptAction =
   | { type: "submitted"; turn: OptimisticChatTurn }
   | { type: "progress"; clientTurnId: string; label: string }
   | { type: "delta"; clientTurnId: string; text: string }
@@ -160,7 +160,7 @@ export function chatTranscriptRows(
   return [...durableTurns, ...optimisticTurns.filter((turn) => !durableIds.has(clientTurnIdOf(turn)))];
 }
 
-export type ChatStreamEvent =
+type ChatStreamEvent =
   | { type: "progress"; label: string }
   | { type: "delta"; text: string }
   | { type: "completed"; turn: ChatTurn }
@@ -181,7 +181,7 @@ export class ChatStreamProtocolError extends Error {
 }
 
 /** A chat response whose connection ended before a terminal event. */
-export class ChatStreamInterruptedError extends Error {
+class ChatStreamInterruptedError extends Error {
   constructor(message: string) {
     super(message);
     this.name = "ChatStreamInterruptedError";

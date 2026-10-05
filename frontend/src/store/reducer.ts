@@ -193,15 +193,15 @@ export function reduceRunStreamFrame(state: RunStreamState, frame: SseFrame): Ru
     case "plan.updated":
       return { ...base, plan: { version: frame.version, plan: frame.plan } };
 
-    case "project.updated":
+    case "task.updated":
       // `null` on the wire means "not touched by this event" — preserve
       // whatever the store already had for a field this event didn't set.
       return {
         ...base,
-        project: {
-          name: frame.name ?? base.project.name,
-          question: frame.question ?? base.project.question,
-          status: frame.status ?? base.project.status,
+        task: {
+          name: frame.name ?? base.task.name,
+          question: frame.question ?? base.task.question,
+          status: frame.status ?? base.task.status,
         },
       };
 

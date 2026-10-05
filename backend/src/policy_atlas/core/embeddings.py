@@ -2,8 +2,8 @@
 
 This module owns the first runtime-egress embedding seam. The defaultable stub is
 deterministic and zero-egress; the live backend is explicit and env-keyed. The
-embed pass is project-scoped through ``project_source_snapshot`` because chunks
-and snapshots are corpus-global, not project-owned.
+embed pass is task-scoped through ``task_source_snapshot`` because chunks
+and snapshots are corpus-global, not task-owned.
 """
 
 from __future__ import annotations
@@ -12,6 +12,7 @@ import hashlib
 import math
 import random
 import re
+import threading
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -26,7 +27,7 @@ from sqlalchemy.engine import Connection
 
 from policy_atlas.core.openai_client import resolve_openai_client
 from policy_atlas.core.schema import chunk as chunk_table
-from policy_atlas.core.schema import chunk_embedding, project_source_snapshot
+from policy_atlas.core.schema import chunk_embedding, task_source_snapshot
 
 log = structlog.get_logger()
 
@@ -80,6 +81,21 @@ class _ChunkState:
     vectors: dict[int, list[float]] = field(default_factory=dict)
     failed: bool = False
     inserted: bool = False
+
+
+_last_usage = threading.local()
+
+
+def take_last_prompt_tokens() -> int | None:
+    """Return and clear the prompt-token count of this thread's last live embed call.
+
+    ``embed_texts`` returns vectors only, so the live backend parks the provider's
+    usage here for the tracing wrapper that runs on the same thread. ``None`` when
+    the last call was a stub or the provider omitted usage.
+    """
+    tokens = getattr(_last_usage, "prompt_tokens", None)
+    _last_usage.prompt_tokens = None
+    return tokens if isinstance(tokens, int) else None
 
 
 class EmbeddingBackend(Protocol):
@@ -173,6 +189,7 @@ class OpenAIEmbeddingBackend:
 
         log.info("embedding.openai.request", text_count=len(texts))
         response = self._create_embeddings_with_backoff(texts)
+        _last_usage.prompt_tokens = getattr(getattr(response, "usage", None), "prompt_tokens", None)
         items = sorted(response.data, key=lambda item: item.index)
         vectors = [list(item.embedding) for item in items]
         log.info("embedding.openai.response", text_count=len(texts), vector_count=len(vectors))
@@ -404,17 +421,17 @@ def _chunk_rows_for_insert(state: _ChunkState) -> list[dict[str, object]]:
 
 
 def _pending_chunks(
-    conn: Connection, project_id: uuid.UUID, *, max_hydrated: int
+    conn: Connection, task_id: uuid.UUID, *, max_hydrated: int
 ) -> tuple[int, int, list[_PendingChunk]]:
     eligible_snapshot_ids = union(
         select(
-            project_source_snapshot.c.source_snapshot_id.label("source_snapshot_id")
-        ).where(project_source_snapshot.c.project_id == project_id),
+            task_source_snapshot.c.source_snapshot_id.label("source_snapshot_id")
+        ).where(task_source_snapshot.c.task_id == task_id),
         select(
-            project_source_snapshot.c.full_text_snapshot_id.label("source_snapshot_id")
+            task_source_snapshot.c.full_text_snapshot_id.label("source_snapshot_id")
         )
-        .where(project_source_snapshot.c.project_id == project_id)
-        .where(project_source_snapshot.c.full_text_snapshot_id.is_not(None)),
+        .where(task_source_snapshot.c.task_id == task_id)
+        .where(task_source_snapshot.c.full_text_snapshot_id.is_not(None)),
     ).subquery()
 
     eligible_filter = chunk_table.c.source_snapshot_id.in_(
@@ -495,14 +512,14 @@ def embed_pending_chunks(
     conn: Connection,
     *,
     embedder: EmbeddingBackend,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     run_id: uuid.UUID,
     batch_size: int = API_BATCH_SIZE,
     max_chunks: int = DEFAULT_MAX_CHUNKS,
 ) -> dict[str, int]:
-    """Embed eligible project chunks that lack rows for the active profile.
+    """Embed eligible task chunks that lack rows for the active profile.
 
-    The pending query is project-scoped through the project's envelope snapshot
+    The pending query is task-scoped through the task's envelope snapshot
     IDs and non-null full-text snapshot IDs. A chunk with any row for the active
     profile and unit policy is treated as already embedded, matching the
     result-table idempotency pattern.
@@ -510,7 +527,7 @@ def embed_pending_chunks(
     Args:
         conn: Open database connection; inserts use its active transaction.
         embedder: Live or stub embedding backend.
-        project_id: Project whose snapshot union defines embedding eligibility.
+        task_id: Task whose snapshot union defines embedding eligibility.
         run_id: Current run, used only for structured logs.
         batch_size: Maximum unit texts per backend call.
         max_chunks: Maximum embedding units allowed for this pass.
@@ -529,7 +546,7 @@ def embed_pending_chunks(
         raise ValueError("max_chunks must be non-negative")
 
     eligible_count, pending_count, pending_chunks = _pending_chunks(
-        conn, project_id, max_hydrated=max_chunks
+        conn, task_id, max_hydrated=max_chunks
     )
     already_embedded = eligible_count - pending_count
     states, all_units, unitless_chunk_ids = _derive_unit_work(pending_chunks)

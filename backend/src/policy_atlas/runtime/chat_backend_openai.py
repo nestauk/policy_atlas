@@ -8,12 +8,12 @@ from typing import Any
 
 from policy_atlas.core.openai_client import require_parsed, resolve_openai_client
 from policy_atlas.core.usage import UsageResult, token_usage_from_provider
-from policy_atlas.evidence_base.synthesis.synthesis_backend import (
+from policy_atlas.evidence_search.synthesis.synthesis_backend import (
     LOOKUP_TOOL_SCHEMA,
     QUERY_FINDINGS_TOOL_SCHEMA,
     SEARCH_CHUNKS_TOOL_SCHEMA,
 )
-from policy_atlas.evidence_base.synthesis.synthesis_tools import ToolExchange
+from policy_atlas.evidence_search.synthesis.synthesis_tools import ToolExchange
 from policy_atlas.runtime.chat_backend import ChatBackend, ChatTurn
 from policy_atlas.runtime.chat_prompt import CHAT_MODEL, ChatAnswerWire
 

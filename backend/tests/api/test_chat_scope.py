@@ -13,22 +13,22 @@ from policy_atlas.core.schema import (
     EVIDENCE_TYPES,
     TOPIC_THEME,
     capability_run,
-    project_source_snapshot,
     runs,
     search_coverage_record,
     source_appraisal_result,
     source_classification_result,
     source_screening_result,
     source_tag,
+    task_source_snapshot,
 )
 from tests.helpers import now
-from tests.runtime.test_runner import _cleanup, _seed_project
+from tests.runtime.test_runner import _cleanup, _seed_task
 
 
 def _walk(
     engine: Engine,
     *,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     scope_id: uuid.UUID,
     status: str = "succeeded",
     components: tuple[str, ...] = ("characterise", "select", "extract", "group"),
@@ -40,9 +40,9 @@ def _walk(
         conn.execute(
             capability_run.insert().values(
                 capability_run_id=capability_run_id,
-                project_id=project_id,
+                task_id=task_id,
                 evidence_scope_id=scope_id,
-                capability="evidence_base",
+                capability="evidence_search",
                 plan_id=uuid.uuid4(),
                 plan_version=1,
                 status=status,
@@ -56,7 +56,7 @@ def _walk(
             conn.execute(
                 runs.insert().values(
                     run_id=run_id,
-                    project_id=project_id,
+                    task_id=task_id,
                     status="succeeded",
                     started_at=now(),
                     ended_at=now(),
@@ -65,7 +65,7 @@ def _walk(
             )
             events.append(
                 conn,
-                project_id=project_id,
+                task_id=task_id,
                 run_id=run_id,
                 event_type="run.started",
                 payload={"component": component, "registry_component": component},
@@ -76,7 +76,7 @@ def _walk(
 def _append_attempt(
     engine: Engine,
     *,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     capability_run_id: uuid.UUID,
     component: str,
     status: str = "succeeded",
@@ -87,7 +87,7 @@ def _append_attempt(
         conn.execute(
             runs.insert().values(
                 run_id=run_id,
-                project_id=project_id,
+                task_id=task_id,
                 status=status,
                 started_at=now(),
                 ended_at=now(),
@@ -96,7 +96,7 @@ def _append_attempt(
         )
         events.append(
             conn,
-            project_id=project_id,
+            task_id=task_id,
             run_id=run_id,
             event_type="run.started",
             payload={"component": component, "registry_component": component},
@@ -105,14 +105,14 @@ def _append_attempt(
 
 
 def test_resolver_returns_terminal_component_ids(engine: Engine) -> None:
-    project_id: uuid.UUID | None = None
+    task_id: uuid.UUID | None = None
     try:
-        project_id, scope_id = _seed_project(engine)
+        task_id, scope_id = _seed_task(engine)
         capability_run_id, attempts = _walk(
-            engine, project_id=project_id, scope_id=scope_id
+            engine, task_id=task_id, scope_id=scope_id
         )
 
-        scope = resolve_terminal_run_components(engine, project_id=project_id)
+        scope = resolve_terminal_run_components(engine, task_id=task_id)
         assert scope is not None
         assert scope.capability_run_id == capability_run_id
         assert scope.evidence_scope_id == scope_id
@@ -121,92 +121,92 @@ def test_resolver_returns_terminal_component_ids(engine: Engine) -> None:
         assert scope.extraction_run_id == attempts["extract"][-1]
         assert scope.grouping_run_id == attempts["group"][-1]
     finally:
-        _cleanup(engine, project_id)
+        _cleanup(engine, task_id)
 
 
 def test_resolver_uses_later_replacement_attempt(engine: Engine) -> None:
-    project_id: uuid.UUID | None = None
+    task_id: uuid.UUID | None = None
     try:
-        project_id, scope_id = _seed_project(engine)
-        _capability_run_id, attempts = _walk(engine, project_id=project_id, scope_id=scope_id)
+        task_id, scope_id = _seed_task(engine)
+        _capability_run_id, attempts = _walk(engine, task_id=task_id, scope_id=scope_id)
         replacement = _append_attempt(
             engine,
-            project_id=project_id,
+            task_id=task_id,
             capability_run_id=_capability_run_id,
             component="select",
         )
 
-        scope = resolve_terminal_run_components(engine, project_id=project_id)
+        scope = resolve_terminal_run_components(engine, task_id=task_id)
         assert scope is not None
         assert scope.selection_run_id == replacement
         assert scope.selection_run_id != attempts["select"][-1]
     finally:
-        _cleanup(engine, project_id)
+        _cleanup(engine, task_id)
 
 
 def test_resolver_ignores_additive_acquire_retries(engine: Engine) -> None:
-    project_id: uuid.UUID | None = None
+    task_id: uuid.UUID | None = None
     try:
-        project_id, scope_id = _seed_project(engine)
-        capability_run_id, attempts = _walk(engine, project_id=project_id, scope_id=scope_id)
+        task_id, scope_id = _seed_task(engine)
+        capability_run_id, attempts = _walk(engine, task_id=task_id, scope_id=scope_id)
         _append_attempt(
             engine,
-            project_id=project_id,
+            task_id=task_id,
             capability_run_id=capability_run_id,
             component="acquire",
         )
         _append_attempt(
             engine,
-            project_id=project_id,
+            task_id=task_id,
             capability_run_id=capability_run_id,
             component="acquire",
         )
 
-        scope = resolve_terminal_run_components(engine, project_id=project_id)
+        scope = resolve_terminal_run_components(engine, task_id=task_id)
         assert scope is not None
         assert scope.selection_run_id == attempts["select"][-1]
         assert scope.extraction_run_id == attempts["extract"][-1]
     finally:
-        _cleanup(engine, project_id)
+        _cleanup(engine, task_id)
 
 
 def test_resolver_keeps_degraded_missing_component_honest(engine: Engine) -> None:
-    project_id: uuid.UUID | None = None
+    task_id: uuid.UUID | None = None
     try:
-        project_id, scope_id = _seed_project(engine)
+        task_id, scope_id = _seed_task(engine)
         _walk(
             engine,
-            project_id=project_id,
+            task_id=task_id,
             scope_id=scope_id,
             status="degraded",
             components=("characterise", "select", "extract"),
         )
 
-        scope = resolve_terminal_run_components(engine, project_id=project_id)
+        scope = resolve_terminal_run_components(engine, task_id=task_id)
         assert scope is not None
         assert scope.grouping_run_id is None
     finally:
-        _cleanup(engine, project_id)
+        _cleanup(engine, task_id)
 
 
 def test_resolver_returns_none_without_completed_walk(engine: Engine) -> None:
-    project_id: uuid.UUID | None = None
+    task_id: uuid.UUID | None = None
     try:
-        project_id, scope_id = _seed_project(engine)
-        _walk(engine, project_id=project_id, scope_id=scope_id, status="running")
-        assert resolve_terminal_run_components(engine, project_id=project_id) is None
+        task_id, scope_id = _seed_task(engine)
+        _walk(engine, task_id=task_id, scope_id=scope_id, status="running")
+        assert resolve_terminal_run_components(engine, task_id=task_id) is None
     finally:
-        _cleanup(engine, project_id)
+        _cleanup(engine, task_id)
 
 
 def test_scope_wide_readers_exclude_rows_from_newer_walk(engine: Engine) -> None:
     """Every run-keyed scope-wide lookup remains at its turn-start snapshot."""
-    project_id: uuid.UUID | None = None
+    task_id: uuid.UUID | None = None
     try:
-        project_id, scope_id = _seed_project(engine)
+        task_id, scope_id = _seed_task(engine)
         terminal_id, old = _walk(
             engine,
-            project_id=project_id,
+            task_id=task_id,
             scope_id=scope_id,
             components=(
                 "acquire",
@@ -220,26 +220,26 @@ def test_scope_wide_readers_exclude_rows_from_newer_walk(engine: Engine) -> None
             ),
         )
         with engine.begin() as conn:
-            pss_ids = list(
+            tss_ids = list(
                 conn.execute(
-                    select(project_source_snapshot.c.project_source_snapshot_id)
-                    .where(project_source_snapshot.c.project_id == project_id)
-                    .order_by(project_source_snapshot.c.project_source_snapshot_id)
+                    select(task_source_snapshot.c.task_source_snapshot_id)
+                    .where(task_source_snapshot.c.task_id == task_id)
+                    .order_by(task_source_snapshot.c.task_source_snapshot_id)
                 ).scalars()
             )
-            old_doc, new_doc = pss_ids[:2]
+            old_doc, new_doc = tss_ids[:2]
             _seed_scope_rows(
                 conn,
-                project_id=project_id,
+                task_id=task_id,
                 scope_id=scope_id,
                 doc_id=old_doc,
                 runs_by_component=old,
                 suffix="old",
             )
 
-        resolved = resolve_terminal_run_components(engine, project_id=project_id)
+        resolved = resolve_terminal_run_components(engine, task_id=task_id)
         assert resolved is not None and resolved.capability_run_id == terminal_id
-        _retriever, _findings, lookup = build_chat_readers(engine, resolved, project_id)
+        _retriever, _findings, lookup = build_chat_readers(engine, resolved, task_id)
         assert lookup({"kind": "appraisal_by_doc", "doc_id": str(old_doc)})["result"] == {
             "quality_score": 3,
             "rubric_version": "old",
@@ -247,7 +247,7 @@ def test_scope_wide_readers_exclude_rows_from_newer_walk(engine: Engine) -> None
 
         newer_id, newer = _walk(
             engine,
-            project_id=project_id,
+            task_id=task_id,
             scope_id=scope_id,
             status="running",
             components=("acquire", "screen_abstract", "classify", "appraise"),
@@ -256,17 +256,17 @@ def test_scope_wide_readers_exclude_rows_from_newer_walk(engine: Engine) -> None
         with engine.begin() as conn:
             conn.execute(
                 update(source_appraisal_result)
-                .where(source_appraisal_result.c.project_id == project_id)
+                .where(source_appraisal_result.c.task_id == task_id)
                 .values(appraised_by_run_id=newer["appraise"][-1], quality_score=5)
             )
             conn.execute(
                 update(source_classification_result)
-                .where(source_classification_result.c.project_id == project_id)
+                .where(source_classification_result.c.task_id == task_id)
                 .values(classified_by_run_id=newer["classify"][-1])
             )
             _seed_scope_rows(
                 conn,
-                project_id=project_id,
+                task_id=task_id,
                 scope_id=scope_id,
                 doc_id=new_doc,
                 runs_by_component=newer,
@@ -299,19 +299,19 @@ def test_scope_wide_readers_exclude_rows_from_newer_walk(engine: Engine) -> None
         assert lookup({"kind": "tag_aggregate", "by": "type"})["result"] == {
             TOPIC_THEME: 1
         }
-        # ``screening_by_doc`` resolves doc ids project-wide by design (022
+        # ``screening_by_doc`` resolves doc ids task-wide by design (022
         # rider 16: screened-out docs' history must stay readable), so a doc
         # known only to a newer walk resolves — but none of its rows may
         # appear in this turn's snapshot.
         assert lookup({"kind": "screening_by_doc", "doc_id": str(new_doc)})["result"] == []
     finally:
-        _cleanup(engine, project_id)
+        _cleanup(engine, task_id)
 
 
 def _seed_scope_rows(
     conn: Connection,
     *,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     scope_id: uuid.UUID,
     doc_id: uuid.UUID,
     runs_by_component: dict[str, list[uuid.UUID]],
@@ -324,8 +324,8 @@ def _seed_scope_rows(
         source_screening_result.insert().values(
             source_screening_result_id=uuid.uuid4(),
             evidence_scope_id=scope_id,
-            project_source_snapshot_id=doc_id,
-            project_id=project_id,
+            task_source_snapshot_id=doc_id,
+            task_id=task_id,
             screened_by_run_id=runs_by_component["screen_abstract"][-1],
             status="relevant",
             screen_basis="title_abstract",
@@ -340,8 +340,8 @@ def _seed_scope_rows(
             source_classification_result.insert().values(
                 source_classification_result_id=uuid.uuid4(),
                 evidence_scope_id=scope_id,
-                project_source_snapshot_id=doc_id,
-                project_id=project_id,
+                task_source_snapshot_id=doc_id,
+                task_id=task_id,
                 classified_by_run_id=runs_by_component["classify"][-1],
                 primary_evidence_type=EVIDENCE_TYPES[0],
                 classified_at=now(),
@@ -352,8 +352,8 @@ def _seed_scope_rows(
             source_appraisal_result.insert().values(
                 source_appraisal_result_id=uuid.uuid4(),
                 evidence_scope_id=scope_id,
-                project_source_snapshot_id=doc_id,
-                project_id=project_id,
+                task_source_snapshot_id=doc_id,
+                task_id=task_id,
                 appraised_by_run_id=runs_by_component["appraise"][-1],
                 quality_score=3,
                 rubric_version=suffix,
@@ -363,8 +363,8 @@ def _seed_scope_rows(
     conn.execute(
         source_tag.insert().values(
             source_tag_id=uuid.uuid4(),
-            project_id=project_id,
-            project_source_snapshot_id=doc_id,
+            task_id=task_id,
+            task_source_snapshot_id=doc_id,
             tag="shared",
             tag_type=TOPIC_THEME,
             asserted_by="characterise",
@@ -378,7 +378,7 @@ def _seed_scope_rows(
         search_coverage_record.insert().values(
             search_coverage_record_id=uuid.uuid4(),
             evidence_scope_id=scope_id,
-            project_id=project_id,
+            task_id=task_id,
             acquired_by_run_id=runs_by_component["acquire"][-1],
             backends=[],
             scope_filters={},

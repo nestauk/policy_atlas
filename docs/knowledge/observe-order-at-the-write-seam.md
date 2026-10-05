@@ -39,5 +39,5 @@ order instead of summary-vs-row drift.
 
 # Citations
 
-- `backend/tests/evidence_base/extract/test_extract_contract.py`
+- `backend/tests/evidence_search/extract/test_extract_contract.py`
   (`test_parallel_vs_serial_same_write_order`)

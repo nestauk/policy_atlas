@@ -15,7 +15,7 @@ class SourceFixture:
     chunks: tuple[str, ...]
 
 
-# Synthetic sources seeded into every orchestrate run's corpus.
+# Synthetic sources seeded into every agent run's corpus.
 # syn-001: originally the walking-skeleton echo source (echo + its grounded-block
 # leg retired in 023); retained as a plain synthetic upload fixture.
 # syn-002: the on-topic appraised seed for the synthesise demo (task 013) — an

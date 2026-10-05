@@ -1,8 +1,9 @@
+import { LIFECYCLE_LABELS } from "../../lib/vocabulary";
 import type { PlanDraft, RunStatus, StageEntry, StageStatus } from "../../store";
 import { timelineSummary } from "./journey/presentation";
 import { stepsForAnalysisDepth, type PlanStepPreview } from "./planVocabulary";
 
-export type RunningCardTone = "running" | "paused" | "done" | "stopped";
+type RunningCardTone = "running" | "paused" | "done" | "stopped";
 
 export type StageRow = {
   /** Unique among rows on this card — stage repeats across search rounds. */
@@ -15,7 +16,7 @@ export type StageRow = {
   seconds?: number | null;
 };
 
-export type StageSignpost = { href: string; label: string; message: string };
+type StageSignpost = { href: string; label: string; message: string };
 
 /** Chat-thread primary CTA — same size as Review the plan / Start search. */
 export const CHAT_PRIMARY_CTA_CLASS =
@@ -34,7 +35,7 @@ export const SEE_PLAN_CTA_CLASS =
 
 /** Chat-thread notice once the run has landed. */
 export const RUN_FINISHED_MESSAGE =
-  "Evidence search is finished. You can read the report in the Results tab.";
+  `Evidence search is finished. You can read the report in the ${LIFECYCLE_LABELS.result} tab.`;
 
 /** Eyebrow and title for the in-thread running card. */
 export function runningCardCopy(status: RunStatus | undefined): {
@@ -218,7 +219,7 @@ export function stageRows(stages: StageEntry[], plan: PlanDraft | null | undefin
 }
 
 /** Label of the in-flight step, else the last completed one. */
-export function currentStepLabel(rows: StageRow[]): string | null {
+function currentStepLabel(rows: StageRow[]): string | null {
   const started = rows.find((row) => row.status === "started");
   if (started !== undefined) return started.label;
   const completed = [...rows].reverse().find((row) => row.status === "completed");
@@ -242,26 +243,26 @@ export function stageDetailLines(row: StageRow): string[] {
 /** Link to a lifecycle tab that now has something to read. */
 export function signpostForStage(
   stage: string,
-  projectId: string,
+  taskId: string,
   hasFindings: boolean,
 ): StageSignpost | null {
   if (stage === "acquire") {
     return {
-      href: `/projects/${projectId}/sources/all`,
+      href: `/tasks/${taskId}/sources/all`,
       label: "Sources are ready",
       message: "Searching has finished.",
     };
   }
   if (stage === "characterise") {
     return {
-      href: `/projects/${projectId}/sources/landscape`,
+      href: `/tasks/${taskId}/sources/landscape`,
       label: "The landscape is ready",
       message: "Mapping has finished.",
     };
   }
   if (stage === "extract" && hasFindings) {
     return {
-      href: `/projects/${projectId}/sources/findings`,
+      href: `/tasks/${taskId}/sources/findings`,
       label: "Findings are ready",
       message: "Findings are ready.",
     };
@@ -271,13 +272,13 @@ export function signpostForStage(
 
 /** Chat-thread destination once the write-up exists — last word, not a stage echo. */
 export function runFinishedSignpost(
-  projectId: string,
+  taskId: string,
   status: RunStatus | undefined,
 ): StageSignpost | null {
   if (status === "succeeded" || status === "degraded") {
     return {
-      href: `/projects/${projectId}/results`,
-      label: "Results",
+      href: `/tasks/${taskId}/result`,
+      label: LIFECYCLE_LABELS.result,
       message: RUN_FINISHED_MESSAGE,
     };
   }
@@ -287,14 +288,14 @@ export function runFinishedSignpost(
 /** Completed-stage signposts in timeline order, one per destination. */
 export function completedSignposts(
   stages: StageEntry[],
-  projectId: string,
+  taskId: string,
   hasFindings: boolean,
 ): StageSignpost[] {
   const out: StageSignpost[] = [];
   const seen = new Set<string>();
   for (const entry of stages) {
     if (entry.status !== "completed") continue;
-    const signpost = signpostForStage(entry.stage, projectId, hasFindings);
+    const signpost = signpostForStage(entry.stage, taskId, hasFindings);
     if (signpost === null || seen.has(signpost.href)) continue;
     seen.add(signpost.href);
     out.push(signpost);
@@ -304,13 +305,13 @@ export function completedSignposts(
 
 /** Results link once the write-up exists. */
 export function resultsSignpost(
-  projectId: string,
+  taskId: string,
   status: RunStatus | undefined,
 ): StageSignpost | null {
   if (status === "succeeded" || status === "degraded") {
     return {
-      href: `/projects/${projectId}/results`,
-      label: "Read the evidence base",
+      href: `/tasks/${taskId}/result`,
+      label: "Read the report",
       message: RUN_FINISHED_MESSAGE,
     };
   }

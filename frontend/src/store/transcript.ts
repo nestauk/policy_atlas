@@ -19,11 +19,11 @@ export interface OptimisticPlanningTurn {
   errorCode?: string;
 }
 
-export interface OptimisticTranscriptState {
+interface OptimisticTranscriptState {
   turns: OptimisticPlanningTurn[];
 }
 
-export type OptimisticTranscriptAction =
+type OptimisticTranscriptAction =
   | { type: "submitted"; turn: OptimisticPlanningTurn }
   | { type: "reconciled"; clientTurnId: string }
   | { type: "failed"; clientTurnId: string; errorMessage: string; errorCode?: string }
@@ -125,18 +125,18 @@ export function transcriptRows(
  * always resends the original `client_turn_id`.
  *
  * Args:
- *   projectId: Project whose single planning conversation is active.
+ *   taskId: Project whose single planning conversation is active.
  *   query: Optional transcript page parameters.
  *
  * Returns:
  *   Query state, merged rows, and submit/retry actions for the composer.
  */
 export function usePlanningTranscript(
-  projectId: string,
+  taskId: string,
   query?: { page?: number; page_size?: number },
 ) {
-  const transcript = usePlanningTurns(projectId, query);
-  const planningTurn = usePlanningTurn(projectId);
+  const transcript = usePlanningTurns(taskId, query);
+  const planningTurn = usePlanningTurn(taskId);
   const [optimistic, dispatch] = useReducer(reduceOptimisticTranscript, initialOptimisticTranscriptState);
 
   const send = useCallback(

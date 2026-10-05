@@ -21,78 +21,78 @@ from sqlalchemy.engine import Connection
 from policy_atlas.core import events
 from policy_atlas.core.embeddings import EmbeddingBackend, StubEmbeddingBackend
 from policy_atlas.core.inference import InferenceProvider
-from policy_atlas.core.liveness import project_liveness
+from policy_atlas.core.liveness import task_liveness
 from policy_atlas.core.schema import evidence_scope, runs
-from policy_atlas.evidence_base.assess.appraise import AppraiseContext, appraise_sources
-from policy_atlas.evidence_base.assess.classification_backend import (
+from policy_atlas.evidence_search.assess.appraise import AppraiseContext, appraise_sources
+from policy_atlas.evidence_search.assess.classification_backend import (
     ClassificationBackend,
     StubClassificationBackend,
 )
-from policy_atlas.evidence_base.assess.classify import ClassifyContext, classify_sources
-from policy_atlas.evidence_base.assess.screen import ScreenContext, screen_sources
-from policy_atlas.evidence_base.assess.screening_backend import (
+from policy_atlas.evidence_search.assess.classify import ClassifyContext, classify_sources
+from policy_atlas.evidence_search.assess.screen import ScreenContext, screen_sources
+from policy_atlas.evidence_search.assess.screening_backend import (
     ScreeningBackend,
     StubScreeningBackend,
 )
-from policy_atlas.evidence_base.corpus.characterise import (
+from policy_atlas.evidence_search.corpus.characterise import (
     CharacteriseContext,
     CharacteriseFailure,
     characterise_scope,
 )
-from policy_atlas.evidence_base.corpus.ranking import RankingBackend
-from policy_atlas.evidence_base.corpus.select import SelectContext, select_scope
-from policy_atlas.evidence_base.corpus.theme_grouping import (
+from policy_atlas.evidence_search.corpus.ranking import RankingBackend
+from policy_atlas.evidence_search.corpus.select import SelectContext, select_scope
+from policy_atlas.evidence_search.corpus.theme_grouping import (
     StubThemeGroupingBackend,
     ThemeGroupingBackend,
 )
-from policy_atlas.evidence_base.extract.extract import (
+from policy_atlas.evidence_search.extract.extract import (
     ExtractContext,
     _parse_extraction_directive,
     extract_scope,
     parse_relevance_emphasis,
 )
-from policy_atlas.evidence_base.extract.extraction_backend import (
+from policy_atlas.evidence_search.extract.extraction_backend import (
     ExtractionBackend,
     StubExtractionBackend,
     StubICFExtractionBackend,
 )
-from policy_atlas.evidence_base.extract.finding_vetter import (
+from policy_atlas.evidence_search.extract.finding_vetter import (
     FindingVetterBackend,
     ICFFindingVetterBackend,
 )
-from policy_atlas.evidence_base.extract.relevance_annotator import (
+from policy_atlas.evidence_search.extract.relevance_annotator import (
     RelevanceAnnotatorBackend,
 )
-from policy_atlas.evidence_base.group.group import (
+from policy_atlas.evidence_search.group.group import (
     GroupClusteringBackendFactory,
     GroupContext,
     StubGroupClusteringBackend,
     group_findings,
 )
-from policy_atlas.evidence_base.sourcing.acquire import (
+from policy_atlas.evidence_search.sourcing.acquire import (
     AcquireContext,
     SearchBackend,
 )
-from policy_atlas.evidence_base.sourcing.ingest_full_text import (
+from policy_atlas.evidence_search.sourcing.ingest_full_text import (
     DocumentFetcher,
     FixtureFetcher,
     IngestFullTextContext,
     ingest_full_text_sources,
 )
-from policy_atlas.evidence_base.sourcing.search_generation import (
+from policy_atlas.evidence_search.sourcing.search_generation import (
     SearchGenerationBackend,
     StubSearchGenerationBackend,
 )
-from policy_atlas.evidence_base.sourcing.search_loop import run_search
-from policy_atlas.evidence_base.synthesis.grounding_judge import (
+from policy_atlas.evidence_search.sourcing.search_loop import run_search
+from policy_atlas.evidence_search.synthesis.grounding_judge import (
     GroundingJudgeBackend,
     StubGroundingJudgeBackend,
 )
-from policy_atlas.evidence_base.synthesis.synthesis_backend import (
+from policy_atlas.evidence_search.synthesis.synthesis_backend import (
     StubSynthesisBackend,
     SynthesisBackend,
 )
-from policy_atlas.evidence_base.synthesis.synthesise import (
+from policy_atlas.evidence_search.synthesis.synthesise import (
     SynthesiseContext,
     SynthesiseFailure,
     synthesise_scope,
@@ -108,7 +108,7 @@ class HarnessState(TypedDict):
 
     config: Config
     conn: Connection
-    project_id: uuid.UUID
+    task_id: uuid.UUID
     run_id: uuid.UUID
     provider: InferenceProvider
     search_backends: list[SearchBackend]
@@ -139,22 +139,22 @@ def _run_scope_component(
 ) -> HarnessState:
     """Shared implementation for the scope-driven harness nodes (screen/classify/appraise)."""
     conn = state["conn"]
-    project_id = state["project_id"]
+    task_id = state["task_id"]
     run_id = state["run_id"]
     config = state["config"]
 
     row = conn.execute(
         select(evidence_scope)
         .where(evidence_scope.c.evidence_scope_id == config.evidence_scope_id)
-        .where(evidence_scope.c.project_id == project_id)
+        .where(evidence_scope.c.task_id == task_id)
     ).one_or_none()
     if row is None:
         err = (
             f"evidence_scope {config.evidence_scope_id!r} "
-            f"not found for project {project_id!r}"
+            f"not found for task {task_id!r}"
         )
         events.append(
-            conn, project_id=project_id, run_id=run_id,
+            conn, task_id=task_id, run_id=run_id,
             event_type="component.failed",
             payload={"component": config.component, "error": err},
         )
@@ -167,7 +167,7 @@ def _run_scope_component(
     )
 
     try:
-        counts = sources_fn(conn, project_id=project_id, run_id=run_id, context=ctx)
+        counts = sources_fn(conn, task_id=task_id, run_id=run_id, context=ctx)
     except Exception as exc:
         err = str(exc)
         # A structured exception's own reason (e.g. ScreenSupersessionError's
@@ -179,7 +179,7 @@ def _run_scope_component(
         if reason is not None:
             payload["reason"] = reason
         events.append(
-            conn, project_id=project_id, run_id=run_id,
+            conn, task_id=task_id, run_id=run_id,
             event_type="component.failed",
             payload=payload,
         )
@@ -240,7 +240,7 @@ def _run_select(state: HarnessState) -> HarnessState:
 def _run_directed_extract_scope(
     conn: Connection,
     *,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     run_id: uuid.UUID,
     context: ExtractContext,
     extraction_backend: ExtractionBackend,
@@ -253,7 +253,7 @@ def _run_directed_extract_scope(
 
     Args:
         conn: Open database connection.
-        project_id: Owning project id.
+        task_id: Owning task id.
         run_id: Run writing the extraction result.
         context: Extract context carrying the merged scope directives.
         extraction_backend: IOF extraction backend.
@@ -271,7 +271,7 @@ def _run_directed_extract_scope(
     relevance_emphasis = parse_relevance_emphasis(directive)
     return extract_scope(
         conn,
-        project_id=project_id,
+        task_id=task_id,
         run_id=run_id,
         context=context,
         extraction_backend=extraction_backend,
@@ -319,22 +319,22 @@ def _run_characterise(state: HarnessState) -> HarnessState:
     except emits only {component, error}, and a ``CharacteriseFailure`` must carry
     coverage in the failure payload."""
     conn = state["conn"]
-    project_id = state["project_id"]
+    task_id = state["task_id"]
     run_id = state["run_id"]
     config = state["config"]
 
     row = conn.execute(
         select(evidence_scope)
         .where(evidence_scope.c.evidence_scope_id == config.evidence_scope_id)
-        .where(evidence_scope.c.project_id == project_id)
+        .where(evidence_scope.c.task_id == task_id)
     ).one_or_none()
     if row is None:
         err = (
             f"evidence_scope {config.evidence_scope_id!r} "
-            f"not found for project {project_id!r}"
+            f"not found for task {task_id!r}"
         )
         events.append(
-            conn, project_id=project_id, run_id=run_id,
+            conn, task_id=task_id, run_id=run_id,
             event_type="component.failed",
             payload={"component": config.component, "error": err},
         )
@@ -349,14 +349,14 @@ def _run_characterise(state: HarnessState) -> HarnessState:
     try:
         summary = characterise_scope(
             conn,
-            project_id=project_id,
+            task_id=task_id,
             run_id=run_id,
             context=ctx,
             theme_grouping_backend=state["theme_grouping_backend"],
         )
     except CharacteriseFailure as exc:
         events.append(
-            conn, project_id=project_id, run_id=run_id,
+            conn, task_id=task_id, run_id=run_id,
             event_type="component.failed",
             payload={"component": config.component, "error": exc.error, "coverage": exc.coverage},
         )
@@ -367,7 +367,7 @@ def _run_characterise(state: HarnessState) -> HarnessState:
         # (never raw response bodies) before they can reach this handler.
         err = str(exc)
         events.append(
-            conn, project_id=project_id, run_id=run_id,
+            conn, task_id=task_id, run_id=run_id,
             event_type="component.failed",
             payload={"component": config.component, "error": err},
         )
@@ -384,23 +384,23 @@ def _run_synthesise(state: HarnessState) -> HarnessState:
     already persisted before a post-mint/post-block failure.
     """
     conn = state["conn"]
-    project_id = state["project_id"]
+    task_id = state["task_id"]
     run_id = state["run_id"]
     config = state["config"]
 
     row = conn.execute(
         select(evidence_scope)
         .where(evidence_scope.c.evidence_scope_id == config.evidence_scope_id)
-        .where(evidence_scope.c.project_id == project_id)
+        .where(evidence_scope.c.task_id == task_id)
     ).one_or_none()
     if row is None:
         err = (
             f"evidence_scope {config.evidence_scope_id!r} "
-            f"not found for project {project_id!r}"
+            f"not found for task {task_id!r}"
         )
         events.append(
             conn,
-            project_id=project_id,
+            task_id=task_id,
             run_id=run_id,
             event_type="component.failed",
             payload={"component": config.component, "error": err},
@@ -420,7 +420,7 @@ def _run_synthesise(state: HarnessState) -> HarnessState:
     try:
         summary = synthesise_scope(
             conn,
-            project_id=project_id,
+            task_id=task_id,
             run_id=run_id,
             context=ctx,
             synthesis_backend=state["synthesis_backend"],
@@ -431,7 +431,7 @@ def _run_synthesise(state: HarnessState) -> HarnessState:
     except SynthesiseFailure as exc:
         events.append(
             conn,
-            project_id=project_id,
+            task_id=task_id,
             run_id=run_id,
             event_type="component.failed",
             payload={
@@ -447,7 +447,7 @@ def _run_synthesise(state: HarnessState) -> HarnessState:
         err = f"{type(exc).__name__}: {str(exc)[:200]}"
         events.append(
             conn,
-            project_id=project_id,
+            task_id=task_id,
             run_id=run_id,
             event_type="component.failed",
             payload={"component": config.component, "error": err},
@@ -463,7 +463,7 @@ def _dispatch(state: HarnessState) -> str:
 
 def _finish(state: HarnessState) -> HarnessState:
     conn = state["conn"]
-    project_id = state["project_id"]
+    task_id = state["task_id"]
     run_id = state["run_id"]
     now = datetime.now(UTC)
 
@@ -484,7 +484,7 @@ def _finish(state: HarnessState) -> HarnessState:
     assert result.rowcount == 1, f"Expected 1 run row updated, got {result.rowcount}"
     events.append(
         conn,
-        project_id=project_id,
+        task_id=task_id,
         run_id=run_id,
         event_type=event_type,
         payload=payload,
@@ -594,7 +594,7 @@ def run_harness(
     conn: Connection,
     *,
     config: Config,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     run_id: uuid.UUID,
     provider: InferenceProvider,
     search_backends: list[SearchBackend] | None = None,
@@ -620,7 +620,7 @@ def run_harness(
     Args:
         conn: Open database connection; all writes occur within its transaction.
         config: Compiled execution spec naming the component and source.
-        project_id: Owning project; must match the run's stored project.
+        task_id: Owning task; must match the run's stored task.
         run_id: Pre-created run row to execute.
         provider: Inference provider; unused by every current component node,
             kept required pending a live grounding/provider-backed seam
@@ -681,24 +681,24 @@ def run_harness(
         component work; the runner owns the matching lifecycle append.
 
     Raises:
-        ValueError: If ``run_id`` is unknown or belongs to another project.
+        ValueError: If ``run_id`` is unknown or belongs to another task.
     """
-    # Guard: verify run belongs to this project before any write
+    # Guard: verify run belongs to this task before any write
     stored_pid = conn.execute(
-        select(runs.c.project_id).where(runs.c.run_id == run_id)
+        select(runs.c.task_id).where(runs.c.run_id == run_id)
     ).scalar_one_or_none()
     if stored_pid is None:
         raise ValueError(f"run_id {run_id!r} not found")
-    if stored_pid != project_id:
+    if stored_pid != task_id:
         raise ValueError(
-            f"run_id {run_id!r} belongs to project {stored_pid!r}, not {project_id!r}"
+            f"run_id {run_id!r} belongs to task {stored_pid!r}, not {task_id!r}"
         )
 
     graph = build_graph()
     initial: HarnessState = {
         "config": config,
         "conn": conn,
-        "project_id": project_id,
+        "task_id": task_id,
         "run_id": run_id,
         "provider": provider,
         "search_backends": scoped_search_backends(
@@ -770,12 +770,12 @@ def run_harness(
     }
     # Bind run/component correlation once for every log call this component
     # execution makes (structlog's merge_contextvars processor picks these up),
-    # instead of hand-threading project_id/run_id through each log call. This is
+    # instead of hand-threading task_id/run_id through each log call. This is
     # the innermost boundary that sees exactly one component execution: each
     # run_harness call dispatches to exactly one node (routed by config.component),
     # and it is the direct caller of node-level component work.
-    with project_liveness(project_id), structlog.contextvars.bound_contextvars(
-        project_id=str(project_id), run_id=str(run_id), component=config.component,
+    with task_liveness(task_id), structlog.contextvars.bound_contextvars(
+        task_id=str(task_id), run_id=str(run_id), component=config.component,
     ):
         final: HarnessState = graph.invoke(initial)
     return {"summary": final.get("summary"), "error": final.get("error")}

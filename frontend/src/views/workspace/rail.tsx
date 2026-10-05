@@ -10,7 +10,7 @@ const KEY_STEP = 24;
 /** Collapsed strip: just the expand control, nothing readable. */
 const RAIL_COLLAPSED = "48px";
 
-export interface RailState {
+interface RailState {
   collapsed: boolean;
   /** Value for the workspace grid's chat-column width variable. */
   width: string;

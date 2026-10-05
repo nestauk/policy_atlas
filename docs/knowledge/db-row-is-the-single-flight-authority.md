@@ -1,7 +1,7 @@
 ---
 type: Invariant
 title: Cross-process turn correctness lives in the DB row, never in process-local state
-description: Chat-turn single-flight, cancel, and capacity are all decided by the chat_turn row's status under the project row lock. Process-local locks and registries are latency optimisations only — every one of the 029 review stack's race findings was a path where local state was treated as the authority.
+description: Chat-turn single-flight, cancel, and capacity are all decided by the chat_turn row's status under the task row lock. Process-local locks and registries are latency optimisations only — every one of the 029 review stack's race findings was a path where local state was treated as the authority.
 tags: [chat, concurrency, single-flight, cancel, idempotency, two-phase, invariant]
 timestamp: 2026-08-11
 ---

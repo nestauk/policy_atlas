@@ -48,6 +48,7 @@ describe("scopeChips", () => {
         published_after: "2015-01-01",
         published_before: null,
         publisher_country: "GB",
+        publisher_source: null,
         author_affiliation_countries: ["GB", "IE"],
         country_group: { label: "UK & Ireland", countries: ["GB", "IE"], authorship: null },
       }),
@@ -60,6 +61,7 @@ describe("scopeChips", () => {
         published_after: null,
         published_before: "2024-06-30",
         publisher_country: "GB",
+        publisher_source: null,
         author_affiliation_countries: ["GB", "SE"],
         country_group: null,
       }),
@@ -69,6 +71,32 @@ describe("scopeChips", () => {
   it("returns nothing for absent constraints", () => {
     expect(scopeChips(null)).toEqual([]);
     expect(scopeChips(undefined)).toEqual([]);
+  });
+
+  it("prefers publisher_source over the country/group geography (APO)", () => {
+    expect(
+      scopeChips({
+        published_after: null,
+        published_before: null,
+        publisher_country: null,
+        publisher_source: "apo",
+        author_affiliation_countries: null,
+        country_group: null,
+      }),
+    ).toEqual(["Geography: APO"]);
+  });
+
+  it("publisher_source wins even over a stray publisher_country", () => {
+    expect(
+      scopeChips({
+        published_after: null,
+        published_before: null,
+        publisher_country: "GB",
+        publisher_source: "apo",
+        author_affiliation_countries: null,
+        country_group: null,
+      }),
+    ).toEqual(["Geography: APO"]);
   });
 });
 

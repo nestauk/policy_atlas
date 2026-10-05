@@ -11,7 +11,6 @@ import { cn } from "../brand/cn";
 
 export const Sheet = DialogPrimitive.Root;
 export const SheetTrigger = DialogPrimitive.Trigger;
-export const SheetClose = DialogPrimitive.Close;
 
 export function SheetContent({
   className,
@@ -27,12 +26,20 @@ export function SheetContent({
 }) {
   return (
     <DialogPrimitive.Portal>
-      <DialogPrimitive.Overlay className="fixed inset-0 z-40 bg-navy/40 data-[state=open]:animate-in data-[state=open]:fade-in" />
+      <DialogPrimitive.Overlay className="fixed inset-0 z-40 bg-navy/40 transition-opacity duration-200 ease-out starting:opacity-0" />
       <DialogPrimitive.Content
         className={cn(
           "fixed inset-y-0 z-50 flex w-full max-w-xl flex-col overflow-y-auto",
           "border-line-2 bg-paper shadow-[0_10px_30px_rgba(15,41,74,0.14)]",
-          side === "right" ? "right-0 border-l" : "left-0 border-r",
+          // Slides in from its edge on the drawer curve; transform only.
+          "transition-transform duration-[260ms] ease-drawer",
+          side === "right" ? "right-0 border-l starting:translate-x-full" : "left-0 border-r starting:-translate-x-full",
+          // Below md both sides collapse to a Wikipedia-style bottom sheet:
+          // pinned to the bottom edge, full width, content-driven height
+          // capped under half the viewport, sliding up instead of across.
+          "max-md:inset-x-0 max-md:inset-y-auto max-md:bottom-0 max-md:max-h-[45svh] max-md:max-w-none",
+          "max-md:border-x-0 max-md:border-t",
+          "max-md:starting:translate-x-0 max-md:starting:translate-y-full",
           className,
         )}
         {...props}
@@ -52,7 +59,7 @@ export function SheetContent({
           </div>
           <DialogPrimitive.Close
             aria-label="Close panel"
-            className="cursor-pointer p-1.5 text-grey hover:text-navy focus-visible:outline-2 focus-visible:outline-blue"
+            className="cursor-pointer p-2 text-lead leading-none text-grey hover:text-navy focus-visible:outline-2 focus-visible:outline-blue"
           >
             ✕
           </DialogPrimitive.Close>

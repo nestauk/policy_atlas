@@ -1,12 +1,13 @@
 import type { components } from "../api/gen/types";
+import { TASK } from "../lib/vocabulary";
 
 type Decision = components["schemas"]["DecisionOut"];
 
 /** The demo server's complete, user-facing decision-detail vocabulary. */
-export const DECISION_DETAIL_LABELS: Record<string, string> = {
+const DECISION_DETAIL_LABELS: Record<string, string> = {
   acquired: "New sources found",
   results_returned: "Results returned by the databases",
-  already_acquired: "Already in the project",
+  already_acquired: `Already in the ${TASK.lower}`,
   dropped_over_cap: "Set aside — over this round's limit",
   relevant: "Judged relevant",
   not_relevant: "Screened out",
@@ -29,7 +30,7 @@ export const DECISION_DETAIL_LABELS: Record<string, string> = {
   overton: "Queries run · Overton",
 };
 
-export type FriendlyDetail = { label: string; value: string | number | boolean };
+type FriendlyDetail = { label: string; value: string | number | boolean };
 
 /** Return only safe, friendly-labelled scalar decision details. */
 export function friendlyDecisionDetails(detail: Decision["detail"]): FriendlyDetail[] {
@@ -42,7 +43,7 @@ export function friendlyDecisionDetails(detail: Decision["detail"]): FriendlyDet
   });
 }
 
-export type PresentedDecision = Decision & { searchCount?: number };
+type PresentedDecision = Decision & { searchCount?: number };
 
 /** Collapse durable search events into one count without exposing their raw payloads. */
 export function groupSearchDecisions(entries: Decision[]): PresentedDecision[] {

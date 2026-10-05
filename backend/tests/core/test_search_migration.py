@@ -12,7 +12,7 @@ Two couplings this test carries deliberately (both bitten once, task 017):
   and any later migration silently broke the narrow-constraint assertion.
 - No row-holding transaction may be open while alembic runs DDL on a second
   connection: later migrations create/drop tables whose foreign keys reference
-  ``project``/``evidence_scope``, and that DDL blocks forever behind this
+  the Task/``evidence_scope`` rows, and that DDL blocks forever behind this
   test's own uncommitted seed rows (lock-order deadlock). Seeding therefore
   happens strictly after the DDL step it accompanies, and every seed
   transaction is rolled back before the next DDL step.
@@ -28,7 +28,14 @@ from sqlalchemy.exc import IntegrityError
 
 from policy_atlas.core.schema import search_coverage_record, source_screening_result
 from tests.conftest import _alembic_cfg
-from tests.helpers import seed_project_and_run, seed_run, seed_scope, seed_source
+from tests.core.legacy_catalog import (
+    legacy_table,
+    seed_legacy_run,
+    seed_legacy_scope,
+    seed_legacy_source,
+    seed_legacy_task_and_run,
+)
+from tests.helpers import seed_run, seed_scope, seed_source, seed_task_and_run
 
 # The revision below c9e4b7f2d1a8 (the stop_condition widen) — the narrow-
 # constraint state this test exercises.
@@ -45,30 +52,43 @@ PRE_FOLDING_PASS_WIDEN_REVISION = "64ff33416d1a"
 def _insert_coverage_row(
     connection: Connection,
     *,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     run_id: uuid.UUID,
     scope_id: uuid.UUID,
     stop_condition: str,
+    legacy: bool = False,
 ) -> None:
+    """Insert one coverage record.
+
+    Args:
+        connection: Open connection on the revision being exercised.
+        task_id: Task the record belongs to.
+        run_id: Run that acquired the coverage.
+        scope_id: Evidence scope the record belongs to.
+        stop_condition: Stop condition to store.
+        legacy: Insert BELOW revision c1a7f4e9b0d2, where the column is still
+            ``project_id`` (plan D9).
+    """
+    table = legacy_table(connection, "search_coverage_record") if legacy else search_coverage_record
     connection.execute(
-        search_coverage_record.insert().values(
-            search_coverage_record_id=uuid.uuid4(),
-            evidence_scope_id=scope_id,
-            project_id=project_id,
-            acquired_by_run_id=run_id,
-            backends=[
+        table.insert().values(**{
+            "search_coverage_record_id": uuid.uuid4(),
+            "evidence_scope_id": scope_id,
+            "project_id" if legacy else "task_id": task_id,
+            "acquired_by_run_id": run_id,
+            "backends": [
                 {
                     "backend": "openalex",
                     "trust_class": "academic_aggregator",
                     "mode": "fixture",
                 }
             ],
-            scope_filters={},
-            stop_condition=stop_condition,
-            adequacy_verdict="adequate",
-            verdict_origin="model",
-            created_at=datetime.now(UTC),
-        )
+            "scope_filters": {},
+            "stop_condition": stop_condition,
+            "adequacy_verdict": "adequate",
+            "verdict_origin": "model",
+            "created_at": datetime.now(UTC),
+        })
     )
 
 
@@ -83,15 +103,16 @@ def test_stop_condition_widen_migration_roundtrip(engine: Engine) -> None:
         connection = engine.connect()
         trans = connection.begin()
         try:
-            project_id, run_id = seed_project_and_run(connection)
-            scope_id = seed_scope(connection, project_id)
+            task_id, run_id = seed_legacy_task_and_run(connection)
+            scope_id = seed_legacy_scope(connection, task_id)
             with pytest.raises(IntegrityError, match="ck_scov_stop_condition"):
                 _insert_coverage_row(
                     connection,
-                    project_id=project_id,
+                    task_id=task_id,
                     run_id=run_id,
                     scope_id=scope_id,
                     stop_condition="short_circuit",
+                    legacy=True,
                 )
         finally:
             trans.rollback()
@@ -104,13 +125,13 @@ def test_stop_condition_widen_migration_roundtrip(engine: Engine) -> None:
     connection = engine.connect()
     trans = connection.begin()
     try:
-        project_id, run_id = seed_project_and_run(connection)
-        scope_id = seed_scope(connection, project_id)
+        task_id, run_id = seed_task_and_run(connection)
+        scope_id = seed_scope(connection, task_id)
         for stop_condition in ("short_circuit", "budget_exhausted", "target_reached"):
             _insert_coverage_row(
                 connection,
-                project_id=project_id,
-                run_id=seed_run(connection, project_id),
+                task_id=task_id,
+                run_id=seed_run(connection, task_id),
                 scope_id=scope_id,
                 stop_condition=stop_condition,
             )
@@ -120,8 +141,8 @@ def test_stop_condition_widen_migration_roundtrip(engine: Engine) -> None:
         with pytest.raises(IntegrityError, match="ck_scov_stop_condition"):
             _insert_coverage_row(
                 connection,
-                project_id=project_id,
-                run_id=seed_run(connection, project_id),
+                task_id=task_id,
+                run_id=seed_run(connection, task_id),
                 scope_id=scope_id,
                 stop_condition="saturated",
             )
@@ -134,25 +155,41 @@ def test_stop_condition_widen_migration_roundtrip(engine: Engine) -> None:
 def _insert_screening_row(
     connection: Connection,
     *,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     run_id: uuid.UUID,
     scope_id: uuid.UUID,
-    pss_id: uuid.UUID,
+    tss_id: uuid.UUID,
     status: str,
+    legacy: bool = False,
 ) -> None:
+    """Insert one screening result.
+
+    Args:
+        connection: Open connection on the revision being exercised.
+        task_id: Task the result belongs to.
+        run_id: Run that screened the source.
+        scope_id: Evidence scope the result belongs to.
+        tss_id: Task-source-snapshot the result is about.
+        status: Screening status to store.
+        legacy: Insert BELOW revision c1a7f4e9b0d2, where the columns are still
+            ``project_id`` / ``project_source_snapshot_id`` (plan D9).
+    """
+    table = (
+        legacy_table(connection, "source_screening_result") if legacy else source_screening_result
+    )
     connection.execute(
-        source_screening_result.insert().values(
-            source_screening_result_id=uuid.uuid4(),
-            evidence_scope_id=scope_id,
-            project_source_snapshot_id=pss_id,
-            project_id=project_id,
-            screened_by_run_id=run_id,
-            status=status,
-            screen_basis="title_abstract",
-            screen_decision_confidence=1.0,
-            screen_stage=1,
-            screened_at=datetime.now(UTC),
-        )
+        table.insert().values(**{
+            "source_screening_result_id": uuid.uuid4(),
+            "evidence_scope_id": scope_id,
+            "project_source_snapshot_id" if legacy else "task_source_snapshot_id": tss_id,
+            "project_id" if legacy else "task_id": task_id,
+            "screened_by_run_id": run_id,
+            "status": status,
+            "screen_basis": "title_abstract",
+            "screen_decision_confidence": 1.0,
+            "screen_stage": 1,
+            "screened_at": datetime.now(UTC),
+        })
     )
 
 
@@ -172,19 +209,20 @@ def test_stop_grain_and_retraction_widen_migration_roundtrip(engine: Engine) -> 
         connection = engine.connect()
         trans = connection.begin()
         try:
-            project_id, run_id = seed_project_and_run(connection)
-            scope_id = seed_scope(connection, project_id)
-            _, pss_id = seed_source(connection, project_id)
+            task_id, run_id = seed_legacy_task_and_run(connection)
+            scope_id = seed_legacy_scope(connection, task_id)
+            _, tss_id = seed_legacy_source(connection, task_id)
 
             for stop_condition in ("completed", "wall_clock_exceeded"):
                 savepoint = connection.begin_nested()
                 with pytest.raises(IntegrityError, match="ck_scov_stop_condition"):
                     _insert_coverage_row(
                         connection,
-                        project_id=project_id,
-                        run_id=seed_run(connection, project_id),
+                        task_id=task_id,
+                        run_id=seed_legacy_run(connection, task_id),
                         scope_id=scope_id,
                         stop_condition=stop_condition,
+                        legacy=True,
                     )
                 savepoint.rollback()
 
@@ -192,11 +230,12 @@ def test_stop_grain_and_retraction_widen_migration_roundtrip(engine: Engine) -> 
             with pytest.raises(IntegrityError, match="ck_ssr_status"):
                 _insert_screening_row(
                     connection,
-                    project_id=project_id,
+                    task_id=task_id,
                     run_id=run_id,
                     scope_id=scope_id,
-                    pss_id=pss_id,
+                    tss_id=tss_id,
                     status="excluded_retracted",
+                    legacy=True,
                 )
             savepoint.rollback()
         finally:
@@ -210,15 +249,15 @@ def test_stop_grain_and_retraction_widen_migration_roundtrip(engine: Engine) -> 
     connection = engine.connect()
     trans = connection.begin()
     try:
-        project_id, run_id = seed_project_and_run(connection)
-        scope_id = seed_scope(connection, project_id)
-        _, pss_id = seed_source(connection, project_id)
+        task_id, run_id = seed_task_and_run(connection)
+        scope_id = seed_scope(connection, task_id)
+        _, tss_id = seed_source(connection, task_id)
 
         for stop_condition in ("completed", "wall_clock_exceeded"):
             _insert_coverage_row(
                 connection,
-                project_id=project_id,
-                run_id=seed_run(connection, project_id),
+                task_id=task_id,
+                run_id=seed_run(connection, task_id),
                 scope_id=scope_id,
                 stop_condition=stop_condition,
             )
@@ -227,18 +266,18 @@ def test_stop_grain_and_retraction_widen_migration_roundtrip(engine: Engine) -> 
         # rejected by a widening CHECK.
         _insert_coverage_row(
             connection,
-            project_id=project_id,
-            run_id=seed_run(connection, project_id),
+            task_id=task_id,
+            run_id=seed_run(connection, task_id),
             scope_id=scope_id,
             stop_condition="breadth_truncated",
         )
 
         _insert_screening_row(
             connection,
-            project_id=project_id,
+            task_id=task_id,
             run_id=run_id,
             scope_id=scope_id,
-            pss_id=pss_id,
+            tss_id=tss_id,
             status="excluded_retracted",
         )
 
@@ -247,8 +286,8 @@ def test_stop_grain_and_retraction_widen_migration_roundtrip(engine: Engine) -> 
         with pytest.raises(IntegrityError, match="ck_scov_stop_condition"):
             _insert_coverage_row(
                 connection,
-                project_id=project_id,
-                run_id=seed_run(connection, project_id),
+                task_id=task_id,
+                run_id=seed_run(connection, task_id),
                 scope_id=scope_id,
                 stop_condition="saturated",
             )

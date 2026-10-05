@@ -932,6 +932,18 @@ def test_cognito_user_pool_is_operator_managed_and_retained():
     }
 
 
+def test_cognito_password_policy_keeps_default_rules_with_30_day_temporary_passwords():
+    _, user_pool = _resources(TEMPLATES["app"], "AWS::Cognito::UserPool")[0]
+    assert user_pool["Properties"]["Policies"]["PasswordPolicy"] == {
+        "MinimumLength": 8,
+        "RequireLowercase": True,
+        "RequireUppercase": True,
+        "RequireNumbers": True,
+        "RequireSymbols": True,
+        "TemporaryPasswordValidityDays": 30,
+    }
+
+
 def test_cognito_spa_client_is_public_code_flow_with_exact_redirects():
     _, client = _resources(TEMPLATES["app"], "AWS::Cognito::UserPoolClient")[0]
     properties = client["Properties"]

@@ -15,27 +15,26 @@ from policy_atlas.core.schema import (
     characterisation_result,
     evidence_scope,
     grouping_result,
-    orchestration_plan,
     runs,
     selection_result,
     source_appraisal_result,
     synthesis_result,
+    task_plan,
 )
-from policy_atlas.evidence_base.assess.appraise import (
+from policy_atlas.evidence_search.assess.appraise import (
     DEFAULT_RUBRIC_VERSION,
     _derive_rubric_version,
 )
-from policy_atlas.evidence_base.corpus.characterise import CharacteriseFailure, ScreenedSource
-from policy_atlas.evidence_base.corpus.select import (
+from policy_atlas.evidence_search.corpus.characterise import CharacteriseFailure, ScreenedSource
+from policy_atlas.evidence_search.corpus.select import (
     SelectionCandidate,
     SelectionStratum,
     _parse_directive,
     select_documents,
 )
-from policy_atlas.evidence_base.extract.extract import KNOWN_PROFILE_IDS
-from policy_atlas.evidence_base.sourcing.search_loop import DEPTH_CONSTANTS
+from policy_atlas.evidence_search.extract.extract import KNOWN_PROFILE_IDS
+from policy_atlas.evidence_search.sourcing.search_loop import DEPTH_CONSTANTS
 from policy_atlas.runtime import harness, steering_events
-from policy_atlas.runtime.orchestration_plan import OrchestrationPlan, compose
 from policy_atlas.runtime.runner import (
     NullIO,
     _apply_replacement_rerun,
@@ -61,8 +60,9 @@ from policy_atlas.runtime.steering import (
     render_collation,
     steer_point_triggers,
 )
+from policy_atlas.runtime.task_plan import TaskPlan, compose
 from tests.helpers import now
-from tests.runtime.test_runner import _base_plan, _cleanup, _runner_backends, _seed_project
+from tests.runtime.test_runner import _base_plan, _cleanup, _runner_backends, _seed_task
 
 IOF_PROFILE_ID, ICF_PROFILE_ID = KNOWN_PROFILE_IDS
 
@@ -123,11 +123,11 @@ class _InjectAtIO:
 
 
 def _compiled_by_component(
-    engine: Engine, project_id: uuid.UUID
+    engine: Engine, task_id: uuid.UUID
 ) -> dict[str, list[dict[str, Any]]]:
     by_component: dict[str, list[dict[str, Any]]] = {}
     with engine.connect() as conn:
-        for entry in events.read(conn, project_id):
+        for entry in events.read(conn, task_id):
             if entry["event_type"] == "plan.compiled":
                 by_component.setdefault(entry["payload"]["component"], []).append(entry["payload"])
     return by_component
@@ -136,16 +136,16 @@ def _compiled_by_component(
 def _insert_plan_row(
     engine: Engine,
     *,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     scope_id: uuid.UUID,
-    plan: OrchestrationPlan,
+    plan: TaskPlan,
 ) -> uuid.UUID:
     plan_id = uuid.uuid4()
     with engine.begin() as conn:
         conn.execute(
-            orchestration_plan.insert().values(
+            task_plan.insert().values(
                 plan_id=plan_id,
-                project_id=project_id,
+                task_id=task_id,
                 evidence_scope_id=scope_id,
                 version=1,
                 status="approved",
@@ -158,14 +158,14 @@ def _insert_plan_row(
     return plan_id
 
 
-def _cleanup_project(engine: Engine, project_id: uuid.UUID | None) -> None:
-    if project_id is None:
+def _cleanup_task(engine: Engine, task_id: uuid.UUID | None) -> None:
+    if task_id is None:
         return
     with engine.begin() as conn:
         conn.execute(
-            orchestration_plan.delete().where(orchestration_plan.c.project_id == project_id)
+            task_plan.delete().where(task_plan.c.task_id == task_id)
         )
-    _cleanup(engine, project_id)
+    _cleanup(engine, task_id)
 
 
 @pytest.mark.parametrize(
@@ -210,7 +210,7 @@ def test_appraise_directive_delta_validation_fails_closed(
 
 def test_appraise_directive_delta_validates_and_is_exempt_from_plan_round_trip() -> None:
     """D1: the appraisal rubric override is a commit-layer directive with no
-    OrchestrationPlan field (apply_reselect precedent). It validates at the
+    TaskPlan field (apply_reselect precedent). It validates at the
     parser but is honestly exempted from the generic round-trip check —
     unlike every other component, it is never expected to appear in the
     recomposed chain's directive_delta."""
@@ -255,7 +255,7 @@ def test_extract_refresh_directive_delta_rejects_bogus_value(
 
 
 def test_extract_refresh_is_exempt_from_plan_round_trip_but_profiles_still_are() -> None:
-    """D3: refresh has no OrchestrationPlan field (commit-layer, appraisal-rubric
+    """D3: refresh has no TaskPlan field (commit-layer, appraisal-rubric
     precedent) and is silently exempted from the round-trip comparison; the
     sibling profiles key still round-trips normally."""
     # _base_plan()'s default "deep" depth compiles extract_profiles to both
@@ -458,7 +458,7 @@ def test_characterise_directive_delta_validation_fails_closed(
 
 def test_characterise_directive_delta_validates_and_is_exempt_from_plan_round_trip() -> None:
     """B5/D9: the characterise themes/guidance directive is a commit-layer
-    directive with no OrchestrationPlan field (the appraise/D1 precedent). It
+    directive with no TaskPlan field (the appraise/D1 precedent). It
     validates at the parser but is honestly exempted from the generic
     round-trip check — it is never expected to appear in the recomposed
     chain's directive_delta."""
@@ -538,11 +538,11 @@ def test_pause_points_compile_pinned_for_all_modes() -> None:
 def test_frequent_run_pauses_after_every_component_and_continue_matches_nullio(
     engine: Engine,
 ) -> None:
-    pause_project_id: uuid.UUID | None = None
-    null_project_id: uuid.UUID | None = None
+    pause_task_id: uuid.UUID | None = None
+    null_task_id: uuid.UUID | None = None
     try:
-        pause_project_id, pause_scope_id = _seed_project(engine)
-        null_project_id, null_scope_id = _seed_project(engine)
+        pause_task_id, pause_scope_id = _seed_task(engine)
+        null_task_id, null_scope_id = _seed_task(engine)
         # deep depth: the default component set (select/extract/group) is
         # deep-only after the 018 regrade.
         plan = _base_plan(
@@ -554,7 +554,7 @@ def test_frequent_run_pauses_after_every_component_and_continue_matches_nullio(
 
         pause_outcome = run_plan(
             engine,
-            project_id=pause_project_id,
+            task_id=pause_task_id,
             evidence_scope_id=pause_scope_id,
             plan=plan,
             plan_id=uuid.uuid4(),
@@ -564,7 +564,7 @@ def test_frequent_run_pauses_after_every_component_and_continue_matches_nullio(
         )
         null_outcome = run_plan(
             engine,
-            project_id=null_project_id,
+            task_id=null_task_id,
             evidence_scope_id=null_scope_id,
             plan=plan,
             plan_id=uuid.uuid4(),
@@ -602,20 +602,20 @@ def test_frequent_run_pauses_after_every_component_and_continue_matches_nullio(
             step.status for step in null_outcome.steps
         ]
     finally:
-        _cleanup_project(engine, pause_project_id)
-        _cleanup_project(engine, null_project_id)
+        _cleanup_task(engine, pause_task_id)
+        _cleanup_task(engine, null_task_id)
 
 
 def test_adjustment_writes_new_plan_version_and_changes_not_yet_run_group_directive(
     engine: Engine,
 ) -> None:
-    project_id: uuid.UUID | None = None
+    task_id: uuid.UUID | None = None
     try:
-        project_id, scope_id = _seed_project(engine)
+        task_id, scope_id = _seed_task(engine)
         plan = _base_plan(steering_mode="minimal")
         plan_id = _insert_plan_row(
             engine,
-            project_id=project_id,
+            task_id=task_id,
             scope_id=scope_id,
             plan=plan,
         )
@@ -625,7 +625,7 @@ def test_adjustment_writes_new_plan_version_and_changes_not_yet_run_group_direct
 
         outcome = run_plan(
             engine,
-            project_id=project_id,
+            task_id=task_id,
             evidence_scope_id=scope_id,
             plan=plan,
             plan_id=plan_id,
@@ -639,17 +639,17 @@ def test_adjustment_writes_new_plan_version_and_changes_not_yet_run_group_direct
         with engine.connect() as conn:
             rows = conn.execute(
                 select(
-                    orchestration_plan.c.version,
-                    orchestration_plan.c.status,
-                    orchestration_plan.c.created_by,
-                    orchestration_plan.c.payload,
+                    task_plan.c.version,
+                    task_plan.c.status,
+                    task_plan.c.created_by,
+                    task_plan.c.payload,
                 )
-                .where(orchestration_plan.c.project_id == project_id)
-                .order_by(orchestration_plan.c.version)
+                .where(task_plan.c.task_id == task_id)
+                .order_by(task_plan.c.version)
             ).all()
             facets = conn.execute(
                 select(grouping_result.c.grouping_provenance).where(
-                    grouping_result.c.project_id == project_id
+                    grouping_result.c.task_id == task_id
                 )
             ).scalar_one()["facets"]
 
@@ -660,7 +660,7 @@ def test_adjustment_writes_new_plan_version_and_changes_not_yet_run_group_direct
         assert rows[1].payload["grouping_facets"] == ["population"]
         assert facets == ["population"]
     finally:
-        _cleanup_project(engine, project_id)
+        _cleanup_task(engine, task_id)
 
 
 def test_minimal_partial_delta_round_trips_despite_composer_injected_siblings(
@@ -668,13 +668,13 @@ def test_minimal_partial_delta_round_trips_despite_composer_injected_siblings(
 ) -> None:
     # compose() always injects sibling keys the caller need not supply
     # (screen_full's {"stage": 2}); a criteria-only delta must still apply.
-    project_id: uuid.UUID | None = None
+    task_id: uuid.UUID | None = None
     try:
-        project_id, scope_id = _seed_project(engine)
+        task_id, scope_id = _seed_task(engine)
         plan = _base_plan(steering_mode="frequent")
         plan_id = _insert_plan_row(
             engine,
-            project_id=project_id,
+            task_id=task_id,
             scope_id=scope_id,
             plan=plan,
         )
@@ -690,7 +690,7 @@ def test_minimal_partial_delta_round_trips_despite_composer_injected_siblings(
 
         outcome = run_plan(
             engine,
-            project_id=project_id,
+            task_id=task_id,
             evidence_scope_id=scope_id,
             plan=plan,
             plan_id=plan_id,
@@ -704,12 +704,12 @@ def test_minimal_partial_delta_round_trips_despite_composer_injected_siblings(
         with engine.connect() as conn:
             rows = conn.execute(
                 select(
-                    orchestration_plan.c.version,
-                    orchestration_plan.c.status,
-                    orchestration_plan.c.payload,
+                    task_plan.c.version,
+                    task_plan.c.status,
+                    task_plan.c.payload,
                 )
-                .where(orchestration_plan.c.project_id == project_id)
-                .order_by(orchestration_plan.c.version)
+                .where(task_plan.c.task_id == task_id)
+                .order_by(task_plan.c.version)
             ).all()
         assert [(row.version, row.status) for row in rows] == [
             (1, "superseded"),
@@ -717,7 +717,7 @@ def test_minimal_partial_delta_round_trips_despite_composer_injected_siblings(
         ]
         assert rows[1].payload["screening_criteria"] == ["Exclude opinion pieces."]
     finally:
-        _cleanup_project(engine, project_id)
+        _cleanup_task(engine, task_id)
 
 
 def test_appraise_adjustment_accepted_end_to_end_but_absent_from_plan_payload(
@@ -727,17 +727,17 @@ def test_appraise_adjustment_accepted_end_to_end_but_absent_from_plan_payload(
     ``appraise`` component is accepted by the full ``apply_adjustment`` path
     (parser validates, round-trip is exempted) and commits a new
     user-attributed plan version — but, being a commit-layer directive with
-    no OrchestrationPlan field, the amended payload carries no trace of it.
+    no TaskPlan field, the amended payload carries no trace of it.
     This is the flagged, deliberately-landed behaviour for D1 (task 024
     Family D), not a bug: a full commit-layer apply path (an appraise
     analogue of ``apply_reselect``) is out of scope here."""
-    project_id: uuid.UUID | None = None
+    task_id: uuid.UUID | None = None
     try:
-        project_id, scope_id = _seed_project(engine)
+        task_id, scope_id = _seed_task(engine)
         plan = _base_plan(steering_mode="frequent")
         plan_id = _insert_plan_row(
             engine,
-            project_id=project_id,
+            task_id=task_id,
             scope_id=scope_id,
             plan=plan,
         )
@@ -756,7 +756,7 @@ def test_appraise_adjustment_accepted_end_to_end_but_absent_from_plan_payload(
 
         outcome = run_plan(
             engine,
-            project_id=project_id,
+            task_id=task_id,
             evidence_scope_id=scope_id,
             plan=plan,
             plan_id=plan_id,
@@ -770,23 +770,23 @@ def test_appraise_adjustment_accepted_end_to_end_but_absent_from_plan_payload(
         with engine.connect() as conn:
             rows = conn.execute(
                 select(
-                    orchestration_plan.c.version,
-                    orchestration_plan.c.status,
-                    orchestration_plan.c.created_by,
-                    orchestration_plan.c.payload,
+                    task_plan.c.version,
+                    task_plan.c.status,
+                    task_plan.c.created_by,
+                    task_plan.c.payload,
                 )
-                .where(orchestration_plan.c.project_id == project_id)
-                .order_by(orchestration_plan.c.version)
+                .where(task_plan.c.task_id == task_id)
+                .order_by(task_plan.c.version)
             ).all()
         assert [(row.version, row.status, row.created_by) for row in rows] == [
             (1, "superseded", "planner"),
             (2, "approved", "user"),
         ]
-        # No OrchestrationPlan field carries the appraisal directive.
+        # No TaskPlan field carries the appraisal directive.
         assert "appraisal" not in rows[1].payload
         assert "rubric" not in rows[1].payload
     finally:
-        _cleanup_project(engine, project_id)
+        _cleanup_task(engine, task_id)
 
 
 def test_delta_round_trip_still_rejects_a_request_plan_fields_cannot_express() -> None:
@@ -801,29 +801,29 @@ def test_delta_round_trip_still_rejects_a_request_plan_fields_cannot_express() -
 def test_adjustment_naming_already_run_component_reprompts_without_plan_write(
     engine: Engine,
 ) -> None:
-    project_id: uuid.UUID | None = None
+    task_id: uuid.UUID | None = None
     try:
-        project_id, scope_id = _seed_project(engine)
+        task_id, scope_id = _seed_task(engine)
         plan = _base_plan(steering_mode="minimal")
         plan_id = _insert_plan_row(
             engine,
-            project_id=project_id,
+            task_id=task_id,
             scope_id=scope_id,
             plan=plan,
         )
         # select/characterise/group are each re-runnable at their own steer point
         # (task 7 / 15b — characterise re-runs at P2), so the already-run rejection
         # property is proven with appraise, an already-run component no steer point
-        # ever re-runs. It is delivered at P2 (evidence_base_coverage, after
+        # ever re-runs. It is delivered at P2 (evidence_search_coverage, after
         # appraise has run) so the rejection is "already-run"; the reprompt then
         # Continues.
         io = ScriptedIO(
-            by_steer_point={"evidence_base_coverage": [Adjust(directive_deltas={"appraise": {}})]}
+            by_steer_point={"evidence_search_coverage": [Adjust(directive_deltas={"appraise": {}})]}
         )
 
         outcome = run_plan(
             engine,
-            project_id=project_id,
+            task_id=task_id,
             evidence_scope_id=scope_id,
             plan=plan,
             plan_id=plan_id,
@@ -840,25 +840,25 @@ def test_adjustment_naming_already_run_component_reprompts_without_plan_write(
         assert any("already-run component 'appraise'" in render for _, render in io.pauses)
         with engine.connect() as conn:
             rows = conn.execute(
-                select(orchestration_plan.c.version, orchestration_plan.c.status)
-                .where(orchestration_plan.c.project_id == project_id)
-                .order_by(orchestration_plan.c.version)
+                select(task_plan.c.version, task_plan.c.status)
+                .where(task_plan.c.task_id == task_id)
+                .order_by(task_plan.c.version)
             ).all()
         assert [(row.version, row.status) for row in rows] == [(1, "approved")]
     finally:
-        _cleanup_project(engine, project_id)
+        _cleanup_task(engine, task_id)
 
 
 def test_abort_at_pause_stops_walk_marks_plan_abandoned_and_preserves_prior_runs(
     engine: Engine,
 ) -> None:
-    project_id: uuid.UUID | None = None
+    task_id: uuid.UUID | None = None
     try:
-        project_id, scope_id = _seed_project(engine)
+        task_id, scope_id = _seed_task(engine)
         plan = _base_plan(steering_mode="frequent")
         plan_id = _insert_plan_row(
             engine,
-            project_id=project_id,
+            task_id=task_id,
             scope_id=scope_id,
             plan=plan,
         )
@@ -866,7 +866,7 @@ def test_abort_at_pause_stops_walk_marks_plan_abandoned_and_preserves_prior_runs
 
         outcome = run_plan(
             engine,
-            project_id=project_id,
+            task_id=task_id,
             evidence_scope_id=scope_id,
             plan=plan,
             plan_id=plan_id,
@@ -881,12 +881,12 @@ def test_abort_at_pause_stops_walk_marks_plan_abandoned_and_preserves_prior_runs
         assert all(step.status == "succeeded" for step in outcome.steps)
         with engine.connect() as conn:
             plan_status = conn.execute(
-                select(orchestration_plan.c.status).where(orchestration_plan.c.plan_id == plan_id)
+                select(task_plan.c.status).where(task_plan.c.plan_id == plan_id)
             ).scalar_one()
             run_statuses = (
                 conn.execute(
                     select(runs.c.status)
-                    .where(runs.c.project_id == project_id)
+                    .where(runs.c.task_id == task_id)
                     .order_by(runs.c.started_at)
                 )
                 .scalars()
@@ -895,22 +895,22 @@ def test_abort_at_pause_stops_walk_marks_plan_abandoned_and_preserves_prior_runs
             synth_count = conn.execute(
                 select(func.count())
                 .select_from(synthesis_result)
-                .where(synthesis_result.c.project_id == project_id)
+                .where(synthesis_result.c.task_id == task_id)
             ).scalar_one()
 
         assert plan_status == "abandoned"
         assert run_statuses == ["succeeded", "succeeded"]
         assert synth_count == 0
     finally:
-        _cleanup_project(engine, project_id)
+        _cleanup_task(engine, task_id)
 
 
 def test_unattended_auto_resolves_steer_point_without_pause_and_collates_flag(
     engine: Engine,
 ) -> None:
-    project_id: uuid.UUID | None = None
+    task_id: uuid.UUID | None = None
     try:
-        project_id, scope_id = _seed_project(engine)
+        task_id, scope_id = _seed_task(engine)
         plan = _base_plan(
             steering_mode="unattended",
             steer_point_defaults=[{"steer_point": "deepening_selection", "action": "proceed_flag"}],
@@ -919,7 +919,7 @@ def test_unattended_auto_resolves_steer_point_without_pause_and_collates_flag(
 
         outcome = run_plan(
             engine,
-            project_id=project_id,
+            task_id=task_id,
             evidence_scope_id=scope_id,
             plan=plan,
             plan_id=uuid.uuid4(),
@@ -954,7 +954,7 @@ def test_unattended_auto_resolves_steer_point_without_pause_and_collates_flag(
         assert "auto-resolutions" in collation
         assert collation.index("unconfigured_default") < collation.index("rule=deepening_selection")
     finally:
-        _cleanup_project(engine, project_id)
+        _cleanup_task(engine, task_id)
 
 
 def test_render_check_in_and_collation_are_deterministic_and_contain_key_facts() -> None:
@@ -995,7 +995,7 @@ def test_render_check_in_and_collation_are_deterministic_and_contain_key_facts()
 def _insert_selection_row(
     engine: Engine,
     *,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     scope_id: uuid.UUID,
     flags: dict[str, Any],
 ) -> uuid.UUID:
@@ -1004,7 +1004,7 @@ def _insert_selection_row(
         conn.execute(
             runs.insert().values(
                 run_id=run_id,
-                project_id=project_id,
+                task_id=task_id,
                 status="succeeded",
                 started_at=now(),
             )
@@ -1012,7 +1012,7 @@ def _insert_selection_row(
         conn.execute(
             selection_result.insert().values(
                 selection_result_id=uuid.uuid4(),
-                project_id=project_id,
+                task_id=task_id,
                 evidence_scope_id=scope_id,
                 run_id=run_id,
                 strategy="coverage_stratified_v1",
@@ -1039,7 +1039,7 @@ def _screened(
     if year is not None:
         metadata["year"] = year
     return ScreenedSource(
-        pss_id=uuid.uuid4(),
+        tss_id=uuid.uuid4(),
         source_snapshot_id=uuid.uuid4(),
         full_text_snapshot_id=None,
         origin=origin,
@@ -1058,19 +1058,19 @@ def _screened(
 
 
 def test_steer_point_triggers_map_each_flag_shape(engine: Engine) -> None:
-    project_id: uuid.UUID | None = None
+    task_id: uuid.UUID | None = None
     try:
-        project_id, scope_id = _seed_project(engine)
+        task_id, scope_id = _seed_task(engine)
         plan = _base_plan()
         large_run = _insert_selection_row(
             engine,
-            project_id=project_id,
+            task_id=task_id,
             scope_id=scope_id,
             flags={"large_stratum_excluded": ["Housing supply"]},
         )
         nominated_run = _insert_selection_row(
             engine,
-            project_id=project_id,
+            task_id=task_id,
             scope_id=scope_id,
             flags={
                 "priority_stratum_excluded": ["Health equity"],
@@ -1079,41 +1079,41 @@ def test_steer_point_triggers_map_each_flag_shape(engine: Engine) -> None:
         )
         thin_run = _insert_selection_row(
             engine,
-            project_id=project_id,
+            task_id=task_id,
             scope_id=scope_id,
             flags={"thin_base": {"sufficiently_confident": 2, "floor": 10}},
         )
         other_run = _insert_selection_row(
             engine,
-            project_id=project_id,
+            task_id=task_id,
             scope_id=scope_id,
             flags={"thin_full_text": {"share": 0.1, "floor": 0.5}},
         )
         empty_run = _insert_selection_row(
             engine,
-            project_id=project_id,
+            task_id=task_id,
             scope_id=scope_id,
             flags={},
         )
 
         with engine.connect() as conn:
             large = steer_point_triggers(
-                conn, project_id=project_id, selection_run_id=large_run, plan=plan
+                conn, task_id=task_id, selection_run_id=large_run, plan=plan
             )
             nominated = steer_point_triggers(
-                conn, project_id=project_id, selection_run_id=nominated_run, plan=plan
+                conn, task_id=task_id, selection_run_id=nominated_run, plan=plan
             )
             thin = steer_point_triggers(
-                conn, project_id=project_id, selection_run_id=thin_run, plan=plan
+                conn, task_id=task_id, selection_run_id=thin_run, plan=plan
             )
             other = steer_point_triggers(
-                conn, project_id=project_id, selection_run_id=other_run, plan=plan
+                conn, task_id=task_id, selection_run_id=other_run, plan=plan
             )
             empty = steer_point_triggers(
-                conn, project_id=project_id, selection_run_id=empty_run, plan=plan
+                conn, task_id=task_id, selection_run_id=empty_run, plan=plan
             )
             missing = steer_point_triggers(
-                conn, project_id=project_id, selection_run_id=uuid.uuid4(), plan=plan
+                conn, task_id=task_id, selection_run_id=uuid.uuid4(), plan=plan
             )
 
         assert large == [{"trigger": "excluded_large_stratum", "detail": ["Housing supply"]}]
@@ -1134,7 +1134,7 @@ def test_steer_point_triggers_map_each_flag_shape(engine: Engine) -> None:
         assert empty == []
         assert missing == []
     finally:
-        _cleanup_project(engine, project_id)
+        _cleanup_task(engine, task_id)
 
 
 def test_build_steer_point_options_speak_intents_with_pinned_grammar() -> None:
@@ -1180,7 +1180,7 @@ def test_emphasis_options_reorder_selection_through_the_real_select_path() -> No
     # quality) wins once the quality weight is doubled.
     doc_a = _screened(quality=2, text_basis="full_text", screen_confidence=0.9, year=year)
     doc_b = _screened(quality=5, text_basis="abstract_only", screen_confidence=0.6, year=None)
-    quality_stratum = SelectionStratum(name="S", candidate_ids=(doc_a.pss_id, doc_b.pss_id))
+    quality_stratum = SelectionStratum(name="S", candidate_ids=(doc_a.tss_id, doc_b.tss_id))
     quality_candidates = [
         SelectionCandidate(source=doc_a, tags=()),
         SelectionCandidate(source=doc_b, tags=()),
@@ -1206,14 +1206,14 @@ def test_emphasis_options_reorder_selection_through_the_real_select_path() -> No
         intent="q",
         ranking_backend=None,
     )
-    assert [record["pss_id"] for record in default_quality.selected] == [str(doc_a.pss_id)]
-    assert [record["pss_id"] for record in emphasised_quality.selected] == [str(doc_b.pss_id)]
+    assert [record["tss_id"] for record in default_quality.selected] == [str(doc_a.tss_id)]
+    assert [record["tss_id"] for record in emphasised_quality.selected] == [str(doc_b.tss_id)]
 
     # Screen-confidence flip: doc C beats doc D by default; doc D (higher screen
     # confidence) wins once screen_confidence is emphasised x2.5.
     doc_c = _screened(quality=5, text_basis="full_text", screen_confidence=0.3, year=year)
     doc_d = _screened(quality=3, text_basis="full_text", screen_confidence=0.9, year=year)
-    relevance_stratum = SelectionStratum(name="S", candidate_ids=(doc_c.pss_id, doc_d.pss_id))
+    relevance_stratum = SelectionStratum(name="S", candidate_ids=(doc_c.tss_id, doc_d.tss_id))
     relevance_candidates = [
         SelectionCandidate(source=doc_c, tags=()),
         SelectionCandidate(source=doc_d, tags=()),
@@ -1238,18 +1238,18 @@ def test_emphasis_options_reorder_selection_through_the_real_select_path() -> No
         intent="q",
         ranking_backend=None,
     )
-    assert [record["pss_id"] for record in default_relevance.selected] == [str(doc_c.pss_id)]
-    assert [record["pss_id"] for record in emphasised_relevance.selected] == [str(doc_d.pss_id)]
+    assert [record["tss_id"] for record in default_relevance.selected] == [str(doc_c.tss_id)]
+    assert [record["tss_id"] for record in emphasised_relevance.selected] == [str(doc_d.tss_id)]
 
 
 def test_moderate_steer_point_reselect_reruns_select_and_threads_new_run_id(
     engine: Engine,
 ) -> None:
-    project_id: uuid.UUID | None = None
+    task_id: uuid.UUID | None = None
     try:
-        project_id, scope_id = _seed_project(engine)
+        task_id, scope_id = _seed_task(engine)
         plan = _base_plan()  # moderate mode, full (deep) chain
-        plan_id = _insert_plan_row(engine, project_id=project_id, scope_id=scope_id, plan=plan)
+        plan_id = _insert_plan_row(engine, task_id=task_id, scope_id=scope_id, plan=plan)
         # Reselect lands at the P3 deepening_selection pause; every other lattice
         # pause (P1 fires on the thin stub seed, P2, P4) Continues.
         io = ScriptedIO(
@@ -1266,7 +1266,7 @@ def test_moderate_steer_point_reselect_reruns_select_and_threads_new_run_id(
 
         outcome = run_plan(
             engine,
-            project_id=project_id,
+            task_id=task_id,
             evidence_scope_id=scope_id,
             plan=plan,
             plan_id=plan_id,
@@ -1281,16 +1281,16 @@ def test_moderate_steer_point_reselect_reruns_select_and_threads_new_run_id(
         with engine.connect() as conn:
             plan_rows = conn.execute(
                 select(
-                    orchestration_plan.c.version,
-                    orchestration_plan.c.status,
-                    orchestration_plan.c.created_by,
+                    task_plan.c.version,
+                    task_plan.c.status,
+                    task_plan.c.created_by,
                 )
-                .where(orchestration_plan.c.project_id == project_id)
-                .order_by(orchestration_plan.c.version)
+                .where(task_plan.c.task_id == task_id)
+                .order_by(task_plan.c.version)
             ).all()
             compiled = [
                 entry
-                for entry in events.read(conn, project_id)
+                for entry in events.read(conn, task_id)
                 if entry["event_type"] == "plan.compiled"
             ]
 
@@ -1330,21 +1330,21 @@ def test_moderate_steer_point_reselect_reruns_select_and_threads_new_run_id(
         assert len(select_steps) == 2
         assert all(step.status == "succeeded" for step in select_steps)
     finally:
-        _cleanup_project(engine, project_id)
+        _cleanup_task(engine, task_id)
 
 
 def test_p2_recharacterise_option_reruns_and_rethreads_reference(engine: Engine) -> None:
     """A canonical P2 (before select) re-characterise option Adjust re-runs
     characterise (replacement) — both characterisation rows persist and select
     references the NEW run (Task 15b)."""
-    project_id: uuid.UUID | None = None
+    task_id: uuid.UUID | None = None
     try:
-        project_id, scope_id = _seed_project(engine)
-        plan = _base_plan()  # moderate: P2 (evidence_base_coverage) pauses
-        plan_id = _insert_plan_row(engine, project_id=project_id, scope_id=scope_id, plan=plan)
+        task_id, scope_id = _seed_task(engine)
+        plan = _base_plan()  # moderate: P2 (evidence_search_coverage) pauses
+        plan_id = _insert_plan_row(engine, task_id=task_id, scope_id=scope_id, plan=plan)
         io = ScriptedIO(
             by_steer_point={
-                "evidence_base_coverage": [
+                "evidence_search_coverage": [
                     Adjust(
                         directive_deltas={
                             "characterise": {
@@ -1361,7 +1361,7 @@ def test_p2_recharacterise_option_reruns_and_rethreads_reference(engine: Engine)
 
         outcome = run_plan(
             engine,
-            project_id=project_id,
+            task_id=task_id,
             evidence_scope_id=scope_id,
             plan=plan,
             plan_id=plan_id,
@@ -1375,13 +1375,13 @@ def test_p2_recharacterise_option_reruns_and_rethreads_reference(engine: Engine)
         with engine.connect() as conn:
             compiled = [
                 entry
-                for entry in events.read(conn, project_id)
+                for entry in events.read(conn, task_id)
                 if entry["event_type"] == "plan.compiled"
             ]
             char_row_runs = set(
                 conn.execute(
                     select(characterisation_result.c.run_id).where(
-                        characterisation_result.c.project_id == project_id
+                        characterisation_result.c.task_id == task_id
                     )
                 )
                 .scalars()
@@ -1403,25 +1403,25 @@ def test_p2_recharacterise_option_reruns_and_rethreads_reference(engine: Engine)
         with engine.connect() as conn:
             replacements = [
                 entry
-                for entry in events.read(conn, project_id)
+                for entry in events.read(conn, task_id)
                 if entry["event_type"] == steering_events.STEERING_DECISION
                 and entry["payload"].get("rerun_mode") == "replacement"
                 and entry["payload"].get("boundary") == "before_component"
             ]
         assert len(replacements) == 1
     finally:
-        _cleanup_project(engine, project_id)
+        _cleanup_task(engine, task_id)
 
 
 def test_p4_regroup_option_reruns_and_rethreads_reference(engine: Engine) -> None:
     """A canonical P4 (before synthesise) re-group option Adjust re-runs group
     (replacement) — both grouping rows persist and synthesise references the NEW
     group run (Task 15b)."""
-    project_id: uuid.UUID | None = None
+    task_id: uuid.UUID | None = None
     try:
-        project_id, scope_id = _seed_project(engine)
+        task_id, scope_id = _seed_task(engine)
         plan = _base_plan()  # moderate: P4 (synthesis_shape) pauses
-        plan_id = _insert_plan_row(engine, project_id=project_id, scope_id=scope_id, plan=plan)
+        plan_id = _insert_plan_row(engine, task_id=task_id, scope_id=scope_id, plan=plan)
         io = ScriptedIO(
             by_steer_point={
                 "synthesis_shape": [
@@ -1432,7 +1432,7 @@ def test_p4_regroup_option_reruns_and_rethreads_reference(engine: Engine) -> Non
 
         outcome = run_plan(
             engine,
-            project_id=project_id,
+            task_id=task_id,
             evidence_scope_id=scope_id,
             plan=plan,
             plan_id=plan_id,
@@ -1446,13 +1446,13 @@ def test_p4_regroup_option_reruns_and_rethreads_reference(engine: Engine) -> Non
         with engine.connect() as conn:
             compiled = [
                 entry
-                for entry in events.read(conn, project_id)
+                for entry in events.read(conn, task_id)
                 if entry["event_type"] == "plan.compiled"
             ]
             group_row_runs = set(
                 conn.execute(
                     select(grouping_result.c.run_id).where(
-                        grouping_result.c.project_id == project_id
+                        grouping_result.c.task_id == task_id
                     )
                 )
                 .scalars()
@@ -1472,14 +1472,14 @@ def test_p4_regroup_option_reruns_and_rethreads_reference(engine: Engine) -> Non
         with engine.connect() as conn:
             replacements = [
                 entry
-                for entry in events.read(conn, project_id)
+                for entry in events.read(conn, task_id)
                 if entry["event_type"] == steering_events.STEERING_DECISION
                 and entry["payload"].get("rerun_mode") == "replacement"
                 and entry["payload"].get("boundary") == "before_component"
             ]
         assert len(replacements) == 1
     finally:
-        _cleanup_project(engine, project_id)
+        _cleanup_task(engine, task_id)
 
 
 # --- Pending commit-layer overlays (task 024, 15c) -------------------------
@@ -1489,11 +1489,11 @@ def test_pending_overlay_appraise_rubric_reaches_run(engine: Engine) -> None:
     """A pending appraise rubric adjustment (commit-layer, no plan field) is
     stored as an overlay and reaches the appraise run: every appraisal row carries
     the derived override rubric_version, and the plan.compiled event echoes it."""
-    project_id: uuid.UUID | None = None
+    task_id: uuid.UUID | None = None
     try:
-        project_id, scope_id = _seed_project(engine)
+        task_id, scope_id = _seed_task(engine)
         plan = _base_plan(steering_mode="frequent")
-        plan_id = _insert_plan_row(engine, project_id=project_id, scope_id=scope_id, plan=plan)
+        plan_id = _insert_plan_row(engine, task_id=task_id, scope_id=scope_id, plan=plan)
         rubric = {"Expert Opinion and Commentary": 5}
         # Injected at the after-classify pause — appraise has not yet run.
         io = _InjectAtIO(
@@ -1503,7 +1503,7 @@ def test_pending_overlay_appraise_rubric_reaches_run(engine: Engine) -> None:
 
         outcome = run_plan(
             engine,
-            project_id=project_id,
+            task_id=task_id,
             evidence_scope_id=scope_id,
             plan=plan,
             plan_id=plan_id,
@@ -1520,7 +1520,7 @@ def test_pending_overlay_appraise_rubric_reaches_run(engine: Engine) -> None:
             versions = set(
                 conn.execute(
                     select(source_appraisal_result.c.rubric_version).where(
-                        source_appraisal_result.c.project_id == project_id
+                        source_appraisal_result.c.task_id == task_id
                     )
                 )
                 .scalars()
@@ -1530,20 +1530,20 @@ def test_pending_overlay_appraise_rubric_reaches_run(engine: Engine) -> None:
         assert versions == {expected_version}
 
         # Provenance: the appraise plan.compiled event echoes the executed overlay.
-        appraise_payloads = _compiled_by_component(engine, project_id)["appraise"]
+        appraise_payloads = _compiled_by_component(engine, task_id)["appraise"]
         assert appraise_payloads[0]["pending_overlay"] == {"appraisal": {"rubric": rubric}}
     finally:
-        _cleanup_project(engine, project_id)
+        _cleanup_task(engine, task_id)
 
 
 def test_pending_overlay_characterise_echoes_and_does_not_leak(engine: Engine) -> None:
     """A pending characterise themes/guidance overlay echoes on characterise's
     plan.compiled event and does NOT leak onto other components' events."""
-    project_id: uuid.UUID | None = None
+    task_id: uuid.UUID | None = None
     try:
-        project_id, scope_id = _seed_project(engine)
+        task_id, scope_id = _seed_task(engine)
         plan = _base_plan(steering_mode="frequent")
-        plan_id = _insert_plan_row(engine, project_id=project_id, scope_id=scope_id, plan=plan)
+        plan_id = _insert_plan_row(engine, task_id=task_id, scope_id=scope_id, plan=plan)
         char_delta = {"characterise": {"themes": "standard", "guidance": ["focus on rural areas"]}}
         io = _InjectAtIO(
             target_component="classify",
@@ -1552,7 +1552,7 @@ def test_pending_overlay_characterise_echoes_and_does_not_leak(engine: Engine) -
 
         outcome = run_plan(
             engine,
-            project_id=project_id,
+            task_id=task_id,
             evidence_scope_id=scope_id,
             plan=plan,
             plan_id=plan_id,
@@ -1563,24 +1563,24 @@ def test_pending_overlay_characterise_echoes_and_does_not_leak(engine: Engine) -
         )
         assert outcome.status == "succeeded"
 
-        by_component = _compiled_by_component(engine, project_id)
+        by_component = _compiled_by_component(engine, task_id)
         # The overlay echoes on characterise only.
         assert by_component["characterise"][0]["pending_overlay"] == char_delta
         # It does not leak onto appraise / select / group / synthesise events.
         for other in ("appraise", "select", "group", "synthesise"):
             assert all("pending_overlay" not in payload for payload in by_component[other])
     finally:
-        _cleanup_project(engine, project_id)
+        _cleanup_task(engine, task_id)
 
 
 def test_plan_mappable_screening_criteria_takes_plan_path_no_overlay(engine: Engine) -> None:
     """Guard: a plan-mappable delta (screening criteria) takes the EXISTING plan
     path — it maps to the plan payload and is NOT overlaid (no double-apply)."""
-    project_id: uuid.UUID | None = None
+    task_id: uuid.UUID | None = None
     try:
-        project_id, scope_id = _seed_project(engine)
+        task_id, scope_id = _seed_task(engine)
         plan = _base_plan(steering_mode="frequent")
-        plan_id = _insert_plan_row(engine, project_id=project_id, scope_id=scope_id, plan=plan)
+        plan_id = _insert_plan_row(engine, task_id=task_id, scope_id=scope_id, plan=plan)
         new_criteria = ["Include only randomised controlled trials"]
         # Injected at the after-acquire pause — screen_abstract has not yet run.
         io = _InjectAtIO(
@@ -1592,7 +1592,7 @@ def test_plan_mappable_screening_criteria_takes_plan_path_no_overlay(engine: Eng
 
         outcome = run_plan(
             engine,
-            project_id=project_id,
+            task_id=task_id,
             evidence_scope_id=scope_id,
             plan=plan,
             plan_id=plan_id,
@@ -1606,17 +1606,17 @@ def test_plan_mappable_screening_criteria_takes_plan_path_no_overlay(engine: Eng
         # The criteria took the plan path: a new version carries them in its payload.
         with engine.connect() as conn:
             rows = conn.execute(
-                select(orchestration_plan.c.version, orchestration_plan.c.payload)
-                .where(orchestration_plan.c.project_id == project_id)
-                .order_by(orchestration_plan.c.version)
+                select(task_plan.c.version, task_plan.c.payload)
+                .where(task_plan.c.task_id == task_id)
+                .order_by(task_plan.c.version)
             ).all()
         assert rows[-1].payload["screening_criteria"] == new_criteria
         # No overlay was minted for a plan-mappable component (no double-apply).
-        by_component = _compiled_by_component(engine, project_id)
+        by_component = _compiled_by_component(engine, task_id)
         for payloads in by_component.values():
             assert all("pending_overlay" not in payload for payload in payloads)
     finally:
-        _cleanup_project(engine, project_id)
+        _cleanup_task(engine, task_id)
 
 
 # --- Mixed-grammar delta splitting (task 024, 15d) -------------------------
@@ -1638,11 +1638,11 @@ def test_pending_extract_split_maps_profiles_and_overlays_refresh_and_emphasis(
     (the B2' entry point) fold into the overlay and reach the run — the scope
     context carries all three and the plan.compiled event echoes ONLY the
     commit-layer keys (never silently dropped again)."""
-    project_id: uuid.UUID | None = None
+    task_id: uuid.UUID | None = None
     try:
-        project_id, scope_id = _seed_project(engine)
+        task_id, scope_id = _seed_task(engine)
         plan = _base_plan(steering_mode="frequent")
-        plan_id = _insert_plan_row(engine, project_id=project_id, scope_id=scope_id, plan=plan)
+        plan_id = _insert_plan_row(engine, task_id=task_id, scope_id=scope_id, plan=plan)
         emphasis = ["prioritise rural areas"]
         delta = {
             "extract": {
@@ -1657,7 +1657,7 @@ def test_pending_extract_split_maps_profiles_and_overlays_refresh_and_emphasis(
 
         outcome = run_plan(
             engine,
-            project_id=project_id,
+            task_id=task_id,
             evidence_scope_id=scope_id,
             plan=plan,
             plan_id=plan_id,
@@ -1671,15 +1671,15 @@ def test_pending_extract_split_maps_profiles_and_overlays_refresh_and_emphasis(
         # profiles took the PLAN path (a new version carries extract_profiles).
         with engine.connect() as conn:
             latest = conn.execute(
-                select(orchestration_plan.c.payload)
-                .where(orchestration_plan.c.project_id == project_id)
-                .order_by(orchestration_plan.c.version.desc())
+                select(task_plan.c.payload)
+                .where(task_plan.c.task_id == task_id)
+                .order_by(task_plan.c.version.desc())
                 .limit(1)
             ).scalar_one()
         assert latest["extract_profiles"] == ["iof"]
 
         # The overlay echoes ONLY the commit-layer keys — profiles are NOT overlaid.
-        extract_compiled = _compiled_by_component(engine, project_id)["extract"]
+        extract_compiled = _compiled_by_component(engine, task_id)["extract"]
         assert extract_compiled[0]["pending_overlay"] == {
             "extraction": {"refresh": "abstract_only", "relevance_emphasis": emphasis}
         }
@@ -1691,7 +1691,7 @@ def test_pending_extract_split_maps_profiles_and_overlays_refresh_and_emphasis(
         assert extraction_ctx["relevance_emphasis"] == emphasis
         assert extraction_ctx["profiles"] == [IOF_PROFILE_ID]
     finally:
-        _cleanup_project(engine, project_id)
+        _cleanup_task(engine, task_id)
 
 
 def test_pending_group_split_maps_facets_and_overlays_granularity_guidance(
@@ -1701,11 +1701,11 @@ def test_pending_group_split_maps_facets_and_overlays_granularity_guidance(
     facets map to the plan; granularity (D8) + guidance (B3) overlay and reach the
     run. The plan.compiled event echoes only the commit-layer keys and the scope
     context carries them alongside the plan-path facets."""
-    project_id: uuid.UUID | None = None
+    task_id: uuid.UUID | None = None
     try:
-        project_id, scope_id = _seed_project(engine)
+        task_id, scope_id = _seed_task(engine)
         plan = _base_plan(steering_mode="frequent")
-        plan_id = _insert_plan_row(engine, project_id=project_id, scope_id=scope_id, plan=plan)
+        plan_id = _insert_plan_row(engine, task_id=task_id, scope_id=scope_id, plan=plan)
         guidance = ["group rural and urban separately"]
         delta = {
             "group": {
@@ -1720,7 +1720,7 @@ def test_pending_group_split_maps_facets_and_overlays_granularity_guidance(
 
         outcome = run_plan(
             engine,
-            project_id=project_id,
+            task_id=task_id,
             evidence_scope_id=scope_id,
             plan=plan,
             plan_id=plan_id,
@@ -1734,15 +1734,15 @@ def test_pending_group_split_maps_facets_and_overlays_granularity_guidance(
         # facets took the PLAN path.
         with engine.connect() as conn:
             latest = conn.execute(
-                select(orchestration_plan.c.payload)
-                .where(orchestration_plan.c.project_id == project_id)
-                .order_by(orchestration_plan.c.version.desc())
+                select(task_plan.c.payload)
+                .where(task_plan.c.task_id == task_id)
+                .order_by(task_plan.c.version.desc())
                 .limit(1)
             ).scalar_one()
         assert latest["grouping_facets"] == ["population"]
 
         # The overlay echoes ONLY granularity + guidance (facets are NOT overlaid).
-        group_compiled = _compiled_by_component(engine, project_id)["group"]
+        group_compiled = _compiled_by_component(engine, task_id)["group"]
         assert group_compiled[0]["pending_overlay"] == {
             "grouping": {"granularity": "coarser", "guidance": guidance}
         }
@@ -1753,7 +1753,7 @@ def test_pending_group_split_maps_facets_and_overlays_granularity_guidance(
         assert grouping_ctx["guidance"] == guidance
         assert grouping_ctx["facets"] == ["population"]
     finally:
-        _cleanup_project(engine, project_id)
+        _cleanup_task(engine, task_id)
 
 
 def test_p3_refresh_extraction_is_retired_from_the_floor() -> None:
@@ -1770,11 +1770,11 @@ def test_pending_select_commit_layer_key_overlays_to_run(engine: Engine) -> None
     ``strata_scope`` (D6) + ``weight_emphasis`` ride the overlay; ``exclude`` names
     a non-existent stratum so selection is unaffected (only the plumbing is under
     test)."""
-    project_id: uuid.UUID | None = None
+    task_id: uuid.UUID | None = None
     try:
-        project_id, scope_id = _seed_project(engine)
+        task_id, scope_id = _seed_task(engine)
         plan = _base_plan(steering_mode="frequent")
-        plan_id = _insert_plan_row(engine, project_id=project_id, scope_id=scope_id, plan=plan)
+        plan_id = _insert_plan_row(engine, task_id=task_id, scope_id=scope_id, plan=plan)
         selection_delta = {
             "strata_scope": {"exclude": ["nonexistent-stratum"]},
             "weight_emphasis": {"quality": 2.0},
@@ -1786,7 +1786,7 @@ def test_pending_select_commit_layer_key_overlays_to_run(engine: Engine) -> None
 
         outcome = run_plan(
             engine,
-            project_id=project_id,
+            task_id=task_id,
             evidence_scope_id=scope_id,
             plan=plan,
             plan_id=plan_id,
@@ -1802,14 +1802,14 @@ def test_pending_select_commit_layer_key_overlays_to_run(engine: Engine) -> None
         with engine.connect() as conn:
             rejected = [
                 entry
-                for entry in events.read(conn, project_id)
+                for entry in events.read(conn, task_id)
                 if entry["event_type"] == steering_events.STEERING_REJECTED
             ]
         assert not any("not yet mappable" in e["payload"].get("reason", "") for e in rejected)
 
         # The plan.compiled event echoes the whole commit-layer select delta
         # (nothing is plan-mappable here — budget is absent — so ALL of it overlays).
-        select_compiled = _compiled_by_component(engine, project_id)["select"]
+        select_compiled = _compiled_by_component(engine, task_id)["select"]
         assert select_compiled[0]["pending_overlay"] == {"selection": selection_delta}
 
         # The run consumed it: select's executed directive input (the scope context)
@@ -1818,7 +1818,7 @@ def test_pending_select_commit_layer_key_overlays_to_run(engine: Engine) -> None
         assert selection_ctx["strata_scope"] == {"exclude": ["nonexistent-stratum"]}
         assert selection_ctx["weight_emphasis"] == {"quality": 2.0}
     finally:
-        _cleanup_project(engine, project_id)
+        _cleanup_task(engine, task_id)
 
 
 def test_refuse_inexpressible_returns_honest_not_yet_message() -> None:
@@ -1838,9 +1838,9 @@ def test_refuse_inexpressible_returns_honest_not_yet_message() -> None:
 def _walk_to_completion(
     engine: Engine,
     *,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     scope_id: uuid.UUID,
-    plan: OrchestrationPlan,
+    plan: TaskPlan,
     plan_id: uuid.UUID,
 ) -> tuple[Any, dict[str, uuid.UUID], _SteeringState]:
     """Walk a plan to completion (no live steering) and reconstruct walk state.
@@ -1851,7 +1851,7 @@ def _walk_to_completion(
     """
     outcome = run_plan(
         engine,
-        project_id=project_id,
+        task_id=task_id,
         evidence_scope_id=scope_id,
         plan=plan,
         plan_id=plan_id,
@@ -1877,25 +1877,25 @@ def _walk_to_completion(
     return outcome, successful_runs, state
 
 
-def _plan_version_rows(engine: Engine, project_id: uuid.UUID) -> list[tuple[int, str, str]]:
+def _plan_version_rows(engine: Engine, task_id: uuid.UUID) -> list[tuple[int, str, str]]:
     with engine.connect() as conn:
         rows = conn.execute(
             select(
-                orchestration_plan.c.version,
-                orchestration_plan.c.status,
-                orchestration_plan.c.created_by,
+                task_plan.c.version,
+                task_plan.c.status,
+                task_plan.c.created_by,
             )
-            .where(orchestration_plan.c.project_id == project_id)
-            .order_by(orchestration_plan.c.version)
+            .where(task_plan.c.task_id == task_id)
+            .order_by(task_plan.c.version)
         ).all()
     return [(row.version, row.status, row.created_by) for row in rows]
 
 
-def _replacement_decisions(engine: Engine, project_id: uuid.UUID) -> list[dict[str, Any]]:
+def _replacement_decisions(engine: Engine, task_id: uuid.UUID) -> list[dict[str, Any]]:
     with engine.connect() as conn:
         return [
             entry
-            for entry in events.read(conn, project_id)
+            for entry in events.read(conn, task_id)
             if entry["event_type"] == steering_events.STEERING_DECISION
             and entry["payload"].get("rerun_mode") == "replacement"
         ]
@@ -1907,13 +1907,13 @@ def test_re_characterise_moves_reference_preserves_rows_and_stamps_replacement(
     """Re-characterise: new characterisation_result row, both rows persist, the
     walk's reference moves to the new run, a user-attributed plan version row is
     appended and the decision stamps rerun_mode=replacement."""
-    project_id: uuid.UUID | None = None
+    task_id: uuid.UUID | None = None
     try:
-        project_id, scope_id = _seed_project(engine)
+        task_id, scope_id = _seed_task(engine)
         plan = _base_plan()
-        plan_id = _insert_plan_row(engine, project_id=project_id, scope_id=scope_id, plan=plan)
+        plan_id = _insert_plan_row(engine, task_id=task_id, scope_id=scope_id, plan=plan)
         outcome, successful_runs, state = _walk_to_completion(
-            engine, project_id=project_id, scope_id=scope_id, plan=plan, plan_id=plan_id
+            engine, task_id=task_id, scope_id=scope_id, plan=plan, plan_id=plan_id
         )
         original_char = successful_runs["characterise"]
 
@@ -1927,7 +1927,7 @@ def test_re_characterise_moves_reference_preserves_rows_and_stamps_replacement(
         adjustment = Adjust(directive_deltas={"characterise": {"characterise": {"themes": "more"}}})
         rerun_state, merged = _apply_replacement_rerun(
             engine,
-            project_id=project_id,
+            task_id=task_id,
             state=state,
             adjustment=adjustment,
             base=base,
@@ -1941,7 +1941,7 @@ def test_re_characterise_moves_reference_preserves_rows_and_stamps_replacement(
         _, new_char = _run_component_rerun(
             engine,
             NullIO(),
-            project_id=project_id,
+            task_id=task_id,
             evidence_scope_id=scope_id,
             state=rerun_state,
             component="characterise",
@@ -1964,7 +1964,7 @@ def test_re_characterise_moves_reference_preserves_rows_and_stamps_replacement(
             char_run_ids = (
                 conn.execute(
                     select(characterisation_result.c.run_id).where(
-                        characterisation_result.c.project_id == project_id
+                        characterisation_result.c.task_id == task_id
                     )
                 )
                 .scalars()
@@ -1973,16 +1973,16 @@ def test_re_characterise_moves_reference_preserves_rows_and_stamps_replacement(
         # Rows immutable: BOTH the old and new characterisation rows persist.
         assert set(char_run_ids) == {original_char, new_char}
 
-        assert _plan_version_rows(engine, project_id) == [
+        assert _plan_version_rows(engine, task_id) == [
             (1, "superseded", "planner"),
             (2, "approved", "user"),
         ]
-        decisions = _replacement_decisions(engine, project_id)
+        decisions = _replacement_decisions(engine, task_id)
         assert len(decisions) == 1
         assert decisions[0]["payload"]["boundary"] == "after_component"
         assert decisions[0]["payload"]["component"] == "characterise"
     finally:
-        _cleanup_project(engine, project_id)
+        _cleanup_task(engine, task_id)
 
 
 def test_re_group_moves_reference_preserves_rows_and_stamps_replacement(
@@ -1990,13 +1990,13 @@ def test_re_group_moves_reference_preserves_rows_and_stamps_replacement(
 ) -> None:
     """Re-group (same facet): new grouping_result row, both rows persist, and
     synthesise's reference rule picks the new grouping run."""
-    project_id: uuid.UUID | None = None
+    task_id: uuid.UUID | None = None
     try:
-        project_id, scope_id = _seed_project(engine)
+        task_id, scope_id = _seed_task(engine)
         plan = _base_plan()
-        plan_id = _insert_plan_row(engine, project_id=project_id, scope_id=scope_id, plan=plan)
+        plan_id = _insert_plan_row(engine, task_id=task_id, scope_id=scope_id, plan=plan)
         outcome, successful_runs, state = _walk_to_completion(
-            engine, project_id=project_id, scope_id=scope_id, plan=plan, plan_id=plan_id
+            engine, task_id=task_id, scope_id=scope_id, plan=plan, plan_id=plan_id
         )
         original_group = successful_runs["group"]
 
@@ -2010,7 +2010,7 @@ def test_re_group_moves_reference_preserves_rows_and_stamps_replacement(
         adjustment = Adjust(directive_deltas={"group": {"grouping": {"granularity": "coarser"}}})
         rerun_state, merged = _apply_replacement_rerun(
             engine,
-            project_id=project_id,
+            task_id=task_id,
             state=state,
             adjustment=adjustment,
             base=base,
@@ -2023,7 +2023,7 @@ def test_re_group_moves_reference_preserves_rows_and_stamps_replacement(
         _, new_group = _run_component_rerun(
             engine,
             NullIO(),
-            project_id=project_id,
+            task_id=task_id,
             evidence_scope_id=scope_id,
             state=rerun_state,
             component="group",
@@ -2046,7 +2046,7 @@ def test_re_group_moves_reference_preserves_rows_and_stamps_replacement(
             group_run_ids = (
                 conn.execute(
                     select(grouping_result.c.run_id).where(
-                        grouping_result.c.project_id == project_id
+                        grouping_result.c.task_id == task_id
                     )
                 )
                 .scalars()
@@ -2054,15 +2054,15 @@ def test_re_group_moves_reference_preserves_rows_and_stamps_replacement(
             )
         assert set(group_run_ids) == {original_group, new_group}
 
-        assert _plan_version_rows(engine, project_id) == [
+        assert _plan_version_rows(engine, task_id) == [
             (1, "superseded", "planner"),
             (2, "approved", "user"),
         ]
-        decisions = _replacement_decisions(engine, project_id)
+        decisions = _replacement_decisions(engine, task_id)
         assert len(decisions) == 1
         assert decisions[0]["payload"]["component"] == "group"
     finally:
-        _cleanup_project(engine, project_id)
+        _cleanup_task(engine, task_id)
 
 
 def test_reselect_preserves_both_selection_rows_and_moves_reference(
@@ -2071,11 +2071,11 @@ def test_reselect_preserves_both_selection_rows_and_moves_reference(
     """Re-select via the wired deepening-selection steer point: both
     selection_result rows persist (immutable), extract references the new run,
     and the steer point is not re-entered (one adjustment cycle per boundary)."""
-    project_id: uuid.UUID | None = None
+    task_id: uuid.UUID | None = None
     try:
-        project_id, scope_id = _seed_project(engine)
+        task_id, scope_id = _seed_task(engine)
         plan = _base_plan()
-        plan_id = _insert_plan_row(engine, project_id=project_id, scope_id=scope_id, plan=plan)
+        plan_id = _insert_plan_row(engine, task_id=task_id, scope_id=scope_id, plan=plan)
         # Reselect lands at P3 (deepening_selection); other lattice pauses Continue.
         io = ScriptedIO(
             by_steer_point={
@@ -2090,7 +2090,7 @@ def test_reselect_preserves_both_selection_rows_and_moves_reference(
         )
         outcome = run_plan(
             engine,
-            project_id=project_id,
+            task_id=task_id,
             evidence_scope_id=scope_id,
             plan=plan,
             plan_id=plan_id,
@@ -2105,7 +2105,7 @@ def test_reselect_preserves_both_selection_rows_and_moves_reference(
             selection_run_ids = (
                 conn.execute(
                     select(selection_result.c.run_id).where(
-                        selection_result.c.project_id == project_id
+                        selection_result.c.task_id == task_id
                     )
                 )
                 .scalars()
@@ -2113,7 +2113,7 @@ def test_reselect_preserves_both_selection_rows_and_moves_reference(
             )
             compiled = [
                 entry
-                for entry in events.read(conn, project_id)
+                for entry in events.read(conn, task_id)
                 if entry["event_type"] == "plan.compiled"
             ]
 
@@ -2136,11 +2136,11 @@ def test_reselect_preserves_both_selection_rows_and_moves_reference(
         ]
         assert steer_points.count("deepening_selection") == 1
 
-        decisions = _replacement_decisions(engine, project_id)
+        decisions = _replacement_decisions(engine, task_id)
         assert len(decisions) == 1
         assert decisions[0]["payload"]["component"] == "select"
     finally:
-        _cleanup_project(engine, project_id)
+        _cleanup_task(engine, task_id)
 
 
 def test_failed_replacement_rerun_blocks_downstream_discretionary(
@@ -2150,13 +2150,13 @@ def test_failed_replacement_rerun_blocks_downstream_discretionary(
     """A failed replacement re-run marks the component blocked so downstream
     discretionary dependents skip — mirroring a select re-run failure today
     (DISCRETIONARY_REQUIREMENTS maps select->characterise)."""
-    project_id: uuid.UUID | None = None
+    task_id: uuid.UUID | None = None
     try:
-        project_id, scope_id = _seed_project(engine)
+        task_id, scope_id = _seed_task(engine)
         plan = _base_plan()
-        plan_id = _insert_plan_row(engine, project_id=project_id, scope_id=scope_id, plan=plan)
+        plan_id = _insert_plan_row(engine, task_id=task_id, scope_id=scope_id, plan=plan)
         outcome, successful_runs, state = _walk_to_completion(
-            engine, project_id=project_id, scope_id=scope_id, plan=plan, plan_id=plan_id
+            engine, task_id=task_id, scope_id=scope_id, plan=plan, plan_id=plan_id
         )
 
         base = steering_events.base_payload(
@@ -2169,7 +2169,7 @@ def test_failed_replacement_rerun_blocks_downstream_discretionary(
         adjustment = Adjust(directive_deltas={"characterise": {"characterise": {"themes": "more"}}})
         rerun_state, merged = _apply_replacement_rerun(
             engine,
-            project_id=project_id,
+            task_id=task_id,
             state=state,
             adjustment=adjustment,
             base=base,
@@ -2190,7 +2190,7 @@ def test_failed_replacement_rerun_blocks_downstream_discretionary(
         _run_component_rerun(
             engine,
             NullIO(),
-            project_id=project_id,
+            task_id=task_id,
             evidence_scope_id=scope_id,
             state=rerun_state,
             component="characterise",
@@ -2213,7 +2213,7 @@ def test_failed_replacement_rerun_blocks_downstream_discretionary(
         # Mirrors select's failure today: a downstream discretionary dependent skips.
         assert _skip_reason("select", blocked_discretionary) is not None
     finally:
-        _cleanup_project(engine, project_id)
+        _cleanup_task(engine, task_id)
 
 
 def test_finding_groups_regroup_option_reruns_group_from_the_pause(engine: Engine) -> None:
@@ -2221,11 +2221,11 @@ def test_finding_groups_regroup_option_reruns_group_from_the_pause(engine: Engin
     a replacement wired from the pause itself (review 028 M1: the affordance was
     dead — rerun wiring existed only for P3, so both apply paths refused the
     delta as an already-run adjustment)."""
-    project_id: uuid.UUID | None = None
+    task_id: uuid.UUID | None = None
     try:
-        project_id, scope_id = _seed_project(engine)
+        task_id, scope_id = _seed_task(engine)
         plan = _base_plan(steering_mode="frequent")  # FG pauses "always" in frequent
-        plan_id = _insert_plan_row(engine, project_id=project_id, scope_id=scope_id, plan=plan)
+        plan_id = _insert_plan_row(engine, task_id=task_id, scope_id=scope_id, plan=plan)
         io = ScriptedIO(
             by_steer_point={
                 "finding_groups": [
@@ -2236,7 +2236,7 @@ def test_finding_groups_regroup_option_reruns_group_from_the_pause(engine: Engin
 
         outcome = run_plan(
             engine,
-            project_id=project_id,
+            task_id=task_id,
             evidence_scope_id=scope_id,
             plan=plan,
             plan_id=plan_id,
@@ -2251,7 +2251,7 @@ def test_finding_groups_regroup_option_reruns_group_from_the_pause(engine: Engin
         with engine.connect() as conn:
             compiled = [
                 entry
-                for entry in events.read(conn, project_id)
+                for entry in events.read(conn, task_id)
                 if entry["event_type"] == "plan.compiled"
             ]
         group_run_ids = [
@@ -2277,7 +2277,7 @@ def test_finding_groups_regroup_option_reruns_group_from_the_pause(engine: Engin
         )
         assert fg_point["rerun_component"] == "group"
     finally:
-        _cleanup_project(engine, project_id)
+        _cleanup_task(engine, task_id)
 
 
 def test_p4_as_proposed_overlay_pins_displayed_equals_submitted(engine: Engine) -> None:
@@ -2285,7 +2285,7 @@ def test_p4_as_proposed_overlay_pins_displayed_equals_submitted(engine: Engine) 
     the section budget, and carries the proposal's group_ids into the
     as_proposed delta — displayed == submitted == valid (review 028 F4/M2/m1;
     deleting the overlay must fail this test)."""
-    from policy_atlas.evidence_base.synthesis.synthesis_tools import parse_synthesis_directive
+    from policy_atlas.evidence_search.synthesis.synthesis_tools import parse_synthesis_directive
     from policy_atlas.runtime import runner as runner_module
 
     plan = _base_plan(section_budget=2)
@@ -2315,7 +2315,7 @@ def test_p4_as_proposed_overlay_pins_displayed_equals_submitted(engine: Engine) 
         engine,
         steer_point_name="synthesis_shape",
         state=state,
-        project_id=uuid.uuid4(),
+        task_id=uuid.uuid4(),
         evidence_scope_id=uuid.uuid4(),
         successful_runs={},
         backends=_runner_backends(),

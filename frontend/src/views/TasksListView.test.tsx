@@ -1,0 +1,156 @@
+import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { MemoryRouter } from "react-router";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+import * as queries from "../api/queries";
+import { TasksListView } from "./TasksListView";
+
+vi.mock("../api/queries", () => ({
+  useMe: vi.fn(),
+  useTasks: vi.fn(),
+  useProjects: vi.fn(),
+}));
+
+const ROW = {
+  task_id: "task-1",
+  name: "Healthier childhoods",
+  updated_at: "2026-07-21T09:00:00Z",
+  latest_run: null,
+  project_id: null,
+  source_count: 4,
+  is_owner: true,
+  owner_display: "Ada Lovelace",
+};
+
+function renderView() {
+  return render(
+    <MemoryRouter>
+      <TasksListView />
+    </MemoryRouter>,
+  );
+}
+
+beforeEach(() => {
+  vi.mocked(queries.useProjects).mockReturnValue(
+    { data: { data: [] } } as unknown as ReturnType<typeof queries.useProjects>,
+  );
+  vi.mocked(queries.useTasks).mockReturnValue(
+    {
+      data: { data: [ROW] },
+      isPending: false,
+      isError: false,
+      refetch: vi.fn(),
+    } as unknown as ReturnType<typeof queries.useTasks>,
+  );
+});
+
+describe("TasksListView — the Organisation/Mine switcher (task 033 phase 10b, rubric 14 dark launch)", () => {
+  it("hides the switcher, and calls useTasks with no scope, when /me has no organisation", () => {
+    vi.mocked(queries.useMe).mockReturnValue(
+      { data: { user_id: "u1", display_name: "Ada Lovelace", organisation: null, is_admin: false } } as unknown as ReturnType<
+        typeof queries.useMe
+      >,
+    );
+    renderView();
+    expect(screen.queryByRole("tablist", { name: "Scope" })).not.toBeInTheDocument();
+    expect(queries.useTasks).toHaveBeenCalledWith(undefined);
+    // Byte-identical to today: no owner column either, even though the
+    // row carries `owner_display` now.
+    expect(screen.queryByText("Ada Lovelace")).not.toBeInTheDocument();
+  });
+
+  it("shows the switcher when enrolled, defaults to Mine, and drives scope on click", async () => {
+    vi.mocked(queries.useMe).mockReturnValue(
+      {
+        data: {
+          user_id: "u1",
+          display_name: "Ada Lovelace",
+          organisation: { org_id: "org-1", name: "Dept" },
+          is_admin: false,
+        },
+      } as unknown as ReturnType<typeof queries.useMe>,
+    );
+    const user = userEvent.setup();
+    renderView();
+    expect(queries.useTasks).toHaveBeenCalledWith({ scope: "mine" });
+    expect(screen.getByRole("tab", { name: "Mine" })).toHaveAttribute("aria-selected", "true");
+
+    await user.click(screen.getByRole("tab", { name: "Organisation" }));
+    expect(queries.useTasks).toHaveBeenCalledWith({ scope: "all" });
+  });
+
+  it("shows the owner column once enrolled, even on the caller's own row", () => {
+    vi.mocked(queries.useMe).mockReturnValue(
+      {
+        data: {
+          user_id: "u1",
+          display_name: "Ada Lovelace",
+          organisation: { org_id: "org-1", name: "Dept" },
+          is_admin: false,
+        },
+      } as unknown as ReturnType<typeof queries.useMe>,
+    );
+    renderView();
+    expect(screen.getByText("Ada Lovelace")).toBeInTheDocument();
+  });
+
+  it("shows the admin wider-list notice only for admin + Organisation scope", async () => {
+    vi.mocked(queries.useMe).mockReturnValue(
+      {
+        data: {
+          user_id: "admin-1",
+          display_name: "Admin",
+          organisation: { org_id: "org-1", name: "Dept" },
+          is_admin: true,
+        },
+      } as unknown as ReturnType<typeof queries.useMe>,
+    );
+    const user = userEvent.setup();
+    renderView();
+    // Mine is the default now; the wide list is behind the Organisation tab.
+    await user.click(screen.getByRole("tab", { name: "Organisation" }));
+    expect(screen.getByText("Showing every organisation.")).toBeInTheDocument();
+  });
+
+  it("does not show the admin notice for a non-admin", () => {
+    vi.mocked(queries.useMe).mockReturnValue(
+      {
+        data: {
+          user_id: "u1",
+          display_name: "Ada Lovelace",
+          organisation: { org_id: "org-1", name: "Dept" },
+          is_admin: false,
+        },
+      } as unknown as ReturnType<typeof queries.useMe>,
+    );
+    renderView();
+    expect(screen.queryByText("Showing every organisation.")).not.toBeInTheDocument();
+  });
+
+  it("renders a null owner_display as 'No organisation' for the admin wide list", async () => {
+    vi.mocked(queries.useMe).mockReturnValue(
+      {
+        data: {
+          user_id: "admin-1",
+          display_name: "Admin",
+          organisation: { org_id: "org-1", name: "Dept" },
+          is_admin: true,
+        },
+      } as unknown as ReturnType<typeof queries.useMe>,
+    );
+    vi.mocked(queries.useTasks).mockReturnValue(
+      {
+        data: { data: [{ ...ROW, task_id: "orphan-1", is_owner: false, owner_display: null }] },
+        isPending: false,
+        isError: false,
+        refetch: vi.fn(),
+      } as unknown as ReturnType<typeof queries.useTasks>,
+    );
+    const user = userEvent.setup();
+    renderView();
+    // Mine is the default now; the wide list is behind the Organisation tab.
+    await user.click(screen.getByRole("tab", { name: "Organisation" }));
+    expect(screen.getByText("No organisation")).toBeInTheDocument();
+  });
+});
