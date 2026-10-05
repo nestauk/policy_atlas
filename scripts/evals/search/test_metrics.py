@@ -1341,6 +1341,82 @@ def test_get_campbell_select() -> None:
     assert [w["id"] for w in select_reviews(works, min_refs=30)] == ["W1"]
 
 
+def test_select_ground_truth() -> None:
+    """The sample picker: the quality check, the topic rotation, labels and the 10-in-100 subset."""
+    import csv
+    import tempfile
+    from pathlib import Path
+
+    from ground_truth_dataset import load_references, load_reviews
+    from select_ground_truth import pick, rejection, select, topic, write_sample
+
+    def review(title, n_refs, n_doi, cutoff="2020-01-01", level="review", dup=False, dataset="campbell"):
+        return {
+            "title": title, "doi": "10.1/x", "url": "", "published_before": cutoff, "exclude": "",
+            "dataset": dataset, "review_id": title, "level": level, "n_references": n_refs,
+            "n_with_doi": n_doi, "research_questions": "",
+            "_n_refs": n_refs, "_n_doi": n_doi, "_dup_title": dup,
+        }
+
+    today = "2026-10-05"
+    assert rejection(review("ok", 100, 90), today) is None
+    assert "whole gap map" in rejection(review("m", 100, 90, level="map"), today)
+    assert "twice" in rejection(review("d", 100, 90, dup=True), today)
+    assert "fewer than 20" in rejection(review("few", 30, 19), today)
+    assert "more than 300" in rejection(review("big", 301, 300), today)
+    assert "under 70%" in rejection(review("grey", 100, 69), today)
+    assert rejection(review("yef grey", 100, 51, dataset="yef"), today) is None  # YEF floor is 50%
+    assert "before 2010" in rejection(review("old", 100, 90, cutoff="2009-12-31"), today)
+    assert "not in the past" in rejection(review("living", 100, 90, cutoff="2026-12-31"), today)
+    # Topics rotate: three mental-health reviews and one school review, quota 2 -> one of each.
+    rows = [
+        review("Depression therapy A", 100, 100), review("Anxiety B", 100, 99),
+        review("Suicide C", 100, 98), review("School reading D", 100, 80),
+    ]
+    picked = pick(rows, 2)
+    assert {topic(r["title"]) for r in picked} == {"mental health", "education"}
+    assert picked[0]["title"] == "School reading D" or picked[1]["title"] == "School reading D"
+    # Gap-map rows rotate across maps (the title prefix), best DOI share first.
+    maps = [
+        review("Food: A", 50, 50, dataset="3ie"), review("Food: B", 50, 49, dataset="3ie"),
+        review("Energy: C", 50, 40, dataset="3ie"),
+    ]
+    assert [r["title"] for r in pick(maps, 2)] == ["Energy: C", "Food: A"]
+    # End to end on tiny files: labels become content, the loaders accept both samples,
+    # and the small sample is the head of the big one.
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        import select_ground_truth as sel
+
+        for name in sel.QUOTAS:
+            titles = [f"{name} review {i}: topic {i}" for i in range(4)]
+            with (root / f"{name}_reviews.csv").open("w", newline="") as handle:
+                writer = csv.DictWriter(handle, fieldnames=sel.REVIEW_COLUMNS)
+                writer.writeheader()
+                for t in titles:
+                    writer.writerow({"title": t, "doi": "", "url": f"https://x/{t}", "published_before": "2021-12-31", "level": "intervention", "dataset": name, "review_id": t})
+            with (root / f"{name}_references.csv").open("w", newline="") as handle:
+                writer = csv.DictWriter(handle, fieldnames=sel.REFERENCE_COLUMNS)
+                writer.writeheader()
+                for t in titles:
+                    for j in range(25):
+                        writer.writerow({"review_title": t, "ref_title": f"ref {j}", "label": "", "doi": f"10.1/{t}-{j}"})
+        picks, reasons = select(root, today)
+        assert all(len(rows) == 4 for rows in picks.values())
+        assert all(dict(c) == {"passing": 4} for c in reasons.values())
+        small = {n: rows[: sel.MIN_QUOTAS[n]] for n, rows in picks.items()}
+        rv, rf = write_sample("sample_100", picks, root)
+        rv10, rf10 = write_sample("sample_10", small, root)
+        assert len(load_reviews(rv)) == 16 and len(load_reviews(rv10)) == 10
+        targets = load_references(rf)
+        assert len(targets) == 16 and all(len(t["titles"]) == 25 for t in targets.values())
+        big = {r.title for r in load_reviews(rv)}
+        assert {r.title for r in load_reviews(rv10)} <= big
+        with rv.open() as handle:
+            labelled = {row["dataset"]: row["target_labelled"] for row in csv.DictReader(handle)}
+        assert labelled == {"campbell": "no", "3ie": "yes", "sr4all": "no", "yef": "yes"}
+
+
 if __name__ == "__main__":
     test_normalize_doi()
     test_record_key()
@@ -1379,4 +1455,5 @@ if __name__ == "__main__":
     test_get_yef_strands()
     test_get_sr4all_filter()
     test_get_campbell_select()
+    test_select_ground_truth()
     print("ok")

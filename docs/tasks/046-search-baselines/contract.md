@@ -5,6 +5,11 @@
 > 2026-09-25 · owner · Plan approved (before implementation): 2026-09-25 · owner · ADR: none.
 > **Amendment (build, 2026-09-25, owner-approved):** a fourth arm, `semantic-scholar-snippet`,
 > added after the live run showed arm 1 is a keyword engine (see § Arms).
+> **Amendment 3 (2026-10-05, owner-directed):** the ground-truth **sample**. The fetchers
+> moved to `scripts/evals/search/getters/`; `select_ground_truth.py` applies a simple quality
+> check and writes `sample_100` (30 Campbell, 30 3ie, 30 SR4ALL, 10 YEF) and `sample_10`
+> (3, 3, 3, 1 of those). The owner chose to **skip the labelling pass**: reference lists are
+> used whole, so their recall ceiling is about 50%. Written up as § Amendment 3 at the end.
 > **Review note (2026-09-25):** D4's Consensus price model ("above the included monthly
 > amount") is stale for our account, which is billed on every call. The `api_cost_usd`
 > figure is the price of the result pages that cover the cap at the echoed page size, as
@@ -464,3 +469,62 @@ Shipped means: each script runs end to end, writes `<dataset>_reviews.csv` and
 In `verification.md`: the four runs' printed summaries (reviews, references, with-DOI
 counts), the raw cache sizes, the dry-run results, the gates, the diff summary, and any
 deviation.
+
+## Amendment 3 — The ground-truth sample (2026-10-05)
+
+Owner-directed, written with the code. Builds on Amendment 2's fetchers; see the README
+section 7 for the reader-facing version.
+
+### Problem
+
+- **P6 — The fetched collections are 666 candidates, not a dataset.** Four public
+  collections give far more rows than an eval can afford to run, of uneven quality, and
+  nothing picks among them.
+
+### Deliverable (added)
+
+12. **`scripts/evals/search/select_ground_truth.py`** — the quality check (D15), the
+    spread (D16) and the two samples (D17), written as CSV pairs under
+    `results/ground_truth/`. Self-check in `test_metrics.py`; README section 7.
+13. **Fetchers moved** to `scripts/evals/search/getters/`; each adds its parent folder to
+    `sys.path` so the shared helpers still import when run directly.
+14. Two Langfuse datasets, `retrieval-ground-truth-10` and `retrieval-ground-truth-100`,
+    uploaded with `ground_truth_dataset.py` from the sample files. The four hand-made
+    reviews stay in `retrieval-ground-truth`.
+
+### Decisions (added)
+
+- **D15 — Quality check.** Keep a candidate only if it is one specific question (an
+  intervention row or one review, not a whole map; a title that appears once in its
+  collection), has 20 to 300 references with a DOI, has at least 70% of its references
+  with a DOI (YEF 50%: it cites evaluation reports, and only seven strands pass at 70%),
+  and has a cutoff in the past and on or after 2010-01-01. Owner-approved 1 to 4; the
+  YEF floor is the lead's call to reach the owner's quota of 10, flagged here.
+- **D16 — Spread, not ranking.** Within a collection the picks rotate across groups (the
+  map for gap-map rows, a coarse keyword topic for reviews), highest DOI share first. The
+  owner's quotas (30, 30, 30, 10) carry the social-policy bias; the rotation stops one
+  subject from filling a quota. Deterministic: sorted inputs, no randomness.
+- **D17 — Two samples, nested.** `sample_100` is the full set; `sample_10` is the first 3,
+  3, 3 and 1 of each collection's picks, so the cheap set is a subset of the full one and a
+  number measured on the 10 is a preview of the 100.
+- **D11 revised — No labelling pass for the samples.** Every sampled reference is written
+  `label = content`, including Campbell and SR4ALL lists that nobody has labelled. The owner
+  accepts that about half of a reference list may be off topic, so recall on those rows has
+  a ceiling near 50%, and the numbers are read against it. `target_labelled` in the reviews
+  file marks `yes` (gap maps) and `no` (lists). D11 stands for the fetchers' own output.
+
+### Scope (added)
+
+- **In:** the selection script and its test; the move; the README section; the two uploads.
+- **Out:** running any eval on the samples (owner's call on spend: about $20 a round on the
+  10, $200 on the 100). Labelling. P2.
+
+### Acceptance checks (added)
+
+- `test_metrics.py` green with `test_select_ground_truth`: each rule of D15 rejects for its
+  own reason and the YEF floor passes at 51%; the rotation picks one row per group before a
+  second from any; gap-map rows rotate across maps; an end-to-end run on tiny files loads
+  through the real `load_reviews` and `load_references` with every reference counted, and
+  the 10 is a subset of the 100.
+- `ground_truth_dataset.py --dry-run` loads both samples with no unusable row.
+- A second run of the selection writes identical files.

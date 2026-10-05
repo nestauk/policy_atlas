@@ -18,6 +18,7 @@ The folder has thirteen Python files. You run nine of them from the command line
 | `history.py` | Prints one markdown table row per dataset run in Langfuse: date, commit, settings, run name, mean recall and the run's variable cost. It writes nothing. | After each eval you can copy the rows worth keeping into `results/history.md` and add a note. |
 | `baseline_recall.py` | The baselines. Sends each review's intent once, as plain text, to Semantic Scholar (keyword and semantic search), Consensus and OpenAlex, caches the raw result pages locally, and scores recall at several result caps. One Langfuse run per service and cap. | When you want a "what does good look like" number to compare the pipeline's recall with. The services are called once; later runs read the cache. See section 5. |
 | `getters/get_campbell.py`, `getters/get_3ie.py`, `getters/get_yef.py`, `getters/get_sr4all.py` | The ground-truth fetchers, in their own folder. Each downloads one public source of "review plus the studies it covers", keeps the raw download under `results/ground_truth/raw/`, and writes two CSVs in the same shape as `input/gt_reviews.csv` and `input/references.csv` into `results/ground_truth/`. | When you want to grow the ground truth beyond the four hand-made reviews. See section 6. |
+| `select_ground_truth.py` | Picks the ground-truth sample from the fetched collections: a simple quality check, a spread across topics, 30 Campbell + 30 3ie + 30 SR4ALL + 10 YEF rows (`sample_100`) and the first 3 + 3 + 3 + 1 of those (`sample_10`). Writes the two CSV pairs next to the fetched files. No network. | After the fetchers have run, or after changing a rule in the quality check. See section 7. |
 | `sweep_record_cap.py` | The experiment. It runs a rapid search many times, each time with a different cap on the number of records kept and with one of the two query-generation methods. It records the recall for each combination. | When you want to know how the record cap or the prompting method changes recall. |
 
 The two measuring scripts read the reviews and their reference lists from the Langfuse dataset. They do not read the CSV files. This means you must run `ground_truth_dataset.py` at least once before you run either of them.
@@ -312,3 +313,78 @@ uv run --project backend --env-file backend/.env python scripts/evals/search/gro
 - **3ie's review records are not used.** The portal lists 1,700 systematic reviews, but a review record links to at most four "related" studies, not its included-study list. Only the maps carry full study lists. The maps are read through the two JSON calls the map page itself makes; there is no documented API. 3ie's terms allow non-commercial use with attribution.
 - **SR4ALL selection** is repeatable: English reviews with a DOI, at least one stated research question, at least `--min-refs` references, a non-protocol title and a `field` in `--fields` (default: Social Sciences, Psychology, Economics, Business), then the `--limit` most cited. The stated research questions are kept in the `research_questions` column for a later eval that starts from a question instead of a title.
 - **Duplicate titles** (an updated review with the same title as the original) are dropped after the first, because the title is the join key between the two CSVs.
+
+## 7. The ground-truth sample: 100 reviews, and a cheap 10
+
+Key script: `select_ground_truth.py`. Outputs: `results/ground_truth/sample_100_*.csv` and
+`sample_10_*.csv` (git-ignored like everything under `results/`; the script rebuilds them
+from the fetched files in a second, and the same inputs always give the same sample).
+
+### Why two sizes
+
+A full pipeline run costs about $1.75 per review at deep depth and $1 at standard; a
+Consensus baseline costs $0.50 per review; Semantic Scholar is free. So one round over the
+100 costs about $200 and one round over the 10 about $20. Use the 10 for quick checks while
+changing code, and the 100 for a number you would quote.
+
+### The quality check (owner decisions, 2026-10-05)
+
+A candidate review from any collection is kept only if:
+
+1. It is **one specific question**: an intervention row of a gap map or a single published
+   review, not a whole map, and its title appears once in its collection (the title is the
+   join key between the two CSV files).
+2. It has **between 20 and 300 references with a DOI**. Below 20, one hit moves recall by
+   whole tens of a percent (the hand-made social-care review has 7). Above 300, one list
+   dominates a run.
+3. **At least 70% of its references carry a DOI** (YEF: 50%, because it cites many
+   evaluation reports and only seven strands would pass at 70%). Every recall number is
+   scholarly recall until the grey-literature keys exist (P2), so a list that is mostly
+   grey literature would measure the gap in the ground truth, not the search.
+4. Its **cutoff date is in the past and 2010 or later**. Four 3ie rows and one YEF strand
+   have a cutoff of 31 December 2026 because the map still gains studies; they wait.
+
+Then the script takes the collection's quota by rotating across groups so no single
+subject fills it: for gap maps the group is the map (3ie rows share their map's title),
+for Campbell and SR4ALL it is a coarse keyword topic (education, crime and justice, mental
+health, families and children, welfare and work, health, development and environment,
+organisations and innovation, other). Inside a group the rows with the highest DOI share
+come first. The `topic` column in the reviews file records the tag; it is only used to
+spread the picks, never to score.
+
+On the collections fetched on 2026-09-25 the check keeps 257 of 349 Campbell reviews, 88
+of 197 3ie rows, 91 of 100 SR4ALL reviews and 13 of 20 YEF strands. `--verbose` prints
+why each rejected row failed.
+
+### Labels: no labelling pass, and what that does to the numbers
+
+The owner decided on 2026-10-05 to **skip the labelling pass**. Every reference in the
+sample is written `label = content`, including the Campbell and SR4ALL reference lists
+that nobody has read. A reference list mixes the studies a review is about with background
+and methods citations, so perhaps half of its rows are off topic, and a search that found
+every on-topic study would still score near **50%** on those rows. Read Campbell and
+SR4ALL recall against that ceiling, not against 100%. Gap-map rows (3ie, YEF) were coded
+by the map's screeners and have no such ceiling. The reviews file says which is which in
+`target_labelled` (`yes` for gap maps, `no` for lists); keep the two kinds apart when you
+compare numbers. This revises D11 of the task 046 contract for these two samples.
+
+### Usage
+
+```
+uv run --project backend python scripts/evals/search/select_ground_truth.py --verbose
+
+# Upload each sample as its own Langfuse dataset (drop --dry-run to upload):
+uv run --project backend --env-file backend/.env python scripts/evals/search/ground_truth_dataset.py \
+    --reviews scripts/evals/search/results/ground_truth/sample_10_reviews.csv \
+    --references scripts/evals/search/results/ground_truth/sample_10_references.csv \
+    --dataset retrieval-ground-truth-10 --dry-run
+# and the same with sample_100 and --dataset retrieval-ground-truth-100
+
+# Then measure against a sample instead of the four hand-made reviews:
+uv run --project backend --env-file backend/.env python scripts/evals/search/baseline_recall.py --dataset retrieval-ground-truth-10
+uv run --project backend --env-file backend/.env python scripts/evals/search/production_recall.py --dataset retrieval-ground-truth-10 --depths rapid
+```
+
+The four hand-made reviews stay in `retrieval-ground-truth`, so the rows already in
+`results/history.md` keep their meaning. Rows measured on a sample say which dataset in
+the `run` column.
