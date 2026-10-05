@@ -366,22 +366,34 @@ why each rejected row failed.
 
 Eleven rows are chosen by hand from the hundred (`SAMPLE_MINI_TITLES` in the script; the
 script refuses a title that is not in the hundred, so the mini set is always a subset of the
-full one). They lean towards Nesta's missions (a healthy life, a fairer start, a sustainable
-future):
+full one), plus the four hand-made reviews. They lean towards Nesta's missions (a healthy
+life, a fairer start, a sustainable future). The **intent** column is the exact text every
+baseline arm receives and the pipeline's query generator starts from: the review title with
+its "a systematic review" tail removed by `clean_review_title`, or for a gap-map row the map
+title followed by the intervention.
 
-| Source | Review | Why |
+| Source | Intent sent to the services | Why |
 |---|---|---|
-| Campbell | Health and social care interventions for people aged 80 and over (evidence and gap map) | health and social care |
-| Campbell | Whole-school interventions promoting mental health and preventing risk behaviours (evidence and gap map) | schools, a fairer start |
-| Campbell | Residential energy efficiency interventions (meta-analysis) | home energy, a sustainable future |
-| 3ie | Learning-to-earning interventions: core skills training | jobs and skills |
-| 3ie | Nutrition-sensitive agriculture: large-scale fortified foods | food and health |
-| 3ie | Human rights: civic and legal education | a non-social-policy control |
+| Campbell | Health and Social Care Interventions in the 80 years Old and Over Population | health and social care |
+| Campbell | Evidence and Gap Map of Whole-School Interventions Promoting Mental Health and Preventing Risk Behaviours in Adolescence: Programme Component Mapping Within the Health-Promoting Schools Framework | schools, a fairer start |
+| Campbell | Residential energy efficiency interventions | home energy, a sustainable future |
+| 3ie | Improving Labour Market Outcomes Through Learning to Earning Interventions in Low- and Middle-Income Countries: Core skills training | jobs and skills |
+| 3ie | Nutrition-Sensitive Agriculture Evidence Gap Map: Consumption / provision of large-scale fortified foods | food and health |
+| 3ie | Human Rights: Civic and Legal Education | a non-social-policy control |
 | SR4ALL | Recent intimate partner violence against women and health | violence and health |
-| SR4ALL | Learning during the COVID-19 pandemic | learning loss |
-| SR4ALL | Risk and protective factors of adolescent drug abuse | young people |
-| SR4ALL | Sleep duration and incidence of obesity in infants, children and adolescents | child health, early years |
-| YEF | Trauma-specific therapies (youth violence) | the one gap-map strand |
+| SR4ALL | A systematic review and meta-analysis of the evidence on learning during the COVID-19 pandemic | learning loss |
+| SR4ALL | Risk and protective factors of drug abuse among adolescents | young people |
+| SR4ALL | Sleep duration and incidence of obesity in infants, children, and adolescents | child health, early years |
+| YEF | Interventions to prevent children and young people's involvement in violence: Trauma-specific therapies | the one gap-map strand |
+| hand-made | The effect of parental leave on parents' mental health | the original four, labelled |
+| hand-made | Tackling loneliness evidence review: main report | the original four, labelled; mostly grey literature |
+| hand-made | Adverse childhood experiences in children and youth experiencing homelessness | the original four, labelled |
+| hand-made | Social care shows that privatisation will not be the answer to NHS inequality | the original four, labelled; only 7 references |
+
+Two intents keep a title tail the cleaner does not strip: the Campbell whole-school map ends
+in "An evidence and gap map" inside a longer colon-separated title, and the SR4ALL learning
+review *starts* with "A systematic review and meta-analysis of the evidence on", which the
+cleaner only removes from the end. Both are sent as shown.
 
 To change them, edit `SAMPLE_MINI_TITLES`, re-run the script, re-upload the dataset and
 delete the items that dropped out (an upload upserts and never deletes).
