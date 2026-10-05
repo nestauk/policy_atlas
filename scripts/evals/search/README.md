@@ -59,6 +59,7 @@ Then it rotates across topics so that no single subject fills the sample. The sa
 
 - **Only scholarly recall.** All targets are matched by DOI. A government report without a DOI cannot be found, so it is not counted.
 - **Campbell and SR4ALL targets are not labelled.** A reference list mixes the studies a review is about with background and methods citations. We decided (2026-10-05) not to label them. So a perfect search probably scores only about **50%** on these rows (verificaiton needed). The `target_labelled` column (`yes` / `no`) tells you which rows have this ceiling. Do not compare the two kinds directly.
+- **Campbell and SR4ALL lists are shorter than the published ones.** We take the reference lists from OpenAlex, which keeps only the citations it could link to a record in its index. For example, our target for the review of people aged 80 and over has 95 of its 117 references. Most of the missing 22 have no DOI (statistics, government plans, software). A few are papers that OpenAlex did not link. Sometimes OpenAlex keeps a different DOI for the same paper, or links the wrong record, such as a correction notice instead of the paper. A search that finds the correct paper then counts as a miss.
 - **Small reviews are noisy.** With 20 references, one found study changes recall by 5 percentage points.
 
 ## 2. Measures
