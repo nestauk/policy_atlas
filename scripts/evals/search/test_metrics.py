@@ -1261,7 +1261,7 @@ def test_write_ground_truth_round_trip() -> None:
 
 
 def test_get_3ie_map_rows() -> None:
-    from get_3ie import build_rows, map_rows
+    from getters.get_3ie import build_rows, map_rows
 
     data = {
         "interventions": [
@@ -1294,7 +1294,7 @@ def test_get_3ie_map_rows() -> None:
 
 
 def test_get_yef_strands() -> None:
-    from get_yef import MAP_SCOPE, build_rows, strands
+    from getters.get_yef import MAP_SCOPE, build_rows, strands
 
     csv_data = {"rows": [
         [{"id": 100, "title": "Toolkit strand", "parentId": None, "isColumn": True}],
@@ -1317,7 +1317,7 @@ def test_get_yef_strands() -> None:
 
 
 def test_get_sr4all_filter() -> None:
-    from get_sr4all import DEFAULT_FIELDS, wanted
+    from getters.get_sr4all import DEFAULT_FIELDS, wanted
 
     ok = {"field": "Psychology", "doi": "10.1/x", "research_questions": ["q"], "language": "en", "referenced_works_count": 40, "title": "X: a systematic review"}
     assert wanted(ok, set(DEFAULT_FIELDS), 30)
@@ -1329,7 +1329,7 @@ def test_get_sr4all_filter() -> None:
 
 
 def test_get_campbell_select() -> None:
-    from get_campbell import select_reviews
+    from getters.get_campbell import select_reviews
 
     works = [
         {"id": "W1", "title": "Hot spots policing", "doi": "10.1/1", "publication_date": "2019-05-01", "referenced_works_count": 100},

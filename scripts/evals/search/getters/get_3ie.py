@@ -45,6 +45,11 @@ from typing import Any
 
 import httpx
 
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # shared helpers live one folder up
+
 from ground_truth import RAW_DIR, cached_json, clean_review_title, doi_if_valid, write_ground_truth
 
 API = "https://api.developmentevidence.3ieimpact.org"

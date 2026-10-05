@@ -31,6 +31,11 @@ from typing import Any
 
 import httpx
 
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # shared helpers live one folder up
+
 from ground_truth import RAW_DIR, doi_if_valid, write_ground_truth
 
 PAGE_URL = "https://youthendowmentfund.org.uk/wp-content/uploads/2026/08/EGM-April-2026.html"

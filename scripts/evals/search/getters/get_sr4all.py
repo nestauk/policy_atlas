@@ -33,6 +33,10 @@ import json
 from pathlib import Path
 from typing import Any
 
+import sys
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # shared helpers live one folder up
+
 from ground_truth import (
     NOT_A_REVIEW_TITLE_RE,
     RAW_DIR,
