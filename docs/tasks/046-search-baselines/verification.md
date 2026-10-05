@@ -14,21 +14,22 @@ commits that follow it. Public-safe: no keys, no cache content, no raw abstracts
 | `make verify` (step-6 exit, working tree at `8b4a61b` + docs) | pass | okf-validate, backend 2583 tests, mypy 306 files, ruff, build, frontend 617 tests; one pre-existing eslint warning (`SplashField.tsx`), also in the baseline log |
 | `make verify-fast` (Phase 5 gate, snippet arm) | pass | 2583 tests, mypy, ruff |
 | `make verify` (step-6 exit after Phase 5, commit `af1c86e` + docs) | pass | same suites as above, exit 0, same pre-existing eslint warning |
-| `uv run --project backend python scripts/evals/search/test_metrics.py` | pass (`ok`) | 11 new self-checks: `test_baseline_*` (10, incl. `test_baseline_snippet_arm`) and `test_history_cost_column` |
+| `uv run --project backend python scripts/evals/search/tests/test_measure.py` | pass (`ok`) | 11 new self-checks: `test_baseline_*` (10, incl. `test_baseline_snippet_arm`) and `test_history_cost_column` |
 | `uv run --project backend ruff check scripts/evals/search/` | pass | scripts are outside the `make lint` scope (`src`, `tests`), so run by hand |
 | `make verify` (review-open, tree at `c8453ab`) | pass | backend 2583 tests, mypy 306 files, ruff, okf-validate, build, frontend 617 tests; same pre-existing eslint warning |
 | `make verify-fast` (after the review fixes) | pass | 2583 tests, mypy 306 files, ruff |
-| `test_metrics.py` and `ruff check scripts/evals/search/` (after the review fixes) | pass (`ok`) | eleven `test_baseline_*`/`test_history_*` checks, extended per § Review findings |
+| `tests/test_measure.py` and `ruff check scripts/evals/search/` (after the review fixes) | pass (`ok`) | eleven `test_baseline_*`/`test_history_*` checks, extended per § Review findings |
 | `make okf-validate` (after the step-8 records) | pass | 147 concepts, 0 violations |
 | cache re-score, paid keys blanked, `--dry-run` (after the fixes) | 0 fetches | all 16 rows identical to `history.md` |
-| `test_metrics.py` (Phase 6, fetchers) | pass (`ok`) | eight new self-checks: `test_doi_if_valid`, `test_clean_review_title_gap_maps`, `test_not_a_review_title`, `test_write_ground_truth_round_trip`, `test_get_3ie_map_rows`, `test_get_yef_strands`, `test_get_sr4all_filter`, `test_get_campbell_select` |
+| `make verify-fast` (after the folder split, 2026-10-05) | pass | 2583 tests, mypy 306 files, ruff; plus `eval-check`: 38 self-checks, ruff on `scripts/evals/search` |
+| `tests/test_measure.py` (Phase 6, fetchers) | pass (`ok`) | eight new self-checks: `test_doi_if_valid`, `test_clean_review_title_gap_maps`, `test_not_a_review_title`, `test_write_ground_truth_round_trip`, `test_get_3ie_map_rows`, `test_get_yef_strands`, `test_get_sr4all_filter`, `test_get_campbell_select` |
 | `ruff check scripts/evals/search/` (Phase 6) | pass | |
 | `get_yef.py`, `get_3ie.py`, `get_campbell.py`, `get_sr4all.py` (live, once each) | exit 0 | numbers in § Phase 6 addendum |
-| `ground_truth_dataset.py --dry-run` on `yef_*.csv` and `3ie_*.csv` | 20 and 197 items | every row loaded; no network (all rows carry `published_before`) |
+| `ground_truth/upload.py --dry-run` on `yef_*.csv` and `3ie_*.csv` | 20 and 197 items | every row loaded; no network (all rows carry `published_before`) |
 
 ## Checks beyond the build
 
-- **Deterministic self-checks** (all in `test_metrics.py`, no network): record-to-key mapping
+- **Deterministic self-checks** (all in `tests/test_measure.py`, no network): record-to-key mapping
   per arm; the three cutoff converters incl. Consensus month rounding; the Semantic Scholar
   hyphen rule and verbatim intent for the other two arms; paging per arm (Semantic Scholar
   stops on absent `next`, empty `data`, full last page, and at 1,000 after exactly 10
@@ -53,16 +54,16 @@ commits that follow it. Public-safe: no keys, no cache content, no raw abstracts
 
 ```
 # 1. Consensus preflight probe: one review, fetch + cache + score, upload nothing
-uv run --project backend --env-file backend/.env python scripts/evals/search/baseline_recall.py --arms consensus --reviews parental --dry-run
+uv run --project backend --env-file backend/.env python scripts/evals/search/measure/baseline_recall.py --arms consensus --reviews parental --dry-run
 
 # 2. Full fetch of all arms and reviews, score at all caps, upload 12 Langfuse runs
-uv run --project backend --env-file backend/.env python scripts/evals/search/baseline_recall.py
+uv run --project backend --env-file backend/.env python scripts/evals/search/measure/baseline_recall.py
 
 # 3. After the paging fix (commit 8b4a61b): refetch Consensus only, upload nothing
-uv run --project backend --env-file backend/.env python scripts/evals/search/baseline_recall.py --arms consensus --refresh --dry-run
+uv run --project backend --env-file backend/.env python scripts/evals/search/measure/baseline_recall.py --arms consensus --refresh --dry-run
 
 # 4. The run whose rows are in history.md: read every arm from the cache, zero requests, upload
-uv run --project backend --env-file backend/.env python scripts/evals/search/baseline_recall.py
+uv run --project backend --env-file backend/.env python scripts/evals/search/measure/baseline_recall.py
 
 # 5. History rows with the new cost column
 uv run --project backend --env-file backend/.env python scripts/evals/search/history.py --since 2026-09-22
@@ -146,7 +147,7 @@ in any cache file. `git check-ignore` confirms the rule at `.gitignore:34`.
 
 ### Phase 5 addendum: arm 1b `semantic-scholar-snippet` (owner amendment, 2026-09-25)
 
-Commit `af1c86e`; gate `make verify-fast` green (2583 tests, mypy, ruff); `test_metrics.py`
+Commit `af1c86e`; gate `make verify-fast` green (2583 tests, mypy, ruff); `tests/test_measure.py`
 gained `test_baseline_snippet_arm`. Live: `--arms semantic-scholar-snippet`, 11 requests
 (four searches, seven id lookups), 42 s, 0 failed, free; four Langfuse runs
 `2026-09-25-af1c86e/semantic-scholar-snippet-cap<cap>` with the seven D6 scores and six
@@ -204,12 +205,12 @@ lookup loop, so a crash mid-way repeats the lookups. The YEF page URL is pinned 
 (owner-directed, side conversation) and written up afterwards as § Amendment 2. Also, while
 they were being built, the review-stack conversation committed `36596c2` from the same
 working tree, which swept in the Phase 6 edits to `README.md` (section 6) and
-`test_metrics.py` (eight tests) ahead of the code they describe. At that commit alone
-`test_metrics.py` cannot import `get_3ie`; the Phase 6 commit that follows repairs it.
+`tests/test_ground_truth.py` (eight tests) ahead of the code they describe. At that commit alone
+`tests/test_ground_truth.py` cannot import `get_3ie`; the Phase 6 commit that follows repairs it.
 
 ## Diff summary
 
-- **`scripts/evals/search/baseline_recall.py`** (new, Codex-authored from the lead's brief;
+- **`scripts/evals/search/measure/baseline_recall.py`** (new, Codex-authored from the lead's brief;
   lead edits listed under Review handoff). Three `fetch_*` functions with one signature,
   three pure cutoff converters, one price table, one rate-limited retrying getter, the S7
   cache (`cache_path`, `write_cache`, `read_cache`, `load_or_fetch`), `records_of`,
@@ -217,7 +218,7 @@ working tree, which swept in the Phase 6 edits to `README.md` (section 6) and
   `run_baseline` (Langfuse upload in the `production_recall._run_depth` shape) and the CLI.
 - **`scripts/evals/search/history.py`** (fast-worker, S6): `variable cost` column, summed
   per run, labelled `api` or `llm`; four decimals under one cent.
-- **`scripts/evals/search/test_metrics.py`**: eleven new self-checks (extended in review).
+- **`scripts/evals/search/tests/test_ground_truth.py`**: eleven new self-checks (extended in review).
 - **`scripts/evals/search/README.md`**: section 5 (baselines, cache, `--refresh`, reading the
   rows), the cost-column paragraph in section 4, the scripts table.
 - **`scripts/evals/search/results/history.md`**: the cost column on every row (old rows
@@ -225,10 +226,10 @@ working tree, which swept in the Phase 6 edits to `README.md` (section 6) and
 - **`backend/.env.example`**: the two key names, empty.
 - **`docs/deferred.md`**: § Search recall baselines (task 046 seams), four entries.
 - **Phase 6 (post hoc):** `get_campbell.py`, `get_3ie.py`, `get_yef.py`, `get_sr4all.py`
-  (new, one file each: list or select, `build_rows`, `main`); `ground_truth.py` (+131 lines:
+  (new, one file each: list or select, `build_rows`, `main`); `evals_search_utils.py and ground_truth/fetch_helpers.py` (+131 lines:
   `doi_if_valid`, `NOT_A_REVIEW_TITLE_RE`, `resolve_openalex_works` and `_cached`,
   `cached_json`, `write_ground_truth`, the column tuples, gap-map tails in
-  `clean_review_title`); `test_metrics.py` (eight tests); README section 6; contract
+  `clean_review_title`); `tests/test_ground_truth.py` (eight tests); README section 6; contract
   § Amendment 2, plan Phase 6, rubric item 12, `docs/deferred.md` P2 entry.
 
 ### Flagged deviations (minor, resolved within the contract's vocabulary)
@@ -430,7 +431,7 @@ silent success into a reported failure, the opposite of a swallow.
 
 ### Gates after the fixes
 
-See the rows added to § Commands run: `test_metrics.py` `ok`, `ruff check` clean, and the
+See the rows added to § Commands run: `tests/test_ground_truth.py` `ok`, `ruff check` clean, and the
 cache re-score identical to `history.md`. `make verify-fast` and `make verify` results are in
 the same table.
 
@@ -448,14 +449,25 @@ the same table.
 | # | Holds? | Evidence |
 |---|---|---|
 | 1 | yes | Contract verifier: all five deliverables, D1-D4 and D6-D9 traced to code (lines in its report); D4 wording corrected (finding 3). |
-| 2 | yes | `make verify` green before the stack and after the fixes (§ Commands run); `test_metrics.py` `ok` with every contract-listed check plus the review additions. |
+| 2 | yes | `make verify` green before the stack and after the fixes (§ Commands run); `tests/test_ground_truth.py` `ok` with every contract-listed check plus the review additions. |
 | 3 | yes | Langfuse: 16 runs, exactly the seven D6 scores and six metadata keys, values equal to `history.md`; cache 16 files complete; lead re-score made zero requests. |
 | 4 | yes | `api_cost_usd` on every baseline trace; `history.md` shows `api`/`llm` sums; README says what is excluded and that the figure is computed from the pages fetched (finding 3). |
 | 5 | yes | Same intent, cutoff, key, cap rule and formula per lane; the notes name D1, D2, the snippet dedup order, D3 scholarly-only, `b16f859` (D8) and "a sign, not a controlled test". |
 | 6 | yes | Diff touches only `backend/.env.example`, `docs/`, `scripts/evals/search/`; no dependency change; no key or cache file tracked; no key substring in any cache file. |
 | 7 | yes | No generated file or secret edited. |
-| 8 | yes | Zero deletions in `test_metrics.py`; no skip or xfail. |
+| 8 | yes | Zero deletions in `tests/test_ground_truth.py`; no skip or xfail. |
 | 9 | yes | This file. |
 | 10 | yes | `docs/deferred.md` § Search recall baselines: four entries plus the cap-sized cost note. |
 | 11 | yes | This section; contract/plan adversarial reviews recorded in the contract status line. |
 | 12 | yes (self-reported at build, not yet through the review stack) | § Phase 6 addendum: four live runs, dry-run loads 217 items, eight self-checks `ok`, `ruff` clean, `results/` untracked. Post-hoc write-up flagged as a deviation. |
+
+## Refactor record (2026-10-05, owner-approved)
+
+The folder was split by purpose (contract Amendment 3, deliverable 13). Checks run before
+and after, all unchanged: `make eval-check` green (17 ground-truth and 21 measure
+self-checks, ruff check and format); `--help` on all ten command-line scripts from their new
+paths; `engine` and `inspect_run` import; the baseline cache re-score with the paid keys
+blanked made zero requests and reproduced every `history.md` row; `select_sample.py` wrote
+byte-identical sample files; `upload.py --dry-run` loaded the 10-row sample; `history.py
+--since 2026-09-25` listed the runs. `make verify-fast` (now including `eval-check`) is in
+the commands table. Git history follows the files (`git mv`).

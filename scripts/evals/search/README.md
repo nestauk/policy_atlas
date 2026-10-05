@@ -7,50 +7,53 @@ This folder contains scripts related to calculating evaluation metrics against a
 
 ## How the files fit together
 
-The folder has thirteen Python files. You run nine of them from the command line. The other four are helper modules that the scripts import.
+The folder is split by purpose:
+
+| Folder or file | Purpose |
+|---|---|
+| `evals_search_utils.py` | Shared building blocks that need no database and no pipeline code: the key used to match a found document to a reference (a lowercase DOI, Digital Object Identifier, or an Overton id), the `GroundTruth` container, the function that turns a review title into a search intent, the date helpers for a review's cutoff, the OpenAlex getter with retries, the dataset name, the `--reviews` item selector and the dollar formatter. Both halves import it. |
+| `ground_truth/` | Building the dataset: the fetchers in `getters/` (`get_campbell.py`, `get_3ie.py`, `get_yef.py`, `get_sr4all.py`) with their shared `fetch_helpers.py`, `select_sample.py` (the quality check and the two samples) and `upload.py` (the CSV files to a Langfuse dataset). |
+| `measure/` | Running measurements: `engine.py` (runs one intent through the real search stage; no command line), `production_recall.py`, `sweep_record_cap.py`, `baseline_recall.py`, and `inspect_run.py` (tables over one run's raw provider output; no command line). |
+| `history.py` | Reading results: one markdown row per Langfuse dataset run. |
+| `tests/` | Self-checks that need no network and no database: `test_ground_truth.py` and `test_measure.py`. `make eval-check` runs them with ruff, and `make verify` and `make verify-fast` include it. |
+| `results/` | Outputs: the curated `history.md` (tracked) and the git-ignored caches, sweep files and ground-truth CSV files. |
+
+Every script below the root starts with `import _bootstrap`, a short file that puts the folder's siblings on Python's import path, so each script runs directly with `uv run --project backend python scripts/evals/search/<folder>/<script>.py`.
+
 
 **Scripts you run:**
 
 | Script | What it does | When to run it |
 |---|---|---|
-| `ground_truth_dataset.py` | Reads the two CSV files in `input/` and uploads them to Langfuse as a dataset called `retrieval-ground-truth`. | Once at the start, and again each time `references.csv` or `gt_reviews.csv` changes. |
-| `production_recall.py` | Measures how much of each review's reference list the pipeline finds when it runs exactly as it does in production. It makes one Langfuse run for each search depth (rapid, standard, deep). | By hand, from time to time, so that a history of production recall builds up. |
+| `ground_truth/upload.py` | Reads the two CSV files in `input/` and uploads them to Langfuse as a dataset called `retrieval-ground-truth`. | Once at the start, and again each time `references.csv` or `gt_reviews.csv` changes. |
+| `measure/production_recall.py` | Measures how much of each review's reference list the pipeline finds when it runs exactly as it does in production. It makes one Langfuse run for each search depth (rapid, standard, deep). | By hand, from time to time, so that a history of production recall builds up. |
 | `history.py` | Prints one markdown table row per dataset run in Langfuse: date, commit, settings, run name, mean recall and the run's variable cost. It writes nothing. | After each eval you can copy the rows worth keeping into `results/history.md` and add a note. |
-| `baseline_recall.py` | The baselines. Sends each review's intent once, as plain text, to Semantic Scholar (keyword and semantic search), Consensus and OpenAlex, caches the raw result pages locally, and scores recall at several result caps. One Langfuse run per service and cap. | When you want a "what does good look like" number to compare the pipeline's recall with. The services are called once; later runs read the cache. See section 5. |
-| `getters/get_campbell.py`, `getters/get_3ie.py`, `getters/get_yef.py`, `getters/get_sr4all.py` | The ground-truth fetchers, in their own folder. Each downloads one public source of "review plus the studies it covers", keeps the raw download under `results/ground_truth/raw/`, and writes two CSVs in the same shape as `input/gt_reviews.csv` and `input/references.csv` into `results/ground_truth/`. | When you want to grow the ground truth beyond the four hand-made reviews. See section 6. |
-| `select_ground_truth.py` | Picks the ground-truth sample from the fetched collections: a simple quality check, a spread across topics, 30 Campbell + 30 3ie + 30 SR4ALL + 10 YEF rows (`sample_100`) and ten hand-chosen rows out of those (`sample_10`). Writes the two CSV pairs next to the fetched files. No network. | After the fetchers have run, or after changing a rule in the quality check. See section 7. |
-| `sweep_record_cap.py` | The experiment. It runs a rapid search many times, each time with a different cap on the number of records kept and with one of the two query-generation methods. It records the recall for each combination. | When you want to know how the record cap or the prompting method changes recall. |
+| `measure/baseline_recall.py` | The baselines. Sends each review's intent once, as plain text, to Semantic Scholar (keyword and semantic search), Consensus and OpenAlex, caches the raw result pages locally, and scores recall at several result caps. One Langfuse run per service and cap. | When you want a "what does good look like" number to compare the pipeline's recall with. The services are called once; later runs read the cache. See section 5. |
+| `ground_truth/getters/get_campbell.py`, `ground_truth/getters/get_3ie.py`, `ground_truth/getters/get_yef.py`, `ground_truth/getters/get_sr4all.py` | The ground-truth fetchers, in their own folder. Each downloads one public source of "review plus the studies it covers", keeps the raw download under `results/ground_truth/raw/`, and writes two CSVs in the same shape as `input/gt_reviews.csv` and `input/references.csv` into `results/ground_truth/`. | When you want to grow the ground truth beyond the four hand-made reviews. See section 6. |
+| `ground_truth/select_sample.py` | Picks the ground-truth sample from the fetched collections: a simple quality check, a spread across topics, 30 Campbell + 30 3ie + 30 SR4ALL + 10 YEF rows (`sample_100`) and ten hand-chosen rows out of those (`sample_10`). Writes the two CSV pairs next to the fetched files. No network. | After the fetchers have run, or after changing a rule in the quality check. See section 7. |
+| `measure/sweep_record_cap.py` | The experiment. It runs a rapid search many times, each time with a different cap on the number of records kept and with one of the two query-generation methods. It records the recall for each combination. | When you want to know how the record cap or the prompting method changes recall. |
 
-The two measuring scripts read the reviews and their reference lists from the Langfuse dataset. They do not read the CSV files. This means you must run `ground_truth_dataset.py` at least once before you run either of them.
+The two measuring scripts read the reviews and their reference lists from the Langfuse dataset. They do not read the CSV files. This means you must run `ground_truth/upload.py` at least once before you run either of them.
 
-**Helper modules (these have no command line):**
-
-| Module | What it holds | Who uses it |
-|---|---|---|
-| `ground_truth.py` | Small building blocks that need no database and no pipeline code: the key used to match a found document to a reference (a lowercase DOI, or `overton:<id>` for documents without a DOI), the `GroundTruth` container, the function that turns a review title into a search intent, the date helpers, and one lookup to the OpenAlex API. | All the other files. |
-| `search_eval.py` | The core of the evaluation. Its function `run_one_query` takes one search intent, runs the real search stage (and screening, if asked) and works out the recall. It runs inside a database transaction that is always rolled back, so nothing is saved to the database. It returns a `QueryResult` that holds the recall and the raw records each API call returned. | `sweep_record_cap.py` and `production_recall.py`. |
-| `inspect_run.py` | Two functions that turn a `QueryResult` into tables: one row per API call, or one row per record returned. The tables show titles and DOIs, so in a notebook you can see which API call found which paper without paying for the calls again. | `sweep_record_cap.py` uses it to build its queries CSV and papers CSV. |
-| `test_metrics.py` | A self-check for the functions that need no network and no database: scoring, CSV loading, the output tables and the OpenAlex retry logic. | Run it after you change any of the files above: `uv run --project backend python scripts/evals/search/test_metrics.py`. |
-
-`production_recall.py` also imports the score names and the Langfuse upload code from `sweep_record_cap.py`. This means both scripts report the same set of scores, and you can compare their runs in Langfuse.
+`measure/production_recall.py` also imports the score names and the Langfuse upload code from `measure/sweep_record_cap.py`. This means both scripts report the same set of scores, and you can compare their runs in Langfuse.
 
 **How data flows through the files:**
 
 ```
 input/gt_reviews.csv ─┐
-input/references.csv ─┴─> ground_truth_dataset.py ──> Langfuse dataset
+input/references.csv ─┴─> ground_truth/upload.py ──> Langfuse dataset
                                                           │
                               ┌───────────────────────────┴──────────────┐
                               v                                          v
-                     production_recall.py                        sweep_record_cap.py
+                     measure/production_recall.py                        measure/sweep_record_cap.py
                               │                                          │
-                              └────────> search_eval.run_one_query <─────┘
+                              └────────> engine.run_one_query <─────┘
                                           (real search + screening,
                                            rolled back, never saved)
                                                      │
                                                      v
                                      Langfuse runs + scores
-                                     results/*.csv (sweep only, built with inspect_run.py)
+                                     results/*.csv (sweep only, built with measure/inspect_run.py)
 ```
 
 Abbreviations used above: CSV is a comma-separated values file. JSON is a plain-text data format (JavaScript Object Notation) that programs read and write. DOI is a Digital Object Identifier, the permanent ID of a published paper. API is an application programming interface, the way our code asks OpenAlex and Overton for records.
@@ -63,7 +66,7 @@ Two files in `scripts/evals/search/input/`:
 
 ## 1. Uploading datasets to Langfuse
 
-Key scripts/files: `ground_truth_dataset.py`
+Key scripts/files: `ground_truth/upload.py`
 
 ### What this does
 
@@ -76,12 +79,12 @@ This should be run whenever new reviews have been curated, i.e. if the local `re
 Dry-run first, since it uploads nothing and needs no Langfuse keys:
 
 ```
-uv run --project backend --env-file backend/.env python scripts/evals/search/ground_truth_dataset.py --dry-run
+uv run --project backend --env-file backend/.env python scripts/evals/search/ground_truth/upload.py --dry-run
 ```
 
 Run it for real:
 ```
-uv run --project backend --env-file backend/.env python scripts/evals/search/ground_truth_dataset.py
+uv run --project backend --env-file backend/.env python scripts/evals/search/ground_truth/upload.py
 ```
 
 ### Methodology details
@@ -100,7 +103,7 @@ Some other points worth knowing:
 
 ## 2. Establishing the recall of current production rapid/standard/deep search types
 
-Key scripts/files: `production_recall.py`
+Key scripts/files: `measure/production_recall.py`
 
 ### What this does
 
@@ -119,7 +122,7 @@ make eval-search-recall ARGS="--depths rapid"                      # run it just
 
 ## 3. Experiment to see how lifting the cap on records kept from the two APIs affects recall
 
-Key scripts/files: `sweep_record_cap.py`
+Key scripts/files: `measure/sweep_record_cap.py`
 
 ### What this does
 
@@ -130,14 +133,14 @@ It also compares v2-style and v3 prompting methods. v2 comes with higher latency
 ### Usage
 
 ```
-uv run --project backend --env-file backend/.env python scripts/evals/search/sweep_record_cap.py --caps 50 --generation-backends shared --repeats 1   # smoke test
-uv run --project backend --env-file backend/.env python scripts/evals/search/sweep_record_cap.py                                                     # full sweep
+uv run --project backend --env-file backend/.env python scripts/evals/search/measure/sweep_record_cap.py --caps 50 --generation-backends shared --repeats 1   # smoke test
+uv run --project backend --env-file backend/.env python scripts/evals/search/measure/sweep_record_cap.py                                                     # full sweep
 
 ```
 
 ### Methodology details
 
-- In the Policy Atlas searches, we are at present just trying to calculate a recall metric on search i.e. the very first component of the pipeline. To this end, we just use the rapid search methodology i.e. generating 18 API queries across OpenAlex and Overton, but just one round of queries, and no reformulation, citation snowballing etc. The reason for this is that running multiple rounds would involve relevance screening, and that needs to be evaluated separately. (There is actually already code ready to turn screening on and this is in `sweep_record_cap.py`)
+- In the Policy Atlas searches, we are at present just trying to calculate a recall metric on search i.e. the very first component of the pipeline. To this end, we just use the rapid search methodology i.e. generating 18 API queries across OpenAlex and Overton, but just one round of queries, and no reformulation, citation snowballing etc. The reason for this is that running multiple rounds would involve relevance screening, and that needs to be evaluated separately. (There is actually already code ready to turn screening on and this is in `measure/sweep_record_cap.py`)
 
 - We run a Langfuse Experiment to compare: prompt version (v2 vs v3) x cap on the number of records kept from each API (50, 100, 250, 500, 1000, 2000). We expect that raising the cap -> better recall. There is a cost to raising this cap in the real PA workflow though because records passed to the relevance screening step also get stored and are available for RAG retrieval during the synthesis step. Therefore there is a tradeoff of search recall against documents kept.
 
@@ -195,7 +198,7 @@ fee), compute, or Langfuse itself. `n/a` means neither source had a number.
 
 ## 5. Search recall baselines: what does good look like?
 
-Key scripts/files: `baseline_recall.py`, `results/cache/`
+Key scripts/files: `measure/baseline_recall.py`, `results/cache/`
 
 ### What this does
 
@@ -246,13 +249,13 @@ needs none. The dataset must already be in Langfuse (section 1).
 
 ```
 # Try one arm on one review, score and print, upload nothing (still fills the cache):
-uv run --project backend --env-file backend/.env python scripts/evals/search/baseline_recall.py --arms consensus --reviews parental --dry-run
+uv run --project backend --env-file backend/.env python scripts/evals/search/measure/baseline_recall.py --arms consensus --reviews parental --dry-run
 
 # All arms, all reviews, all caps; one Langfuse run per arm and cap:
-uv run --project backend --env-file backend/.env python scripts/evals/search/baseline_recall.py
+uv run --project backend --env-file backend/.env python scripts/evals/search/measure/baseline_recall.py
 
 # Later, re-score after a code change without calling the services:
-uv run --project backend --env-file backend/.env python scripts/evals/search/baseline_recall.py
+uv run --project backend --env-file backend/.env python scripts/evals/search/measure/baseline_recall.py
 ```
 
 Before any request the script prints how many reviews need a fetch per arm and the ceiling
@@ -274,7 +277,7 @@ generated queries and then trims, so the two are not a controlled pair.
 
 ### What this does
 
-The four hand-made reviews in `input/` are too few to tell a real improvement from noise. Each `get_<dataset>.py` script pulls one public collection of "a review question plus the studies that answer it" and writes it in the same two-CSV shape that `ground_truth_dataset.py` already reads, so nothing downstream changes. Raw downloads go to `results/ground_truth/raw/` and the CSVs to `results/ground_truth/`; git ignores both.
+The four hand-made reviews in `input/` are too few to tell a real improvement from noise. Each `get_<dataset>.py` script pulls one public collection of "a review question plus the studies that answer it" and writes it in the same two-CSV shape that `ground_truth/upload.py` already reads, so nothing downstream changes. Raw downloads go to `results/ground_truth/raw/` and the CSVs to `results/ground_truth/`; git ignores both.
 
 | Script | Source | What one "review" is | Studies per review | `label` column |
 |---|---|---|---|---|
@@ -286,7 +289,7 @@ The four hand-made reviews in `input/` are too few to tell a real improvement fr
 Two kinds of target, and they are not equally clean:
 
 - **Gap-map rows** (3ie, YEF) list studies that screeners coded as being about that intervention. Every one is on topic, so the rows are labelled `content` and are scorable straight away. About a quarter to a third have no DOI (grey literature). Those rows keep a URL but cannot be scored until an Overton id is filled in.
-- **Reference lists** (Campbell, SR4ALL) mix the studies a review is about with background and methods citations. The `label` column is left empty, so `ground_truth_dataset.py` counts none of them until the labelling repo ([policy_atlas_gt_labelling](https://github.com/nestauk/policy_atlas_gt_labelling)) has marked the `content` rows, exactly as was done for the first four reviews.
+- **Reference lists** (Campbell, SR4ALL) mix the studies a review is about with background and methods citations. The `label` column is left empty, so `ground_truth/upload.py` counts none of them until the labelling repo ([policy_atlas_gt_labelling](https://github.com/nestauk/policy_atlas_gt_labelling)) has marked the `content` rows, exactly as was done for the first four reviews.
 
 Columns beyond the ones the loaders read (`dataset`, `review_id`, `level`, `n_references`, `n_with_doi`, `research_questions`, `url`, `year`, `ref_id`) are there for the person choosing and labelling reviews. The loaders ignore them.
 
@@ -301,7 +304,7 @@ uv run --project backend python scripts/evals/search/get_yef.py --min-studies 20
 uv run --project backend --env-file backend/.env python scripts/evals/search/get_sr4all.py --limit 100
 
 # Then pick rows, label where needed, and upload as usual:
-uv run --project backend --env-file backend/.env python scripts/evals/search/ground_truth_dataset.py \
+uv run --project backend --env-file backend/.env python scripts/evals/search/ground_truth/upload.py \
     --reviews scripts/evals/search/results/ground_truth/3ie_reviews.csv \
     --references scripts/evals/search/results/ground_truth/3ie_references.csv --dataset retrieval-ground-truth-3ie --dry-run
 ```
@@ -316,7 +319,7 @@ uv run --project backend --env-file backend/.env python scripts/evals/search/gro
 
 ## 7. The ground-truth sample: 100 reviews, and a cheap 10
 
-Key script: `select_ground_truth.py`. Outputs: `results/ground_truth/sample_100_*.csv` and
+Key script: `ground_truth/select_sample.py`. Outputs: `results/ground_truth/sample_100_*.csv` and
 `sample_10_*.csv` (git-ignored like everything under `results/`; the script rebuilds them
 from the fetched files in a second, and the same inputs always give the same sample).
 
@@ -396,18 +399,18 @@ compare numbers. This revises D11 of the task 046 contract for these two samples
 ### Usage
 
 ```
-uv run --project backend python scripts/evals/search/select_ground_truth.py --verbose
+uv run --project backend python scripts/evals/search/ground_truth/select_sample.py --verbose
 
 # Upload each sample as its own Langfuse dataset (drop --dry-run to upload):
-uv run --project backend --env-file backend/.env python scripts/evals/search/ground_truth_dataset.py \
+uv run --project backend --env-file backend/.env python scripts/evals/search/ground_truth/upload.py \
     --reviews scripts/evals/search/results/ground_truth/sample_10_reviews.csv \
     --references scripts/evals/search/results/ground_truth/sample_10_references.csv \
     --dataset retrieval-ground-truth-10 --dry-run
 # and the same with sample_100 and --dataset retrieval-ground-truth-100
 
 # Then measure against a sample instead of the four hand-made reviews:
-uv run --project backend --env-file backend/.env python scripts/evals/search/baseline_recall.py --dataset retrieval-ground-truth-10
-uv run --project backend --env-file backend/.env python scripts/evals/search/production_recall.py --dataset retrieval-ground-truth-10 --depths rapid
+uv run --project backend --env-file backend/.env python scripts/evals/search/measure/baseline_recall.py --dataset retrieval-ground-truth-10
+uv run --project backend --env-file backend/.env python scripts/evals/search/measure/production_recall.py --dataset retrieval-ground-truth-10 --depths rapid
 ```
 
 The four hand-made reviews stay in `retrieval-ground-truth`, so the rows already in

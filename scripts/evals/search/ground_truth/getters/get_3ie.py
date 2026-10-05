@@ -37,6 +37,8 @@ in anything that reuses these lists.
 
 from __future__ import annotations
 
+import _bootstrap  # noqa: F401
+
 import argparse
 import re
 import time
@@ -45,12 +47,8 @@ from typing import Any
 
 import httpx
 
-import sys
-from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # shared helpers live one folder up
-
-from ground_truth import RAW_DIR, cached_json, clean_review_title, doi_if_valid, write_ground_truth
+from evals_search_utils import clean_review_title
+from fetch_helpers import RAW_DIR, cached_json, doi_if_valid, write_ground_truth
 
 API = "https://api.developmentevidence.3ieimpact.org"
 PORTAL_MAP_PREFIX = "https://developmentevidence.3ieimpact.org/egm/"
@@ -92,14 +90,20 @@ def list_maps() -> list[dict[str, Any]]:
     while True:
         page = graphql(
             f'{{ keywordSearch(data:{{keyword:"*", from:{start}, size:{PAGE}, '
-            'filters:{product_type:[egm]}}) { search_result { id } } }'
+            "filters:{product_type:[egm]}}) { search_result { id } } }"
         )["keywordSearch"]["search_result"]
         ids.extend(hit["id"] for hit in page)
         if len(page) < PAGE:
             break
         start += PAGE
     fields = "{ title year_of_publication egm_url }"
-    details = graphql("{" + " ".join(f'r{i}: recordDetail(id:"{pid}") {fields}' for i, pid in enumerate(ids)) + "}")
+    details = graphql(
+        "{"
+        + " ".join(
+            f'r{i}: recordDetail(id:"{pid}") {fields}' for i, pid in enumerate(ids)
+        )
+        + "}"
+    )
     maps: list[dict[str, Any]] = []
     skipped = 0
     for record in details.values():
@@ -107,15 +111,26 @@ def list_maps() -> list[dict[str, Any]]:
         if not url.startswith(PORTAL_MAP_PREFIX):
             skipped += 1
             continue
-        maps.append({"title": record["title"].strip(), "year": record["year_of_publication"], "url": url, "slug": url[len(PORTAL_MAP_PREFIX) :].strip("/")})
-    print(f"{len(ids)} gap-map records, {len(maps)} hosted on the portal, {skipped} on the old site (skipped)")
+        maps.append(
+            {
+                "title": record["title"].strip(),
+                "year": record["year_of_publication"],
+                "url": url,
+                "slug": url[len(PORTAL_MAP_PREFIX) :].strip("/"),
+            }
+        )
+    print(
+        f"{len(ids)} gap-map records, {len(maps)} hosted on the portal, {skipped} on the old site (skipped)"
+    )
     return maps
 
 
 def fetch_map(slug: str) -> dict[str, Any]:
     """The whole map as the page receives it: layout, cells and every study record."""
     details = post_json("/api/project_details", {"url": slug})["data"]
-    data = post_json("/api/get_map_data", {"project_id": details["project_id"], "lang": "en"})
+    data = post_json(
+        "/api/get_map_data", {"project_id": details["project_id"], "lang": "en"}
+    )
     data["project_name"] = details.get("project_name")
     return data
 
@@ -146,7 +161,13 @@ def map_rows(data: dict[str, Any]) -> list[tuple[str, str, set[str]]]:
     rows = []
     for group in leaf_groups(data.get("interventions") or []):
         gid = str(group["map_layout_group_id"])
-        rows.append((gid, re.sub(r"\s+", " ", group["map_layout_group_title"]).strip(), studies_in_cells(grid.get(gid) or {})))
+        rows.append(
+            (
+                gid,
+                re.sub(r"\s+", " ", group["map_layout_group_title"]).strip(),
+                studies_in_cells(grid.get(gid) or {}),
+            )
+        )
     return rows
 
 
@@ -159,12 +180,23 @@ def build_rows(
     egm: dict[str, Any], data: dict[str, Any], min_studies: int
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """One map -> its review rows (map level plus qualifying intervention rows) and reference rows."""
-    records: dict[str, dict[str, Any]] = {str(k): v for k, v in (data.get("project_records") or {}).items()}
+    records: dict[str, dict[str, Any]] = {
+        str(k): v for k, v in (data.get("project_records") or {}).items()
+    }
     map_title = clean_review_title(egm["title"])
-    targets: list[tuple[str, str, str, set[str]]] = [(map_title, egm["url"], "map", set(records))]
+    targets: list[tuple[str, str, str, set[str]]] = [
+        (map_title, egm["url"], "map", set(records))
+    ]
     for gid, row_title, ids in map_rows(data):
         if len(ids) >= min_studies:
-            targets.append((f"{map_title}: {row_title}", f"{egm['url']}#intervention={gid}", "intervention", ids))
+            targets.append(
+                (
+                    f"{map_title}: {row_title}",
+                    f"{egm['url']}#intervention={gid}",
+                    "intervention",
+                    ids,
+                )
+            )
 
     review_rows: list[dict[str, Any]] = []
     reference_rows: list[dict[str, Any]] = []
@@ -207,21 +239,38 @@ def build_rows(
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--min-studies", type=int, default=20, help="Keep intervention rows with at least this many studies (default 20).")
-    parser.add_argument("--refresh", action="store_true", help="Ignore the raw cache and call the portal again.")
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    parser.add_argument(
+        "--min-studies",
+        type=int,
+        default=20,
+        help="Keep intervention rows with at least this many studies (default 20).",
+    )
+    parser.add_argument(
+        "--refresh",
+        action="store_true",
+        help="Ignore the raw cache and call the portal again.",
+    )
     args = parser.parse_args()
 
     maps = cached_json(RAW / "maps.json", list_maps, args.refresh)
     reviews: list[dict[str, Any]] = []
     references: list[dict[str, Any]] = []
     for egm in maps:
-        data = cached_json(RAW / f"{egm['slug']}.json", lambda slug=egm["slug"]: fetch_map(slug), args.refresh)
+        data = cached_json(
+            RAW / f"{egm['slug']}.json",
+            lambda slug=egm["slug"]: fetch_map(slug),
+            args.refresh,
+        )
         if not data.get("project_records"):
             print(f"  {egm['slug']}: no studies, skipped")
             continue
         r, refs = build_rows(egm, data, args.min_studies)
-        print(f"  {egm['slug']}: {len(data['project_records'])} studies, {len(r) - 1} intervention rows kept")
+        print(
+            f"  {egm['slug']}: {len(data['project_records'])} studies, {len(r) - 1} intervention rows kept"
+        )
         reviews.extend(r)
         references.extend(refs)
     write_ground_truth("3ie", reviews, references)

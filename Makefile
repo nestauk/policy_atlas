@@ -142,7 +142,17 @@ prompt-guard:
 # Records only — it does not pass or fail on the numbers.
 # Example: make eval-search-recall ARGS="--depths rapid"
 eval-search-recall:
-	uv run --project backend --env-file backend/.env python scripts/evals/search/production_recall.py $(ARGS)
+	uv run --project backend --env-file backend/.env python scripts/evals/search/measure/production_recall.py $(ARGS)
+
+# The search eval's own checks: its pure self-tests (no network, no database) and ruff
+# on scripts/evals/search, which `make lint` does not cover. Runs inside verify and
+# verify-fast so a broken eval script fails the gate instead of the next person who
+# runs it by hand.
+eval-check:
+	uv run --project backend python scripts/evals/search/tests/test_ground_truth.py
+	uv run --project backend python scripts/evals/search/tests/test_measure.py
+	uv run --project backend ruff check scripts/evals/search
+	uv run --project backend ruff format --check scripts/evals/search
 
 # Installs frontend dependencies from the committed lockfile (task 025 F.1).
 # A prerequisite for drift-check (and any other frontend gate) in CI, where
@@ -233,6 +243,7 @@ verify:
 	fi
 	$(MAKE) okf-validate
 	$(MAKE) -C backend verify
+	$(MAKE) eval-check
 	$(MAKE) -C infra test
 	$(MAKE) audit-paths
 	$(MAKE) prompt-guard
@@ -245,3 +256,4 @@ verify:
 # touching schema or ingest-adjacent code, and the step-6 exit.
 verify-fast:
 	$(MAKE) -C backend verify-fast
+	$(MAKE) eval-check

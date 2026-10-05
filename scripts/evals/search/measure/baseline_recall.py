@@ -1,7 +1,7 @@
 """Search recall baselines: one plain search per review on three services.
 
 The pipeline finds a share of each review's reference list (see
-``production_recall.py``). This script gives that share something to be compared
+``measure/production_recall.py``). This script gives that share something to be compared
 with. A **baseline** is the simplest possible search: the review's intent text is sent
 once, as it is, to one search service. No language model writes queries, nothing is
 screened, and there is no second round. The four **arms** (as in an experiment) are
@@ -38,13 +38,13 @@ arm, five per second for OpenAlex. A "too many requests" answer (HTTP 429) or a 
 error (HTTP 5xx) is retried up to four times, waiting at least the arm's interval each
 time; after that the request counts as failed and that review's fetch stops and is
 marked incomplete (it is fetched again next run). OpenAlex requests go through
-``ground_truth.openalex_get``, which carries its own five-try retry, so this script does
+``evals_search_utils.openalex_get``, which carries its own five-try retry, so this script does
 not retry them a second time.
 
 Usage::
 
     uv run --project backend --env-file backend/.env \\
-        python scripts/evals/search/baseline_recall.py [--arms ...] [--caps ...] \\
+        python scripts/evals/search/measure/baseline_recall.py [--arms ...] [--caps ...] \\
         [--reviews TEXT ...] [--run-label LABEL] [--refresh] [--dry-run]
 
 ``--dry-run`` still fills missing cache entries, but only prints scores; it uploads
@@ -52,6 +52,18 @@ no Langfuse run. Dev-only eval tooling. Not part of the runtime package.
 """
 
 from __future__ import annotations
+
+import _bootstrap  # noqa: F401
+from evals_search_utils import (
+    DEFAULT_DATASET,
+    git_commit,
+    ground_truth_from_item,
+    GroundTruth,
+    openalex_get,
+    record_key,
+    select_items,
+    usd,
+)
 
 import argparse
 import hashlib
@@ -66,12 +78,7 @@ from pathlib import Path
 from typing import Any, TypeAlias
 
 import httpx
-from ground_truth import GroundTruth, openalex_get, record_key
-from ground_truth_dataset import DEFAULT_DATASET
-from history import usd
 from langfuse import Evaluation, propagate_attributes
-from production_recall import select_items
-from sweep_record_cap import _git_commit, _ground_truth_from_item
 
 from policy_atlas.core import tracing
 
@@ -81,7 +88,7 @@ BATCH_SIZE = 500  # paper/batch accepts up to 500 ids per call
 DEFAULT_CAPS = [50, 100, 200, 1000]
 RESULT_CEILING = 1000
 EXPERIMENT = "retrieval-baseline"
-CACHE_DIR = Path(__file__).parent / "results" / "cache"
+CACHE_DIR = Path(__file__).resolve().parents[1] / "results" / "cache"
 # Prices read from the services' documentation on 2026-09-25.
 CONSENSUS_USD_PER_CALL = (
     0.05  # our API beta account pays this on every call, no free amount
@@ -285,7 +292,9 @@ def _snippet_corpus_ids(body: dict[str, Any]) -> list[str]:
     """Corpus ids of a snippet page in rank order; a hit with no paper id is skipped."""
     ids = []
     for hit in body.get("data", []):
-        corpus_id = (hit.get("paper") or {}).get("corpusId") if isinstance(hit, dict) else None
+        corpus_id = (
+            (hit.get("paper") or {}).get("corpusId") if isinstance(hit, dict) else None
+        )
         if corpus_id is not None:
             ids.append(str(corpus_id))
     return ids
@@ -722,7 +731,7 @@ def run_baseline(
     def task(*, item: Any, **_: Any) -> dict[str, Any]:
         fetched = read_cache(cache_path(arm, str(item.id), cache_dir))
         assert fetched is not None
-        score = score_arm(arm, fetched, _ground_truth_from_item(item), cap)
+        score = score_arm(arm, fetched, ground_truth_from_item(item), cap)
         outputs.append(score)
         print(_describe(item.metadata.get("review_title", str(item.id)), score))
         return score
@@ -811,8 +820,8 @@ def main() -> None:
         help="Fetch or load, score and print, but upload nothing to Langfuse.",
     )
     args = parser.parse_args()
-    git_commit = _git_commit()
-    os.environ.setdefault("LANGFUSE_RELEASE", git_commit)
+    commit = git_commit()
+    os.environ.setdefault("LANGFUSE_RELEASE", commit)
     client = tracing.get_langfuse()
     if client is None:
         parser.error(
@@ -823,7 +832,7 @@ def main() -> None:
         items = select_items(dataset.items, args.reviews)
     except ValueError as exc:
         parser.error(str(exc))
-    label = args.run_label or f"{date.today().isoformat()}-{git_commit[:7]}"
+    label = args.run_label or f"{date.today().isoformat()}-{commit[:7]}"
     ceilings = {
         "semantic-scholar": "at most 10 requests per review, free",
         SNIPPET: "2 or 3 requests per review (one search, one or two id lookups), free",
@@ -860,7 +869,7 @@ def main() -> None:
             arm=arm,
             cap=cap,
             label=label,
-            git_commit=git_commit,
+            git_commit=commit,
             cache_dir=CACHE_DIR,
             dry_run=args.dry_run,
         )

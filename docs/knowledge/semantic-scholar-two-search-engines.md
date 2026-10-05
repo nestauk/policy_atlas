@@ -48,6 +48,6 @@ as one.
 
 - [046 contract § Arms (arm 1 and 1b)](../tasks/046-search-baselines/contract.md)
 - [046 verification § Phase 5 addendum and § Review findings](../tasks/046-search-baselines/verification.md)
-- `scripts/evals/search/baseline_recall.py` `fetch_semantic_scholar`,
-  `fetch_semantic_scholar_snippet`; `test_metrics.py::test_baseline_snippet_arm`
+- `scripts/evals/search/measure/baseline_recall.py` `fetch_semantic_scholar`,
+  `fetch_semantic_scholar_snippet`; `tests/test_measure.py::test_baseline_snippet_arm`
 - `scripts/evals/search/results/history.md` rows dated 2026-09-25

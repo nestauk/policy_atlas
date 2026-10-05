@@ -6,7 +6,7 @@
 > **Amendment (build, 2026-09-25, owner-approved):** a fourth arm, `semantic-scholar-snippet`,
 > added after the live run showed arm 1 is a keyword engine (see § Arms).
 > **Amendment 3 (2026-10-05, owner-directed):** the ground-truth **sample**. The fetchers
-> moved to `scripts/evals/search/getters/`; `select_ground_truth.py` applies a simple quality
+> moved to `scripts/evals/search/ground_truth/getters/`; `ground_truth/select_sample.py` applies a simple quality
 > check and writes `sample_100` (30 Campbell, 30 3ie, 30 SR4ALL, 10 YEF) and `sample_10`
 > (3, 3, 3, 1 of those). The owner chose to **skip the labelling pass**: reference lists are
 > used whole, so their recall ceiling is about 50%. Written up as § Amendment 3 at the end.
@@ -62,7 +62,7 @@ One number each. The rubric and the plan use the same numbers.
   government reports and charity publications. A reference with no key is dropped from
   the target. So if Overton returned exactly that government report, we could not tell.
   This is not a limit of Overton or of the scoring code, which already accepts Overton
-  ids (see `ground_truth.record_key`). It is a gap in the ground-truth data: the
+  ids (see `evals_search_utils.record_key`). It is a gap in the ground-truth data: the
   `overton_id` column was never filled. Fixing it means labelling work and a change to
   the ground truth. The owner plans a larger expansion of the ground truth to more
   reviews, and this fix belongs in that work, not here. Until then every eval, this one
@@ -78,14 +78,14 @@ One number each. The rubric and the plan use the same numbers.
 
 One pull request on `task/046-search-baselines` that lands:
 
-1. **`scripts/evals/search/baseline_recall.py`** — new script. For each review in the
+1. **`scripts/evals/search/measure/baseline_recall.py`** — new script. For each review in the
    Langfuse dataset and each arm (§ Arms), sends one search and fetches every result page
    up to the service's 1,000-result ceiling, **once**, and saves the raw pages to a local
    cache (D9). From the cache it scores recall at each cap, uploads one Langfuse dataset
    run per arm and cap with the scores listed in D6, and prints a summary table. A second
    run reads the cache and makes no service calls. (P1, P3)
 2. **`scripts/evals/search/history.py`** — a cost column, summed per run (D4). (P4)
-3. **`scripts/evals/search/test_metrics.py`** — self-checks for the new pure functions
+3. **`scripts/evals/search/tests/test_measure.py`** — self-checks for the new pure functions
    (§ Acceptance checks).
 4. **`scripts/evals/search/README.md`** — a section on the baselines and the cache, in
    plain language. **`results/history.md`** — the rows from one real run of every arm at
@@ -103,10 +103,10 @@ next to recall and cost for the pipeline's existing rapid, standard and deep row
 |---|---|
 | **Ground truth** | Four published evidence reviews and, for each, the list of works it cites. Held as the Langfuse dataset `retrieval-ground-truth`. This slice reads it and does not change it. |
 | **Review** | One of the four evidence reviews in the ground truth. Each gives one intent, one cutoff date and one reference list. |
-| **Intent** | The search text. It is the review's title with the "a systematic review" tail removed, made by `ground_truth.clean_review_title`. Every arm and the pipeline receive this same text. |
+| **Intent** | The search text. It is the review's title with the "a systematic review" tail removed, made by `evals_search_utils.clean_review_title`. Every arm and the pipeline receive this same text. |
 | **Cutoff** | `published_before`: one month before the review was published. Nothing published after it counts, because the review could not have cited it. Each arm applies it with the service's own date filter (§ Arms). |
 | **Reference** | One work a review cites. Only rows labelled `content` count; methodology citations do not. |
-| **Scoring key** | The identity a found document is matched on: its DOI in lowercase, or `overton:<id>` for an Overton policy document with no DOI. Defined once in `ground_truth.record_key`. Today every key in the ground truth is a DOI (see P2). |
+| **Scoring key** | The identity a found document is matched on: its DOI in lowercase, or `overton:<id>` for an Overton policy document with no DOI. Defined once in `evals_search_utils.record_key`. Today every key in the ground truth is a DOI (see P2). |
 | **DOI** | Digital Object Identifier. The permanent id most published papers carry, e.g. `10.1016/s0140-6736(18)31612-x`. |
 | **Overton id** | Overton's own id for a policy document, the `policy_document_id` field. The only stable id for grey literature. None are in the ground truth yet (P2). |
 | **Grey literature** | Reports and publications from governments, charities and think tanks. Usually no DOI. Overton indexes them; the scholarly services mostly do not. |
@@ -119,7 +119,7 @@ next to recall and cost for the pipeline's existing rapid, standard and deep row
 | **Candidates kept** | The number of documents left after removing duplicates from the first N results. `n_candidates_kept` in Langfuse. Compare recall between runs with similar values of this, not between runs with similar numbers of HTTP requests. |
 | **Cache** | One JSON file per arm and review under `scripts/evals/search/results/cache/`, holding the raw result pages exactly as the service returned them, the request that produced them, and the time. Git ignores everything under `results/` except `history.md`, so the cache never enters the repo. |
 | **Langfuse** | The service where the eval stores its results. A **dataset** holds the ground truth. A **dataset run** is one setting (one arm at one cap, or one pipeline depth) scored over the selected reviews. A **trace** is the record of one review's run inside it, and carries that review's **scores** (numbers) and **metadata** (labels such as the arm name and the cap). |
-| **Pipeline** | Policy Atlas's own search stage: a language model writes many queries, the app fans them out to OpenAlex and Overton, and later depths screen and re-query. Measured by `production_recall.py`. |
+| **Pipeline** | Policy Atlas's own search stage: a language model writes many queries, the app fans them out to OpenAlex and Overton, and later depths screen and re-query. Measured by `measure/production_recall.py`. |
 | **API** | Application programming interface. The way a program asks a service for records over the web. |
 | **Semantic Scholar** | A free scholarly search service run by the Allen Institute for AI, with its own relevance ranking. |
 | **Consensus** | A paid scholarly search service built on top of Semantic Scholar's corpus, with its own ranking and study-type filters. |
@@ -144,7 +144,7 @@ the same day.
 | 1 | `semantic-scholar` | Semantic Scholar Academic Graph | `GET https://api.semanticscholar.org/graph/v1/paper/search?query=<intent>&fields=externalIds,title,publicationDate`, header `x-api-key`. Relevance-ranked. The spec says hyphenated terms match nothing, so hyphens in the intent are sent as spaces (the one allowed change to the text; D1). | `limit=100` (the maximum), `offset`; the response's `next` is the next offset and is absent on the last page. At most 1,000 results per query. | `publicationDateOrYear=:<cutoff>` (inclusive) | `externalIds.DOI` | Free with a key, about 1 request per second. Without a key the shared pool answers 429 at once. |
 | 1b | `semantic-scholar-snippet` | Semantic Scholar snippet search | `GET https://api.semanticscholar.org/graph/v1/snippet/search?query=<intent>&limit=1000&fields=snippet.snippetKind`, header `x-api-key`. Ranked by meaning over passages from title, abstract and body text (`retrievalVersion` `pa1-v1` on 2026-09-25). Intent verbatim, no hyphen rule. Each snippet names its paper by `corpusId` only, so a second step maps the unique papers, in order of first appearance, to DOIs with `POST /graph/v1/paper/batch?fields=externalIds,title` (500 ids per call). | No paging: one request returns up to 1,000 snippets. About 550 unique papers per 1,000 snippets, so the cap-1000 row holds fewer than 1,000 candidates; a cap of N is the first N unique papers. | `publicationDateOrYear=:<cutoff>` (inclusive) | `externalIds.DOI` from the lookup | Free with a key. Three requests per review. Body-text snippets exist only for open-access papers, so the arm leans towards them (the notes say so). |
 | 2 | `consensus` | Consensus | `GET https://api.consensus.app/v1/search?query=<intent>`, header `x-api-key`. Relevance-ranked over about 220 million papers. Every result carries `doi`, `title`, `publish_year`, `publish_date`. | `page` is **zero-indexed**; `page_size` defaults to 20 and is silently capped to the plan's maximum (Pro and Teams 300, Deep 750), so the script reads the `page_size` echoed back. `is_end` is true on the last page; `next_page` gives the next. At most 1,000 results per query. Pages after the first need a paid plan. | `year_max` + `month_max` of the cutoff (inclusive, month granularity; see D2) | `doi` | Included calls per month: Pro and Teams 500, Deep 2,000. One call per 100 papers returned, rounded up. Above the included amount, $0.05 per call, only if "additional usage" is switched on in the dashboard. Rate limit 1 request per second; a faster request gets 429 with a `retry-after` header. |
-| 3 | `openalex-raw` | OpenAlex | `GET https://api.openalex.org/works?search=<intent>&select=id,doi,display_name,publication_date` — OpenAlex's own relevance search over title, abstract and full text. Sent through `ground_truth.openalex_get`. | `per-page=200`, `page` from 1; stop when a page returns fewer than 200, or after page 5 (1,000 results, to match the other two). | `filter=to_publication_date:<cutoff>` (inclusive) | `doi` | Free. OpenAlex reports `meta.cost_usd` in every response; the script records it. |
+| 3 | `openalex-raw` | OpenAlex | `GET https://api.openalex.org/works?search=<intent>&select=id,doi,display_name,publication_date` — OpenAlex's own relevance search over title, abstract and full text. Sent through `evals_search_utils.openalex_get`. | `per-page=200`, `page` from 1; stop when a page returns fewer than 200, or after page 5 (1,000 results, to match the other two). | `filter=to_publication_date:<cutoff>` (inclusive) | `doi` | Free. OpenAlex reports `meta.cost_usd` in every response; the script records it. |
 
 A raw Overton arm was in the draft and is deferred with P2: with no Overton ids in the
 ground truth it could only score DOI hits, and the sweep's `found_by_backend` already
@@ -169,7 +169,7 @@ backend per round, so its `n_candidates_kept` is at most 100.
   day. All of those are still before the review was published, so none can be the review
   itself. The notes say Consensus is helped by this by a small, unknown amount.
 - **D3 — Same scoring, no title matching.** Results are mapped to scoring keys with
-  `ground_truth.record_key` and scored with the same recall formula as the pipeline runs.
+  `evals_search_utils.record_key` and scored with the same recall formula as the pipeline runs.
   Titles are never used to match a result to a reference. A cap of N means the first N
   results in the service's own order, then duplicates on key are removed. Because every
   key in the ground truth is a DOI today (P2), the notes say the numbers are scholarly
@@ -203,7 +203,7 @@ backend per round, so its `n_candidates_kept` is at most 100.
   baseline rows appear in the history table, and the only change to `history.py` is the
   cost column.
 - **D7 — No pipeline code changes.** Nothing under `backend/src` changes. The baselines
-  call the services with plain `httpx`, reusing `ground_truth.openalex_get` for OpenAlex.
+  call the services with plain `httpx`, reusing `evals_search_utils.openalex_get` for OpenAlex.
   A Semantic Scholar backend for the pipeline itself (the "swap") is a separate slice,
   decided on these results.
 - **D8 — No pipeline re-run.** The ground truth does not change in this slice, so the
@@ -223,11 +223,11 @@ backend per round, so its `n_candidates_kept` is at most 100.
 ## Read first
 
 - `scripts/evals/search/README.md` — how the existing eval works, end to end.
-- `scripts/evals/search/ground_truth.py` — `record_key`, `normalize_doi`, `GroundTruth`,
+- `scripts/evals/search/evals_search_utils.py` — `record_key`, `normalize_doi`, `GroundTruth`,
   `openalex_get`.
-- `scripts/evals/search/sweep_record_cap.py` — `SCORE_KEYS`, `score_summary`, and how a
+- `scripts/evals/search/measure/sweep_record_cap.py` — `SCORE_KEYS`, `score_summary`, and how a
   run is uploaded.
-- `scripts/evals/search/production_recall.py` — `_run_depth` (run naming and metadata),
+- `scripts/evals/search/measure/production_recall.py` — `_run_depth` (run naming and metadata),
   `select_items`, `_ground_truth_from_item`.
 - `scripts/evals/search/history.py` — the metadata keys it prints and how it averages.
 - Consensus: `https://docs.consensus.app/api-plans-and-access` and the endpoint reference
@@ -244,7 +244,7 @@ backend per round, so its `n_candidates_kept` is at most 100.
   `SEMANTIC_SCHOLAR_API_KEY` and `CONSENSUS_API_KEY`, read from `backend/.env`. The
   local cache directory.
 - **Out:** anything under `backend/src`. Any change to the ground truth or to
-  `ground_truth_dataset.py` (P2, deferred). A raw Overton arm. Screening, multi-round
+  `ground_truth/upload.py` (P2, deferred). A raw Overton arm. Screening, multi-round
   search, query rewriting, citation snowballing. A Semantic Scholar or Consensus backend
   for the pipeline. Precision. Re-running any pipeline depth. Uploading the cache to S3.
   Repeat fetches to test ranking stability. A per-reference CSV (the cache holds the raw
@@ -294,7 +294,7 @@ needs and "additional usage" is off; or scope would grow past this slice.
 ## Acceptance checks
 
 - `make verify` green (no backend code changes, so this confirms nothing broke).
-- `uv run --project backend python scripts/evals/search/test_metrics.py` green, with new
+- `uv run --project backend python scripts/evals/search/tests/test_measure.py` green, with new
   self-checks for: each arm's record-to-key mapping from a saved sample response; each
   arm's cutoff filter (including Consensus month rounding); each arm's paging (stops at
   1,000, stops on the service's end signal, handles a full last page with no
@@ -379,15 +379,15 @@ collections already pair a review question with the studies that answer it.
    English reviews with a DOI, a stated research question, at least `--min-refs` references
    and a `field` in `--fields` (default: the four social-science fields), takes the `--limit`
    most cited (default 100), resolves cited works to DOIs and writes the two CSVs (D10).
-10. **`scripts/evals/search/ground_truth.py`** — the shared parts: `doi_if_valid` (a real DOI
+10. **`scripts/evals/search/evals_search_utils.py`** — the shared parts: `doi_if_valid` (a real DOI
     out of a messy field, else none), `NOT_A_REVIEW_TITLE_RE`, `resolve_openalex_works` and
     its cached form, `cached_json`, `write_ground_truth`, the `REVIEW_COLUMNS` and
     `REFERENCE_COLUMNS` tuples, and `clean_review_title` extended to strip "an evidence gap
     map" / "an evidence and gap map" / "a systematic map" tails.
-11. **`test_metrics.py`** self-checks and **README** section 6 for the above.
+11. **`tests/test_ground_truth.py`** self-checks and **README** section 6 for the above.
 
 Shipped means: each script runs end to end, writes `<dataset>_reviews.csv` and
-`<dataset>_references.csv` under `results/ground_truth/`, and `ground_truth_dataset.py
+`<dataset>_references.csv` under `results/ground_truth/`, and `ground_truth/upload.py
 --dry-run` loads those files unchanged.
 
 ### Terms (added)
@@ -403,7 +403,7 @@ Shipped means: each script runs end to end, writes `<dataset>_reviews.csv` and
 ### Decisions (added)
 
 - **D10 — Same two CSVs, extra columns allowed.** Every fetcher writes the shape
-  `ground_truth_dataset.py` already reads (`title`, `doi`, `url`, `published_before`,
+  `ground_truth/upload.py` already reads (`title`, `doi`, `url`, `published_before`,
   `exclude`; `review_title`, `ref_title`, `label`, `doi`, `overton_id`). Extra columns
   (`dataset`, `review_id`, `level`, `n_references`, `n_with_doi`, `research_questions`,
   `url`, `year`, `ref_id`) are for the person choosing and labelling; the loaders ignore
@@ -436,7 +436,7 @@ Shipped means: each script runs end to end, writes `<dataset>_reviews.csv` and
   local copy of the SR4ALL corpus. Outputs under `results/ground_truth/`, git-ignored.
 - **Out:** labelling reference lists. Filling `overton_id` for the grey-literature rows (P2,
   still deferred: these CSVs are its input). Choosing which rows go into the Langfuse dataset.
-  Uploading anything. Any change to `ground_truth_dataset.py` or to the loaders.
+  Uploading anything. Any change to `ground_truth/upload.py` or to the loaders.
 
 ### Constraints (added)
 
@@ -451,7 +451,7 @@ Shipped means: each script runs end to end, writes `<dataset>_reviews.csv` and
 
 ### Acceptance checks (added)
 
-- `test_metrics.py` green with: `doi_if_valid` on "No DOI", a bare DOI, a `doi.org` link
+- `tests/test_ground_truth.py` green with: `doi_if_valid` on "No DOI", a bare DOI, a `doi.org` link
   with a trailing full stop and a `doi:` prefix; `clean_review_title` on gap-map tails and a
   title with no tail; `NOT_A_REVIEW_TITLE_RE`; `write_ground_truth` round trip through the
   real `load_reviews` / `load_references` (only labelled content rows with a key count; a
@@ -461,7 +461,7 @@ Shipped means: each script runs end to end, writes `<dataset>_reviews.csv` and
   filter clause; Campbell `select_reviews` (protocol, short list, no DOI and duplicate title
   dropped).
 - `ruff check scripts/evals/search/` clean.
-- **Live check:** each fetcher run once end to end; `ground_truth_dataset.py --dry-run` on
+- **Live check:** each fetcher run once end to end; `ground_truth/upload.py --dry-run` on
   the 3ie and YEF files loads every row; a second run of each fetcher makes no download.
 
 ### Verification evidence expected
@@ -483,13 +483,23 @@ section 7 for the reader-facing version.
 
 ### Deliverable (added)
 
-12. **`scripts/evals/search/select_ground_truth.py`** — the quality check (D15), the
+12. **`scripts/evals/search/ground_truth/select_sample.py`** — the quality check (D15), the
     spread (D16) and the two samples (D17), written as CSV pairs under
-    `results/ground_truth/`. Self-check in `test_metrics.py`; README section 7.
-13. **Fetchers moved** to `scripts/evals/search/getters/`; each adds its parent folder to
-    `sys.path` so the shared helpers still import when run directly.
+    `results/ground_truth/`. Self-check in `tests/test_ground_truth.py`; README section 7.
+13. **The folder split by purpose** (owner-approved, 2026-10-05): `evals_search_utils.py`
+    (shared keys, titles, dates, OpenAlex getter, dataset name, item selector, git commit,
+    dollar formatter), `ground_truth/` (`getters/`, `fetch_helpers.py`, `select_sample.py`,
+    `upload.py`), `measure/` (`engine.py`, the three runners, `inspect_run.py`), `history.py`,
+    and `tests/` (`test_ground_truth.py`, `test_measure.py`). Every script below the root
+    imports `_bootstrap`, an identical short file per folder that puts the siblings on the
+    import path, so each runs directly as before. The private cross-script imports
+    (`_git_commit`, `_ground_truth_from_item`, `select_items`, `usd`) became public names in
+    the shared module. New Makefile target `eval-check` (both test files, ruff check and
+    format on the folder) runs inside `make verify` and `make verify-fast`, so the eval's
+    self-checks are no longer run by hand only. Behaviour unchanged: the cache re-score,
+    the sample files and every script's command line were checked before and after.
 14. Two Langfuse datasets, `retrieval-ground-truth-10` and `retrieval-ground-truth-100`,
-    uploaded with `ground_truth_dataset.py` from the sample files. The four hand-made
+    uploaded with `ground_truth/upload.py` from the sample files. The four hand-made
     reviews stay in `retrieval-ground-truth`.
 
 ### Decisions (added)
@@ -525,11 +535,11 @@ section 7 for the reader-facing version.
 
 ### Acceptance checks (added)
 
-- `test_metrics.py` green with `test_select_ground_truth`: each rule of D15 rejects for its
+- `tests/test_ground_truth.py` green with `test_select_ground_truth`: each rule of D15 rejects for its
   own reason and the YEF floor passes at 51%; rule 5 rejects protocols, editorials and guides but
   not a scoping review about guidance; the rotation picks one row per group before a
   second from any; gap-map rows rotate across maps; an end-to-end run on tiny files loads
   through the real `load_reviews` and `load_references` with every reference counted, and
   a hand-chosen title outside the hundred is refused.
-- `ground_truth_dataset.py --dry-run` loads both samples with no unusable row.
+- `ground_truth/upload.py --dry-run` loads both samples with no unusable row.
 - A second run of the selection writes identical files.

@@ -32,12 +32,23 @@ One Langfuse dataset item per review:
 Usage:
 
     uv run --project backend --env-file backend/.env \\
-        python scripts/evals/search/ground_truth_dataset.py [--dry-run]
+        python scripts/evals/search/ground_truth/upload.py [--dry-run]
 
 ``--dry-run`` prints what would be uploaded and needs no Langfuse keys.
 """
 
 from __future__ import annotations
+
+import _bootstrap  # noqa: F401
+from evals_search_utils import (
+    clean_review_title,
+    DEFAULT_DATASET,
+    fetch_openalex_work,
+    iso_date,
+    months_earlier,
+    normalize_doi,
+    overton_key,
+)
 
 import argparse
 import csv
@@ -46,19 +57,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from ground_truth import (
-    clean_review_title,
-    fetch_openalex_work,
-    iso_date,
-    months_earlier,
-    normalize_doi,
-    overton_key,
-)
 
 from policy_atlas.core import tracing
 
-INPUT_DIR = Path(__file__).parent / "input"
-DEFAULT_DATASET = "retrieval-ground-truth"
+INPUT_DIR = Path(__file__).resolve().parents[1] / "input"
 
 
 @dataclass
@@ -138,7 +140,9 @@ def load_reviews(path: Path) -> list[ReviewSpec]:
         )
 
     if problems:
-        raise ValueError(f"{path} has {len(problems)} unusable row(s):\n  " + "\n  ".join(problems))
+        raise ValueError(
+            f"{path} has {len(problems)} unusable row(s):\n  " + "\n  ".join(problems)
+        )
     if not reviews:
         raise ValueError(f"{path} has no usable rows (every row excluded?).")
     return reviews
@@ -156,7 +160,9 @@ def load_references(path: Path) -> dict[str, dict[str, Any]]:
     for row in _read_csv(path):
         if row.get("label") != "content":
             continue
-        target = targets.setdefault(row["review_title"], {"titles": {}, "n_unscorable": 0})
+        target = targets.setdefault(
+            row["review_title"], {"titles": {}, "n_unscorable": 0}
+        )
         key = normalize_doi(row.get("doi")) or overton_key(row.get("overton_id"))
         if key:
             target["titles"][key] = row.get("ref_title") or key
@@ -184,7 +190,9 @@ def build_items(
     for spec in reviews:
         target = references.get(spec.title)
         if not target or not target["titles"]:
-            print(f"  SKIPPED {spec.title!r}: no scorable 'content' references in references.csv")
+            print(
+                f"  SKIPPED {spec.title!r}: no scorable 'content' references in references.csv"
+            )
             continue
         published_before = spec.published_before
         if not published_before:
@@ -204,7 +212,10 @@ def build_items(
         items.append(
             {
                 "id": _item_id(dataset, spec.identifier),
-                "input": {"intent": clean_review_title(spec.title), "published_before": published_before},
+                "input": {
+                    "intent": clean_review_title(spec.title),
+                    "published_before": published_before,
+                },
                 "expected_output": {"keys": sorted(titles), "titles": titles},
                 "metadata": {
                     "review_id": spec.identifier,
@@ -223,18 +234,28 @@ def upload(client: Any, dataset: str, items: list[dict[str, Any]]) -> None:
     try:
         client.create_dataset(name=dataset)
     except Exception as exc:  # the SDK does a bare POST with no existence check
-        print(f"  create_dataset: {type(exc).__name__}: {exc} (continuing — it probably exists)")
+        print(
+            f"  create_dataset: {type(exc).__name__}: {exc} (continuing — it probably exists)"
+        )
     for item in items:
         client.create_dataset_item(dataset_name=dataset, **item)
     client.flush()
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--dataset", default=DEFAULT_DATASET, help=f"Langfuse dataset name (default {DEFAULT_DATASET}).")
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    parser.add_argument(
+        "--dataset",
+        default=DEFAULT_DATASET,
+        help=f"Langfuse dataset name (default {DEFAULT_DATASET}).",
+    )
     parser.add_argument("--reviews", type=Path, default=INPUT_DIR / "gt_reviews.csv")
     parser.add_argument("--references", type=Path, default=INPUT_DIR / "references.csv")
-    parser.add_argument("--dry-run", action="store_true", help="Print the items; upload nothing.")
+    parser.add_argument(
+        "--dry-run", action="store_true", help="Print the items; upload nothing."
+    )
     args = parser.parse_args()
 
     try:
@@ -244,7 +265,9 @@ def main() -> None:
     references = load_references(args.references)
     orphans = set(references) - {r.title for r in reviews}
     if orphans:
-        print(f"  WARNING: references.csv has {len(orphans)} review_title(s) not in gt_reviews.csv: {sorted(orphans)}")
+        print(
+            f"  WARNING: references.csv has {len(orphans)} review_title(s) not in gt_reviews.csv: {sorted(orphans)}"
+        )
 
     items = build_items(reviews, references, args.dataset)
     for item in items:
@@ -261,7 +284,9 @@ def main() -> None:
 
     client = tracing.get_langfuse()
     if client is None:
-        parser.error("Langfuse is not configured (LANGFUSE_PUBLIC_KEY / SECRET_KEY / HOST). Use --dry-run to check the CSVs.")
+        parser.error(
+            "Langfuse is not configured (LANGFUSE_PUBLIC_KEY / SECRET_KEY / HOST). Use --dry-run to check the CSVs."
+        )
     upload(client, args.dataset, items)
     print(f"Upserted {len(items)} item(s) into dataset {args.dataset!r}.")
 

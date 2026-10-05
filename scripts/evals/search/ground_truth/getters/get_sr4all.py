@@ -28,21 +28,18 @@ research questions are carried in the ``research_questions`` column, joined by
 
 from __future__ import annotations
 
+import _bootstrap  # noqa: F401
+
 import argparse
 import json
 from pathlib import Path
 from typing import Any
 
-import sys
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # shared helpers live one folder up
-
-from ground_truth import (
+from evals_search_utils import months_earlier, normalize_doi
+from fetch_helpers import (
     NOT_A_REVIEW_TITLE_RE,
     RAW_DIR,
     cached_json,
-    months_earlier,
-    normalize_doi,
     resolve_openalex_works_cached,
     write_ground_truth,
 )
@@ -56,8 +53,18 @@ DEFAULT_FIELDS = (
     "Business, Management and Accounting",
 )
 KEEP_KEYS = (
-    "id", "doi", "title", "year", "field", "subfield", "cited_by_count",
-    "referenced_works", "referenced_works_count", "research_questions", "objective", "n_studies_final",
+    "id",
+    "doi",
+    "title",
+    "year",
+    "field",
+    "subfield",
+    "cited_by_count",
+    "referenced_works",
+    "referenced_works_count",
+    "research_questions",
+    "objective",
+    "n_studies_final",
 )
 
 
@@ -72,7 +79,9 @@ def wanted(record: dict[str, Any], fields: set[str], min_refs: int) -> bool:
     )
 
 
-def select_reviews(corpus: Path, fields: set[str], min_refs: int, limit: int) -> list[dict[str, Any]]:
+def select_reviews(
+    corpus: Path, fields: set[str], min_refs: int, limit: int
+) -> list[dict[str, Any]]:
     """Stream the corpus and keep the ``limit`` most-cited records that pass ``wanted``."""
     kept: list[dict[str, Any]] = []
     with corpus.open(encoding="utf-8") as handle:
@@ -81,7 +90,9 @@ def select_reviews(corpus: Path, fields: set[str], min_refs: int, limit: int) ->
             if wanted(record, fields, min_refs):
                 kept.append({k: record.get(k) for k in KEEP_KEYS})
     kept.sort(key=lambda r: (-(r.get("cited_by_count") or 0), r["id"]))
-    print(f"{len(kept)} reviews pass the filter; keeping the {min(limit, len(kept))} most cited")
+    print(
+        f"{len(kept)} reviews pass the filter; keeping the {min(limit, len(kept))} most cited"
+    )
     return kept[:limit]
 
 
@@ -97,7 +108,10 @@ def build_rows(
             continue
         seen.add(title.lower())
         wid = review["id"].rsplit("/", 1)[-1]
-        refs = [resolved.get(r.rsplit("/", 1)[-1]) for r in review.get("referenced_works") or []]
+        refs = [
+            resolved.get(r.rsplit("/", 1)[-1])
+            for r in review.get("referenced_works") or []
+        ]
         refs = [r for r in refs if r]
         for ref in refs:
             reference_rows.append(
@@ -125,27 +139,55 @@ def build_rows(
                 "level": "review",
                 "n_references": len(refs),
                 "n_with_doi": sum(1 for r in refs if r.get("doi")),
-                "research_questions": " | ".join(q.strip() for q in review.get("research_questions") or []),
+                "research_questions": " | ".join(
+                    q.strip() for q in review.get("research_questions") or []
+                ),
             }
         )
     return review_rows, reference_rows
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--limit", type=int, default=100, help="How many reviews to keep (default 100).")
-    parser.add_argument("--min-refs", type=int, default=30, help="Minimum reference-list length (default 30).")
-    parser.add_argument("--fields", nargs="+", default=list(DEFAULT_FIELDS), help="OpenAlex 'field' names to keep.")
-    parser.add_argument("--refresh", action="store_true", help="Re-read the corpus and re-query OpenAlex.")
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    parser.add_argument(
+        "--limit", type=int, default=100, help="How many reviews to keep (default 100)."
+    )
+    parser.add_argument(
+        "--min-refs",
+        type=int,
+        default=30,
+        help="Minimum reference-list length (default 30).",
+    )
+    parser.add_argument(
+        "--fields",
+        nargs="+",
+        default=list(DEFAULT_FIELDS),
+        help="OpenAlex 'field' names to keep.",
+    )
+    parser.add_argument(
+        "--refresh",
+        action="store_true",
+        help="Re-read the corpus and re-query OpenAlex.",
+    )
     args = parser.parse_args()
     if not CORPUS.exists():
-        parser.error(f"{CORPUS} is missing: download sr4all_full.jsonl from Zenodo (10.5281/zenodo.18431942) into that folder.")
+        parser.error(
+            f"{CORPUS} is missing: download sr4all_full.jsonl from Zenodo (10.5281/zenodo.18431942) into that folder."
+        )
 
     reviews = cached_json(
-        SELECTED, lambda: select_reviews(CORPUS, set(args.fields), args.min_refs, args.limit), args.refresh
+        SELECTED,
+        lambda: select_reviews(CORPUS, set(args.fields), args.min_refs, args.limit),
+        args.refresh,
     )
-    ids = [r["id"] for r in reviews] + [w for r in reviews for w in r.get("referenced_works") or []]
-    resolved = resolve_openalex_works_cached(RAW_DIR / "sr4all" / "works.json", ids, args.refresh)
+    ids = [r["id"] for r in reviews] + [
+        w for r in reviews for w in r.get("referenced_works") or []
+    ]
+    resolved = resolve_openalex_works_cached(
+        RAW_DIR / "sr4all" / "works.json", ids, args.refresh
+    )
     write_ground_truth("sr4all", *build_rows(reviews, resolved))
 
 

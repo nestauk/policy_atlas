@@ -2468,7 +2468,7 @@ deliberately left, each with its reason:
 
 ## Search recall baselines (task 046 seams)
 
-Context: `scripts/evals/search/baseline_recall.py` and `results/history.md` (rows dated
+Context: `scripts/evals/search/measure/baseline_recall.py` and `results/history.md` (rows dated
 2026-09-25). Contract at `docs/tasks/046-search-baselines/contract.md`.
 
 - **P2 — grey-literature scoring keys, with the raw Overton arm.** The ground truth has 34

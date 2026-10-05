@@ -28,7 +28,7 @@ timestamp: 2026-09-25
   asserted ids/compilation instead of answering the pause (see
   [tested-in-isolation-is-not-wired](tested-in-isolation-is-not-wired.md)).
   Weight review budget toward delegated tests, not delegated product code.
-  Confirmed a fourth time in 046: Codex's `baseline_recall.py` survived four review
+  Confirmed a fourth time in 046: Codex's `measure/baseline_recall.py` survived four review
   lanes with only edge-case findings, while its tests missed three of the
   contract's listed self-checks.
 - **A background `make verify-fast` shares the test database** with anything
@@ -38,7 +38,7 @@ timestamp: 2026-09-25
 - **Committing one phase's slice of a shared file** while a sibling phase has
   already edited it: snapshot the file at gate time and stage the snapshot blob
   with `git update-index --cacheinfo`, so the commit carries what the gate saw
-  and the sibling's edits stay in the working tree (046 build, `test_metrics.py`).
+  and the sibling's edits stay in the working tree (046 build, `tests/test_measure.py`).
 - **Two families editing one working tree concurrently** is safe when the
   briefs carry disjoint file lists AND each names the sibling's files;
   string-anchored edits on one SHARED file from two agents also merged

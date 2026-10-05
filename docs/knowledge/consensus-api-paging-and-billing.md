@@ -24,7 +24,7 @@ timestamp: 2026-09-25
   request. Our **API beta account pays $0.05 on every call with no included monthly
   amount** (owner, 2026-09-25); the public docs' "included calls, then overage" model does
   not apply to it. A full fetch of one review to 1,000 results is 10 calls, $0.50. Never
-  re-fetch (`--refresh` in `baseline_recall.py`) without the owner.
+  re-fetch (`--refresh` in `measure/baseline_recall.py`) without the owner.
 - **Date filter is month-grained** (`year_max`, `month_max`), so a cutoff of the 17th lets
   up to 30 more days through. Say so wherever the numbers are compared with a day-grained
   filter.
@@ -51,5 +51,5 @@ same 10 calls.
 - [046 contract § Arms](../tasks/046-search-baselines/contract.md) (facts pinned from the
   Consensus docs, 2026-09-25)
 - [046 verification § Consensus preflight and flagged deviation 1](../tasks/046-search-baselines/verification.md)
-- `scripts/evals/search/baseline_recall.py` `fetch_consensus`, `cost_usd`;
-  `test_metrics.py::test_baseline_paging_consensus`
+- `scripts/evals/search/measure/baseline_recall.py` `fetch_consensus`, `cost_usd`;
+  `tests/test_measure.py::test_baseline_paging_consensus`

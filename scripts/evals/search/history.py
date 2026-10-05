@@ -31,8 +31,7 @@ import statistics
 from collections import defaultdict
 from typing import Any
 
-from ground_truth import iso_date
-from ground_truth_dataset import DEFAULT_DATASET
+from evals_search_utils import DEFAULT_DATASET, iso_date, usd
 from langfuse.api.core import ApiError
 
 from policy_atlas.core import tracing
@@ -112,15 +111,6 @@ def fetch_runs(
 
 def _pct(value: float | None) -> str:
     return "-" if value is None else f"{value:.1%}"
-
-
-def usd(value: float) -> str:
-    """Dollars to two decimals, or four when the amount would otherwise show as $0.00.
-
-    OpenAlex bills fractions of a cent per page, so $0.0004 must not print as $0.00.
-    Shared with ``baseline_recall.py`` so both tables format money the same way.
-    """
-    return f"${value:.2f}" if value == 0 or value >= 0.01 else f"${value:.4f}"
 
 
 def _cost(r: dict[str, Any]) -> str:

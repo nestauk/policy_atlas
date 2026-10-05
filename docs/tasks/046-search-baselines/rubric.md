@@ -6,7 +6,7 @@ P2 and D5 are deferred and have no item here. Item 12 covers § Amendment 2 (pos
 
 1. [ ] Implementation satisfies [contract.md](contract.md): all five deliverables land;
        D1–D4 and D6–D9 hold as written.
-2. [ ] `make verify` passes. `test_metrics.py` passes with every new self-check listed in
+2. [ ] `make verify` passes. `tests/test_measure.py` passes with every new self-check listed in
        the contract's § Acceptance checks.
 3. [ ] **P1.** All four arms (the fourth added by owner amendment, 2026-09-25) were fetched once to 1,000 results over all four reviews and
        scored at caps 50, 100, 200 and 1,000 from the cache (D9). Each run is in Langfuse
@@ -25,7 +25,7 @@ P2 and D5 are deferred and have no item here. Item 12 covers § Amendment 2 (pos
        rows are compared with (D8), and state that the raw-versus-pipeline comparison is a
        sign, not a controlled test.
 6. [ ] Nothing under `backend/src` changed (D7). The ground truth and
-       `ground_truth_dataset.py` are unchanged (P2 deferred). No dependency added. No key
+       `ground_truth/upload.py` are unchanged (P2 deferred). No dependency added. No key
        and no cache file committed; the cache holds no key.
 7. [ ] No generated files or secrets edited by hand.
 8. [ ] No tests deleted, skipped or weakened without written justification.
@@ -38,12 +38,12 @@ P2 and D5 are deferred and have no item here. Item 12 covers § Amendment 2 (pos
         asked for ran at design time; their findings and outcomes are in the contract's
         status line and in [verification.md](verification.md).
 12. [ ] **P5 (Amendment 2).** The four fetchers run end to end and write
-        `<dataset>_reviews.csv` and `<dataset>_references.csv` that `ground_truth_dataset.py
+        `<dataset>_reviews.csv` and `<dataset>_references.csv` that `ground_truth/upload.py
         --dry-run` loads unchanged (D10). Gap-map rows are `content`, reference-list rows
         unlabelled (D11). A second run makes no download (D14). Self-checks listed in the
         contract's added § Acceptance checks pass. Nothing under `results/` is committed.
-13. [ ] **P6 (Amendment 3).** `select_ground_truth.py` writes `sample_100` (30/30/30/10) and
+13. [ ] **P6 (Amendment 3).** `ground_truth/select_sample.py` writes `sample_100` (30/30/30/10) and
         `sample_10` (ten hand-chosen rows, a subset) from the fetched collections under D15–D17; both load
-        through `ground_truth_dataset.py --dry-run` with no unusable row and are uploaded as
+        through `ground_truth/upload.py --dry-run` with no unusable row and are uploaded as
         `retrieval-ground-truth-10` and `-100`. README section 7 states the quality check and
         the 50% ceiling on unlabelled lists (D11 revised). Self-check listed in the contract.

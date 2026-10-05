@@ -4,7 +4,7 @@ Campbell Systematic Reviews is a journal of social-policy reviews (crime,
 education, social welfare, international development). This script lists every
 work in that journal through OpenAlex, keeps the ones that look like finished
 reviews with a long enough reference list, resolves each cited work to its DOI,
-and writes the two CSVs that ``ground_truth_dataset.py`` reads:
+and writes the two CSVs that ``ground_truth/upload.py`` reads:
 
 * ``results/ground_truth/campbell_reviews.csv`` — one row per review. The
   ``title`` becomes the search intent; ``doi`` identifies the review;
@@ -14,7 +14,7 @@ and writes the two CSVs that ``ground_truth_dataset.py`` reads:
   The ``label`` column is left EMPTY: a reference list mixes the studies the
   review is about with background and methods citations, and only a labelling
   pass (see the ``policy_atlas_gt_labelling`` repo) can tell them apart. Until
-  then ``ground_truth_dataset.py`` counts none of these rows.
+  then ``ground_truth/upload.py`` counts none of these rows.
 
 Raw OpenAlex responses are kept under ``results/ground_truth/raw/campbell/`` and
 reused on the next run, so re-running after a code change makes no API calls.
@@ -27,21 +27,16 @@ Usage:
 
 from __future__ import annotations
 
+import _bootstrap  # noqa: F401
+
 import argparse
 from typing import Any
 
-import sys
-from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # shared helpers live one folder up
-
-from ground_truth import (
+from evals_search_utils import months_earlier, normalize_doi, openalex_get
+from fetch_helpers import (
     NOT_A_REVIEW_TITLE_RE,
     RAW_DIR,
     cached_json,
-    months_earlier,
-    normalize_doi,
-    openalex_get,
     resolve_openalex_works_cached,
     write_ground_truth,
 )
@@ -102,7 +97,10 @@ def build_rows(
     reference_rows: list[dict[str, Any]] = []
     for work in reviews:
         title = work["title"].strip()
-        refs = [resolved.get(wid.rsplit("/", 1)[-1]) for wid in work.get("referenced_works", [])]
+        refs = [
+            resolved.get(wid.rsplit("/", 1)[-1])
+            for wid in work.get("referenced_works", [])
+        ]
         refs = [r for r in refs if r]
         for ref in refs:
             reference_rows.append(
@@ -136,16 +134,31 @@ def build_rows(
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--min-refs", type=int, default=30, help="Keep reviews with at least this many references (default 30).")
-    parser.add_argument("--refresh", action="store_true", help="Ignore the raw cache and call OpenAlex again.")
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    parser.add_argument(
+        "--min-refs",
+        type=int,
+        default=30,
+        help="Keep reviews with at least this many references (default 30).",
+    )
+    parser.add_argument(
+        "--refresh",
+        action="store_true",
+        help="Ignore the raw cache and call OpenAlex again.",
+    )
     args = parser.parse_args()
 
     works = cached_json(RAW / "works.json", list_campbell_works, args.refresh)
     reviews = select_reviews(works, args.min_refs)
-    print(f"{len(works)} Campbell works in OpenAlex, {len(reviews)} kept as reviews with >= {args.min_refs} references")
+    print(
+        f"{len(works)} Campbell works in OpenAlex, {len(reviews)} kept as reviews with >= {args.min_refs} references"
+    )
     ref_ids = [wid for w in reviews for wid in w.get("referenced_works", [])]
-    resolved = resolve_openalex_works_cached(RAW / "referenced_works.json", ref_ids, args.refresh)
+    resolved = resolve_openalex_works_cached(
+        RAW / "referenced_works.json", ref_ids, args.refresh
+    )
     write_ground_truth("campbell", *build_rows(reviews, resolved))
 
 

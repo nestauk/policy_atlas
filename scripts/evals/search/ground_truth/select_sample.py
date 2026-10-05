@@ -3,7 +3,7 @@
 The ``getters/`` scripts write one pair of CSV files per public collection under
 ``results/ground_truth/`` (Campbell, 3ie, YEF, SR4ALL): hundreds of candidate reviews.
 This script applies a simple quality check to every candidate, spreads the picks across
-topics, and writes two samples in the shape ``ground_truth_dataset.py`` reads:
+topics, and writes two samples in the shape ``ground_truth/upload.py`` reads:
 
 - ``sample_100``: 30 Campbell reviews, 30 3ie gap-map rows, 30 SR4ALL reviews and 10 YEF
   strands. The full eval set.
@@ -42,11 +42,11 @@ which rows are labelled (``target_labelled``: ``yes`` for gap maps, ``no`` for l
 
 Usage::
 
-    uv run --project backend python scripts/evals/search/select_ground_truth.py [--verbose]
+    uv run --project backend python scripts/evals/search/ground_truth/select_sample.py [--verbose]
 
 then upload each sample as its own Langfuse dataset::
 
-    uv run --project backend --env-file backend/.env python scripts/evals/search/ground_truth_dataset.py \\
+    uv run --project backend --env-file backend/.env python scripts/evals/search/ground_truth/upload.py \\
         --reviews scripts/evals/search/results/ground_truth/sample_10_reviews.csv \\
         --references scripts/evals/search/results/ground_truth/sample_10_references.csv \\
         --dataset retrieval-ground-truth-10 --dry-run
@@ -56,6 +56,8 @@ Dev-only eval tooling. No network. Not part of the runtime package.
 
 from __future__ import annotations
 
+import _bootstrap  # noqa: F401
+
 import argparse
 import csv
 import re
@@ -64,7 +66,7 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 
-from ground_truth import GROUND_TRUTH_DIR, REFERENCE_COLUMNS, REVIEW_COLUMNS
+from fetch_helpers import GROUND_TRUTH_DIR, REFERENCE_COLUMNS, REVIEW_COLUMNS
 
 QUOTAS = {"campbell": 30, "3ie": 30, "sr4all": 30, "yef": 10}
 # The cheap sample, chosen by hand from the hundred (owner, 2026-10-05): two health rows,
@@ -87,7 +89,9 @@ MIN_DOI_SHARE = {"yef": 0.5}
 DEFAULT_MIN_DOI_SHARE = 0.7
 MIN_CUTOFF = "2010-01-01"
 # A protocol announces a review; an editorial or guide is not one. None has included studies.
-NOT_A_REVIEW_RE = re.compile(r"\bprotocol\b|^\s*editorial\b|\ba guide to\b", re.IGNORECASE)
+NOT_A_REVIEW_RE = re.compile(
+    r"\bprotocol\b|^\s*editorial\b|\ba guide to\b", re.IGNORECASE
+)
 # Coarse keyword topics, first match wins. Only used to spread the picks, never to score.
 TOPICS = {
     "education": r"school|educat|learning|literacy|teacher|student|pupil|preschool",
@@ -113,14 +117,18 @@ def topic(title: str) -> str:
 
 def load_source(name: str, directory: Path = GROUND_TRUTH_DIR) -> list[dict[str, Any]]:
     """Reviews of one collection with their reference counts recomputed from the references file."""
-    with (directory / f"{name}_references.csv").open(newline="", encoding="utf-8") as handle:
+    with (directory / f"{name}_references.csv").open(
+        newline="", encoding="utf-8"
+    ) as handle:
         references = list(csv.DictReader(handle))
     n_refs: Counter[str] = Counter()
     n_doi: Counter[str] = Counter()
     for row in references:
         n_refs[row["review_title"]] += 1
         n_doi[row["review_title"]] += bool(row.get("doi"))
-    with (directory / f"{name}_reviews.csv").open(newline="", encoding="utf-8") as handle:
+    with (directory / f"{name}_reviews.csv").open(
+        newline="", encoding="utf-8"
+    ) as handle:
         reviews = list(csv.DictReader(handle))
     titles = Counter(r["title"] for r in reviews)
     for review in reviews:
@@ -214,10 +222,16 @@ def mini_sample(
         ValueError: When a title is not in the full sample, so the small set can never
             drift away from the big one.
     """
-    by_title = {review["title"]: (source, review) for source, rows in picks.items() for review in rows}
+    by_title = {
+        review["title"]: (source, review)
+        for source, rows in picks.items()
+        for review in rows
+    }
     missing = [t for t in titles if t not in by_title]
     if missing:
-        raise ValueError(f"{len(missing)} title(s) not in the full sample: {missing[:2]}")
+        raise ValueError(
+            f"{len(missing)} title(s) not in the full sample: {missing[:2]}"
+        )
     small: dict[str, list[dict[str, Any]]] = {source: [] for source in picks}
     for title in titles:
         source, review = by_title[title]
@@ -237,7 +251,9 @@ def write_sample(
     reviews_path = out_dir / f"{name}_reviews.csv"
     references_path = out_dir / f"{name}_references.csv"
     with reviews_path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=SAMPLE_REVIEW_COLUMNS, extrasaction="ignore")
+        writer = csv.DictWriter(
+            handle, fieldnames=SAMPLE_REVIEW_COLUMNS, extrasaction="ignore"
+        )
         writer.writeheader()
         for source, rows in picks.items():
             for review in rows:
@@ -249,11 +265,15 @@ def write_sample(
                     }
                 )
     with references_path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=REFERENCE_COLUMNS, extrasaction="ignore")
+        writer = csv.DictWriter(
+            handle, fieldnames=REFERENCE_COLUMNS, extrasaction="ignore"
+        )
         writer.writeheader()
         for source, rows in picks.items():
             wanted = {review["title"] for review in rows}
-            with (directory / f"{source}_references.csv").open(newline="", encoding="utf-8") as src:
+            with (directory / f"{source}_references.csv").open(
+                newline="", encoding="utf-8"
+            ) as src:
                 for row in csv.DictReader(src):
                     if row["review_title"] in wanted:
                         writer.writerow({**row, "label": "content"})
@@ -265,15 +285,25 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
-    parser.add_argument("--dir", type=Path, default=GROUND_TRUTH_DIR, help="Where the fetched CSVs are.")
-    parser.add_argument("--today", default=None, help="Override today's date (YYYY-MM-DD) for the cutoff rule.")
-    parser.add_argument("--verbose", action="store_true", help="Print the rejection reasons per source.")
+    parser.add_argument(
+        "--dir", type=Path, default=GROUND_TRUTH_DIR, help="Where the fetched CSVs are."
+    )
+    parser.add_argument(
+        "--today",
+        default=None,
+        help="Override today's date (YYYY-MM-DD) for the cutoff rule.",
+    )
+    parser.add_argument(
+        "--verbose", action="store_true", help="Print the rejection reasons per source."
+    )
     args = parser.parse_args()
     picks, reasons = select(args.dir, args.today)
     small = mini_sample(picks)
     write_sample("sample_100", picks, args.dir)
     write_sample("sample_10", small, args.dir)
-    print(f"{'source':<10}{'candidates':>12}{'passing':>9}{'picked':>8}{'in 10':>7}  groups covered")
+    print(
+        f"{'source':<10}{'candidates':>12}{'passing':>9}{'picked':>8}{'in 10':>7}  groups covered"
+    )
     for name, rows in picks.items():
         n_candidates = sum(reasons[name].values())
         passing = reasons[name]["passing"]
@@ -283,14 +313,18 @@ def main() -> None:
             f"{len(groups)} ({', '.join(f'{k} {v}' for k, v in sorted(groups.items()))})"
         )
         if len(rows) < QUOTAS[name]:
-            print(f"  WARNING: {name} fills {len(rows)} of {QUOTAS[name]}; relax a rule or widen the fetch")
+            print(
+                f"  WARNING: {name} fills {len(rows)} of {QUOTAS[name]}; relax a rule or widen the fetch"
+            )
         if args.verbose:
             for why, count in reasons[name].most_common():
                 if why != "passing":
                     print(f"  rejected {count:>4}: {why}")
     total = sum(len(r) for r in picks.values())
     refs = sum(r["_n_refs"] for rows in picks.values() for r in rows)
-    print(f"sample_100: {total} reviews, {refs} references; sample_10: {sum(len(r) for r in small.values())} reviews")
+    print(
+        f"sample_100: {total} reviews, {refs} references; sample_10: {sum(len(r) for r in small.values())} reviews"
+    )
 
 
 if __name__ == "__main__":

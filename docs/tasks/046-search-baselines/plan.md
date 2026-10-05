@@ -19,13 +19,13 @@ its reason.
 **Verify gates.** Full `make verify` at Phase 0 (build-open baseline) and Phase 4
 (step-6 exit). Phases 1–2 touch only `scripts/evals/search/` and `.env.example`, no
 backend code, no schema. Each gates on `make verify-fast` plus the eval self-test
-(`uv run --project backend python scripts/evals/search/test_metrics.py`). Two phases
+(`uv run --project backend python scripts/evals/search/tests/test_measure.py`). Two phases
 share one class of risk, so they share one full-verify gate at the exit.
 
 ## Decisions fixed here (lead seam design)
 
 S1. **One module, one fetch function per arm, paging pinned per service.**
-`baseline_recall.py` holds three functions with one signature:
+`measure/baseline_recall.py` holds three functions with one signature:
 `fetch_<arm>(intent, cutoff, *, get) -> Fetched`. `get` is the HTTP function (default
 `httpx.get` wrapped with the arm's minimum interval and the retry rule) so tests pass a
 stub. `Fetched` is a dataclass: `pages` (raw response bodies in order), `request` (the
@@ -38,7 +38,7 @@ results or the service's end signal. Paging, per arm:
 - Consensus: header `x-api-key`; `page` from **0**; `page_size=1000` on the first
   request, then the echoed `page_size` for every later one; stop when `is_end` is true,
   when `results` is empty, or when `(page + 1) × page_size` would exceed 1,000.
-- OpenAlex: `per-page=200`, `page` from 1 through `ground_truth.openalex_get`; stop when
+- OpenAlex: `per-page=200`, `page` from 1 through `evals_search_utils.openalex_get`; stop when
   a page has fewer than 200 results or after page 5.
 Retry rule for every arm: on 429 wait the `retry-after` header if present, else 1, 2, 4 s;
 on 5xx the same waits; after the fourth failure count the request in `n_failed_calls`,
@@ -100,13 +100,13 @@ and S1–S5, S7. Codex may probe OpenAlex and Semantic Scholar's bulk endpoint k
 shape; Consensus needs the key and is probed by the lead in Phase 3.
 
 Done when:
-1. `baseline_recall.py` exists with the three `fetch_*` functions, the three cutoff
+1. `measure/baseline_recall.py` exists with the three `fetch_*` functions, the three cutoff
    converters, the price table, the S7 cache and slicing functions, `score_arm(records,
    ground_truth) -> dict`, `score_baseline`, the Langfuse upload and the printed summary.
    Command line: `--arms`, `--caps`, `--reviews`, `--run-label`, `--refresh` (ignore the
    cache), `--dry-run` (fetch or load, score, upload nothing). Module docstring in plain
    language; Google-style docstrings on public functions.
-2. `test_metrics.py` gains self-checks with saved sample responses (small JSON literals,
+2. `tests/test_measure.py` gains self-checks with saved sample responses (small JSON literals,
    one per arm, the Consensus one shaped like the owner's example response) and a stub
    `get`: record-to-key mapping per arm; each cutoff converter; the hyphen rule; per arm,
    paging stops at 1,000, stops on the end signal, handles a full last page with no
@@ -120,7 +120,7 @@ Done when:
    `api_cost_usd`.
 3. `.env.example` lists `SEMANTIC_SCHOLAR_API_KEY=` and `CONSENSUS_API_KEY=` with a
    one-line comment each.
-4. `make verify-fast` and `test_metrics.py` green. Commit.
+4. `make verify-fast` and `tests/test_measure.py` green. Commit.
 
 ## Phase 2 — History cost column: S6, P4 — `fast-worker`
 
@@ -138,10 +138,10 @@ matters: nothing live runs before step 2 passes.
 2. **Preflight.** The fetch needs at most 10 calls per review (1,000 papers ÷ 100), 40
    calls for four reviews, in 16 requests at page size 300 or 8 at 750. If fewer than 40
    included calls remain and additional usage is off, stop (contract § Stop conditions).
-   Otherwise one probe: `baseline_recall.py --arms consensus --reviews <one review>
+   Otherwise one probe: `measure/baseline_recall.py --arms consensus --reviews <one review>
    --dry-run`, which fetches and caches that review; check the echoed `page_size`, the
    `doi` field, and the timing. Record all three.
-3. `baseline_recall.py` over all arms and reviews, all caps. Expected: Semantic Scholar
+3. `measure/baseline_recall.py` over all arms and reviews, all caps. Expected: Semantic Scholar
    40 requests in about 1 minute; OpenAlex 20 requests in under 1 minute; Consensus 12 to
    15 further requests in about 1 minute. Then run it once more with no flags and confirm
    it made zero requests and produced the same table.
@@ -193,10 +193,10 @@ Written after the code (contract § Amendment 2, P5, D10-D14). Recorded as it wa
    300,000-review corpus on Zenodo with OpenAlex reference ids and extracted research
    questions. Screening datasets (SYNERGY, CSMeD, CLEF TAR) and Epistemonikos are medical and
    were not used.
-2. Shared helpers into `ground_truth.py` (Deliverable 10), so each fetcher is one file with
+2. Shared helpers into `evals_search_utils.py and ground_truth/fetch_helpers.py` (Deliverable 10), so each fetcher is one file with
    `list/select`, `build_rows` and `main`.
 3. `get_campbell.py`, `get_3ie.py`, `get_yef.py`, `get_sr4all.py` (Deliverables 6-9), each
    with a raw cache and `--refresh` (D14).
-4. Self-checks in `test_metrics.py`; README section 6; `ruff check` clean.
-5. Live: run each fetcher once; `ground_truth_dataset.py --dry-run` on the gap-map CSVs.
+4. Self-checks in `tests/test_ground_truth.py`; README section 6; `ruff check` clean.
+5. Live: run each fetcher once; `ground_truth/upload.py --dry-run` on the gap-map CSVs.
    Numbers into `verification.md` § Phase 6 addendum. Commit.

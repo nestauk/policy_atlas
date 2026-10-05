@@ -1,13 +1,13 @@
-"""Shared ground-truth helpers for the eval: the key a document is scored on,
-the ``GroundTruth`` container, the function that cleans a review title into a
-search intent, the date helpers for a review's search cutoff, the OpenAlex
-lookups the dataset builders need, and the CSV writer the ``get_*.py`` fetchers
-share. Plain Python plus ``httpx``.
-Nothing here imports the pipeline or the database, so the CSV loader stays
-cheap to run.
+"""Shared code for the search eval: scoring keys, titles and dates, OpenAlex access,
+and the small helpers every runner needs.
 
-The recall target itself comes from the hand-curated CSVs under ``input/``
-(see ``ground_truth_dataset.py``), not from anything in this file.
+Used by both halves of ``scripts/evals/search/``: ``ground_truth/`` (building the
+Langfuse dataset) and ``measure/`` (running recall measurements). Holds the key a document
+is scored on (``record_key``), the ``GroundTruth`` container, the function that cleans a
+review title into a search intent, the date helpers for a review's search cutoff, the
+retrying OpenAlex getter, the dataset name, the item selector shared by the runners, the
+git commit for run labels, and the dollar formatter both tables use. Plain Python plus
+``httpx``; nothing here imports the pipeline or the database.
 
 Dev-only eval tooling. Not part of the runtime package.
 """
@@ -16,12 +16,10 @@ from __future__ import annotations
 
 import argparse
 import calendar
-import csv
-import json
 import os
 import re
+import subprocess
 import time
-from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
@@ -79,34 +77,16 @@ def normalize_doi(doi: Any) -> str | None:
     if not isinstance(doi, str) or not doi:
         return None
     d = doi.strip().lower()
-    for prefix in ("https://doi.org/", "http://doi.org/", "https://dx.doi.org/", "http://dx.doi.org/"):
+    for prefix in (
+        "https://doi.org/",
+        "http://doi.org/",
+        "https://dx.doi.org/",
+        "http://dx.doi.org/",
+    ):
         if d.startswith(prefix):
-            d = d[len(prefix):]
+            d = d[len(prefix) :]
             break
     return d or None
-
-
-_DOI_RE = re.compile(r"10\.\d{4,9}/\S+")
-
-
-def doi_if_valid(value: Any) -> str | None:
-    """A real DOI pulled out of a messy field, or None.
-
-    Source databases write "No DOI", "n/a", a bare DOI, a ``https://doi.org/``
-    link or a publisher link into the same column. Anything that does not
-    contain a ``10.xxxx/...`` pattern is treated as no DOI at all.
-    """
-    if not isinstance(value, str):
-        return None
-    match = _DOI_RE.search(value)
-    return normalize_doi(match.group(0).rstrip(".,;)")) if match else None
-
-
-# Titles that a review database lists but that are not reviews with a reference
-# list worth scoring against: protocols announce a review, errata correct one.
-NOT_A_REVIEW_TITLE_RE = re.compile(
-    r"^\s*(protocol|erratum|corrigendum|correction|retraction)\b", re.IGNORECASE
-)
 
 
 def _openalex_params(**extra: str) -> dict[str, str]:
@@ -132,7 +112,11 @@ def openalex_get(path: str, **params: str) -> httpx.Response:
     for attempt in range(5):
         last = attempt == 4
         try:
-            resp = httpx.get(f"{OPENALEX_HOST}{path}", params=_openalex_params(**params), timeout=30.0)
+            resp = httpx.get(
+                f"{OPENALEX_HOST}{path}",
+                params=_openalex_params(**params),
+                timeout=30.0,
+            )
         except httpx.TransportError:
             if last:
                 raise
@@ -150,105 +134,6 @@ def fetch_openalex_work(doi: str) -> dict[str, Any]:
     resp = openalex_get(f"/works/https://doi.org/{normalized}")
     resp.raise_for_status()
     return resp.json()
-
-
-def resolve_openalex_works(ids: Iterable[str]) -> dict[str, dict[str, Any]]:
-    """Look up many OpenAlex works by id (``W123`` or the full URL), 50 per call.
-
-    Returns:
-        ``{"W123": {"id", "doi", "title", "publication_year", "publication_date"}}``
-        for every id OpenAlex knows. Ids it does not know are simply absent.
-    """
-    wanted = sorted({str(i).rsplit("/", 1)[-1] for i in ids if i})
-    found: dict[str, dict[str, Any]] = {}
-    for start in range(0, len(wanted), 50):
-        batch = wanted[start : start + 50]
-        resp = openalex_get(
-            "/works",
-            filter=f"openalex_id:{'|'.join(batch)}",
-            select="id,doi,title,publication_year,publication_date",
-            **{"per-page": "50"},
-        )
-        resp.raise_for_status()
-        for work in resp.json()["results"]:
-            found[work["id"].rsplit("/", 1)[-1]] = work
-    return found
-
-
-def resolve_openalex_works_cached(path: Path, ids: Iterable[str], refresh: bool = False) -> dict[str, dict[str, Any]]:
-    """``resolve_openalex_works`` behind a JSON cache at ``path``.
-
-    Only ids missing from the cache are fetched, so widening a selection later
-    costs only the new lookups. Ids OpenAlex does not know are re-asked each
-    run; there are few of them.
-    """
-    found: dict[str, dict[str, Any]] = {}
-    if path.exists() and not refresh:
-        with path.open(encoding="utf-8") as handle:
-            found = json.load(handle)
-    missing = {str(i).rsplit("/", 1)[-1] for i in ids if i} - set(found)
-    if missing:
-        found.update(resolve_openalex_works(missing))
-        path.parent.mkdir(parents=True, exist_ok=True)
-        with path.open("w", encoding="utf-8") as handle:
-            json.dump(found, handle, ensure_ascii=False)
-    return found
-
-
-# Where the ``get_*.py`` fetchers put things. Git ignores everything under
-# ``results/`` except ``history.md``, so raw downloads never enter the repo.
-GROUND_TRUTH_DIR = Path(__file__).parent / "results" / "ground_truth"
-RAW_DIR = GROUND_TRUTH_DIR / "raw"
-
-
-def cached_json(path: Path, fetch: Callable[[], Any], refresh: bool = False) -> Any:
-    """Return ``path``'s JSON, or call ``fetch()`` and save the result there first.
-
-    Re-running a fetcher after a code change then costs no network calls.
-    ``refresh=True`` forces the download.
-    """
-    if path.exists() and not refresh:
-        with path.open(encoding="utf-8") as handle:
-            return json.load(handle)
-    data = fetch()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", encoding="utf-8") as handle:
-        json.dump(data, handle, ensure_ascii=False)
-    return data
-
-
-# The two CSV shapes ``ground_truth_dataset.py`` reads (its loaders ignore the
-# extra columns, which are there for the human doing the labelling).
-REVIEW_COLUMNS = (
-    "title", "doi", "url", "published_before", "exclude",
-    "dataset", "review_id", "level", "n_references", "n_with_doi", "research_questions",
-)
-REFERENCE_COLUMNS = ("review_title", "ref_title", "label", "doi", "overton_id", "url", "year", "ref_id")
-
-
-def write_ground_truth(
-    name: str, reviews: list[dict[str, Any]], references: list[dict[str, Any]], out_dir: Path = GROUND_TRUTH_DIR
-) -> tuple[Path, Path]:
-    """Write ``<name>_reviews.csv`` and ``<name>_references.csv`` in the shape
-    ``ground_truth_dataset.py`` expects, and print a one-line summary.
-
-    Every reference row must name a review title that appears in ``reviews``:
-    that title is the join key, so a mismatch would silently lose the row.
-    """
-    titles = {r["title"] for r in reviews}
-    orphans = [r["review_title"] for r in references if r["review_title"] not in titles]
-    if orphans:
-        raise ValueError(f"{len(orphans)} reference row(s) name a review that is not in the reviews list: {orphans[:3]}")
-    out_dir.mkdir(parents=True, exist_ok=True)
-    paths = (out_dir / f"{name}_reviews.csv", out_dir / f"{name}_references.csv")
-    for path, rows, columns in zip(paths, (reviews, references), (REVIEW_COLUMNS, REFERENCE_COLUMNS), strict=True):
-        with path.open("w", newline="", encoding="utf-8") as handle:
-            writer = csv.DictWriter(handle, fieldnames=columns, extrasaction="ignore")
-            writer.writeheader()
-            writer.writerows(rows)
-    with_doi = sum(1 for r in references if r.get("doi"))
-    print(f"{name}: {len(reviews)} reviews, {len(references)} references ({with_doi} with a DOI) -> {paths[0].parent}")
-    return paths
 
 
 # Trailing review-type clause, anchored to a colon/dash separator at the END
@@ -288,7 +173,9 @@ def iso_date(value: str) -> str:
     try:
         parsed = date.fromisoformat(value)
     except ValueError as exc:
-        raise argparse.ArgumentTypeError(f"{value!r} is not a valid ISO date (YYYY-MM-DD)") from exc
+        raise argparse.ArgumentTypeError(
+            f"{value!r} is not a valid ISO date (YYYY-MM-DD)"
+        ) from exc
     if parsed.isoformat() != value:
         raise argparse.ArgumentTypeError(f"{value!r} must be a YYYY-MM-DD ISO date")
     return value
@@ -333,3 +220,72 @@ class GroundTruth:
         reference list counts as a miss it was never possible to hit.
         """
         return self.dois | self.overton_ids
+
+
+def git_commit() -> str:
+    """The full commit hash of the working tree, or ``unknown`` outside git."""
+    try:
+        return subprocess.check_output(
+            ["git", "rev-parse", "HEAD"], cwd=Path(__file__).parent, text=True
+        ).strip()
+    except (OSError, subprocess.CalledProcessError):
+        return "unknown"
+
+
+def ground_truth_from_item(item: Any) -> GroundTruth:
+    """Rebuild the recall target from a dataset item's ``expected_output``."""
+    keys = set(item.expected_output["keys"])
+    overton_ids = {key for key in keys if key.startswith("overton:")}
+    return GroundTruth(
+        dois=keys - overton_ids,
+        overton_ids=overton_ids,
+        source=item.metadata.get("source", "doi"),
+        titles=item.expected_output.get("titles", {}),
+    )
+
+
+def select_items(items: list[Any], patterns: list[str] | None) -> list[Any]:
+    """The dataset items to run: all of them, or those matching ``--reviews``.
+
+    A pattern matches an item when it appears (case-insensitive) in the item's
+    id, its ``review_id`` or its ``review_title``.
+
+    Raises:
+        ValueError: No item matched, listing what was available.
+    """
+    if not patterns:
+        return items
+    wanted = [p.lower() for p in patterns]
+    chosen = [
+        item
+        for item in items
+        if any(
+            p in text
+            for p in wanted
+            for text in (
+                str(item.id).lower(),
+                str(item.metadata.get("review_id", "")).lower(),
+                str(item.metadata.get("review_title", "")).lower(),
+            )
+        )
+    ]
+    if not chosen:
+        available = "\n  ".join(
+            f"{item.id}  {item.metadata.get('review_title', '')[:70]}" for item in items
+        )
+        raise ValueError(
+            f"--reviews {patterns} matched no dataset item. Items:\n  {available}"
+        )
+    return chosen
+
+
+def usd(value: float) -> str:
+    """Dollars to two decimals, or four when the amount would otherwise show as $0.00.
+
+    OpenAlex bills fractions of a cent per page, so $0.0004 must not print as $0.00.
+    Shared with ``measure/baseline_recall.py`` so both tables format money the same way.
+    """
+    return f"${value:.2f}" if value == 0 or value >= 0.01 else f"${value:.4f}"
+
+
+DEFAULT_DATASET = "retrieval-ground-truth"

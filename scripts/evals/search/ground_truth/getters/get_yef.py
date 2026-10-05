@@ -24,6 +24,8 @@ If YEF publishes a new edition, change ``PAGE_URL``.
 
 from __future__ import annotations
 
+import _bootstrap  # noqa: F401
+
 import argparse
 import json
 import re
@@ -31,15 +33,14 @@ from typing import Any
 
 import httpx
 
-import sys
-from pathlib import Path
+from fetch_helpers import RAW_DIR, doi_if_valid, write_ground_truth
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # shared helpers live one folder up
-
-from ground_truth import RAW_DIR, doi_if_valid, write_ground_truth
-
-PAGE_URL = "https://youthendowmentfund.org.uk/wp-content/uploads/2026/08/EGM-April-2026.html"
-MAP_SCOPE = "Interventions to prevent children and young people's involvement in violence"
+PAGE_URL = (
+    "https://youthendowmentfund.org.uk/wp-content/uploads/2026/08/EGM-April-2026.html"
+)
+MAP_SCOPE = (
+    "Interventions to prevent children and young people's involvement in violence"
+)
 AXIS_TITLE = "Toolkit strand"
 RAW = RAW_DIR / "yef" / PAGE_URL.rsplit("/", 1)[-1]
 
@@ -65,15 +66,20 @@ def embedded_const(html: str, name: str) -> Any:
 def strands(csv_data: dict[str, Any]) -> dict[int, str]:
     """``{attribute id: strand name}`` for the map's strand axis, minus 'Uncategorised'."""
     cells = [cell for row in csv_data["rows"] for cell in row]
-    axis = next(c for c in cells if c.get("title") == AXIS_TITLE and not c.get("parentId"))
+    axis = next(
+        c for c in cells if c.get("title") == AXIS_TITLE and not c.get("parentId")
+    )
     return {
         int(c["id"]): re.sub(r"\s+", " ", c["title"]).strip()
         for c in cells
-        if c.get("parentId") == axis["id"] and c.get("title", "").strip().lower() != "uncategorised"
+        if c.get("parentId") == axis["id"]
+        and c.get("title", "").strip().lower() != "uncategorised"
     }
 
 
-def items_by_strand(items: list[dict[str, Any]], strand_ids: set[int]) -> dict[int, list[dict[str, Any]]]:
+def items_by_strand(
+    items: list[dict[str, Any]], strand_ids: set[int]
+) -> dict[int, list[dict[str, Any]]]:
     grouped: dict[int, list[dict[str, Any]]] = {sid: [] for sid in strand_ids}
     for item in items:
         for code in item.get("Codes") or []:
@@ -91,10 +97,19 @@ def build_rows(
     items: list[dict[str, Any]], strand_names: dict[int, str], min_studies: int
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     grouped = items_by_strand(items, set(strand_names))
-    targets: list[tuple[str, str, str, list[dict[str, Any]]]] = [(MAP_SCOPE, PAGE_URL, "map", items)]
+    targets: list[tuple[str, str, str, list[dict[str, Any]]]] = [
+        (MAP_SCOPE, PAGE_URL, "map", items)
+    ]
     for sid, name in sorted(strand_names.items(), key=lambda kv: kv[1]):
         if len(grouped[sid]) >= min_studies:
-            targets.append((f"{MAP_SCOPE}: {name}", f"{PAGE_URL}#strand={sid}", "intervention", grouped[sid]))
+            targets.append(
+                (
+                    f"{MAP_SCOPE}: {name}",
+                    f"{PAGE_URL}#strand={sid}",
+                    "intervention",
+                    grouped[sid],
+                )
+            )
 
     review_rows: list[dict[str, Any]] = []
     reference_rows: list[dict[str, Any]] = []
@@ -135,9 +150,20 @@ def build_rows(
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--min-studies", type=int, default=20, help="Keep strands with at least this many studies (default 20).")
-    parser.add_argument("--refresh", action="store_true", help="Download the page again even if a copy exists.")
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    parser.add_argument(
+        "--min-studies",
+        type=int,
+        default=20,
+        help="Keep strands with at least this many studies (default 20).",
+    )
+    parser.add_argument(
+        "--refresh",
+        action="store_true",
+        help="Download the page again even if a copy exists.",
+    )
     args = parser.parse_args()
 
     html = download_page(args.refresh)

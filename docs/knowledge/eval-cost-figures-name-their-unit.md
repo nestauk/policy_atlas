@@ -43,5 +43,5 @@ served old results for an edited review.
 - [046 contract D4 and D9](../tasks/046-search-baselines/contract.md)
 - [046 verification § Review findings 1 and 3](../tasks/046-search-baselines/verification.md)
 - `scripts/evals/search/history.py` `usd`, `fetch_runs`;
-  `scripts/evals/search/baseline_recall.py` `cost_usd`, `pages_for_cap`, `read_cache`;
+  `scripts/evals/search/measure/baseline_recall.py` `cost_usd`, `pages_for_cap`, `read_cache`;
   `scripts/evals/search/README.md` § The variable cost column

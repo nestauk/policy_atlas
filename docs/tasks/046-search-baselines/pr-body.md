@@ -24,22 +24,27 @@ one hundred: `get_campbell.py` (Campbell Systematic Reviews via OpenAlex, refere
 resolved to DOIs), `get_3ie.py` (every evidence gap map on 3ie's Development Evidence Portal,
 one review per map and per intervention row), `get_yef.py` (the Youth Endowment Fund gap map
 and its toolkit strands) and `get_sr4all.py` (the Webis-SR4ALL-26 corpus, social-science
-fields, most-cited reviews). Each writes the two CSV shapes `ground_truth_dataset.py` already
+fields, most-cited reviews). Each writes the two CSV shapes `ground_truth/upload.py` already
 reads (D10); gap-map rows are labelled `content`, reference lists stay unlabelled until the
 labelling pass (D11). Shared helpers land in `ground_truth.py`. P2 itself stays deferred.
 
 **Amendment 3 (owner-directed, 2026-10-05):** the ground-truth **sample**. The fetchers moved
-to `getters/`; `select_ground_truth.py` applies a simple quality check (one specific question,
+to `getters/`; `ground_truth/select_sample.py` applies a simple quality check (one specific question,
 20 to 300 references with a DOI, at least 70% with a DOI, cutoff in the past and from 2010) and
 picks 30 Campbell, 30 3ie, 30 SR4ALL and 10 YEF rows by rotating across topics, plus ten
 hand-chosen rows out of those for cheap checks, leaning towards Nesta's missions. The owner chose to skip the labelling pass, so the Campbell
 and SR4ALL lists are used whole and their recall ceiling is about 50% (README § 7). Both
 samples are uploaded as Langfuse datasets `retrieval-ground-truth-10` and `-100`.
 
-Files: `scripts/evals/search/baseline_recall.py` (new), `history.py` (cost column),
-`test_metrics.py` (self-checks), `README.md` § 5 and § 6, `results/history.md`,
+**Layout (2026-10-05):** the folder is split by purpose: `evals_search_utils.py` (shared),
+`ground_truth/` (getters, sample selection, upload), `measure/` (engine and the three
+runners), `history.py`, `tests/`. A new `make eval-check` (the two test files plus ruff on the
+folder) runs inside `make verify` and `make verify-fast`.
+
+Files: `scripts/evals/search/measure/baseline_recall.py` (new), `history.py` (cost column),
+`tests/test_ground_truth.py`, `tests/test_measure.py` (self-checks), `README.md` § 5 and § 6, `results/history.md`,
 `backend/.env.example` (two empty key names), `get_campbell.py`, `get_3ie.py`, `get_yef.py`,
-`get_sr4all.py` (new, under `getters/`), `select_ground_truth.py` (new), `ground_truth.py`
+`get_sr4all.py` (new, under `getters/`), `ground_truth/select_sample.py` (new), `ground_truth.py`
 (shared fetcher helpers), `docs/deferred.md`,
 `docs/knowledge/` (four concepts, one update), `docs/agentic-ops/environment.md`.
 
@@ -49,7 +54,7 @@ Evidence in `docs/tasks/046-search-baselines/verification.md`.
 
 - **`make verify`:** pass (build-open, step-6 exit, review-open, and after the review fixes,
   at `36596c2`). Not yet re-run on the Amendment 2 commit.
-- **Self-checks:** `uv run --project backend python scripts/evals/search/test_metrics.py`
+- **Self-checks:** `uv run --project backend python scripts/evals/search/tests/`
   → `ok` (eleven new checks, extended by the review stack: paging per arm incl. Consensus's
   refusal to cross 1,000, retry pacing, cache round trip and staleness, cost at a cap,
   snippet arm, history cost column and 404 guard).
@@ -102,7 +107,7 @@ adopted, 3 declined with reasons).
 ## Known gaps & deferred seams
 
 The fetchers and the sample selection are unreviewed (see above). Their outputs are not yet in Langfuse: the CSVs are
-inputs to the labelling pass and to `ground_truth_dataset.py`, not part of this PR's numbers.
+inputs to the labelling pass and to `ground_truth/upload.py`, not part of this PR's numbers.
 
 `docs/deferred.md` § Search recall baselines: P2 grey-literature keys with the raw Overton
 arm (design at `37d496c`), the "swap" slice (with the cap-sized cost note), S3 upload of the

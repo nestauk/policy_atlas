@@ -31,5 +31,5 @@ deviation 2, confirmed by the review stack).
 # Citations
 
 - [046 verification § Zero-request check and § Flagged deviations](../tasks/046-search-baselines/verification.md)
-- `scripts/evals/search/baseline_recall.py` `run_baseline`, `main` (`--dry-run`,
+- `scripts/evals/search/measure/baseline_recall.py` `run_baseline`, `main` (`--dry-run`,
   `--run-label`)
