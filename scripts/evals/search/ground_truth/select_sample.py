@@ -5,12 +5,13 @@ The ``getters/`` scripts write one pair of CSV files per public collection under
 This script applies a simple quality check to every candidate, spreads the picks across
 topics, and writes two samples in the shape ``ground_truth/upload.py`` reads:
 
-- ``sample_100``: 30 Campbell reviews, 30 3ie gap-map rows, 30 SR4ALL reviews and 10 YEF
+- ``sample_full``: 30 Campbell reviews, 30 3ie gap-map rows, 30 SR4ALL reviews and 10 YEF
   strands. The full eval set.
-- ``sample_10``: ten rows chosen by hand from the hundred (``SAMPLE_10_TITLES``: 3
-  Campbell, 3 3ie, 3 SR4ALL, 1 YEF), leaning towards Nesta's missions: a healthy life, a
+- ``sample_mini``: eleven rows chosen by hand from the hundred (``SAMPLE_MINI_TITLES``: 3
+  Campbell, 3 3ie, 4 SR4ALL, 1 YEF), leaning towards Nesta's missions: a healthy life, a
   fairer start, a sustainable future. The cheap set for quick checks; always a subset of
-  the full one, and the script refuses a title that is not in the hundred.
+  the full one, and the script refuses a title that is not in the hundred. Uploaded with
+  the four hand-made reviews, it is the fifteen-item ``retrieval-ground-truth-mini``.
 
 **The quality check** (one reason per failing row, printed with ``--verbose``):
 
@@ -47,11 +48,11 @@ Usage::
 then upload each sample as its own Langfuse dataset::
 
     uv run --project backend --env-file backend/.env python scripts/evals/search/ground_truth/upload.py \\
-        --reviews scripts/evals/search/results/ground_truth/sample_10_reviews.csv \\
-        --references scripts/evals/search/results/ground_truth/sample_10_references.csv \\
+        --reviews scripts/evals/search/results/ground_truth/sample_mini_reviews.csv \\
+        --references scripts/evals/search/results/ground_truth/sample_mini_references.csv \\
         --dataset retrieval-ground-truth-mini --include-from retrieval-ground-truth --dry-run
 
-``--include-from`` adds the four hand-made reviews to the mini dataset (fourteen items), so
+``--include-from`` adds the four hand-made reviews to the mini dataset (fifteen items), so
 its numbers sit next to the rows already in ``history.md``; the full dataset is the hundred.
 
 Dev-only eval tooling. No network. Not part of the runtime package.
@@ -72,9 +73,11 @@ from typing import Any
 from fetch_helpers import GROUND_TRUTH_DIR, REFERENCE_COLUMNS, REVIEW_COLUMNS
 
 QUOTAS = {"campbell": 30, "3ie": 30, "sr4all": 30, "yef": 10}
-# The cheap sample, chosen by hand from the hundred (owner, 2026-10-05): two health rows,
-# schools, home energy, jobs, civic education, violence, learning loss, adolescent drug use.
-SAMPLE_10_TITLES = (
+# The cheap sample, chosen by hand from the hundred (owner, 2026-10-05): health and social
+# care, schools, home energy, jobs, nutrition, civic education, violence, learning loss,
+# adolescent drug use, child sleep and obesity. With the four hand-made reviews copied in at
+# upload, the mini dataset holds fifteen items.
+SAMPLE_MINI_TITLES = (
     "Health and Social Care Interventions in the 80 years Old and Over Population: An Evidence and Gap Map",
     "Evidence and Gap Map of Whole-School Interventions Promoting Mental Health and Preventing Risk Behaviours in Adolescence: Programme Component Mapping Within the Health-Promoting Schools Framework: An evidence and gap map",
     "Residential energy efficiency interventions: A meta-analysis of effectiveness studies",
@@ -84,6 +87,7 @@ SAMPLE_10_TITLES = (
     "Recent intimate partner violence against women and health: a systematic review and meta-analysis of cohort studies",
     "A systematic review and meta-analysis of the evidence on learning during the COVID-19 pandemic",
     "Risk and protective factors of drug abuse among adolescents: a systematic review",
+    "Sleep duration and incidence of obesity in infants, children, and adolescents: a systematic review and meta-analysis of prospective studies",
     "Interventions to prevent children and young people's involvement in violence: Trauma-specific therapies",
 )
 GAP_MAP_SOURCES = {"3ie", "yef"}  # rows already labelled content by the map's screeners
@@ -217,7 +221,7 @@ def select(
 
 
 def mini_sample(
-    picks: dict[str, list[dict[str, Any]]], titles: tuple[str, ...] = SAMPLE_10_TITLES
+    picks: dict[str, list[dict[str, Any]]], titles: tuple[str, ...] = SAMPLE_MINI_TITLES
 ) -> dict[str, list[dict[str, Any]]]:
     """The hand-chosen rows out of the full picks, grouped by source in the picks' order.
 
@@ -302,8 +306,8 @@ def main() -> None:
     args = parser.parse_args()
     picks, reasons = select(args.dir, args.today)
     small = mini_sample(picks)
-    write_sample("sample_100", picks, args.dir)
-    write_sample("sample_10", small, args.dir)
+    write_sample("sample_full", picks, args.dir)
+    write_sample("sample_mini", small, args.dir)
     print(
         f"{'source':<10}{'candidates':>12}{'passing':>9}{'picked':>8}{'in 10':>7}  groups covered"
     )
@@ -326,7 +330,7 @@ def main() -> None:
     total = sum(len(r) for r in picks.values())
     refs = sum(r["_n_refs"] for rows in picks.values() for r in rows)
     print(
-        f"sample_100: {total} reviews, {refs} references; sample_10: {sum(len(r) for r in small.values())} reviews"
+        f"sample_full: {total} reviews, {refs} references; sample_mini: {sum(len(r) for r in small.values())} reviews"
     )
 
 

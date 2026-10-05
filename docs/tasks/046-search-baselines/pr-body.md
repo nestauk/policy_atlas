@@ -31,10 +31,10 @@ labelling pass (D11). Shared helpers land in `ground_truth.py`. P2 itself stays 
 **Amendment 3 (owner-directed, 2026-10-05):** the ground-truth **sample**. The fetchers moved
 to `getters/`; `ground_truth/select_sample.py` applies a simple quality check (one specific question,
 20 to 300 references with a DOI, at least 70% with a DOI, cutoff in the past and from 2010) and
-picks 30 Campbell, 30 3ie, 30 SR4ALL and 10 YEF rows by rotating across topics, plus ten
+picks 30 Campbell, 30 3ie, 30 SR4ALL and 10 YEF rows by rotating across topics, plus eleven
 hand-chosen rows out of those for cheap checks, leaning towards Nesta's missions. The owner chose to skip the labelling pass, so the Campbell
 and SR4ALL lists are used whole and their recall ceiling is about 50% (README § 7). The mini
-dataset (`retrieval-ground-truth-mini`) is the ten plus the four original reviews, fourteen
+dataset (`retrieval-ground-truth-mini`) is eleven hand-chosen rows plus the four original reviews, fifteen
 items, copied in with the uploader's new `--include-from`; `retrieval-ground-truth-full` is
 the hundred.
 

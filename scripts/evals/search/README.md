@@ -30,7 +30,7 @@ Every script below the root starts with `import _bootstrap`, a short file that p
 | `history.py` | Prints one markdown table row per dataset run in Langfuse: date, commit, settings, run name, mean recall and the run's variable cost. It writes nothing. | After each eval you can copy the rows worth keeping into `results/history.md` and add a note. |
 | `measure/baseline_recall.py` | The baselines. Sends each review's intent once, as plain text, to Semantic Scholar (keyword and semantic search), Consensus and OpenAlex, caches the raw result pages locally, and scores recall at several result caps. One Langfuse run per service and cap. | When you want a "what does good look like" number to compare the pipeline's recall with. The services are called once; later runs read the cache. See section 5. |
 | `ground_truth/getters/get_campbell.py`, `ground_truth/getters/get_3ie.py`, `ground_truth/getters/get_yef.py`, `ground_truth/getters/get_sr4all.py` | The ground-truth fetchers, in their own folder. Each downloads one public source of "review plus the studies it covers", keeps the raw download under `results/ground_truth/raw/`, and writes two CSVs in the same shape as `input/gt_reviews.csv` and `input/references.csv` into `results/ground_truth/`. | When you want to grow the ground truth beyond the four hand-made reviews. See section 6. |
-| `ground_truth/select_sample.py` | Picks the ground-truth sample from the fetched collections: a simple quality check, a spread across topics, 30 Campbell + 30 3ie + 30 SR4ALL + 10 YEF rows (`sample_100`) and ten hand-chosen rows out of those (`sample_10`). Writes the two CSV pairs next to the fetched files. No network. | After the fetchers have run, or after changing a rule in the quality check. See section 7. |
+| `ground_truth/select_sample.py` | Picks the ground-truth sample from the fetched collections: a simple quality check, a spread across topics, 30 Campbell + 30 3ie + 30 SR4ALL + 10 YEF rows (`sample_full`) and eleven hand-chosen rows out of those (`sample_mini`; with the four original reviews, the fifteen-item mini dataset). Writes the two CSV pairs next to the fetched files. No network. | After the fetchers have run, or after changing a rule in the quality check. See section 7. |
 | `measure/sweep_record_cap.py` | The experiment. It runs a rapid search many times, each time with a different cap on the number of records kept and with one of the two query-generation methods. It records the recall for each combination. | When you want to know how the record cap or the prompting method changes recall. |
 
 The two measuring scripts read the reviews and their reference lists from the Langfuse dataset. They do not read the CSV files. This means you must run `ground_truth/upload.py` at least once before you run either of them.
@@ -317,10 +317,10 @@ uv run --project backend --env-file backend/.env python scripts/evals/search/gro
 - **SR4ALL selection** is repeatable: English reviews with a DOI, at least one stated research question, at least `--min-refs` references, a non-protocol title and a `field` in `--fields` (default: Social Sciences, Psychology, Economics, Business), then the `--limit` most cited. The stated research questions are kept in the `research_questions` column for a later eval that starts from a question instead of a title.
 - **Duplicate titles** (an updated review with the same title as the original) are dropped after the first, because the title is the join key between the two CSVs.
 
-## 7. The ground-truth sample: 100 reviews, and a cheap 14
+## 7. The ground-truth sample: 100 reviews, and a cheap 15
 
-Key script: `ground_truth/select_sample.py`. Outputs: `results/ground_truth/sample_100_*.csv` and
-`sample_10_*.csv` (git-ignored like everything under `results/`; the script rebuilds them
+Key script: `ground_truth/select_sample.py`. Outputs: `results/ground_truth/sample_full_*.csv` and
+`sample_mini_*.csv` (git-ignored like everything under `results/`; the script rebuilds them
 from the fetched files in a second, and the same inputs always give the same sample).
 
 ### Why two sizes
@@ -362,11 +362,12 @@ On the collections fetched on 2026-09-25 the check keeps 250 of 349 Campbell rev
 of 197 3ie rows, 91 of 100 SR4ALL reviews and 13 of 20 YEF strands. `--verbose` prints
 why each rejected row failed.
 
-### The cheap 10
+### The cheap 15
 
-The ten are chosen by hand from the hundred (`SAMPLE_10_TITLES` in the script; the script
-refuses a title that is not in the hundred, so the 10 is always a subset of the 100). They
-lean towards Nesta's missions (a healthy life, a fairer start, a sustainable future):
+Eleven rows are chosen by hand from the hundred (`SAMPLE_MINI_TITLES` in the script; the
+script refuses a title that is not in the hundred, so the mini set is always a subset of the
+full one). They lean towards Nesta's missions (a healthy life, a fairer start, a sustainable
+future):
 
 | Source | Review | Why |
 |---|---|---|
@@ -379,15 +380,16 @@ lean towards Nesta's missions (a healthy life, a fairer start, a sustainable fut
 | SR4ALL | Recent intimate partner violence against women and health | violence and health |
 | SR4ALL | Learning during the COVID-19 pandemic | learning loss |
 | SR4ALL | Risk and protective factors of adolescent drug abuse | young people |
+| SR4ALL | Sleep duration and incidence of obesity in infants, children and adolescents | child health, early years |
 | YEF | Trauma-specific therapies (youth violence) | the one gap-map strand |
 
-To change the ten, edit `SAMPLE_10_TITLES`, re-run the script, re-upload the dataset and
+To change them, edit `SAMPLE_MINI_TITLES`, re-run the script, re-upload the dataset and
 delete the items that dropped out (an upload upserts and never deletes).
 
 ### The mini dataset also carries the four hand-made reviews
 
-`retrieval-ground-truth-mini` holds the ten rows above **plus the four original reviews**
-(parental leave, loneliness, adverse childhood experiences, social care), fourteen items in
+`retrieval-ground-truth-mini` holds the eleven rows above **plus the four original reviews**
+(parental leave, loneliness, adverse childhood experiences, social care), fifteen items in
 all, so a number measured on it can be read next to the rows already in `history.md`. The
 originals have no CSV files in this repo; `upload.py --include-from retrieval-ground-truth`
 copies them out of their own Langfuse dataset, re-keyed for the target and marked
@@ -410,12 +412,12 @@ compare numbers. This revises D11 of the task 046 contract for these two samples
 ```
 uv run --project backend python scripts/evals/search/ground_truth/select_sample.py --verbose
 
-# Upload the mini dataset: the 10 sampled rows plus the 4 original reviews (drop --dry-run to upload):
+# Upload the mini dataset: the 11 sampled rows plus the 4 original reviews (drop --dry-run to upload):
 uv run --project backend --env-file backend/.env python scripts/evals/search/ground_truth/upload.py \
-    --reviews scripts/evals/search/results/ground_truth/sample_10_reviews.csv \
-    --references scripts/evals/search/results/ground_truth/sample_10_references.csv \
+    --reviews scripts/evals/search/results/ground_truth/sample_mini_reviews.csv \
+    --references scripts/evals/search/results/ground_truth/sample_mini_references.csv \
     --dataset retrieval-ground-truth-mini --include-from retrieval-ground-truth --dry-run
-# The full dataset: the same with sample_100 and --dataset retrieval-ground-truth-full (no --include-from)
+# The full dataset: the same with sample_full and --dataset retrieval-ground-truth-full (no --include-from)
 
 # Then measure against a sample instead of the four hand-made reviews:
 uv run --project backend --env-file backend/.env python scripts/evals/search/measure/baseline_recall.py --dataset retrieval-ground-truth-mini

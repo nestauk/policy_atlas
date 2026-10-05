@@ -42,8 +42,8 @@ P2 and D5 are deferred and have no item here. Item 12 covers § Amendment 2 (pos
         --dry-run` loads unchanged (D10). Gap-map rows are `content`, reference-list rows
         unlabelled (D11). A second run makes no download (D14). Self-checks listed in the
         contract's added § Acceptance checks pass. Nothing under `results/` is committed.
-13. [ ] **P6 (Amendment 3).** `ground_truth/select_sample.py` writes `sample_100` (30/30/30/10) and
-        `sample_10` (ten hand-chosen rows, a subset) from the fetched collections under D15–D17; both load
+13. [ ] **P6 (Amendment 3).** `ground_truth/select_sample.py` writes `sample_full` (30/30/30/10) and
+        `sample_mini` (eleven hand-chosen rows, a subset) from the fetched collections under D15–D17; both load
         through `ground_truth/upload.py --dry-run` with no unusable row and are uploaded as
         `retrieval-ground-truth-mini` and `-full`. README section 7 states the quality check and
         the 50% ceiling on unlabelled lists (D11 revised). Self-check listed in the contract.

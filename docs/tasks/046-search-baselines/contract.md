@@ -7,8 +7,8 @@
 > added after the live run showed arm 1 is a keyword engine (see § Arms).
 > **Amendment 3 (2026-10-05, owner-directed):** the ground-truth **sample**. The fetchers
 > moved to `scripts/evals/search/ground_truth/getters/`; `ground_truth/select_sample.py` applies a simple quality
-> check and writes `sample_100` (30 Campbell, 30 3ie, 30 SR4ALL, 10 YEF) and `sample_10`
-> (3, 3, 3, 1 of those). The owner chose to **skip the labelling pass**: reference lists are
+> check and writes `sample_full` (30 Campbell, 30 3ie, 30 SR4ALL, 10 YEF) and `sample_mini`
+> (eleven hand-chosen rows, plus the four original reviews at upload: fifteen items). The owner chose to **skip the labelling pass**: reference lists are
 > used whole, so their recall ceiling is about 50%. Written up as § Amendment 3 at the end.
 > **Review note (2026-09-25):** D4's Consensus price model ("above the included monthly
 > amount") is stale for our account, which is billed on every call. The `api_cost_usd`
@@ -498,8 +498,8 @@ section 7 for the reader-facing version.
     format on the folder) runs inside `make verify` and `make verify-fast`, so the eval's
     self-checks are no longer run by hand only. Behaviour unchanged: the cache re-score,
     the sample files and every script's command line were checked before and after.
-14. Two Langfuse datasets, `retrieval-ground-truth-mini` (the ten sampled rows **plus the
-    four hand-made reviews**, fourteen items; owner, 2026-10-05) and
+14. Two Langfuse datasets, `retrieval-ground-truth-mini` (eleven sampled rows **plus the
+    four hand-made reviews**, fifteen items; owner, 2026-10-05) and
     `retrieval-ground-truth-full` (the hundred), uploaded with `ground_truth/upload.py`.
     The originals are copied in with `--include-from retrieval-ground-truth` (new flag;
     they have no CSV files in this repo) and keep their own dataset too. The first
@@ -520,8 +520,8 @@ section 7 for the reader-facing version.
   map for gap-map rows, a coarse keyword topic for reviews), highest DOI share first. The
   owner's quotas (30, 30, 30, 10) carry the social-policy bias; the rotation stops one
   subject from filling a quota. Deterministic: sorted inputs, no randomness.
-- **D17 — Two samples, nested.** `sample_100` is the full set; `sample_10` is ten rows
-  chosen by hand out of it (`SAMPLE_10_TITLES`: 3 Campbell, 3 3ie, 3 SR4ALL, 1 YEF, leaning
+- **D17 — Two samples, nested.** `sample_full` is the full set; `sample_mini` is eleven rows
+  chosen by hand out of it (`SAMPLE_MINI_TITLES`: 3 Campbell, 3 3ie, 4 SR4ALL, 1 YEF, leaning
   towards Nesta's missions; owner steer 2026-10-05: two health rows, no violent-extremism or
   agricultural-extension row). The script refuses a title outside the hundred, so the cheap
   set is always a subset of the full one.

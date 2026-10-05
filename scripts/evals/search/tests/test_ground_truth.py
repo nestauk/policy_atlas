@@ -667,8 +667,8 @@ def test_select_ground_truth() -> None:
             raise AssertionError("an unknown title must be refused")
         except ValueError:
             pass
-        rv, rf = write_sample("sample_100", picks, root)
-        rv10, rf10 = write_sample("sample_10", small, root)
+        rv, rf = write_sample("sample_full", picks, root)
+        rv10, rf10 = write_sample("sample_mini", small, root)
         assert len(load_reviews(rv)) == 16 and len(load_reviews(rv10)) == 10
         targets = load_references(rf)
         assert len(targets) == 16 and all(

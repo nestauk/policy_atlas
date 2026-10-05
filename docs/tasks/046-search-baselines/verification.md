@@ -481,6 +481,7 @@ made `make verify` skip the eval checks silently (fixed). Codex traced every `Pa
 path to `parents[1]`, the bootstrap behaviour under the tests, and the selection logic, and
 found no defect there. Its sandbox could not run `make eval-check` (no access to the uv cache);
 the lead ran it. Owner follow-up in the same session: the mini dataset now carries the four
-hand-made reviews (fourteen items) through `upload.py --include-from`; self-check
+hand-made reviews through `upload.py --include-from`, then grown to fifteen items with an eleventh
+sampled row (child sleep and obesity, SR4ALL) on the owner's go; self-check
 `test_copied_items` added; the `-10`/`-100` datasets emptied and replaced by `-mini`/`-full`.
 
