@@ -33,7 +33,7 @@ from typing import Any
 
 import httpx
 
-from fetch_helpers import RAW_DIR, doi_if_valid, write_ground_truth
+from fetch_helpers import RAW_DIR, doi_if_valid, gap_map_question, write_ground_truth
 
 PAGE_URL = (
     "https://youthendowmentfund.org.uk/wp-content/uploads/2026/08/EGM-April-2026.html"
@@ -97,14 +97,15 @@ def build_rows(
     items: list[dict[str, Any]], strand_names: dict[int, str], min_studies: int
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     grouped = items_by_strand(items, set(strand_names))
-    targets: list[tuple[str, str, str, list[dict[str, Any]]]] = [
-        (MAP_SCOPE, PAGE_URL, "map", items)
+    targets: list[tuple[str, str, str, str, list[dict[str, Any]]]] = [
+        (MAP_SCOPE, gap_map_question(MAP_SCOPE), PAGE_URL, "map", items)
     ]
     for sid, name in sorted(strand_names.items(), key=lambda kv: kv[1]):
         if len(grouped[sid]) >= min_studies:
             targets.append(
                 (
                     f"{MAP_SCOPE}: {name}",
+                    gap_map_question(MAP_SCOPE, name),
                     f"{PAGE_URL}#strand={sid}",
                     "intervention",
                     grouped[sid],
@@ -113,7 +114,7 @@ def build_rows(
 
     review_rows: list[dict[str, Any]] = []
     reference_rows: list[dict[str, Any]] = []
-    for title, url, level, studies in targets:
+    for title, intent, url, level, studies in targets:
         years = [y for y in (_year(s.get("Year")) for s in studies) if y]
         with_doi = 0
         for study in studies:
@@ -134,6 +135,7 @@ def build_rows(
         review_rows.append(
             {
                 "title": title,
+                "intent": intent,
                 "doi": "",
                 "url": url,
                 "published_before": f"{max(years)}-12-31" if years else "",

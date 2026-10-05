@@ -39,6 +39,53 @@ def doi_if_valid(value: Any) -> str | None:
     return normalize_doi(match.group(0).rstrip(".,;)")) if match else None
 
 
+def _plain(phrase: str) -> str:
+    """Lower-case every word except acronyms, read " / " as " or " and " + " as " and "."""
+    phrase = phrase.replace(" / ", " or ").replace(" + ", " and ").strip()
+    words = []
+    for word in phrase.split(" "):
+        # An acronym (CBT, PAH, COVID-19) has two or more capitals in one part; keep it.
+        acronym = any(sum(c.isupper() for c in part) >= 2 for part in word.split("-"))
+        words.append(word if acronym else word.lower())
+    return " ".join(words)
+
+
+_MAP_TYPE_TAIL_RE = re.compile(
+    r"\s*(?:rapid\s+)?(?:evidence\s+(?:and\s+)?gap\s+map|evidence\s+map|systematic\s+map)\s*$",
+    re.IGNORECASE,
+)
+_MAP_TYPE_HEAD_RE = re.compile(
+    r"^\s*(?:rapid\s+)?evidence\s+(?:gap\s+)?map:\s*", re.IGNORECASE
+)
+
+
+def gap_map_question(theme: str, row: str | None = None) -> str:
+    """A question-shaped intent for a gap-map row, built the same way every time.
+
+    A gap-map row's title is "<map title>: <intervention label>", which no search engine
+    handles well. This turns the two parts into one plain question, deterministically:
+    "What is the evidence on <intervention> in relation to <map theme>?" (or, for a whole
+    map, "What is the evidence on <map theme>?"). Title-case words are lower-cased, acronyms
+    such as CBT are kept, " / " becomes " or " and " + " becomes " and ". Anyone who wants a
+    better question for one row can overwrite the ``intent`` column by hand; the uploader
+    sends whatever is there.
+
+    Args:
+        theme: The map title, already passed through ``clean_review_title``.
+        row: The intervention row or strand label; None for the whole map.
+
+    Returns:
+        One question, ending in a question mark.
+    """
+    # A map title may carry its own type with no separator for clean_review_title to anchor
+    # on ("Nutrition-Sensitive Agriculture Evidence Gap Map", "Rapid Evidence Map: ...").
+    theme = _MAP_TYPE_TAIL_RE.sub("", theme)
+    theme = _MAP_TYPE_HEAD_RE.sub("", theme)
+    if row:
+        return f"What is the evidence on {_plain(row)} in relation to {_plain(theme)}?"
+    return f"What is the evidence on {_plain(theme)}?"
+
+
 # Titles that a review database lists but that are not reviews with a reference
 # list worth scoring against: protocols announce a review, errata correct one.
 NOT_A_REVIEW_TITLE_RE = re.compile(
@@ -117,6 +164,7 @@ def cached_json(path: Path, fetch: Callable[[], Any], refresh: bool = False) -> 
 # extra columns, which are there for the human doing the labelling).
 REVIEW_COLUMNS = (
     "title",
+    "intent",
     "doi",
     "url",
     "published_before",

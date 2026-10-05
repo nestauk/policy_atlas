@@ -311,7 +311,7 @@ uv run --project backend --env-file backend/.env python scripts/evals/search/gro
 
 ### Methodology details
 
-- **Intent.** As for the hand-made reviews, the `title` column becomes the intent through `clean_review_title`, which now also strips "an evidence gap map" and "a systematic map" tails. A gap-map row's title is "<map title>: <intervention row>", for example "The effects of rule of law interventions on justice outcomes: Diversion".
+- **Intent.** For a published review the `title` column becomes the intent through `clean_review_title`, which now also strips "an evidence gap map" and "a systematic map" tails. A gap-map row's title is "<map title>: <intervention row>", for example "The effects of rule of law interventions on justice outcomes: Diversion", but that shape suits no search engine, so the getters also write an **`intent` column** built by one fixed template: "What is the evidence on <intervention> in relation to <map theme>?" (`gap_map_question` in `fetch_helpers.py`; every word lower-cased except acronyms, " / " read as " or ", " + " as " and "). The uploader sends the `intent` column when it is filled and the cleaned title otherwise, so the question is deterministic and visible in the CSV before anything is uploaded. Overwrite the cell by hand if a row deserves a better question. (Added 2026-10-05 after the first mini-dataset run scored the gap-map rows near zero on every engine.)
 - **Cutoff.** A Campbell or SR4ALL review is identified by its DOI and gets `published_before` one month before its OpenAlex publication date, as before. A gap-map row is identified by a URL, so it needs an explicit date: the script uses 31 December of the latest publication year among the row's studies, the last date a study could carry and still be in the map.
 - **3ie's review records are not used.** The portal lists 1,700 systematic reviews, but a review record links to at most four "related" studies, not its included-study list. Only the maps carry full study lists. The maps are read through the two JSON calls the map page itself makes; there is no documented API. 3ie's terms allow non-commercial use with attribution.
 - **SR4ALL selection** is repeatable: English reviews with a DOI, at least one stated research question, at least `--min-refs` references, a non-protocol title and a `field` in `--fields` (default: Social Sciences, Psychology, Economics, Business), then the `--limit` most cited. The stated research questions are kept in the `research_questions` column for a later eval that starts from a question instead of a title.
@@ -377,20 +377,22 @@ title followed by the intervention.
 | Campbell | Health and Social Care Interventions in the 80 years Old and Over Population | health and social care |
 | Campbell | Evidence and Gap Map of Whole-School Interventions Promoting Mental Health and Preventing Risk Behaviours in Adolescence: Programme Component Mapping Within the Health-Promoting Schools Framework | schools, a fairer start |
 | Campbell | Residential energy efficiency interventions | home energy, a sustainable future |
-| 3ie | Improving Labour Market Outcomes Through Learning to Earning Interventions in Low- and Middle-Income Countries: Core skills training | jobs and skills |
-| 3ie | Nutrition-Sensitive Agriculture Evidence Gap Map: Consumption / provision of large-scale fortified foods | food and health |
-| 3ie | Human Rights: Civic and Legal Education | a non-social-policy control |
+| 3ie | What is the evidence on core skills training in relation to improving labour market outcomes through learning to earning interventions in low- and middle-income countries? | jobs and skills |
+| 3ie | What is the evidence on consumption or provision of large-scale fortified foods in relation to nutrition-sensitive agriculture? | food and health |
+| 3ie | What is the evidence on civic and legal education in relation to human rights? | a non-social-policy control |
 | SR4ALL | Recent intimate partner violence against women and health | violence and health |
 | SR4ALL | A systematic review and meta-analysis of the evidence on learning during the COVID-19 pandemic | learning loss |
 | SR4ALL | Risk and protective factors of drug abuse among adolescents | young people |
 | SR4ALL | Sleep duration and incidence of obesity in infants, children, and adolescents | child health, early years |
-| YEF | Interventions to prevent children and young people's involvement in violence: Trauma-specific therapies | the one gap-map strand |
+| YEF | What is the evidence on trauma-specific therapies in relation to interventions to prevent children and young people's involvement in violence? | the one gap-map strand |
 | hand-made | The effect of parental leave on parents' mental health | the original four, labelled |
 | hand-made | Tackling loneliness evidence review: main report | the original four, labelled; mostly grey literature |
 | hand-made | Adverse childhood experiences in children and youth experiencing homelessness | the original four, labelled |
 | hand-made | Social care shows that privatisation will not be the answer to NHS inequality | the original four, labelled; only 7 references |
 
-Two intents keep a title tail the cleaner does not strip: the Campbell whole-school map ends
+The four gap-map intents are question-shaped by the template described in section 6
+(since 2026-10-05; the first mini run used the "map title: row" form and scored them near
+zero on every engine). Two intents keep a title tail the cleaner does not strip: the Campbell whole-school map ends
 in "An evidence and gap map" inside a longer colon-separated title, and the SR4ALL learning
 review *starts* with "A systematic review and meta-analysis of the evidence on", which the
 cleaner only removes from the end. Both are sent as shown.

@@ -531,6 +531,16 @@ section 7 for the reader-facing version.
   a ceiling near 50%, and the numbers are read against it. `target_labelled` in the reviews
   file marks `yes` (gap maps) and `no` (lists). D11 stands for the fetchers' own output.
 
+- **D18 — Gap-map intents are questions, by template (2026-10-05).** The first mini run
+  scored every gap-map row near zero on every engine, while the reference-list rows
+  behaved; the intent shape "map title: intervention label" was the likely cause. The
+  getters now also write an `intent` column from one deterministic template,
+  `gap_map_question`: "What is the evidence on <intervention> in relation to <map
+  theme>?", words lower-cased except acronyms, " / " as " or ", " + " as " and ". The
+  uploader sends `intent` when filled, else the cleaned title (D12 stands for the title
+  and the identifier). A hand-written question may overwrite the cell. Owner-directed;
+  the baseline cache refetches a row whose intent changed.
+
 ### Scope (added)
 
 - **In:** the selection script and its test; the move; the README section; the two uploads.

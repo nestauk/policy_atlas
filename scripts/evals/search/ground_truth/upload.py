@@ -69,13 +69,15 @@ class ReviewSpec:
 
     Exactly one of ``doi``/``url`` is set. ``published_before`` is the search
     cutoff: optional for a DOI (derived from OpenAlex) and required for a URL,
-    where no machine-readable publication date exists.
+    where no machine-readable publication date exists. ``intent`` is the search
+    text to send as it is; when empty, the cleaned title is used.
     """
 
     title: str
     doi: str | None = None
     url: str | None = None
     published_before: str | None = None
+    intent: str | None = None
 
     @property
     def identifier(self) -> str:
@@ -136,6 +138,7 @@ def load_reviews(path: Path) -> list[ReviewSpec]:
                 doi=normalize_doi(doi) if doi else None,
                 url=None if doi else url,
                 published_before=published_before or None,
+                intent=row.get("intent") or None,
             )
         )
 
@@ -213,7 +216,7 @@ def build_items(
             {
                 "id": _item_id(dataset, spec.identifier),
                 "input": {
-                    "intent": clean_review_title(spec.title),
+                    "intent": spec.intent or clean_review_title(spec.title),
                     "published_before": published_before,
                 },
                 "expected_output": {"keys": sorted(titles), "titles": titles},

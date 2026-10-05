@@ -720,6 +720,99 @@ def test_copied_items() -> None:
     assert copies[1]["id"] == _item_id("retrieval-ground-truth-mini", "orphan")
 
 
+def test_gap_map_question() -> None:
+    """The deterministic question for a gap-map row: same parts, same text."""
+    from fetch_helpers import gap_map_question
+
+    assert (
+        gap_map_question("Human Rights", "Civic and Legal Education")
+        == "What is the evidence on civic and legal education in relation to human rights?"
+    )
+    assert gap_map_question(
+        "Nutrition-Sensitive Agriculture",
+        "Consumption / provision of large-scale fortified foods",
+    ) == (
+        "What is the evidence on consumption or provision of large-scale fortified foods "
+        "in relation to nutrition-sensitive agriculture?"
+    )
+    # Acronyms survive; "+" reads as "and"; the whole-map form has no "in relation to".
+    assert gap_map_question(
+        "Sexual and Reproductive Health", "PAH + SBC + Services"
+    ) == (
+        "What is the evidence on PAH and SBC and services in relation to sexual and reproductive health?"
+    )
+    assert gap_map_question("Interventions to prevent violence") == (
+        "What is the evidence on interventions to prevent violence?"
+    )
+    assert gap_map_question(
+        "A", "Clinical CBT Treatment (Targeted / High-risk)"
+    ).startswith(
+        "What is the evidence on clinical CBT treatment (targeted or high-risk)"
+    )
+    # Map titles that carry their own type, with or without a separator, lose it.
+    assert gap_map_question(
+        "Nutrition-Sensitive Agriculture Evidence Gap Map", "Biofortified foods"
+    ) == (
+        "What is the evidence on biofortified foods in relation to nutrition-sensitive agriculture?"
+    )
+    assert gap_map_question(
+        "Rapid Evidence Map: Promoting Agricultural Resilience", "Food aid"
+    ) == (
+        "What is the evidence on food aid in relation to promoting agricultural resilience?"
+    )
+
+
+def test_intent_column_wins_over_title() -> None:
+    """A filled ``intent`` column is sent as it is; an empty one falls back to the cleaned title."""
+    import csv
+    import tempfile
+    from pathlib import Path
+
+    from upload import build_items, load_reviews
+
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "r.csv"
+        with path.open("w", newline="") as handle:
+            writer = csv.DictWriter(
+                handle,
+                fieldnames=[
+                    "title",
+                    "intent",
+                    "doi",
+                    "url",
+                    "published_before",
+                    "exclude",
+                ],
+            )
+            writer.writeheader()
+            writer.writerow(
+                {
+                    "title": "Map: Row",
+                    "intent": "What is the evidence on row in relation to map?",
+                    "url": "https://x/1",
+                    "published_before": "2021-12-31",
+                }
+            )
+            writer.writerow(
+                {
+                    "title": "Exercise for mood: a systematic review",
+                    "intent": "",
+                    "url": "https://x/2",
+                    "published_before": "2021-12-31",
+                }
+            )
+        reviews = load_reviews(path)
+        refs = {
+            r.title: {"titles": {"10.1/a": "A"}, "n_unscorable": 0} for r in reviews
+        }
+        items = build_items(reviews, refs, "ds")
+        assert (
+            items[0]["input"]["intent"]
+            == "What is the evidence on row in relation to map?"
+        )
+        assert items[1]["input"]["intent"] == "Exercise for mood"
+
+
 if __name__ == "__main__":
     test_normalize_doi()
     test_record_key()
@@ -739,4 +832,6 @@ if __name__ == "__main__":
     test_get_campbell_select()
     test_select_ground_truth()
     test_copied_items()
+    test_gap_map_question()
+    test_intent_column_wins_over_title()
     print("ok")

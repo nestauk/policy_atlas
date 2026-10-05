@@ -48,7 +48,13 @@ from typing import Any
 import httpx
 
 from evals_search_utils import clean_review_title
-from fetch_helpers import RAW_DIR, cached_json, doi_if_valid, write_ground_truth
+from fetch_helpers import (
+    RAW_DIR,
+    cached_json,
+    doi_if_valid,
+    gap_map_question,
+    write_ground_truth,
+)
 
 API = "https://api.developmentevidence.3ieimpact.org"
 PORTAL_MAP_PREFIX = "https://developmentevidence.3ieimpact.org/egm/"
@@ -184,14 +190,15 @@ def build_rows(
         str(k): v for k, v in (data.get("project_records") or {}).items()
     }
     map_title = clean_review_title(egm["title"])
-    targets: list[tuple[str, str, str, set[str]]] = [
-        (map_title, egm["url"], "map", set(records))
+    targets: list[tuple[str, str, str, str, set[str]]] = [
+        (map_title, gap_map_question(map_title), egm["url"], "map", set(records))
     ]
     for gid, row_title, ids in map_rows(data):
         if len(ids) >= min_studies:
             targets.append(
                 (
                     f"{map_title}: {row_title}",
+                    gap_map_question(map_title, row_title),
                     f"{egm['url']}#intervention={gid}",
                     "intervention",
                     ids,
@@ -200,7 +207,7 @@ def build_rows(
 
     review_rows: list[dict[str, Any]] = []
     reference_rows: list[dict[str, Any]] = []
-    for title, url, level, ids in targets:
+    for title, intent, url, level, ids in targets:
         studies = [records[i] for i in sorted(ids) if i in records]
         years = [y for y in (_year(s.get("year_of_publication")) for s in studies) if y]
         latest = max(years) if years else _year(egm["year"])
@@ -223,6 +230,7 @@ def build_rows(
         review_rows.append(
             {
                 "title": title,
+                "intent": intent,
                 "doi": "",
                 "url": url,
                 "published_before": f"{latest}-12-31" if latest else "",

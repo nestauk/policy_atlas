@@ -485,3 +485,23 @@ hand-made reviews through `upload.py --include-from`, then grown to fifteen item
 sampled row (child sleep and obesity, SR4ALL) on the owner's go; self-check
 `test_copied_items` added; the `-10`/`-100` datasets emptied and replaced by `-mini`/`-full`.
 
+## First mini-dataset run and the gap-map intent change (2026-10-05)
+
+The owner ran the full ladder on `retrieval-ground-truth-mini` (label `mini-2026-10-05`,
+commit `d848515`): all four baseline arms, pipeline rapid and standard; rows are in
+`results/history.md`. Headline: snippet 11.7% and Consensus 10.7% at the ceiling, OpenAlex
+raw 5.2%, Semantic Scholar keyword 1.9%; rapid 2.5% at cap 50, standard 5.0% (= screen
+recall) for $15.85 over fifteen reviews. Per-review split (Langfuse): the four gap-map rows
+scored 0-9% on every engine, the seven reference lists 12-13% at the ceiling on the two
+semantic engines, the four originals reproduced September's engine numbers exactly while
+rapid fell 5.6% -> 4.4% and standard 10.7% -> 8.1% on identical inputs (language-model
+variance). Three single requests failed after retries (one each: keyword arm, snippet
+lookup, rapid), each a small undercount on one row.
+
+Owner decision from that reading: gap-map intents become questions (D18). `gap_map_question`
+in `fetch_helpers.py` writes the `intent` column by template; the uploader sends it when
+filled. Both datasets re-uploaded in place (same item ids): 4 of 15 and 40 of 100 items now
+carry question-shaped intents. The baseline cache compares intents, so those rows refetch on
+the next run (Consensus: $2 on the mini, $20 on the full). Self-checks `test_gap_map_question`
+and `test_intent_column_wins_over_title`; `make eval-check` green.
+
