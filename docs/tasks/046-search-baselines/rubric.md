@@ -43,7 +43,7 @@ P2 and D5 are deferred and have no item here. Item 12 covers § Amendment 2 (pos
         unlabelled (D11). A second run makes no download (D14). Self-checks listed in the
         contract's added § Acceptance checks pass. Nothing under `results/` is committed.
 13. [ ] **P6 (Amendment 3).** `select_ground_truth.py` writes `sample_100` (30/30/30/10) and
-        `sample_10` (3/3/3/1, a subset) from the fetched collections under D15–D17; both load
+        `sample_10` (ten hand-chosen rows, a subset) from the fetched collections under D15–D17; both load
         through `ground_truth_dataset.py --dry-run` with no unusable row and are uploaded as
         `retrieval-ground-truth-10` and `-100`. README section 7 states the quality check and
         the 50% ceiling on unlabelled lists (D11 revised). Self-check listed in the contract.

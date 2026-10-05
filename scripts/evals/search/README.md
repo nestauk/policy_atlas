@@ -18,7 +18,7 @@ The folder has thirteen Python files. You run nine of them from the command line
 | `history.py` | Prints one markdown table row per dataset run in Langfuse: date, commit, settings, run name, mean recall and the run's variable cost. It writes nothing. | After each eval you can copy the rows worth keeping into `results/history.md` and add a note. |
 | `baseline_recall.py` | The baselines. Sends each review's intent once, as plain text, to Semantic Scholar (keyword and semantic search), Consensus and OpenAlex, caches the raw result pages locally, and scores recall at several result caps. One Langfuse run per service and cap. | When you want a "what does good look like" number to compare the pipeline's recall with. The services are called once; later runs read the cache. See section 5. |
 | `getters/get_campbell.py`, `getters/get_3ie.py`, `getters/get_yef.py`, `getters/get_sr4all.py` | The ground-truth fetchers, in their own folder. Each downloads one public source of "review plus the studies it covers", keeps the raw download under `results/ground_truth/raw/`, and writes two CSVs in the same shape as `input/gt_reviews.csv` and `input/references.csv` into `results/ground_truth/`. | When you want to grow the ground truth beyond the four hand-made reviews. See section 6. |
-| `select_ground_truth.py` | Picks the ground-truth sample from the fetched collections: a simple quality check, a spread across topics, 30 Campbell + 30 3ie + 30 SR4ALL + 10 YEF rows (`sample_100`) and the first 3 + 3 + 3 + 1 of those (`sample_10`). Writes the two CSV pairs next to the fetched files. No network. | After the fetchers have run, or after changing a rule in the quality check. See section 7. |
+| `select_ground_truth.py` | Picks the ground-truth sample from the fetched collections: a simple quality check, a spread across topics, 30 Campbell + 30 3ie + 30 SR4ALL + 10 YEF rows (`sample_100`) and ten hand-chosen rows out of those (`sample_10`). Writes the two CSV pairs next to the fetched files. No network. | After the fetchers have run, or after changing a rule in the quality check. See section 7. |
 | `sweep_record_cap.py` | The experiment. It runs a rapid search many times, each time with a different cap on the number of records kept and with one of the two query-generation methods. It records the recall for each combination. | When you want to know how the record cap or the prompting method changes recall. |
 
 The two measuring scripts read the reviews and their reference lists from the Langfuse dataset. They do not read the CSV files. This means you must run `ground_truth_dataset.py` at least once before you run either of them.
@@ -343,6 +343,9 @@ A candidate review from any collection is kept only if:
    grey literature would measure the gap in the ground truth, not the search.
 4. Its **cutoff date is in the past and 2010 or later**. Four 3ie rows and one YEF strand
    have a cutoff of 31 December 2026 because the map still gains studies; they wait.
+5. Its title is **not a protocol, an editorial or a guide**. Those have a reference list
+   but no included studies, so there is nothing for a search to find. (Campbell publishes
+   protocols as articles; nine of its 349 candidates are protocols, guides or editorials.)
 
 Then the script takes the collection's quota by rotating across groups so no single
 subject fills it: for gap maps the group is the map (3ie rows share their map's title),
@@ -352,9 +355,31 @@ organisations and innovation, other). Inside a group the rows with the highest D
 come first. The `topic` column in the reviews file records the tag; it is only used to
 spread the picks, never to score.
 
-On the collections fetched on 2026-09-25 the check keeps 257 of 349 Campbell reviews, 88
+On the collections fetched on 2026-09-25 the check keeps 250 of 349 Campbell reviews, 88
 of 197 3ie rows, 91 of 100 SR4ALL reviews and 13 of 20 YEF strands. `--verbose` prints
 why each rejected row failed.
+
+### The cheap 10
+
+The ten are chosen by hand from the hundred (`SAMPLE_10_TITLES` in the script; the script
+refuses a title that is not in the hundred, so the 10 is always a subset of the 100). They
+lean towards Nesta's missions (a healthy life, a fairer start, a sustainable future):
+
+| Source | Review | Why |
+|---|---|---|
+| Campbell | Health and social care interventions for people aged 80 and over (evidence and gap map) | health and social care |
+| Campbell | Whole-school interventions promoting mental health and preventing risk behaviours (evidence and gap map) | schools, a fairer start |
+| Campbell | Residential energy efficiency interventions (meta-analysis) | home energy, a sustainable future |
+| 3ie | Learning-to-earning interventions: core skills training | jobs and skills |
+| 3ie | Nutrition-sensitive agriculture: large-scale fortified foods | food and health |
+| 3ie | Human rights: civic and legal education | a non-social-policy control |
+| SR4ALL | Recent intimate partner violence against women and health | violence and health |
+| SR4ALL | Learning during the COVID-19 pandemic | learning loss |
+| SR4ALL | Risk and protective factors of adolescent drug abuse | young people |
+| YEF | Trauma-specific therapies (youth violence) | the one gap-map strand |
+
+To change the ten, edit `SAMPLE_10_TITLES`, re-run the script, re-upload the dataset and
+delete the items that dropped out (an upload upserts and never deletes).
 
 ### Labels: no labelling pass, and what that does to the numbers
 

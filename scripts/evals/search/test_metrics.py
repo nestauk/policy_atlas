@@ -1348,7 +1348,7 @@ def test_select_ground_truth() -> None:
     from pathlib import Path
 
     from ground_truth_dataset import load_references, load_reviews
-    from select_ground_truth import pick, rejection, select, topic, write_sample
+    from select_ground_truth import mini_sample, pick, rejection, select, topic, write_sample
 
     def review(title, n_refs, n_doi, cutoff="2020-01-01", level="review", dup=False, dataset="campbell"):
         return {
@@ -1362,6 +1362,9 @@ def test_select_ground_truth() -> None:
     assert rejection(review("ok", 100, 90), today) is None
     assert "whole gap map" in rejection(review("m", 100, 90, level="map"), today)
     assert "twice" in rejection(review("d", 100, 90, dup=True), today)
+    for bad in ("X: A Systematic Review Protocol", "Updated protocol: Y", "Editorial: Z", "Searching: a guide to W"):
+        assert "not a review" in rejection(review(bad, 100, 90), today)
+    assert rejection(review("Guidance for engagement in health guideline development: A scoping review", 100, 90), today) is None
     assert "fewer than 20" in rejection(review("few", 30, 19), today)
     assert "more than 300" in rejection(review("big", 301, 300), today)
     assert "under 70%" in rejection(review("grey", 100, 69), today)
@@ -1404,7 +1407,13 @@ def test_select_ground_truth() -> None:
         picks, reasons = select(root, today)
         assert all(len(rows) == 4 for rows in picks.values())
         assert all(dict(c) == {"passing": 4} for c in reasons.values())
-        small = {n: rows[: sel.MIN_QUOTAS[n]] for n, rows in picks.items()}
+        chosen = tuple(rows[i]["title"] for n, rows in picks.items() for i in range({"yef": 1}.get(n, 3)))
+        small = mini_sample(picks, chosen)
+        try:
+            mini_sample(picks, ("not in the hundred",))
+            raise AssertionError("an unknown title must be refused")
+        except ValueError:
+            pass
         rv, rf = write_sample("sample_100", picks, root)
         rv10, rf10 = write_sample("sample_10", small, root)
         assert len(load_reviews(rv)) == 16 and len(load_reviews(rv10)) == 10

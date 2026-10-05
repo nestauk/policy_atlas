@@ -7,8 +7,10 @@ topics, and writes two samples in the shape ``ground_truth_dataset.py`` reads:
 
 - ``sample_100``: 30 Campbell reviews, 30 3ie gap-map rows, 30 SR4ALL reviews and 10 YEF
   strands. The full eval set.
-- ``sample_10``: the first 3, 3, 3 and 1 of those, in the same order. The cheap set for
-  quick checks; it is a subset of the full one.
+- ``sample_10``: ten rows chosen by hand from the hundred (``SAMPLE_10_TITLES``: 3
+  Campbell, 3 3ie, 3 SR4ALL, 1 YEF), leaning towards Nesta's missions: a healthy life, a
+  fairer start, a sustainable future. The cheap set for quick checks; always a subset of
+  the full one, and the script refuses a title that is not in the hundred.
 
 **The quality check** (one reason per failing row, printed with ``--verbose``):
 
@@ -21,6 +23,8 @@ topics, and writes two samples in the shape ``ground_truth_dataset.py`` reads:
    recall until the grey-literature keys exist (P2). YEF cites many evaluation reports,
    so its floor is 50%; otherwise only seven strands would pass.
 4. The cutoff date is in the past and 2010 or later.
+5. The title is not a protocol, an editorial or a guide: those have a reference list but
+   no included studies, so there is nothing for a search to find.
 
 **Spread.** Within a collection the picks rotate across groups so no one subject fills the
 quota: for gap-map sources the group is the map (3ie rows share their map's title), for
@@ -63,12 +67,27 @@ from typing import Any
 from ground_truth import GROUND_TRUTH_DIR, REFERENCE_COLUMNS, REVIEW_COLUMNS
 
 QUOTAS = {"campbell": 30, "3ie": 30, "sr4all": 30, "yef": 10}
-MIN_QUOTAS = {"campbell": 3, "3ie": 3, "sr4all": 3, "yef": 1}
+# The cheap sample, chosen by hand from the hundred (owner, 2026-10-05): two health rows,
+# schools, home energy, jobs, civic education, violence, learning loss, adolescent drug use.
+SAMPLE_10_TITLES = (
+    "Health and Social Care Interventions in the 80 years Old and Over Population: An Evidence and Gap Map",
+    "Evidence and Gap Map of Whole-School Interventions Promoting Mental Health and Preventing Risk Behaviours in Adolescence: Programme Component Mapping Within the Health-Promoting Schools Framework: An evidence and gap map",
+    "Residential energy efficiency interventions: A meta-analysis of effectiveness studies",
+    "Improving Labour Market Outcomes Through Learning to Earning Interventions in Low- and Middle-Income Countries: Core skills training",
+    "Nutrition-Sensitive Agriculture Evidence Gap Map: Consumption / provision of large-scale fortified foods",
+    "Human Rights: Civic and Legal Education",
+    "Recent intimate partner violence against women and health: a systematic review and meta-analysis of cohort studies",
+    "A systematic review and meta-analysis of the evidence on learning during the COVID-19 pandemic",
+    "Risk and protective factors of drug abuse among adolescents: a systematic review",
+    "Interventions to prevent children and young people's involvement in violence: Trauma-specific therapies",
+)
 GAP_MAP_SOURCES = {"3ie", "yef"}  # rows already labelled content by the map's screeners
 MIN_DOI_REFS, MAX_REFS = 20, 300
 MIN_DOI_SHARE = {"yef": 0.5}
 DEFAULT_MIN_DOI_SHARE = 0.7
 MIN_CUTOFF = "2010-01-01"
+# A protocol announces a review; an editorial or guide is not one. None has included studies.
+NOT_A_REVIEW_RE = re.compile(r"\bprotocol\b|^\s*editorial\b|\ba guide to\b", re.IGNORECASE)
 # Coarse keyword topics, first match wins. Only used to spread the picks, never to score.
 TOPICS = {
     "education": r"school|educat|learning|literacy|teacher|student|pupil|preschool",
@@ -118,6 +137,8 @@ def rejection(review: dict[str, Any], today: str) -> str | None:
         return "whole gap map, not one question"
     if review["_dup_title"]:
         return "title appears twice in its collection"
+    if NOT_A_REVIEW_RE.search(review["title"]):
+        return "a protocol, editorial or guide, not a review"
     if review["_n_doi"] < MIN_DOI_REFS:
         return f"fewer than {MIN_DOI_REFS} references with a DOI"
     if review["_n_refs"] > MAX_REFS:
@@ -184,6 +205,26 @@ def select(
     return picks, reasons
 
 
+def mini_sample(
+    picks: dict[str, list[dict[str, Any]]], titles: tuple[str, ...] = SAMPLE_10_TITLES
+) -> dict[str, list[dict[str, Any]]]:
+    """The hand-chosen rows out of the full picks, grouped by source in the picks' order.
+
+    Raises:
+        ValueError: When a title is not in the full sample, so the small set can never
+            drift away from the big one.
+    """
+    by_title = {review["title"]: (source, review) for source, rows in picks.items() for review in rows}
+    missing = [t for t in titles if t not in by_title]
+    if missing:
+        raise ValueError(f"{len(missing)} title(s) not in the full sample: {missing[:2]}")
+    small: dict[str, list[dict[str, Any]]] = {source: [] for source in picks}
+    for title in titles:
+        source, review = by_title[title]
+        small[source].append(review)
+    return small
+
+
 def write_sample(
     name: str,
     picks: dict[str, list[dict[str, Any]]],
@@ -229,7 +270,7 @@ def main() -> None:
     parser.add_argument("--verbose", action="store_true", help="Print the rejection reasons per source.")
     args = parser.parse_args()
     picks, reasons = select(args.dir, args.today)
-    small = {name: rows[: MIN_QUOTAS[name]] for name, rows in picks.items()}
+    small = mini_sample(picks)
     write_sample("sample_100", picks, args.dir)
     write_sample("sample_10", small, args.dir)
     print(f"{'source':<10}{'candidates':>12}{'passing':>9}{'picked':>8}{'in 10':>7}  groups covered")

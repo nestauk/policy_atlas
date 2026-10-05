@@ -498,15 +498,19 @@ section 7 for the reader-facing version.
   intervention row or one review, not a whole map; a title that appears once in its
   collection), has 20 to 300 references with a DOI, has at least 70% of its references
   with a DOI (YEF 50%: it cites evaluation reports, and only seven strands pass at 70%),
-  and has a cutoff in the past and on or after 2010-01-01. Owner-approved 1 to 4; the
-  YEF floor is the lead's call to reach the owner's quota of 10, flagged here.
+  has a cutoff in the past and on or after 2010-01-01, and has a title that is not a
+  protocol, editorial or guide (no included studies). Owner-approved 1 to 4; the YEF
+  floor and rule 5 are the lead's calls (rule 5 after four such titles reached the first
+  sample), flagged here.
 - **D16 — Spread, not ranking.** Within a collection the picks rotate across groups (the
   map for gap-map rows, a coarse keyword topic for reviews), highest DOI share first. The
   owner's quotas (30, 30, 30, 10) carry the social-policy bias; the rotation stops one
   subject from filling a quota. Deterministic: sorted inputs, no randomness.
-- **D17 — Two samples, nested.** `sample_100` is the full set; `sample_10` is the first 3,
-  3, 3 and 1 of each collection's picks, so the cheap set is a subset of the full one and a
-  number measured on the 10 is a preview of the 100.
+- **D17 — Two samples, nested.** `sample_100` is the full set; `sample_10` is ten rows
+  chosen by hand out of it (`SAMPLE_10_TITLES`: 3 Campbell, 3 3ie, 3 SR4ALL, 1 YEF, leaning
+  towards Nesta's missions; owner steer 2026-10-05: two health rows, no violent-extremism or
+  agricultural-extension row). The script refuses a title outside the hundred, so the cheap
+  set is always a subset of the full one.
 - **D11 revised — No labelling pass for the samples.** Every sampled reference is written
   `label = content`, including Campbell and SR4ALL lists that nobody has labelled. The owner
   accepts that about half of a reference list may be off topic, so recall on those rows has
@@ -522,9 +526,10 @@ section 7 for the reader-facing version.
 ### Acceptance checks (added)
 
 - `test_metrics.py` green with `test_select_ground_truth`: each rule of D15 rejects for its
-  own reason and the YEF floor passes at 51%; the rotation picks one row per group before a
+  own reason and the YEF floor passes at 51%; rule 5 rejects protocols, editorials and guides but
+  not a scoping review about guidance; the rotation picks one row per group before a
   second from any; gap-map rows rotate across maps; an end-to-end run on tiny files loads
   through the real `load_reviews` and `load_references` with every reference counted, and
-  the 10 is a subset of the 100.
+  a hand-chosen title outside the hundred is refused.
 - `ground_truth_dataset.py --dry-run` loads both samples with no unusable row.
 - A second run of the selection writes identical files.
