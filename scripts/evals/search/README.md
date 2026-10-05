@@ -16,7 +16,7 @@ The folder is split by purpose:
 | `measure/` | Running measurements: `engine.py` (runs one intent through the real search stage; no command line), `production_recall.py`, `sweep_record_cap.py`, `baseline_recall.py`, and `inspect_run.py` (tables over one run's raw provider output; no command line). |
 | `history.py` | Reading results: one markdown row per Langfuse dataset run. |
 | `tests/` | Self-checks that need no network and no database: `test_ground_truth.py` and `test_measure.py`. `make eval-check` runs them with ruff, and `make verify` and `make verify-fast` include it. |
-| `results/` | Outputs: the curated `history.md` (tracked) and the git-ignored caches, sweep files and ground-truth CSV files. |
+| `results/` | Outputs: the curated `history.md` (tracked), `analyses/` (tracked: dated scripts that re-derive a day's quoted figures from the Langfuse runs and write the table next to themselves), and the git-ignored caches, sweep files and ground-truth CSV files. |
 
 Every script below the root starts with `import _bootstrap`, a short file that puts the folder's siblings on Python's import path, so each script runs directly with `uv run --project backend python scripts/evals/search/<folder>/<script>.py`.
 
@@ -401,6 +401,16 @@ cleaner only removes from the end. Both are sent as shown.
 
 To change them, edit `SAMPLE_MINI_TITLES`, re-run the script, re-upload the dataset and
 delete the items that dropped out (an upload upserts and never deletes).
+
+### Re-deriving a day's figures
+
+Numbers quoted in `history.md` notes or in a write-up should be reproducible from the
+Langfuse runs, not trusted. `results/analyses/<date>-<topic>.py` scripts do that: each reads
+the labelled runs it names, refuses to run if a run does not hold the items it expects, and
+writes its table as `<date>-<topic>.md` beside itself. The first one,
+`2026-10-05-mini-question-intents.py`, rebuilds the title-against-question comparison on the
+mini dataset, including the spliced fifteen-row standard figure. Run from the repo root with
+`uv run --project backend --env-file backend/.env python <path>`; read-only against Langfuse.
 
 ### The mini dataset also carries the four hand-made reviews
 
