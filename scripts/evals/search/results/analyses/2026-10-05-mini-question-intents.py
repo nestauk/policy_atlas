@@ -22,7 +22,8 @@ Run from the repo root (read-only against Langfuse, no search-service calls)::
     uv run --project backend --env-file backend/.env \\
         python scripts/evals/search/results/analyses/2026-10-05-mini-question-intents.py
 
-It prints the table and writes it next to itself as ``2026-10-05-mini-question-intents.md``.
+It prints the tables and writes them next to itself as ``2026-10-05-mini-question-intents.md``
+and, with click-to-sort column headers, as ``2026-10-05-mini-question-intents.html``.
 Dev-only eval tooling. Not part of the runtime package.
 """
 
@@ -109,6 +110,71 @@ def pct(value: float | None) -> str:
     return "-" if value is None else f"{value:.1%}"
 
 
+def markdown_to_html(lines: list[str], title: str) -> str:
+    """A self-contained HTML page from the markdown lines, every table sortable by clicking a header.
+
+    Sorting reads the first number in a cell (so "34/84 (40%)" sorts by 34 and "11.7%" by
+    11.7) and falls back to text. No library; one short script.
+    """
+    import html
+
+    body: list[str] = []
+    table: list[list[str]] = []
+
+    def flush() -> None:
+        if not table:
+            return
+        head, *rows = [r for r in table if not set(r[0]) <= set("-: ")]
+        body.append(
+            "<table><thead><tr>"
+            + "".join(f"<th>{html.escape(c)}</th>" for c in head)
+            + "</tr></thead><tbody>"
+        )
+        for row in rows:
+            body.append(
+                "<tr>" + "".join(f"<td>{html.escape(c)}</td>" for c in row) + "</tr>"
+            )
+        body.append("</tbody></table>")
+        table.clear()
+
+    for line in lines:
+        if line.startswith("|"):
+            table.append([c.strip() for c in line.strip().strip("|").split("|")])
+            continue
+        flush()
+        if line.startswith("# "):
+            body.append(f"<h1>{html.escape(line[2:])}</h1>")
+        elif line.startswith("## "):
+            body.append(f"<h2>{html.escape(line[3:])}</h2>")
+        elif line.strip():
+            body.append(f"<p>{html.escape(line)}</p>")
+    flush()
+    script = """
+document.querySelectorAll("th").forEach((th, i) => th.addEventListener("click", () => {
+  const table = th.closest("table"), body = table.tBodies[0];
+  const num = (t) => { const m = t.match(/-?\\d+(\\.\\d+)?/); return m ? parseFloat(m[0]) : null; };
+  const col = Array.from(th.parentNode.children).indexOf(th);
+  const asc = th.dataset.asc !== "true"; th.dataset.asc = asc;
+  Array.from(body.rows).sort((a, b) => {
+    const x = a.cells[col].textContent, y = b.cells[col].textContent, nx = num(x), ny = num(y);
+    const r = (nx !== null && ny !== null) ? nx - ny : x.localeCompare(y);
+    return asc ? r : -r;
+  }).forEach((row) => body.appendChild(row));
+}));
+"""
+    style = (
+        "body{font:14px/1.4 system-ui,sans-serif;max-width:1400px;margin:2rem auto;padding:0 1rem}"
+        "table{border-collapse:collapse;margin:1rem 0;width:100%}th,td{border:1px solid #ccc;padding:4px 8px;text-align:left}"
+        "th{cursor:pointer;background:#f3f3f3;user-select:none}th:hover{background:#e6e6e6}p{max-width:90ch}"
+    )
+    return (
+        f'<!doctype html><html><head><meta charset="utf-8"><title>{html.escape(title)}</title>'
+        f"<style>{style}</style></head><body>"
+        + "\n".join(body)
+        + f"<script>{script}</script></body></html>\n"
+    )
+
+
 def main() -> None:
     client = tracing.get_langfuse()
     if client is None:
@@ -163,6 +229,10 @@ def main() -> None:
         "",
         "## 1. Total recall per experiment",
         "",
+        "One free Semantic Scholar snippet request and one Consensus request tie at 11.7% at the "
+        "ceiling, above the pipeline's standard depth (4.8%) and five times its rapid depth (2.2%); "
+        "the keyword engine barely registers.",
+        "",
         "| experiment | recall (15 reviews) |",
         "|---|---|",
     ]
@@ -171,6 +241,10 @@ def main() -> None:
     lines += [
         "",
         "## 2. Recall per experiment, by source",
+        "",
+        "The ranking of engines holds within every source, but the level does not: the 3ie and YEF "
+        "gap-map rows stay near zero for everyone (a corpus problem, not a wording one), while the "
+        "hand-made reviews score highest on every semantic engine.",
         "",
         "| experiment | "
         + " | ".join(f"{s} ({len(by_source[s])})" for s in SOURCES)
@@ -183,6 +257,12 @@ def main() -> None:
     lines += [
         "",
         "## 3. Recall per review (found/target)",
+        "",
+        "The two semantic engines disagree sharply review by review (Consensus 34/84 on child sleep "
+        "and obesity where the snippet engine finds 18; snippet 27/84 on loneliness where Consensus "
+        "finds 16), so querying both would likely add; the pipeline beats neither on any review and "
+        "has its one good result, parental leave at standard depth, on the intent most like a "
+        "research question.",
         "",
         "| source | review | " + " | ".join(PER_REVIEW_RUNS) + " |",
         "|---|---|" + "---|" * len(PER_REVIEW_RUNS),
@@ -207,7 +287,9 @@ def main() -> None:
     print(text)
     out = Path(__file__).with_suffix(".md")
     out.write_text(text, encoding="utf-8")
-    print(f"written {out}")
+    page = Path(__file__).with_suffix(".html")
+    page.write_text(markdown_to_html(lines, lines[0].lstrip("# ")), encoding="utf-8")
+    print(f"written {out} and {page} (click a column header to sort)")
 
 
 if __name__ == "__main__":
