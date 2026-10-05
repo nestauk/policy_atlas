@@ -688,6 +688,38 @@ def test_select_ground_truth() -> None:
         }
 
 
+def test_copied_items() -> None:
+    """Items copied from another dataset keep their content, get this dataset's id scheme."""
+    from types import SimpleNamespace
+
+    from upload import _item_id, copied_items
+
+    source = [
+        SimpleNamespace(
+            id="retrieval-ground-truth:abc",
+            input={"intent": "Parental leave", "published_before": "2022-12-01"},
+            expected_output={"keys": ["10.1/a"], "titles": {"10.1/a": "A"}},
+            metadata={
+                "review_id": "10.1016/x",
+                "review_title": "Parental leave: a review",
+            },
+        ),
+        SimpleNamespace(
+            id="orphan", input={}, expected_output={"keys": []}, metadata=None
+        ),
+    ]
+    copies = copied_items(
+        "retrieval-ground-truth-mini", "retrieval-ground-truth", source
+    )
+    assert copies[0]["id"] == _item_id("retrieval-ground-truth-mini", "10.1016/x")
+    assert copies[0]["input"]["intent"] == "Parental leave"
+    assert copies[0]["expected_output"]["keys"] == ["10.1/a"]
+    assert copies[0]["metadata"]["copied_from"] == "retrieval-ground-truth"
+    assert copies[0]["metadata"]["review_title"] == "Parental leave: a review"
+    # No review_id in the metadata: the source item id is the key, so the copy is still stable.
+    assert copies[1]["id"] == _item_id("retrieval-ground-truth-mini", "orphan")
+
+
 if __name__ == "__main__":
     test_normalize_doi()
     test_record_key()
@@ -706,4 +738,5 @@ if __name__ == "__main__":
     test_get_sr4all_filter()
     test_get_campbell_select()
     test_select_ground_truth()
+    test_copied_items()
     print("ok")

@@ -229,6 +229,38 @@ def build_items(
     return items
 
 
+def copied_items(
+    dataset: str, source: str, source_items: list[Any]
+) -> list[dict[str, Any]]:
+    """Re-key another Langfuse dataset's items for ``dataset`` so they can live in both.
+
+    Used to carry the four hand-made reviews into a sampled dataset without their CSV
+    files. Input, expected output and metadata are copied as they are; the id follows
+    this dataset's scheme and ``metadata.copied_from`` names the source.
+
+    Args:
+        dataset: The dataset the copies go into.
+        source: The dataset the items come from (recorded in the copy's metadata).
+        source_items: Items as the Langfuse client returns them.
+
+    Returns:
+        Item dicts ready for ``upload``.
+    """
+    copies = []
+    for item in source_items:
+        metadata = dict(item.metadata or {})
+        review_id = str(metadata.get("review_id") or item.id)
+        copies.append(
+            {
+                "id": _item_id(dataset, review_id),
+                "input": item.input,
+                "expected_output": item.expected_output,
+                "metadata": {**metadata, "copied_from": source},
+            }
+        )
+    return copies
+
+
 def upload(client: Any, dataset: str, items: list[dict[str, Any]]) -> None:
     """Create the dataset (if new) and upsert every item."""
     try:
@@ -254,6 +286,14 @@ def main() -> None:
     parser.add_argument("--reviews", type=Path, default=INPUT_DIR / "gt_reviews.csv")
     parser.add_argument("--references", type=Path, default=INPUT_DIR / "references.csv")
     parser.add_argument(
+        "--include-from",
+        action="append",
+        default=[],
+        metavar="DATASET",
+        help="Also copy every item of this existing Langfuse dataset into the target "
+        "(repeatable). Used to carry the four hand-made reviews into a sampled dataset.",
+    )
+    parser.add_argument(
         "--dry-run", action="store_true", help="Print the items; upload nothing."
     )
     args = parser.parse_args()
@@ -278,15 +318,18 @@ def main() -> None:
         )
     if not items:
         parser.error("no review has any scorable references — nothing to upload.")
-    if args.dry_run:
-        print(f"Dry run: {len(items)} item(s) would go to dataset {args.dataset!r}.")
-        return
-
     client = tracing.get_langfuse()
-    if client is None:
+    if client is None and (args.include_from or not args.dry_run):
         parser.error(
             "Langfuse is not configured (LANGFUSE_PUBLIC_KEY / SECRET_KEY / HOST). Use --dry-run to check the CSVs."
         )
+    for source in args.include_from:
+        copies = copied_items(args.dataset, source, client.get_dataset(source).items)
+        print(f"  + {len(copies)} item(s) copied from dataset {source!r}")
+        items += copies
+    if args.dry_run:
+        print(f"Dry run: {len(items)} item(s) would go to dataset {args.dataset!r}.")
+        return
     upload(client, args.dataset, items)
     print(f"Upserted {len(items)} item(s) into dataset {args.dataset!r}.")
 

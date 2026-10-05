@@ -33,8 +33,10 @@ to `getters/`; `ground_truth/select_sample.py` applies a simple quality check (o
 20 to 300 references with a DOI, at least 70% with a DOI, cutoff in the past and from 2010) and
 picks 30 Campbell, 30 3ie, 30 SR4ALL and 10 YEF rows by rotating across topics, plus ten
 hand-chosen rows out of those for cheap checks, leaning towards Nesta's missions. The owner chose to skip the labelling pass, so the Campbell
-and SR4ALL lists are used whole and their recall ceiling is about 50% (README § 7). Both
-samples are uploaded as Langfuse datasets `retrieval-ground-truth-10` and `-100`.
+and SR4ALL lists are used whole and their recall ceiling is about 50% (README § 7). The mini
+dataset (`retrieval-ground-truth-mini`) is the ten plus the four original reviews, fourteen
+items, copied in with the uploader's new `--include-from`; `retrieval-ground-truth-full` is
+the hundred.
 
 **Layout (2026-10-05):** the folder is split by purpose: `evals_search_utils.py` (shared),
 `ground_truth/` (getters, sample selection, upload), `measure/` (engine and the three

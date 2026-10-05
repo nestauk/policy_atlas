@@ -49,7 +49,10 @@ then upload each sample as its own Langfuse dataset::
     uv run --project backend --env-file backend/.env python scripts/evals/search/ground_truth/upload.py \\
         --reviews scripts/evals/search/results/ground_truth/sample_10_reviews.csv \\
         --references scripts/evals/search/results/ground_truth/sample_10_references.csv \\
-        --dataset retrieval-ground-truth-10 --dry-run
+        --dataset retrieval-ground-truth-mini --include-from retrieval-ground-truth --dry-run
+
+``--include-from`` adds the four hand-made reviews to the mini dataset (fourteen items), so
+its numbers sit next to the rows already in ``history.md``; the full dataset is the hundred.
 
 Dev-only eval tooling. No network. Not part of the runtime package.
 """

@@ -471,3 +471,16 @@ blanked made zero requests and reproduced every `history.md` row; `select_sample
 byte-identical sample files; `upload.py --dry-run` loaded the 10-row sample; `history.py
 --since 2026-09-25` listed the runs. `make verify-fast` (now including `eval-check`) is in
 the commands table. Git history follows the files (`git mv`).
+
+## Codex review of the 2026-10-05 work (read-only brief, job `task-muv5v4r4-4q30hm`)
+
+Scope: the four commits of the day (getters move, sample, rule 5, folder split). Two findings,
+both adopted: README section 6 still ran the fetchers from their deleted root paths (fixed);
+the new `eval-check` target was missing from `.PHONY`, so a stray file of that name would have
+made `make verify` skip the eval checks silently (fixed). Codex traced every `Path(__file__)`
+path to `parents[1]`, the bootstrap behaviour under the tests, and the selection logic, and
+found no defect there. Its sandbox could not run `make eval-check` (no access to the uv cache);
+the lead ran it. Owner follow-up in the same session: the mini dataset now carries the four
+hand-made reviews (fourteen items) through `upload.py --include-from`; self-check
+`test_copied_items` added; the `-10`/`-100` datasets emptied and replaced by `-mini`/`-full`.
+

@@ -317,7 +317,7 @@ uv run --project backend --env-file backend/.env python scripts/evals/search/gro
 - **SR4ALL selection** is repeatable: English reviews with a DOI, at least one stated research question, at least `--min-refs` references, a non-protocol title and a `field` in `--fields` (default: Social Sciences, Psychology, Economics, Business), then the `--limit` most cited. The stated research questions are kept in the `research_questions` column for a later eval that starts from a question instead of a title.
 - **Duplicate titles** (an updated review with the same title as the original) are dropped after the first, because the title is the join key between the two CSVs.
 
-## 7. The ground-truth sample: 100 reviews, and a cheap 10
+## 7. The ground-truth sample: 100 reviews, and a cheap 14
 
 Key script: `ground_truth/select_sample.py`. Outputs: `results/ground_truth/sample_100_*.csv` and
 `sample_10_*.csv` (git-ignored like everything under `results/`; the script rebuilds them
@@ -384,6 +384,15 @@ lean towards Nesta's missions (a healthy life, a fairer start, a sustainable fut
 To change the ten, edit `SAMPLE_10_TITLES`, re-run the script, re-upload the dataset and
 delete the items that dropped out (an upload upserts and never deletes).
 
+### The mini dataset also carries the four hand-made reviews
+
+`retrieval-ground-truth-mini` holds the ten rows above **plus the four original reviews**
+(parental leave, loneliness, adverse childhood experiences, social care), fourteen items in
+all, so a number measured on it can be read next to the rows already in `history.md`. The
+originals have no CSV files in this repo; `upload.py --include-from retrieval-ground-truth`
+copies them out of their own Langfuse dataset, re-keyed for the target and marked
+`copied_from` in their metadata. `retrieval-ground-truth-full` holds the hundred only.
+
 ### Labels: no labelling pass, and what that does to the numbers
 
 The owner decided on 2026-10-05 to **skip the labelling pass**. Every reference in the
@@ -401,16 +410,16 @@ compare numbers. This revises D11 of the task 046 contract for these two samples
 ```
 uv run --project backend python scripts/evals/search/ground_truth/select_sample.py --verbose
 
-# Upload each sample as its own Langfuse dataset (drop --dry-run to upload):
+# Upload the mini dataset: the 10 sampled rows plus the 4 original reviews (drop --dry-run to upload):
 uv run --project backend --env-file backend/.env python scripts/evals/search/ground_truth/upload.py \
     --reviews scripts/evals/search/results/ground_truth/sample_10_reviews.csv \
     --references scripts/evals/search/results/ground_truth/sample_10_references.csv \
-    --dataset retrieval-ground-truth-10 --dry-run
-# and the same with sample_100 and --dataset retrieval-ground-truth-100
+    --dataset retrieval-ground-truth-mini --include-from retrieval-ground-truth --dry-run
+# The full dataset: the same with sample_100 and --dataset retrieval-ground-truth-full (no --include-from)
 
 # Then measure against a sample instead of the four hand-made reviews:
-uv run --project backend --env-file backend/.env python scripts/evals/search/measure/baseline_recall.py --dataset retrieval-ground-truth-10
-uv run --project backend --env-file backend/.env python scripts/evals/search/measure/production_recall.py --dataset retrieval-ground-truth-10 --depths rapid
+uv run --project backend --env-file backend/.env python scripts/evals/search/measure/baseline_recall.py --dataset retrieval-ground-truth-mini
+uv run --project backend --env-file backend/.env python scripts/evals/search/measure/production_recall.py --dataset retrieval-ground-truth-mini --depths rapid
 ```
 
 The four hand-made reviews stay in `retrieval-ground-truth`, so the rows already in

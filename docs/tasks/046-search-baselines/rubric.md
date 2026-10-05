@@ -45,5 +45,5 @@ P2 and D5 are deferred and have no item here. Item 12 covers § Amendment 2 (pos
 13. [ ] **P6 (Amendment 3).** `ground_truth/select_sample.py` writes `sample_100` (30/30/30/10) and
         `sample_10` (ten hand-chosen rows, a subset) from the fetched collections under D15–D17; both load
         through `ground_truth/upload.py --dry-run` with no unusable row and are uploaded as
-        `retrieval-ground-truth-10` and `-100`. README section 7 states the quality check and
+        `retrieval-ground-truth-mini` and `-full`. README section 7 states the quality check and
         the 50% ceiling on unlabelled lists (D11 revised). Self-check listed in the contract.

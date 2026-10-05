@@ -498,9 +498,13 @@ section 7 for the reader-facing version.
     format on the folder) runs inside `make verify` and `make verify-fast`, so the eval's
     self-checks are no longer run by hand only. Behaviour unchanged: the cache re-score,
     the sample files and every script's command line were checked before and after.
-14. Two Langfuse datasets, `retrieval-ground-truth-10` and `retrieval-ground-truth-100`,
-    uploaded with `ground_truth/upload.py` from the sample files. The four hand-made
-    reviews stay in `retrieval-ground-truth`.
+14. Two Langfuse datasets, `retrieval-ground-truth-mini` (the ten sampled rows **plus the
+    four hand-made reviews**, fourteen items; owner, 2026-10-05) and
+    `retrieval-ground-truth-full` (the hundred), uploaded with `ground_truth/upload.py`.
+    The originals are copied in with `--include-from retrieval-ground-truth` (new flag;
+    they have no CSV files in this repo) and keep their own dataset too. The first
+    uploads under the names `-10` and `-100` were emptied; the API cannot delete a
+    dataset, so the empty shells wait for the Langfuse UI.
 
 ### Decisions (added)
 
