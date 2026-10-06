@@ -34,6 +34,12 @@ scripts/recordings/
 scripts/evals/search/results/*
 !scripts/evals/search/results/history.md
 
+# Coverage/prominence eval: generated output and real cases (review text is copyrighted);
+# only the synthetic example is committed, including its CSV annotations
+scripts/evals/coverage/results/
+scripts/evals/coverage/cases/*
+!scripts/evals/coverage/cases/example_synthetic/
+
 # Node / frontend build artifacts (never committed)
 node_modules/
 .vite/
@@ -68,3 +74,6 @@ scripts/.rename_038_state.json
 
 # Data
 *.csv
+
+# Coverage eval: the synthetic example's human-annotation CSV is committed (must follow *.csv above)
+!scripts/evals/coverage/cases/example_synthetic/**/*.csv
