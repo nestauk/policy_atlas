@@ -293,7 +293,7 @@ would exceed 1,500. Recorded for `docs/deferred.md`.
 
 ## 2026-10-06 — Prompt and model comparison for the seed queries
 
-Full table and reading in `scripts/evals/search/EXPERIMENTS.md` § Results so far. In one
+Full table and reading in `scripts/evals/search/results/analyses/2026-10-06-search-experiments.md` § Results so far. In one
 line: the production prompt on gpt-5.4-mini remains the best seed source (15.2% / 14.1%
 with the snowball, two runs); the systematic-review-style prompts (synonym blocks, roles,
 code-composed concept blocks) lowered it by three to six points, because OpenAlex caps a
@@ -321,12 +321,12 @@ it is the top of its noise rather than a real gain. **Conclusion of the query-ge
 work:** fourteen configurations land between 14% and 16% with the snowball at cap 200;
 the production prompt on gpt-5.4-mini is as good as any and the cheapest. Stop here on
 prompts; next levers are the snowball itself (second hop, screened seeds) and the
-ground-truth labelling. Table in `EXPERIMENTS.md`.
+ground-truth labelling. Table in `results/analyses/2026-10-06-search-experiments.md`.
 
 ## 2026-10-06 — Miss analysis and hypotheses
 
 Bucketed all 941 ground-truth papers against the best configuration; table and the five
-ranked hypotheses are in `EXPERIMENTS.md` § 6. Headlines: 26% of the ground truth is
+ranked hypotheses are in `results/analyses/2026-10-06-search-experiments.md` § 6. Headlines: 26% of the ground truth is
 cited by a seed but falls below the 200 cut (mostly single citations); 28% cites a seed
 and is reachable by forward citation chasing; a third has no graph path from the seeds.
 Zero-cost test: weighting the count by seed type (review seeds, keyword rank, seed
@@ -352,7 +352,7 @@ corpus and pricing (https://help.openalex.org/).
 
 Built into `snowball_recall.py` (`--forward N --forward-top 20 --forward-pages 10`,
 optional `--forward-search`, `--forward-sort`, `--forward-max-cites`). Results and the
-ranking study are in `EXPERIMENTS.md` § 7. Headline: snowball plus forward on the
+ranking study are in `results/analyses/2026-10-06-search-experiments.md` § 7. Headline: snowball plus forward on the
 production prompt with gpt-5.4-mini reaches 16.3% at cap 200, 21.1% at 400 and a 22.8%
 ceiling, against 13.6% / 16.8% / 16.8% for the snowball alone on the same seeds. Ten free
 OpenAlex calls. Weighted coupling (cited seeds weighted by their in-set citations) ranks
@@ -367,7 +367,7 @@ on the official path. Run folders end in `-f200p10c300t20`.
 
 ## 2026-10-06 — Longer tail with re-ranking, and topic fence (hypotheses 2 and 4)
 
-Script `measure/pool_rerank.py`; results in `EXPERIMENTS.md` § 8. Pool of about 1,900
+Script `measure/pool_rerank.py`; results in `results/analyses/2026-10-06-search-experiments.md` § 8. Pool of about 1,900
 candidates (200 seeds, 800 backward, 200 forward, 700 topic-fenced) holds 35.5% of the
 ground truth. Best ranking rule is the graph specificity multiplied by the normalised
 embedding similarity: 17.9% at cap 200, 22.3% at 400, 26.0% at 600 (graph alone 15.7 /
@@ -383,9 +383,9 @@ folder: `results/snowball/pool/2026-10-06-shared-c6e320-s200-k800-f200`.
 `search.semantic`, eight texts per review (question, two paraphrases, five queries),
 50 results each, year fence server-side and the exact cutoff applied locally (the
 endpoint rejects date filters; first attempt failed on that and on the one-per-second
-rate limit, both handled). Results in `EXPERIMENTS.md` § 9. Keyword plus semantic seeds
+rate limit, both handled). Results in `results/analyses/2026-10-06-search-experiments.md` § 9. Keyword plus semantic seeds
 with snowball and forward on mini: 21.9% at cap 200, 28.1% at 400, 30.6% ceiling,
 against 16.3 / 21.1 / 22.8 for keyword seeds alone; the two routes overlap little (7.1
 ground-truth seeds per review together against 4.1 and 5.6 apart). Under a cent per
-search. Luna `exp_d` with combined seeds: 16.8 / 24.7 / 27.2, below keyword-only at cap 200 (18.5); suspected cause is sending boolean-block queries to semantic search; `--semantic-texts intent` variant running. Run folders:
+search. Luna `exp_d` with combined seeds: 16.8 / 24.7 / 27.2, below keyword-only at cap 200 (18.5); suspected cause is sending boolean-block queries to semantic search; `--semantic-texts intent` (three calls): 18.9 / 23.8 / 26.3, parity with keyword-only on luna. Best overall remains mini + production prompt + combined seeds (21.9 / 28.1). Run folders:
 `shared+semantic-c6e320-s200-k200-f200p10c300t20` and `semantic-c6e320-...`.

@@ -1,4 +1,4 @@
-"""Ideas 2 and 4 of EXPERIMENTS.md § 6: a longer tail re-ranked before the cut, and a
+"""Ideas 2 and 4 of the search experiments write-up § 6: a longer tail re-ranked before the cut, and a
 topic-fenced search for the papers no citation link reaches.
 
 Builds on ``snowball_recall.py`` (same seeds, backward snowball and forward stage) and
@@ -48,6 +48,7 @@ from snowball_recall import (
     MINI_DATASET,
     QUERY_SOURCES,
     candidates,
+    cited_asof,
     load_or_expand,
     override_prompt,
     score,
@@ -57,6 +58,7 @@ from snowball_recall import (
 import argparse
 import collections
 import csv
+import hashlib
 import json
 import math
 from datetime import date
@@ -64,7 +66,7 @@ from pathlib import Path
 from typing import Any
 
 from policy_atlas.core import tracing
-from policy_atlas.core.embeddings import OpenAIEmbeddingBackend
+from policy_atlas.core.embeddings import EMBEDDING_MODEL, OpenAIEmbeddingBackend
 from policy_atlas.evidence_search.sourcing import search_generation
 
 OUT_DIR = Path(__file__).resolve().parents[1] / "results" / "snowball" / "pool"
@@ -122,7 +124,8 @@ def seed_topics(payload: dict[str, Any], *, item_id: str, get: Any) -> list[str]
         counter.pop("", None)
         return [t for t, _ in counter.most_common(3)]
 
-    return cached_json(f"topics|{item_id}|{payload.get('source')}|{len(ids)}", build)
+    seed_hash = hashlib.sha256("|".join(ids).encode()).hexdigest()[:12]
+    return cached_json(f"topics|{item_id}|{seed_hash}|{payload['cutoff']}", build)
 
 
 def topic_search(
@@ -139,7 +142,7 @@ def topic_search(
                 {
                     "search": openalex_query(query),
                     "filter": f"primary_topic.id:{'|'.join(topics)},{openalex_cutoff(cutoff)}",
-                    "select": "id,doi,display_name,publication_date,cited_by_count",
+                    "select": "id,doi,display_name,publication_date,cited_by_count,counts_by_year",
                     "per-page": "200",
                 },
                 {},
@@ -342,7 +345,7 @@ def main() -> None:
                         "backend": "openalex",
                         "title": w.get("display_name"),
                         "year": (w.get("publication_date") or "")[:4],
-                        "cited_by_count": w.get("cited_by_count") or 0,
+                        "cited_by_count": cited_asof(w, cutoff),
                         "inset": counts.get(sid, 0),
                         "coupling": 0,
                         "wcoupling": 0.0,
@@ -365,19 +368,19 @@ def main() -> None:
         sims = embed_pool(
             rows,
             intent,
-            key=f"emb|{item.id}|{payload.get('source')}|{prompt_sha}|k{args.expand}|f{args.forward}|t{int(not args.no_topics)}",
+            key=(
+                f"emb|{item.id}|{cutoff}|{EMBEDDING_MODEL}|"
+                + hashlib.sha256(
+                    "|".join(sorted(r["openalex_id"] for r in rows)).encode()
+                ).hexdigest()[:16]
+            ),
             get=get,
             embedder=embedder,
         )
         aa = adamic_adar(payload)
         for name, ranked in rankers(rows, aa, sims).items():
             for cap in args.caps:
-                s = score(ranked, gt, cap, set())
-                s["n_from_topic"] = sum(
-                    1
-                    for r in ranked[:cap]
-                    if r["source"] == "topic" and r["doi"] in gt.dois
-                )
+                s = score(ranked, gt, cap, set())  # includes n_from_topic, deduplicated
                 rows_out.append(
                     {
                         "review": title,

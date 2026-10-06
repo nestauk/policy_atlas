@@ -1117,6 +1117,7 @@ def test_snowball_rank_and_score() -> None:
 
     # L: a topical landmark (3 seeds, 300 citations). P: PRISMA-like (2 seeds, 80,000 citations).
     payload = {
+        "cutoff": "2025-01-01",
         "seed_order": ["S1", "S2", "S3"],
         "seed_works": seeds,
         "counts": dict(counts),
@@ -1196,6 +1197,111 @@ def test_snowball_compose_queries() -> None:
     assert all(len(q) <= QUERY_MAX_CHARS for q in compose_queries(long))
 
 
+def test_snowball_review_fixes() -> None:
+    """As-of-cutoff citations, server-side page size, cache identity, source attribution."""
+    from evals_search_utils import GroundTruth
+    from snowball_recall import (
+        cited_asof,
+        forward_cache_key,
+        forward_chase,
+        score,
+        snowball_cache_key,
+    )
+
+    # 1. citations as of the cutoff: later years are subtracted, the cutoff year kept.
+    work = {
+        "cited_by_count": 100,
+        "counts_by_year": [
+            {"year": 2026, "cited_by_count": 30},
+            {"year": 2025, "cited_by_count": 20},
+            {"year": 2024, "cited_by_count": 10},
+        ],
+    }
+    assert cited_asof(work, "2024-06-30") == 50
+    assert cited_asof(work, "2026-01-01") == 100
+    assert (
+        cited_asof({"cited_by_count": 7}, "2020-01-01") == 7
+    )  # no field: today's count
+
+    # 2. cache identity changes with the question and the cutoff.
+    base = snowball_cache_key("item", "tag", "q", "2024-01-01", 200, 200)
+    assert base != snowball_cache_key(
+        "item", "tag", "other question", "2024-01-01", 200, 200
+    )
+    assert base != snowball_cache_key("item", "tag", "q", "2023-01-01", 200, 200)
+    fk = dict(forward=200, pages=10, max_cites=300, use_search=False, top=20, sort=None)
+    assert forward_cache_key(
+        "i", "t", "q", "2024-01-01", 200, **fk
+    ) != forward_cache_key("i", "t", "q", "2023-01-01", 200, **fk)
+
+    # 3. forward chase: pages until the server's page size is not filled; seeds excluded;
+    #    coupling counts the seeds a citing paper cites. The fake server serves 100 per
+    #    page although 200 were asked for, so paging must continue past page 1.
+    W = "https://openalex.org/"
+    seeds = [
+        {"id": W + "S1", "cited_by_count": 5},
+        {"id": W + "S2", "cited_by_count": 5},
+    ]
+    pages_served: list[int] = []
+
+    class Resp:
+        status_code = 200
+
+        def __init__(self, body: dict) -> None:
+            self._body = body
+
+        def json(self) -> dict:
+            return self._body
+
+    def fake_get(url: str, params: dict, headers: dict) -> Resp:
+        page = int(params["page"])
+        pages_served.append(page)
+        if page == 1:
+            results = [
+                {"id": W + f"C{i}", "referenced_works": [W + "S1", W + "S2"]}
+                for i in range(99)
+            ] + [{"id": W + "S1", "referenced_works": []}]  # a seed: must be skipped
+        elif page == 2:
+            results = [
+                {"id": W + "C99", "referenced_works": [W + "S1"]}
+            ]  # short page: stop
+        else:
+            raise AssertionError("paged past the short page")
+        return Resp({"meta": {"per_page": 100}, "results": results})
+
+    chase = forward_chase(
+        seeds,
+        intent="q",
+        cutoff="2024-01-01",
+        max_cites=300,
+        pages=10,
+        use_search=False,
+        get=fake_get,
+        counts={"S1": 4, "S2": 1},
+    )
+    assert pages_served == [1, 2]
+    ids = {w["id"] for w in chase["works"]}
+    assert W + "S1" not in ids and len(ids) == 100
+    c0 = next(w for w in chase["works"] if w["id"] == W + "C0")
+    assert c0["coupling"] == 2 and c0["wcoupling"] > 0
+
+    # 4. duplicates at the cap are counted once, and each hit is attributed to one source.
+    rows = [
+        {"doi": "10.1/a", "backend": "openalex", "source": "seed"},
+        {"doi": "10.1/a", "backend": "openalex", "source": "forward"},  # duplicate DOI
+        {"doi": "10.1/b", "backend": "openalex", "source": "topic"},
+        {
+            "doi": None,
+            "backend": "openalex",
+            "source": "snowball",
+        },  # no key: kept, unmatched
+    ]
+    gt = GroundTruth(dois={"10.1/a", "10.1/b", "10.1/c"}, source="doi")
+    s = score(rows, gt, cap=4, seminal=set())
+    assert s["n_found"] == 2 and s["n_candidates"] == 3
+    assert s["n_from_seed"] == 1 and s["n_from_forward"] == 0 and s["n_from_topic"] == 1
+
+
 if __name__ == "__main__":
     test_recall()
     test_keys_of()
@@ -1220,4 +1326,5 @@ if __name__ == "__main__":
     test_history_cost_column()
     test_snowball_rank_and_score()
     test_snowball_compose_queries()
+    test_snowball_review_fixes()
     print("ok")

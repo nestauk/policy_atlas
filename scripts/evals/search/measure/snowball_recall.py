@@ -106,8 +106,15 @@ ARM = "openalex-snowball"
 SEED_ARM = "openalex-raw"
 MINI_DATASET = DEFAULT_DATASET + "-mini"
 BATCH = 50  # OpenAlex accepts up to 50 values in one filter
-SEED_SELECT = "id,doi,display_name,publication_date,cited_by_count,referenced_works"
-RESOLVE_SELECT = "id,doi,display_name,publication_date,cited_by_count"
+# ``counts_by_year`` lets every citation count be taken AS OF the review's cutoff (today's
+# count minus citations in later years), so a historical-cutoff evaluation does not rank
+# on citations the review's authors could not have seen. OpenAlex carries the last ten
+# years, which covers every cutoff in the datasets (2018 onward).
+SEED_SELECT = "id,doi,display_name,publication_date,cited_by_count,counts_by_year,referenced_works"
+RESOLVE_SELECT = "id,doi,display_name,publication_date,cited_by_count,counts_by_year"
+# Bumped when cached payload contents change shape (here: counts_by_year added), so old
+# cache files are not read as if they held the new fields.
+CACHE_VERSION = "v2"
 DEFAULT_CAPS = [50, 100, 200, 400]
 SEMINAL_FLOOR = 5
 OUT_DIR = Path(__file__).resolve().parents[1] / "results" / "snowball"
@@ -260,13 +267,13 @@ def compose_queries(wire: ConceptBlocksWire) -> list[str]:
 
 
 PER_CALL_DEFAULT = 200  # results fetched per generated query (rapid itself fetches 50)
-# Forward citation chasing (hypothesis 1 of EXPERIMENTS.md § 6): papers that CITE the
+# Forward citation chasing (hypothesis 1 of the search experiments write-up § 6): papers that CITE the
 # seeds. OpenAlex's ``cites:`` filter takes up to 100 ids joined by ``|``; a seed with
 # thousands of citations floods the result, so only seeds with at most
 # ``forward_max_cites`` citations are chased. Candidates are ranked by **coupling**: how
 # many seeds each citing paper cites (bibliographic coupling), computed locally from
 # its reference list.
-FORWARD_SELECT = "id,doi,display_name,publication_date,cited_by_count,referenced_works"
+FORWARD_SELECT = "id,doi,display_name,publication_date,cited_by_count,counts_by_year,referenced_works"
 FORWARD_IDS_PER_CALL = 100
 RANKINGS = {
     "raw": "keyword results in the service's order, then snowball works by in-set citations",
@@ -276,6 +283,24 @@ RANKINGS = {
     "global": "everything by global citation count",
     "interleave": "alternate one keyword result (service order) and one snowball work (in-set order)",
 }
+
+
+def cited_asof(work: dict[str, Any], cutoff: str) -> int:
+    """The work's citation count as of the cutoff date: today's count minus later years.
+
+    ``counts_by_year`` lists ``{year, cited_by_count}`` for the last ten years. Citations
+    received in years after the cutoff year are subtracted; the cutoff year itself is
+    kept whole (a month-level approximation, as the Consensus baseline's cutoff is).
+    A work without the field keeps today's count.
+    """
+    total = int(work.get("cited_by_count") or 0)
+    cutoff_year = int(cutoff[:4])
+    later = sum(
+        int(entry.get("cited_by_count") or 0)
+        for entry in work.get("counts_by_year") or []
+        if int(entry.get("year") or 0) > cutoff_year
+    )
+    return max(0, total - later)
 
 
 def short_id(openalex_id: str | None) -> str | None:
@@ -604,7 +629,7 @@ def forward_chase(
         chased = [
             short_id(w["id"])
             for w in seed_works
-            if (w.get("cited_by_count") or 0) <= max_cites and short_id(w["id"])
+            if cited_asof(w, cutoff) <= max_cites and short_id(w["id"])
         ]
     seed_set = set(seed_ids)
     found: dict[str, dict[str, Any]] = {}
@@ -644,7 +669,10 @@ def forward_chase(
                     )
                     work["forward_rank"] = len(found)
                     found[sid] = work
-            if len(results) < 200:
+            # Stop on the server's own page size, not the one requested: OpenAlex's
+            # documented maximum is now 100, and a request for 200 may be served as 100.
+            served = int((body.get("meta") or {}).get("per_page") or len(results) or 1)
+            if len(results) < served:
                 break
     return {
         "works": list(found.values()),
@@ -678,7 +706,7 @@ def candidates(payload: dict[str, Any]) -> list[dict[str, Any]]:
                 "wcoupling",
                 round(sum(math.log2(1 + counts.get(c, 0)) for c in cited_seeds), 3),
             )
-            cites = work.get("cited_by_count") or 0
+            cites = cited_asof(work, payload["cutoff"])
             rows.append(
                 {
                     "openalex_id": sid,
@@ -686,7 +714,9 @@ def candidates(payload: dict[str, Any]) -> list[dict[str, Any]]:
                     "backend": "openalex",
                     "title": work.get("display_name"),
                     "year": (work.get("publication_date") or "")[:4],
+                    # As of the cutoff; today's count kept beside it for reading.
                     "cited_by_count": cites,
+                    "cited_by_count_now": work.get("cited_by_count") or 0,
                     "inset": inset,
                     "coupling": coupling,
                     "wcoupling": wcoupling,
@@ -766,9 +796,10 @@ def score(
     return {
         "recall": len(found_from) / n_gt if n_gt else 0.0,
         "n_found": len(found_from),
-        "n_from_seed": sum(1 for s in found_from.values() if s == "seed"),
-        "n_from_snowball": sum(1 for s in found_from.values() if s == "snowball"),
-        "n_from_forward": sum(1 for s in found_from.values() if s == "forward"),
+        **{
+            f"n_from_{source}": sum(1 for s in found_from.values() if s == source)
+            for source in ("seed", "snowball", "forward", "topic")
+        },
         "n_candidates": kept,
         "n_gt": n_gt,
         "seminal_recall": (len(seminal & set(found_from)) / len(seminal))
@@ -779,10 +810,10 @@ def score(
 
 
 def gt_citations(
-    ground_truth: GroundTruth, *, item_id: str, get: Any, refresh: bool
+    ground_truth: GroundTruth, *, item_id: str, get: Any, refresh: bool, cutoff: str
 ) -> dict[str, int]:
-    """Citation count per ground-truth DOI, cached. Missing DOIs count as zero."""
-    path = cache_path("gt-citations", item_id)
+    """Citation count per ground-truth DOI as of the cutoff, cached. Missing DOIs count as zero."""
+    path = cache_path("gt-citations", f"{item_id}|{cutoff}|{CACHE_VERSION}")
     if path.exists() and not refresh:
         return json.loads(path.read_text())
     counts: dict[str, int] = {}
@@ -793,7 +824,7 @@ def gt_citations(
             "/works",
             {
                 "filter": f"doi:{'|'.join(chunk)}",
-                "select": "doi,cited_by_count",
+                "select": "doi,cited_by_count,counts_by_year",
                 "per-page": str(BATCH),
             },
             {},
@@ -803,7 +834,7 @@ def gt_citations(
         for work in response.json().get("results", []):
             key = normalize_doi(work.get("doi"))
             if key:
-                counts[key] = work.get("cited_by_count") or 0
+                counts[key] = cited_asof(work, cutoff)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(counts))
     return counts
@@ -870,7 +901,9 @@ def load_or_expand(
         + (f"-st{semantic_texts}" if semantic_texts != "all" else "")
         + (f"-e{REASONING_EFFORT}" if REASONING_EFFORT else "")
     )
-    path = cache_path(ARM, f"{item_id}|{tag}|s{n_seeds}|k{n_expand}")
+    path = cache_path(
+        ARM, snowball_cache_key(item_id, tag, intent, cutoff, n_seeds, n_expand)
+    )
     if path.exists() and not refresh:
         payload = json.loads(path.read_text())
         if payload.get("complete") and payload.get("cutoff") == cutoff:
@@ -972,6 +1005,36 @@ def load_or_expand(
     return payload, False
 
 
+def snowball_cache_key(
+    item_id: str, tag: str, intent: str, cutoff: str, n_seeds: int, n_expand: int
+) -> str:
+    """Identity of one backward-snowball payload: every input that changes its content."""
+    return f"{item_id}|{tag}|{_digest(intent)}|{cutoff}|s{n_seeds}|k{n_expand}|{CACHE_VERSION}"
+
+
+def forward_cache_key(
+    item_id: str,
+    tag: str,
+    intent: str,
+    cutoff: str,
+    n_seeds: int,
+    *,
+    forward: int,
+    pages: int,
+    max_cites: int,
+    use_search: bool,
+    top: int,
+    sort: str | None,
+) -> str:
+    """Identity of one forward chase: the seed set's identity plus every chase setting."""
+    return (
+        f"{item_id}|{tag}|{_digest(intent)}|{cutoff}|s{n_seeds}|f{forward}|p{pages}|c{max_cites}|q{int(use_search)}"
+        + (f"|t{top}" if top else "")
+        + (f"|o{sort}" if sort else "")
+        + f"|{CACHE_VERSION}"
+    )
+
+
 def with_forward(
     payload: dict[str, Any],
     *,
@@ -994,10 +1057,18 @@ def with_forward(
     Cached under ``results/cache/openalex-forward/`` by seed set and forward settings, so
     the backward snowball cache is untouched and a settings change refetches only this.
     """
-    key = (
-        f"{item_id}|{tag}|s{n_seeds}|f{forward}|p{pages}|c{max_cites}|q{int(use_search)}"
-        + (f"|t{top}" if top else "")
-        + (f"|o{sort}" if sort else "")
+    key = forward_cache_key(
+        item_id,
+        tag,
+        intent,
+        cutoff,
+        n_seeds,
+        forward=forward,
+        pages=pages,
+        max_cites=max_cites,
+        use_search=use_search,
+        top=top,
+        sort=sort,
     )
     path = cache_path("openalex-forward", key)
     if path.exists() and not refresh:
@@ -1046,6 +1117,7 @@ def write_candidates(
         "wcoupling",
         "specificity",
         "cited_by_count",
+        "cited_by_count_now",
         "year",
         "title",
         "doi",
@@ -1262,7 +1334,11 @@ def main() -> None:
             seminal_keys(
                 ground_truth,
                 gt_citations(
-                    ground_truth, item_id=str(item.id), get=get, refresh=args.refresh
+                    ground_truth,
+                    item_id=str(item.id),
+                    get=get,
+                    refresh=args.refresh,
+                    cutoff=cutoff,
                 ),
             )
             if is_labelled

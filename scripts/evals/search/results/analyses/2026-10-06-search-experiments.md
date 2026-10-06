@@ -53,9 +53,11 @@ Design choices that were tested and settled:
 - **Do not add more seeds.** Going from 200 to 500 seeds lowered recall at a fixed cap.
   Search results past 200 are mostly off topic and add noise to the citation count. In
   production the seeds should be the papers that passed screening.
-- **Rank by specificity**: in-set citations divided by log10 of global citations. This
-  pushes down papers that everyone cites, such as PRISMA and the I² statistic, and keeps
-  papers that this topic cites. Ranking by global citations alone found nothing new.
+- **Rank by specificity**: (in-set citations + coupling) divided by log10 of global
+  citations, where coupling is how many seeds the paper cites (section 7). This pushes
+  down papers that everyone cites, such as PRISMA and the I² statistic, and keeps papers
+  that this topic cites. Ranking by global citations alone found nothing new. Since the
+  review fixes (section 10) "global citations" means the count as of the review's cutoff.
 - **Keep the first 50 keyword results in their own order** as a relevance reserve.
   Citations only point to older papers, so a recent study has no in-set citations yet
   and only the keyword rank can keep it.
@@ -207,8 +209,9 @@ mattered, gpt-5.6-luna on the production prompt is the same recall for 40% of th
    in-set citations, fetch the papers that cite them (10 pages), score each by how many
    seeds it cites, add the top 200. This reaches the recent work the snowball cannot.
 5. Rank the union by specificity: (in-set citations + coupling) / log10 of global
-   citations, weighted coupling as tiebreak, with the first 50 keyword results held in
-   their own order as a relevance reserve.
+   citations, weighted coupling as tiebreak. A relevance reserve (the first 50 keyword
+   results held in their own order) is proposed for production but **is not implemented
+   in the experiment script, and none of the numbers in this file include it**.
 6. Screen the resulting 200 as normal.
 
 This configuration measures **21.9% recall at 200 candidates and 28.1% at 400** on the
@@ -563,15 +566,95 @@ What the numbers say:
   cap-200 result fell. The likely cause: the texts sent to semantic search include the
   five generated queries, and `exp_d` queries are 250-character boolean blocks, which
   are poor input for an embedding search. Each bad semantic call still gets an equal
-  share of the round-robin merge, so it dilutes the 200 seeds. A variant that sends only
-  the question and the two paraphrases (`--semantic-texts intent`) is running. Until it
-  reports, the combined-seed gain is established for the production prompt on mini and
-  open for luna.
+  share of the round-robin merge, so it dilutes the 200 seeds. Sending only the question
+  and the two paraphrases (`--semantic-texts intent`, three calls) confirms it: 18.9% at
+  cap 200, 23.8% at 400, 26.3% ceiling, back to parity with keyword-only seeds (18.5%)
+  but no further. So on luna with `exp_d` the semantic seeds add little, while on mini
+  with the production prompt they add 5.6 points. The best configuration measured on
+  this set is therefore **mini, production prompt, combined seeds: 21.9% at 200 and
+  28.1% at 400**; the best luna configuration is three points behind at cap 200. A luna
+  migration should expect that gap unless the prompt is re-tuned for it.
 - **One caveat on the date fence.** The semantic endpoint only filters by year, so papers
   from the cutoff year but after the cutoff day are fetched and then dropped locally.
   Nothing leaks into the scores; the calls just return a few results fewer.
 
-### 10. What to do next
+### 10. Independent review and fixes (2026-10-06)
+
+A read-only review by a second model (Codex) over both experiment scripts, the shared
+helpers, the self-checks and this file found six things worth acting on and confirmed
+the core mechanics: candidates never consult the ground truth, the date filter is
+inclusive and consistent at every stage, scoring matches the baseline convention, and
+forward candidates exclude seeds. The findings, what was done, and what each means for
+the numbers above:
+
+1. **Citation counts were today's, not the review's.** The specificity score, the choice
+   of which seeds to chase and the seminal-decile metric used OpenAlex's current
+   `cited_by_count`. In a historical-cutoff evaluation that is information the review's
+   authors could not have had. **Fixed:** every count is now taken as of the cutoff,
+   today's count minus citations in later years from OpenAlex's `counts_by_year` (the
+   last ten years, which covers every cutoff in the datasets). Implication: every
+   specificity-ranked number above was computed with today's counts; section 11
+   re-measures the three best configurations with the fix. In production there is no
+   cutoff, so the product is unaffected.
+2. **Three cache keys were incomplete.** The pool experiment's embedding cache omitted
+   the model and the candidate set; its topic cache omitted which seeds were used; the
+   snowball and forward caches omitted the question text and, for forward, the cutoff.
+   **Fixed:** all keys now carry every input that changes the content, plus a version
+   token. Implication for the numbers above: the embedding cache did not collide in the
+   two pool runs made (different prompt hashes); the topic cache did collide, so the
+   luna pool run used the mini run's seed topics, which affects only the topic-fenced
+   rows (about one hit per review, dropped); the snowball and forward keys did not
+   collide because no question or cutoff changed. No reported number changes.
+3. **Forward paging stopped on the requested page size.** If OpenAlex served 100 per
+   page instead of the 200 asked for, every batch would have stopped after one page.
+   **Fixed:** paging now stops on the server's reported page size. Implication: the
+   logs of every forward run show about 192 results per page over ten pages, so the
+   server did serve 200 and no run under-fetched.
+4. **Overton keys in the denominator.** DOI-less policy documents in a reference list can
+   never be matched by an OpenAlex-only experiment but stay in the denominator. This
+   matches the baseline rows it is compared with, and the mini set has none, so no number
+   here is affected; the full set may have some, and a scholarly-only recall should be
+   reported beside the full one when it is run. Not changed.
+5. **Topic-hit attribution was not deduplicated.** Cosmetic. **Fixed** by taking all
+   source counts from the scoring loop.
+6. **Self-checks did not cover the new paths.** **Fixed:** tests added for as-of-cutoff
+   counts, cache identity changing with question and cutoff, forward paging against a
+   server that serves 100 per page, seed exclusion and coupling, and duplicate handling at
+   the cap with per-source attribution.
+
+Two documentation mismatches were also corrected: the specificity formula in section 2
+and the script table now include coupling, and the relevance reserve is marked as not
+implemented beside the recommended configuration.
+
+### 11. Final headline after the fixes
+
+The three best configurations were re-run with every fix of section 10 in place and the
+caches rebuilt (citation counts as of the cutoff, complete cache keys, server page size).
+Same seeds, same ground truth, 15 reviews, 200 seeds, 200 snowball, 200 forward:
+
+| configuration | cap 200 before / after | cap 400 before / after | ceiling before / after |
+|---|---|---|---|
+| **gpt-5.4-mini, production prompt, keyword + semantic seeds** | 21.9% / **22.2%** | 28.1% / **28.0%** | 30.6% / **30.6%** |
+| gpt-5.6-luna, synonym-block prompt, keyword seeds | 18.5% / 18.3% | 23.7% / 23.9% | 26.0% / 26.0% |
+| gpt-5.6-luna, synonym-block prompt, keyword + semantic (question and paraphrases) | 18.9% / 19.6% | 23.8% / 24.0% | 26.3% / 26.3% |
+
+Nothing moved by more than 0.7 points. Taking citation counts as of the review's cutoff,
+rather than today's, does not change the ranking enough to matter, and the cache fixes
+did not change what was fetched. The conclusions of sections 2 to 9 stand.
+
+**Headline.** On the 15-review mini set, a search built from the production prompt's
+five keyword queries plus eight OpenAlex semantic calls as seeds, a reference-frequency
+snowball of 200, forward citation chasing of 200 from the twenty most in-set-cited seeds,
+and specificity ranking finds **22% of the reviews' reference lists in the first 200
+candidates and 28% in the first 400**. The plain OpenAlex search finds 3%, and the
+pipeline's deep depth measured 15% on four of these reviews in September. The retrieval
+costs about a cent per search in OpenAlex calls and one query-generation call; what the
+screen can afford to read is now the limiting factor. The best luna configuration is
+about three points behind at cap 200 and should be re-tuned at the prompt before the
+model migration. Half the reviews in the set are reachable by this method and half are
+not; the mean hides that split, and the full 100-review set is the next measurement.
+
+### 12. What to do next
 
 1. All five hypotheses of section 6 are tested (sections 7 to 9): forward chasing and
    semantic seeds adopted; the embedding product adopted as the ranking rule when a
@@ -627,7 +710,7 @@ Started 2026-10-06 (task 047). Not promoted to the pipeline yet.
 |---|---|
 | `raw` | keyword results in the service's order, then snowball works by in-set citations. Below a cap of N this is the keyword search itself, so it is the control. |
 | `inset` | in-set citations, ties by global citations |
-| `specific` | in-set citations / log10(global citations + 10). The recommended rule. |
+| `specific` | (in-set citations + coupling) / log10(citations as of the cutoff + 10), weighted coupling as tiebreak. The recommended rule. |
 | `global` | global citation count |
 | `interleave` | one keyword result, one snowball work, alternating |
 
