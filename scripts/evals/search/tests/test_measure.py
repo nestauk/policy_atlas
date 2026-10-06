@@ -1078,6 +1078,124 @@ def test_history_cost_column() -> None:
     assert header_line.count("|") == row_baseline.count("|")
 
 
+def test_snowball_rank_and_score() -> None:
+    """Frequency count, the specificity rule, and where a hit is attributed."""
+    from evals_search_utils import GroundTruth
+    from snowball_recall import candidates, count_references, rank, score
+
+    W = "https://openalex.org/"
+    seeds = [
+        {
+            "id": W + "S1",
+            "doi": "10.1/s1",
+            "display_name": "seed one",
+            "publication_date": "2020-01-01",
+            "cited_by_count": 10,
+            "referenced_works": [W + "L", W + "P", W + "S2"],
+        },
+        {
+            "id": W + "S2",
+            "doi": "10.1/s2",
+            "display_name": "seed two",
+            "publication_date": "2021-01-01",
+            "cited_by_count": 5,
+            "referenced_works": [W + "L", W + "P"],
+        },
+        {
+            "id": W + "S3",
+            "doi": "10.1/s3",
+            "display_name": "seed three",
+            "publication_date": "2019-01-01",
+            "cited_by_count": 1,
+            "referenced_works": [W + "L"],
+        },
+    ]
+    counts = count_references(seeds)
+    assert (
+        counts["L"] == 3 and counts["P"] == 2 and counts["S2"] == 1
+    )  # seeds keep a tally
+
+    # L: a topical landmark (3 seeds, 300 citations). P: PRISMA-like (2 seeds, 80,000 citations).
+    payload = {
+        "seed_order": ["S1", "S2", "S3"],
+        "seed_works": seeds,
+        "counts": dict(counts),
+        "new_works": [
+            {
+                "id": W + "P",
+                "doi": "10.1/p",
+                "display_name": "prisma",
+                "publication_date": "2009-01-01",
+                "cited_by_count": 80_000,
+            },
+            {
+                "id": W + "L",
+                "doi": "10.1/l",
+                "display_name": "landmark",
+                "publication_date": "2003-01-01",
+                "cited_by_count": 300,
+            },
+        ],
+    }
+    rows = candidates(payload)
+    assert [r["openalex_id"] for r in rank(rows, "raw")] == ["S1", "S2", "S3", "L", "P"]
+    assert [r["openalex_id"] for r in rank(rows, "inset")][:2] == ["L", "P"]
+    # Specificity damps the everyone-cites-it work below the landmark and below a seed cited once.
+    by_specific = [r["openalex_id"] for r in rank(rows, "specific")]
+    assert by_specific[0] == "L" and by_specific.index("P") > by_specific.index("S2")
+    assert [r["openalex_id"] for r in rank(rows, "interleave")] == [
+        "S1",
+        "L",
+        "S2",
+        "P",
+        "S3",
+    ]
+
+    gt = GroundTruth(dois={"10.1/l", "10.1/s3", "10.1/zz"}, source="doi")
+    s = score(rank(rows, "specific"), gt, cap=2, seminal={"10.1/l"})
+    assert s["n_found"] == 1 and s["n_from_snowball"] == 1 and s["n_from_seed"] == 0
+    assert s["recall"] == 1 / 3 and s["seminal_recall"] == 1.0
+    s_all = score(rank(rows, "raw"), gt, cap=10, seminal=set())
+    assert (
+        s_all["n_found"] == 2
+        and s_all["n_from_seed"] == 1
+        and s_all["seminal_recall"] is None
+    )
+
+
+def test_snowball_compose_queries() -> None:
+    """Concept blocks become bracketed two-group boolean queries within the length cap."""
+    from snowball_recall import QUERY_MAX_CHARS, ConceptBlocksWire, compose_queries
+
+    wire = ConceptBlocksWire(
+        population=["parents", "mothers", "fathers"],
+        phenomenon=["parental leave", "maternity leave", "paternity leave"],
+        phenomenon_alternatives=["family leave", "paid leave"],
+        setting=[],
+        forms=["leave duration", "leave (paid*)"],
+        outcome=["mental health", "depression"],
+    )
+    queries = compose_queries(wire)
+    assert queries[0] == '("parental leave" OR "maternity leave" OR "paternity leave")'
+    assert queries[1].startswith("(parents OR mothers OR fathers) AND (")
+    assert all(q.count(" AND ") <= 1 for q in queries)  # two groups at most
+    assert all("*" not in q and len(q) <= QUERY_MAX_CHARS for q in queries)
+    assert any(
+        '"leave paid"' in q for q in queries
+    )  # operators scrubbed, phrase quoted
+    assert len(queries) == 5 and len(set(q.lower() for q in queries)) == 5
+
+    long = ConceptBlocksWire(
+        population=[f"population term number {i}" for i in range(6)],
+        phenomenon=[f"phenomenon phrase number {i}" for i in range(6)],
+        phenomenon_alternatives=[],
+        setting=[],
+        forms=[],
+        outcome=[],
+    )
+    assert all(len(q) <= QUERY_MAX_CHARS for q in compose_queries(long))
+
+
 if __name__ == "__main__":
     test_recall()
     test_keys_of()
@@ -1100,4 +1218,6 @@ if __name__ == "__main__":
     test_baseline_snippet_arm()
     test_baseline_score_evaluator()
     test_history_cost_column()
+    test_snowball_rank_and_score()
+    test_snowball_compose_queries()
     print("ok")

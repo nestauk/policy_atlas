@@ -103,6 +103,10 @@ Each arm is scored at several caps (the first 50, 100, 200 and 1,000 results).
 
 Keeping more results costs more later: every kept result is screened and stored for the synthesis step.
 
+### Experiments
+
+Search R&D experiments that are not part of the measured baselines or the production runs live in [EXPERIMENTS.md](EXPERIMENTS.md), one section per experiment script, with the dated results in `docs/tasks/047-search-rnd/notes.md`. As of 2026-10-06 the best measured configuration there (generated queries plus semantic search as seeds, a reference-frequency snowball, forward citation chasing, specificity ranking) reaches about 22% recall at 200 candidates on the mini set, against 3% for a plain OpenAlex search; see the file for the numbers and the caveats.
+
 ### Cost
 
 `history.py` shows a **variable cost** for each run: money that grows with how much you search. `api` is the service price (baselines). `llm` is the language-model spend that Langfuse records (pipeline runs). Fixed subscriptions are not included.
@@ -125,6 +129,8 @@ scripts/evals/search/
 ├── measure/                runs the measurements
 │   ├── production_recall.py
 │   ├── baseline_recall.py
+│   ├── snowball_recall.py  R&D experiment, see EXPERIMENTS.md
+│   ├── pool_rerank.py      R&D experiment, see EXPERIMENTS.md
 │   ├── sweep_record_cap.py
 │   ├── engine.py           runs one intent through the real search (no command line)
 │   └── inspect_run.py      tables of one run's raw output (no command line)
@@ -134,6 +140,7 @@ scripts/evals/search/
     ├── history.md          the headline results, kept by hand
     ├── analyses/           dated analyses: a script plus the .md and .html tables it writes
     ├── cache/              raw baseline results, one JSON file per arm and review
+    ├── snowball/           snowball scores, ranked candidates, manual-question exports; pool/ for the re-rank experiment
     └── ground_truth/       fetched collections and the two samples
 ```
 
