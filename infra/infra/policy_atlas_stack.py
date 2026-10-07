@@ -31,6 +31,7 @@ from aws_cdk import (
     aws_logs as logs,
 )
 from infra.cognito_auth import CognitoAuth
+from infra.components.shared_alb import import_shared_alb
 
 
 class PolicyAtlasStack(Stack):
@@ -51,36 +52,11 @@ class PolicyAtlasStack(Stack):
             domain_name=domain_name
         )
 
-        # --- Import shared ALB from NetworkStack ---
-        shared_alb_arn = ssm.StringParameter.value_for_string_parameter(self,
-            parameter_name="/policy_atlas_v3/shared_alb/arn")
-        shared_alb_sg_id = ssm.StringParameter.value_for_string_parameter(self,
-            parameter_name="/policy_atlas_v3/shared_alb/security_group_id")
-        shared_alb_dns = ssm.StringParameter.value_for_string_parameter(self,
-            parameter_name="/policy_atlas_v3/shared_alb/dns_name")
-        shared_alb_zone_id = ssm.StringParameter.value_for_string_parameter(self,
-            parameter_name="/policy_atlas_v3/shared_alb/canonical_hosted_zone_id")
-        shared_listener_arn = ssm.StringParameter.value_for_string_parameter(self,
-            parameter_name="/policy_atlas_v3/shared_alb/https_listener_arn")
-
-        shared_alb_sg = ec2.SecurityGroup.from_security_group_id(
-            self, "SharedALBSG", security_group_id=shared_alb_sg_id,
-            allow_all_outbound=False,
-        )
-
-        shared_alb = elbv2.ApplicationLoadBalancer.from_application_load_balancer_attributes(
-            self, "SharedALB",
-            load_balancer_arn=shared_alb_arn,
-            security_group_id=shared_alb_sg_id,
-            load_balancer_dns_name=shared_alb_dns,
-            load_balancer_canonical_hosted_zone_id=shared_alb_zone_id,
-        )
-
-        shared_listener = elbv2.ApplicationListener.from_application_listener_attributes(
-            self, "SharedHTTPSListener",
-            listener_arn=shared_listener_arn,
-            security_group=shared_alb_sg,
-        )
+        # --- Import shared ALB from NetworkStack (SSM-resolved at deploy time) ---
+        shared_alb_imports = import_shared_alb(self)
+        shared_alb_sg = shared_alb_imports.security_group
+        shared_alb = shared_alb_imports.load_balancer
+        shared_listener = shared_alb_imports.listener
 
         # --- Import DB resources from DatabaseStack ---
         db_secret_name = ssm.StringParameter.value_for_string_parameter(self,

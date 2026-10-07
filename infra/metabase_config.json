@@ -1,0 +1,25 @@
+{
+    "staging": {
+        "aws_region": "eu-west-2",
+        "container": {
+            "cpu": 1024,
+            "memory_limit_mib": 2048,
+            "image_tag": "v0.63.15.7",
+            "internal_port": 3000,
+            "desired_count": 1,
+            "java_opts": "-Xms512m -Xmx1536m",
+            "application_connection_pool_size": 5,
+            "warehouse_connection_pool_size": 5
+        },
+        "database": {
+            "instance_size": "t4g.micro",
+            "multi_az": false,
+            "allocated_storage": 30,
+            "max_allocated_storage": 100,
+            "backup_retention_days": 7
+        },
+        "domain_name": "v3.policyatlas.uk",
+        "metabase_subdomain": "metabase",
+        "allowed_cidrs_parameter_name": "/policy_atlas_v3/metabase/allowed_cidrs"
+    }
+}

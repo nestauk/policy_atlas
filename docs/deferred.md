@@ -2232,6 +2232,24 @@ omissions.
   `index.css` token list and the tailwind-merge registration in `cn.ts` stay in sync
   (`src/ui/brand/typeScale.test.ts`), which is the failure that actually shipped in
   028.
+- **Portfolio surfaces in the mock API** — **discharged in 033**: mock
+  `/api/v1/portfolios` plus membership on the project so Share and the
+  projects list work under `VITE_MOCK=1`.
+
+## Metabase staging (task 034 seams)
+
+- **Owner-safe Policy Atlas source model and login** — the staging stack provides
+  private network reachability but deliberately creates no Policy Atlas database
+  credentials or grants. Direct table access would bypass the API's owner scoping.
+  A follow-up must approve curated analytics views (or equivalent row-level
+  controls), create a least-privilege read role, store it in Secrets Manager and
+  onboard that source in Metabase.
+- **Single sign-on and embedding** — Metabase uses its own accounts in this slice.
+  Cognito/OIDC integration, user lifecycle, embedding and any Policy Atlas UI
+  integration require a separate authentication and product decision.
+- **Production analytics** — `deploy_analytics` is fail-closed outside staging.
+  Production capacity, availability, backup/restore rehearsal, access controls and
+  operational ownership must be reviewed before a production config is added.
 - **Project surfaces in the mock API** — ~~`src/mock/api.ts` serves no
   `/api/v1/portfolios`~~ **discharged by 033** (Phase 10a + ux-snags): the mock now
   serves `/api/v1/me`, `GET /api/v1/projects`, `GET /api/v1/projects/{id}`,

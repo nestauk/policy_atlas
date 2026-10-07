@@ -47,11 +47,27 @@ network = environment_config("network_config.json")
 database = environment_config("db_config.json")
 application = environment_config("pa_config.json")
 
+deploy_analytics = application.get("deploy_analytics", False)
+if type(deploy_analytics) is not bool:
+    raise SystemExit(
+        f"FAIL: {env_name!r} deploy_analytics must be a JSON boolean"
+    )
+if deploy_analytics and env_name != "staging":
+    raise SystemExit("FAIL: the analytics stack is currently approved only for staging")
+
+analytics = None
+analytics_allowlist_parameter = "-"
+metabase_domain = "-"
+if deploy_analytics:
+    analytics = environment_config("metabase_config.json")
+
 regions = {
     network.get("aws_region"),
     database.get("aws_region"),
     application.get("aws_region"),
 }
+if analytics is not None:
+    regions.add(analytics.get("aws_region"))
 if None in regions or len(regions) != 1:
     raise SystemExit(
         f"FAIL: {env_name!r} must use one explicit aws_region across all CDK configs"
@@ -65,6 +81,95 @@ if not public_domain or app.get("domain_name") != public_domain:
         f"FAIL: {env_name!r} must use the same non-empty domain in network_config.json "
         "and pa_config.json"
     )
+
+if analytics is not None:
+    container = analytics.get("container", {})
+    analytics_database = analytics.get("database", {})
+    if analytics.get("domain_name") != public_domain:
+        raise SystemExit(
+            f"FAIL: {env_name!r} must use the same domain in metabase_config.json"
+        )
+    subdomain = analytics.get("metabase_subdomain")
+    if not isinstance(subdomain, str) or re.fullmatch(
+        r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?", subdomain
+    ) is None:
+        raise SystemExit("FAIL: metabase_subdomain must be a valid DNS label")
+    metabase_domain = f"{subdomain}.{public_domain}"
+    analytics_allowlist_parameter = analytics.get(
+        "allowed_cidrs_parameter_name"
+    )
+    if not isinstance(analytics_allowlist_parameter, str) or re.fullmatch(
+        r"/policy_atlas_v3/metabase/[A-Za-z0-9_.-]+",
+        analytics_allowlist_parameter,
+    ) is None:
+        raise SystemExit(
+            "FAIL: allowed_cidrs_parameter_name must be under "
+            "/policy_atlas_v3/metabase/"
+        )
+
+    exact_image_tag = container.get("image_tag")
+    if not isinstance(exact_image_tag, str) or re.fullmatch(
+        r"v\d+\.\d+\.\d+\.\d+", exact_image_tag
+    ) is None:
+        raise SystemExit(
+            "FAIL: Metabase image_tag must pin an exact four-part release"
+        )
+
+    positive_container_values = {
+        "cpu": container.get("cpu"),
+        "memory_limit_mib": container.get("memory_limit_mib"),
+        "application_connection_pool_size": container.get(
+            "application_connection_pool_size"
+        ),
+        "warehouse_connection_pool_size": container.get(
+            "warehouse_connection_pool_size"
+        ),
+    }
+    invalid_container_values = [
+        name
+        for name, value in positive_container_values.items()
+        if type(value) is not int or value <= 0
+    ]
+    if invalid_container_values:
+        raise SystemExit(
+            "FAIL: Metabase container values must be positive integers: "
+            + ", ".join(invalid_container_values)
+        )
+    if container.get("desired_count") != 1:
+        raise SystemExit(
+            "FAIL: staging Metabase must use desired_count 1 for safe migrations"
+        )
+    internal_port = container.get("internal_port")
+    if type(internal_port) is not int or not 1 <= internal_port <= 65535:
+        raise SystemExit("FAIL: Metabase internal_port must be between 1 and 65535")
+    if not isinstance(container.get("java_opts"), str) or not container["java_opts"]:
+        raise SystemExit("FAIL: Metabase java_opts must be a non-empty string")
+
+    instance_size = analytics_database.get("instance_size")
+    if not isinstance(instance_size, str) or re.fullmatch(
+        r"[a-z0-9]+\.[a-z0-9]+", instance_size
+    ) is None:
+        raise SystemExit(
+            "FAIL: Metabase database instance_size must omit the db. prefix"
+        )
+    allocated_storage = analytics_database.get("allocated_storage")
+    max_allocated_storage = analytics_database.get("max_allocated_storage")
+    backup_days = analytics_database.get("backup_retention_days")
+    if type(allocated_storage) is not int or allocated_storage < 20:
+        raise SystemExit("FAIL: Metabase allocated_storage must be at least 20 GiB")
+    if (
+        type(max_allocated_storage) is not int
+        or max_allocated_storage < allocated_storage
+    ):
+        raise SystemExit(
+            "FAIL: Metabase max_allocated_storage must cover allocated_storage"
+        )
+    if type(backup_days) is not int or not 1 <= backup_days <= 35:
+        raise SystemExit(
+            "FAIL: Metabase backup_retention_days must be between 1 and 35"
+        )
+    if type(analytics_database.get("multi_az")) is not bool:
+        raise SystemExit("FAIL: Metabase multi_az must be a JSON boolean")
 
 required = {
     "backend_subdomain": app.get("backend_subdomain"),
@@ -82,14 +187,16 @@ values = [
     public_domain,
     required["backend_subdomain"],
     required["backend.secret_name"],
+    analytics_allowlist_parameter,
+    metabase_domain,
 ]
 if any("\t" in value or "\n" in value for value in values):
     raise SystemExit("FAIL: deployment config values may not contain tabs or newlines")
 print("\t".join(values))
 PY
 )"
-IFS=$'\t' read -r DEPLOY_REGION PUBLIC_DOMAIN BACKEND_SUBDOMAIN APP_SECRET_NAME <<< "$deploy_config"
-readonly DEPLOY_REGION PUBLIC_DOMAIN BACKEND_SUBDOMAIN APP_SECRET_NAME
+IFS=$'\t' read -r DEPLOY_REGION PUBLIC_DOMAIN BACKEND_SUBDOMAIN APP_SECRET_NAME METABASE_ALLOWLIST_PARAMETER METABASE_DOMAIN <<< "$deploy_config"
+readonly DEPLOY_REGION PUBLIC_DOMAIN BACKEND_SUBDOMAIN APP_SECRET_NAME METABASE_ALLOWLIST_PARAMETER METABASE_DOMAIN
 readonly API_BASE_URL="https://${BACKEND_SUBDOMAIN}.${PUBLIC_DOMAIN}"
 
 readonly SSM_CLUSTER_ARN="/policy_atlas_v3/deploy/cluster_arn"
@@ -102,6 +209,7 @@ readonly SSM_DISTRIBUTION_ID="/policy_atlas_v3/deploy/distribution_id"
 readonly SSM_USER_POOL_ID="/policy_atlas_v3/auth/user_pool_id"
 readonly SSM_OIDC_ISSUER="/policy_atlas_v3/auth/issuer"
 readonly SSM_OIDC_CLIENT_ID="/policy_atlas_v3/auth/client_id"
+readonly SSM_SHARED_LISTENER_ARN="/policy_atlas_v3/shared_alb/https_listener_arn"
 
 usage() {
     echo "Usage: $0 {bootstrap|update|check}" >&2
@@ -112,13 +220,22 @@ fail() {
     exit 1
 }
 
+# Checks echo looked-up values on stdout, so stdout is discarded; stderr carries
+# the reason a check failed and is shown so a failed gate is diagnosable from
+# the log. Deploy logs are public for this repository, so any 12-digit account
+# id an AWS error message may carry (e.g. AccessDenied principal ARNs) is
+# redacted first, and the allowlist validator itself never prints addresses.
 gate_check() {
     local description="$1"
     shift
+    local diagnostics
 
-    if "$@" >/dev/null 2>&1; then
+    if diagnostics="$("$@" 2>&1 >/dev/null)"; then
         echo "PASS: ${description}"
     else
+        if [[ -n "$diagnostics" ]]; then
+            printf '%s\n' "$diagnostics" | sed -E 's/[0-9]{12}/<account-id>/g' >&2
+        fi
         fail "${description}"
     fi
 }
@@ -184,6 +301,35 @@ check_cdk_account() {
     [[ -n "${CDK_DEFAULT_ACCOUNT:-}" ]]
 }
 
+check_metabase_allowlist_parameter() {
+    aws ssm get-parameter \
+        --region "$DEPLOY_REGION" \
+        --name "$METABASE_ALLOWLIST_PARAMETER" \
+        --query Parameter \
+        --output json | \
+        PYTHONPATH="$REPO_ROOT/infra" python3 -m infra.metabase_allowlist
+}
+
+# The listener rule reads the allowlist through an AWS::SSM::Parameter::Value
+# template parameter, so its CIDRs are re-resolved by CloudFormation on every
+# stack update (the CDK CLI never skips a stack that carries such a parameter,
+# even when the template is unchanged). This check turns that assumption into
+# an observed post-condition: after the CDK deploy, the rule on the shared
+# listener must match the parameter exactly. It prints counts, never addresses.
+check_metabase_listener_rule_matches_allowlist() {
+    local listener_arn allowlist_value
+    listener_arn="$(ssm_value "$SSM_SHARED_LISTENER_ARN")"
+    allowlist_value="$(ssm_value "$METABASE_ALLOWLIST_PARAMETER")"
+    aws elbv2 describe-rules \
+        --region "$DEPLOY_REGION" \
+        --listener-arn "$listener_arn" \
+        --query Rules \
+        --output json | \
+        METABASE_ALLOWLIST_VALUE="$allowlist_value" \
+        PYTHONPATH="$REPO_ROOT/infra" python3 -m infra.metabase_allowlist \
+            verify-rule --host "$METABASE_DOMAIN"
+}
+
 check_fonts_uploaded() {
     local listing
     listing="$(aws s3 ls "s3://${FONTS_BUCKET}/")"
@@ -237,6 +383,20 @@ deploy_all_stacks() {
         # app.py requires env_name; stage=all is explicit for reproducible deploys.
         run_cdk deploy -c "env_name=${ENV_NAME}" -c stage=all --all
     )
+    verify_metabase_allowlist_applied
+}
+
+# Removing an address from the allowlist only takes effect once a deploy has
+# re-resolved the SSM parameter into the listener rule; fail loudly if the rule
+# the deploy left behind differs from the parameter.
+verify_metabase_allowlist_applied() {
+    if [[ "$METABASE_ALLOWLIST_PARAMETER" == "-" ]]; then
+        return 0
+    fi
+    echo "Postconditions gate: Metabase allowlist"
+    gate_check \
+        "Metabase listener rule source-ip condition matches the SSM allowlist" \
+        check_metabase_listener_rule_matches_allowlist
 }
 
 bootstrap() {
@@ -477,6 +637,12 @@ export AWS_DEFAULT_REGION="$DEPLOY_REGION"
 if [[ "${PA_DEPLOY_GUARD_ONLY:-}" == "1" ]]; then
     require_production_build_environment
     exit 0
+fi
+
+if [[ "$METABASE_ALLOWLIST_PARAMETER" != "-" ]]; then
+    gate_check \
+        "Metabase allowlist SSM parameter contains one to three valid IPv4 CIDRs" \
+        check_metabase_allowlist_parameter
 fi
 
 if [[ "$mode" == "bootstrap" ]]; then

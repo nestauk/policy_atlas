@@ -14,7 +14,8 @@
                 "db_pool_size": 15,
                 "db_max_overflow": 10
             }
-        }
+        },
+        "deploy_analytics": true
     },
     "prod": {
         "aws_region": "eu-west-2",

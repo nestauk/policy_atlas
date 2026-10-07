@@ -6,6 +6,7 @@ from aws_cdk import Environment
 
 from infra.database_stack import DatabaseStack
 from infra.cert_stack import PaV3CertStack
+from infra.analytics_stack import PaV3AnalyticsStack
 from infra.policy_atlas_stack import PolicyAtlasStack
 from infra.network_stack import NetworkStack
 
@@ -46,6 +47,21 @@ with open('db_config.json') as f:
     db_config = config.get(env_name)
     if not db_config:
         raise ValueError(f"No database configuration found for environment '{env_name}' in db_config.json.")
+
+deploy_analytics = pa_config.get("deploy_analytics", False)
+if not isinstance(deploy_analytics, bool):
+    raise ValueError(
+        f"'deploy_analytics' for environment '{env_name}' must be a JSON boolean."
+    )
+if deploy_analytics and env_name != "staging":
+    raise ValueError("The analytics stack is currently approved only for staging.")
+
+if deploy_analytics:
+    with open('metabase_config.json') as f:
+        config = json.load(f)
+        metabase_config = config.get(env_name)
+        if not metabase_config:
+            raise ValueError(f"No Metabase configuration found for environment '{env_name}' in metabase_config.json.")
 
 # Add 'VPCManaged': true tag to all resources recursively.
 # Just in case we're looking manually and need to spot what this has built.
@@ -88,7 +104,7 @@ if stage == "all":
         region=db_config['aws_region']
     )
 
-    DatabaseStack(
+    database_stack = DatabaseStack(
         app,
         "PaV3DatabaseStack",
         db_config=db_config,
@@ -111,5 +127,22 @@ if stage == "all":
         env_name=env_name,
         cross_region_references=True,
     )
+
+    if deploy_analytics:
+        analytics_env = Environment(
+            account=account,
+            region=metabase_config['aws_region']
+        )
+
+        analytics_stack = PaV3AnalyticsStack(
+            app,
+            "PaV3AnalyticsStack",
+            metabase_config=metabase_config,
+            env=analytics_env,
+            env_name=env_name,
+        )
+        analytics_stack.add_dependency(network_stack)
+        analytics_stack.add_dependency(database_stack)
+
 
 app.synth()
