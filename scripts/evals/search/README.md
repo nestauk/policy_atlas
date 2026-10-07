@@ -1,173 +1,239 @@
-# Evaluating against ground truth
+# Search evals
 
-This folder contains scripts related to calculating evaluation metrics against a ground truth dataset. There are three components to the work here:
-* uploading golden datasets to Langfuse
-* Testing the recall of the current production rapid/standard/deep search methodology
-* An experimental sweep across different record caps to see how these affect recall (basically seeing how lifting the cap on the number of records kept after deduplication affects recall)
+These scripts measure **search recall**: of the studies that a systematic review included, how many does a search find? We use published reviews as the "right answer" (the ground truth) and score different ways of searching against them.
 
-## How the files fit together
+All runs and scores are stored in [Langfuse](https://langfuse.com) (our tool for tracing and evaluating language-model apps). The headline numbers are copied into `results/history.md`, so the history lives in git next to the code.
 
-The folder has eight Python files. You run four of them from the command line. The other four are helper modules that the scripts import.
+---
 
-**Scripts you run:**
+# Part 1: Methodology
 
-| Script | What it does | When to run it |
+## 1. Ground truth
+
+One item in the ground truth is one review:
+
+- **Intent** (the input): a short text that says what the review is about. This is what a search receives.
+- **Target** (the expected output): the list of studies that the review covers. Each study is identified by its DOI (Digital Object Identifier, the permanent ID of a published paper).
+- **Cutoff date**: one month before the review was published. Studies published after this date cannot count, because the review could not include them.
+
+**Recall** = the share of the target studies that the search found, before the cutoff date.
+
+### Systematic review sources for the ground truth dataset
+
+| Source | What one item is | Is the target clean? |
 |---|---|---|
-| `ground_truth_dataset.py` | Reads the two CSV files in `input/` and uploads them to Langfuse as a dataset called `retrieval-ground-truth`. | Once at the start, and again each time `references.csv` or `gt_reviews.csv` changes. |
-| `production_recall.py` | Measures how much of each review's reference list the pipeline finds when it runs exactly as it does in production. It makes one Langfuse run for each search depth (rapid, standard, deep). | By hand, from time to time, so that a history of production recall builds up. |
-| `history.py` | Prints one markdown table row per dataset run in Langfuse: date, commit, settings, run name and mean recall. It writes nothing. | After each eval you can copy the rows worth keeping into `results/history.md` and add a note. |
-| `sweep_record_cap.py` | The experiment. It runs a rapid search many times, each time with a different cap on the number of records kept and with one of the two query-generation methods. It records the recall for each combination. | When you want to know how the record cap or the prompting method changes recall. |
+| **Hand-made** (4 reviews: parental leave, loneliness, adverse childhood experiences, social care) | One review. A person removed the off-topic citations in the [labelling repo](https://github.com/nestauk/policy_atlas_gt_labelling). | Yes |
+| **3ie** evidence gap maps (development interventions in low- and middle-income countries) | One intervention row of a map | Yes. Screeners coded each study as on topic. |
+| **YEF** (Youth Endowment Fund) evidence and gap map (preventing youth violence) | One strand of the map, for example mentoring | Yes, as above |
+| **Campbell** Systematic Reviews (a social-policy review journal, read through OpenAlex) | One published review | No. See "Limits" below. |
+| **SR4ALL** (a public corpus of 300,000 systematic reviews) | One social-science review | No. See "Limits" below. |
 
-The two measuring scripts read the reviews and their reference lists from the Langfuse dataset. They do not read the CSV files. This means you must run `ground_truth_dataset.py` at least once before you run either of them.
+### How the intent is made
 
-**Helper modules (these have no command line):**
+The intent is made by fixed rules, not by a language model. This makes it the same on every run.
 
-| Module | What it holds | Who uses it |
+- **Published review**: the title, with tails such as ": a systematic review" removed.
+- **Gap-map row**: a question from a template: "What is the evidence on *intervention* in relation to *map theme*?"
+
+Note: in the app, a Planner turns the user's text into an intent. The evals skip the Planner. They test the search only.
+
+### Mini and full ground truth samples
+
+`ground_truth/select_sample.py` picks the samples from the fetched collections. It keeps a review only if it:
+
+1. asks one specific question (not a whole map),
+2. has 20 to 300 references with a DOI,
+3. has a DOI for at least 70% of its references (50% for YEF),
+4. has a cutoff date in the past, and 2010 or later,
+5. is not a protocol, editorial or guide.
+
+Then it rotates across topics so that no single subject fills the sample. The same inputs always give the same sample.
+
+| Langfuse dataset | Contents | Use it for |
 |---|---|---|
-| `ground_truth.py` | Small building blocks that need no database and no pipeline code: the key used to match a found document to a reference (a lowercase DOI, or `overton:<id>` for documents without a DOI), the `GroundTruth` container, the function that turns a review title into a search intent, the date helpers, and one lookup to the OpenAlex API. | All the other files. |
-| `search_eval.py` | The core of the evaluation. Its function `run_one_query` takes one search intent, runs the real search stage (and screening, if asked) and works out the recall. It runs inside a database transaction that is always rolled back, so nothing is saved to the database. It returns a `QueryResult` that holds the recall and the raw records each API call returned. | `sweep_record_cap.py` and `production_recall.py`. |
-| `inspect_run.py` | Two functions that turn a `QueryResult` into tables: one row per API call, or one row per record returned. The tables show titles and DOIs, so in a notebook you can see which API call found which paper without paying for the calls again. | `sweep_record_cap.py` uses it to build its queries CSV and papers CSV. |
-| `test_metrics.py` | A self-check for the functions that need no network and no database: scoring, CSV loading, the output tables and the OpenAlex retry logic. | Run it after you change any of the files above: `uv run --project backend python scripts/evals/search/test_metrics.py`. |
+| `retrieval-ground-truth` | The 4 hand-made reviews | Comparing with older rows in `history.md` |
+| `retrieval-ground-truth-mini` | 11 hand-picked rows from the full sample, plus the 4 hand-made reviews (15) | Quick checks while you change code (about $20 per round) |
+| `retrieval-ground-truth-full` | 30 Campbell + 30 3ie + 30 SR4ALL + 10 YEF (100) | A number you would quote (about $200 per round) |
 
-`production_recall.py` also imports the score names and the Langfuse upload code from `sweep_record_cap.py`. This means both scripts report the same set of scores, and you can compare their runs in Langfuse.
+### Limits
 
-**How data flows through the files:**
+- **Only scholarly recall.** All targets are matched by DOI. A government report without a DOI cannot be found, so it is not counted.
+- **Campbell and SR4ALL targets are not labelled.** A reference list mixes the studies a review is about with background and methods citations. We decided (2026-10-05) not to label them. So a perfect search probably scores only about **50%** on these rows (verificaiton needed). The `target_labelled` column (`yes` / `no`) tells you which rows have this ceiling. Do not compare the two kinds directly.
+- **Campbell and SR4ALL lists are shorter than the published ones.** We take the reference lists from OpenAlex, which keeps only the citations it could link to a record in its index. For example, our target for the review of people aged 80 and over has 95 of its 117 references. Most of the missing 22 have no DOI (statistics, government plans, software). A few are papers that OpenAlex did not link. Sometimes OpenAlex keeps a different DOI for the same paper, or links the wrong record, such as a correction notice instead of the paper. A search that finds the correct paper then counts as a miss.
+- **Small reviews are noisy.** With 20 references, one found study changes recall by 5 percentage points.
 
-```
-input/gt_reviews.csv ─┐
-input/references.csv ─┴─> ground_truth_dataset.py ──> Langfuse dataset
-                                                          │
-                              ┌───────────────────────────┴──────────────┐
-                              v                                          v
-                     production_recall.py                        sweep_record_cap.py
-                              │                                          │
-                              └────────> search_eval.run_one_query <─────┘
-                                          (real search + screening,
-                                           rolled back, never saved)
-                                                     │
-                                                     v
-                                     Langfuse runs + scores
-                                     results/*.csv (sweep only, built with inspect_run.py)
-```
+## 2. Measures
 
-Abbreviations used above: CSV is a comma-separated values file. DOI is a Digital Object Identifier, the permanent ID of a published paper. API is an application programming interface, the way our code asks OpenAlex and Overton for records.
+There are three kinds of run. Each answers a different question.
 
-## Prerequisites
+### Production runs: how good is the real pipeline?
 
-Two files in `scripts/evals/search/input/`:
-- `gt_reviews.csv`
-- `references.csv`
+`measure/production_recall.py` runs the search exactly as the app does, at each depth:
 
-## 1. Uploading datasets to Langfuse
+| Depth | What runs | Scores |
+|---|---|---|
+| `rapid` | One search round. A language model writes queries for OpenAlex and Overton. No screening. | Search recall |
+| `standard`, `deep` | Search, then screen the new results with a language model, then search again (reformulated queries, citation snowballing and so on) until the depth's round limit, or until screening finds few new studies | Search recall and screen recall |
 
-Key scripts/files: `ground_truth_dataset.py`
+**Search recall** is measured on everything the search kept. **Screen recall** is measured on what the screening step kept as relevant.
 
-### What this does
+Nothing is saved to the database. Each run is rolled back.
 
-This uploads curated systematic reviews to Langfuse as a dataset (the dataset `retrieval-ground-truth`). Each systematic review becomes an input ("intent", derived from the review's title -- see more below) and an output (the list of references in that review).
+### Baselines: what does "good" look like?
 
-### Usage
+A production recall of, say, 6% means nothing alone. The baselines give a number to compare it with. `measure/baseline_recall.py` sends each intent **once, unchanged**, to one search service. There is no language model, no screening and no second round. Each service is called an **arm**:
 
-This should be run whenever new reviews have been curated, i.e. if the local `references.csv` has been updated.
+| Arm | Service | Notes |
+|---|---|---|
+| `openalex-raw` | OpenAlex, one plain search | The same service the pipeline uses. If this matches the pipeline, our query writing adds little. |
+| `semantic-scholar` | Semantic Scholar keyword search | Every word must match, so long intents find little. Free. |
+| `semantic-scholar-snippet` | Semantic Scholar semantic search (by meaning) | Free. Favours open-access papers. |
+| `consensus` | Consensus | Paid: $0.05 per call. |
 
-Dry-run first, since it uploads nothing and needs no Langfuse keys:
+Each arm is scored at several caps (the first 50, 100, 200 and 1,000 results).
 
-```
-uv run --project backend --env-file backend/.env python scripts/evals/search/ground_truth_dataset.py --dry-run
-```
+**How to compare**: put a baseline row next to a production row with a similar number of kept results (`n_candidates_kept`). For example, `rapid` keeps up to 50 per service, so compare it with the baselines at cap 50 and 100. 
 
-Run it for real:
-```
-uv run --project backend --env-file backend/.env python scripts/evals/search/ground_truth_dataset.py
-```
+### Record-cap sweep: an experiment
 
-### Methodology details
+`measure/sweep_record_cap.py` asks a research question: does recall go up if the search keeps more results? It runs a `rapid` search many times. Each time it changes:
 
-- A list of a handful of systematic reviews to use as the ground truth has been collected in `input/gt_reviews.csv`. Each must have either a DOI or a URL (as policy papers will not have a DOI) - this is the key that is used to match the target to the references returned by the Policy Atlas search. Each also has a cutoff date, either specified in gt_reviews.csv or the publication date - 1 month.
+- the cap on results kept from each service (50, 100, 250, 500, 1,000, 2,000), and
+- the query-writing method: `shared` (v3, one prompt writes queries for both services) or `per-provider` (v2, one prompt per service).
 
-- These systematic reviews have been collected because they represent a range of policy areas: universal basic income, parental leave, loneliness and so on.
+Keeping more results costs more later: every kept result is screened and stored for the synthesis step.
 
-- A separate repo, [policy_atlas_gt_labelling](https://github.com/nestauk/policy_atlas_gt_labelling), handles getting the reference lists for these systematic reviews and curating them so that our recall target is only on-topic/"content" citations (rather than e.g. methodology citations about how to conduct a systematic review).
+### Experiments
 
-- For each of the systematic reviews listed in `gt_reviews.csv`, we infer a Policy Atlas query. We deterministically extract "intent" from the title of the systematic review. Because the reviews chosen are ones with "systematic review" or similar in the title, we use deterministic rules to strip the ": a systematic review" part from the end of the title. On the assumption that the title accurately defines the scope of the research, what remains is treated as the "intent". This is important because it means **we're bypassing the Planner/Agent**, so it's not totally faithful to how a real search in Policy Atlas happens. In the app, the Planner turns the user's raw text into an "intent".
+Search R&D experiments that are not part of the measured baselines or the production runs live in [results/analyses/2026-10-06-search-experiments.md](results/analyses/2026-10-06-search-experiments.md), one section per experiment script, with the dated results in `docs/tasks/047-search-rnd/notes.md`. As of 2026-10-06 the best measured configuration there (generated queries plus semantic search as seeds, a reference-frequency snowball, forward citation chasing, specificity ranking) reaches about 22% recall at 200 candidates on the mini set, against 3% for a plain OpenAlex search; see the file for the numbers and the caveats.
 
-Some other points worth knowing:
+### Cost
 
-- The date cut off as recorded in `gt_reviews.csv` is `<date review published> - 1 month`. The OpenAlex date cut off is inclusive so if the date of publication is used directly, you can end up accidentally including the source review itself. We put the cut off 1 month behind that to be on the safe side, as anything published less than a month before the review's publication is highly unlikely to make it into te systematic review.
+`history.py` shows a **variable cost** for each run: money that grows with how much you search. `api` is the service price (baselines). `llm` is the language-model spend that Langfuse records (pipeline runs). Fixed subscriptions are not included.
 
-## 2. Establishing the recall of current production rapid/standard/deep search types
+---
 
-Key scripts/files: `production_recall.py`
+# Part 2: How to run it
 
-### What this does
-
-This calculates recall at the search/retrieval and, if applicable, screening stages for a rapid/standard/deep search.
-
-Ultimately this should be built into a regression test.
-
-A GitHub Actions workflow for this exists but is parked in `.github/workflows-disabled/`, so it is not live. Move it back to `.github/workflows/` to enable it once the cost and gating questions are settled.
-
-### Usage
+## Folder structure
 
 ```
-make eval-search-recall                                            # all depths, all reviews
-make eval-search-recall ARGS="--depths rapid"                      # run it just for a rapid search (all reviews)
+scripts/evals/search/
+├── evals_search_utils.py   shared helpers: DOI matching, intent from title, cutoff dates
+├── history.py              prints one table row per Langfuse run
+├── ground_truth/           builds the dataset
+│   ├── getters/            get_campbell.py, get_3ie.py, get_yef.py, get_sr4all.py
+│   ├── fetch_helpers.py    shared code for the getters
+│   ├── select_sample.py    quality check, makes the mini and full samples
+│   └── upload.py           CSV files -> Langfuse dataset
+├── measure/                runs the measurements
+│   ├── production_recall.py
+│   ├── baseline_recall.py
+│   ├── snowball_recall.py  R&D experiment, see results/analyses/2026-10-06-search-experiments.md
+│   ├── pool_rerank.py      R&D experiment, see results/analyses/2026-10-06-search-experiments.md
+│   ├── sweep_record_cap.py
+│   ├── engine.py           runs one intent through the real search (no command line)
+│   └── inspect_run.py      tables of one run's raw output (no command line)
+├── tests                   self-checks, no network and no database
+├── input/                  the 4 hand-made reviews as CSV (git-ignored; from the labelling repo)
+└── results/                outputs (git-ignored, except history.md and analyses/)
+    ├── history.md          the headline results, kept by hand
+    ├── analyses/           dated analyses and the search experiments write-up (tracked)
+    ├── cache/              raw baseline results, one JSON file per arm and review
+    ├── snowball/           snowball scores, ranked candidates, manual-question exports; pool/ for the re-rank experiment
+    └── ground_truth/       fetched collections and the two samples
 ```
 
-## 3. Experiment to see how lifting the cap on records kept from the two APIs affects recall
+Each script starts with `import _bootstrap`. This short file lets the script import its neighbours, so you can run any script directly.
 
-Key scripts/files: `sweep_record_cap.py`
-
-### What this does
-
-The search stage fetches far more records than it keeps. This experiment tests how just using the rapid search paradigm (i.e. one search round, and no reformulation, citation snowballing etc) and varying the cap on records kept affects recall.
-
-It also compares v2-style and v3 prompting methods. v2 comes with higher latency (aysncio or similar was used in the v2 repo to manage this?) but better recall.
-
-### Usage
+## How data flows
 
 ```
-uv run --project backend --env-file backend/.env python scripts/evals/search/sweep_record_cap.py --caps 50 --generation-backends shared --repeats 1   # smoke test
-uv run --project backend --env-file backend/.env python scripts/evals/search/sweep_record_cap.py                                                     # full sweep
-
+getters ──> select_sample.py ──> upload.py ──> Langfuse dataset
+                                                   │
+                ┌──────────────────────────────────┼─────────────────────┐
+                v                                  v                     v
+       production_recall.py                baseline_recall.py    sweep_record_cap.py
+                │                                  │                     │
+                └──> engine.py (real search) <─────┼─────────────────────┘
+                                                   v
+                                Langfuse runs and scores ──> history.py ──> history.md
 ```
 
-### Methodology details
+The measuring scripts read the ground truth from Langfuse, not from the CSV files. Upload the dataset first.
 
-- In the Policy Atlas searches, we are at present just trying to calculate a recall metric on search i.e. the very first component of the pipeline. To this end, we just use the rapid search methodology i.e. generating 18 API queries across OpenAlex and Overton, but just one round of queries, and no reformulation, citation snowballing etc. The reason for this is that running multiple rounds would involve relevance screening, and that needs to be evaluated separately. (There is actually already code ready to turn screening on and this is in `sweep_record_cap.py`)
+## Commands
 
-- We run a Langfuse Experiment to compare: prompt version (v2 vs v3) x cap on the number of records kept from each API (50, 100, 250, 500, 1000, 2000). We expect that raising the cap -> better recall. There is a cost to raising this cap in the real PA workflow though because records passed to the relevance screening step also get stored and are available for RAG retrieval during the synthesis step. Therefore there is a tradeoff of search recall against documents kept.
+All commands run from the repository root. 
 
+Keys go in `backend/.env`: Langfuse keys, `SEMANTIC_SCHOLAR_API_KEY` and `CONSENSUS_API_KEY`. 
 
-#### Comparison of v2 and v3 API query generation
+Most scripts have `--dry-run` (do everything, upload nothing) and `--reviews` (run only some reviews). Use `--help` to see all options.
 
-The two generation backends are:
+### 1. Build and upload the ground truth
 
-| version | value | class | prompt files |
-|---|---|---|---|
-| v3 | `shared` | `OpenAISearchGenerationBackend` | `search_queries_system_v3.txt` — one prompt writes both the OpenAlex keyword queries and the Overton paraphrases |
-| v2 | `per-provider` | `V2SearchGenerationBackend` | `search_queries_openalex_system_v2.txt` and `search_queries_overton_system_v2.txt` — one prompt per provider, called once per query |
-
-## 4. Keeping a history of the headline results
-
-Key scripts/files: `history.py`, `results/history.md`
-
-### What this does
-
-Langfuse holds every run and all the detail. `results/history.md` holds only the headline numbers of the runs that matter (mean recall per run, with a note on each), so the history of recall lives in git next to the code. `history.py` prints one markdown table row per run in Langfuse so you can pick the rows to keep.
-
-### Usage
-
-Print a row for every run, oldest first:
+Do this only when the ground truth changes.
 
 ```
-uv run --project backend --env-file backend/.env python scripts/evals/search/history.py
+# Fetch the collections (each script caches its download; --refresh downloads again)
+uv run --project backend --env-file backend/.env python scripts/evals/search/ground_truth/getters/get_campbell.py --min-refs 30
+uv run --project backend --env-file backend/.env python scripts/evals/search/ground_truth/getters/get_3ie.py --min-studies 20
+uv run --project backend --env-file backend/.env python scripts/evals/search/ground_truth/getters/get_yef.py --min-studies 20
+# SR4ALL: first download sr4all_full.jsonl (1.6 GB, DOI 10.5281/zenodo.18431942) into results/ground_truth/raw/
+uv run --project backend --env-file backend/.env python scripts/evals/search/ground_truth/getters/get_sr4all.py --limit 100
+
+# Pick the samples (no network; --verbose says why each row was rejected)
+uv run --project backend --env-file backend/.env python scripts/evals/search/ground_truth/select_sample.py --verbose
+
+# Upload the mini dataset (the 11 sampled rows plus the 4 hand-made reviews)
+uv run --project backend --env-file backend/.env python scripts/evals/search/ground_truth/upload.py \
+    --reviews scripts/evals/search/results/ground_truth/sample_mini_reviews.csv \
+    --references scripts/evals/search/results/ground_truth/sample_mini_references.csv \
+    --dataset retrieval-ground-truth-mini --include-from retrieval-ground-truth
+
+# Upload the full dataset: the same with sample_full and --dataset retrieval-ground-truth-full (no --include-from)
+# Upload the 4 hand-made reviews: uv run --project backend --env-file backend/.env python scripts/evals/search/ground_truth/upload.py (reads input/)
 ```
 
-Print only recent runs:
+An upload adds and updates items. It never deletes them. If a review drops out of a sample, delete its item in Langfuse by hand.
+
+### 2. Measure
 
 ```
-uv run --project backend --env-file backend/.env python scripts/evals/search/history.py --since 2026-09-24
+# Production: one Langfuse run per depth
+uv run --project backend --env-file backend/.env python scripts/evals/search/measure/production_recall.py --dataset retrieval-ground-truth-mini --depths rapid
+make eval-search-recall ARGS="--depths rapid"         # same, on the 4 hand-made reviews (retrieval-ground-truth, the default when --dataset is not given)
+
+# Baselines: one Langfuse run per arm and cap
+uv run --project backend --env-file backend/.env python scripts/evals/search/measure/baseline_recall.py --dataset retrieval-ground-truth-mini
+
+# Sweep: smoke test, then the full sweep
+uv run --project backend --env-file backend/.env python scripts/evals/search/measure/sweep_record_cap.py --caps 50 --generation-backends shared --repeats 1
+uv run --project backend --env-file backend/.env python scripts/evals/search/measure/sweep_record_cap.py
 ```
 
-Then copy the row(s) worth keeping into the table in `results/history.md` and fill in the notes cell. Leave out smoke tests and partial runs unless they tell you something.
+The baselines call each service **once** and save the raw results in `results/cache/`. Later runs score from the cache and cost nothing. Use `--refresh` only when you need fresh results: Consensus charges for every call.
+
+Before you read recall, check `n_failed_calls`. If it is above 0, a service call failed, and recall for that review is too low.
+
+### 3. Record the results
+
+```
+uv run --project backend --env-file backend/.env python scripts/evals/search/history.py --since 2026-10-01
+```
+
+This prints one markdown row per run. Copy the rows that matter into `results/history.md` and add a note: what changed, and anything that affects how to read the number.
+
+For a closer look at one day's runs (recall by source, by review, before and after a change), write a **dated analysis** in `results/analyses/`. Name it `<date>-<topic>.py`. The script reads the runs from Langfuse (it does not call the search services) and writes its tables next to itself as `.md` and `.html`. Because the script is committed, anyone can run it again to re-derive the numbers. For an example, see `2026-10-05-mini-question-intents.py`:
+
+```
+uv run --project backend --env-file backend/.env python scripts/evals/search/results/analyses/2026-10-05-mini-question-intents.py
+```
+
+### 4. Check the scripts
+
+```
+make eval-check
+```
+
+This runs the self-checks in `tests/` and ruff (the code linter) on this folder. `make verify` includes it.
