@@ -1,0 +1,3 @@
+# Rendering dependency for build_diagram.py (docs tooling only; not a runtime
+# dependency of any deployed component). Install with `make setup`.
+reportlab==5.0.1

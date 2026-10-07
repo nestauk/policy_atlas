@@ -19,7 +19,7 @@ The setup:
 * ``record_cap_per_backend`` swept over 50, 100, 250, 500, 1000, 2000.
 * The generation backend swept over ``--generation-backends``: ``shared``
   (one prompt writes the queries for both providers) and ``per-provider``
-  (one prompt per provider). See ``search_eval.GENERATION_BACKENDS``; each
+  (one prompt per provider). See ``engine.GENERATION_BACKENDS``; each
   class names the prompt files it reads in ``prompt_files``. Every backend is
   run at every cap, so the two effects can be told apart.
 * Screening OFF by default. Retrieval is what is usually being measured, and
@@ -34,7 +34,7 @@ would mix up the generation-method and cap effects with query luck.
 How it is organised in Langfuse:
 
 * The ground truth is a Langfuse **dataset**, one item per review, built from
-  the CSVs under ``input/`` by ``ground_truth_dataset.py``. The sweep reads the
+  the CSVs under ``input/`` by ``ground_truth/upload.py``. The sweep reads the
   dataset, never the CSVs, so a run is pinned to the dataset version it saw.
 * Each generation backend x cap x repeat combination is one **dataset run**,
   named ``<label>/<backend>-cap<cap>-r<repeat>``. ``--run-label`` defaults to
@@ -63,9 +63,9 @@ OPENALEX_API_KEY / OVERTON_API_KEY, which is what ``--env-file backend/.env``
 supplies), after the dataset has been uploaded once:
 
     uv run --project backend --env-file backend/.env \\
-        python scripts/evals/search/ground_truth_dataset.py
+        python scripts/evals/search/ground_truth/upload.py
     uv run --project backend --env-file backend/.env \\
-        python scripts/evals/search/sweep_record_cap.py --repeats 1
+        python scripts/evals/search/measure/sweep_record_cap.py --repeats 1
 
 Besides the Langfuse runs, the script writes three CSVs into ``results/``.
 All of them can be joined on ``run_id`` and all carry the review's identifier
@@ -92,20 +92,26 @@ changes what Overton keeps.
 
 from __future__ import annotations
 
+import _bootstrap  # noqa: F401
+from evals_search_utils import (
+    DEFAULT_DATASET,
+    git_commit,
+    ground_truth_from_item,
+    GroundTruth,
+    record_key,
+)
+
 import argparse
 import hashlib
 import os
-import subprocess
 from datetime import date
 from pathlib import Path
 from typing import Any
 
 import pandas as pd
-from ground_truth import GroundTruth, record_key
-from ground_truth_dataset import DEFAULT_DATASET
 from inspect_run import call_table, records_table
 from langfuse import Evaluation, propagate_attributes
-from search_eval import GENERATION_BACKENDS, QueryResult, _keys_of, run_one_query
+from engine import GENERATION_BACKENDS, QueryResult, _keys_of, run_one_query
 
 from policy_atlas.core import tracing
 from policy_atlas.core.db import get_engine
@@ -163,22 +169,13 @@ def _prompt_identity(variant: str) -> tuple[str, str]:
     return version, sha
 
 
-def _git_commit() -> str:
-    try:
-        return subprocess.check_output(
-            ["git", "rev-parse", "HEAD"], cwd=Path(__file__).parent, text=True
-        ).strip()
-    except (OSError, subprocess.CalledProcessError):
-        return "unknown"
-
-
 def _kept_by_backend(result: QueryResult) -> dict[str, str]:
     """Scoring key -> the backend whose record survived into the candidate set.
 
     Acquire de-duplicates across backends, so a document both providers
     returned is kept once, under whichever backend reached it first. The key is
     a DOI where the document has one and an Overton document id otherwise, so
-    policy documents count (see ``ground_truth.record_key``).
+    policy documents count (see ``evals_search_utils.record_key``).
     """
     kept: dict[str, str] = {}
     for doc in result.search_docs:
@@ -206,7 +203,9 @@ def _run_frames(
     records = records_table(result.search_calls, ground_truth.keys)
     kept_by_key = _kept_by_backend(result)
     # None when the run did not screen: "not measured", not "nothing survived".
-    screened_keys = _keys_of(result.screened_docs) if result.screen_recall is not None else None
+    screened_keys = (
+        _keys_of(result.screened_docs) if result.screen_recall is not None else None
+    )
 
     # Which backends' API calls returned each cited document, before any capping.
     returned_by: dict[str, set[str]] = {}
@@ -241,9 +240,15 @@ def _run_frames(
     n_gt = len(ground_truth.keys)
     runs_rows: list[dict[str, Any]] = []
     for backend in [*sorted({call["backend"] for call in result.search_calls}), "all"]:
-        calls = [c for c in result.search_calls if backend == "all" or c["backend"] == backend]
+        calls = [
+            c
+            for c in result.search_calls
+            if backend == "all" or c["backend"] == backend
+        ]
         found = {
-            key for key, kept in kept_by_key.items() if backend == "all" or kept == backend
+            key
+            for key, kept in kept_by_key.items()
+            if backend == "all" or kept == backend
         } & ground_truth.keys
         kept_here = [
             doc
@@ -268,7 +273,11 @@ def _run_frames(
                 "search_recall": round(len(found) / n_gt, 4) if n_gt else 0.0,
                 "n_screened_in": None if screened_here is None else len(screened_here),
                 "screen_recall": (
-                    None if screened_here is None else round(len(screened_here) / n_gt, 4) if n_gt else 0.0
+                    None
+                    if screened_here is None
+                    else round(len(screened_here) / n_gt, 4)
+                    if n_gt
+                    else 0.0
                 ),
             }
         )
@@ -289,26 +298,17 @@ def _summary(runs: pd.DataFrame) -> dict[str, Any]:
         },
         "n_ground_truth": int(total["n_ground_truth"]),
         "found_by_backend": {
-            row.backend: int(row.n_found) for row in runs[runs["backend"] != "all"].itertuples()
+            row.backend: int(row.n_found)
+            for row in runs[runs["backend"] != "all"].itertuples()
         },
     }
 
 
 def score_summary(*, output: dict[str, Any], **_: Any) -> list[Evaluation]:
     """The experiment evaluator: lift the task's summary numbers into Langfuse scores."""
-    return [Evaluation(name=key, value=output[key]) for key in SCORE_KEYS if key in output]
-
-
-def _ground_truth_from_item(item: Any) -> GroundTruth:
-    """Rebuild the recall target from a dataset item's ``expected_output``."""
-    keys = set(item.expected_output["keys"])
-    overton_ids = {key for key in keys if key.startswith("overton:")}
-    return GroundTruth(
-        dois=keys - overton_ids,
-        overton_ids=overton_ids,
-        source=item.metadata.get("source", "doi"),
-        titles=item.expected_output.get("titles", {}),
-    )
+    return [
+        Evaluation(name=key, value=output[key]) for key in SCORE_KEYS if key in output
+    ]
 
 
 def _run_cell(
@@ -353,7 +353,7 @@ def _run_cell(
     print(f"\n=== {run_name} (call_budget={constants['call_budget']}) ===")
 
     def task(*, item: Any, **_: Any) -> dict[str, Any]:
-        ground_truth = _ground_truth_from_item(item)
+        ground_truth = ground_truth_from_item(item)
         intent = item.input["intent"]
         published_before = item.input["published_before"]
         # propagate_attributes is what puts the cell's configuration on the
@@ -394,7 +394,9 @@ def _run_cell(
             bucket.append(frame)
 
         summary = _summary(frames[0])
-        per_backend = ", ".join(f"{b} {n}" for b, n in summary["found_by_backend"].items())
+        per_backend = ", ".join(
+            f"{b} {n}" for b, n in summary["found_by_backend"].items()
+        )
         failed = (
             f", {summary['n_failed_calls']} CALLS FAILED — recall is an undercount"
             if summary["n_failed_calls"]
@@ -427,12 +429,14 @@ def _run_cell(
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     parser.add_argument(
         "--dataset",
         default=DEFAULT_DATASET,
         help=f"Langfuse dataset holding the reviews and their reference lists (default "
-        f"{DEFAULT_DATASET}; upload it with ground_truth_dataset.py).",
+        f"{DEFAULT_DATASET}; upload it with ground_truth/upload.py).",
     )
     parser.add_argument(
         "--run-label",
@@ -477,10 +481,10 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    git_commit = _git_commit()
+    commit = git_commit()
     # Langfuse's ``release`` field is its slot for the code version; the SDK
     # reads it from this variable when the client is built.
-    os.environ.setdefault("LANGFUSE_RELEASE", git_commit)
+    os.environ.setdefault("LANGFUSE_RELEASE", commit)
     client = tracing.get_langfuse()
     if client is None:
         parser.error(
@@ -489,18 +493,26 @@ def main() -> None:
         )
     dataset = client.get_dataset(args.dataset)
     if not dataset.items:
-        parser.error(f"dataset {args.dataset!r} has no items — run ground_truth_dataset.py first.")
-    label = args.run_label or f"{date.today().isoformat()}-{git_commit[:7]}"
+        parser.error(
+            f"dataset {args.dataset!r} has no items — run ground_truth/upload.py first."
+        )
+    label = args.run_label or f"{date.today().isoformat()}-{commit[:7]}"
 
-    print(f"Dataset: {args.dataset} ({len(dataset.items)} reviews); runs labelled {label}/...")
+    print(
+        f"Dataset: {args.dataset} ({len(dataset.items)} reviews); runs labelled {label}/..."
+    )
     print(
         f"Sweep: depth={DEPTH}, result_cap={RESULT_CAP_PER_BACKEND}, "
         f"generation_backends={args.generation_backends}, caps={args.caps}, "
-        f"repeats={args.repeats}, screening {'ON' if args.screen else 'OFF'}, git_commit={git_commit[:7]}"
+        f"repeats={args.repeats}, screening {'ON' if args.screen else 'OFF'}, git_commit={commit[:7]}"
     )
 
     engine = get_engine()
-    sink: tuple[list[pd.DataFrame], list[pd.DataFrame], list[pd.DataFrame]] = ([], [], [])
+    sink: tuple[list[pd.DataFrame], list[pd.DataFrame], list[pd.DataFrame]] = (
+        [],
+        [],
+        [],
+    )
     skipped: list[str] = []
     for variant in args.generation_backends:
         for record_cap in args.caps:
@@ -513,7 +525,7 @@ def main() -> None:
                     record_cap=record_cap,
                     repeat=repeat,
                     label=label,
-                    git_commit=git_commit,
+                    git_commit=commit,
                     screen=args.screen,
                     sink=sink,
                 )
@@ -522,15 +534,22 @@ def main() -> None:
                 # broken evaluator yields a run with no scores at all.
                 dropped = len(dataset.items) - len(result.item_results)
                 if dropped:
-                    skipped.append(f"{result.run_name}: {dropped} review(s) failed — see the errors above")
+                    skipped.append(
+                        f"{result.run_name}: {dropped} review(s) failed — see the errors above"
+                    )
                 if result.item_results and not result.item_results[0].evaluations:
-                    raise RuntimeError("no scores were recorded — the evaluator failed (see the errors above)")
+                    raise RuntimeError(
+                        "no scores were recorded — the evaluator failed (see the errors above)"
+                    )
                 print(f"  -> {result.dataset_run_url}")
 
     if not sink[0]:
         parser.error("no run produced any results — nothing to write.")
     _write_and_summarise(
-        args.out or Path(__file__).parent / "results" / "record_cap_sweep", *sink, skipped
+        args.out
+        or Path(__file__).resolve().parents[1] / "results" / "record_cap_sweep",
+        *sink,
+        skipped,
     )
     tracing.flush(client)
 
@@ -560,17 +579,25 @@ def _write_and_summarise(
     pct = lambda v: f"{v:.0%}"  # noqa: E731 - pandas float_format wants a callable
 
     print("\n" + "=" * 72)
-    print("Recall per review (rows = record_cap_per_backend, columns = generation backend)")
+    print(
+        "Recall per review (rows = record_cap_per_backend, columns = generation backend)"
+    )
     for review_id, group in totals.groupby("review_id", sort=False):
         print(f"\n{group['review_title'].iloc[0]}")
         print(f"  {review_id} — {group['n_ground_truth'].iloc[0]} scorable references")
         table = group.pivot_table(
             index="record_cap_per_backend",
             columns="generation_backend",
-            values=[c for c in ("search_recall", "screen_recall") if group[c].notna().any()],
+            values=[
+                c for c in ("search_recall", "screen_recall") if group[c].notna().any()
+            ],
             aggfunc="mean",
         )
-        print("\n".join("  " + line for line in table.to_string(float_format=pct).splitlines()))
+        print(
+            "\n".join(
+                "  " + line for line in table.to_string(float_format=pct).splitlines()
+            )
+        )
 
     if n_reviews > 1:
         print("\n" + "=" * 72)
@@ -595,7 +622,9 @@ def _write_and_summarise(
             "undercount — see the 'error' column in the queries CSV."
         )
     if skipped:
-        print(f"\nWARNING: {len(skipped)} run(s) lost reviews and are NOT complete in these numbers:")
+        print(
+            f"\nWARNING: {len(skipped)} run(s) lost reviews and are NOT complete in these numbers:"
+        )
         for line in skipped:
             print(f"  - {line}")
 

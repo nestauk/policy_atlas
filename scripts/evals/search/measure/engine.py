@@ -1,13 +1,13 @@
 """Run one research intent through the real search stage (and optionally
 screening) and score it against a review's reference list.
 
-This is the engine that ``sweep_record_cap.py`` and ``production_recall.py``
+This is the engine that ``measure/sweep_record_cap.py`` and ``measure/production_recall.py``
 drive. It has no command line of its own. ``run_one_query`` seeds a throwaway
 task/scope, runs the pipeline's own ``run_search`` and ``screen_sources`` for
 as many rounds as the depth allows, and does so inside the caller's
 transaction (which the caller rolls back, so nothing is ever committed). It
 returns a ``QueryResult`` with recall attributed to each stage, plus
-everything needed to unpick the run offline (see ``inspect_run.py``).
+everything needed to unpick the run offline (see ``measure/inspect_run.py``).
 
 One ``run_search`` call is one search round. ``rapid`` is a single round.
 ``standard`` and ``deep`` are several: the app's runner searches, screens the
@@ -39,6 +39,8 @@ process only.
 
 from __future__ import annotations
 
+import _bootstrap  # noqa: F401
+
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -49,11 +51,21 @@ from langfuse import Langfuse
 from sqlalchemy import select
 from sqlalchemy.engine import Connection
 
-from ground_truth import GroundTruth, record_key
+from evals_search_utils import GroundTruth, record_key
 
 from policy_atlas.core import tracing
-from policy_atlas.core.schema import evidence_scope, task, task_source_snapshot, runs, source_snapshot
-from policy_atlas.evidence_search.assess.screen import ScreenContext, effective_screen_rows, screen_sources
+from policy_atlas.core.schema import (
+    evidence_scope,
+    task,
+    task_source_snapshot,
+    runs,
+    source_snapshot,
+)
+from policy_atlas.evidence_search.assess.screen import (
+    ScreenContext,
+    effective_screen_rows,
+    screen_sources,
+)
 from policy_atlas.evidence_search.assess.screening_backend import OpenAIScreeningBackend
 from policy_atlas.evidence_search.sourcing.acquire import AcquireContext
 from policy_atlas.evidence_search.sourcing.search_generation import (
@@ -89,7 +101,11 @@ def _seed_task(conn: Connection) -> uuid.UUID:
     task_id = uuid.uuid4()
     conn.execute(
         task.insert().values(
-            task_id=task_id, created_at=now, name="eval-pilot", status="active", updated_at=now
+            task_id=task_id,
+            created_at=now,
+            name="eval-pilot",
+            status="active",
+            updated_at=now,
         )
     )
     return task_id
@@ -101,7 +117,12 @@ def _seed_run(conn: Connection, task_id: uuid.UUID) -> uuid.UUID:
     every screen round gets a fresh one, exactly as the app's runner does."""
     run_id = uuid.uuid4()
     conn.execute(
-        runs.insert().values(run_id=run_id, task_id=task_id, status="running", started_at=datetime.now(UTC))
+        runs.insert().values(
+            run_id=run_id,
+            task_id=task_id,
+            status="running",
+            started_at=datetime.now(UTC),
+        )
     )
     return run_id
 
@@ -120,12 +141,18 @@ def _seed_scope(conn: Connection, task_id: uuid.UUID, intent: str) -> uuid.UUID:
     return scope_id
 
 
-def _search_candidate_docs(conn: Connection, task_id: uuid.UUID) -> list[dict[str, Any]]:
+def _search_candidate_docs(
+    conn: Connection, task_id: uuid.UUID
+) -> list[dict[str, Any]]:
     """Metadata for every candidate that reached the database — i.e. what
     survived acquire's dedup and cap, not everything the APIs returned."""
     rows = conn.execute(
         select(source_snapshot.c.metadata)
-        .join(task_source_snapshot, task_source_snapshot.c.source_snapshot_id == source_snapshot.c.source_snapshot_id)
+        .join(
+            task_source_snapshot,
+            task_source_snapshot.c.source_snapshot_id
+            == source_snapshot.c.source_snapshot_id,
+        )
         .where(task_source_snapshot.c.task_id == task_id)
     ).fetchall()
     return [metadata for (metadata,) in rows]
@@ -133,22 +160,31 @@ def _search_candidate_docs(conn: Connection, task_id: uuid.UUID) -> list[dict[st
 
 def _keys_of(docs: list[dict[str, Any]]) -> set[str]:
     """Scoring keys for a set of documents: DOI where there is one, else the
-    Overton document id (see ``ground_truth.record_key``). Documents with
+    Overton document id (see ``evals_search_utils.record_key``). Documents with
     neither cannot be matched against the ground truth and are dropped."""
     return {key for d in docs if (key := record_key(d))}
 
 
-def _screened_relevant_docs(conn: Connection, task_id: uuid.UUID, scope_id: uuid.UUID) -> list[dict[str, Any]]:
+def _screened_relevant_docs(
+    conn: Connection, task_id: uuid.UUID, scope_id: uuid.UUID
+) -> list[dict[str, Any]]:
     """Mirrors ``classify._load_relevant_docs``'s join shape over the effective screen rows."""
     effective = effective_screen_rows()
     rows = conn.execute(
         select(source_snapshot.c.metadata)
         .join(
             effective,
-            (effective.c.task_source_snapshot_id == task_source_snapshot.c.task_source_snapshot_id)
+            (
+                effective.c.task_source_snapshot_id
+                == task_source_snapshot.c.task_source_snapshot_id
+            )
             & (effective.c.task_id == task_source_snapshot.c.task_id),
         )
-        .join(source_snapshot, task_source_snapshot.c.source_snapshot_id == source_snapshot.c.source_snapshot_id)
+        .join(
+            source_snapshot,
+            task_source_snapshot.c.source_snapshot_id
+            == source_snapshot.c.source_snapshot_id,
+        )
         .where(effective.c.evidence_scope_id == scope_id)
         .where(effective.c.status == "relevant")
         .where(task_source_snapshot.c.task_id == task_id)
@@ -172,7 +208,10 @@ class _RecordingBackend:
     """
 
     def __init__(
-        self, inner: Any, calls: list[dict[str, Any]], langfuse_client: Langfuse | None = None
+        self,
+        inner: Any,
+        calls: list[dict[str, Any]],
+        langfuse_client: Langfuse | None = None,
     ) -> None:
         self._inner = inner
         self._calls = calls
@@ -262,16 +301,24 @@ class _RecordingBackend:
         return records
 
     def search(
-        self, query: str, *, wire_params: dict[str, str] | None = None, max_results: int | None = None
+        self,
+        query: str,
+        *,
+        wire_params: dict[str, str] | None = None,
+        max_results: int | None = None,
     ) -> list[dict[str, Any]]:
         return self._record(
             "search",
             query,
             wire_params,
-            lambda: self._inner.search(query, wire_params=wire_params, max_results=max_results),
+            lambda: self._inner.search(
+                query, wire_params=wire_params, max_results=max_results
+            ),
         )
 
-    def fetch_citations(self, record_id: str, *, max_results: int | None = None) -> list[dict[str, Any]]:
+    def fetch_citations(
+        self, record_id: str, *, max_results: int | None = None
+    ) -> list[dict[str, Any]]:
         return self._record(
             "fetch_citations",
             record_id,
@@ -294,7 +341,9 @@ class _RecordingBackend:
             "lookup_title", title, None, lambda: self._inner.lookup_title(title)
         )
 
-    def lookup_dois(self, dois: list[str], *, max_results: int | None = None) -> list[dict[str, Any]]:
+    def lookup_dois(
+        self, dois: list[str], *, max_results: int | None = None
+    ) -> list[dict[str, Any]]:
         return self._record(
             "lookup_dois",
             ",".join(dois),
@@ -375,10 +424,15 @@ def run_one_query(
     }
     search_calls: list[dict[str, Any]] = []
     recording_backends = [
-        _RecordingBackend(b, search_calls, langfuse_client) for b in live_search_backends()
+        _RecordingBackend(b, search_calls, langfuse_client)
+        for b in live_search_backends()
     ]
-    generation_backend = GENERATION_BACKENDS[generation_backend_variant](langfuse_client=langfuse_client)
-    screening_backend = OpenAIScreeningBackend(langfuse_client=langfuse_client) if run_screen else None
+    generation_backend = GENERATION_BACKENDS[generation_backend_variant](
+        langfuse_client=langfuse_client
+    )
+    screening_backend = (
+        OpenAIScreeningBackend(langfuse_client=langfuse_client) if run_screen else None
+    )
 
     # Mirrors runner.py's round loop: search, screen the new candidates, ask
     # the pipeline's stop rule, repeat. run_search works out which round it is
@@ -391,7 +445,9 @@ def run_one_query(
             conn,
             task_id=task_id,
             run_id=_seed_run(conn, task_id),
-            context=AcquireContext(scope_id=scope_id, intent=query, context=search_context),
+            context=AcquireContext(
+                scope_id=scope_id, intent=query, context=search_context
+            ),
             backends=recording_backends,
             generation_backend=generation_backend,
         )

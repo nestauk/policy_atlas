@@ -1,7 +1,7 @@
 """Measure what production does: search (and screening) recall at the real
 depth constants, one Langfuse dataset run per depth.
 
-The sweep (``sweep_record_cap.py``) asks a research question by pushing the
+The sweep (``measure/sweep_record_cap.py``) asks a research question by pushing the
 caps far above production. This script asks the operational question: with
 the pipeline exactly as deployed, how much of each review's reference list
 does a ``rapid``, ``standard`` or ``deep`` search find? Run it by hand,
@@ -11,7 +11,7 @@ about cost and gating are settled.) It records numbers. It does not pass or
 fail on them.
 
 How a depth is run (this mirrors the round loop in ``runtime/runner.py``, see
-``search_eval.run_one_query``):
+``engine.run_one_query``):
 
 * ``rapid`` — one search round, no screening. Search recall only.
 * ``standard`` / ``deep`` — search, screen the new candidates, then let the
@@ -35,10 +35,10 @@ reading recall. Any value above 0 means a provider call failed after retries,
 so that review's recall is an undercount caused by the provider, not the code.
 
 Usage (same environment as the sweep; the dataset must already be uploaded
-with ``ground_truth_dataset.py``):
+with ``ground_truth/upload.py``):
 
     uv run --project backend --env-file backend/.env \\
-        python scripts/evals/search/production_recall.py \\
+        python scripts/evals/search/measure/production_recall.py \\
         [--depths rapid standard deep] [--run-label LABEL] [--reviews TEXT ...]
 
 ``--reviews`` restricts the run to the dataset items whose id, review id or
@@ -49,17 +49,22 @@ dataset. It simply has fewer items, so its averages cover only those reviews.
 
 from __future__ import annotations
 
+import _bootstrap  # noqa: F401
+from evals_search_utils import (
+    DEFAULT_DATASET,
+    git_commit,
+    ground_truth_from_item,
+    select_items,
+)
+
 import argparse
 import os
 from datetime import date
 from typing import Any
 
-from ground_truth_dataset import DEFAULT_DATASET
 from langfuse import Evaluation, propagate_attributes
-from search_eval import run_one_query
+from engine import run_one_query
 from sweep_record_cap import (
-    _git_commit,
-    _ground_truth_from_item,
     _prompt_identity,
     _run_frames,
     _summary,
@@ -73,7 +78,7 @@ from policy_atlas.evidence_search.sourcing.search_loop import DEPTH_CONSTANTS
 EXPERIMENT = "retrieval-production-recall"
 DEPTHS = ["rapid", "standard", "deep"]
 # What the app wires (runtime/agent.py): OpenAISearchGenerationBackend, the
-# "shared" arm in search_eval.GENERATION_BACKENDS.
+# "shared" arm in engine.GENERATION_BACKENDS.
 GENERATION_BACKEND = "shared"
 
 
@@ -87,41 +92,6 @@ def item_scores(*, output: dict[str, Any], **_: Any) -> list[Evaluation]:
 
 def _mean(values: list[float]) -> float | None:
     return sum(values) / len(values) if values else None
-
-
-def select_items(items: list[Any], patterns: list[str] | None) -> list[Any]:
-    """The dataset items to run: all of them, or those matching ``--reviews``.
-
-    A pattern matches an item when it appears (case-insensitive) in the item's
-    id, its ``review_id`` or its ``review_title``.
-
-    Raises:
-        ValueError: No item matched, listing what was available.
-    """
-    if not patterns:
-        return items
-    wanted = [p.lower() for p in patterns]
-    chosen = [
-        item
-        for item in items
-        if any(
-            p in text
-            for p in wanted
-            for text in (
-                str(item.id).lower(),
-                str(item.metadata.get("review_id", "")).lower(),
-                str(item.metadata.get("review_title", "")).lower(),
-            )
-        )
-    ]
-    if not chosen:
-        available = "\n  ".join(
-            f"{item.id}  {item.metadata.get('review_title', '')[:70]}" for item in items
-        )
-        raise ValueError(
-            f"--reviews {patterns} matched no dataset item. Items:\n  {available}"
-        )
-    return chosen
 
 
 def _describe(title: str, s: dict[str, Any]) -> str:
@@ -181,7 +151,7 @@ def _run_depth(
     )
 
     def task(*, item: Any, **_: Any) -> dict[str, Any]:
-        ground_truth = _ground_truth_from_item(item)
+        ground_truth = ground_truth_from_item(item)
         intent, published_before = item.input["intent"], item.input["published_before"]
         with propagate_attributes(metadata=meta), engine.connect() as connection:
             trans = connection.begin()
@@ -258,9 +228,9 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    git_commit = _git_commit()
+    commit = git_commit()
     # Langfuse's ``release`` field is its slot for the code version.
-    os.environ.setdefault("LANGFUSE_RELEASE", git_commit)
+    os.environ.setdefault("LANGFUSE_RELEASE", commit)
     client = tracing.get_langfuse()
     if client is None:
         parser.error(
@@ -269,13 +239,13 @@ def main() -> None:
     dataset = client.get_dataset(args.dataset)
     if not dataset.items:
         parser.error(
-            f"dataset {args.dataset!r} has no items — run ground_truth_dataset.py first."
+            f"dataset {args.dataset!r} has no items — run ground_truth/upload.py first."
         )
     try:
         items = select_items(dataset.items, args.reviews)
     except ValueError as exc:
         parser.error(str(exc))
-    label = args.run_label or f"{date.today().isoformat()}-{git_commit[:7]}"
+    label = args.run_label or f"{date.today().isoformat()}-{commit[:7]}"
     print(
         f"Dataset: {args.dataset} ({len(items)} of {len(dataset.items)} reviews); "
         f"depths {args.depths}; runs labelled {label}/..."
@@ -294,7 +264,7 @@ def main() -> None:
             client,
             depth=depth,
             label=label,
-            git_commit=git_commit,
+            git_commit=commit,
         )
         # The SDK isolates failures: a review whose run raised is logged to
         # stderr and silently missing from item_results.
