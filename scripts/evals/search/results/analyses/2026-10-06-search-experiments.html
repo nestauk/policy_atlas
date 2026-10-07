@@ -1,0 +1,470 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Search Experiments, October 2026</title>
+<meta name="description" content="How Policy Atlas search went from 3% to 22% recall in one day of experiments: the snowball, forward citation chasing, semantic seeds, and what did not work.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;800&family=Manrope:wght@400;500;600;700&display=swap">
+<style>
+/* Layout: one reading column (about 70 characters) for the narrative, with figures and
+   charts breaking out to a wider measure. Headline figures first, mechanisms in the
+   middle, caveats and the recipe last. Palette and type follow the Policy Atlas front
+   end (frontend/src/index.css): Nesta navy, electric blue as the single accent, Averta and
+   Zosia Display when installed, Manrope and Archivo otherwise. */
+:root {
+  --paper: #ffffff;
+  --ground: #f4f4f5;
+  --ink: #1c1c1e;
+  --ink-2: #4b4b4f;
+  --grey: #646363;
+  --line: #e4e4e7;
+  --navy: #0f294a;
+  --navy-muted: #c8d6e6;
+  --blue: #0000ff;
+  --blue-tint: #ececff;
+  --yellow: #fdb633;
+  --yellow-tint: #fff6e3;
+  --green-tint: #e7f5f2;
+  --red: #eb003b;
+  /* categorical: seed / snowball / forward / semantic (validated, light surface) */
+  --c-seed: #2d3ff0;
+  --c-snow: #18a48c;
+  --c-fwd: #e8552b;
+  --c-sem: #9a1bbe;
+  --c-plain: #9a9aa3;
+  --font-display: "Zosia Display", "Archivo", "Helvetica Neue", Arial, sans-serif;
+  --font-body: "Averta", "Manrope", "Helvetica Neue", Arial, sans-serif;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #0f294a; --ground: #0b1f38; --ink: #f4f6fa; --ink-2: #c8d6e6; --grey: #a9b7c9;
+    --line: #27405f; --navy: #f4f6fa; --navy-muted: #27405f; --blue: #8c9bff; --blue-tint: #1a2f52;
+    --yellow: #fdb633; --yellow-tint: #2b2a1a; --green-tint: #123a35; --red: #ff5f85;
+    --c-seed: #5f6dff; --c-snow: #149a81; --c-fwd: #e2603a; --c-sem: #ad66d4; --c-plain: #6f7d93;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #0f294a; --ground: #0b1f38; --ink: #f4f6fa; --ink-2: #c8d6e6; --grey: #a9b7c9;
+  --line: #27405f; --navy: #f4f6fa; --navy-muted: #27405f; --blue: #8c9bff; --blue-tint: #1a2f52;
+  --yellow: #fdb633; --yellow-tint: #2b2a1a; --green-tint: #123a35; --red: #ff5f85;
+  --c-seed: #5f6dff; --c-snow: #149a81; --c-fwd: #e2603a; --c-sem: #ad66d4; --c-plain: #6f7d93;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background: var(--paper); color: var(--ink);
+  font-family: var(--font-body); font-size: 17px; line-height: 1.55;
+  padding-block: 0 4rem; padding-inline: 16px;
+  -webkit-font-smoothing: antialiased;
+}
+.wrap { max-width: 72ch; margin: 0 auto; }
+.wide { max-width: 980px; margin-inline: auto; }
+header.masthead { border-bottom: 3px solid var(--navy); padding-block: 1.25rem 1.5rem; margin-bottom: 2.5rem; }
+.eyebrow { font-size: .8rem; letter-spacing: .08em; text-transform: uppercase; color: var(--grey); font-weight: 600; }
+h1, h2, h3 { font-family: var(--font-display); color: var(--navy); text-wrap: balance; line-height: 1.1; margin: 0; }
+h1 { font-size: clamp(2.1rem, 5vw, 3.4rem); font-weight: 800; margin-top: .4rem; }
+h2 { font-size: clamp(1.5rem, 3vw, 2.1rem); font-weight: 800; margin-top: 3rem; margin-bottom: .75rem; }
+h3 { font-size: 1.15rem; font-weight: 700; margin-top: 1.75rem; margin-bottom: .4rem; font-family: var(--font-body); }
+p { margin: 0 0 1rem; }
+.lede { font-size: 1.2rem; color: var(--ink-2); max-width: 60ch; margin-top: 1rem; }
+a { color: var(--blue); }
+code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .9em; background: var(--ground); padding: .05em .35em; border-radius: 3px; }
+/* headline tiles */
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); margin: 1.5rem 0 0; }
+.tile { background: var(--paper); padding: 1rem 1.1rem; }
+.tile .num { font-family: var(--font-display); font-size: 2.6rem; font-weight: 800; line-height: 1; color: var(--navy); font-variant-numeric: tabular-nums; }
+.tile .num.accent { color: var(--blue); }
+.tile .lab { font-size: .85rem; color: var(--grey); margin-top: .35rem; line-height: 1.3; }
+/* figures */
+figure { margin: 1.5rem 0 2rem; }
+figure svg { display: block; width: 100%; height: auto; max-width: 100%; color: var(--ink); }
+figcaption { font-size: .9rem; color: var(--ink-2); margin-top: .6rem; max-width: 70ch; }
+figcaption b { color: var(--ink); }
+.scroll { overflow-x: auto; }
+/* legend chips */
+.legend { display: flex; flex-wrap: wrap; gap: .4rem 1.2rem; font-size: .85rem; color: var(--ink-2); margin: .5rem 0 0; }
+.legend span::before { content: ""; display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: .4rem; vertical-align: -1px; background: var(--dot); }
+/* tables */
+table { border-collapse: collapse; width: 100%; font-size: .92rem; font-variant-numeric: tabular-nums; }
+th, td { text-align: left; padding: .45rem .6rem; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-size: .78rem; letter-spacing: .05em; text-transform: uppercase; color: var(--grey); font-weight: 600; }
+td.n, th.n { text-align: right; }
+tr.hl td { background: var(--blue-tint); font-weight: 600; }
+/* callouts */
+.note { border-left: 4px solid var(--yellow); background: var(--yellow-tint); padding: .8rem 1rem; margin: 1.25rem 0; font-size: .95rem; }
+.formula { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1rem; background: var(--ground); padding: .9rem 1rem; border-radius: 4px; overflow-x: auto; margin: 1rem 0; }
+.steps { counter-reset: step; list-style: none; padding: 0; margin: 1rem 0; display: grid; gap: .6rem; }
+.steps li { position: relative; padding-left: 2.6rem; }
+.steps li::before { counter-increment: step; content: counter(step); position: absolute; left: 0; top: .05rem; width: 1.9rem; height: 1.9rem; border-radius: 50%; background: var(--navy); color: var(--paper); font-family: var(--font-display); font-weight: 800; display: grid; place-items: center; font-size: .95rem; }
+.didnt { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: .8rem; margin: 1rem 0; }
+.didnt div { border-top: 2px solid var(--line); padding-top: .6rem; font-size: .93rem; }
+.didnt b { display: block; color: var(--navy); margin-bottom: .2rem; }
+footer { margin-top: 3.5rem; padding-top: 1rem; border-top: 1px solid var(--line); font-size: .85rem; color: var(--grey); }
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+</style>
+</head>
+<body>
+
+<header class="masthead wrap">
+  <div class="eyebrow">Policy Atlas · evidence search · task 047 · 6 October 2026</div>
+  <h1>From 3% to 22%: what the search experiments found</h1>
+  <p class="lede">One day of experiments on how Policy Atlas finds academic papers for a research question. Two changes did most of the work, both free: following citations from the papers we already found, and asking OpenAlex's semantic search alongside the keyword search. Prompt wording and model choice barely mattered.</p>
+  <div class="tiles" role="list">
+    <div class="tile" role="listitem"><div class="num">3%</div><div class="lab">of a review's reference list found by a plain OpenAlex search, 200 results</div></div>
+    <div class="tile" role="listitem"><div class="num">15%</div><div class="lab">the pipeline's deep search, measured in September</div></div>
+    <div class="tile" role="listitem"><div class="num accent">22%</div><div class="lab">the best configuration, 200 candidates, same 15 reviews</div></div>
+    <div class="tile" role="listitem"><div class="num accent">28%</div><div class="lab">the same configuration with 400 candidates</div></div>
+    <div class="tile" role="listitem"><div class="num">1¢</div><div class="lab">retrieval cost per search in OpenAlex calls, measured on our account</div></div>
+  </div>
+</header>
+
+<main>
+<section class="wrap">
+  <h2>How recall is measured</h2>
+  <p>The ground truth is 15 systematic reviews and evidence gap maps in social policy, health and education. Each one comes with the list of studies it cites. We turn the review's title into a research question, run our search with a date cutoff just before the review was published, keep the first 200 candidates, and count how many of the review's references we found. That share is <b>recall</b>. Two runs of the same configuration differ by about one point, so a difference under one point means nothing.</p>
+  <h3>Where the research question comes from</h3>
+  <p>No one writes the question by hand and no language model rewrites it. For a published review, the question is the review's title with its trailing review-type clause removed by a fixed rule: "Risk and protective factors of drug abuse among adolescents: a systematic review" becomes <i>Risk and protective factors of drug abuse among adolescents</i>. The assumption is that a review's title states its scope. For an evidence gap map there is no single title, so the question is assembled from the map's own intervention and outcome labels in one fixed form: <i>What is the evidence on civic and legal education in relation to human rights?</i> The cutoff date is one month before the review was published, so the review itself and anything published alongside it cannot be found.</p>
+  <p>This matters for reading the numbers in two ways. The question is title-length, which is shorter and blunter than what a user types into Policy Atlas, and it bypasses the app's planner, which normally refines the user's words before search. So these recall figures measure the search stages on their own, with a fixed, slightly unfavourable input.</p>
+  <p>The ground truth has a known ceiling. Nine of the 15 lists are unlabelled reference lists where about half the entries are background and methods citations that no topic search can find. Five of the 15 reviews turned out to be unreachable by any citation method at all. So the mean of 22% is closer to "about 40% on the topics where this works, near zero on the rest".</p>
+</section>
+
+<section class="wrap">
+  <h2>The problem: keyword search never returns most of the papers</h2>
+  <p>The missed papers are not sitting further down the result list. For a plain query, recall is 3.1% at 200 results and only 5.1% at 1,000. Every ground-truth paper exists in OpenAlex; the search simply does not return them, because they use different words from the question, or older terminology.</p>
+</section>
+
+<section class="wide">
+  <figure>
+    <svg viewBox="0 0 980 300" role="img" aria-label="Keyword search alone: a question produces five queries, each returns 200 papers, the merged list is cut at 200, and most ground-truth papers are never in any result list at all.">
+      <defs><marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker></defs>
+      <g font-family="inherit" font-size="13">
+        <rect x="20" y="110" width="170" height="70" rx="6" fill="var(--ground)" stroke="currentColor"/>
+        <text x="105" y="140" text-anchor="middle" font-weight="600">Research question</text>
+        <text x="105" y="160" text-anchor="middle" fill="var(--grey)" font-size="12">+ one generation call</text>
+        <line x1="190" y1="145" x2="250" y2="145" stroke="currentColor" stroke-width="1.5" marker-end="url(#arr)"/>
+        <text x="220" y="135" text-anchor="middle" font-size="11" fill="var(--grey)">5 queries</text>
+        <!-- five query boxes -->
+        <g fill="var(--c-seed)" fill-opacity=".15" stroke="var(--c-seed)">
+          <rect x="255" y="30" width="150" height="34" rx="4"/><rect x="255" y="86" width="150" height="34" rx="4"/><rect x="255" y="142" width="150" height="34" rx="4"/><rect x="255" y="198" width="150" height="34" rx="4"/><rect x="255" y="254" width="150" height="34" rx="4"/>
+        </g>
+        <g fill="currentColor" font-size="12" text-anchor="middle">
+          <text x="330" y="52">"school closures learning loss"</text><text x="330" y="108">"pandemic remote learning"</text><text x="330" y="164">"education disruption COVID"</text><text x="330" y="220">"distance learning attainment"</text><text x="330" y="276">"COVID-19 learning evidence"</text>
+        </g>
+        <g stroke="currentColor" stroke-width="1.2" marker-end="url(#arr)">
+          <line x1="405" y1="47" x2="480" y2="47"/><line x1="405" y1="103" x2="480" y2="103"/><line x1="405" y1="159" x2="480" y2="159"/><line x1="405" y1="215" x2="480" y2="215"/><line x1="405" y1="271" x2="480" y2="271"/>
+        </g>
+        <text x="443" y="20" text-anchor="middle" font-size="11" fill="var(--grey)">200 results each</text>
+        <rect x="485" y="30" width="120" height="258" rx="6" fill="var(--c-seed)" fill-opacity=".12" stroke="var(--c-seed)"/>
+        <text x="545" y="150" text-anchor="middle" font-weight="600">merged,</text>
+        <text x="545" y="170" text-anchor="middle" font-weight="600">first 200 kept</text>
+        <text x="545" y="192" text-anchor="middle" font-size="12" fill="var(--grey)">the "seeds"</text>
+        <line x1="605" y1="159" x2="680" y2="159" stroke="currentColor" stroke-width="1.5" marker-end="url(#arr)"/>
+        <!-- outcome -->
+        <rect x="685" y="30" width="275" height="258" rx="6" fill="none" stroke="var(--line)"/>
+        <text x="822" y="56" text-anchor="middle" font-weight="600">A review's 55 reference papers</text>
+        <!-- dots: 4 found (blue), 51 missed (grey hollow) arranged in 11x5 -->
+        <g>
+          <circle cx="710" cy="90" r="6" fill="var(--c-seed)"/><circle cx="734" cy="90" r="6" fill="var(--c-seed)"/><circle cx="758" cy="90" r="6" fill="var(--c-seed)"/><circle cx="782" cy="90" r="6" fill="var(--c-seed)"/>
+          <g fill="none" stroke="var(--c-plain)" stroke-width="1.5">
+            <circle cx="806" cy="90" r="6"/><circle cx="830" cy="90" r="6"/><circle cx="854" cy="90" r="6"/><circle cx="878" cy="90" r="6"/><circle cx="902" cy="90" r="6"/><circle cx="926" cy="90" r="6"/><circle cx="950" cy="90" r="6"/>
+            <circle cx="710" cy="118" r="6"/><circle cx="734" cy="118" r="6"/><circle cx="758" cy="118" r="6"/><circle cx="782" cy="118" r="6"/><circle cx="806" cy="118" r="6"/><circle cx="830" cy="118" r="6"/><circle cx="854" cy="118" r="6"/><circle cx="878" cy="118" r="6"/><circle cx="902" cy="118" r="6"/><circle cx="926" cy="118" r="6"/><circle cx="950" cy="118" r="6"/>
+            <circle cx="710" cy="146" r="6"/><circle cx="734" cy="146" r="6"/><circle cx="758" cy="146" r="6"/><circle cx="782" cy="146" r="6"/><circle cx="806" cy="146" r="6"/><circle cx="830" cy="146" r="6"/><circle cx="854" cy="146" r="6"/><circle cx="878" cy="146" r="6"/><circle cx="902" cy="146" r="6"/><circle cx="926" cy="146" r="6"/><circle cx="950" cy="146" r="6"/>
+            <circle cx="710" cy="174" r="6"/><circle cx="734" cy="174" r="6"/><circle cx="758" cy="174" r="6"/><circle cx="782" cy="174" r="6"/><circle cx="806" cy="174" r="6"/><circle cx="830" cy="174" r="6"/><circle cx="854" cy="174" r="6"/><circle cx="878" cy="174" r="6"/><circle cx="902" cy="174" r="6"/><circle cx="926" cy="174" r="6"/><circle cx="950" cy="174" r="6"/>
+            <circle cx="710" cy="202" r="6"/><circle cx="734" cy="202" r="6"/><circle cx="758" cy="202" r="6"/><circle cx="782" cy="202" r="6"/><circle cx="806" cy="202" r="6"/><circle cx="830" cy="202" r="6"/><circle cx="854" cy="202" r="6"/><circle cx="878" cy="202" r="6"/><circle cx="902" cy="202" r="6"/><circle cx="926" cy="202" r="6"/><circle cx="950" cy="202" r="6"/>
+          </g>
+        </g>
+        <text x="822" y="240" text-anchor="middle" font-size="12">4 found among the 200 seeds</text>
+        <text x="822" y="258" text-anchor="middle" font-size="12" fill="var(--grey)">51 never returned by any query</text>
+      </g>
+    </svg>
+    <figcaption><b>Keyword search alone.</b> A typical review from the set: five generated queries, 200 results each, merged and cut at 200. Four of the review's 55 reference papers are in that set. Paging deeper does not help; the other 51 are not in any query's results at all.</figcaption>
+  </figure>
+</section>
+
+<section class="wrap">
+  <h2>Approach 1: the reference-frequency snowball</h2>
+  <p>Every OpenAlex record carries its reference list. So take the 200 keyword results as <b>seeds</b>, read all their reference lists, and count how many seeds cite each paper. A paper cited by 60 of the 200 seeds is a landmark of the topic, found without anyone knowing its title or its vocabulary. Add the 200 most-cited papers to the candidate set. Cost: eight free OpenAlex calls, about five seconds, no language model.</p>
+</section>
+<section class="wide">
+  <figure>
+    <svg viewBox="0 0 980 330" role="img" aria-label="Seeds on the left cite papers on the right; the count of citing seeds ranks the cited papers, and a landmark cited by many seeds rises to the top.">
+      <defs><marker id="arr2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--c-snow)"/></marker></defs>
+      <g font-family="inherit" font-size="13">
+        <text x="110" y="24" text-anchor="middle" font-weight="600">200 seeds (keyword results)</text>
+        <text x="620" y="24" text-anchor="middle" font-weight="600">Papers the seeds cite</text>
+        <!-- seeds column: 8 shown -->
+        <g fill="var(--c-seed)">
+          <circle cx="110" cy="60" r="9"/><circle cx="110" cy="95" r="9"/><circle cx="110" cy="130" r="9"/><circle cx="110" cy="165" r="9"/><circle cx="110" cy="200" r="9"/><circle cx="110" cy="235" r="9"/><circle cx="110" cy="270" r="9"/>
+        </g>
+        <text x="110" y="305" text-anchor="middle" fill="var(--grey)" font-size="12">… and 193 more</text>
+        <!-- cited papers -->
+        <g stroke="var(--c-snow)" stroke-width="1.3" fill="none" marker-end="url(#arr2)" opacity=".85">
+          <!-- landmark L at (520,120): cited by 6 seeds -->
+          <path d="M119,60 C300,60 380,120 500,120"/><path d="M119,95 C300,95 380,120 500,120"/><path d="M119,130 C300,130 380,120 500,120"/><path d="M119,165 C300,165 380,120 500,120"/><path d="M119,200 C300,200 380,120 500,120"/><path d="M119,270 C300,270 380,120 500,120"/>
+          <!-- paper B at (520,210): cited by 2 -->
+          <path d="M119,235 C300,235 380,210 500,210"/><path d="M119,165 C300,180 380,210 500,210"/>
+          <!-- PRISMA at (520,290): cited by 3 -->
+          <path d="M119,200 C300,230 380,290 500,290"/><path d="M119,235 C300,260 380,290 500,290"/><path d="M119,270 C300,280 380,290 500,290"/>
+        </g>
+        <circle cx="520" cy="120" r="18" fill="var(--c-snow)"/>
+        <circle cx="520" cy="210" r="10" fill="var(--c-snow)"/>
+        <circle cx="520" cy="290" r="13" fill="var(--c-plain)"/>
+        <g font-size="12">
+          <text x="548" y="106" font-weight="600">Landmark study, 2003</text>
+          <text x="548" y="123" fill="var(--grey)">cited by 6 of the seeds shown · 2,400 citations overall</text>
+          <text x="548" y="141" font-weight="700" fill="var(--c-snow)">specificity 6 / log₁₀(2,410) = 1.8</text>
+          <text x="548" y="196" font-weight="600">Primary study, 2015</text>
+          <text x="548" y="213" fill="var(--grey)">cited by 2 seeds · 150 citations overall</text>
+          <text x="548" y="231" font-weight="700" fill="var(--c-snow)">specificity 2 / log₁₀(160) = 0.9</text>
+          <text x="548" y="276" font-weight="600">PRISMA reporting guideline</text>
+          <text x="548" y="293" fill="var(--grey)">cited by 3 seeds · 83,000 citations overall</text>
+          <text x="548" y="311" font-weight="700" fill="var(--grey)">specificity 3 / log₁₀(83,010) = 0.6, damped</text>
+        </g>
+      </g>
+    </svg>
+    <figcaption><b>The snowball.</b> Arrows point from a seed to a paper it cites. The number of citing seeds is the signal. Dividing by the logarithm of the paper's total citations keeps topic landmarks on top and pushes down papers that everyone cites for any reason, such as the PRISMA guideline or a statistics method. Real counts run to 60 and more for the top paper of a review.</figcaption>
+  </figure>
+</section>
+<section class="wrap">
+  <p>On the 15 reviews the snowball lifted recall at 200 candidates from 7.0% (keyword seeds alone) to 15.2%. On the most-cited tenth of each labelled review's list, the seminal papers, recall went from 7% to 42%. The parameter sweep showed that adding more cited papers keeps paying, while adding more seeds hurts: results beyond the first 200 are mostly off topic and add noise to the count. In production the seeds should be the papers that passed screening.</p>
+  <div class="note">Two reviews got worse under any citation ranking. In one, the snowball surfaced the field's classic papers, which the review's list of included primary studies does not contain, so the metric counts them as misses. In the other, the hits were studies from 2020 to 2022 that nothing cites yet. Citations point backwards in time. That second gap is what approach 2 is for.</div>
+</section>
+
+<section class="wrap">
+  <h2>Approach 2: forward citation chasing</h2>
+  <p>Take the 20 seeds with the most in-set citations, the landmarks among the seeds, and fetch the papers that <b>cite them</b>, using OpenAlex's <code>cites:</code> filter. Score each citing paper by <b>coupling</b>: how many of the 200 seeds it cites, read from its own reference list. Add the top 200. This reaches the newer work that builds on the seeds, exactly where the backward snowball is blind. Cost: ten free OpenAlex calls.</p>
+</section>
+<section class="wide">
+  <figure>
+    <svg viewBox="0 0 980 300" role="img" aria-label="Backward snowball on the left finds older papers that seeds cite; forward chasing on the right finds newer papers that cite the seeds, scored by how many seeds they cite.">
+      <defs><marker id="arr3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker></defs>
+      <g font-family="inherit" font-size="13">
+        <!-- timeline -->
+        <line x1="40" y1="265" x2="940" y2="265" stroke="var(--line)" stroke-width="2"/>
+        <g fill="var(--grey)" font-size="11" text-anchor="middle"><text x="150" y="288">older</text><text x="490" y="288">the seeds' years</text><text x="830" y="288">newer, up to the cutoff</text></g>
+        <!-- seeds centre -->
+        <g fill="var(--c-seed)">
+          <circle cx="440" cy="80" r="9"/><circle cx="490" cy="60" r="9"/><circle cx="540" cy="90" r="9"/><circle cx="460" cy="140" r="9"/><circle cx="520" cy="150" r="9"/><circle cx="490" cy="200" r="9"/>
+        </g>
+        <text x="490" y="32" text-anchor="middle" font-weight="600">Seeds</text>
+        <!-- backward: seeds -> older -->
+        <g stroke="var(--c-snow)" stroke-width="1.3" fill="none" marker-end="url(#arr3)" color="var(--c-snow)">
+          <path d="M431,80 C330,80 260,110 190,110"/><path d="M481,60 C330,60 260,110 190,110"/><path d="M451,140 C330,140 260,110 190,110"/><path d="M481,200 C330,200 260,110 190,110"/>
+          <path d="M531,90 C400,120 320,190 200,190"/><path d="M511,150 C400,160 320,190 200,190"/>
+        </g>
+        <circle cx="175" cy="110" r="16" fill="var(--c-snow)"/><circle cx="185" cy="190" r="10" fill="var(--c-snow)"/>
+        <text x="175" y="146" text-anchor="middle" font-size="12" font-weight="600" fill="var(--c-snow)">cited by 4 seeds</text>
+        <text x="175" y="214" text-anchor="middle" font-size="12" fill="var(--grey)">cited by 2</text>
+        <text x="175" y="60" text-anchor="middle" font-weight="600">Backward snowball</text>
+        <text x="175" y="78" text-anchor="middle" font-size="12" fill="var(--grey)">in-set citations</text>
+        <!-- forward: newer -> seeds -->
+        <g stroke="var(--c-fwd)" stroke-width="1.3" fill="none" marker-end="url(#arr3)" color="var(--c-fwd)">
+          <path d="M770,120 C680,120 600,80 549,80"/><path d="M770,120 C680,110 600,60 499,60"/><path d="M770,120 C680,130 600,150 529,150"/><path d="M770,120 C680,150 600,200 499,200"/><path d="M770,120 C680,120 600,140 469,140"/>
+          <path d="M790,200 C700,200 620,170 529,150"/><path d="M790,200 C700,210 620,200 499,200"/>
+        </g>
+        <circle cx="788" cy="120" r="16" fill="var(--c-fwd)"/><circle cx="805" cy="200" r="10" fill="var(--c-fwd)"/>
+        <text x="800" y="60" text-anchor="middle" font-weight="600">Forward chasing</text>
+        <text x="800" y="78" text-anchor="middle" font-size="12" fill="var(--grey)">coupling = seeds cited</text>
+        <text x="830" y="124" font-size="12" font-weight="600" fill="var(--c-fwd)">cites 5 seeds</text>
+        <text x="840" y="204" font-size="12" fill="var(--grey)">cites 2</text>
+      </g>
+    </svg>
+    <figcaption><b>Two directions on the citation graph.</b> The snowball follows arrows out of the seeds to older papers and counts how many seeds point at each. Forward chasing follows arrows into the seeds from newer papers and counts how many seeds each one cites. A 2024 paper that cites 13 seeds is about the topic even though nobody cites it yet.</figcaption>
+  </figure>
+</section>
+<section class="wrap">
+  <p>Ranking the citing papers mattered more than which seeds to chase. The fetched sets held 141 ground-truth papers across the 15 reviews. The service's default order ranked 26 of them into the top 200, plain coupling 55, and coupling with each cited seed weighted by its own in-set citations 66. Adding the question words as a search filter on the citing papers was the worst option, and sorting the fetch by citation count did not help. On the same seeds, the forward stage took recall at 200 from 13.6% to 16.3%, and at 400 from 16.8% to 21.1%.</p>
+</section>
+
+<section class="wrap">
+  <h2>Approach 3: semantic seeds</h2>
+  <p>OpenAlex has an embedding search over titles and abstracts, 50 results per call at a tenth of a cent. We send it eight texts we already have: the question, the two natural-language paraphrases the production prompt writes, and its five keyword queries. The results are merged with the keyword results, round robin, and the first 200 become the seeds.</p>
+</section>
+<section class="wide">
+  <figure>
+    <svg viewBox="0 0 980 260" role="img" aria-label="Keyword search and semantic search each find ground-truth papers; they overlap little, so together they find more, and every later stage inherits the better seed set.">
+      <g font-family="inherit" font-size="13">
+        <text x="110" y="40" font-weight="600">Ground-truth papers among the 200 seeds, per review</text>
+        <!-- bars -->
+        <g font-size="12">
+          <text x="110" y="92" text-anchor="end" fill="var(--ink)">keyword queries, 15 calls</text>
+          <rect x="125" y="78" width="246" height="20" rx="3" fill="var(--c-seed)"/><text x="380" y="93" font-weight="700">4.1</text>
+          <text x="110" y="137" text-anchor="end" fill="var(--ink)">semantic search, 8 calls</text>
+          <rect x="125" y="123" width="336" height="20" rx="3" fill="var(--c-sem)"/><text x="470" y="138" font-weight="700">5.6</text>
+          <text x="110" y="182" text-anchor="end" fill="var(--ink)">both together, 23 calls</text>
+          <rect x="125" y="168" width="246" height="20" rx="3" fill="var(--c-seed)"/><rect x="373" y="168" width="180" height="20" rx="3" fill="var(--c-sem)"/><text x="562" y="183" font-weight="700">7.1</text>
+          <line x1="125" y1="70" x2="125" y2="196" stroke="var(--line)"/>
+        </g>
+        <!-- union explanation -->
+        <g font-size="12" fill="var(--grey)">
+          <text x="620" y="92">If the two routes found the same papers,</text>
+          <text x="620" y="110">"both together" would stay near 5.6.</text>
+          <text x="620" y="140">It reaches 7.1, so the overlap is small:</text>
+          <text x="620" y="158">each route reaches papers the other does not.</text>
+          <text x="620" y="190" fill="var(--ink)" font-weight="600">Better seeds lift every later stage,</text>
+          <text x="620" y="208" fill="var(--ink)" font-weight="600">because the snowball and the forward stage</text>
+          <text x="620" y="226" fill="var(--ink)" font-weight="600">both count from the seeds.</text>
+        </g>
+      </g>
+    </svg>
+    <figcaption><b>Two routes to the seeds.</b> Bars are ground-truth papers found per review among the 200 seeds, averaged over 15 reviews. Keyword and semantic search find different papers. The combined seeds took the whole configuration from 16.3% to 22.2% at 200 candidates and from 21.1% to 28.0% at 400.</figcaption>
+  </figure>
+</section>
+
+<section class="wrap">
+  <h2>How the final list is ranked</h2>
+  <p>Every candidate, whether seed, snowball or forward paper, gets one score and the list is sorted by it before the cut:</p>
+  <div class="formula">specificity = (in-set citations + coupling) / log<sub>10</sub>(citations as of the cutoff + 10)</div>
+  <p><b>In-set citations</b> is how many seeds cite the paper, the backward signal. <b>Coupling</b> is how many seeds the paper cites, the forward signal. The denominator damps papers that everyone cites. Citation counts are taken as of the review's cutoff date, so the evaluation does not use citations the review's authors could not have seen. A landmark cited by 60 seeds with 2,400 citations scores 18; the PRISMA guideline cited by 30 seeds with 83,000 citations scores 6; a new paper citing 13 seeds with 6 citations scores 11.</p>
+</section>
+
+<section class="wide">
+  <h2 style="max-width:72ch;margin-inline:auto">Results</h2>
+  <figure>
+    <div class="scroll">
+    <svg viewBox="0 0 980 420" role="img" aria-label="Recall at 200 and 400 candidates for each configuration, from 3 percent for a plain query to 22 and 28 percent for the full configuration.">
+      <g font-family="inherit" font-size="13" font-variant="tabular-nums">
+        <!-- x scale: 0..60% over 560px starting at x=340 ; 1% = 9.333px -->
+        <g stroke="var(--line)" stroke-dasharray="2 4">
+          <line x1="340" y1="40" x2="340" y2="390"/><line x1="433" y1="40" x2="433" y2="390"/><line x1="527" y1="40" x2="527" y2="390"/><line x1="620" y1="40" x2="620" y2="390"/><line x1="713" y1="40" x2="713" y2="390"/><line x1="807" y1="40" x2="807" y2="390"/><line x1="900" y1="40" x2="900" y2="390"/>
+        </g>
+        <g fill="var(--grey)" font-size="11" text-anchor="middle"><text x="340" y="408">0%</text><text x="433" y="408">10%</text><text x="527" y="408">20%</text><text x="620" y="408">30%</text><text x="713" y="408">40%</text><text x="807" y="408">50%</text><text x="900" y="408">60%</text></g>
+        <text x="340" y="30" font-size="11" fill="var(--grey)">recall, mean over 15 reviews · dark bar: 200 candidates · light bar: 400 candidates</text>
+        <!-- rows: y start 50, row height 48 -->
+        <g text-anchor="end" fill="var(--ink)">
+          <text x="325" y="72">plain OpenAlex query</text>
+          <text x="325" y="120">+ 5 generated queries (production prompt)</text>
+          <text x="325" y="168">+ reference snowball, 200</text>
+          <text x="325" y="216">+ forward chasing, 200</text>
+          <text x="325" y="264" font-weight="700">+ semantic seeds (best, gpt-5.4-mini)</text>
+          <text x="325" y="312">best gpt-5.6-luna configuration</text>
+          <text x="325" y="360">pipeline deep depth, Sept, 4 reviews</text>
+        </g>
+        <!-- plain: 3.1 / 5.1@1000 -->
+        <rect x="340" y="58" width="29" height="12" fill="var(--c-plain)"/><text x="375" y="68" font-size="11">3.1%</text>
+        <rect x="340" y="72" width="48" height="12" fill="var(--c-plain)" opacity=".45"/><text x="394" y="82" font-size="11" fill="var(--grey)">5.1% at 1,000</text>
+        <!-- seeds only: 7.0 / n/a -->
+        <rect x="340" y="106" width="65" height="12" fill="var(--c-seed)"/><text x="411" y="116" font-size="11">7.0%</text>
+        <!-- snowball: 15.2 / 18.1 -->
+        <rect x="340" y="154" width="142" height="12" fill="var(--c-snow)"/><text x="488" y="164" font-size="11">15.2%</text>
+        <rect x="340" y="168" width="169" height="12" fill="var(--c-snow)" opacity=".45"/><text x="515" y="178" font-size="11" fill="var(--grey)">18.1%</text>
+        <!-- forward: 16.3 / 21.1 -->
+        <rect x="340" y="202" width="152" height="12" fill="var(--c-fwd)"/><text x="498" y="212" font-size="11">16.3%</text>
+        <rect x="340" y="216" width="197" height="12" fill="var(--c-fwd)" opacity=".45"/><text x="543" y="226" font-size="11" fill="var(--grey)">21.1%</text>
+        <!-- semantic: 22.2 / 28.0 -->
+        <rect x="340" y="250" width="207" height="12" fill="var(--c-sem)"/><text x="553" y="260" font-size="11" font-weight="700">22.2%</text>
+        <rect x="340" y="264" width="261" height="12" fill="var(--c-sem)" opacity=".45"/><text x="607" y="274" font-size="11" fill="var(--grey)">28.0%</text>
+        <!-- luna: 19.6 / 24.0 -->
+        <rect x="340" y="298" width="183" height="12" fill="var(--c-sem)" opacity=".7"/><text x="529" y="308" font-size="11">19.6%</text>
+        <rect x="340" y="312" width="224" height="12" fill="var(--c-sem)" opacity=".3"/><text x="570" y="322" font-size="11" fill="var(--grey)">24.0%</text>
+        <!-- pipeline deep -->
+        <rect x="340" y="346" width="143" height="12" fill="var(--c-plain)"/><text x="489" y="356" font-size="11">15.3%</text>
+      </g>
+    </svg>
+    </div>
+    <figcaption><b>Each stage adds to the last.</b> Rows are cumulative: each configuration includes everything above it. The best configuration finds 22.2% of the reference lists in 200 candidates and 28.0% in 400. The luna row uses a synonym-block prompt, which that model needs; with the production prompt it scores lower. Figures after the review fixes described below.</figcaption>
+  </figure>
+</section>
+
+<section class="wide">
+  <figure>
+    <div class="scroll">
+    <svg viewBox="-50 0 1030 352" role="img" aria-label="Recall of the best configuration for each of the 15 reviews at 400 candidates, sorted: eight reviews between 34 and 69 percent, seven between 0 and 24 percent.">
+      <g font-family="inherit" font-size="12" font-variant="tabular-nums">
+        <!-- 15 bars, x from 30, width 56, gap 7; scale 70% = 220px -> 1% = 3.143px, baseline y=250 -->
+        <line x1="30" y1="250" x2="950" y2="250" stroke="var(--line)"/>
+        <g fill="var(--c-sem)">
+          <rect x="30" y="35" width="52" height="215"/><rect x="93" y="59" width="52" height="191"/><rect x="156" y="81" width="52" height="169"/><rect x="219" y="124" width="52" height="126"/><rect x="282" y="125" width="52" height="125"/><rect x="345" y="135" width="52" height="115"/><rect x="408" y="142" width="52" height="108"/><rect x="471" y="176" width="52" height="74"/>
+        </g>
+        <g fill="var(--c-plain)">
+          <rect x="534" y="182" width="52" height="68"/><rect x="597" y="202" width="52" height="48"/><rect x="660" y="205" width="52" height="45"/><rect x="723" y="232" width="52" height="18"/><rect x="786" y="238" width="52" height="12"/><rect x="849" y="243" width="52" height="7"/><rect x="912" y="249" width="38" height="1"/>
+        </g>
+        <g text-anchor="middle" font-size="11" font-weight="600">
+          <text x="56" y="28">69%</text><text x="119" y="52">61%</text><text x="182" y="74">54%</text><text x="245" y="117">40%</text><text x="308" y="118">40%</text><text x="371" y="128">37%</text><text x="434" y="135">35%</text><text x="497" y="169">24%</text>
+          <text x="560" y="175" fill="var(--grey)">22%</text><text x="623" y="195" fill="var(--grey)">15%</text><text x="686" y="198" fill="var(--grey)">14%</text><text x="749" y="225" fill="var(--grey)">6%</text><text x="812" y="231" fill="var(--grey)">4%</text><text x="875" y="236" fill="var(--grey)">2%</text><text x="931" y="242" fill="var(--grey)">0%</text>
+        </g>
+        <g fill="var(--grey)" font-size="11" text-anchor="end">
+          <text transform="translate(56 258) rotate(-35)">learning loss</text>
+          <text transform="translate(119 258) rotate(-35)">sleep & obesity</text>
+          <text transform="translate(182 258) rotate(-35)">parental leave</text>
+          <text transform="translate(245 258) rotate(-35)">childhood adversity</text>
+          <text transform="translate(308 258) rotate(-35)">whole-school</text>
+          <text transform="translate(371 258) rotate(-35)">youth violence</text>
+          <text transform="translate(434 258) rotate(-35)">loneliness</text>
+          <text transform="translate(497 258) rotate(-35)">energy efficiency</text>
+          <text transform="translate(560 258) rotate(-35)">nutrition</text>
+          <text transform="translate(623 258) rotate(-35)">partner violence</text>
+          <text transform="translate(686 258) rotate(-35)">social care</text>
+          <text transform="translate(749 258) rotate(-35)">drug abuse</text>
+          <text transform="translate(812 258) rotate(-35)">learning to earning</text>
+          <text transform="translate(875 258) rotate(-35)">care, 80+</text>
+          <text transform="translate(931 258) rotate(-35)">civic education</text>
+        </g>
+        <text x="30" y="340" font-size="11" fill="var(--grey)">The mean of 28% hides two groups. The right-hand seven are grey literature and broad policy topics; the citation graph barely reaches them.</text>
+      </g>
+    </svg>
+    </div>
+    <figcaption><b>The same number per review, 400 candidates.</b> Eight reviews sit between 24% and 69%; seven sit under 15%, with pools that hold almost none of their references under any method. Report the median and the two groups, not only the mean.</figcaption>
+  </figure>
+</section>
+
+<section class="wrap">
+  <h2>What did not work</h2>
+  <p>Fourteen configurations of prompt, model and reasoning effort for the query-generation step all landed between 14% and 16% with the snowball at 200 candidates, inside two noise floors. Several other ideas added nothing.</p>
+  <div class="didnt">
+    <div><b>Systematic-review-style prompts</b>Synonym blocks, two-concept AND structure, five named query roles. On gpt-5.4-mini they lost three to six points. OpenAlex returns 200 results per query ranked by relevance, and a wide net's first 200 are generic. Short specific phrases win under a cap.</div>
+    <div><b>Lay vocabulary</b>The "alternative vocabulary" query role scored 14 hits across 15 reviews, the lowest of any position. Abstracts use the technical term.</div>
+    <div><b>Bigger models for queries</b>gpt-5.6-luna and gpt-5.6-terra gave better seeds with a boolean prompt but broke OpenAlex's 1,500-character limit, and with the snowball every model landed in the same band. Reasoning effort changed nothing.</div>
+    <div><b>Concept blocks composed in code</b>The model lists concepts, the code builds the boolean queries. 9.1% at 200, the worst configuration tried.</div>
+    <div><b>Sorting by citation count</b>Zero new ground-truth papers on every review.</div>
+    <div><b>Weighting review-type seeds</b>Review papers have longer reference lists but the same density of ground truth per reference. No gain.</div>
+    <div><b>Topic fence</b>Rerunning the queries restricted to the seeds' top three OpenAlex topics added 700 candidates and about one hit per review. Dropped.</div>
+    <div><b>Second hop and Adamic-Adar</b>Snowballing again from the snowball reached 3% of misses. Weighting citing seeds by reference-list length was a wash.</div>
+    <div><b>Embedding re-rank</b>Multiplying the graph score by the similarity of each candidate to the question added about two points on a 1,900-candidate pool. Real but small; kept because it is free.</div>
+  </div>
+</section>
+
+<section class="wrap">
+  <h2>What it costs</h2>
+  <p>Measured on our OpenAlex account, reading the cost header on each response: a keyword search page costs $0.0001 whatever its size, a list or filter call $0.0001, a semantic search call $0.001. The best configuration makes 15 keyword calls, 8 semantic calls and about 19 list calls, so <b>about $0.011 per search</b>, plus one query-generation call at about a tenth of a cent. The Member plan allows $20 a day, roughly 1,800 searches. Screening 200 candidates with a language model costs about $2, so the screen, not retrieval, is now the limiting cost.</p>
+  <table>
+    <thead><tr><th>candidates screened</th><th>ranking</th><th class="n">recall</th><th class="n">screening cost</th></tr></thead>
+    <tbody>
+      <tr><td>200</td><td>graph score</td><td class="n">22%</td><td class="n">about $2</td></tr>
+      <tr class="hl"><td>400</td><td>graph score</td><td class="n">28%</td><td class="n">about $4</td></tr>
+      <tr><td>600</td><td>graph × embedding</td><td class="n">26 to 29%</td><td class="n">about $6</td></tr>
+      <tr><td>1,900 (the whole pool)</td><td>none</td><td class="n">35 to 40%</td><td class="n">about $19</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<section class="wrap">
+  <h2>The recommended configuration</h2>
+  <ol class="steps">
+    <li>Generate five keyword queries with the production prompt on gpt-5.4-mini or gpt-5.6-luna. One language-model call.</li>
+    <li>Send each query with its systematic-review and randomised-trial variants to OpenAlex keyword search, 15 calls, and send the question, the two paraphrases and the five queries to OpenAlex semantic search, 8 calls. Merge round robin; the first 200 are the seeds. In production, use the screened-in set as seeds for the later stages.</li>
+    <li>Read the seeds' reference lists, count how many seeds cite each paper, add the 200 most-cited.</li>
+    <li>Take the 20 seeds with the most in-set citations, fetch the papers that cite them, score each by how many seeds it cites, add the top 200.</li>
+    <li>Rank the union by specificity. Hold the first 50 keyword results in their own order as a relevance reserve for recent studies that nothing cites yet.</li>
+    <li>Screen the first 200, or 400 if the budget allows.</li>
+  </ol>
+  <div class="note">The relevance reserve in step 5 is proposed for production and is not in the experiment script. None of the numbers on this page include it.</div>
+</section>
+
+<section class="wrap">
+  <h2>Checks and caveats</h2>
+  <p>An independent read-only review found six issues, all fixed or recorded. The main one: the ranking had used today's citation counts in an evaluation with a historical cutoff. Counts are now taken as of each review's cutoff from OpenAlex's per-year data. Re-running the three best configurations moved no number by more than 0.7 points. Three cache keys were made complete, forward paging now stops on the server's reported page size, and self-checks cover every new code path.</p>
+  <p>Remaining limits: 15 reviews, one run per configuration, a noise floor of about one point, nine unlabelled reference lists with a recall ceiling near 50%, and a mean that hides the split between reachable and unreachable topics. The full 100-review set is the next measurement, and the ground truth would benefit from a cheap labelling pass so recall is measured against on-topic studies only.</p>
+</section>
+</main>
+
+<footer class="wrap">
+  Full method, every table and the review findings: <code>scripts/evals/search/results/analyses/2026-10-06-search-experiments.md</code>. Dated log: <code>docs/tasks/047-search-rnd/notes.md</code>. Experiment scripts: <code>scripts/evals/search/measure/snowball_recall.py</code> and <code>pool_rerank.py</code>. Policy Atlas, Nesta, 6 October 2026.
+</footer>
+</body>
+</html>
