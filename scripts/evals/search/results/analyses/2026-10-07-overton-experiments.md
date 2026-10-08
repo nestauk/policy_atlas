@@ -28,7 +28,8 @@ free; the whole day cost under 50 cents in OpenAlex and embedding calls.
   (23.1% against 22.4%). The papers only Overton finds carry one policy citation each,
   among eleven thousand others like them. Nothing ranks them.
 - **The DOI metric hides under a point on this sample.** Title matching finds 6 of the
-  53 DOI-less references on DOI-less OpenAlex records and none on 5,341 policy
+  53 DOI-less references in the OpenAlex pool (five of them records that do carry a
+  DOI the reference list lacks, one a DOI-less record) and none on 5,341 policy
   documents. The sample has no grey literature as evidence; the hand-made reviews do,
   and they are not in the file yet.
 - **For the policy side, the policy-to-policy snowball with specificity is the
@@ -136,12 +137,18 @@ DOI-less records of the OpenAlex pool:
 |---|---:|
 | DOI-less references on Overton policy documents | 0 of 53 |
 | DOI-less references on Overton-cited works without a DOI | 0 (there are none) |
-| DOI-less references on DOI-less OpenAlex records | 6 of 53 |
-| DOI references found only by title on a DOI-less candidate | 3 |
+| DOI-less references on any OpenAlex record in the pool | 6 of 53 |
+| of those, on a record that itself has no DOI | 1 |
+| DOI references found only by title on a DOI-less candidate | 3 (loose), 2 (strict) |
 
-The blind spot is under a point on this sample and sits on the OpenAlex side. The
-DOI-less references in the gap-map rows are papers missing a DOI in the export, not
-grey literature. No review-included reference is an Overton policy document. The
+DOI recall over the 743 references that have a DOI, pooled: Overton route 24.0%,
+OpenAlex pool 30.1%. Coverage over all 797 references with title matches added:
+22.3% and 28.2%.
+
+The blind spot is under a point on this sample and sits on the OpenAlex side. Five of
+the six title matches are OpenAlex records that have a DOI the review's export does
+not: the reference list is missing the DOI, not the record. The DOI-less references in
+the gap-map rows are papers missing a DOI in the export, not grey literature. No review-included reference is an Overton policy document. The
 four hand-made reviews, which cite grey literature as evidence, are not in the file;
 add them before concluding anything about policy-document recall.
 
@@ -176,7 +183,7 @@ cite but is off the question drops.
 
 **Against the paper ground truth**, by the paper recall of the papers the first 100
 documents cite: the snowball keeps 7.5% at 200 and lifts the ceiling to 20.9%
-(relevance 7.7% / 18.1%); coupling and forward reach 24 to 25% ceilings. The 200 cut
+(relevance 7.7% / 18.1%); coupling and forward reach 25 to 26% ceilings. The 200 cut
 does not move.
 
 **By eye**, on obesity, decarbonising heating and early years attainment (top-25
@@ -210,7 +217,8 @@ snowball is favoured by design. For comparing orders, not for a headline.
 
 A first pass selected the 15 gov.uk documents citing the most policy documents. The
 rule picked omnibus publications (an SDG review, Net Zero, Levelling Up); their pools
-held 4% of the target. Not a result. The second pass is 15 hand-picked topic-specific
+held 4% of the target. Not a result, and not rerun after the fixes below. The second
+pass is 15 hand-picked topic-specific
 documents with written questions (`ground_truth/policy_gt_specific.csv`: women's
 health, prevention, ageing, smoking, SEND, children's social care, the 1,001 days,
 adult skills, violence against women, serious violence, work and disability, rough
@@ -219,12 +227,12 @@ question plus two generated paraphrases. Policy recall, mean over the 15:
 
 | order | @25 | @50 | @100 | @200 | pool ceiling |
 |---|---:|---:|---:|---:|---:|
-| `relevance` | 3.5% | 3.7% | 4.8% | 7.3% | 8.6% |
-| **`inset`** | **5.8%** | **7.8%** | **8.3%** | 8.6% | 8.6% |
-| **`specific`** | **5.8%** | **7.8%** | **8.3%** | 8.6% | 8.6% |
-| `coupling` | 1.3% | 3.1% | 7.4% | 8.6% | 8.6% |
-| `forward` | 0.6% | 2.7% | 4.4% | 7.1% | 8.6% |
-| `combined` | 1.6% | 5.0% | 8.3% | 8.6% | 8.6% |
+| `relevance` | 3.5% | 3.7% | 4.8% | 7.3% | 8.8% |
+| **`inset`** | **6.0%** | **8.0%** | **8.5%** | 8.8% | 8.8% |
+| **`specific`** | **6.0%** | **8.0%** | **8.5%** | 8.8% | 8.8% |
+| `coupling` | 1.0% | 3.1% | 7.6% | 8.8% | 8.8% |
+| `forward` | 0.6% | 2.7% | 4.4% | 6.9% | 8.8% |
+| `combined` | 1.3% | 4.7% | 8.5% | 8.8% | 8.8% |
 
 The snowball finds in 50 documents more than relevance finds in 200. Gambling 16% at 25 against 0%,
 children's social care 12% against 3%, serious violence 11% against 5%.
@@ -268,12 +276,12 @@ measures. The full order comparison under both settings:
 
 | order | global @25 | global @100 | UK-only @25 | UK-only @100 | pool ceiling, global / UK-only |
 |---|---:|---:|---:|---:|---:|
-| `relevance` | 3.5% | 4.8% | 4.6% | 8.8% | 8.6% / 15.4% |
-| **`inset`** | **5.8%** | **8.3%** | **9.6%** | **13.7%** | 8.6% / 15.4% |
-| **`specific`** | **5.8%** | **8.3%** | **9.0%** | **13.7%** | 8.6% / 15.4% |
-| `coupling` | 1.3% | 7.4% | 3.3% | 13.7% | 8.6% / 15.4% |
-| `forward` | 0.6% | 4.4% | 2.5% | 8.8% | 8.6% / 15.4% |
-| `combined` | 1.6% | 8.3% | 6.4% | 13.7% | 8.6% / 15.4% |
+| `relevance` | 3.5% | 4.8% | 4.6% | 8.8% | 8.8% / 15.4% |
+| **`inset`** | **6.0%** | **8.5%** | **9.6%** | **13.7%** | 8.8% / 15.4% |
+| **`specific`** | **6.0%** | **8.5%** | **9.0%** | **13.7%** | 8.8% / 15.4% |
+| `coupling` | 1.0% | 7.6% | 3.3% | 13.7% | 8.8% / 15.4% |
+| `forward` | 0.6% | 4.4% | 2.5% | 8.6% | 8.8% / 15.4% |
+| `combined` | 1.3% | 8.5% | 5.9% | 13.7% | 8.8% / 15.4% |
 
 Under the UK filter the ceiling nearly doubles (15.4%) and the snowball keeps its
 lead: 9.6% at 25 against 4.6% for the search order, well above the global snowball. Gambling 23% at 25,
@@ -303,14 +311,21 @@ exactly the exposure wanted, even though no UK strategy cites it.
    snowballs need no new fetch.
 5. **Policy documents' own DOIs** (`keyed_other_identifiers.doi`) are read by the
    mapper already; the eval probes now count them too.
-6. **Date fences, checked 2026-10-08.** OpenAlex forward chasing and the backward
-   resolve are fenced server-side (`to_publication_date`); Overton searches by
-   `published_before`; no review's own DOI appears in any candidate list. One leak
-   found and fixed in the eval: documents fetched by id in `policy_rank.py` had no
-   fence, and 22% of the forward step's documents were dated after the cutoff (2% of
-   landmarks). They are now dropped, old caches included; the tables above are the
-   rescored numbers. Only the held orders (coupling, forward, combined) moved, by
-   under a point.
+6. **Date fences and a code review, 2026-10-08.** OpenAlex forward chasing and the
+   backward resolve are fenced server-side (`to_publication_date`); Overton searches
+   by `published_before`; no review's own DOI appears in any candidate list. A Codex
+   review of the eval scripts found eight issues, all fixed and the policy runs
+   rebuilt from scratch: documents fetched by id in `policy_rank.py` had no date
+   fence (22% of the forward step's documents were after the cutoff) and citing
+   documents after the cutoff were counted in scores; the held-out strategy was only
+   removed after the signals were built (checked: it never appeared in a search
+   result, since the cutoff is its own date, so this was a safeguard); the probe
+   cache was keyed without the request shape; title matching compared against every
+   OpenAlex record while the write-up said DOI-less ones, and divided DOI recall by
+   all references; the specific target set was not committed. The tables in this
+   file are the rebuilt numbers; every change was under a point, and the snowball
+   gained slightly. The targets are now a committed snapshot,
+   `ground_truth/policy_gt_specific_targets.json`.
 
 ## 5. Suggested course of action
 

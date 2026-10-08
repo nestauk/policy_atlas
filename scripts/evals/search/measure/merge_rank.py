@@ -278,9 +278,13 @@ def main() -> None:
     for item in items:
         gt = ground_truth_from_item(item)
         title = item.metadata.get("review_title", str(item.id))
-        ov = json.loads(
-            (CACHE_DIR / f"overton-{args.arm}" / f"{item.id}.json").read_text()
+        folder = CACHE_DIR / f"overton-{args.arm}"
+        ov_path = next(
+            iter(
+                sorted(folder.glob(f"{item.id}-*.json")) or [folder / f"{item.id}.json"]
+            )
         )
+        ov = json.loads(ov_path.read_text())
         cands = candidates(
             args.run, title, ov, item.input["published_before"], str(item.id)
         )

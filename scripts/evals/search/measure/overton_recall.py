@@ -45,6 +45,7 @@ from snowball_recall import generated_queries, override_prompt
 import argparse
 import collections
 import csv
+import hashlib
 import json
 import os
 import time
@@ -106,8 +107,27 @@ def pages(path: str, n: int, **params: str) -> list[dict[str, Any]]:
     return out[:n]
 
 
-def cached(arm: str, item_id: str, build: Any, refresh: bool) -> dict[str, Any]:
-    path = CACHE_DIR / f"overton-{arm}" / f"{item_id}.json"
+CACHE_VERSION = "v2"  # 2026-10-08: payloads carry slim docs and cited_without_doi
+
+
+def cache_file(arm: str, item_id: str, shape: str) -> Path:
+    """One cache file per arm, review and request shape (document counts, texts, version).
+
+    Files written before the shape was part of the name (all made with the defaults,
+    100 documents and 200 articles) are renamed on first use rather than refetched.
+    """
+    folder = CACHE_DIR / f"overton-{arm}"
+    new = folder / f"{item_id}-{hashlib.sha256(shape.encode()).hexdigest()[:10]}.json"
+    old = folder / f"{item_id}.json"
+    if old.exists() and not new.exists():
+        old.rename(new)
+    return new
+
+
+def cached(
+    arm: str, item_id: str, build: Any, refresh: bool, shape: str
+) -> dict[str, Any]:
+    path = cache_file(arm, item_id, shape)
     if path.exists() and not refresh:
         return json.loads(path.read_text())
     payload = build()
@@ -256,44 +276,66 @@ def main() -> None:
         )
     items = select_items(client.get_dataset(args.dataset).items, args.reviews)
 
+    # Each arm: (fetch, request shape). The shape goes into the cache file name so a
+    # run with other counts cannot be served a stale file (Codex review, 2026-10-08).
     arms = {
-        "articles": lambda i, c: fetch_articles(
-            i, c, sort="relevance", n=args.articles
+        "articles": (
+            lambda i, c: fetch_articles(i, c, sort="relevance", n=args.articles),
+            f"articles|relevance|n{args.articles}|{CACHE_VERSION}",
         ),
-        "articles-cited": lambda i, c: fetch_articles(
-            i, c, sort="citations", n=args.articles
+        "articles-cited": (
+            lambda i, c: fetch_articles(i, c, sort="citations", n=args.articles),
+            f"articles|citations|n{args.articles}|{CACHE_VERSION}",
         ),
-        "docs-cites": lambda i, c: fetch_docs_cites(
-            [i], c, sort="relevance", per_text=args.docs, keep=args.docs
+        "docs-cites": (
+            lambda i, c: fetch_docs_cites(
+                [i], c, sort="relevance", per_text=args.docs, keep=args.docs
+            ),
+            f"docs|intent|relevance|d{args.docs}|{CACHE_VERSION}",
         ),
-        "docs-cites-date": lambda i, c: fetch_docs_cites(
-            [i], c, sort="date", per_text=args.docs, keep=args.docs
+        "docs-cites-date": (
+            lambda i, c: fetch_docs_cites(
+                [i], c, sort="date", per_text=args.docs, keep=args.docs
+            ),
+            f"docs|intent|date|d{args.docs}|{CACHE_VERSION}",
         ),
         # Seed-set variants (2026-10-07): more documents, and the pipeline's generated
         # texts as extra searches, to see whether policy in-set counts rise above one.
-        "docs-cites-200": lambda i, c: fetch_docs_cites(
-            [i], c, sort="relevance", per_text=200, keep=200
+        "docs-cites-200": (
+            lambda i, c: fetch_docs_cites(
+                [i], c, sort="relevance", per_text=200, keep=200
+            ),
+            f"docs|intent|relevance|d200|{CACHE_VERSION}",
         ),
-        "docs-cites-para-200": lambda i, c: fetch_docs_cites(
-            [i, *generated_texts(i)["paraphrases"]],
-            c,
-            sort="relevance",
-            per_text=100,
-            keep=200,
+        "docs-cites-para-200": (
+            lambda i, c: fetch_docs_cites(
+                [i, *generated_texts(i)["paraphrases"]],
+                c,
+                sort="relevance",
+                per_text=100,
+                keep=200,
+            ),
+            f"docs|intent+para|relevance|p100|k200|{CACHE_VERSION}",
         ),
-        "docs-cites-all-200": lambda i, c: fetch_docs_cites(
-            [i, *generated_texts(i)["paraphrases"], *generated_texts(i)["queries"]],
-            c,
-            sort="relevance",
-            per_text=50,
-            keep=200,
+        "docs-cites-all-200": (
+            lambda i, c: fetch_docs_cites(
+                [i, *generated_texts(i)["paraphrases"], *generated_texts(i)["queries"]],
+                c,
+                sort="relevance",
+                per_text=50,
+                keep=200,
+            ),
+            f"docs|all8|relevance|p50|k200|{CACHE_VERSION}",
         ),
-        "docs-cites-all-400": lambda i, c: fetch_docs_cites(
-            [i, *generated_texts(i)["paraphrases"], *generated_texts(i)["queries"]],
-            c,
-            sort="relevance",
-            per_text=100,
-            keep=400,
+        "docs-cites-all-400": (
+            lambda i, c: fetch_docs_cites(
+                [i, *generated_texts(i)["paraphrases"], *generated_texts(i)["queries"]],
+                c,
+                sort="relevance",
+                per_text=100,
+                keep=400,
+            ),
+            f"docs|all8|relevance|p100|k400|{CACHE_VERSION}",
         ),
     }
     if args.arms:
@@ -306,12 +348,13 @@ def main() -> None:
         intent, cutoff = item.input["intent"], item.input["published_before"]
         gt = ground_truth_from_item(item)
         title = item.metadata.get("review_title", str(item.id))
-        for arm, fetch in arms.items():
+        for arm, (fetch, shape) in arms.items():
             payload = cached(
                 arm,
                 str(item.id),
-                lambda: fetch(intent, cutoff),
-                args.refresh,  # noqa: B023
+                lambda: fetch(intent, cutoff),  # noqa: B023
+                args.refresh,
+                shape,
             )
             # The policy documents' own DOIs (few: about 5% have one) are direct
             # results and go first, in relevance order, then the cited papers.

@@ -105,7 +105,7 @@ footer { margin-top: 3.5rem; padding-top: 1rem; border-top: 1px solid var(--line
     <li><b>Overton can find academic research papers, through the policy documents that cite them.</b> Every policy document on Overton lists the papers it cites. Search for 100 policy documents on a question, collect the papers they cite, and rank those papers by how many of the 100 cite them. That finds 7.7% of a review's reference list in the first 200 candidates. A plain OpenAlex search finds 3.1%.</li>
     <li><b>But adding those research papers to the OpenAlex search gains almost nothing.</b> OpenAlex alone reaches 22.4% at 200 candidates. Merged with Overton, the best of fourteen ranking rules reaches 23.3%. The papers only Overton finds are each cited by a single policy document, among eleven thousand other such papers, so no rule can lift them into the top 200.</li>
     <li><b>For policy documents, Overton's own citation graph finds the key ones.</b> Policy documents cite other policy documents. Count how many of the search results cite each document, fetch the most-cited ones the search did not return, and the strategies, evidence reviews and guidance on a topic come to the top. On obesity, seven of the top ten were documents the search had never returned.</li>
-    <li><b>That ranking beats the search order on a ground truth built from 15 UK strategies.</b> It finds 5.8% of a strategy's cited documents in the first 25, against 3.5% for the search order, and 9.6% against 4.6% when the search is restricted to UK sources.</li>
+    <li><b>That ranking beats the search order on a ground truth built from 15 UK strategies.</b> It finds 6.0% of a strategy's cited documents in the first 25, against 3.5% for the search order, and 9.6% against 4.6% when the search is restricted to UK sources.</li>
     <li><b>Most of what Overton returns for UK questions is not from the UK.</b> Only 23% of the results came from UK sources; the Government of Japan supplied more documents than the UK Government and Parliament together. A country filter is now a user option, and the evaluation reports a global and a UK-only number.</li>
     <li><b>Two bugs in the pipeline's Overton calls, recorded for a later fix.</b> Results are sorted by date instead of similarity, and the same document can arrive twice under different sources.</li>
   </ol>
@@ -326,11 +326,11 @@ footer { margin-top: 3.5rem; padding-top: 1rem; border-top: 1px solid var(--line
 <section class="wide">
   <h3 style="max-width:72ch;margin-inline:auto">Share of a strategy's cited documents found, mean over 15 strategies</h3>
   <div class="scroll"><table>
-    <thead><tr><th>document order</th><th class="n">global, first 25</th><th class="n">global, first 100</th><th class="n">UK sources only, first 25</th><th class="n">UK only, first 100</th></tr></thead>
+    <thead><tr><th>document order</th><th class="n">global, first 25</th><th class="n">global, first 100</th><th class="n">global, first 200</th><th class="n">UK only, first 25</th><th class="n">UK only, first 100</th><th class="n">UK only, first 200</th></tr></thead>
     <tbody>
-      <tr><td>Search order (similarity)</td><td class="n">3.5%</td><td class="n">4.8%</td><td class="n">4.6%</td><td class="n">8.8%</td></tr>
-      <tr class="hl"><td>Citation snowball</td><td class="n">5.8%</td><td class="n">8.3%</td><td class="n">9.6%</td><td class="n">13.7%</td></tr>
-      <tr><td>Ceiling: everything in the pool</td><td class="n">8.6%</td><td class="n">8.6%</td><td class="n">15.4%</td><td class="n">15.4%</td></tr>
+      <tr><td>Search order (similarity)</td><td class="n">3.5%</td><td class="n">4.8%</td><td class="n">7.3%</td><td class="n">4.6%</td><td class="n">8.8%</td><td class="n">13.3%</td></tr>
+      <tr class="hl"><td>Citation snowball</td><td class="n">6.0%</td><td class="n">8.5%</td><td class="n">8.8%</td><td class="n">9.6%</td><td class="n">13.7%</td><td class="n">14.8%</td></tr>
+      <tr><td>Ceiling: everything in the pool</td><td class="n">8.8%</td><td class="n">8.8%</td><td class="n">8.8%</td><td class="n">15.4%</td><td class="n">15.4%</td><td class="n">15.4%</td></tr>
     </tbody>
   </table></div>
   <p style="max-width:72ch;margin-inline:auto;font-size:.95rem;color:var(--ink-2);margin-top:.8rem">Takeaway: the snowball finds in 50 documents more than the search order finds in 200, and it reaches the ceiling of the pool by 100. Two other signals were tried, how many of the topic's core papers a document cites and which documents cite the core papers; both ranked committee submissions above strategies on most topics and are on hold.</p>
@@ -365,7 +365,7 @@ footer { margin-top: 3.5rem; padding-top: 1rem; border-top: 1px solid var(--line
         <text x="20" y="222" font-size="12" fill="var(--grey)">The Government of Japan supplied 301 documents, more than the UK Government and Parliament together.</text>
       </g>
     </svg>
-    <figcaption><b>Overton's country filter</b> (<code>source_country=UK</code>) nearly doubles the ceiling, from 8.6% to 15.4%, and the snowball's score with it. It is not the default: Policy Atlas is meant to widen exposure to thinking from other countries, and a Japanese or Australian obesity strategy may be exactly what a user should see. So the filter is a user option, "restrict to UK sources", and the evaluation reports both numbers.</figcaption>
+    <figcaption><b>Overton's country filter</b> (<code>source_country=UK</code>) nearly doubles the ceiling, from 8.8% to 15.4%, and the snowball's score with it. It is not the default: Policy Atlas is meant to widen exposure to thinking from other countries, and a Japanese or Australian obesity strategy may be exactly what a user should see. So the filter is a user option, "restrict to UK sources", and the evaluation reports both numbers.</figcaption>
   </figure>
 </section>
 
