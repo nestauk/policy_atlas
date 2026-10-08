@@ -49,11 +49,19 @@ Two workflows automate only steady-state updates:
 
 | Workflow | Trigger | Ref deployed | GitHub Environment |
 | --- | --- | --- | --- |
-| `deploy-staging.yml` | engineer runs `workflow_dispatch` | dispatch SHA, accepted only when the selected ref is `dev` | `staging` |
-| `deploy-production.yml` | stable GitHub Release is published | immutable Release SHA, accepted only when it is in `dev` history | `prod` |
+| `deploy-staging.yml` | engineer runs `workflow_dispatch` from `dev` | dispatch SHA, accepted only when the selected ref is `dev` | `staging` |
+| `deploy-production.yml` | push to `main` | that `main` SHA, accepted only when it is in `dev` history | `prod` |
 
-`release.published` includes prereleases; the workflow explicitly skips them. A
-failed configuration/ref validation job never reaches the protected Environment
+`dev` remains the repository default branch. Pull requests, continuous
+integration, and staging deploys stay on `dev`. `main` is the production branch
+only. Merging a reviewed `dev` commit into `main` deploys it. The workflow
+refuses a `main` commit that is not already in `dev` history.
+
+The first push that creates `main` is a production deploy. Create `main` from
+the `dev` commit you intend to release, after this workflow file is on that
+commit, and only when that deploy is intended.
+
+A failed configuration/ref validation job never reaches the protected Environment
 and never requests an OIDC token. Deploy jobs have only `contents: read` and
 `id-token: write`. Concurrency queues a later deployment and deliberately does not
 cancel the active stop→migrate→scale→publish sequence.
@@ -72,10 +80,10 @@ one-hour default fails during credential setup instead of expiring partway throu
 an outage-sensitive deploy.
 
 Restrict `staging` deployment branches to `dev`. Restrict `prod` deployment
-tags to the repository's release-tag pattern (for example `v*`) and require a
-reviewer for prod. These restrictions are security controls, not just UI:
-an environment-based GitHub OIDC token has a subject naming the Environment rather
-than its branch/tag. The workflow performs a second ref check in code.
+branches to `main` and require a reviewer for prod. These restrictions are
+security controls, not just UI: an environment-based GitHub OIDC token has a
+subject naming the Environment rather than its branch or tag. The workflow
+performs a second ref check in code.
 
 Create GitHub's OIDC provider in each AWS account with URL
 `https://token.actions.githubusercontent.com` and audience `sts.amazonaws.com`.
@@ -397,8 +405,8 @@ restore service manually with
 For normal operator recovery use
 `make deploy-update DEPLOY_ENV=<environment>` so local and GitHub execution stay on
 the same interface. A GitHub rerun uses the same event SHA. For prod code
-rollback, publish a new reviewed Release pointing at the chosen prior commit; do
-not move or republish an existing Release tag.
+rollback, merge a prior commit that is still in `dev` history into `main`. Do
+not force-push `main`.
 
 **One-time pending step — encrypting the Aurora cluster (026 review hardening).**
 The committed template sets `StorageEncrypted` (+ deletion protection, 7-day

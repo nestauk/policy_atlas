@@ -1,5 +1,5 @@
 name: deploy staging
-run-name: Deploy ${{ github.sha }} to staging
+run-name: Deploy dev branch (${{ github.sha }}) to staging
 
 on:
   workflow_dispatch:
