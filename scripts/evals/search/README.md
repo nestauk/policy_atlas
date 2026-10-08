@@ -105,7 +105,7 @@ Keeping more results costs more later: every kept result is screened and stored 
 
 ### Experiments
 
-Search R&D experiments that are not part of the measured baselines or the production runs live in [results/analyses/2026-10-06-search-experiments.md](results/analyses/2026-10-06-search-experiments.md), one section per experiment script, with the dated results in `docs/tasks/047-search-rnd/notes.md`. As of 2026-10-06 the best measured configuration there (generated queries plus semantic search as seeds, a reference-frequency snowball, forward citation chasing, specificity ranking) reaches about 22% recall at 200 candidates on the mini set, against 3% for a plain OpenAlex search; see the file for the numbers and the caveats.
+Search R&D experiments that are not part of the measured baselines or the production runs live in [results/analyses/2026-10-06-search-experiments.md](results/analyses/2026-10-06-search-experiments.md), one section per experiment script, with the dated results in `docs/tasks/047-search-rnd/notes.md`. As of 2026-10-06 the best measured configuration there (generated queries plus semantic search as seeds, a reference-frequency snowball, forward citation chasing, specificity ranking) reaches about 22% recall at 200 candidates on the mini set, against 3% for a plain OpenAlex search; see the file for the numbers and the caveats. The Overton side (what carries over, how the two sources share one cap, the date-order finding) is in [results/analyses/2026-10-07-overton-experiments.md](results/analyses/2026-10-07-overton-experiments.md), with notes in `docs/tasks/049-improve-overton-search/notes.md`.
 
 ### Cost
 
@@ -125,12 +125,18 @@ scripts/evals/search/
 │   ├── getters/            get_campbell.py, get_3ie.py, get_yef.py, get_sr4all.py
 │   ├── fetch_helpers.py    shared code for the getters
 │   ├── select_sample.py    quality check, makes the mini and full samples
-│   └── upload.py           CSV files -> Langfuse dataset
+│   ├── upload.py           CSV files -> Langfuse dataset
+│   └── policy_gt_specific.csv  15 topic-specific gov.uk documents and questions (task 049, policy-side ground truth)
 ├── measure/                runs the measurements
 │   ├── production_recall.py
 │   ├── baseline_recall.py
 │   ├── snowball_recall.py  R&D experiment, see results/analyses/2026-10-06-search-experiments.md
 │   ├── pool_rerank.py      R&D experiment, see results/analyses/2026-10-06-search-experiments.md
+│   ├── overton_recall.py   R&D experiment, see results/analyses/2026-10-07-overton-experiments.md
+│   ├── merge_rank.py       R&D experiment: OpenAlex + Overton merged ranking, same write-up
+│   ├── title_match.py      R&D experiment: what the DOI-only metric hides, same write-up
+│   ├── policy_rank.py      R&D experiment: key policy documents from Overton's citation graph, same write-up
+│   ├── policy_gt.py        R&D experiment: a policy-side ground truth from gov.uk documents, same write-up
 │   ├── sweep_record_cap.py
 │   ├── engine.py           runs one intent through the real search (no command line)
 │   └── inspect_run.py      tables of one run's raw output (no command line)
@@ -141,6 +147,7 @@ scripts/evals/search/
     ├── analyses/           dated analyses and the search experiments write-up (tracked)
     ├── cache/              raw baseline results, one JSON file per arm and review
     ├── snowball/           snowball scores, ranked candidates, manual-question exports; pool/ for the re-rank experiment
+    ├── overton/            scores of the Overton probes (overton_recall.py); merge/, policy/, policy_gt*/ for the other 049 scripts
     └── ground_truth/       fetched collections and the two samples
 ```
 
