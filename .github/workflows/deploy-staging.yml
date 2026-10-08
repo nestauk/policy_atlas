@@ -3,10 +3,6 @@ run-name: Deploy dev branch (${{ github.sha }}) to staging
 
 on:
   workflow_dispatch:
-    inputs:
-      branch:
-        description: 'Branch to deploy to staging'
-        default: 'dev'
 
 # No job receives repository permissions implicitly. The deploy job adds only
 # the OIDC token permission needed to exchange a short-lived AWS credential.
