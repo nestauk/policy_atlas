@@ -1,18 +1,14 @@
 name: deploy production
-run-name: Deploy Main branch (${{ github.sha }}) to production
+run-name: Deploy main (${{ github.sha }}) to production
 
 on:
-  push:
-    branches:
-      - main
+  workflow_dispatch:
 
 permissions: {}
 
 jobs:
   validate:
     name: validate production release
-    # dev stays the default branch. main is the production line only.
-    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -23,6 +19,13 @@ jobs:
           ref: ${{ github.sha }}
           fetch-depth: 0
           persist-credentials: false
+      - name: Require the main branch
+        shell: bash
+        run: |
+          if [[ "$GITHUB_REF" != "refs/heads/main" ]]; then
+            echo "Refusing production deployment from $GITHUB_REF; dispatch this workflow from main." >&2
+            exit 1
+          fi
       - name: Require a release from dev history
         shell: bash
         run: |
