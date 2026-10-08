@@ -49,17 +49,20 @@ Two workflows automate only steady-state updates:
 
 | Workflow | Trigger | Ref deployed | GitHub Environment |
 | --- | --- | --- | --- |
-| `deploy-staging.yml` | engineer runs `workflow_dispatch` from `dev` | dispatch SHA, accepted only when the selected ref is `dev` | `staging` |
-| `deploy-production.yml` | push to `main` | that `main` SHA, accepted only when it is in `dev` history | `prod` |
+| `deploy-staging.yml` | automatically when `verify` passes on a push to `dev`, or an engineer runs `workflow_dispatch` from `dev` | the commit `verify` passed (or the dispatch SHA), accepted only from `dev` | `staging` |
+| `deploy-production.yml` | engineer runs `workflow_dispatch` from `main` | the tip of `main`, accepted only when it is in `dev` history | `prod` |
 
 `dev` remains the repository default branch. Pull requests, continuous
-integration, and staging deploys stay on `dev`. `main` is the production branch
-only. Merging a reviewed `dev` commit into `main` deploys it. The workflow
-refuses a `main` commit that is not already in `dev` history.
+integration, and staging deploys stay on `dev`. Every merge to `dev` that passes
+`verify` redeploys staging, which briefly stops the staging API while
+migrations run.
 
-The first push that creates `main` is a production deploy. Create `main` from
-the `dev` commit you intend to release, after this workflow file is on that
-commit, and only when that deploy is intended.
+`main` is the production branch only, and pushing to it deploys nothing. To
+release, merge the staged `dev` commit into `main`, then run **deploy
+production** from `main` in the Actions tab
+(`gh workflow run deploy-production.yml --ref main`). The workflow refuses any
+other branch and any `main` commit that is not already in `dev` history, and a
+`prod` reviewer must approve before the deploy job starts.
 
 A failed configuration/ref validation job never reaches the protected Environment
 and never requests an OIDC token. Deploy jobs have only `contents: read` and
@@ -405,8 +408,9 @@ restore service manually with
 For normal operator recovery use
 `make deploy-update DEPLOY_ENV=<environment>` so local and GitHub execution stay on
 the same interface. A GitHub rerun uses the same event SHA. For prod code
-rollback, merge a prior commit that is still in `dev` history into `main`. Do
-not force-push `main`.
+rollback, revert the bad change on `dev` (so staging redeploys it first), merge
+that revert into `main`, then run **deploy production** from `main`. Do not
+force-push `main`.
 
 **One-time pending step — encrypting the Aurora cluster (026 review hardening).**
 The committed template sets `StorageEncrypted` (+ deletion protection, 7-day
