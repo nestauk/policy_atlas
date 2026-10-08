@@ -190,7 +190,7 @@ Write-up section 3 ("Ranking policy documents").
 
 - Against the paper ground truth (paper recall of the papers the first 100 documents
   cite): snowball keeps 7.5% at 200 and lifts the ceiling to 20.9% (relevance 7.7 /
-  18.1); coupling and forward reach 24 to 25% ceilings. The 200 cut does not move.
+  18.1); coupling and forward reach 25 to 26% ceilings. The 200 cut does not move.
 - By eye on obesity, decarbonising heating and early years attainment: the snowball
   surfaces the topic's canon, most of it documents the search never returned;
   specificity demotes the documents cited on everything; similarity damping removes
@@ -213,11 +213,12 @@ selective references, snowball favoured by design; for comparing orders only.
 
 - `--set omnibus` (15 most-citing documents by rule, title as intent, 200 docs): the
   rule picked omnibus publications; pools held 4.1% of the target. Snowball 2.9% at 25
-  against relevance 1.2%. A diagnosis of the rule, not a result.
+  against relevance 1.2%. A diagnosis of the rule, not a result; not rerun after the
+  review fixes.
 - `--set specific` (15 hand-picked topic-specific documents with written questions,
   `ground_truth/policy_gt_specific.csv`, 400 docs, intent plus two paraphrases, caps
-  25/50/100/200): snowball and specificity 5.8% at 25, 7.8% at 50, 8.3% at 100
-  against relevance 3.5 / 3.7 / 4.8; pool ceiling 8.9%. Coupling and forward below
+  25/50/100/200): snowball and specificity 6.0% at 25, 8.0% at 50, 8.5% at 100
+  against relevance 3.5 / 3.7 / 4.8; pool ceiling 8.8%. Coupling and forward below
   relevance at 25. The snowball finds in 50 more than relevance finds in 200.
 - Where the rest of the target is (580 cited documents): 23% are cited by at least one
   retrieved document, 9% by two or more (the snowball's landmarks already take those),
@@ -241,9 +242,9 @@ retrieved documents 9% to 17%, by one or more 23% to 33%, in the 400 results 6% 
 side; the country filter is a user option ("restrict to UK sources"), not a default,
 because the product wants to widen exposure to global thinking.** Order comparison
 under both settings (`policy_gt.py --set specific --docs 400 --paraphrases
-[--source-country UK]`): snowball 5.8% at 25 global, 9.6% UK-only; relevance 3.5%
-and 4.6%; pool ceiling 8.6% and 15.4% (rescored 2026-10-08 after fencing fetched
-documents by the cutoff; write-up, production findings 6). Caveat: this instrument is built from gov.uk
+[--source-country UK]`): snowball 6.0% at 25 global, 9.6% UK-only; relevance 3.5%
+and 4.6%; pool ceiling 8.8% and 15.4% (rebuilt 2026-10-08 after the Codex review
+fixes; write-up, production findings 6). Caveat: this instrument is built from gov.uk
 strategies, so it rewards UK-only by construction; a fair global measure needs an
 international target set (OECD, WHO, EU, or several countries' strategies on one
 topic).
@@ -254,3 +255,15 @@ short generated queries; the full 100-review set; then the production slice
 (relevance sort, paraphrases plus 200 documents as the Overton seed set, the
 documents' own DOIs and cited papers into the paper pool, policy documents under
 their own cap).
+
+## 2026-10-08 — Codex review of the eval scripts, fixes, rebuilt numbers
+
+Eight findings, all fixed in the eval scripts (write-up, production findings 6):
+held-out strategy excluded before any signal (verified never retrieved anyway);
+forward counts and fetched documents fenced by the cutoff; policy caches versioned
+and rebuilt rather than patched; probe cache keyed by request shape; title matching
+against DOI-less records only, DOI recall over DOI references; the 15-strategy targets
+committed as a dated snapshot; provenance file records the question used. The mini
+paper check and the specific set (global and UK-only) were rerun from scratch; the
+omnibus set was not. Every number moved by under a point; the snowball gained
+slightly (6.0% at 25 global, was 5.8%).
