@@ -19,11 +19,13 @@ Dev-only eval tooling. Not part of the runtime package.
 
 from __future__ import annotations
 
+import _bootstrap  # noqa: F401
+
 from typing import Any
 
 import pandas as pd
 
-from ground_truth import normalize_doi, record_key
+from evals_search_utils import normalize_doi, record_key
 
 # The pipeline's own provider-record -> normalized-envelope mappers. Imported
 # rather than reimplemented (they are private to acquire.py, and this is
@@ -75,7 +77,7 @@ def records_table(
             doi = normalize_doi((envelope or {}).get("doi"))
             # The key the ground truth is matched on: the DOI when there is
             # one, else the Overton document id. A policy document with no DOI
-            # is still scorable — see ground_truth.record_key.
+            # is still scorable — see evals_search_utils.record_key.
             key = record_key(envelope)
             rows.append(
                 {

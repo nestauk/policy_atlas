@@ -1,12 +1,13 @@
-"""Shared ground-truth helpers for the eval: the key a document is scored on,
-the ``GroundTruth`` container, the function that cleans a review title into a
-search intent, the date helpers for a review's search cutoff, and the one
-OpenAlex lookup the dataset builder needs. Plain Python plus ``httpx``.
-Nothing here imports the pipeline or the database, so the CSV loader stays
-cheap to run.
+"""Shared code for the search eval: scoring keys, titles and dates, OpenAlex access,
+and the small helpers every runner needs.
 
-The recall target itself comes from the hand-curated CSVs under ``input/``
-(see ``ground_truth_dataset.py``), not from anything in this file.
+Used by both halves of ``scripts/evals/search/``: ``ground_truth/`` (building the
+Langfuse dataset) and ``measure/`` (running recall measurements). Holds the key a document
+is scored on (``record_key``), the ``GroundTruth`` container, the function that cleans a
+review title into a search intent, the date helpers for a review's search cutoff, the
+retrying OpenAlex getter, the dataset name, the item selector shared by the runners, the
+git commit for run labels, and the dollar formatter both tables use. Plain Python plus
+``httpx``; nothing here imports the pipeline or the database.
 
 Dev-only eval tooling. Not part of the runtime package.
 """
@@ -17,9 +18,11 @@ import argparse
 import calendar
 import os
 import re
+import subprocess
 import time
 from dataclasses import dataclass, field
 from datetime import date
+from pathlib import Path
 from typing import Any, Literal
 
 import httpx
@@ -74,9 +77,14 @@ def normalize_doi(doi: Any) -> str | None:
     if not isinstance(doi, str) or not doi:
         return None
     d = doi.strip().lower()
-    for prefix in ("https://doi.org/", "http://doi.org/", "https://dx.doi.org/", "http://dx.doi.org/"):
+    for prefix in (
+        "https://doi.org/",
+        "http://doi.org/",
+        "https://dx.doi.org/",
+        "http://dx.doi.org/",
+    ):
         if d.startswith(prefix):
-            d = d[len(prefix):]
+            d = d[len(prefix) :]
             break
     return d or None
 
@@ -104,7 +112,11 @@ def openalex_get(path: str, **params: str) -> httpx.Response:
     for attempt in range(5):
         last = attempt == 4
         try:
-            resp = httpx.get(f"{OPENALEX_HOST}{path}", params=_openalex_params(**params), timeout=30.0)
+            resp = httpx.get(
+                f"{OPENALEX_HOST}{path}",
+                params=_openalex_params(**params),
+                timeout=30.0,
+            )
         except httpx.TransportError:
             if last:
                 raise
@@ -139,6 +151,8 @@ _REVIEW_TYPE_SUFFIX_RE = re.compile(
             (?:bibliometric|scientometric)\s+analysis
             |
             meta-analysis
+            |
+            (?:evidence\s+(?:and\s+)?gap\s+map|evidence\s+map|systematic\s+map)(?:\s+report)?
         )
         \s*.*$                          # swallow any trailing clause, e.g. "of RCTs"
     """,
@@ -159,7 +173,9 @@ def iso_date(value: str) -> str:
     try:
         parsed = date.fromisoformat(value)
     except ValueError as exc:
-        raise argparse.ArgumentTypeError(f"{value!r} is not a valid ISO date (YYYY-MM-DD)") from exc
+        raise argparse.ArgumentTypeError(
+            f"{value!r} is not a valid ISO date (YYYY-MM-DD)"
+        ) from exc
     if parsed.isoformat() != value:
         raise argparse.ArgumentTypeError(f"{value!r} must be a YYYY-MM-DD ISO date")
     return value
@@ -204,3 +220,72 @@ class GroundTruth:
         reference list counts as a miss it was never possible to hit.
         """
         return self.dois | self.overton_ids
+
+
+def git_commit() -> str:
+    """The full commit hash of the working tree, or ``unknown`` outside git."""
+    try:
+        return subprocess.check_output(
+            ["git", "rev-parse", "HEAD"], cwd=Path(__file__).parent, text=True
+        ).strip()
+    except (OSError, subprocess.CalledProcessError):
+        return "unknown"
+
+
+def ground_truth_from_item(item: Any) -> GroundTruth:
+    """Rebuild the recall target from a dataset item's ``expected_output``."""
+    keys = set(item.expected_output["keys"])
+    overton_ids = {key for key in keys if key.startswith("overton:")}
+    return GroundTruth(
+        dois=keys - overton_ids,
+        overton_ids=overton_ids,
+        source=item.metadata.get("source", "doi"),
+        titles=item.expected_output.get("titles", {}),
+    )
+
+
+def select_items(items: list[Any], patterns: list[str] | None) -> list[Any]:
+    """The dataset items to run: all of them, or those matching ``--reviews``.
+
+    A pattern matches an item when it appears (case-insensitive) in the item's
+    id, its ``review_id`` or its ``review_title``.
+
+    Raises:
+        ValueError: No item matched, listing what was available.
+    """
+    if not patterns:
+        return items
+    wanted = [p.lower() for p in patterns]
+    chosen = [
+        item
+        for item in items
+        if any(
+            p in text
+            for p in wanted
+            for text in (
+                str(item.id).lower(),
+                str(item.metadata.get("review_id", "")).lower(),
+                str(item.metadata.get("review_title", "")).lower(),
+            )
+        )
+    ]
+    if not chosen:
+        available = "\n  ".join(
+            f"{item.id}  {item.metadata.get('review_title', '')[:70]}" for item in items
+        )
+        raise ValueError(
+            f"--reviews {patterns} matched no dataset item. Items:\n  {available}"
+        )
+    return chosen
+
+
+def usd(value: float) -> str:
+    """Dollars to two decimals, or four when the amount would otherwise show as $0.00.
+
+    OpenAlex bills fractions of a cent per page, so $0.0004 must not print as $0.00.
+    Shared with ``measure/baseline_recall.py`` so both tables format money the same way.
+    """
+    return f"${value:.2f}" if value == 0 or value >= 0.01 else f"${value:.4f}"
+
+
+DEFAULT_DATASET = "retrieval-ground-truth"
