@@ -155,8 +155,14 @@ def build(
     n_forward_new: int,
     paraphrases: bool = False,
     source_country: str | None = None,
+    exclude_ids: frozenset[str] = frozenset(),
 ) -> dict[str, Any]:
     """Fetch, snowball, chase and score one question; see the module docstring.
+
+    ``exclude_ids`` are held-out documents (a ground-truth strategy): they are dropped
+    from the search results before any signal is computed and are never fetched, so
+    their own reference lists cannot feed the snowball, the core papers or the
+    forward step (Codex review, 2026-10-08).
 
     With ``paraphrases`` the intent and the pipeline's two generated paraphrases are
     searched separately, ``n_docs`` split between them, and merged round-robin with
@@ -182,21 +188,27 @@ def build(
             ):
                 seen_ids.add(result[position]["policy_document_id"])
                 merged.append(result[position])
+    merged = [m for m in merged if m.get("policy_document_id") not in exclude_ids]
     docs = [slim(d, "search") for d in merged[:n_docs]]
     for position, d in enumerate(docs, start=1):
         d["rel_rank"] = position
-    ids = {d["id"] for d in docs}
+    ids = {d["id"] for d in docs} | set(exclude_ids)
+
+    def fetch(doc_id: str, origin: str) -> None:
+        # Documents fetched by id carry no date fence; drop any dated after the cutoff.
+        raw = lookup(doc_id)
+        if raw:
+            d = slim(raw, origin)
+            if after_cutoff(d, cutoff):
+                return
+            d["rel_rank"] = 10**6
+            docs.append(d)
+        ids.add(doc_id)
 
     # Policy snowball: documents the set cites but the search did not return.
     cited = collections.Counter(p for d in docs for p in set(d["cites_policy"]))
-    landmark_ids = [p for p, _ in cited.most_common() if p not in ids][:n_landmarks]
-    for doc_id in landmark_ids:
-        raw = lookup(doc_id)
-        if raw:
-            d = slim(raw, "landmark")
-            d["rel_rank"] = 10**6
-            docs.append(d)
-            ids.add(doc_id)
+    for doc_id in [p for p, _ in cited.most_common() if p not in ids][:n_landmarks]:
+        fetch(doc_id, "landmark")
 
     # Core papers and forward chasing from the ten most cited.
     paper_counts = collections.Counter(
@@ -208,22 +220,14 @@ def build(
     for doi in core[:n_forward]:
         for rec in cited_by(doi):
             doc_id = rec.get("policy_document_id")
-            if doc_id:
+            # A citing document after the cutoff must not count for anyone's score.
+            if doc_id and not after_cutoff(rec, cutoff):
                 forward_counts[doc_id] += 1
                 forward_meta.setdefault(doc_id, rec)
-    new_ids = [p for p, _ in forward_counts.most_common() if p not in ids][
+    for doc_id in [p for p, _ in forward_counts.most_common() if p not in ids][
         :n_forward_new
-    ]
-    for doc_id in new_ids:
-        raw = lookup(doc_id)
-        if raw:
-            d = slim(raw, "forward")
-            d["rel_rank"] = 10**6
-            docs.append(d)
-            ids.add(doc_id)
-    # Documents fetched by id carry no date fence: a citing document found by the
-    # forward step can be later than the cutoff (22% were, 2026-10-08). Drop them.
-    docs = [d for d in docs if not after_cutoff(d, cutoff)]
+    ]:
+        fetch(doc_id, "forward")
 
     core_set = set(core)
     for d in docs:
@@ -304,19 +308,20 @@ def after_cutoff(doc: dict[str, Any], cutoff: str | None) -> bool:
     return bool(cutoff) and (doc.get("published_on") or "")[:10] > cutoff
 
 
+CACHE_VERSION = "v2"  # bumped 2026-10-08: exclusions and date fences applied at build
+
+
 def cached_build(key: str, **kwargs: Any) -> dict[str, Any]:
+    """Build once per key; the key carries every knob and the cache version."""
+    exclude = kwargs.get("exclude_ids")
+    key = f"{CACHE_VERSION}|{key}|x{sorted(exclude) if exclude else ''}"
     path = (
         CACHE_DIR
         / "overton-policy"
         / f"{hashlib.sha256(key.encode()).hexdigest()[:16]}.json"
     )
     if path.exists():
-        payload = json.loads(path.read_text())
-        # Caches written before the date fence on fetched documents (2026-10-08).
-        payload["docs"] = [
-            d for d in payload["docs"] if not after_cutoff(d, payload.get("cutoff"))
-        ]
-        return payload
+        return json.loads(path.read_text())
     payload = build(**kwargs)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload))

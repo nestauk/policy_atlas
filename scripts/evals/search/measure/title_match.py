@@ -100,6 +100,14 @@ def match(
     return found
 
 
+def cache_path_for(folder: Path, item_id: str) -> Path | None:
+    """The one cached payload for a review in an arm folder (shape-suffixed file name)."""
+    if not item_id:
+        return None
+    matches = sorted(folder.glob(f"{item_id}-*.json")) + [folder / f"{item_id}.json"]
+    return next((p for p in matches if p.exists()), None)
+
+
 def load_references() -> dict[str, list[dict[str, Any]]]:
     refs: dict[str, list[dict[str, Any]]] = collections.defaultdict(list)
     with REFERENCES.open() as fh:
@@ -141,13 +149,15 @@ def main() -> None:
     totals: collections.Counter[str] = collections.Counter()
     print(
         "| review | refs | no DOI | found by title: Overton docs | cited, no DOI | "
-        "OpenAlex pool | extra DOI refs found by title on DOI-less candidates | "
-        "DOI recall (Overton / OpenAlex) | with titles (Overton / OpenAlex) |"
+        "DOI-less OpenAlex records (any OpenAlex record) | "
+        "extra DOI refs found by title on DOI-less candidates | "
+        "DOI recall over DOI refs (Overton / OpenAlex) | "
+        "coverage over all refs with titles (Overton / OpenAlex) |"
     )
     print("|---|---:|---:|---:|---:|---:|---:|---:|---:|")
     for title, review_refs in refs.items():
-        path = cache_dir / f"{item_by_title.get(norm(title), '')}.json"
-        if not path.exists():
+        path = cache_path_for(cache_dir, item_by_title.get(norm(title), ""))
+        if path is None:
             print(f"| {title[:40]} | no Overton cache | | | | | | | |")
             continue
         payload = json.loads(path.read_text())
@@ -172,7 +182,10 @@ def main() -> None:
 
         m_docs = match(no_doi, doc_titles, loose=args.loose)
         m_cited = match(no_doi, cited_nodoi, loose=args.loose)
-        m_oa = match(no_doi, oa_titles, loose=args.loose)
+        # DOI-less references against the DOI-less OpenAlex records only, as the
+        # write-up states (Codex review, 2026-10-08); the whole-pool match is kept too.
+        m_oa = match(no_doi, oa_titles_nodoi, loose=args.loose)
+        m_oa_any = match(no_doi, oa_titles, loose=args.loose)
         # Reverse gap: references WITH a DOI, found only by title on candidates WITHOUT one.
         m_rev = match(with_doi, doc_titles_nodoi + oa_titles_nodoi, loose=args.loose)
 
@@ -181,15 +194,18 @@ def main() -> None:
         ) & gt_dois
         oa_doi_hits = {normalize_doi(r["doi"]) for r in oa_rows if r["doi"]} & gt_dois
         n = len(review_refs)
+        n_doi = len(gt_dois)
         ov_title = len(set(m_docs) | set(m_cited))
         oa_title = len(m_oa)
         totals.update(
             {
                 "refs": n,
+                "dois": n_doi,
                 "no_doi": len(no_doi),
                 "docs": len(m_docs),
                 "cited": len(m_cited),
                 "oa": len(m_oa),
+                "oa_any": len(m_oa_any),
                 "rev": len(m_rev),
                 "ov_doi": len(ov_doi_hits),
                 "oa_doi": len(oa_doi_hits),
@@ -199,8 +215,8 @@ def main() -> None:
         )
         print(
             f"| {title[:40]} | {n} | {len(no_doi)} | {len(m_docs)} | {len(m_cited)} | "
-            f"{len(m_oa)} | {len(m_rev)} | "
-            f"{len(ov_doi_hits) / n:.0%} / {len(oa_doi_hits) / n:.0%} | "
+            f"{len(m_oa)} ({len(m_oa_any)}) | {len(m_rev)} | "
+            f"{len(ov_doi_hits) / n_doi:.0%} / {len(oa_doi_hits) / n_doi:.0%} | "
             f"{(len(ov_doi_hits) + ov_title) / n:.0%} / {(len(oa_doi_hits) + oa_title) / n:.0%} |"
         )
         if args.show:
@@ -216,12 +232,14 @@ def main() -> None:
     print(
         f"\nTotals over {len(refs)} reviews: {t['refs']} references, {t['no_doi']} without a "
         f"DOI. Found by title: {t['docs']} on Overton documents, {t['cited']} on cited "
-        f"works without a DOI, {t['oa']} on the OpenAlex pool; reverse gap {t['rev']}."
+        f"works without a DOI, {t['oa']} on DOI-less OpenAlex records ({t['oa_any']} on "
+        f"any OpenAlex record); reverse gap {t['rev']}."
     )
     print(
-        f"Recall, DOI only: Overton {t['ov_doi'] / t['refs']:.1%}, OpenAlex "
-        f"{t['oa_doi'] / t['refs']:.1%}. With titles: Overton {t['ov_both'] / t['refs']:.1%}, "
-        f"OpenAlex {t['oa_both'] / t['refs']:.1%} (pooled over references, not a mean of reviews)."
+        f"DOI recall over the {t['dois']} DOI references: Overton {t['ov_doi'] / t['dois']:.1%}, "
+        f"OpenAlex {t['oa_doi'] / t['dois']:.1%}. Coverage over all {t['refs']} references, "
+        f"DOI hits plus title matches: Overton {t['ov_both'] / t['refs']:.1%}, OpenAlex "
+        f"{t['oa_both'] / t['refs']:.1%} (pooled over references, not a mean of reviews)."
     )
 
 

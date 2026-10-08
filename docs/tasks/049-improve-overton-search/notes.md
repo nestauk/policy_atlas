@@ -161,11 +161,17 @@ works without a DOI, and the DOI-less records of the OpenAlex pool.
 | | strict | loose |
 |---|---:|---:|
 | DOI-less references found on Overton policy documents | 0 of 53 | 0 |
-| found on DOI-less OpenAlex records | 6 of 53 | 6 |
+| found on any OpenAlex record in the pool | 6 of 53 | 6 |
+| of those, on a record that itself has no DOI | 1 | 1 |
 | DOI references found only by title on a DOI-less candidate | 2 | 3 |
 
+Corrected 2026-10-08 after the Codex review: the first version matched against every
+OpenAlex title but labelled the result "DOI-less records"; five of the six are records
+with a DOI the export lacks. DOI recall is now reported over DOI references only
+(Overton 24.0%, OpenAlex 30.1%, pooled) and coverage with titles over all references.
+
 What we learned, honestly: on this sample the blind spot is under one point and sits
-on the OpenAlex side (journal papers OpenAlex holds without a DOI). The DOI-less
+on the OpenAlex side (journal papers whose DOI the review's export lacks). The DOI-less
 references in the gap-map rows are papers missing a DOI in the export, not grey
 literature. No review-included reference is an Overton policy document, so a
 policy-document recall would read zero here. The caveat is the sample: the four

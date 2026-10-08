@@ -45,6 +45,7 @@ import argparse
 import csv
 import json
 import re
+from datetime import date
 from pathlib import Path
 from typing import Any
 
@@ -52,6 +53,9 @@ OUT_DIR = Path(__file__).resolve().parents[1] / "results" / "overton" / "policy_
 SPECIFIC_CSV = (
     Path(__file__).resolve().parents[1] / "ground_truth" / "policy_gt_specific.csv"
 )
+# Committed snapshot of the targets (strategy date, cited policy ids, cited DOIs) so the
+# numbers can be reproduced after Overton's data moves on. Written on first use.
+SPECIFIC_TARGETS = SPECIFIC_CSV.with_name("policy_gt_specific_targets.json")
 
 
 def slim_target(doc_id: str) -> dict[str, Any]:
@@ -199,13 +203,43 @@ def main() -> None:
     }
     rows_survey = survey()
     if args.set == "specific":
+        snapshot = (
+            {s["id"]: s for s in json.loads(SPECIFIC_TARGETS.read_text())["targets"]}
+            if SPECIFIC_TARGETS.exists()
+            else {}
+        )
         by_id = {r["id"]: r for r in rows_survey}
         strategies = []
         with SPECIFIC_CSV.open() as fh:
             for r in csv.DictReader(fh):
-                s = dict(by_id[r["id"]]) if r["id"] in by_id else slim_target(r["id"])
+                if r["id"] in snapshot:
+                    s = dict(snapshot[r["id"]])
+                else:
+                    s = (
+                        dict(by_id[r["id"]])
+                        if r["id"] in by_id
+                        else slim_target(r["id"])
+                    )
                 s["intent"] = r["intent"]
                 strategies.append(s)
+        if not SPECIFIC_TARGETS.exists():
+            keys = (
+                "id",
+                "title",
+                "published_on",
+                "citation_count",
+                "policy_ids",
+                "dois",
+            )
+            SPECIFIC_TARGETS.write_text(
+                json.dumps(
+                    {
+                        "fetched_on": date.today().isoformat(),
+                        "targets": [{k: s[k] for k in keys} for s in strategies],
+                    },
+                    indent=1,
+                )
+            )
         args.out = args.out.parent / (
             "policy_gt_specific"
             + (f"-{args.source_country}" if args.source_country else "")
@@ -227,7 +261,7 @@ def main() -> None:
                     s["published_on"],
                     len(s["policy_ids"]),
                     len(s["dois"]),
-                    intent_of(s["title"]),
+                    s["intent"],
                     s["title"],
                 ]
             )
@@ -241,6 +275,7 @@ def main() -> None:
             f"gt|{s['id']}|{intent}|{cutoff}|{knobs}",
             intent=intent,
             cutoff=cutoff,
+            exclude_ids=frozenset({s["id"]}),  # held out before any signal is computed
             **knobs,
         )
         docs = [d for d in payload["docs"] if d["id"] != s["id"]]

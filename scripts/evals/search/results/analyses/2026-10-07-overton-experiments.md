@@ -28,7 +28,8 @@ free; the whole day cost under 50 cents in OpenAlex and embedding calls.
   (23.1% against 22.4%). The papers only Overton finds carry one policy citation each,
   among eleven thousand others like them. Nothing ranks them.
 - **The DOI metric hides under a point on this sample.** Title matching finds 6 of the
-  53 DOI-less references on DOI-less OpenAlex records and none on 5,341 policy
+  53 DOI-less references in the OpenAlex pool (five of them records that do carry a
+  DOI the reference list lacks, one a DOI-less record) and none on 5,341 policy
   documents. The sample has no grey literature as evidence; the hand-made reviews do,
   and they are not in the file yet.
 - **For the policy side, the policy-to-policy snowball with specificity is the
@@ -136,12 +137,18 @@ DOI-less records of the OpenAlex pool:
 |---|---:|
 | DOI-less references on Overton policy documents | 0 of 53 |
 | DOI-less references on Overton-cited works without a DOI | 0 (there are none) |
-| DOI-less references on DOI-less OpenAlex records | 6 of 53 |
-| DOI references found only by title on a DOI-less candidate | 3 |
+| DOI-less references on any OpenAlex record in the pool | 6 of 53 |
+| of those, on a record that itself has no DOI | 1 |
+| DOI references found only by title on a DOI-less candidate | 3 (loose), 2 (strict) |
 
-The blind spot is under a point on this sample and sits on the OpenAlex side. The
-DOI-less references in the gap-map rows are papers missing a DOI in the export, not
-grey literature. No review-included reference is an Overton policy document. The
+DOI recall over the 743 references that have a DOI, pooled: Overton route 24.0%,
+OpenAlex pool 30.1%. Coverage over all 797 references with title matches added:
+22.3% and 28.2%.
+
+The blind spot is under a point on this sample and sits on the OpenAlex side. Five of
+the six title matches are OpenAlex records that have a DOI the review's export does
+not: the reference list is missing the DOI, not the record. The DOI-less references in
+the gap-map rows are papers missing a DOI in the export, not grey literature. No review-included reference is an Overton policy document. The
 four hand-made reviews, which cite grey literature as evidence, are not in the file;
 add them before concluding anything about policy-document recall.
 
