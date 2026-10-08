@@ -221,6 +221,9 @@ def build(
             d["rel_rank"] = 10**6
             docs.append(d)
             ids.add(doc_id)
+    # Documents fetched by id carry no date fence: a citing document found by the
+    # forward step can be later than the cutoff (22% were, 2026-10-08). Drop them.
+    docs = [d for d in docs if not after_cutoff(d, cutoff)]
 
     core_set = set(core)
     for d in docs:
@@ -296,6 +299,11 @@ def paper_recall(docs: list[dict[str, Any]], gt: GroundTruth, cap: int | None) -
     return len(found) / len(gt.keys) if gt.keys else 0.0
 
 
+def after_cutoff(doc: dict[str, Any], cutoff: str | None) -> bool:
+    """True when the document is dated after the cutoff (undated documents are kept)."""
+    return bool(cutoff) and (doc.get("published_on") or "")[:10] > cutoff
+
+
 def cached_build(key: str, **kwargs: Any) -> dict[str, Any]:
     path = (
         CACHE_DIR
@@ -303,7 +311,12 @@ def cached_build(key: str, **kwargs: Any) -> dict[str, Any]:
         / f"{hashlib.sha256(key.encode()).hexdigest()[:16]}.json"
     )
     if path.exists():
-        return json.loads(path.read_text())
+        payload = json.loads(path.read_text())
+        # Caches written before the date fence on fetched documents (2026-10-08).
+        payload["docs"] = [
+            d for d in payload["docs"] if not after_cutoff(d, payload.get("cutoff"))
+        ]
+        return payload
     payload = build(**kwargs)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload))

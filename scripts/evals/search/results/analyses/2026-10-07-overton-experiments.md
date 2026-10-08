@@ -35,7 +35,7 @@ free; the whole day cost under 50 cents in OpenAlex and embedding calls.
   method.** Counting how many retrieved documents cite each policy document, and
   fetching the most-cited ones the search missed, surfaces the canon of a topic. On
   obesity, seven of the top ten were not in the 200 search results. On a 15-strategy
-  ground truth it finds at 25 documents what the search order finds at 200.
+  ground truth it finds in 50 documents more than the search order finds in 200.
 - **For UK questions, three quarters of what Overton returns is from outside the UK.**
   A `source_country=UK` filter doubles what the snowball can reach on a UK-built
   target. By owner decision it is a user option, not a default, and the evaluation
@@ -176,7 +176,7 @@ cite but is off the question drops.
 
 **Against the paper ground truth**, by the paper recall of the papers the first 100
 documents cite: the snowball keeps 7.5% at 200 and lifts the ceiling to 20.9%
-(relevance 7.7% / 18.1%); coupling and forward reach 25 to 26% ceilings. The 200 cut
+(relevance 7.7% / 18.1%); coupling and forward reach 24 to 25% ceilings. The 200 cut
 does not move.
 
 **By eye**, on obesity, decarbonising heating and early years attainment (top-25
@@ -219,14 +219,14 @@ question plus two generated paraphrases. Policy recall, mean over the 15:
 
 | order | @25 | @50 | @100 | @200 | pool ceiling |
 |---|---:|---:|---:|---:|---:|
-| `relevance` | 3.5% | 3.7% | 4.8% | 7.3% | 8.9% |
-| **`inset`** | **5.8%** | **7.8%** | **8.3%** | 8.6% | 8.9% |
-| **`specific`** | **5.8%** | **7.8%** | **8.3%** | 8.6% | 8.9% |
-| `coupling` | 1.0% | 3.1% | 7.4% | 8.9% | 8.9% |
-| `forward` | 0.9% | 3.0% | 4.7% | 7.2% | 8.9% |
-| `combined` | 1.3% | 4.5% | 8.5% | 8.9% | 8.9% |
+| `relevance` | 3.5% | 3.7% | 4.8% | 7.3% | 8.6% |
+| **`inset`** | **5.8%** | **7.8%** | **8.3%** | 8.6% | 8.6% |
+| **`specific`** | **5.8%** | **7.8%** | **8.3%** | 8.6% | 8.6% |
+| `coupling` | 1.3% | 3.1% | 7.4% | 8.6% | 8.6% |
+| `forward` | 0.6% | 2.7% | 4.4% | 7.1% | 8.6% |
+| `combined` | 1.6% | 5.0% | 8.3% | 8.6% | 8.6% |
 
-The snowball finds at 25 what relevance finds at 200. Gambling 16% at 25 against 0%,
+The snowball finds in 50 documents more than relevance finds in 200. Gambling 16% at 25 against 0%,
 children's social care 12% against 3%, serious violence 11% against 5%.
 
 ### 3.3 Why the ceiling is 9%: a structural mismatch
@@ -268,15 +268,15 @@ measures. The full order comparison under both settings:
 
 | order | global @25 | global @100 | UK-only @25 | UK-only @100 | pool ceiling, global / UK-only |
 |---|---:|---:|---:|---:|---:|
-| `relevance` | 3.5% | 4.8% | 4.6% | 8.8% | 8.9% / 16.0% |
-| **`inset`** | **5.8%** | **8.3%** | **9.9%** | **14.2%** | 8.9% / 16.0% |
-| **`specific`** | **5.8%** | **8.3%** | **9.3%** | **14.2%** | 8.9% / 16.0% |
-| `coupling` | 1.0% | 7.4% | 3.2% | 14.3% | 8.9% / 16.0% |
-| `forward` | 0.9% | 4.7% | 2.7% | 9.2% | 8.9% / 16.0% |
-| `combined` | 1.3% | 8.5% | 6.3% | 14.3% | 8.9% / 16.0% |
+| `relevance` | 3.5% | 4.8% | 4.6% | 8.8% | 8.6% / 15.4% |
+| **`inset`** | **5.8%** | **8.3%** | **9.6%** | **13.7%** | 8.6% / 15.4% |
+| **`specific`** | **5.8%** | **8.3%** | **9.0%** | **13.7%** | 8.6% / 15.4% |
+| `coupling` | 1.3% | 7.4% | 3.3% | 13.7% | 8.6% / 15.4% |
+| `forward` | 0.6% | 4.4% | 2.5% | 8.8% | 8.6% / 15.4% |
+| `combined` | 1.6% | 8.3% | 6.4% | 13.7% | 8.6% / 15.4% |
 
-Under the UK filter the ceiling doubles (16.0%) and the snowball keeps its lead: 9.9%
-at 25 against 4.6% for the search order, twice the global snowball. Gambling 23% at 25,
+Under the UK filter the ceiling nearly doubles (15.4%) and the snowball keeps its
+lead: 9.6% at 25 against 4.6% for the search order, well above the global snowball. Gambling 23% at 25,
 the 1,001 days 19%, smoking 13%, transport decarbonisation 13%. The UK pools are
 smaller (190 to 310 documents after de-duplication, from the same 24 calls), because
 fewer UK documents pass the similarity floor; the search is working with less and
@@ -303,6 +303,14 @@ exactly the exposure wanted, even though no UK strategy cites it.
    snowballs need no new fetch.
 5. **Policy documents' own DOIs** (`keyed_other_identifiers.doi`) are read by the
    mapper already; the eval probes now count them too.
+6. **Date fences, checked 2026-10-08.** OpenAlex forward chasing and the backward
+   resolve are fenced server-side (`to_publication_date`); Overton searches by
+   `published_before`; no review's own DOI appears in any candidate list. One leak
+   found and fixed in the eval: documents fetched by id in `policy_rank.py` had no
+   fence, and 22% of the forward step's documents were dated after the cutoff (2% of
+   landmarks). They are now dropped, old caches included; the tables above are the
+   rescored numbers. Only the held orders (coupling, forward, combined) moved, by
+   under a point.
 
 ## 5. Suggested course of action
 

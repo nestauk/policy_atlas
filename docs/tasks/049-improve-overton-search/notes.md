@@ -184,7 +184,7 @@ Write-up section 3 ("Ranking policy documents").
 
 - Against the paper ground truth (paper recall of the papers the first 100 documents
   cite): snowball keeps 7.5% at 200 and lifts the ceiling to 20.9% (relevance 7.7 /
-  18.1); coupling and forward reach 25 to 26% ceilings. The 200 cut does not move.
+  18.1); coupling and forward reach 24 to 25% ceilings. The 200 cut does not move.
 - By eye on obesity, decarbonising heating and early years attainment: the snowball
   surfaces the topic's canon, most of it documents the search never returned;
   specificity demotes the documents cited on everything; similarity damping removes
@@ -212,7 +212,7 @@ selective references, snowball favoured by design; for comparing orders only.
   `ground_truth/policy_gt_specific.csv`, 400 docs, intent plus two paraphrases, caps
   25/50/100/200): snowball and specificity 5.8% at 25, 7.8% at 50, 8.3% at 100
   against relevance 3.5 / 3.7 / 4.8; pool ceiling 8.9%. Coupling and forward below
-  relevance at 25. The snowball finds at 25 what relevance finds at 200.
+  relevance at 25. The snowball finds in 50 more than relevance finds in 200.
 - Where the rest of the target is (580 cited documents): 23% are cited by at least one
   retrieved document, 9% by two or more (the snowball's landmarks already take those),
   77% by none. The single-citation tail is the paper-side haystack again; untested
@@ -235,8 +235,9 @@ retrieved documents 9% to 17%, by one or more 23% to 33%, in the 400 results 6% 
 side; the country filter is a user option ("restrict to UK sources"), not a default,
 because the product wants to widen exposure to global thinking.** Order comparison
 under both settings (`policy_gt.py --set specific --docs 400 --paraphrases
-[--source-country UK]`): snowball 5.8% at 25 global, 9.9% UK-only; relevance 3.5%
-and 4.6%; pool ceiling 8.9% and 16.0%. Caveat: this instrument is built from gov.uk
+[--source-country UK]`): snowball 5.8% at 25 global, 9.6% UK-only; relevance 3.5%
+and 4.6%; pool ceiling 8.6% and 15.4% (rescored 2026-10-08 after fencing fetched
+documents by the cutoff; write-up, production findings 6). Caveat: this instrument is built from gov.uk
 strategies, so it rewards UK-only by construction; a fair global measure needs an
 international target set (OECD, WHO, EU, or several countries' strategies on one
 topic).
