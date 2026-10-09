@@ -1,0 +1,36 @@
+{
+  "status": 200,
+  "n_results": 1,
+  "record": {
+    "policy_document_id": "govuk-b1e2465b51126438862aa25a92cbe6b3",
+    "title": "10 Year Health Plan for England: fit for the future",
+    "published_on": "2025-07-03",
+    "es_score": null,
+    "citation_count": 504,
+    "source_country": "UK",
+    "n_cites_policy": 67
+  },
+  "cites_policy_sample": [
+    {
+      "overton_id": "carequalityuk-93634539bec84a1b703d331d4b39f0e4",
+      "title": "Review of CQC's single assessment framework and its implementation"
+    },
+    {
+      "overton_id": "ukparliament_select-5edc3fba0d497803707dbf6568d84b86",
+      "title": "First Report - The New Hospital Programme"
+    },
+    {
+      "overton_id": "commonwealthfund-703748eca977ecab44037985b5933e36",
+      "title": "Mirror, Mirror 2021: Reflecting Poorly"
+    },
+    {
+      "overton_id": "onsgovuk-a4df2e86307f4c8339584c21b12051f0",
+      "title": "Public service productivity, UK: 1997 to 2022"
+    },
+    {
+      "overton_id": "healthfoundation-31d6cf36c01158b4b2b1a6487f4e2bb3",
+      "title": "Health Equity in England: The Marmot Review 10 Years On"
+    }
+  ],
+  "id_matches": true
+}

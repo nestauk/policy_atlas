@@ -1,0 +1,4840 @@
+{
+ "question": "Interventions to improve early years attainment",
+ "texts": [
+  "Interventions to improve early years attainment",
+  "What interventions are effective in improving educational attainment and developmental outcomes among children in the early years?",
+  "Which early childhood programs, teaching approaches, or support services help young children achieve better learning outcomes and prepare for school?"
+ ],
+ "result_lists": [
+  [
+   {
+    "policy_document_id": "ukparliament_select-8c11dd2b346d7a33edbd3e9a9113a8ae",
+    "title": "Professor Catherine Davies (Professor of Language Development at University of Leeds) (EYS0028)",
+    "translated_title": "",
+    "published_on": "2025-11-11",
+    "es_score": 0.9067972,
+    "citation_count": 0,
+    "source": {
+     "title": "UK Parliament Select Committee Publications",
+     "type": "government",
+     "country": "UK"
+    },
+    "cites": {
+     "policy": [
+      {
+       "overton_id": "nationalauditofficeuk-e67007545fd586db7fda1cd82799e382"
+      },
+      {
+       "overton_id": "nesta-3aad74cd2810be5aefe0da66794f9c8a"
+      },
+      {
+       "overton_id": "govuk-f86a1e5ce6df736b0b0ba086abda8bdb"
+      },
+      {
+       "overton_id": "govuk-61b0381e76df7197875fd64efdd3f236"
+      },
+      {
+       "overton_id": "govuk-18c386c43fe4f85c00d21411990b99bd"
+      },
+      {
+       "overton_id": "lsecase-68b36a12c998f03efd30546cb9233f3d"
+      }
+     ]
+    }
+   },
+   {
+    "policy_document_id": "esmeefairbairn-ea142a6d47703db2c53085b176c9ec02",
+    "title": "Fade or Flourish",
+    "translated_title": "",
+    "published_on": "2006-07-05",
+    "es_score": 0.89650893,
+    "citation_count": 0,
+    "source": {
+     "title": "Esm\u00e9e Fairbairn Foundation",
+     "type": "think tank",
+     "country": "UK"
+    },
+    "cites": {
+     "policy": [
+      {
+       "overton_id": "nber-81e98a8feb17431561ec689673378fff"
+      },
+      {
+       "overton_id": "socialmarketfoundation-d0fdc0437aaea5822b1acb6b84f6816e"
+      }
+     ]
+    }
+   },
+   {
+    "policy_document_id": "ukparliament_select-0ed0f2cbe0ef1d205ff8dc75b9351194",
+    "title": "Response to this report 9th Report - Tackling disadvantage in the early years",
+    "translated_title": "",
+    "published_on": "2019-04-05",
+    "es_score": 0.8860645,
+    "citation_count": 0,
+    "source": {
+     "title": "UK Parliament Select Committee Publications",
+     "type": "government",
+     "country": "UK"
+    },
+    "cites": {
+     "policy": [
+      {
+       "overton_id": "govuk-00a91efc894cce7b57509e34c8de1a01"
+      },
+      {
+       "overton_id": "govuk-0d1a8a185140b3f5605d32aaed580bca"
+      },
+      {
+       "overton_id": "govuk-0cea0c24a7e4bc89f084ffdc1bbf51ec"
+      },
+      {
+       "overton_id": "govuk-1619c3d6690235ca84d7e1808ee0e75f"
+      }
+     ]
+    }
+   },
+   {
+    "policy_document_id": "ukparliament_select-ef635032c8931d9dd4d215baa116d9ea",
+    "title": "Early Education and Childcare Coalition (IEDO0019)",
+    "translated_title": "",
+    "published_on": "2025-01-13",
+    "es_score": 0.8859944,
+    "citation_count": 1,
+    "source": {
+     "title": "UK Parliament Select Committee Publications",
+     "type": "government",
+     "country": "UK"
+    },
+    "cites": {
+     "policy": [
+      {
+       "overton_id": "educationpolicyinstitute-35a5ca99d17585d929f49ed92ec9d6db"
+      },
+      {
+       "overton_id": "nationalauditofficeuk-04253e854636b7f28207aa84e402b5f6"
+      },
+      {
+       "overton_id": "educationpolicyinstitute-699f8e4a8b200d5c50a02c0933fcd16d"
+      },
+      {
+       "overton_id": "educationpolicyinstitute-0cc3fe9318360f0fd8c4ffdc9c7fb146"
+      },
+      {
+       "overton_id": "ifs-829fe885f794f838aaecff32fee9959d"
+      },
+      {
+       "overton_id": "ifs-4af681244ef4db046c394dee390c145c"
+      },
+      {
+       "overton_id": "ifs-3cf24c72611b2eed53f56d86da742f69"
+      },
+      {
+       "overton_id": "ifs-ef5606e2b73d8f721b6a7778b56b06f9"
+      },
+      {
+       "overton_id": "suttontrust-71d53ffa124bf9f3edafe177b25e75d2"
+      }
+     ]
+    }
+   },
+   {
+    "policy_document_id": "govuk-7f2c4668c13f531ea0d1e6bd909d45a3",
+    "title": "The early education pilot for 2-year-old children: age 5 follow up",
+    "translated_title": "",
+    "published_on": "2013-03-07",
+    "es_score": 0.8838685,
+    "citation_count": 1,
+    "source": {
+     "title": "The UK Government",
+     "type": "government",
+     "country": "UK"
+    },
+    "cites": {
+     "policy": [
+      {
+       "overton_id": "ifs-d1563001274f83b46febd4ed12e4332c"
+      },
+      {
+       "overton_id": "ifs-e991143860f5f3aadcb12b8cd3f23f9a"
+      }
+     ]
+    }
+   },
+   {
+    "policy_document_id": "frontiereconomics-f5c4d0762d1faee90b334af6a823d909",
+    "title": "Study of Early Education and Development (SEED): The potential value for money of early education",
+    "translated_title": "",
+    "published_on": "2017-07-11",
+    "es_score": 0.8819162,
+    "citation_count": 0,
+    "source": {
+     "title": "Frontier Economics",
+     "type": "think tank",
+     "country": "UK"
+    },
+    "cites": {
+     "policy": [
+      {
+       "overton_id": "onsgovuk-56a234db3511da1e842453d3fe72db6a"
+      },
+      {
+       "overton_id": "npc-c3ee4c8dd9c0bdef32f287c6795b0f88"
+      },
+      {
+       "overton_id": "govuk-9d4a543ff95ae66e0dcd5b82b3ad8fae"
+      },
+      {
+       "overton_id": "ifs-c0e2efa2a78ce4e5e7634ce56456bcfa"
+      },
+      {
+       "overton_id": "ashorguk-3e5b465bbc15dd9067b39ae938f0325a"
+      },
+      {
+       "overton_id": "govuk-1e754697e27b230c7ed0ebc54fe1d931"
+      },
+      {
+       "overton_id": "ifs-71815b5dd5c99c47162c1d45821d522e"
+      },
+      {
+       "overton_id": "govuk-92160512079fc6c90ba1348e35d83b11"
+      },
+      {
+       "overton_id": "govuk-eb2139028cdd9b8621f2b3082bac3c2f"
+      },
+      {
+       "overton_id": "ifs-56cdd52e239b270feaf9b692415c3ed6"
+      },
+      {
+       "overton_id": "nationalauditofficeuk-6c9ed4578412706918e665ae055da9cd"
+      },
+      {
+       "overton_id": "govuk-9e2244bb7afd00f034ec22fb6c79128c"
+      },
+      {
+       "overton_id": "kingsfund-c9a92beb4b9c9ec26bb4bde672d1cd9e"
+      }
+     ]
+    }
+   },
+   {
+    "policy_document_id": "centreforsocialjustice-da440956dc5778c23a7c16a61882ecf8",
+    "title": "Getting in Early: Primary Schools and Early Intervention",
+    "translated_title": "",
+    "published_on": "2008-12-02",
+    "es_score": 0.8809066,
+    "citation_count": 0,
+    "source": {
+     "title": "Centre for Social Justice",
+     "type": "think tank",
+     "country": "UK"
+    },
+    "cites": {
+     "policy": [
+      {
+       "overton_id": "pubmedcentral-5a03b2d4521f518c8ef1da2d5b155e27"
+      },
+      {
+       "overton_id": "ifs-b014d76a55cf9a1fb8bc80c317e78bd7"
+      },
+      {
+       "overton_id": "josephrowntreefoundation-0718c97d949987e3a0b339f0f9b53529"
+      }
+     ]
+    }
+   },
+   {
+    "policy_document_id": "govuk-7c40cc228d2e172cfe9ac2c714b25bb1",
+    "title": "Early education: potential value for money",
+    "translated_title": "",
+    "published_on": "2017-07-12",
+    "es_score": 0.880854,
+    "citation_count": 2,
+    "source": {
+     "title": "The UK Government",
+     "type": "government",
+     "country": "UK"
+    },
+    "cites": {
+     "policy": [
+      {
+       "overton_id": "onsgovuk-56a234db3511da1e842453d3fe72db6a"
+      },
+      {
+       "overton_id": "ashorguk-3e5b465bbc15dd9067b39ae938f0325a"
+      },
+      {
+       "overton_id": "npc-c3ee4c8dd9c0bdef32f287c6795b0f88"
+      },
+      {
+       "overton_id": "ifs-c0e2efa2a78ce4e5e7634ce56456bcfa"
+      },
+      {
+       "overton_id": "govuk-eb2139028cdd9b8621f2b3082bac3c2f"
+      },
+      {
+       "overton_id": "ifs-56cdd52e239b270feaf9b692415c3ed6"
+      },
+      {
+       "overton_id": "ifs-71815b5dd5c99c47162c1d45821d522e"
+      },
+      {
+       "overton_id": "nationalauditofficeuk-6c9ed4578412706918e665ae055da9cd"
+      },
+      {
+       "overton_id": "govuk-1e754697e27b230c7ed0ebc54fe1d931"
+      },
+      {
+       "overton_id": "govuk-9d4a543ff95ae66e0dcd5b82b3ad8fae"
+      },
+      {
+       "overton_id": "govuk-92160512079fc6c90ba1348e35d83b11"
+      },
+      {
+       "overton_id": "govuk-9e2244bb7afd00f034ec22fb6c79128c"
+      },
+      {
+       "overton_id": "kingsfund-c9a92beb4b9c9ec26bb4bde672d1cd9e"
+      }
+     ]
+    }
+   },
+   {
+    "policy_document_id": "deptofsocialservicesau-0cac6cfb8debefed14a1ecacdbab98ca",
+    "title": "ANONYMOUS 17006 - New submission from Early Years Strategy - Public Submissions",
+    "translated_title": "",
+    "published_on": "2023-05-09",
+    "es_score": 0.880334,
+    "citation_count": 0,
+    "source": {
+     "title": "Australian Government Department of Social Services",
+     "type": "government",
+     "country": "Australia"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "lsecase-0b02fcd60833f11750e59e8c6a361c30",
+    "title": "Early Childhood Interventions and Outcomes (summarised in CASEreport 5, 'Persistent Poverty and Lifetime Inequality')",
+    "translated_title": "",
+    "published_on": "1999-07-02",
+    "es_score": 0.8801662,
+    "citation_count": 0,
+    "source": {
+     "title": "Centre for Analysis of Social Exclusion",
+     "type": "think tank",
+     "country": "UK"
+    },
+    "cites": {
+     "policy": [
+      {
+       "overton_id": "randcorporation-84c5520a7f8fa93bdcc474641360fbd9"
+      }
+     ]
+    }
+   },
+   {
+    "policy_document_id": "ukparliament_select-1afba646c63cd890a242c4c0bfd6f1f7",
+    "title": "[THIS TITLE IS BROKEN AND HAS BEEN REMOVED]",
+    "translated_title": "[THIS TITLE IS BROKEN AND HAS BEEN REMOVED]",
+    "published_on": "2025-11-18",
+    "es_score": 0.88007426,
+    "citation_count": 0,
+    "source": {
+     "title": "UK Parliament Select Committee Publications",
+     "type": "government",
+     "country": "UK"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "ukparliament_select-46bad658d4878166f48dccb1829f2215",
+    "title": "Education Endowment Foundation (EYS0092)",
+    "translated_title": "",
+    "published_on": "2025-11-04",
+    "es_score": 0.87962115,
+    "citation_count": 0,
+    "source": {
+     "title": "UK Parliament Select Committee Publications",
+     "type": "government",
+     "country": "UK"
+    },
+    "cites": {
+     "policy": [
+      {
+       "overton_id": "educationpolicyinstitute-a5002309eaa07af66e40f72cbe7de62f"
+      },
+      {
+       "overton_id": "nesta-07095f12818393576302471cd3863c63"
+      },
+      {
+       "overton_id": "neweconomicsfoundation-fc6d1c84a6eb7c01bc42976bdccaf6f2"
+      },
+      {
+       "overton_id": "ifs-3cf24c72611b2eed53f56d86da742f69"
+      },
+      {
+       "overton_id": "educationpolicyinstitute-8f997247a510143b9b9ea7b83e103387"
+      },
+      {
+       "overton_id": "educationpolicyinstitute-25e8abe89140e650a6df901475dcf96b"
+      },
+      {
+       "overton_id": "govuk-c530af64d30fecb0bf3cc47312598bf2"
+      },
+      {
+       "overton_id": "ippr-a28831967c918ddc7239b25d04a3041b"
+      },
+      {
+       "overton_id": "govuk-b43917da04d70d5da72fd5bb91f56ba5"
+      },
+      {
+       "overton_id": "govuk-1412a911f5a2574a212e836fd7df607a"
+      },
+      {
+       "overton_id": "govuk-189ebf2a24dbe4f1c84e39fb54e474df"
+      },
+      {
+       "overton_id": "suttontrust-350fea816cda2590a88d151c3dd97654"
+      }
+     ]
+    }
+   },
+   {
+    "policy_document_id": "govuk-7938b177442c86cfdb461835ef94fc3f",
+    "title": "Pre-school influences on children and young people\u2019s outcomes",
+    "translated_title": "",
+    "published_on": "2015-06-25",
+    "es_score": 0.87781656,
+    "citation_count": 7,
+    "source": {
+     "title": "The UK Government",
+     "type": "government",
+     "country": "UK"
+    },
+    "cites": {
+     "policy": [
+      {
+       "overton_id": "govuk-91cf5dce33d3b57577f80bc4c7ca1072"
+      },
+      {
+       "overton_id": "govdeptsbrazil-24a933ed081d8d38c7a6610b323b391a"
+      },
+      {
+       "overton_id": "opregovus-f3a5b93e24d8f11a4c1a23de2e81f78b"
+      },
+      {
+       "overton_id": "nzcernz-892c8abfffb74387392995285f2c08ec"
+      },
+      {
+       "overton_id": "unesco-596eabb33d3ffeebf0e6468b9622d8d2"
+      },
+      {
+       "overton_id": "govuk-417685b0630d49fda24d5422f3d397de"
+      },
+      {
+       "overton_id": "nationalauditofficeuk-3a155cb8901a23c72d6637c1a7b1161a"
+      },
+      {
+       "overton_id": "govuk-c5338a9fcb65e63c5d1bdc365db2f22c"
+      },
+      {
+       "overton_id": "ifs-71815b5dd5c99c47162c1d45821d522e"
+      },
+      {
+       "overton_id": "oecddiscovery-3bea96e4715881095e77d04fea797482"
+      }
+     ]
+    }
+   },
+   {
+    "policy_document_id": "nationalauditofficeuk-3a155cb8901a23c72d6637c1a7b1161a",
+    "title": "Delivering the free entitlement to education for three- and four-year-olds (NAO) Report",
+    "translated_title": "",
+    "published_on": "2012-01-31",
+    "es_score": 0.8775389,
+    "citation_count": 23,
+    "source": {
+     "title": "National Audit Office",
+     "type": "government",
+     "country": "UK"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "ukparliament_select-5db2de1bd5d07d8fdfbc904665b24352",
+    "title": "Written evidence submitted by: Education Endowment Foundation (EYS0154)",
+    "translated_title": "",
+    "published_on": "2026-03-10",
+    "es_score": 0.8768152,
+    "citation_count": 0,
+    "source": {
+     "title": "UK Parliament Select Committee Publications",
+     "type": "government",
+     "country": "UK"
+    },
+    "cites": {
+     "policy": [
+      {
+       "overton_id": "ifs-acdd978640538e2cd02c3170d3fe2673"
+      },
+      {
+       "overton_id": "ippr-a28831967c918ddc7239b25d04a3041b"
+      },
+      {
+       "overton_id": "educationpolicyinstitute-a5002309eaa07af66e40f72cbe7de62f"
+      },
+      {
+       "overton_id": "govuk-93c14c113a83e30fe800a3aebb50654a"
+      },
+      {
+       "overton_id": "govuk-dc865e0581b9dc8ea4cb3da231c8e108"
+      }
+     ]
+    }
+   },
+   {
+    "policy_document_id": "worldbank-5a17f6a9265c02cc88333ac75a4a3fee",
+    "title": "Getting an Early Start on Early Child Development",
+    "translated_title": "",
+    "published_on": "2012-08-13",
+    "es_score": 0.8766216,
+    "citation_count": 1,
+    "source": {
+     "title": "World Bank",
+     "type": "igo",
+     "country": "IGO"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "edulinksusa-449049ac137dbea2076b8d1a90783489",
+    "title": "Later Impacts of Early Childhood Interventions",
+    "translated_title": "",
+    "published_on": "2015-03-01",
+    "es_score": 0.8766004,
+    "citation_count": 0,
+    "source": {
+     "title": "EduLinks",
+     "type": "government",
+     "country": "USA"
+    },
+    "cites": {
+     "policy": [
+      {
+       "overton_id": "nber-81e98a8feb17431561ec689673378fff"
+      },
+      {
+       "overton_id": "worldbank-8e0018ec9bd73086ccebca794ce2d747"
+      },
+      {
+       "overton_id": "nber-9742845ec2f7491eb4f15a81c5961d64"
+      },
+      {
+       "overton_id": "nber-742e91e680ff95cfdcfb42c46e55d8a3"
+      },
+      {
+       "overton_id": "worldbank-739e81124e1d23ea05c288051fc9425b"
+      },
+      {
+       "overton_id": "worldbank-7c4a788bb6d51f2664aa169a9f7980f0"
+      },
+      {
+       "overton_id": "nber-b98da5f55e15912530f03aceaa836186"
+      },
+      {
+       "overton_id": "unicef-e308ce096106ac278e9f9782feb71d48"
+      },
+      {
+       "overton_id": "worldbank-9a0366275b68df4d529cabb78abd7807"
+      },
+      {
+       "overton_id": "iadb-52d374e3fca8997d06fdfa6a0b8b810d"
+      },
+      {
+       "overton_id": "worldbank-ab162cf35a3e3475c2703a55c093e11a"
+      },
+      {
+       "overton_id": "worldbank-590ba58b7eed94c4669f4d2bba9f77cd"
+      },
+      {
+       "overton_id": "randcorporation-451514a52ee98ad1bdc6aac9b4460a1b"
+      },
+      {
+       "overton_id": "ifpri-3e0d14db48a1d08915f545ca316d1bad"
+      },
+      {
+       "overton_id": "paho-f2e685e03542e6ea643b12ec9814d952"
+      },
+      {
+       "overton_id": "worldbank-6eedf6f2e47e547ac0e0a6733443d4ee"
+      },
+      {
+       "overton_id": "worldbank-ebec5a02cf3d0f956d6a266d850b50ed"
+      },
+      {
+       "overton_id": "worldbank-9020c6c3191d47a8cc84f869d60f738e"
+      },
+      {
+       "overton_id": "ifs-d5b936b4247884133166b6ac875918cf"
+      }
+     ]
+    }
+   },
+   {
+    "policy_document_id": "legislationgovuk-4eacee4c732c3a2cae239c645e49a3a9",
+    "title": "The Early Years Foundation Stage (Learning and Development Requirements) (Amendment) Order 2012",
+    "translated_title": "",
+    "published_on": "2012-03-29",
+    "es_score": 0.8762608,
+    "citation_count": 0,
+    "source": {
+     "title": "Legislation.gov.uk",
+     "type": "government",
+     "country": "UK"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "europa-b1214c0ef736961594dea333ded1318d",
+    "title": "Study on the effective use of early childhood education and care (ECEC) in preventing early school leaving (ESL) : annex 1 : literature review.",
+    "translated_title": "",
+    "published_on": "2014-11-24",
+    "es_score": 0.8761697,
+    "citation_count": 1,
+    "source": {
+     "title": "Publications Office of the European Union",
+     "type": "government",
+     "country": "EU"
+    },
+    "cites": {
+     "policy": [
+      {
+       "overton_id": "europa-527cc790d7cda01fc5ef4ef9b87e4cfe"
+      },
+      {
+       "overton_id": "europa-eea2d3a81c7377ab82e3a403b9ed3e3a"
+      },
+      {
+       "overton_id": "oecddiscovery-5c6e0adeda29294f1e4415452e118ed3"
+      },
+      {
+       "overton_id": "oecddiscovery-316d8674e94ae136aa18370a2d9a9efc"
+      },
+      {
+       "overton_id": "europa-0c0f2eccdbec085952f5e587f44532f2"
+      },
+      {
+       "overton_id": "deptofsocialservicesau-da397b8b2ad9bee58fa31adbbbdd31a4"
+      },
+      {
+       "overton_id": "opregovus-e04ae3bf90b9773361315efd86a09935"
+      },
+      {
+       "overton_id": "worldbank-070aeafc97f5c11648a109fda7294c13"
+      },
+      {
+       "overton_id": "worldbank-ce176b8a9b31f5284161cc1bfb146242"
+      },
+      {
+       "overton_id": "eucommission-b238e358f157ac4c8820e0aff2bce3be"
+      },
+      {
+       "overton_id": "unicef_innocenti-63d7cdb58071dda7122b70a6da005c67"
+      },
+      {
+       "overton_id": "izade-c9eebffd49625ebcbfe6c72cf27a9c7c"
+      },
+      {
+       "overton_id": "izade-55b7099d577bb03195c9b79d907f6c92"
+      },
+      {
+       "overton_id": "izade-e61b66aead86d1aa2f980068dc827a74"
+      },
+      {
+       "overton_id": "esridublin-842c7c94a5adc0c23798ce1a02bf53d7"
+      },
+      {
+       "overton_id": "unesco-9faab147a81c51de6823a017b384137a"
+      },
+      {
+       "overton_id": "unesco-a58a1574da08dca70ec87345e014a03d"
+      },
+      {
+       "overton_id": "bancoes-d58251ac845a364daccd092bb10b90b0"
+      },
+      {
+       "overton_id": "bernardvanleer-caa9765b52bed7ccc971777438bdfbcd"
+      },
+      {
+       "overton_id": "worldbank-594eb42088acfa514e2392fd1606267a"
+      },
+      {
+       "overton_id": "unesco-c325aef6083f118258435d57016e52c4"
+      },
+      {
+       "overton_id": "unesco-bcee3260f2ff6567b3983bb07a320a59"
+      },
+      {
+       "overton_id": "oecddiscovery-45c0a0a116a8a288cb88eac5cf2ac294"
+      },
+      {
+       "overton_id": "oecddiscovery-53a0f4de7a01e516699fc234ee830702"
+      },
+      {
+       "overton_id": "oecddiscovery-2994e635d63c1adc9348a6c0650686df"
+      },
+      {
+       "overton_id": "unicef_innocenti-80df767024e7b02d188c20754a139b69"
+      },
+      {
+       "overton_id": "brookings-bf034331d1aad86060d11ece905def4c"
+      },
+      {
+       "overton_id": "josephrowntreefoundation-677b5e537a68fa871f86c19d0074f2cd"
+      },
+      {
+       "overton_id": "governmentoflithuania-63fc61424729cf934ba0c0ad0b0a9719"
+      },
+      {
+       "overton_id": "unicef_innocenti-f38828489deee038cab4aaad19bd76d4"
+      },
+      {
+       "overton_id": "unesco-df6b0bfe247d01e0f2982fa31125b683"
+      },
+      {
+       "overton_id": "oecddiscovery-dafcb6f72101c6539de4aae3ca40ca4a"
+      },
+      {
+       "overton_id": "oecddiscovery-65ab1130525b00e1ff2e15b822685a7c"
+      },
+      {
+       "overton_id": "oecddiscovery-7c2c76cd5611f51edefa6deb2a4f5c3b"
+      },
+      {
+       "overton_id": "oecddiscovery-e68cf578bdb5a620e970e5c058fcc412"
+      },
+      {
+       "overton_id": "oecddiscovery-ceab66696e320bb9e4d9f73ef533db91"
+      },
+      {
+       "overton_id": "oecddiscovery-7d19c1be01c3d85000d45d87e09a6e93"
+      },
+      {
+       "overton_id": "oecddiscovery-32cd91fa241716f2579f13714bbfa9a5"
+      },
+      {
+       "overton_id": "izade-f97f21c5e3934a7da64501a5c991e18c"
+      },
+      {
+       "overton_id": "izade-2f39130978a007edcf108d3320e5eb32"
+      },
+      {
+       "overton_id": "izade-565836f9706c64456c93bde08c8ab3df"
+      },
+      {
+       "overton_id": "izade-40e8fce4a774ff9e65d62ba9d3a698d3"
+      }
+     ]
+    }
+   },
+   {
+    "policy_document_id": "northernirelandgovuk-7c37c65497fde87e85a3c590dd338777",
+    "title": "Learning to Learn - Framework document 2012",
+    "translated_title": "",
+    "published_on": "2015-06-19",
+    "es_score": 0.8754126,
+    "citation_count": 0,
+    "source": {
+     "title": "Northern Ireland Executive",
+     "type": "government",
+     "country": "UK"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "oecddiscovery-71cecf31c4c02b5d4ee46cdbc661527d",
+    "title": "\u00bfLlega la educaci\u00f3n infantil a aquellos que m\u00e1s la necesitan?",
+    "translated_title": "Does early childhood education reach those who need it most?",
+    "published_on": "2014-06-01",
+    "es_score": 0.87475586,
+    "citation_count": 2,
+    "source": {
+     "title": "OECD",
+     "type": "igo",
+     "country": "IGO"
+    },
+    "cites": {
+     "policy": [
+      {
+       "overton_id": "oecddiscovery-45c0a0a116a8a288cb88eac5cf2ac294"
+      }
+     ]
+    }
+   },
+   {
+    "policy_document_id": "europa-a3cdb139eaffbf82c519039c455c29bd",
+    "title": "Study on the effective use of early childhood education and care (ECEC) in preventing early school leaving (ESL) : executive summary in English.",
+    "translated_title": "",
+    "published_on": "2014-11-24",
+    "es_score": 0.8741964,
+    "citation_count": 0,
+    "source": {
+     "title": "Publications Office of the European Union",
+     "type": "government",
+     "country": "EU"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "govuk-920f783a80fa0447b01907e4efb3bd93",
+    "title": "Early years evidence pack",
+    "translated_title": "",
+    "published_on": "2011-07-01",
+    "es_score": 0.8736348,
+    "citation_count": 1,
+    "source": {
+     "title": "The UK Government",
+     "type": "government",
+     "country": "UK"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "randcorporation-6bc63fa02750216d418ef3809e807db9",
+    "title": "How Early Childhood Education and Care Can Help to Tackle the Impact of Childhood Disadvantage",
+    "translated_title": "",
+    "published_on": "2018-08-20",
+    "es_score": 0.8735329,
+    "citation_count": 0,
+    "source": {
+     "title": "RAND Corporation",
+     "type": "think tank",
+     "country": "USA"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "localgovassoc-82b98cf13c4a1222f7a2e043f855fccf",
+    "title": "Achieving the best start in life: Research to support a plan for partners",
+    "translated_title": "",
+    "published_on": "2026-01-28",
+    "es_score": 0.87336695,
+    "citation_count": 0,
+    "source": {
+     "title": "Local Government Association",
+     "type": "government",
+     "country": "UK"
+    },
+    "cites": {
+     "policy": [
+      {
+       "overton_id": "govuk-60bb3f58e3457bd1f4d73b9edfcde972"
+      },
+      {
+       "overton_id": "localgovassoc-5de38a9a7156f4f80dc4d36a4dce4abe"
+      },
+      {
+       "overton_id": "ukparliament_select-ef635032c8931d9dd4d215baa116d9ea"
+      },
+      {
+       "overton_id": "govuk-b3ac9e9bafb93b882a6bb4e28830f66f"
+      },
+      {
+       "overton_id": "ifs-ac56e0a4567167a2ed13e7b1adb276f9"
+      },
+      {
+       "overton_id": "ukparliament-0a5598edc73c3a4af4ac0b4cf7ef9d9b"
+      },
+      {
+       "overton_id": "govuk-704d96975f902909194d7a28283f1908"
+      },
+      {
+       "overton_id": "govuk-076bc584a2604e616ad5997d50e75121"
+      },
+      {
+       "overton_id": "govuk-18c386c43fe4f85c00d21411990b99bd"
+      },
+      {
+       "overton_id": "govuk-96b6294789816b39b3ad095aa0eb4145"
+      },
+      {
+       "overton_id": "govuk-c08c159d3ab41f9cd65dae0c8803364d"
+      },
+      {
+       "overton_id": "kingsfund-6a19c378160cd716366661bee315be01"
+      },
+      {
+       "overton_id": "govuk-91cf5dce33d3b57577f80bc4c7ca1072"
+      },
+      {
+       "overton_id": "govuk-5ea770d090e5b4b13ac1549ca0ff15d1"
+      },
+      {
+       "overton_id": "govuk-61b0381e76df7197875fd64efdd3f236"
+      }
+     ]
+    }
+   },
+   {
+    "policy_document_id": "ugippie-fd70a4a9d1fd06ba37824c2c8a639e2e",
+    "title": "Breaking the Cycle of Deprivation: An Experimental Evaluation of an Early Childhood Intervention",
+    "translated_title": "",
+    "published_on": "2012-04-26",
+    "es_score": 0.8729248,
+    "citation_count": 0,
+    "source": {
+     "title": "UCD Geary Institute for Public Policy",
+     "type": "think tank",
+     "country": "Ireland"
+    },
+    "cites": {
+     "policy": [
+      {
+       "overton_id": "childtrends-3cb6649832a51f72552136ef0c57f435"
+      }
+     ]
+    }
+   },
+   {
+    "policy_document_id": "smithinstitute-e5ac5c8fc22ba8e18db6e8b98f7ca16f",
+    "title": "Getting in Early: Primary schools and early intervention",
+    "translated_title": "",
+    "published_on": "2008-11-24",
+    "es_score": 0.8728707,
+    "citation_count": 5,
+    "source": {
+     "title": "Smith Institute",
+     "type": "think tank",
+     "country": "UK"
+    },
+    "cites": {
+     "policy": [
+      {
+       "overton_id": "pubmedcentral-5a03b2d4521f518c8ef1da2d5b155e27"
+      },
+      {
+       "overton_id": "ifs-b014d76a55cf9a1fb8bc80c317e78bd7"
+      },
+      {
+       "overton_id": "josephrowntreefoundation-0718c97d949987e3a0b339f0f9b53529"
+      }
+     ]
+    }
+   },
+   {
+    "policy_document_id": "brookings-b6e1cdaf0cdd51f20d7630b23e733679",
+    "title": "Invest in programs that boost children\u2019s learning and development",
+    "translated_title": "",
+    "published_on": "2021-10-05",
+    "es_score": 0.8728329,
+    "citation_count": 1,
+    "source": {
+     "title": "Brookings Institution",
+     "type": "think tank",
+     "country": "USA"
+    },
+    "cites": {
+     "policy": [
+      {
+       "overton_id": "brookings-c947b025fe57913b488a2ebe7d420b57"
+      },
+      {
+       "overton_id": "brookings-8f2dae5fd0f5b096254d150ab4ec232a"
+      },
+      {
+       "overton_id": "brookings-b1f43564808d62b84faf834ec6f382a8"
+      }
+     ]
+    }
+   },
+   {
+    "policy_document_id": "oecddiscovery-d71895fe49fb35215f9486e78f62e9f4",
+    "title": "Erhalten die Kinder Vorschulbildung, die sie am dringendsten ben\u00f6tigen?",
+    "translated_title": "Are the children receiving the preschool education they most need?",
+    "published_on": "2014-06-01",
+    "es_score": 0.8725934,
+    "citation_count": 0,
+    "source": {
+     "title": "OECD",
+     "type": "igo",
+     "country": "IGO"
+    },
+    "cites": {
+     "policy": [
+      {
+       "overton_id": "oecddiscovery-2994e635d63c1adc9348a6c0650686df"
+      }
+     ]
+    }
+   },
+   {
+    "policy_document_id": "oecddiscovery-3169a6b0cb2219c39ef9a398960f1b64",
+    "title": "Attendance in early childhood education and care programmes and academic proficiencies at age 15",
+    "translated_title": "",
+    "published_on": "2020-01-31",
+    "es_score": 0.8719851,
+    "citation_count": 18,
+    "source": {
+     "title": "OECD",
+     "type": "igo",
+     "country": "IGO"
+    },
+    "cites": {
+     "policy": [
+      {
+       "overton_id": "oecddiscovery-4df0d22ab6fb81ddb7232fab1400516b"
+      },
+      {
+       "overton_id": "oecddiscovery-74c533fba2d899cffd1df19669b9f671"
+      },
+      {
+       "overton_id": "oecddiscovery-4bfdcbac3c8300afa2fe7f838ce3c19e"
+      },
+      {
+       "overton_id": "oecddiscovery-33039dbc403bfb187eecb07c4b334274"
+      },
+      {
+       "overton_id": "oecddiscovery-7d19c1be01c3d85000d45d87e09a6e93"
+      },
+      {
+       "overton_id": "oecddiscovery-6c0cce46348bd647f3b1e7bb408e6dc8"
+      },
+      {
+       "overton_id": "oecddiscovery-2bb80975e1d1bb7326330f0ce0b018fe"
+      },
+      {
+       "overton_id": "oecddiscovery-2b3ef6618812a23b9fc7209cda15e5c3"
+      },
+      {
+       "overton_id": "oecddiscovery-4b30f8496be50e1474f48f3df396dc3d"
+      },
+      {
+       "overton_id": "oecddiscovery-5d9f8d5ca49b087a6cd49b467217468b"
+      },
+      {
+       "overton_id": "oecddiscovery-3bea96e4715881095e77d04fea797482"
+      }
+     ]
+    }
+   },
+   {
+    "policy_document_id": "ifs-e2d1d83e11419968666ce4794744ced8",
+    "title": "Evaluation for impact",
+    "translated_title": "",
+    "published_on": "2025-03-25",
+    "es_score": 0.8718152,
+    "citation_count": 0,
+    "source": {
+     "title": "Institute for Fiscal Studies",
+     "type": "think tank",
+     "country": "UK"
+    },
+    "cites": {
+     "policy": [
+      {
+       "overton_id": "ifs-0d7792a81196b2cb62792a517f8f4d6d"
+      },
+      {
+       "overton_id": "ifs-19284686b94c9888a0b7611e3796b358"
+      }
+     ]
+    }
+   },
+   {
+    "policy_document_id": "ukparliament_select-fb3502a459dfac264e1e3100875b502e",
+    "title": "Prof Claire Crawford (Professor of Economics at UCL Centre for Education Policy & Equalising Opportunities), and Dr Laura Outhwaite (Principal Research Fellow at UCL Centre for Education Policy & Equalising Opportunities) (EYS0067)",
+    "translated_title": "",
+    "published_on": "2025-11-18",
+    "es_score": 0.8717632,
+    "citation_count": 0,
+    "source": {
+     "title": "UK Parliament Select Committee Publications",
+     "type": "government",
+     "country": "UK"
+    },
+    "cites": {
+     "policy": [
+      {
+       "overton_id": "ifs-3cf24c72611b2eed53f56d86da742f69"
+      },
+      {
+       "overton_id": "ifs-829fe885f794f838aaecff32fee9959d"
+      }
+     ]
+    }
+   },
+   {
+    "policy_document_id": "ifs-c6051a406bbd4de6aed8f32607902007",
+    "title": "Early childhood development: fostering economic inclusion right from the start",
+    "translated_title": "",
+    "published_on": "2016-02-26",
+    "es_score": 0.8716895,
+    "citation_count": 0,
+    "source": {
+     "title": "Institute for Fiscal Studies",
+     "type": "think tank",
+     "country": "UK"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "educationendowmentfoundation-1a2715664ad642275c71783512327471",
+    "title": "Closing the attainment gap: key lessons learned in the EEF \u2019s first six years",
+    "translated_title": "",
+    "published_on": "2018-01-22",
+    "es_score": 0.87104696,
+    "citation_count": 1,
+    "source": {
+     "title": "Education Endowment Foundation",
+     "type": "think tank",
+     "country": "UK"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "govuk-72050dbb3d6886f62398dbb3dcbeedcd",
+    "title": "Early years foundation stage (EYFS) 2021 reforms: evaluation",
+    "translated_title": "",
+    "published_on": "2023-10-27",
+    "es_score": 0.8705061,
+    "citation_count": 0,
+    "source": {
+     "title": "The UK Government",
+     "type": "government",
+     "country": "UK"
+    },
+    "cites": {
+     "policy": [
+      {
+       "overton_id": "govuk-91cf5dce33d3b57577f80bc4c7ca1072"
+      }
+     ]
+    }
+   },
+   {
+    "policy_document_id": "govuk-31b7ccb9629b458c54662cab67323e77",
+    "title": "Achieving and maintaining high quality early years provision: getting it right first time",
+    "translated_title": "",
+    "published_on": "2013-07-03",
+    "es_score": 0.87037665,
+    "citation_count": 0,
+    "source": {
+     "title": "The UK Government",
+     "type": "government",
+     "country": "UK"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "govuk-88d33d2df2d6d9eb6f8fd396626d152f",
+    "title": "Helping disadvantaged children start school",
+    "translated_title": "",
+    "published_on": "2014-04-03",
+    "es_score": 0.87002575,
+    "citation_count": 3,
+    "source": {
+     "title": "The UK Government",
+     "type": "government",
+     "country": "UK"
+    },
+    "cites": {
+     "policy": [
+      {
+       "overton_id": "govuk-dc3c512e075548c66c963b6fed120daf"
+      },
+      {
+       "overton_id": "josephrowntreefoundation-7a3ed4a68dffe81d96727be6e4cff3d3"
+      },
+      {
+       "overton_id": "govuk-c535f45bdba1ba54a36ce9df4ea169b5"
+      },
+      {
+       "overton_id": "govuk-91cf5dce33d3b57577f80bc4c7ca1072"
+      }
+     ]
+    }
+   },
+   {
+    "policy_document_id": "oecddiscovery-df212a36e6bc2272ace393de9a973655",
+    "title": "Quels sont les b\u00e9n\u00e9fices de l\u2019\u00e9ducation de la petite enfance ?",
+    "translated_title": "What are the benefits of early childhood education?",
+    "published_on": "2018-04-26",
+    "es_score": 0.8699639,
+    "citation_count": 0,
+    "source": {
+     "title": "OECD",
+     "type": "igo",
+     "country": "IGO"
+    },
+    "cites": {
+     "policy": [
+      {
+       "overton_id": "unesco-9012138a72c70ed01a3ea430f2674591"
+      },
+      {
+       "overton_id": "oecddiscovery-123eb680f5a210f15478e749f0ae2fe2"
+      },
+      {
+       "overton_id": "oecddiscovery-fea5eae81c8f9062191eecdbe5a27f7c"
+      },
+      {
+       "overton_id": "oecddiscovery-e9637e3ec0f82380390f836b3a35a334"
+      },
+      {
+       "overton_id": "oecddiscovery-352ca0bcdf2d543e293f2d5b7bd612e8"
+      },
+      {
+       "overton_id": "oecddiscovery-855682a7318df95dc71142de5ba91895"
+      },
+      {
+       "overton_id": "oecddiscovery-3be8a320b1d619b00548ebd589051cdd"
+      },
+      {
+       "overton_id": "oecddiscovery-e5e68709d7e65c9f72ee3ac72345fe85"
+      }
+     ]
+    }
+   },
+   {
+    "policy_document_id": "northernirelandgovuk-919fce82f5dcb56f4e98457f87246a52",
+    "title": "A framework for early years education and learning - October 2013",
+    "translated_title": "",
+    "published_on": "2015-06-19",
+    "es_score": 0.86993325,
+    "citation_count": 2,
+    "source": {
+     "title": "Northern Ireland Executive",
+     "type": "government",
+     "country": "UK"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "govwales-b800dcefc96ee1bc0615fb63c212fbd1",
+    "title": "Early Years Pupil Development Grant: guidance",
+    "translated_title": "",
+    "published_on": "2015-07-20",
+    "es_score": 0.8697325,
+    "citation_count": 0,
+    "source": {
+     "title": "The Welsh Government",
+     "type": "government",
+     "country": "UK"
+    },
+    "cites": {
+     "policy": [
+      {
+       "overton_id": "govwales-6bf0c8d0404d78d8447a6dd53b70bde7"
+      },
+      {
+       "overton_id": "educationendowmentfoundation-f364c492ae841c56a2790df8a5caa53a"
+      },
+      {
+       "overton_id": "govwales-a5ed2f1524f93960aaa348bbe351a3bf"
+      },
+      {
+       "overton_id": "govwales-d8e0d7f4071974fbb6ac2699af872a24"
+      }
+     ]
+    }
+   }
+  ],
+  [
+   {
+    "policy_document_id": "worldbank-ee6c304c47a43c02a0fb53edd9dc1134",
+    "title": "Impacts of Interventions during Early Childhood on Later Outcomes : A Systematic Review",
+    "translated_title": "",
+    "published_on": "2015-05-19",
+    "es_score": 0.9010326,
+    "citation_count": 1,
+    "source": {
+     "title": "World Bank",
+     "type": "igo",
+     "country": "IGO"
+    },
+    "cites": {
+     "policy": [
+      {
+       "overton_id": "nber-9742845ec2f7491eb4f15a81c5961d64"
+      },
+      {
+       "overton_id": "nber-b98da5f55e15912530f03aceaa836186"
+      },
+      {
+       "overton_id": "worldbank-ebec5a02cf3d0f956d6a266d850b50ed"
+      },
+      {
+       "overton_id": "nber-742e91e680ff95cfdcfb42c46e55d8a3"
+      },
+      {
+       "overton_id": "worldbank-35c0660bc50dc8780e0412d269c9fd78"
+      },
+      {
+       "overton_id": "worldbank-32274bf48d65666f9dcc5daec63a29f1"
+      },
+      {
+       "overton_id": "worldbank-ab162cf35a3e3475c2703a55c093e11a"
+      },
+      {
+       "overton_id": "worldbank-7c4a788bb6d51f2664aa169a9f7980f0"
+      },
+      {
+       "overton_id": "nber-81e98a8feb17431561ec689673378fff"
+      },
+      {
+       "overton_id": "unicef-e308ce096106ac278e9f9782feb71d48"
+      },
+      {
+       "overton_id": "ifpri-3e0d14db48a1d08915f545ca316d1bad"
+      },
+      {
+       "overton_id": "iadb-52d374e3fca8997d06fdfa6a0b8b810d"
+      },
+      {
+       "overton_id": "worldbank-590ba58b7eed94c4669f4d2bba9f77cd"
+      },
+      {
+       "overton_id": "randcorporation-451514a52ee98ad1bdc6aac9b4460a1b"
+      },
+      {
+       "overton_id": "paho-f2e685e03542e6ea643b12ec9814d952"
+      },
+      {
+       "overton_id": "worldbank-9020c6c3191d47a8cc84f869d60f738e"
+      },
+      {
+       "overton_id": "ifs-d5b936b4247884133166b6ac875918cf"
+      }
+     ]
+    }
+   },
+   {
+    "policy_document_id": "randcorporation-1b78c2c7dd94f8f6498e8014e346ab04",
+    "title": "Early Childhood Intervention Programs Save Money, Benefit Children",
+    "translated_title": "",
+    "published_on": "2005-10-18",
+    "es_score": 0.88365686,
+    "citation_count": 23,
+    "source": {
+     "title": "RAND Corporation",
+     "type": "think tank",
+     "country": "USA"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "edulinksusa-449049ac137dbea2076b8d1a90783489",
+    "title": "Later Impacts of Early Childhood Interventions",
+    "translated_title": "",
+    "published_on": "2015-03-01",
+    "es_score": 0.8715533,
+    "citation_count": 0,
+    "source": {
+     "title": "EduLinks",
+     "type": "government",
+     "country": "USA"
+    },
+    "cites": {
+     "policy": [
+      {
+       "overton_id": "nber-81e98a8feb17431561ec689673378fff"
+      },
+      {
+       "overton_id": "worldbank-8e0018ec9bd73086ccebca794ce2d747"
+      },
+      {
+       "overton_id": "nber-9742845ec2f7491eb4f15a81c5961d64"
+      },
+      {
+       "overton_id": "nber-742e91e680ff95cfdcfb42c46e55d8a3"
+      },
+      {
+       "overton_id": "worldbank-739e81124e1d23ea05c288051fc9425b"
+      },
+      {
+       "overton_id": "worldbank-7c4a788bb6d51f2664aa169a9f7980f0"
+      },
+      {
+       "overton_id": "nber-b98da5f55e15912530f03aceaa836186"
+      },
+      {
+       "overton_id": "unicef-e308ce096106ac278e9f9782feb71d48"
+      },
+      {
+       "overton_id": "worldbank-9a0366275b68df4d529cabb78abd7807"
+      },
+      {
+       "overton_id": "iadb-52d374e3fca8997d06fdfa6a0b8b810d"
+      },
+      {
+       "overton_id": "worldbank-ab162cf35a3e3475c2703a55c093e11a"
+      },
+      {
+       "overton_id": "worldbank-590ba58b7eed94c4669f4d2bba9f77cd"
+      },
+      {
+       "overton_id": "randcorporation-451514a52ee98ad1bdc6aac9b4460a1b"
+      },
+      {
+       "overton_id": "ifpri-3e0d14db48a1d08915f545ca316d1bad"
+      },
+      {
+       "overton_id": "paho-f2e685e03542e6ea643b12ec9814d952"
+      },
+      {
+       "overton_id": "worldbank-6eedf6f2e47e547ac0e0a6733443d4ee"
+      },
+      {
+       "overton_id": "worldbank-ebec5a02cf3d0f956d6a266d850b50ed"
+      },
+      {
+       "overton_id": "worldbank-9020c6c3191d47a8cc84f869d60f738e"
+      },
+      {
+       "overton_id": "ifs-d5b936b4247884133166b6ac875918cf"
+      }
+     ]
+    }
+   },
+   {
+    "policy_document_id": "stateofwashington-a56b524ff735f8369890864f35e7fc89",
+    "title": "How Do We Know Early Intervention Services Help Infants, Toddlers and Families?",
+    "translated_title": "",
+    "published_on": "2011-01-25",
+    "es_score": 0.865529,
+    "citation_count": 0,
+    "source": {
+     "title": "State of Washington",
+     "type": "government",
+     "country": "USA"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "worldbank-116761123194990080220d76af613d37",
+    "title": "World Development Report 2018",
+    "translated_title": "",
+    "published_on": "2018-01-01",
+    "es_score": 0.8616501,
+    "citation_count": 131,
+    "source": {
+     "title": "World Bank",
+     "type": "igo",
+     "country": "IGO"
+    },
+    "cites": {
+     "policy": [
+      {
+       "overton_id": "worldbank-ce176b8a9b31f5284161cc1bfb146242"
+      },
+      {
+       "overton_id": "worldbank-7c4a788bb6d51f2664aa169a9f7980f0"
+      },
+      {
+       "overton_id": "oecddiscovery-fc4786b68a1172d90231c191f8cb78a2"
+      },
+      {
+       "overton_id": "ifode-0818d01ecf69f0e3ad3b2faa3890a631"
+      },
+      {
+       "overton_id": "unesco-bef88f31925b491d799f833fcdbd3261"
+      },
+      {
+       "overton_id": "nber-a56a208a6300dea7cb5cc4b5a5001812"
+      },
+      {
+       "overton_id": "worldbank-8e0018ec9bd73086ccebca794ce2d747"
+      },
+      {
+       "overton_id": "worldbank-b38c7785ed9fb5ee1a1fbe722bb792dd"
+      },
+      {
+       "overton_id": "who-7ca59ba8aaf55fda8fc16618563579c7"
+      },
+      {
+       "overton_id": "nber-53e8d2f05b11eed6b0ebb255b9ffe244"
+      },
+      {
+       "overton_id": "worldbank-635de6c06b47f38337afcf120c630e5a"
+      },
+      {
+       "overton_id": "worldbank-9da395e682b9f30acf6bb845698b8495"
+      },
+      {
+       "overton_id": "oecddiscovery-f3c2d80d6f628d0ae3d52466a0568808"
+      },
+      {
+       "overton_id": "brookings-3d1e8508629a640a41ded11536bc43e5"
+      },
+      {
+       "overton_id": "iadb-5ad184f5299317b504ae4d9493e356c4"
+      },
+      {
+       "overton_id": "iadb-f20e66728ae094142f21a31a10f48adb"
+      },
+      {
+       "overton_id": "worldbank-81244a738c740e87a25404162727f438"
+      },
+      {
+       "overton_id": "unicef-f40800b7a05939f2cf6c7cca78a41cb1"
+      },
+      {
+       "overton_id": "worldbank-6eedf6f2e47e547ac0e0a6733443d4ee"
+      },
+      {
+       "overton_id": "worldbank-1cf1620993ddff7e8f869ded89a916ee"
+      },
+      {
+       "overton_id": "worldbank-ca327125274f6c977bf772072a735b0c"
+      },
+      {
+       "overton_id": "worldbank-11bc30da9bfa44668271221a8416741b"
+      },
+      {
+       "overton_id": "worldbank-d73d24c57fb059c7a6d09f9ab15ab63c"
+      },
+      {
+       "overton_id": "worldbank-9e14e2a63f46a03d3614b85f67bd3dd7"
+      },
+      {
+       "overton_id": "unesco-d1c894b12d5a9e2cbc1cc204bf496126"
+      }
+     ]
+    }
+   },
+   {
+    "policy_document_id": "worldbank-32274bf48d65666f9dcc5daec63a29f1",
+    "title": "Stepping Up Early Childhood Development : Investing in Young Children for High Returns",
+    "translated_title": "",
+    "published_on": "2015-01-05",
+    "es_score": 0.8589478,
+    "citation_count": 15,
+    "source": {
+     "title": "World Bank",
+     "type": "igo",
+     "country": "IGO"
+    },
+    "cites": {
+     "policy": [
+      {
+       "overton_id": "worldbank-108bc7f92df2431375c080ab4e28af86"
+      },
+      {
+       "overton_id": "worldbank-ebec5a02cf3d0f956d6a266d850b50ed"
+      },
+      {
+       "overton_id": "nber-17d900436575f05976b95ae11fda7e50"
+      },
+      {
+       "overton_id": "worldbank-1699c08d1c7f82d729e3692d12a5392a"
+      },
+      {
+       "overton_id": "worldbank-17df4d958f449fca720692c07f057b81"
+      },
+      {
+       "overton_id": "worldbank-24351d2e3f6540e8d087c5909d3d4c73"
+      },
+      {
+       "overton_id": "worldbank-32400513ae1d4ce720f8124fddbac8f5"
+      },
+      {
+       "overton_id": "worldbank-35c0660bc50dc8780e0412d269c9fd78"
+      },
+      {
+       "overton_id": "worldbank-94ae74e6b1b3c28857c9b076c8a22cd3"
+      },
+      {
+       "overton_id": "worldbank-f65404a01714026b689db25f2299511d"
+      },
+      {
+       "overton_id": "unicef-aad9ba755fafd69f5eaed8bd1e4b856c"
+      },
+      {
+       "overton_id": "unicef_innocenti-4ed9e5cb82127909cafeac6953d357ec"
+      },
+      {
+       "overton_id": "who-8bb6e5ab94896f662078bbe5175cb439"
+      },
+      {
+       "overton_id": "worldbank-89bb725fd5431bd0cf33a8d9d8e7660d"
+      },
+      {
+       "overton_id": "aspeninstitute-edff4138bffffc8b0de82d347b0090b3"
+      },
+      {
+       "overton_id": "worldbank-585d02bd686a9cd13b437a3f24d648b6"
+      },
+      {
+       "overton_id": "worldbank-ce176b8a9b31f5284161cc1bfb146242"
+      },
+      {
+       "overton_id": "oecddiscovery-fc21d94f5ce191941d27fa7e000125b0"
+      },
+      {
+       "overton_id": "oecddiscovery-ac5d1f2d29d090fbef2763bb913f0d7e"
+      },
+      {
+       "overton_id": "who-b1002d28605b7ba0728b0a622abbf73e"
+      },
+      {
+       "overton_id": "unesco-aa67207fa83d72dbdad53a7ccc56d586"
+      },
+      {
+       "overton_id": "unicef_innocenti-64c45cdc044a327caa0ea6775f3988e8"
+      },
+      {
+       "overton_id": "copenhagenconsensus-a06b9bba2be22b60c1f40cac0261b524"
+      }
+     ]
+    }
+   },
+   {
+    "policy_document_id": "randcorporation-73c54d592218d87cb711abfe54dd6067",
+    "title": "Proven Benefits of Early Childhood Interventions",
+    "translated_title": "",
+    "published_on": "2005-01-01",
+    "es_score": 0.85337085,
+    "citation_count": 51,
+    "source": {
+     "title": "RAND Corporation",
+     "type": "think tank",
+     "country": "USA"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "lenus-5d01936d0ea9cfb91b04c0fed7e015b4",
+    "title": "Prevention and early intervention in children and young people\u2019s services: children's learning",
+    "translated_title": "",
+    "published_on": "2013-02-01",
+    "es_score": 0.8524133,
+    "citation_count": 0,
+    "source": {
+     "title": "Lenus: The Irish Health Repository",
+     "type": "government",
+     "country": "Ireland"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "napedu-768d87fd6ed4f433fb008f501219fb06",
+    "title": "Early Childhood Intervention: Views from the Field: Report of a Workshop",
+    "translated_title": "",
+    "published_on": "2000-05-26",
+    "es_score": 0.8517827,
+    "citation_count": 2,
+    "source": {
+     "title": "National Academies of Sciences, Engineering, and Medicine",
+     "type": "government",
+     "country": "USA"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "randcorporation-84c5520a7f8fa93bdcc474641360fbd9",
+    "title": "Investing in Our Children: What We Know and Don't Know About the Costs and Benefits of Early Childhood Interventions",
+    "translated_title": "",
+    "published_on": "1998-01-01",
+    "es_score": 0.8506856,
+    "citation_count": 198,
+    "source": {
+     "title": "RAND Corporation",
+     "type": "think tank",
+     "country": "USA"
+    },
+    "cites": {
+     "policy": [
+      {
+       "overton_id": "randcorporation-af1c628d342e3899c5eea75138e84a92"
+      },
+      {
+       "overton_id": "cbousa-56be2c97c1beb271434f3a310349cd23"
+      },
+      {
+       "overton_id": "randcorporation-598d1d8cdd8cb072d52063142e83f2c7"
+      },
+      {
+       "overton_id": "randcorporation-c4957c123a00857cf36c83ed7df750d2"
+      }
+     ]
+    }
+   },
+   {
+    "policy_document_id": "lsecase-0b02fcd60833f11750e59e8c6a361c30",
+    "title": "Early Childhood Interventions and Outcomes (summarised in CASEreport 5, 'Persistent Poverty and Lifetime Inequality')",
+    "translated_title": "",
+    "published_on": "1999-07-02",
+    "es_score": 0.85055333,
+    "citation_count": 0,
+    "source": {
+     "title": "Centre for Analysis of Social Exclusion",
+     "type": "think tank",
+     "country": "UK"
+    },
+    "cites": {
+     "policy": [
+      {
+       "overton_id": "randcorporation-84c5520a7f8fa93bdcc474641360fbd9"
+      }
+     ]
+    }
+   },
+   {
+    "policy_document_id": "nygov-be9fad1eba0a2714ad332887295c1fd9",
+    "title": "Early",
+    "translated_title": "",
+    "published_on": "2023-10-11",
+    "es_score": 0.850185,
+    "citation_count": 0,
+    "source": {
+     "title": "New York State",
+     "type": "government",
+     "country": "USA"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "govsg-78e8f7d7df22d33655a59cb2a9644244",
+    "title": "Professional Practice Guidelines",
+    "translated_title": "",
+    "published_on": "2021-02-27",
+    "es_score": 0.8501779,
+    "citation_count": 0,
+    "source": {
+     "title": "Government of Singapore",
+     "type": "government",
+     "country": "Singapore"
+    },
+    "cites": {
+     "policy": [
+      {
+       "overton_id": "govsg-8a10879a1eda27dcc68708fe092f7f56"
+      },
+      {
+       "overton_id": "pubmedcentral-0e551a757788c3716202f4df0ba51794"
+      },
+      {
+       "overton_id": "pubmedcentral-086ef472046af9a1346c56fa5b3fae36"
+      },
+      {
+       "overton_id": "bmj_ranzcoo-f7ac8c3a07f9c4d5fedec7e680ec0282"
+      },
+      {
+       "overton_id": "govsg-be1284fb28e8f98aac0631b6cd88fcb6"
+      }
+     ]
+    }
+   },
+   {
+    "policy_document_id": "opportunityinstitute-e2cf72ca602d950174ce0c98577b260a",
+    "title": "The Link Between Early Learning And Care And School Readiness",
+    "translated_title": "",
+    "published_on": "2002-10-01",
+    "es_score": 0.85000026,
+    "citation_count": 0,
+    "source": {
+     "title": "Economic Opportunity Institute",
+     "type": "think tank",
+     "country": "USA"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "stateofnevada-094a2c13907e848a333ba3d5fed067fe",
+    "title": "Early Intervention FAQs Update 7/17/15",
+    "translated_title": "",
+    "published_on": "2015-07-17",
+    "es_score": 0.84956545,
+    "citation_count": 0,
+    "source": {
+     "title": "State of Nevada",
+     "type": "government",
+     "country": "USA"
+    },
+    "cites": {
+     "policy": [
+      {
+       "overton_id": "stateofnevada-52cae5a452d6ebbfa0746c073f9bdf9b"
+      }
+     ]
+    }
+   },
+   {
+    "policy_document_id": "provinceofquebec-f755b4d27714cfe593be1caee035bdb7",
+    "title": "Personnel Des Services Compl\u00e9mentaires",
+    "translated_title": "Complementary Services Staff",
+    "published_on": "2020-05-15",
+    "es_score": 0.84839237,
+    "citation_count": 0,
+    "source": {
+     "title": "Province of Qu\u00e9bec",
+     "type": "government",
+     "country": "Canada"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "stateofminnesota-5a828734a349056f0ce7c7b1569966c2",
+    "title": "3-5 Parents Guide - Russian",
+    "translated_title": "",
+    "published_on": "2013-05-09",
+    "es_score": 0.84827375,
+    "citation_count": 0,
+    "source": {
+     "title": "State of Minnesota",
+     "type": "government",
+     "country": "USA"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "stateofwashington-b605e47ec06b001438b23b8e0b74fedf",
+    "title": "Who is eligible for Early Intervention Services?",
+    "translated_title": "",
+    "published_on": "2014-07-10",
+    "es_score": 0.8481629,
+    "citation_count": 0,
+    "source": {
+     "title": "State of Washington",
+     "type": "government",
+     "country": "USA"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "nationaleducationpolicycenter-8206b17908dc82d752bc1e7f6ca0286a",
+    "title": "Identifying and Implementing Educational Practices Supported by Rigorous Evidence: A User-Friendly Guide",
+    "translated_title": "",
+    "published_on": "2003-12-01",
+    "es_score": 0.8479447,
+    "citation_count": 0,
+    "source": {
+     "title": "National Education Policy Center",
+     "type": "think tank",
+     "country": "USA"
+    },
+    "cites": {
+     "policy": [
+      {
+       "overton_id": "brookings-f520ca6c97f2fee7e37eadd23947778d"
+      }
+     ]
+    }
+   },
+   {
+    "policy_document_id": "ministrukabinets-8f6d08f90723a90929a378e9942d5b36",
+    "title": "Agr\u012bn\u0101 prevent\u012bv\u0101 atbalsta sist\u0113mas b\u0113rnu att\u012bst\u012bbai izveides aktualit\u0101tes",
+    "translated_title": "Current events in the creation of an early preventive support system for child development",
+    "published_on": "2026-01-28",
+    "es_score": 0.84792995,
+    "citation_count": 0,
+    "source": {
+     "title": "Government of Latvia",
+     "type": "government",
+     "country": "Latvia"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "stateofbadende-4ef95381fe481ba4361795e39017b24e",
+    "title": "B1 Mentale Funktionen 1 2 3 4 5",
+    "translated_title": "B1 Mental Function 1 2 3 4 5",
+    "published_on": "2008-03-24",
+    "es_score": 0.8477707,
+    "citation_count": 0,
+    "source": {
+     "title": "Landesregierung Baden-W\u00fcrttemberg",
+     "type": "government",
+     "country": "Germany"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "commonwealthfund-2ec4df4b570b7f2cf9c71eccd3693aee",
+    "title": "Reasons and Strategies for Strengthening Childhood Development Services in the Healthcare System",
+    "translated_title": "",
+    "published_on": "2002-10-01",
+    "es_score": 0.847758,
+    "citation_count": 0,
+    "source": {
+     "title": "Commonwealth Fund",
+     "type": "think tank",
+     "country": "USA"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "stateofminnesota-6b8932157936f1ad61873d132bda94de",
+    "title": "Family Outcome Survey - Khmer - Cambodian",
+    "translated_title": "",
+    "published_on": "2010-09-13",
+    "es_score": 0.8472016,
+    "citation_count": 0,
+    "source": {
+     "title": "State of Minnesota",
+     "type": "government",
+     "country": "USA"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "governmentofukraine-5e21d3a03ecaf8bcfb272b971b26219d",
+    "title": "\u0449\u043e \u0442\u0430\u043a\u0435 \u0440\u0430\u043d\u043d\u0454 \u0432\u0442\u0440\u0443\u0447\u0430\u043d\u043d\u044f",
+    "translated_title": "What is early intervention?",
+    "published_on": "2023-07-11",
+    "es_score": 0.8467572,
+    "citation_count": 0,
+    "source": {
+     "title": "Government of Ukraine",
+     "type": "government",
+     "country": "Ukraine"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "provinceofquebec-63e39a6d116c7b135bd95abd9c904916",
+    "title": "Guide d'information aux parents - plan d'intervention",
+    "translated_title": "Information guide for parents - intervention plan",
+    "published_on": "2022-01-20",
+    "es_score": 0.8466741,
+    "citation_count": 0,
+    "source": {
+     "title": "Province of Qu\u00e9bec",
+     "type": "government",
+     "country": "Canada"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "worldbank-43309dad84d7bb1da6fb72fa8b0e5c68",
+    "title": "Early Childhood Development : A Review of the Global Evidence",
+    "translated_title": "",
+    "published_on": "2016-03-07",
+    "es_score": 0.84661007,
+    "citation_count": 2,
+    "source": {
+     "title": "World Bank",
+     "type": "igo",
+     "country": "IGO"
+    },
+    "cites": {
+     "policy": [
+      {
+       "overton_id": "worldbank-32274bf48d65666f9dcc5daec63a29f1"
+      },
+      {
+       "overton_id": "worldbank-ce176b8a9b31f5284161cc1bfb146242"
+      },
+      {
+       "overton_id": "worldbank-be452e9e9a056c43914c9a32311e8b32"
+      },
+      {
+       "overton_id": "bernardvanleer-6b14a941ab378009ecacc6af68757c3e"
+      },
+      {
+       "overton_id": "worldbank-17df4d958f449fca720692c07f057b81"
+      },
+      {
+       "overton_id": "worldbank-f65404a01714026b689db25f2299511d"
+      },
+      {
+       "overton_id": "worldbank-70d771f34251c485e9aef299bb13735b"
+      },
+      {
+       "overton_id": "worldbank-2bd782138aa38bbb7d637c126a6c435d"
+      },
+      {
+       "overton_id": "ifs-de28fbd11d4fe16e57005fe0f85c0f70"
+      }
+     ]
+    }
+   },
+   {
+    "policy_document_id": "stateofwashington-e1d8eaf0d04831b4914dc75d4fd177e4",
+    "title": "Early Achievers",
+    "translated_title": "",
+    "published_on": "2015-10-29",
+    "es_score": 0.8463591,
+    "citation_count": 0,
+    "source": {
+     "title": "State of Washington",
+     "type": "government",
+     "country": "USA"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "worldbank-8e0018ec9bd73086ccebca794ce2d747",
+    "title": "Stepping Up Early Childhood Development : Investing in Young Children for High Returns",
+    "translated_title": "",
+    "published_on": "2014-10-01",
+    "es_score": 0.8463105,
+    "citation_count": 21,
+    "source": {
+     "title": "World Bank",
+     "type": "igo",
+     "country": "IGO"
+    },
+    "cites": {
+     "policy": [
+      {
+       "overton_id": "worldbank-94ae74e6b1b3c28857c9b076c8a22cd3"
+      },
+      {
+       "overton_id": "worldbank-f351c6271f969bc7cc6313c68e16a49f"
+      },
+      {
+       "overton_id": "who-b1002d28605b7ba0728b0a622abbf73e"
+      },
+      {
+       "overton_id": "nber-17d900436575f05976b95ae11fda7e50"
+      },
+      {
+       "overton_id": "oecddiscovery-5114de06651f0004fa9bb2e9973536e5"
+      },
+      {
+       "overton_id": "worldbank-108bc7f92df2431375c080ab4e28af86"
+      },
+      {
+       "overton_id": "worldbank-635de6c06b47f38337afcf120c630e5a"
+      },
+      {
+       "overton_id": "worldbank-24351d2e3f6540e8d087c5909d3d4c73"
+      },
+      {
+       "overton_id": "ilo-d81fe7a126857e4b20c5440f3cb40799"
+      },
+      {
+       "overton_id": "worldbank-ebec5a02cf3d0f956d6a266d850b50ed"
+      },
+      {
+       "overton_id": "oecddiscovery-ac5d1f2d29d090fbef2763bb913f0d7e"
+      },
+      {
+       "overton_id": "unicef_innocenti-64c45cdc044a327caa0ea6775f3988e8"
+      },
+      {
+       "overton_id": "unicef-aad9ba755fafd69f5eaed8bd1e4b856c"
+      },
+      {
+       "overton_id": "unicef_innocenti-4ed9e5cb82127909cafeac6953d357ec"
+      },
+      {
+       "overton_id": "worldbank-585d02bd686a9cd13b437a3f24d648b6"
+      },
+      {
+       "overton_id": "worldbank-1699c08d1c7f82d729e3692d12a5392a"
+      },
+      {
+       "overton_id": "worldbank-17df4d958f449fca720692c07f057b81"
+      },
+      {
+       "overton_id": "worldbank-f65404a01714026b689db25f2299511d"
+      },
+      {
+       "overton_id": "unesco-aa67207fa83d72dbdad53a7ccc56d586"
+      },
+      {
+       "overton_id": "copenhagenconsensus-a06b9bba2be22b60c1f40cac0261b524"
+      }
+     ]
+    }
+   },
+   {
+    "policy_document_id": "randcorporation-5f2bb1a96daaad5ded011822ffe2bc0f",
+    "title": "Children at Risk: Consequences for School Readiness and Beyond",
+    "translated_title": "",
+    "published_on": "2005-01-01",
+    "es_score": 0.84611917,
+    "citation_count": 11,
+    "source": {
+     "title": "RAND Corporation",
+     "type": "think tank",
+     "country": "USA"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "provinceofquebec-4abdfcf0454bb37b38e5c850debf5eab",
+    "title": "Favoriser le d\u00e9veloppement de l'enfant",
+    "translated_title": "Promote child development",
+    "published_on": "2024-09-10",
+    "es_score": 0.84605646,
+    "citation_count": 0,
+    "source": {
+     "title": "Province of Qu\u00e9bec",
+     "type": "government",
+     "country": "Canada"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "cityofnashville-11e3c5bd9f69004f7dd9bf686f74293d",
+    "title": "Nashville.gov - Social Services - Using Scientific Evidence to Improve Outcomes Through Early Childhood Investments",
+    "translated_title": "",
+    "published_on": "2012-07-09",
+    "es_score": 0.845664,
+    "citation_count": 0,
+    "source": {
+     "title": "City of Nashville",
+     "type": "government",
+     "country": "USA"
+    },
+    "cites": {
+     "policy": [
+      {
+       "overton_id": "stateoftennessee-d7402297ca005306d11460b9c2a55a50"
+      }
+     ]
+    }
+   },
+   {
+    "policy_document_id": "iadb-0fbb5287a8d6fc6001737660df1cc1f6",
+    "title": "La Realidad Social: Una introducci\u00f3n a los Problemas y Pol\u00edticas del Desarrollo Social en Am\u00e9rica Latina: M\u00f3dulo II: Los Ninos Primero: Pol\u00edticas para el Desarrollo de la Primera Infancia",
+    "translated_title": "Social Reality: An Introduction to the Problems and Policies of Social Development in Latin America: Module II: Children First: Policies for Early Childhood Development",
+    "published_on": "2012-05-11",
+    "es_score": 0.8455473,
+    "citation_count": 1,
+    "source": {
+     "title": "Inter-American Development Bank",
+     "type": "igo",
+     "country": "IGO"
+    },
+    "cites": {
+     "policy": [
+      {
+       "overton_id": "worldbank-69e7f3bec399fa52a4883d47fc77e718"
+      },
+      {
+       "overton_id": "worldbank-cf47b47cd23c02a8acde617c039d62dc"
+      },
+      {
+       "overton_id": "worldbank-94ae74e6b1b3c28857c9b076c8a22cd3"
+      },
+      {
+       "overton_id": "oecddiscovery-a3335f4dea21c574d698d4aa963abe77"
+      }
+     ]
+    }
+   },
+   {
+    "policy_document_id": "stateofmissouri-9b6c355dc2864d6900dc4c7b3ee1c5c6",
+    "title": "Early Childhood Development Act Administrative Manual",
+    "translated_title": "",
+    "published_on": "2015-09-11",
+    "es_score": 0.84516305,
+    "citation_count": 0,
+    "source": {
+     "title": "State of Missouri",
+     "type": "government",
+     "country": "USA"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "stateofminnesota-bd00babc7bf55e1abeb7ca5d394776a5",
+    "title": "0-3 Parents Guide - Russian",
+    "translated_title": "",
+    "published_on": "2013-05-09",
+    "es_score": 0.8451112,
+    "citation_count": 0,
+    "source": {
+     "title": "State of Minnesota",
+     "type": "government",
+     "country": "USA"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "opregovus-14ee8b1e06daf7f79c673f6bb24eefc6",
+    "title": "Opening Session: Health and Education: Scientific Evidence Supports Head Start\u2019s Comprehensive Approach to Promoting Children\u2019s School Readiness",
+    "translated_title": "",
+    "published_on": "2007-01-09",
+    "es_score": 0.845026,
+    "citation_count": 0,
+    "source": {
+     "title": "OPRE",
+     "type": "government",
+     "country": "USA"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "nycgov-1d73b2b8f05b7c00bc46a704e834da2c",
+    "title": "El Programa de Intervencion Temprana de Nueva York",
+    "translated_title": "The New York Early Intervention Program",
+    "published_on": "2011-04-13",
+    "es_score": 0.8447863,
+    "citation_count": 0,
+    "source": {
+     "title": "City of New York",
+     "type": "government",
+     "country": "USA"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "gpeusa-2d3fd1ab13553e33cc4e1325f5b29d9b",
+    "title": "Methodology sheet for GPE result indicator 2",
+    "translated_title": "",
+    "published_on": "2018-04-08",
+    "es_score": 0.84413075,
+    "citation_count": 0,
+    "source": {
+     "title": "Global Partnership for Education",
+     "type": "think tank",
+     "country": "USA"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "pagov-c042431cad1aa44f7bc1643843f6bfec",
+    "title": "A parent guid to choose child care",
+    "translated_title": "",
+    "published_on": "2015-11-20",
+    "es_score": 0.8440186,
+    "citation_count": 0,
+    "source": {
+     "title": "Commonwealth of Pennsylvania",
+     "type": "government",
+     "country": "USA"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "stateofalabama-be761891e7ff6cbaccfbaabffd7639cb",
+    "title": "Why Is Ei Important?",
+    "translated_title": "",
+    "published_on": "2023-01-09",
+    "es_score": 0.8438443,
+    "citation_count": 0,
+    "source": {
+     "title": "State of Alabama",
+     "type": "government",
+     "country": "USA"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "stateoflouisiana-97b8cd70c1475167d439dea3b2ac7ae6",
+    "title": "Early Childhood Developmental Screening Guidebook",
+    "translated_title": "",
+    "published_on": "2025-05-09",
+    "es_score": 0.84378994,
+    "citation_count": 0,
+    "source": {
+     "title": "State of Louisiana",
+     "type": "government",
+     "country": "USA"
+    },
+    "cites": {
+     "policy": [
+      {
+       "overton_id": "stateoflouisiana-804877122f994740d5c44496b0a1ef3b"
+      },
+      {
+       "overton_id": "stateoflouisiana-ca923db92abb39a5c2a905637da17ff9"
+      }
+     ]
+    }
+   }
+  ],
+  [
+   {
+    "policy_document_id": "opportunityinstitute-e2cf72ca602d950174ce0c98577b260a",
+    "title": "The Link Between Early Learning And Care And School Readiness",
+    "translated_title": "",
+    "published_on": "2002-10-01",
+    "es_score": 0.8734747,
+    "citation_count": 0,
+    "source": {
+     "title": "Economic Opportunity Institute",
+     "type": "think tank",
+     "country": "USA"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "stateofwashington-aabcbf1a5bb744e813ff8fe5ef426ed4",
+    "title": "1. Introduction",
+    "translated_title": "",
+    "published_on": "2023-08-09",
+    "es_score": 0.86207867,
+    "citation_count": 0,
+    "source": {
+     "title": "State of Washington",
+     "type": "government",
+     "country": "USA"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "edulinksusa-00411966862c13e2bc6e8035f55a66f3",
+    "title": "Screening of School Readiness Skills",
+    "translated_title": "",
+    "published_on": "2014-05-01",
+    "es_score": 0.8603446,
+    "citation_count": 0,
+    "source": {
+     "title": "EduLinks",
+     "type": "government",
+     "country": "USA"
+    },
+    "cites": {
+     "policy": [
+      {
+       "overton_id": "iadb-f20e66728ae094142f21a31a10f48adb"
+      },
+      {
+       "overton_id": "unesco-760cfb6222e191840896c7c4e4f5173e"
+      }
+     ]
+    }
+   },
+   {
+    "policy_document_id": "governmentofazerbaijan-b7aecb822ced173cf4175591fc62b72e",
+    "title": "\u201c\u0130cma \u0259sasl\u0131 m\u0259kt\u0259b\u0259q\u0259d\u0259r t\u0259hsil\u201d layih\u0259si",
+    "translated_title": "&quot;Community-based preschool education&quot; project",
+    "published_on": "2026-06-01",
+    "es_score": 0.86004055,
+    "citation_count": 0,
+    "source": {
+     "title": "Government of Azerbaijan",
+     "type": "government",
+     "country": "Azerbaijan"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "randcorporation-a250d8192b6bd61e773ee0e53078bffa",
+    "title": "Building Blocks for a Strong Preschool to Early Elementary Education System",
+    "translated_title": "",
+    "published_on": "2012-02-16",
+    "es_score": 0.8595312,
+    "citation_count": 0,
+    "source": {
+     "title": "RAND Corporation",
+     "type": "think tank",
+     "country": "USA"
+    },
+    "cites": {
+     "policy": [
+      {
+       "overton_id": "dcgov-6113939e4ca24602220adfd417a134e9"
+      }
+     ]
+    }
+   },
+   {
+    "policy_document_id": "stateofconnecticut-42a1b501a991739da2ab03f251a0efa6",
+    "title": "14-22 Practice Guide Draft Outline:",
+    "translated_title": "",
+    "published_on": "2015-06-24",
+    "es_score": 0.8594408,
+    "citation_count": 0,
+    "source": {
+     "title": "State of Connecticut",
+     "type": "government",
+     "country": "USA"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "stateofohio-d84c6bcaade5d8a7095798205d4797f2",
+    "title": "\u65e9\u671f\u513f\u7ae5\u6559\u80b2\u8d44\u52a9",
+    "translated_title": "Early childhood education funding",
+    "published_on": "2017-04-14",
+    "es_score": 0.85944045,
+    "citation_count": 0,
+    "source": {
+     "title": "State of Ohio",
+     "type": "government",
+     "country": "USA"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "stateofnorthcarolina-3da6f05771c9b0c90ec7bd944ae72647",
+    "title": "North Carolina Foundations for Early Learning and Development",
+    "translated_title": "",
+    "published_on": "2014-02-10",
+    "es_score": 0.8590837,
+    "citation_count": 0,
+    "source": {
+     "title": "State of North Carolina",
+     "type": "government",
+     "country": "USA"
+    },
+    "cites": {
+     "policy": [
+      {
+       "overton_id": "napedu-4181b13247328b75a95a1bdaaedf67cd"
+      }
+     ]
+    }
+   },
+   {
+    "policy_document_id": "dcgov-37ca2892f6b85bcc3205ee3e8bfa7dbc",
+    "title": "Organizati",
+    "translated_title": "",
+    "published_on": "2018-01-23",
+    "es_score": 0.8581389,
+    "citation_count": 0,
+    "source": {
+     "title": "District of Columbia",
+     "type": "government",
+     "country": "USA"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "stateofmissouri-cb3c3a510d363f747f23ecddf75f760f",
+    "title": "Foundations for School Success Grant - Program Guidelines",
+    "translated_title": "",
+    "published_on": "2024-05-03",
+    "es_score": 0.85775983,
+    "citation_count": 0,
+    "source": {
+     "title": "State of Missouri",
+     "type": "government",
+     "country": "USA"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "stateofwashington-e1d8eaf0d04831b4914dc75d4fd177e4",
+    "title": "Early Achievers",
+    "translated_title": "",
+    "published_on": "2015-10-29",
+    "es_score": 0.8577556,
+    "citation_count": 0,
+    "source": {
+     "title": "State of Washington",
+     "type": "government",
+     "country": "USA"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "stateofminnesota-f64db94aac88ce55f724bc1199c13e42",
+    "title": "10 Essential Elements of Effective Early Care and Education Programs",
+    "translated_title": "",
+    "published_on": "2011-11-09",
+    "es_score": 0.857609,
+    "citation_count": 0,
+    "source": {
+     "title": "State of Minnesota",
+     "type": "government",
+     "country": "USA"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "randcorporation-1b78c2c7dd94f8f6498e8014e346ab04",
+    "title": "Early Childhood Intervention Programs Save Money, Benefit Children",
+    "translated_title": "",
+    "published_on": "2005-10-18",
+    "es_score": 0.8573155,
+    "citation_count": 23,
+    "source": {
+     "title": "RAND Corporation",
+     "type": "think tank",
+     "country": "USA"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "randcorporation-aa15a8c0cf073230cf88d19a3b5706e0",
+    "title": "High-Quality, Full-Scale Preschool Programs Boost School Readiness and Produce Sustained Benefits",
+    "translated_title": "",
+    "published_on": "2016-03-11",
+    "es_score": 0.8558737,
+    "citation_count": 3,
+    "source": {
+     "title": "RAND Corporation",
+     "type": "think tank",
+     "country": "USA"
+    },
+    "cites": {
+     "policy": [
+      {
+       "overton_id": "opregovus-08fb1a2daaa39b6a6daeef8f4527cf1a"
+      },
+      {
+       "overton_id": "upjohninstitute-8d5a723e271a93b05f7b8c626b9a67ae"
+      },
+      {
+       "overton_id": "economicpolicyinstitute-0577d36105d2ad269b27d6c111915801"
+      },
+      {
+       "overton_id": "cedboard-5fc9c5d58c03309cb9314f4418072a97"
+      },
+      {
+       "overton_id": "gatesfoundation-a95f17d268dea77f4eb48ec0836c62ed"
+      },
+      {
+       "overton_id": "randcorporation-9f02bfa2bd526fb0a6f867696ab6fd0c"
+      },
+      {
+       "overton_id": "opregovus-345b652d9419cbfe966451d79dafafbf"
+      },
+      {
+       "overton_id": "nber-853d456d11183c05f229337c84d3d3dc"
+      },
+      {
+       "overton_id": "napedu-ccf4f5c5558560f1f6c6027ccc82e5c7"
+      }
+     ]
+    }
+   },
+   {
+    "policy_document_id": "stateofmontana-c1ce95f6dc7b0551e48d1661a6c0fe62",
+    "title": "School Readiness Brochure",
+    "translated_title": "",
+    "published_on": "2007-03-28",
+    "es_score": 0.8554294,
+    "citation_count": 0,
+    "source": {
+     "title": "State of Montana",
+     "type": "government",
+     "country": "USA"
+    },
+    "cites": {
+     "policy": [
+      {
+       "overton_id": "stateofmontana-c9b0e6d8aa0f9e1ed2918e06a59f9d8b"
+      }
+     ]
+    }
+   },
+   {
+    "policy_document_id": "pagov-c042431cad1aa44f7bc1643843f6bfec",
+    "title": "A parent guid to choose child care",
+    "translated_title": "",
+    "published_on": "2015-11-20",
+    "es_score": 0.85491735,
+    "citation_count": 0,
+    "source": {
+     "title": "Commonwealth of Pennsylvania",
+     "type": "government",
+     "country": "USA"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "stateofconnecticut-0e792a173cf9b2ea98ebfae92b73bb44",
+    "title": "Connecticut State Department of Education Evidence-Based Practice Guide for Early Learning",
+    "translated_title": "",
+    "published_on": "2021-01-19",
+    "es_score": 0.85473156,
+    "citation_count": 1,
+    "source": {
+     "title": "State of Connecticut",
+     "type": "government",
+     "country": "USA"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "stateofwashington-0bff76c91c6ab57c14ed9ee2e95d3a3d",
+    "title": "EL_0081 ECEAP Comprehensive Services",
+    "translated_title": "",
+    "published_on": "2024-05-17",
+    "es_score": 0.8546547,
+    "citation_count": 0,
+    "source": {
+     "title": "State of Washington",
+     "type": "government",
+     "country": "USA"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "unesco-88b09e1c1348c94ad5b241859b73afec",
+    "title": "School children in families with young children: educational opportunities at risk",
+    "translated_title": "",
+    "published_on": "2003-01-01",
+    "es_score": 0.8534561,
+    "citation_count": 0,
+    "source": {
+     "title": "UNESCO",
+     "type": "igo",
+     "country": "IGO"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "stateofminnesota-5a828734a349056f0ce7c7b1569966c2",
+    "title": "3-5 Parents Guide - Russian",
+    "translated_title": "",
+    "published_on": "2013-05-09",
+    "es_score": 0.85344386,
+    "citation_count": 0,
+    "source": {
+     "title": "State of Minnesota",
+     "type": "government",
+     "country": "USA"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "stateofmaine-6b8233ecc76da3ae3005831781a4096f",
+    "title": "Investing in Our Future : The Evidence Base on Preschool Education",
+    "translated_title": "",
+    "published_on": "2013-10-11",
+    "es_score": 0.85264844,
+    "citation_count": 0,
+    "source": {
+     "title": "State of Maine",
+     "type": "government",
+     "country": "USA"
+    },
+    "cites": {
+     "policy": [
+      {
+       "overton_id": "nber-957c2207b87790d8cf858d9b57c73940"
+      },
+      {
+       "overton_id": "aspeninstitute-31793e54f0087afee1fc4f04c9d08e03"
+      },
+      {
+       "overton_id": "randcorporation-9f02bfa2bd526fb0a6f867696ab6fd0c"
+      },
+      {
+       "overton_id": "nber-92e2136ef3c5f1ada240fd023787a8ee"
+      },
+      {
+       "overton_id": "cscceusa-eb9b1492578d5fe9d92ed647634a28b5"
+      },
+      {
+       "overton_id": "opregovus-08fb1a2daaa39b6a6daeef8f4527cf1a"
+      },
+      {
+       "overton_id": "opregovus-5849c59a91eacae040187f37c7672670"
+      }
+     ]
+    }
+   },
+   {
+    "policy_document_id": "worldbank-116761123194990080220d76af613d37",
+    "title": "World Development Report 2018",
+    "translated_title": "",
+    "published_on": "2018-01-01",
+    "es_score": 0.85215765,
+    "citation_count": 131,
+    "source": {
+     "title": "World Bank",
+     "type": "igo",
+     "country": "IGO"
+    },
+    "cites": {
+     "policy": [
+      {
+       "overton_id": "worldbank-ce176b8a9b31f5284161cc1bfb146242"
+      },
+      {
+       "overton_id": "worldbank-7c4a788bb6d51f2664aa169a9f7980f0"
+      },
+      {
+       "overton_id": "oecddiscovery-fc4786b68a1172d90231c191f8cb78a2"
+      },
+      {
+       "overton_id": "ifode-0818d01ecf69f0e3ad3b2faa3890a631"
+      },
+      {
+       "overton_id": "unesco-bef88f31925b491d799f833fcdbd3261"
+      },
+      {
+       "overton_id": "nber-a56a208a6300dea7cb5cc4b5a5001812"
+      },
+      {
+       "overton_id": "worldbank-8e0018ec9bd73086ccebca794ce2d747"
+      },
+      {
+       "overton_id": "worldbank-b38c7785ed9fb5ee1a1fbe722bb792dd"
+      },
+      {
+       "overton_id": "who-7ca59ba8aaf55fda8fc16618563579c7"
+      },
+      {
+       "overton_id": "nber-53e8d2f05b11eed6b0ebb255b9ffe244"
+      },
+      {
+       "overton_id": "worldbank-635de6c06b47f38337afcf120c630e5a"
+      },
+      {
+       "overton_id": "worldbank-9da395e682b9f30acf6bb845698b8495"
+      },
+      {
+       "overton_id": "oecddiscovery-f3c2d80d6f628d0ae3d52466a0568808"
+      },
+      {
+       "overton_id": "brookings-3d1e8508629a640a41ded11536bc43e5"
+      },
+      {
+       "overton_id": "iadb-5ad184f5299317b504ae4d9493e356c4"
+      },
+      {
+       "overton_id": "iadb-f20e66728ae094142f21a31a10f48adb"
+      },
+      {
+       "overton_id": "worldbank-81244a738c740e87a25404162727f438"
+      },
+      {
+       "overton_id": "unicef-f40800b7a05939f2cf6c7cca78a41cb1"
+      },
+      {
+       "overton_id": "worldbank-6eedf6f2e47e547ac0e0a6733443d4ee"
+      },
+      {
+       "overton_id": "worldbank-1cf1620993ddff7e8f869ded89a916ee"
+      },
+      {
+       "overton_id": "worldbank-ca327125274f6c977bf772072a735b0c"
+      },
+      {
+       "overton_id": "worldbank-11bc30da9bfa44668271221a8416741b"
+      },
+      {
+       "overton_id": "worldbank-d73d24c57fb059c7a6d09f9ab15ab63c"
+      },
+      {
+       "overton_id": "worldbank-9e14e2a63f46a03d3614b85f67bd3dd7"
+      },
+      {
+       "overton_id": "unesco-d1c894b12d5a9e2cbc1cc204bf496126"
+      }
+     ]
+    }
+   },
+   {
+    "policy_document_id": "stateofmissouri-9b6c355dc2864d6900dc4c7b3ee1c5c6",
+    "title": "Early Childhood Development Act Administrative Manual",
+    "translated_title": "",
+    "published_on": "2015-09-11",
+    "es_score": 0.85173595,
+    "citation_count": 0,
+    "source": {
+     "title": "State of Missouri",
+     "type": "government",
+     "country": "USA"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "stateofvictoria-3d32a090aebbf9bee671fb4369677bcd",
+    "title": "E Fiafia Tamaiti A \u2019 Oga Fa \u2019 Ata \u2019 Ita \u2019 I E A \u2019 Oa \u2019 O",
+    "translated_title": "",
+    "published_on": "2020-11-16",
+    "es_score": 0.8514923,
+    "citation_count": 0,
+    "source": {
+     "title": "State of Victoria",
+     "type": "government",
+     "country": "Australia"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "newamerica-cce37ee0e6d1eb254bc9c4fb53980fe2",
+    "title": "Guest Blog: Thinking Bigger About Changing the Odds",
+    "translated_title": "",
+    "published_on": "2008-12-01",
+    "es_score": 0.8514331,
+    "citation_count": 0,
+    "source": {
+     "title": "New America",
+     "type": "think tank",
+     "country": "USA"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "illinoisgov-0ad34ade2836281ebef43386cab682fb",
+    "title": "\u00a1 Listos, preparados, Pre-K!",
+    "translated_title": "Ready, set, Pre-K!",
+    "published_on": "2026-02-25",
+    "es_score": 0.85140646,
+    "citation_count": 0,
+    "source": {
+     "title": "State of Illinois",
+     "type": "government",
+     "country": "USA"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "stateofmissouri-e0782ce7c6753605825a4ae46f72b4fa",
+    "title": "Early Childhood",
+    "translated_title": "",
+    "published_on": "2019-10-01",
+    "es_score": 0.8508649,
+    "citation_count": 0,
+    "source": {
+     "title": "State of Missouri",
+     "type": "government",
+     "country": "USA"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "provinceofontario-41f7fa627b50efe2f09dab41a35678aa",
+    "title": "The Full-Day Early Learning\u2013Kindergarten Program Draft Version",
+    "translated_title": "",
+    "published_on": "2010-06-02",
+    "es_score": 0.8507912,
+    "citation_count": 2,
+    "source": {
+     "title": "Province of Ontario",
+     "type": "government",
+     "country": "Canada"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "stateofhawaiigov-83acaf7fb4339badd803d84ab568abc7",
+    "title": "Early-Childhood-Context-Map-November2012",
+    "translated_title": "",
+    "published_on": "2012-11-02",
+    "es_score": 0.850754,
+    "citation_count": 0,
+    "source": {
+     "title": "State of Hawaii",
+     "type": "government",
+     "country": "USA"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "stateofhawaiigov-ea490adf9b880c6dc26836c7950426b1",
+    "title": "Return on investment in early childhood education",
+    "translated_title": "",
+    "published_on": "2016-12-28",
+    "es_score": 0.8500113,
+    "citation_count": 0,
+    "source": {
+     "title": "State of Hawaii",
+     "type": "government",
+     "country": "USA"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "provinceofquebec-f3d3e584970c9603f8a2e11afc2fd679",
+    "title": "Pr\u00e9scolaire-Maternelle",
+    "translated_title": "Preschool-Kindergarten",
+    "published_on": "2022-02-16",
+    "es_score": 0.84965503,
+    "citation_count": 0,
+    "source": {
+     "title": "Province of Qu\u00e9bec",
+     "type": "government",
+     "country": "Canada"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "opportunityinstitute-2b3ea7faa142ff3a28044d2a1206288b",
+    "title": "The Link Between Early Learning And Care And School Readiness",
+    "translated_title": "",
+    "published_on": "2002-10-01",
+    "es_score": 0.8496098,
+    "citation_count": 0,
+    "source": {
+     "title": "Economic Opportunity Institute",
+     "type": "think tank",
+     "country": "USA"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "gpogov-eb9fa0dafa16852164209a7973963a74",
+    "title": "Head Start early learning outcomes framework :\u00a0ages birth to five.",
+    "translated_title": "",
+    "published_on": "2015-08-05",
+    "es_score": 0.8494978,
+    "citation_count": 0,
+    "source": {
+     "title": "Government Publishing Office (GPO)",
+     "type": "government",
+     "country": "USA"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "cedboard-f12572c0c4640653d1acb2edf33b6218",
+    "title": "What Are The Most Important Steps Parents Can Take To Help Their Children Grow Up Healthy?",
+    "translated_title": "",
+    "published_on": "2018-04-18",
+    "es_score": 0.84931445,
+    "citation_count": 0,
+    "source": {
+     "title": "Committee for Economic Development",
+     "type": "think tank",
+     "country": "USA"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "houstontxgov-463cf0c4bf118a22d2838a7d8daaa440",
+    "title": "40 Developmental Assets \u00ae for Early Childhood (ages 3 to 5)",
+    "translated_title": "",
+    "published_on": "2006-04-12",
+    "es_score": 0.8488811,
+    "citation_count": 0,
+    "source": {
+     "title": "City of Houston",
+     "type": "government",
+     "country": "USA"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "stateofohio-7fe44d69bd03b67f2375b76fcfa89c80",
+    "title": "Early Childhood Education Grants",
+    "translated_title": "",
+    "published_on": "2017-03-21",
+    "es_score": 0.8486535,
+    "citation_count": 0,
+    "source": {
+     "title": "State of Ohio",
+     "type": "government",
+     "country": "USA"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "gpeusa-2d3fd1ab13553e33cc4e1325f5b29d9b",
+    "title": "Methodology sheet for GPE result indicator 2",
+    "translated_title": "",
+    "published_on": "2018-04-08",
+    "es_score": 0.84830076,
+    "citation_count": 0,
+    "source": {
+     "title": "Global Partnership for Education",
+     "type": "think tank",
+     "country": "USA"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "seattlegov-ad10a0d419e89a72da8fab541f1f1496",
+    "title": "Investing in Our Future : The Evidence Base on Preschool Education",
+    "translated_title": "",
+    "published_on": "2013-10-11",
+    "es_score": 0.848182,
+    "citation_count": 0,
+    "source": {
+     "title": "City of Seattle",
+     "type": "government",
+     "country": "USA"
+    },
+    "cites": {
+     "policy": [
+      {
+       "overton_id": "nber-957c2207b87790d8cf858d9b57c73940"
+      },
+      {
+       "overton_id": "aspeninstitute-31793e54f0087afee1fc4f04c9d08e03"
+      },
+      {
+       "overton_id": "opregovus-08fb1a2daaa39b6a6daeef8f4527cf1a"
+      },
+      {
+       "overton_id": "nber-92e2136ef3c5f1ada240fd023787a8ee"
+      },
+      {
+       "overton_id": "randcorporation-9f02bfa2bd526fb0a6f867696ab6fd0c"
+      },
+      {
+       "overton_id": "opregovus-5849c59a91eacae040187f37c7672670"
+      },
+      {
+       "overton_id": "cscceusa-eb9b1492578d5fe9d92ed647634a28b5"
+      }
+     ]
+    }
+   },
+   {
+    "policy_document_id": "stateofconnecticut-2891586401d8684e6debb4cd7ccf3b1c",
+    "title": "A Guide for Preschool Programs",
+    "translated_title": "",
+    "published_on": "2010-08-31",
+    "es_score": 0.8477551,
+    "citation_count": 0,
+    "source": {
+     "title": "State of Connecticut",
+     "type": "government",
+     "country": "USA"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "stateofvictoria-a0040fdf503a8fe657cfd0d23082cc71",
+    "title": "Two Years Of Quality Kindergarten : What Does The Evidence Say?",
+    "translated_title": "",
+    "published_on": "2020-09-28",
+    "es_score": 0.84767365,
+    "citation_count": 0,
+    "source": {
+     "title": "State of Victoria",
+     "type": "government",
+     "country": "Australia"
+    },
+    "cites": {
+     "policy": [
+      {
+       "overton_id": "brookings-3d1e8508629a640a41ded11536bc43e5"
+      },
+      {
+       "overton_id": "oecddiscovery-94010d01be868a16c015992871567862"
+      },
+      {
+       "overton_id": "stateofvictoria-d9208ba85004ba2c96fd2f964b104ddf"
+      },
+      {
+       "overton_id": "stateofvictoria-311504a6b204247c7a87d3b7bf3751b9"
+      },
+      {
+       "overton_id": "upjohninstitute-8d5a723e271a93b05f7b8c626b9a67ae"
+      },
+      {
+       "overton_id": "unicef_innocenti-d4ddaae9ce7c0fb884f306e1f05f78b7"
+      },
+      {
+       "overton_id": "unicef-404c55d3be3d51b30c0f9e0ea900a73c"
+      }
+     ]
+    }
+   },
+   {
+    "policy_document_id": "frontiereconomics-f5c4d0762d1faee90b334af6a823d909-dup-a",
+    "title": "STUDY  OF  EARLY  EDUCATION  AND  DEVELOPMENT  (SEED):  THE  POTENTIAL  VALUE  FOR  MONEY  OF  EARLY  EDUCATION.",
+    "translated_title": null,
+    "published_on": "2017-07-11",
+    "es_score": 0.8719162,
+    "citation_count": 0,
+    "source": {
+     "title": "Frontier Economics",
+     "type": "think tank",
+     "country": "UK"
+    },
+    "cites": {
+     "policy": [
+      {
+       "overton_id": "onsgovuk-56a234db3511da1e842453d3fe72db6a"
+      },
+      {
+       "overton_id": "npc-c3ee4c8dd9c0bdef32f287c6795b0f88"
+      },
+      {
+       "overton_id": "govuk-9d4a543ff95ae66e0dcd5b82b3ad8fae"
+      },
+      {
+       "overton_id": "ifs-c0e2efa2a78ce4e5e7634ce56456bcfa"
+      },
+      {
+       "overton_id": "ashorguk-3e5b465bbc15dd9067b39ae938f0325a"
+      },
+      {
+       "overton_id": "govuk-1e754697e27b230c7ed0ebc54fe1d931"
+      },
+      {
+       "overton_id": "ifs-71815b5dd5c99c47162c1d45821d522e"
+      },
+      {
+       "overton_id": "govuk-92160512079fc6c90ba1348e35d83b11"
+      },
+      {
+       "overton_id": "govuk-eb2139028cdd9b8621f2b3082bac3c2f"
+      },
+      {
+       "overton_id": "ifs-56cdd52e239b270feaf9b692415c3ed6"
+      },
+      {
+       "overton_id": "nationalauditofficeuk-6c9ed4578412706918e665ae055da9cd"
+      },
+      {
+       "overton_id": "govuk-9e2244bb7afd00f034ec22fb6c79128c"
+      },
+      {
+       "overton_id": "kingsfund-c9a92beb4b9c9ec26bb4bde672d1cd9e"
+      }
+     ]
+    }
+   },
+   {
+    "policy_document_id": "lenus-5d01936d0ea9cfb91b04c0fed7e015b4-dup-b",
+    "title": "PREVENTION  AND  EARLY  INTERVENTION  IN  CHILDREN  AND  YOUNG  PEOPLE\u2019S  SERVICES:  CHILDREN'S  LEARNING.",
+    "translated_title": null,
+    "published_on": "2013-02-01",
+    "es_score": 0.8424133,
+    "citation_count": 0,
+    "source": {
+     "title": "Lenus: The Irish Health Repository",
+     "type": "government",
+     "country": "Ireland"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "synthetic-titleless-1",
+    "title": null,
+    "translated_title": null,
+    "published_on": null,
+    "es_score": 0.5,
+    "citation_count": 3,
+    "source": {
+     "title": "Synthetic",
+     "type": "other",
+     "country": "UK"
+    },
+    "cites": {
+     "policy": []
+    }
+   }
+  ]
+ ],
+ "landmark_records": [
+  {
+   "policy_document_id": "worldbank-ce176b8a9b31f5284161cc1bfb146242",
+   "title": "Investing in Young Children : An Early Childhood Development Guide for Policy Dialogue and Project Preparation",
+   "translated_title": "",
+   "published_on": "2012-03-19",
+   "es_score": null,
+   "citation_count": 95,
+   "source": {
+    "title": "World Bank",
+    "type": "igo",
+    "country": "IGO"
+   },
+   "cites": {
+    "policy": [
+     {
+      "overton_id": "napedu-a64e39337a178ecbc77f0d3a42710be4"
+     },
+     {
+      "overton_id": "worldbank-d3cd13b885e30421a64d9df07b18cd10"
+     },
+     {
+      "overton_id": "worldbank-7733c5f0f8978c23991e5a0c575927b2"
+     },
+     {
+      "overton_id": "worldbank-9ab99ab428295ba79550ea0465562ff0"
+     },
+     {
+      "overton_id": "worldbank-9650c4d9c080981f623c0ed0a96c539f"
+     },
+     {
+      "overton_id": "worldbank-d9e71a85ecea4502d145f45132773929"
+     },
+     {
+      "overton_id": "worldbank-a84a2fdb545d5837dcfac50e715312ad"
+     },
+     {
+      "overton_id": "worldbank-591d22cb9b13060dffb5aa2ce31c5835"
+     },
+     {
+      "overton_id": "oecddiscovery-ceab66696e320bb9e4d9f73ef533db91"
+     },
+     {
+      "overton_id": "worldbank-69e7f3bec399fa52a4883d47fc77e718"
+     },
+     {
+      "overton_id": "worldbank-9e10f9418ae43a7a735662c09d4d7b67"
+     },
+     {
+      "overton_id": "worldbank-e7b0e27c4e9b3959339a0b897da4638f"
+     },
+     {
+      "overton_id": "cedboard-0360d5535a06d17dfb89cddd2909c41c"
+     },
+     {
+      "overton_id": "worldbank-4d0242be21b661b54866bd07989521ee"
+     },
+     {
+      "overton_id": "worldbank-dc2b810e6cbb614fd1e124f569524cf9"
+     },
+     {
+      "overton_id": "nber-17d900436575f05976b95ae11fda7e50"
+     },
+     {
+      "overton_id": "unicef-20db530dd815228c101c73a736216bb0"
+     },
+     {
+      "overton_id": "worldbank-594eb42088acfa514e2392fd1606267a"
+     },
+     {
+      "overton_id": "worldbank-89bb725fd5431bd0cf33a8d9d8e7660d"
+     },
+     {
+      "overton_id": "oecddiscovery-e25c470e5289623aca971b74818ea849"
+     },
+     {
+      "overton_id": "oecddiscovery-8accb2c51e784c6ad4375d22f964add4"
+     },
+     {
+      "overton_id": "unitednations-f0ca85e0b4aea8a51dba54c05fc23ff5"
+     },
+     {
+      "overton_id": "unitednations-7d0d2ff4aec024b22b63d294420b6d09"
+     },
+     {
+      "overton_id": "randcorporation-9f02bfa2bd526fb0a6f867696ab6fd0c"
+     },
+     {
+      "overton_id": "brookings-9e4cb25a7783dcb5d8b2b083f6a5c3c6"
+     },
+     {
+      "overton_id": "unesco-7aa8541551fcfa2f36253d60f1e6b591"
+     },
+     {
+      "overton_id": "ifs-de28fbd11d4fe16e57005fe0f85c0f70"
+     },
+     {
+      "overton_id": "napedu-c7b82d9744bcea02be00a6229d3e92eb"
+     },
+     {
+      "overton_id": "unesco-e7a681a3141fefbbe19551b3a340af80"
+     },
+     {
+      "overton_id": "unesco-a9236c0f0ad5795a4b0e4e6b699b2deb"
+     }
+    ]
+   }
+  },
+  {
+   "policy_document_id": "govuk-91cf5dce33d3b57577f80bc4c7ca1072",
+   "title": "Early years foundation stage statutory framework (EYFS)",
+   "translated_title": "",
+   "published_on": "2018-02-20",
+   "es_score": null,
+   "citation_count": 193,
+   "source": {
+    "title": "The UK Government",
+    "type": "government",
+    "country": "UK"
+   },
+   "cites": {
+    "policy": []
+   }
+  },
+  {
+   "policy_document_id": "worldbank-ebec5a02cf3d0f956d6a266d850b50ed",
+   "title": "Stepping Up Skills for More Jobs and Higher Productivity",
+   "translated_title": "",
+   "published_on": "2017-08-16",
+   "es_score": null,
+   "citation_count": 81,
+   "source": {
+    "title": "World Bank",
+    "type": "igo",
+    "country": "IGO"
+   },
+   "cites": {
+    "policy": [
+     {
+      "overton_id": "worldbank-41c77cfb6afced76fe0ba2136a347c15"
+     },
+     {
+      "overton_id": "worldbank-5680e582cddad07bb6e41f9b502d2acc"
+     },
+     {
+      "overton_id": "worldbank-8c6b356ca8dc362c4052a557b7b4864f"
+     },
+     {
+      "overton_id": "worldbank-7346fe3ebb0f72c87f8f85660c206611"
+     },
+     {
+      "overton_id": "worldbank-c31eaa1031998600a88faa015e383646"
+     },
+     {
+      "overton_id": "oecddiscovery-ceab66696e320bb9e4d9f73ef533db91"
+     },
+     {
+      "overton_id": "worldbank-d3cd13b885e30421a64d9df07b18cd10"
+     },
+     {
+      "overton_id": "worldbank-b3c025bd04b7125a3219e9c84b317f13"
+     },
+     {
+      "overton_id": "worldbank-73c0c5195d5af8e92693a1ac5092778d"
+     },
+     {
+      "overton_id": "worldbank-5704b6623155efdcdbe8bd822e3beead"
+     },
+     {
+      "overton_id": "worldbank-4c6933b7adecc39008568cc7e6b67b45"
+     },
+     {
+      "overton_id": "worldbank-6e9659c9b1128d4976a5a042b2c981ad"
+     },
+     {
+      "overton_id": "worldbank-b0f7fe605aadfdf1acf837dfbd79f8c0"
+     },
+     {
+      "overton_id": "worldbank-8a92a43506bb1787528e9a4660fd5256"
+     },
+     {
+      "overton_id": "worldbank-16b3107f9279b0c2e7917d54415b6bb2"
+     },
+     {
+      "overton_id": "worldbank-97eea2d8f40862294531398b348254b1"
+     },
+     {
+      "overton_id": "worldbank-5c304d450197d82c4fb2b5a1631506da"
+     },
+     {
+      "overton_id": "worldbank-cc71143754694470878214d6db247e0b"
+     },
+     {
+      "overton_id": "worldbank-c975822b23bc89f9a81d02af3d4117b4"
+     },
+     {
+      "overton_id": "worldbank-3bfd07ede3544cd6f5469e8b8bebd3b5"
+     },
+     {
+      "overton_id": "worldbank-f3d4e90a2795a21e3b873fa2630ce5a1"
+     }
+    ]
+   }
+  },
+  {
+   "policy_document_id": "worldbank-7c4a788bb6d51f2664aa169a9f7980f0",
+   "title": "World Development Report 2015 : Mind, Society, and Behavior",
+   "translated_title": "",
+   "published_on": "2014-12-02",
+   "es_score": null,
+   "citation_count": 304,
+   "source": {
+    "title": "World Bank",
+    "type": "igo",
+    "country": "IGO"
+   },
+   "cites": {
+    "policy": [
+     {
+      "overton_id": "worldbank-5e771eaba63137cbc50f761c90de9e7e"
+     },
+     {
+      "overton_id": "pubmedcentral-adacd1a11042205a360e3dd24126e726"
+     },
+     {
+      "overton_id": "pewresearch-18ae4957e967bd9ecff7221aa0016660"
+     },
+     {
+      "overton_id": "worldbank-151484a0a53b2eadf17866321659040a"
+     },
+     {
+      "overton_id": "oecddiscovery-b381d608338d5b8f39c677e4255d510c"
+     },
+     {
+      "overton_id": "worldbank-4fe074b511686f1220b5e94b5455c85d"
+     },
+     {
+      "overton_id": "worldbank-65fc3b05a1865ddda4f05522b57f999e"
+     },
+     {
+      "overton_id": "worldbank-76406c04adc803ea7feda9ab3df80763"
+     },
+     {
+      "overton_id": "worldbank-ab162cf35a3e3475c2703a55c093e11a"
+     },
+     {
+      "overton_id": "worldbank-efe9992533be054c13140cc8406f77e2"
+     },
+     {
+      "overton_id": "worldbank-3bf069608bca724db95c2a508474e45b"
+     },
+     {
+      "overton_id": "who-515f91735049317022664204ab588fa5"
+     },
+     {
+      "overton_id": "worldbank-ecffb2f3f8b6c860772819a4e8180d65"
+     },
+     {
+      "overton_id": "worldbank-54611655c611ad4b8936057b5c45e140"
+     },
+     {
+      "overton_id": "worldbank-f477cf24363b073e862d0a8ca8897f4f"
+     },
+     {
+      "overton_id": "worldbank-b0f7ba88a38982244d0fa9130b1ffc40"
+     },
+     {
+      "overton_id": "worldbank-f40c166ce77f34ca4afd87a7629a6e3a"
+     },
+     {
+      "overton_id": "worldbank-5c3c6789dd0cca958cf9183727e2b064"
+     },
+     {
+      "overton_id": "worldbank-0a2ccdf3e2ad92e4e23c6691eea8b1ce"
+     },
+     {
+      "overton_id": "undp-26ec8c89292be0d5b179d4e7d7bd0bd1"
+     },
+     {
+      "overton_id": "who-c35ebc1f733c88fefd74a7c203203e33"
+     },
+     {
+      "overton_id": "worldbank-2d6f0ddb21ab103045adf10bd318b488"
+     },
+     {
+      "overton_id": "cgdev-848571a4ea4f21be24a79dd6363e22ae"
+     },
+     {
+      "overton_id": "worldbank-60bbf5b9541b3b6d659a6394dbe1a0dd"
+     },
+     {
+      "overton_id": "worldbank-6f496e25bfd8c9da33cb896f6a8bda17"
+     },
+     {
+      "overton_id": "ipcc-1e0b1a7ef1718ff08c682ce4cb651d90"
+     },
+     {
+      "overton_id": "worldbank-282b1ce4bc7d0b2abca7a2d22bbdc943"
+     },
+     {
+      "overton_id": "cgdev-8c28fcefaeb73d5f42c737e1e76fe1f8"
+     },
+     {
+      "overton_id": "cgdev-0c4a315f25401f3a806af7c635b57bc2"
+     },
+     {
+      "overton_id": "worldbank-6a60e5a7c0d8ab1d741d82cc60bd708d"
+     },
+     {
+      "overton_id": "worldbank-8fba348382c41c317e5353f071ebf9b3"
+     },
+     {
+      "overton_id": "worldbank-f23bb2da751a22129488c5ca9b2c78c4"
+     },
+     {
+      "overton_id": "worldbank-9bec4f2b284f902765de680a63319e84"
+     },
+     {
+      "overton_id": "oecddiscovery-a471866c57460ed95efa6eeb13505b59"
+     },
+     {
+      "overton_id": "unicef-882f82fd53932785970cfebf252ede87"
+     },
+     {
+      "overton_id": "opregovus-9f819ffb5980e292ebcb1d2fdffa579a"
+     },
+     {
+      "overton_id": "opregovus-345b652d9419cbfe966451d79dafafbf"
+     },
+     {
+      "overton_id": "jpal-154b14e193ac0abe7b3811a59830cb62"
+     },
+     {
+      "overton_id": "brookings-abb60b38b3c059a4d0b201866135e7e4"
+     },
+     {
+      "overton_id": "worldbank-f3f7f3bc07b495419e24e6a0c0587fe3"
+     },
+     {
+      "overton_id": "ifpri-507e225d24f57a729f7460a4c7a2f8e8"
+     },
+     {
+      "overton_id": "oecddiscovery-31541d97c031795e767e787edbdbd3eb"
+     },
+     {
+      "overton_id": "iadb-5b239ac353d3889ccfd86db13fae7871"
+     },
+     {
+      "overton_id": "bituk-c73490401ade50c844396dce7c3a6a88"
+     },
+     {
+      "overton_id": "unicef-48bbee369d1c7e38023b55e311d2731d"
+     },
+     {
+      "overton_id": "nber-9c42d017de90f9865e3538d6a67a72a9"
+     },
+     {
+      "overton_id": "worldbank-a86cf2420254162ed0e1048d2d3aabe0"
+     },
+     {
+      "overton_id": "worldbank-495755dc7a02dff2ad3ed4f9f5258314"
+     },
+     {
+      "overton_id": "cmino-29f65bfb2217fdcb9d492b58f73329d4"
+     },
+     {
+      "overton_id": "cmino-c0c200bddebaa90f2d1a73b71c08b9a1"
+     },
+     {
+      "overton_id": "ipcc-fa957a7cfe7a4a87f1522afb3e152e34"
+     }
+    ]
+   }
+  },
+  {
+   "policy_document_id": "nber-81e98a8feb17431561ec689673378fff",
+   "title": "Longer Term Effects of Head Start",
+   "translated_title": "",
+   "published_on": "2000-12-01",
+   "es_score": null,
+   "citation_count": 27,
+   "source": {
+    "title": "NBER",
+    "type": "think tank",
+    "country": "USA"
+   },
+   "cites": {
+    "policy": []
+   }
+  },
+  {
+   "policy_document_id": "ifs-3cf24c72611b2eed53f56d86da742f69",
+   "title": "What you need to know about the new childcare entitlements",
+   "translated_title": "",
+   "published_on": "2024-03-28",
+   "es_score": null,
+   "citation_count": 13,
+   "source": {
+    "title": "Institute for Fiscal Studies",
+    "type": "think tank",
+    "country": "UK"
+   },
+   "cites": {
+    "policy": [
+     {
+      "overton_id": "ifs-9f0ac8f30d995b9ae9a695c738cfcefa"
+     },
+     {
+      "overton_id": "ifs-4af681244ef4db046c394dee390c145c"
+     },
+     {
+      "overton_id": "govuk-be8fcf31c34c559bc4cee25f34de127f"
+     }
+    ]
+   }
+  },
+  {
+   "policy_document_id": "ifs-71815b5dd5c99c47162c1d45821d522e",
+   "title": "The economic effects of pre-school education and quality",
+   "translated_title": "",
+   "published_on": "2014-11-05",
+   "es_score": null,
+   "citation_count": 62,
+   "source": {
+    "title": "Institute for Fiscal Studies",
+    "type": "think tank",
+    "country": "UK"
+   },
+   "cites": {
+    "policy": [
+     {
+      "overton_id": "govuk-1e754697e27b230c7ed0ebc54fe1d931"
+     },
+     {
+      "overton_id": "govuk-417685b0630d49fda24d5422f3d397de"
+     }
+    ]
+   }
+  },
+  {
+   "policy_document_id": "govuk-61b0381e76df7197875fd64efdd3f236",
+   "title": "Early education use and child outcomes up to age 7",
+   "translated_title": "",
+   "published_on": "2021-10-29",
+   "es_score": null,
+   "citation_count": 8,
+   "source": {
+    "title": "The UK Government",
+    "type": "government",
+    "country": "UK"
+   },
+   "cites": {
+    "policy": []
+   }
+  },
+  {
+   "policy_document_id": "govuk-18c386c43fe4f85c00d21411990b99bd",
+   "title": "Giving every child the best start in life",
+   "translated_title": "",
+   "published_on": "2025-07-07",
+   "es_score": null,
+   "citation_count": 65,
+   "source": {
+    "title": "The UK Government",
+    "type": "government",
+    "country": "UK"
+   },
+   "cites": {
+    "policy": [
+     {
+      "overton_id": "ifs-3cf24c72611b2eed53f56d86da742f69"
+     },
+     {
+      "overton_id": "govuk-5cf10f4cf22a2cec28a51c9aeb0c97df"
+     },
+     {
+      "overton_id": "govuk-b3ac9e9bafb93b882a6bb4e28830f66f"
+     },
+     {
+      "overton_id": "bmj_insthe-25c807c367a0e493e4f108eef055ee87"
+     },
+     {
+      "overton_id": "govuk-1412a911f5a2574a212e836fd7df607a"
+     },
+     {
+      "overton_id": "ifs-1fdf6e34aec979854e880a96da8e3b2a"
+     },
+     {
+      "overton_id": "ifs-ac56e0a4567167a2ed13e7b1adb276f9"
+     },
+     {
+      "overton_id": "nuffieldfoundationuk-3754e96c1aaf0a6b045b74091eaeff2e"
+     },
+     {
+      "overton_id": "oecddiscovery-2a3b10bdb7b4571bb9973107143f7169"
+     },
+     {
+      "overton_id": "govuk-61b0381e76df7197875fd64efdd3f236"
+     },
+     {
+      "overton_id": "govuk-5846a2352d32d2a5fd66e3d98ca3c186"
+     },
+     {
+      "overton_id": "govuk-4606057b30e95c42f7b55640a1f5540d"
+     }
+    ]
+   }
+  },
+  {
+   "policy_document_id": "nber-9742845ec2f7491eb4f15a81c5961d64",
+   "title": "Stature and Status: Height, Ability, and Labor Market Outcomes",
+   "translated_title": "",
+   "published_on": "2006-08-18",
+   "es_score": null,
+   "citation_count": 27,
+   "source": {
+    "title": "NBER",
+    "type": "think tank",
+    "country": "USA"
+   },
+   "cites": {
+    "policy": []
+   }
+  },
+  {
+   "policy_document_id": "nber-b98da5f55e15912530f03aceaa836186",
+   "title": "Labor Market Returns to Early Childhood Stimulation: a 20-year Followup to an Experimental Intervention in Jamaica",
+   "translated_title": "",
+   "published_on": "2013-06-28",
+   "es_score": null,
+   "citation_count": 41,
+   "source": {
+    "title": "NBER",
+    "type": "think tank",
+    "country": "USA"
+   },
+   "cites": {
+    "policy": [
+     {
+      "overton_id": "izade-f26bd780759c367f656ee75443df20d1"
+     },
+     {
+      "overton_id": "izade-2a1e12e6d1b355f8d97ccd46d12903ec"
+     }
+    ]
+   }
+  },
+  {
+   "policy_document_id": "nber-742e91e680ff95cfdcfb42c46e55d8a3",
+   "title": "Experimental Evidence on Distributional Effects of Head Start",
+   "translated_title": "",
+   "published_on": "2014-08-28",
+   "es_score": null,
+   "citation_count": 39,
+   "source": {
+    "title": "NBER",
+    "type": "think tank",
+    "country": "USA"
+   },
+   "cites": {
+    "policy": [
+     {
+      "overton_id": "nber-07b68fc35b7c13ea84dd9b806d783209"
+     },
+     {
+      "overton_id": "nber-ec3e18807c3b7f4815859209730c9d74"
+     },
+     {
+      "overton_id": "nber-f2aaa6f71802c0c2909285b23cdcb4c0"
+     }
+    ]
+   }
+  },
+  {
+   "policy_document_id": "worldbank-35c0660bc50dc8780e0412d269c9fd78",
+   "title": "Impact Evaluation in Practice, First Edition",
+   "translated_title": "",
+   "published_on": "2012-03-19",
+   "es_score": null,
+   "citation_count": 157,
+   "source": {
+    "title": "World Bank",
+    "type": "igo",
+    "country": "IGO"
+   },
+   "cites": {
+    "policy": [
+     {
+      "overton_id": "worldbank-4746ad4afdb387ac2e51d2a7a452db75"
+     },
+     {
+      "overton_id": "worldbank-026ef112531f570d116e75d17f3519e8"
+     },
+     {
+      "overton_id": "worldbank-c5f2170026f178c837dee89cc30310ce"
+     },
+     {
+      "overton_id": "nber-d736bed0ddb1e65c1a5a39f9bafa0e28"
+     },
+     {
+      "overton_id": "worldbank-6ce8c36eef3a4035b0e8df427d6446e7"
+     },
+     {
+      "overton_id": "worldbank-6e7bfa74e4ef8b018dceff5e7906cf14"
+     },
+     {
+      "overton_id": "worldbank-acca53226ff0ff7c021047e6b5851d04"
+     },
+     {
+      "overton_id": "worldbank-1175ce875af3d484000dff7e29f8eb84"
+     },
+     {
+      "overton_id": "nber-09e4cc6731a6fa3758cfd9a1c64e2f44"
+     },
+     {
+      "overton_id": "worldbank-099504d3a1fde10f120c49d92a776334"
+     },
+     {
+      "overton_id": "nber-6d895c04e2037726bd115ab162c96b41"
+     },
+     {
+      "overton_id": "worldbank-adb67dc9659afe9fc07a0fd6f04507ad"
+     },
+     {
+      "overton_id": "worldbank-98c976ae34b39d608a136daf7e60efb6"
+     },
+     {
+      "overton_id": "worldbank-a2397c4968b164a9edd92437dbd405e2"
+     },
+     {
+      "overton_id": "worldbank-24351d2e3f6540e8d087c5909d3d4c73"
+     },
+     {
+      "overton_id": "worldbank-734f3783888d7a75e73a39ad678ad136"
+     },
+     {
+      "overton_id": "unitednations-0607da1f6cd7b3c922ad0a909fa8bd50"
+     },
+     {
+      "overton_id": "worldbank-89bb725fd5431bd0cf33a8d9d8e7660d"
+     },
+     {
+      "overton_id": "iadb-ae9cb52ff12494a8dccf6fda377297fb"
+     },
+     {
+      "overton_id": "nber-fe5f698d4c29a80bc1787219757f823b"
+     },
+     {
+      "overton_id": "worldbank-a87a8b285f57a0848cba077118ad32f0"
+     },
+     {
+      "overton_id": "ifpri-2d207cf8b9013c255a05e8dfb54ccb96"
+     },
+     {
+      "overton_id": "ifpri-a75c73dd91a61956569440f03c338e41"
+     },
+     {
+      "overton_id": "ifpri-df7c26091a4b6f2c1627ac49250b5e4b"
+     },
+     {
+      "overton_id": "ifpri-b865edc248a18103457fd30e8d997db1"
+     },
+     {
+      "overton_id": "cgdev-f6dd7a834f578cfddfaa2d2bf2f53707"
+     },
+     {
+      "overton_id": "worldbank-57f2e88282b2fd99dba52c6e630db32c"
+     }
+    ]
+   }
+  },
+  {
+   "policy_document_id": "worldbank-ab162cf35a3e3475c2703a55c093e11a",
+   "title": "World Development Report 2006 : Equity and Development",
+   "translated_title": "",
+   "published_on": "2012-04-06",
+   "es_score": null,
+   "citation_count": 570,
+   "source": {
+    "title": "World Bank",
+    "type": "igo",
+    "country": "IGO"
+   },
+   "cites": {
+    "policy": [
+     {
+      "overton_id": "worldbank-07b4cf83707b248153a5f5285c60b3d7"
+     },
+     {
+      "overton_id": "worldbank-0ace75399478fbf999436886e36909de"
+     },
+     {
+      "overton_id": "worldbank-0b72b5a09b38b7456a61560f85a42cde"
+     },
+     {
+      "overton_id": "worldbank-258146b84a935eb74a32d8f689babff5"
+     },
+     {
+      "overton_id": "worldbank-41512f0230c33a84ac1208cf54bb50fb"
+     },
+     {
+      "overton_id": "worldbank-5348163d9fbb0deb5120396ca48c4672"
+     },
+     {
+      "overton_id": "worldbank-5103ee8b287d337b99a97ace2916bb45"
+     },
+     {
+      "overton_id": "worldbank-96d579a51bbf00319f0ec08d4721d30a"
+     },
+     {
+      "overton_id": "worldbank-b2f84eb6252c58cb6ee3623bb4041dcf"
+     },
+     {
+      "overton_id": "worldbank-b344a6c2f0c457e7e01365ddd25b3b21"
+     },
+     {
+      "overton_id": "worldbank-b58e79497e4abe5dd55f77d3c843fdce"
+     },
+     {
+      "overton_id": "worldbank-e055e6dab80f004cb614719de6545186"
+     },
+     {
+      "overton_id": "worldbank-e65457fcd34fadda73f4d833b2332aa0"
+     },
+     {
+      "overton_id": "worldbank-f74568ed6f10dec4b50a0bfbe67aaf45"
+     },
+     {
+      "overton_id": "worldbank-f9dbbf690ea6d7c91f386ed2298adc2b"
+     },
+     {
+      "overton_id": "worldbank-abbd05ab7e9f50a8e3859878dd627720"
+     },
+     {
+      "overton_id": "worldbank-9d23c922d83e7752deff4208dfa608de"
+     },
+     {
+      "overton_id": "worldbank-2549308e0f8908628099f70350d3d30b"
+     },
+     {
+      "overton_id": "csirza-289e3c26511413f36b2af5c03601c6b2"
+     },
+     {
+      "overton_id": "worldbank-98e7a2198c53ced4b00a3ef4c760d8cb"
+     },
+     {
+      "overton_id": "worldbank-5123f7cb0ed59f5767c2b8391dfe6763"
+     },
+     {
+      "overton_id": "worldbank-19f58aa25ba740f32fb7ccc9ee25aa4d"
+     },
+     {
+      "overton_id": "asiandevelopmentbank-cc696dda64005d12aec40551cbb70670"
+     },
+     {
+      "overton_id": "worldbank-c7cdc34e23750495d976c374798360fe"
+     },
+     {
+      "overton_id": "councilonforeignrelations-5d4b5494fb112610da65744c75f8ec09"
+     },
+     {
+      "overton_id": "worldbank-d659ae566b90ecd18d8983bd46b9cbb1"
+     },
+     {
+      "overton_id": "worldbank-7d48fa333e5549d7ad9682bce991f8da"
+     },
+     {
+      "overton_id": "worldbank-66816e5598a10fa1f10825ef0224a9c4"
+     },
+     {
+      "overton_id": "humanrightswatch-d0ba6d4702d7d7748ed6c954887242c1"
+     },
+     {
+      "overton_id": "worldbank-5a57d3ceeac991dbf7142f12c3917096"
+     },
+     {
+      "overton_id": "worldbank-963805adf1ee01eec945f58378918b5f"
+     },
+     {
+      "overton_id": "worldbank-57e1eebe8a72c93ddcab5db3b0b25560"
+     },
+     {
+      "overton_id": "worldbank-a8233961802ca165c0891d85fa9d4f59"
+     },
+     {
+      "overton_id": "undp-7940fc5ee9b5fd6d2d3d132d9e7c3daf"
+     },
+     {
+      "overton_id": "worldbank-6d0f2176225a884b4429350d5a863f56"
+     },
+     {
+      "overton_id": "worldbank-9850a1198141081674f3dfe5d0293f57"
+     },
+     {
+      "overton_id": "ilo-21440b1e04b2db824aceb59d4e6ba248"
+     },
+     {
+      "overton_id": "worldbank-f3a5190ae35faba80804dc4dc04ff1e2"
+     },
+     {
+      "overton_id": "worldbank-3bd0930500cd8507d7170e190925b414"
+     },
+     {
+      "overton_id": "worldbank-4d54e0910d6afbd8335534bd709c71da"
+     },
+     {
+      "overton_id": "worldbank-48b5c055a9792ae9685e7789e76c5021"
+     },
+     {
+      "overton_id": "worldbank-d9b8e78e6055119277c659c5dfa9f6b8"
+     },
+     {
+      "overton_id": "worldbank-b808d3ae4898e6bf98c450a627365f2a"
+     },
+     {
+      "overton_id": "worldbank-41c77cfb6afced76fe0ba2136a347c15"
+     },
+     {
+      "overton_id": "worldbank-3db22f64206c813e5fb526a6bda2b18e"
+     },
+     {
+      "overton_id": "worldbank-0a57a981280ceb5ed9fc6532fbfca43b"
+     },
+     {
+      "overton_id": "worldbank-a6e3aec0b50e3c242ec36ec85ab240db"
+     },
+     {
+      "overton_id": "worldbank-1562d34ee3bab28ea81942e56dd5b5d9"
+     },
+     {
+      "overton_id": "worldbank-912713a005891074c00b2780bb92b254"
+     },
+     {
+      "overton_id": "worldbank-cc28ad8b6316983270436e8e287828fc"
+     },
+     {
+      "overton_id": "worldbank-6bd466bf8e52a10f769bbdbba0fc9944"
+     },
+     {
+      "overton_id": "worldbank-aa2332147969991dc54b8c6fdf61e64d"
+     },
+     {
+      "overton_id": "who-be11aa55b8b3a2aa8e1ea68835d94f87"
+     },
+     {
+      "overton_id": "worldbank-3de744ceb3c51ca558481382ff47eb7a"
+     },
+     {
+      "overton_id": "worldbank-ba8bc7a942d59eb059694f7b93bd6ea2"
+     },
+     {
+      "overton_id": "worldbank-bab13b94a69ca04ea7594f3cb998abe0"
+     },
+     {
+      "overton_id": "worldbank-64ece53f3d57d89c09299a4bea163db8"
+     },
+     {
+      "overton_id": "worldbank-e6c18e8f80bab9eaf37f67555f16d0d7"
+     },
+     {
+      "overton_id": "worldbank-a70e4cfdd8e3f0eb3d62c3d9ef75768d"
+     },
+     {
+      "overton_id": "worldbank-8c954d85a46860a99e585ca5a7c85a81"
+     },
+     {
+      "overton_id": "worldbank-2886b78261f00e5f02558628d55e9ea7"
+     },
+     {
+      "overton_id": "worldbank-417b54d10f930059d78d587b17819db2"
+     },
+     {
+      "overton_id": "worldbank-ef72e3fb9a23d1e8e944b507c9ffdaa6"
+     },
+     {
+      "overton_id": "worldbank-867d8ea14ac82a9056d4ad0918af2e9d"
+     },
+     {
+      "overton_id": "worldbank-364a7b772c224460a9167bc27e90acc4"
+     },
+     {
+      "overton_id": "worldbank-039006615ce430fb6f05b0eb458d33c6"
+     },
+     {
+      "overton_id": "cgdev-1f3f74a12a1eb884b411f497d5a86a6c"
+     },
+     {
+      "overton_id": "worldbank-a8623b1faba69b8d9a8625cac7597669"
+     },
+     {
+      "overton_id": "worldbank-ebf115d346a90e8c27ecc61c38029f41"
+     },
+     {
+      "overton_id": "worldbank-ca3bea76228c0cd64b6e76d965391107"
+     },
+     {
+      "overton_id": "worldbank-88e62156188f627e955d1fe46cc74147"
+     },
+     {
+      "overton_id": "worldbank-565a6a132465e5a82eb1cc8801bc3c1d"
+     },
+     {
+      "overton_id": "worldbank-0f0c30bc72b68d0a42578a5e0e9d33c1"
+     },
+     {
+      "overton_id": "worldbank-b262afa5e39c105c52b9a6f7bfdf1045"
+     },
+     {
+      "overton_id": "worldbank-99b97bf123f7a405f80e857194d0a625"
+     },
+     {
+      "overton_id": "unitednations-216253824954530a5a412556709a9dea"
+     },
+     {
+      "overton_id": "brookings-f4882539c74a36d3769b55eaada55559"
+     },
+     {
+      "overton_id": "randcorporation-c4957c123a00857cf36c83ed7df750d2"
+     },
+     {
+      "overton_id": "worldbank-1311db650741e12ddfc8e91bc3b5e7c3"
+     },
+     {
+      "overton_id": "worldbank-77331a3cc5b22d93d06e5269f789941c"
+     },
+     {
+      "overton_id": "iadb-62e711b66db611e8284f775fad555537"
+     },
+     {
+      "overton_id": "bankofcolombia-3c689cae18fa9c7317dad8ab0ecb4707"
+     },
+     {
+      "overton_id": "imf-8c67900aa53e79ff5870af8513972249"
+     },
+     {
+      "overton_id": "imf-78394e10988204629dfe30ca5ffda42f"
+     },
+     {
+      "overton_id": "imf-8b3b427ac1566a534927500182e387ff"
+     },
+     {
+      "overton_id": "ifs-d5b936b4247884133166b6ac875918cf"
+     },
+     {
+      "overton_id": "ifpri-89be37d84ead53cbc180ecb273de6612"
+     },
+     {
+      "overton_id": "imf-28fa50578c218e7d8bd266100c3c9bae"
+     },
+     {
+      "overton_id": "imf-8591a5b5432c9ac19ceb5c3ceca89308"
+     },
+     {
+      "overton_id": "iadb-866c804695586dd0be8f145be3f58e3b"
+     },
+     {
+      "overton_id": "worldbank-8b4da78686dd8929a43e08d6f9caed68"
+     },
+     {
+      "overton_id": "napedu-4c7e1a30321fbc06863407d5bcf81a1a"
+     },
+     {
+      "overton_id": "ilo-5c94bec93ee95d5a54383ae741c907cb"
+     },
+     {
+      "overton_id": "worldbank-aeef60c807aad5dd70aa916c353dcd8c"
+     },
+     {
+      "overton_id": "worldbank-40c37f13e964b0d571fa601c4afb05a0"
+     },
+     {
+      "overton_id": "oecddiscovery-4e221af75c723496916a98b814a5f484"
+     }
+    ]
+   }
+  },
+  {
+   "policy_document_id": "unicef-e308ce096106ac278e9f9782feb71d48",
+   "title": "A World Fit for Children",
+   "translated_title": "",
+   "published_on": "2008-09-03",
+   "es_score": null,
+   "citation_count": 152,
+   "source": {
+    "title": "UNICEF",
+    "type": "igo",
+    "country": "IGO"
+   },
+   "cites": {
+    "policy": []
+   }
+  }
+ ],
+ "synthetic_ids": [
+  "frontiereconomics-f5c4d0762d1faee90b334af6a823d909-dup-a",
+  "lenus-5d01936d0ea9cfb91b04c0fed7e015b4-dup-b",
+  "synthetic-titleless-1"
+ ],
+ "expected": {
+  "interleaved": [
+   "ukparliament_select-8c11dd2b346d7a33edbd3e9a9113a8ae",
+   "worldbank-ee6c304c47a43c02a0fb53edd9dc1134",
+   "opportunityinstitute-e2cf72ca602d950174ce0c98577b260a",
+   "esmeefairbairn-ea142a6d47703db2c53085b176c9ec02",
+   "randcorporation-1b78c2c7dd94f8f6498e8014e346ab04",
+   "stateofwashington-aabcbf1a5bb744e813ff8fe5ef426ed4",
+   "ukparliament_select-0ed0f2cbe0ef1d205ff8dc75b9351194",
+   "edulinksusa-449049ac137dbea2076b8d1a90783489",
+   "edulinksusa-00411966862c13e2bc6e8035f55a66f3",
+   "ukparliament_select-ef635032c8931d9dd4d215baa116d9ea",
+   "stateofwashington-a56b524ff735f8369890864f35e7fc89",
+   "governmentofazerbaijan-b7aecb822ced173cf4175591fc62b72e",
+   "govuk-7f2c4668c13f531ea0d1e6bd909d45a3",
+   "worldbank-116761123194990080220d76af613d37",
+   "randcorporation-a250d8192b6bd61e773ee0e53078bffa",
+   "frontiereconomics-f5c4d0762d1faee90b334af6a823d909",
+   "worldbank-32274bf48d65666f9dcc5daec63a29f1",
+   "stateofconnecticut-42a1b501a991739da2ab03f251a0efa6",
+   "centreforsocialjustice-da440956dc5778c23a7c16a61882ecf8",
+   "randcorporation-73c54d592218d87cb711abfe54dd6067",
+   "stateofohio-d84c6bcaade5d8a7095798205d4797f2",
+   "govuk-7c40cc228d2e172cfe9ac2c714b25bb1",
+   "lenus-5d01936d0ea9cfb91b04c0fed7e015b4",
+   "stateofnorthcarolina-3da6f05771c9b0c90ec7bd944ae72647",
+   "deptofsocialservicesau-0cac6cfb8debefed14a1ecacdbab98ca",
+   "napedu-768d87fd6ed4f433fb008f501219fb06",
+   "dcgov-37ca2892f6b85bcc3205ee3e8bfa7dbc",
+   "lsecase-0b02fcd60833f11750e59e8c6a361c30",
+   "randcorporation-84c5520a7f8fa93bdcc474641360fbd9",
+   "stateofmissouri-cb3c3a510d363f747f23ecddf75f760f",
+   "ukparliament_select-1afba646c63cd890a242c4c0bfd6f1f7",
+   "stateofwashington-e1d8eaf0d04831b4914dc75d4fd177e4",
+   "ukparliament_select-46bad658d4878166f48dccb1829f2215",
+   "nygov-be9fad1eba0a2714ad332887295c1fd9",
+   "stateofminnesota-f64db94aac88ce55f724bc1199c13e42",
+   "govuk-7938b177442c86cfdb461835ef94fc3f",
+   "govsg-78e8f7d7df22d33655a59cb2a9644244",
+   "nationalauditofficeuk-3a155cb8901a23c72d6637c1a7b1161a",
+   "randcorporation-aa15a8c0cf073230cf88d19a3b5706e0",
+   "ukparliament_select-5db2de1bd5d07d8fdfbc904665b24352",
+   "stateofnevada-094a2c13907e848a333ba3d5fed067fe",
+   "stateofmontana-c1ce95f6dc7b0551e48d1661a6c0fe62",
+   "worldbank-5a17f6a9265c02cc88333ac75a4a3fee",
+   "provinceofquebec-f755b4d27714cfe593be1caee035bdb7",
+   "pagov-c042431cad1aa44f7bc1643843f6bfec",
+   "stateofminnesota-5a828734a349056f0ce7c7b1569966c2",
+   "stateofconnecticut-0e792a173cf9b2ea98ebfae92b73bb44",
+   "legislationgovuk-4eacee4c732c3a2cae239c645e49a3a9",
+   "stateofwashington-b605e47ec06b001438b23b8e0b74fedf",
+   "stateofwashington-0bff76c91c6ab57c14ed9ee2e95d3a3d",
+   "europa-b1214c0ef736961594dea333ded1318d",
+   "nationaleducationpolicycenter-8206b17908dc82d752bc1e7f6ca0286a",
+   "unesco-88b09e1c1348c94ad5b241859b73afec",
+   "northernirelandgovuk-7c37c65497fde87e85a3c590dd338777",
+   "ministrukabinets-8f6d08f90723a90929a378e9942d5b36",
+   "oecddiscovery-71cecf31c4c02b5d4ee46cdbc661527d",
+   "stateofbadende-4ef95381fe481ba4361795e39017b24e",
+   "stateofmaine-6b8233ecc76da3ae3005831781a4096f",
+   "europa-a3cdb139eaffbf82c519039c455c29bd",
+   "commonwealthfund-2ec4df4b570b7f2cf9c71eccd3693aee",
+   "govuk-920f783a80fa0447b01907e4efb3bd93",
+   "stateofminnesota-6b8932157936f1ad61873d132bda94de",
+   "stateofmissouri-9b6c355dc2864d6900dc4c7b3ee1c5c6",
+   "randcorporation-6bc63fa02750216d418ef3809e807db9",
+   "governmentofukraine-5e21d3a03ecaf8bcfb272b971b26219d",
+   "stateofvictoria-3d32a090aebbf9bee671fb4369677bcd",
+   "localgovassoc-82b98cf13c4a1222f7a2e043f855fccf",
+   "provinceofquebec-63e39a6d116c7b135bd95abd9c904916",
+   "newamerica-cce37ee0e6d1eb254bc9c4fb53980fe2",
+   "ugippie-fd70a4a9d1fd06ba37824c2c8a639e2e",
+   "worldbank-43309dad84d7bb1da6fb72fa8b0e5c68",
+   "illinoisgov-0ad34ade2836281ebef43386cab682fb",
+   "smithinstitute-e5ac5c8fc22ba8e18db6e8b98f7ca16f",
+   "stateofmissouri-e0782ce7c6753605825a4ae46f72b4fa",
+   "brookings-b6e1cdaf0cdd51f20d7630b23e733679",
+   "worldbank-8e0018ec9bd73086ccebca794ce2d747",
+   "provinceofontario-41f7fa627b50efe2f09dab41a35678aa",
+   "oecddiscovery-d71895fe49fb35215f9486e78f62e9f4",
+   "randcorporation-5f2bb1a96daaad5ded011822ffe2bc0f",
+   "stateofhawaiigov-83acaf7fb4339badd803d84ab568abc7",
+   "oecddiscovery-3169a6b0cb2219c39ef9a398960f1b64",
+   "provinceofquebec-4abdfcf0454bb37b38e5c850debf5eab",
+   "stateofhawaiigov-ea490adf9b880c6dc26836c7950426b1",
+   "ifs-e2d1d83e11419968666ce4794744ced8",
+   "cityofnashville-11e3c5bd9f69004f7dd9bf686f74293d",
+   "provinceofquebec-f3d3e584970c9603f8a2e11afc2fd679",
+   "ukparliament_select-fb3502a459dfac264e1e3100875b502e",
+   "iadb-0fbb5287a8d6fc6001737660df1cc1f6",
+   "opportunityinstitute-2b3ea7faa142ff3a28044d2a1206288b",
+   "ifs-c6051a406bbd4de6aed8f32607902007",
+   "gpogov-eb9fa0dafa16852164209a7973963a74",
+   "educationendowmentfoundation-1a2715664ad642275c71783512327471",
+   "stateofminnesota-bd00babc7bf55e1abeb7ca5d394776a5",
+   "cedboard-f12572c0c4640653d1acb2edf33b6218",
+   "govuk-72050dbb3d6886f62398dbb3dcbeedcd",
+   "opregovus-14ee8b1e06daf7f79c673f6bb24eefc6",
+   "houstontxgov-463cf0c4bf118a22d2838a7d8daaa440",
+   "govuk-31b7ccb9629b458c54662cab67323e77",
+   "nycgov-1d73b2b8f05b7c00bc46a704e834da2c",
+   "stateofohio-7fe44d69bd03b67f2375b76fcfa89c80",
+   "govuk-88d33d2df2d6d9eb6f8fd396626d152f",
+   "gpeusa-2d3fd1ab13553e33cc4e1325f5b29d9b",
+   "oecddiscovery-df212a36e6bc2272ace393de9a973655",
+   "seattlegov-ad10a0d419e89a72da8fab541f1f1496",
+   "northernirelandgovuk-919fce82f5dcb56f4e98457f87246a52",
+   "stateofalabama-be761891e7ff6cbaccfbaabffd7639cb",
+   "stateofconnecticut-2891586401d8684e6debb4cd7ccf3b1c",
+   "govwales-b800dcefc96ee1bc0615fb63c212fbd1",
+   "stateoflouisiana-97b8cd70c1475167d439dea3b2ac7ae6",
+   "stateofvictoria-a0040fdf503a8fe657cfd0d23082cc71",
+   "frontiereconomics-f5c4d0762d1faee90b334af6a823d909-dup-a",
+   "lenus-5d01936d0ea9cfb91b04c0fed7e015b4-dup-b",
+   "synthetic-titleless-1"
+  ],
+  "deduplicated": [
+   "ukparliament_select-8c11dd2b346d7a33edbd3e9a9113a8ae",
+   "worldbank-ee6c304c47a43c02a0fb53edd9dc1134",
+   "opportunityinstitute-e2cf72ca602d950174ce0c98577b260a",
+   "esmeefairbairn-ea142a6d47703db2c53085b176c9ec02",
+   "randcorporation-1b78c2c7dd94f8f6498e8014e346ab04",
+   "stateofwashington-aabcbf1a5bb744e813ff8fe5ef426ed4",
+   "ukparliament_select-0ed0f2cbe0ef1d205ff8dc75b9351194",
+   "edulinksusa-449049ac137dbea2076b8d1a90783489",
+   "edulinksusa-00411966862c13e2bc6e8035f55a66f3",
+   "ukparliament_select-ef635032c8931d9dd4d215baa116d9ea",
+   "stateofwashington-a56b524ff735f8369890864f35e7fc89",
+   "governmentofazerbaijan-b7aecb822ced173cf4175591fc62b72e",
+   "govuk-7f2c4668c13f531ea0d1e6bd909d45a3",
+   "worldbank-116761123194990080220d76af613d37",
+   "randcorporation-a250d8192b6bd61e773ee0e53078bffa",
+   "frontiereconomics-f5c4d0762d1faee90b334af6a823d909",
+   "worldbank-32274bf48d65666f9dcc5daec63a29f1",
+   "stateofconnecticut-42a1b501a991739da2ab03f251a0efa6",
+   "centreforsocialjustice-da440956dc5778c23a7c16a61882ecf8",
+   "randcorporation-73c54d592218d87cb711abfe54dd6067",
+   "stateofohio-d84c6bcaade5d8a7095798205d4797f2",
+   "govuk-7c40cc228d2e172cfe9ac2c714b25bb1",
+   "lenus-5d01936d0ea9cfb91b04c0fed7e015b4",
+   "stateofnorthcarolina-3da6f05771c9b0c90ec7bd944ae72647",
+   "deptofsocialservicesau-0cac6cfb8debefed14a1ecacdbab98ca",
+   "napedu-768d87fd6ed4f433fb008f501219fb06",
+   "dcgov-37ca2892f6b85bcc3205ee3e8bfa7dbc",
+   "lsecase-0b02fcd60833f11750e59e8c6a361c30",
+   "randcorporation-84c5520a7f8fa93bdcc474641360fbd9",
+   "stateofmissouri-cb3c3a510d363f747f23ecddf75f760f",
+   "ukparliament_select-1afba646c63cd890a242c4c0bfd6f1f7",
+   "stateofwashington-e1d8eaf0d04831b4914dc75d4fd177e4",
+   "ukparliament_select-46bad658d4878166f48dccb1829f2215",
+   "nygov-be9fad1eba0a2714ad332887295c1fd9",
+   "stateofminnesota-f64db94aac88ce55f724bc1199c13e42",
+   "govuk-7938b177442c86cfdb461835ef94fc3f",
+   "govsg-78e8f7d7df22d33655a59cb2a9644244",
+   "nationalauditofficeuk-3a155cb8901a23c72d6637c1a7b1161a",
+   "randcorporation-aa15a8c0cf073230cf88d19a3b5706e0",
+   "ukparliament_select-5db2de1bd5d07d8fdfbc904665b24352",
+   "stateofnevada-094a2c13907e848a333ba3d5fed067fe",
+   "stateofmontana-c1ce95f6dc7b0551e48d1661a6c0fe62",
+   "worldbank-5a17f6a9265c02cc88333ac75a4a3fee",
+   "provinceofquebec-f755b4d27714cfe593be1caee035bdb7",
+   "pagov-c042431cad1aa44f7bc1643843f6bfec",
+   "stateofminnesota-5a828734a349056f0ce7c7b1569966c2",
+   "stateofconnecticut-0e792a173cf9b2ea98ebfae92b73bb44",
+   "legislationgovuk-4eacee4c732c3a2cae239c645e49a3a9",
+   "stateofwashington-b605e47ec06b001438b23b8e0b74fedf",
+   "stateofwashington-0bff76c91c6ab57c14ed9ee2e95d3a3d",
+   "europa-b1214c0ef736961594dea333ded1318d",
+   "nationaleducationpolicycenter-8206b17908dc82d752bc1e7f6ca0286a",
+   "unesco-88b09e1c1348c94ad5b241859b73afec",
+   "northernirelandgovuk-7c37c65497fde87e85a3c590dd338777",
+   "ministrukabinets-8f6d08f90723a90929a378e9942d5b36",
+   "oecddiscovery-71cecf31c4c02b5d4ee46cdbc661527d",
+   "stateofbadende-4ef95381fe481ba4361795e39017b24e",
+   "stateofmaine-6b8233ecc76da3ae3005831781a4096f",
+   "europa-a3cdb139eaffbf82c519039c455c29bd",
+   "commonwealthfund-2ec4df4b570b7f2cf9c71eccd3693aee",
+   "govuk-920f783a80fa0447b01907e4efb3bd93",
+   "stateofminnesota-6b8932157936f1ad61873d132bda94de",
+   "stateofmissouri-9b6c355dc2864d6900dc4c7b3ee1c5c6",
+   "randcorporation-6bc63fa02750216d418ef3809e807db9",
+   "governmentofukraine-5e21d3a03ecaf8bcfb272b971b26219d",
+   "stateofvictoria-3d32a090aebbf9bee671fb4369677bcd",
+   "localgovassoc-82b98cf13c4a1222f7a2e043f855fccf",
+   "provinceofquebec-63e39a6d116c7b135bd95abd9c904916",
+   "newamerica-cce37ee0e6d1eb254bc9c4fb53980fe2",
+   "ugippie-fd70a4a9d1fd06ba37824c2c8a639e2e",
+   "worldbank-43309dad84d7bb1da6fb72fa8b0e5c68",
+   "illinoisgov-0ad34ade2836281ebef43386cab682fb",
+   "stateofmissouri-e0782ce7c6753605825a4ae46f72b4fa",
+   "brookings-b6e1cdaf0cdd51f20d7630b23e733679",
+   "provinceofontario-41f7fa627b50efe2f09dab41a35678aa",
+   "oecddiscovery-d71895fe49fb35215f9486e78f62e9f4",
+   "randcorporation-5f2bb1a96daaad5ded011822ffe2bc0f",
+   "stateofhawaiigov-83acaf7fb4339badd803d84ab568abc7",
+   "oecddiscovery-3169a6b0cb2219c39ef9a398960f1b64",
+   "provinceofquebec-4abdfcf0454bb37b38e5c850debf5eab",
+   "stateofhawaiigov-ea490adf9b880c6dc26836c7950426b1",
+   "ifs-e2d1d83e11419968666ce4794744ced8",
+   "cityofnashville-11e3c5bd9f69004f7dd9bf686f74293d",
+   "provinceofquebec-f3d3e584970c9603f8a2e11afc2fd679",
+   "ukparliament_select-fb3502a459dfac264e1e3100875b502e",
+   "iadb-0fbb5287a8d6fc6001737660df1cc1f6",
+   "ifs-c6051a406bbd4de6aed8f32607902007",
+   "gpogov-eb9fa0dafa16852164209a7973963a74",
+   "educationendowmentfoundation-1a2715664ad642275c71783512327471",
+   "stateofminnesota-bd00babc7bf55e1abeb7ca5d394776a5",
+   "cedboard-f12572c0c4640653d1acb2edf33b6218",
+   "govuk-72050dbb3d6886f62398dbb3dcbeedcd",
+   "opregovus-14ee8b1e06daf7f79c673f6bb24eefc6",
+   "houstontxgov-463cf0c4bf118a22d2838a7d8daaa440",
+   "govuk-31b7ccb9629b458c54662cab67323e77",
+   "nycgov-1d73b2b8f05b7c00bc46a704e834da2c",
+   "stateofohio-7fe44d69bd03b67f2375b76fcfa89c80",
+   "govuk-88d33d2df2d6d9eb6f8fd396626d152f",
+   "gpeusa-2d3fd1ab13553e33cc4e1325f5b29d9b",
+   "oecddiscovery-df212a36e6bc2272ace393de9a973655",
+   "northernirelandgovuk-919fce82f5dcb56f4e98457f87246a52",
+   "stateofalabama-be761891e7ff6cbaccfbaabffd7639cb",
+   "stateofconnecticut-2891586401d8684e6debb4cd7ccf3b1c",
+   "govwales-b800dcefc96ee1bc0615fb63c212fbd1",
+   "stateoflouisiana-97b8cd70c1475167d439dea3b2ac7ae6",
+   "stateofvictoria-a0040fdf503a8fe657cfd0d23082cc71",
+   "synthetic-titleless-1"
+  ],
+  "result_ids": [
+   "ukparliament_select-8c11dd2b346d7a33edbd3e9a9113a8ae",
+   "worldbank-ee6c304c47a43c02a0fb53edd9dc1134",
+   "opportunityinstitute-e2cf72ca602d950174ce0c98577b260a",
+   "esmeefairbairn-ea142a6d47703db2c53085b176c9ec02",
+   "randcorporation-1b78c2c7dd94f8f6498e8014e346ab04",
+   "stateofwashington-aabcbf1a5bb744e813ff8fe5ef426ed4",
+   "ukparliament_select-0ed0f2cbe0ef1d205ff8dc75b9351194",
+   "edulinksusa-449049ac137dbea2076b8d1a90783489",
+   "edulinksusa-00411966862c13e2bc6e8035f55a66f3",
+   "ukparliament_select-ef635032c8931d9dd4d215baa116d9ea",
+   "stateofwashington-a56b524ff735f8369890864f35e7fc89",
+   "governmentofazerbaijan-b7aecb822ced173cf4175591fc62b72e",
+   "govuk-7f2c4668c13f531ea0d1e6bd909d45a3",
+   "worldbank-116761123194990080220d76af613d37",
+   "randcorporation-a250d8192b6bd61e773ee0e53078bffa",
+   "frontiereconomics-f5c4d0762d1faee90b334af6a823d909",
+   "worldbank-32274bf48d65666f9dcc5daec63a29f1",
+   "stateofconnecticut-42a1b501a991739da2ab03f251a0efa6",
+   "centreforsocialjustice-da440956dc5778c23a7c16a61882ecf8",
+   "randcorporation-73c54d592218d87cb711abfe54dd6067",
+   "stateofohio-d84c6bcaade5d8a7095798205d4797f2",
+   "govuk-7c40cc228d2e172cfe9ac2c714b25bb1",
+   "lenus-5d01936d0ea9cfb91b04c0fed7e015b4",
+   "stateofnorthcarolina-3da6f05771c9b0c90ec7bd944ae72647",
+   "deptofsocialservicesau-0cac6cfb8debefed14a1ecacdbab98ca",
+   "napedu-768d87fd6ed4f433fb008f501219fb06",
+   "dcgov-37ca2892f6b85bcc3205ee3e8bfa7dbc",
+   "lsecase-0b02fcd60833f11750e59e8c6a361c30",
+   "randcorporation-84c5520a7f8fa93bdcc474641360fbd9",
+   "stateofmissouri-cb3c3a510d363f747f23ecddf75f760f",
+   "ukparliament_select-1afba646c63cd890a242c4c0bfd6f1f7",
+   "stateofwashington-e1d8eaf0d04831b4914dc75d4fd177e4",
+   "ukparliament_select-46bad658d4878166f48dccb1829f2215",
+   "nygov-be9fad1eba0a2714ad332887295c1fd9",
+   "stateofminnesota-f64db94aac88ce55f724bc1199c13e42",
+   "govuk-7938b177442c86cfdb461835ef94fc3f",
+   "govsg-78e8f7d7df22d33655a59cb2a9644244",
+   "nationalauditofficeuk-3a155cb8901a23c72d6637c1a7b1161a",
+   "randcorporation-aa15a8c0cf073230cf88d19a3b5706e0",
+   "ukparliament_select-5db2de1bd5d07d8fdfbc904665b24352",
+   "stateofnevada-094a2c13907e848a333ba3d5fed067fe",
+   "stateofmontana-c1ce95f6dc7b0551e48d1661a6c0fe62",
+   "worldbank-5a17f6a9265c02cc88333ac75a4a3fee",
+   "provinceofquebec-f755b4d27714cfe593be1caee035bdb7",
+   "pagov-c042431cad1aa44f7bc1643843f6bfec",
+   "stateofminnesota-5a828734a349056f0ce7c7b1569966c2",
+   "stateofconnecticut-0e792a173cf9b2ea98ebfae92b73bb44",
+   "legislationgovuk-4eacee4c732c3a2cae239c645e49a3a9",
+   "stateofwashington-b605e47ec06b001438b23b8e0b74fedf",
+   "stateofwashington-0bff76c91c6ab57c14ed9ee2e95d3a3d",
+   "europa-b1214c0ef736961594dea333ded1318d",
+   "nationaleducationpolicycenter-8206b17908dc82d752bc1e7f6ca0286a",
+   "unesco-88b09e1c1348c94ad5b241859b73afec",
+   "northernirelandgovuk-7c37c65497fde87e85a3c590dd338777",
+   "ministrukabinets-8f6d08f90723a90929a378e9942d5b36",
+   "oecddiscovery-71cecf31c4c02b5d4ee46cdbc661527d",
+   "stateofbadende-4ef95381fe481ba4361795e39017b24e",
+   "stateofmaine-6b8233ecc76da3ae3005831781a4096f",
+   "europa-a3cdb139eaffbf82c519039c455c29bd",
+   "commonwealthfund-2ec4df4b570b7f2cf9c71eccd3693aee",
+   "govuk-920f783a80fa0447b01907e4efb3bd93",
+   "stateofminnesota-6b8932157936f1ad61873d132bda94de",
+   "stateofmissouri-9b6c355dc2864d6900dc4c7b3ee1c5c6",
+   "randcorporation-6bc63fa02750216d418ef3809e807db9",
+   "governmentofukraine-5e21d3a03ecaf8bcfb272b971b26219d",
+   "stateofvictoria-3d32a090aebbf9bee671fb4369677bcd",
+   "localgovassoc-82b98cf13c4a1222f7a2e043f855fccf",
+   "provinceofquebec-63e39a6d116c7b135bd95abd9c904916",
+   "newamerica-cce37ee0e6d1eb254bc9c4fb53980fe2",
+   "ugippie-fd70a4a9d1fd06ba37824c2c8a639e2e",
+   "worldbank-43309dad84d7bb1da6fb72fa8b0e5c68",
+   "illinoisgov-0ad34ade2836281ebef43386cab682fb",
+   "stateofmissouri-e0782ce7c6753605825a4ae46f72b4fa",
+   "brookings-b6e1cdaf0cdd51f20d7630b23e733679",
+   "provinceofontario-41f7fa627b50efe2f09dab41a35678aa",
+   "oecddiscovery-d71895fe49fb35215f9486e78f62e9f4",
+   "randcorporation-5f2bb1a96daaad5ded011822ffe2bc0f",
+   "stateofhawaiigov-83acaf7fb4339badd803d84ab568abc7",
+   "oecddiscovery-3169a6b0cb2219c39ef9a398960f1b64",
+   "provinceofquebec-4abdfcf0454bb37b38e5c850debf5eab",
+   "stateofhawaiigov-ea490adf9b880c6dc26836c7950426b1",
+   "ifs-e2d1d83e11419968666ce4794744ced8",
+   "cityofnashville-11e3c5bd9f69004f7dd9bf686f74293d",
+   "provinceofquebec-f3d3e584970c9603f8a2e11afc2fd679",
+   "ukparliament_select-fb3502a459dfac264e1e3100875b502e",
+   "iadb-0fbb5287a8d6fc6001737660df1cc1f6",
+   "ifs-c6051a406bbd4de6aed8f32607902007",
+   "gpogov-eb9fa0dafa16852164209a7973963a74",
+   "educationendowmentfoundation-1a2715664ad642275c71783512327471",
+   "stateofminnesota-bd00babc7bf55e1abeb7ca5d394776a5",
+   "cedboard-f12572c0c4640653d1acb2edf33b6218",
+   "govuk-72050dbb3d6886f62398dbb3dcbeedcd",
+   "opregovus-14ee8b1e06daf7f79c673f6bb24eefc6",
+   "houstontxgov-463cf0c4bf118a22d2838a7d8daaa440",
+   "govuk-31b7ccb9629b458c54662cab67323e77",
+   "nycgov-1d73b2b8f05b7c00bc46a704e834da2c",
+   "stateofohio-7fe44d69bd03b67f2375b76fcfa89c80",
+   "govuk-88d33d2df2d6d9eb6f8fd396626d152f",
+   "gpeusa-2d3fd1ab13553e33cc4e1325f5b29d9b",
+   "oecddiscovery-df212a36e6bc2272ace393de9a973655",
+   "northernirelandgovuk-919fce82f5dcb56f4e98457f87246a52",
+   "stateofalabama-be761891e7ff6cbaccfbaabffd7639cb",
+   "stateofconnecticut-2891586401d8684e6debb4cd7ccf3b1c",
+   "govwales-b800dcefc96ee1bc0615fb63c212fbd1",
+   "stateoflouisiana-97b8cd70c1475167d439dea3b2ac7ae6",
+   "stateofvictoria-a0040fdf503a8fe657cfd0d23082cc71",
+   "synthetic-titleless-1"
+  ],
+  "landmarks": [
+   "worldbank-ce176b8a9b31f5284161cc1bfb146242",
+   "govuk-91cf5dce33d3b57577f80bc4c7ca1072",
+   "worldbank-ebec5a02cf3d0f956d6a266d850b50ed",
+   "worldbank-7c4a788bb6d51f2664aa169a9f7980f0",
+   "nber-81e98a8feb17431561ec689673378fff",
+   "ifs-3cf24c72611b2eed53f56d86da742f69",
+   "ifs-71815b5dd5c99c47162c1d45821d522e",
+   "govuk-61b0381e76df7197875fd64efdd3f236",
+   "govuk-18c386c43fe4f85c00d21411990b99bd",
+   "nber-9742845ec2f7491eb4f15a81c5961d64",
+   "nber-b98da5f55e15912530f03aceaa836186",
+   "nber-742e91e680ff95cfdcfb42c46e55d8a3",
+   "worldbank-35c0660bc50dc8780e0412d269c9fd78",
+   "worldbank-ab162cf35a3e3475c2703a55c093e11a",
+   "unicef-e308ce096106ac278e9f9782feb71d48"
+  ],
+  "landmarks_found": [
+   "worldbank-ce176b8a9b31f5284161cc1bfb146242",
+   "govuk-91cf5dce33d3b57577f80bc4c7ca1072",
+   "worldbank-ebec5a02cf3d0f956d6a266d850b50ed",
+   "worldbank-7c4a788bb6d51f2664aa169a9f7980f0",
+   "nber-81e98a8feb17431561ec689673378fff",
+   "ifs-3cf24c72611b2eed53f56d86da742f69",
+   "ifs-71815b5dd5c99c47162c1d45821d522e",
+   "govuk-61b0381e76df7197875fd64efdd3f236",
+   "govuk-18c386c43fe4f85c00d21411990b99bd",
+   "nber-9742845ec2f7491eb4f15a81c5961d64",
+   "nber-b98da5f55e15912530f03aceaa836186",
+   "nber-742e91e680ff95cfdcfb42c46e55d8a3",
+   "worldbank-35c0660bc50dc8780e0412d269c9fd78",
+   "worldbank-ab162cf35a3e3475c2703a55c093e11a",
+   "unicef-e308ce096106ac278e9f9782feb71d48"
+  ],
+  "inset": {
+   "govuk-61b0381e76df7197875fd64efdd3f236": 2,
+   "govuk-18c386c43fe4f85c00d21411990b99bd": 2,
+   "nber-9742845ec2f7491eb4f15a81c5961d64": 2,
+   "nber-b98da5f55e15912530f03aceaa836186": 2,
+   "worldbank-ebec5a02cf3d0f956d6a266d850b50ed": 3,
+   "nber-742e91e680ff95cfdcfb42c46e55d8a3": 2,
+   "worldbank-35c0660bc50dc8780e0412d269c9fd78": 2,
+   "worldbank-32274bf48d65666f9dcc5daec63a29f1": 2,
+   "worldbank-ab162cf35a3e3475c2703a55c093e11a": 2,
+   "worldbank-7c4a788bb6d51f2664aa169a9f7980f0": 3,
+   "nber-81e98a8feb17431561ec689673378fff": 3,
+   "unicef-e308ce096106ac278e9f9782feb71d48": 2,
+   "ifs-3cf24c72611b2eed53f56d86da742f69": 3,
+   "worldbank-ce176b8a9b31f5284161cc1bfb146242": 4,
+   "ifs-71815b5dd5c99c47162c1d45821d522e": 3,
+   "randcorporation-84c5520a7f8fa93bdcc474641360fbd9": 1,
+   "govuk-91cf5dce33d3b57577f80bc4c7ca1072": 4,
+   "nationalauditofficeuk-3a155cb8901a23c72d6637c1a7b1161a": 1,
+   "ukparliament_select-ef635032c8931d9dd4d215baa116d9ea": 1
+  },
+  "specific": [
+   "ifs-3cf24c72611b2eed53f56d86da742f69",
+   "worldbank-ce176b8a9b31f5284161cc1bfb146242",
+   "nber-81e98a8feb17431561ec689673378fff",
+   "govuk-91cf5dce33d3b57577f80bc4c7ca1072",
+   "ifs-71815b5dd5c99c47162c1d45821d522e",
+   "govuk-61b0381e76df7197875fd64efdd3f236",
+   "worldbank-ebec5a02cf3d0f956d6a266d850b50ed",
+   "worldbank-32274bf48d65666f9dcc5daec63a29f1",
+   "nber-9742845ec2f7491eb4f15a81c5961d64",
+   "worldbank-7c4a788bb6d51f2664aa169a9f7980f0",
+   "nber-742e91e680ff95cfdcfb42c46e55d8a3",
+   "nber-b98da5f55e15912530f03aceaa836186",
+   "govuk-18c386c43fe4f85c00d21411990b99bd",
+   "ukparliament_select-ef635032c8931d9dd4d215baa116d9ea",
+   "unicef-e308ce096106ac278e9f9782feb71d48",
+   "worldbank-35c0660bc50dc8780e0412d269c9fd78",
+   "worldbank-ab162cf35a3e3475c2703a55c093e11a",
+   "nationalauditofficeuk-3a155cb8901a23c72d6637c1a7b1161a",
+   "randcorporation-84c5520a7f8fa93bdcc474641360fbd9",
+   "ukparliament_select-8c11dd2b346d7a33edbd3e9a9113a8ae",
+   "worldbank-ee6c304c47a43c02a0fb53edd9dc1134",
+   "opportunityinstitute-e2cf72ca602d950174ce0c98577b260a",
+   "esmeefairbairn-ea142a6d47703db2c53085b176c9ec02",
+   "randcorporation-1b78c2c7dd94f8f6498e8014e346ab04",
+   "stateofwashington-aabcbf1a5bb744e813ff8fe5ef426ed4",
+   "ukparliament_select-0ed0f2cbe0ef1d205ff8dc75b9351194",
+   "edulinksusa-449049ac137dbea2076b8d1a90783489",
+   "edulinksusa-00411966862c13e2bc6e8035f55a66f3",
+   "stateofwashington-a56b524ff735f8369890864f35e7fc89",
+   "governmentofazerbaijan-b7aecb822ced173cf4175591fc62b72e",
+   "govuk-7f2c4668c13f531ea0d1e6bd909d45a3",
+   "worldbank-116761123194990080220d76af613d37",
+   "randcorporation-a250d8192b6bd61e773ee0e53078bffa",
+   "frontiereconomics-f5c4d0762d1faee90b334af6a823d909",
+   "stateofconnecticut-42a1b501a991739da2ab03f251a0efa6",
+   "centreforsocialjustice-da440956dc5778c23a7c16a61882ecf8",
+   "randcorporation-73c54d592218d87cb711abfe54dd6067",
+   "stateofohio-d84c6bcaade5d8a7095798205d4797f2",
+   "govuk-7c40cc228d2e172cfe9ac2c714b25bb1",
+   "lenus-5d01936d0ea9cfb91b04c0fed7e015b4",
+   "stateofnorthcarolina-3da6f05771c9b0c90ec7bd944ae72647",
+   "deptofsocialservicesau-0cac6cfb8debefed14a1ecacdbab98ca",
+   "napedu-768d87fd6ed4f433fb008f501219fb06",
+   "dcgov-37ca2892f6b85bcc3205ee3e8bfa7dbc",
+   "lsecase-0b02fcd60833f11750e59e8c6a361c30",
+   "stateofmissouri-cb3c3a510d363f747f23ecddf75f760f",
+   "ukparliament_select-1afba646c63cd890a242c4c0bfd6f1f7",
+   "stateofwashington-e1d8eaf0d04831b4914dc75d4fd177e4",
+   "ukparliament_select-46bad658d4878166f48dccb1829f2215",
+   "nygov-be9fad1eba0a2714ad332887295c1fd9",
+   "stateofminnesota-f64db94aac88ce55f724bc1199c13e42",
+   "govuk-7938b177442c86cfdb461835ef94fc3f",
+   "govsg-78e8f7d7df22d33655a59cb2a9644244",
+   "randcorporation-aa15a8c0cf073230cf88d19a3b5706e0",
+   "ukparliament_select-5db2de1bd5d07d8fdfbc904665b24352",
+   "stateofnevada-094a2c13907e848a333ba3d5fed067fe",
+   "stateofmontana-c1ce95f6dc7b0551e48d1661a6c0fe62",
+   "worldbank-5a17f6a9265c02cc88333ac75a4a3fee",
+   "provinceofquebec-f755b4d27714cfe593be1caee035bdb7",
+   "pagov-c042431cad1aa44f7bc1643843f6bfec",
+   "stateofminnesota-5a828734a349056f0ce7c7b1569966c2",
+   "stateofconnecticut-0e792a173cf9b2ea98ebfae92b73bb44",
+   "legislationgovuk-4eacee4c732c3a2cae239c645e49a3a9",
+   "stateofwashington-b605e47ec06b001438b23b8e0b74fedf",
+   "stateofwashington-0bff76c91c6ab57c14ed9ee2e95d3a3d",
+   "europa-b1214c0ef736961594dea333ded1318d",
+   "nationaleducationpolicycenter-8206b17908dc82d752bc1e7f6ca0286a",
+   "unesco-88b09e1c1348c94ad5b241859b73afec",
+   "northernirelandgovuk-7c37c65497fde87e85a3c590dd338777",
+   "ministrukabinets-8f6d08f90723a90929a378e9942d5b36",
+   "oecddiscovery-71cecf31c4c02b5d4ee46cdbc661527d",
+   "stateofbadende-4ef95381fe481ba4361795e39017b24e",
+   "stateofmaine-6b8233ecc76da3ae3005831781a4096f",
+   "europa-a3cdb139eaffbf82c519039c455c29bd",
+   "commonwealthfund-2ec4df4b570b7f2cf9c71eccd3693aee",
+   "govuk-920f783a80fa0447b01907e4efb3bd93",
+   "stateofminnesota-6b8932157936f1ad61873d132bda94de",
+   "stateofmissouri-9b6c355dc2864d6900dc4c7b3ee1c5c6",
+   "randcorporation-6bc63fa02750216d418ef3809e807db9",
+   "governmentofukraine-5e21d3a03ecaf8bcfb272b971b26219d",
+   "stateofvictoria-3d32a090aebbf9bee671fb4369677bcd",
+   "localgovassoc-82b98cf13c4a1222f7a2e043f855fccf",
+   "provinceofquebec-63e39a6d116c7b135bd95abd9c904916",
+   "newamerica-cce37ee0e6d1eb254bc9c4fb53980fe2",
+   "ugippie-fd70a4a9d1fd06ba37824c2c8a639e2e",
+   "worldbank-43309dad84d7bb1da6fb72fa8b0e5c68",
+   "illinoisgov-0ad34ade2836281ebef43386cab682fb",
+   "stateofmissouri-e0782ce7c6753605825a4ae46f72b4fa",
+   "brookings-b6e1cdaf0cdd51f20d7630b23e733679",
+   "provinceofontario-41f7fa627b50efe2f09dab41a35678aa",
+   "oecddiscovery-d71895fe49fb35215f9486e78f62e9f4",
+   "randcorporation-5f2bb1a96daaad5ded011822ffe2bc0f",
+   "stateofhawaiigov-83acaf7fb4339badd803d84ab568abc7",
+   "oecddiscovery-3169a6b0cb2219c39ef9a398960f1b64",
+   "provinceofquebec-4abdfcf0454bb37b38e5c850debf5eab",
+   "stateofhawaiigov-ea490adf9b880c6dc26836c7950426b1",
+   "ifs-e2d1d83e11419968666ce4794744ced8",
+   "cityofnashville-11e3c5bd9f69004f7dd9bf686f74293d",
+   "provinceofquebec-f3d3e584970c9603f8a2e11afc2fd679",
+   "ukparliament_select-fb3502a459dfac264e1e3100875b502e",
+   "iadb-0fbb5287a8d6fc6001737660df1cc1f6",
+   "ifs-c6051a406bbd4de6aed8f32607902007",
+   "gpogov-eb9fa0dafa16852164209a7973963a74",
+   "educationendowmentfoundation-1a2715664ad642275c71783512327471",
+   "stateofminnesota-bd00babc7bf55e1abeb7ca5d394776a5",
+   "cedboard-f12572c0c4640653d1acb2edf33b6218",
+   "govuk-72050dbb3d6886f62398dbb3dcbeedcd",
+   "opregovus-14ee8b1e06daf7f79c673f6bb24eefc6",
+   "houstontxgov-463cf0c4bf118a22d2838a7d8daaa440",
+   "govuk-31b7ccb9629b458c54662cab67323e77",
+   "nycgov-1d73b2b8f05b7c00bc46a704e834da2c",
+   "stateofohio-7fe44d69bd03b67f2375b76fcfa89c80",
+   "govuk-88d33d2df2d6d9eb6f8fd396626d152f",
+   "gpeusa-2d3fd1ab13553e33cc4e1325f5b29d9b",
+   "oecddiscovery-df212a36e6bc2272ace393de9a973655",
+   "northernirelandgovuk-919fce82f5dcb56f4e98457f87246a52",
+   "stateofalabama-be761891e7ff6cbaccfbaabffd7639cb",
+   "stateofconnecticut-2891586401d8684e6debb4cd7ccf3b1c",
+   "govwales-b800dcefc96ee1bc0615fb63c212fbd1",
+   "stateoflouisiana-97b8cd70c1475167d439dea3b2ac7ae6",
+   "stateofvictoria-a0040fdf503a8fe657cfd0d23082cc71",
+   "synthetic-titleless-1"
+  ],
+  "uk_only": [
+   "ifs-3cf24c72611b2eed53f56d86da742f69",
+   "govuk-91cf5dce33d3b57577f80bc4c7ca1072",
+   "ifs-71815b5dd5c99c47162c1d45821d522e",
+   "govuk-61b0381e76df7197875fd64efdd3f236",
+   "govuk-18c386c43fe4f85c00d21411990b99bd",
+   "ukparliament_select-ef635032c8931d9dd4d215baa116d9ea",
+   "nationalauditofficeuk-3a155cb8901a23c72d6637c1a7b1161a",
+   "ukparliament_select-8c11dd2b346d7a33edbd3e9a9113a8ae",
+   "esmeefairbairn-ea142a6d47703db2c53085b176c9ec02",
+   "ukparliament_select-0ed0f2cbe0ef1d205ff8dc75b9351194",
+   "govuk-7f2c4668c13f531ea0d1e6bd909d45a3",
+   "frontiereconomics-f5c4d0762d1faee90b334af6a823d909",
+   "centreforsocialjustice-da440956dc5778c23a7c16a61882ecf8",
+   "govuk-7c40cc228d2e172cfe9ac2c714b25bb1",
+   "lsecase-0b02fcd60833f11750e59e8c6a361c30",
+   "ukparliament_select-1afba646c63cd890a242c4c0bfd6f1f7",
+   "ukparliament_select-46bad658d4878166f48dccb1829f2215",
+   "govuk-7938b177442c86cfdb461835ef94fc3f",
+   "ukparliament_select-5db2de1bd5d07d8fdfbc904665b24352",
+   "legislationgovuk-4eacee4c732c3a2cae239c645e49a3a9",
+   "northernirelandgovuk-7c37c65497fde87e85a3c590dd338777",
+   "govuk-920f783a80fa0447b01907e4efb3bd93",
+   "localgovassoc-82b98cf13c4a1222f7a2e043f855fccf",
+   "ifs-e2d1d83e11419968666ce4794744ced8",
+   "ukparliament_select-fb3502a459dfac264e1e3100875b502e",
+   "ifs-c6051a406bbd4de6aed8f32607902007",
+   "educationendowmentfoundation-1a2715664ad642275c71783512327471",
+   "govuk-72050dbb3d6886f62398dbb3dcbeedcd",
+   "govuk-31b7ccb9629b458c54662cab67323e77",
+   "govuk-88d33d2df2d6d9eb6f8fd396626d152f",
+   "northernirelandgovuk-919fce82f5dcb56f4e98457f87246a52",
+   "govwales-b800dcefc96ee1bc0615fb63c212fbd1",
+   "synthetic-titleless-1"
+  ],
+  "cut_50": [
+   "ifs-3cf24c72611b2eed53f56d86da742f69",
+   "worldbank-ce176b8a9b31f5284161cc1bfb146242",
+   "nber-81e98a8feb17431561ec689673378fff",
+   "govuk-91cf5dce33d3b57577f80bc4c7ca1072",
+   "ifs-71815b5dd5c99c47162c1d45821d522e",
+   "govuk-61b0381e76df7197875fd64efdd3f236",
+   "worldbank-ebec5a02cf3d0f956d6a266d850b50ed",
+   "worldbank-32274bf48d65666f9dcc5daec63a29f1",
+   "nber-9742845ec2f7491eb4f15a81c5961d64",
+   "worldbank-7c4a788bb6d51f2664aa169a9f7980f0",
+   "nber-742e91e680ff95cfdcfb42c46e55d8a3",
+   "nber-b98da5f55e15912530f03aceaa836186",
+   "govuk-18c386c43fe4f85c00d21411990b99bd",
+   "ukparliament_select-ef635032c8931d9dd4d215baa116d9ea",
+   "unicef-e308ce096106ac278e9f9782feb71d48",
+   "worldbank-35c0660bc50dc8780e0412d269c9fd78",
+   "worldbank-ab162cf35a3e3475c2703a55c093e11a",
+   "nationalauditofficeuk-3a155cb8901a23c72d6637c1a7b1161a",
+   "randcorporation-84c5520a7f8fa93bdcc474641360fbd9",
+   "ukparliament_select-8c11dd2b346d7a33edbd3e9a9113a8ae",
+   "worldbank-ee6c304c47a43c02a0fb53edd9dc1134",
+   "opportunityinstitute-e2cf72ca602d950174ce0c98577b260a",
+   "esmeefairbairn-ea142a6d47703db2c53085b176c9ec02",
+   "randcorporation-1b78c2c7dd94f8f6498e8014e346ab04",
+   "stateofwashington-aabcbf1a5bb744e813ff8fe5ef426ed4",
+   "ukparliament_select-0ed0f2cbe0ef1d205ff8dc75b9351194",
+   "edulinksusa-449049ac137dbea2076b8d1a90783489",
+   "edulinksusa-00411966862c13e2bc6e8035f55a66f3",
+   "stateofwashington-a56b524ff735f8369890864f35e7fc89",
+   "governmentofazerbaijan-b7aecb822ced173cf4175591fc62b72e",
+   "govuk-7f2c4668c13f531ea0d1e6bd909d45a3",
+   "worldbank-116761123194990080220d76af613d37",
+   "randcorporation-a250d8192b6bd61e773ee0e53078bffa",
+   "frontiereconomics-f5c4d0762d1faee90b334af6a823d909",
+   "stateofconnecticut-42a1b501a991739da2ab03f251a0efa6",
+   "centreforsocialjustice-da440956dc5778c23a7c16a61882ecf8",
+   "randcorporation-73c54d592218d87cb711abfe54dd6067",
+   "stateofohio-d84c6bcaade5d8a7095798205d4797f2",
+   "govuk-7c40cc228d2e172cfe9ac2c714b25bb1",
+   "lenus-5d01936d0ea9cfb91b04c0fed7e015b4",
+   "stateofnorthcarolina-3da6f05771c9b0c90ec7bd944ae72647",
+   "deptofsocialservicesau-0cac6cfb8debefed14a1ecacdbab98ca",
+   "napedu-768d87fd6ed4f433fb008f501219fb06",
+   "dcgov-37ca2892f6b85bcc3205ee3e8bfa7dbc",
+   "lsecase-0b02fcd60833f11750e59e8c6a361c30",
+   "stateofmissouri-cb3c3a510d363f747f23ecddf75f760f",
+   "ukparliament_select-1afba646c63cd890a242c4c0bfd6f1f7",
+   "stateofwashington-e1d8eaf0d04831b4914dc75d4fd177e4",
+   "ukparliament_select-46bad658d4878166f48dccb1829f2215",
+   "nygov-be9fad1eba0a2714ad332887295c1fd9"
+  ]
+ }
+}

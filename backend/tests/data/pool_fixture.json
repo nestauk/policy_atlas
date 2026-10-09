@@ -1,0 +1,5550 @@
+{
+ "source": {
+  "review": "Tackling loneliness evidence review: main report",
+  "run": "results/snowball/2026-10-09-shared+semantic-c6e320-gpt-5.6-luna-s200-k200-f200p10c300t20",
+  "trim": "seeds 60, reference ids 100, forward 80"
+ },
+ "cutoff": "2023-02-17",
+ "seed_order": [
+  "W3207109509",
+  "W2771805027",
+  "W4213058852",
+  "W3007542285",
+  "W3184884734",
+  "W2133556218",
+  "W2944878516",
+  "W2740060821",
+  "W2755781951",
+  "W2791611352",
+  "W2460451430",
+  "W3153688757",
+  "W4286762483",
+  "W2155151233",
+  "W2138867401",
+  "W2117614628",
+  "W3113109421",
+  "W2079231371",
+  "W4306663560",
+  "W3130872383",
+  "W2961148372",
+  "W3111278950",
+  "W2130566074",
+  "W2791794543",
+  "W3009624784",
+  "W2891043746",
+  "W3027131656",
+  "W2137123520",
+  "W2159852265",
+  "W3033485693",
+  "W3048706957",
+  "W2615658301",
+  "W2078254424",
+  "W292445073",
+  "W3158015415",
+  "W2150063271",
+  "W4285034658",
+  "W2901628123",
+  "W2292616725",
+  "W3183587195",
+  "W2126012228",
+  "W2736857151",
+  "W2154406753",
+  "W1974179382",
+  "W4310828191",
+  "W4311116418",
+  "W2912165696",
+  "W4296692877",
+  "W2981077025",
+  "W2171723063",
+  "W4317910262",
+  "W2805201924",
+  "W3210636872",
+  "W2898962481",
+  "W3012427396",
+  "W3017177466",
+  "W2795467188",
+  "W2990748566",
+  "W3093771799",
+  "W2117413323"
+ ],
+ "seeds": [
+  {
+   "id": "https://openalex.org/W3207109509",
+   "doi": "https://doi.org/10.1016/j.adolescence.2021.09.007",
+   "display_name": "Interventions to address loneliness and social isolation in young people: A systematic review of the evidence on acceptability and effectiveness",
+   "publication_date": "2021-10-18",
+   "cited_by_count": 23,
+   "referenced_works": [
+    "https://openalex.org/W197767008",
+    "https://openalex.org/W1974179382",
+    "https://openalex.org/W1974322420",
+    "https://openalex.org/W2026022164",
+    "https://openalex.org/W2041367957",
+    "https://openalex.org/W2080837127",
+    "https://openalex.org/W2117614628",
+    "https://openalex.org/W2117765622",
+    "https://openalex.org/W2131334268",
+    "https://openalex.org/W2138867401",
+    "https://openalex.org/W2154406753",
+    "https://openalex.org/W2159852265",
+    "https://openalex.org/W2162544110",
+    "https://openalex.org/W2168289525",
+    "https://openalex.org/W2531385025",
+    "https://openalex.org/W2615658301",
+    "https://openalex.org/W3011588871"
+   ]
+  },
+  {
+   "id": "https://openalex.org/W2771805027",
+   "doi": "https://doi.org/10.1016/j.exger.2017.11.017",
+   "display_name": "Interventions targeting loneliness and social isolation among the older people: An update systematic review",
+   "publication_date": "2017-12-02",
+   "cited_by_count": 262,
+   "referenced_works": [
+    "https://openalex.org/W197767008",
+    "https://openalex.org/W1568801823",
+    "https://openalex.org/W1972401458",
+    "https://openalex.org/W1974179382",
+    "https://openalex.org/W2003490123",
+    "https://openalex.org/W2004761428",
+    "https://openalex.org/W2029499893",
+    "https://openalex.org/W2118709867",
+    "https://openalex.org/W2134664900",
+    "https://openalex.org/W2138867401",
+    "https://openalex.org/W2154406753",
+    "https://openalex.org/W2156098321",
+    "https://openalex.org/W2159852265",
+    "https://openalex.org/W2265482988"
+   ]
+  },
+  {
+   "id": "https://openalex.org/W4213058852",
+   "doi": "https://doi.org/10.1146/annurev-psych-042716-051139",
+   "display_name": "Mindfulness Interventions",
+   "publication_date": "2016-09-29",
+   "cited_by_count": 998,
+   "referenced_works": [
+    "https://openalex.org/W2122626461"
+   ]
+  },
+  {
+   "id": "https://openalex.org/W3007542285",
+   "doi": "https://doi.org/10.1186/s12889-020-8251-6",
+   "display_name": "Loneliness and social isolation interventions for older adults: a scoping review of reviews",
+   "publication_date": "2020-02-13",
+   "cited_by_count": 409,
+   "referenced_works": [
+    "https://openalex.org/W1974179382",
+    "https://openalex.org/W2003490123",
+    "https://openalex.org/W2018849096",
+    "https://openalex.org/W2022436084",
+    "https://openalex.org/W2029499893",
+    "https://openalex.org/W2029943398",
+    "https://openalex.org/W2052245613",
+    "https://openalex.org/W2095349644",
+    "https://openalex.org/W2107269725",
+    "https://openalex.org/W2108696783",
+    "https://openalex.org/W2117614628",
+    "https://openalex.org/W2127756161",
+    "https://openalex.org/W2137123520",
+    "https://openalex.org/W2138867401",
+    "https://openalex.org/W2154406753",
+    "https://openalex.org/W2159852265",
+    "https://openalex.org/W2162544110",
+    "https://openalex.org/W2165243546",
+    "https://openalex.org/W2168289525",
+    "https://openalex.org/W2265482988",
+    "https://openalex.org/W2334587181",
+    "https://openalex.org/W2417301675",
+    "https://openalex.org/W2460451430",
+    "https://openalex.org/W2615658301",
+    "https://openalex.org/W2771805027",
+    "https://openalex.org/W4285719527"
+   ]
+  },
+  {
+   "id": "https://openalex.org/W3184884734",
+   "doi": "https://doi.org/10.1016/j.cpr.2021.102066",
+   "display_name": "The effectiveness of psychological interventions for loneliness: A systematic review and meta-analysis",
+   "publication_date": "2021-07-18",
+   "cited_by_count": 74,
+   "referenced_works": [
+    "https://openalex.org/W1511697076",
+    "https://openalex.org/W1568801823",
+    "https://openalex.org/W1928146223",
+    "https://openalex.org/W1974179382",
+    "https://openalex.org/W2004761428",
+    "https://openalex.org/W2029499893",
+    "https://openalex.org/W2029943398",
+    "https://openalex.org/W2098003297",
+    "https://openalex.org/W2106100258",
+    "https://openalex.org/W2110221483",
+    "https://openalex.org/W2114690339",
+    "https://openalex.org/W2117614628",
+    "https://openalex.org/W2122626461",
+    "https://openalex.org/W2125435699",
+    "https://openalex.org/W2127756161",
+    "https://openalex.org/W2131334268",
+    "https://openalex.org/W2131374070",
+    "https://openalex.org/W2138867401",
+    "https://openalex.org/W2154406753",
+    "https://openalex.org/W2159852265",
+    "https://openalex.org/W2160788840",
+    "https://openalex.org/W2162577640",
+    "https://openalex.org/W2165243546",
+    "https://openalex.org/W2168289525",
+    "https://openalex.org/W2265482988",
+    "https://openalex.org/W2334587181",
+    "https://openalex.org/W2460451430",
+    "https://openalex.org/W2531385025",
+    "https://openalex.org/W2615658301",
+    "https://openalex.org/W2771805027",
+    "https://openalex.org/W3011588871",
+    "https://openalex.org/W4285719527"
+   ]
+  },
+  {
+   "id": "https://openalex.org/W2133556218",
+   "doi": "https://doi.org/10.1146/annurev-psych-010814-015240",
+   "display_name": "The Neuroendocrinology of Social Isolation",
+   "publication_date": "2014-08-22",
+   "cited_by_count": 662,
+   "referenced_works": [
+    "https://openalex.org/W1756842549",
+    "https://openalex.org/W2003490123",
+    "https://openalex.org/W2026022164",
+    "https://openalex.org/W2041367957",
+    "https://openalex.org/W2048168755",
+    "https://openalex.org/W2105547874",
+    "https://openalex.org/W2109338375",
+    "https://openalex.org/W2122524132",
+    "https://openalex.org/W2131334268",
+    "https://openalex.org/W2135570695",
+    "https://openalex.org/W2139433778"
+   ]
+  },
+  {
+   "id": "https://openalex.org/W2944878516",
+   "doi": "https://doi.org/10.1002/jrsm.1354",
+   "display_name": "Best practice guidelines for abstract screening large\u2010evidence systematic reviews and meta\u2010analyses",
+   "publication_date": "2019-05-14",
+   "cited_by_count": 141,
+   "referenced_works": [
+    "https://openalex.org/W2560438049"
+   ]
+  },
+  {
+   "id": "https://openalex.org/W2740060821",
+   "doi": "https://doi.org/10.1056/nejmra1614394",
+   "display_name": "Evidence for Health Decision Making \u2014 Beyond Randomized, Controlled Trials",
+   "publication_date": "2017-08-02",
+   "cited_by_count": 595,
+   "referenced_works": []
+  },
+  {
+   "id": "https://openalex.org/W2755781951",
+   "doi": "https://doi.org/10.1016/j.puhe.2017.07.035",
+   "display_name": "An overview of systematic reviews on the public health consequences of social isolation and loneliness",
+   "publication_date": "2017-09-12",
+   "cited_by_count": 1382,
+   "referenced_works": [
+    "https://openalex.org/W1511697076",
+    "https://openalex.org/W1974322420",
+    "https://openalex.org/W2003490123",
+    "https://openalex.org/W2008067465",
+    "https://openalex.org/W2022436084",
+    "https://openalex.org/W2046141868",
+    "https://openalex.org/W2095349644",
+    "https://openalex.org/W2120113719",
+    "https://openalex.org/W2131334268",
+    "https://openalex.org/W2165243546",
+    "https://openalex.org/W2168289525",
+    "https://openalex.org/W2341545815"
+   ]
+  },
+  {
+   "id": "https://openalex.org/W2791611352",
+   "doi": "https://doi.org/10.1186/s13063-018-2589-4",
+   "display_name": "Are randomised controlled trials positivist? Reviewing the social science and philosophy literature to assess positivist tendencies of trials of social interventions in public health and health services",
+   "publication_date": "2018-04-19",
+   "cited_by_count": 28,
+   "referenced_works": [
+    "https://openalex.org/W2162544110"
+   ]
+  },
+  {
+   "id": "https://openalex.org/W2460451430",
+   "doi": "https://doi.org/10.1111/hsc.12367",
+   "display_name": "Interventions to reduce social isolation and loneliness among older people: an integrative review",
+   "publication_date": "2016-07-13",
+   "cited_by_count": 493,
+   "referenced_works": [
+    "https://openalex.org/W292445073",
+    "https://openalex.org/W1568801823",
+    "https://openalex.org/W1928146223",
+    "https://openalex.org/W1974179382",
+    "https://openalex.org/W2007153777",
+    "https://openalex.org/W2029943398",
+    "https://openalex.org/W2041367957",
+    "https://openalex.org/W2069660924",
+    "https://openalex.org/W2076208799",
+    "https://openalex.org/W2095349644",
+    "https://openalex.org/W2098713693",
+    "https://openalex.org/W2117614628",
+    "https://openalex.org/W2121289794",
+    "https://openalex.org/W2122626461",
+    "https://openalex.org/W2123162645",
+    "https://openalex.org/W2130268063",
+    "https://openalex.org/W2132164645",
+    "https://openalex.org/W2134664900",
+    "https://openalex.org/W2154406753",
+    "https://openalex.org/W2155151233",
+    "https://openalex.org/W2159852265",
+    "https://openalex.org/W4243663932",
+    "https://openalex.org/W4285719527"
+   ]
+  },
+  {
+   "id": "https://openalex.org/W3153688757",
+   "doi": "https://doi.org/10.2196/24712",
+   "display_name": "Evaluation of the Effectiveness of Digital Technology Interventions to Reduce Loneliness in Older Adults: Systematic Review and Meta-analysis",
+   "publication_date": "2021-04-19",
+   "cited_by_count": 56,
+   "referenced_works": [
+    "https://openalex.org/W1928146223",
+    "https://openalex.org/W2004761428",
+    "https://openalex.org/W2029499893",
+    "https://openalex.org/W2029943398",
+    "https://openalex.org/W2125435699",
+    "https://openalex.org/W2138867401",
+    "https://openalex.org/W2155151233",
+    "https://openalex.org/W2156098321",
+    "https://openalex.org/W2159852265",
+    "https://openalex.org/W2160788840",
+    "https://openalex.org/W2165243546",
+    "https://openalex.org/W2265482988",
+    "https://openalex.org/W2341545815",
+    "https://openalex.org/W2771805027",
+    "https://openalex.org/W2782215249",
+    "https://openalex.org/W2991792334",
+    "https://openalex.org/W3011588871",
+    "https://openalex.org/W4243663932"
+   ]
+  },
+  {
+   "id": "https://openalex.org/W4286762483",
+   "doi": "https://doi.org/10.2196/36358",
+   "display_name": "Evaluating the Efficacy of a Guided and Unguided Internet-Based Self-help Intervention for Chronic Loneliness: Protocol for a 3-Arm Randomized Controlled Trial",
+   "publication_date": "2022-05-24",
+   "cited_by_count": 7,
+   "referenced_works": [
+    "https://openalex.org/W2010220117",
+    "https://openalex.org/W2081155210",
+    "https://openalex.org/W2098003297",
+    "https://openalex.org/W2117765622",
+    "https://openalex.org/W2131334268",
+    "https://openalex.org/W2131374070",
+    "https://openalex.org/W2138867401",
+    "https://openalex.org/W2160788840",
+    "https://openalex.org/W2165243546",
+    "https://openalex.org/W2615658301",
+    "https://openalex.org/W2771805027",
+    "https://openalex.org/W2782215249"
+   ]
+  },
+  {
+   "id": "https://openalex.org/W2155151233",
+   "doi": "https://doi.org/10.1037//0022-3514.39.3.472",
+   "display_name": "The revised UCLA Loneliness Scale: Concurrent and discriminant validity evidence.",
+   "publication_date": "1980-01-01",
+   "cited_by_count": 3294,
+   "referenced_works": [
+    "https://openalex.org/W2014754251",
+    "https://openalex.org/W2041367957",
+    "https://openalex.org/W4285719527"
+   ]
+  },
+  {
+   "id": "https://openalex.org/W2138867401",
+   "doi": "https://doi.org/10.1177/1088868310377394",
+   "display_name": "A Meta-Analysis of Interventions to Reduce Loneliness",
+   "publication_date": "2010-08-17",
+   "cited_by_count": 1427,
+   "referenced_works": [
+    "https://openalex.org/W1756842549",
+    "https://openalex.org/W2010220117",
+    "https://openalex.org/W2018849096",
+    "https://openalex.org/W2025396819",
+    "https://openalex.org/W2026022164",
+    "https://openalex.org/W2041367957",
+    "https://openalex.org/W2043669727",
+    "https://openalex.org/W2057529685",
+    "https://openalex.org/W2058361378",
+    "https://openalex.org/W2069660924",
+    "https://openalex.org/W2076208799",
+    "https://openalex.org/W2081155210",
+    "https://openalex.org/W2095349644",
+    "https://openalex.org/W2098003297",
+    "https://openalex.org/W2098713693",
+    "https://openalex.org/W2101196871",
+    "https://openalex.org/W2106100258",
+    "https://openalex.org/W2107269725",
+    "https://openalex.org/W2114690339",
+    "https://openalex.org/W2117614628",
+    "https://openalex.org/W2117765622",
+    "https://openalex.org/W2121289794",
+    "https://openalex.org/W2122524132",
+    "https://openalex.org/W2123271605",
+    "https://openalex.org/W2125435699",
+    "https://openalex.org/W2127756161",
+    "https://openalex.org/W2130268063",
+    "https://openalex.org/W2131334268",
+    "https://openalex.org/W2131374070",
+    "https://openalex.org/W2132164645",
+    "https://openalex.org/W2135570695",
+    "https://openalex.org/W2137760862",
+    "https://openalex.org/W2138720796",
+    "https://openalex.org/W2139433778",
+    "https://openalex.org/W2154406753",
+    "https://openalex.org/W2155151233",
+    "https://openalex.org/W2160196750",
+    "https://openalex.org/W2160788840",
+    "https://openalex.org/W2334587181",
+    "https://openalex.org/W2417301675",
+    "https://openalex.org/W2789549830",
+    "https://openalex.org/W4243663932"
+   ]
+  },
+  {
+   "id": "https://openalex.org/W2117614628",
+   "doi": "https://doi.org/10.1017/s0144686x03001296",
+   "display_name": "Interventions to reduce social isolation amongst older people: where is the evidence?",
+   "publication_date": "2003-09-01",
+   "cited_by_count": 427,
+   "referenced_works": [
+    "https://openalex.org/W2043669727",
+    "https://openalex.org/W2058361378",
+    "https://openalex.org/W2100783595",
+    "https://openalex.org/W2123162645",
+    "https://openalex.org/W2140884566",
+    "https://openalex.org/W2160196750"
+   ]
+  },
+  {
+   "id": "https://openalex.org/W3113109421",
+   "doi": "https://doi.org/10.1111/hsc.13248",
+   "display_name": "Interventions for reducing loneliness: An umbrella review of intervention studies",
+   "publication_date": "2020-12-05",
+   "cited_by_count": 31,
+   "referenced_works": [
+    "https://openalex.org/W292445073",
+    "https://openalex.org/W1756842549",
+    "https://openalex.org/W2007153777",
+    "https://openalex.org/W2029499893",
+    "https://openalex.org/W2029943398",
+    "https://openalex.org/W2123271605",
+    "https://openalex.org/W2125435699",
+    "https://openalex.org/W2137123520",
+    "https://openalex.org/W2138867401",
+    "https://openalex.org/W2154406753",
+    "https://openalex.org/W2156098321",
+    "https://openalex.org/W2159852265",
+    "https://openalex.org/W2160788840",
+    "https://openalex.org/W2991792334",
+    "https://openalex.org/W4294215472"
+   ]
+  },
+  {
+   "id": "https://openalex.org/W2079231371",
+   "doi": "https://doi.org/10.1186/1471-2318-12-31",
+   "display_name": "A systematic mapping review of Randomized Controlled Trials (RCTs) in care homes",
+   "publication_date": "2012-06-25",
+   "cited_by_count": 37,
+   "referenced_works": [
+    "https://openalex.org/W2132164645"
+   ]
+  },
+  {
+   "id": "https://openalex.org/W4306663560",
+   "doi": "https://doi.org/10.1001/jamanetworkopen.2022.36676",
+   "display_name": "Interventions Associated With Reduced Loneliness and Social Isolation in Older Adults",
+   "publication_date": "2022-10-17",
+   "cited_by_count": 26,
+   "referenced_works": [
+    "https://openalex.org/W1568801823",
+    "https://openalex.org/W1928146223",
+    "https://openalex.org/W1972401458",
+    "https://openalex.org/W1974179382",
+    "https://openalex.org/W2029499893",
+    "https://openalex.org/W2029943398",
+    "https://openalex.org/W2043669727",
+    "https://openalex.org/W2057529685",
+    "https://openalex.org/W2058361378",
+    "https://openalex.org/W2069660924",
+    "https://openalex.org/W2076208799",
+    "https://openalex.org/W2106100258",
+    "https://openalex.org/W2114690339",
+    "https://openalex.org/W2118709867",
+    "https://openalex.org/W2132164645",
+    "https://openalex.org/W2134664900",
+    "https://openalex.org/W2138867401",
+    "https://openalex.org/W2154406753",
+    "https://openalex.org/W2160788840",
+    "https://openalex.org/W2168289525",
+    "https://openalex.org/W2265482988",
+    "https://openalex.org/W2417301675",
+    "https://openalex.org/W2460451430",
+    "https://openalex.org/W2771805027"
+   ]
+  },
+  {
+   "id": "https://openalex.org/W3130872383",
+   "doi": "https://doi.org/10.1371/journal.pone.0247139",
+   "display_name": "Interventions to reduce social isolation and loneliness during COVID-19 physical distancing measures: A rapid systematic review",
+   "publication_date": "2021-02-17",
+   "cited_by_count": 158,
+   "referenced_works": [
+    "https://openalex.org/W2025396819",
+    "https://openalex.org/W2043669727",
+    "https://openalex.org/W2057529685",
+    "https://openalex.org/W2058361378",
+    "https://openalex.org/W2098713693",
+    "https://openalex.org/W2106100258",
+    "https://openalex.org/W2114690339",
+    "https://openalex.org/W2118709867",
+    "https://openalex.org/W2122626461",
+    "https://openalex.org/W2130268063",
+    "https://openalex.org/W2132164645",
+    "https://openalex.org/W2134664900",
+    "https://openalex.org/W2137760862",
+    "https://openalex.org/W2139540989",
+    "https://openalex.org/W2155151233",
+    "https://openalex.org/W2156098321",
+    "https://openalex.org/W2168289525",
+    "https://openalex.org/W2341545815",
+    "https://openalex.org/W2460451430",
+    "https://openalex.org/W2531385025",
+    "https://openalex.org/W2560438049",
+    "https://openalex.org/W2755781951",
+    "https://openalex.org/W2991792334",
+    "https://openalex.org/W4243663932"
+   ]
+  },
+  {
+   "id": "https://openalex.org/W2961148372",
+   "doi": "https://doi.org/10.1002/gps.5174",
+   "display_name": "Are loneliness and social isolation associated with cognitive decline?",
+   "publication_date": "2019-07-15",
+   "cited_by_count": 250,
+   "referenced_works": [
+    "https://openalex.org/W1974322420",
+    "https://openalex.org/W2004761428",
+    "https://openalex.org/W2105547874",
+    "https://openalex.org/W2120113719",
+    "https://openalex.org/W2138720796",
+    "https://openalex.org/W2168289525"
+   ]
+  },
+  {
+   "id": "https://openalex.org/W3111278950",
+   "doi": "https://doi.org/10.1038/s42256-020-00287-7",
+   "display_name": "An open source machine learning framework for efficient and transparent systematic reviews",
+   "publication_date": "2021-02-01",
+   "cited_by_count": 223,
+   "referenced_works": [
+    "https://openalex.org/W2560438049"
+   ]
+  },
+  {
+   "id": "https://openalex.org/W2130566074",
+   "doi": "https://doi.org/10.1111/j.1365-2753.2010.01382.x",
+   "display_name": "The limitations of randomized controlled trials in predicting effectiveness",
+   "publication_date": "2010-03-30",
+   "cited_by_count": 160,
+   "referenced_works": []
+  },
+  {
+   "id": "https://openalex.org/W2791794543",
+   "doi": "https://doi.org/10.1080/13548506.2018.1446096",
+   "display_name": "A systematic literature review on the association between loneliness and coping strategies",
+   "publication_date": "2018-03-13",
+   "cited_by_count": 46,
+   "referenced_works": [
+    "https://openalex.org/W2048168755",
+    "https://openalex.org/W2137123520",
+    "https://openalex.org/W2138867401",
+    "https://openalex.org/W2139433778",
+    "https://openalex.org/W2156098321",
+    "https://openalex.org/W2789549830",
+    "https://openalex.org/W2991792334"
+   ]
+  },
+  {
+   "id": "https://openalex.org/W3009624784",
+   "doi": "https://doi.org/10.1111/dar.13051",
+   "display_name": "How often are outcomes other than change in substance use measured? A systematic review of outcome measures in contemporary randomised controlled trials",
+   "publication_date": "2020-03-09",
+   "cited_by_count": 15,
+   "referenced_works": []
+  },
+  {
+   "id": "https://openalex.org/W2891043746",
+   "doi": "https://doi.org/10.1186/s12889-018-6004-6",
+   "display_name": "Does household help prevent loneliness among the elderly? An evaluation of a policy reform in the Netherlands",
+   "publication_date": "2018-09-10",
+   "cited_by_count": 18,
+   "referenced_works": [
+    "https://openalex.org/W2003490123",
+    "https://openalex.org/W2046141868",
+    "https://openalex.org/W2052245613",
+    "https://openalex.org/W2098713693",
+    "https://openalex.org/W2138867401",
+    "https://openalex.org/W2154406753",
+    "https://openalex.org/W2334587181",
+    "https://openalex.org/W2417301675"
+   ]
+  },
+  {
+   "id": "https://openalex.org/W3027131656",
+   "doi": "https://doi.org/10.1111/chso.12390",
+   "display_name": "Bringing young children\u2019s voices into programme development, randomized controlled trials and other unlikely places",
+   "publication_date": "2020-05-17",
+   "cited_by_count": 4,
+   "referenced_works": []
+  },
+  {
+   "id": "https://openalex.org/W2137123520",
+   "doi": "https://doi.org/10.1177/1745691615570616",
+   "display_name": "Loneliness",
+   "publication_date": "2015-03-01",
+   "cited_by_count": 803,
+   "referenced_works": [
+    "https://openalex.org/W1756842549",
+    "https://openalex.org/W1974322420",
+    "https://openalex.org/W2008067465",
+    "https://openalex.org/W2010220117",
+    "https://openalex.org/W2022436084",
+    "https://openalex.org/W2041367957",
+    "https://openalex.org/W2048168755",
+    "https://openalex.org/W2080837127",
+    "https://openalex.org/W2098003297",
+    "https://openalex.org/W2105547874",
+    "https://openalex.org/W2107269725",
+    "https://openalex.org/W2109338375",
+    "https://openalex.org/W2114690339",
+    "https://openalex.org/W2117614628",
+    "https://openalex.org/W2117765622",
+    "https://openalex.org/W2122524132",
+    "https://openalex.org/W2123271605",
+    "https://openalex.org/W2131334268",
+    "https://openalex.org/W2131374070",
+    "https://openalex.org/W2135570695",
+    "https://openalex.org/W2138720796",
+    "https://openalex.org/W2138867401",
+    "https://openalex.org/W2139433778",
+    "https://openalex.org/W2154406753",
+    "https://openalex.org/W2155151233",
+    "https://openalex.org/W2165243546",
+    "https://openalex.org/W2334587181",
+    "https://openalex.org/W2417301675",
+    "https://openalex.org/W2789549830"
+   ]
+  },
+  {
+   "id": "https://openalex.org/W2159852265",
+   "doi": "https://doi.org/10.4278/ajhp.130418-lit-182",
+   "display_name": "Interventions for Alleviating Loneliness among Older Persons: A Critical Review",
+   "publication_date": "2014-02-27",
+   "cited_by_count": 207,
+   "referenced_works": [
+    "https://openalex.org/W1974179382",
+    "https://openalex.org/W2007153777",
+    "https://openalex.org/W2041367957",
+    "https://openalex.org/W2043669727",
+    "https://openalex.org/W2046141868",
+    "https://openalex.org/W2057529685",
+    "https://openalex.org/W2069660924",
+    "https://openalex.org/W2076208799",
+    "https://openalex.org/W2086463261",
+    "https://openalex.org/W2095349644",
+    "https://openalex.org/W2098713693",
+    "https://openalex.org/W2106100258",
+    "https://openalex.org/W2121289794",
+    "https://openalex.org/W2123271605",
+    "https://openalex.org/W2130268063",
+    "https://openalex.org/W2137760862",
+    "https://openalex.org/W2138720796",
+    "https://openalex.org/W2138867401",
+    "https://openalex.org/W2139540989",
+    "https://openalex.org/W2140884566",
+    "https://openalex.org/W2154406753"
+   ]
+  },
+  {
+   "id": "https://openalex.org/W3033485693",
+   "doi": "https://doi.org/10.1007/s00127-020-01889-7",
+   "display_name": "Understanding loneliness in the twenty-first century: an update on correlates, risk factors, and potential solutions",
+   "publication_date": "2020-06-10",
+   "cited_by_count": 214,
+   "referenced_works": [
+    "https://openalex.org/W1974322420",
+    "https://openalex.org/W2004761428",
+    "https://openalex.org/W2007153777",
+    "https://openalex.org/W2026022164",
+    "https://openalex.org/W2029499893",
+    "https://openalex.org/W2048168755",
+    "https://openalex.org/W2072288828",
+    "https://openalex.org/W2081155210",
+    "https://openalex.org/W2098003297",
+    "https://openalex.org/W2105547874",
+    "https://openalex.org/W2109338375",
+    "https://openalex.org/W2116398621",
+    "https://openalex.org/W2122524132",
+    "https://openalex.org/W2131334268",
+    "https://openalex.org/W2138720796",
+    "https://openalex.org/W2138867401",
+    "https://openalex.org/W2139433778",
+    "https://openalex.org/W2139540989",
+    "https://openalex.org/W2143288954",
+    "https://openalex.org/W2160788840",
+    "https://openalex.org/W2165243546",
+    "https://openalex.org/W2169719947",
+    "https://openalex.org/W2334587181",
+    "https://openalex.org/W2615658301",
+    "https://openalex.org/W2755781951",
+    "https://openalex.org/W2782215249",
+    "https://openalex.org/W4285719527"
+   ]
+  },
+  {
+   "id": "https://openalex.org/W3048706957",
+   "doi": "https://doi.org/10.3310/phr08100",
+   "display_name": "Reducing loneliness among migrant and ethnic minority people: a participatory evidence synthesis",
+   "publication_date": "2020-07-01",
+   "cited_by_count": 14,
+   "referenced_works": [
+    "https://openalex.org/W292445073",
+    "https://openalex.org/W2003490123",
+    "https://openalex.org/W2004761428",
+    "https://openalex.org/W2007153777",
+    "https://openalex.org/W2010220117",
+    "https://openalex.org/W2018849096",
+    "https://openalex.org/W2026022164",
+    "https://openalex.org/W2048168755",
+    "https://openalex.org/W2081155210",
+    "https://openalex.org/W2107269725",
+    "https://openalex.org/W2117614628",
+    "https://openalex.org/W2127756161",
+    "https://openalex.org/W2131374070",
+    "https://openalex.org/W2134664900",
+    "https://openalex.org/W2138867401",
+    "https://openalex.org/W2143288954",
+    "https://openalex.org/W2154406753",
+    "https://openalex.org/W2155151233",
+    "https://openalex.org/W2156098321",
+    "https://openalex.org/W2168289525",
+    "https://openalex.org/W2460451430",
+    "https://openalex.org/W4243663932"
+   ]
+  },
+  {
+   "id": "https://openalex.org/W2615658301",
+   "doi": "https://doi.org/10.1007/s00127-017-1392-y",
+   "display_name": "A life less lonely: the state of the art in interventions to reduce loneliness in people with mental health problems",
+   "publication_date": "2017-05-20",
+   "cited_by_count": 228,
+   "referenced_works": [
+    "https://openalex.org/W1972401458",
+    "https://openalex.org/W2003490123",
+    "https://openalex.org/W2004761428",
+    "https://openalex.org/W2010220117",
+    "https://openalex.org/W2025396819",
+    "https://openalex.org/W2048168755",
+    "https://openalex.org/W2080837127",
+    "https://openalex.org/W2101196871",
+    "https://openalex.org/W2107269725",
+    "https://openalex.org/W2109338375",
+    "https://openalex.org/W2110221483",
+    "https://openalex.org/W2116398621",
+    "https://openalex.org/W2120113719",
+    "https://openalex.org/W2131334268",
+    "https://openalex.org/W2137123520",
+    "https://openalex.org/W2138720796",
+    "https://openalex.org/W2138867401",
+    "https://openalex.org/W2154406753",
+    "https://openalex.org/W2160788840",
+    "https://openalex.org/W2165243546",
+    "https://openalex.org/W2168289525",
+    "https://openalex.org/W2169719947",
+    "https://openalex.org/W2334587181",
+    "https://openalex.org/W2341545815",
+    "https://openalex.org/W2417301675",
+    "https://openalex.org/W2460451430",
+    "https://openalex.org/W2531385025"
+   ]
+  },
+  {
+   "id": "https://openalex.org/W2078254424",
+   "doi": "https://doi.org/10.2196/jmir.2262",
+   "display_name": "Internet-Based Recruitment to a Depression Prevention Intervention: Lessons From the Mood Memos Study",
+   "publication_date": "2013-02-12",
+   "cited_by_count": 135,
+   "referenced_works": []
+  },
+  {
+   "id": "https://openalex.org/W292445073",
+   "doi": "https://doi.org/10.1111/hsc.12311",
+   "display_name": "Social isolation, loneliness and health in old age: a scoping review",
+   "publication_date": "2015-12-28",
+   "cited_by_count": 945,
+   "referenced_works": [
+    "https://openalex.org/W2003490123",
+    "https://openalex.org/W2004761428",
+    "https://openalex.org/W2008067465",
+    "https://openalex.org/W2018849096",
+    "https://openalex.org/W2029943398",
+    "https://openalex.org/W2048168755",
+    "https://openalex.org/W2052245613",
+    "https://openalex.org/W2076208799",
+    "https://openalex.org/W2086463261",
+    "https://openalex.org/W2095349644",
+    "https://openalex.org/W2098003297",
+    "https://openalex.org/W2098713693",
+    "https://openalex.org/W2101196871",
+    "https://openalex.org/W2105547874",
+    "https://openalex.org/W2107269725",
+    "https://openalex.org/W2117614628",
+    "https://openalex.org/W2122524132",
+    "https://openalex.org/W2127756161",
+    "https://openalex.org/W2131374070",
+    "https://openalex.org/W2138720796",
+    "https://openalex.org/W2139433778",
+    "https://openalex.org/W2139540989",
+    "https://openalex.org/W2143288954",
+    "https://openalex.org/W2154406753",
+    "https://openalex.org/W2160788840",
+    "https://openalex.org/W2162577640",
+    "https://openalex.org/W2168289525",
+    "https://openalex.org/W2334587181"
+   ]
+  },
+  {
+   "id": "https://openalex.org/W3158015415",
+   "doi": "https://doi.org/10.1111/brv.12721",
+   "display_name": "Preferred reporting items for systematic reviews and meta\u2010analyses in ecology and evolutionary biology: a PRISMA extension",
+   "publication_date": "2021-05-07",
+   "cited_by_count": 214,
+   "referenced_works": [
+    "https://openalex.org/W2156098321",
+    "https://openalex.org/W2560438049",
+    "https://openalex.org/W2991792334",
+    "https://openalex.org/W4294215472"
+   ]
+  },
+  {
+   "id": "https://openalex.org/W2150063271",
+   "doi": "https://doi.org/10.1186/1471-2288-11-117",
+   "display_name": "Questions asked and answered in pilot and feasibility randomized controlled trials",
+   "publication_date": "2011-08-16",
+   "cited_by_count": 178,
+   "referenced_works": [
+    "https://openalex.org/W2108696783",
+    "https://openalex.org/W2162544110",
+    "https://openalex.org/W4285719527"
+   ]
+  },
+  {
+   "id": "https://openalex.org/W4285034658",
+   "doi": "https://doi.org/10.1177/17579139221106579",
+   "display_name": "Loneliness prevention and the role of the Public Health system",
+   "publication_date": "2022-07-11",
+   "cited_by_count": 5,
+   "referenced_works": [
+    "https://openalex.org/W1974322420",
+    "https://openalex.org/W2057529685",
+    "https://openalex.org/W2116398621",
+    "https://openalex.org/W2122626461",
+    "https://openalex.org/W2132164645",
+    "https://openalex.org/W2137123520",
+    "https://openalex.org/W2160196750",
+    "https://openalex.org/W2168289525",
+    "https://openalex.org/W2789549830"
+   ]
+  },
+  {
+   "id": "https://openalex.org/W2901628123",
+   "doi": "https://doi.org/10.3233/jad-180439",
+   "display_name": "The Association between Social Engagement, Loneliness, and Risk of Dementia: A Systematic Review and Meta-Analysis",
+   "publication_date": "2018-11-16",
+   "cited_by_count": 270,
+   "referenced_works": [
+    "https://openalex.org/W1928146223",
+    "https://openalex.org/W2138720796",
+    "https://openalex.org/W2140884566",
+    "https://openalex.org/W2169719947"
+   ]
+  },
+  {
+   "id": "https://openalex.org/W2292616725",
+   "doi": null,
+   "display_name": "The Silver Line: Tackling Loneliness in Older People Evaluation Research Report",
+   "publication_date": "2015-10-01",
+   "cited_by_count": 1,
+   "referenced_works": [
+    "https://openalex.org/W197767008",
+    "https://openalex.org/W1974179382",
+    "https://openalex.org/W2003490123",
+    "https://openalex.org/W2004761428",
+    "https://openalex.org/W2008067465",
+    "https://openalex.org/W2010220117",
+    "https://openalex.org/W2046141868",
+    "https://openalex.org/W2052245613",
+    "https://openalex.org/W2072288828",
+    "https://openalex.org/W2080837127",
+    "https://openalex.org/W2086463261",
+    "https://openalex.org/W2101196871",
+    "https://openalex.org/W2117614628",
+    "https://openalex.org/W2118709867",
+    "https://openalex.org/W2123271605",
+    "https://openalex.org/W2135570695",
+    "https://openalex.org/W2138720796",
+    "https://openalex.org/W2138867401",
+    "https://openalex.org/W2154406753",
+    "https://openalex.org/W2159852265",
+    "https://openalex.org/W2162577640",
+    "https://openalex.org/W2168289525",
+    "https://openalex.org/W2169719947"
+   ]
+  },
+  {
+   "id": "https://openalex.org/W3183587195",
+   "doi": "https://doi.org/10.1371/journal.pone.0255088",
+   "display_name": "Prevalence of loneliness amongst older people in high-income countries: A systematic review and meta-analysis",
+   "publication_date": "2021-07-26",
+   "cited_by_count": 61,
+   "referenced_works": [
+    "https://openalex.org/W197767008",
+    "https://openalex.org/W1974322420",
+    "https://openalex.org/W2003490123",
+    "https://openalex.org/W2007153777",
+    "https://openalex.org/W2072288828",
+    "https://openalex.org/W2080837127",
+    "https://openalex.org/W2095349644",
+    "https://openalex.org/W2100783595",
+    "https://openalex.org/W2110221483",
+    "https://openalex.org/W2116398621",
+    "https://openalex.org/W2123162645",
+    "https://openalex.org/W2123271605",
+    "https://openalex.org/W2143288954",
+    "https://openalex.org/W2165243546",
+    "https://openalex.org/W2169719947",
+    "https://openalex.org/W2341545815",
+    "https://openalex.org/W2560438049",
+    "https://openalex.org/W4285719527"
+   ]
+  },
+  {
+   "id": "https://openalex.org/W2126012228",
+   "doi": "https://doi.org/10.1186/1477-7525-11-159",
+   "display_name": "Nudging socially isolated people towards well-being with the \u2018Happiness Route\u2019: design of a randomized controlled trial for the evaluation of a happiness-based intervention",
+   "publication_date": "2013-01-01",
+   "cited_by_count": 18,
+   "referenced_works": [
+    "https://openalex.org/W2086463261",
+    "https://openalex.org/W2122524132",
+    "https://openalex.org/W4285719527"
+   ]
+  },
+  {
+   "id": "https://openalex.org/W2736857151",
+   "doi": "https://doi.org/10.1016/0005-7916(83)90066-6",
+   "display_name": "Loneliness: A sourcebook of current theory, research and therapy",
+   "publication_date": "1983-09-01",
+   "cited_by_count": 531,
+   "referenced_works": []
+  },
+  {
+   "id": "https://openalex.org/W2154406753",
+   "doi": "https://doi.org/10.1017/s0144686x04002594",
+   "display_name": "Preventing social isolation and loneliness among older people: a systematic review of health promotion interventions",
+   "publication_date": "2005-01-01",
+   "cited_by_count": 874,
+   "referenced_works": [
+    "https://openalex.org/W2022436084",
+    "https://openalex.org/W2043669727",
+    "https://openalex.org/W2057529685",
+    "https://openalex.org/W2058361378",
+    "https://openalex.org/W2100783595",
+    "https://openalex.org/W2123162645",
+    "https://openalex.org/W2137760862",
+    "https://openalex.org/W2160196750",
+    "https://openalex.org/W2334587181",
+    "https://openalex.org/W4285719527"
+   ]
+  },
+  {
+   "id": "https://openalex.org/W1974179382",
+   "doi": "https://doi.org/10.1186/1471-2458-11-647",
+   "display_name": "Interventions targeting social isolation in older people: a systematic review",
+   "publication_date": "2011-08-15",
+   "cited_by_count": 626,
+   "referenced_works": [
+    "https://openalex.org/W2003490123",
+    "https://openalex.org/W2041367957",
+    "https://openalex.org/W2043669727",
+    "https://openalex.org/W2058361378",
+    "https://openalex.org/W2069660924",
+    "https://openalex.org/W2076208799",
+    "https://openalex.org/W2086463261",
+    "https://openalex.org/W2098713693",
+    "https://openalex.org/W2100783595",
+    "https://openalex.org/W2106100258",
+    "https://openalex.org/W2108696783",
+    "https://openalex.org/W2117614628",
+    "https://openalex.org/W2121289794",
+    "https://openalex.org/W2123162645",
+    "https://openalex.org/W2123271605",
+    "https://openalex.org/W2130268063",
+    "https://openalex.org/W2137760862",
+    "https://openalex.org/W2138867401",
+    "https://openalex.org/W2139540989",
+    "https://openalex.org/W2140884566",
+    "https://openalex.org/W2154406753",
+    "https://openalex.org/W2156098321",
+    "https://openalex.org/W2162544110",
+    "https://openalex.org/W2417301675",
+    "https://openalex.org/W2991792334",
+    "https://openalex.org/W4285719527"
+   ]
+  },
+  {
+   "id": "https://openalex.org/W4310828191",
+   "doi": "https://doi.org/10.1016/s2542-5196(22)00306-0",
+   "display_name": "Lonelygenic environments: a call for research on multilevel determinants of loneliness",
+   "publication_date": "2022-12-01",
+   "cited_by_count": 7,
+   "referenced_works": [
+    "https://openalex.org/W2782215249"
+   ]
+  },
+  {
+   "id": "https://openalex.org/W4311116418",
+   "doi": "https://doi.org/10.1111/camh.12614",
+   "display_name": "Review: Interventions addressing loneliness amongst university students: a systematic review",
+   "publication_date": "2022-12-10",
+   "cited_by_count": 6,
+   "referenced_works": [
+    "https://openalex.org/W2025396819",
+    "https://openalex.org/W2137123520",
+    "https://openalex.org/W2138867401",
+    "https://openalex.org/W2160788840",
+    "https://openalex.org/W2168289525",
+    "https://openalex.org/W2460451430",
+    "https://openalex.org/W2531385025",
+    "https://openalex.org/W2615658301",
+    "https://openalex.org/W3011588871",
+    "https://openalex.org/W4294215472"
+   ]
+  },
+  {
+   "id": "https://openalex.org/W2912165696",
+   "doi": "https://doi.org/10.23970/ahrqepc-rapidisolation",
+   "display_name": "Addressing Social Isolation To Improve the Health of Older Adults: A Rapid Review",
+   "publication_date": "2019-02-08",
+   "cited_by_count": 62,
+   "referenced_works": [
+    "https://openalex.org/W2008067465",
+    "https://openalex.org/W2014754251",
+    "https://openalex.org/W2041367957",
+    "https://openalex.org/W2116398621",
+    "https://openalex.org/W2139540989",
+    "https://openalex.org/W2140884566",
+    "https://openalex.org/W2155151233",
+    "https://openalex.org/W2159852265",
+    "https://openalex.org/W2165243546",
+    "https://openalex.org/W2341545815",
+    "https://openalex.org/W2460451430",
+    "https://openalex.org/W2771805027"
+   ]
+  },
+  {
+   "id": "https://openalex.org/W4296692877",
+   "doi": "https://doi.org/10.1038/s41398-022-02178-4",
+   "display_name": "The effects of social isolation stress and discrimination on mental health",
+   "publication_date": "2022-09-21",
+   "cited_by_count": 31,
+   "referenced_works": [
+    "https://openalex.org/W292445073",
+    "https://openalex.org/W1511697076",
+    "https://openalex.org/W2120113719",
+    "https://openalex.org/W2131334268",
+    "https://openalex.org/W2138867401",
+    "https://openalex.org/W2165243546",
+    "https://openalex.org/W2615658301",
+    "https://openalex.org/W2755781951"
+   ]
+  },
+  {
+   "id": "https://openalex.org/W2981077025",
+   "doi": "https://doi.org/10.1002/jrsm.1378",
+   "display_name": "Which academic search systems are suitable for systematic reviews or meta\u2010analyses? Evaluating retrieval qualities of Google Scholar, PubMed, and 26 other resources",
+   "publication_date": "2019-10-15",
+   "cited_by_count": 839,
+   "referenced_works": [
+    "https://openalex.org/W2156098321",
+    "https://openalex.org/W4294215472"
+   ]
+  },
+  {
+   "id": "https://openalex.org/W2171723063",
+   "doi": "https://doi.org/10.3310/hta18280",
+   "display_name": "Assessing methods to specify the target difference for a randomised controlled trial: DELTA (Difference ELicitation in TriAls) review",
+   "publication_date": "2014-01-01",
+   "cited_by_count": 177,
+   "referenced_works": [
+    "https://openalex.org/W2108696783"
+   ]
+  },
+  {
+   "id": "https://openalex.org/W4317910262",
+   "doi": "https://doi.org/10.3389/fpsyg.2022.1040651",
+   "display_name": "Loneliness and disability: A systematic review of loneliness conceptualization and intervention strategies",
+   "publication_date": "2023-01-25",
+   "cited_by_count": 4,
+   "referenced_works": [
+    "https://openalex.org/W1974322420",
+    "https://openalex.org/W2014754251",
+    "https://openalex.org/W2131334268",
+    "https://openalex.org/W2138867401"
+   ]
+  },
+  {
+   "id": "https://openalex.org/W2805201924",
+   "doi": "https://doi.org/10.1186/s12888-018-1736-5",
+   "display_name": "Associations between loneliness and perceived social support and outcomes of mental health problems: a systematic review",
+   "publication_date": "2018-05-29",
+   "cited_by_count": 796,
+   "referenced_works": [
+    "https://openalex.org/W1511697076",
+    "https://openalex.org/W1928146223",
+    "https://openalex.org/W2003490123",
+    "https://openalex.org/W2010220117",
+    "https://openalex.org/W2041367957",
+    "https://openalex.org/W2080837127",
+    "https://openalex.org/W2101196871",
+    "https://openalex.org/W2109338375",
+    "https://openalex.org/W2110221483",
+    "https://openalex.org/W2127756161",
+    "https://openalex.org/W2138867401",
+    "https://openalex.org/W2160788840",
+    "https://openalex.org/W2162577640",
+    "https://openalex.org/W2165243546",
+    "https://openalex.org/W2168289525",
+    "https://openalex.org/W2334587181",
+    "https://openalex.org/W2615658301"
+   ]
+  },
+  {
+   "id": "https://openalex.org/W3210636872",
+   "doi": "https://doi.org/10.3390/ijerph182111522",
+   "display_name": "A Conceptual Review of Loneliness in Adults: Qualitative Evidence Synthesis",
+   "publication_date": "2021-11-02",
+   "cited_by_count": 17,
+   "referenced_works": [
+    "https://openalex.org/W292445073",
+    "https://openalex.org/W2008067465",
+    "https://openalex.org/W2080837127",
+    "https://openalex.org/W2116398621",
+    "https://openalex.org/W2131334268",
+    "https://openalex.org/W2155151233",
+    "https://openalex.org/W2156098321",
+    "https://openalex.org/W2162577640",
+    "https://openalex.org/W2165243546",
+    "https://openalex.org/W2755781951",
+    "https://openalex.org/W4243663932",
+    "https://openalex.org/W4294215472"
+   ]
+  },
+  {
+   "id": "https://openalex.org/W2898962481",
+   "doi": "https://doi.org/10.1016/j.jad.2018.10.359",
+   "display_name": "Conceptual framework for social connectedness in mental disorders: Systematic review and narrative synthesis",
+   "publication_date": "2018-10-29",
+   "cited_by_count": 58,
+   "referenced_works": [
+    "https://openalex.org/W2003490123",
+    "https://openalex.org/W2025396819",
+    "https://openalex.org/W2041367957",
+    "https://openalex.org/W2081155210",
+    "https://openalex.org/W2098003297",
+    "https://openalex.org/W2110221483",
+    "https://openalex.org/W2131374070",
+    "https://openalex.org/W2138867401",
+    "https://openalex.org/W2341545815",
+    "https://openalex.org/W2615658301",
+    "https://openalex.org/W2782215249",
+    "https://openalex.org/W2789549830"
+   ]
+  },
+  {
+   "id": "https://openalex.org/W3012427396",
+   "doi": "https://doi.org/10.3390/ijerph17061813",
+   "display_name": "Causal Evidence and Dispositions in Medicine and Public Health",
+   "publication_date": "2020-03-11",
+   "cited_by_count": 13,
+   "referenced_works": []
+  },
+  {
+   "id": "https://openalex.org/W3017177466",
+   "doi": "https://doi.org/10.1016/j.jad.2020.03.075",
+   "display_name": "Factors Associated With Loneliness: An Umbrella Review Of Observational Studies",
+   "publication_date": "2020-04-15",
+   "cited_by_count": 98,
+   "referenced_works": [
+    "https://openalex.org/W1756842549",
+    "https://openalex.org/W2072288828",
+    "https://openalex.org/W2120113719",
+    "https://openalex.org/W2125435699",
+    "https://openalex.org/W2138720796",
+    "https://openalex.org/W2460451430",
+    "https://openalex.org/W2755781951",
+    "https://openalex.org/W2782215249",
+    "https://openalex.org/W2991792334",
+    "https://openalex.org/W4285719527",
+    "https://openalex.org/W4294215472"
+   ]
+  },
+  {
+   "id": "https://openalex.org/W2795467188",
+   "doi": null,
+   "display_name": "Preventing the harmful consequences of severe and persistent loneliness.",
+   "publication_date": "1984-01-01",
+   "cited_by_count": 132,
+   "referenced_works": []
+  },
+  {
+   "id": "https://openalex.org/W2990748566",
+   "doi": "https://doi.org/10.1007/s00127-019-01800-z",
+   "display_name": "The effectiveness of interventions for reducing subjective and objective social isolation among people with mental health problems: a systematic review",
+   "publication_date": "2019-11-19",
+   "cited_by_count": 124,
+   "referenced_works": [
+    "https://openalex.org/W1928146223",
+    "https://openalex.org/W1972401458",
+    "https://openalex.org/W1974179382",
+    "https://openalex.org/W2003490123",
+    "https://openalex.org/W2014754251",
+    "https://openalex.org/W2022436084",
+    "https://openalex.org/W2025396819",
+    "https://openalex.org/W2100783595",
+    "https://openalex.org/W2110221483",
+    "https://openalex.org/W2117614628",
+    "https://openalex.org/W2123271605",
+    "https://openalex.org/W2127756161",
+    "https://openalex.org/W2137123520",
+    "https://openalex.org/W2138867401",
+    "https://openalex.org/W2139433778",
+    "https://openalex.org/W2143288954",
+    "https://openalex.org/W2154406753",
+    "https://openalex.org/W2155151233",
+    "https://openalex.org/W2162577640",
+    "https://openalex.org/W2169719947",
+    "https://openalex.org/W2417301675",
+    "https://openalex.org/W2615658301",
+    "https://openalex.org/W4243663932"
+   ]
+  },
+  {
+   "id": "https://openalex.org/W3093771799",
+   "doi": "https://doi.org/10.1177/1757913920967040",
+   "display_name": "Understanding loneliness: a systematic review of the impact of social prescribing initiatives on loneliness",
+   "publication_date": "2021-06-23",
+   "cited_by_count": 50,
+   "referenced_works": [
+    "https://openalex.org/W2003490123",
+    "https://openalex.org/W2014754251",
+    "https://openalex.org/W2156098321",
+    "https://openalex.org/W2160788840",
+    "https://openalex.org/W4294215472"
+   ]
+  },
+  {
+   "id": "https://openalex.org/W2117413323",
+   "doi": "https://doi.org/10.1186/1471-2458-13-984",
+   "display_name": "Effect evaluation of a two-year complex intervention to reduce loneliness in non-institutionalised elderly Dutch people",
+   "publication_date": "2013-10-21",
+   "cited_by_count": 28,
+   "referenced_works": [
+    "https://openalex.org/W1928146223",
+    "https://openalex.org/W1974179382",
+    "https://openalex.org/W2007153777",
+    "https://openalex.org/W2046141868",
+    "https://openalex.org/W2072288828",
+    "https://openalex.org/W2098713693",
+    "https://openalex.org/W2117614628",
+    "https://openalex.org/W2121289794",
+    "https://openalex.org/W2123271605",
+    "https://openalex.org/W2135570695",
+    "https://openalex.org/W2138867401",
+    "https://openalex.org/W2154406753",
+    "https://openalex.org/W2160196750",
+    "https://openalex.org/W2162544110",
+    "https://openalex.org/W2417301675"
+   ]
+  }
+ ],
+ "backward": [
+  {
+   "id": "https://openalex.org/W2003490123",
+   "doi": "https://doi.org/10.1371/journal.pmed.1000316",
+   "display_name": "Social Relationships and Mortality Risk: A Meta-analytic Review",
+   "publication_date": "2010-07-27",
+   "cited_by_count": 5566
+  },
+  {
+   "id": "https://openalex.org/W2168289525",
+   "doi": "https://doi.org/10.1007/s12160-010-9210-8",
+   "display_name": "Loneliness Matters: A Theoretical and Empirical Review of Consequences and Mechanisms",
+   "publication_date": "2010-07-21",
+   "cited_by_count": 3093
+  },
+  {
+   "id": "https://openalex.org/W2165243546",
+   "doi": "https://doi.org/10.1177/1745691614568352",
+   "display_name": "Loneliness and Social Isolation as Risk Factors for Mortality",
+   "publication_date": "2015-03-01",
+   "cited_by_count": 3805
+  },
+  {
+   "id": "https://openalex.org/W2131334268",
+   "doi": "https://doi.org/10.1016/j.tics.2009.06.005",
+   "display_name": "Perceived social isolation and cognition",
+   "publication_date": "2009-09-01",
+   "cited_by_count": 1394
+  },
+  {
+   "id": "https://openalex.org/W2160788840",
+   "doi": "https://doi.org/10.1207/s15327752jpa6601_2",
+   "display_name": "UCLA Loneliness Scale (Version 3): Reliability, Validity, and Factor Structure",
+   "publication_date": "1996-02-01",
+   "cited_by_count": 4020
+  },
+  {
+   "id": "https://openalex.org/W2041367957",
+   "doi": null,
+   "display_name": "Loneliness: the experience of emotional and social isolation",
+   "publication_date": "1974-01-01",
+   "cited_by_count": 2254
+  },
+  {
+   "id": "https://openalex.org/W2156098321",
+   "doi": "https://doi.org/10.1136/bmj.b2535",
+   "display_name": "Preferred reporting items for systematic reviews and meta-analyses: the PRISMA statement",
+   "publication_date": "2009-07-21",
+   "cited_by_count": 75584
+  },
+  {
+   "id": "https://openalex.org/W2334587181",
+   "doi": "https://doi.org/10.1093/geronj/38.4.492",
+   "display_name": "Loneliness: A Source Book of Current Theory, Research and Therapy",
+   "publication_date": "1983-07-01",
+   "cited_by_count": 1862
+  },
+  {
+   "id": "https://openalex.org/W2138720796",
+   "doi": "https://doi.org/10.1001/archpsyc.64.2.234",
+   "display_name": "Loneliness and Risk of Alzheimer Disease",
+   "publication_date": "2007-02-01",
+   "cited_by_count": 1130
+  },
+  {
+   "id": "https://openalex.org/W2004761428",
+   "doi": "https://doi.org/10.1073/pnas.1219686110",
+   "display_name": "Social isolation, loneliness, and all-cause mortality in older men and women",
+   "publication_date": "2013-03-25",
+   "cited_by_count": 1786
+  },
+  {
+   "id": "https://openalex.org/W2417301675",
+   "doi": "https://doi.org/10.7748/nop.17.1.40.s11",
+   "display_name": "Preventing social isolation and loneliness among older people: a systematic review of health promotion interventions",
+   "publication_date": "2005-03-01",
+   "cited_by_count": 274
+  },
+  {
+   "id": "https://openalex.org/W2123271605",
+   "doi": "https://doi.org/10.1017/s0144686x04003332",
+   "display_name": "The prevalence of, and risk factors for, loneliness in later life: a survey of older people in Great Britain",
+   "publication_date": "2005-04-22",
+   "cited_by_count": 495
+  },
+  {
+   "id": "https://openalex.org/W1974322420",
+   "doi": "https://doi.org/10.1016/j.cpr.2006.04.002",
+   "display_name": "The clinical significance of loneliness: A literature review",
+   "publication_date": "2006-06-20",
+   "cited_by_count": 1516
+  },
+  {
+   "id": "https://openalex.org/W1928146223",
+   "doi": "https://doi.org/10.1177/014662168500900307",
+   "display_name": "The Development of a Rasch-Type Loneliness Scale",
+   "publication_date": "1985-09-01",
+   "cited_by_count": 1024
+  },
+  {
+   "id": "https://openalex.org/W2098713693",
+   "doi": "https://doi.org/10.1080/13607860600637893",
+   "display_name": "Breaking the cycle of loneliness? Psychological effects of a friendship enrichment program for older women",
+   "publication_date": "2006-09-01",
+   "cited_by_count": 87
+  },
+  {
+   "id": "https://openalex.org/W2080837127",
+   "doi": "https://doi.org/10.1080/00223980.2011.613875",
+   "display_name": "The Prevalence of Loneliness Among Adults: A Case Study of the United Kingdom",
+   "publication_date": "2011-12-05",
+   "cited_by_count": 536
+  },
+  {
+   "id": "https://openalex.org/W2029499893",
+   "doi": "https://doi.org/10.4258/hir.2012.18.3.191",
+   "display_name": "Computer and Internet Interventions for Loneliness and Depression in Older Adults: A Meta-Analysis",
+   "publication_date": "2012-01-01",
+   "cited_by_count": 166
+  },
+  {
+   "id": "https://openalex.org/W2127756161",
+   "doi": "https://doi.org/10.1080/01612840590959425",
+   "display_name": "COMBATING LONELINESS AMONG PERSONS WITH SEVERE MENTAL ILLNESS: SOCIAL NETWORK INTERVENTIONS' CHARACTERISTICS, EFFECTIVENESS, AND APPLICABILITY",
+   "publication_date": "2005-01-01",
+   "cited_by_count": 172
+  },
+  {
+   "id": "https://openalex.org/W2098003297",
+   "doi": "https://doi.org/10.1037/a0017216",
+   "display_name": "Perceived social isolation makes me sad: 5-year cross-lagged analyses of loneliness and depressive symptomatology in the Chicago Health, Aging, and Social Relations Study.",
+   "publication_date": "2010-01-01",
+   "cited_by_count": 1374
+  },
+  {
+   "id": "https://openalex.org/W2131374070",
+   "doi": "https://doi.org/10.1037/0882-7974.21.1.140",
+   "display_name": "Loneliness as a specific risk factor for depressive symptoms: Cross-sectional and longitudinal analyses.",
+   "publication_date": "2006-03-01",
+   "cited_by_count": 1858
+  },
+  {
+   "id": "https://openalex.org/W2048168755",
+   "doi": "https://doi.org/10.1016/j.socscimed.2011.11.028",
+   "display_name": "Loneliness, health, and mortality in old age: A national longitudinal study",
+   "publication_date": "2012-01-30",
+   "cited_by_count": 1033
+  },
+  {
+   "id": "https://openalex.org/W2139433778",
+   "doi": "https://doi.org/10.1097/00006842-200205000-00005",
+   "display_name": "Loneliness and Health: Potential Mechanisms",
+   "publication_date": "2002-05-01",
+   "cited_by_count": 973
+  },
+  {
+   "id": "https://openalex.org/W2341545815",
+   "doi": "https://doi.org/10.1136/bmjopen-2015-010799",
+   "display_name": "Loneliness, social isolation and social relationships: what are we measuring? A novel framework for classifying and comparing tools",
+   "publication_date": "2016-04-01",
+   "cited_by_count": 233
+  },
+  {
+   "id": "https://openalex.org/W2007153777",
+   "doi": "https://doi.org/10.1002/gps.2181",
+   "display_name": "Loneliness, social support networks, mood and wellbeing in community\u2010dwelling elderly",
+   "publication_date": "2009-03-09",
+   "cited_by_count": 504
+  },
+  {
+   "id": "https://openalex.org/W4243663932",
+   "doi": "https://doi.org/10.1037/0022-3514.39.3.472",
+   "display_name": "The revised UCLA Loneliness Scale: Concurrent and discriminant validity evidence.",
+   "publication_date": "1980-09-01",
+   "cited_by_count": 3076
+  },
+  {
+   "id": "https://openalex.org/W2991792334",
+   "doi": null,
+   "display_name": "Preferred reporting items for systematic reviews and meta-analyses: the PRISMA Statement.",
+   "publication_date": "2009-01-01",
+   "cited_by_count": 44099
+  },
+  {
+   "id": "https://openalex.org/W2010220117",
+   "doi": "https://doi.org/10.2307/2068915",
+   "display_name": "Loneliness: A Sourcebook of Current Theory, Research and Therapy.",
+   "publication_date": "1984-03-01",
+   "cited_by_count": 1308
+  },
+  {
+   "id": "https://openalex.org/W2043669727",
+   "doi": "https://doi.org/10.1080/13607860220142422",
+   "display_name": "A randomized controlled trial of the psychosocial impact of providing internet training and access to older adults",
+   "publication_date": "2002-08-01",
+   "cited_by_count": 366
+  },
+  {
+   "id": "https://openalex.org/W4294215472",
+   "doi": "https://doi.org/10.1371/journal.pmed.1000097",
+   "display_name": "Preferred Reporting Items for Systematic Reviews and Meta-Analyses: The PRISMA Statement",
+   "publication_date": "2009-07-20",
+   "cited_by_count": 51035
+  },
+  {
+   "id": "https://openalex.org/W2162544110",
+   "doi": "https://doi.org/10.1136/bmj.a1655",
+   "display_name": "Developing and evaluating complex interventions: the new Medical Research Council guidance",
+   "publication_date": "2008-09-29",
+   "cited_by_count": 9674
+  },
+  {
+   "id": "https://openalex.org/W2107269725",
+   "doi": "https://doi.org/10.1002/j.1556-6676.1990.tb02521.x",
+   "display_name": "Loneliness: A Review of Current Literature, With Implications for Counseling and Research",
+   "publication_date": "1990-03-04",
+   "cited_by_count": 257
+  },
+  {
+   "id": "https://openalex.org/W2106100258",
+   "doi": "https://doi.org/10.1080/13607860600841206",
+   "display_name": "Improved self-management ability and well-being in older women after a short group intervention",
+   "publication_date": "2006-09-01",
+   "cited_by_count": 72
+  },
+  {
+   "id": "https://openalex.org/W2110221483",
+   "doi": "https://doi.org/10.1007/s00127-012-0515-8",
+   "display_name": "Feelings of loneliness among adults with mental disorder",
+   "publication_date": "2012-05-08",
+   "cited_by_count": 242
+  },
+  {
+   "id": "https://openalex.org/W2162577640",
+   "doi": "https://doi.org/10.1177/0898264312460275",
+   "display_name": "Social Isolation, Loneliness and Health Among Older Adults",
+   "publication_date": "2012-09-23",
+   "cited_by_count": 621
+  },
+  {
+   "id": "https://openalex.org/W2122524132",
+   "doi": "https://doi.org/10.1037/0882-7974.21.1.152",
+   "display_name": "Loneliness is a unique predictor of age-related differences in systolic blood pressure.",
+   "publication_date": "2006-03-01",
+   "cited_by_count": 434
+  },
+  {
+   "id": "https://openalex.org/W2008067465",
+   "doi": "https://doi.org/10.1001/archinternmed.2012.1993",
+   "display_name": "Loneliness in Older Persons",
+   "publication_date": "2012-06-14",
+   "cited_by_count": 962
+  },
+  {
+   "id": "https://openalex.org/W2076208799",
+   "doi": "https://doi.org/10.1111/j.1365-2648.2008.04837.x",
+   "display_name": "Effects of psychosocial group rehabilitation on social functioning, loneliness and well\u2010being of lonely, older people: randomized controlled trial",
+   "publication_date": "2008-12-02",
+   "cited_by_count": 178
+  },
+  {
+   "id": "https://openalex.org/W2132164645",
+   "doi": "https://doi.org/10.1016/j.jamda.2007.11.007",
+   "display_name": "Animal-Assisted Therapy and Loneliness in Nursing Homes: Use of Robotic versus Living Dogs",
+   "publication_date": "2008-02-22",
+   "cited_by_count": 458
+  },
+  {
+   "id": "https://openalex.org/W2782215249",
+   "doi": "https://doi.org/10.1371/journal.pone.0190033",
+   "display_name": "Association of loneliness with all-cause mortality: A meta-analysis",
+   "publication_date": "2018-01-04",
+   "cited_by_count": 412
+  },
+  {
+   "id": "https://openalex.org/W2025396819",
+   "doi": "https://doi.org/10.1037/0022-0167.32.1.139",
+   "display_name": "Effects of reframing and self-control directives on loneliness, depression, and controllability.",
+   "publication_date": "1985-01-01",
+   "cited_by_count": 58
+  },
+  {
+   "id": "https://openalex.org/W2057529685",
+   "doi": "https://doi.org/10.1006/pmed.2000.0740",
+   "display_name": "Social Relations, Physical Activity, and Well-Being in Older Adults",
+   "publication_date": "2000-11-01",
+   "cited_by_count": 412
+  },
+  {
+   "id": "https://openalex.org/W2058361378",
+   "doi": "https://doi.org/10.1007/bf00942253",
+   "display_name": "Peer support telephone dyads for elderly women: Was this the wrong intervention?",
+   "publication_date": "1991-02-01",
+   "cited_by_count": 147
+  },
+  {
+   "id": "https://openalex.org/W2139540989",
+   "doi": "https://doi.org/10.1177/002214650905000103",
+   "display_name": "Social Disconnectedness, Perceived Isolation, and Health among Older Adults",
+   "publication_date": "2009-03-01",
+   "cited_by_count": 1600
+  },
+  {
+   "id": "https://openalex.org/W2116398621",
+   "doi": "https://doi.org/10.2105/ajph.2014.302427",
+   "display_name": "Loneliness as a Public Health Issue: The Impact of Loneliness on Health Care Utilization Among Older Adults",
+   "publication_date": "2015-03-19",
+   "cited_by_count": 591
+  },
+  {
+   "id": "https://openalex.org/W2169719947",
+   "doi": "https://doi.org/10.1136/jnnp-2012-302755",
+   "display_name": "Feelings of loneliness, but not social isolation, predict dementia onset: results from the Amsterdam Study of the Elderly (AMSTEL)",
+   "publication_date": "2012-12-10",
+   "cited_by_count": 495
+  },
+  {
+   "id": "https://openalex.org/W2026022164",
+   "doi": "https://doi.org/10.1001/archpedi.160.8.805",
+   "display_name": "Socially Isolated Children 20 Years Later",
+   "publication_date": "2006-08-01",
+   "cited_by_count": 366
+  },
+  {
+   "id": "https://openalex.org/W2531385025",
+   "doi": "https://doi.org/10.1002/ijop.12394",
+   "display_name": "Mindfulness training for loneliness among Chinese college students: A pilot randomized controlled trial",
+   "publication_date": "2016-10-05",
+   "cited_by_count": 51
+  },
+  {
+   "id": "https://openalex.org/W2122626461",
+   "doi": "https://doi.org/10.1016/j.bbi.2012.07.006",
+   "display_name": "Mindfulness-Based Stress Reduction training reduces loneliness and pro-inflammatory gene expression in older adults: A small randomized controlled trial",
+   "publication_date": "2012-07-20",
+   "cited_by_count": 487
+  },
+  {
+   "id": "https://openalex.org/W2022436084",
+   "doi": "https://doi.org/10.1080/13607869856506",
+   "display_name": "Loneliness research and interventions: A review of the literature",
+   "publication_date": "1998-11-01",
+   "cited_by_count": 274
+  },
+  {
+   "id": "https://openalex.org/W2114690339",
+   "doi": "https://doi.org/10.1002/gps.2350",
+   "display_name": "The effects of reminiscence therapy on psychological well\u2010being, depression, and loneliness among the institutionalized aged",
+   "publication_date": "2009-08-20",
+   "cited_by_count": 270
+  },
+  {
+   "id": "https://openalex.org/W2125435699",
+   "doi": "https://doi.org/10.1136/bmj.327.7414.557",
+   "display_name": "Measuring inconsistency in meta-analyses",
+   "publication_date": "2003-09-04",
+   "cited_by_count": 49972
+  },
+  {
+   "id": "https://openalex.org/W1756842549",
+   "doi": "https://doi.org/10.5860/choice.46-1765",
+   "display_name": "Loneliness: human nature and the need for social connection",
+   "publication_date": "2008-11-01",
+   "cited_by_count": 1403
+  },
+  {
+   "id": "https://openalex.org/W2105547874",
+   "doi": "https://doi.org/10.1016/s0306-4530(03)00086-6",
+   "display_name": "Loneliness and neuroendocrine, cardiovascular, and inflammatory stress responses in middle-aged men and women",
+   "publication_date": "2003-05-27",
+   "cited_by_count": 519
+  },
+  {
+   "id": "https://openalex.org/W2109338375",
+   "doi": "https://doi.org/10.1080/02699931.2013.837379",
+   "display_name": "Evolutionary mechanisms for loneliness",
+   "publication_date": "2013-09-25",
+   "cited_by_count": 350
+  },
+  {
+   "id": "https://openalex.org/W2135570695",
+   "doi": "https://doi.org/10.1093/geronb/63.6.s375",
+   "display_name": "From Social Structural Factors to Perceptions of Relationship Quality and Loneliness: The Chicago Health, Aging, and Social Relations Study",
+   "publication_date": "2008-11-01",
+   "cited_by_count": 528
+  },
+  {
+   "id": "https://openalex.org/W2560438049",
+   "doi": "https://doi.org/10.1186/s13643-016-0384-4",
+   "display_name": "Rayyan\u2014a web and mobile app for systematic reviews",
+   "publication_date": "2016-12-01",
+   "cited_by_count": 10609
+  },
+  {
+   "id": "https://openalex.org/W2046141868",
+   "doi": "https://doi.org/10.1007/s10433-009-0110-3",
+   "display_name": "Older adult loneliness: myths and realities",
+   "publication_date": "2009-04-03",
+   "cited_by_count": 530
+  },
+  {
+   "id": "https://openalex.org/W2120113719",
+   "doi": "https://doi.org/10.1017/s1041610214002749",
+   "display_name": "Loneliness and cognitive function in the older adult: a systematic review",
+   "publication_date": "2015-01-02",
+   "cited_by_count": 371
+  },
+  {
+   "id": "https://openalex.org/W2069660924",
+   "doi": "https://doi.org/10.1080/14623730.2008.9721760",
+   "display_name": "Alleviating Loneliness among Frail Older People \u2013 Findings from a Randomised Controlled Trial",
+   "publication_date": "2008-05-01",
+   "cited_by_count": 36
+  },
+  {
+   "id": "https://openalex.org/W2121289794",
+   "doi": "https://doi.org/10.1080/13607860701366129",
+   "display_name": "Escape loneliness by going digital: A quantitative and qualitative evaluation of a Dutch experiment in using ECT to overcome loneliness among older adults",
+   "publication_date": "2007-09-01",
+   "cited_by_count": 207
+  },
+  {
+   "id": "https://openalex.org/W2123162645",
+   "doi": "https://doi.org/10.1017/s0959259800104101",
+   "display_name": "Being alone in later life: loneliness, social isolation and living alone",
+   "publication_date": "2000-11-01",
+   "cited_by_count": 645
+  },
+  {
+   "id": "https://openalex.org/W2130268063",
+   "doi": "https://doi.org/10.1080/13607860701366228",
+   "display_name": "A cognitive intervention to enhance institutionalized older adults\u2019 social support networks and decrease loneliness",
+   "publication_date": "2007-11-01",
+   "cited_by_count": 141
+  },
+  {
+   "id": "https://openalex.org/W2081155210",
+   "doi": "https://doi.org/10.1037/0033-2909.117.3.497",
+   "display_name": "The need to belong: Desire for interpersonal attachments as a fundamental human motivation.",
+   "publication_date": "1995-05-01",
+   "cited_by_count": 18107
+  },
+  {
+   "id": "https://openalex.org/W2014754251",
+   "doi": "https://doi.org/10.1207/s15327752jpa4203_11",
+   "display_name": "Developing a Measure of Loneliness",
+   "publication_date": "1978-06-01",
+   "cited_by_count": 1569
+  },
+  {
+   "id": "https://openalex.org/W2101196871",
+   "doi": "https://doi.org/10.1037/a0017805",
+   "display_name": "Loneliness predicts increased blood pressure: 5-year cross-lagged analyses in middle-aged and older adults.",
+   "publication_date": "2010-03-01",
+   "cited_by_count": 577
+  },
+  {
+   "id": "https://openalex.org/W2137760862",
+   "doi": "https://doi.org/10.1177/073346489901800306",
+   "display_name": "Surfing the Net in Later Life: A Review of the Literature and Pilot Study of Computer Use and Quality of Life",
+   "publication_date": "1999-09-01",
+   "cited_by_count": 246
+  },
+  {
+   "id": "https://openalex.org/W2160196750",
+   "doi": "https://doi.org/10.1017/s0144686x01008108",
+   "display_name": "Combating loneliness: a friendship enrichment programme for older women",
+   "publication_date": "2001-03-01",
+   "cited_by_count": 111
+  },
+  {
+   "id": "https://openalex.org/W2789549830",
+   "doi": "https://doi.org/10.7205/milmed.169.10.814",
+   "display_name": "Psychosocial Effects of the Boot Strap Intervention in Navy Recruits",
+   "publication_date": "2004-10-01",
+   "cited_by_count": 80
+  },
+  {
+   "id": "https://openalex.org/W2100783595",
+   "doi": "https://doi.org/10.1017/s0144686x00003457",
+   "display_name": "Social Isolation and Loneliness in Old Age: Review and Model Refinement",
+   "publication_date": "1996-05-01",
+   "cited_by_count": 405
+  },
+  {
+   "id": "https://openalex.org/W2140884566",
+   "doi": "https://doi.org/10.1016/s0140-6736(00)02113-9",
+   "display_name": "Influence of social network on occurrence of dementia: a community-based longitudinal study",
+   "publication_date": "2000-04-01",
+   "cited_by_count": 1246
+  },
+  {
+   "id": "https://openalex.org/W2086463261",
+   "doi": "https://doi.org/10.1016/j.archger.2005.03.002",
+   "display_name": "Predictors and subjective causes of loneliness in an aged population",
+   "publication_date": "2005-05-24",
+   "cited_by_count": 580
+  },
+  {
+   "id": "https://openalex.org/W2072288828",
+   "doi": "https://doi.org/10.1207/153248301753225702",
+   "display_name": "Influences on Loneliness in Older Adults: A Meta-Analysis",
+   "publication_date": "2001-12-01",
+   "cited_by_count": 569
+  },
+  {
+   "id": "https://openalex.org/W2143288954",
+   "doi": "https://doi.org/10.1017/s0033291711001772",
+   "display_name": "Increased risk of mortality associated with social isolation in older men: only when feeling lonely? Results from the Amsterdam Study of the Elderly (AMSTEL)",
+   "publication_date": "2011-09-06",
+   "cited_by_count": 209
+  },
+  {
+   "id": "https://openalex.org/W197767008",
+   "doi": null,
+   "display_name": "Preventing loneliness and social isolation: interventions and outcomes",
+   "publication_date": "2011-10-01",
+   "cited_by_count": 91
+  },
+  {
+   "id": "https://openalex.org/W2117765622",
+   "doi": "https://doi.org/10.1111/j.1467-9280.2005.01617.x",
+   "display_name": "How Can I Connect With Thee?",
+   "publication_date": "2005-09-26",
+   "cited_by_count": 265
+  },
+  {
+   "id": "https://openalex.org/W1568801823",
+   "doi": null,
+   "display_name": "The Effect of a Multi-Strategy Program on Developing Social Behaviors Based on Pender's Health Promotion Model to Prevent Loneliness of Old Women Referred to Gonabad Urban Health Centers.",
+   "publication_date": "2015-04-01",
+   "cited_by_count": 31
+  },
+  {
+   "id": "https://openalex.org/W2118709867",
+   "doi": "https://doi.org/10.1186/1745-6215-15-141",
+   "display_name": "\u2018Putting Life in Years\u2019 (PLINY) telephone friendship groups research study: pilot randomised controlled trial",
+   "publication_date": "2014-04-24",
+   "cited_by_count": 34
+  },
+  {
+   "id": "https://openalex.org/W2018849096",
+   "doi": "https://doi.org/10.1037/0003-066x.39.12.1389",
+   "display_name": "Promoting social bonding: Strategies for helping the lonely and socially isolated.",
+   "publication_date": "1984-12-01",
+   "cited_by_count": 246
+  },
+  {
+   "id": "https://openalex.org/W2052245613",
+   "doi": "https://doi.org/10.1258/jrsm.2012.120128",
+   "display_name": "Loneliness, isolation and the health of older adults: do we need a new research agenda?",
+   "publication_date": "2012-12-01",
+   "cited_by_count": 246
+  },
+  {
+   "id": "https://openalex.org/W2108696783",
+   "doi": "https://doi.org/10.1186/1741-7015-8-18",
+   "display_name": "CONSORT 2010 Statement: updated guidelines for reporting parallel group randomised trials",
+   "publication_date": "2010-03-24",
+   "cited_by_count": 11537
+  }
+ ],
+ "forward": [
+  {
+   "id": "https://openalex.org/W3213587868",
+   "doi": "https://doi.org/10.1007/s00127-021-02191-w",
+   "display_name": "Interventions to improve social connections: a systematic review and meta-analysis",
+   "publication_date": "2021-11-18",
+   "cited_by_count": 21,
+   "referenced_works": [
+    "https://openalex.org/W1974179382",
+    "https://openalex.org/W2117614628",
+    "https://openalex.org/W2138867401",
+    "https://openalex.org/W2154406753",
+    "https://openalex.org/W2159852265",
+    "https://openalex.org/W2460451430",
+    "https://openalex.org/W2615658301",
+    "https://openalex.org/W2736857151",
+    "https://openalex.org/W2771805027",
+    "https://openalex.org/W2898962481",
+    "https://openalex.org/W2990748566",
+    "https://openalex.org/W3007542285"
+   ]
+  },
+  {
+   "id": "https://openalex.org/W4295206852",
+   "doi": "https://doi.org/10.3390/ijerph191811310",
+   "display_name": "Can Communication Technologies Reduce Loneliness and Social Isolation in Older People? A Scoping Review of Reviews",
+   "publication_date": "2022-09-08",
+   "cited_by_count": 13,
+   "referenced_works": [
+    "https://openalex.org/W1974179382",
+    "https://openalex.org/W2138867401",
+    "https://openalex.org/W2154406753",
+    "https://openalex.org/W2159852265",
+    "https://openalex.org/W2460451430",
+    "https://openalex.org/W2771805027",
+    "https://openalex.org/W3007542285",
+    "https://openalex.org/W3153688757"
+   ]
+  },
+  {
+   "id": "https://openalex.org/W3036000571",
+   "doi": "https://doi.org/10.20900/agmr20200016",
+   "display_name": "Why Loneliness Interventions Are Unsuccessful: A Call for Precision Health",
+   "publication_date": "2020-01-01",
+   "cited_by_count": 37,
+   "referenced_works": [
+    "https://openalex.org/W2137123520",
+    "https://openalex.org/W2138867401",
+    "https://openalex.org/W2154406753",
+    "https://openalex.org/W2159852265",
+    "https://openalex.org/W2460451430",
+    "https://openalex.org/W2615658301",
+    "https://openalex.org/W2771805027"
+   ]
+  },
+  {
+   "id": "https://openalex.org/W3011083723",
+   "doi": null,
+   "display_name": "Social isolation and loneliness: the new geriatric giants: Approach for primary care.",
+   "publication_date": "2020-03-01",
+   "cited_by_count": 138,
+   "referenced_works": [
+    "https://openalex.org/W292445073",
+    "https://openalex.org/W1974179382",
+    "https://openalex.org/W2117614628",
+    "https://openalex.org/W2138867401",
+    "https://openalex.org/W2154406753",
+    "https://openalex.org/W2159852265",
+    "https://openalex.org/W2460451430",
+    "https://openalex.org/W2771805027",
+    "https://openalex.org/W2912165696"
+   ]
+  },
+  {
+   "id": "https://openalex.org/W4283511013",
+   "doi": "https://doi.org/10.1002/nop2.1277",
+   "display_name": "Effectiveness of a multicomponent intervention to reduce social isolation and loneliness in community\u2010dwelling elders: A randomized clinical trial",
+   "publication_date": "2022-06-24",
+   "cited_by_count": 6,
+   "referenced_works": [
+    "https://openalex.org/W292445073",
+    "https://openalex.org/W1974179382",
+    "https://openalex.org/W2117614628",
+    "https://openalex.org/W2138867401",
+    "https://openalex.org/W2154406753",
+    "https://openalex.org/W2460451430",
+    "https://openalex.org/W2755781951"
+   ]
+  },
+  {
+   "id": "https://openalex.org/W4295419463",
+   "doi": "https://doi.org/10.2196/40125",
+   "display_name": "Effectiveness of Technology Interventions in Addressing Social Isolation, Connectedness, and Loneliness in Older Adults: Systematic Umbrella Review",
+   "publication_date": "2022-09-13",
+   "cited_by_count": 16,
+   "referenced_works": [
+    "https://openalex.org/W2154406753",
+    "https://openalex.org/W2159852265",
+    "https://openalex.org/W2460451430",
+    "https://openalex.org/W2771805027",
+    "https://openalex.org/W3007542285",
+    "https://openalex.org/W3113109421",
+    "https://openalex.org/W3130872383"
+   ]
+  },
+  {
+   "id": "https://openalex.org/W4210271795",
+   "doi": "https://doi.org/10.3390/s22031108",
+   "display_name": "Managing Perceived Loneliness and Social-Isolation Levels for Older Adults: A Survey with Focus on Wearables-Based Solutions",
+   "publication_date": "2022-02-01",
+   "cited_by_count": 7,
+   "referenced_works": [
+    "https://openalex.org/W2138867401",
+    "https://openalex.org/W2155151233",
+    "https://openalex.org/W2755781951",
+    "https://openalex.org/W2771805027",
+    "https://openalex.org/W2805201924",
+    "https://openalex.org/W3153688757"
+   ]
+  },
+  {
+   "id": "https://openalex.org/W4289766535",
+   "doi": "https://doi.org/10.1161/jaha.122.026493",
+   "display_name": "Effects of Objective and Perceived Social Isolation on Cardiovascular and Brain Health: A Scientific Statement From the American Heart Association",
+   "publication_date": "2022-08-04",
+   "cited_by_count": 42,
+   "referenced_works": [
+    "https://openalex.org/W1974179382",
+    "https://openalex.org/W2138867401",
+    "https://openalex.org/W2159852265",
+    "https://openalex.org/W2460451430",
+    "https://openalex.org/W2755781951",
+    "https://openalex.org/W2771805027",
+    "https://openalex.org/W2901628123",
+    "https://openalex.org/W2912165696",
+    "https://openalex.org/W2961148372",
+    "https://openalex.org/W3007542285"
+   ]
+  },
+  {
+   "id": "https://openalex.org/W2979222397",
+   "doi": "https://doi.org/10.1017/s1478951519000804",
+   "display_name": "Loneliness among cancer caregivers: A narrative review",
+   "publication_date": "2019-10-04",
+   "cited_by_count": 38,
+   "referenced_works": [
+    "https://openalex.org/W2137123520",
+    "https://openalex.org/W2138867401",
+    "https://openalex.org/W2154406753",
+    "https://openalex.org/W2155151233",
+    "https://openalex.org/W2460451430"
+   ]
+  },
+  {
+   "id": "https://openalex.org/W3127777580",
+   "doi": "https://doi.org/10.1186/s12889-021-10363-1",
+   "display_name": "\u201cIt makes me feel not so alone\u201d: features of the Choose to Move physical activity intervention that reduce loneliness in older adults",
+   "publication_date": "2021-02-06",
+   "cited_by_count": 32,
+   "referenced_works": [
+    "https://openalex.org/W292445073",
+    "https://openalex.org/W1974179382",
+    "https://openalex.org/W2117614628",
+    "https://openalex.org/W2154406753",
+    "https://openalex.org/W2460451430",
+    "https://openalex.org/W3007542285"
+   ]
+  },
+  {
+   "id": "https://openalex.org/W4200489303",
+   "doi": "https://doi.org/10.2196/28022",
+   "display_name": "Older Adults\u2019 Loneliness, Social Isolation, and Physical Information and Communication Technology in the Era of Ambient Assisted Living: A Systematic Literature Review",
+   "publication_date": "2021-12-30",
+   "cited_by_count": 48,
+   "referenced_works": [
+    "https://openalex.org/W292445073",
+    "https://openalex.org/W1974179382",
+    "https://openalex.org/W2138867401",
+    "https://openalex.org/W2755781951",
+    "https://openalex.org/W2771805027",
+    "https://openalex.org/W2805201924"
+   ]
+  },
+  {
+   "id": "https://openalex.org/W2765386820",
+   "doi": "https://doi.org/10.1016/j.psychsport.2017.10.003",
+   "display_name": "Physical activity interventions for treatment of social isolation, loneliness or low social support in older adults: A systematic review and meta-analysis of randomised controlled trials",
+   "publication_date": "2017-10-26",
+   "cited_by_count": 93,
+   "referenced_works": [
+    "https://openalex.org/W1974179382",
+    "https://openalex.org/W2117614628",
+    "https://openalex.org/W2138867401",
+    "https://openalex.org/W2154406753",
+    "https://openalex.org/W2155151233"
+   ]
+  },
+  {
+   "id": "https://openalex.org/W4200418819",
+   "doi": "https://doi.org/10.1111/hsc.13682",
+   "display_name": "Community\u2010based responses to loneliness in older people: A systematic review of qualitative studies",
+   "publication_date": "2021-12-13",
+   "cited_by_count": 10,
+   "referenced_works": [
+    "https://openalex.org/W1974179382",
+    "https://openalex.org/W2154406753",
+    "https://openalex.org/W2159852265",
+    "https://openalex.org/W2460451430",
+    "https://openalex.org/W2771805027",
+    "https://openalex.org/W3007542285",
+    "https://openalex.org/W3093771799"
+   ]
+  },
+  {
+   "id": "https://openalex.org/W2789447765",
+   "doi": "https://doi.org/10.1080/13607863.2018.1450835",
+   "display_name": "Loneliness and social isolation among older adults in a community exercise program: a qualitative study",
+   "publication_date": "2018-03-15",
+   "cited_by_count": 53,
+   "referenced_works": [
+    "https://openalex.org/W1974179382",
+    "https://openalex.org/W2137123520",
+    "https://openalex.org/W2154406753",
+    "https://openalex.org/W2159852265",
+    "https://openalex.org/W2460451430"
+   ]
+  },
+  {
+   "id": "https://openalex.org/W4200333417",
+   "doi": "https://doi.org/10.1097/yco.0000000000000779",
+   "display_name": "Social health, social reserve and dementia",
+   "publication_date": "2021-12-24",
+   "cited_by_count": 17,
+   "referenced_works": [
+    "https://openalex.org/W1974179382",
+    "https://openalex.org/W2138867401",
+    "https://openalex.org/W2154406753",
+    "https://openalex.org/W2159852265",
+    "https://openalex.org/W2901628123",
+    "https://openalex.org/W3007542285"
+   ]
+  },
+  {
+   "id": "https://openalex.org/W2921660000",
+   "doi": "https://doi.org/10.1111/hsc.12735",
+   "display_name": "\u2018What works here doesn\u2019t work there\u2019: The significance of local context for a sustainable and replicable asset\u2010based community intervention aimed at promoting social interaction in later life",
+   "publication_date": "2019-03-12",
+   "cited_by_count": 22,
+   "referenced_works": [
+    "https://openalex.org/W292445073",
+    "https://openalex.org/W1974179382",
+    "https://openalex.org/W2117614628",
+    "https://openalex.org/W2154406753",
+    "https://openalex.org/W2159852265",
+    "https://openalex.org/W2460451430"
+   ]
+  },
+  {
+   "id": "https://openalex.org/W2914353810",
+   "doi": "https://doi.org/10.1371/journal.pone.0211143",
+   "display_name": "Examining individual and geographic factors associated with social isolation and loneliness using Canadian Longitudinal Study on Aging (CLSA) data",
+   "publication_date": "2019-02-01",
+   "cited_by_count": 121,
+   "referenced_works": [
+    "https://openalex.org/W292445073",
+    "https://openalex.org/W1974179382",
+    "https://openalex.org/W2137123520",
+    "https://openalex.org/W2138867401",
+    "https://openalex.org/W2755781951"
+   ]
+  },
+  {
+   "id": "https://openalex.org/W2120762949",
+   "doi": "https://doi.org/10.1186/1471-2318-14-106",
+   "display_name": "Does owning a pet protect older people against loneliness?",
+   "publication_date": "2014-09-20",
+   "cited_by_count": 81,
+   "referenced_works": [
+    "https://openalex.org/W1974179382",
+    "https://openalex.org/W2117614628",
+    "https://openalex.org/W2138867401",
+    "https://openalex.org/W2154406753",
+    "https://openalex.org/W2155151233"
+   ]
+  },
+  {
+   "id": "https://openalex.org/W3049583205",
+   "doi": "https://doi.org/10.1016/j.jagp.2020.08.005",
+   "display_name": "Social Isolation and Loneliness in Older Adults: Review and Commentary of a National Academies Report",
+   "publication_date": "2020-08-19",
+   "cited_by_count": 218,
+   "referenced_works": [
+    "https://openalex.org/W2133556218",
+    "https://openalex.org/W2137123520",
+    "https://openalex.org/W2138867401",
+    "https://openalex.org/W2460451430",
+    "https://openalex.org/W2615658301",
+    "https://openalex.org/W2901628123"
+   ]
+  },
+  {
+   "id": "https://openalex.org/W3012861936",
+   "doi": "https://doi.org/10.1371/journal.pone.0230673",
+   "display_name": "Examining social isolation and loneliness in combination in relation to social support and psychological distress using Canadian Longitudinal Study of Aging (CLSA) data",
+   "publication_date": "2020-03-23",
+   "cited_by_count": 98,
+   "referenced_works": [
+    "https://openalex.org/W292445073",
+    "https://openalex.org/W2138867401",
+    "https://openalex.org/W2159852265",
+    "https://openalex.org/W2755781951",
+    "https://openalex.org/W2771805027"
+   ]
+  },
+  {
+   "id": "https://openalex.org/W3016884178",
+   "doi": "https://doi.org/10.1111/dar.13064",
+   "display_name": "Loneliness among people with substance use problems: A narrative systematic review",
+   "publication_date": "2020-04-20",
+   "cited_by_count": 87,
+   "referenced_works": [
+    "https://openalex.org/W2137123520",
+    "https://openalex.org/W2138867401",
+    "https://openalex.org/W2155151233",
+    "https://openalex.org/W2159852265",
+    "https://openalex.org/W2615658301",
+    "https://openalex.org/W2755781951"
+   ]
+  },
+  {
+   "id": "https://openalex.org/W3015968712",
+   "doi": "https://doi.org/10.1111/scs.12852",
+   "display_name": "Intervention to reduce perceived loneliness in community\u2010dwelling older people",
+   "publication_date": "2020-04-13",
+   "cited_by_count": 36,
+   "referenced_works": [
+    "https://openalex.org/W1974179382",
+    "https://openalex.org/W2117413323",
+    "https://openalex.org/W2154406753",
+    "https://openalex.org/W2460451430",
+    "https://openalex.org/W2755781951",
+    "https://openalex.org/W2771805027"
+   ]
+  },
+  {
+   "id": "https://openalex.org/W2590752062",
+   "doi": "https://doi.org/10.1111/hsc.12438",
+   "display_name": "What do older people experiencing loneliness think about primary care or community based interventions to reduce loneliness? A qualitative study in England",
+   "publication_date": "2017-02-23",
+   "cited_by_count": 62,
+   "referenced_works": [
+    "https://openalex.org/W1974179382",
+    "https://openalex.org/W2117614628",
+    "https://openalex.org/W2138867401",
+    "https://openalex.org/W2154406753"
+   ]
+  },
+  {
+   "id": "https://openalex.org/W4307965746",
+   "doi": "https://doi.org/10.1177/17456916221127218",
+   "display_name": "Understanding and Addressing Older Adults\u2019 Loneliness: The Social Relationship Expectations Framework",
+   "publication_date": "2022-11-02",
+   "cited_by_count": 15,
+   "referenced_works": [
+    "https://openalex.org/W2138867401",
+    "https://openalex.org/W2460451430",
+    "https://openalex.org/W3153688757",
+    "https://openalex.org/W3184884734"
+   ]
+  },
+  {
+   "id": "https://openalex.org/W2770019040",
+   "doi": "https://doi.org/10.3389/fpsyg.2017.02003",
+   "display_name": "Loneliness, Resilience, Mental Health, and Quality of Life in Old Age: A Structural Equation Model",
+   "publication_date": "2017-11-14",
+   "cited_by_count": 191,
+   "referenced_works": [
+    "https://openalex.org/W1974179382",
+    "https://openalex.org/W2117614628",
+    "https://openalex.org/W2138867401",
+    "https://openalex.org/W2154406753"
+   ]
+  },
+  {
+   "id": "https://openalex.org/W2974322204",
+   "doi": "https://doi.org/10.1007/s00127-019-01778-8",
+   "display_name": "The bidirectional relationship between loneliness and common mental disorders in adults: findings from a longitudinal population-based cohort study",
+   "publication_date": "2019-09-19",
+   "cited_by_count": 49,
+   "referenced_works": [
+    "https://openalex.org/W2133556218",
+    "https://openalex.org/W2460451430",
+    "https://openalex.org/W2615658301",
+    "https://openalex.org/W2755781951",
+    "https://openalex.org/W2805201924"
+   ]
+  },
+  {
+   "id": "https://openalex.org/W3164743056",
+   "doi": "https://doi.org/10.2147/cia.s282709",
+   "display_name": "Friends from the Future: A Scoping Review of Research into Robots and Computer Agents to Combat Loneliness in Older People",
+   "publication_date": "2021-05-01",
+   "cited_by_count": 42,
+   "referenced_works": [
+    "https://openalex.org/W2137123520",
+    "https://openalex.org/W2138867401",
+    "https://openalex.org/W2159852265",
+    "https://openalex.org/W2460451430",
+    "https://openalex.org/W2961148372"
+   ]
+  },
+  {
+   "id": "https://openalex.org/W4200575028",
+   "doi": "https://doi.org/10.1038/s41398-021-01740-w",
+   "display_name": "Loneliness as an active ingredient in preventing or alleviating youth anxiety and depression: a critical interpretative synthesis incorporating principles from rapid realist reviews",
+   "publication_date": "2021-12-10",
+   "cited_by_count": 12,
+   "referenced_works": [
+    "https://openalex.org/W2138867401",
+    "https://openalex.org/W2155151233",
+    "https://openalex.org/W2615658301",
+    "https://openalex.org/W2990748566",
+    "https://openalex.org/W3033485693"
+   ]
+  },
+  {
+   "id": "https://openalex.org/W2801470122",
+   "doi": "https://doi.org/10.1016/j.maturitas.2018.04.014",
+   "display_name": "Preventing social isolation in older people",
+   "publication_date": "2018-04-30",
+   "cited_by_count": 135,
+   "referenced_works": [
+    "https://openalex.org/W292445073",
+    "https://openalex.org/W1974179382",
+    "https://openalex.org/W2154406753",
+    "https://openalex.org/W2460451430"
+   ]
+  },
+  {
+   "id": "https://openalex.org/W3148290888",
+   "doi": "https://doi.org/10.1016/j.socscimed.2021.113909",
+   "display_name": "Evidence that loneliness can be reduced by a whole-of-community intervention to increase neighbourhood identification",
+   "publication_date": "2021-04-06",
+   "cited_by_count": 35,
+   "referenced_works": [
+    "https://openalex.org/W292445073",
+    "https://openalex.org/W2138867401",
+    "https://openalex.org/W2460451430",
+    "https://openalex.org/W2755781951",
+    "https://openalex.org/W2805201924"
+   ]
+  },
+  {
+   "id": "https://openalex.org/W2996175109",
+   "doi": "https://doi.org/10.1007/s10615-019-00737-9",
+   "display_name": "Social Isolation\u2019s Influence on Loneliness Among Older Adults",
+   "publication_date": "2019-12-23",
+   "cited_by_count": 44,
+   "referenced_works": [
+    "https://openalex.org/W1974179382",
+    "https://openalex.org/W2117614628",
+    "https://openalex.org/W2138867401",
+    "https://openalex.org/W2154406753",
+    "https://openalex.org/W2912165696"
+   ]
+  },
+  {
+   "id": "https://openalex.org/W3176015489",
+   "doi": "https://doi.org/10.1080/13607863.2021.1940096",
+   "display_name": "Cumulative effect of loneliness and social isolation on health outcomes among older adults",
+   "publication_date": "2021-07-02",
+   "cited_by_count": 30,
+   "referenced_works": [
+    "https://openalex.org/W292445073",
+    "https://openalex.org/W1974179382",
+    "https://openalex.org/W2137123520",
+    "https://openalex.org/W2138867401"
+   ]
+  },
+  {
+   "id": "https://openalex.org/W3096287430",
+   "doi": "https://doi.org/10.1017/s147474642000055x",
+   "display_name": "Developing a New Conceptual Framework of Meaningful Interaction for Understanding Social Isolation and Loneliness",
+   "publication_date": "2020-11-24",
+   "cited_by_count": 21,
+   "referenced_works": [
+    "https://openalex.org/W1974179382",
+    "https://openalex.org/W2117614628",
+    "https://openalex.org/W2138867401",
+    "https://openalex.org/W2154406753",
+    "https://openalex.org/W2755781951"
+   ]
+  },
+  {
+   "id": "https://openalex.org/W3159404508",
+   "doi": "https://doi.org/10.1080/14992027.2021.1915506",
+   "display_name": "A scoping review of studies investigating hearing loss, social isolation and/or loneliness in adults",
+   "publication_date": "2021-05-25",
+   "cited_by_count": 39,
+   "referenced_works": [
+    "https://openalex.org/W2154406753",
+    "https://openalex.org/W2155151233",
+    "https://openalex.org/W2460451430",
+    "https://openalex.org/W3007542285"
+   ]
+  },
+  {
+   "id": "https://openalex.org/W3113027307",
+   "doi": "https://doi.org/10.3389/fpsyt.2020.608476",
+   "display_name": "Loneliness, Social Isolation and Their Difference: A Cross-Diagnostic Study in Persistent Depressive Disorder and Borderline Personality Disorder",
+   "publication_date": "2020-12-17",
+   "cited_by_count": 41,
+   "referenced_works": [
+    "https://openalex.org/W2133556218",
+    "https://openalex.org/W2137123520",
+    "https://openalex.org/W2138867401",
+    "https://openalex.org/W2155151233",
+    "https://openalex.org/W2805201924"
+   ]
+  },
+  {
+   "id": "https://openalex.org/W2172499243",
+   "doi": "https://doi.org/10.1111/hsc.12284",
+   "display_name": "Promoting social capital to alleviate loneliness and improve health among older people in Spain",
+   "publication_date": "2015-10-01",
+   "cited_by_count": 111,
+   "referenced_works": [
+    "https://openalex.org/W1974179382",
+    "https://openalex.org/W2117614628",
+    "https://openalex.org/W2138867401",
+    "https://openalex.org/W2154406753"
+   ]
+  },
+  {
+   "id": "https://openalex.org/W4229451984",
+   "doi": "https://doi.org/10.1037/amp0001005",
+   "display_name": "Loneliness before and during the COVID-19 pandemic: A systematic review with meta-analysis.",
+   "publication_date": "2022-05-09",
+   "cited_by_count": 186,
+   "referenced_works": [
+    "https://openalex.org/W2137123520",
+    "https://openalex.org/W2138867401",
+    "https://openalex.org/W2155151233",
+    "https://openalex.org/W2755781951",
+    "https://openalex.org/W3033485693"
+   ]
+  },
+  {
+   "id": "https://openalex.org/W2768951261",
+   "doi": "https://doi.org/10.1017/9781316417867.031",
+   "display_name": "New Ways of Theorizing and Conducting Research in the Field of Loneliness and Social Isolation",
+   "publication_date": "2018-06-11",
+   "cited_by_count": 103,
+   "referenced_works": [
+    "https://openalex.org/W1974179382",
+    "https://openalex.org/W2138867401",
+    "https://openalex.org/W2155151233"
+   ]
+  },
+  {
+   "id": "https://openalex.org/W2731881383",
+   "doi": "https://doi.org/10.1093/geronb/gbx087",
+   "display_name": "Loneliness, Social Integration, and Incident Dementia Over 6 Years: Prospective Findings From the English Longitudinal Study of Ageing",
+   "publication_date": "2017-06-13",
+   "cited_by_count": 183,
+   "referenced_works": [
+    "https://openalex.org/W1974179382",
+    "https://openalex.org/W2133556218",
+    "https://openalex.org/W2137123520",
+    "https://openalex.org/W2138867401",
+    "https://openalex.org/W2159852265"
+   ]
+  },
+  {
+   "id": "https://openalex.org/W4200032706",
+   "doi": "https://doi.org/10.3389/fpubh.2021.750736",
+   "display_name": "Reducing Loneliness Among Aging Adults: The Roles of Personal Voice Assistants and Anthropomorphic Interactions",
+   "publication_date": "2021-12-09",
+   "cited_by_count": 20,
+   "referenced_works": [
+    "https://openalex.org/W2155151233",
+    "https://openalex.org/W2460451430",
+    "https://openalex.org/W2771805027",
+    "https://openalex.org/W3007542285"
+   ]
+  },
+  {
+   "id": "https://openalex.org/W2950508301",
+   "doi": "https://doi.org/10.1177/0890117119856551",
+   "display_name": "Loneliness in the United States: A 2018 National Panel Survey of Demographic, Structural, Cognitive, and Behavioral Characteristics",
+   "publication_date": "2019-06-16",
+   "cited_by_count": 102,
+   "referenced_works": [
+    "https://openalex.org/W2137123520",
+    "https://openalex.org/W2138867401",
+    "https://openalex.org/W2155151233",
+    "https://openalex.org/W2755781951",
+    "https://openalex.org/W2805201924"
+   ]
+  },
+  {
+   "id": "https://openalex.org/W4306790122",
+   "doi": "https://doi.org/10.1186/s12913-022-08656-1",
+   "display_name": "Do people perceive benefits in the use of social prescribing to address loneliness and/or social isolation? A qualitative meta-synthesis of the literature",
+   "publication_date": "2022-10-19",
+   "cited_by_count": 10,
+   "referenced_works": [
+    "https://openalex.org/W2138867401",
+    "https://openalex.org/W2460451430",
+    "https://openalex.org/W2615658301",
+    "https://openalex.org/W3017177466",
+    "https://openalex.org/W3093771799"
+   ]
+  },
+  {
+   "id": "https://openalex.org/W4214860988",
+   "doi": "https://doi.org/10.1177/08982643221074857",
+   "display_name": "Loneliness, Social Isolation, and All-Cause Mortality in a Large Sample of Older Adults",
+   "publication_date": "2022-03-02",
+   "cited_by_count": 20,
+   "referenced_works": [
+    "https://openalex.org/W1974179382",
+    "https://openalex.org/W2137123520",
+    "https://openalex.org/W2138867401",
+    "https://openalex.org/W2901628123"
+   ]
+  },
+  {
+   "id": "https://openalex.org/W1975892538",
+   "doi": "https://doi.org/10.1007/s10433-013-0267-7",
+   "display_name": "Differences in late-life loneliness: a comparison between Turkish and native-born older adults in Germany",
+   "publication_date": "2013-03-05",
+   "cited_by_count": 109,
+   "referenced_works": [
+    "https://openalex.org/W2117614628",
+    "https://openalex.org/W2138867401",
+    "https://openalex.org/W2154406753"
+   ]
+  },
+  {
+   "id": "https://openalex.org/W2791839928",
+   "doi": "https://doi.org/10.1186/s13643-018-0680-2",
+   "display_name": "What is the impact on health and wellbeing of interventions that foster respect and social inclusion in community-residing older adults? A systematic review of quantitative and qualitative studies",
+   "publication_date": "2018-01-30",
+   "cited_by_count": 89,
+   "referenced_works": [
+    "https://openalex.org/W1974179382",
+    "https://openalex.org/W2117614628",
+    "https://openalex.org/W2154406753"
+   ]
+  },
+  {
+   "id": "https://openalex.org/W4280654551",
+   "doi": "https://doi.org/10.1016/j.archger.2022.104728",
+   "display_name": "Health effects of loneliness and social isolation in older adults living in congregate long term care settings: A systematic review of quantitative and qualitative evidence",
+   "publication_date": "2022-05-13",
+   "cited_by_count": 14,
+   "referenced_works": [
+    "https://openalex.org/W2137123520",
+    "https://openalex.org/W2138867401",
+    "https://openalex.org/W2736857151"
+   ]
+  },
+  {
+   "id": "https://openalex.org/W2803645611",
+   "doi": "https://doi.org/10.1016/bs.aesp.2018.03.003",
+   "display_name": "Loneliness in the Modern Age: An Evolutionary Theory of Loneliness (ETL)",
+   "publication_date": "2018-01-01",
+   "cited_by_count": 209,
+   "referenced_works": [
+    "https://openalex.org/W2133556218",
+    "https://openalex.org/W2137123520",
+    "https://openalex.org/W2138867401",
+    "https://openalex.org/W2155151233"
+   ]
+  },
+  {
+   "id": "https://openalex.org/W2625457048",
+   "doi": "https://doi.org/10.1177/0146167217705120",
+   "display_name": "Reciprocal Influences Between Loneliness and Self-Centeredness: A Cross-Lagged Panel Analysis in a Population-Based Sample of African American, Hispanic, and Caucasian Adults",
+   "publication_date": "2017-06-13",
+   "cited_by_count": 67,
+   "referenced_works": [
+    "https://openalex.org/W2133556218",
+    "https://openalex.org/W2137123520",
+    "https://openalex.org/W2138867401",
+    "https://openalex.org/W2155151233"
+   ]
+  },
+  {
+   "id": "https://openalex.org/W2620395995",
+   "doi": "https://doi.org/10.1146/annurev-psych-122216-011902",
+   "display_name": "Why Social Relationships Are Important for Physical Health: A Systems Approach to Understanding and Modifying Risk and Protection",
+   "publication_date": "2017-10-16",
+   "cited_by_count": 496,
+   "referenced_works": [
+    "https://openalex.org/W2137123520",
+    "https://openalex.org/W2138867401",
+    "https://openalex.org/W2460451430"
+   ]
+  },
+  {
+   "id": "https://openalex.org/W3165388667",
+   "doi": "https://doi.org/10.1093/ije/dyab089",
+   "display_name": "More green, less lonely? A longitudinal cohort study",
+   "publication_date": "2021-04-13",
+   "cited_by_count": 68,
+   "referenced_works": [
+    "https://openalex.org/W2138867401",
+    "https://openalex.org/W2155151233",
+    "https://openalex.org/W2460451430"
+   ]
+  },
+  {
+   "id": "https://openalex.org/W4308078228",
+   "doi": "https://doi.org/10.1371/journal.pone.0276590",
+   "display_name": "Effects of social isolation on quality of life in elderly adults",
+   "publication_date": "2022-11-03",
+   "cited_by_count": 10,
+   "referenced_works": [
+    "https://openalex.org/W292445073",
+    "https://openalex.org/W2117614628",
+    "https://openalex.org/W2154406753",
+    "https://openalex.org/W2755781951"
+   ]
+  },
+  {
+   "id": "https://openalex.org/W2054313355",
+   "doi": "https://doi.org/10.1017/s0144686x14000890",
+   "display_name": "Association of social isolation and health across different racial and ethnic groups of older Americans",
+   "publication_date": "2014-08-27",
+   "cited_by_count": 95,
+   "referenced_works": [
+    "https://openalex.org/W1974179382",
+    "https://openalex.org/W2117614628",
+    "https://openalex.org/W2138867401",
+    "https://openalex.org/W2154406753"
+   ]
+  },
+  {
+   "id": "https://openalex.org/W3164966901",
+   "doi": "https://doi.org/10.3390/jcm10112308",
+   "display_name": "The Effects of Technological Interventions on Social Participation of Community-Dwelling Older Adults with and without Dementia: A Systematic Review",
+   "publication_date": "2021-05-25",
+   "cited_by_count": 29,
+   "referenced_works": [
+    "https://openalex.org/W1974179382",
+    "https://openalex.org/W2460451430",
+    "https://openalex.org/W2771805027",
+    "https://openalex.org/W2901628123"
+   ]
+  },
+  {
+   "id": "https://openalex.org/W3217699112",
+   "doi": "https://doi.org/10.3390/ijerph182212162",
+   "display_name": "Loneliness: An Immunometabolic Syndrome",
+   "publication_date": "2021-11-19",
+   "cited_by_count": 20,
+   "referenced_works": [
+    "https://openalex.org/W2133556218",
+    "https://openalex.org/W2155151233",
+    "https://openalex.org/W2755781951"
+   ]
+  },
+  {
+   "id": "https://openalex.org/W4283314625",
+   "doi": "https://doi.org/10.1002/ajs4.223",
+   "display_name": "Beware the \u201cloneliness gap\u201d? Examining emerging inequalities and long\u2010term risks of loneliness and isolation emerging from COVID \u201019",
+   "publication_date": "2022-06-23",
+   "cited_by_count": 11,
+   "referenced_works": [
+    "https://openalex.org/W2137123520",
+    "https://openalex.org/W2138867401",
+    "https://openalex.org/W3007542285"
+   ]
+  },
+  {
+   "id": "https://openalex.org/W3194074207",
+   "doi": "https://doi.org/10.1177/13607804211029298",
+   "display_name": "When Technologies are Not Enough: The Challenges of Digital Interventions to Address Loneliness in Later Life",
+   "publication_date": "2021-08-24",
+   "cited_by_count": 10,
+   "referenced_works": [
+    "https://openalex.org/W2138867401",
+    "https://openalex.org/W2154406753",
+    "https://openalex.org/W2771805027"
+   ]
+  },
+  {
+   "id": "https://openalex.org/W3017147344",
+   "doi": "https://doi.org/10.1186/s12889-020-08703-8",
+   "display_name": "Lonely places or lonely people? Investigating the relationship between loneliness and place of residence",
+   "publication_date": "2020-05-26",
+   "cited_by_count": 58,
+   "referenced_works": [
+    "https://openalex.org/W2159852265"
+   ]
+  },
+  {
+   "id": "https://openalex.org/W2956100283",
+   "doi": "https://doi.org/10.1080/08870446.2019.1632312",
+   "display_name": "Differential impact of transient and chronic loneliness on health status. A longitudinal study",
+   "publication_date": "2019-06-25",
+   "cited_by_count": 49,
+   "referenced_works": [
+    "https://openalex.org/W2138867401",
+    "https://openalex.org/W2460451430",
+    "https://openalex.org/W2736857151"
+   ]
+  },
+  {
+   "id": "https://openalex.org/W2163764368",
+   "doi": "https://doi.org/10.2217/ahe.12.65",
+   "display_name": "Loneliness in Care Homes: A Neglected Area of Research?",
+   "publication_date": "2012-12-01",
+   "cited_by_count": 79,
+   "referenced_works": [
+    "https://openalex.org/W1974179382",
+    "https://openalex.org/W2138867401",
+    "https://openalex.org/W2154406753"
+   ]
+  },
+  {
+   "id": "https://openalex.org/W3047227658",
+   "doi": "https://doi.org/10.1186/s12889-020-09208-0",
+   "display_name": "Age differences in demographic, social and health-related factors associated with loneliness across the adult life span (19\u201365 years): a cross-sectional study in the Netherlands",
+   "publication_date": "2020-08-05",
+   "cited_by_count": 86,
+   "referenced_works": [
+    "https://openalex.org/W2755781951",
+    "https://openalex.org/W2795467188"
+   ]
+  },
+  {
+   "id": "https://openalex.org/W1979286231",
+   "doi": "https://doi.org/10.1080/01634372.2015.1007258",
+   "display_name": "The Heterogeneity of Socially Isolated Older Adults: A Social Isolation Typology",
+   "publication_date": "2015-01-14",
+   "cited_by_count": 73,
+   "referenced_works": [
+    "https://openalex.org/W1974179382",
+    "https://openalex.org/W2117614628",
+    "https://openalex.org/W2154406753"
+   ]
+  },
+  {
+   "id": "https://openalex.org/W3032643348",
+   "doi": "https://doi.org/10.1111/cpsp.12345",
+   "display_name": "Loneliness in psychosis: A practical review and critique for clinicians.",
+   "publication_date": "2020-05-25",
+   "cited_by_count": 44,
+   "referenced_works": [
+    "https://openalex.org/W2133556218",
+    "https://openalex.org/W2138867401",
+    "https://openalex.org/W2615658301"
+   ]
+  },
+  {
+   "id": "https://openalex.org/W2899893803",
+   "doi": "https://doi.org/10.1016/j.jad.2018.11.022",
+   "display_name": "Suicidal thoughts and behaviors and social isolation: A narrative review of the literature",
+   "publication_date": "2018-11-06",
+   "cited_by_count": 400,
+   "referenced_works": [
+    "https://openalex.org/W2137123520",
+    "https://openalex.org/W2138867401",
+    "https://openalex.org/W2155151233",
+    "https://openalex.org/W2460451430"
+   ]
+  },
+  {
+   "id": "https://openalex.org/W3098850347",
+   "doi": "https://doi.org/10.4088/jcp.20m13378",
+   "display_name": "Predictors of Loneliness by Age Decade",
+   "publication_date": "2020-11-09",
+   "cited_by_count": 40,
+   "referenced_works": [
+    "https://openalex.org/W2137123520",
+    "https://openalex.org/W2138867401",
+    "https://openalex.org/W2159852265",
+    "https://openalex.org/W2460451430"
+   ]
+  },
+  {
+   "id": "https://openalex.org/W1964849608",
+   "doi": "https://doi.org/10.1017/s0144686x14001524",
+   "display_name": "Older men and social activity: a scoping review of Men's Sheds and other gendered interventions",
+   "publication_date": "2015-03-04",
+   "cited_by_count": 60,
+   "referenced_works": [
+    "https://openalex.org/W1974179382",
+    "https://openalex.org/W2117614628",
+    "https://openalex.org/W2138867401"
+   ]
+  },
+  {
+   "id": "https://openalex.org/W3137450459",
+   "doi": "https://doi.org/10.1017/s0714980821000040",
+   "display_name": "Online Social Networking and Mental Health among Older Adults: A Scoping Review",
+   "publication_date": "2021-03-19",
+   "cited_by_count": 30,
+   "referenced_works": [
+    "https://openalex.org/W2460451430",
+    "https://openalex.org/W2771805027"
+   ]
+  },
+  {
+   "id": "https://openalex.org/W3159712948",
+   "doi": "https://doi.org/10.3390/ijerph18094517",
+   "display_name": "Loneliness, Wellbeing, and Social Activity in Scottish Older Adults Resulting from Social Distancing during the COVID-19 Pandemic",
+   "publication_date": "2021-04-24",
+   "cited_by_count": 43,
+   "referenced_works": [
+    "https://openalex.org/W2138867401",
+    "https://openalex.org/W2771805027",
+    "https://openalex.org/W2805201924"
+   ]
+  },
+  {
+   "id": "https://openalex.org/W2964058646",
+   "doi": "https://doi.org/10.1186/s12877-019-1189-9",
+   "display_name": "Understanding the care and support needs of older people: a scoping review and categorisation using the WHO international classification of functioning, disability and health framework (ICF)",
+   "publication_date": "2019-07-22",
+   "cited_by_count": 273,
+   "referenced_works": [
+    "https://openalex.org/W1974179382",
+    "https://openalex.org/W2138867401",
+    "https://openalex.org/W2460451430"
+   ]
+  },
+  {
+   "id": "https://openalex.org/W3139120254",
+   "doi": "https://doi.org/10.1177/23337214211002951",
+   "display_name": "Resilient Aging: Psychological Well-Being and Social Well-Being as Targets for the Promotion of Healthy Aging",
+   "publication_date": "2021-01-01",
+   "cited_by_count": 49,
+   "referenced_works": [
+    "https://openalex.org/W2137123520",
+    "https://openalex.org/W2460451430",
+    "https://openalex.org/W2755781951"
+   ]
+  },
+  {
+   "id": "https://openalex.org/W2065493546",
+   "doi": "https://doi.org/10.1016/j.ejon.2014.05.002",
+   "display_name": "Risk factors for loneliness in patients with cancer: A systematic literature review and meta-analysis",
+   "publication_date": "2014-07-02",
+   "cited_by_count": 123,
+   "referenced_works": [
+    "https://openalex.org/W1974179382",
+    "https://openalex.org/W2138867401",
+    "https://openalex.org/W2155151233",
+    "https://openalex.org/W2795467188"
+   ]
+  },
+  {
+   "id": "https://openalex.org/W4295797290",
+   "doi": "https://doi.org/10.1016/j.ijchp.2022.100339",
+   "display_name": "Loneliness, ageism, and mental health: The buffering role of resilience in seniors",
+   "publication_date": "2022-09-14",
+   "cited_by_count": 18,
+   "referenced_works": [
+    "https://openalex.org/W2805201924",
+    "https://openalex.org/W3007542285",
+    "https://openalex.org/W3183587195"
+   ]
+  },
+  {
+   "id": "https://openalex.org/W3205635220",
+   "doi": "https://doi.org/10.3390/ijerph182010563",
+   "display_name": "Teaching and Practicing Cognitive-Behavioral and Mindfulness Skills in a Web-Based Platform among Older Adults through the COVID-19 Pandemic: A Pilot Randomized Controlled Trial",
+   "publication_date": "2021-10-09",
+   "cited_by_count": 19,
+   "referenced_works": [
+    "https://openalex.org/W1974179382",
+    "https://openalex.org/W2138867401",
+    "https://openalex.org/W2771805027"
+   ]
+  },
+  {
+   "id": "https://openalex.org/W2053404736",
+   "doi": "https://doi.org/10.1093/swr/34.3.157",
+   "display_name": "The Role of Social Relationships in Predicting Loneliness: The National Social Life, Health, and Aging Project",
+   "publication_date": "2010-09-01",
+   "cited_by_count": 140,
+   "referenced_works": [
+    "https://openalex.org/W2117614628",
+    "https://openalex.org/W2154406753",
+    "https://openalex.org/W2155151233"
+   ]
+  },
+  {
+   "id": "https://openalex.org/W2900135057",
+   "doi": "https://doi.org/10.1177/0733464818807820",
+   "display_name": "Reducing Isolation and Loneliness Through Membership in a Fitness Program for Older Adults: Implications for Health",
+   "publication_date": "2018-11-04",
+   "cited_by_count": 100,
+   "referenced_works": [
+    "https://openalex.org/W1974179382",
+    "https://openalex.org/W2117614628",
+    "https://openalex.org/W2154406753"
+   ]
+  },
+  {
+   "id": "https://openalex.org/W3138437463",
+   "doi": "https://doi.org/10.1136/bmjopen-2020-042335",
+   "display_name": "Potential impact of physical distancing on physical and mental health: a rapid narrative umbrella review of meta-analyses on the link between social connection and health",
+   "publication_date": "2021-03-01",
+   "cited_by_count": 68,
+   "referenced_works": [
+    "https://openalex.org/W2133556218",
+    "https://openalex.org/W2901628123",
+    "https://openalex.org/W3007542285"
+   ]
+  },
+  {
+   "id": "https://openalex.org/W4289526495",
+   "doi": "https://doi.org/10.1016/j.arr.2022.101705",
+   "display_name": "Associations between loneliness and physical frailty in community-dwelling older adults: A systematic review and meta-analysis",
+   "publication_date": "2022-08-03",
+   "cited_by_count": 11,
+   "referenced_works": [
+    "https://openalex.org/W292445073",
+    "https://openalex.org/W2137123520",
+    "https://openalex.org/W3183587195"
+   ]
+  },
+  {
+   "id": "https://openalex.org/W2912348259",
+   "doi": "https://doi.org/10.1111/jgs.15746",
+   "display_name": "A Practical Approach to Assessing and Mitigating Loneliness and Isolation in Older Adults",
+   "publication_date": "2019-02-14",
+   "cited_by_count": 116,
+   "referenced_works": [
+    "https://openalex.org/W2138867401",
+    "https://openalex.org/W2155151233",
+    "https://openalex.org/W2755781951"
+   ]
+  },
+  {
+   "id": "https://openalex.org/W3157751089",
+   "doi": "https://doi.org/10.1093/gerona/glab128",
+   "display_name": "Associations of Loneliness and Social Isolation With Health Span and Life Span in the U.S. Health and Retirement Study",
+   "publication_date": "2021-05-08",
+   "cited_by_count": 52,
+   "referenced_works": [
+    "https://openalex.org/W292445073",
+    "https://openalex.org/W2460451430"
+   ]
+  },
+  {
+   "id": "https://openalex.org/W3199485004",
+   "doi": "https://doi.org/10.1080/13607863.2021.1976723",
+   "display_name": "The association between loneliness, social isolation and all-cause mortality in a nationally representative sample of older women and men",
+   "publication_date": "2021-09-22",
+   "cited_by_count": 31,
+   "referenced_works": [
+    "https://openalex.org/W292445073",
+    "https://openalex.org/W2133556218",
+    "https://openalex.org/W2755781951",
+    "https://openalex.org/W3007542285"
+   ]
+  },
+  {
+   "id": "https://openalex.org/W3122948142",
+   "doi": "https://doi.org/10.1016/j.invent.2021.100368",
+   "display_name": "A pilot randomized controlled trial of a group intervention via Zoom to relieve loneliness and depressive symptoms among older persons during the COVID-19 outbreak",
+   "publication_date": "2021-01-27",
+   "cited_by_count": 66,
+   "referenced_works": [
+    "https://openalex.org/W292445073",
+    "https://openalex.org/W2137123520",
+    "https://openalex.org/W2138867401"
+   ]
+  }
+ ],
+ "counts": {
+  "W2138867401": 24,
+  "W2154406753": 18,
+  "W2003490123": 15,
+  "W2168289525": 14,
+  "W2165243546": 13,
+  "W2117614628": 12,
+  "W2131334268": 12,
+  "W2160788840": 12,
+  "W2041367957": 11,
+  "W2156098321": 11,
+  "W4285719527": 11,
+  "W1974179382": 10,
+  "W2615658301": 10,
+  "W2334587181": 10,
+  "W2138720796": 10,
+  "W2159852265": 9,
+  "W2004761428": 9,
+  "W2417301675": 9,
+  "W2460451430": 9,
+  "W2155151233": 9,
+  "W2123271605": 9,
+  "W1974322420": 8,
+  "W1928146223": 8,
+  "W2098713693": 8,
+  "W2080837127": 7,
+  "W2029499893": 7,
+  "W2029943398": 7,
+  "W2095349644": 7,
+  "W2127756161": 7,
+  "W2137123520": 7,
+  "W2098003297": 7,
+  "W2131374070": 7,
+  "W2048168755": 7,
+  "W2139433778": 7,
+  "W2341545815": 7,
+  "W2007153777": 7,
+  "W4243663932": 7,
+  "W2991792334": 7,
+  "W2010220117": 7,
+  "W2043669727": 7,
+  "W4294215472": 7,
+  "W2162544110": 6,
+  "W2107269725": 6,
+  "W2771805027": 6,
+  "W2106100258": 6,
+  "W2110221483": 6,
+  "W2162577640": 6,
+  "W2122524132": 6,
+  "W2008067465": 6,
+  "W2076208799": 6,
+  "W2132164645": 6,
+  "W2782215249": 6,
+  "W2025396819": 6,
+  "W2057529685": 6,
+  "W2058361378": 6,
+  "W2139540989": 6,
+  "W2116398621": 6,
+  "W2169719947": 6,
+  "W2026022164": 5,
+  "W2531385025": 5,
+  "W2134664900": 5,
+  "W2265482988": 5,
+  "W2122626461": 5,
+  "W2022436084": 5,
+  "W2114690339": 5,
+  "W2125435699": 5,
+  "W1756842549": 5,
+  "W2105547874": 5,
+  "W2109338375": 5,
+  "W2135570695": 5,
+  "W2560438049": 5,
+  "W2046141868": 5,
+  "W2120113719": 5,
+  "W292445073": 5,
+  "W2069660924": 5,
+  "W2121289794": 5,
+  "W2123162645": 5,
+  "W2130268063": 5,
+  "W2081155210": 5,
+  "W2014754251": 5,
+  "W2101196871": 5,
+  "W2137760862": 5,
+  "W2160196750": 5,
+  "W2789549830": 5,
+  "W2100783595": 5,
+  "W2140884566": 5,
+  "W2755781951": 5,
+  "W2086463261": 5,
+  "W2072288828": 5,
+  "W2143288954": 5,
+  "W197767008": 4,
+  "W2117765622": 4,
+  "W3011588871": 4,
+  "W1568801823": 4,
+  "W1972401458": 4,
+  "W2118709867": 4,
+  "W2018849096": 4,
+  "W2052245613": 4,
+  "W2108696783": 4,
+  "W1511697076": 4
+ },
+ "expected_backward_targets": [
+  "W2003490123",
+  "W2168289525",
+  "W2165243546",
+  "W2131334268",
+  "W2160788840",
+  "W2041367957",
+  "W2156098321",
+  "W4285719527",
+  "W2334587181",
+  "W2138720796",
+  "W2004761428",
+  "W2417301675",
+  "W2123271605",
+  "W1974322420",
+  "W1928146223",
+  "W2098713693",
+  "W2080837127",
+  "W2029499893",
+  "W2029943398",
+  "W2095349644",
+  "W2127756161",
+  "W2098003297",
+  "W2131374070",
+  "W2048168755",
+  "W2139433778",
+  "W2341545815",
+  "W2007153777",
+  "W4243663932",
+  "W2991792334",
+  "W2010220117",
+  "W2043669727",
+  "W4294215472",
+  "W2162544110",
+  "W2107269725",
+  "W2106100258",
+  "W2110221483",
+  "W2162577640",
+  "W2122524132",
+  "W2008067465",
+  "W2076208799",
+  "W2132164645",
+  "W2782215249",
+  "W2025396819",
+  "W2057529685",
+  "W2058361378",
+  "W2139540989",
+  "W2116398621",
+  "W2169719947",
+  "W2026022164",
+  "W2531385025",
+  "W2134664900",
+  "W2265482988",
+  "W2122626461",
+  "W2022436084",
+  "W2114690339",
+  "W2125435699",
+  "W1756842549",
+  "W2105547874",
+  "W2109338375",
+  "W2135570695",
+  "W2560438049",
+  "W2046141868",
+  "W2120113719",
+  "W2069660924",
+  "W2121289794",
+  "W2123162645",
+  "W2130268063",
+  "W2081155210",
+  "W2014754251",
+  "W2101196871",
+  "W2137760862",
+  "W2160196750",
+  "W2789549830",
+  "W2100783595",
+  "W2140884566",
+  "W2086463261",
+  "W2072288828",
+  "W2143288954",
+  "W197767008",
+  "W2117765622",
+  "W3011588871",
+  "W1568801823",
+  "W1972401458",
+  "W2118709867",
+  "W2018849096",
+  "W2052245613",
+  "W2108696783",
+  "W1511697076"
+ ],
+ "expected_order": [
+  "W2138867401",
+  "W3213587868",
+  "W2154406753",
+  "W2615658301",
+  "W4295206852",
+  "W4289766535",
+  "W4283511013",
+  "W2460451430",
+  "W4200418819",
+  "W2159852265",
+  "W4295419463",
+  "W4210271795",
+  "W2292616725",
+  "W1974179382",
+  "W2117614628",
+  "W3048706957",
+  "W4200333417",
+  "W3036000571",
+  "W3184884734",
+  "W3011083723",
+  "W2771805027",
+  "W2098713693",
+  "W2168289525",
+  "W2003490123",
+  "W2921660000",
+  "W3207109509",
+  "W4306790122",
+  "W2131334268",
+  "W2137123520",
+  "W4200575028",
+  "W3127777580",
+  "W2417301675",
+  "W2165243546",
+  "W3015968712",
+  "W3007542285",
+  "W4200489303",
+  "W3096287430",
+  "W2123271605",
+  "W2160788840",
+  "W4311116418",
+  "W2990748566",
+  "W2041367957",
+  "W2025396819",
+  "W2138720796",
+  "W4306663560",
+  "W2106100258",
+  "W2029499893",
+  "W3113109421",
+  "W2127756161",
+  "W4308078228",
+  "W2334587181",
+  "W3148290888",
+  "W3016884178",
+  "W2069660924",
+  "W2979222397",
+  "W2341545815",
+  "W3113027307",
+  "W3164743056",
+  "W2996175109",
+  "W4307965746",
+  "W2974322204",
+  "W2531385025",
+  "W2789447765",
+  "W2004761428",
+  "W2058361378",
+  "W2043669727",
+  "W4214860988",
+  "W4200032706",
+  "W1928146223",
+  "W2076208799",
+  "W2007153777",
+  "W2789549830",
+  "W2155151233",
+  "W2080837127",
+  "W2120762949",
+  "W3049583205",
+  "W2117413323",
+  "W3164966901",
+  "W1974322420",
+  "W2110221483",
+  "W3176015489",
+  "W2765386820",
+  "W4296692877",
+  "W3199485004",
+  "W1568801823",
+  "W2107269725",
+  "W3012861936",
+  "W2950508301",
+  "W4286762483",
+  "W2118709867",
+  "W2160196750",
+  "W3159404508",
+  "W2914353810",
+  "W3098850347",
+  "W292445073",
+  "W2139433778",
+  "W2048168755",
+  "W3194074207",
+  "W2130268063",
+  "W2782215249",
+  "W2057529685",
+  "W4283314625",
+  "W4289526495",
+  "W2122524132",
+  "W2156098321",
+  "W2132164645",
+  "W2010220117",
+  "W2098003297",
+  "W2169719947",
+  "W3153688757",
+  "W2731881383",
+  "W4229451984",
+  "W4280654551",
+  "W2116398621",
+  "W2590752062",
+  "W2912165696",
+  "W2162577640",
+  "W2131374070",
+  "W2121289794",
+  "W2143288954",
+  "W2625457048",
+  "W3210636872",
+  "W2137760862",
+  "W4295797290",
+  "W3205635220",
+  "W2114690339",
+  "W2022436084",
+  "W3217699112",
+  "W2008067465",
+  "W4243663932",
+  "W197767008",
+  "W2054313355",
+  "W2109338375",
+  "W2026022164",
+  "W2120113719",
+  "W2172499243",
+  "W2100783595",
+  "W2065493546",
+  "W2139540989",
+  "W2122626461",
+  "W2801470122",
+  "W2105547874",
+  "W2135570695",
+  "W2046141868",
+  "W2072288828",
+  "W2101196871",
+  "W2086463261",
+  "W2123162645",
+  "W3159712948",
+  "W2770019040",
+  "W3032643348",
+  "W2803645611",
+  "W3139120254",
+  "W2956100283",
+  "W2018849096",
+  "W2052245613",
+  "W2117765622",
+  "W1964849608",
+  "W2140884566",
+  "W3122948142",
+  "W2755781951",
+  "W1756842549",
+  "W3165388667",
+  "W3138437463",
+  "W1979286231",
+  "W2014754251",
+  "W2163764368",
+  "W2899893803",
+  "W2991792334",
+  "W2162544110",
+  "W2791839928",
+  "W4294215472",
+  "W2900135057",
+  "W2768951261",
+  "W1975892538",
+  "W2912348259",
+  "W2891043746",
+  "W2053404736",
+  "W3130872383",
+  "W3033485693",
+  "W3137450459",
+  "W2560438049",
+  "W2964058646",
+  "W2081155210",
+  "W2791794543",
+  "W3157751089",
+  "W2620395995",
+  "W2898962481",
+  "W2125435699",
+  "W3047227658",
+  "W2108696783",
+  "W3017177466",
+  "W4317910262",
+  "W4285034658",
+  "W2805201924",
+  "W3017147344",
+  "W4213058852",
+  "W2133556218",
+  "W2944878516",
+  "W2740060821",
+  "W2791611352",
+  "W2079231371",
+  "W2961148372",
+  "W3111278950",
+  "W2130566074",
+  "W3009624784",
+  "W3027131656",
+  "W2078254424",
+  "W3158015415",
+  "W2150063271",
+  "W2901628123",
+  "W3183587195",
+  "W2126012228",
+  "W2736857151",
+  "W4310828191",
+  "W2981077025",
+  "W2171723063",
+  "W3012427396",
+  "W2795467188",
+  "W3093771799"
+ ],
+ "expected_rows": [
+  {
+   "openalex_id": "W2138867401",
+   "source": "seed",
+   "inset": 24,
+   "coupling": 3,
+   "wcoupling": 11.27,
+   "cited_by_count": 1427,
+   "specificity": 8.551,
+   "raw_rank": 14
+  },
+  {
+   "openalex_id": "W3213587868",
+   "source": "forward",
+   "inset": 0,
+   "coupling": 12,
+   "wcoupling": 28.962,
+   "cited_by_count": 21,
+   "specificity": 8.046,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W2154406753",
+   "source": "seed",
+   "inset": 18,
+   "coupling": 0,
+   "wcoupling": 0,
+   "cited_by_count": 874,
+   "specificity": 6.109,
+   "raw_rank": 42
+  },
+  {
+   "openalex_id": "W2615658301",
+   "source": "seed",
+   "inset": 10,
+   "coupling": 4,
+   "wcoupling": 15.214,
+   "cited_by_count": 228,
+   "specificity": 5.891,
+   "raw_rank": 31
+  },
+  {
+   "openalex_id": "W4295206852",
+   "source": "forward",
+   "inset": 0,
+   "coupling": 8,
+   "wcoupling": 21.802,
+   "cited_by_count": 13,
+   "specificity": 5.875,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W4289766535",
+   "source": "forward",
+   "inset": 0,
+   "coupling": 10,
+   "wcoupling": 20.139,
+   "cited_by_count": 42,
+   "specificity": 5.827,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W4283511013",
+   "source": "forward",
+   "inset": 0,
+   "coupling": 7,
+   "wcoupling": 24.544,
+   "cited_by_count": 6,
+   "specificity": 5.813,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W2460451430",
+   "source": "seed",
+   "inset": 9,
+   "coupling": 6,
+   "wcoupling": 20.637,
+   "cited_by_count": 493,
+   "specificity": 5.552,
+   "raw_rank": 10
+  },
+  {
+   "openalex_id": "W4200418819",
+   "source": "forward",
+   "inset": 0,
+   "coupling": 7,
+   "wcoupling": 17.159,
+   "cited_by_count": 10,
+   "specificity": 5.38,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W2159852265",
+   "source": "seed",
+   "inset": 9,
+   "coupling": 3,
+   "wcoupling": 12.351,
+   "cited_by_count": 207,
+   "specificity": 5.136,
+   "raw_rank": 28
+  },
+  {
+   "openalex_id": "W4295419463",
+   "source": "forward",
+   "inset": 0,
+   "coupling": 7,
+   "wcoupling": 13.699,
+   "cited_by_count": 16,
+   "specificity": 4.947,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W4210271795",
+   "source": "forward",
+   "inset": 0,
+   "coupling": 6,
+   "wcoupling": 13.358,
+   "cited_by_count": 7,
+   "specificity": 4.876,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W2292616725",
+   "source": "seed",
+   "inset": 0,
+   "coupling": 5,
+   "wcoupling": 19.374,
+   "cited_by_count": 1,
+   "specificity": 4.801,
+   "raw_rank": 38
+  },
+  {
+   "openalex_id": "W1974179382",
+   "source": "seed",
+   "inset": 10,
+   "coupling": 3,
+   "wcoupling": 12.592,
+   "cited_by_count": 626,
+   "specificity": 4.637,
+   "raw_rank": 43
+  },
+  {
+   "openalex_id": "W2117614628",
+   "source": "seed",
+   "inset": 12,
+   "coupling": 0,
+   "wcoupling": 0,
+   "cited_by_count": 427,
+   "specificity": 4.545,
+   "raw_rank": 15
+  },
+  {
+   "openalex_id": "W3048706957",
+   "source": "seed",
+   "inset": 0,
+   "coupling": 6,
+   "wcoupling": 21.821,
+   "cited_by_count": 14,
+   "specificity": 4.347,
+   "raw_rank": 30
+  },
+  {
+   "openalex_id": "W4200333417",
+   "source": "forward",
+   "inset": 0,
+   "coupling": 6,
+   "wcoupling": 15.673,
+   "cited_by_count": 17,
+   "specificity": 4.192,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W3036000571",
+   "source": "forward",
+   "inset": 0,
+   "coupling": 7,
+   "wcoupling": 24.802,
+   "cited_by_count": 37,
+   "specificity": 4.186,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W3184884734",
+   "source": "seed",
+   "inset": 0,
+   "coupling": 8,
+   "wcoupling": 28.962,
+   "cited_by_count": 74,
+   "specificity": 4.157,
+   "raw_rank": 4
+  },
+  {
+   "openalex_id": "W3011083723",
+   "source": "forward",
+   "inset": 0,
+   "coupling": 9,
+   "wcoupling": 28.088,
+   "cited_by_count": 138,
+   "specificity": 4.147,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W2771805027",
+   "source": "seed",
+   "inset": 6,
+   "coupling": 4,
+   "wcoupling": 15.673,
+   "cited_by_count": 262,
+   "specificity": 4.108,
+   "raw_rank": 1
+  },
+  {
+   "openalex_id": "W2098713693",
+   "source": "snowball",
+   "inset": 8,
+   "coupling": 0,
+   "wcoupling": 0,
+   "cited_by_count": 87,
+   "specificity": 4.027,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W2168289525",
+   "source": "snowball",
+   "inset": 14,
+   "coupling": 0,
+   "wcoupling": 0,
+   "cited_by_count": 3093,
+   "specificity": 4.009,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W2003490123",
+   "source": "snowball",
+   "inset": 15,
+   "coupling": 0,
+   "wcoupling": 0,
+   "cited_by_count": 5566,
+   "specificity": 4.004,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W2921660000",
+   "source": "forward",
+   "inset": 0,
+   "coupling": 6,
+   "wcoupling": 20.637,
+   "cited_by_count": 22,
+   "specificity": 3.986,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W3207109509",
+   "source": "seed",
+   "inset": 0,
+   "coupling": 6,
+   "wcoupling": 22.833,
+   "cited_by_count": 23,
+   "specificity": 3.951,
+   "raw_rank": 0
+  },
+  {
+   "openalex_id": "W4306790122",
+   "source": "forward",
+   "inset": 0,
+   "coupling": 5,
+   "wcoupling": 11.425,
+   "cited_by_count": 10,
+   "specificity": 3.843,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W2131334268",
+   "source": "snowball",
+   "inset": 12,
+   "coupling": 0,
+   "wcoupling": 0,
+   "cited_by_count": 1394,
+   "specificity": 3.813,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W2137123520",
+   "source": "seed",
+   "inset": 7,
+   "coupling": 4,
+   "wcoupling": 15.914,
+   "cited_by_count": 803,
+   "specificity": 3.78,
+   "raw_rank": 27
+  },
+  {
+   "openalex_id": "W4200575028",
+   "source": "forward",
+   "inset": 0,
+   "coupling": 5,
+   "wcoupling": 11.425,
+   "cited_by_count": 12,
+   "specificity": 3.725,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W3127777580",
+   "source": "forward",
+   "inset": 0,
+   "coupling": 6,
+   "wcoupling": 17.315,
+   "cited_by_count": 32,
+   "specificity": 3.696,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W2417301675",
+   "source": "snowball",
+   "inset": 9,
+   "coupling": 0,
+   "wcoupling": 0,
+   "cited_by_count": 274,
+   "specificity": 3.669,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W2165243546",
+   "source": "snowball",
+   "inset": 13,
+   "coupling": 0,
+   "wcoupling": 0,
+   "cited_by_count": 3805,
+   "specificity": 3.63,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W3015968712",
+   "source": "forward",
+   "inset": 0,
+   "coupling": 6,
+   "wcoupling": 16.422,
+   "cited_by_count": 36,
+   "specificity": 3.608,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W3007542285",
+   "source": "seed",
+   "inset": 0,
+   "coupling": 9,
+   "wcoupling": 31.962,
+   "cited_by_count": 409,
+   "specificity": 3.432,
+   "raw_rank": 3
+  },
+  {
+   "openalex_id": "W4200489303",
+   "source": "forward",
+   "inset": 0,
+   "coupling": 6,
+   "wcoupling": 16.081,
+   "cited_by_count": 48,
+   "specificity": 3.402,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W3096287430",
+   "source": "forward",
+   "inset": 0,
+   "coupling": 5,
+   "wcoupling": 18.637,
+   "cited_by_count": 21,
+   "specificity": 3.353,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W2123271605",
+   "source": "snowball",
+   "inset": 9,
+   "coupling": 0,
+   "wcoupling": 0,
+   "cited_by_count": 495,
+   "specificity": 3.329,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W2160788840",
+   "source": "snowball",
+   "inset": 12,
+   "coupling": 0,
+   "wcoupling": 0,
+   "cited_by_count": 4020,
+   "specificity": 3.328,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W4311116418",
+   "source": "seed",
+   "inset": 0,
+   "coupling": 4,
+   "wcoupling": 14.425,
+   "cited_by_count": 6,
+   "specificity": 3.322,
+   "raw_rank": 45
+  },
+  {
+   "openalex_id": "W2990748566",
+   "source": "seed",
+   "inset": 0,
+   "coupling": 7,
+   "wcoupling": 25.833,
+   "cited_by_count": 124,
+   "specificity": 3.291,
+   "raw_rank": 57
+  },
+  {
+   "openalex_id": "W2041367957",
+   "source": "snowball",
+   "inset": 11,
+   "coupling": 0,
+   "wcoupling": 0,
+   "cited_by_count": 2254,
+   "specificity": 3.279,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W2025396819",
+   "source": "snowball",
+   "inset": 6,
+   "coupling": 0,
+   "wcoupling": 0,
+   "cited_by_count": 58,
+   "specificity": 3.274,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W2138720796",
+   "source": "snowball",
+   "inset": 10,
+   "coupling": 0,
+   "wcoupling": 0,
+   "cited_by_count": 1130,
+   "specificity": 3.271,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W4306663560",
+   "source": "seed",
+   "inset": 0,
+   "coupling": 5,
+   "wcoupling": 18.48,
+   "cited_by_count": 26,
+   "specificity": 3.213,
+   "raw_rank": 18
+  },
+  {
+   "openalex_id": "W2106100258",
+   "source": "snowball",
+   "inset": 6,
+   "coupling": 0,
+   "wcoupling": 0,
+   "cited_by_count": 72,
+   "specificity": 3.135,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W2029499893",
+   "source": "snowball",
+   "inset": 7,
+   "coupling": 0,
+   "wcoupling": 0,
+   "cited_by_count": 166,
+   "specificity": 3.117,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W3113109421",
+   "source": "seed",
+   "inset": 0,
+   "coupling": 5,
+   "wcoupling": 17.799,
+   "cited_by_count": 31,
+   "specificity": 3.1,
+   "raw_rank": 16
+  },
+  {
+   "openalex_id": "W2127756161",
+   "source": "snowball",
+   "inset": 7,
+   "coupling": 0,
+   "wcoupling": 0,
+   "cited_by_count": 172,
+   "specificity": 3.097,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W4308078228",
+   "source": "forward",
+   "inset": 0,
+   "coupling": 4,
+   "wcoupling": 13.118,
+   "cited_by_count": 10,
+   "specificity": 3.074,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W2334587181",
+   "source": "snowball",
+   "inset": 10,
+   "coupling": 0,
+   "wcoupling": 0,
+   "cited_by_count": 1862,
+   "specificity": 3.056,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W3148290888",
+   "source": "forward",
+   "inset": 0,
+   "coupling": 5,
+   "wcoupling": 13.136,
+   "cited_by_count": 35,
+   "specificity": 3.024,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W3016884178",
+   "source": "forward",
+   "inset": 0,
+   "coupling": 6,
+   "wcoupling": 20.332,
+   "cited_by_count": 87,
+   "specificity": 3.02,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W2069660924",
+   "source": "snowball",
+   "inset": 5,
+   "coupling": 0,
+   "wcoupling": 0,
+   "cited_by_count": 36,
+   "specificity": 3.007,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W2979222397",
+   "source": "forward",
+   "inset": 0,
+   "coupling": 5,
+   "wcoupling": 18.536,
+   "cited_by_count": 38,
+   "specificity": 2.974,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W2341545815",
+   "source": "snowball",
+   "inset": 7,
+   "coupling": 0,
+   "wcoupling": 0,
+   "cited_by_count": 233,
+   "specificity": 2.934,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W3113027307",
+   "source": "forward",
+   "inset": 0,
+   "coupling": 5,
+   "wcoupling": 10.966,
+   "cited_by_count": 41,
+   "specificity": 2.928,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W3164743056",
+   "source": "forward",
+   "inset": 0,
+   "coupling": 5,
+   "wcoupling": 14.288,
+   "cited_by_count": 42,
+   "specificity": 2.914,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W2996175109",
+   "source": "forward",
+   "inset": 0,
+   "coupling": 5,
+   "wcoupling": 16.052,
+   "cited_by_count": 44,
+   "specificity": 2.886,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W4307965746",
+   "source": "forward",
+   "inset": 0,
+   "coupling": 4,
+   "wcoupling": 7.966,
+   "cited_by_count": 15,
+   "specificity": 2.861,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W2974322204",
+   "source": "forward",
+   "inset": 0,
+   "coupling": 5,
+   "wcoupling": 9.366,
+   "cited_by_count": 49,
+   "specificity": 2.823,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W2531385025",
+   "source": "snowball",
+   "inset": 5,
+   "coupling": 0,
+   "wcoupling": 0,
+   "cited_by_count": 51,
+   "specificity": 2.801,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W2789447765",
+   "source": "forward",
+   "inset": 0,
+   "coupling": 5,
+   "wcoupling": 17.351,
+   "cited_by_count": 53,
+   "specificity": 2.779,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W2004761428",
+   "source": "snowball",
+   "inset": 9,
+   "coupling": 0,
+   "wcoupling": 0,
+   "cited_by_count": 1786,
+   "specificity": 2.766,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W2058361378",
+   "source": "snowball",
+   "inset": 6,
+   "coupling": 0,
+   "wcoupling": 0,
+   "cited_by_count": 147,
+   "specificity": 2.732,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W2043669727",
+   "source": "snowball",
+   "inset": 7,
+   "coupling": 0,
+   "wcoupling": 0,
+   "cited_by_count": 366,
+   "specificity": 2.718,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W4214860988",
+   "source": "forward",
+   "inset": 0,
+   "coupling": 4,
+   "wcoupling": 11.103,
+   "cited_by_count": 20,
+   "specificity": 2.708,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W4200032706",
+   "source": "forward",
+   "inset": 0,
+   "coupling": 4,
+   "wcoupling": 9.451,
+   "cited_by_count": 20,
+   "specificity": 2.708,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W1928146223",
+   "source": "snowball",
+   "inset": 8,
+   "coupling": 0,
+   "wcoupling": 0,
+   "cited_by_count": 1024,
+   "specificity": 2.654,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W2076208799",
+   "source": "snowball",
+   "inset": 6,
+   "coupling": 0,
+   "wcoupling": 0,
+   "cited_by_count": 178,
+   "specificity": 2.638,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W2007153777",
+   "source": "snowball",
+   "inset": 7,
+   "coupling": 0,
+   "wcoupling": 0,
+   "cited_by_count": 504,
+   "specificity": 2.582,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W2789549830",
+   "source": "snowball",
+   "inset": 5,
+   "coupling": 0,
+   "wcoupling": 0,
+   "cited_by_count": 80,
+   "specificity": 2.559,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W2155151233",
+   "source": "seed",
+   "inset": 9,
+   "coupling": 0,
+   "wcoupling": 0,
+   "cited_by_count": 3294,
+   "specificity": 2.558,
+   "raw_rank": 13
+  },
+  {
+   "openalex_id": "W2080837127",
+   "source": "snowball",
+   "inset": 7,
+   "coupling": 0,
+   "wcoupling": 0,
+   "cited_by_count": 536,
+   "specificity": 2.557,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W2120762949",
+   "source": "forward",
+   "inset": 0,
+   "coupling": 5,
+   "wcoupling": 19.374,
+   "cited_by_count": 81,
+   "specificity": 2.552,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W3049583205",
+   "source": "forward",
+   "inset": 0,
+   "coupling": 6,
+   "wcoupling": 14.425,
+   "cited_by_count": 218,
+   "specificity": 2.545,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W2117413323",
+   "source": "seed",
+   "inset": 0,
+   "coupling": 4,
+   "wcoupling": 16.052,
+   "cited_by_count": 28,
+   "specificity": 2.532,
+   "raw_rank": 59
+  },
+  {
+   "openalex_id": "W3164966901",
+   "source": "forward",
+   "inset": 0,
+   "coupling": 4,
+   "wcoupling": 9.589,
+   "cited_by_count": 29,
+   "specificity": 2.514,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W1974322420",
+   "source": "snowball",
+   "inset": 8,
+   "coupling": 0,
+   "wcoupling": 0,
+   "cited_by_count": 1516,
+   "specificity": 2.513,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W2110221483",
+   "source": "snowball",
+   "inset": 6,
+   "coupling": 0,
+   "wcoupling": 0,
+   "cited_by_count": 242,
+   "specificity": 2.499,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W3176015489",
+   "source": "forward",
+   "inset": 0,
+   "coupling": 4,
+   "wcoupling": 13.688,
+   "cited_by_count": 30,
+   "specificity": 2.497,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W2765386820",
+   "source": "forward",
+   "inset": 0,
+   "coupling": 5,
+   "wcoupling": 19.374,
+   "cited_by_count": 93,
+   "specificity": 2.484,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W4296692877",
+   "source": "seed",
+   "inset": 0,
+   "coupling": 4,
+   "wcoupling": 13.273,
+   "cited_by_count": 31,
+   "specificity": 2.48,
+   "raw_rank": 47
+  },
+  {
+   "openalex_id": "W3199485004",
+   "source": "forward",
+   "inset": 0,
+   "coupling": 4,
+   "wcoupling": 5.17,
+   "cited_by_count": 31,
+   "specificity": 2.48,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W1568801823",
+   "source": "snowball",
+   "inset": 4,
+   "coupling": 0,
+   "wcoupling": 0,
+   "cited_by_count": 31,
+   "specificity": 2.48,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W2107269725",
+   "source": "snowball",
+   "inset": 6,
+   "coupling": 0,
+   "wcoupling": 0,
+   "cited_by_count": 257,
+   "specificity": 2.473,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W3012861936",
+   "source": "forward",
+   "inset": 0,
+   "coupling": 5,
+   "wcoupling": 15.943,
+   "cited_by_count": 98,
+   "specificity": 2.459,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W2950508301",
+   "source": "forward",
+   "inset": 0,
+   "coupling": 5,
+   "wcoupling": 13.551,
+   "cited_by_count": 102,
+   "specificity": 2.44,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W4286762483",
+   "source": "seed",
+   "inset": 0,
+   "coupling": 3,
+   "wcoupling": 10.911,
+   "cited_by_count": 7,
+   "specificity": 2.438,
+   "raw_rank": 12
+  },
+  {
+   "openalex_id": "W2118709867",
+   "source": "snowball",
+   "inset": 4,
+   "coupling": 0,
+   "wcoupling": 0,
+   "cited_by_count": 34,
+   "specificity": 2.434,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W2160196750",
+   "source": "snowball",
+   "inset": 5,
+   "coupling": 0,
+   "wcoupling": 0,
+   "cited_by_count": 111,
+   "specificity": 2.401,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W3159404508",
+   "source": "forward",
+   "inset": 0,
+   "coupling": 4,
+   "wcoupling": 10.892,
+   "cited_by_count": 39,
+   "specificity": 2.367,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W2914353810",
+   "source": "forward",
+   "inset": 0,
+   "coupling": 5,
+   "wcoupling": 16.273,
+   "cited_by_count": 121,
+   "specificity": 2.362,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W3098850347",
+   "source": "forward",
+   "inset": 0,
+   "coupling": 4,
+   "wcoupling": 14.288,
+   "cited_by_count": 40,
+   "specificity": 2.354,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W292445073",
+   "source": "seed",
+   "inset": 5,
+   "coupling": 2,
+   "wcoupling": 7.948,
+   "cited_by_count": 945,
+   "specificity": 2.349,
+   "raw_rank": 33
+  },
+  {
+   "openalex_id": "W2139433778",
+   "source": "snowball",
+   "inset": 7,
+   "coupling": 0,
+   "wcoupling": 0,
+   "cited_by_count": 973,
+   "specificity": 2.339,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W2048168755",
+   "source": "snowball",
+   "inset": 7,
+   "coupling": 0,
+   "wcoupling": 0,
+   "cited_by_count": 1033,
+   "specificity": 2.319,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W3194074207",
+   "source": "forward",
+   "inset": 0,
+   "coupling": 3,
+   "wcoupling": 11.699,
+   "cited_by_count": 10,
+   "specificity": 2.306,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W2130268063",
+   "source": "snowball",
+   "inset": 5,
+   "coupling": 0,
+   "wcoupling": 0,
+   "cited_by_count": 141,
+   "specificity": 2.295,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W2782215249",
+   "source": "snowball",
+   "inset": 6,
+   "coupling": 0,
+   "wcoupling": 0,
+   "cited_by_count": 412,
+   "specificity": 2.285,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W2057529685",
+   "source": "snowball",
+   "inset": 6,
+   "coupling": 0,
+   "wcoupling": 0,
+   "cited_by_count": 412,
+   "specificity": 2.285,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W4283314625",
+   "source": "forward",
+   "inset": 0,
+   "coupling": 3,
+   "wcoupling": 7.644,
+   "cited_by_count": 11,
+   "specificity": 2.269,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W4289526495",
+   "source": "forward",
+   "inset": 0,
+   "coupling": 3,
+   "wcoupling": 5.585,
+   "cited_by_count": 11,
+   "specificity": 2.269,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W2122524132",
+   "source": "snowball",
+   "inset": 6,
+   "coupling": 0,
+   "wcoupling": 0,
+   "cited_by_count": 434,
+   "specificity": 2.266,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W2156098321",
+   "source": "snowball",
+   "inset": 11,
+   "coupling": 0,
+   "wcoupling": 0,
+   "cited_by_count": 75584,
+   "specificity": 2.255,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W2132164645",
+   "source": "snowball",
+   "inset": 6,
+   "coupling": 0,
+   "wcoupling": 0,
+   "cited_by_count": 458,
+   "specificity": 2.247,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W2010220117",
+   "source": "snowball",
+   "inset": 7,
+   "coupling": 0,
+   "wcoupling": 0,
+   "cited_by_count": 1308,
+   "specificity": 2.244,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W2098003297",
+   "source": "snowball",
+   "inset": 7,
+   "coupling": 0,
+   "wcoupling": 0,
+   "cited_by_count": 1374,
+   "specificity": 2.228,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W2169719947",
+   "source": "snowball",
+   "inset": 6,
+   "coupling": 0,
+   "wcoupling": 0,
+   "cited_by_count": 495,
+   "specificity": 2.22,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W3153688757",
+   "source": "seed",
+   "inset": 0,
+   "coupling": 4,
+   "wcoupling": 14.095,
+   "cited_by_count": 56,
+   "specificity": 2.198,
+   "raw_rank": 11
+  },
+  {
+   "openalex_id": "W2731881383",
+   "source": "forward",
+   "inset": 0,
+   "coupling": 5,
+   "wcoupling": 14.425,
+   "cited_by_count": 183,
+   "specificity": 2.188,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W4229451984",
+   "source": "forward",
+   "inset": 0,
+   "coupling": 5,
+   "wcoupling": 13.551,
+   "cited_by_count": 186,
+   "specificity": 2.181,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W4280654551",
+   "source": "forward",
+   "inset": 0,
+   "coupling": 3,
+   "wcoupling": 7.644,
+   "cited_by_count": 14,
+   "specificity": 2.174,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W2116398621",
+   "source": "snowball",
+   "inset": 6,
+   "coupling": 0,
+   "wcoupling": 0,
+   "cited_by_count": 591,
+   "specificity": 2.159,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W2590752062",
+   "source": "forward",
+   "inset": 0,
+   "coupling": 4,
+   "wcoupling": 16.052,
+   "cited_by_count": 62,
+   "specificity": 2.154,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W2912165696",
+   "source": "seed",
+   "inset": 0,
+   "coupling": 4,
+   "wcoupling": 12.773,
+   "cited_by_count": 62,
+   "specificity": 2.154,
+   "raw_rank": 46
+  },
+  {
+   "openalex_id": "W2162577640",
+   "source": "snowball",
+   "inset": 6,
+   "coupling": 0,
+   "wcoupling": 0,
+   "cited_by_count": 621,
+   "specificity": 2.143,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W2131374070",
+   "source": "snowball",
+   "inset": 7,
+   "coupling": 0,
+   "wcoupling": 0,
+   "cited_by_count": 1858,
+   "specificity": 2.14,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W2121289794",
+   "source": "snowball",
+   "inset": 5,
+   "coupling": 0,
+   "wcoupling": 0,
+   "cited_by_count": 207,
+   "specificity": 2.14,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W2143288954",
+   "source": "snowball",
+   "inset": 5,
+   "coupling": 0,
+   "wcoupling": 0,
+   "cited_by_count": 209,
+   "specificity": 2.136,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W2625457048",
+   "source": "forward",
+   "inset": 0,
+   "coupling": 4,
+   "wcoupling": 10.966,
+   "cited_by_count": 67,
+   "specificity": 2.12,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W3210636872",
+   "source": "seed",
+   "inset": 0,
+   "coupling": 3,
+   "wcoupling": 8.492,
+   "cited_by_count": 17,
+   "specificity": 2.096,
+   "raw_rank": 52
+  },
+  {
+   "openalex_id": "W2137760862",
+   "source": "snowball",
+   "inset": 5,
+   "coupling": 0,
+   "wcoupling": 0,
+   "cited_by_count": 246,
+   "specificity": 2.076,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W4295797290",
+   "source": "forward",
+   "inset": 0,
+   "coupling": 3,
+   "wcoupling": 0.0,
+   "cited_by_count": 18,
+   "specificity": 2.073,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W3205635220",
+   "source": "forward",
+   "inset": 0,
+   "coupling": 3,
+   "wcoupling": 10.911,
+   "cited_by_count": 19,
+   "specificity": 2.051,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W2114690339",
+   "source": "snowball",
+   "inset": 5,
+   "coupling": 0,
+   "wcoupling": 0,
+   "cited_by_count": 270,
+   "specificity": 2.043,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W2022436084",
+   "source": "snowball",
+   "inset": 5,
+   "coupling": 0,
+   "wcoupling": 0,
+   "cited_by_count": 274,
+   "specificity": 2.038,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W3217699112",
+   "source": "forward",
+   "inset": 0,
+   "coupling": 3,
+   "wcoupling": 5.907,
+   "cited_by_count": 20,
+   "specificity": 2.031,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W2008067465",
+   "source": "snowball",
+   "inset": 6,
+   "coupling": 0,
+   "wcoupling": 0,
+   "cited_by_count": 962,
+   "specificity": 2.008,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W4243663932",
+   "source": "snowball",
+   "inset": 7,
+   "coupling": 0,
+   "wcoupling": 0,
+   "cited_by_count": 3076,
+   "specificity": 2.006,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W197767008",
+   "source": "snowball",
+   "inset": 4,
+   "coupling": 0,
+   "wcoupling": 0,
+   "cited_by_count": 91,
+   "specificity": 1.996,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W2054313355",
+   "source": "forward",
+   "inset": 0,
+   "coupling": 4,
+   "wcoupling": 16.052,
+   "cited_by_count": 95,
+   "specificity": 1.979,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W2109338375",
+   "source": "snowball",
+   "inset": 5,
+   "coupling": 0,
+   "wcoupling": 0,
+   "cited_by_count": 350,
+   "specificity": 1.956,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W2026022164",
+   "source": "snowball",
+   "inset": 5,
+   "coupling": 0,
+   "wcoupling": 0,
+   "cited_by_count": 366,
+   "specificity": 1.942,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W2120113719",
+   "source": "snowball",
+   "inset": 5,
+   "coupling": 0,
+   "wcoupling": 0,
+   "cited_by_count": 371,
+   "specificity": 1.937,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W2172499243",
+   "source": "forward",
+   "inset": 0,
+   "coupling": 4,
+   "wcoupling": 16.052,
+   "cited_by_count": 111,
+   "specificity": 1.921,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W2100783595",
+   "source": "snowball",
+   "inset": 5,
+   "coupling": 0,
+   "wcoupling": 0,
+   "cited_by_count": 405,
+   "specificity": 1.91,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W2065493546",
+   "source": "forward",
+   "inset": 0,
+   "coupling": 4,
+   "wcoupling": 11.425,
+   "cited_by_count": 123,
+   "specificity": 1.883,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W2139540989",
+   "source": "snowball",
+   "inset": 6,
+   "coupling": 0,
+   "wcoupling": 0,
+   "cited_by_count": 1600,
+   "specificity": 1.871,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W2122626461",
+   "source": "snowball",
+   "inset": 5,
+   "coupling": 0,
+   "wcoupling": 0,
+   "cited_by_count": 487,
+   "specificity": 1.854,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W2801470122",
+   "source": "forward",
+   "inset": 0,
+   "coupling": 4,
+   "wcoupling": 13.614,
+   "cited_by_count": 135,
+   "specificity": 1.851,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W2105547874",
+   "source": "snowball",
+   "inset": 5,
+   "coupling": 0,
+   "wcoupling": 0,
+   "cited_by_count": 519,
+   "specificity": 1.836,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W2135570695",
+   "source": "snowball",
+   "inset": 5,
+   "coupling": 0,
+   "wcoupling": 0,
+   "cited_by_count": 528,
+   "specificity": 1.831,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W2046141868",
+   "source": "snowball",
+   "inset": 5,
+   "coupling": 0,
+   "wcoupling": 0,
+   "cited_by_count": 530,
+   "specificity": 1.83,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W2072288828",
+   "source": "snowball",
+   "inset": 5,
+   "coupling": 0,
+   "wcoupling": 0,
+   "cited_by_count": 569,
+   "specificity": 1.81,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W2101196871",
+   "source": "snowball",
+   "inset": 5,
+   "coupling": 0,
+   "wcoupling": 0,
+   "cited_by_count": 577,
+   "specificity": 1.806,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W2086463261",
+   "source": "snowball",
+   "inset": 5,
+   "coupling": 0,
+   "wcoupling": 0,
+   "cited_by_count": 580,
+   "specificity": 1.804,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W2123162645",
+   "source": "snowball",
+   "inset": 5,
+   "coupling": 0,
+   "wcoupling": 0,
+   "cited_by_count": 645,
+   "specificity": 1.775,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W3159712948",
+   "source": "forward",
+   "inset": 0,
+   "coupling": 3,
+   "wcoupling": 7.451,
+   "cited_by_count": 43,
+   "specificity": 1.74,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W2770019040",
+   "source": "forward",
+   "inset": 0,
+   "coupling": 4,
+   "wcoupling": 16.052,
+   "cited_by_count": 191,
+   "specificity": 1.737,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W3032643348",
+   "source": "forward",
+   "inset": 0,
+   "coupling": 3,
+   "wcoupling": 8.103,
+   "cited_by_count": 44,
+   "specificity": 1.732,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W2803645611",
+   "source": "forward",
+   "inset": 0,
+   "coupling": 4,
+   "wcoupling": 10.966,
+   "cited_by_count": 209,
+   "specificity": 1.709,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W3139120254",
+   "source": "forward",
+   "inset": 0,
+   "coupling": 3,
+   "wcoupling": 8.907,
+   "cited_by_count": 49,
+   "specificity": 1.694,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W2956100283",
+   "source": "forward",
+   "inset": 0,
+   "coupling": 3,
+   "wcoupling": 7.966,
+   "cited_by_count": 49,
+   "specificity": 1.694,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W2018849096",
+   "source": "snowball",
+   "inset": 4,
+   "coupling": 0,
+   "wcoupling": 0,
+   "cited_by_count": 246,
+   "specificity": 1.661,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W2052245613",
+   "source": "snowball",
+   "inset": 4,
+   "coupling": 0,
+   "wcoupling": 0,
+   "cited_by_count": 246,
+   "specificity": 1.661,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W2117765622",
+   "source": "snowball",
+   "inset": 4,
+   "coupling": 0,
+   "wcoupling": 0,
+   "cited_by_count": 265,
+   "specificity": 1.64,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W1964849608",
+   "source": "forward",
+   "inset": 0,
+   "coupling": 3,
+   "wcoupling": 11.804,
+   "cited_by_count": 60,
+   "specificity": 1.626,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W2140884566",
+   "source": "snowball",
+   "inset": 5,
+   "coupling": 0,
+   "wcoupling": 0,
+   "cited_by_count": 1246,
+   "specificity": 1.613,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W3122948142",
+   "source": "forward",
+   "inset": 0,
+   "coupling": 3,
+   "wcoupling": 10.229,
+   "cited_by_count": 66,
+   "specificity": 1.595,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W2755781951",
+   "source": "seed",
+   "inset": 5,
+   "coupling": 0,
+   "wcoupling": 0,
+   "cited_by_count": 1382,
+   "specificity": 1.591,
+   "raw_rank": 8
+  },
+  {
+   "openalex_id": "W1756842549",
+   "source": "snowball",
+   "inset": 5,
+   "coupling": 0,
+   "wcoupling": 0,
+   "cited_by_count": 1403,
+   "specificity": 1.587,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W3165388667",
+   "source": "forward",
+   "inset": 0,
+   "coupling": 3,
+   "wcoupling": 11.288,
+   "cited_by_count": 68,
+   "specificity": 1.586,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W3138437463",
+   "source": "forward",
+   "inset": 0,
+   "coupling": 3,
+   "wcoupling": 0.0,
+   "cited_by_count": 68,
+   "specificity": 1.586,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W1979286231",
+   "source": "forward",
+   "inset": 0,
+   "coupling": 3,
+   "wcoupling": 11.408,
+   "cited_by_count": 73,
+   "specificity": 1.563,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W2014754251",
+   "source": "snowball",
+   "inset": 5,
+   "coupling": 0,
+   "wcoupling": 0,
+   "cited_by_count": 1569,
+   "specificity": 1.563,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W2163764368",
+   "source": "forward",
+   "inset": 0,
+   "coupling": 3,
+   "wcoupling": 12.351,
+   "cited_by_count": 79,
+   "specificity": 1.539,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W2899893803",
+   "source": "forward",
+   "inset": 0,
+   "coupling": 4,
+   "wcoupling": 14.288,
+   "cited_by_count": 400,
+   "specificity": 1.531,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W2991792334",
+   "source": "snowball",
+   "inset": 7,
+   "coupling": 0,
+   "wcoupling": 0,
+   "cited_by_count": 44099,
+   "specificity": 1.507,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W2162544110",
+   "source": "snowball",
+   "inset": 6,
+   "coupling": 0,
+   "wcoupling": 0,
+   "cited_by_count": 9674,
+   "specificity": 1.505,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W2791839928",
+   "source": "forward",
+   "inset": 0,
+   "coupling": 3,
+   "wcoupling": 11.408,
+   "cited_by_count": 89,
+   "specificity": 1.503,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W4294215472",
+   "source": "snowball",
+   "inset": 7,
+   "coupling": 0,
+   "wcoupling": 0,
+   "cited_by_count": 51035,
+   "specificity": 1.487,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W2900135057",
+   "source": "forward",
+   "inset": 0,
+   "coupling": 3,
+   "wcoupling": 11.408,
+   "cited_by_count": 100,
+   "specificity": 1.47,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W2768951261",
+   "source": "forward",
+   "inset": 0,
+   "coupling": 3,
+   "wcoupling": 11.425,
+   "cited_by_count": 103,
+   "specificity": 1.461,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W1975892538",
+   "source": "forward",
+   "inset": 0,
+   "coupling": 3,
+   "wcoupling": 12.592,
+   "cited_by_count": 109,
+   "specificity": 1.445,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W2912348259",
+   "source": "forward",
+   "inset": 0,
+   "coupling": 3,
+   "wcoupling": 10.551,
+   "cited_by_count": 116,
+   "specificity": 1.428,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W2891043746",
+   "source": "seed",
+   "inset": 0,
+   "coupling": 2,
+   "wcoupling": 8.892,
+   "cited_by_count": 18,
+   "specificity": 1.382,
+   "raw_rank": 25
+  },
+  {
+   "openalex_id": "W2053404736",
+   "source": "forward",
+   "inset": 0,
+   "coupling": 3,
+   "wcoupling": 11.27,
+   "cited_by_count": 140,
+   "specificity": 1.379,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W3130872383",
+   "source": "seed",
+   "inset": 0,
+   "coupling": 3,
+   "wcoupling": 9.229,
+   "cited_by_count": 158,
+   "specificity": 1.348,
+   "raw_rank": 19
+  },
+  {
+   "openalex_id": "W3033485693",
+   "source": "seed",
+   "inset": 0,
+   "coupling": 3,
+   "wcoupling": 10.688,
+   "cited_by_count": 214,
+   "specificity": 1.276,
+   "raw_rank": 29
+  },
+  {
+   "openalex_id": "W3137450459",
+   "source": "forward",
+   "inset": 0,
+   "coupling": 2,
+   "wcoupling": 6.129,
+   "cited_by_count": 30,
+   "specificity": 1.248,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W2560438049",
+   "source": "snowball",
+   "inset": 5,
+   "coupling": 0,
+   "wcoupling": 0,
+   "cited_by_count": 10609,
+   "specificity": 1.242,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W2964058646",
+   "source": "forward",
+   "inset": 0,
+   "coupling": 3,
+   "wcoupling": 11.425,
+   "cited_by_count": 273,
+   "specificity": 1.224,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W2081155210",
+   "source": "snowball",
+   "inset": 5,
+   "coupling": 0,
+   "wcoupling": 0,
+   "cited_by_count": 18107,
+   "specificity": 1.174,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W2791794543",
+   "source": "seed",
+   "inset": 0,
+   "coupling": 2,
+   "wcoupling": 7.644,
+   "cited_by_count": 46,
+   "specificity": 1.144,
+   "raw_rank": 23
+  },
+  {
+   "openalex_id": "W3157751089",
+   "source": "forward",
+   "inset": 0,
+   "coupling": 2,
+   "wcoupling": 5.907,
+   "cited_by_count": 52,
+   "specificity": 1.116,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W2620395995",
+   "source": "forward",
+   "inset": 0,
+   "coupling": 3,
+   "wcoupling": 10.966,
+   "cited_by_count": 496,
+   "specificity": 1.109,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W2898962481",
+   "source": "seed",
+   "inset": 0,
+   "coupling": 2,
+   "wcoupling": 8.103,
+   "cited_by_count": 58,
+   "specificity": 1.091,
+   "raw_rank": 53
+  },
+  {
+   "openalex_id": "W2125435699",
+   "source": "snowball",
+   "inset": 5,
+   "coupling": 0,
+   "wcoupling": 0,
+   "cited_by_count": 49972,
+   "specificity": 1.064,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W3047227658",
+   "source": "forward",
+   "inset": 0,
+   "coupling": 2,
+   "wcoupling": 2.585,
+   "cited_by_count": 86,
+   "specificity": 1.009,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W2108696783",
+   "source": "snowball",
+   "inset": 4,
+   "coupling": 0,
+   "wcoupling": 0,
+   "cited_by_count": 11537,
+   "specificity": 0.985,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W3017177466",
+   "source": "seed",
+   "inset": 0,
+   "coupling": 2,
+   "wcoupling": 5.907,
+   "cited_by_count": 98,
+   "specificity": 0.984,
+   "raw_rank": 55
+  },
+  {
+   "openalex_id": "W4317910262",
+   "source": "seed",
+   "inset": 0,
+   "coupling": 1,
+   "wcoupling": 4.644,
+   "cited_by_count": 4,
+   "specificity": 0.873,
+   "raw_rank": 50
+  },
+  {
+   "openalex_id": "W4285034658",
+   "source": "seed",
+   "inset": 0,
+   "coupling": 1,
+   "wcoupling": 3.0,
+   "cited_by_count": 5,
+   "specificity": 0.85,
+   "raw_rank": 36
+  },
+  {
+   "openalex_id": "W2805201924",
+   "source": "seed",
+   "inset": 0,
+   "coupling": 2,
+   "wcoupling": 8.103,
+   "cited_by_count": 796,
+   "specificity": 0.688,
+   "raw_rank": 51
+  },
+  {
+   "openalex_id": "W3017147344",
+   "source": "forward",
+   "inset": 0,
+   "coupling": 1,
+   "wcoupling": 3.322,
+   "cited_by_count": 58,
+   "specificity": 0.546,
+   "raw_rank": 1000000
+  },
+  {
+   "openalex_id": "W4213058852",
+   "source": "seed",
+   "inset": 0,
+   "coupling": 0,
+   "wcoupling": 0,
+   "cited_by_count": 998,
+   "specificity": 0.0,
+   "raw_rank": 2
+  },
+  {
+   "openalex_id": "W2133556218",
+   "source": "seed",
+   "inset": 0,
+   "coupling": 0,
+   "wcoupling": 0,
+   "cited_by_count": 662,
+   "specificity": 0.0,
+   "raw_rank": 5
+  },
+  {
+   "openalex_id": "W2944878516",
+   "source": "seed",
+   "inset": 0,
+   "coupling": 0,
+   "wcoupling": 0,
+   "cited_by_count": 141,
+   "specificity": 0.0,
+   "raw_rank": 6
+  },
+  {
+   "openalex_id": "W2740060821",
+   "source": "seed",
+   "inset": 0,
+   "coupling": 0,
+   "wcoupling": 0,
+   "cited_by_count": 595,
+   "specificity": 0.0,
+   "raw_rank": 7
+  },
+  {
+   "openalex_id": "W2791611352",
+   "source": "seed",
+   "inset": 0,
+   "coupling": 0,
+   "wcoupling": 0,
+   "cited_by_count": 28,
+   "specificity": 0.0,
+   "raw_rank": 9
+  },
+  {
+   "openalex_id": "W2079231371",
+   "source": "seed",
+   "inset": 0,
+   "coupling": 0,
+   "wcoupling": 0,
+   "cited_by_count": 37,
+   "specificity": 0.0,
+   "raw_rank": 17
+  },
+  {
+   "openalex_id": "W2961148372",
+   "source": "seed",
+   "inset": 0,
+   "coupling": 0,
+   "wcoupling": 0,
+   "cited_by_count": 250,
+   "specificity": 0.0,
+   "raw_rank": 20
+  },
+  {
+   "openalex_id": "W3111278950",
+   "source": "seed",
+   "inset": 0,
+   "coupling": 0,
+   "wcoupling": 0,
+   "cited_by_count": 223,
+   "specificity": 0.0,
+   "raw_rank": 21
+  },
+  {
+   "openalex_id": "W2130566074",
+   "source": "seed",
+   "inset": 0,
+   "coupling": 0,
+   "wcoupling": 0,
+   "cited_by_count": 160,
+   "specificity": 0.0,
+   "raw_rank": 22
+  },
+  {
+   "openalex_id": "W3009624784",
+   "source": "seed",
+   "inset": 0,
+   "coupling": 0,
+   "wcoupling": 0,
+   "cited_by_count": 15,
+   "specificity": 0.0,
+   "raw_rank": 24
+  },
+  {
+   "openalex_id": "W3027131656",
+   "source": "seed",
+   "inset": 0,
+   "coupling": 0,
+   "wcoupling": 0,
+   "cited_by_count": 4,
+   "specificity": 0.0,
+   "raw_rank": 26
+  },
+  {
+   "openalex_id": "W2078254424",
+   "source": "seed",
+   "inset": 0,
+   "coupling": 0,
+   "wcoupling": 0,
+   "cited_by_count": 135,
+   "specificity": 0.0,
+   "raw_rank": 32
+  },
+  {
+   "openalex_id": "W3158015415",
+   "source": "seed",
+   "inset": 0,
+   "coupling": 0,
+   "wcoupling": 0,
+   "cited_by_count": 214,
+   "specificity": 0.0,
+   "raw_rank": 34
+  },
+  {
+   "openalex_id": "W2150063271",
+   "source": "seed",
+   "inset": 0,
+   "coupling": 0,
+   "wcoupling": 0,
+   "cited_by_count": 178,
+   "specificity": 0.0,
+   "raw_rank": 35
+  },
+  {
+   "openalex_id": "W2901628123",
+   "source": "seed",
+   "inset": 0,
+   "coupling": 0,
+   "wcoupling": 0,
+   "cited_by_count": 270,
+   "specificity": 0.0,
+   "raw_rank": 37
+  },
+  {
+   "openalex_id": "W3183587195",
+   "source": "seed",
+   "inset": 0,
+   "coupling": 0,
+   "wcoupling": 0,
+   "cited_by_count": 61,
+   "specificity": 0.0,
+   "raw_rank": 39
+  },
+  {
+   "openalex_id": "W2126012228",
+   "source": "seed",
+   "inset": 0,
+   "coupling": 0,
+   "wcoupling": 0,
+   "cited_by_count": 18,
+   "specificity": 0.0,
+   "raw_rank": 40
+  },
+  {
+   "openalex_id": "W2736857151",
+   "source": "seed",
+   "inset": 0,
+   "coupling": 0,
+   "wcoupling": 0,
+   "cited_by_count": 531,
+   "specificity": 0.0,
+   "raw_rank": 41
+  },
+  {
+   "openalex_id": "W4310828191",
+   "source": "seed",
+   "inset": 0,
+   "coupling": 0,
+   "wcoupling": 0,
+   "cited_by_count": 7,
+   "specificity": 0.0,
+   "raw_rank": 44
+  },
+  {
+   "openalex_id": "W2981077025",
+   "source": "seed",
+   "inset": 0,
+   "coupling": 0,
+   "wcoupling": 0,
+   "cited_by_count": 839,
+   "specificity": 0.0,
+   "raw_rank": 48
+  },
+  {
+   "openalex_id": "W2171723063",
+   "source": "seed",
+   "inset": 0,
+   "coupling": 0,
+   "wcoupling": 0,
+   "cited_by_count": 177,
+   "specificity": 0.0,
+   "raw_rank": 49
+  },
+  {
+   "openalex_id": "W3012427396",
+   "source": "seed",
+   "inset": 0,
+   "coupling": 0,
+   "wcoupling": 0,
+   "cited_by_count": 13,
+   "specificity": 0.0,
+   "raw_rank": 54
+  },
+  {
+   "openalex_id": "W2795467188",
+   "source": "seed",
+   "inset": 0,
+   "coupling": 0,
+   "wcoupling": 0,
+   "cited_by_count": 132,
+   "specificity": 0.0,
+   "raw_rank": 56
+  },
+  {
+   "openalex_id": "W3093771799",
+   "source": "seed",
+   "inset": 0,
+   "coupling": 0,
+   "wcoupling": 0,
+   "cited_by_count": 50,
+   "specificity": 0.0,
+   "raw_rank": 58
+  }
+ ]
+}

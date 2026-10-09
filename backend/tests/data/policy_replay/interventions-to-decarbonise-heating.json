@@ -1,0 +1,4568 @@
+{
+ "question": "Interventions to decarbonise heating",
+ "texts": [
+  "Interventions to decarbonise heating",
+  "What policies and programs can reduce carbon emissions from heating buildings, including measures such as heat pumps, energy efficiency improvements, and fuel switching?",
+  "Which interventions support the transition from fossil-fuel heating to low-carbon or renewable heating systems in homes and other buildings?"
+ ],
+ "result_lists": [
+  [
+   {
+    "policy_document_id": "stateofvermont-de0bf34da9181ee067800fc02fd40b4c",
+    "title": "Clean Heat Standard represents a tremendous opportunity to move away from these fuels and in doing so reduce our climate pollution, keep more dollars in our local economies, and help Vermonters make the shift to more affordable, clean, and predictably priced energy sources. As taken from our 2022 vote rec--",
+    "translated_title": "",
+    "published_on": "2023-02-02",
+    "es_score": 0.88146967,
+    "citation_count": 0,
+    "source": {
+     "title": "State of Vermont",
+     "type": "government",
+     "country": "USA"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "frontiereconomics-aaa96ffc0f8e8c123bf31cf09d052ed4",
+    "title": "Low-carbon Heating : How Can We Manage Peak Winter Demand?",
+    "translated_title": "",
+    "published_on": "2023-02-16",
+    "es_score": 0.87426835,
+    "citation_count": 0,
+    "source": {
+     "title": "Frontier Economics",
+     "type": "think tank",
+     "country": "UK"
+    },
+    "cites": {
+     "policy": [
+      {
+       "overton_id": "frontiereconomics-4f36281bd38888770c348a189fe8089c"
+      },
+      {
+       "overton_id": "frontiereconomics-12993af64e1c536e2f9bfef379da581b"
+      },
+      {
+       "overton_id": "nationalauditofficeuk-c023aa37d925d77051cb8532950b1dc4"
+      },
+      {
+       "overton_id": "theccc-745863b7d2156e1fe3ae77b50d6591aa"
+      },
+      {
+       "overton_id": "theccc-19b69be85262d90bec88da946e52f674"
+      }
+     ]
+    }
+   },
+   {
+    "policy_document_id": "policyexchange-ccc38abe4c5f68768b0e3a89bddeced2",
+    "title": "Too Hot to Handle?",
+    "translated_title": "",
+    "published_on": "2016-09-09",
+    "es_score": 0.87242496,
+    "citation_count": 8,
+    "source": {
+     "title": "Policy Exchange",
+     "type": "think tank",
+     "country": "UK"
+    },
+    "cites": {
+     "policy": [
+      {
+       "overton_id": "policyexchange-66043a5de34893678a088656b1c6a7fb"
+      },
+      {
+       "overton_id": "policyexchange-c632c17f26f0b51621b002a4fdacecf9"
+      },
+      {
+       "overton_id": "policyexchange-e24455ce5cd008beb6894c7d403540e5"
+      },
+      {
+       "overton_id": "theccc-e0095a54e610e7184f56c8ba35e2ee48"
+      },
+      {
+       "overton_id": "theccc-7c1cfde4bee923cfe5ec162f091fee0f"
+      },
+      {
+       "overton_id": "theccc-7780ae05594769943b4aa9f5f7983797"
+      },
+      {
+       "overton_id": "theccc-3ef1c04c9fb7b6b4a4de0574a935c47f"
+      },
+      {
+       "overton_id": "internationalenergyagency-c9041ead620c041d9967c0efb3e92f46"
+      },
+      {
+       "overton_id": "ifs-28c5b150fd30ac537201ab68d12fefc6"
+      }
+     ]
+    }
+   },
+   {
+    "policy_document_id": "ukparliament_select-f70268548165e415874eade9aa0380c7",
+    "title": "DHH0114 - Decarbonising heat in homes",
+    "translated_title": "",
+    "published_on": "2021-02-05",
+    "es_score": 0.8709278,
+    "citation_count": 0,
+    "source": {
+     "title": "UK Parliament Select Committee Publications",
+     "type": "government",
+     "country": "UK"
+    },
+    "cites": {
+     "policy": [
+      {
+       "overton_id": "theccc-f82ff7067970bd782c590a8d03814e09"
+      },
+      {
+       "overton_id": "govuk-c04a666481efa9c21a2018a888bfa114"
+      }
+     ]
+    }
+   },
+   {
+    "policy_document_id": "ukparliament_select-e9d79c1cffaf0a1ed1a6c146066e9391",
+    "title": "DHH0032 - Decarbonising heat in homes",
+    "translated_title": "",
+    "published_on": "2021-02-05",
+    "es_score": 0.87062526,
+    "citation_count": 0,
+    "source": {
+     "title": "UK Parliament Select Committee Publications",
+     "type": "government",
+     "country": "UK"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "europa-a9e90bf91cce573108d9471d6fff2e8e",
+    "title": "Decarbonising heating and cooling : a climate imperative.",
+    "translated_title": "",
+    "published_on": "2023-03-16",
+    "es_score": 0.87050825,
+    "citation_count": 0,
+    "source": {
+     "title": "Publications Office of the European Union",
+     "type": "government",
+     "country": "EU"
+    },
+    "cites": {
+     "policy": [
+      {
+       "overton_id": "irena-25744259390f8fce10f92a5623c1a5a9"
+      },
+      {
+       "overton_id": "jointresearcheu-d5d72ae764928614e8cea7aa5e902582"
+      },
+      {
+       "overton_id": "europa-8200700efba16dc550b936b1b35ecc25"
+      },
+      {
+       "overton_id": "ipcc-01dbc640e8794be751c4d0fa1ae8a5d0"
+      }
+     ]
+    }
+   },
+   {
+    "policy_document_id": "governmentofthailand-f2c1c52f3badbcb8c2e5f44eecba6e6c",
+    "title": "\u0e27\u0e34\u0e18\u0e35\u0e2b\u0e22\u0e38\u0e14\u0e42\u0e25\u0e01\u0e23\u0e49\u0e2d\u0e19\u0e20\u0e32\u0e04 \u0e52 \u0e0b\u0e36\u0e48\u0e07\u0e40\u0e1b\u0e47\u0e19\u0e01\u0e32\u0e23\u0e19\u0e32\u0e40\u0e2a\u0e19\u0e2d\u0e41\u0e19\u0e27\u0e17\u0e32\u0e07\u0e17\u0e35\u0e48\u0e40\u0e23\u0e32\u0e2a\u0e32\u0e21\u0e32\u0e23\u0e16\u0e25\u0e14\u0e42\u0e25\u0e01\u0e23\u0e49\u0e2d\u0e19\u0e44\u0e14\u0e49\u0e15\u0e48\u0e2d\u0e08\u0e32\u0e01\u0e20\u0e32\u0e04\u0e17\u0e35\u0e48 \u0e51 \u0e40\u0e1e\u0e34\u0e48\u0e21\u0e40\u0e15\u0e34\u0e21\u0e2d\u0e35\u0e01\u0e19\u0e34\u0e14\u0e2b\u0e19\u0e48\u0e2d\u0e22 \u0e04\u0e48\u0e30 \u0e27\u0e34\u0e18\u0e35\u0e2a\u0e32\u0e2b\u0e23\u0e31\u0e1a\u0e1b\u0e23\u0e30\u0e0a\u0e32\u0e0a\u0e19\u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b\u0e43\u0e19\u0e01\u0e32\u0e23\u0e25\u0e14\u0e42\u0e25\u0e01\u0e23\u0e49\u0e2d\u0e19 \u0e15\u0e2d\u0e19\u0e17\u0e35\u0e48 \u0e52",
+    "translated_title": "How to stop global warming, part 2, which presents a way that we can reduce global warming after part 1, a little more. Methods for the general public to reduce global warming, part 2",
+    "published_on": "2017-10-30",
+    "es_score": 0.8680422,
+    "citation_count": 0,
+    "source": {
+     "title": "Government of Thailand",
+     "type": "government",
+     "country": "Thailand"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "ukparliament_select-aab9a4684ff712106a655b11af5ace99",
+    "title": "GRUNDFOS Pumps Ltd (RFH0013)",
+    "translated_title": "",
+    "published_on": "2024-12-04",
+    "es_score": 0.8672917,
+    "citation_count": 0,
+    "source": {
+     "title": "UK Parliament Select Committee Publications",
+     "type": "government",
+     "country": "UK"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "govuk-63322f5369d6e98e2adb2e8b440c84b6",
+    "title": "Heat decarbonisation: overview of current evidence base",
+    "translated_title": "",
+    "published_on": "2018-12-18",
+    "es_score": 0.8665515,
+    "citation_count": 46,
+    "source": {
+     "title": "The UK Government",
+     "type": "government",
+     "country": "UK"
+    },
+    "cites": {
+     "policy": [
+      {
+       "overton_id": "theccc-3ef1c04c9fb7b6b4a4de0574a935c47f"
+      },
+      {
+       "overton_id": "theccc-59ea93e0f57f0d6e0e06224531176b5a"
+      },
+      {
+       "overton_id": "theccc-285eeaefdbbf6c66bae838719666cf3f"
+      },
+      {
+       "overton_id": "govuk-90285fbd894d7ec38d2052937bd39391"
+      },
+      {
+       "overton_id": "theccc-47b20f41b6f9c1c44e93b3aa3587dbf0"
+      },
+      {
+       "overton_id": "greenalliance-6df762e90238a2dcfbac6472591a1125"
+      },
+      {
+       "overton_id": "theccc-d5e5af71fd689f1ff19d1a9164f688c3"
+      },
+      {
+       "overton_id": "theccc-aa171640e6ea17363cab3bd29f721ffc"
+      },
+      {
+       "overton_id": "internationalenergyagency-c56422f926a8a4c62eeb96bb038735aa"
+      },
+      {
+       "overton_id": "govuk-1a11452bcdf234793c18e598bdcbb782"
+      },
+      {
+       "overton_id": "theccc-61c04cabb7a10dc83c316e8f1eaae5dc"
+      },
+      {
+       "overton_id": "theccc-71dfb9e72f72ff1604e8a60b5dc13921"
+      },
+      {
+       "overton_id": "irena-687d096e18bcad0265a2bbbd88ab374b"
+      },
+      {
+       "overton_id": "londonassembly-d7ea1acf95dcaf80f431c3e3706c379b"
+      },
+      {
+       "overton_id": "worldbank-7c952dc8867b42f04bf1dd2a649906f4"
+      },
+      {
+       "overton_id": "theccc-818b880955d970783a0fec26612538b5"
+      },
+      {
+       "overton_id": "wrap-ca403de754a2bfc0243ba79dd943ac67"
+      },
+      {
+       "overton_id": "govuk-9241c9cab05e3a284726ed28201d4ba1"
+      },
+      {
+       "overton_id": "govuk-0182ce3a3d661aa1dc388839fbe4e9a8"
+      },
+      {
+       "overton_id": "govuk-8ca4024320dd416b49a77479fc70eb17"
+      },
+      {
+       "overton_id": "govuk-cbb81311bbd1d384312050a4899bdb3b"
+      },
+      {
+       "overton_id": "govuk-243ac345c4451c6d1530c92f3508aec2"
+      },
+      {
+       "overton_id": "govuk-d8d34b41598da4c499b828b5d360d04b"
+      },
+      {
+       "overton_id": "govuk-9710cfba5535d5122e2ef955a0e9a7c4"
+      },
+      {
+       "overton_id": "govuk-2e6b1f533af743156cacb7f0ef79f6dd"
+      },
+      {
+       "overton_id": "govuk-970c51aca5b1641289b9a8e8b3fba629"
+      },
+      {
+       "overton_id": "govuk-98fbc3a147b9756742cfa6171000f4f6"
+      },
+      {
+       "overton_id": "govuk-488c89afbbf700813119e5e6779bd5f9"
+      },
+      {
+       "overton_id": "govuk-6a824b3dddd0f687ef665817e7567f1e"
+      },
+      {
+       "overton_id": "theccc-ecdf9b67cd919cb69d34485df7bfd7f2"
+      },
+      {
+       "overton_id": "govuk-c84959dc107c495e9fa98ee2738ea64d"
+      },
+      {
+       "overton_id": "govuk-0ecec347eedd29b09d1b255c74f98e38"
+      },
+      {
+       "overton_id": "govuk-83ec5597a604f59420821f9e7642beb0"
+      },
+      {
+       "overton_id": "royalsociety-37950ccfc7770d73d122a256a14933b0"
+      },
+      {
+       "overton_id": "govuk-30bad8a4a6c56f6d7d2ed6d43c56afca"
+      },
+      {
+       "overton_id": "theccc-42f61324bfd2ab4778c3dcf72c3198c0"
+      },
+      {
+       "overton_id": "ieep-f742f9d783a7635e8addcb12ffec9f91"
+      },
+      {
+       "overton_id": "govuk-59403adb510896e13e456d90eaf7340a"
+      },
+      {
+       "overton_id": "theccc-adca0e05cc2cc4677050207a6e77cef2"
+      },
+      {
+       "overton_id": "govuk-7d7ca4c02e010c2163041654e3c3b2de"
+      },
+      {
+       "overton_id": "govuk-2653b0bdf09a1a742fd1824d55c203ae"
+      },
+      {
+       "overton_id": "jointresearcheu-6aeba662cbd50a6e8e6bc47355bc987a"
+      },
+      {
+       "overton_id": "jointresearcheu-96c458cccecc8afdcd57e4c5469a61f1"
+      },
+      {
+       "overton_id": "europa-36dd20f3a7a4ac28737159737bfcfeae"
+      },
+      {
+       "overton_id": "europa-bbbabb0bd3055a2e45d09b1dc0801e52"
+      },
+      {
+       "overton_id": "europa-9bb57efeeac3c309465c2bea921bb187"
+      },
+      {
+       "overton_id": "royalsociety-cebc9d4a6eabef3f4b51ae3a3448051e"
+      },
+      {
+       "overton_id": "govuk-3414c993e8f2543ea39770b62823f12b"
+      },
+      {
+       "overton_id": "govuk-fe2266558e3405d9bf53e4560f027663"
+      },
+      {
+       "overton_id": "govuk-cf91755c55e8de483ba3307b97a819c5"
+      },
+      {
+       "overton_id": "govuk-e4ed26c531a85f9fdb29fda2b5c0ad29"
+      },
+      {
+       "overton_id": "govuk-8aeee1009347535adc26e85138128af2"
+      },
+      {
+       "overton_id": "govuk-a181481e64e732ffaccb52525cc1ee42"
+      },
+      {
+       "overton_id": "icct-81a3b0fb39f4cd755cdf94fdafd93e11"
+      },
+      {
+       "overton_id": "icct-7b61b87ac2dda6c31e37152e4b49e1d8"
+      },
+      {
+       "overton_id": "govuk-8d76c61b76c04c884ed045735d33ae54"
+      },
+      {
+       "overton_id": "govuk-106802a5a59be236b2580236bb1513f3"
+      },
+      {
+       "overton_id": "govuk-35a6d591408edfac73b19f6e1565d6ea"
+      },
+      {
+       "overton_id": "ifpri-19ea3a31b54d88ebd3e643cde3e4df7e"
+      },
+      {
+       "overton_id": "govuk-73357b7b4267c681474d0b691c5ab962"
+      },
+      {
+       "overton_id": "govuk-8db8241bff0639debb2622d158cfa2a4"
+      },
+      {
+       "overton_id": "ukparliament-45e5ae6f72c552636a2f4834fc0a7841"
+      },
+      {
+       "overton_id": "govuk-37b22dfee2180f33bdf79fdff6cd07e8"
+      },
+      {
+       "overton_id": "easacbe-8eb53ef94aa9952d59dc60dcd45e9853"
+      },
+      {
+       "overton_id": "govuk-658abfd8fdb3b1ba0b0cceaf0ddf19d1"
+      },
+      {
+       "overton_id": "govuk-1f70fdfc1b14c1fbb3be4af2f5eb61a4"
+      },
+      {
+       "overton_id": "govuk-1795f18b5dbfbabcb6568f0dd1f61865"
+      },
+      {
+       "overton_id": "govuk-6ae378b3714e6fc597ff5e20d689968b"
+      },
+      {
+       "overton_id": "oecddiscovery-cf50ccd0abf626f25865e3fede86a3b8"
+      },
+      {
+       "overton_id": "govuk-6e02ae5569c42860070ecbe6c55f3706"
+      },
+      {
+       "overton_id": "govuk-3495770340022e5d7e9102f7ee729918"
+      },
+      {
+       "overton_id": "govuk-1f201dba325ef3053ef119326fb513ef"
+      },
+      {
+       "overton_id": "govuk-cb7f843d2a7f179f16580b5578fd5e33"
+      },
+      {
+       "overton_id": "govuk-45017e2432e5dcaf4594508277afdabc"
+      },
+      {
+       "overton_id": "govuk-522be07256d4b6a25e2196721f6713f2"
+      },
+      {
+       "overton_id": "govuk-6de4710c35af2b8739accd57325340b9"
+      },
+      {
+       "overton_id": "govuk-b59b2d3a846e2e1824cc30c695ac9f4a"
+      },
+      {
+       "overton_id": "govuk-90383d197f180ab101622c3e719b407e"
+      },
+      {
+       "overton_id": "govuk-5c1c6e290950593184433cfbaa7d22a5"
+      },
+      {
+       "overton_id": "govuk-90a29140674ef671211468f12735d236"
+      },
+      {
+       "overton_id": "govuk-24b468808d8d882d936253ad9f99a63f"
+      },
+      {
+       "overton_id": "govuk-7b61a36c7de83fa2d4a9d508f55fe504"
+      },
+      {
+       "overton_id": "govuk-5fabfa1ec3c51303bb11e6f8c56c2bdc"
+      },
+      {
+       "overton_id": "govuk-3cc9b2132549bc26820b67d58d2a34de"
+      },
+      {
+       "overton_id": "govuk-09d40b439f36dae36b2a6759c7e4d197"
+      },
+      {
+       "overton_id": "ipcc-3fd5159892a5bb700df04809a328a7db"
+      },
+      {
+       "overton_id": "policyexchange-ccc38abe4c5f68768b0e3a89bddeced2"
+      },
+      {
+       "overton_id": "policyexchange-cead5535bec3584c3d0d3eb0e5f0e060"
+      },
+      {
+       "overton_id": "govuk-e426258e0b025f475e4d3d5be141ea8c"
+      },
+      {
+       "overton_id": "govuk-67f38c92518eba60b8cade94e5f08afa"
+      },
+      {
+       "overton_id": "govuk-872658d3825e06289edfe8f1d4eb533d"
+      },
+      {
+       "overton_id": "govuk-7335d109fbddedd3c8606588cadb792a"
+      },
+      {
+       "overton_id": "govuk-c16c3f42276893b73740cdeea41528db"
+      },
+      {
+       "overton_id": "govuk-4276c554620a75effd3b488ef0f300dc"
+      },
+      {
+       "overton_id": "govuk-aacd052eea9315106049b6fa184c8626"
+      },
+      {
+       "overton_id": "govuk-1fb0dc14b3f27589a0c397928aecb005"
+      }
+     ]
+    }
+   },
+   {
+    "policy_document_id": "ukparliament_select-bed7a01c8dd2a729aa194e390f7be6cc",
+    "title": "DHH0084 - Decarbonising heat in homes",
+    "translated_title": "",
+    "published_on": "2021-02-05",
+    "es_score": 0.8660186,
+    "citation_count": 0,
+    "source": {
+     "title": "UK Parliament Select Committee Publications",
+     "type": "government",
+     "country": "UK"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "cambridgeeconometrics-9de9f99515fbe7dddc36ea98cd5ac5eb",
+    "title": "Greenpeace: The economic impact of decarbonising household heating in the UK in an era of high fossil fuel prices",
+    "translated_title": "",
+    "published_on": "2022-09-01",
+    "es_score": 0.8653322,
+    "citation_count": 3,
+    "source": {
+     "title": "Cambridge Econometrics",
+     "type": "other",
+     "country": "UK"
+    },
+    "cites": {
+     "policy": [
+      {
+       "overton_id": "theccc-9592ab527496aefe554bd3b6d674849d"
+      },
+      {
+       "overton_id": "internationalenergyagency-2340ab13f884cb06b8cd271f46904dc5"
+      },
+      {
+       "overton_id": "credsacuk-1e01586fa619c7de08101f148efdc02a"
+      },
+      {
+       "overton_id": "theccc-19b69be85262d90bec88da946e52f674"
+      },
+      {
+       "overton_id": "theccc-cb9a7cd8d81fb669e8e701d66d675eba"
+      },
+      {
+       "overton_id": "onsgovuk-3339f6990f9eb77f7c58066972999f54"
+      },
+      {
+       "overton_id": "scottishgovernment-ebefe961c543a13bfa4dd97bb8df898e"
+      },
+      {
+       "overton_id": "napedu-719322cb0fa9a96d946af28b15549149"
+      },
+      {
+       "overton_id": "govuk-51c12e0f3b43b5c0823dc36fd1dcf952"
+      },
+      {
+       "overton_id": "govuk-3c1f634be1dced167cf706f84f942e18"
+      }
+     ]
+    }
+   },
+   {
+    "policy_document_id": "ukparliament_select-c7d8b304ff3fe56f24f1dfe67cf5f90c",
+    "title": "DHH0038 - Decarbonising heat in homes",
+    "translated_title": "",
+    "published_on": "2021-02-05",
+    "es_score": 0.8644388,
+    "citation_count": 0,
+    "source": {
+     "title": "UK Parliament Select Committee Publications",
+     "type": "government",
+     "country": "UK"
+    },
+    "cites": {
+     "policy": [
+      {
+       "overton_id": "theccc-ea16ae1ee6519565847262e85d198832"
+      },
+      {
+       "overton_id": "govuk-e20854ec1d1ef6aa10a08c0c1ce5db99"
+      }
+     ]
+    }
+   },
+   {
+    "policy_document_id": "ukparliament_select-8ecf2e3be15010f1683f0fedcee9e650",
+    "title": "DHH0100 - Decarbonising heat in homes",
+    "translated_title": "",
+    "published_on": "2021-02-05",
+    "es_score": 0.8638186,
+    "citation_count": 0,
+    "source": {
+     "title": "UK Parliament Select Committee Publications",
+     "type": "government",
+     "country": "UK"
+    },
+    "cites": {
+     "policy": [
+      {
+       "overton_id": "greenalliance-03aed455442d01ce6e466a80f5705460"
+      }
+     ]
+    }
+   },
+   {
+    "policy_document_id": "cordisbe-b8fae1dde60b904d6b10802d64e17023",
+    "title": "Supporting the progress of renewable energies for heating and cooling in the EU on a local level",
+    "translated_title": "",
+    "published_on": "2018-02-08",
+    "es_score": 0.8636797,
+    "citation_count": 0,
+    "source": {
+     "title": "CORDIS",
+     "type": "government",
+     "country": "EU"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "climatexuk-c72bd1e46ce67925257703da97648d0f",
+    "title": "A review of heat decarbonisation policies in Europe",
+    "translated_title": "",
+    "published_on": "2021-03-06",
+    "es_score": 0.8628968,
+    "citation_count": 5,
+    "source": {
+     "title": "ClimateXChange",
+     "type": "government",
+     "country": "UK"
+    },
+    "cites": {
+     "policy": [
+      {
+       "overton_id": "govuk-e3f7936c60a2d19bb0e66b164bdecbf7"
+      },
+      {
+       "overton_id": "climatexuk-d6f37228a658d264a6069688675d3e66"
+      },
+      {
+       "overton_id": "govuk-6348fb2f54a7c59e09a2483fe01f14d9"
+      },
+      {
+       "overton_id": "odi-631f94661513f8f9ab2a2791681fe4d2"
+      },
+      {
+       "overton_id": "odi-48c1586b730e289056a541ea879714cf"
+      },
+      {
+       "overton_id": "theccc-ea16ae1ee6519565847262e85d198832"
+      },
+      {
+       "overton_id": "theccc-d5e5af71fd689f1ff19d1a9164f688c3"
+      },
+      {
+       "overton_id": "theccc-401c1201418ce454e333b99c305faac8"
+      },
+      {
+       "overton_id": "irena-21da9b2a68999c6da62e95c2998edb3f"
+      },
+      {
+       "overton_id": "agorae-91a98dd66c6b8b879a2b4b2a9abea926"
+      },
+      {
+       "overton_id": "nordiccouncil-29ed666ba883cbfb3a4a475072d1745d"
+      },
+      {
+       "overton_id": "internationalenergyagency-0838d2db25cf07127e90fa19aa836730"
+      },
+      {
+       "overton_id": "internationalenergyagency-7dfcf08b2db61106267d646ca17125cf"
+      },
+      {
+       "overton_id": "internationalenergyagency-fb03bbfec4af3982090759948b245906"
+      },
+      {
+       "overton_id": "scottishgovernment-c844db49cc8e86ecce361384fd9e47da"
+      },
+      {
+       "overton_id": "internationalenergyagency-20b9f91f9459b4ccd14d2bd90caf01c8"
+      },
+      {
+       "overton_id": "internationalenergyagency-d4cffcfb9c41ee0712682f17d773f14d"
+      },
+      {
+       "overton_id": "internationalenergyagency-b32c6e136eab3af9fb93882e085c3027"
+      },
+      {
+       "overton_id": "internationalenergyagency-7f1afe24d97f2523cfe91f0d465064e2"
+      },
+      {
+       "overton_id": "internationalenergyagency-5edf84a4c9ccc42df509d02d9fa1fe48"
+      },
+      {
+       "overton_id": "jamestownfoundation-36f07891d4a95039a93dc2c7d0ca5f05"
+      },
+      {
+       "overton_id": "ukparliament_select-0b7762c43147cc8a602ea31e36f6df11"
+      },
+      {
+       "overton_id": "ukparliament_select-892479e38ce42d13ce597eab54d61fde"
+      },
+      {
+       "overton_id": "ukparliament_select-809b4ddc0a1af8fc6ca873e754d039e0"
+      },
+      {
+       "overton_id": "regjeringa-25c7be2e13e4b35b8309a81aade44367"
+      },
+      {
+       "overton_id": "scottishgovernment-16a1a9f1512e4c41856460f5fffa90f1"
+      },
+      {
+       "overton_id": "scottishgovernment-dbf570d0608d28520413fab875b5a105"
+      },
+      {
+       "overton_id": "scottishgovernment-acb1a6e0c5f6717201c9beb6df5c3872"
+      },
+      {
+       "overton_id": "scottishgovernment-3c6e51dbfc5507da1b920b3a2c79c514"
+      },
+      {
+       "overton_id": "scottishgovernment-440abf32f6fc5367ede11219edf65c0f"
+      },
+      {
+       "overton_id": "scottishgovernment-65aad1ee38d33ab5c4ca5db8e01aa658"
+      },
+      {
+       "overton_id": "scottishgovernment-93dbdc39f654f5180006c85bdfda5a12"
+      },
+      {
+       "overton_id": "scottishgovernment-0fa71acf7cfbb88abf436941aea9f640"
+      },
+      {
+       "overton_id": "legislationgovuk-9e41d4cdf52309712355e95ee0daca5d"
+      },
+      {
+       "overton_id": "govie-b13cca48f849d4685e583cb678a8059f"
+      },
+      {
+       "overton_id": "govuk-8ee5f17ddbca3880fbcda35ab3f13fff"
+      },
+      {
+       "overton_id": "govuk-1f354849d7d5b39d7cf5160b572bc290"
+      },
+      {
+       "overton_id": "govuk-488c89afbbf700813119e5e6779bd5f9"
+      },
+      {
+       "overton_id": "oecddiscovery-6334171de8e81f212b518beb87c93209"
+      },
+      {
+       "overton_id": "oecddiscovery-47d4c152ab716043e652bdd88050e0d9"
+      },
+      {
+       "overton_id": "govuk-7d7ca4c02e010c2163041654e3c3b2de"
+      },
+      {
+       "overton_id": "govuk-35a6d591408edfac73b19f6e1565d6ea"
+      },
+      {
+       "overton_id": "govuk-5661037e5827d1559b98a8ba770be0d4"
+      }
+     ]
+    }
+   },
+   {
+    "policy_document_id": "govdeptsjapan-a0a059fbf345524b34a1f019e1ef3018",
+    "title": "\u73fe\u5927\u7db1\u306b\u304a\u3051\u308b\u56fd\u6c11\u5404\u754c\u5404\u5c64\u306e\u66f4\u306a\u308b \u5730\u7403\u6e29\u6696\u5316\u9632\u6b62\u6d3b\u52d5\u306e\u63a8\u9032\u306e\u5bfe\u7b56\u306e\u6982\u8981",
+    "translated_title": "Outline of measures to further promote global warming prevention activities at all levels of society and among the public under the current guidelines",
+    "published_on": "2004-04-01",
+    "es_score": 0.8622993,
+    "citation_count": 0,
+    "source": {
+     "title": "Government of Japan",
+     "type": "government",
+     "country": "Japan"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "cbiuk-f9010792261c7c8a9dcae3b340dbc11e",
+    "title": "Net-zero: the road to low-carbon heat",
+    "translated_title": "",
+    "published_on": "2020-07-22",
+    "es_score": 0.86200035,
+    "citation_count": 23,
+    "source": {
+     "title": "Confederation of British Industry (CBI)",
+     "type": "think tank",
+     "country": "UK"
+    },
+    "cites": {
+     "policy": [
+      {
+       "overton_id": "theccc-ae27ff6102e93e9391e11af544762b1e"
+      },
+      {
+       "overton_id": "theccc-92197fed39e25f023e8d35c46e5a643d"
+      },
+      {
+       "overton_id": "theccc-d5e5af71fd689f1ff19d1a9164f688c3"
+      },
+      {
+       "overton_id": "theccc-ea16ae1ee6519565847262e85d198832"
+      },
+      {
+       "overton_id": "greenalliance-5e86c9279f58e29311137bf597e2c0ef"
+      },
+      {
+       "overton_id": "theccc-61c04cabb7a10dc83c316e8f1eaae5dc"
+      },
+      {
+       "overton_id": "theccc-9592ab527496aefe554bd3b6d674849d"
+      },
+      {
+       "overton_id": "internationalenergyagency-8346ed883187ece03803b91c1c30b8fa"
+      }
+     ]
+    }
+   },
+   {
+    "policy_document_id": "ukparliament_select-0d973b12237a2804b10157fc168ccebf",
+    "title": "DHH0125 - Decarbonising heat in homes",
+    "translated_title": "",
+    "published_on": "2021-02-05",
+    "es_score": 0.86120486,
+    "citation_count": 0,
+    "source": {
+     "title": "UK Parliament Select Committee Publications",
+     "type": "government",
+     "country": "UK"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "govuk-7d7ca4c02e010c2163041654e3c3b2de",
+    "title": "International comparisons of heating, cooling and heat decarbonisation policies",
+    "translated_title": "",
+    "published_on": "2018-04-12",
+    "es_score": 0.8608076,
+    "citation_count": 10,
+    "source": {
+     "title": "The UK Government",
+     "type": "government",
+     "country": "UK"
+    },
+    "cites": {
+     "policy": [
+      {
+       "overton_id": "eesceu-e701198996f8d71e37074ec3672d6d72"
+      },
+      {
+       "overton_id": "nordiccouncil-29ed666ba883cbfb3a4a475072d1745d"
+      },
+      {
+       "overton_id": "internationalenergyagency-1734c98016b90a03b3c986ab88b2b505"
+      },
+      {
+       "overton_id": "jointresearcheu-2f8ea8160124a3484dfafd0096505862"
+      },
+      {
+       "overton_id": "unenvironment-af85b0999775ecdbb22112a243a5617f"
+      }
+     ]
+    }
+   },
+   {
+    "policy_document_id": "ukparliament_select-24317ee4ce702f46e9519df4949d8fc7",
+    "title": "Seventh report - Decarbonising heat in homes",
+    "translated_title": "",
+    "published_on": "2022-02-03",
+    "es_score": 0.8605032,
+    "citation_count": 8,
+    "source": {
+     "title": "UK Parliament Select Committee Publications",
+     "type": "government",
+     "country": "UK"
+    },
+    "cites": {
+     "policy": [
+      {
+       "overton_id": "ukparliament-b896497eaefdb858388c20231e43d029"
+      },
+      {
+       "overton_id": "govuk-320e20184538586126321c6dcd550232"
+      },
+      {
+       "overton_id": "theccc-462f4a6db96569a3f69b819ce98784ec"
+      },
+      {
+       "overton_id": "theccc-19b69be85262d90bec88da946e52f674"
+      },
+      {
+       "overton_id": "theccc-ea16ae1ee6519565847262e85d198832"
+      },
+      {
+       "overton_id": "ukparliament_select-892479e38ce42d13ce597eab54d61fde"
+      },
+      {
+       "overton_id": "ukparliament_select-0b7762c43147cc8a602ea31e36f6df11"
+      },
+      {
+       "overton_id": "ukparliament_select-e8d66c6754c6a508a42fe4e822a222cf"
+      },
+      {
+       "overton_id": "ukparliament_select-be4c2024050c452f28fba9f3d7950fd8"
+      },
+      {
+       "overton_id": "instituteforgovernment-4ffbaebaea881cd3b4fade66987a79c7"
+      },
+      {
+       "overton_id": "theccc-cb9a7cd8d81fb669e8e701d66d675eba"
+      },
+      {
+       "overton_id": "theccc-9d3ed67d62d8143824c5921043c1fba5"
+      },
+      {
+       "overton_id": "ukparliament_select-82831aad60415035c84725820897a0ee"
+      },
+      {
+       "overton_id": "govuk-5b3e0a6c78ecdd6ddaae10dbd151517c"
+      },
+      {
+       "overton_id": "nationalauditofficeuk-c023aa37d925d77051cb8532950b1dc4"
+      },
+      {
+       "overton_id": "ukparliament_select-1601797c95f057f387e4bad013d9c81c"
+      },
+      {
+       "overton_id": "theccc-9592ab527496aefe554bd3b6d674849d"
+      },
+      {
+       "overton_id": "ukparliament-33ec1ef6411a73dca54b2ca053ea7a73"
+      },
+      {
+       "overton_id": "ukparliament_select-e12d4c4a977bd9cfc26644074f18fec5"
+      },
+      {
+       "overton_id": "ukparliament_select-137fbe8a4050bb6f63a1369685df361b"
+      },
+      {
+       "overton_id": "ukparliament-aef61b4cc3824d80b6bea68b684f43ee"
+      },
+      {
+       "overton_id": "nationalauditofficeuk-d5f349e3626a03cd4391618752bc83a1"
+      },
+      {
+       "overton_id": "legislationgovuk-b728bf18852b87d3cb1db86e03bee74a"
+      },
+      {
+       "overton_id": "govuk-6a471c05b915ad2f38d6c7c297d095d2"
+      },
+      {
+       "overton_id": "cbiuk-f9010792261c7c8a9dcae3b340dbc11e"
+      },
+      {
+       "overton_id": "govuk-2f93b4ed1c1aac281539062e3879fd2b"
+      },
+      {
+       "overton_id": "govuk-9fce63ff0947208f83b8914e3f7b5e06"
+      },
+      {
+       "overton_id": "govuk-35be09caf7035ec5aa1c27a0035785a3"
+      },
+      {
+       "overton_id": "govuk-43565b0cfa846ab773fa3b2b65360699"
+      },
+      {
+       "overton_id": "govuk-cd07dfc0b2c0fbc2ae36693a544bf93d"
+      },
+      {
+       "overton_id": "govuk-3414c993e8f2543ea39770b62823f12b"
+      }
+     ]
+    }
+   },
+   {
+    "policy_document_id": "govdeptsjapan-13b149d071f39a5d5c9208370f41e787",
+    "title": "\u73fe\u5927\u7db1\u306b\u304a\u3051\u308b\u56fd\u6c11\u5404\u754c\u5404\u5c64\u306e\u66f4\u306a\u308b\u5730\u7403\u6e29\u6696\u5316\u9632\u6b62\u6d3b\u52d5\u306e\u63a8\u9032\u306e \u5bfe\u7b56\u306e\u9032\u6357\u72b6\u6cc1\u306b\u3064\u3044\u3066 (\u66ab\u5b9a\u8a55\u4fa1)",
+    "translated_title": "Progress of measures to further promote global warming prevention activities among all sectors of the public under the current Guidelines (provisional assessment)",
+    "published_on": "2004-04-01",
+    "es_score": 0.85910296,
+    "citation_count": 0,
+    "source": {
+     "title": "Government of Japan",
+     "type": "government",
+     "country": "Japan"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "voivodeshiplesserpolandpl-def3e7a55ea130328c663de0d46266f9",
+    "title": "Ogrzewanie naszych dom\u00f3w jest coraz dro\u017csze. Oto 15 prostych krok\u00f3w do zmniejszenia rachunk\u00f3w jeszcze tej zimy.",
+    "translated_title": "Heating our homes is becoming increasingly expensive. Here are 15 simple steps to reduce your bills this winter.",
+    "published_on": "2023-01-11",
+    "es_score": 0.8584046,
+    "citation_count": 0,
+    "source": {
+     "title": "Samorz\u0105d Wojew\u00f3dztwa Ma\u0142opolskiego",
+     "type": "government",
+     "country": "Poland"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "govuk-90383d197f180ab101622c3e719b407e",
+    "title": "The future of heating: a strategic framework for low carbon heat",
+    "translated_title": "",
+    "published_on": "2012-03-29",
+    "es_score": 0.8581359,
+    "citation_count": 37,
+    "source": {
+     "title": "The UK Government",
+     "type": "government",
+     "country": "UK"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "ukparliament_select-540283a16dc32c24baeebb54c32cd274",
+    "title": "DHH0052 - Decarbonising heat in homes",
+    "translated_title": "",
+    "published_on": "2021-02-05",
+    "es_score": 0.85784745,
+    "citation_count": 0,
+    "source": {
+     "title": "UK Parliament Select Committee Publications",
+     "type": "government",
+     "country": "UK"
+    },
+    "cites": {
+     "policy": [
+      {
+       "overton_id": "govuk-6b06a8992c565b8cddbaaf9ff84c3320"
+      },
+      {
+       "overton_id": "frontiereconomics-c6cd8ab3089fce7fbc6ff5b7ead7c000"
+      },
+      {
+       "overton_id": "govuk-6de4710c35af2b8739accd57325340b9"
+      }
+     ]
+    }
+   },
+   {
+    "policy_document_id": "marylandgov-726ca633dc6e98975aa758a6f7c5172b",
+    "title": "Clean Heat Standards :",
+    "translated_title": "",
+    "published_on": "2023-02-17",
+    "es_score": 0.85778123,
+    "citation_count": 0,
+    "source": {
+     "title": "State of Maryland",
+     "type": "government",
+     "country": "USA"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "ukparliament_select-bc292bbe2e728da9288c69ed98442a9d",
+    "title": "DHH0002 - Decarbonising heat in homes",
+    "translated_title": "",
+    "published_on": "2021-02-05",
+    "es_score": 0.8576541,
+    "citation_count": 0,
+    "source": {
+     "title": "UK Parliament Select Committee Publications",
+     "type": "government",
+     "country": "UK"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "govdeptsjapan-c44ac69ed0217fa6e52b29398a3f59c4",
+    "title": "\u53c2\u8003\u8cc7\u6599 1 \u6691\u71b1\u5bfe\u7b56\u306e\u52b9\u679c\u306b\u95a2\u3059\u308b\u57fa\u790e\u8abf\u67fb\u3068 Co 2 \u6392\u51fa\u91cf\u524a\u6e1b\u30e1\u30ab\u30cb\u30ba\u30e0\u306e\u691c\u8a0e",
+    "translated_title": "Reference material 1 Basic research on the effect of heat countermeasures and examination of the mechanism of reducing CO 2 emissions",
+    "published_on": "2018-05-28",
+    "es_score": 0.8573995,
+    "citation_count": 0,
+    "source": {
+     "title": "Government of Japan",
+     "type": "government",
+     "country": "Japan"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "ukparliament_select-380475d90a6a3afc6e590b875728afd2",
+    "title": "PMP0051 - Technological Innovations and Climate Change: Heat Pumps",
+    "translated_title": "",
+    "published_on": "2021-01-13",
+    "es_score": 0.85683835,
+    "citation_count": 0,
+    "source": {
+     "title": "UK Parliament Select Committee Publications",
+     "type": "government",
+     "country": "UK"
+    },
+    "cites": {
+     "policy": [
+      {
+       "overton_id": "theccc-ea16ae1ee6519565847262e85d198832"
+      },
+      {
+       "overton_id": "theccc-1e5a840ca0909d3b4d60e5850752fbd7"
+      },
+      {
+       "overton_id": "theccc-9d3ed67d62d8143824c5921043c1fba5"
+      },
+      {
+       "overton_id": "theccc-61c04cabb7a10dc83c316e8f1eaae5dc"
+      },
+      {
+       "overton_id": "ukparliament_select-809b4ddc0a1af8fc6ca873e754d039e0"
+      },
+      {
+       "overton_id": "nationalauditofficeuk-d5f349e3626a03cd4391618752bc83a1"
+      },
+      {
+       "overton_id": "govuk-85308e53cee4ae3caa844642e831bca0"
+      },
+      {
+       "overton_id": "cbiuk-f9010792261c7c8a9dcae3b340dbc11e"
+      },
+      {
+       "overton_id": "govuk-e3f7936c60a2d19bb0e66b164bdecbf7"
+      }
+     ]
+    }
+   },
+   {
+    "policy_document_id": "stateofvermont-ae246cba4ae84380088bededb0526404",
+    "title": "Amendment (Committee) Template",
+    "translated_title": "",
+    "published_on": "2023-04-04",
+    "es_score": 0.85614896,
+    "citation_count": 0,
+    "source": {
+     "title": "State of Vermont",
+     "type": "government",
+     "country": "USA"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "ukparliament_select-9cf42359938c4cc5c1e51bcaea5b2118",
+    "title": "Letter from the Minister of State for Housing relating to MHCLG and decarbonising heat in homes",
+    "translated_title": "",
+    "published_on": "2021-07-22",
+    "es_score": 0.856099,
+    "citation_count": 0,
+    "source": {
+     "title": "UK Parliament Select Committee Publications",
+     "type": "government",
+     "country": "UK"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "frontiereconomics-584722377c36ea5d508369fa8699eccb",
+    "title": "Low-carbon Heating : How Can We Manage Peak Winter Demand?",
+    "translated_title": "",
+    "published_on": "2023-02-16",
+    "es_score": 0.8554512,
+    "citation_count": 0,
+    "source": {
+     "title": "Frontier Economics",
+     "type": "think tank",
+     "country": "UK"
+    },
+    "cites": {
+     "policy": [
+      {
+       "overton_id": "nationalauditofficeuk-c023aa37d925d77051cb8532950b1dc4"
+      },
+      {
+       "overton_id": "theccc-19b69be85262d90bec88da946e52f674"
+      },
+      {
+       "overton_id": "frontiereconomics-4f36281bd38888770c348a189fe8089c"
+      },
+      {
+       "overton_id": "frontiereconomics-12993af64e1c536e2f9bfef379da581b"
+      },
+      {
+       "overton_id": "theccc-745863b7d2156e1fe3ae77b50d6591aa"
+      }
+     ]
+    }
+   },
+   {
+    "policy_document_id": "eucommission-87b8c17d31f00451bb2e115def48be81",
+    "title": "High-level round table on the decarbonisation of the heating sector - Presentations",
+    "translated_title": "",
+    "published_on": "2018-12-12",
+    "es_score": 0.855253,
+    "citation_count": 0,
+    "source": {
+     "title": "EU Commission",
+     "type": "government",
+     "country": "EU"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "govdeptsjapan-d7188ee5b4056b447d419144759205a4",
+    "title": "\u73fe\u5927\u7db1\u306b\u304a\u3051\u308b\u56fd\u6c11\u5404\u754c\u5404\u5c64\u306e\u66f4\u306a\u308b\u5730\u7403\u6e29\u6696\u5316\u9632\u6b62\u6d3b\u52d5 \u306e\u63a8\u9032\u306e\u65bd\u7b56\u306e\u9032\u6357\u72b6\u6cc1\u306b\u3064\u3044\u3066 (\u66ab\u5b9a\u8a55\u4fa1)",
+    "translated_title": "Progress of the current Framework for Promoting Further Global Warming Prevention Activities by All Parties (Provisional Assessment)",
+    "published_on": "2004-04-01",
+    "es_score": 0.8549625,
+    "citation_count": 0,
+    "source": {
+     "title": "Government of Japan",
+     "type": "government",
+     "country": "Japan"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "ukparliament_select-75db98cb9b0b0183ee91c16057623840",
+    "title": "DHH0124 - Decarbonising heat in homes",
+    "translated_title": "",
+    "published_on": "2021-02-05",
+    "es_score": 0.85433865,
+    "citation_count": 0,
+    "source": {
+     "title": "UK Parliament Select Committee Publications",
+     "type": "government",
+     "country": "UK"
+    },
+    "cites": {
+     "policy": [
+      {
+       "overton_id": "neweconomicsfoundation-5bea91558958ab5de56b835e3849a2da"
+      },
+      {
+       "overton_id": "theccc-d5e5af71fd689f1ff19d1a9164f688c3"
+      },
+      {
+       "overton_id": "theccc-285eeaefdbbf6c66bae838719666cf3f"
+      },
+      {
+       "overton_id": "govuk-18afc365ba75ae2f60b514f19a85155b"
+      },
+      {
+       "overton_id": "scottishgovernment-71afe6df09a2aebc8288a0f6694662ca"
+      },
+      {
+       "overton_id": "cbiuk-f9010792261c7c8a9dcae3b340dbc11e"
+      },
+      {
+       "overton_id": "govuk-c4d39f626e71f64d4f8674efa2c5e6a6"
+      },
+      {
+       "overton_id": "govuk-3ca26226ab4ed7505ec113ec56fce70c"
+      }
+     ]
+    }
+   },
+   {
+    "policy_document_id": "ukparliament_select-fb3661ed600b8c607339c5df8153b9f4",
+    "title": "DHH0145 - Decarbonising heat in homes",
+    "translated_title": "",
+    "published_on": "2021-04-29",
+    "es_score": 0.853804,
+    "citation_count": 0,
+    "source": {
+     "title": "UK Parliament Select Committee Publications",
+     "type": "government",
+     "country": "UK"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "cityofgenevach-f96bd72ce9c50ef63cb3f01670c91ddb",
+    "title": "Des Gestes Pour \u00e9conomiser Notre \u00e9nergie",
+    "translated_title": "Actions to Save Our Energy",
+    "published_on": "2022-09-28",
+    "es_score": 0.8535167,
+    "citation_count": 0,
+    "source": {
+     "title": "Ville de Gen\u00e8ve",
+     "type": "government",
+     "country": "Switzerland"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "ukparliament_select-86d6905eda0eff3cc1ee5f72d6bef2a8",
+    "title": "Business",
+    "translated_title": "",
+    "published_on": "2021-02-18",
+    "es_score": 0.85274196,
+    "citation_count": 0,
+    "source": {
+     "title": "UK Parliament Select Committee Publications",
+     "type": "government",
+     "country": "UK"
+    },
+    "cites": {
+     "policy": [
+      {
+       "overton_id": "ukparliament_select-8e9246000a03bb772606e4a5debfa0ad"
+      },
+      {
+       "overton_id": "ukparliament_select-5246bd4e99a12f924e801e9418dbaa85"
+      }
+     ]
+    }
+   },
+   {
+    "policy_document_id": "randcorporation-307530e28516269758c151bd07b9548f",
+    "title": "The Double-Edged Sword of Air Conditioning in a Warming World",
+    "translated_title": "",
+    "published_on": "2024-08-19",
+    "es_score": 0.8523855,
+    "citation_count": 0,
+    "source": {
+     "title": "RAND Corporation",
+     "type": "think tank",
+     "country": "USA"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "umweltbundesamt-e6c5f6e1f2318d1238f7419abeb6a9cd",
+    "title": "Ratgeber: Nicht das Geld verheizen!",
+    "translated_title": "Adviser: Don&#39;t burn the money!",
+    "published_on": "2009-01-30",
+    "es_score": 0.85213196,
+    "citation_count": 0,
+    "source": {
+     "title": "Umweltbundesamt (UBA)",
+     "type": "government",
+     "country": "Germany"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "unenvironment-7996fadc03ef6ace56b9d36384decbf0",
+    "title": "Cooling and extreme heat - Key messages",
+    "translated_title": "",
+    "published_on": "2024-11-01",
+    "es_score": 0.8520646,
+    "citation_count": 0,
+    "source": {
+     "title": "United Nations Environment Programme",
+     "type": "igo",
+     "country": "IGO"
+    },
+    "cites": {
+     "policy": [
+      {
+       "overton_id": "worldbankifc-0159b6ff8b4290dd4e05aa9edfd5596f"
+      }
+     ]
+    }
+   }
+  ],
+  [
+   {
+    "policy_document_id": "govdeptsjapan-4d67fdec45092e98ba7dcc09343a6cac",
+    "title": "\u6e29\u5ba4\u52b9\u679c\u30ac\u30b9\u300c\u6392\u51fa\u6291\u5236\u7b49\u6307\u91dd\u300d\u696d\u52d9\u90e8\u9580 \u5bfe\u7b56\u30e1\u30cb\u30e5\u30fc 1 / 2 \u30da\u30fc\u30b8",
+    "translated_title": "Greenhouse Gas \u201cGuidelines for Emissions Control\u201d Business Division Measures Menu Page 1 of 2",
+    "published_on": "2014-05-31",
+    "es_score": 0.87554574,
+    "citation_count": 0,
+    "source": {
+     "title": "Government of Japan",
+     "type": "government",
+     "country": "Japan"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "ipcc-b81a9d9a73f60a7896616651e2655de2",
+    "title": "AR4 Climate Change 2007: Mitigation of Climate Change",
+    "translated_title": "",
+    "published_on": "2007-06-01",
+    "es_score": 0.8723368,
+    "citation_count": 809,
+    "source": {
+     "title": "IPCC",
+     "type": "igo",
+     "country": "IGO"
+    },
+    "cites": {
+     "policy": [
+      {
+       "overton_id": "epagov-2f9b2dd83d5bc547c3470c0f0459b8da"
+      },
+      {
+       "overton_id": "unitednations-ad760fe58a49de2dc3b103b245af3acc"
+      },
+      {
+       "overton_id": "internationalenergyagency-e09832b8701b7c3cb23518f47cbc9d73"
+      },
+      {
+       "overton_id": "undp-d63d2d90011627a60e1869512f1826f7"
+      },
+      {
+       "overton_id": "worldbank-a38ce2e4f83359ff21641a59147ddf8b"
+      },
+      {
+       "overton_id": "ren21-801d6a6cd6b09241538526ab2a3bd147"
+      },
+      {
+       "overton_id": "oecddiscovery-258c67941214c1e33becd19cc6843167"
+      },
+      {
+       "overton_id": "unenvironment-256200601fce5dca5407ffb9654d1307"
+      },
+      {
+       "overton_id": "oecddiscovery-eb90f814e099029d91835763a6f4dec1"
+      },
+      {
+       "overton_id": "ipcc-97e57eb04f4b877b3878ae53ea9ca8e3"
+      },
+      {
+       "overton_id": "unitednations-fc2a4ef719aa6eaa8009d964acfd4d12"
+      },
+      {
+       "overton_id": "internationalenergyagency-c386f15d9d155a5d96a64a8b64f0bc57"
+      }
+     ]
+    }
+   },
+   {
+    "policy_document_id": "govdeptsfrance-10eb540aa787292ef98cf2b99a7c4cb1",
+    "title": "[THIS TITLE IS BROKEN AND HAS BEEN REMOVED]",
+    "translated_title": "[THIS TITLE IS BROKEN AND HAS BEEN REMOVED]",
+    "published_on": "2022-10-07",
+    "es_score": 0.87211156,
+    "citation_count": 0,
+    "source": {
+     "title": "French Government Ministries",
+     "type": "government",
+     "country": "France"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "bostongov-9c7ed29597db236dbab4d13b30bd48ab",
+    "title": "How To Decarbonize Your Building",
+    "translated_title": "",
+    "published_on": "2021-04-06",
+    "es_score": 0.8716928,
+    "citation_count": 0,
+    "source": {
+     "title": "City of Boston",
+     "type": "government",
+     "country": "USA"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "stateofbadende-031c0e095e1e2001f495e576f1526786",
+    "title": "Auftaktveranstaltung Energieeffizienz 2021",
+    "translated_title": "Kick-off event for energy efficiency 2021",
+    "published_on": "2021-04-06",
+    "es_score": 0.870191,
+    "citation_count": 0,
+    "source": {
+     "title": "Landesregierung Baden-W\u00fcrttemberg",
+     "type": "government",
+     "country": "Germany"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "stateofvermont-ae246cba4ae84380088bededb0526404",
+    "title": "Amendment (Committee) Template",
+    "translated_title": "",
+    "published_on": "2023-04-04",
+    "es_score": 0.8693423,
+    "citation_count": 0,
+    "source": {
+     "title": "State of Vermont",
+     "type": "government",
+     "country": "USA"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "stateofvermont-57212022efaaf9c201e948c97b80cc9a",
+    "title": "Buildings and Thermal Task Group",
+    "translated_title": "",
+    "published_on": "2024-10-23",
+    "es_score": 0.86857784,
+    "citation_count": 0,
+    "source": {
+     "title": "State of Vermont",
+     "type": "government",
+     "country": "USA"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "internationalenergyagency-1812dfba53a9a9de973c6fcd1fb3792b",
+    "title": "Technology Roadmap - Energy-Efficient Buildings - Heating and Cooling Equipment \u2013 Analysis",
+    "translated_title": "",
+    "published_on": "2011-05-13",
+    "es_score": 0.8677826,
+    "citation_count": 71,
+    "source": {
+     "title": "International Energy Agency",
+     "type": "igo",
+     "country": "IGO"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "bmwsbde-f99b6d3aacf768ad69d4b25d37ce8f94",
+    "title": "BMWSB und BMWK legen Sofortprogramm mit Klimaschutzma\u00dfnahmen f\u00fcr den Geb\u00e4udesektor vor",
+    "translated_title": "BMWSB and BMWK present immediate action program with climate protection measures for the building sector",
+    "published_on": "2022-07-13",
+    "es_score": 0.86754775,
+    "citation_count": 2,
+    "source": {
+     "title": "Bundesministerium f\u00fcr Wohnen, Stadtentwicklung und Bauwesen (BMWSB)",
+     "type": "government",
+     "country": "Germany"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "bostongov-99dcef1d71f5f82d173ba857e921c5ad",
+    "title": "Building Decarbonization Guide",
+    "translated_title": "",
+    "published_on": "2026-07-02",
+    "es_score": 0.8672652,
+    "citation_count": 0,
+    "source": {
+     "title": "City of Boston",
+     "type": "government",
+     "country": "USA"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "nrelosti-5388f91510122fd6740c8e2c4e9b3ba1",
+    "title": "BTS strategic plan executive summary",
+    "translated_title": "",
+    "published_on": "1999-01-06",
+    "es_score": 0.86657226,
+    "citation_count": 0,
+    "source": {
+     "title": "National Renewable Energy Laboratory",
+     "type": "government",
+     "country": "USA"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "govdeptsjapan-a6766458b871732649e406c72292f498",
+    "title": "\u5efa\u7bc9\u7269\u306b\u4fc2\u308b\u30a8\u30cd\u30eb\u30ae\u30fc\u306e\u4f7f\u7528\u306e\u5408\u7406\u5316\u306e\u4e00\u5c64\u306e\u4fc3\u9032\u305d\u306e\u4ed6\u306e \u5efa\u7bc9\u7269\u306e\u4f4e\u70ad\u7d20\u5316\u306e\u4fc3\u9032\u306e\u305f\u3081\u306b\u8a98\u5c0e\u3059\u3079\u304d\u57fa\u6e96 (\u6539\u6b63\u30a4\u30e1\u30fc\u30b8)",
+    "translated_title": "Standards to be introduced to further promote the rationalization of energy use in buildings and promote other low-carbon buildings (image of the amendment)",
+    "published_on": "2013-07-17",
+    "es_score": 0.86457765,
+    "citation_count": 0,
+    "source": {
+     "title": "Government of Japan",
+     "type": "government",
+     "country": "Japan"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "govdeptsfrance-497318aaa73982e7b7232404a28e0baa",
+    "title": "Canada",
+    "translated_title": "",
+    "published_on": "2024-08-30",
+    "es_score": 0.8638304,
+    "citation_count": 0,
+    "source": {
+     "title": "French Government Ministries",
+     "type": "government",
+     "country": "France"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "nycgov-f436cfd2b5a3779f68e173fb2c99acfd",
+    "title": "Meeting Local Law 97 through Energy Efficiency and Beneficial Electrification",
+    "translated_title": "",
+    "published_on": "2020-07-17",
+    "es_score": 0.8635676,
+    "citation_count": 1,
+    "source": {
+     "title": "City of New York",
+     "type": "government",
+     "country": "USA"
+    },
+    "cites": {
+     "policy": [
+      {
+       "overton_id": "nycgov-3d63ef60c8064aadbd2f7c9e0184b43f"
+      },
+      {
+       "overton_id": "nycgov-8f62eb4f4e7b9903e6e3c6c7aa15e464"
+      },
+      {
+       "overton_id": "nycgov-495833558b85a1ede262e7159563deba"
+      },
+      {
+       "overton_id": "rockymountaininstitute-fc0bdb19cc82af92cdfdbed5b39c0e4c"
+      },
+      {
+       "overton_id": "nygov-cc19e87b19173e2c72a693023b476f40"
+      },
+      {
+       "overton_id": "aceee-4cf62cc5e5d6ade06561f505fcf5b87a"
+      },
+      {
+       "overton_id": "nycgov-096911172c403f35a0f69a148d5bc807"
+      },
+      {
+       "overton_id": "nygov-30605785d10a6446c6aef3611d68e98e"
+      },
+      {
+       "overton_id": "nycgov-6bce80ed214fd1968d3fcfb1ae23ec76"
+      },
+      {
+       "overton_id": "nycgov-bc2f27607f617c3c3c1c29ba55c36cba"
+      },
+      {
+       "overton_id": "nycgov-72da2bbb2253c3561390dde7f92c32a1"
+      }
+     ]
+    }
+   },
+   {
+    "policy_document_id": "frontiereconomics-aaa96ffc0f8e8c123bf31cf09d052ed4",
+    "title": "Low-carbon Heating : How Can We Manage Peak Winter Demand?",
+    "translated_title": "",
+    "published_on": "2023-02-16",
+    "es_score": 0.8630987,
+    "citation_count": 0,
+    "source": {
+     "title": "Frontier Economics",
+     "type": "think tank",
+     "country": "UK"
+    },
+    "cites": {
+     "policy": [
+      {
+       "overton_id": "frontiereconomics-4f36281bd38888770c348a189fe8089c"
+      },
+      {
+       "overton_id": "frontiereconomics-12993af64e1c536e2f9bfef379da581b"
+      },
+      {
+       "overton_id": "nationalauditofficeuk-c023aa37d925d77051cb8532950b1dc4"
+      },
+      {
+       "overton_id": "theccc-745863b7d2156e1fe3ae77b50d6591aa"
+      },
+      {
+       "overton_id": "theccc-19b69be85262d90bec88da946e52f674"
+      }
+     ]
+    }
+   },
+   {
+    "policy_document_id": "stateofbavariade-8b1e450aca64e46af4c40e4ef8e4f021",
+    "title": "Hinweise zum Energiesparen | 42 Verbesserungsvorschlaege fuer bestehende Heizungen",
+    "translated_title": "Notes on saving energy | 42 suggestions for improving existing heating systems",
+    "published_on": "2014-10-02",
+    "es_score": 0.862514,
+    "citation_count": 0,
+    "source": {
+     "title": "Bayerische Staatsregierung",
+     "type": "government",
+     "country": "Germany"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "c2es-3fdada1873a9d749a61737d46c087567",
+    "title": "Towards a Climate-Friendly Built Environment",
+    "translated_title": "",
+    "published_on": "2005-06-13",
+    "es_score": 0.8624773,
+    "citation_count": 0,
+    "source": {
+     "title": "Center for Climate and Energy Solutions",
+     "type": "think tank",
+     "country": "USA"
+    },
+    "cites": {
+     "policy": [
+      {
+       "overton_id": "napedu-bc4289b60823b6086eddd068427c5167"
+      }
+     ]
+    }
+   },
+   {
+    "policy_document_id": "govdeptsjapan-e4282d4df394ed9e2e19003b802c00a3",
+    "title": "\u4f4f\u5b85\u7814\u7a76\u958b\u767a\u59d4\u54e1\u4f1a \u74b0\u5883\u30fb\u8a2d\u5099\u90e8\u4f1a\u306e\u7814\u7a76\u5185\u5bb9",
+    "translated_title": "Research contents of the Housing Research and Development Committee Environment and Facilities Division",
+    "published_on": "2009-09-15",
+    "es_score": 0.86176324,
+    "citation_count": 0,
+    "source": {
+     "title": "Government of Japan",
+     "type": "government",
+     "country": "Japan"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "provinceofquebec-be3221ac482e26be5dc5b3eb1e488e0f",
+    "title": "Guides des modalit\u00e9s d'application - Mesures d'exemplarit\u00e9 de l'\u00c9tat du PEV",
+    "translated_title": "Guides to the modalities of application - Exemplary measures of the EPI State",
+    "published_on": "2022-04-04",
+    "es_score": 0.8614048,
+    "citation_count": 0,
+    "source": {
+     "title": "Province of Qu\u00e9bec",
+     "type": "government",
+     "country": "Canada"
+    },
+    "cites": {
+     "policy": [
+      {
+       "overton_id": "provinceofquebec-3243976c5b409bffc420c96f249b85c4"
+      },
+      {
+       "overton_id": "provinceofquebec-69ab608a703f4ae1d683c40cc5785c74"
+      },
+      {
+       "overton_id": "provinceofquebec-79b42d7d10361e0e0e57fec797563155"
+      }
+     ]
+    }
+   },
+   {
+    "policy_document_id": "nycgov-37d1f0e78bac113ebd41bb8c708707e9",
+    "title": "One City",
+    "translated_title": "",
+    "published_on": "2016-04-21",
+    "es_score": 0.86088574,
+    "citation_count": 7,
+    "source": {
+     "title": "City of New York",
+     "type": "government",
+     "country": "USA"
+    },
+    "cites": {
+     "policy": [
+      {
+       "overton_id": "unhabitat-aacd7392b9a36e5a7a9278a0ce829072"
+      }
+     ]
+    }
+   },
+   {
+    "policy_document_id": "provinceofnorthwest-f2214b1a5d506ee5d0a81bb46dd285d7",
+    "title": "Guide Du Programme De Subventions Publiques Pour",
+    "translated_title": "Guide to the Public Grants Program for",
+    "published_on": "2022-02-07",
+    "es_score": 0.8600515,
+    "citation_count": 0,
+    "source": {
+     "title": "Government of Northwest Territories",
+     "type": "government",
+     "country": "Canada"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "lacitygov-a42bf780d8db99ceb6ae46cf49771509",
+    "title": "City of Los Angeles",
+    "translated_title": "",
+    "published_on": "2018-05-10",
+    "es_score": 0.8597711,
+    "citation_count": 0,
+    "source": {
+     "title": "City of Los Angeles",
+     "type": "government",
+     "country": "USA"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "nrdc-90bcf11e290a6870ce223eb77d650383",
+    "title": "Kick-Starting Building Efficiency: A Policy Workplan for Maximizing the Economic Benefits of Energy Efficiency in Buildings",
+    "translated_title": "",
+    "published_on": "2009-05-04",
+    "es_score": 0.8594626,
+    "citation_count": 0,
+    "source": {
+     "title": "Natural Resources Defense Council",
+     "type": "think tank",
+     "country": "USA"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "govdeptsjapan-6c1ec4b973264e2eb991c788cb5d91de",
+    "title": "\u53c2\u8003 \u8cc7\u6599 1",
+    "translated_title": "Reference 1",
+    "published_on": "2007-10-19",
+    "es_score": 0.85943484,
+    "citation_count": 0,
+    "source": {
+     "title": "Government of Japan",
+     "type": "government",
+     "country": "Japan"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "nygov-7373380713edb45f9494a7ed724c3a44",
+    "title": "Commercial Analysis Appendix Tables",
+    "translated_title": "",
+    "published_on": "2013-08-28",
+    "es_score": 0.85908765,
+    "citation_count": 0,
+    "source": {
+     "title": "New York State",
+     "type": "government",
+     "country": "USA"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "adminch-afb9aa13e820b6ad3f80e6f736b4fa2f",
+    "title": "Optimieren der Heizungsanlage : Entspannung f\u00fcr Raumklima und Geldbeutel",
+    "translated_title": "Optimizing the heating system: Relaxation for indoor climate and wallet",
+    "published_on": "2004-06-18",
+    "es_score": 0.8590176,
+    "citation_count": 0,
+    "source": {
+     "title": "Government of Switzerland",
+     "type": "government",
+     "country": "Switzerland"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "bostongov-9ee001a1222b3ac8595a4ddb55196ed3",
+    "title": "How To Make Healthy, Low-carbon Building Improvements",
+    "translated_title": "",
+    "published_on": "2024-05-03",
+    "es_score": 0.8589493,
+    "citation_count": 0,
+    "source": {
+     "title": "City of Boston",
+     "type": "government",
+     "country": "USA"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "stateofnevada-528bfa5a9c8be116e564c5c984040c21",
+    "title": "List of Eligible Measures",
+    "translated_title": "",
+    "published_on": "2016-06-23",
+    "es_score": 0.8588891,
+    "citation_count": 0,
+    "source": {
+     "title": "State of Nevada",
+     "type": "government",
+     "country": "USA"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "stateofwashington-743d4314e21ec31329cb82d60bcc51d8",
+    "title": "Washington Takes Bold Steps To Reduce Greenhouse Gas Emissions From Buildings",
+    "translated_title": "",
+    "published_on": "2019-05-06",
+    "es_score": 0.85883737,
+    "citation_count": 0,
+    "source": {
+     "title": "State of Washington",
+     "type": "government",
+     "country": "USA"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "nycgov-044527c18ee606f89e237477c717d84f",
+    "title": "Handbook for Multifamily Buildings",
+    "translated_title": "",
+    "published_on": "2016-10-19",
+    "es_score": 0.8587989,
+    "citation_count": 0,
+    "source": {
+     "title": "City of New York",
+     "type": "government",
+     "country": "USA"
+    },
+    "cites": {
+     "policy": [
+      {
+       "overton_id": "nycgov-5ec15cf94943346bf12b023b1af0bd83"
+      },
+      {
+       "overton_id": "nycgov-afedc9be286739165e8d6310eb01f6d0"
+      },
+      {
+       "overton_id": "nygov-8bfe5e4f79ab9e2f52daa41274accb2e"
+      }
+     ]
+    }
+   },
+   {
+    "policy_document_id": "nrelosti-4feb0572a135886189975b97e4b83129",
+    "title": "A Guide for Creating a Building-Level Action Plan to Improve Energy Efficiency and Reduce Carbon Emissions",
+    "translated_title": "",
+    "published_on": "2023-05-16",
+    "es_score": 0.85850495,
+    "citation_count": 0,
+    "source": {
+     "title": "National Renewable Energy Laboratory",
+     "type": "government",
+     "country": "USA"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "cordisbe-b8fae1dde60b904d6b10802d64e17023",
+    "title": "Supporting the progress of renewable energies for heating and cooling in the EU on a local level",
+    "translated_title": "",
+    "published_on": "2018-02-08",
+    "es_score": 0.8584536,
+    "citation_count": 0,
+    "source": {
+     "title": "CORDIS",
+     "type": "government",
+     "country": "EU"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "nygov-9b10a9deba3c811fc9df79def5c85597",
+    "title": "Energy Efficiency & Housing Advisory Panel",
+    "translated_title": "",
+    "published_on": "2020-10-16",
+    "es_score": 0.8577819,
+    "citation_count": 0,
+    "source": {
+     "title": "New York State",
+     "type": "government",
+     "country": "USA"
+    },
+    "cites": {
+     "policy": [
+      {
+       "overton_id": "nycgov-c5a9beca5d8f707dcad400f525370abb"
+      }
+     ]
+    }
+   },
+   {
+    "policy_document_id": "stateofvermont-2e6c5ebe91afdabf0c6d4941262fbb2c",
+    "title": "Cross Sector Mitigation Subcommittee Buildings and Thermal Task Group Priority Recommendations",
+    "translated_title": "",
+    "published_on": "2024-12-12",
+    "es_score": 0.857409,
+    "citation_count": 0,
+    "source": {
+     "title": "State of Vermont",
+     "type": "government",
+     "country": "USA"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "cityofdenver-7a31107be9a1a4e3f3b86e3d0a05678e",
+    "title": "Evaluaci\u00f3n comparativa y requisitos de rendimiento energ\u00e9tico",
+    "translated_title": "Benchmarking and energy performance requirements",
+    "published_on": "2023-07-13",
+    "es_score": 0.8572989,
+    "citation_count": 0,
+    "source": {
+     "title": "City of Denver",
+     "type": "government",
+     "country": "USA"
+    },
+    "cites": {
+     "policy": [
+      {
+       "overton_id": "cityofdenver-7bf26c4a688cf0f31a0926b166853a60"
+      }
+     ]
+    }
+   },
+   {
+    "policy_document_id": "stateofmaine-7155a30978941ae8d0a8f983f39cea06",
+    "title": "Proposed Recommendations and Actions DRAFT / For discussion only Updated 5 / 7 / 24",
+    "translated_title": "",
+    "published_on": "2024-05-07",
+    "es_score": 0.8569018,
+    "citation_count": 0,
+    "source": {
+     "title": "State of Maine",
+     "type": "government",
+     "country": "USA"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "voivodeshiplodzpl-b967a82489e8245c3a78caa5e2a53027",
+    "title": "Ograniczanie niskiej emisji w gminie",
+    "translated_title": "Reducing low emissions in the municipality",
+    "published_on": "2015-11-19",
+    "es_score": 0.8566559,
+    "citation_count": 0,
+    "source": {
+     "title": "Samorz\u0105d Wojew\u00f3dztwa \u0141\u00f3dzkiego",
+     "type": "government",
+     "country": "Poland"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "nygov-81527164d9c33c25dafa11e2370a3293",
+    "title": "CH&C Fact Sheet",
+    "translated_title": "",
+    "published_on": "2019-10-07",
+    "es_score": 0.8565378,
+    "citation_count": 0,
+    "source": {
+     "title": "New York State",
+     "type": "government",
+     "country": "USA"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "california_state_agencies-261afa5002901a51dbf50096ff784439",
+    "title": "Senate Bill Policy Committee Analysis",
+    "translated_title": "",
+    "published_on": "2018-06-26",
+    "es_score": 0.85554063,
+    "citation_count": 0,
+    "source": {
+     "title": "State of California",
+     "type": "government",
+     "country": "USA"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "unionconcerned-fdb35d46004ef4a5a5c905f331b6fc02",
+    "title": "Climate 2030",
+    "translated_title": "",
+    "published_on": "2009-05-06",
+    "es_score": 0.85552084,
+    "citation_count": 6,
+    "source": {
+     "title": "Union of Concerned Scientists",
+     "type": "think tank",
+     "country": "USA"
+    },
+    "cites": {
+     "policy": []
+    }
+   }
+  ],
+  [
+   {
+    "policy_document_id": "bostongov-9c7ed29597db236dbab4d13b30bd48ab",
+    "title": "How To Decarbonize Your Building",
+    "translated_title": "",
+    "published_on": "2021-04-06",
+    "es_score": 0.86085194,
+    "citation_count": 0,
+    "source": {
+     "title": "City of Boston",
+     "type": "government",
+     "country": "USA"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "nycgov-3fb2a595f0e8a876af4ac743048958e1",
+    "title": "Committee on Environmental Protection Hearing on Intro 1159 Testimony by Anthony J. Fiore Deputy Commissioner, Department of Citywide Administrative Services February 28, 2017.",
+    "translated_title": "",
+    "published_on": "2017-03-06",
+    "es_score": 0.86055243,
+    "citation_count": 0,
+    "source": {
+     "title": "City of New York",
+     "type": "government",
+     "country": "USA"
+    },
+    "cites": {
+     "policy": [
+      {
+       "overton_id": "nygov-c3b95f4298b5be7eccba447e28bb5e8c"
+      },
+      {
+       "overton_id": "nygov-42ec17732d7fd685f1c21ca2c915f9af"
+      },
+      {
+       "overton_id": "nygov-9671ad62d3594f3f49d54a96bcae36f7"
+      },
+      {
+       "overton_id": "nygov-34bf771497700bb2a8ce8d0634ad8378"
+      },
+      {
+       "overton_id": "nygov-f490772f264fd3929711125c9213807d"
+      },
+      {
+       "overton_id": "nygov-814589f42005c566ea580205e8fc9556"
+      },
+      {
+       "overton_id": "rockymountaininstitute-7ff04337d09a2d3a7c1ab57bbc371bb6"
+      },
+      {
+       "overton_id": "nygov-7ba3e04e8771dd4319bb622b10d2f841"
+      },
+      {
+       "overton_id": "ipcc-1e0b1a7ef1718ff08c682ce4cb651d90"
+      },
+      {
+       "overton_id": "nygov-dac73a216344c46879bcfb60c5718aa1"
+      }
+     ]
+    }
+   },
+   {
+    "policy_document_id": "climateactionnetworkeurope-8faea0e61c8e251e2012b7816f1f9732",
+    "title": "REPORT: Embracing a renewable heating revolution in our buildings!",
+    "translated_title": "",
+    "published_on": "2023-02-22",
+    "es_score": 0.8604747,
+    "citation_count": 0,
+    "source": {
+     "title": "Climate Action Network Europe",
+     "type": "think tank",
+     "country": "Belgium"
+    },
+    "cites": {
+     "policy": [
+      {
+       "overton_id": "climateactionnetworkeurope-34b4c48f515b05320e3dc881309091f2"
+      }
+     ]
+    }
+   },
+   {
+    "policy_document_id": "departmenteconomyuk-440d01cdc96c884548850d813c26cb2b",
+    "title": "Government Response to Support for Low Carbon Heat in the Residential Sector Consultation",
+    "translated_title": "",
+    "published_on": "2026-01-25",
+    "es_score": 0.85965204,
+    "citation_count": 0,
+    "source": {
+     "title": "Department for the Economy (Northern Ireland)",
+     "type": "government",
+     "country": "UK"
+    },
+    "cites": {
+     "policy": [
+      {
+       "overton_id": "govuk-13ce47911aee910408a85aa84b8cb043"
+      },
+      {
+       "overton_id": "govuk-98ade90aec6717aacbb2b3e434427962"
+      },
+      {
+       "overton_id": "theccc-c7d292248dd54b0cdabbbc541bce5600"
+      },
+      {
+       "overton_id": "legislationgovuk-8430c42f5620fcbcc353898bfbd6c764"
+      },
+      {
+       "overton_id": "northernirelandgovuk-28d57845e1ec807a9d4fef1dd56f7c66"
+      }
+     ]
+    }
+   },
+   {
+    "policy_document_id": "govdeptsfrance-c890bc366046e24d3d30d0c8ea479691",
+    "title": "220531 ADEME_Infographie-ChauffageENR_Mars2022 01",
+    "translated_title": "220531 ADEME_Infographie-HeatingENR_March2022 01",
+    "published_on": "2022-05-31",
+    "es_score": 0.8596385,
+    "citation_count": 0,
+    "source": {
+     "title": "French Government Ministries",
+     "type": "government",
+     "country": "France"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "ukparliament_select-380475d90a6a3afc6e590b875728afd2",
+    "title": "PMP0051 - Technological Innovations and Climate Change: Heat Pumps",
+    "translated_title": "",
+    "published_on": "2021-01-13",
+    "es_score": 0.85794455,
+    "citation_count": 0,
+    "source": {
+     "title": "UK Parliament Select Committee Publications",
+     "type": "government",
+     "country": "UK"
+    },
+    "cites": {
+     "policy": [
+      {
+       "overton_id": "theccc-ea16ae1ee6519565847262e85d198832"
+      },
+      {
+       "overton_id": "theccc-1e5a840ca0909d3b4d60e5850752fbd7"
+      },
+      {
+       "overton_id": "theccc-9d3ed67d62d8143824c5921043c1fba5"
+      },
+      {
+       "overton_id": "theccc-61c04cabb7a10dc83c316e8f1eaae5dc"
+      },
+      {
+       "overton_id": "ukparliament_select-809b4ddc0a1af8fc6ca873e754d039e0"
+      },
+      {
+       "overton_id": "nationalauditofficeuk-d5f349e3626a03cd4391618752bc83a1"
+      },
+      {
+       "overton_id": "govuk-85308e53cee4ae3caa844642e831bca0"
+      },
+      {
+       "overton_id": "cbiuk-f9010792261c7c8a9dcae3b340dbc11e"
+      },
+      {
+       "overton_id": "govuk-e3f7936c60a2d19bb0e66b164bdecbf7"
+      }
+     ]
+    }
+   },
+   {
+    "policy_document_id": "govdeptsfrance-a52100c760e9a724799a2a9a78dabe69",
+    "title": "Un hiver tout confort",
+    "translated_title": "A comfortable winter",
+    "published_on": "2021-12-06",
+    "es_score": 0.8577826,
+    "citation_count": 0,
+    "source": {
+     "title": "French Government Ministries",
+     "type": "government",
+     "country": "France"
+    },
+    "cites": {
+     "policy": [
+      {
+       "overton_id": "ademefr-f04c4435ab2505dbed7c955b61590084"
+      }
+     ]
+    }
+   },
+   {
+    "policy_document_id": "stateofvermont-de0bf34da9181ee067800fc02fd40b4c",
+    "title": "Clean Heat Standard represents a tremendous opportunity to move away from these fuels and in doing so reduce our climate pollution, keep more dollars in our local economies, and help Vermonters make the shift to more affordable, clean, and predictably priced energy sources. As taken from our 2022 vote rec--",
+    "translated_title": "",
+    "published_on": "2023-02-02",
+    "es_score": 0.85743093,
+    "citation_count": 0,
+    "source": {
+     "title": "State of Vermont",
+     "type": "government",
+     "country": "USA"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "landstyriaat-51953ff37658147c85ae613d8533d8af",
+    "title": "Heizen",
+    "translated_title": "Heat",
+    "published_on": "2022-10-19",
+    "es_score": 0.85735977,
+    "citation_count": 0,
+    "source": {
+     "title": "Land Steiermark",
+     "type": "government",
+     "country": "Austria"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "govuk-7d7ca4c02e010c2163041654e3c3b2de",
+    "title": "International comparisons of heating, cooling and heat decarbonisation policies",
+    "translated_title": "",
+    "published_on": "2018-04-12",
+    "es_score": 0.8569287,
+    "citation_count": 10,
+    "source": {
+     "title": "The UK Government",
+     "type": "government",
+     "country": "UK"
+    },
+    "cites": {
+     "policy": [
+      {
+       "overton_id": "internationalenergyagency-1734c98016b90a03b3c986ab88b2b505"
+      },
+      {
+       "overton_id": "unenvironment-af85b0999775ecdbb22112a243a5617f"
+      },
+      {
+       "overton_id": "nordiccouncil-29ed666ba883cbfb3a4a475072d1745d"
+      }
+     ]
+    }
+   },
+   {
+    "policy_document_id": "climateactionnetworkeurope-34b4c48f515b05320e3dc881309091f2",
+    "title": "REPORT: Embracing a renewable heating revolution in our buildings! - CAN Europe",
+    "translated_title": "",
+    "published_on": "2023-02-21",
+    "es_score": 0.8568456,
+    "citation_count": 0,
+    "source": {
+     "title": "Climate Action Network Europe",
+     "type": "think tank",
+     "country": "Belgium"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "cordisbe-dcdd6596d23f0b4e3f66f016bbd51ede",
+    "title": "Making heating and cooling for European consumers efficient, economically resilient, clean and climate-friendly",
+    "translated_title": "",
+    "published_on": "2023-10-19",
+    "es_score": 0.85633343,
+    "citation_count": 0,
+    "source": {
+     "title": "CORDIS",
+     "type": "government",
+     "country": "EU"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "provinceofquebec-833292ab413965b1dfed30a7ef2d6551",
+    "title": "Programme Chauffez vert - Volet conversion petit CII",
+    "translated_title": "Green Heating Program - Small CII Conversion Component",
+    "published_on": "2018-08-30",
+    "es_score": 0.8550732,
+    "citation_count": 0,
+    "source": {
+     "title": "Province of Qu\u00e9bec",
+     "type": "government",
+     "country": "Canada"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "rockymountaininstitute-39abaf755b275c0f6eeb46db76ea3ace",
+    "title": "Now Is the Time to Go All In on Heat Pumps",
+    "translated_title": "",
+    "published_on": false,
+    "es_score": 0.8535928,
+    "citation_count": 2,
+    "source": {
+     "title": "Rocky Mountain Institute (RMI)",
+     "type": "think tank",
+     "country": "USA"
+    },
+    "cites": {
+     "policy": [
+      {
+       "overton_id": "rockymountaininstitute-53f9be36463360cb7f15a289eaf5e512"
+      },
+      {
+       "overton_id": "rockymountaininstitute-1b672bba74d8972ecba6373974afe4d4"
+      }
+     ]
+    }
+   },
+   {
+    "policy_document_id": "rijksoverheid-d4da70248a855ce3eeb1baf10f666619",
+    "title": "Een laagdrempelige energietransitie Hoe kan de haalbaarheid van de energietransitie in de gebouwde omgeving worden vergroot",
+    "translated_title": "An accessible energy transition: How can the feasibility of the energy transition in the built environment be increased?",
+    "published_on": "2020-04-22",
+    "es_score": 0.8534512,
+    "citation_count": 0,
+    "source": {
+     "title": "Rijksoverheid",
+     "type": "government",
+     "country": "Netherlands"
+    },
+    "cites": {
+     "policy": [
+      {
+       "overton_id": "bituk-08c304e5507cfdb468da6b267e3d29d2"
+      },
+      {
+       "overton_id": "tnonl-4753cf0c89646185a4ca69a3745e954c"
+      }
+     ]
+    }
+   },
+   {
+    "policy_document_id": "adminch-1b5ef75cde0b31f9ba742671474737dd",
+    "title": "Dans Les Grands Immeubles D\u2019habitation Et Pour Les Ppe",
+    "translated_title": "In Large Apartment Buildings And For EPPs",
+    "published_on": "2021-11-02",
+    "es_score": 0.8534446,
+    "citation_count": 0,
+    "source": {
+     "title": "Government of Switzerland",
+     "type": "government",
+     "country": "Switzerland"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "esridublin-5b41869ea40a948543a93ee315161236",
+    "title": "Who upgrades their residential heating system?",
+    "translated_title": "",
+    "published_on": "2018-08-01",
+    "es_score": 0.8523835,
+    "citation_count": 0,
+    "source": {
+     "title": "ESRI",
+     "type": "think tank",
+     "country": "Ireland"
+    },
+    "cites": {
+     "policy": [
+      {
+       "overton_id": "esridublin-3a89408a97046de871a182cc90cc87a4"
+      }
+     ]
+    }
+   },
+   {
+    "policy_document_id": "ademefr-8c726624f0f573fc2149dae2969a7786",
+    "title": "Comment se chauffer mieux ?",
+    "translated_title": "How to heat better?",
+    "published_on": "2019-03-11",
+    "es_score": 0.85039735,
+    "citation_count": 0,
+    "source": {
+     "title": "ADEME",
+     "type": "government",
+     "country": "France"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "california_state_agencies-2cb3bc8c97d22a2cb600f96583188e2f",
+    "title": "Woodsmoke Reduction Program Program Guidelines",
+    "translated_title": "",
+    "published_on": "2023-11-17",
+    "es_score": 0.8503246,
+    "citation_count": 0,
+    "source": {
+     "title": "State of California",
+     "type": "government",
+     "country": "USA"
+    },
+    "cites": {
+     "policy": [
+      {
+       "overton_id": "california_state_agencies-be79ceae508bf1cb1904140f656998c6"
+      },
+      {
+       "overton_id": "epagov-014cce710d92759ad7bc6016ccd3c1ae"
+      }
+     ]
+    }
+   },
+   {
+    "policy_document_id": "govuk-9f1a8eb3ae08666ea354437824e0b5ca",
+    "title": "Homes for Net Zero research programme",
+    "translated_title": "",
+    "published_on": "2026-07-09",
+    "es_score": 0.84976953,
+    "citation_count": 0,
+    "source": {
+     "title": "The UK Government",
+     "type": "government",
+     "country": "UK"
+    },
+    "cites": {
+     "policy": [
+      {
+       "overton_id": "nationalauditofficeuk-b015e0621e69eff9d1176bee8240d7fe"
+      },
+      {
+       "overton_id": "ukparliament-7a89ba37cfa866438a27997bd3e23bfe"
+      },
+      {
+       "overton_id": "govuk-1cfae2b3d55a882d70e008766953e5d6"
+      },
+      {
+       "overton_id": "govuk-3e08dac8fc91c2bcaf776bb7f36f2b9f"
+      }
+     ]
+    }
+   },
+   {
+    "policy_document_id": "europa-fc57b21a10835ef39fb560a81ae0e5c1",
+    "title": "EU challenges of reducing fossil fuel use in buildings.",
+    "translated_title": "",
+    "published_on": "2021-12-15",
+    "es_score": 0.84943664,
+    "citation_count": 1,
+    "source": {
+     "title": "Publications Office of the European Union",
+     "type": "government",
+     "country": "EU"
+    },
+    "cites": {
+     "policy": [
+      {
+       "overton_id": "jointresearcheu-f37a1b6c8a9e1e8ef3da69ba0a1ea659"
+      },
+      {
+       "overton_id": "jointresearcheu-56875af8459b528a3720eb17a534716e"
+      },
+      {
+       "overton_id": "europa-888341e86f690619a4e6bd11e4e2a9fb"
+      },
+      {
+       "overton_id": "umweltbundesamt-83caab1d4a0ad7c4ac121150e0198d40"
+      },
+      {
+       "overton_id": "europa-2158bf8bf9fa7e39e5ec69d149ea28dc"
+      },
+      {
+       "overton_id": "europa-0039c83599027534e9e8f974663f4790"
+      },
+      {
+       "overton_id": "agorae-9cf149ba8c3b17219aa46a82e7fafb15"
+      },
+      {
+       "overton_id": "europa-01d85b9b58aa26f7bdebe6c7810a1665"
+      },
+      {
+       "overton_id": "agorae-8739464fb438c1acb00a4ea692f3033f"
+      },
+      {
+       "overton_id": "europa-3535731c727e81c680a5b23b6effd09d"
+      },
+      {
+       "overton_id": "europa-cb1ba0e43727a87c4b4d6b72ffea8b03"
+      },
+      {
+       "overton_id": "eucommission-5e68b88f0203e8054a70940da45beae8"
+      },
+      {
+       "overton_id": "eucommission-417f055addde6888bb7f68f0a384f53a"
+      },
+      {
+       "overton_id": "govuk-cd07dfc0b2c0fbc2ae36693a544bf93d"
+      },
+      {
+       "overton_id": "oecddiscovery-ed1033e32ebf21d625c9287fa757d9bf"
+      },
+      {
+       "overton_id": "bruegel-1bccd7d35c1707e0be2149443e251973"
+      },
+      {
+       "overton_id": "europa-6574b91a95c9ec439a463e8bb7ccec89"
+      }
+     ]
+    }
+   },
+   {
+    "policy_document_id": "govuk-3f5b6e4038bd0fc5312cee7813eb0ef5",
+    "title": "Phasing out the installation of fossil fuel heating systems in businesses and public buildings off the gas grid",
+    "translated_title": "",
+    "published_on": "2021-10-19",
+    "es_score": 0.8489945,
+    "citation_count": 3,
+    "source": {
+     "title": "The UK Government",
+     "type": "government",
+     "country": "UK"
+    },
+    "cites": {
+     "policy": [
+      {
+       "overton_id": "theccc-59ea93e0f57f0d6e0e06224531176b5a"
+      },
+      {
+       "overton_id": "grantham-560492f2b743d04d88847d0ad70fd1a9"
+      },
+      {
+       "overton_id": "govuk-cf91755c55e8de483ba3307b97a819c5"
+      },
+      {
+       "overton_id": "govuk-3414c993e8f2543ea39770b62823f12b"
+      },
+      {
+       "overton_id": "govuk-2ff22d99d9ed1bf588bb83a807f679fe"
+      },
+      {
+       "overton_id": "govuk-45017e2432e5dcaf4594508277afdabc"
+      },
+      {
+       "overton_id": "govuk-e76ac6c42f33bdc080f0ec0fc10ffc84"
+      },
+      {
+       "overton_id": "govuk-b4e4c6f6a234eb0a1895a00177c8a28e"
+      }
+     ]
+    }
+   },
+   {
+    "policy_document_id": "ukparliament_select-aab9a4684ff712106a655b11af5ace99",
+    "title": "GRUNDFOS Pumps Ltd (RFH0013)",
+    "translated_title": "",
+    "published_on": "2024-12-04",
+    "es_score": 0.84889376,
+    "citation_count": 0,
+    "source": {
+     "title": "UK Parliament Select Committee Publications",
+     "type": "government",
+     "country": "UK"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "stateofvermont-6250368c6ef5a4f2b70163b60ecc7a12",
+    "title": "Bill As Passed By The House",
+    "translated_title": "",
+    "published_on": "2022-03-22",
+    "es_score": 0.84864724,
+    "citation_count": 0,
+    "source": {
+     "title": "State of Vermont",
+     "type": "government",
+     "country": "USA"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "provinceofquebec-eb281e5e1f7114204be5836eab95eaa8",
+    "title": "Environnement, de la Lutte contre les changements climatiques, de la Faune et des Parcs",
+    "translated_title": "Environment, Climate Change, Wildlife and Parks",
+    "published_on": "2024-07-09",
+    "es_score": 0.84861904,
+    "citation_count": 0,
+    "source": {
+     "title": "Province of Qu\u00e9bec",
+     "type": "government",
+     "country": "Canada"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "stateofvermont-05722c3b6a09cc794cea67b1bd44953f",
+    "title": "Draft Bill Template",
+    "translated_title": "",
+    "published_on": "2022-01-12",
+    "es_score": 0.847456,
+    "citation_count": 0,
+    "source": {
+     "title": "State of Vermont",
+     "type": "government",
+     "country": "USA"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "stateofbremen-0228a353d2bd011840ba4970eeac68aa",
+    "title": "Antragstellung und Kontakt",
+    "translated_title": "Application and contact",
+    "published_on": "2024-02-22",
+    "es_score": 0.8472738,
+    "citation_count": 0,
+    "source": {
+     "title": "Senat der Freien Hansestadt Bremen",
+     "type": "government",
+     "country": "Germany"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "provinceofquebec-a15403b99e01272a00574a986fe044a1",
+    "title": "Programme Chauffez vert Cadre normatif",
+    "translated_title": "Chauffez vert program Normative framework",
+    "published_on": "2022-06-21",
+    "es_score": 0.8471498,
+    "citation_count": 0,
+    "source": {
+     "title": "Province of Qu\u00e9bec",
+     "type": "government",
+     "country": "Canada"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "adminch-ce61aafc023d1f6fafc8c2805f8a6908",
+    "title": "Dans Les Maisons Individuelles Et Les Petits Immeubles",
+    "translated_title": "In Detached Houses And Small Buildings",
+    "published_on": "2021-11-02",
+    "es_score": 0.8471007,
+    "citation_count": 0,
+    "source": {
+     "title": "Government of Switzerland",
+     "type": "government",
+     "country": "Switzerland"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "frontiereconomics-aaa96ffc0f8e8c123bf31cf09d052ed4",
+    "title": "Low-carbon Heating : How Can We Manage Peak Winter Demand?",
+    "translated_title": "",
+    "published_on": "2023-02-16",
+    "es_score": 0.846992,
+    "citation_count": 0,
+    "source": {
+     "title": "Frontier Economics",
+     "type": "think tank",
+     "country": "UK"
+    },
+    "cites": {
+     "policy": [
+      {
+       "overton_id": "frontiereconomics-4f36281bd38888770c348a189fe8089c"
+      },
+      {
+       "overton_id": "frontiereconomics-12993af64e1c536e2f9bfef379da581b"
+      },
+      {
+       "overton_id": "nationalauditofficeuk-c023aa37d925d77051cb8532950b1dc4"
+      },
+      {
+       "overton_id": "theccc-745863b7d2156e1fe3ae77b50d6591aa"
+      },
+      {
+       "overton_id": "theccc-19b69be85262d90bec88da946e52f674"
+      }
+     ]
+    }
+   },
+   {
+    "policy_document_id": "illinoisgov-ce758348e738c49ff9a0267aeb1e6a84",
+    "title": "Heating Systems",
+    "translated_title": "",
+    "published_on": "2005-10-26",
+    "es_score": 0.8469438,
+    "citation_count": 0,
+    "source": {
+     "title": "State of Illinois",
+     "type": "government",
+     "country": "USA"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "govdeptsfrance-497318aaa73982e7b7232404a28e0baa",
+    "title": "Canada",
+    "translated_title": "",
+    "published_on": "2024-08-30",
+    "es_score": 0.8467186,
+    "citation_count": 0,
+    "source": {
+     "title": "French Government Ministries",
+     "type": "government",
+     "country": "France"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "nygov-81527164d9c33c25dafa11e2370a3293",
+    "title": "CH&C Fact Sheet",
+    "translated_title": "",
+    "published_on": "2019-10-07",
+    "es_score": 0.8465673,
+    "citation_count": 0,
+    "source": {
+     "title": "New York State",
+     "type": "government",
+     "country": "USA"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "lacitygov-a42bf780d8db99ceb6ae46cf49771509",
+    "title": "City of Los Angeles",
+    "translated_title": "",
+    "published_on": "2018-05-10",
+    "es_score": 0.8464711,
+    "citation_count": 0,
+    "source": {
+     "title": "City of Los Angeles",
+     "type": "government",
+     "country": "USA"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "europa-1ac07979fb1283085246cd8bed53aef0",
+    "title": "Household heating and air quality : saving energy and money.",
+    "translated_title": "",
+    "published_on": "2019-11-18",
+    "es_score": 0.8463638,
+    "citation_count": 0,
+    "source": {
+     "title": "Publications Office of the European Union",
+     "type": "government",
+     "country": "EU"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "cantonfribourgch-852479c9af5e5d23a6e98b89b2a38b16",
+    "title": "Vollzugshilfe EN-120",
+    "translated_title": "Enforcement aid EN-120",
+    "published_on": "2019-12-11",
+    "es_score": 0.8463621,
+    "citation_count": 0,
+    "source": {
+     "title": "Etat de Fribourg",
+     "type": "government",
+     "country": "Switzerland"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "climateactionnetworkeurope-550c8808a07a457b812f0df458742a8a",
+    "title": "\u0414\u041e\u041a\u041b\u0410\u0414: \u0412\u044a\u0437\u043f\u0440\u0438\u0435\u043c\u0430\u043d\u0435 \u043d\u0430 \u0440\u0435\u0432\u043e\u043b\u044e\u0446\u0438\u044f \u0432 \u043e\u0442\u043e\u043f\u043b\u0435\u043d\u0438\u0435\u0442\u043e \u0441 \u0432\u044a\u0437\u043e\u0431\u043d\u043e\u0432\u044f\u0435\u043c\u0438 \u0438\u0437\u0442\u043e\u0447\u043d\u0438\u0446\u0438 \u0432 \u043d\u0430\u0448\u0438\u0442\u0435 \u0441\u0433\u0440\u0430\u0434\u0438!",
+    "translated_title": "REPORT: Embracing a renewable heating revolution in our buildings!",
+    "published_on": "2023-04-04",
+    "es_score": 0.84635437,
+    "citation_count": 0,
+    "source": {
+     "title": "Climate Action Network Europe",
+     "type": "think tank",
+     "country": "Belgium"
+    },
+    "cites": {
+     "policy": [
+      {
+       "overton_id": "climateactionnetworkeurope-7f6a6415d72c4fd2eb0afd31e1fb0358"
+      },
+      {
+       "overton_id": "internationalenergyagency-b8fca5e9a9261ae50f513545f22e7d9a"
+      },
+      {
+       "overton_id": "internationalenergyagency-9b95424b7f8a17cc005fac689e74e460"
+      }
+     ]
+    }
+   },
+   {
+    "policy_document_id": "folketingetdk-5810282fae3c11c1dd4b29e9508ceddb",
+    "title": "KEF, Alm.del - 2023-24 - Bilag 228: Orientering om offentligg\u00f8relsen af den endelige afrapportering fra NEKST - Farvel til gas i danske hjem, fra klima-, energi- og forsyningsministeren",
+    "translated_title": "KEF, Alm.del - 2023-24 - Appendix 228: Guidance on the publication of the final report from NEKST - Farewell to gas in Danish homes, from the Minister for Climate, Energy and Supply",
+    "published_on": "2024-03-14",
+    "es_score": 0.8462395,
+    "citation_count": 0,
+    "source": {
+     "title": "Folketinget",
+     "type": "government",
+     "country": "Denmark"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "govdeptsaustria-885c580d29ce2ad09cb4e4dbc6bac2f6",
+    "title": "Analyse wichtiger Kennzahlen f\u00fcr die F\u00f6rderaktionen \u201eSauber Heizen f\u00fcr Alle\u201c und \u201eRaus aus \u00d6l und Gas\u201c",
+    "translated_title": "Analysis of key performance indicators for the funding programs &quot;Clean Heating for All&quot; and &quot;Out of Oil and Gas&quot;",
+    "published_on": "2023-12-20",
+    "es_score": 0.8457414,
+    "citation_count": 0,
+    "source": {
+     "title": "Austrian Government Ministries",
+     "type": "government",
+     "country": "Austria"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "govuk-cbb81311bbd1d384312050a4899bdb3b",
+    "title": "A future framework for heat in buildings: call for evidence",
+    "translated_title": "",
+    "published_on": "2018-12-07",
+    "es_score": 0.84555835,
+    "citation_count": 10,
+    "source": {
+     "title": "The UK Government",
+     "type": "government",
+     "country": "UK"
+    },
+    "cites": {
+     "policy": [
+      {
+       "overton_id": "theccc-61c04cabb7a10dc83c316e8f1eaae5dc"
+      },
+      {
+       "overton_id": "govuk-8aeee1009347535adc26e85138128af2"
+      },
+      {
+       "overton_id": "govuk-1f201dba325ef3053ef119326fb513ef"
+      },
+      {
+       "overton_id": "govuk-d64be9188a9d314edbc5954371e4ab39"
+      },
+      {
+       "overton_id": "govuk-522be07256d4b6a25e2196721f6713f2"
+      },
+      {
+       "overton_id": "govuk-aacd052eea9315106049b6fa184c8626"
+      },
+      {
+       "overton_id": "govuk-2c061fee5bd3dd6ca2227949de9a019c"
+      },
+      {
+       "overton_id": "govuk-d59130c92e64c83ccf6073d75952a0db"
+      },
+      {
+       "overton_id": "govuk-98d0d1c9fd181f3b3c445c4254f857ef"
+      },
+      {
+       "overton_id": "govuk-488c89afbbf700813119e5e6779bd5f9"
+      },
+      {
+       "overton_id": "govuk-c377992f8ce997343ba8671b111d691b"
+      }
+     ]
+    }
+   },
+   {
+    "policy_document_id": "europa-a9e90bf91cce573108d9471d6fff2e8e-dup-a",
+    "title": "DECARBONISING  HEATING  AND  COOLING  :  A  CLIMATE  IMPERATIVE..",
+    "translated_title": null,
+    "published_on": "2023-03-16",
+    "es_score": 0.86050825,
+    "citation_count": 0,
+    "source": {
+     "title": "Publications Office of the European Union",
+     "type": "government",
+     "country": "EU"
+    },
+    "cites": {
+     "policy": [
+      {
+       "overton_id": "irena-25744259390f8fce10f92a5623c1a5a9"
+      },
+      {
+       "overton_id": "jointresearcheu-d5d72ae764928614e8cea7aa5e902582"
+      },
+      {
+       "overton_id": "europa-8200700efba16dc550b936b1b35ecc25"
+      },
+      {
+       "overton_id": "ipcc-01dbc640e8794be751c4d0fa1ae8a5d0"
+      }
+     ]
+    }
+   },
+   {
+    "policy_document_id": "internationalenergyagency-1812dfba53a9a9de973c6fcd1fb3792b-dup-b",
+    "title": "TECHNOLOGY  ROADMAP  -  ENERGY-EFFICIENT  BUILDINGS  -  HEATING  AND  COOLING  EQUIPMENT  \u2013  ANALYSIS.",
+    "translated_title": null,
+    "published_on": "2011-05-13",
+    "es_score": 0.8577826,
+    "citation_count": 71,
+    "source": {
+     "title": "International Energy Agency",
+     "type": "igo",
+     "country": "IGO"
+    },
+    "cites": {
+     "policy": []
+    }
+   },
+   {
+    "policy_document_id": "synthetic-titleless-1",
+    "title": null,
+    "translated_title": null,
+    "published_on": null,
+    "es_score": 0.5,
+    "citation_count": 3,
+    "source": {
+     "title": "Synthetic",
+     "type": "other",
+     "country": "UK"
+    },
+    "cites": {
+     "policy": []
+    }
+   }
+  ]
+ ],
+ "landmark_records": [
+  {
+   "policy_document_id": "theccc-ea16ae1ee6519565847262e85d198832",
+   "title": "Net Zero - The UK's contribution to stopping global warming",
+   "translated_title": "",
+   "published_on": "2019-05-02",
+   "es_score": null,
+   "citation_count": 735,
+   "source": {
+    "title": "Committee on Climate Change",
+    "type": "government",
+    "country": "UK"
+   },
+   "cites": {
+    "policy": [
+     {
+      "overton_id": "theccc-285eeaefdbbf6c66bae838719666cf3f"
+     },
+     {
+      "overton_id": "onsgovuk-572235dfb9e582833f5fa724d77eec17"
+     },
+     {
+      "overton_id": "royalsociety-fb64a65521bc648d31f382617a5e1493"
+     },
+     {
+      "overton_id": "bankofengland-b27ea075c8451ecc763fbaaa935242c7"
+     },
+     {
+      "overton_id": "icct-4591ebf9d68dc510559aa289014d1545"
+     },
+     {
+      "overton_id": "theccc-4fd3796c551763538bcf8454815a31d9"
+     },
+     {
+      "overton_id": "theccc-a28b8a163349c10b849b8c8abce829d7"
+     },
+     {
+      "overton_id": "oecddiscovery-a39a392f1d30c8e0722018ef296c76a2"
+     },
+     {
+      "overton_id": "onsgovuk-564465f7e92b46116cb773727bf53fd9"
+     },
+     {
+      "overton_id": "wmo-852f3eb8f3284b4e5503b1493fcf19ee"
+     },
+     {
+      "overton_id": "unitednations-40ae3f4dfbe08f00f5de0f9a4a82655e"
+     },
+     {
+      "overton_id": "theccc-47b20f41b6f9c1c44e93b3aa3587dbf0"
+     },
+     {
+      "overton_id": "theccc-a253af65da1066cf429514407ae45e26"
+     },
+     {
+      "overton_id": "theccc-5b777738efbf8b603904e2554d8add15"
+     },
+     {
+      "overton_id": "theccc-c1bfb0b79b80630e92fbbb57eac768e1"
+     },
+     {
+      "overton_id": "theccc-1ea9116d72fdc4e5df39d1c2990f0f93"
+     },
+     {
+      "overton_id": "theccc-8eb2ff720e897336d6038abf3b4f3a46"
+     },
+     {
+      "overton_id": "theccc-37df2896e6980da5a94ccaf09784570d"
+     },
+     {
+      "overton_id": "theccc-9592ab527496aefe554bd3b6d674849d"
+     },
+     {
+      "overton_id": "theccc-71dfb9e72f72ff1604e8a60b5dc13921"
+     },
+     {
+      "overton_id": "theccc-f1fc2c9b67164167db492d05860a0584"
+     },
+     {
+      "overton_id": "ilo-55bdbdcf68c601f7c2e09fb63c253418"
+     },
+     {
+      "overton_id": "ukparliament_select-c86ab4b52750c5befc9c7ad5082d1428"
+     },
+     {
+      "overton_id": "grantham-120279a18262f83d541f84b62c6c0eb3"
+     }
+    ]
+   }
+  },
+  {
+   "policy_document_id": "theccc-61c04cabb7a10dc83c316e8f1eaae5dc",
+   "title": "Next Steps for UK Heat Policy",
+   "translated_title": "",
+   "published_on": "2016-10-13",
+   "es_score": null,
+   "citation_count": 61,
+   "source": {
+    "title": "Committee on Climate Change",
+    "type": "government",
+    "country": "UK"
+   },
+   "cites": {
+    "policy": [
+     {
+      "overton_id": "climatexuk-d8a5913d3baab8628aeb335b382c537a"
+     },
+     {
+      "overton_id": "theccc-1e5a840ca0909d3b4d60e5850752fbd7"
+     },
+     {
+      "overton_id": "greenalliance-a0d4774d67c3392237454cf9cbfacc72"
+     },
+     {
+      "overton_id": "theccc-0a0675421e43a8697a3473731dfd66f5"
+     },
+     {
+      "overton_id": "grantham-fac79f1a292c69eba724bf0d028bf3e9"
+     },
+     {
+      "overton_id": "respublica-c196b503a72c321d32483a66f1750517"
+     },
+     {
+      "overton_id": "theccc-7c1cfde4bee923cfe5ec162f091fee0f"
+     },
+     {
+      "overton_id": "govuk-ea3a77d8be4669932dccc29428b5daf7"
+     },
+     {
+      "overton_id": "theccc-8d1414124ff6cf9116916b497750a4ff"
+     },
+     {
+      "overton_id": "theccc-3ef1c04c9fb7b6b4a4de0574a935c47f"
+     },
+     {
+      "overton_id": "theccc-bcb5bf36f8b0f4264ee6563bc66bc2d9"
+     },
+     {
+      "overton_id": "theccc-1ea9116d72fdc4e5df39d1c2990f0f93"
+     },
+     {
+      "overton_id": "govuk-477e7f15d560efedc185119683c40125"
+     },
+     {
+      "overton_id": "greenalliance-408252c1dd5b1612799784529e7e3b8a"
+     },
+     {
+      "overton_id": "ukparliament_select-299443e14e6e1520889a45926d3529e1"
+     },
+     {
+      "overton_id": "govuk-669ffa2a38902c087baaba6a7e0132cd"
+     }
+    ]
+   }
+  },
+  {
+   "policy_document_id": "theccc-d5e5af71fd689f1ff19d1a9164f688c3",
+   "title": "Hydrogen in a low-carbon economy",
+   "translated_title": "",
+   "published_on": "2018-11-22",
+   "es_score": null,
+   "citation_count": 137,
+   "source": {
+    "title": "Committee on Climate Change",
+    "type": "government",
+    "country": "UK"
+   },
+   "cites": {
+    "policy": [
+     {
+      "overton_id": "seise-2b2d713b78cbb0da5f031bad1d972975"
+     },
+     {
+      "overton_id": "policyexchange-cead5535bec3584c3d0d3eb0e5f0e060"
+     },
+     {
+      "overton_id": "frontiereconomics-43c0c131360959b96e01a0bc281ad1f3"
+     },
+     {
+      "overton_id": "theccc-285eeaefdbbf6c66bae838719666cf3f"
+     },
+     {
+      "overton_id": "theccc-745863b7d2156e1fe3ae77b50d6591aa"
+     },
+     {
+      "overton_id": "theccc-4fd3796c551763538bcf8454815a31d9"
+     },
+     {
+      "overton_id": "theccc-61c04cabb7a10dc83c316e8f1eaae5dc"
+     },
+     {
+      "overton_id": "theccc-4d401b0ca5b37ff01a76a459aaf8419a"
+     },
+     {
+      "overton_id": "theccc-7c1cfde4bee923cfe5ec162f091fee0f"
+     },
+     {
+      "overton_id": "ukparliament-e335144edc4ab1be12cd4670b9deddd5"
+     }
+    ]
+   }
+  },
+  {
+   "policy_document_id": "theccc-19b69be85262d90bec88da946e52f674",
+   "title": "Sixth Carbon Budget - Climate Change Committee",
+   "translated_title": "",
+   "published_on": "2022-03-09",
+   "es_score": null,
+   "citation_count": 597,
+   "source": {
+    "title": "Committee on Climate Change",
+    "type": "government",
+    "country": "UK"
+   },
+   "cites": {
+    "policy": [
+     {
+      "overton_id": "naturalenglanduk-bde54764b4da4cf09e088611154d6312"
+     },
+     {
+      "overton_id": "theccc-fb68176cb9ad2e643d03496efe6d80c7"
+     },
+     {
+      "overton_id": "theccc-71dfb9e72f72ff1604e8a60b5dc13921"
+     },
+     {
+      "overton_id": "ipcc-1e0b1a7ef1718ff08c682ce4cb651d90"
+     },
+     {
+      "overton_id": "theccc-bb521261790fe776ebba7e3b7b99d183"
+     },
+     {
+      "overton_id": "scottishgovernment-0d838d26fae674fe397520f80351e825"
+     },
+     {
+      "overton_id": "royalsociety-6ab8e3512b65af449cc745cafbb5b4a6"
+     },
+     {
+      "overton_id": "onsgovuk-ed301ae257a8a82756775205ef4dc332"
+     },
+     {
+      "overton_id": "internationalenergyagency-224d8f2e14e5a9f23e22709e8f7fd80e"
+     },
+     {
+      "overton_id": "theccc-52fd503ca564e41d55f979b6f061748d"
+     },
+     {
+      "overton_id": "theccc-aa6cd482ace8eb8fe0d60f6576f42ca6"
+     },
+     {
+      "overton_id": "theccc-d5e5af71fd689f1ff19d1a9164f688c3"
+     },
+     {
+      "overton_id": "theccc-d534700d1daa3b9b5168ef4142f14975"
+     },
+     {
+      "overton_id": "iucn-107b5ff4ade250acb36af6b7880f6249"
+     },
+     {
+      "overton_id": "weforum-2ab069b40d93c92c43d0646f60c8b5ee"
+     },
+     {
+      "overton_id": "theccc-f82ff7067970bd782c590a8d03814e09"
+     },
+     {
+      "overton_id": "theccc-a78f34953d642c1aa6f7f9341a739a1f"
+     },
+     {
+      "overton_id": "theccc-d60136f709d7b1af2c5ee47ad995cb4e"
+     },
+     {
+      "overton_id": "theccc-9592ab527496aefe554bd3b6d674849d"
+     },
+     {
+      "overton_id": "theccc-e5229e7ca373071c66c83e225bd54630"
+     },
+     {
+      "overton_id": "theccc-3d59a68dc7bef47b5b87e23f25787c2e"
+     },
+     {
+      "overton_id": "theccc-899f42a56761dc1e99af8331abc7ee48"
+     },
+     {
+      "overton_id": "theccc-e0095a54e610e7184f56c8ba35e2ee48"
+     },
+     {
+      "overton_id": "theccc-285eeaefdbbf6c66bae838719666cf3f"
+     },
+     {
+      "overton_id": "theccc-4ab5cbcd15a89bc303c7ff8cfb98fb93"
+     },
+     {
+      "overton_id": "theccc-ea16ae1ee6519565847262e85d198832"
+     },
+     {
+      "overton_id": "theccc-f180681ff9590b18511f32a01201f245"
+     },
+     {
+      "overton_id": "theccc-491a9bc75189eb5db1280b65158ba3bb"
+     },
+     {
+      "overton_id": "theccc-402db6c401c14a0172dd99c72bdf542e"
+     },
+     {
+      "overton_id": "theccc-37df2896e6980da5a94ccaf09784570d"
+     },
+     {
+      "overton_id": "theccc-4fd3796c551763538bcf8454815a31d9"
+     },
+     {
+      "overton_id": "theccc-bee95159f0bddeb7fcc9b70ef4cf389d"
+     },
+     {
+      "overton_id": "wrap-1591e9a8a66736da42e8100a2ecd25a9"
+     },
+     {
+      "overton_id": "wrap-87b622be97b7fe6eca3f71ecc0ca4203"
+     },
+     {
+      "overton_id": "govwales-195936a8b8c8f9c73acb151a5197059a"
+     },
+     {
+      "overton_id": "ukparliament_select-6c81b62b2c779abf1f4a11dd64032b17"
+     },
+     {
+      "overton_id": "govuk-17e443389e8e9226c0703cbe5a5114cc"
+     },
+     {
+      "overton_id": "ipcc-59b4d6c1bddc0882d1e4635dcc363136"
+     },
+     {
+      "overton_id": "govuk-2f9f76112679be6ac056ab00e493d65b"
+     },
+     {
+      "overton_id": "govuk-6ae378b3714e6fc597ff5e20d689968b"
+     }
+    ]
+   }
+  },
+  {
+   "policy_document_id": "govuk-488c89afbbf700813119e5e6779bd5f9",
+   "title": "Clean Growth Strategy",
+   "translated_title": "",
+   "published_on": "2018-04-16",
+   "es_score": null,
+   "citation_count": 211,
+   "source": {
+    "title": "The UK Government",
+    "type": "government",
+    "country": "UK"
+   },
+   "cites": {
+    "policy": [
+     {
+      "overton_id": "greenalliance-c53e6219da2af079d064a49d40c27099"
+     },
+     {
+      "overton_id": "theccc-59ea93e0f57f0d6e0e06224531176b5a"
+     },
+     {
+      "overton_id": "onsgovuk-ab0bc8acba3c90a6b091b1f70d7545b8"
+     },
+     {
+      "overton_id": "theccc-7c1cfde4bee923cfe5ec162f091fee0f"
+     },
+     {
+      "overton_id": "internationalenergyagency-90f0fc131d69dbc9aab2ad32668e1dff"
+     },
+     {
+      "overton_id": "worldbank-21dc08c12f150cbc78743d34a7ec7919"
+     },
+     {
+      "overton_id": "icct-9b9043959764da0a5823a8d1c18c222b"
+     },
+     {
+      "overton_id": "irena-57c9e983462360a129f76333cc55c3cf"
+     },
+     {
+      "overton_id": "icct-05f6b2b8c7cfba546e312be8d1de496c"
+     },
+     {
+      "overton_id": "worldbank-ea27202f953f9e02445bcef6557f7e71"
+     },
+     {
+      "overton_id": "theccc-1ea9116d72fdc4e5df39d1c2990f0f93"
+     },
+     {
+      "overton_id": "onsgovuk-8bbf0be0ff230ea2df72e9bb9d5f1569"
+     },
+     {
+      "overton_id": "govuk-522be07256d4b6a25e2196721f6713f2"
+     },
+     {
+      "overton_id": "govuk-a123095ac0398a84b74f24e6cfba6c65"
+     },
+     {
+      "overton_id": "govuk-cf91755c55e8de483ba3307b97a819c5"
+     },
+     {
+      "overton_id": "unenvironment-2c50b57a00653cbc443f0335d64291a1"
+     },
+     {
+      "overton_id": "theccc-c1bfb0b79b80630e92fbbb57eac768e1"
+     },
+     {
+      "overton_id": "theccc-3096477df7271728c161e472d86d93ea"
+     },
+     {
+      "overton_id": "wrap-4c4d0bf1662475522fd4a9a47111783e"
+     },
+     {
+      "overton_id": "govuk-51dd09e22ae5497089da8769752f4a99"
+     },
+     {
+      "overton_id": "govuk-51fcdba0ee612d87fc5e4fabdc327b1f"
+     },
+     {
+      "overton_id": "govuk-b1d7966d0358cd4fc12fee96c0859ff7"
+     },
+     {
+      "overton_id": "govuk-22f9c6b7cf0ee021bb5054feb5b5d3e6"
+     },
+     {
+      "overton_id": "govuk-23ba28a4352ea9a8da99db7f62a4aca1"
+     },
+     {
+      "overton_id": "govuk-ee22c54127242ba7ba072c4e7a413314"
+     },
+     {
+      "overton_id": "govuk-0b3e6603344cd1b31f18ff225c6b7021"
+     },
+     {
+      "overton_id": "worldbankifc-b35e0c757c166d4408fa1507214ae999"
+     },
+     {
+      "overton_id": "gcoec-38ff59c7b3efbbf3996cf8700e78ec0e"
+     },
+     {
+      "overton_id": "grantham-6960fb8b392be719ed1e8d1128e68967"
+     },
+     {
+      "overton_id": "govuk-1a11452bcdf234793c18e598bdcbb782"
+     },
+     {
+      "overton_id": "govuk-32c6f40d9c7eb6d1e3ceaca41dfaab34"
+     },
+     {
+      "overton_id": "governmentofindia-a833066bfd17152fbded942cb8134432"
+     },
+     {
+      "overton_id": "oecddiscovery-cf50ccd0abf626f25865e3fede86a3b8"
+     },
+     {
+      "overton_id": "onsgovuk-564465f7e92b46116cb773727bf53fd9"
+     },
+     {
+      "overton_id": "govuk-2653b0bdf09a1a742fd1824d55c203ae"
+     },
+     {
+      "overton_id": "govuk-6ae378b3714e6fc597ff5e20d689968b"
+     },
+     {
+      "overton_id": "govuk-0d6324a13fe2b51c2ec385290d82cc88"
+     },
+     {
+      "overton_id": "govuk-3703a47d94436158d4f24cc692d96280"
+     },
+     {
+      "overton_id": "govuk-2ff22d99d9ed1bf588bb83a807f679fe"
+     },
+     {
+      "overton_id": "govuk-5d42fde33622be3d144ee1535fea5fbd"
+     },
+     {
+      "overton_id": "govuk-c04a666481efa9c21a2018a888bfa114"
+     },
+     {
+      "overton_id": "govuk-98adf101bbf8f50b7c21c28fcecfd9ba"
+     },
+     {
+      "overton_id": "govuk-563afad95c11fc7eb003c960f5792d38"
+     },
+     {
+      "overton_id": "govuk-6de4710c35af2b8739accd57325340b9"
+     },
+     {
+      "overton_id": "govuk-872658d3825e06289edfe8f1d4eb533d"
+     },
+     {
+      "overton_id": "govuk-b11c98b9c3f3f5f3dcdb237d8fb8df5a"
+     },
+     {
+      "overton_id": "govuk-71b995ac993e7e538da41c2027786e96"
+     },
+     {
+      "overton_id": "govuk-6e29100e7ae69582cb3300eb71a4e32b"
+     },
+     {
+      "overton_id": "govuk-902a53e3df02b013b595ef448b942834"
+     },
+     {
+      "overton_id": "govuk-ec9b1f6d66412297797235d2cbe9901d"
+     },
+     {
+      "overton_id": "govuk-763d18f4382a5bc202e3fd278085c5b5"
+     },
+     {
+      "overton_id": "ipcc-dc3d9d229614c298991eb2daff28fda7"
+     },
+     {
+      "overton_id": "ipcc-128f010881efa5d8c7fae6f1ca449f1e"
+     },
+     {
+      "overton_id": "ipcc-fa957a7cfe7a4a87f1522afb3e152e34"
+     },
+     {
+      "overton_id": "ren21-b8ba2e1c6f60411deeb4e38aa174ded4"
+     }
+    ]
+   }
+  },
+  {
+   "policy_document_id": "theccc-9592ab527496aefe554bd3b6d674849d",
+   "title": "UK housing: Fit for the future?",
+   "translated_title": "",
+   "published_on": "2019-02-21",
+   "es_score": null,
+   "citation_count": 264,
+   "source": {
+    "title": "Committee on Climate Change",
+    "type": "government",
+    "country": "UK"
+   },
+   "cites": {
+    "policy": [
+     {
+      "overton_id": "socialmarketfoundation-d037137cc3dfcdb8f4d47ec887898307"
+     },
+     {
+      "overton_id": "theccc-92197fed39e25f023e8d35c46e5a643d"
+     },
+     {
+      "overton_id": "josephrowntreefoundation-99aaeb337a85c7307384e6c91328e95d"
+     },
+     {
+      "overton_id": "theccc-7c1cfde4bee923cfe5ec162f091fee0f"
+     },
+     {
+      "overton_id": "icct-816ea020489f50ba26a0f54bab0eacbb"
+     },
+     {
+      "overton_id": "theccc-bee95159f0bddeb7fcc9b70ef4cf389d"
+     },
+     {
+      "overton_id": "govuk-5abfef0d8c3f28446fdf76afa57f8f3e"
+     },
+     {
+      "overton_id": "onsgovuk-a9ea8af70a351f3e769305d4eff97d05"
+     },
+     {
+      "overton_id": "onsgovuk-34607ac704bde412065a9affc7097d0c"
+     },
+     {
+      "overton_id": "onsgovuk-58cf1f2635921a4409111e3e22bddccb"
+     },
+     {
+      "overton_id": "theccc-899f42a56761dc1e99af8331abc7ee48"
+     },
+     {
+      "overton_id": "theccc-d7f16837e2822e1d956d09385756d401"
+     },
+     {
+      "overton_id": "theccc-375905c7cf9985d19c98c4a9047db1be"
+     },
+     {
+      "overton_id": "theccc-71dfb9e72f72ff1604e8a60b5dc13921"
+     },
+     {
+      "overton_id": "theccc-d5e5af71fd689f1ff19d1a9164f688c3"
+     },
+     {
+      "overton_id": "theccc-c1bfb0b79b80630e92fbbb57eac768e1"
+     },
+     {
+      "overton_id": "theccc-e8ad1036b48a135dbcaa6b0a2d7ed327"
+     },
+     {
+      "overton_id": "theccc-ce13a555b52c4c4b693e7bf836664e12"
+     },
+     {
+      "overton_id": "theccc-87883900314e6ea701e43c79ffeb1854"
+     },
+     {
+      "overton_id": "theccc-f1fc2c9b67164167db492d05860a0584"
+     },
+     {
+      "overton_id": "theccc-61c04cabb7a10dc83c316e8f1eaae5dc"
+     },
+     {
+      "overton_id": "theccc-285eeaefdbbf6c66bae838719666cf3f"
+     },
+     {
+      "overton_id": "nationalauditofficeuk-ad1f105631a8f45156eef0a0e9dc1043"
+     },
+     {
+      "overton_id": "govuk-ce7e5c76165955d700a709e677440ed2"
+     },
+     {
+      "overton_id": "govuk-4ea4f893e6c13c40981dfaa50dd2dc53"
+     }
+    ]
+   }
+  },
+  {
+   "policy_document_id": "nationalauditofficeuk-c023aa37d925d77051cb8532950b1dc4",
+   "title": "Green Homes Grant Voucher Scheme (NAO) Report",
+   "translated_title": "",
+   "published_on": "2021-09-06",
+   "es_score": null,
+   "citation_count": 41,
+   "source": {
+    "title": "National Audit Office",
+    "type": "government",
+    "country": "UK"
+   },
+   "cites": {
+    "policy": [
+     {
+      "overton_id": "nationalauditofficeuk-04729d012b5a71a64d8a6269142fb06e"
+     },
+     {
+      "overton_id": "nationalauditofficeuk-351e4d142f52bdbc5edfb6da958970a1"
+     },
+     {
+      "overton_id": "nationalauditofficeuk-d5f349e3626a03cd4391618752bc83a1"
+     },
+     {
+      "overton_id": "nationalauditofficeuk-98140951028bcb3c1ec1b28b89ce99b3"
+     },
+     {
+      "overton_id": "govuk-e466e480e03b1deec55bb0fd23b5dda4"
+     }
+    ]
+   }
+  },
+  {
+   "policy_document_id": "theccc-3ef1c04c9fb7b6b4a4de0574a935c47f",
+   "title": "Bioenergy Review",
+   "translated_title": "",
+   "published_on": "2011-12-07",
+   "es_score": null,
+   "citation_count": 46,
+   "source": {
+    "title": "Committee on Climate Change",
+    "type": "government",
+    "country": "UK"
+   },
+   "cites": {
+    "policy": []
+   }
+  },
+  {
+   "policy_document_id": "ukparliament_select-809b4ddc0a1af8fc6ca873e754d039e0",
+   "title": "Renewable Heat Incentive in Great Britain",
+   "translated_title": "",
+   "published_on": "2018-05-15",
+   "es_score": null,
+   "citation_count": 13,
+   "source": {
+    "title": "UK Parliament Select Committee Publications",
+    "type": "government",
+    "country": "UK"
+   },
+   "cites": {
+    "policy": [
+     {
+      "overton_id": "ukparliament_select-63f6f82c309733ef3c4d030248e63ed4"
+     },
+     {
+      "overton_id": "nationalauditofficeuk-aed373771c47e78c1e6fae21acaa8a6d"
+     },
+     {
+      "overton_id": "govuk-6de4710c35af2b8739accd57325340b9"
+     },
+     {
+      "overton_id": "ukparliament_select-b2735a3803ed38ce6dc84b93c6941566"
+     },
+     {
+      "overton_id": "govuk-cbb81311bbd1d384312050a4899bdb3b"
+     }
+    ]
+   }
+  },
+  {
+   "policy_document_id": "govuk-e3f7936c60a2d19bb0e66b164bdecbf7",
+   "title": "Future support for low carbon heat",
+   "translated_title": "",
+   "published_on": "2020-04-28",
+   "es_score": null,
+   "citation_count": 53,
+   "source": {
+    "title": "The UK Government",
+    "type": "government",
+    "country": "UK"
+   },
+   "cites": {
+    "policy": [
+     {
+      "overton_id": "govuk-c27d81df98620b9910614d736021926e"
+     },
+     {
+      "overton_id": "govuk-63322f5369d6e98e2adb2e8b440c84b6"
+     },
+     {
+      "overton_id": "govuk-2b97820d14fae089b668b34df648f993"
+     },
+     {
+      "overton_id": "govuk-1f201dba325ef3053ef119326fb513ef"
+     },
+     {
+      "overton_id": "govuk-e5a636519c975cac08e51f1d2fc687ba"
+     },
+     {
+      "overton_id": "theccc-71dfb9e72f72ff1604e8a60b5dc13921"
+     },
+     {
+      "overton_id": "govuk-45017e2432e5dcaf4594508277afdabc"
+     },
+     {
+      "overton_id": "govuk-8f797557816e60fc0d8ea3037eb7e308"
+     },
+     {
+      "overton_id": "govuk-f8c150bf84c7bf89e0e0d33a8595a6fa"
+     },
+     {
+      "overton_id": "legislationgovuk-02b01d194b8a259a761733c70029f4f9"
+     },
+     {
+      "overton_id": "govuk-3cc9b2132549bc26820b67d58d2a34de"
+     },
+     {
+      "overton_id": "govuk-970c51aca5b1641289b9a8e8b3fba629"
+     },
+     {
+      "overton_id": "govuk-6b06a8992c565b8cddbaaf9ff84c3320"
+     },
+     {
+      "overton_id": "govuk-c911ba5494bba1e967d4a9ee86a2b70a"
+     },
+     {
+      "overton_id": "govuk-8db8241bff0639debb2622d158cfa2a4"
+     },
+     {
+      "overton_id": "govuk-1e754697e27b230c7ed0ebc54fe1d931"
+     }
+    ]
+   }
+  },
+  {
+   "policy_document_id": "theccc-59ea93e0f57f0d6e0e06224531176b5a",
+   "title": "UK business opportunities of moving to a low-carbon economy",
+   "translated_title": "",
+   "published_on": "2017-03-16",
+   "es_score": null,
+   "citation_count": 72,
+   "source": {
+    "title": "Committee on Climate Change",
+    "type": "government",
+    "country": "UK"
+   },
+   "cites": {
+    "policy": [
+     {
+      "overton_id": "theccc-1ea9116d72fdc4e5df39d1c2990f0f93"
+     },
+     {
+      "overton_id": "theccc-7c1cfde4bee923cfe5ec162f091fee0f"
+     },
+     {
+      "overton_id": "internationalenergyagency-7464b259027b37a7c4a0017be1e91d7e"
+     },
+     {
+      "overton_id": "internationalenergyagency-baa2959e477a774ed13a1990be9e27f8"
+     },
+     {
+      "overton_id": "theccc-52c0032e39dc92f438cf883590ce7eae"
+     },
+     {
+      "overton_id": "unenvironment-cd2a3a06794881db34f0b7ff46320232"
+     },
+     {
+      "overton_id": "govuk-5977ce44ff58f1ba94ae0f6e657cae5c"
+     },
+     {
+      "overton_id": "govuk-1b9022be896dbc03dd8888abb8674ac8"
+     },
+     {
+      "overton_id": "unenvironment-ccb361a12d9be943fe31be702c7fc37d"
+     },
+     {
+      "overton_id": "govuk-d97d1307887af4c1d65617644856b02f"
+     }
+    ]
+   }
+  },
+  {
+   "policy_document_id": "theccc-285eeaefdbbf6c66bae838719666cf3f",
+   "title": "Analysis of alternative UK heat decarbonisation pathways (Imperial)",
+   "translated_title": "",
+   "published_on": "2018-06-28",
+   "es_score": null,
+   "citation_count": 57,
+   "source": {
+    "title": "Committee on Climate Change",
+    "type": "government",
+    "country": "UK"
+   },
+   "cites": {
+    "policy": [
+     {
+      "overton_id": "theccc-61c04cabb7a10dc83c316e8f1eaae5dc"
+     }
+    ]
+   }
+  }
+ ],
+ "synthetic_ids": [
+  "europa-a9e90bf91cce573108d9471d6fff2e8e-dup-a",
+  "internationalenergyagency-1812dfba53a9a9de973c6fcd1fb3792b-dup-b",
+  "synthetic-titleless-1"
+ ],
+ "expected": {
+  "interleaved": [
+   "stateofvermont-de0bf34da9181ee067800fc02fd40b4c",
+   "govdeptsjapan-4d67fdec45092e98ba7dcc09343a6cac",
+   "bostongov-9c7ed29597db236dbab4d13b30bd48ab",
+   "frontiereconomics-aaa96ffc0f8e8c123bf31cf09d052ed4",
+   "ipcc-b81a9d9a73f60a7896616651e2655de2",
+   "nycgov-3fb2a595f0e8a876af4ac743048958e1",
+   "policyexchange-ccc38abe4c5f68768b0e3a89bddeced2",
+   "govdeptsfrance-10eb540aa787292ef98cf2b99a7c4cb1",
+   "climateactionnetworkeurope-8faea0e61c8e251e2012b7816f1f9732",
+   "ukparliament_select-f70268548165e415874eade9aa0380c7",
+   "departmenteconomyuk-440d01cdc96c884548850d813c26cb2b",
+   "ukparliament_select-e9d79c1cffaf0a1ed1a6c146066e9391",
+   "stateofbadende-031c0e095e1e2001f495e576f1526786",
+   "govdeptsfrance-c890bc366046e24d3d30d0c8ea479691",
+   "europa-a9e90bf91cce573108d9471d6fff2e8e",
+   "stateofvermont-ae246cba4ae84380088bededb0526404",
+   "ukparliament_select-380475d90a6a3afc6e590b875728afd2",
+   "governmentofthailand-f2c1c52f3badbcb8c2e5f44eecba6e6c",
+   "stateofvermont-57212022efaaf9c201e948c97b80cc9a",
+   "govdeptsfrance-a52100c760e9a724799a2a9a78dabe69",
+   "ukparliament_select-aab9a4684ff712106a655b11af5ace99",
+   "internationalenergyagency-1812dfba53a9a9de973c6fcd1fb3792b",
+   "govuk-63322f5369d6e98e2adb2e8b440c84b6",
+   "bmwsbde-f99b6d3aacf768ad69d4b25d37ce8f94",
+   "landstyriaat-51953ff37658147c85ae613d8533d8af",
+   "ukparliament_select-bed7a01c8dd2a729aa194e390f7be6cc",
+   "bostongov-99dcef1d71f5f82d173ba857e921c5ad",
+   "govuk-7d7ca4c02e010c2163041654e3c3b2de",
+   "cambridgeeconometrics-9de9f99515fbe7dddc36ea98cd5ac5eb",
+   "nrelosti-5388f91510122fd6740c8e2c4e9b3ba1",
+   "climateactionnetworkeurope-34b4c48f515b05320e3dc881309091f2",
+   "ukparliament_select-c7d8b304ff3fe56f24f1dfe67cf5f90c",
+   "govdeptsjapan-a6766458b871732649e406c72292f498",
+   "cordisbe-dcdd6596d23f0b4e3f66f016bbd51ede",
+   "ukparliament_select-8ecf2e3be15010f1683f0fedcee9e650",
+   "govdeptsfrance-497318aaa73982e7b7232404a28e0baa",
+   "provinceofquebec-833292ab413965b1dfed30a7ef2d6551",
+   "cordisbe-b8fae1dde60b904d6b10802d64e17023",
+   "nycgov-f436cfd2b5a3779f68e173fb2c99acfd",
+   "rockymountaininstitute-39abaf755b275c0f6eeb46db76ea3ace",
+   "climatexuk-c72bd1e46ce67925257703da97648d0f",
+   "rijksoverheid-d4da70248a855ce3eeb1baf10f666619",
+   "govdeptsjapan-a0a059fbf345524b34a1f019e1ef3018",
+   "stateofbavariade-8b1e450aca64e46af4c40e4ef8e4f021",
+   "adminch-1b5ef75cde0b31f9ba742671474737dd",
+   "cbiuk-f9010792261c7c8a9dcae3b340dbc11e",
+   "c2es-3fdada1873a9d749a61737d46c087567",
+   "esridublin-5b41869ea40a948543a93ee315161236",
+   "ukparliament_select-0d973b12237a2804b10157fc168ccebf",
+   "govdeptsjapan-e4282d4df394ed9e2e19003b802c00a3",
+   "ademefr-8c726624f0f573fc2149dae2969a7786",
+   "provinceofquebec-be3221ac482e26be5dc5b3eb1e488e0f",
+   "california_state_agencies-2cb3bc8c97d22a2cb600f96583188e2f",
+   "ukparliament_select-24317ee4ce702f46e9519df4949d8fc7",
+   "nycgov-37d1f0e78bac113ebd41bb8c708707e9",
+   "govuk-9f1a8eb3ae08666ea354437824e0b5ca",
+   "govdeptsjapan-13b149d071f39a5d5c9208370f41e787",
+   "provinceofnorthwest-f2214b1a5d506ee5d0a81bb46dd285d7",
+   "europa-fc57b21a10835ef39fb560a81ae0e5c1",
+   "voivodeshiplesserpolandpl-def3e7a55ea130328c663de0d46266f9",
+   "lacitygov-a42bf780d8db99ceb6ae46cf49771509",
+   "govuk-3f5b6e4038bd0fc5312cee7813eb0ef5",
+   "govuk-90383d197f180ab101622c3e719b407e",
+   "nrdc-90bcf11e290a6870ce223eb77d650383",
+   "ukparliament_select-540283a16dc32c24baeebb54c32cd274",
+   "govdeptsjapan-6c1ec4b973264e2eb991c788cb5d91de",
+   "stateofvermont-6250368c6ef5a4f2b70163b60ecc7a12",
+   "marylandgov-726ca633dc6e98975aa758a6f7c5172b",
+   "nygov-7373380713edb45f9494a7ed724c3a44",
+   "provinceofquebec-eb281e5e1f7114204be5836eab95eaa8",
+   "ukparliament_select-bc292bbe2e728da9288c69ed98442a9d",
+   "adminch-afb9aa13e820b6ad3f80e6f736b4fa2f",
+   "stateofvermont-05722c3b6a09cc794cea67b1bd44953f",
+   "govdeptsjapan-c44ac69ed0217fa6e52b29398a3f59c4",
+   "bostongov-9ee001a1222b3ac8595a4ddb55196ed3",
+   "stateofbremen-0228a353d2bd011840ba4970eeac68aa",
+   "stateofnevada-528bfa5a9c8be116e564c5c984040c21",
+   "provinceofquebec-a15403b99e01272a00574a986fe044a1",
+   "stateofwashington-743d4314e21ec31329cb82d60bcc51d8",
+   "adminch-ce61aafc023d1f6fafc8c2805f8a6908",
+   "ukparliament_select-9cf42359938c4cc5c1e51bcaea5b2118",
+   "nycgov-044527c18ee606f89e237477c717d84f",
+   "frontiereconomics-584722377c36ea5d508369fa8699eccb",
+   "nrelosti-4feb0572a135886189975b97e4b83129",
+   "illinoisgov-ce758348e738c49ff9a0267aeb1e6a84",
+   "eucommission-87b8c17d31f00451bb2e115def48be81",
+   "govdeptsjapan-d7188ee5b4056b447d419144759205a4",
+   "nygov-9b10a9deba3c811fc9df79def5c85597",
+   "nygov-81527164d9c33c25dafa11e2370a3293",
+   "ukparliament_select-75db98cb9b0b0183ee91c16057623840",
+   "stateofvermont-2e6c5ebe91afdabf0c6d4941262fbb2c",
+   "ukparliament_select-fb3661ed600b8c607339c5df8153b9f4",
+   "cityofdenver-7a31107be9a1a4e3f3b86e3d0a05678e",
+   "europa-1ac07979fb1283085246cd8bed53aef0",
+   "cityofgenevach-f96bd72ce9c50ef63cb3f01670c91ddb",
+   "stateofmaine-7155a30978941ae8d0a8f983f39cea06",
+   "cantonfribourgch-852479c9af5e5d23a6e98b89b2a38b16",
+   "ukparliament_select-86d6905eda0eff3cc1ee5f72d6bef2a8",
+   "voivodeshiplodzpl-b967a82489e8245c3a78caa5e2a53027",
+   "climateactionnetworkeurope-550c8808a07a457b812f0df458742a8a",
+   "randcorporation-307530e28516269758c151bd07b9548f",
+   "folketingetdk-5810282fae3c11c1dd4b29e9508ceddb",
+   "umweltbundesamt-e6c5f6e1f2318d1238f7419abeb6a9cd",
+   "california_state_agencies-261afa5002901a51dbf50096ff784439",
+   "govdeptsaustria-885c580d29ce2ad09cb4e4dbc6bac2f6",
+   "unenvironment-7996fadc03ef6ace56b9d36384decbf0",
+   "unionconcerned-fdb35d46004ef4a5a5c905f331b6fc02",
+   "govuk-cbb81311bbd1d384312050a4899bdb3b",
+   "europa-a9e90bf91cce573108d9471d6fff2e8e-dup-a",
+   "internationalenergyagency-1812dfba53a9a9de973c6fcd1fb3792b-dup-b",
+   "synthetic-titleless-1"
+  ],
+  "deduplicated": [
+   "stateofvermont-de0bf34da9181ee067800fc02fd40b4c",
+   "govdeptsjapan-4d67fdec45092e98ba7dcc09343a6cac",
+   "bostongov-9c7ed29597db236dbab4d13b30bd48ab",
+   "frontiereconomics-aaa96ffc0f8e8c123bf31cf09d052ed4",
+   "ipcc-b81a9d9a73f60a7896616651e2655de2",
+   "nycgov-3fb2a595f0e8a876af4ac743048958e1",
+   "policyexchange-ccc38abe4c5f68768b0e3a89bddeced2",
+   "govdeptsfrance-10eb540aa787292ef98cf2b99a7c4cb1",
+   "climateactionnetworkeurope-8faea0e61c8e251e2012b7816f1f9732",
+   "ukparliament_select-f70268548165e415874eade9aa0380c7",
+   "departmenteconomyuk-440d01cdc96c884548850d813c26cb2b",
+   "ukparliament_select-e9d79c1cffaf0a1ed1a6c146066e9391",
+   "stateofbadende-031c0e095e1e2001f495e576f1526786",
+   "govdeptsfrance-c890bc366046e24d3d30d0c8ea479691",
+   "europa-a9e90bf91cce573108d9471d6fff2e8e",
+   "stateofvermont-ae246cba4ae84380088bededb0526404",
+   "ukparliament_select-380475d90a6a3afc6e590b875728afd2",
+   "governmentofthailand-f2c1c52f3badbcb8c2e5f44eecba6e6c",
+   "stateofvermont-57212022efaaf9c201e948c97b80cc9a",
+   "govdeptsfrance-a52100c760e9a724799a2a9a78dabe69",
+   "ukparliament_select-aab9a4684ff712106a655b11af5ace99",
+   "internationalenergyagency-1812dfba53a9a9de973c6fcd1fb3792b",
+   "govuk-63322f5369d6e98e2adb2e8b440c84b6",
+   "bmwsbde-f99b6d3aacf768ad69d4b25d37ce8f94",
+   "landstyriaat-51953ff37658147c85ae613d8533d8af",
+   "ukparliament_select-bed7a01c8dd2a729aa194e390f7be6cc",
+   "bostongov-99dcef1d71f5f82d173ba857e921c5ad",
+   "govuk-7d7ca4c02e010c2163041654e3c3b2de",
+   "cambridgeeconometrics-9de9f99515fbe7dddc36ea98cd5ac5eb",
+   "nrelosti-5388f91510122fd6740c8e2c4e9b3ba1",
+   "climateactionnetworkeurope-34b4c48f515b05320e3dc881309091f2",
+   "ukparliament_select-c7d8b304ff3fe56f24f1dfe67cf5f90c",
+   "govdeptsjapan-a6766458b871732649e406c72292f498",
+   "cordisbe-dcdd6596d23f0b4e3f66f016bbd51ede",
+   "ukparliament_select-8ecf2e3be15010f1683f0fedcee9e650",
+   "govdeptsfrance-497318aaa73982e7b7232404a28e0baa",
+   "provinceofquebec-833292ab413965b1dfed30a7ef2d6551",
+   "cordisbe-b8fae1dde60b904d6b10802d64e17023",
+   "nycgov-f436cfd2b5a3779f68e173fb2c99acfd",
+   "rockymountaininstitute-39abaf755b275c0f6eeb46db76ea3ace",
+   "climatexuk-c72bd1e46ce67925257703da97648d0f",
+   "rijksoverheid-d4da70248a855ce3eeb1baf10f666619",
+   "govdeptsjapan-a0a059fbf345524b34a1f019e1ef3018",
+   "stateofbavariade-8b1e450aca64e46af4c40e4ef8e4f021",
+   "adminch-1b5ef75cde0b31f9ba742671474737dd",
+   "cbiuk-f9010792261c7c8a9dcae3b340dbc11e",
+   "c2es-3fdada1873a9d749a61737d46c087567",
+   "esridublin-5b41869ea40a948543a93ee315161236",
+   "ukparliament_select-0d973b12237a2804b10157fc168ccebf",
+   "govdeptsjapan-e4282d4df394ed9e2e19003b802c00a3",
+   "ademefr-8c726624f0f573fc2149dae2969a7786",
+   "provinceofquebec-be3221ac482e26be5dc5b3eb1e488e0f",
+   "california_state_agencies-2cb3bc8c97d22a2cb600f96583188e2f",
+   "ukparliament_select-24317ee4ce702f46e9519df4949d8fc7",
+   "nycgov-37d1f0e78bac113ebd41bb8c708707e9",
+   "govuk-9f1a8eb3ae08666ea354437824e0b5ca",
+   "govdeptsjapan-13b149d071f39a5d5c9208370f41e787",
+   "provinceofnorthwest-f2214b1a5d506ee5d0a81bb46dd285d7",
+   "europa-fc57b21a10835ef39fb560a81ae0e5c1",
+   "voivodeshiplesserpolandpl-def3e7a55ea130328c663de0d46266f9",
+   "lacitygov-a42bf780d8db99ceb6ae46cf49771509",
+   "govuk-3f5b6e4038bd0fc5312cee7813eb0ef5",
+   "govuk-90383d197f180ab101622c3e719b407e",
+   "nrdc-90bcf11e290a6870ce223eb77d650383",
+   "ukparliament_select-540283a16dc32c24baeebb54c32cd274",
+   "govdeptsjapan-6c1ec4b973264e2eb991c788cb5d91de",
+   "stateofvermont-6250368c6ef5a4f2b70163b60ecc7a12",
+   "marylandgov-726ca633dc6e98975aa758a6f7c5172b",
+   "nygov-7373380713edb45f9494a7ed724c3a44",
+   "provinceofquebec-eb281e5e1f7114204be5836eab95eaa8",
+   "ukparliament_select-bc292bbe2e728da9288c69ed98442a9d",
+   "adminch-afb9aa13e820b6ad3f80e6f736b4fa2f",
+   "stateofvermont-05722c3b6a09cc794cea67b1bd44953f",
+   "govdeptsjapan-c44ac69ed0217fa6e52b29398a3f59c4",
+   "bostongov-9ee001a1222b3ac8595a4ddb55196ed3",
+   "stateofbremen-0228a353d2bd011840ba4970eeac68aa",
+   "stateofnevada-528bfa5a9c8be116e564c5c984040c21",
+   "provinceofquebec-a15403b99e01272a00574a986fe044a1",
+   "stateofwashington-743d4314e21ec31329cb82d60bcc51d8",
+   "adminch-ce61aafc023d1f6fafc8c2805f8a6908",
+   "ukparliament_select-9cf42359938c4cc5c1e51bcaea5b2118",
+   "nycgov-044527c18ee606f89e237477c717d84f",
+   "nrelosti-4feb0572a135886189975b97e4b83129",
+   "illinoisgov-ce758348e738c49ff9a0267aeb1e6a84",
+   "eucommission-87b8c17d31f00451bb2e115def48be81",
+   "govdeptsjapan-d7188ee5b4056b447d419144759205a4",
+   "nygov-9b10a9deba3c811fc9df79def5c85597",
+   "nygov-81527164d9c33c25dafa11e2370a3293",
+   "ukparliament_select-75db98cb9b0b0183ee91c16057623840",
+   "stateofvermont-2e6c5ebe91afdabf0c6d4941262fbb2c",
+   "ukparliament_select-fb3661ed600b8c607339c5df8153b9f4",
+   "cityofdenver-7a31107be9a1a4e3f3b86e3d0a05678e",
+   "europa-1ac07979fb1283085246cd8bed53aef0",
+   "cityofgenevach-f96bd72ce9c50ef63cb3f01670c91ddb",
+   "stateofmaine-7155a30978941ae8d0a8f983f39cea06",
+   "cantonfribourgch-852479c9af5e5d23a6e98b89b2a38b16",
+   "ukparliament_select-86d6905eda0eff3cc1ee5f72d6bef2a8",
+   "voivodeshiplodzpl-b967a82489e8245c3a78caa5e2a53027",
+   "randcorporation-307530e28516269758c151bd07b9548f",
+   "folketingetdk-5810282fae3c11c1dd4b29e9508ceddb",
+   "umweltbundesamt-e6c5f6e1f2318d1238f7419abeb6a9cd",
+   "california_state_agencies-261afa5002901a51dbf50096ff784439",
+   "govdeptsaustria-885c580d29ce2ad09cb4e4dbc6bac2f6",
+   "unenvironment-7996fadc03ef6ace56b9d36384decbf0",
+   "unionconcerned-fdb35d46004ef4a5a5c905f331b6fc02",
+   "govuk-cbb81311bbd1d384312050a4899bdb3b",
+   "synthetic-titleless-1"
+  ],
+  "result_ids": [
+   "stateofvermont-de0bf34da9181ee067800fc02fd40b4c",
+   "govdeptsjapan-4d67fdec45092e98ba7dcc09343a6cac",
+   "bostongov-9c7ed29597db236dbab4d13b30bd48ab",
+   "frontiereconomics-aaa96ffc0f8e8c123bf31cf09d052ed4",
+   "ipcc-b81a9d9a73f60a7896616651e2655de2",
+   "nycgov-3fb2a595f0e8a876af4ac743048958e1",
+   "policyexchange-ccc38abe4c5f68768b0e3a89bddeced2",
+   "govdeptsfrance-10eb540aa787292ef98cf2b99a7c4cb1",
+   "climateactionnetworkeurope-8faea0e61c8e251e2012b7816f1f9732",
+   "ukparliament_select-f70268548165e415874eade9aa0380c7",
+   "departmenteconomyuk-440d01cdc96c884548850d813c26cb2b",
+   "ukparliament_select-e9d79c1cffaf0a1ed1a6c146066e9391",
+   "stateofbadende-031c0e095e1e2001f495e576f1526786",
+   "govdeptsfrance-c890bc366046e24d3d30d0c8ea479691",
+   "europa-a9e90bf91cce573108d9471d6fff2e8e",
+   "stateofvermont-ae246cba4ae84380088bededb0526404",
+   "ukparliament_select-380475d90a6a3afc6e590b875728afd2",
+   "governmentofthailand-f2c1c52f3badbcb8c2e5f44eecba6e6c",
+   "stateofvermont-57212022efaaf9c201e948c97b80cc9a",
+   "govdeptsfrance-a52100c760e9a724799a2a9a78dabe69",
+   "ukparliament_select-aab9a4684ff712106a655b11af5ace99",
+   "internationalenergyagency-1812dfba53a9a9de973c6fcd1fb3792b",
+   "govuk-63322f5369d6e98e2adb2e8b440c84b6",
+   "bmwsbde-f99b6d3aacf768ad69d4b25d37ce8f94",
+   "landstyriaat-51953ff37658147c85ae613d8533d8af",
+   "ukparliament_select-bed7a01c8dd2a729aa194e390f7be6cc",
+   "bostongov-99dcef1d71f5f82d173ba857e921c5ad",
+   "govuk-7d7ca4c02e010c2163041654e3c3b2de",
+   "cambridgeeconometrics-9de9f99515fbe7dddc36ea98cd5ac5eb",
+   "nrelosti-5388f91510122fd6740c8e2c4e9b3ba1",
+   "climateactionnetworkeurope-34b4c48f515b05320e3dc881309091f2",
+   "ukparliament_select-c7d8b304ff3fe56f24f1dfe67cf5f90c",
+   "govdeptsjapan-a6766458b871732649e406c72292f498",
+   "cordisbe-dcdd6596d23f0b4e3f66f016bbd51ede",
+   "ukparliament_select-8ecf2e3be15010f1683f0fedcee9e650",
+   "govdeptsfrance-497318aaa73982e7b7232404a28e0baa",
+   "provinceofquebec-833292ab413965b1dfed30a7ef2d6551",
+   "cordisbe-b8fae1dde60b904d6b10802d64e17023",
+   "nycgov-f436cfd2b5a3779f68e173fb2c99acfd",
+   "rockymountaininstitute-39abaf755b275c0f6eeb46db76ea3ace",
+   "climatexuk-c72bd1e46ce67925257703da97648d0f",
+   "rijksoverheid-d4da70248a855ce3eeb1baf10f666619",
+   "govdeptsjapan-a0a059fbf345524b34a1f019e1ef3018",
+   "stateofbavariade-8b1e450aca64e46af4c40e4ef8e4f021",
+   "adminch-1b5ef75cde0b31f9ba742671474737dd",
+   "cbiuk-f9010792261c7c8a9dcae3b340dbc11e",
+   "c2es-3fdada1873a9d749a61737d46c087567",
+   "esridublin-5b41869ea40a948543a93ee315161236",
+   "ukparliament_select-0d973b12237a2804b10157fc168ccebf",
+   "govdeptsjapan-e4282d4df394ed9e2e19003b802c00a3",
+   "ademefr-8c726624f0f573fc2149dae2969a7786",
+   "provinceofquebec-be3221ac482e26be5dc5b3eb1e488e0f",
+   "california_state_agencies-2cb3bc8c97d22a2cb600f96583188e2f",
+   "ukparliament_select-24317ee4ce702f46e9519df4949d8fc7",
+   "nycgov-37d1f0e78bac113ebd41bb8c708707e9",
+   "govuk-9f1a8eb3ae08666ea354437824e0b5ca",
+   "govdeptsjapan-13b149d071f39a5d5c9208370f41e787",
+   "provinceofnorthwest-f2214b1a5d506ee5d0a81bb46dd285d7",
+   "europa-fc57b21a10835ef39fb560a81ae0e5c1",
+   "voivodeshiplesserpolandpl-def3e7a55ea130328c663de0d46266f9",
+   "lacitygov-a42bf780d8db99ceb6ae46cf49771509",
+   "govuk-3f5b6e4038bd0fc5312cee7813eb0ef5",
+   "govuk-90383d197f180ab101622c3e719b407e",
+   "nrdc-90bcf11e290a6870ce223eb77d650383",
+   "ukparliament_select-540283a16dc32c24baeebb54c32cd274",
+   "govdeptsjapan-6c1ec4b973264e2eb991c788cb5d91de",
+   "stateofvermont-6250368c6ef5a4f2b70163b60ecc7a12",
+   "marylandgov-726ca633dc6e98975aa758a6f7c5172b",
+   "nygov-7373380713edb45f9494a7ed724c3a44",
+   "provinceofquebec-eb281e5e1f7114204be5836eab95eaa8",
+   "ukparliament_select-bc292bbe2e728da9288c69ed98442a9d",
+   "adminch-afb9aa13e820b6ad3f80e6f736b4fa2f",
+   "stateofvermont-05722c3b6a09cc794cea67b1bd44953f",
+   "govdeptsjapan-c44ac69ed0217fa6e52b29398a3f59c4",
+   "bostongov-9ee001a1222b3ac8595a4ddb55196ed3",
+   "stateofbremen-0228a353d2bd011840ba4970eeac68aa",
+   "stateofnevada-528bfa5a9c8be116e564c5c984040c21",
+   "provinceofquebec-a15403b99e01272a00574a986fe044a1",
+   "stateofwashington-743d4314e21ec31329cb82d60bcc51d8",
+   "adminch-ce61aafc023d1f6fafc8c2805f8a6908",
+   "ukparliament_select-9cf42359938c4cc5c1e51bcaea5b2118",
+   "nycgov-044527c18ee606f89e237477c717d84f",
+   "nrelosti-4feb0572a135886189975b97e4b83129",
+   "illinoisgov-ce758348e738c49ff9a0267aeb1e6a84",
+   "eucommission-87b8c17d31f00451bb2e115def48be81",
+   "govdeptsjapan-d7188ee5b4056b447d419144759205a4",
+   "nygov-9b10a9deba3c811fc9df79def5c85597",
+   "nygov-81527164d9c33c25dafa11e2370a3293",
+   "ukparliament_select-75db98cb9b0b0183ee91c16057623840",
+   "stateofvermont-2e6c5ebe91afdabf0c6d4941262fbb2c",
+   "ukparliament_select-fb3661ed600b8c607339c5df8153b9f4",
+   "cityofdenver-7a31107be9a1a4e3f3b86e3d0a05678e",
+   "europa-1ac07979fb1283085246cd8bed53aef0",
+   "cityofgenevach-f96bd72ce9c50ef63cb3f01670c91ddb",
+   "stateofmaine-7155a30978941ae8d0a8f983f39cea06",
+   "cantonfribourgch-852479c9af5e5d23a6e98b89b2a38b16",
+   "ukparliament_select-86d6905eda0eff3cc1ee5f72d6bef2a8",
+   "voivodeshiplodzpl-b967a82489e8245c3a78caa5e2a53027",
+   "randcorporation-307530e28516269758c151bd07b9548f",
+   "folketingetdk-5810282fae3c11c1dd4b29e9508ceddb",
+   "umweltbundesamt-e6c5f6e1f2318d1238f7419abeb6a9cd",
+   "california_state_agencies-261afa5002901a51dbf50096ff784439",
+   "govdeptsaustria-885c580d29ce2ad09cb4e4dbc6bac2f6",
+   "unenvironment-7996fadc03ef6ace56b9d36384decbf0",
+   "unionconcerned-fdb35d46004ef4a5a5c905f331b6fc02",
+   "govuk-cbb81311bbd1d384312050a4899bdb3b",
+   "synthetic-titleless-1"
+  ],
+  "landmarks": [
+   "theccc-ea16ae1ee6519565847262e85d198832",
+   "theccc-61c04cabb7a10dc83c316e8f1eaae5dc",
+   "theccc-d5e5af71fd689f1ff19d1a9164f688c3",
+   "theccc-19b69be85262d90bec88da946e52f674",
+   "govuk-488c89afbbf700813119e5e6779bd5f9",
+   "govuk-3414c993e8f2543ea39770b62823f12b",
+   "theccc-9592ab527496aefe554bd3b6d674849d",
+   "nationalauditofficeuk-c023aa37d925d77051cb8532950b1dc4",
+   "theccc-3ef1c04c9fb7b6b4a4de0574a935c47f",
+   "theccc-9d3ed67d62d8143824c5921043c1fba5",
+   "ukparliament_select-809b4ddc0a1af8fc6ca873e754d039e0",
+   "nationalauditofficeuk-d5f349e3626a03cd4391618752bc83a1",
+   "govuk-e3f7936c60a2d19bb0e66b164bdecbf7",
+   "theccc-59ea93e0f57f0d6e0e06224531176b5a",
+   "theccc-285eeaefdbbf6c66bae838719666cf3f"
+  ],
+  "landmarks_found": [
+   "theccc-ea16ae1ee6519565847262e85d198832",
+   "theccc-61c04cabb7a10dc83c316e8f1eaae5dc",
+   "theccc-d5e5af71fd689f1ff19d1a9164f688c3",
+   "theccc-19b69be85262d90bec88da946e52f674",
+   "govuk-488c89afbbf700813119e5e6779bd5f9",
+   "theccc-9592ab527496aefe554bd3b6d674849d",
+   "nationalauditofficeuk-c023aa37d925d77051cb8532950b1dc4",
+   "theccc-3ef1c04c9fb7b6b4a4de0574a935c47f",
+   "ukparliament_select-809b4ddc0a1af8fc6ca873e754d039e0",
+   "govuk-e3f7936c60a2d19bb0e66b164bdecbf7",
+   "theccc-59ea93e0f57f0d6e0e06224531176b5a",
+   "theccc-285eeaefdbbf6c66bae838719666cf3f"
+  ],
+  "inset": {
+   "nationalauditofficeuk-c023aa37d925d77051cb8532950b1dc4": 2,
+   "theccc-19b69be85262d90bec88da946e52f674": 3,
+   "theccc-3ef1c04c9fb7b6b4a4de0574a935c47f": 2,
+   "climateactionnetworkeurope-34b4c48f515b05320e3dc881309091f2": 1,
+   "theccc-ea16ae1ee6519565847262e85d198832": 5,
+   "theccc-61c04cabb7a10dc83c316e8f1eaae5dc": 4,
+   "ukparliament_select-809b4ddc0a1af8fc6ca873e754d039e0": 2,
+   "cbiuk-f9010792261c7c8a9dcae3b340dbc11e": 3,
+   "govuk-e3f7936c60a2d19bb0e66b164bdecbf7": 2,
+   "theccc-59ea93e0f57f0d6e0e06224531176b5a": 2,
+   "theccc-285eeaefdbbf6c66bae838719666cf3f": 2,
+   "theccc-d5e5af71fd689f1ff19d1a9164f688c3": 4,
+   "govuk-cbb81311bbd1d384312050a4899bdb3b": 1,
+   "govuk-488c89afbbf700813119e5e6779bd5f9": 3,
+   "govuk-7d7ca4c02e010c2163041654e3c3b2de": 2,
+   "govuk-90383d197f180ab101622c3e719b407e": 1,
+   "policyexchange-ccc38abe4c5f68768b0e3a89bddeced2": 1,
+   "theccc-9592ab527496aefe554bd3b6d674849d": 3
+  },
+  "specific": [
+   "theccc-61c04cabb7a10dc83c316e8f1eaae5dc",
+   "cbiuk-f9010792261c7c8a9dcae3b340dbc11e",
+   "theccc-d5e5af71fd689f1ff19d1a9164f688c3",
+   "theccc-ea16ae1ee6519565847262e85d198832",
+   "govuk-7d7ca4c02e010c2163041654e3c3b2de",
+   "ukparliament_select-809b4ddc0a1af8fc6ca873e754d039e0",
+   "govuk-488c89afbbf700813119e5e6779bd5f9",
+   "theccc-9592ab527496aefe554bd3b6d674849d",
+   "nationalauditofficeuk-c023aa37d925d77051cb8532950b1dc4",
+   "theccc-3ef1c04c9fb7b6b4a4de0574a935c47f",
+   "govuk-e3f7936c60a2d19bb0e66b164bdecbf7",
+   "theccc-285eeaefdbbf6c66bae838719666cf3f",
+   "theccc-19b69be85262d90bec88da946e52f674",
+   "theccc-59ea93e0f57f0d6e0e06224531176b5a",
+   "climateactionnetworkeurope-34b4c48f515b05320e3dc881309091f2",
+   "policyexchange-ccc38abe4c5f68768b0e3a89bddeced2",
+   "govuk-cbb81311bbd1d384312050a4899bdb3b",
+   "govuk-90383d197f180ab101622c3e719b407e",
+   "stateofvermont-de0bf34da9181ee067800fc02fd40b4c",
+   "govdeptsjapan-4d67fdec45092e98ba7dcc09343a6cac",
+   "bostongov-9c7ed29597db236dbab4d13b30bd48ab",
+   "frontiereconomics-aaa96ffc0f8e8c123bf31cf09d052ed4",
+   "ipcc-b81a9d9a73f60a7896616651e2655de2",
+   "nycgov-3fb2a595f0e8a876af4ac743048958e1",
+   "govdeptsfrance-10eb540aa787292ef98cf2b99a7c4cb1",
+   "climateactionnetworkeurope-8faea0e61c8e251e2012b7816f1f9732",
+   "ukparliament_select-f70268548165e415874eade9aa0380c7",
+   "departmenteconomyuk-440d01cdc96c884548850d813c26cb2b",
+   "ukparliament_select-e9d79c1cffaf0a1ed1a6c146066e9391",
+   "stateofbadende-031c0e095e1e2001f495e576f1526786",
+   "govdeptsfrance-c890bc366046e24d3d30d0c8ea479691",
+   "europa-a9e90bf91cce573108d9471d6fff2e8e",
+   "stateofvermont-ae246cba4ae84380088bededb0526404",
+   "ukparliament_select-380475d90a6a3afc6e590b875728afd2",
+   "governmentofthailand-f2c1c52f3badbcb8c2e5f44eecba6e6c",
+   "stateofvermont-57212022efaaf9c201e948c97b80cc9a",
+   "govdeptsfrance-a52100c760e9a724799a2a9a78dabe69",
+   "ukparliament_select-aab9a4684ff712106a655b11af5ace99",
+   "internationalenergyagency-1812dfba53a9a9de973c6fcd1fb3792b",
+   "govuk-63322f5369d6e98e2adb2e8b440c84b6",
+   "bmwsbde-f99b6d3aacf768ad69d4b25d37ce8f94",
+   "landstyriaat-51953ff37658147c85ae613d8533d8af",
+   "ukparliament_select-bed7a01c8dd2a729aa194e390f7be6cc",
+   "bostongov-99dcef1d71f5f82d173ba857e921c5ad",
+   "cambridgeeconometrics-9de9f99515fbe7dddc36ea98cd5ac5eb",
+   "nrelosti-5388f91510122fd6740c8e2c4e9b3ba1",
+   "ukparliament_select-c7d8b304ff3fe56f24f1dfe67cf5f90c",
+   "govdeptsjapan-a6766458b871732649e406c72292f498",
+   "cordisbe-dcdd6596d23f0b4e3f66f016bbd51ede",
+   "ukparliament_select-8ecf2e3be15010f1683f0fedcee9e650",
+   "govdeptsfrance-497318aaa73982e7b7232404a28e0baa",
+   "provinceofquebec-833292ab413965b1dfed30a7ef2d6551",
+   "cordisbe-b8fae1dde60b904d6b10802d64e17023",
+   "nycgov-f436cfd2b5a3779f68e173fb2c99acfd",
+   "rockymountaininstitute-39abaf755b275c0f6eeb46db76ea3ace",
+   "climatexuk-c72bd1e46ce67925257703da97648d0f",
+   "rijksoverheid-d4da70248a855ce3eeb1baf10f666619",
+   "govdeptsjapan-a0a059fbf345524b34a1f019e1ef3018",
+   "stateofbavariade-8b1e450aca64e46af4c40e4ef8e4f021",
+   "adminch-1b5ef75cde0b31f9ba742671474737dd",
+   "c2es-3fdada1873a9d749a61737d46c087567",
+   "esridublin-5b41869ea40a948543a93ee315161236",
+   "ukparliament_select-0d973b12237a2804b10157fc168ccebf",
+   "govdeptsjapan-e4282d4df394ed9e2e19003b802c00a3",
+   "ademefr-8c726624f0f573fc2149dae2969a7786",
+   "provinceofquebec-be3221ac482e26be5dc5b3eb1e488e0f",
+   "california_state_agencies-2cb3bc8c97d22a2cb600f96583188e2f",
+   "ukparliament_select-24317ee4ce702f46e9519df4949d8fc7",
+   "nycgov-37d1f0e78bac113ebd41bb8c708707e9",
+   "govuk-9f1a8eb3ae08666ea354437824e0b5ca",
+   "govdeptsjapan-13b149d071f39a5d5c9208370f41e787",
+   "provinceofnorthwest-f2214b1a5d506ee5d0a81bb46dd285d7",
+   "europa-fc57b21a10835ef39fb560a81ae0e5c1",
+   "voivodeshiplesserpolandpl-def3e7a55ea130328c663de0d46266f9",
+   "lacitygov-a42bf780d8db99ceb6ae46cf49771509",
+   "govuk-3f5b6e4038bd0fc5312cee7813eb0ef5",
+   "nrdc-90bcf11e290a6870ce223eb77d650383",
+   "ukparliament_select-540283a16dc32c24baeebb54c32cd274",
+   "govdeptsjapan-6c1ec4b973264e2eb991c788cb5d91de",
+   "stateofvermont-6250368c6ef5a4f2b70163b60ecc7a12",
+   "marylandgov-726ca633dc6e98975aa758a6f7c5172b",
+   "nygov-7373380713edb45f9494a7ed724c3a44",
+   "provinceofquebec-eb281e5e1f7114204be5836eab95eaa8",
+   "ukparliament_select-bc292bbe2e728da9288c69ed98442a9d",
+   "adminch-afb9aa13e820b6ad3f80e6f736b4fa2f",
+   "stateofvermont-05722c3b6a09cc794cea67b1bd44953f",
+   "govdeptsjapan-c44ac69ed0217fa6e52b29398a3f59c4",
+   "bostongov-9ee001a1222b3ac8595a4ddb55196ed3",
+   "stateofbremen-0228a353d2bd011840ba4970eeac68aa",
+   "stateofnevada-528bfa5a9c8be116e564c5c984040c21",
+   "provinceofquebec-a15403b99e01272a00574a986fe044a1",
+   "stateofwashington-743d4314e21ec31329cb82d60bcc51d8",
+   "adminch-ce61aafc023d1f6fafc8c2805f8a6908",
+   "ukparliament_select-9cf42359938c4cc5c1e51bcaea5b2118",
+   "nycgov-044527c18ee606f89e237477c717d84f",
+   "nrelosti-4feb0572a135886189975b97e4b83129",
+   "illinoisgov-ce758348e738c49ff9a0267aeb1e6a84",
+   "eucommission-87b8c17d31f00451bb2e115def48be81",
+   "govdeptsjapan-d7188ee5b4056b447d419144759205a4",
+   "nygov-9b10a9deba3c811fc9df79def5c85597",
+   "nygov-81527164d9c33c25dafa11e2370a3293",
+   "ukparliament_select-75db98cb9b0b0183ee91c16057623840",
+   "stateofvermont-2e6c5ebe91afdabf0c6d4941262fbb2c",
+   "ukparliament_select-fb3661ed600b8c607339c5df8153b9f4",
+   "cityofdenver-7a31107be9a1a4e3f3b86e3d0a05678e",
+   "europa-1ac07979fb1283085246cd8bed53aef0",
+   "cityofgenevach-f96bd72ce9c50ef63cb3f01670c91ddb",
+   "stateofmaine-7155a30978941ae8d0a8f983f39cea06",
+   "cantonfribourgch-852479c9af5e5d23a6e98b89b2a38b16",
+   "ukparliament_select-86d6905eda0eff3cc1ee5f72d6bef2a8",
+   "voivodeshiplodzpl-b967a82489e8245c3a78caa5e2a53027",
+   "randcorporation-307530e28516269758c151bd07b9548f",
+   "folketingetdk-5810282fae3c11c1dd4b29e9508ceddb",
+   "umweltbundesamt-e6c5f6e1f2318d1238f7419abeb6a9cd",
+   "california_state_agencies-261afa5002901a51dbf50096ff784439",
+   "govdeptsaustria-885c580d29ce2ad09cb4e4dbc6bac2f6",
+   "unenvironment-7996fadc03ef6ace56b9d36384decbf0",
+   "unionconcerned-fdb35d46004ef4a5a5c905f331b6fc02",
+   "synthetic-titleless-1"
+  ],
+  "uk_only": [
+   "theccc-61c04cabb7a10dc83c316e8f1eaae5dc",
+   "cbiuk-f9010792261c7c8a9dcae3b340dbc11e",
+   "theccc-d5e5af71fd689f1ff19d1a9164f688c3",
+   "theccc-ea16ae1ee6519565847262e85d198832",
+   "govuk-7d7ca4c02e010c2163041654e3c3b2de",
+   "ukparliament_select-809b4ddc0a1af8fc6ca873e754d039e0",
+   "govuk-488c89afbbf700813119e5e6779bd5f9",
+   "theccc-9592ab527496aefe554bd3b6d674849d",
+   "nationalauditofficeuk-c023aa37d925d77051cb8532950b1dc4",
+   "theccc-3ef1c04c9fb7b6b4a4de0574a935c47f",
+   "govuk-e3f7936c60a2d19bb0e66b164bdecbf7",
+   "theccc-285eeaefdbbf6c66bae838719666cf3f",
+   "theccc-19b69be85262d90bec88da946e52f674",
+   "theccc-59ea93e0f57f0d6e0e06224531176b5a",
+   "policyexchange-ccc38abe4c5f68768b0e3a89bddeced2",
+   "govuk-cbb81311bbd1d384312050a4899bdb3b",
+   "govuk-90383d197f180ab101622c3e719b407e",
+   "frontiereconomics-aaa96ffc0f8e8c123bf31cf09d052ed4",
+   "ukparliament_select-f70268548165e415874eade9aa0380c7",
+   "departmenteconomyuk-440d01cdc96c884548850d813c26cb2b",
+   "ukparliament_select-e9d79c1cffaf0a1ed1a6c146066e9391",
+   "ukparliament_select-380475d90a6a3afc6e590b875728afd2",
+   "ukparliament_select-aab9a4684ff712106a655b11af5ace99",
+   "govuk-63322f5369d6e98e2adb2e8b440c84b6",
+   "ukparliament_select-bed7a01c8dd2a729aa194e390f7be6cc",
+   "cambridgeeconometrics-9de9f99515fbe7dddc36ea98cd5ac5eb",
+   "ukparliament_select-c7d8b304ff3fe56f24f1dfe67cf5f90c",
+   "ukparliament_select-8ecf2e3be15010f1683f0fedcee9e650",
+   "climatexuk-c72bd1e46ce67925257703da97648d0f",
+   "ukparliament_select-0d973b12237a2804b10157fc168ccebf",
+   "ukparliament_select-24317ee4ce702f46e9519df4949d8fc7",
+   "govuk-9f1a8eb3ae08666ea354437824e0b5ca",
+   "govuk-3f5b6e4038bd0fc5312cee7813eb0ef5",
+   "ukparliament_select-540283a16dc32c24baeebb54c32cd274",
+   "ukparliament_select-bc292bbe2e728da9288c69ed98442a9d",
+   "ukparliament_select-9cf42359938c4cc5c1e51bcaea5b2118",
+   "ukparliament_select-75db98cb9b0b0183ee91c16057623840",
+   "ukparliament_select-fb3661ed600b8c607339c5df8153b9f4",
+   "ukparliament_select-86d6905eda0eff3cc1ee5f72d6bef2a8",
+   "synthetic-titleless-1"
+  ],
+  "cut_50": [
+   "theccc-61c04cabb7a10dc83c316e8f1eaae5dc",
+   "cbiuk-f9010792261c7c8a9dcae3b340dbc11e",
+   "theccc-d5e5af71fd689f1ff19d1a9164f688c3",
+   "theccc-ea16ae1ee6519565847262e85d198832",
+   "govuk-7d7ca4c02e010c2163041654e3c3b2de",
+   "ukparliament_select-809b4ddc0a1af8fc6ca873e754d039e0",
+   "govuk-488c89afbbf700813119e5e6779bd5f9",
+   "theccc-9592ab527496aefe554bd3b6d674849d",
+   "nationalauditofficeuk-c023aa37d925d77051cb8532950b1dc4",
+   "theccc-3ef1c04c9fb7b6b4a4de0574a935c47f",
+   "govuk-e3f7936c60a2d19bb0e66b164bdecbf7",
+   "theccc-285eeaefdbbf6c66bae838719666cf3f",
+   "theccc-19b69be85262d90bec88da946e52f674",
+   "theccc-59ea93e0f57f0d6e0e06224531176b5a",
+   "climateactionnetworkeurope-34b4c48f515b05320e3dc881309091f2",
+   "policyexchange-ccc38abe4c5f68768b0e3a89bddeced2",
+   "govuk-cbb81311bbd1d384312050a4899bdb3b",
+   "govuk-90383d197f180ab101622c3e719b407e",
+   "stateofvermont-de0bf34da9181ee067800fc02fd40b4c",
+   "govdeptsjapan-4d67fdec45092e98ba7dcc09343a6cac",
+   "bostongov-9c7ed29597db236dbab4d13b30bd48ab",
+   "frontiereconomics-aaa96ffc0f8e8c123bf31cf09d052ed4",
+   "ipcc-b81a9d9a73f60a7896616651e2655de2",
+   "nycgov-3fb2a595f0e8a876af4ac743048958e1",
+   "govdeptsfrance-10eb540aa787292ef98cf2b99a7c4cb1",
+   "climateactionnetworkeurope-8faea0e61c8e251e2012b7816f1f9732",
+   "ukparliament_select-f70268548165e415874eade9aa0380c7",
+   "departmenteconomyuk-440d01cdc96c884548850d813c26cb2b",
+   "ukparliament_select-e9d79c1cffaf0a1ed1a6c146066e9391",
+   "stateofbadende-031c0e095e1e2001f495e576f1526786",
+   "govdeptsfrance-c890bc366046e24d3d30d0c8ea479691",
+   "europa-a9e90bf91cce573108d9471d6fff2e8e",
+   "stateofvermont-ae246cba4ae84380088bededb0526404",
+   "ukparliament_select-380475d90a6a3afc6e590b875728afd2",
+   "governmentofthailand-f2c1c52f3badbcb8c2e5f44eecba6e6c",
+   "stateofvermont-57212022efaaf9c201e948c97b80cc9a",
+   "govdeptsfrance-a52100c760e9a724799a2a9a78dabe69",
+   "ukparliament_select-aab9a4684ff712106a655b11af5ace99",
+   "internationalenergyagency-1812dfba53a9a9de973c6fcd1fb3792b",
+   "govuk-63322f5369d6e98e2adb2e8b440c84b6",
+   "bmwsbde-f99b6d3aacf768ad69d4b25d37ce8f94",
+   "landstyriaat-51953ff37658147c85ae613d8533d8af",
+   "ukparliament_select-bed7a01c8dd2a729aa194e390f7be6cc",
+   "bostongov-99dcef1d71f5f82d173ba857e921c5ad",
+   "cambridgeeconometrics-9de9f99515fbe7dddc36ea98cd5ac5eb",
+   "nrelosti-5388f91510122fd6740c8e2c4e9b3ba1",
+   "ukparliament_select-c7d8b304ff3fe56f24f1dfe67cf5f90c",
+   "govdeptsjapan-a6766458b871732649e406c72292f498",
+   "cordisbe-dcdd6596d23f0b4e3f66f016bbd51ede",
+   "ukparliament_select-8ecf2e3be15010f1683f0fedcee9e650"
+  ]
+ }
+}
