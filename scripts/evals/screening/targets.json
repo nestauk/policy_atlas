@@ -1,0 +1,433 @@
+[
+  {
+    "name": "Clinical_Rosuvastatin",
+    "id": "CD010254",
+    "dataset_source": "CSMeD",
+    "query": "Rosuvastatin for lowering lipids",
+    "criteria": [
+      "Primary objective To quantify the effects of various doses of rosuvastatin on serum total cholesterol, low‐density lipoprotein (LDL)‐cholesterol, high‐density lipoprotein (HDL)‐cholesterol, non‐HDL‐cholesterol and triglycerides in participants with and without evidence of cardiovascular disease. Secondary objectives To quantify the variability of the effect of various doses of rosuvastatin. To quantify withdrawals due to adverse effects (WDAEs) in the randomized placebo‐controlled trials."
+    ],
+    "criteria_dropped": 0,
+    "published_title": "Rosuvastatin for lowering lipids",
+    "title_source": "CSMeD-FT-dev_reviews_metadata.json [CD010254].title",
+    "criteria_source": "CSMeD-FT-dev_reviews_metadata.json [CD010254].abstract, Objectives section"
+  },
+  {
+    "name": "Policy_DrugOffenders",
+    "id": "CD010901",
+    "dataset_source": "CSMeD",
+    "query": "Interventions for drug‐using offenders with co‐occurring mental health problems",
+    "criteria": [
+      "To assess the effectiveness of interventions for drug‐using offenders with co‐occurring mental health problems in reducing criminal activity or drug use, or both. This review addresses the following questions. • Does any treatment for drug‐using offenders with co‐occurring mental health problems reduce drug use? • Does any treatment for drug‐using offenders with co‐occurring mental health problems reduce criminal activity? • Does the treatment setting (court, community, prison/secure establishment) affect intervention outcome(s)? • Does the type of treatment affect treatment outcome(s)?"
+    ],
+    "criteria_dropped": 0,
+    "published_title": "Interventions for drug‐using offenders with co‐occurring mental health problems",
+    "title_source": "CSMeD-FT-dev_reviews_metadata.json [CD010901].title",
+    "criteria_source": "CSMeD-FT-dev_reviews_metadata.json [CD010901].abstract, Objectives section"
+  },
+  {
+    "name": "PublicHealth_SaturatedFat",
+    "id": "CD011737",
+    "dataset_source": "CSMeD",
+    "query": "Reduction in saturated fat intake for cardiovascular disease",
+    "criteria": [
+      "To assess the effect of reducing saturated fat intake and replacing it with carbohydrate (CHO), polyunsaturated (PUFA), monounsaturated fat (MUFA) and/or protein on mortality and cardiovascular morbidity, using all available randomised clinical trials."
+    ],
+    "criteria_dropped": 0,
+    "published_title": "Reduction in saturated fat intake for cardiovascular disease",
+    "title_source": "CSMeD-FT-dev_reviews_metadata.json [CD011737].title",
+    "criteria_source": "CSMeD-FT-dev_reviews_metadata.json [CD011737].abstract, Objectives section"
+  },
+  {
+    "name": "Systems_TelemonitoringHF",
+    "id": "CD007228",
+    "dataset_source": "CSMeD",
+    "query": "Structured telephone support or non‐invasive telemonitoring for patients with heart failure",
+    "criteria": [
+      "To review randomised controlled trials (RCTs) of structured telephone support or non‐invasive home telemonitoring compared to standard practice for people with heart failure, in order to quantify the effects of these interventions over and above usual care."
+    ],
+    "criteria_dropped": 0,
+    "published_title": "Structured telephone support or non‐invasive telemonitoring for patients with heart failure",
+    "title_source": "CSMeD-FT-dev_reviews_metadata.json [CD007228].title",
+    "criteria_source": "CSMeD-FT-dev_reviews_metadata.json [CD007228].abstract, Objectives section"
+  },
+  {
+    "name": "Hospital_DeliriumPrevention",
+    "id": "CD005563",
+    "dataset_source": "CSMeD",
+    "query": "Interventions for preventing delirium in hospitalised non‐ICU patients",
+    "criteria": [
+      "To assess the effectiveness of interventions for preventing delirium in hospitalised non‐Intensive Care Unit (ICU) patients."
+    ],
+    "criteria_dropped": 0,
+    "published_title": "Interventions for preventing delirium in hospitalised non‐ICU patients",
+    "title_source": "CSMeD-FT-dev_reviews_metadata.json [CD005563].title",
+    "criteria_source": "CSMeD-FT-dev_reviews_metadata.json [CD005563].abstract, Objectives section"
+  },
+  {
+    "name": "Family_ParentInfantPsych",
+    "id": "CD010534",
+    "dataset_source": "CSMeD",
+    "query": "Parent‐infant psychotherapy for improving parental and infant mental health",
+    "criteria": [
+      "1. To assess the effectiveness of PIP in improving parental and infant mental health and the parent‐infant relationship. 2. To identify the programme components that appear to be associated with more effective outcomes and factors that modify intervention effectiveness (e.g. programme duration, programme focus)."
+    ],
+    "criteria_dropped": 0,
+    "published_title": "Parent‐infant psychotherapy for improving parental and infant mental health",
+    "title_source": "CSMeD-FT-dev_reviews_metadata.json [CD010534].title",
+    "criteria_source": "CSMeD-FT-dev_reviews_metadata.json [CD010534].abstract, Objectives section"
+  },
+  {
+    "name": "Aging_AlzheimersDrug",
+    "id": "CD001191",
+    "dataset_source": "CSMeD",
+    "query": "Rivastigmine for Alzheimer's disease",
+    "criteria": [
+      "To determine the clinical efficacy and safety of rivastigmine for patients with dementia of Alzheimer's type."
+    ],
+    "criteria_dropped": 0,
+    "published_title": "Rivastigmine for Alzheimer's disease",
+    "title_source": "CSMeD-FT-dev_reviews_metadata.json [CD001191].title",
+    "criteria_source": "CSMeD-FT-dev_reviews_metadata.json [CD001191].abstract, Objectives section"
+  },
+  {
+    "name": "Respiratory_NIV_COPD",
+    "id": "CD007714",
+    "dataset_source": "CSMeD",
+    "query": "Non‐invasive ventilation during exercise training for people with chronic obstructive pulmonary disease",
+    "criteria": [
+      "To determine whether NIV during exercise training (as part of pulmonary rehabilitation) affects exercise capacity, HRQL and physical activity in people with COPD compared with exercise training alone or exercise training with sham NIV."
+    ],
+    "criteria_dropped": 0,
+    "published_title": "Non‐invasive ventilation during exercise training for people with chronic obstructive pulmonary disease",
+    "title_source": "CSMeD-FT-dev_reviews_metadata.json [CD007714].title",
+    "criteria_source": "CSMeD-FT-dev_reviews_metadata.json [CD007714].abstract, Objectives section"
+  },
+  {
+    "name": "Cardio_Homocysteine",
+    "id": "CD006612",
+    "dataset_source": "CSMeD",
+    "query": "Homocysteine‐lowering interventions for preventing cardiovascular events",
+    "criteria": [
+      "To determine whether homocysteine‐lowering interventions, provided to patients with and without pre‐existing cardiovascular disease are effective in preventing cardiovascular events, as well as reducing all‐cause mortality, and to evaluate their safety."
+    ],
+    "criteria_dropped": 0,
+    "published_title": "Homocysteine‐lowering interventions for preventing cardiovascular events",
+    "title_source": "CSMeD-FT-dev_reviews_metadata.json [CD006612].title",
+    "criteria_source": "CSMeD-FT-dev_reviews_metadata.json [CD006612].abstract, Objectives section"
+  },
+  {
+    "name": "Psych_OncologySupport",
+    "id": "CD008729",
+    "dataset_source": "CSMeD",
+    "query": "Psychological interventions for women with non‐metastatic breast cancer",
+    "criteria": [
+      "To assess the effects of psychological interventions on psychological morbidities, quality of life and survival among women with non‐metastatic breast cancer."
+    ],
+    "criteria_dropped": 0,
+    "published_title": "Psychological interventions for women with non‐metastatic breast cancer",
+    "title_source": "CSMeD-FT-dev_reviews_metadata.json [CD008729].title",
+    "criteria_source": "CSMeD-FT-dev_reviews_metadata.json [CD008729].abstract, Objectives section"
+  },
+  {
+    "name": "Psych_CBT_Anxiety",
+    "id": "van_Dis_2020",
+    "dataset_source": "SYNERGY",
+    "query": "Long-term Outcomes of Cognitive Behavioral Therapy for Anxiety-Related Disorders",
+    "criteria": [
+      "Randomized clinical trials were included that examined effects of CBT(ie, any therapy with cognitive restructuring and/or a behavioral therapy, such as exposure, as core component), including third generation CBTs (ie, acceptance and commitment therapy and metacognitive therapy), at least 1 month after treatment completion, in an individual, group, or internet treatment format.",
+      "Comparison groups included care as usual (ie, anything patients would normally receive as long as it was not a structured type of psychotherapy, such as primary care at medical centers or case management with educational groups), relaxation, psychoeducation, pill placebo, supportive therapy, or waiting list.",
+      "Studies were included if they tested adult patients (or samples consisting mostly of adults but also some adolescents aged ≥16 years) who received a diagnosis of GAD, PD, SAD, specific phobia, PTSD, or OCD based on results of a structured diagnostic interview.",
+      "Studies were excluded if they did not use CBT (eg, applied relaxation, eye movement desensitization and reprocessing, or interpersonal therapy) or did not report symptoms separately for each disorder.",
+      "To reduce clinical heterogeneity, studies were also excluded if they had done any of the following: (1) used self-guided therapy without any guidance, (2) used CBT combined with medication or pill placebo, or (3) tested inpatients.",
+      "English language articles only"
+    ],
+    "criteria_dropped": 0,
+    "published_title": "Long-term Outcomes of Cognitive Behavioral Therapy for Anxiety-Related Disorders",
+    "title_source": "OpenAlex https://openalex.org/W2990088051 (doi:10.1001/jamapsychiatry.2019.3986)",
+    "criteria_source": "SYNERGY datasets.toml @ dc2dadfdbb98, [van_Dis_2020].publication.eligibility_criteria"
+  },
+  {
+    "name": "Psych_PTSD_Trajectories",
+    "id": "van_de_Schoot_2018",
+    "dataset_source": "SYNERGY",
+    "query": "Bayesian PTSD-Trajectory Analysis with Informed Priors Based on a Systematic Literature Search and Expert Elicitation",
+    "criteria": [
+      "In the second round, the full-text articles were independently read and screened by RvdS and MS for the following inclusion criteria: (a) longitudinal studies with at least three measurement waves measuring PTSD, (b) studies that measured PTSD on a continuous scale via an interview or questionnaire, (c) and studies that used a clustering method (LGMM, LCGA, hierarchical cluster analysis), (d) traumatic stress symptoms following events that appeared to fulfill DSM-IV criterion A1 for PTSD or acute stress disorder."
+    ],
+    "criteria_dropped": 0,
+    "published_title": "Bayesian PTSD-Trajectory Analysis with Informed Priors Based on a Systematic Literature Search and Expert Elicitation",
+    "title_source": "OpenAlex https://openalex.org/W2783658081 (doi:10.1080/00273171.2017.1412293)",
+    "criteria_source": "SYNERGY datasets.toml @ dc2dadfdbb98, [van_de_Schoot_2018].publication.eligibility_criteria"
+  },
+  {
+    "name": "CS_FaultPrediction",
+    "id": "Hall_2012",
+    "dataset_source": "SYNERGY",
+    "query": "A Systematic Literature Review on Fault Prediction Performance in Software Engineering",
+    "criteria": [
+      "To be included in this review, a study must be reported in a paper published in English as either a Journal paper or Conference proceedings. The criteria for studies to be included in our SLR are based on the inclusion and exclusion criteria presented in Table 2. Before accepting a paper into the review, we excluded repeated studies. If the same study appeared in several publications we included only the most comprehensive or most recent.",
+      "Table 2.",
+      "Inclusion criteria (a paper must be. . . )",
+      "An empirical study",
+      "Focused on predicting faults in units of a software system",
+      "Faults in code is the main output (dependent variable)",
+      "Exclusion criteria (a paper must not be. . . )",
+      "Focused on: testing, fault injection, inspections, reliability modelling, aspects, effort estimation, debugging, faults relating to memory leakage, nano-computing, fault tolerance.",
+      "About the detection or localisation of existing individual known faults."
+    ],
+    "criteria_dropped": 0,
+    "published_title": "A Systematic Literature Review on Fault Prediction Performance in Software Engineering",
+    "title_source": "OpenAlex https://openalex.org/W2151666086 (doi:10.1109/TSE.2011.103)",
+    "criteria_source": "SYNERGY datasets.toml @ dc2dadfdbb98, [Hall_2012].publication.eligibility_criteria"
+  },
+  {
+    "name": "CS_SoftwareMetrics",
+    "id": "Radjenovic_2013",
+    "dataset_source": "SYNERGY",
+    "query": "Software fault prediction metrics",
+    "criteria": [
+      "The search was not limited by the year of publication. Journal papers and conference proceedings were included. The search was limited to English.",
+      "During the systematic review, we included empirical studies validating and assessing software metrics in the area of software fault prediction. For the selection of primary studies, the following inclusion and exclusion criteria were used.",
+      "Inclusion criteria:",
+      "Empirical studies (academic and industry) using large and small scale data sets AND.",
+      "Studies comparing software metrics performance in the area of software fault prediction.",
+      "Exclusion criteria:",
+      "Studies without an empirical validation or including experimental results of software metrics in fault prediction OR.",
+      "- Studies discussing software metrics in a context other than software fault prediction (e.g. maintainability) OR.",
+      "- Studies discussing modeling techniques (e.g. Naive Bayes, Random Forest) and not software metrics.",
+      "- Studies discussing and comparing prediction techniques were excluded from the review, Studies proposing new software metrics and not empirically validating them were also excluded"
+    ],
+    "criteria_dropped": 0,
+    "published_title": "Software fault prediction metrics: A systematic literature review",
+    "title_source": "OpenAlex https://openalex.org/W2160988203 (doi:10.1016/j.infsof.2013.02.009)",
+    "criteria_source": "SYNERGY datasets.toml @ dc2dadfdbb98, [Radjenovic_2013].publication.eligibility_criteria"
+  },
+  {
+    "name": "Clinical_WilsonDisease",
+    "id": "Appenzeller-Herzog_2019",
+    "dataset_source": "SYNERGY",
+    "query": "Comparative effectiveness of common therapies for Wilson disease",
+    "criteria": [
+      "We included WD patients of any age or stage.",
+      "The study drug had to be one of four established therapies, namely DPen, trientine, TTM or Zn.",
+      "The control could be placebo, no treatment or any other treatment that does not include the respective study drug (eg Zn vs trientine was allowed, Zn 50 mg vs Zn 100 mg was not allowed).",
+      "Concomitant therapies had to be identical in the compared treatment arms (eg trientine plus Zn vs TTM plus Zn).",
+      "Comparisons between monotherapy and combination therapy regimens that included the respective monotherapy drug (eg DPen plus Zn vs Zn) have been analysed elsewhere and were not considered any further here.",
+      "We included studies that reported all‐cause mortality, orthotopic liver transplantation (OLT), neurological symptoms (eg dystonia, dysarthria, cognitive decline, drooling, tremor, gait disturbance, chorea, seizure, psychosis), liver‐related symptoms (eg icterus, ascites, steatosis, fibrosis, mild hepatitis, acute liver failure, cirrhosis, serum transaminases), adverse effects (eg dermatological manifestations, nephrotoxicity, pulmonary toxicity, autoimmune disorders, anaemia, neutrophilic agranulocytosis, thrombocytopenia, hypothyroidism, liver dysfunction, colitis, status dystonicus, myasthenia gravis, arthropathy, macromastia, early neurological deterioration, gastrointestinal irritation), and frequency of treatment discontinuation (ie switching to another drug, stopping or changing the treatment).",
+      "We included prospective and retrospective studies, including randomized, non‐randomized controlled trials and comparative observational studies that were written in English, German, Dutch, French, Spanish or Portuguese."
+    ],
+    "criteria_dropped": 2,
+    "published_title": "Comparative effectiveness of common therapies for Wilson disease: A systematic review and meta‐analysis of controlled studies",
+    "title_source": "OpenAlex https://openalex.org/W2949422680 (doi:10.1111/liv.14179)",
+    "criteria_source": "SYNERGY datasets.toml @ dc2dadfdbb98, [Appenzeller-Herzog_2019].publication.eligibility_criteria"
+  },
+  {
+    "name": "Clinical_SmallVesselDisease",
+    "id": "Bos_2018",
+    "dataset_source": "SYNERGY",
+    "query": "Cerebral small vessel disease and the risk of dementia",
+    "criteria": [
+      "For the current review, we used the following inclusion criteria: (1) all studies had to be prospective population-based cohort studies.",
+      "Inherent to the nature of population-based studies this meant that except for a selection criterion of age, no other selection criteria were applied;",
+      "(2) cerebral imaging had to be performed (either magnetic resonance imaging [MRI] or computed tomography) for the visualization of white matter hyperintensities, covert brain infarcts, or microbleeds;",
+      "(3) all studies had to have investigated the association of any of the three pathologies with the risk of incident all-dementia or AD.",
+      "We specifically note that we chose all-dementia as primary outcome measure, given that the syndrome diagnosis of dementia can be defined with high consistency across studies and is less dependent on advanced diagnostic testing, which is often not feasible in large population-based studies.",
+      "Still, we acknowledge the importance of various neuropathologies underlying the clinical manifestation of dementia.",
+      "To provide additional insight into the association of cerebral small vessel disease with dementia independent of manifest cerebrovascular disease, we also highlighted the associations with a diagnosis of AD (if available in the study) as a secondary outcome measure.",
+      "We restricted our inclusion to original articles that were written in English and excluded review articles, case reports, conference papers, and editorials."
+    ],
+    "criteria_dropped": 0,
+    "published_title": "Cerebral small vessel disease and the risk of dementia: A systematic review and meta‐analysis of population‐based evidence",
+    "title_source": "OpenAlex https://openalex.org/W2804868354 (doi:10.1016/j.jalz.2018.04.007)",
+    "criteria_source": "SYNERGY datasets.toml @ dc2dadfdbb98, [Bos_2018].publication.eligibility_criteria"
+  },
+  {
+    "name": "Clinical_HeartBrain",
+    "id": "Wolters_2018",
+    "dataset_source": "SYNERGY",
+    "query": "Coronary heart disease, heart failure, and the risk of dementia",
+    "criteria": [
+      "the following inclusion criteria: (1) cohort studies or longitudinal studies conducted with routinely collected health care data (e.g., national medical registries or insurance databases); (2) determinant CHD (i.e., myocardial infarction with or without angina or coronary revascularization) or CHF; and (3) report of incident dementia diagnosis as the outcome (i.e., at least all-cause dementia or AD as its most common subtype). We chose all-cause dementia as the main outcome measure of interest for this meta-analysis because a syndrome diagnosis of dementia can be defined with high consistency across studies and is less dependent on advanced diagnostic testing that is often not feasible in large (population-based) studies.",
+      "To provide more insight into the association of CHDandCHFwithdementiaindependentofmanifestcerebrovascular disease, we therefore adopted a clinical diagnosis of AD (per study protocol) as a secondary outcome measure. If multiple results were reported for the same cohort, we preferred the longer follow-up duration [10, 11], longer follow-up along with more comprehensive assessment of exposure [12, 13], larger number of incident dementia cases [14–17], most contemporary data [13], or the study in which selection bias was considered least likely [18]. I"
+    ],
+    "criteria_dropped": 0,
+    "published_title": "Coronary heart disease, heart failure, and the risk of dementia: A systematic review and meta‐analysis",
+    "title_source": "OpenAlex https://openalex.org/W2790981410 (doi:10.1016/j.jalz.2018.01.007)",
+    "criteria_source": "SYNERGY datasets.toml @ dc2dadfdbb98, [Wolters_2018].publication.eligibility_criteria"
+  },
+  {
+    "name": "Psych_BPD_Therapies",
+    "id": "Oud_2018",
+    "dataset_source": "SYNERGY",
+    "query": "Specialized psychotherapies for adults with borderline personality disorder",
+    "criteria": [
+      "We included RCTs on four specialized psychotherapies (DBT, MBT, TFP and ST) for adults (18 years and older) with BPD, which included an individual psychotherapy component and had a duration of 16 weeks or more. Eligible comparison groups were other protocolized and specialized psychotherapies, or control groups, for example, treatment as usual (TAU), waiting list, attention control or community treatment by experts (CTBE). Studies were excluded with an arbitrary cut-off of <66% of the participants having BPD, unless disaggregated data were provided. Also, studies were excluded that tested incomplete versions of specialized treatment, for example, studies that investigated only skills training instead of the full DBT program."
+    ],
+    "criteria_dropped": 0,
+    "published_title": "Specialized psychotherapies for adults with borderline personality disorder: A systematic review and meta-analysis",
+    "title_source": "OpenAlex https://openalex.org/W2885938281 (doi:10.1177/0004867418791257)",
+    "criteria_source": "SYNERGY datasets.toml @ dc2dadfdbb98, [Oud_2018].publication.eligibility_criteria"
+  },
+  {
+    "name": "Endocrine_StressBiomarkers",
+    "id": "van_der_Valk_2021",
+    "dataset_source": "SYNERGY",
+    "query": "Cross‐sectional relation of long‐term glucocorticoids in hair with anthropometric measurements and their possible determinants",
+    "criteria": [
+      "We included studies that reported cross-sectional associations between HairGC and measurements of obesity. We excluded case reports, animal studies, review articles, non-English or nonpeer reviewed studies, and studies in which hair sampling and weight measurements were not performed simultaneously (Figure 1). Pediatric studies that only included children younger than age 2 years were also excluded because BMI-based definitions of obesity are not available for this age group"
+    ],
+    "criteria_dropped": 0,
+    "published_title": "Cross‐sectional relation of long‐term glucocorticoids in hair with anthropometric measurements and their possible determinants: A systematic review and meta‐analysis",
+    "title_source": "OpenAlex https://openalex.org/W3216502150 (doi:10.1111/obr.13376)",
+    "criteria_source": "SYNERGY datasets.toml @ dc2dadfdbb98, [van_der_Valk_2021].publication.eligibility_criteria"
+  },
+  {
+    "name": "Oncology_SharedDecisions",
+    "id": "van_der_Waal_2022",
+    "dataset_source": "SYNERGY",
+    "query": "A meta-analysis on the role older adults with cancer favour in treatment decision making",
+    "criteria": [
+      "Language was limited to English and date range was set from January 2008 until June 2021.",
+      "Studies included in this review were performed among adults (defined as eighteen years and older) with cancer treated in research centres that are part of a western healthcare system (including: European Union, United Kingdom, United States of America, Canada, Japan, Australia, and New Zealand). Japan was included, as previous studies have shown that the Japanese healthcare system is comparable to the western health care system [9,10]. We excluded conference abstracts, non-original research, studies on paediatric population (defined as younger than eighteen years old), as well as studies addressing specific ethnographic subgroups within western healthcare systems. For meta analysis purposes, studies were filtered on reporting data from the Control Preference Scale (CPS), which is a questionnaire to assess the patients’ preference for their role in treatment decision making (Table 1)"
+    ],
+    "criteria_dropped": 0,
+    "published_title": "A meta-analysis on the role older adults with cancer favour in treatment decision making",
+    "title_source": "OpenAlex https://openalex.org/W4304695229 (doi:10.1016/j.jgo.2022.09.012)",
+    "criteria_source": "SYNERGY datasets.toml @ dc2dadfdbb98, [van_der_Waal_2022].publication.eligibility_criteria"
+  },
+  {
+    "name": "Enviro_ClimateBiodiversity",
+    "id": "3ie_EGM_Climate_2024",
+    "dataset_source": "3ie",
+    "query": "Mapping the evidence of climate change and biodiversity interventions on environmental and human outcomes in low- and middle-income countries",
+    "criteria": [],
+    "criteria_dropped": 0,
+    "published_title": "Mapping the evidence of climate change and biodiversity interventions on environmental and human outcomes in low- and middle-income countries",
+    "title_source": "https://www.3ieimpact.org/evidence-hub/publications/evidence-gap-maps/mapping-evidence-climate-change-and-biodiversity",
+    "criteria_source": "none: the map is not on the 3ie portal's open map feed"
+  },
+  {
+    "name": "Gov_GoodGovernance",
+    "id": "3ie_EGM_Governance_2023",
+    "dataset_source": "3ie",
+    "query": "Strengthening good governance through government effectiveness in low- and middle-income countries",
+    "criteria": [
+      "Interventions: Transparency, monitoring, and oversight; Creation of participation opportunities; Capacity building and administrative management; Institutional reform efforts and architecture of public service delivery; Multicomponent Interventions",
+      "Outcomes: Legitimate authority; Compliance with rules; Inclusive decision-making; Accountability of public decision-makers and quality of policy-making; Competence and performance of public officials, public servants and decision-makers; Stewardship of public resources; Public service delivery; Public and social wellbeing and growth"
+    ],
+    "criteria_dropped": 0,
+    "published_title": "Strengthening good governance through government effectiveness in low- and middle-income countries: an evidence gap map",
+    "title_source": "https://developmentevidence.3ieimpact.org/egm/good-governance-through-government-effectiveness-evidence-gap-map",
+    "criteria_source": "3ie get_map_data for good-governance-through-government-effectiveness-evidence-gap-map: top-level intervention and outcome groups (99% of the local file's studies are on this map)"
+  },
+  {
+    "name": "Policy_IrregularMigration",
+    "id": "3ie_EGM_Migration_2023",
+    "dataset_source": "3ie",
+    "query": "Addressing Root Causes and Drivers of Irregular Migration",
+    "criteria": [
+      "Interventions: Economic Opportunities and Work Policies; Strengthening Resilience Against Shocks and Stressors; Build Safe Communities Through Violence Prevention and Intervention; Orderly and Safe Migration Management; External Migration Management; Multicomponent: Migration partnerships/deal; Multicomponent interventions",
+      "Outcomes: Any migration; International migration flow; International migration stock; Intention to migrate; Knowledge, perceptions, attitudes, and Expectations"
+    ],
+    "criteria_dropped": 0,
+    "published_title": "Addressing Root Causes and Drivers of Irregular Migration: An Evidence Gap Map",
+    "title_source": "https://developmentevidence.3ieimpact.org/egm/addressing-root-causes-and-drivers-of-irregular-migration-an-evidence-gap-map",
+    "criteria_source": "3ie get_map_data for addressing-root-causes-and-drivers-of-irregular-migration-an-evidence-gap-map: top-level intervention and outcome groups (96% of the local file's studies are on this map)"
+  },
+  {
+    "name": "Agri_FoodSystems",
+    "id": "3ie_EGM_FoodSystems_2024",
+    "dataset_source": "3ie",
+    "query": "The effects of food systems interventions on food security and nutrition outcomes in low- and middle- income countries",
+    "criteria": [
+      "Interventions: Production system; Distribution & storage; Processing & packaging; Food loss & waste management; Availability & affordability; Promotion & labelling; Empowerment; Behaviour change communication; Multi-component program",
+      "Outcomes: Economic; Agricultural; Bionutrition; Advertising & labels; Food distribution; Environmental impact; Food losses; Intrinsic motivation; Women's empowerment; Regulations; Other intermediate outcomes; Anthropometric; Child development; Micronutrient status; Diet quality & adequacy; Food safety; Affordability & availability"
+    ],
+    "criteria_dropped": 0,
+    "published_title": "The effects of food systems interventions on food security and nutrition outcomes in low- and middle- income countries: a living evidence gap map",
+    "title_source": "https://developmentevidence.3ieimpact.org/egm/food-systems-and-nutrition-evidence-gap-map",
+    "criteria_source": "3ie get_map_data for food-systems-and-nutrition-evidence-gap-map: top-level intervention and outcome groups (99% of the local file's studies are on this map)"
+  },
+  {
+    "name": "Health_SexualReproRights",
+    "id": "3ie_EGM_SRHR_2024",
+    "dataset_source": "3ie",
+    "query": "Sexual and Reproductive Health and Rights",
+    "criteria": [
+      "Interventions: SRHR policy, advocacy and health systems; Social and behavioural change for the public; SRHR services; Vouchers, cash or in-kind transfers; Multicomponent",
+      "Outcomes: Knowledge, attitudes and norms; Behaviours of the public; Availability, accessibility, acceptability and quality of services; Health outcomes; Gender-based violence and harmful practices; Enabling environment"
+    ],
+    "criteria_dropped": 0,
+    "published_title": "Sexual and Reproductive Health and Rights Evidence Gap Map",
+    "title_source": "https://developmentevidence.3ieimpact.org/egm/sexual-reproductive-health-rights-in-low-and-middle-income-countries",
+    "criteria_source": "3ie get_map_data for sexual-reproductive-health-rights-in-low-and-middle-income-countries: top-level intervention and outcome groups (95% of the local file's studies are on this map)"
+  },
+  {
+    "name": "Infra_WaterSanitation",
+    "id": "3ie_EGM_WASH_2023",
+    "dataset_source": "3ie",
+    "query": "Mapping water, sanitation and hygiene achievements to prosperity, stability and resilience",
+    "criteria": [
+      "Interventions: Drinking Water; Sanitation and Hygiene; Frequently Combined WaSH",
+      "Outcomes: Prosperity; Stability; Resilience"
+    ],
+    "criteria_dropped": 0,
+    "published_title": "Mapping water, sanitation and hygiene achievements to prosperity, stability and resilience: An outcome-to-outcome systematic map",
+    "title_source": "https://developmentevidence.3ieimpact.org/egm/reaper-wash-evidence-gap-map",
+    "criteria_source": "3ie get_map_data for reaper-wash-evidence-gap-map: top-level intervention and outcome groups (99% of the local file's studies are on this map)"
+  },
+  {
+    "name": "Health_AnaemiaReduction",
+    "id": "3ie_EGM_Anaemia_2024",
+    "dataset_source": "3ie",
+    "query": "Interventions to reduce anaemia in low- and middle-income countries",
+    "criteria": [],
+    "criteria_dropped": 0,
+    "published_title": "Interventions to reduce anaemia in low- and middle-income countries: An evidence gap map",
+    "title_source": "https://3ieimpact.org/evidence-hub/publications/evidence-gap-map/interventions-reduce-anaemia-low-and-middle-income",
+    "criteria_source": "none: the map is not on the 3ie portal's open map feed"
+  },
+  {
+    "name": "Infra_SustainableEnergy",
+    "id": "3ie_EGM_Energy_2024",
+    "dataset_source": "3ie",
+    "query": "Promoting Sustainable Energy Development through Access, Renewables and Efficient Technologies",
+    "criteria": [
+      "Interventions: Legal and regulatory frameworks and policies; Financial incentives and market enabling; Electrification and energy infrastructure; Information and capacity development; Multicomponent",
+      "Outcomes: Intermediate/ Behaviour change; Energy and environmental outcomes; Socio-economic and community welfare"
+    ],
+    "criteria_dropped": 0,
+    "published_title": "Promoting Sustainable Energy Development through Access, Renewables and Efficient Technologies: An Evidence Gap Map",
+    "title_source": "https://developmentevidence.3ieimpact.org/egm/sustainable-energy-evidence-gap-map",
+    "criteria_source": "3ie get_map_data for sustainable-energy-evidence-gap-map: top-level intervention and outcome groups (99% of the local file's studies are on this map)"
+  },
+  {
+    "name": "Enviro_LandUseForestry",
+    "id": "3ie_EGM_LandUse_2024",
+    "dataset_source": "3ie",
+    "query": "Land-use change and forestry programmes in low- and middle-income countries",
+    "criteria": [
+      "Interventions: Area protection and management; Law and policies related to forests and other land; Incentives; Training, education and information to promote sustainable practices and technology; Infrastructure; Multicomponent",
+      "Outcomes: Intermediate outcomes; Environmental outcomes; Human welfare outcomes"
+    ],
+    "criteria_dropped": 0,
+    "published_title": "Land-use change and forestry programmes in low- and middle-income countries: an evidence gap map update",
+    "title_source": "https://developmentevidence.3ieimpact.org/egm/land-use-update",
+    "criteria_source": "3ie get_map_data for land-use-update: top-level intervention and outcome groups (100% of the local file's studies are on this map)"
+  },
+  {
+    "name": "Social_ResilienceShocks",
+    "id": "3ie_EGM_Resilience_2023",
+    "dataset_source": "3ie",
+    "query": "Strengthening resilience against shocks, stressors and recurring crises in low- and middle-income countries",
+    "criteria": [
+      "Interventions: Disaster Risk Financing; Early Warning Systems; Environmental and natural resource management; Financial inclusion and livelihoods; Social protection and safety net programming; Social cohesion and conflict resolution; Inclusive and accountable institutions; Multicomponent interventions",
+      "Outcomes: Psychological (Absorptive and Adaptive); Financial (Absorptive and Adaptive); Livelihoods (Adaptive); Livelihoods (Transformative); Disaster Risk Management (Absorptive); Disaster Risk Management (Transformative); Social (Absorptive)/Bonding Social Capital; Social (Adaptive)/Binding social capital; Social (Transformative) / Linking Social Capital; Governance (Transformative)"
+    ],
+    "criteria_dropped": 0,
+    "published_title": "Strengthening resilience against shocks, stressors and recurring crises in low- and middle-income countries: an evidence gap map",
+    "title_source": "https://developmentevidence.3ieimpact.org/egm/building-resilient-societies-in-low-and-middle-income-countries-an-evidence-gap-map",
+    "criteria_source": "3ie get_map_data for building-resilient-societies-in-low-and-middle-income-countries-an-evidence-gap-map: top-level intervention and outcome groups (99% of the local file's studies are on this map)"
+  }
+]

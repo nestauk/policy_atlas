@@ -144,15 +144,18 @@ prompt-guard:
 eval-search-recall:
 	uv run --project backend --env-file backend/.env python scripts/evals/search/measure/production_recall.py $(ARGS)
 
-# The search eval's own checks: its pure self-tests (no network, no database) and ruff
-# on scripts/evals/search, which `make lint` does not cover. Runs inside verify and
-# verify-fast so a broken eval script fails the gate instead of the next person who
-# runs it by hand.
+# The eval scripts' own checks: pure self-tests (no network, no database, no model
+# calls) and ruff on scripts/evals/search and scripts/evals/screening, which `make lint`
+# does not cover. Runs inside verify and verify-fast so a broken eval script fails the
+# gate instead of the next person who runs it by hand.
 eval-check:
 	uv run --project backend python scripts/evals/search/tests/test_ground_truth.py
 	uv run --project backend python scripts/evals/search/tests/test_measure.py
 	uv run --project backend ruff check scripts/evals/search
 	uv run --project backend ruff format --check scripts/evals/search
+	uv run --project backend python scripts/evals/screening/tests/test_screening.py
+	uv run --project backend ruff check scripts/evals/screening
+	uv run --project backend ruff format --check scripts/evals/screening
 
 # Installs frontend dependencies from the committed lockfile (task 025 F.1).
 # A prerequisite for drift-check (and any other frontend gate) in CI, where
