@@ -41,7 +41,7 @@ by title or review id; the four hand-made reviews count as labelled.
 Usage::
 
     uv run --project backend --env-file backend/.env \\
-        python scripts/evals/search/measure/snowball_recall.py \\
+        python scripts/evals/search/experiments/snowball_recall.py \\
         [--dataset retrieval-ground-truth-mini] [--seeds 200] [--expand 200] \\
         [--caps 50 100 200 400] [--rankings raw inset specific global interleave] \\
         [--reviews TEXT ...] [--manual QUESTION ...] [--out DIR] [--refresh]

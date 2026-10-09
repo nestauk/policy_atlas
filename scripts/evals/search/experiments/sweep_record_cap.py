@@ -65,7 +65,7 @@ supplies), after the dataset has been uploaded once:
     uv run --project backend --env-file backend/.env \\
         python scripts/evals/search/ground_truth/upload.py
     uv run --project backend --env-file backend/.env \\
-        python scripts/evals/search/measure/sweep_record_cap.py --repeats 1
+        python scripts/evals/search/experiments/sweep_record_cap.py --repeats 1
 
 Besides the Langfuse runs, the script writes three CSVs into ``results/``.
 All of them can be joined on ``run_id`` and all carry the review's identifier

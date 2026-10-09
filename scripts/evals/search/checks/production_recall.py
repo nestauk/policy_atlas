@@ -1,7 +1,7 @@
 """Measure what production does: search (and screening) recall at the real
 depth constants, one Langfuse dataset run per depth.
 
-The sweep (``measure/sweep_record_cap.py``) asks a research question by pushing the
+The sweep (``experiments/sweep_record_cap.py``) asks a research question by pushing the
 caps far above production. This script asks the operational question: with
 the pipeline exactly as deployed, how much of each review's reference list
 does a ``rapid``, ``standard`` or ``deep`` search find? Run it by hand,
@@ -38,7 +38,7 @@ Usage (same environment as the sweep; the dataset must already be uploaded
 with ``ground_truth/upload.py``):
 
     uv run --project backend --env-file backend/.env \\
-        python scripts/evals/search/measure/production_recall.py \\
+        python scripts/evals/search/checks/production_recall.py \\
         [--depths rapid standard deep] [--run-label LABEL] [--reviews TEXT ...]
 
 ``--reviews`` restricts the run to the dataset items whose id, review id or

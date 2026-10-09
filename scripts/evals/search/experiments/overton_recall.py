@@ -24,7 +24,7 @@ subscription with a one-call-per-second limit. Uploads nothing to Langfuse.
 Usage::
 
     uv run --project backend --env-file backend/.env \\
-        python scripts/evals/search/measure/overton_recall.py \\
+        python scripts/evals/search/experiments/overton_recall.py \\
         [--dataset retrieval-ground-truth-mini] [--caps 50 100 200 400] \\
         [--docs 100] [--reviews TEXT ...] [--refresh]
 """

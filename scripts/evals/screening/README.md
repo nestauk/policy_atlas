@@ -104,9 +104,11 @@ scripts/evals/screening/
 ├── vote.py             the app's keep rule
 ├── metrics.py          recall, precision, F2, and the dollar cost
 ├── sync_s3.py          download the datasets and upload a run, via the AWS command line
-├── measure/run_screen.py     one run: screen, score, write a folder
-├── measure/analyse_runs.py   summarise and compare saved runs (no model calls)
-├── measure/rank_baselines.py non-AI baselines: BM25, embeddings, hybrid
+├── checks/             measures the app's screen as built
+│   ├── run_screen.py   one run: screen, score, write a folder (flags change one setting for an experiment)
+│   └── analyse_runs.py summarise and compare saved runs (no model calls)
+├── experiments/        research scripts
+│   └── rank_baselines.py non-AI baselines: BM25, embeddings, hybrid
 ├── prompts/            replacement system prompts for prompt experiments
 ├── tests               self-checks, no network and no model calls
 ├── datasets/           the downloaded files (not in git)
@@ -180,19 +182,19 @@ OpenAlex and 3ie can change their records, so the build also writes `targets_sou
 
 ```
 # mini dataset, production settings: gpt-5.4-mini, three replies per document
-uv run --project backend --env-file backend/.env python scripts/evals/screening/measure/run_screen.py
+uv run --project backend --env-file backend/.env python scripts/evals/screening/checks/run_screen.py
 
 # The same, with each question's published criteria added under it
-uv run --project backend --env-file backend/.env python scripts/evals/screening/measure/run_screen.py --criteria
+uv run --project backend --env-file backend/.env python scripts/evals/screening/checks/run_screen.py --criteria
 
 # One reply per document (about a third of the calls)
-uv run --project backend --env-file backend/.env python scripts/evals/screening/measure/run_screen.py --reps 1
+uv run --project backend --env-file backend/.env python scripts/evals/screening/checks/run_screen.py --reps 1
 
 # The same one-reply run on gpt-5.6-luna
-uv run --project backend --env-file backend/.env python scripts/evals/screening/measure/run_screen.py --reps 1 --model gpt-5.6-luna
+uv run --project backend --env-file backend/.env python scripts/evals/screening/checks/run_screen.py --reps 1 --model gpt-5.6-luna
 
 # full dataset (about 3,000 documents), only for a setting that looks good on mini
-uv run --project backend --env-file backend/.env python scripts/evals/screening/measure/run_screen.py --dataset full
+uv run --project backend --env-file backend/.env python scripts/evals/screening/checks/run_screen.py --dataset full
 ```
 
 `--targets Name1 Name2` scores a chosen subset, for example a pilot of a few cents. `--reasoning-effort low` sets the reasoning effort; leaving it off matches the app. `--system-prompt scripts/evals/screening/prompts/<file>.txt` replaces the stage-1 system prompt for this run only. The production prompt is hash-pinned and is never edited by the eval; the run JSON records the file name and a hash of the text (`system_prompt`).
@@ -216,7 +218,7 @@ uv run --project backend python scripts/evals/screening/sync_s3.py upload \
 `analyse_runs.py` reads saved run folders and prints Markdown. It makes no model calls, so the same folders always give the same numbers. Every number in `results/history.md` and the task notes comes from it.
 
 ```
-uv run --project backend python scripts/evals/screening/measure/analyse_runs.py \
+uv run --project backend python scripts/evals/screening/checks/analyse_runs.py \
     scripts/evals/screening/results/runs/<run A> scripts/evals/screening/results/runs/<run B>
 ```
 
@@ -241,7 +243,7 @@ For a run with three calls per document it also replays other ways of combining 
 A ranking is not a keep-or-drop decision. The report says whether the rankers got the same scope text as the run (question only, or question and criteria); match it with `--criteria` for a like-for-like comparison. With `--match <run folder>`, each ranker keeps, for every question, as many documents as that language-model run kept. Both then spend the same reading effort, and the table compares recall, excludes dropped, precision, F1 and F2, with an exact McNemar test on the included documents. A "chance" row gives what a random pick of the same size would reach on average. Without `--match` it prints only ranking quality (AUC and average precision, per question).
 
 ```
-uv run --project backend --env-file backend/.env python scripts/evals/screening/measure/rank_baselines.py \
+uv run --project backend --env-file backend/.env python scripts/evals/screening/experiments/rank_baselines.py \
     --criteria --match scripts/evals/screening/results/runs/<run folder>
 ```
 

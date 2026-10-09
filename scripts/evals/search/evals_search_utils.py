@@ -2,7 +2,7 @@
 and the small helpers every runner needs.
 
 Used by both halves of ``scripts/evals/search/``: ``ground_truth/`` (building the
-Langfuse dataset) and ``measure/`` (running recall measurements). Holds the key a document
+Langfuse dataset) and ``checks/`` and ``experiments/`` (running recall measurements). Holds the key a document
 is scored on (``record_key``), the ``GroundTruth`` container, the function that cleans a
 review title into a search intent, the date helpers for a review's search cutoff, the
 retrying OpenAlex getter, the dataset name, the item selector shared by the runners, the
@@ -283,7 +283,7 @@ def usd(value: float) -> str:
     """Dollars to two decimals, or four when the amount would otherwise show as $0.00.
 
     OpenAlex bills fractions of a cent per page, so $0.0004 must not print as $0.00.
-    Shared with ``measure/baseline_recall.py`` so both tables format money the same way.
+    Shared with ``checks/baseline_recall.py`` so both tables format money the same way.
     """
     return f"${value:.2f}" if value == 0 or value >= 0.01 else f"${value:.4f}"
 

@@ -7,8 +7,8 @@ tables under `results/` (git-ignored). The dated log of runs and decisions is in
 `docs/tasks/047-search-rnd/notes.md`. This file holds the method, how to run it, and the
 key results.
 
-The measured baselines (`measure/baseline_recall.py`) and the production runs
-(`measure/production_recall.py`) are described in the [README](README.md).
+The measured baselines (`checks/baseline_recall.py`) and the production runs
+(`checks/production_recall.py`) are described in the [README](README.md).
 
 ## Key results (as of 2026-10-06)
 
@@ -436,7 +436,7 @@ thirteen seeds is a display question; the signal itself is right.
 
 ### 8. A longer tail re-ranked before the cut, and a topic fence (2026-10-06, hypotheses 2 and 4)
 
-Script: `measure/pool_rerank.py`. It builds a much larger pool than the base
+Script: `experiments/pool_rerank.py`. It builds a much larger pool than the base
 configuration and asks whether a better ranking rule can pull the ground truth to the
 top of it: 200 seeds, **800** backward snowball papers (against 200), 200 forward
 papers, plus the **topic fence**: the five generated queries and the question rerun
@@ -687,7 +687,7 @@ not; the mean hides that split, and the full 100-review set is the next measurem
   (at least five papers), reported only for reviews whose list is a labelled set of
   included studies.
 
-## The script: `measure/snowball_recall.py`
+## The script: `experiments/snowball_recall.py`
 
 Started 2026-10-06 (task 047). Not promoted to the pipeline yet.
 
@@ -725,16 +725,16 @@ the cache.
 
 ```
 # raw query seeds, with the manual question exported for hand review
-uv run --project backend --env-file backend/.env python scripts/evals/search/measure/snowball_recall.py \
+uv run --project backend --env-file backend/.env python scripts/evals/search/experiments/snowball_recall.py \
     --seeds 200 --expand 200 --caps 50 100 200 400 \
     --manual "What is the relationship between avalanche criticality and edge of chaos criticality in neural networks"
 
 # generated-query seeds with the production prompt
-uv run --project backend --env-file backend/.env python scripts/evals/search/measure/snowball_recall.py \
+uv run --project backend --env-file backend/.env python scripts/evals/search/experiments/snowball_recall.py \
     --queries shared --rankings raw specific --caps 100 200 400
 
 # an edited prompt, a different model, a reasoning setting, a repeat
-uv run --project backend --env-file backend/.env python scripts/evals/search/measure/snowball_recall.py \
+uv run --project backend --env-file backend/.env python scripts/evals/search/experiments/snowball_recall.py \
     --queries shared --prompt-file scripts/evals/search/prompts/search_queries_exp_d.txt \
     --model gpt-5.6-luna --reasoning-effort low --repeat 2
 ```

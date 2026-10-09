@@ -27,7 +27,7 @@ and topic searches, all free; and one embedding call per 100 texts on
 
 Usage::
 
-    uv run --project backend --env-file backend/.env python scripts/evals/search/measure/pool_rerank.py \\
+    uv run --project backend --env-file backend/.env python scripts/evals/search/experiments/pool_rerank.py \\
         [--queries shared] [--model gpt-5.6-luna] [--prompt-file ...] [--expand 800] \\
         [--forward 200] [--caps 200 400 600]
 

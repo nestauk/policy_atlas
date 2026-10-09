@@ -4,7 +4,7 @@ No model calls: everything is worked out from the ``result_*.csv`` files and
 ``eval_results.json`` that ``run_screen.py`` writes. The same run folders always
 give the same numbers, so every figure in the task notes can be checked.
 
-    uv run --project backend python scripts/evals/screening/measure/analyse_runs.py \\
+    uv run --project backend python scripts/evals/screening/checks/analyse_runs.py \\
         scripts/evals/screening/results/runs/<run A> [<run B> ...]
 
 What it prints, as Markdown:

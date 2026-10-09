@@ -1,7 +1,7 @@
 """Search recall baselines: one plain search per review on three services.
 
 The pipeline finds a share of each review's reference list (see
-``measure/production_recall.py``). This script gives that share something to be compared
+``checks/production_recall.py``). This script gives that share something to be compared
 with. A **baseline** is the simplest possible search: the review's intent text is sent
 once, as it is, to one search service. No language model writes queries, nothing is
 screened, and there is no second round. The four **arms** (as in an experiment) are
@@ -44,7 +44,7 @@ not retry them a second time.
 Usage::
 
     uv run --project backend --env-file backend/.env \\
-        python scripts/evals/search/measure/baseline_recall.py [--arms ...] [--caps ...] \\
+        python scripts/evals/search/checks/baseline_recall.py [--arms ...] [--caps ...] \\
         [--reviews TEXT ...] [--run-label LABEL] [--refresh] [--dry-run]
 
 ``--dry-run`` still fills missing cache entries, but only prints scores; it uploads

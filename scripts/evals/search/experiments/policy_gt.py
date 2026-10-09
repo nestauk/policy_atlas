@@ -26,7 +26,7 @@ Relative comparisons between orders are the use; the absolute level is not.
 Usage::
 
     uv run --project backend --env-file backend/.env \\
-        python scripts/evals/search/measure/policy_gt.py [--n 15] [--docs 200] \\
+        python scripts/evals/search/experiments/policy_gt.py [--n 15] [--docs 200] \\
         [--landmarks 15] [--forward 10] [--forward-new 15]
 
 About 12 calls for the survey and 45 per strategy, cached under

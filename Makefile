@@ -142,7 +142,7 @@ prompt-guard:
 # Records only — it does not pass or fail on the numbers.
 # Example: make eval-search-recall ARGS="--depths rapid"
 eval-search-recall:
-	uv run --project backend --env-file backend/.env python scripts/evals/search/measure/production_recall.py $(ARGS)
+	uv run --project backend --env-file backend/.env python scripts/evals/search/checks/production_recall.py $(ARGS)
 
 # The eval scripts' own checks: pure self-tests (no network, no database, no model
 # calls) and ruff on scripts/evals/search and scripts/evals/screening, which `make lint`
