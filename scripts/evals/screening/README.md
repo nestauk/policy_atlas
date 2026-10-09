@@ -108,7 +108,7 @@ scripts/evals/screening/
 ├── measure/analyse_runs.py   summarise and compare saved runs (no model calls)
 ├── measure/rank_baselines.py non-AI baselines: BM25, embeddings, hybrid
 ├── prompts/            replacement system prompts for prompt experiments
-├── tests/              self-checks, no network and no model calls
+├── tests               self-checks, no network and no model calls
 ├── datasets/           the downloaded files (not in git)
 └── results/
     ├── history.md      headline numbers, kept by hand
