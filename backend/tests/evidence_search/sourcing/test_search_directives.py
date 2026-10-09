@@ -17,11 +17,8 @@ from policy_atlas.evidence_search.sourcing.country_filters import (
     validate_iso_alpha2,
 )
 from policy_atlas.evidence_search.sourcing.search_loop import (
-    ROUND_CAP,
     SearchDirectiveError,
-    StopDecision,
     _filter_variants,
-    evaluate_deep_stop,
     parse_search_directive,
     to_wire_params,
     validate_scope_filters,
@@ -56,7 +53,9 @@ def test_parse_search_directive_depth_deep_ok() -> None:
 
 def test_parse_search_directive_depth_standard_ok() -> None:
     assert parse_search_directive({"search": {"depth": "standard"}}) == (
-        "standard", None, None,
+        "standard",
+        None,
+        None,
     )
 
 
@@ -94,7 +93,9 @@ def test_parse_search_directive_guidance_absent_is_none() -> None:
 )
 def test_parse_search_directive_accepts_valid_guidance(guidance: list[str]) -> None:
     assert parse_search_directive({"search": {"guidance": guidance}}) == (
-        "rapid", None, guidance,
+        "rapid",
+        None,
+        guidance,
     )
 
 
@@ -233,9 +234,7 @@ def test_validate_scope_filters_full_example_both_backends() -> None:
         ({"shared": {"sdgs": [3, 4]}}, ["openalex", "overton"]),
     ],
 )
-def test_validate_scope_filters_fail_closed(
-    raw: dict[str, Any], backend_names: list[str]
-) -> None:
+def test_validate_scope_filters_fail_closed(raw: dict[str, Any], backend_names: list[str]) -> None:
     with pytest.raises(SearchDirectiveError):
         validate_scope_filters(raw, backend_names=backend_names)
 
@@ -311,15 +310,8 @@ def test_openalex_country_filter_variants_split_after_100_codes() -> None:
 
     assert [len(variant["author_affiliation_countries"]) for variant in variants] == [100, 1]
     wires = [to_wire_params("openalex", variant)["filter"] for variant in variants]
-    assert all(
-        len(wire.removeprefix("authorships.countries:").split("|")) <= 100
-        for wire in wires
-    )
-    union = [
-        country
-        for variant in variants
-        for country in variant["author_affiliation_countries"]
-    ]
+    assert all(len(wire.removeprefix("authorships.countries:").split("|")) <= 100 for wire in wires)
+    union = [country for variant in variants for country in variant["author_affiliation_countries"]]
     assert union == countries
 
 
@@ -379,71 +371,3 @@ def test_search_backend_scope_unknown_value_rejected_on_config() -> None:
                 "search_backend_scope": "unknown_scope",
             }
         )
-
-
-# --- evaluate_deep_stop: pure stop-decision matrix ---
-# No target and no clock (task 029): the only stops are short_circuit (yield
-# collapse, rounds >= 2) and budget_exhausted (round cap).
-
-
-def test_deep_stop_short_circuit_low_rate_round_2() -> None:
-    decision = evaluate_deep_stop(
-        round_index=2,
-        new_confident_relevant=1,
-        docs_screened_this_round=1000,  # 1/1000 < 1/50
-        round_cap=ROUND_CAP,
-    )
-    assert decision == StopDecision(True, "short_circuit")
-
-
-def test_deep_stop_short_circuit_zero_docs_round_2() -> None:
-    decision = evaluate_deep_stop(
-        round_index=2,
-        new_confident_relevant=0,
-        docs_screened_this_round=0,
-        round_cap=ROUND_CAP,
-    )
-    assert decision == StopDecision(True, "short_circuit")
-
-
-def test_deep_stop_round_1_never_short_circuits() -> None:
-    """Round 1 is the plain fan-out; the discovery-rate floor applies from round 2."""
-    decision = evaluate_deep_stop(
-        round_index=1,
-        new_confident_relevant=0,
-        docs_screened_this_round=1000,
-        round_cap=ROUND_CAP,
-    )
-    assert decision == StopDecision(False, None)
-
-
-def test_deep_stop_budget_on_round_cap() -> None:
-    decision = evaluate_deep_stop(
-        round_index=ROUND_CAP,
-        new_confident_relevant=5,
-        docs_screened_this_round=10,  # healthy rate, no short-circuit
-        round_cap=ROUND_CAP,
-    )
-    assert decision == StopDecision(True, "budget_exhausted")
-
-
-def test_deep_stop_no_stop_otherwise() -> None:
-    decision = evaluate_deep_stop(
-        round_index=2,
-        new_confident_relevant=5,
-        docs_screened_this_round=10,
-        round_cap=ROUND_CAP,
-    )
-    assert decision == StopDecision(False, None)
-
-
-def test_deep_stop_standard_round_cap_is_two() -> None:
-    """The gate passes the DEPTH's cap — standard stops at 2 rounds, not deep's 3
-    (run_deep_rounds used to hardcode deep's cap; the runner gate must not)."""
-    decision = evaluate_deep_stop(
-        round_index=2,
-        new_confident_relevant=5,
-        docs_screened_this_round=10,
-        round_cap=2,
-    )
-    assert decision == StopDecision(True, "budget_exhausted")

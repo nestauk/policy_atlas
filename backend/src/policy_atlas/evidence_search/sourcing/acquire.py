@@ -529,34 +529,11 @@ class _Candidate(NamedTuple):
 
     backend_name: str
     verb: str
+    origin: str
     record: dict[str, Any]
     mapped: dict[str, Any]
     text: str
     chash: str
-
-
-def _interleave(per_call: list[list[_Candidate]]) -> list[_Candidate]:
-    """Merge per-call candidate lists round-robin by rank position.
-
-    Providers return each call's records in rank order (OpenAlex relevance,
-    Overton similarity), so taking every call's rank-1 record, then every
-    rank-2, and so on, is a merge that keeps the fan-out's query diversity: a
-    later trim removes the tail of every query rather than every record of the
-    later queries. Sorting the merged set by score instead would need a score
-    that is comparable across queries, which provider relevance scores are not.
-
-    Args:
-        per_call: One candidate list per call, each already in provider order.
-
-    Returns:
-        A single list, rank-interleaved across the calls in the given order.
-    """
-    merged: list[_Candidate] = []
-    for rank in range(max((len(candidates) for candidates in per_call), default=0)):
-        for candidates in per_call:
-            if rank < len(candidates):
-                merged.append(candidates[rank])
-    return merged
 
 
 def acquire_sources(
@@ -571,7 +548,8 @@ def acquire_sources(
     depth: str = "rapid",
     scope_wire_params: dict[str, Any] | None = None,
     search_guidance: list[str] | None = None,
-    record_cap_per_backend: int | None = None,
+    pools: dict[str, list[tuple[dict[str, Any], str, str]]] | None = None,
+    caps: dict[str, int] | None = None,
 ) -> dict[str, Any]:
     """Acquire metadata-only sources for an evidence scope over the given backends.
 
@@ -596,14 +574,12 @@ def acquire_sources(
         search_guidance: B1 (024 steering surface) executed ``search.guidance``
             list, echoed verbatim onto ``search_coverage_record.scope_filters``
             as a sibling ``guidance`` key when present.
-        record_cap_per_backend: Maximum records persisted per backend from the
-            ``search`` fan-out, applied after the rank-interleaved merge and
-            after dedup, so a capped round still yields a full cap of *new*
-            documents. ``None`` means uncapped. This is the run's volume brake:
-            each persisted record costs an embedding here and about 1.3
-            screening calls downstream (the adaptive stage-1 vote). Targeted
-            verbs (snowball, suggest) are never trimmed — they carry their own
-            call caps upstream.
+        pools: Ranked raw records as ``(record, origin, verb)`` tuples. When
+            omitted, no ranking is applied: every successful call's records
+            are consumed in call order with that call's origin and verb.
+        caps: Maximum persisted records for each backend's ranked pool. When
+            omitted (or missing a backend), there is no cut: this is what a
+            caller that only has executed calls gets.
 
     Returns:
         Counts dict: ``acquired``, ``already_acquired``, ``skipped_unusable``,
@@ -623,6 +599,20 @@ def acquire_sources(
     if len(set(names)) != len(names):
         raise ValueError(f"duplicate backend names: {names}")
     backend_by_name = {backend.name: backend for backend in backends}
+    if pools is None:
+        pools = {
+            name: [
+                (record, call.query_origin, call.verb)
+                for call in executed_calls
+                if call.backend_name == name and call.status == "ok"
+                for record in call.records
+            ]
+            for name in names
+        }
+    caps = caps or {}
+    unknown_pool_backends = [name for name in pools if name not in backend_by_name]
+    if unknown_pool_backends:
+        raise ValueError(f"pool references unknown backend(s): {unknown_pool_backends}")
     unknown_call_backends = [
         call.backend_name for call in executed_calls if call.backend_name not in backend_by_name
     ]
@@ -681,9 +671,12 @@ def acquire_sources(
         verb: str,
         records: list[dict[str, Any]],
         counts: dict[str, Any],
+        origin: str = "generated",
+        count_results: bool = True,
     ) -> list[_Candidate]:
         """Map one call's raw records to candidates. No dedup, no writes."""
-        counts["results_returned"] += len(records)
+        if count_results:
+            counts["results_returned"] += len(records)
         mapper = _MAPPERS[backend_name]  # validated upfront
 
         candidates: list[_Candidate] = []
@@ -699,6 +692,7 @@ def acquire_sources(
                 _Candidate(
                     backend_name=backend_name,
                     verb=verb,
+                    origin=origin,
                     record=record,
                     mapped=mapped,
                     text=text,
@@ -817,16 +811,12 @@ def acquire_sources(
                 "evidence_scope_id": str(context.scope_id),
                 "backend": backend_name,
                 "backend_record_id": record_id,
+                "query_origin": candidate.origin,
             },
         )
 
         counts["acquired"] += 1
         acquired_tss_by_verb.setdefault(verb, []).append(str(tss_id))
-
-    # Per-backend candidate lists, kept apart by verb: the `search` fan-out is
-    # merged and trimmed, targeted verbs are not.
-    search_candidates: dict[str, list[list[_Candidate]]] = {name: [] for name in names}
-    targeted_candidates: dict[str, list[_Candidate]] = {name: [] for name in names}
 
     for call in executed_calls:
         backend = backend_by_name[call.backend_name]
@@ -852,6 +842,9 @@ def acquire_sources(
         }
         if post_filter_excluded is not None:
             event_payload["post_filter_excluded"] = post_filter_excluded
+        pages = getattr(call, "pages", None)
+        if pages is not None:
+            event_payload["pages"] = pages
         events.append(
             conn,
             task_id=task_id,
@@ -861,16 +854,7 @@ def acquire_sources(
         )
         if call.status == "ok":
             ok_calls_by_backend[backend.name] += 1
-            candidates = map_records(
-                backend_name=backend.name,
-                verb=call.verb,
-                records=call.records,
-                counts=counts,
-            )
-            if call.verb == "search":
-                search_candidates[backend.name].append(candidates)
-            else:
-                targeted_candidates[backend.name].extend(candidates)
+            counts["results_returned"] += len(call.records)
         else:
             errors_by_backend[backend.name].append(error or "unknown search error")
             log.warning(
@@ -881,29 +865,29 @@ def acquire_sources(
                 error=error,
             )
 
-    # Merge, dedup, trim, persist — in that order, per backend. Dedup runs
-    # *before* the trim so a capped round still yields a full cap of new
-    # documents however many repeats the queries returned; and it runs over the
-    # interleaved stream so the best-ranked copy of a document is the one kept.
-    # Targeted verbs are deduped first and never trimmed: snowball and suggest
-    # results are individually chosen, and their arms are capped upstream.
     for name in names:
         counts = by_backend[name]
-        for candidate in targeted_candidates[name]:
-            if is_new(candidate):
-                persist(candidate)
-            else:
-                counts["already_acquired"] += 1
-
         kept = 0
-        for candidate in _interleave(search_candidates[name]):
+        for record, origin, verb in pools.get(name, []):
             # Cap checked before the identity guards, never after: `is_new`
             # *claims* the keys it checks, so running it on a record we are
             # about to drop would make a later backend's genuine record look
             # already-acquired and lose it.
-            if record_cap_per_backend is not None and kept >= record_cap_per_backend:
+            cap = caps.get(name)
+            if cap is not None and kept >= cap:
                 counts["dropped_over_cap"] += 1
                 continue
+            candidates = map_records(
+                backend_name=name,
+                verb=verb,
+                records=[record],
+                counts=counts,
+                origin=origin,
+                count_results=False,
+            )
+            if not candidates:
+                continue
+            candidate = candidates[0]
             if not is_new(candidate):
                 counts["already_acquired"] += 1
                 continue
@@ -917,7 +901,7 @@ def acquire_sources(
                 run_id=str(run_id),
                 kept=kept,
                 dropped=counts["dropped_over_cap"],
-                cap=record_cap_per_backend,
+                cap=cap,
             )
 
     any_error = False

@@ -12,7 +12,7 @@ from __future__ import annotations
 import time
 import uuid
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date
 from typing import Any, Literal, TypedDict, cast
 
@@ -20,18 +20,14 @@ from sqlalchemy import func, select
 from sqlalchemy.engine import Connection
 
 from policy_atlas.core.embeddings import EmbeddingBackend
-from policy_atlas.core.prompt_fields import metadata_dict, parse_guidance_channel
+from policy_atlas.core.prompt_fields import parse_guidance_channel
 from policy_atlas.core.schema import (
     DIRECTIVE_STRING_MAX,
-    event_log,
     search_coverage_record,
-    source_screening_result,
-    source_snapshot,
-    task_source_snapshot,
 )
 from policy_atlas.core.usage import UsageAccumulator
 from policy_atlas.evidence_search.assess import screen
-from policy_atlas.evidence_search.sourcing import acquire
+from policy_atlas.evidence_search.sourcing import acquire, pool
 from policy_atlas.evidence_search.sourcing.country_filters import (
     OVERTON_DISPLAY_ALLOWLIST,
     validate_iso_alpha2,
@@ -43,12 +39,8 @@ from policy_atlas.evidence_search.sourcing.country_filters import (
 from policy_atlas.evidence_search.sourcing.search_generation import SearchGenerationBackend
 from policy_atlas.evidence_search.sourcing.search_prompts import (
     N_QUERIES,
-    ExemplarRecord,
     QueriesPayload,
-    ReformulatePayload,
-    SuggestPayload,
     validated_queries,
-    validated_suggestions,
 )
 
 SearchDepth = Literal["rapid", "standard", "deep"]
@@ -77,91 +69,46 @@ CallVerb = Literal[
     "fetch_by_id",
 ]
 CallStatus = Literal["ok", "error"]
-ArmName = Literal["reformulate", "snowball", "suggest", "diversity"]
 
 # No wall clock at any depth (task 030): a time budget over an ordered fan-out
 # truncates the tail — a specific set of queries and providers, not a random
 # sample — and its breach once cost the entire Overton leg while the run still
-# reported 'adequate'. Volume is bounded at acquisition instead
-# (`record_cap_per_backend`), which brakes the thing that actually costs money.
-# There is deliberately no confident-relevant stop target either: the per-depth
-# `round_cap` is the budget, with `short_circuit` (SHORT_CIRCUIT_RATE) as the
-# yield-collapse early exit.
-ROUND_CAP = 3
-POS_EXEMPLARS = 8
-NEG_EXEMPLARS = 4
-SNOWBALL_SEEDS = 5
-SNOWBALL_RESULTS = 40
+# reported 'adequate'. Volume is bounded at acquisition instead (the two caps
+# in DEPTH_CONSTANTS), which brakes the thing that actually costs money, and by
+# the logical-call budgets here.
+#
+# Kept for the parked reformulation contingency (task 051, docs/deferred.md):
+# `confident_relevant_count` and its two thresholds have no caller in the
+# single pass.
 CONFIDENT_FLOOR = 0.7
-SHORT_CIRCUIT_RATE = 1.0 / 50.0
 THIN_CONFIDENT_RELEVANT = 8
-DIVERSITY_FRACTION = 0.15
-REFORMULATE_CALL_CAP = 4
-SNOWBALL_CALL_CAP = 6
-SUGGEST_CALL_CAP = 6
-DIVERSITY_CALL_MIN = 1
 
 
 class DepthConstants(TypedDict):
-    """Per-depth budget constants used by the search strategy."""
+    """Per-depth output caps and logical-call budgets."""
 
-    # Results requested per API call at this depth — NOT a shared total split
-    # across the fan-out. A shared total divided by `planned` was the original
-    # bug: as the SR/RCT variant fan-out widened to 15 OpenAlex calls, the
-    # standard cap of 75 collapsed to 5 results per query.
-    #
-    # Sized against provider page boundaries, not "as much as possible"
-    # (Overton page 50 / OpenAlex page 200): each value stays within two
-    # Overton pages, so one logical call is 1-2 real HTTP requests, and
-    # `call_budget` below counts those logical backend calls. Overton
-    # enforces a 1.2s gap per request, so per-call targets far above a page
-    # turn the fan-out into mostly enforced sleep.
-    #
-    # This bounds one CALL — how much a single query may fetch and how many
-    # HTTP requests that takes. It does NOT bound the round: that is
-    # `record_cap_per_backend` below.
-    result_cap_per_backend: int
-    # Documents acquired per backend per round, applied after merge and dedup
-    # (see `acquire_sources`). This is the run's volume brake: every acquired
-    # record is embedded on acquisition and screened afterwards at about 1.3
-    # LLM calls each (the adaptive stage-1 vote), so this number — not the
-    # per-call cap — is what bounds spend. Owner-set (2026-08-06): rapid 50 /
-    # standard 100 / deep 200, per backend per round.
-    #
-    # ponytail: sized from methodology, not measurement. The ground-truth
-    # recall eval (scripts/evals/search/, other branch) is the instrument
-    # for revising these once rounds + arms are live.
-    record_cap_per_backend: int
-    round_cap: int
+    # A cap is the maximum number of records persisted from the ranked pool.
+    papers_cap: int
+    policy_cap: int
+    # A logical call is one planned provider request, even when it pages or retries.
     call_budget: dict[str, int]
-    # Deep-round-loop arm selection (017, contract rev 2.9): which of the
-    # four deep-round arms run at this depth. Not applicable to "rapid" —
-    # rapid's single round_cap never reaches the deep-round loop — so its
-    # value is the empty set.
-    arms: frozenset[ArmName]
 
 
 DEPTH_CONSTANTS: dict[SearchDepth, DepthConstants] = {
     "rapid": {
-        "result_cap_per_backend": 50,
-        "record_cap_per_backend": 50,
-        "round_cap": 1,
-        "call_budget": {"openalex": 20, "overton": 5},
-        "arms": frozenset(),
+        "papers_cap": 100,
+        "policy_cap": 50,
+        "call_budget": {"openalex": 45, "overton": 30},
     },
     "standard": {
-        "result_cap_per_backend": 75,
-        "record_cap_per_backend": 100,
-        "round_cap": 2,
-        "call_budget": {"openalex": 30, "overton": 8},
-        "arms": frozenset({"reformulate", "diversity"}),
+        "papers_cap": 200,
+        "policy_cap": 100,
+        "call_budget": {"openalex": 45, "overton": 30},
     },
     "deep": {
-        "result_cap_per_backend": 100,
-        "record_cap_per_backend": 200,
-        "round_cap": ROUND_CAP,
-        "call_budget": {"openalex": 50, "overton": 15},
-        "arms": frozenset({"reformulate", "snowball", "suggest", "diversity"}),
+        "papers_cap": 400,
+        "policy_cap": 200,
+        "call_budget": {"openalex": 45, "overton": 30},
     },
 }
 
@@ -254,6 +201,9 @@ _OVERTON_FILTER_KEYS = {
     "language",
 }
 _BACKEND_NAMES = {"openalex", "overton"}
+SEMANTIC_ACCEPTED_FILTER_KEYS: frozenset[str] = frozenset(
+    {"types", "languages", "exclude_retracted"}
+)
 
 
 @dataclass(frozen=True)
@@ -282,6 +232,7 @@ class ExecutedCall:
     status: CallStatus
     error: str | None
     post_filter_excluded: int | None = None
+    pages: int | None = None
 
 
 @dataclass(frozen=True)
@@ -291,26 +242,6 @@ class _PlannedCall:
     query_origin: QueryOrigin
     group_key: str | None = None
     filter_variant_index: int = 0
-
-
-@dataclass(frozen=True)
-class _ScreenedRecord:
-    tss_id: uuid.UUID
-    metadata: dict[str, Any]
-    confidence: float
-
-
-@dataclass(frozen=True)
-class StopDecision:
-    """Deep-loop stop decision.
-
-    Attributes:
-        stop: Whether the loop should stop after this evaluation.
-        stop_condition: Raw stop condition before any deep-thin overlay.
-    """
-
-    stop: bool
-    stop_condition: str | None
 
 
 # Unified filter-directive validator/raiser family.
@@ -827,32 +758,17 @@ def _scope_wire_params_payload(
     }
 
 
-def _with_filter_variants(plan: _PlannedCall, variant_count: int) -> list[_PlannedCall]:
-    if variant_count <= 1:
-        return [plan]
-    return [
-        _PlannedCall(
-            backend_name=plan.backend_name,
-            query=plan.query,
-            query_origin=plan.query_origin,
-            group_key=plan.group_key,
-            filter_variant_index=index,
-        )
-        for index in range(variant_count)
-    ]
-
-
 def count_existing_rounds(
     conn: Connection,
     *,
     task_id: uuid.UUID,
     scope_id: uuid.UUID,
 ) -> int:
-    """Count completed search rounds for a scope (one coverage row per round).
+    """Count completed search runs for a scope (one coverage row per run).
 
-    ``run_search`` derives its own round index from this (round N+1 unlocks
-    the reformulate/snowball/suggest/diversity arms at N+1 >= 2), and the
-    runner's round gate reads it to enforce the depth's ``round_cap``.
+    ``run_search`` reports its ``round_index`` from this (1 on a fresh scope;
+    a re-run of the search on the same scope counts up). Search is one pass
+    at every scope (task 051); historical rows from the round loop still count.
 
     Args:
         conn: Open database connection.
@@ -867,43 +783,6 @@ def count_existing_rounds(
         .select_from(search_coverage_record)
         .where(search_coverage_record.c.task_id == task_id)
         .where(search_coverage_record.c.evidence_scope_id == scope_id)
-    ).scalar_one()
-    return int(count)
-
-
-def new_confident_relevant_for_run(
-    conn: Connection,
-    *,
-    task_id: uuid.UUID,
-    scope_id: uuid.UUID,
-    run_id: uuid.UUID,
-) -> int:
-    """Count confident-relevant stage-1 rows written by one screen run.
-
-    Screening is incremental (NOT-EXISTS on prior non-failed stage-1 rows), so
-    the rows a screen run writes are exactly the documents new to that round —
-    this is the round's marginal yield, read from persisted provenance rather
-    than in-memory state so the runner's round gate survives park/resume.
-
-    Args:
-        conn: Open database connection.
-        task_id: Owning task.
-        scope_id: Evidence scope being screened.
-        run_id: The screen run whose newly written rows to count.
-
-    Returns:
-        Count of that run's stage-1 rows with ``status='relevant'`` and
-        ``screen_decision_confidence >= CONFIDENT_FLOOR``.
-    """
-    count = conn.execute(
-        select(func.count())
-        .select_from(source_screening_result)
-        .where(source_screening_result.c.task_id == task_id)
-        .where(source_screening_result.c.evidence_scope_id == scope_id)
-        .where(source_screening_result.c.screened_by_run_id == run_id)
-        .where(source_screening_result.c.screen_stage == 1)
-        .where(source_screening_result.c.status == "relevant")
-        .where(source_screening_result.c.screen_decision_confidence >= CONFIDENT_FLOOR)
     ).scalar_one()
     return int(count)
 
@@ -935,259 +814,6 @@ def confident_relevant_count(
         .where(effective.c.screen_decision_confidence >= CONFIDENT_FLOOR)
     ).scalar_one()
     return int(count)
-
-
-def evaluate_deep_stop(
-    *,
-    round_index: int,
-    new_confident_relevant: int,
-    docs_screened_this_round: int,
-    round_cap: int,
-) -> StopDecision:
-    """Evaluate round-loop stopping without touching the database.
-
-    There is deliberately no confident-relevant target (task 030): the round
-    cap is the budget, and ``short_circuit`` is the yield-collapse early exit.
-
-    Args:
-        round_index: Search round just completed.
-        new_confident_relevant: New confident-relevant rows from this round.
-        docs_screened_this_round: Stage-1 docs screened this round.
-        round_cap: The depth's round budget (``DEPTH_CONSTANTS[depth]["round_cap"]``).
-
-    Returns:
-        Stop decision with the raw stop condition, if any.
-    """
-    if round_index >= 2 and (
-        docs_screened_this_round == 0
-        or new_confident_relevant / docs_screened_this_round < SHORT_CIRCUIT_RATE
-    ):
-        return StopDecision(True, "short_circuit")
-    if round_index >= round_cap:
-        return StopDecision(True, "budget_exhausted")
-    return StopDecision(False, None)
-
-
-def finalise_deep_stop(
-    conn: Connection,
-    *,
-    task_id: uuid.UUID,
-    scope_id: uuid.UUID,
-    stop_condition: str,
-    thin: bool,
-) -> str:
-    """Write the final round-loop stop condition onto the latest coverage row.
-
-    Args:
-        conn: Open database connection.
-        task_id: Owning task.
-        scope_id: Evidence scope being searched.
-        stop_condition: Raw stop condition from ``evaluate_deep_stop``.
-        thin: Whether the final confident-relevant count is below
-            ``THIN_CONFIDENT_RELEVANT`` — the honesty overlay that tells the
-            reader "we searched again and the evidence is still thin".
-
-    Returns:
-        Stop condition written to ``search_coverage_record`` after applying the
-        thin-evidence overlay.
-
-    Raises:
-        RuntimeError: If no search coverage row exists for the scope.
-    """
-    final_value = "re_searched_still_thin" if thin else stop_condition
-    row = conn.execute(
-        select(search_coverage_record.c.search_coverage_record_id)
-        .where(search_coverage_record.c.task_id == task_id)
-        .where(search_coverage_record.c.evidence_scope_id == scope_id)
-        .order_by(
-            search_coverage_record.c.created_at.desc(),
-            search_coverage_record.c.acquired_by_run_id.desc(),
-        )
-        .limit(1)
-    ).one_or_none()
-    if row is None:
-        raise RuntimeError("deep stop finalisation requires a coverage row")
-    conn.execute(
-        search_coverage_record.update()
-        .where(search_coverage_record.c.search_coverage_record_id == row.search_coverage_record_id)
-        .values(stop_condition=final_value)
-    )
-    return final_value
-
-
-def _text_or_none(raw: Any) -> str | None:
-    return raw if isinstance(raw, str) and raw else None
-
-
-_normalized_doi = acquire._normalize_doi
-
-
-def _normalized_title(raw: Any) -> str:
-    return " ".join(str(raw or "").casefold().split())
-
-
-def _record_key(record: dict[str, Any]) -> str:
-    record_id = record.get("id")
-    if isinstance(record_id, str) and record_id:
-        return f"id:{record_id}"
-    doi = _normalized_doi(record.get("doi"))
-    if doi is not None:
-        return f"doi:{doi}"
-    return f"title:{_normalized_title(record.get('display_name'))}"
-
-
-def _dedupe_records(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    out: list[dict[str, Any]] = []
-    seen: set[str] = set()
-    for record in records:
-        key = _record_key(record)
-        if key in seen:
-            continue
-        seen.add(key)
-        out.append(record)
-    return out
-
-
-def _prior_deep_usage(
-    conn: Connection,
-    *,
-    task_id: uuid.UUID,
-    scope_id: uuid.UUID,
-    backend_names: list[str],
-    depth: SearchDepth,
-) -> dict[str, int]:
-    http_calls = dict.fromkeys(backend_names, 0)
-    rows = conn.execute(
-        select(event_log.c.payload)
-        .where(event_log.c.task_id == task_id)
-        .where(event_log.c.event_type == "search.executed")
-        .where(event_log.c.payload.op("->>")("evidence_scope_id") == str(scope_id))
-        .where(event_log.c.payload.op("->>")("depth") == depth)
-    ).fetchall()
-    for row in rows:
-        payload = metadata_dict(row.payload)
-        backend = payload.get("backend")
-        if not isinstance(backend, str) or backend not in http_calls:
-            continue
-        http_calls[backend] += 1
-    return http_calls
-
-
-def _screened_records(
-    conn: Connection,
-    *,
-    task_id: uuid.UUID,
-    scope_id: uuid.UUID,
-    status: Literal["relevant", "not_relevant"],
-    limit: int,
-    confidence_floor: float | None,
-) -> list[_ScreenedRecord]:
-    effective = screen.effective_screen_rows()
-    query = (
-        select(
-            task_source_snapshot.c.task_source_snapshot_id,
-            source_snapshot.c.metadata,
-            effective.c.screen_decision_confidence,
-        )
-        .select_from(
-            effective.join(
-                task_source_snapshot,
-                (
-                    effective.c.task_source_snapshot_id
-                    == task_source_snapshot.c.task_source_snapshot_id
-                )
-                & (effective.c.task_id == task_source_snapshot.c.task_id),
-            ).join(
-                source_snapshot,
-                task_source_snapshot.c.source_snapshot_id == source_snapshot.c.source_snapshot_id,
-            )
-        )
-        .where(effective.c.task_id == task_id)
-        .where(effective.c.evidence_scope_id == scope_id)
-        .where(effective.c.status == status)
-        .where(effective.c.screen_decision_confidence.is_not(None))
-        .order_by(
-            effective.c.screen_decision_confidence.desc(),
-            task_source_snapshot.c.task_source_snapshot_id,
-        )
-        .limit(limit)
-    )
-    if confidence_floor is not None:
-        query = query.where(effective.c.screen_decision_confidence >= confidence_floor)
-    return [
-        _ScreenedRecord(
-            tss_id=cast(uuid.UUID, row.task_source_snapshot_id),
-            metadata=metadata_dict(row.metadata),
-            confidence=float(row.screen_decision_confidence),
-        )
-        for row in conn.execute(query)
-    ]
-
-
-def _exemplar(record: _ScreenedRecord) -> ExemplarRecord:
-    return ExemplarRecord(
-        tss_id=str(record.tss_id),
-        title=_text_or_none(record.metadata.get("title")) or "",
-        abstract=_text_or_none(record.metadata.get("abstract")),
-        screen_confidence=record.confidence,
-    )
-
-
-def _read_exemplars(
-    conn: Connection,
-    *,
-    task_id: uuid.UUID,
-    scope_id: uuid.UUID,
-) -> tuple[
-    list[_ScreenedRecord],
-    list[_ScreenedRecord],
-    list[ExemplarRecord],
-    list[ExemplarRecord],
-]:
-    positives = _screened_records(
-        conn,
-        task_id=task_id,
-        scope_id=scope_id,
-        status="relevant",
-        limit=POS_EXEMPLARS,
-        confidence_floor=CONFIDENT_FLOOR,
-    )
-    negatives = _screened_records(
-        conn,
-        task_id=task_id,
-        scope_id=scope_id,
-        status="not_relevant",
-        limit=NEG_EXEMPLARS,
-        confidence_floor=None,
-    )
-    return (
-        positives,
-        negatives,
-        [_exemplar(record) for record in positives],
-        [_exemplar(record) for record in negatives],
-    )
-
-
-def docs_screened_from_payload(payload: dict[str, Any]) -> int:
-    """Extract the stage-1 ``screened`` count from a screen component summary.
-
-    Stage-1 ``screened`` is the honest round-loop denominator: the number of
-    newly loaded docs before consensus insertion. Used by the runner's round
-    gate to evaluate ``short_circuit``.
-
-    Args:
-        payload: A screen component's ``component.completed`` summary.
-
-    Returns:
-        The stage-1 ``screened`` count.
-
-    Raises:
-        RuntimeError: If the payload lacks an integer ``screened`` count.
-    """
-    value = payload.get("screened")
-    if isinstance(value, int):
-        return value
-    raise RuntimeError("round-loop screen payload must include stage-1 'screened'")
 
 
 def _compose_variant(query: str, clause: str) -> str:
@@ -1233,6 +859,491 @@ def _rapid_plans(
     return []
 
 
+def _semantic_filter_parts(validated: dict[str, Any]) -> tuple[dict[str, str], list[str]]:
+    """Split the plan's OpenAlex filters for one semantic-search call.
+
+    The semantic endpoint accepts only some of the filters the keyword endpoint
+    takes (probe of 2026-10-09). The accepted ones go on the wire. A date range
+    goes on the wire as a publication-year fence, which the endpoint accepts,
+    and the exact dates are then checked locally. Every other filter is checked
+    locally on the returned records (``_semantic_record_passes``), so the
+    directive always holds and the semantic leg never has to be skipped.
+
+    Args:
+        validated: The validated OpenAlex filter block (one filter variant).
+
+    Returns:
+        The wire params to send, and the sorted directive keys applied locally.
+    """
+    accepted = {k: v for k, v in validated.items() if k in SEMANTIC_ACCEPTED_FILTER_KEYS}
+    wire = openalex_wire_params(accepted)
+    fence: list[str] = []
+    if "published_after" in validated:
+        fence.append(f"publication_year:>{int(str(validated['published_after'])[:4]) - 1}")
+    if "published_before" in validated:
+        fence.append(f"publication_year:<{int(str(validated['published_before'])[:4]) + 1}")
+    if fence:
+        parts = [wire["filter"]] if wire.get("filter") else []
+        wire["filter"] = ",".join([*parts, *fence])
+    local = sorted(
+        key
+        for key, value in validated.items()
+        if key not in SEMANTIC_ACCEPTED_FILTER_KEYS and (value or key != "exclude_paratext")
+    )
+    return wire, local
+
+
+def _semantic_record_passes(validated: dict[str, Any], record: dict[str, Any]) -> bool:
+    """Check one semantic-search record against the filters applied locally.
+
+    Args:
+        validated: The validated OpenAlex filter block.
+        record: A raw OpenAlex work with the ``OA_SELECT`` fields.
+
+    Returns:
+        True when the record satisfies every locally applied filter.
+    """
+    published = str(record.get("publication_date") or "")
+    after = validated.get("published_after")
+    if after and (not published or published < str(after)):
+        return False
+    before = validated.get("published_before")
+    if before and (not published or published > str(before)):
+        return False
+    sdgs = validated.get("sdgs")
+    if sdgs:
+        wanted = {f"https://metadata.un.org/sdg/{number}" for number in sdgs}
+        goals = record.get("sustainable_development_goals") or []
+        found = {goal.get("id") for goal in goals if isinstance(goal, dict)}
+        if not wanted & found:
+            return False
+    if validated.get("exclude_paratext") and record.get("is_paratext"):
+        return False
+    statuses = validated.get("oa_status")
+    if statuses:
+        open_access = record.get("open_access")
+        status = open_access.get("oa_status") if isinstance(open_access, dict) else None
+        if status not in set(statuses):
+            return False
+    countries = validated.get("author_affiliation_countries")
+    return not countries or pool.country_predicate(record, set(countries))
+
+
+def _without_country_filter(wire_params: dict[str, str]) -> dict[str, str]:
+    """Drop the affiliation-country clause from an OpenAlex wire filter.
+
+    The resolve and forward calls carry every wire filter except this one,
+    which is applied locally to the citation-found papers instead, so a
+    two-variant country split does not double those calls.
+    """
+    parts = [
+        part
+        for part in wire_params.get("filter", "").split(",")
+        if part and not part.startswith("authorships.countries:")
+    ]
+    return {"filter": ",".join(parts)} if parts else {}
+
+
+def _overton_country(record: dict[str, Any]) -> str | None:
+    source = record.get("source")
+    return source.get("country") if isinstance(source, dict) else None
+
+
+PoolEntry = tuple[dict[str, Any], str, str]
+"""One record handed to acquire: ``(record, query_origin, verb)``."""
+
+Fetch = Callable[[int], list[dict[str, Any]]]
+"""A bound provider call: give it the page size, get the records."""
+
+
+def _search_fetch(backend: acquire.SearchBackendBase, query: str, wire: dict[str, str]) -> Fetch:
+    return lambda size: backend.search(query, wire_params=wire, max_results=size)
+
+
+def _semantic_fetch(
+    backend: acquire.ExtendedSearchBackend, text: str, wire: dict[str, str]
+) -> Fetch:
+    return lambda size: backend.search_semantic(text, wire_params=wire, max_results=size)
+
+
+def _lookup_fetch(
+    backend: acquire.ExtendedSearchBackend, ids: list[str], wire: dict[str, str]
+) -> Fetch:
+    return lambda _size: backend.lookup_ids(ids, wire_params=wire)
+
+
+def _citing_fetch(
+    backend: acquire.ExtendedSearchBackend, ids: list[str], wire: dict[str, str], page: int
+) -> Fetch:
+    return lambda size: backend.fetch_citing(ids, wire_params=wire, max_results=size, page=page)
+
+
+def _by_id_fetch(backend: acquire.ExtendedSearchBackend, document_id: str) -> Fetch:
+    def fetch(_size: int) -> list[dict[str, Any]]:
+        record = backend.fetch_by_id(document_id)
+        return [record] if record is not None else []
+
+    return fetch
+
+
+@dataclass
+class _Pass:
+    """What one search pass has called so far, and the budget it works under.
+
+    Attributes:
+        constants: The depth's caps and call budgets.
+        variant_count: Filter variants per backend (the OpenAlex budget is per variant).
+        executed: Every logical call, in order, for acquire's events and counts.
+        calls: Logical calls made per backend.
+        origin_of: The origin and verb of the call that returned each record
+            object, keyed by ``id(record)``.
+    """
+
+    constants: DepthConstants
+    variant_count: dict[str, int]
+    executed: list[ExecutedCall] = field(default_factory=list)
+    calls: dict[str, int] = field(default_factory=dict)
+    origin_of: dict[int, tuple[str, str]] = field(default_factory=dict)
+    ranked_count: dict[str, int] = field(default_factory=dict)
+
+    def execute(
+        self,
+        backend: acquire.SearchBackendBase,
+        *,
+        verb: CallVerb,
+        query: str,
+        origin: QueryOrigin,
+        wire_params: dict[str, str],
+        max_records: int,
+        fetch: Callable[[int], list[dict[str, Any]]],
+        keep: Callable[[dict[str, Any]], bool] | None = None,
+    ) -> ExecutedCall | None:
+        """Make one logical call, or skip it when the backend's budget is spent.
+
+        A logical call is one planned request however the transport pages or
+        retries underneath (contract D12). ``keep`` is a local filter applied
+        to the returned records; what it drops is counted on the call as
+        ``post_filter_excluded``, beside anything the backend itself excluded.
+        """
+        budget = self.constants["call_budget"].get(backend.name, 0)
+        budget *= self.variant_count.get(backend.name, 1) if backend.name == "openalex" else 1
+        if self.calls.get(backend.name, 0) >= budget:
+            return None
+        self.calls[backend.name] = self.calls.get(backend.name, 0) + 1
+        try:
+            # Copies: a backend may hand back the same record objects on every
+            # call (the fixtures do), and the pool bookkeeping is by object.
+            records = [dict(record) for record in fetch(max_records)[:max_records]]
+            excluded = (
+                getattr(backend, "last_post_filter_excluded", None) if verb == "search" else None
+            )
+            if keep is not None:
+                kept = [record for record in records if keep(record)]
+                excluded = (excluded or 0) + len(records) - len(kept)
+                records = kept
+            call = ExecutedCall(
+                backend_name=backend.name,
+                verb=verb,
+                query=query,
+                query_origin=origin,
+                wire_params=wire_params,
+                records=records,
+                status="ok",
+                error=None,
+                post_filter_excluded=excluded,
+                pages=getattr(backend, "last_pages", None) if verb == "search" else None,
+            )
+        except Exception as exc:
+            call = ExecutedCall(
+                backend_name=backend.name,
+                verb=verb,
+                query=query,
+                query_origin=origin,
+                wire_params=wire_params,
+                records=[],
+                status="error",
+                error=str(exc),
+            )
+        self.executed.append(call)
+        for record in call.records:
+            self.origin_of.setdefault(id(record), (origin, verb))
+        return call
+
+    def entries(self, ranked: list[dict[str, Any]], backend_name: str) -> list[PoolEntry]:
+        """The pool handed to acquire: the ranked records, then every other record.
+
+        Every record a call returned is listed exactly once, so acquire's count
+        invariant holds: the ranked ones first (persisted up to the cap), then
+        duplicate copies and the records the ranking left out, which the cap
+        (never larger than the ranked list, see ``run_search``) counts as
+        already acquired or dropped over the cap.
+        """
+        self.ranked_count[backend_name] = len(ranked)
+        placed = {id(record) for record in ranked}
+        out: list[PoolEntry] = [(record, *self.origin_of[id(record)]) for record in ranked]
+        for call in self.executed:
+            if call.backend_name != backend_name:
+                continue
+            for record in call.records:
+                if id(record) not in placed:
+                    placed.add(id(record))
+                    out.append((record, *self.origin_of[id(record)]))
+        return out
+
+
+@dataclass
+class _LegSummary:
+    """Counts one backend's leg reports into the ``search`` summary."""
+
+    zero_result_queries: int = 0
+    fallback_to_verbatim: bool = False
+    seeds: int = 0
+    backward_targets: int = 0
+    forward_candidates: int = 0
+    landmarks: int = 0
+
+
+def _openalex_leg(
+    search: _Pass,
+    backend: acquire.SearchBackendBase,
+    *,
+    intent: str,
+    queries: list[str],
+    paraphrases: list[str],
+    variants: list[dict[str, Any]],
+    wires: list[dict[str, str]],
+) -> tuple[list[PoolEntry], _LegSummary, list[str]]:
+    """Seeds, backward snowball, forward chase, ranking: the paper pool.
+
+    Returns the pool entries, the leg's counts, and the semantic filters applied locally.
+    """
+    summary = _LegSummary()
+    extended = cast(acquire.ExtendedSearchBackend, backend)
+
+    # 1. Keyword seeds: each generated query as written and with the
+    #    systematic-review and randomised-trial clauses, per filter variant.
+    keyword: list[tuple[_PlannedCall, ExecutedCall]] = []
+    for wire in wires:
+        for plan in _rapid_plans(
+            backend_name="openalex", intent=intent, queries=queries, overton_paraphrases=[]
+        ):
+            call = search.execute(
+                backend,
+                verb="search",
+                query=plan.query,
+                origin=plan.query_origin,
+                wire_params=wire,
+                max_records=pool.KEYWORD_PER_CALL,
+                fetch=_search_fetch(backend, plan.query, wire),
+            )
+            if call is not None:
+                keyword.append((plan, call))
+    groups: dict[str, list[ExecutedCall]] = {}
+    for plan, call in keyword:
+        groups.setdefault(plan.group_key or plan.query, []).append(call)
+    summary.zero_result_queries = sum(
+        1 for calls in groups.values() if all(c.status == "ok" and not c.records for c in calls)
+    )
+    if all(c.status == "ok" and not c.records for _, c in keyword):
+        # Every generated query came back empty: fall back to the verbatim
+        # intent, loudly (ADR 0012 decision 2), one call per filter variant.
+        summary.fallback_to_verbatim = True
+        for wire in wires:
+            call = search.execute(
+                backend,
+                verb="search",
+                query=intent,
+                origin="fallback_verbatim",
+                wire_params=wire,
+                max_records=pool.KEYWORD_PER_CALL,
+                fetch=_search_fetch(backend, intent, wire),
+            )
+            if call is not None:
+                keyword.append((_PlannedCall("openalex", intent, "fallback_verbatim"), call))
+
+    # 2. Semantic seeds: the question, the paraphrases and the queries through
+    #    the embedding search. Filters the endpoint rejects are applied here
+    #    (the country filter included), so one set of calls serves every variant.
+    semantic_wire, local_filters = _semantic_filter_parts(variants[0])
+    keep = (lambda record: _semantic_record_passes(variants[0], record)) if local_filters else None
+    semantic: list[ExecutedCall] = []
+    for text in [intent, *paraphrases[:2], *queries[:N_QUERIES]]:
+        call = search.execute(
+            backend,
+            verb="search_semantic",
+            query=text,
+            origin="semantic",
+            wire_params=semantic_wire,
+            max_records=pool.SEMANTIC_PER_CALL,
+            fetch=_semantic_fetch(extended, text, semantic_wire),
+            keep=keep,
+        )
+        if call is not None:
+            semantic.append(call)
+
+    # 3. The seeds are the first SEEDS distinct works, interleaved by rank.
+    lists = [call.records for _, call in keyword] + [call.records for call in semantic]
+    seeds = pool.interleave(lists, pool.record_short_id)[: pool.SEEDS]
+    seed_ids = {work_id for record in seeds if (work_id := pool.record_short_id(record))}
+    counts = pool.count_references(seeds)
+    summary.seeds = len(seeds)
+
+    # 4. Citation chasing carries every wire filter except the country clause,
+    #    which is checked locally on the citation-found papers.
+    citation_wire = _without_country_filter(wires[0])
+    countries = variants[0].get("author_affiliation_countries")
+    country_keep = (
+        (lambda record: pool.country_predicate(record, set(countries)))
+        if isinstance(countries, list) and countries
+        else None
+    )
+
+    # 5. Backward: resolve the works the seeds cite most, 50 ids per call.
+    targets = pool.backward_targets(counts, seed_ids, pool.BACKWARD_EXPAND)
+    summary.backward_targets = len(targets)
+    backward: list[dict[str, Any]] = []
+    for start in range(0, len(targets), pool.RESOLVE_BATCH):
+        batch = targets[start : start + pool.RESOLVE_BATCH]
+        call = search.execute(
+            backend,
+            verb="fetch_references",
+            query="|".join(batch),
+            origin="snowball_backward",
+            wire_params=citation_wire,
+            max_records=pool.RESOLVE_BATCH,
+            fetch=_lookup_fetch(extended, batch, citation_wire),
+            keep=country_keep,
+        )
+        if call is not None:
+            backward.extend(call.records)
+
+    # 6. Forward: the works that cite the best-connected seeds, paged until a
+    #    short page, 100 seed ids per request.
+    chased = pool.forward_seeds(
+        seeds, counts, top=pool.FORWARD_TOP, max_cites=pool.FORWARD_MAX_CITES
+    )
+    citing: list[dict[str, Any]] = []
+    for start in range(0, len(chased), pool.FORWARD_IDS_PER_CALL):
+        ids = chased[start : start + pool.FORWARD_IDS_PER_CALL]
+        for page in range(1, pool.FORWARD_PAGES + 1):
+            call = search.execute(
+                backend,
+                verb="fetch_citations",
+                query="|".join(ids),
+                origin="snowball_forward",
+                wire_params=citation_wire,
+                max_records=pool.KEYWORD_PER_CALL,
+                fetch=_citing_fetch(extended, ids, citation_wire, page),
+                keep=country_keep,
+            )
+            if call is None or call.status != "ok":
+                break
+            citing.extend(call.records)
+            if len(call.records) + (call.post_filter_excluded or 0) < pool.KEYWORD_PER_CALL:
+                break
+    forward = pool.score_forward(citing, seed_ids, counts, excluded_ids=set(targets))
+    forward = forward[: pool.FORWARD_KEEP]
+    summary.forward_candidates = len(forward)
+
+    # 7. One ranked pool over seeds, backward and forward candidates.
+    seeded = [(record, search.origin_of[id(record)][0]) for record in seeds]
+    ranked = pool.rank_papers(pool.paper_candidates(seeded, backward, forward, counts))
+    return search.entries([c.record for c in ranked], "openalex"), summary, local_filters
+
+
+def _overton_leg(
+    search: _Pass,
+    backend: acquire.SearchBackendBase,
+    *,
+    intent: str,
+    paraphrases: list[str],
+    validated: dict[str, Any],
+    wire: dict[str, str],
+) -> tuple[list[PoolEntry], _LegSummary]:
+    """Relevance results, title dedup, landmarks, ranking: the policy pool."""
+    summary = _LegSummary()
+    post_filter = validated.get("source_country_post_filter")
+    if isinstance(post_filter, list) and not hasattr(backend, "search_with_post_filter"):
+        # Fail closed: silently searching unfiltered would admit
+        # out-of-group records with no provenance trace.
+        raise SearchDirectiveError(
+            "source_country_post_filter requires an Overton backend "
+            "with search_with_post_filter; refusing to search unfiltered"
+        )
+
+    def fetch_for(query: str) -> Fetch:
+        if isinstance(post_filter, list):
+            return lambda size: cast(
+                list[dict[str, Any]],
+                cast(Any, backend).search_with_post_filter(
+                    query,
+                    wire_params=wire,
+                    source_country_post_filter=post_filter,
+                    max_results=size,
+                ),
+            )
+        return _search_fetch(backend, query, wire)
+
+    # 1. Three relevance-ordered searches sharing OVERTON_DOCS documents.
+    per_text = -(-pool.OVERTON_DOCS // 3)
+    searches: list[ExecutedCall] = []
+    for plan in _rapid_plans(
+        backend_name="overton", intent=intent, queries=[], overton_paraphrases=paraphrases
+    ):
+        call = search.execute(
+            backend,
+            verb="search",
+            query=plan.query,
+            origin=plan.query_origin,
+            wire_params=wire,
+            max_records=per_text,
+            fetch=fetch_for(plan.query),
+        )
+        if call is not None:
+            searches.append(call)
+    summary.zero_result_queries = sum(
+        1
+        for call in searches
+        if call.query_origin == "paraphrase" and call.status == "ok" and not call.records
+    )
+
+    # 2. Interleave by rank, drop title duplicates (best-ranked copy kept).
+    results = pool.dedupe_policy(
+        pool.interleave(
+            [call.records for call in searches], lambda r: r.get("policy_document_id") or None
+        )
+    )
+    counts = pool.count_policy_cites(results)
+    result_ids = {str(record.get("policy_document_id")) for record in results}
+
+    # 3. Landmarks: the documents the results cite most and the search missed.
+    country_keep = (
+        (lambda record: _overton_country(record) in set(post_filter))
+        if isinstance(post_filter, list)
+        else None
+    )
+    landmarks: list[dict[str, Any]] = []
+    for document_id in pool.landmark_targets(counts, result_ids, pool.OVERTON_LANDMARKS):
+        call = search.execute(
+            backend,
+            verb="fetch_by_id",
+            query=document_id,
+            origin="landmark",
+            wire_params={},
+            max_records=1,
+            fetch=_by_id_fetch(cast(acquire.ExtendedSearchBackend, backend), document_id),
+            keep=country_keep,
+        )
+        if call is not None:
+            landmarks.extend(call.records)
+    summary.landmarks = len(landmarks)
+
+    # 4. One ranked pool over results and landmarks.
+    seeded = [(record, search.origin_of[id(record)][0]) for record in results]
+    ranked = pool.rank_policy(seeded, landmarks, counts)
+    return search.entries([c.record for c in ranked], "overton"), summary
+
+
 def run_search(
     conn: Connection,
     *,
@@ -1243,12 +1354,14 @@ def run_search(
     generation_backend: SearchGenerationBackend,
     embedder: EmbeddingBackend | None = None,
 ) -> dict[str, Any]:
-    """Execute the depth-graded search strategy and persist acquired records.
+    """Run the single search pass and persist the two capped pools.
 
-    Every planned call runs to completion — there is no time budget (task 030:
-    a clock over the ordered fan-out truncated a specific tail, historically
-    the whole Overton leg). Volume is bounded per round at acquisition by
-    ``record_cap_per_backend``.
+    Every scope runs the same pass once (task 051, ADR 0038): one
+    query-generation call, OpenAlex keyword and semantic seeds, backward and
+    forward citation chasing, Overton relevance results and their landmarks,
+    two specificity-ranked pools cut at the scope's two caps. Every planned
+    call runs; there is no wall clock (task 030). Volume is bounded by the
+    caps at acquisition and by the logical-call budgets here.
 
     Args:
         conn: Open database connection; writes are delegated to acquire.
@@ -1268,506 +1381,48 @@ def run_search(
     """
     depth, raw_filters, guidance = parse_search_directive(context.context)
     constants = DEPTH_CONSTANTS[depth]
-    backend_names = [backend.name for backend in backends]
-    validated_filters = validate_scope_filters(raw_filters, backend_names=backend_names)
-    filter_variants_by_backend = {
-        name: _filter_variants(name, validated_filters[name]) for name in backend_names
-    }
-    wire_params_by_backend = {
-        name: [to_wire_params(name, variant) for variant in filter_variants_by_backend[name]]
-        for name in backend_names
-    }
-    scope_wire_params = (
-        _scope_wire_params_payload(wire_params_by_backend) if raw_filters is not None else None
-    )
-
-    round_index = (
-        count_existing_rounds(
-            conn,
-            task_id=task_id,
-            scope_id=context.scope_id,
-        )
-        + 1
-    )
-    prior_http_calls = (
-        _prior_deep_usage(
-            conn,
-            task_id=task_id,
-            scope_id=context.scope_id,
-            backend_names=backend_names,
-            depth=depth,
-        )
-        if depth in ("deep", "standard")
-        else dict.fromkeys(backend_names, 0)
-    )
-
+    names = [backend.name for backend in backends]
+    validated = validate_scope_filters(raw_filters, backend_names=names)
+    variants = {name: _filter_variants(name, validated[name]) for name in names}
+    wires = {name: [to_wire_params(name, item) for item in variants[name]] for name in names}
+    scope_wire_params = _scope_wire_params_payload(wires) if raw_filters is not None else None
+    round_index = count_existing_rounds(conn, task_id=task_id, scope_id=context.scope_id) + 1
     started = time.monotonic()
-    executed_calls: list[ExecutedCall] = []
-    http_calls_by_backend = dict(prior_http_calls)
-    queries_zero_result = dict.fromkeys(backend_names, 0)
-    fallback_to_verbatim = dict.fromkeys(backend_names, False)
-    arm_calls: dict[ArmName, int] = {
-        "reformulate": 0,
-        "snowball": 0,
-        "suggest": 0,
-        "diversity": 0,
-    }
-    positive_exemplars: list[ExemplarRecord] = []
-    negative_exemplars: list[ExemplarRecord] = []
-    suggestions_proposed = 0
-    suggestions_grounded = 0
-    suggestions_dropped = 0
-    suggest_failures = 0
-    generation_calls = 0
+
+    wire, usage = generation_backend.generate_queries(
+        QueriesPayload(intent=context.intent, guidance=guidance)
+    )
     usage_totals = UsageAccumulator()
+    usage_totals.add(usage)
+    queries, paraphrases = validated_queries(wire)
+    queries_dropped = len(wire.queries) - len(queries)
 
-    def execute_call(
-        backend: acquire.SearchBackendBase,
-        *,
-        verb: CallVerb,
-        query: str,
-        query_origin: QueryOrigin,
-        wire_params: dict[str, str],
-        fetch: Callable[[int], list[dict[str, Any]]],
-        post_filter_excluded: Callable[[], int | None] | None = None,
-        max_records: int | None = None,
-        arm: ArmName | None = None,
-    ) -> ExecutedCall | None:
-        backend_budget = constants["call_budget"].get(backend.name, 0)
-        if http_calls_by_backend[backend.name] >= backend_budget:
-            return None
-        request_size = (
-            max_records if max_records is not None else constants["result_cap_per_backend"]
-        )
-        http_calls_by_backend[backend.name] += 1
-        try:
-            records = fetch(request_size)
-            records = records[:request_size]
-            excluded = post_filter_excluded() if post_filter_excluded is not None else None
-            call = ExecutedCall(
-                backend_name=backend.name,
-                verb=verb,
-                query=query,
-                query_origin=query_origin,
-                wire_params=wire_params,
-                records=records,
-                status="ok",
-                error=None,
-                post_filter_excluded=excluded,
-            )
-        except Exception as exc:
-            call = ExecutedCall(
-                backend_name=backend.name,
-                verb=verb,
-                query=query,
-                query_origin=query_origin,
-                wire_params=wire_params,
-                records=[],
-                status="error",
-                error=str(exc),
-            )
-        executed_calls.append(call)
-        if arm is not None:
-            arm_calls[arm] += 1
-        return call
-
-    def execute_plan(
-        backend: acquire.SearchBackendBase,
-        plan: _PlannedCall,
-        *,
-        arm: ArmName | None = None,
-        max_records: int | None = None,
-    ) -> ExecutedCall | None:
-        wire_params = wire_params_by_backend[backend.name][plan.filter_variant_index]
-        validated = filter_variants_by_backend[backend.name][plan.filter_variant_index]
-        post_filter = validated.get("source_country_post_filter")
-        if backend.name == "overton" and isinstance(post_filter, list):
-            if not hasattr(backend, "search_with_post_filter"):
-                # Fail closed: silently searching unfiltered would admit
-                # out-of-group records with no provenance trace.
-                raise SearchDirectiveError(
-                    "source_country_post_filter requires an Overton backend "
-                    "with search_with_post_filter; refusing to search unfiltered"
-                )
-            return execute_call(
+    search = _Pass(constants, {name: len(variants[name]) for name in names})
+    pools: dict[str, list[PoolEntry]] = {}
+    summaries: dict[str, _LegSummary] = {}
+    local_filters: list[str] = []
+    for backend in backends:
+        if backend.name == "openalex":
+            pools[backend.name], summaries[backend.name], local_filters = _openalex_leg(
+                search,
                 backend,
-                verb="search",
-                query=plan.query,
-                query_origin=plan.query_origin,
-                wire_params=wire_params,
-                max_records=max_records,
-                arm=arm,
-                post_filter_excluded=lambda: cast(
-                    int | None, getattr(backend, "last_post_filter_excluded", None)
-                ),
-                fetch=lambda remaining: cast(Any, backend).search_with_post_filter(
-                    plan.query,
-                    wire_params=wire_params,
-                    source_country_post_filter=post_filter,
-                    max_results=remaining,
-                ),
-            )
-        return execute_call(
-            backend,
-            verb="search",
-            query=plan.query,
-            query_origin=plan.query_origin,
-            wire_params=wire_params,
-            max_records=max_records,
-            arm=arm,
-            fetch=lambda remaining: backend.search(
-                plan.query,
-                wire_params=wire_params,
-                max_results=remaining,
-            ),
-        )
-
-    if all(backend.mode == "fixture" for backend in backends):
-        for backend in backends:
-            for plan in _with_filter_variants(
-                _PlannedCall(backend.name, context.intent, "verbatim"),
-                len(filter_variants_by_backend[backend.name]),
-            ):
-                execute_plan(backend, plan)
-    elif depth in ("deep", "standard") and round_index >= 2:
-        positive_records, _negative_records, positive_exemplars, negative_exemplars = (
-            _read_exemplars(
-                conn,
-                task_id=task_id,
-                scope_id=context.scope_id,
-            )
-        )
-
-        wire, usage = generation_backend.reformulate(
-            ReformulatePayload(
-                intent=context.intent,
-                round_index=round_index,
-                positive=positive_exemplars,
-                negative=negative_exemplars,
-                guidance=guidance,
-            )
-        )
-        usage_totals.add(usage)
-        generation_calls += 1
-        queries, overton_paraphrases = validated_queries(wire)
-
-        for backend in backends:
-            quota = constants["result_cap_per_backend"]
-            if backend.name == "openalex":
-                variant_count = len(filter_variants_by_backend[backend.name])
-                for query in queries[:REFORMULATE_CALL_CAP]:
-                    for plan in _with_filter_variants(
-                        _PlannedCall(backend.name, query, "generated"),
-                        variant_count,
-                    ):
-                        execute_plan(
-                            backend,
-                            plan,
-                            arm="reformulate",
-                            max_records=quota,
-                        )
-            elif backend.name == "overton":
-                for paraphrase in overton_paraphrases[:2]:
-                    for plan in _with_filter_variants(
-                        _PlannedCall(backend.name, paraphrase, "paraphrase"),
-                        len(filter_variants_by_backend[backend.name]),
-                    ):
-                        execute_plan(
-                            backend,
-                            plan,
-                            arm="reformulate",
-                            max_records=quota,
-                        )
-
-        openalex_backend = next(
-            (
-                backend
-                for backend in backends
-                if backend.name == "openalex" and backend.caps.has_snowball
-            ),
-            None,
-        )
-        if "snowball" in constants["arms"] and openalex_backend is not None:
-            seeds = [
-                record
-                for record in positive_records
-                if record.metadata.get("backend") == "openalex"
-                and isinstance(record.metadata.get("backend_record_id"), str)
-            ][:SNOWBALL_SEEDS]
-            snowball_records = 0
-            per_seed = SNOWBALL_RESULTS // SNOWBALL_SEEDS
-            for seed in seeds:
-                if arm_calls["snowball"] >= SNOWBALL_CALL_CAP:
-                    break
-                if snowball_records >= SNOWBALL_RESULTS:
-                    break
-                seed_id = cast(str, seed.metadata["backend_record_id"])
-
-                def fetch_forward_citations(
-                    remaining: int,
-                    *,
-                    record_id: str = seed_id,
-                ) -> list[dict[str, Any]]:
-                    return openalex_backend.fetch_citations(
-                        record_id,
-                        max_results=remaining,
-                    )
-
-                call = execute_call(
-                    openalex_backend,
-                    verb="fetch_citations",
-                    query=seed_id,
-                    query_origin="snowball_forward",
-                    wire_params={},
-                    max_records=min(per_seed, SNOWBALL_RESULTS - snowball_records),
-                    arm="snowball",
-                    fetch=fetch_forward_citations,
-                )
-                if call is not None and call.status == "ok":
-                    snowball_records += len(call.records)
-
-            referenced: list[str] = []
-            seen_refs: set[str] = set()
-            for seed in seeds:
-                provider_fields = seed.metadata.get("provider_fields")
-                if not isinstance(provider_fields, dict):
-                    continue
-                raw_refs = provider_fields.get("referenced_works")
-                if not isinstance(raw_refs, list):
-                    continue
-                for raw_ref in raw_refs:
-                    ref = raw_ref if isinstance(raw_ref, str) else None
-                    if ref is None or ref in seen_refs:
-                        continue
-                    seen_refs.add(ref)
-                    referenced.append(ref)
-                    if len(referenced) == 50:
-                        break
-                if len(referenced) == 50:
-                    break
-
-            remaining_snowball = SNOWBALL_RESULTS - snowball_records
-            if referenced and remaining_snowball > 0 and arm_calls["snowball"] < SNOWBALL_CALL_CAP:
-                execute_call(
-                    openalex_backend,
-                    verb="fetch_references",
-                    query="|".join(referenced),
-                    query_origin="snowball_backward",
-                    wire_params={},
-                    max_records=remaining_snowball,
-                    arm="snowball",
-                    fetch=lambda remaining: openalex_backend.fetch_references(
-                        referenced,
-                        max_results=remaining,
-                    ),
-                )
-
-        suggest_backend = next(
-            (
-                backend
-                for backend in backends
-                if backend.name == "openalex"
-                and (backend.caps.has_doi_lookup or backend.caps.has_title_lookup)
-            ),
-            None,
-        )
-        if "suggest" in constants["arms"] and suggest_backend is not None:
-            try:
-                generation_calls += 1
-                suggest_wire, usage = generation_backend.suggest(
-                    SuggestPayload(intent=context.intent, positive=positive_exemplars)
-                )
-                usage_totals.add(usage)
-                suggestions = validated_suggestions(suggest_wire)
-            except Exception:
-                suggest_failures += 1
-                suggestions = []
-
-            suggestions_proposed = len(suggestions)
-            grounded_indices: set[int] = set()
-            doi_to_indices: dict[str, list[int]] = {}
-            doi_values: list[str] = []
-            for index, suggestion in enumerate(suggestions):
-                doi = _normalized_doi(suggestion.get("doi"))
-                if doi is None:
-                    continue
-                doi_to_indices.setdefault(doi, []).append(index)
-                if doi not in doi_values:
-                    doi_values.append(doi)
-
-            if (
-                doi_values
-                and suggest_backend.caps.has_doi_lookup
-                and arm_calls["suggest"] < SUGGEST_CALL_CAP
-            ):
-
-                def fetch_doi_groundings(remaining: int) -> list[dict[str, Any]]:
-                    candidates = suggest_backend.lookup_dois(
-                        doi_values,
-                        max_results=min(remaining, len(doi_values)),
-                    )
-                    grounded: list[dict[str, Any]] = []
-                    for candidate in candidates:
-                        candidate_doi = _normalized_doi(candidate.get("doi"))
-                        if candidate_doi not in doi_to_indices:
-                            continue
-                        grounded.extend([candidate])
-                        grounded_indices.update(doi_to_indices[candidate_doi])
-                    return _dedupe_records(grounded)
-
-                execute_call(
-                    suggest_backend,
-                    verb="lookup_dois",
-                    query="|".join(doi_values),
-                    query_origin="suggestion_doi",
-                    wire_params={},
-                    arm="suggest",
-                    fetch=fetch_doi_groundings,
-                )
-
-            if suggest_backend.caps.has_title_lookup:
-                for index, suggestion in enumerate(suggestions):
-                    if index in grounded_indices:
-                        continue
-                    if arm_calls["suggest"] >= SUGGEST_CALL_CAP:
-                        break
-                    title = cast(str, suggestion["title"])
-                    suggestion_doi = _normalized_doi(suggestion.get("doi"))
-                    title_key = _normalized_title(title)
-
-                    def fetch_title_grounding(
-                        remaining: int,
-                        *,
-                        title_text: str = title,
-                        normalized_title: str = title_key,
-                        doi: str | None = suggestion_doi,
-                        suggestion_index: int = index,
-                    ) -> list[dict[str, Any]]:
-                        candidates = suggest_backend.lookup_title(title_text)
-                        grounded: list[dict[str, Any]] = []
-                        for candidate in candidates:
-                            title_matches = (
-                                _normalized_title(candidate.get("display_name")) == normalized_title
-                            )
-                            doi_matches = (
-                                doi is not None and _normalized_doi(candidate.get("doi")) == doi
-                            )
-                            if title_matches or doi_matches:
-                                grounded.append(candidate)
-                        if grounded:
-                            grounded_indices.add(suggestion_index)
-                        return _dedupe_records(grounded)[:remaining]
-
-                    execute_call(
-                        suggest_backend,
-                        verb="lookup_title",
-                        query=title,
-                        query_origin="suggestion_title",
-                        wire_params={},
-                        arm="suggest",
-                        fetch=fetch_title_grounding,
-                    )
-
-            suggestions_grounded = len(grounded_indices)
-            suggestions_dropped = suggestions_proposed - suggestions_grounded
-
-        diversity_backend = next(
-            (backend for backend in backends if backend.name == "openalex"),
-            None,
-        )
-        if diversity_backend is not None:
-            if round_index == 2:
-                diversity_query = context.intent
-                diversity_origin: QueryOrigin = "verbatim"
-            else:
-                diversity_query = _compose_variant(context.intent, SR_CLAUSE)
-                diversity_origin = "variant_sr"
-            if arm_calls["diversity"] < DIVERSITY_CALL_MIN:
-                # The reserve is a bounded FRACTION of the per-call result
-                # target (contract decision 15 / rubric 7): this is one extra,
-                # un-steered call, so it's deliberately smaller than a full
-                # fan-out call rather than requesting the full per-call target.
-                reserve = max(1, int(constants["result_cap_per_backend"] * DIVERSITY_FRACTION))
-                for plan in _with_filter_variants(
-                    _PlannedCall(
-                        diversity_backend.name,
-                        diversity_query,
-                        diversity_origin,
-                    ),
-                    len(filter_variants_by_backend[diversity_backend.name]),
-                ):
-                    execute_plan(
-                        diversity_backend,
-                        plan,
-                        arm="diversity",
-                        max_records=reserve,
-                    )
-    else:
-        wire, usage = generation_backend.generate_queries(
-            QueriesPayload(intent=context.intent, guidance=guidance)
-        )
-        usage_totals.add(usage)
-        generation_calls = 1
-        queries, overton_paraphrases = validated_queries(wire)
-
-        for backend in backends:
-            plans = _rapid_plans(
-                backend_name=backend.name,
                 intent=context.intent,
                 queries=queries,
-                overton_paraphrases=overton_paraphrases,
+                paraphrases=paraphrases,
+                variants=variants[backend.name],
+                wires=wires[backend.name],
             )
-            plans = [
-                variant
-                for plan in plans
-                for variant in _with_filter_variants(
-                    plan,
-                    len(filter_variants_by_backend[backend.name]),
-                )
-            ]
-            quota = constants["result_cap_per_backend"]
-            backend_calls: list[ExecutedCall] = []
-            generated_groups: dict[str, list[ExecutedCall]] = {}
-            for plan in plans:
-                call = execute_plan(backend, plan, max_records=quota)
-                if call is not None:
-                    backend_calls.append(call)
-                    if plan.group_key is not None:
-                        generated_groups.setdefault(plan.group_key, []).append(call)
-
-            zero_groups = 0
-            for calls in generated_groups.values():
-                if calls and all(call.status == "ok" and len(call.records) == 0 for call in calls):
-                    zero_groups += 1
-            # Overton's generated paraphrases have no variant group; each
-            # zero-result paraphrase is one counted-and-dropped generated query.
-            zero_groups += sum(
-                1
-                for call in backend_calls
-                if call.query_origin == "paraphrase"
-                and call.status == "ok"
-                and len(call.records) == 0
+        elif backend.name == "overton":
+            pools[backend.name], summaries[backend.name] = _overton_leg(
+                search,
+                backend,
+                intent=context.intent,
+                paraphrases=paraphrases,
+                validated=validated[backend.name],
+                wire=wires[backend.name][0],
             )
-            queries_zero_result[backend.name] = zero_groups
-
-            generated_calls = [
-                call
-                for call in backend_calls
-                if call.query_origin in {"generated", "variant_sr", "variant_rct"}
-            ]
-            has_verbatim = any(call.query_origin == "verbatim" for call in backend_calls)
-            all_generated_zero = bool(generated_calls) and all(
-                call.status == "ok" and len(call.records) == 0 for call in generated_calls
-            )
-            if backend.name == "openalex" and not generated_calls:
-                all_generated_zero = True
-            if all_generated_zero and not has_verbatim:
-                for fallback in _with_filter_variants(
-                    _PlannedCall(backend.name, context.intent, "fallback_verbatim"),
-                    len(filter_variants_by_backend[backend.name]),
-                ):
-                    if execute_plan(backend, fallback) is not None:
-                        fallback_to_verbatim[backend.name] = True
+    if scope_wire_params is not None and local_filters:
+        scope_wire_params["semantic_local_filters"] = local_filters
 
     counts = acquire.acquire_sources(
         conn,
@@ -1776,33 +1431,33 @@ def run_search(
         context=context,
         backends=backends,
         embedder=embedder,
-        executed_calls=executed_calls,
+        executed_calls=search.executed,
+        pools=pools,
+        # The cap cuts the ranked list; records the ranking left out never fill it.
+        caps={
+            "openalex": min(constants["papers_cap"], search.ranked_count.get("openalex", 0)),
+            "overton": min(constants["policy_cap"], search.ranked_count.get("overton", 0)),
+        },
         depth=depth,
         scope_wire_params=scope_wire_params,
         search_guidance=guidance,
-        record_cap_per_backend=constants["record_cap_per_backend"],
     )
+    legs = {name: summaries.get(name, _LegSummary()) for name in names}
     counts["search"] = {
         "depth": depth,
         "round_index": round_index,
-        "queries_executed": {
-            name: sum(1 for call in executed_calls if call.backend_name == name)
-            for name in backend_names
-        },
-        "queries_zero_result": queries_zero_result,
-        "fallback_to_verbatim": fallback_to_verbatim,
+        "queries_executed": {name: search.calls.get(name, 0) for name in names},
+        "queries_zero_result": {name: legs[name].zero_result_queries for name in names},
+        "queries_dropped": queries_dropped,
+        "fallback_to_verbatim": {name: legs[name].fallback_to_verbatim for name in names},
         "wall_clock_s": time.monotonic() - started,
-        "generation_calls": generation_calls,
-        "arm_calls": arm_calls,
-        "suggestions_proposed": suggestions_proposed,
-        "suggestions_grounded": suggestions_grounded,
-        "suggestions_dropped": suggestions_dropped,
-        "suggest_failures": suggest_failures,
-        "exemplars": {
-            "positive": len(positive_exemplars),
-            "negative": len(negative_exemplars),
-        },
-        "prior_http_calls": prior_http_calls,
+        "generation_calls": 1,
+        "semantic_local_filters": local_filters,
+        "seeds": legs["openalex"].seeds if "openalex" in legs else 0,
+        "backward_targets": legs["openalex"].backward_targets if "openalex" in legs else 0,
+        "forward_candidates": legs["openalex"].forward_candidates if "openalex" in legs else 0,
+        "landmarks": legs["overton"].landmarks if "overton" in legs else 0,
+        "pool_sizes": {name: len(pools.get(name, [])) for name in names},
     }
     counts["usage_totals"] = usage_totals.payload()
     return counts

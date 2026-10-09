@@ -293,7 +293,21 @@ def test_live_backends_receive_backend_native_wire_params_via_run_search(
 
     assert openalex_fetch.calls
     assert overton_fetch.calls
-    for call in openalex_fetch.calls:
+    keyword_calls = [c for c in openalex_fetch.calls if "search.semantic" not in c.params]
+    semantic_calls = [c for c in openalex_fetch.calls if "search.semantic" in c.params]
+    assert keyword_calls
+    assert semantic_calls
+    for call in semantic_calls:
+        # The semantic endpoint takes only some filters (probe 2026-10-09): the
+        # accepted ones and a year fence go on the wire; the rest is local.
+        semantic_filter = call.params["filter"]
+        assert "type:article" in semantic_filter
+        assert "language:en" in semantic_filter
+        assert "is_retracted:false" in semantic_filter
+        assert "publication_year:>2019" in semantic_filter
+        assert "from_publication_date" not in semantic_filter
+        assert "sustainable_development_goals" not in semantic_filter
+    for call in keyword_calls:
         assert "filter" in call.params
         assert "select" in call.params
         assert "title_and_abstract.search:" in call.params["filter"]
@@ -344,12 +358,21 @@ def test_live_backends_receive_backend_native_wire_params_via_run_search(
             for event in events.read(conn, task_id)
             if event["event_type"] == "search.executed"
         )
+        if payload["verb"] == "search"  # keyword and Overton searches carry the plan's filters
     }
     assert event_filters == expected_filters
     row = conn.execute(
         select(search_coverage_record).where(search_coverage_record.c.acquired_by_run_id == run_id)
     ).one()
-    assert row.scope_filters == expected_filters
+    # The coverage record also names the filters the semantic leg applied
+    # locally, and lists what each locally filtered call excluded (zero here).
+    exclusions = row.scope_filters["post_filter_exclusions"]
+    assert {entry["verb"] for entry in exclusions} == {"search_semantic"}
+    assert all(entry["post_filter_excluded"] == 0 for entry in exclusions)
+    assert {k: v for k, v in row.scope_filters.items() if k != "post_filter_exclusions"} == {
+        **expected_filters,
+        "semantic_local_filters": ["published_after", "sdgs"],
+    }
 
 
 def test_overton_post_filter_without_capable_backend_fails_closed(

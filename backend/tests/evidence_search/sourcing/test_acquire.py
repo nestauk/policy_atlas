@@ -734,7 +734,7 @@ def test_source_acquired_events(conn: Connection) -> None:
         payload = e["payload"]
         assert set(payload) == {
             "source_snapshot_id", "task_source_snapshot_id",
-            "evidence_scope_id", "backend", "backend_record_id",
+            "evidence_scope_id", "backend", "backend_record_id", "query_origin",
         }
         assert payload["evidence_scope_id"] == str(scope_id)
 
@@ -894,9 +894,12 @@ def test_harness_acquire_component(conn: Connection) -> None:
 
     assert read_coverage(conn, rid) is not None
     log = events.read(conn, pid)
-    assert sum(1 for e in log if e["event_type"] == "search.executed") == 2
     summary = outcome["summary"]
     assert summary is not None
+    # One search.executed event per logical call of the single pass (task 051).
+    executed = sum(summary["search"]["queries_executed"].values())
+    assert executed > 2
+    assert sum(1 for e in log if e["event_type"] == "search.executed") == executed
     assert summary["acquired"] == 24
     assert set(summary["by_backend"]) == {"openalex", "overton"}
     assert summary["coverage_record_id"]
