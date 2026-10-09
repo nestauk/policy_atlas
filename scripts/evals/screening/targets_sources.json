@@ -1,0 +1,22 @@
+{
+  "CESMeD/CSMeD-FT-dev_reviews_metadata.json": "e259eeb551c69ba4260981796df2b75c60fe508510ed806376e4180233da2899",
+  "sources/3ie/addressing-root-causes-and-drivers-of-irregular-migration-an-evidence-gap-map.json": "2c7ee8909c960cf31a619ceb367fbc098d62b6517d9b138d8d0520fbbc1aa2d7",
+  "sources/3ie/building-resilient-societies-in-low-and-middle-income-countries-an-evidence-gap-map.json": "172151bcf1304b9c7ce5deab804485a5eceba87d9756b3d8a375206e49ad932c",
+  "sources/3ie/food-systems-and-nutrition-evidence-gap-map.json": "08c927d2f5e106a842dc728351490328ba4c31514b58ef4cf2c601d40b4adc1d",
+  "sources/3ie/good-governance-through-government-effectiveness-evidence-gap-map.json": "1201e740c9ee2bdfa00f999d74bf635b8f05fce1c40709503e07cb4478b3f265",
+  "sources/3ie/land-use-update.json": "031ab9d21c1d72cef65403a4ba01f6bd8e491f7ba30a58d2dd61b4baefb4e599",
+  "sources/3ie/reaper-wash-evidence-gap-map.json": "a0ef9612c40a65b42ebc9b2c68c47c11017778b084b0399a6b208b55855ac0f7",
+  "sources/3ie/sexual-reproductive-health-rights-in-low-and-middle-income-countries.json": "0f9472acf7beec68c91d71c31654e92165440e5c33c5f7b754ebffbba6b6a6aa",
+  "sources/3ie/sustainable-energy-evidence-gap-map.json": "c949d6fbc65e4b3b91724b65bab64e5095279f341b43719c95f474f76ad28031",
+  "sources/openalex/Appenzeller-Herzog_2019.json": "5c473ca76922d2468eeafbbf6d2f1d022e30351ae4d5f2bc8b26346f6f1e580c",
+  "sources/openalex/Bos_2018.json": "48d70d481fa14b1e504524a892b54c3c90b9a1835ba4a235fb17ed48ecb764ba",
+  "sources/openalex/Hall_2012.json": "2e13f30e991e3c75e00aa3e6dd5c26ee31adeebfbe45f32314e12b02920c26fa",
+  "sources/openalex/Oud_2018.json": "843e102cd299b2ce051db80828793a11d5ec6bc9cfa646fdf988b875ad892d11",
+  "sources/openalex/Radjenovic_2013.json": "1bbe0eacab62c3640edc4735b75ebf3b2ff4a4a09ba10c20391508bebf8743c5",
+  "sources/openalex/Wolters_2018.json": "507691254354dd3db0b7b1af3224b7aefddadc66f094016c848f4d80f9d92258",
+  "sources/openalex/van_Dis_2020.json": "16428838293e89a5729cb1fd571ff4411bd1bb8d1d7736aed84186f354cea757",
+  "sources/openalex/van_de_Schoot_2018.json": "71b422c91cdb507c69a6ed74969727835a6feefc489005b4ea4bcf9b3896697e",
+  "sources/openalex/van_der_Valk_2021.json": "b8b4cf0bb789d50599d43f23148e5f652f867ef674fd56b61442d4640c056fee",
+  "sources/openalex/van_der_Waal_2022.json": "351dfef003e3984d9014bde4232809f1ff30a4411d27b970c379c1995bf2eeab",
+  "sources/synergy/datasets-dc2dadfdbb98.toml": "8c714ce8619ebd385c0311a99b6320f67e8c7b7346c726e84a4f76007247a1a4"
+}

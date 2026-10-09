@@ -35,6 +35,12 @@ scripts/evals/search/results/*
 !scripts/evals/search/results/history.md
 !scripts/evals/search/results/analyses/
 
+# Screening eval: downloaded ground truth and per-run outputs
+scripts/evals/screening/datasets/
+scripts/evals/screening/results/*
+!scripts/evals/screening/results/history.md
+!scripts/evals/screening/results/analyses/
+
 # Node / frontend build artifacts (never committed)
 node_modules/
 .vite/
