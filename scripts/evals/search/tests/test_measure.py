@@ -145,7 +145,7 @@ def test_recording_backend_records_failed_calls() -> None:
 
 
 def test_sweep_cap_overrides() -> None:
-    """The cap overrides measure/sweep_record_cap.py applies before each run."""
+    """The cap overrides experiments/sweep_record_cap.py applies before each run."""
     from sweep_record_cap import DEPTH, RESULT_CAP_PER_BACKEND, _apply_caps
 
     constants = _apply_caps(250)

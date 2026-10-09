@@ -27,7 +27,7 @@ what that hides, offline, by matching **titles**:
 Usage::
 
     uv run --project backend --env-file backend/.env \\
-        python scripts/evals/search/measure/title_match.py \\
+        python scripts/evals/search/experiments/title_match.py \\
         [--arm docs-cites-all-400] [--run RUN_FOLDER] [--loose] [--show]
 
 Reads the ground truth from Langfuse (for the review titles) and otherwise only files

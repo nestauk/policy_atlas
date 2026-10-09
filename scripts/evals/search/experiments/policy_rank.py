@@ -34,7 +34,7 @@ qualitative read.
 Usage::
 
     uv run --project backend --env-file backend/.env \\
-        python scripts/evals/search/measure/policy_rank.py \\
+        python scripts/evals/search/experiments/policy_rank.py \\
         [--dataset retrieval-ground-truth-mini] [--docs 200] [--landmarks 15] \\
         [--forward 10] [--forward-new 15] [--reviews TEXT ...] [--manual QUESTION]
 

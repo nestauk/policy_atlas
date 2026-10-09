@@ -1,0 +1,584 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Search and Screening</title>
+<meta name="description" content="How Policy Atlas searches for evidence and screens it today, step by step with diagrams, and a proposal for a simpler and stronger design built on the task 047, 049 and 050 experiments.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;800&family=Manrope:wght@400;500;600;700&display=swap">
+<style>
+/* Same layout and palette as the experiment write-ups under scripts/evals/search and scripts/evals/screening (results/analyses):
+   one reading column, figures break out wider, Nesta navy with electric blue as the single
+   accent. Categorical colours: paper (blue), policy document (orange), language-model step
+   (purple), free citation step (green), plain mechanics (grey). */
+:root {
+  --paper: #ffffff; --ground: #f4f4f5; --ink: #1c1c1e; --ink-2: #4b4b4f; --grey: #646363; --line: #e4e4e7;
+  --navy: #0f294a; --navy-muted: #c8d6e6; --blue: #0000ff; --blue-tint: #ececff;
+  --yellow: #fdb633; --yellow-tint: #fff6e3; --green-tint: #e7f5f2; --red: #eb003b; --red-tint: #ffe9ee;
+  --c-paper: #2d3ff0; --c-policy: #e8552b; --c-land: #18a48c; --c-plain: #9a9aa3; --c-sem: #9a1bbe;
+  --font-display: "Zosia Display", "Archivo", "Helvetica Neue", Arial, sans-serif;
+  --font-body: "Averta", "Manrope", "Helvetica Neue", Arial, sans-serif;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #0f294a; --ground: #0b1f38; --ink: #f4f6fa; --ink-2: #c8d6e6; --grey: #a9b7c9; --line: #27405f;
+    --navy: #f4f6fa; --navy-muted: #27405f; --blue: #8c9bff; --blue-tint: #1a2f52;
+    --yellow: #fdb633; --yellow-tint: #2b2a1a; --green-tint: #123a35; --red: #ff5f85; --red-tint: #3a1a24;
+    --c-paper: #5f6dff; --c-policy: #e2603a; --c-land: #149a81; --c-plain: #6f7d93; --c-sem: #ad66d4;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #0f294a; --ground: #0b1f38; --ink: #f4f6fa; --ink-2: #c8d6e6; --grey: #a9b7c9; --line: #27405f;
+  --navy: #f4f6fa; --navy-muted: #27405f; --blue: #8c9bff; --blue-tint: #1a2f52;
+  --yellow: #fdb633; --yellow-tint: #2b2a1a; --green-tint: #123a35; --red: #ff5f85; --red-tint: #3a1a24;
+  --c-paper: #5f6dff; --c-policy: #e2603a; --c-land: #149a81; --c-plain: #6f7d93; --c-sem: #ad66d4;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { background: var(--paper); color: var(--ink); font-family: var(--font-body); font-size: 17px; line-height: 1.55; padding-block: 0 4rem; padding-inline: 16px; -webkit-font-smoothing: antialiased; }
+.wrap { max-width: 72ch; margin: 0 auto; }
+.wide { max-width: 980px; margin-inline: auto; }
+header.masthead { border-bottom: 3px solid var(--navy); padding-block: 1.25rem 1.5rem; margin-bottom: 2.5rem; }
+.eyebrow { font-size: .8rem; letter-spacing: .08em; text-transform: uppercase; color: var(--grey); font-weight: 600; }
+h1, h2, h3 { font-family: var(--font-display); color: var(--navy); text-wrap: balance; line-height: 1.1; margin: 0; }
+h1 { font-size: clamp(2.1rem, 5vw, 3.4rem); font-weight: 800; margin-top: .4rem; }
+h2 { font-size: clamp(1.5rem, 3vw, 2.1rem); font-weight: 800; margin-top: 3rem; margin-bottom: .75rem; }
+h3 { font-size: 1.15rem; font-weight: 700; margin-top: 1.75rem; margin-bottom: .4rem; font-family: var(--font-body); }
+p { margin: 0 0 1rem; }
+.lede { font-size: 1.2rem; color: var(--ink-2); max-width: 60ch; margin-top: 1rem; }
+a { color: var(--blue); }
+code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .9em; background: var(--ground); padding: .05em .35em; border-radius: 3px; }
+ul, ol { padding-left: 1.3rem; }
+li { margin-bottom: .35rem; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); margin: 1.5rem 0 0; }
+.tile { background: var(--paper); padding: 1rem 1.1rem; }
+.tile .num { font-family: var(--font-display); font-size: 2.6rem; font-weight: 800; line-height: 1; color: var(--navy); font-variant-numeric: tabular-nums; }
+.tile .num.accent { color: var(--blue); }
+.tile .lab { font-size: .85rem; color: var(--grey); margin-top: .35rem; line-height: 1.3; }
+figure { margin: 1.5rem 0 2rem; }
+figure svg { display: block; width: 100%; height: auto; max-width: 100%; color: var(--ink); }
+figcaption { font-size: .9rem; color: var(--ink-2); margin-top: .6rem; max-width: 70ch; }
+figcaption b { color: var(--ink); }
+.legend { display: flex; flex-wrap: wrap; gap: .4rem 1.2rem; font-size: .85rem; color: var(--ink-2); margin: .5rem 0 0; }
+.legend span::before { content: ""; display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: .4rem; vertical-align: -1px; background: var(--dot); }
+table { border-collapse: collapse; width: 100%; font-size: .92rem; font-variant-numeric: tabular-nums; }
+th, td { text-align: left; padding: .45rem .6rem; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-size: .78rem; letter-spacing: .05em; text-transform: uppercase; color: var(--grey); font-weight: 600; }
+td.n, th.n { text-align: right; }
+tr.hl td { background: var(--blue-tint); font-weight: 600; }
+.scroll { overflow-x: auto; }
+.note { border-left: 4px solid var(--yellow); background: var(--yellow-tint); padding: .8rem 1rem; margin: 1.25rem 0; font-size: .95rem; }
+.key { border-left: 4px solid var(--blue); background: var(--blue-tint); padding: .8rem 1rem; margin: 1.25rem 0; font-size: .95rem; }
+.warn { border-left: 4px solid var(--red); background: var(--red-tint); padding: .8rem 1rem; margin: 1.25rem 0; font-size: .95rem; }
+.formula { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1rem; background: var(--ground); padding: .9rem 1rem; border-radius: 4px; overflow-x: auto; margin: 1rem 0; }
+.steps { counter-reset: step; list-style: none; padding: 0; margin: 1rem 0; display: grid; gap: .6rem; }
+.steps li { position: relative; padding-left: 2.6rem; }
+.steps li::before { counter-increment: step; content: counter(step); position: absolute; left: 0; top: .05rem; width: 1.9rem; height: 1.9rem; border-radius: 50%; background: var(--navy); color: var(--paper); font-family: var(--font-display); font-weight: 800; display: grid; place-items: center; font-size: .95rem; }
+.two { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1rem; margin: 1rem 0; }
+.two > div { border-top: 3px solid var(--line); padding-top: .6rem; }
+.two b.h { display: block; font-family: var(--font-display); color: var(--navy); font-size: 1.1rem; margin-bottom: .3rem; }
+.didnt { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: .8rem; margin: 1rem 0; }
+.didnt div { border-top: 2px solid var(--line); padding-top: .6rem; font-size: .93rem; }
+.didnt b { display: block; color: var(--navy); margin-bottom: .2rem; }
+.toc { font-size: .95rem; color: var(--ink-2); margin: 1.25rem 0 0; }
+.toc a { margin-right: .9rem; white-space: nowrap; }
+footer { margin-top: 3.5rem; padding-top: 1rem; border-top: 1px solid var(--line); font-size: .85rem; color: var(--grey); }
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+</style>
+</head>
+<body>
+<header class="masthead wrap">
+  <div class="eyebrow">Policy Atlas · evidence search · task 051 · 9 October 2026</div>
+  <h1>How search and screening work, and how to make them simpler</h1>
+  <p class="lede">Part 1 maps what the app does today when it searches for evidence and screens the results. Part 2 reads the October experiments (tasks 047, 049 and 050) against that map and proposes a new design: one search method, three pool sizes, one cheap screen. Every number is measured against ground truth; the few that are not are marked.</p>
+  <div class="tiles" role="list">
+    <div class="tile" role="listitem"><div class="num">5%</div><div class="lab">of a review's reference list found by today's Broad search, 15 reviews, 100 documents per database</div></div>
+    <div class="tile" role="listitem"><div class="num accent">22%</div><div class="lab">found by the experiment's single-round method at 200 papers, same reviews, about a cent per search</div></div>
+    <div class="tile" role="listitem"><div class="num accent">28%</div><div class="lab">at 400 papers. The pool size is now the limit, not the search</div></div>
+    <div class="tile" role="listitem"><div class="num">4×</div><div class="lab">cheaper screening with a different model and prompt, and higher recall on labelled data</div></div>
+    <div class="tile" role="listitem"><div class="num">97%</div><div class="lab">of the ground-truth papers among real search candidates kept by the proposed screen, measured 9 October</div></div>
+  </div>
+  <p class="toc">
+    <a href="#words">Words</a><a href="#focused">A: Focused</a><a href="#rounds">B: Broad and Broadest</a><a href="#screen">C: Screening</a><a href="#measured">Measured</a><a href="#experiments">Experiments</a><a href="#proposal">D: Proposal</a><a href="#steer">Open questions</a><a href="#before">Before we build</a><a href="#changes">Change list</a>
+  </p>
+</header>
+
+<main>
+<section class="wrap" id="words">
+  <h2>The words we use</h2>
+  <p>The app and the code use different names for the same things. This page uses the app's names and gives the code name once.</p>
+  <div class="scroll"><table>
+    <thead><tr><th>in the app</th><th>in the code</th><th>what it means</th></tr></thead>
+    <tbody>
+      <tr><td><b>Search scope</b>: Focused, Broad, Broadest</td><td><code>search_effort</code>: <code>rapid</code>, <code>standard</code>, <code>deep</code></td><td>How much the search collects. Today it sets the documents kept per database and the number of search rounds.</td></tr>
+      <tr><td><b>Analysis level</b>: Landscape, Standard, Deep</td><td><code>analysis_depth</code></td><td>What runs after the search: full-text screening, selection, findings extraction. It does not change the search.</td></tr>
+      <tr><td>Presets</td><td><code>rapid_overview</code>, <code>standard_review</code>, <code>detailed_review</code></td><td>Focused + Landscape; Broad + Standard; Broadest + Deep.</td></tr>
+      <tr><td>Search</td><td><code>acquire</code>, strategy in <code>sourcing/search_loop.py</code></td><td>Turning the research question into database calls and keeping the results.</td></tr>
+      <tr><td>Screening</td><td><code>screen_abstract</code> (stage 1), <code>screen_full</code> (stage 2)</td><td>A language model reads each result and says relevant, not relevant, or unsure.</td></tr>
+      <tr><td>Research question</td><td><code>intent</code></td><td>The sentence the user wrote, plus any screening criteria from the plan.</td></tr>
+      <tr><td>Recall</td><td>&nbsp;</td><td>The share of a published review's reference list that the search found, scored on DOIs (Digital Object Identifiers, the permanent ids of papers). The mini ground truth has 15 reviews, the full one 100. It measures papers only; policy documents have a smaller instrument of their own (section 7).</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section class="wrap" id="focused">
+  <h2>Diagram A: a Focused search, one round</h2>
+  <p>Every search starts with this round, at every scope. A Focused search is only this round. Two databases: <b>OpenAlex</b>, a free index of about 250 million scholarly works with keyword search and, on every record, the reference list and citation count; and <b>Overton</b>, a subscription index of policy documents with a semantic search that takes a sentence, and on every record the papers and policy documents it cites.</p>
+</section>
+
+<section class="wide">
+  <figure>
+    <svg viewBox="0 0 980 392" role="img" aria-label="The research question goes to one query-generation call, which writes five keyword queries and two paraphrases. OpenAlex receives fifteen calls, Overton three. Results are merged by rank, de-duplicated and cut to fifty, a hundred or two hundred per database, then screened.">
+      <defs><marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker></defs>
+      <g font-family="inherit" font-size="13">
+        <rect x="20" y="150" width="150" height="80" rx="6" fill="var(--ground)" stroke="currentColor"/>
+        <text x="95" y="184" text-anchor="middle" font-weight="600">Research question</text>
+        <text x="95" y="204" text-anchor="middle" font-size="12" fill="var(--grey)">plus plan criteria, filters</text>
+        <line x1="170" y1="190" x2="205" y2="190" stroke="currentColor" stroke-width="1.5" marker-end="url(#arr)"/>
+
+        <rect x="210" y="140" width="170" height="100" rx="6" fill="var(--c-sem)" fill-opacity=".12" stroke="var(--c-sem)" stroke-width="1.5"/>
+        <text x="295" y="166" text-anchor="middle" font-weight="600">Query generation</text>
+        <text x="295" y="186" text-anchor="middle" font-size="12" fill="var(--grey)">gpt-5.4-mini, one call</text>
+        <text x="295" y="206" text-anchor="middle" font-size="12">5 keyword queries</text>
+        <text x="295" y="224" text-anchor="middle" font-size="12">2 paraphrases</text>
+        <line x1="380" y1="170" x2="440" y2="100" stroke="currentColor" stroke-width="1.5" marker-end="url(#arr)"/>
+        <line x1="380" y1="210" x2="440" y2="280" stroke="currentColor" stroke-width="1.5" marker-end="url(#arr)"/>
+
+        <rect x="445" y="40" width="250" height="115" rx="6" fill="var(--c-paper)" fill-opacity=".14" stroke="var(--c-paper)" stroke-width="1.5"/>
+        <text x="570" y="66" text-anchor="middle" font-weight="600">OpenAlex · 15 calls</text>
+        <text x="570" y="88" text-anchor="middle" font-size="12">5 queries, each sent three ways:</text>
+        <text x="570" y="105" text-anchor="middle" font-size="12">as written, + "systematic review",</text>
+        <text x="570" y="122" text-anchor="middle" font-size="12">+ "randomised controlled trial"</text>
+        <text x="570" y="143" text-anchor="middle" font-size="12" fill="var(--grey)">50 / 75 / 100 results per call</text>
+
+        <rect x="445" y="225" width="250" height="115" rx="6" fill="var(--c-policy)" fill-opacity=".14" stroke="var(--c-policy)" stroke-width="1.5"/>
+        <text x="570" y="251" text-anchor="middle" font-weight="600">Overton · 3 calls</text>
+        <text x="570" y="273" text-anchor="middle" font-size="12">the question and the 2 paraphrases,</text>
+        <text x="570" y="290" text-anchor="middle" font-size="12">semantic search, similarity ≥ 0.3</text>
+        <text x="570" y="309" text-anchor="middle" font-size="12" fill="var(--red)" font-weight="600">sorted by date, not relevance: a bug</text>
+        <text x="570" y="328" text-anchor="middle" font-size="12" fill="var(--grey)">50 / 75 / 100 results per call</text>
+
+        <line x1="695" y1="100" x2="730" y2="170" stroke="currentColor" stroke-width="1.5" marker-end="url(#arr)"/>
+        <line x1="695" y1="280" x2="730" y2="210" stroke="currentColor" stroke-width="1.5" marker-end="url(#arr)"/>
+
+        <rect x="735" y="135" width="140" height="110" rx="6" fill="var(--ground)" stroke="currentColor"/>
+        <text x="805" y="160" text-anchor="middle" font-weight="600">Merge and cut</text>
+        <text x="805" y="181" text-anchor="middle" font-size="11">interleave by rank</text>
+        <text x="805" y="197" text-anchor="middle" font-size="11">drop duplicates</text>
+        <text x="805" y="217" text-anchor="middle" font-size="11" font-weight="600">keep first 50 / 100 / 200</text>
+        <text x="805" y="233" text-anchor="middle" font-size="11" font-weight="600">per database</text>
+        <line x1="875" y1="190" x2="895" y2="190" stroke="currentColor" stroke-width="1.5" marker-end="url(#arr)"/>
+
+        <rect x="900" y="135" width="65" height="110" rx="6" fill="var(--c-sem)" fill-opacity=".12" stroke="var(--c-sem)" stroke-width="1.5"/>
+        <text x="932" y="180" text-anchor="middle" font-weight="600">Screen</text>
+        <text x="932" y="200" text-anchor="middle" font-size="11" fill="var(--grey)">3 calls</text>
+        <text x="932" y="215" text-anchor="middle" font-size="11" fill="var(--grey)">per doc</text>
+
+        <text x="20" y="362" font-size="12" fill="var(--grey)">If every generated query returns nothing, the research question is sent verbatim. Each kept record is stored with its provider fields and embedded.</text>
+        <text x="20" y="378" font-size="12" fill="var(--grey)">Nothing is ranked across queries: the cut removes the tail of every query equally.</text>
+      </g>
+    </svg>
+    <figcaption><b>One round.</b> Purple is a language-model call, blue is OpenAlex, orange is Overton. The per-call sizes and the cut depend on the scope: Focused 50, Broad 75 and 100, Broadest 100 and 200.</figcaption>
+  </figure>
+  <div class="scroll"><table>
+    <thead><tr><th>constant (<code>DEPTH_CONSTANTS</code>)</th><th class="n">Focused</th><th class="n">Broad</th><th class="n">Broadest</th></tr></thead>
+    <tbody>
+      <tr><td>results asked for, per call</td><td class="n">50</td><td class="n">75</td><td class="n">100</td></tr>
+      <tr><td>new records kept per database, per round (the volume brake)</td><td class="n">50</td><td class="n">100</td><td class="n">200</td></tr>
+      <tr><td>rounds</td><td class="n">1</td><td class="n">2</td><td class="n">3</td></tr>
+      <tr><td>call budget per round, OpenAlex / Overton</td><td class="n">20 / 5</td><td class="n">30 / 8</td><td class="n">50 / 15</td></tr>
+      <tr><td>extra arms in rounds 2 and 3</td><td class="n">none</td><td class="n">reformulate, diversity</td><td class="n">all four</td></tr>
+      <tr><td>most documents screened per run, both databases</td><td class="n">100</td><td class="n">400</td><td class="n">1,200</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section class="wrap" id="rounds">
+  <h2>Diagram B: Broad and Broadest, the round loop</h2>
+  <p>After a round's screening, the app decides whether to search again. If it does, the next round does not repeat round 1. It reads the screening verdicts and runs up to four "arms". This is the design of ADR 0012 (July 2026): the screen is the judge inside the search loop.</p>
+</section>
+
+<section class="wide">
+  <figure>
+    <svg viewBox="0 0 980 456" role="img" aria-label="After screening, a gate decides whether to search again. If yes, up to eight relevant and four not-relevant documents become exemplars that steer four arms: reformulate, snowball, suggest and diversity. Their results are merged, cut and screened, and the loop returns to the gate.">
+      <g font-family="inherit" font-size="13">
+        <rect x="20" y="170" width="130" height="90" rx="6" fill="var(--ground)" stroke="currentColor"/>
+        <text x="85" y="206" text-anchor="middle" font-weight="600">Last round's</text>
+        <text x="85" y="224" text-anchor="middle" font-weight="600">screen verdicts</text>
+        <line x1="150" y1="215" x2="180" y2="215" stroke="currentColor" stroke-width="1.5" marker-end="url(#arr)"/>
+
+        <rect x="185" y="155" width="160" height="120" rx="6" fill="var(--ground)" stroke="currentColor" stroke-dasharray="5 4"/>
+        <text x="265" y="180" text-anchor="middle" font-weight="600">Search again?</text>
+        <text x="265" y="201" text-anchor="middle" font-size="11">stop at the round cap</text>
+        <text x="265" y="216" text-anchor="middle" font-size="11">(Broad 2, Broadest 3)</text>
+        <text x="265" y="236" text-anchor="middle" font-size="11">or if the last round gave under</text>
+        <text x="265" y="251" text-anchor="middle" font-size="11">1 confident-relevant per 50 screened</text>
+        <text x="265" y="268" text-anchor="middle" font-size="11" fill="var(--grey)">("short circuit")</text>
+        <line x1="345" y1="215" x2="375" y2="215" stroke="currentColor" stroke-width="1.5" marker-end="url(#arr)"/>
+
+        <rect x="380" y="170" width="125" height="90" rx="6" fill="var(--ground)" stroke="currentColor"/>
+        <text x="442" y="200" text-anchor="middle" font-weight="600">Exemplars</text>
+        <text x="442" y="221" text-anchor="middle" font-size="12">8 confident relevant</text>
+        <text x="442" y="238" text-anchor="middle" font-size="12">4 not relevant</text>
+        <g stroke="currentColor" stroke-width="1.5" marker-end="url(#arr)">
+          <line x1="505" y1="195" x2="540" y2="65"/><line x1="505" y1="208" x2="540" y2="165"/><line x1="505" y1="222" x2="540" y2="265"/><line x1="505" y1="235" x2="540" y2="365"/>
+        </g>
+
+        <rect x="540" y="20" width="272" height="88" rx="6" fill="var(--c-sem)" fill-opacity=".12" stroke="var(--c-sem)" stroke-width="1.5"/>
+        <text x="557" y="42" font-weight="600">Reformulate</text><text x="800" y="42" text-anchor="end" font-size="11" fill="var(--grey)">Broad + Broadest</text>
+        <text x="552" y="61" font-size="11">one call rewrites the queries, with the</text>
+        <text x="552" y="77" font-size="11">exemplars as examples: 4 queries, 2 paraphrases</text>
+        <text x="557" y="97" font-size="12" fill="var(--red)">never measured on its own</text>
+
+        <rect x="540" y="120" width="272" height="88" rx="6" fill="var(--c-paper)" fill-opacity=".14" stroke="var(--c-paper)" stroke-width="1.5"/>
+        <text x="557" y="142" font-weight="600">Snowball</text><text x="800" y="142" text-anchor="end" font-size="11" fill="var(--grey)">Broadest only</text>
+        <text x="552" y="161" font-size="11">5 screened-relevant papers as seeds: 8 citing</text>
+        <text x="552" y="177" font-size="11">papers each, then references; 40 records in all</text>
+        <text x="557" y="197" font-size="12" fill="var(--grey)">at most 6 calls; small</text>
+
+        <rect x="540" y="220" width="272" height="88" rx="6" fill="var(--c-sem)" fill-opacity=".12" stroke="var(--c-sem)" stroke-width="1.5"/>
+        <text x="557" y="242" font-weight="600">Suggest</text><text x="800" y="242" text-anchor="end" font-size="11" fill="var(--grey)">Broadest only</text>
+        <text x="552" y="261" font-size="11">one call proposes papers it believes exist;</text>
+        <text x="552" y="277" font-size="11">each looked up on OpenAlex by DOI, then title</text>
+        <text x="557" y="297" font-size="12" fill="var(--red)">never measured on its own</text>
+
+        <rect x="540" y="320" width="272" height="88" rx="6" fill="var(--c-paper)" fill-opacity=".14" stroke="var(--c-paper)" stroke-width="1.5"/>
+        <text x="557" y="342" font-weight="600">Diversity</text><text x="800" y="342" text-anchor="end" font-size="11" fill="var(--grey)">Broad + Broadest</text>
+        <text x="552" y="361" font-size="11">one un-steered call so the loop cannot narrow</text>
+        <text x="552" y="377" font-size="11">onto its own verdicts: the question verbatim</text>
+        <text x="557" y="397" font-size="12" fill="var(--grey)">15% of the per-call size</text>
+
+        <g stroke="currentColor" stroke-width="1.5" marker-end="url(#arr)">
+          <line x1="812" y1="64" x2="836" y2="180"/><line x1="812" y1="164" x2="836" y2="200"/><line x1="812" y1="264" x2="836" y2="225"/><line x1="812" y1="364" x2="836" y2="245"/>
+        </g>
+        <rect x="840" y="160" width="58" height="110" rx="6" fill="var(--ground)" stroke="currentColor"/>
+        <text x="869" y="205" text-anchor="middle" font-weight="600">Merge,</text>
+        <text x="869" y="223" text-anchor="middle" font-weight="600">cut</text>
+        <text x="869" y="243" text-anchor="middle" font-size="10" fill="var(--grey)">100 / 200</text>
+        <line x1="898" y1="215" x2="910" y2="215" stroke="currentColor" stroke-width="1.5" marker-end="url(#arr)"/>
+        <rect x="914" y="160" width="55" height="110" rx="6" fill="var(--c-sem)" fill-opacity=".12" stroke="var(--c-sem)" stroke-width="1.5"/>
+        <text x="941" y="210" text-anchor="middle" font-weight="600" font-size="12">Screen</text>
+        <text x="941" y="228" text-anchor="middle" font-size="10" fill="var(--grey)">new docs</text>
+
+        <path d="M941,160 L939,8 L265,8 L265,150" fill="none" stroke="currentColor" stroke-width="1.2" stroke-dasharray="4 4" marker-end="url(#arr)"/>
+        <text x="100" y="140" font-size="11" fill="var(--grey)">next round</text>
+        <text x="20" y="428" font-size="12" fill="var(--grey)">Exemplars are re-read each round, never accumulated. If the run ends with fewer than 8 confident-relevant documents,</text>
+        <text x="20" y="444" font-size="12" fill="var(--grey)">the coverage record says "re-searched, still thin".</text>
+      </g>
+    </svg>
+    <figcaption><b>What to notice.</b> Four mechanisms, two of them only at Broadest, none measured separately. The only measurement of Broad and Broadest is the whole-pipeline recall in section 6, and there a single-round method from the experiments beats the whole three-round Broadest at the same pool size.</figcaption>
+  </figure>
+</section>
+
+<section class="wrap" id="screen">
+  <h2>Diagram C: screening, stage 1</h2>
+  <p>Every new record goes through the same screen in every round. Its verdicts are the admission decision for everything downstream and, in rounds 2 and 3, the steering signal for the search. It is about one cent per document in the app today and 99% of a search run's cost.</p>
+</section>
+
+<section class="wide">
+  <figure>
+    <svg viewBox="0 0 980 240" role="img" aria-label="The title, abstract and research question go to three independent calls of gpt-5.4-mini. A vote decides: unsure counts as keep, a tie keeps, a title-only document is kept if any call says relevant, fewer than two valid answers marks it failed.">
+      <g font-family="inherit" font-size="13">
+        <rect x="20" y="70" width="190" height="100" rx="6" fill="var(--ground)" stroke="currentColor"/>
+        <text x="115" y="97" text-anchor="middle" font-weight="600">One document</text>
+        <text x="115" y="117" text-anchor="middle" font-size="12">title, abstract (or "none"),</text>
+        <text x="115" y="134" text-anchor="middle" font-size="12">the research question</text>
+        <text x="115" y="151" text-anchor="middle" font-size="12">plus plan criteria</text>
+        <g stroke="currentColor" stroke-width="1.5" marker-end="url(#arr)">
+          <line x1="210" y1="100" x2="255" y2="48"/><line x1="210" y1="120" x2="255" y2="120"/><line x1="210" y1="140" x2="255" y2="192"/>
+        </g>
+        <g fill="var(--c-sem)" fill-opacity=".12" stroke="var(--c-sem)" stroke-width="1.5">
+          <rect x="260" y="20" width="180" height="56" rx="6"/><rect x="260" y="92" width="180" height="56" rx="6"/><rect x="260" y="164" width="180" height="56" rx="6"/>
+        </g>
+        <g font-size="12">
+          <text x="350" y="43" text-anchor="middle" font-weight="600">call 1 · gpt-5.4-mini</text><text x="350" y="62" text-anchor="middle" fill="var(--grey)">relevant / not relevant / unsure</text>
+          <text x="350" y="115" text-anchor="middle" font-weight="600">call 2</text><text x="350" y="134" text-anchor="middle" fill="var(--grey)">+ a confidence and a reason</text>
+          <text x="350" y="187" text-anchor="middle" font-weight="600">call 3</text><text x="350" y="206" text-anchor="middle" fill="var(--grey)">prompt screen_v2, recall first</text>
+        </g>
+        <g stroke="currentColor" stroke-width="1.5" marker-end="url(#arr)">
+          <line x1="440" y1="48" x2="485" y2="100"/><line x1="440" y1="120" x2="485" y2="120"/><line x1="440" y1="192" x2="485" y2="140"/>
+        </g>
+        <rect x="490" y="55" width="230" height="130" rx="6" fill="var(--ground)" stroke="currentColor"/>
+        <text x="605" y="80" text-anchor="middle" font-weight="600">The vote</text>
+        <text x="505" y="103" font-size="12">unsure counts as keep</text>
+        <text x="505" y="121" font-size="12">a tie keeps</text>
+        <text x="505" y="139" font-size="12">title only: one "relevant" keeps</text>
+        <text x="505" y="157" font-size="12">fewer than 2 valid answers: failed</text>
+        <text x="505" y="175" font-size="11" fill="var(--grey)">12 documents screened in parallel</text>
+        <g stroke="currentColor" stroke-width="1.5" marker-end="url(#arr)">
+          <line x1="720" y1="100" x2="765" y2="60"/><line x1="720" y1="120" x2="765" y2="120"/><line x1="720" y1="140" x2="765" y2="180"/>
+        </g>
+        <rect x="770" y="35" width="190" height="50" rx="6" fill="var(--c-land)" fill-opacity=".16" stroke="var(--c-land)" stroke-width="1.5"/>
+        <text x="865" y="56" text-anchor="middle" font-weight="600">Kept</text><text x="865" y="74" text-anchor="middle" font-size="11" fill="var(--grey)">on to classify, appraise, full text</text>
+        <rect x="770" y="95" width="190" height="50" rx="6" fill="var(--c-plain)" fill-opacity=".2" stroke="var(--c-plain)"/>
+        <text x="865" y="116" text-anchor="middle" font-weight="600">Dropped</text><text x="865" y="134" text-anchor="middle" font-size="11" fill="var(--grey)">stays stored, never read again</text>
+        <rect x="770" y="155" width="190" height="50" rx="6" fill="var(--c-plain)" fill-opacity=".2" stroke="var(--c-plain)" stroke-dasharray="4 3"/>
+        <text x="865" y="176" text-anchor="middle" font-weight="600">Failed</text><text x="865" y="194" text-anchor="middle" font-size="11" fill="var(--grey)">retried on the next screen run</text>
+      </g>
+    </svg>
+    <figcaption><b>Stage 2</b> runs later, only at analysis level Standard or Deep: one call reads the first part of the full text and can only demote. Recall is won at stage 1 or not at all. Nothing in the experiments touches stage 2.</figcaption>
+  </figure>
+</section>
+
+<section class="wrap" id="measured">
+  <h2>What it finds and what it costs today</h2>
+  <p>Measured by running the real pipeline on the ground truth (<code>scripts/evals/search/checks/production_recall.py</code>). In every run, screening removed nothing the search had found, so screen recall equals search recall. The limit is the search.</p>
+  <div class="scroll"><table>
+    <thead><tr><th>scope</th><th>reviews</th><th class="n">kept per database</th><th class="n">recall</th><th class="n">cost per review</th><th>date</th></tr></thead>
+    <tbody>
+      <tr><td>Focused</td><td>4 hand-made reviews</td><td class="n">50</td><td class="n">5.6%</td><td class="n">under 1 cent, no screen in the eval</td><td>2026-09-22</td></tr>
+      <tr><td>Broad</td><td>4 hand-made reviews</td><td class="n">100 × 2 rounds</td><td class="n">10.7%</td><td class="n">$1.00</td><td>2026-09-22</td></tr>
+      <tr><td>Broadest</td><td>4 hand-made reviews</td><td class="n">200 × 3 rounds</td><td class="n">15.3%</td><td class="n">$1.75</td><td>2026-09-22</td></tr>
+      <tr><td>Focused</td><td>15 reviews, mini set</td><td class="n">50</td><td class="n">2.2 to 2.5%</td><td class="n">under 1 cent</td><td>2026-10-05</td></tr>
+      <tr><td>Broad</td><td>15 reviews, mini set</td><td class="n">100 × 2 rounds</td><td class="n">5.0%</td><td class="n">$1.06, 99% screening</td><td>2026-10-05</td></tr>
+    </tbody>
+  </table></div>
+  <p style="margin-top:1rem">Two things explain the low numbers. The plain OpenAlex keyword search never returns most of a review's references at any depth of the result list (3.1% in the first 200, 5.1% in the first 1,000). And the app keeps whatever the queries return, in rank order; it has no way to reach a paper that no query matches. The experiments attack exactly those two points.</p>
+</section>
+
+<section class="wrap" id="experiments">
+  <h2>What the experiments found</h2>
+  <p>Three days of light-touch research in October, all on the mini set unless stated. Write-ups: <code>scripts/evals/search/results/analyses/</code> and <code>scripts/evals/screening/results/analyses/</code>.</p>
+  <h3>Task 047: citation chasing is the big lever for papers</h3>
+  <p>Take the search results as <b>seeds</b>. Read each seed's reference list, which OpenAlex returns with the record for free. Count how many seeds cite each paper and add the most-cited new ones (the backward snowball). Then take the 20 seeds with the most such citations and fetch the papers that cite <i>them</i> (forward chasing). Rank everything by <b>specificity</b>:</p>
+  <div class="formula">(citations from this set + seeds it cites) ÷ log10(citations across all of OpenAlex + 10)</div>
+  <p>so that papers everyone cites (PRISMA, the I² statistic) sink and papers this topic cites rise. Adding OpenAlex's semantic search as a second seed source finds different papers from the keyword search.</p>
+</section>
+
+<section class="wide">
+  <figure>
+    <svg viewBox="0 0 980 356" role="img" aria-label="Horizontal bars of recall at 200 candidates: plain OpenAlex 3.1 percent; the app's Broad search 5.0; generated queries alone 7.0; with the backward snowball 15.2; with forward chasing 16.3; with semantic seeds 22.2; the same keeping 400, 28.0; keeping everything, 30.6; the union with Overton's cited papers, 36.6.">
+      <g font-family="inherit" font-size="13">
+        <text x="20" y="22" font-weight="700" font-size="15">Share of a review's reference list found, 15 reviews, first 200 candidates unless stated</text>
+        <g font-size="12" text-anchor="end">
+          <text x="330" y="60">plain OpenAlex search, one query</text>
+          <text x="330" y="90">the app today, Broad (100 × 2 rounds)</text>
+          <text x="330" y="120">the five generated queries alone</text>
+          <text x="330" y="150">+ backward snowball, specificity rank</text>
+          <text x="330" y="180">+ forward chasing</text>
+          <text x="330" y="210" font-weight="700">+ semantic seeds: the recommended method</text>
+          <text x="330" y="240">the same, keeping 400</text>
+          <text x="330" y="270">the same, keeping everything (ceiling)</text>
+          <text x="330" y="300">union with Overton's cited papers (ceiling)</text>
+        </g>
+        <g>
+          <rect x="345" y="46" width="47" height="20" rx="3" fill="var(--navy-muted)"/>
+          <rect x="345" y="76" width="76" height="20" rx="3" fill="var(--navy-muted)"/>
+          <rect x="345" y="106" width="106" height="20" rx="3" fill="var(--navy-muted)"/>
+          <rect x="345" y="136" width="230" height="20" rx="3" fill="var(--c-paper)" fill-opacity=".55"/>
+          <rect x="345" y="166" width="247" height="20" rx="3" fill="var(--c-paper)" fill-opacity=".55"/>
+          <rect x="345" y="196" width="337" height="20" rx="3" fill="var(--c-paper)"/>
+          <rect x="345" y="226" width="424" height="20" rx="3" fill="var(--c-paper)" fill-opacity=".55"/>
+          <rect x="345" y="256" width="464" height="20" rx="3" fill="var(--c-paper)" fill-opacity=".3"/>
+          <rect x="345" y="286" width="555" height="20" rx="3" fill="var(--c-policy)" fill-opacity=".45"/>
+        </g>
+        <g font-size="12" font-weight="700">
+          <text x="400" y="60">3.1%</text><text x="429" y="90">5.0%</text><text x="459" y="120">7.0%</text><text x="583" y="150">15.2%</text><text x="600" y="180">16.3%</text><text x="690" y="210">22.2%</text><text x="777" y="240">28.0%</text><text x="817" y="270">30.6%</text><text x="908" y="300">36.6%</text>
+        </g>
+        <text x="20" y="328" font-size="12" fill="var(--grey)">The Broad row is the pipeline on the same 15 reviews (2026-10-05). All other rows are the task 047 and 049 experiment scripts on the same ground truth.</text>
+        <text x="20" y="344" font-size="12" fill="var(--grey)">Two runs of one configuration differ by about a point.</text>
+      </g>
+    </svg>
+    <figcaption><b>Cost and time of the recommended method:</b> one query-generation call and about 42 free OpenAlex calls, about a cent and a few seconds per search. No screening is needed inside the loop to reach these numbers; the seeds were raw, unscreened search results.</figcaption>
+  </figure>
+</section>
+
+<section class="wrap">
+  <ul>
+    <li><b>Seminal works:</b> recall on the most-cited tenth of each reference list went from 7% to 42%. On a question with no ground truth, the top of the list was the field's canonical reading list.</li>
+    <li><b>Seed quality beats seed quantity:</b> 500 seeds scored below 200 at the same cap. Screened seeds should give cleaner counts; untested.</li>
+    <li><b>Query wording does not matter much:</b> fourteen prompt and model variants landed within two points once the snowball was added. The production prompt on <code>gpt-5.4-mini</code> is as good as any.</li>
+    <li><b>The pool is now the limit:</b> a 1,900-candidate pool holds 35.5% of the ground truth, and re-ranking it by graph score × embedding similarity gives 17.9% at 200, 22.3% at 400 and 26.0% at 600. Past 200 the question is what the screen can afford, not what the search can find.</li>
+    <li>Half the reviews are reachable by this method and half are barely moved; the mean hides that split. The 100-review set is the next measurement.</li>
+  </ul>
+
+  <h3>Task 049: Overton, the policy-document side</h3>
+  <ul>
+    <li><b>The date-sort bug.</b> The papers cited by the first 200 Overton documents reach 7.7% recall at 200 in relevance order, and 1.7% in today's date order. Four times the recall for one parameter.</li>
+    <li><b>Policy documents are a second, free route to papers,</b> but no ranking rule brings the extra papers under a 200 cap (best gain 0.9 points, inside the noise): the papers only Overton finds are each cited by one policy document among thousands of such papers. They become reachable only with a larger screened pool.</li>
+    <li><b>Finding the key policy documents.</b> With no paper-style ground truth, a small instrument was built: 15 topic-specific gov.uk strategies, target = the policy documents each cites. A policy-to-policy snowball with specificity ranking finds in the first 50 what plain relevance order finds in 200 (6.0% at 25 against 3.5%; UK-only 9.6% against 4.6%). By eye on three questions it surfaces the topic's canon. <b>Owner decision:</b> adopt it; keep the UK-only filter a user option, not a default.</li>
+    <li>The policy-side ceiling is structural: 77% of what Overton returns for a UK question is from outside the UK, and about half of what a strategy cites is its wider legal footprint, which no topic search should return.</li>
+    <li>Smaller findings: duplicate documents under different sources, a record with a removed title, and the documents' own DOIs and cited papers already stored but unread.</li>
+  </ul>
+
+  <h3>Task 050: screening can be cheaper, better and simpler</h3>
+  <p>Measured on labelled data with human include and exclude decisions (SYNERGY, CSMeD and ten 3ie evidence gap maps; 288 documents in <code>mini</code>, 2,949 in <code>full</code>), on the production stage-1 code path, with each review's published title as the question and its published criteria appended, as the app does.</p>
+  <div class="scroll"><table>
+    <thead><tr><th>setting</th><th>set</th><th class="n">recall on includes</th><th class="n">precision, all sources</th><th class="n">cost per run</th></tr></thead>
+    <tbody>
+      <tr><td>Today: <code>gpt-5.4-mini</code>, 3 calls, prompt <code>screen_v2</code></td><td>mini</td><td class="n">0.854</td><td class="n">0.695</td><td class="n">$0.97</td></tr>
+      <tr><td>Cheaper model: <code>gpt-5.6-luna</code>, 3 calls, <code>screen_v2</code></td><td>mini</td><td class="n">0.868</td><td class="n">0.714</td><td class="n">$0.23</td></tr>
+      <tr class="hl"><td>Recommended: <code>gpt-5.6-luna</code>, 3 calls, prompt <code>screen_v4</code></td><td>mini</td><td class="n">0.917</td><td class="n">0.698</td><td class="n">$0.19</td></tr>
+      <tr class="hl"><td>the same</td><td>full</td><td class="n">0.900</td><td class="n">0.642</td><td class="n">$1.97</td></tr>
+      <tr><td>the same, one call instead of three (replayed)</td><td>full</td><td class="n">0.893</td><td class="n">0.634</td><td class="n">about $0.66</td></tr>
+      <tr><td>the same, a second call only after a "drop" (replayed, 1.54 calls per document)</td><td>full</td><td class="n">0.917</td><td class="n">0.619</td><td class="n">about $1.00</td></tr>
+      <tr><td>best method with no language model (embeddings, same workload)</td><td>full</td><td class="n">0.799</td><td class="n">0.569</td><td class="n">about $0.02</td></tr>
+    </tbody>
+  </table></div>
+  <ul style="margin-top:1rem">
+    <li><b>Luna with <code>screen_v4</code> is better and four to five times cheaper</b> than today: against today's setting, 9 includes kept only by the new setting, none only by today's (p = 0.004).</li>
+    <li><b>The three-call majority adds 0.7 points for three times the cost.</b> 93% of documents get the same answer from all three calls. "Ask once more only after a drop, keep if the second call keeps" adds 2.4 points at 1.54 calls. Production cannot run fewer than two calls today (<code>SCREEN_QUORUM = 2</code>): a small code change.</li>
+    <li><b>The prompt matters:</b> today's prompt treats the plan's criteria as hard gates and loses 4 to 7 points when they are present. <code>screen_v4</code> says a criterion the abstract does not report never excludes, a partial match is kept, and a clearly different population excludes only when the user named one.</li>
+    <li>The stated confidence carries no signal: wrong exclusions have the same 0.8 to 0.99 confidence as right ones. Nothing should branch on it.</li>
+    <li>Per document, the full-set run cost 0.07 cents with three Luna calls. The app pays about a cent today.</li>
+  </ul>
+</section>
+
+<section class="wrap" id="proposal">
+  <h2>Diagram D: the proposed design</h2>
+  <div class="key"><b>In one sentence:</b> one search method at every scope, built from generated queries plus free citation chasing on both databases, ranked by specificity and cut at a scope-dependent size; then one cheap, recall-first screen. The three scopes differ only in how many documents they keep. The round loop and its four arms go, unless a reformulation experiment earns one back.</div>
+</section>
+
+<section class="wide">
+  <figure>
+    <svg viewBox="0 0 980 600" role="img" aria-label="The question goes to query generation. OpenAlex receives twenty-three calls, keyword and semantic, giving two hundred seed papers; Overton receives three calls in relevance order giving two hundred policy documents. The seeds' reference lists feed a backward snowball and forward chasing; the policy documents' cited papers join the paper pool and their cited documents become landmark candidates. Papers are ranked by specificity and cut at N; policy documents are ranked by the policy snowball and cut at N. Everything kept is screened once with gpt-5.6-luna.">
+      <g font-family="inherit" font-size="13">
+        <rect x="20" y="30" width="140" height="70" rx="6" fill="var(--ground)" stroke="currentColor"/>
+        <text x="90" y="60" text-anchor="middle" font-weight="600">Research question</text>
+        <text x="90" y="80" text-anchor="middle" font-size="11" fill="var(--grey)">plus criteria, filters</text>
+        <line x1="160" y1="65" x2="190" y2="65" stroke="currentColor" stroke-width="1.5" marker-end="url(#arr)"/>
+        <rect x="195" y="22" width="230" height="86" rx="6" fill="var(--c-sem)" fill-opacity=".12" stroke="var(--c-sem)" stroke-width="1.5"/>
+        <text x="310" y="47" text-anchor="middle" font-weight="600">Query generation</text>
+        <text x="310" y="66" text-anchor="middle" font-size="12">one gpt-5.6-luna call</text>
+        <text x="310" y="84" text-anchor="middle" font-size="12">5 queries, 2 paraphrases</text>
+        <text x="310" y="100" text-anchor="middle" font-size="11" fill="var(--c-land)" font-weight="600">Luna: 2 points less at 200, none at 400</text>
+        <line x1="310" y1="108" x2="310" y2="140" stroke="currentColor" stroke-width="1.5" marker-end="url(#arr)"/>
+        <line x1="425" y1="65" x2="740" y2="140" stroke="currentColor" stroke-width="1.5" marker-end="url(#arr)"/>
+
+        <rect x="20" y="145" width="440" height="100" rx="6" fill="var(--c-paper)" fill-opacity=".14" stroke="var(--c-paper)" stroke-width="1.5"/>
+        <text x="32" y="168" font-weight="600">OpenAlex seeds · 23 calls</text><text x="448" y="168" text-anchor="end" font-size="11" fill="var(--c-land)" font-weight="600">semantic calls are new</text>
+        <text x="32" y="190" font-size="12">the 15 keyword calls as today, plus the question, 2 paraphrases and</text>
+        <text x="32" y="206" font-size="12">5 queries to OpenAlex semantic search (8 calls, 50 each)</text>
+        <text x="32" y="228" font-size="12" font-weight="600">interleave by rank: the first 200 are the seeds</text>
+
+        <rect x="520" y="145" width="440" height="100" rx="6" fill="var(--c-policy)" fill-opacity=".14" stroke="var(--c-policy)" stroke-width="1.5"/>
+        <text x="532" y="168" font-weight="600">Overton seeds · 3 calls</text><text x="948" y="168" text-anchor="end" font-size="11" fill="var(--c-land)" font-weight="600">sort fixed, 200 documents</text>
+        <text x="532" y="190" font-size="12">the question and 2 paraphrases, sorted by relevance, 200 documents,</text>
+        <text x="532" y="206" font-size="12">de-duplicated by title, records without a title dropped</text>
+        <text x="532" y="228" font-size="12" font-weight="600">each lists the papers and the policy documents it cites, free</text>
+
+        <g stroke="currentColor" stroke-width="1.5" marker-end="url(#arr)">
+          <line x1="125" y1="245" x2="125" y2="275"/><line x1="350" y1="245" x2="350" y2="275"/><line x1="740" y1="245" x2="740" y2="275"/>
+        </g>
+
+        <rect x="20" y="280" width="210" height="100" rx="6" fill="var(--c-land)" fill-opacity=".14" stroke="var(--c-land)" stroke-width="1.5"/>
+        <text x="32" y="303" font-weight="600">Backward snowball</text>
+        <text x="32" y="323" font-size="12">count how many seeds cite</text>
+        <text x="32" y="339" font-size="12">each paper; resolve the 200</text>
+        <text x="32" y="355" font-size="12">most-cited new ones (4 calls)</text>
+        <text x="32" y="372" font-size="11" fill="var(--grey)">new; replaces the 5-seed arm</text>
+
+        <rect x="245" y="280" width="215" height="100" rx="6" fill="var(--c-land)" fill-opacity=".14" stroke="var(--c-land)" stroke-width="1.5"/>
+        <text x="257" y="303" font-weight="600">Forward chasing</text>
+        <text x="257" y="323" font-size="11">for the 20 most-cited seeds, fetch</text>
+        <text x="257" y="339" font-size="11">the papers that cite them (10 pages)</text>
+        <text x="257" y="355" font-size="11">and score by how many seeds each cites</text>
+        <text x="257" y="372" font-size="11" fill="var(--grey)">new; reaches recent work</text>
+
+        <rect x="520" y="280" width="450" height="100" rx="6" fill="var(--c-land)" fill-opacity=".14" stroke="var(--c-land)" stroke-width="1.5"/>
+        <text x="532" y="303" font-weight="600">Overton policy snowball</text><text x="958" y="303" text-anchor="end" font-size="11" fill="var(--grey)">about 15 fetches by id</text>
+        <text x="532" y="323" font-size="12">count the policy documents the 200 results cite; fetch the most-cited</text>
+        <text x="532" y="339" font-size="12">ones the search did not return, as landmarks. The papers they cite are</text>
+        <text x="532" y="355" font-size="12">left out: resolving them costs 20 calls for a gain inside the noise</text>
+
+        <g stroke="currentColor" stroke-width="1.5" marker-end="url(#arr)">
+          <line x1="125" y1="380" x2="125" y2="410"/><line x1="350" y1="380" x2="350" y2="410"/><line x1="800" y1="380" x2="800" y2="410"/>
+        </g>
+
+        <rect x="20" y="415" width="440" height="85" rx="6" fill="var(--c-paper)" fill-opacity=".14" stroke="var(--c-paper)" stroke-width="1.5"/>
+        <text x="32" y="438" font-weight="600">Rank papers by specificity, then cut</text><text x="448" y="438" text-anchor="end" font-size="11" fill="var(--c-land)" font-weight="600">replaces interleave-then-cut</text>
+        <text x="32" y="459" font-size="12">(in-set citations + coupling) ÷ log10(global citations + 10); no relevance reserve (unmeasured)</text>
+        <text x="32" y="482" font-size="13" font-weight="700">keep the first N papers · N set by the scope</text>
+
+        <rect x="520" y="415" width="440" height="85" rx="6" fill="var(--c-policy)" fill-opacity=".14" stroke="var(--c-policy)" stroke-width="1.5"/>
+        <text x="532" y="438" font-weight="600">Rank policy documents by citation snowball, then cut</text><text x="948" y="438" text-anchor="end" font-size="11" fill="var(--c-land)" font-weight="600">owner decision</text>
+        <text x="532" y="459" font-size="12">in-set citations, specificity, similarity damping; UK-only as a user option</text>
+        <text x="532" y="482" font-size="13" font-weight="700">keep the first N policy documents</text>
+
+        <line x1="240" y1="500" x2="430" y2="530" stroke="currentColor" stroke-width="1.5" marker-end="url(#arr)"/>
+        <line x1="740" y1="500" x2="550" y2="530" stroke="currentColor" stroke-width="1.5" marker-end="url(#arr)"/>
+        <rect x="260" y="535" width="460" height="55" rx="6" fill="var(--c-sem)" fill-opacity=".12" stroke="var(--c-sem)" stroke-width="1.5"/>
+        <text x="490" y="558" text-anchor="middle" font-weight="600">Screen once · gpt-5.6-luna · prompt screen_v4</text>
+        <text x="490" y="578" text-anchor="middle" font-size="12">one call per document; a second only after a "drop", keep if it keeps</text>
+      </g>
+    </svg>
+    <figcaption><b>One method, every scope.</b> Green is a free citation step; there are no language-model calls between query generation and the screen. After the screen: classify, appraise and the rest of the chain as today; stage 2 screening unchanged. The round loop, the gate, the exemplar reader and the reformulate, suggest, snowball and diversity arms are deleted. Reformulation is parked as a measured option for Broadest (experiment 4).</figcaption>
+  </figure>
+</section>
+
+<section class="wrap">
+  <h3>The three scopes become three pool sizes</h3>
+  <div class="tiles" role="list">
+    <div class="tile" role="listitem"><div class="num">100 + 50</div><div class="lab"><b>Focused.</b> Papers and policy documents kept. Measured on the paper side with Luna: 15.5% at 100, against 2.2% for today's Focused. About 150 documents screened.</div></div>
+    <div class="tile" role="listitem"><div class="num accent">200 + 100</div><div class="lab"><b>Broad.</b> Measured on the paper side with Luna: 20.3% at 200, against 5.0% for today's Broad on the same 15 reviews. About 300 documents screened.</div></div>
+    <div class="tile" role="listitem"><div class="num accent">400 + 200</div><div class="lab"><b>Broadest.</b> Measured on the paper side with Luna: 27.6% at 400. About 600 documents screened, below today's Broadest cost with Luna.</div></div>
+  </div>
+  <p style="margin-top:1rem">Why pool size and not mechanism: the cap curve has no knee (every 100 papers buys 2 to 5 points up to 400), and the screen is now cheap enough to read the larger pool. The single-round method beats the whole three-round Broadest run at the same pool size (20% against 15% at 200; different review sets, see section 6). The policy caps are half the paper caps because the policy snowball reaches 90% of its pool by 50 documents and 97% by 100. One code path for the three scopes is also easier to test: one method, one eval, three pairs of constants.</p>
+  <div class="key"><b>Measured on 9 October</b> (section 10): the cap curve with Luna; screened seeds (no effect, so no second pass); the screen on real candidates (97% of ground-truth seeds kept, 72% of the pool kept, 1.3 calls per document); reformulation (+3.9 points at the ceiling, parked); the policy-document cap. <b>Not yet measured:</b> end-to-end recall, cost and latency of the built configuration with Overton, which is the check after the build.</div>
+</section>
+
+<section class="wrap" id="steer">
+  <h2>Answers to the open questions, after the experiments</h2>
+  <div class="didnt">
+    <div><b>How many per database at Focused?</b> 100 papers and 50 policy documents. The cap curve has no knee: with Luna, 15.5% at 100, 18.5% at 150, 20.3% at 200, 25.2% at 300, 27.6% at 400. Every 100 papers buys 2 to 5 points, so the cap is a budget choice. Policy documents flatten early (90% of the pool by 50, 97% by 100), so their cap is half the paper cap.</div>
+    <div><b>Should the snowball be in Focused?</b> Yes. It is the single biggest lever, it costs about eight free calls and a few seconds, and it needs no language model. The ranking it feeds matters most at small caps: +7 points over the raw order at 100, +9 at 200.</div>
+    <div><b>Does query reformulation help?</b> At the ceiling, yes: the production reformulate call on Luna, fed with screened exemplars, reached 32 ground-truth papers the citation graph could not (+3.9 points), four times what 200 more snowball papers buy. Its gain inside a 200 or 400 cut is not measured, and it needs a screen between two search passes. Parked as a measured option for Broadest; not in the first slice.</div>
+    <div><b>Do we still need Broad and Broadest?</b> Keep the three names, drop the three mechanisms. They become three pairs of caps on one code path. The round loop, the gate, the exemplar reader and the reformulate, suggest, snowball and diversity arms go. This supersedes ADR 0012 decisions 3 and 4, so the slice records a new ADR.</div>
+    <div><b>What about seeds that passed screening?</b> No effect. Snowballing from the screened-in seeds gives the same recall at 200 and above and half a point less at 100: the off-topic seeds cite the same landmarks as the on-topic ones. So nothing in the search depends on a screening verdict, and there is no second pass.</div>
+    <div><b>Which model writes the queries?</b> Luna, by decision (the current model is not available after the Bedrock migration). Measured cost: about two points at 100 to 200 candidates, none at 300 and 400, one second longer per call.</div>
+  </div>
+</section>
+
+<section class="wrap" id="before">
+  <h2>The experiments, run on 9 October</h2>
+  <p>All on the existing scripts and caches, the paper side on the 15-review mini set, the policy side on the gov.uk instrument. Total spend under a dollar. Write-up with every table: <code>scripts/evals/search/results/analyses/2026-10-09-design-experiments.md</code>; dated log in <code>docs/tasks/051-improve-production-search-screen/notes.md</code>.</p>
+  <ol class="steps">
+    <li><b>The cap curve for the final configuration, Luna and the current model.</b> Luna 15.5 / 18.5 / 20.3 / 25.2 / 27.6% at 100 / 150 / 200 / 300 / 400; the current model 16.7 / 20.1 / 22.2 / 25.3 / 28.0%. No knee. Decided the three paper caps.</li>
+    <li><b>Overton's cited papers merged in.</b> Dropped: the owner left them out of the paper pool (20 resolution calls per search for a gain inside the noise).</li>
+    <li><b>Screened seeds against raw seeds</b> (<code>screened_seeds.py</code>, new). Same recall at 200 and above, half a point lower at 100. No second pass. By-product: the proposed screen kept 98 of 101 ground-truth papers among 2,966 real seeds, 72% of the pool, 1.3 calls per document, about 30 cents.</li>
+    <li><b>Reformulation against a bigger snowball</b> (<code>reformulate_gain.py</code>, new). Reformulation +3.9 points at the ceiling (32 new papers, 21 cited by a seed); 200 more snowball papers +1.0 at the ceiling and nothing at 200. Parked.</li>
+    <li><b>The policy-document cap.</b> The policy snowball reaches 8.0% at 50, 8.5% at 100 and 8.8% at 200 of a 8.8% pool ceiling (UK-only 12.7 / 13.7 / 14.8 of 15.4). Decided the three policy caps.</li>
+    <li><b>Confirm on 100 reviews.</b> Started and stopped at 16 reviews on the owner's call: the full check runs once the whole configuration, Overton included, is built.</li>
+    <li><b>A real one-call screening run.</b> Not needed; the replayed rule stands.</li>
+    <li><b>End to end in the app, after the build.</b> <code>production_recall.py</code> at each scope: search recall, screen recall, cost, wall clock, seminal-decile recall; and the 100-review set. This is the acceptance check of the slice.</li>
+  </ol>
+</section>
+
+<section class="wrap" id="changes">
+  <h2>The production changes, as a list</h2>
+  <p>For the contract, grouped by what they touch. Each is measured by experiment 8 once built.</p>
+  <h3>Search (<code>sourcing/</code>)</h3>
+  <ol>
+    <li>Query generation on <code>gpt-5.6-luna</code> (and <code>SEARCH_REFORMULATE_MODEL</code>, <code>SEARCH_SUGGEST_MODEL</code> if either survives). The production prompt is unchanged.</li>
+    <li>Overton: send <code>sort=relevance</code> and protect the parameter; de-duplicate by normalised title. Records with a removed title: parked.</li>
+    <li>Overton seed set: question plus 2 paraphrases, 200 documents, at every scope.</li>
+    <li>OpenAlex semantic search as a second seed route (8 calls; one call per second; the endpoint rejects date filters, so the cutoff is applied locally).</li>
+    <li>Backward snowball by reference frequency over the 200 seeds, batched resolution, date fence; forward chasing from the 20 most-cited seeds. Replaces the 5-seed snowball arm.</li>
+    <li>Policy-to-policy snowball over the 200 Overton results: count cited documents, fetch the most-cited ones the search did not return, rank with specificity and similarity damping. Overton's cited papers are read but not resolved.</li>
+    <li>Specificity ranking replaces interleave-then-cut for papers, built before persistence. Two caps per scope: papers 100 / 200 / 400, policy documents 50 / 100 / 200. The relevance reserve is unmeasured and left out.</li>
+    <li>Delete the round loop, the gate, the exemplar reader and the reformulate, suggest, snowball and diversity arms. New ADR superseding ADR 0012 decisions 3 and 4; reformulation recorded as a parked, measured option for Broadest.</li>
+    <li>Lower <code>QUERY_MAX_CHARS</code> to about 1,300: OpenAlex refuses searches over 1,500 characters (found in 047).</li>
+    <li><code>source_country</code> (UK-only) exposed as a user option in the plan, not a default.</li>
+  </ol>
+  <h3>Screening (<code>assess/</code>)</h3>
+  <ol>
+    <li><code>SCREEN_MODEL</code> to <code>gpt-5.6-luna</code>; prompt <code>screen_v4</code> promoted and re-pinned in <code>scripts/prompt_hashes.json</code>.</li>
+    <li>Vote: one call, a second only after a drop, keep if it keeps; <code>SCREEN_QUORUM</code> changed to match. Stored confidence stays a consensus probability. Measured on real candidates: 97% of ground-truth seeds kept at 1.3 calls per document.</li>
+  </ol>
+  <h3>App, plan and eval</h3>
+  <ol>
+    <li>The scope hint ("up to 50 relevant results per database") and the planner prompt updated to the new pairs of numbers; the plan document's three options unchanged.</li>
+    <li>Seminal-decile recall added to the search scores; the policy-side instrument kept as a second measure, global and UK-only; the 100-review set run on the built configuration.</li>
+  </ol>
+</section>
+</main>
+
+<footer class="wrap">
+  <p>Sources: <code>docs/tasks/047-search-rnd/notes.md</code>, <code>docs/tasks/049-improve-overton-search/notes.md</code>, <code>docs/tasks/050-improve-screening/notes.md</code>; the write-ups <code>scripts/evals/search/results/analyses/2026-10-06-search-experiments.md</code>, <code>2026-10-07-overton-experiments.md</code> and <code>scripts/evals/screening/results/analyses/2026-10-08-screening-experiments.md</code>; <code>scripts/evals/search/results/history.md</code>; ADR 0011, 0012 and 0022; code in <code>sourcing/search_loop.py</code>, <code>sourcing/acquire.py</code>, <code>assess/screen.py</code>, <code>runtime/runner.py</code> and <code>runtime/task_plan.py</code>.</p>
+</footer>
+</body>
+</html>

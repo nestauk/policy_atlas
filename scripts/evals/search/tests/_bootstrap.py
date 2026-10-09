@@ -1,8 +1,8 @@
 """Make the eval's shared modules importable when a script in this folder runs directly.
 
 Python puts only the running script's own folder on the import path. The shared code
-lives one level up (``evals_search_utils.py``) and in the sibling folders ``ground_truth/``
-and ``measure/``, so every script below the root imports this module first. An identical
+lives one level up (``evals_search_utils.py``) and in the sibling folders ``ground_truth/``,
+``checks/`` and ``experiments/``, so every script below the root imports this module first. An identical
 copy sits in each folder; whichever loads first does the work.
 """
 
@@ -18,7 +18,8 @@ for _i, _folder in enumerate(
         _root,
         _root / "ground_truth",
         _root / "ground_truth" / "getters",
-        _root / "measure",
+        _root / "checks",
+        _root / "experiments",
     ),
     start=1,
 ):

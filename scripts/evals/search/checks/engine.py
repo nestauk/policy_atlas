@@ -1,13 +1,13 @@
 """Run one research intent through the real search stage (and optionally
 screening) and score it against a review's reference list.
 
-This is the engine that ``measure/sweep_record_cap.py`` and ``measure/production_recall.py``
+This is the engine that ``experiments/sweep_record_cap.py`` and ``checks/production_recall.py``
 drive. It has no command line of its own. ``run_one_query`` seeds a throwaway
 task/scope, runs the pipeline's own ``run_search`` and ``screen_sources`` for
 as many rounds as the depth allows, and does so inside the caller's
 transaction (which the caller rolls back, so nothing is ever committed). It
 returns a ``QueryResult`` with recall attributed to each stage, plus
-everything needed to unpick the run offline (see ``measure/inspect_run.py``).
+everything needed to unpick the run offline (see ``checks/inspect_run.py``).
 
 One ``run_search`` call is one search round. ``rapid`` is a single round.
 ``standard`` and ``deep`` are several: the app's runner searches, screens the

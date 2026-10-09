@@ -20,7 +20,7 @@ any cut-off: AUC (the chance an included document outranks an excluded one; 0.5
 is chance) and average precision per question.
 
     uv run --project backend --env-file backend/.env \\
-        python scripts/evals/screening/measure/rank_baselines.py --criteria \\
+        python scripts/evals/screening/experiments/rank_baselines.py --criteria \\
         --match scripts/evals/screening/results/runs/<language-model run>
 """
 

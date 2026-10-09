@@ -25,7 +25,7 @@ a count of zero. Then the union is ranked several ways and scored at each cap:
 Usage::
 
     uv run --project backend --env-file backend/.env \\
-        python scripts/evals/search/measure/merge_rank.py \\
+        python scripts/evals/search/experiments/merge_rank.py \\
         [--run RUN_FOLDER] [--weights 0.5 1 2 3] [--caps 100 200 400 600] \\
         [--reviews TEXT ...]
 

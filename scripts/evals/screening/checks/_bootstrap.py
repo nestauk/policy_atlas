@@ -14,6 +14,8 @@ _root = next(
     for parent in (_here, *_here.parents)
     if (parent / "targets.py").is_file() and (parent / "adapter.py").is_file()
 )
-for _index, _folder in enumerate((_root, _root / "measure"), start=1):
+for _index, _folder in enumerate(
+    (_root, _root / "checks", _root / "experiments"), start=1
+):
     if str(_folder) not in sys.path:
         sys.path.insert(_index, str(_folder))
