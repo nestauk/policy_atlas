@@ -10,6 +10,9 @@ full text, no raw traces.
 |---|---:|---|
 | `make verify` (Phase 0a, build-open baseline on `5d5c044`) | pass | 2589 tests, typecheck, lint, build and eval-check green. The first run failed only at `eval-check` because the new, unformatted `probe_051.py` was created while the run was in progress; after `ruff format`, `make eval-check` passed on its own. |
 | `make verify-fast` (Phase 0b/0c gate) | pass | probes, fixtures and the two scripts added; no package code changed |
+| `make verify-fast` (shared gate, Phases 1, 2, 6; commits `f966b0a`, `04f57cd`, `651bb5f`) | pass after one fix | 2608 passed, 1 failed: `test_model_routing_by_moment` expects the agent triage model to be mini-class, and the triage default borrowed `SCREEN_MODEL`, which the Phase 4 pin (uncommitted at the time, not part of these commits) had moved to Luna. Fixed by giving triage its own literal default (see § Diff summary); the test file re-run green (42 passed). |
+| `make verify-fast` (Phase 4 gate; commit below) | pass | 2611 passed, typecheck, lint; `make prompt-guard` and `make eval-check` green after the re-pin |
+| `make verify` (shared gate, Phases 3a, 3b, 5; ingest-adjacent; commits below) | pass | backend suite, typecheck, lint, build, eval-check (85 eval tests), frontend (617 tests) all green |
 | `make verify` (step-6 exit) | _pending_ | |
 | `make prompt-guard` | _pending_ | |
 
@@ -79,9 +82,77 @@ tie order varied between processes; the export counts in list order (ties by fir
 appearance) and asserts the counts equal the experiment's, which is the rule production
 follows.
 
+## Prompt hash diffs
+
+| prompt module | before | after | change |
+|---|---|---|---|
+| `runtime/planner_prompt.py` | `4e85172f…` | `88c58a52…` | the thoroughness caps sentences (D15) and the `search_effort` key description (see § Diff summary) |
+| `evidence_search/assess/screen_prompt.py` | `b9149b23…` | `4d69b181…` | `SCREEN_SYSTEM_PROMPT` = `scripts/evals/screening/prompts/screen_v4.txt` byte for byte (checked by equality at transplant time); `SCREEN_PROMPT_VERSION = "screen_v4"`; `SCREEN_MODEL = "gpt-5.6-luna"`; module docstring; `SCREEN_REPS` and `SCREEN_QUORUM` deleted |
+| `sourcing/search_prompts.py` | _Phase 3a_ | | `SEARCH_QUERIES_MODEL`, `SEARCH_REFORMULATE_MODEL`, `SEARCH_SUGGEST_MODEL` = `gpt-5.6-luna`; `QUERY_MAX_CHARS = 1300`; prompt text unchanged |
+
+Re-pinned with `python3 scripts/prompt_hash_guard.py --update`; `make prompt-guard` green after each.
+
 ## Checks beyond the build
 
-_filled at step 6_
+**Phase 4 (adaptive vote), Codex build, lead-reviewed.** `decide_stage1` implements the
+D10 truth table (six parametrised rows in `test_decide_stage1.py`, including the 0.3
+reversal); `_run_stage1_calls` runs batch 1 then one second call per valid
+`not_relevant`; the eval's `vote.py` imports `decide_stage1` and keeps the majority rule
+under `--vote majority` with the literal quorum 2. Codex could not reach the test
+database from its sandbox, so the lead ran `pytest tests/evidence_search/assess
+tests/core/test_tracing.py` (202 passed after one fix: the paired-injection fixture test
+still scripted three replies per document; trimmed to one). The agent's triage model was
+decoupled (see § Diff summary).
+
+**Phases 3a and 3b (single pass, pool hand-off, loop deletion), Codex then lead.** Two
+Codex rounds did not finish Phase 3a: the first stopped before the tests with a cramped
+pass (one-line lambdas, a quadratic pool assembly, the Overton country post-filter
+path dropped, zero-result counting changed meaning, the old function kept as a renamed
+copy); the second wrote placeholder tests and ran `ruff format` over the whole tree
+(about 170 unrelated files, reverted by path). The lead then rewrote `run_search` as a
+small pass-state class (`_Pass`) and two legs in named steps, folded in the owner's
+D13 amendment, deleted the loop code by name with the AST, and wrote the tests:
+`test_search_single_pass.py` (15 tests: the call plan at each depth, the two-variant
+country split, the call budget, logical-call counting with pages and a retry, the
+semantic year fence with the local date check, the local-filter rules, the over-long
+query drop, D9, one-backend scope both ways, fixture mode, and the eight retained
+round-loop tests), `test_acquire_pools.py` (5), `test_search_single_pass_runner.py`
+(2: one acquire and one screen run at standard and deep through `run_plan`, one
+coverage record, `completed`, `round_index` 1). Deleted: `test_search_loop_deep.py`
+(the five deep-round tests, the four `test_finalise_deep_stop_*`,
+`test_new_confident_relevant_for_run_*`; its retained tests moved), `test_search_rounds.py`,
+the six `test_deep_stop_*` in `test_search_directives.py`, the three `_interleave` tests
+and `test_cap_is_per_backend` in `test_acquire_record_cap.py` (the pool-cap tests
+replace them; `test_targeted_verbs_are_never_trimmed` became
+`test_every_pool_entry_counts_toward_the_cap`, the exemption is gone by D7). Updated:
+`test_steering.py` (no second round), `test_runner.py` and `test_concurrent_walks.py`
+(the round helper deleted), `test_acquire.py` (the harness fixture pair now makes the
+pass's calls; `source.acquired` carries `query_origin`), `test_search_wire.py`
+(keyword and semantic requests asserted separately; the coverage record's local
+filters), `test_search_generation.py` (Luna).
+
+**Phase 5 (eval checks), lead.** `engine.run_one_query` is one search and, when asked,
+one screen at any depth; `production_recall._run_depth` screens at every depth and
+records `papers_cap`, `policy_cap`, `call_budget`, `screening`;
+`test_measure.py::test_run_depth_screens_at_every_depth_and_records_the_caps` proves
+it; the sweep's `_apply_caps` overrides `papers_cap`. `make eval-check` green.
+
+**Phase 7 (ADR, spec, deferred, tutorial), lead.** ADR 0038 written (Proposed until the
+step-6 sign-off; supersedes ADR 0012 decisions 1, 3, 4, 5; amends ADR 0011 decision 1;
+carries the restore recipe and the tag). `components.md` §1 acquire and §2 screen
+rewritten for the single pass and the adaptive vote; one line in `docs/specs/log.md`;
+`docs/deferred.md` gains the task 051 section (relevance reserve, similarity damping,
+the reformulation contingency with its +3.9 measurement, seminal-decile scoring,
+removed-title records, the `source_country` plan option) and update notes on the
+record-cap and round-loop entries; the Overton sort bug is recorded as fixed in that
+section (it had no deferred entry). `docs/tutorials/search-and-screen/index.html`
+rewritten per D20: Diagram A is the pass as built (verbs, call counts, constants),
+Diagram B the adaptive vote, a filters section, a measured table with `data-phase8`
+placeholders the live check fills, a short "what it replaced" section, the parked list;
+rendered once with headless Chrome at 1100 px and checked by eye (two over-long
+diagram lines shortened). `make okf-validate` green.
+
+_rest filled at step 6_
 
 ## End-to-end command
 
@@ -89,7 +160,50 @@ _filled at step 6_
 
 ## Diff summary
 
-_filled at step 6_
+_completed at step 6; the flagged deviations are collected here as they arise_
+
+**Flagged deviations (minor, resolved within the contract's vocabulary):**
+
+- **S2 seam (Phase 2):** the four new verbs (`search_semantic`, `lookup_ids`,
+  `fetch_citing`, `fetch_by_id`) live on `acquire.ExtendedSearchBackend`, a Protocol
+  that extends the unchanged five-verb `SearchBackend`; the live and fixture backends
+  implement both. S2 said the existing Protocol gains them. Reason: the old scripted
+  test doubles (deleted in Phase 3b) would have failed typecheck at the Phase 2 gate.
+  `fetch_citing` also takes `page: int = 1`, which S2's signature omitted but S3's
+  "one page per logical call" needs.
+- **S1 (Phase 1):** `pool.py` types `origin` as `str`, not `QueryOrigin`, because
+  `search_loop.py` (where the Literal lives) imports `pool.py`; importing back would be
+  circular.
+- **Agent triage model (Phase 4, lead):** `runtime/agent_backend.py` defaulted the
+  agent's triage model to `SCREEN_MODEL`. Pinning `SCREEN_MODEL` to `gpt-5.6-luna`
+  (D10) would have moved triage too, which the contract does not ask for. The triage
+  default is now the literal `gpt-5.4-mini` (still env-overridable), so triage is
+  unchanged by this slice. One line outside the surfaces table.
+- **Planner prompt (Phase 6, lead):** besides the six cap sentences of S10, the
+  `search_effort` key description no longer calls `standard` and `deep` "a bounded
+  iterative search loop" and "the full iterative loop with citation snowballing"
+  (false after D11); it now says "the same pass, larger caps". The timing figures in
+  that sentence are unchanged (D15 defers band corrections to a follow-up).
+- **S5 semantic calls per variant (Phase 3a):** the plan ran the 8 semantic calls per
+  filter variant. With the D13 amendment the country filter is applied locally, so the
+  variants' semantic requests would be identical; the pass makes the 8 calls once per
+  run. The OpenAlex budget stays `45 × variants`.
+- **D7 pool cut (Phase 3a):** the cap applies to the ranked list, never larger than it.
+  Records a call returned but the ranking left out (citing works past the 200 forward
+  keep) are listed after the ranked ones and counted as `dropped_over_cap`, so the
+  count invariant holds and the persisted set is exactly "the first cap of the ranked
+  list". Returned records are copied once at execution, because a backend may hand
+  back the same objects on every call (the fixtures do) and the pool bookkeeping is by
+  object.
+- **Coverage record `post_filter_exclusions` (Phase 3a):** every locally filtered call
+  (semantic, resolve, forward, landmark) records its exclusion count, zero included,
+  the way the Overton post-filter did already. A dated run lists about 20 small entries.
+- **`queries_dropped` (D14):** the search summary counts generated queries dropped at
+  validation (over-length or empty); no event is written for them.
+- **Fixture export (Phase 0c):** the policy replay fixtures were fetched live (three
+  relevance-ordered pages per question plus 15 fetch-by-id calls, cached privately)
+  rather than cut from the experiment cache, because the cache holds only the merged
+  list, not the three per-text lists the plan asked for.
 
 ## Review findings
 
@@ -109,6 +223,43 @@ _filled at step 7_
 ## Known unverified items
 
 ## Public safety
+
+## Owner decision on D13 (raised and answered 2026-10-09)
+
+**Decided by the owner in chat, 2026-10-09:** apply any filter the semantic endpoint
+rejects locally to the semantic results (the wider form of the proposal below; see the
+contract's amendment line). Implemented as a lead follow-up to Phase 3a.
+
+**What the probe showed.** OpenAlex `search.semantic` rejects `from_publication_date`
+and `to_publication_date` (400) and accepts `publication_year` fences
+(`publication_year:<2025`, `publication_year:2015-2024`, `publication_year:>2014` all
+200). D13 as written says: when a run's directive carries a filter the semantic
+endpoint rejects, skip the semantic calls and record `semantic_skipped`.
+
+**Why it matters.** Every item of the mini and full ground-truth sets carries
+`published_before` (the review's cutoff), so under D13 as written the live check of
+D17 would skip the semantic leg on every review and measure keyword-only seeds
+(experiment 1: 16.3% at 200 without semantic seeds against 20.3% with them; the
+contract's Broad threshold is 17.3%). The experiments that set the thresholds sent
+`publication_year:<cutoff year + 1>` to the semantic endpoint and applied the exact
+date locally. In the app, a plan with a date range would lose the semantic seeds the
+same way.
+
+**Proposed amendment (recommended).** In `_semantic_filter_parts`, map
+`published_after` / `published_before` to a `publication_year` fence on the wire
+(`>=` the start year, `<=` the end year) and apply the exact dates locally to the
+semantic results (`publication_date` outside the range -> dropped before
+interleaving). The directive is still never weakened: every kept record satisfies it.
+The other rejected keys (`sdgs`, `exclude_paratext`, `oa_status`,
+`author_affiliation_countries`) keep the fail-closed skip as contracted. Optional
+second step, not needed for the eval: apply `country_predicate` locally to semantic
+results under a country directive instead of skipping the leg.
+
+**Alternative.** Keep D13 as written; then the live-check thresholds must be re-based
+on keyword-only seeds (about 4 points lower) and the app loses the semantic leg on
+every dated plan.
+
+Phases 1, 2, 4, 5 and 6 do not depend on this decision; Phase 3a does.
 
 ## Review handoff (step-7/8 inputs)
 

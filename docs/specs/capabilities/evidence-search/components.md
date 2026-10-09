@@ -91,25 +91,36 @@ is gated by `screen`. Ingestion is *not* a tool; this component's verb is `searc
 In v3.0 acquire snapshots the metadata envelope itself as text-in-hand
 (`text_basis="abstract_only"`); full-text fetch + Tier-0 ingestion remain post-screen.
 
-**As-built, task 015 ([ADR 0012](../../../adr/0012-depth-graded-agentic-search.md)):**
-search is **depth-graded** — acquire reads `context["search"]["depth"]`
-(`rapid` default | `deep`, fail-closed; every depth constant lives in an extensible
-per-depth table). **Rapid** = LLM multi-query fan-out per backend idiom (OpenAlex
-keyword-lexical queries + SR/RCT variants; Overton verbatim intent + ≤2 NL paraphrases,
-semantic `squery`) with no single query load-bearing (validated generation; all-zero →
-loud verbatim fallback; per-call result quotas distribute the cap). **Deep** = bounded
-acquire↔screen rounds (cap 3) where the loop's relevance judge IS the production
-screen — acquire itself writes **no** screening rows and holds no shadow relevance
-judgment; steering reads persisted consensus rows via the effective-screen helper.
-Round arms (reformulate over graded exemplars anchored to the fixed intent · citation
-snowball · suggested-paper grounding · an un-steered diversity reserve) run on fixed
-call caps. Stops are honest (`target_reached` / `short_circuit` / `budget_exhausted`,
-thin overlay `re_searched_still_thin`); every egress call emits `search.executed`; each
-acquire round writes a fail-closed coverage record carrying depth + executed
-`scope_filters` (the empirically-pinned directive grammar). `search_backend_scope`
-(Plan+Config) selects backends. Transport is first-party httpx, hardened
-(timeouts · Overton limiter · retry cap 1 · redacted errors · sanitizers · no citation
-floor).
+**As-built, task 051 ([ADR 0038](../../../adr/0038-single-pass-search-and-adaptive-screen.md),
+superseding the task 015 round loop of [ADR 0012](../../../adr/0012-depth-graded-agentic-search.md)):**
+search is **one pass at every scope**; acquire reads `context["search"]["depth"]`
+(`rapid` | `standard` | `deep`, fail-closed) and a scope is two caps (`papers_cap` 100 /
+200 / 400, `policy_cap` 50 / 100 / 200) over the same path. **Seeds:** one query-generation
+call (`search_queries_v3`, Luna) gives 5 keyword queries and 2 paraphrases; OpenAlex runs
+each query as written and with the systematic-review and randomised-trial clauses (15
+calls of 200) plus 8 semantic calls (`search.semantic`: the question, the paraphrases and
+the queries, 50 each, skipped fail-closed when the directive carries a filter the
+semantic endpoint rejects, recorded as `semantic_skipped`); the lists are interleaved by
+rank and the first 200 works are the seeds. **Citation chasing:** the 200 works most
+cited by the seeds' reference lists are resolved by id (backward); for the 20 best
+in-set-cited seeds the works that cite them are fetched (forward) and scored by how many
+seeds they cite. **Paper pool:** every candidate is ranked by specificity
+(`(in-set citations + coupling) / log10(cited_by_count + 10)`) and the first `papers_cap`
+distinct works are persisted and embedded. **Policy pool:** Overton returns 400
+relevance-ordered documents for the three texts, interleaved, de-duplicated by
+normalised title; the 15 policy documents most cited by the results and not among them
+are fetched by id (landmarks); results and landmarks are ranked by
+`in-set / log10(citation_count + 10)` and cut at `policy_cap`. Overton's cited papers do
+not enter the paper pool. Acquire writes **no** screening rows and holds no relevance
+judgment; every logical call emits `search.executed` (with `query_origin`, and `pages`
+for an Overton search); every kept record's `source.acquired` carries its
+`query_origin`; one fail-closed coverage record per run carries depth, the executed
+`scope_filters` (the empirically-pinned directive grammar) and `stop_condition`
+`completed` or `error` (the task 015 stop values stay valid on historical rows).
+`search_backend_scope` (Plan+Config) selects backends. Transport is first-party httpx,
+hardened (timeouts · Overton limiter · the semantic call's own 1 s interval · retry cap ·
+redacted errors · sanitizers · no citation floor); call budgets count logical calls per
+backend per run (OpenAlex 45 per filter variant, Overton 30).
 
 ## 2 — screen
 
@@ -120,7 +131,7 @@ for a broad scan is the **false negative**, so the screen is deliberately inclus
   a rapid run stage 1 only — the canonical systematic-review two-stage, task 014):
   - **Stage 1 (always)** screens on **metadata** — title + abstract, **degrading to title-only**
     where no abstract — **fail-open** ("no abstract" must never behave like "not relevant";
-    title-only exclusion requires unanimity across consensus reps).
+    a title-only document follows the same adaptive vote as any other).
   - **Stage 2 (at depth, post-ingestion)** re-screens on **full text** where text is available
     (ingested or envelope-carried), **demote-only** (it can confirm or demote, never rescue a
     stage-1 exclude — recall is won at stage 1 or not at all); docs without full text keep
@@ -136,11 +147,14 @@ for a broad scan is the **false negative**, so the screen is deliberately inclus
   (task 015):** the trigger dissolved into the depth-graded loop's stopping rule — a
   rapid run below the confident-relevant threshold escalates (`should_escalate`) to one
   bounded deep continuation, and any non-target stop below target records
-  `re_searched_still_thin` on the coverage record. Screen is also the **deep loop's
-  judge**: every in-loop relevance judgment is the same durable 3-rep consensus
-  admission decision (one calibration, one eval surface — ADR 0012 decision 3);
-  stage-1 prompt inputs grew `title_source` provenance and (classify likewise) the
-  tag-layer label priors with visible `asserted_by` (task 015 revs 3.7–3.8).
+  `re_searched_still_thin` on the coverage record. **As-built (task 051, ADR 0038):**
+  the loop and its judge role are gone — the search needs no screening verdict — and the
+  stage-1 consensus is an **adaptive vote** (`screen_v4` on Luna): one call per document,
+  a second call only when the first says `not_relevant`, keep when the second says
+  `relevant` or `unsure`; confidence is the consensus probability over the calls made
+  (ADR 0011 decision 1 as amended). Stage-1 prompt inputs carry `title_source`
+  provenance and (classify likewise) the tag-layer label priors with visible
+  `asserted_by` (task 015 revs 3.7–3.8).
 - ⏸ The richer **tiered content peek** (exec-summary / headings / passage scan for poor-metadata
   grey lit) is **deferred** (largely superseded by the stage-2 windowed full-text pass).
 

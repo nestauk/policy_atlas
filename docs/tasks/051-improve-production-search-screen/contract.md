@@ -22,6 +22,18 @@
 > (2026-10-09):** the round loop's orchestration is deleted, but its last working commit is
 > tagged `search-round-loop-last` as the restore point, and the reformulate and suggest
 > prompt builders, wires, backend methods and their tests stay in the tree (D11).
+> **Amendment at build (2026-10-09, owner, in chat):** D13's fail-closed rule for the
+> semantic calls changes from "skip the semantic leg when the directive carries a filter
+> the endpoint rejects" to "apply the rejected filter locally to the semantic results".
+> The pre-build probe showed the endpoint rejects the date, SDG, paratext, OA-status and
+> country filters and accepts a `publication_year` fence; every rejected key maps to a
+> field in the records already fetched (`publication_date`,
+> `sustainable_development_goals[].id`, `is_paratext`, `open_access.oa_status`,
+> `authorships[].countries`), so the semantic leg is never skipped, the dates also go on
+> the wire as a year fence, and every kept record satisfies the directive. Needed because
+> every eval item carries `published_before`; under the rule as written the live check
+> would have measured keyword-only seeds. The coverage record records the locally applied
+> keys as `semantic_local_filters`; `semantic_skipped` is not written.
 
 ## Goal
 
