@@ -1,4 +1,5 @@
 .agent/
+.outputs/
 .vscode/
 docs/work/
 docs/specs/sources/evidence-base-ux/fonts/
