@@ -3,38 +3,30 @@ screening) and score it against a review's reference list.
 
 This is the engine that ``experiments/sweep_record_cap.py`` and ``checks/production_recall.py``
 drive. It has no command line of its own. ``run_one_query`` seeds a throwaway
-task/scope, runs the pipeline's own ``run_search`` and ``screen_sources`` for
-as many rounds as the depth allows, and does so inside the caller's
-transaction (which the caller rolls back, so nothing is ever committed). It
-returns a ``QueryResult`` with recall attributed to each stage, plus
-everything needed to unpick the run offline (see ``checks/inspect_run.py``).
+task/scope, runs the pipeline's own ``run_search`` once and, when asked,
+``screen_sources`` once, inside the caller's transaction (which the caller
+rolls back, so nothing is ever committed). It returns a ``QueryResult`` with
+recall attributed to each stage, plus everything needed to unpick the run
+offline (see ``checks/inspect_run.py``).
 
-One ``run_search`` call is one search round. ``rapid`` is a single round.
-``standard`` and ``deep`` are several: the app's runner searches, screens the
-new candidates, asks ``search_loop.evaluate_deep_stop`` whether to go again,
-and repeats up to the depth's ``round_cap``. Rounds after the first unlock the
-reformulate / snowball / suggest / diversity arms, which are seeded from the
-screening verdicts. ``run_one_query`` mirrors that loop exactly, so a
-multi-round depth cannot be measured with screening off.
+Search is one pass at every depth (task 051, ADR 0038): keyword and semantic
+seeds, backward and forward citation chasing, Overton relevance results and
+landmarks, two ranked pools cut at the depth's two caps. The depths differ only
+in those caps, so a search-only measurement is valid at any depth.
 
 Precision is not scored. A screened-in paper that is absent from one review's
 bibliography is not proven irrelevant (the review had its own scope and time
 cutoff), so bibliography membership is not a valid false-positive signal.
 
-Two separate caps bound how many candidates a run collects. Confusing them
-wastes a lot of time:
+Two caps bound how many candidates a run keeps, both in
+``search_loop.DEPTH_CONSTANTS`` (the sweep overrides ``papers_cap`` in this
+process only):
 
-* ``result_cap_per_backend`` — records requested per HTTP call. Together with
-  the depth's ``call_budget`` (the number of calls allowed), this bounds what
-  a backend can be *asked* for.
-* ``record_cap_per_backend`` — the number of candidates acquire *keeps* per
-  backend, applied after dedup and before persisting. This is the
-  ``acquire.capped`` log line, and normally the tighter of the two: records
-  past it were fetched and paid for, then discarded. This is the cap that
-  sets the recall ceiling.
+* ``papers_cap`` — papers (OpenAlex) persisted from the ranked paper pool.
+* ``policy_cap`` — policy documents (Overton) persisted from the ranked policy pool.
 
-Both live in ``search_loop.DEPTH_CONSTANTS``. The sweep overrides them in this
-process only.
+Records past a cap were fetched and paid for, then discarded (the
+``acquire.capped`` log line); the caps set the recall ceiling.
 """
 
 from __future__ import annotations
@@ -73,12 +65,7 @@ from policy_atlas.evidence_search.sourcing.search_generation import (
     V2SearchGenerationBackend,
 )
 from policy_atlas.evidence_search.sourcing.search_live import live_search_backends
-from policy_atlas.evidence_search.sourcing.search_loop import (
-    DEPTH_CONSTANTS,
-    evaluate_deep_stop,
-    new_confident_relevant_for_run,
-    run_search,
-)
+from policy_atlas.evidence_search.sourcing.search_loop import run_search
 
 # The two query-generation methodologies this eval compares, named by how
 # they prompt:
@@ -427,10 +414,10 @@ class QueryResult:
     """Metadata for every candidate the screening LLM marked relevant.
     Diagnosis only — the scored numbers above are counts over these."""
     rounds_run: int = 1
-    """Search rounds actually run (1 for rapid; up to the depth's round_cap)."""
+    """Always 1: search is one pass at every depth (task 051). Kept so the
+    history's columns do not change."""
     stop_condition: str | None = None
-    """Why the round loop stopped (``budget_exhausted`` / ``short_circuit``),
-    or None when it did not screen and so never asked."""
+    """The coverage record's ``stop_condition`` (``completed`` or ``error``)."""
 
 
 def run_one_query(
@@ -444,27 +431,14 @@ def run_one_query(
     langfuse_client: Langfuse | None = None,
     generation_backend_variant: str = "shared",
 ) -> QueryResult:
-    """Run one intent through the depth's full search/screen round loop, and score it.
+    """Run one intent through the single search pass, screen it, and score it.
 
     Args:
-        depth: ``rapid`` (one round), ``standard`` or ``deep`` (several rounds,
-            each followed by screening, stopped by the pipeline's own rule).
-        run_screen: False skips the screening stage entirely — no screening LLM
-            calls, no screening bill. Only allowed for a single-round depth:
-            later rounds are seeded from screening verdicts, so without
-            screening they would not be the pipeline's rounds. ``screen_recall``
-            comes back None.
-
-    Raises:
-        ValueError: ``run_screen=False`` with a multi-round depth.
+        depth: ``rapid``, ``standard`` or ``deep``; the same pass with different caps.
+        run_screen: False skips the screening stage entirely: no screening LLM
+            calls, no screening bill, ``screen_recall`` comes back None. Valid
+            at any depth, since the search needs no screening verdict.
     """
-    round_cap = DEPTH_CONSTANTS[depth]["round_cap"]
-    if round_cap > 1 and not run_screen:
-        raise ValueError(
-            f"depth {depth!r} runs {round_cap} search rounds, and every round after the "
-            "first is seeded from screening verdicts. Pass run_screen=True, or use "
-            "depth='rapid' for a search-only measurement."
-        )
     task_id = _seed_task(conn)
     scope_id = _seed_scope(conn, task_id, query)
 
@@ -489,46 +463,23 @@ def run_one_query(
         OpenAIScreeningBackend(langfuse_client=langfuse_client) if run_screen else None
     )
 
-    # Mirrors runner.py's round loop: search, screen the new candidates, ask
-    # the pipeline's stop rule, repeat. run_search works out which round it is
-    # from the scope's coverage rows, so calling it again IS round 2.
-    rounds_run = 0
-    stop_condition: str | None = None
-    for round_index in range(1, round_cap + 1):
-        rounds_run = round_index
-        run_search(
+    search_counts = run_search(
+        conn,
+        task_id=task_id,
+        run_id=_seed_run(conn, task_id),
+        context=AcquireContext(scope_id=scope_id, intent=query, context=search_context),
+        backends=recording_backends,
+        generation_backend=generation_backend,
+    )
+    stop_condition: str | None = search_counts.get("stop_condition")
+    if run_screen:
+        screen_sources(
             conn,
             task_id=task_id,
             run_id=_seed_run(conn, task_id),
-            context=AcquireContext(
-                scope_id=scope_id, intent=query, context=search_context
-            ),
-            backends=recording_backends,
-            generation_backend=generation_backend,
-        )
-        if not run_screen:
-            break
-        screen_run_id = _seed_run(conn, task_id)
-        # Stage 1 skips documents that already have a verdict, so from round 2
-        # on this screens only what the new round brought in.
-        screen_summary = screen_sources(
-            conn,
-            task_id=task_id,
-            run_id=screen_run_id,
             context=ScreenContext(scope_id=scope_id, intent=query, context={}),
             screening_backend=screening_backend,
         )
-        decision = evaluate_deep_stop(
-            round_index=round_index,
-            new_confident_relevant=new_confident_relevant_for_run(
-                conn, task_id=task_id, scope_id=scope_id, run_id=screen_run_id
-            ),
-            docs_screened_this_round=int(screen_summary["screened"]),
-            round_cap=round_cap,
-        )
-        if decision.stop:
-            stop_condition = decision.stop_condition
-            break
 
     search_docs = _search_candidate_docs(conn, task_id)
     search_dois = _keys_of(search_docs)
@@ -544,6 +495,6 @@ def run_one_query(
         search_calls=search_calls,
         search_docs=search_docs,
         screened_docs=screened,
-        rounds_run=rounds_run,
+        rounds_run=1,
         stop_condition=stop_condition,
     )

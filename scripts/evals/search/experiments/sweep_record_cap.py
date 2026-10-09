@@ -124,7 +124,6 @@ RECORD_CAPS = [50, 100, 250, 500, 1000, 2000]
 # scale: rapid makes up to 20 OpenAlex calls, and each of them may bring 2,000
 # records to the keep cap's door. 40x the pipeline's own value of 50 — high
 # enough not to bind, without the deep-paging trouble 10,000 caused.
-RESULT_CAP_PER_BACKEND = 2_000
 EXPERIMENT = "retrieval-cap-prompt-sweep"
 # The numbers each run's summary carries into Langfuse as scores. The two
 # screening ones are only present when the run screened (``--screen``).
@@ -148,8 +147,7 @@ def _apply_caps(record_cap: int) -> dict[str, Any]:
     """
     search_loop.DEPTH_CONSTANTS[DEPTH] = {
         **search_loop.DEPTH_CONSTANTS[DEPTH],
-        "result_cap_per_backend": RESULT_CAP_PER_BACKEND,
-        "record_cap_per_backend": record_cap,
+        "papers_cap": record_cap,
     }
     return search_loop.DEPTH_CONSTANTS[DEPTH]
 
@@ -502,7 +500,7 @@ def main() -> None:
         f"Dataset: {args.dataset} ({len(dataset.items)} reviews); runs labelled {label}/..."
     )
     print(
-        f"Sweep: depth={DEPTH}, result_cap={RESULT_CAP_PER_BACKEND}, "
+        f"Sweep: depth={DEPTH}, "
         f"generation_backends={args.generation_backends}, caps={args.caps}, "
         f"repeats={args.repeats}, screening {'ON' if args.screen else 'OFF'}, git_commit={commit[:7]}"
     )

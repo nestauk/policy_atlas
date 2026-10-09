@@ -6,6 +6,8 @@ Run: uv run --project backend python scripts/evals/search/tests/test_measure.py
 """
 
 import _bootstrap  # noqa: F401
+
+from typing import Any
 from engine import _keys_of, _recall
 
 
@@ -146,12 +148,11 @@ def test_recording_backend_records_failed_calls() -> None:
 
 def test_sweep_cap_overrides() -> None:
     """The cap overrides experiments/sweep_record_cap.py applies before each run."""
-    from sweep_record_cap import DEPTH, RESULT_CAP_PER_BACKEND, _apply_caps
+    from sweep_record_cap import _apply_caps
 
     constants = _apply_caps(250)
-    assert constants["record_cap_per_backend"] == 250
-    assert constants["result_cap_per_backend"] == RESULT_CAP_PER_BACKEND
-    assert constants["round_cap"] == 1, f"{DEPTH} must stay a single-round search"
+    assert constants["papers_cap"] == 250
+    assert constants["policy_cap"] == 50
 
 
 def test_generation_backend_arms() -> None:
@@ -282,27 +283,42 @@ def test_sweep_run_frames_with_screening() -> None:
     }
 
 
-def test_multi_round_depth_needs_screening() -> None:
-    """standard/deep are search-screen-search loops; without screening the
-    later rounds have nothing to seed from, so the eval refuses up front
-    (before it touches the database — hence conn=None here)."""
-    from evals_search_utils import GroundTruth
-    from engine import run_one_query
+def test_run_depth_screens_at_every_depth_and_records_the_caps() -> None:
+    """Every depth is one search pass plus one screening pass (task 051): the
+    run metadata says so and carries the two caps, not the old round constants."""
+    from types import SimpleNamespace
 
-    gt = GroundTruth(dois={"10.1/a"}, source="doi")
-    for depth in ("standard", "deep"):
-        try:
-            run_one_query(
-                None,
-                "q",
-                gt,
-                published_before="2020-01-01",
-                depth=depth,
-                run_screen=False,
-            )
-            raise AssertionError(f"{depth} without screening must be refused")
-        except ValueError as exc:
-            assert "run_screen=True" in str(exc)
+    from production_recall import _run_depth
+
+    captured: dict[str, Any] = {}
+
+    class FakeClient:
+        def run_experiment(self, **kwargs: Any) -> str:
+            captured.update(kwargs)
+            return "started"
+
+    from policy_atlas.evidence_search.sourcing.search_loop import DEPTH_CONSTANTS
+
+    # The sweep test above overrides the rapid papers cap in this process, so
+    # compare with the live constants rather than the committed numbers.
+    for depth in ("rapid", "standard", "deep"):
+        papers = DEPTH_CONSTANTS[depth]["papers_cap"]  # type: ignore[index]
+        policy = DEPTH_CONSTANTS[depth]["policy_cap"]  # type: ignore[index]
+        _run_depth(
+            None,
+            SimpleNamespace(version=1),
+            [],
+            FakeClient(),
+            depth=depth,
+            label="test",
+            git_commit="abc",
+        )
+        meta = captured["metadata"]
+        assert captured["run_name"] == f"test/{depth}"
+        assert meta["screening"] == "True"
+        assert meta["papers_cap"] == str(papers)
+        assert meta["policy_cap"] == str(policy)
+        assert "round_cap" not in meta and "record_cap_per_backend" not in meta
 
 
 def test_production_recall_scores() -> None:
@@ -1310,7 +1326,7 @@ if __name__ == "__main__":
     test_generation_backend_arms()
     test_sweep_run_frames()
     test_sweep_run_frames_with_screening()
-    test_multi_round_depth_needs_screening()
+    test_run_depth_screens_at_every_depth_and_records_the_caps()
     test_production_recall_scores()
     test_select_items()
     test_baseline_records_of()

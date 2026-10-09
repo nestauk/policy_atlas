@@ -1,4 +1,7 @@
-"""Does query reformulation add papers the snowball does not? (R&D, task 051)
+"""Needs the tagged commit ``search-round-loop-last``: task 051 deleted the exemplar
+reader (``_read_exemplars``, ``_exemplar``) this script imports from ``search_loop``.
+
+Does query reformulation add papers the snowball does not? (R&D, task 051)
 
 The production round loop's ``reformulate`` arm has never been measured on its own.
 It takes screened exemplars (up to 8 relevant, 4 not relevant), asks the language

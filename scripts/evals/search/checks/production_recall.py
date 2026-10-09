@@ -10,21 +10,15 @@ version is parked in ``.github/workflows-disabled/`` until the open questions
 about cost and gating are settled.) It records numbers. It does not pass or
 fail on them.
 
-How a depth is run (this mirrors the round loop in ``runtime/runner.py``, see
-``engine.run_one_query``):
+How a depth is run (see ``engine.run_one_query``): one search pass, then one
+screening pass, at every depth (task 051, ADR 0038). The depths differ only in
+the two caps the pass cuts at (``papers_cap`` / ``policy_cap``: rapid 100 / 50,
+standard 200 / 100, deep 400 / 200). Search recall and screen recall are both
+scored at every depth.
 
-* ``rapid`` — one search round, no screening. Search recall only.
-* ``standard`` / ``deep`` — search, screen the new candidates, then let the
-  pipeline's own rule (``search_loop.evaluate_deep_stop``) decide whether to
-  search again. It stops at the depth's round cap, or earlier when a round's
-  screening yield collapses. Rounds after the first unlock the reformulate /
-  snowball / suggest / diversity arms. These are seeded from the screening
-  verdicts, so screening is not optional here. Search recall and screen
-  recall are both scored.
-
-Cost: rapid is cheap (at most 25 provider calls x 50 records per review, plus
-one generation LLM call). standard and deep screen every kept candidate in
-every round, which means a few hundred screening LLM calls per review per run.
+Cost: about 37 OpenAlex and 18 Overton provider calls per review plus one
+generation LLM call, then about 1.3 screening LLM calls per kept document
+(roughly 150 / 300 / 600 documents per review at the three depths).
 
 Scores on each dataset item (one review): the sweep's ``SCORE_KEYS``
 (search_recall, n_found, n_api_calls, n_failed_calls, ..., screen_recall,
@@ -124,7 +118,7 @@ def _run_depth(
 ) -> Any:
     """One dataset run: the chosen reviews at one depth, pipeline constants untouched."""
     constants = DEPTH_CONSTANTS[depth]
-    screen = depth != "rapid"
+    screen = True  # every depth screens once (task 051)
     prompt_version, prompt_sha = _prompt_identity(GENERATION_BACKEND)
     # Flat and stringly: Langfuse coerces metadata values to strings anyway.
     meta = {
@@ -135,9 +129,8 @@ def _run_depth(
             "generation_backend": GENERATION_BACKEND,
             "prompt_version": prompt_version,
             "prompt_sha": prompt_sha,
-            "record_cap_per_backend": constants["record_cap_per_backend"],
-            "result_cap_per_backend": constants["result_cap_per_backend"],
-            "round_cap": constants["round_cap"],
+            "papers_cap": constants["papers_cap"],
+            "policy_cap": constants["policy_cap"],
             "call_budget": constants["call_budget"],
             "screening": screen,
             "git_commit": git_commit,
@@ -145,9 +138,9 @@ def _run_depth(
     }
     run_name = f"{label}/{depth}"
     print(
-        f"\n=== {run_name} (record_cap={constants['record_cap_per_backend']}, "
-        f"result_cap={constants['result_cap_per_backend']}, round_cap={constants['round_cap']}, "
-        f"call_budget={constants['call_budget']}, screening {'ON' if screen else 'OFF'}) ==="
+        f"\n=== {run_name} (papers_cap={constants['papers_cap']}, "
+        f"policy_cap={constants['policy_cap']}, call_budget={constants['call_budget']}, "
+        f"screening {'ON' if screen else 'OFF'}) ==="
     )
 
     def task(*, item: Any, **_: Any) -> dict[str, Any]:
