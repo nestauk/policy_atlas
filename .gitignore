@@ -41,6 +41,8 @@ infra/cdk.out/
 
 # Verification evidence is binary + point-in-time: attach to the task PR, never commit
 docs/tasks/*/evidence/
+# Amendment working records stay local: their rulings are in contract.md, plan.md and the ADR (owner, 2026-10-09)
+docs/tasks/*/amendment-*.md
 
 # Notebook checkpoints
 *checkpoint.ipynb
