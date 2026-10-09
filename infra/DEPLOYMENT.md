@@ -50,23 +50,39 @@ Two workflows automate only steady-state updates:
 | Workflow | Trigger | Ref deployed | GitHub Environment |
 | --- | --- | --- | --- |
 | `deploy-staging.yml` | automatically when `verify` passes on a push to `dev`, or an engineer runs `workflow_dispatch` from `dev` | the commit `verify` passed (or the dispatch SHA), accepted only from `dev` | `staging` |
-| `deploy-production.yml` | engineer runs `workflow_dispatch` from `main` | the tip of `main`, accepted only when it is in `dev` history | `prod` |
+| `deploy-production.yml` | engineer runs `workflow_dispatch` from `main` with a new `vX.Y.Z` version | the tip of `main`, accepted only when it is in `dev` history | `prod` |
 
 `dev` remains the repository default branch. Pull requests, continuous
 integration, and staging deploys stay on `dev`. Every merge to `dev` that passes
 `verify` redeploys staging, which briefly stops the staging API while
 migrations run.
 
-`main` is the production branch only, and pushing to it deploys nothing. To
-release, merge the staged `dev` commit into `main`, then run **deploy
-production** from `main` in the Actions tab
-(`gh workflow run deploy-production.yml --ref main`). The workflow refuses any
-other branch and any `main` commit that is not already in `dev` history, and a
-`prod` reviewer must approve before the deploy job starts.
+`main` is the production branch only, and pushing to it deploys nothing. A
+ruleset blocks force-pushes and deletion, so `main` only ever moves forward. To
+release:
+
+1. Pick the `dev` commit that is working on staging (usually the latest
+   successful **deploy staging** run).
+2. Move `main` forward to it: `git fetch origin && git push origin <commit>:main`.
+   Pull requests into `main` are not used: every GitHub merge method creates a
+   commit that is not in `dev` history, which the workflow would refuse.
+3. Run **deploy production** from `main` in the Actions tab, entering a new
+   version such as `v1.4.0`
+   (`gh workflow run deploy-production.yml --ref main -f version=v1.4.0`).
+4. A `prod` reviewer other than the person who started the run approves it.
+
+The workflow refuses any other branch, any `main` commit that is not already in
+`dev` history, and any version that is not `vX.Y.Z` or is already a tag. These
+checks run before the deploy, so a mistake fails before the API is stopped.
+After a successful deploy, a separate job tags the commit with the version and
+publishes a GitHub Release with generated notes listing the merged pull
+requests. If only that job fails, the deploy has already happened: re-run the
+failed job rather than the whole workflow.
 
 A failed configuration/ref validation job never reaches the protected Environment
 and never requests an OIDC token. Deploy jobs have only `contents: read` and
-`id-token: write`. Concurrency queues a later deployment and deliberately does not
+`id-token: write`. The release job has only `contents: write` and never receives
+AWS credentials. Concurrency queues a later deployment and deliberately does not
 cancel the active stop→migrate→scale→publish sequence.
 
 Create protected GitHub Environments named exactly `staging` and `prod`.
@@ -83,7 +99,8 @@ one-hour default fails during credential setup instead of expiring partway throu
 an outage-sensitive deploy.
 
 Restrict `staging` deployment branches to `dev`. Restrict `prod` deployment
-branches to `main` and require a reviewer for prod. These restrictions are
+branches to `main`, require a reviewer for prod, and enable "prevent
+self-review" so the person who starts a release cannot approve it. These restrictions are
 security controls, not just UI: an environment-based GitHub OIDC token has a
 subject naming the Environment rather than its branch or tag. The workflow
 performs a second ref check in code.
@@ -408,9 +425,9 @@ restore service manually with
 For normal operator recovery use
 `make deploy-update DEPLOY_ENV=<environment>` so local and GitHub execution stay on
 the same interface. A GitHub rerun uses the same event SHA. For prod code
-rollback, revert the bad change on `dev` (so staging redeploys it first), merge
-that revert into `main`, then run **deploy production** from `main`. Do not
-force-push `main`.
+rollback, revert the bad change on `dev` (so staging redeploys it first), move
+`main` forward to that revert commit, then run **deploy production** from `main`
+with a new version. `main` cannot be moved backwards or force-pushed.
 
 **One-time pending step — encrypting the Aurora cluster (026 review hardening).**
 The committed template sets `StorageEncrypted` (+ deletion protection, 7-day
