@@ -25,8 +25,11 @@ decides on. It lands before task 3 (shortlist and assessment).
 > Accepted 2026-09-28. **Design phase closed 2026-09-28; the build runs in
 > a fresh conversation with `task-cycle-build`.**
 > **Amendment 4 approved 2026-10-09 · owner** ("Approved, and yes to all
-> six as proposed"): rulings R76–R91 (§ Amendment 4); the contract-stage
-> adversarial review follows.
+> six as proposed"): rulings R76–R91 (§ Amendment 4). The contract-stage
+> and plan-stage reviews ran the same day (C1–C18, PA4-1–19, folded; two
+> findings decided by the owner). **Amendment 4 plan approved 2026-10-09 ·
+> owner ("Yes, plan approved"). Design phase closed; the build runs in a
+> fresh conversation with `task-cycle-build`, phases 24.0–31.**
 >
 > **Branching:** `task/046-longlist-refinement` from `feat/options-scoping`
 > at `1e49a65f`. PR target: `feat/options-scoping`, merge commit, per PR #69.

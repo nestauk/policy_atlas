@@ -1268,9 +1268,12 @@ reasons in ADR 0040 § Amendment 4. This section adds phases 24 to 31 and
 changes no phase above. The working record and the design pages are local
 (`amendment-4-proposed.md`; `evidence/amendment-4-design/`).
 
-> **Status:** written 2026-10-09 from the approved record; the seams
-> S29–S36 are **proposals for the lead to confirm at the plan gate**; none
-> is the owner's. The plan-stage adversarial review follows.
+> **Status:** written 2026-10-09 from the approved record; the plan-stage
+> review (`deep-reasoner`, 19 findings) and the contract-stage review
+> (`codex-rescue`, 18 findings) folded the same day; S35 and S32's country
+> rule decided by the owner. **Plan approved 2026-10-09 · owner ("Yes, plan
+> approved").** The seams S29–S36 are confirmed; the build opens at Phase
+> 24.0 in a fresh conversation.
 
 Executor marks as for amendment 3: prompts and their loops are `lead`;
 judgement-bearing code is `deep-reasoner`; mechanical work is
