@@ -34,6 +34,7 @@ import _bootstrap  # noqa: F401
 import argparse
 import json
 import os
+import re
 import time
 from pathlib import Path
 from typing import Any
@@ -79,11 +80,13 @@ def _overton(params: dict[str, str]) -> httpx.Response:
 
 
 def _error_excerpt(response: httpx.Response) -> str:
+    # The excerpt lands in a public fixture; a provider may echo the request
+    # URL, key included, in an error body (review finding, 2026-10-09).
     try:
-        body = response.json()
+        text = json.dumps(response.json())[:300]
     except ValueError:
-        return response.text[:200]
-    return json.dumps(body)[:300]
+        text = response.text[:200]
+    return re.sub(r"(api_key|mailto)=[^&\"\s]+", r"\1=REDACTED", text)
 
 
 def probe_semantic_filters(text: str) -> list[dict[str, Any]]:

@@ -84,3 +84,21 @@ def conn(engine: Engine) -> Generator[Connection, None, None]:
             yield connection
         finally:
             trans.rollback()
+
+
+@pytest.fixture(autouse=True)
+def _empty_search_cache() -> Generator[None, None, None]:
+    """Start every test with an empty provider-response cache.
+
+    The live transport caches responses in a module-level store keyed by URL
+    and parameters (the key never carries the API key), with a one-hour life.
+    Two tests that build a live backend around a scripted fetch and ask for
+    the same page share that store, so one test's reply answered the other's
+    request (found at the task 051 review, 2026-10-09: an Overton page-2 reply
+    without a next page cut a later test's search to two pages).
+    """
+    from policy_atlas.evidence_search.sourcing import search_live
+
+    with search_live._SEARCH_CACHE_LOCK:
+        search_live._SEARCH_CACHE.clear()
+    yield

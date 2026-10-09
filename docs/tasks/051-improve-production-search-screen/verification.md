@@ -15,6 +15,7 @@ full text, no raw traces.
 | `make verify` (shared gate, Phases 3a, 3b, 5; ingest-adjacent; commits below) | pass | backend suite, typecheck, lint, build, eval-check (85 eval tests), frontend (617 tests) all green |
 | `make verify` (step-6 exit, on the Phase 8 tree) | pass | backend 2612 passed (5 min 52 s), typecheck, lint, build, eval-check, frontend 617 tests in 79 files; no other pytest and no dev server running at the time (the smoke's `make dev` was stopped first) |
 | `make prompt-guard` (step-6 exit) | pass | 16 prompt files unchanged against the re-pinned hashes |
+| `make verify` (after the step-7 fixes) | pass | backend 2614 passed (6 min 31 s), typecheck, lint, build, eval-check, frontend 617 in 79 files; `make okf-validate` run again after the step-8 knowledge entries: 153 concepts, 0 violations; `make eval-check` green after the eval-script fixes |
 
 ## Probes (Phase 0b, 2026-10-09)
 
@@ -88,7 +89,7 @@ follows.
 |---|---|---|---|
 | `runtime/planner_prompt.py` | `4e85172f…` | `88c58a52…` | the thoroughness caps sentences (D15) and the `search_effort` key description (see § Diff summary) |
 | `evidence_search/assess/screen_prompt.py` | `b9149b23…` | `4d69b181…` | `SCREEN_SYSTEM_PROMPT` = `scripts/evals/screening/prompts/screen_v4.txt` byte for byte (checked by equality at transplant time); `SCREEN_PROMPT_VERSION = "screen_v4"`; `SCREEN_MODEL = "gpt-5.6-luna"`; module docstring; `SCREEN_REPS` and `SCREEN_QUORUM` deleted |
-| `sourcing/search_prompts.py` | _Phase 3a_ | | `SEARCH_QUERIES_MODEL`, `SEARCH_REFORMULATE_MODEL`, `SEARCH_SUGGEST_MODEL` = `gpt-5.6-luna`; `QUERY_MAX_CHARS = 1300`; prompt text unchanged |
+| `sourcing/search_prompts.py` | `6589bc11…` | `9b983dda…` | `SEARCH_QUERIES_MODEL`, `SEARCH_REFORMULATE_MODEL`, `SEARCH_SUGGEST_MODEL` = `gpt-5.6-luna`; `QUERY_MAX_CHARS = 1300`; prompt text unchanged |
 
 Re-pinned with `python3 scripts/prompt_hash_guard.py --update`; `make prompt-guard` green after each.
 
@@ -103,6 +104,26 @@ database from its sandbox, so the lead ran `pytest tests/evidence_search/assess
 tests/core/test_tracing.py` (202 passed after one fix: the paired-injection fixture test
 still scripted three replies per document; trimmed to one). The agent's triage model was
 decoupled (see § Diff summary).
+
+Deleted majority-vote tests (rubric 13), replaced by the adaptive-table tests:
+`test_screen_sources_unsure_unanimous_relevant_at_half_confidence`,
+`test_unanimous_relevant_persists_mean_confidence_and_event`,
+`test_majority_confidence_differs_from_unanimous_same_vote_strength`,
+`test_vote_probability_divergence_decides_relevant_below_half_confidence`,
+`test_unanimous_unsure_is_relevant_at_exactly_half`,
+`test_unsure_counts_as_relevant_vote_and_half_probability`,
+`test_rep_failure_degrades_to_survivor_consensus_and_records_failure`,
+`test_tie_after_one_rep_failure_breaks_relevant_and_counts_summary`,
+`test_quorum_failure_with_two_or_three_dead_reps_is_retryable_failed`,
+`test_title_only_not_relevant_requires_unanimity_to_exclude`,
+`test_event_payload_shape_records_reps_agreement_flags_and_stage` -> `test_decide_stage1_table`,
+`test_decide_stage1_rejects_unneeded_second_reply`,
+`test_screen_sources_unsure_relevant_at_half_confidence`,
+`test_stage1_kept_first_reply_persists_one_rep`, `test_stage1_second_reply_keeps_and_records_order`,
+`test_stage1_failed_second_call_keeps_first_exclusion`, `test_stage1_failed_first_call_is_failed`,
+`test_title_only_follows_adaptive_table`. The Langfuse run scores `non_unanimous_share`
+and `tie_broken_count` were replaced by `second_call_kept_count` (`core/tracing.py`); a
+deviation the build did not list (contract verifier, 2026-10-09).
 
 **Phases 3a and 3b (single pass, pool hand-off, loop deletion), Codex then lead.** Two
 Codex rounds did not finish Phase 3a: the first stopped before the tests with a cramped
@@ -271,11 +292,16 @@ _The flagged deviations are collected here as they arise:_
   filter variant. With the D13 amendment the country filter is applied locally, so the
   variants' semantic requests would be identical; the pass makes the 8 calls once per
   run. The OpenAlex budget stays `45 × variants`.
-- **D7 pool cut (Phase 3a):** the cap applies to the ranked list, never larger than it.
-  Records a call returned but the ranking left out (citing works past the 200 forward
-  keep) are listed after the ranked ones and counted as `dropped_over_cap`, so the
-  count invariant holds and the persisted set is exactly "the first cap of the ranked
-  list". Returned records are copied once at execution, because a backend may hand
+- **D7 pool cut (Phase 3a, corrected at review 2026-10-09):** the cap applies to the
+  ranked list, never larger than it, **as a cut by position**: a ranked entry the task
+  already holds or that is unusable is not refilled from beyond the cut, so the persisted
+  set is a subset of the first `cap` ranked entries. Records a call returned but the
+  ranking left out (citing works past the 200 forward keep, Overton title duplicates)
+  are listed after the ranked ones and counted as `dropped_over_cap`, so the count
+  invariant holds. The build had the cap fill with new records past the cut (the deleted
+  loop's "repeats do not consume cap slots" rule), which let unranked leftovers in
+  whenever the ranked pool held repeats; the contract verifier caught it and the test
+  `test_the_cap_is_a_cut_by_position_not_refilled_past_it` now pins the cut. Returned records are copied once at execution, because a backend may hand
   back the same objects on every call (the fixtures do) and the pool bookkeeping is by
   object.
 - **Coverage record `post_filter_exclusions` (Phase 3a):** every locally filtered call
@@ -290,16 +316,118 @@ _The flagged deviations are collected here as they arise:_
 
 ## Review findings
 
-- **Contract verifier:**
-- **`/code-review`:**
-- **`/security-review`:**
-- **Adversarial review** (Tier 3):
-- **`/simplify`:**
-- **`/okf validate`:**
+Step 7 ran on 2026-10-09 **in the build conversation at the owner's instruction**
+("let's do /task-cycle-review, don't run new evals for now, just review and fix"), not in
+a fresh one as the skill asks; the four lanes were fresh agents, the lead adjudicated.
+No new eval run was made. Family flip per surface: the Codex lane read the lead-written
+code (`search_loop.py`, `acquire.py`, the runner and eval wiring, the lead's tests); the
+Claude code review read the Codex-written code (`pool.py`, `search_live.py`, the vote).
+
+- **Contract verifier** (fresh Claude agent, read-only): 11 findings. Adopted: F1 the
+  spec §1 described the pre-amendment D13 (`semantic_skipped`), now the local filters;
+  F2 the second country variant was dropped by the local checks (convergent with the
+  Codex lane, fixed below); F3 the Broadest reading said "13 of 15 above, 2 ties", the
+  per-review counts give 11 above, 3 ties, 1 below, and the forward-chase 300-ceiling
+  difference is now named as a candidate cause; F4 the D7 deviation claimed a cut the
+  code did not make (the cap refilled past the cut), now a cut by position with its test
+  re-pinned; F5 the landmark `source_country` post-filter had no test through production
+  code, `test_landmark_fetches_apply_the_country_post_filter` added; F6 the Focused mean
+  is 12.9% (per-review mean), the tutorial's failed-call sentence counted one of two;
+  F7 the deleted majority-vote tests are now listed with their replacements; F8 the
+  `search_prompts.py` hash row was a placeholder; F9 Phase 3c is now in ADR 0038
+  (decision 9), the spec §1 and the tutorial, and the Langfuse score rename is listed as
+  a deviation; F10 two stale "still open" loop seams in `docs/deferred.md` marked
+  discharged, the wall-clock entry's cap name updated, `sweep_record_cap.py` read a
+  deleted constant (KeyError on its next run) and `history.py` filled the cap column
+  from a key the eval no longer writes; F11 the spend paragraph now says the full-set
+  deferral holds at the Langfuse rate and is the owner's instruction, not the ceiling.
+  Its observation (landmarks carry no Overton wire filters) is a new deferred seam.
+- **`/code-review`** (fresh Claude agent at medium, on the Codex-written surfaces): 6
+  findings. Adopted: the stacking 429 pause (convergent with the security lane); the
+  429-pause test passed with the pause deleted (the retry back-off satisfied it),
+  re-written with the back-off at zero and checked to fail without the pause; the
+  semantic-interval test's shared `sleeps` list cleared between halves; the
+  `_pause_admission` docstring overstated "every thread" (a sleeper under the lock
+  sends when it wakes); `vote.py`'s two identical branches collapsed. Its Overton
+  pacing point (the pause could stamp earlier than normal pacing) is covered by the
+  coalesce fix's clamp. Noted, no change: a failed second screening call keeps the
+  first exclusion, which is D10's fourth row as the owner approved it, not recall-first.
+  Cleanup declined with reason: the `NotImplementedError` stubs on the backend without
+  the capability and `vote.py`'s own decision types mirror the production shapes on
+  purpose (the eval must not import more of production than the decision function).
+  Nothing found in `pool.py`'s edge cases, the fixture doubles, `last_pages`.
+- **Security lane** (fresh Claude agent): 2 low, 3 informational. Adopted: the stacking
+  429 pause (now coalesced, `test_rate_limit_pauses_coalesce`); the probe script wrote
+  raw provider error bodies into a public fixture (clean today), now key-redacted before
+  writing. Informational: the model ids are code constants under D10; the screening
+  confidence field has no 0-1 bound (pre-existing, structured output keeps it in range);
+  pacing is per run, so concurrent runs multiply egress (added to the existing
+  rate-limit-fairness entry in `docs/deferred.md`). Nothing found in egress (every verb
+  through the shared transport, ids validated `W\d+`, filters built from validated
+  values only, keys never in logs or cache keys), concurrency (context copied per task),
+  fixture data, the prompt surface (record text as data, schema-constrained output) or
+  config.
+- **Adversarial review** (Codex, read-only, on the lead-written code): 3 findings.
+  Adopted: the second country variant dropped by the local semantic and citation checks
+  (the "identical semantic requests" rationale missed that the local predicates were
+  not; fixed in `_openalex_leg`, the two-variant test extended and checked to fail
+  without the fix). Deferred: a partial backend failure (one failed call beside
+  successful ones) still reports `completed` and `adequate`; this is the rule since
+  task 019 and the stop vocabulary is in the do-not-change row, so it is a seam in
+  `docs/deferred.md`, not a change here. Declined: `results_returned` counting locally
+  filtered records; that is the convention the Overton post-filter set before this slice
+  and `post_filter_excluded` carries the raw count on every event. Approach-level: the
+  concurrency mechanics were read as sound (one `_Pass` per leg, reservations before
+  submission, plan-order results, context propagated).
+- **Live-trace content review** (lead, existing traces only): the human-rights (0%) and
+  loneliness (7%, Broad) reviews read end to end in Langfuse: the generated queries are
+  sensible for both intents, the screening output has the expected shape (`decision`,
+  `confidence`, `reason`), the second-call counts match the run log, and the 0% row is
+  a gap-map intent that every earlier arm also scored near zero on. No anomaly.
+- **Test hygiene found by the fixes:** two test files that build live backends around
+  scripted fetches shared the transport's module-level response cache, so one test's
+  Overton page-2 reply (no next page) cut a later test's search to two pages when the
+  files ran in one process. An autouse fixture in `backend/tests/conftest.py` now empties
+  the cache before every test.
+- **`/simplify`:** not run separately; the code-review lane carried the reuse,
+  simplification and efficiency lenses and its cleanup items are adjudicated above.
+- **`/okf validate`:** inside `make verify` (below).
+- **Fake-done check on the fixes:** one test re-pinned to the opposite behaviour with a
+  written justification (`test_the_cap_is_a_cut_by_position_not_refilled_past_it`); no
+  test relaxed or skipped; no error swallowed; the 429 test was strengthened, not
+  loosened.
+
+**Convergent across families:** the second-variant country drop (Codex + contract
+verifier) and the stacking 429 pause (security + code review). **Unique to one lane:**
+the refill past the cut and the spec's stale D13 (contract verifier), the tautological
+429 test (code review), the probe's error excerpt (security), the partial-failure
+verdict (Codex).
 
 ## Rubric status
 
-_filled at step 7_
+| # | status | note |
+|---|---|---|
+| 1 | holds after review | surfaces as contracted; the D7 cut corrected at review; spec §1 corrected |
+| 2 | holds | step-6 gate and the post-review gate below |
+| 3 | holds | relevance sort protected, title dedup, 15 landmarks, specificity cut; landmark post-filter now tested |
+| 4 | holds after review | the second country variant now passes the local checks |
+| 5 | holds | one acquire and one screen run per scope; tag and restore recipe; no schema change |
+| 6 | holds | `screen_v4` on Luna, `decide_stage1` truth table, re-pinned |
+| 7 | holds | Luna with the unchanged prompt; 1,300 characters |
+| 8 | holds | two caps per scope in the hint, the constant and the planner prompt |
+| 9 | holds | every verb through the shared transport; budgets; zero-egress doubles; probes recorded |
+| 10 | **partly** | Focused and Broad meet their thresholds; **Broadest 22.3% against 24.6% does not**; screen ≥ 90% at every scope; documents, calls, tokens and cost recorded; replay tests pass; app smoke done; full-set run deferred by the owner (no new evals at review) |
+| 11 | holds | no schema, auth, dependency, CI or production-config change |
+| 12 | holds | hashes by the script; no generated file by hand |
+| 13 | holds after review | the deleted loop and vote tests listed with replacements; one test re-pinned with justification |
+| 14 | holds after review | placeholders filled, numbers made consistent |
+| 15 | holds after review | stale loop seams marked discharged; two new seams |
+| 16 | pending owner | ADR 0038 Proposed, decision 9 added; spec and tutorial corrected |
+| 17 | holds | four lanes run and adjudicated above; the contract-stage Codex review is in the contract's status line |
+
+The task is **not done** under the rubric's own rule until item 10's Broadest threshold
+is adjudicated by the owner (accept the measured 22.3% with the reading above, re-run, or
+re-base the threshold) and item 16's ADR status is flipped.
 
 ## Intent & assumptions
 
@@ -325,11 +453,11 @@ parallel search; its per-review search time is the sequential figure below.
 
 | scope | search recall (mean) | threshold | screen recall (mean) | screen ÷ search | failed provider calls | search time per review (mean, range; after query generation) |
 |---|---:|---:|---:|---:|---:|---:|
-| Focused | 12.8% | 12.5% | 12.5% | 97% | 1 (named below) | 47 s (35 to 88; sequential pass: about 130 s) |
+| Focused | 12.9% | 12.5% | 12.5% | 97% | 1 (named below) | 47 s (35 to 88; sequential pass: about 130 s) |
 | Broad | 17.8% | 17.3% | 17.3% | 97% | 0 | 41 s (37 to 58) |
 | Broadest | **22.3%** | **24.6%** | 21.3% | 96% | 1 (named below) | 44 s (38 to 66) |
 
-**Reading.** Focused and Broad meet their thresholds (by 0.3 and 0.5 points: within the
+**Reading.** Focused and Broad meet their thresholds (by 0.4 and 0.5 points: within the
 run-to-run variance the history rows show, so "met, not comfortably"). **Broadest does
 not: 22.3% against 24.6%, 2.3 points short.** The screen keeps 96% to 97% of what the
 search found at every scope (threshold 90%). The Broadest shortfall is on the paper side
@@ -340,8 +468,12 @@ scopes. Candidate causes, not separated here: query-generation variance (the his
 of 2026-10-05 put it at the size of the gaps between arms), the seed interleave under
 concurrent calls (the order of the 23 seed calls is fixed by the plan, so the pool is the
 same; the forward-chase seeds depend only on the pool), and the 429 pauses, which do not
-drop records. Per review, Broadest beats Broad on 13 of 15 rows and ties the other 2, so
-the deeper scope does add recall; it adds less than the experiment measured. **This is a
+drop records. Per review, Broadest is above Broad on 11 of 15 rows, ties 3 and is below on 1
+(adolescent drug abuse, 3 to 2), so the deeper scope adds recall; less than the
+experiment measured. One production-experiment difference is known (§ Checks beyond the
+build): the experiment's forward chase ignored the 300-citation ceiling, production
+applies it (`pool.forward_seeds`), so the most-cited seeds are not chased in production;
+at the deepest cap that is a direct paper-side difference. **This is a
 threshold miss to adjudicate at review, not a code failure the build can fix without a
 new measurement**; a second Broadest run would cost about $11 and the spend ceiling is
 reached (below).
@@ -418,9 +550,11 @@ reviews, stopped) + $2.51 (Focused) + $1.24 (4 Broad reviews of the stopped laun
 $4.94 (Broad) + $10.66 (Broadest) = **$20.64**, against the contract's $10 mini-set stop
 mark and $25 ceiling. The Broad and Broadest pass ran as one background command and was
 not stopped at $10: its cost was read after it ended, not watched during it, which the plan
-asked for. $4.36 of the ceiling remains, so **the full-set Broad run (about 100 × $0.33 =
-$33) cannot run under this contract** and is left to the owner's decision, as is any
-re-run of Broadest.
+asked for. At the Langfuse rate $4.36 of the ceiling remains and a full-set Broad run (about $33)
+would not fit; at the list price (the correction above) it would, at about $6.5. The
+full-set run and any re-run of Broadest are **deferred by the owner's instruction at
+review (2026-10-09: no new eval runs for now)**, with the Langfuse price row to be
+corrected first so the next figures are right.
 
 **App smoke (plan step 4, contract § Constraints).** `make dev` with the live keys, one
 task through the real app flow: task created, one planning turn ("Policies to reduce

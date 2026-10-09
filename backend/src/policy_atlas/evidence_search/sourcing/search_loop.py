@@ -1211,8 +1211,16 @@ def _openalex_leg(
         )
         for plan, wire in keyword_plans
     ]
-    semantic_wire, local_filters = _semantic_filter_parts(variants[0])
-    keep = (lambda record: _semantic_record_passes(variants[0], record)) if local_filters else None
+    # The variants split only the keyword calls' country clause (at most 100
+    # codes per request); every local country check sees the whole list.
+    countries = [
+        code for variant in variants for code in variant.get("author_affiliation_countries") or []
+    ]
+    local_scope = (
+        {**variants[0], "author_affiliation_countries": countries} if countries else variants[0]
+    )
+    semantic_wire, local_filters = _semantic_filter_parts(local_scope)
+    keep = (lambda record: _semantic_record_passes(local_scope, record)) if local_filters else None
     semantic_specs = [
         _CallSpec(
             verb="search_semantic",
@@ -1271,11 +1279,8 @@ def _openalex_leg(
     # 4. Citation chasing carries every wire filter except the country clause,
     #    which is checked locally on the citation-found papers.
     citation_wire = _without_country_filter(wires[0])
-    countries = variants[0].get("author_affiliation_countries")
     country_keep = (
-        (lambda record: pool.country_predicate(record, set(countries)))
-        if isinstance(countries, list) and countries
-        else None
+        (lambda record: pool.country_predicate(record, set(countries))) if countries else None
     )
 
     # 5. Backward: resolve the works the seeds cite most, 50 ids per call, one

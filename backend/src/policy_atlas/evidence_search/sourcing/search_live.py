@@ -244,10 +244,16 @@ class _TransportMixin:
         self._last_request_at = now
 
     def _pause_admission(self, seconds: float) -> None:
-        """Push every thread's next admission at least ``seconds`` away."""
+        """Push every later admission at least ``seconds`` away.
+
+        A thread already sleeping under the pacing lock sends when it wakes;
+        the pause reaches every admission after it.
+        """
         with self._pace_lock:
             latest = self._last_request_at or 0.0
-            self._last_request_at = max(latest, _monotonic()) + seconds - self._min_interval_s
+            # Pauses coalesce: eight threads refused at once pause once, not
+            # eight times over (review finding, 2026-10-09).
+            self._last_request_at = max(latest, _monotonic() + seconds - self._min_interval_s)
 
     def _request_json(
         self,

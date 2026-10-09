@@ -93,6 +93,16 @@ it cites; the owner's decisions are in the task's `notes.md`.
    runs end to end (`5d5c044`); `git checkout search-round-loop-last -- <path>` for
    `search_loop.py`, `runner.py`, `test_search_loop_deep.py` and `test_search_rounds.py`,
    then re-wire the arm's output to the pool hand-off of decision 4 (contract D11).
+9. **The two legs run in parallel and the OpenAlex calls in concurrent batches**
+   (owner amendment, plan Phase 3c, 2026-10-09). Each backend leg runs on its own
+   thread with its own call budget; the seed, resolve and forward-page calls of a leg
+   are submitted together to a pool of `SEARCH_CONCURRENCY` (8) workers and recorded
+   in plan order whatever the thread timing. The live transport paces admissions
+   behind one lock per backend instance (the interval sleep inside the lock, the
+   request outside), and a 429 reply pushes every later admission on that backend out
+   by `RATE_LIMIT_PAUSE_S` (1 s), coalesced so a burst of refusals pauses once. Measured
+   on the mini set: about 41 to 47 s of search per review at every scope against about
+   130 s sequential.
 
 ## Consequences
 

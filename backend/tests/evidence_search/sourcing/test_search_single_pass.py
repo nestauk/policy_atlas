@@ -145,6 +145,22 @@ class ScriptedBackend:
         self._note(BackendCall("search", query, dict(wire_params or {}), max_results))
         return self._limit(self._consume("search", query), max_results)
 
+    def search_with_post_filter(
+        self,
+        query: str,
+        *,
+        wire_params: dict[str, str] | None = None,
+        source_country_post_filter: list[str],
+        max_results: int | None = None,
+    ) -> list[dict[str, Any]]:
+        """The Overton post-filter verb: drop results from other countries, count them."""
+        self._note(BackendCall("search", query, dict(wire_params or {}), max_results))
+        records = self._consume("search", query)
+        allowed = set(source_country_post_filter)
+        kept = [r for r in records if (r.get("source") or {}).get("country") in allowed]
+        self.last_post_filter_excluded = len(records) - len(kept)
+        return self._limit(kept, max_results)
+
     def search_semantic(
         self,
         text: str,
@@ -395,12 +411,18 @@ def test_two_variant_country_filter_runs_semantic_once_and_filters_locally(
     keyword = [[oa_record(f"kw-{call}", referenced_works=refs)] for call in range(30)]
     british = oa_record("sem-gb")
     british["authorships"] = [{"countries": ["GB"]}]
-    semantic = [[dict(british), oa_record("sem-none")] for _ in range(8)]
+    # The 101st code lands in the second keyword variant; the local checks
+    # must still accept it (review finding, 2026-10-09).
+    second_variant = oa_record("sem-last")
+    second_variant["authorships"] = [{"countries": [countries[100]]}]
+    semantic = [[dict(british), dict(second_variant), oa_record("sem-none")] for _ in range(8)]
     resolved_gb = oa_record("ref0")
     resolved_gb["authorships"] = [{"countries": ["gb"]}]
+    resolved_last = oa_record("ref-last")
+    resolved_last["authorships"] = [{"countries": [countries[100]]}]
     openalex = ScriptedBackend(
         scripts={"search": keyword, "search_semantic": semantic},
-        keyed={"lookup_ids": {"Wref0": [resolved_gb, oa_record("ref-elsewhere")]}},
+        keyed={"lookup_ids": {"Wref0": [resolved_gb, resolved_last, oa_record("ref-elsewhere")]}},
     )
 
     counts = run_search(
@@ -427,6 +449,7 @@ def test_two_variant_country_filter_runs_semantic_once_and_filters_locally(
         1
     ] * 8
     assert [p["post_filter_excluded"] for p in payloads if p["verb"] == "fetch_references"] == [1]
+    assert [p["result_count"] for p in payloads if p["verb"] == "fetch_references"] == [2]
     assert counts["search"]["semantic_local_filters"] == ["author_affiliation_countries"]
     assert _coverage(conn, task_id)[0].scope_filters["semantic_local_filters"] == [
         "author_affiliation_countries"
@@ -1124,3 +1147,55 @@ def test_acquire_search_does_not_write_screening_rows(conn: Connection) -> None:
         .where(task_source_snapshot.c.task_id == task_id)
     ).scalar_one()
     assert snapshots == 2
+
+
+def test_landmark_fetches_apply_the_country_post_filter(conn: Connection) -> None:
+    """A landmark from outside the plan's source countries is fetched, then
+    dropped locally and counted on its ``fetch_by_id`` event (contract D8).
+    The search results carry the backend's own post-filter; the landmark
+    fetches carry this one (review finding, 2026-10-09)."""
+    task_id, run_id = seed_task_and_run(conn)
+    scope_id = seed_scope(conn, task_id)
+    cited = [f"ov-cited-{index}" for index in range(20)]
+    abroad = {cid for index, cid in enumerate(cited) if index % 2}
+    searches = [[ov_record(f"r{call}", cites=cited)] for call in range(3)]
+    overton = ScriptedBackend(
+        name="overton",
+        scripts={"search": searches},
+        keyed={
+            "fetch_by_id": {
+                cid: [
+                    ov_record(
+                        cid.removeprefix("ov-"),
+                        citation_count=5,
+                        country="France" if cid in abroad else "UK",
+                    )
+                ]
+                for cid in cited
+            }
+        },
+    )
+
+    counts = run_search(
+        conn,
+        task_id=task_id,
+        run_id=run_id,
+        context=_context(scope_id, filters={"overton": {"source_country_post_filter": ["UK"]}}),
+        backends=[overton],
+        generation_backend=_generation(),
+    )
+
+    landmark_events = [p for p in _payloads(conn, task_id) if p["verb"] == "fetch_by_id"]
+    assert len(landmark_events) == 15
+    assert all(
+        p["post_filter_excluded"] == (1 if p["query"] in abroad else 0) for p in landmark_events
+    )
+    fetched_abroad = sum(1 for p in landmark_events if p["query"] in abroad)
+    assert fetched_abroad > 0
+    acquired = [
+        event["payload"]
+        for event in events.read(conn, task_id, event_types=["source.acquired"])
+        if event["payload"].get("query_origin") == "landmark"
+    ]
+    assert len(acquired) == 15 - fetched_abroad
+    assert counts["by_backend"]["overton"]["acquired"] == 3 + 15 - fetched_abroad

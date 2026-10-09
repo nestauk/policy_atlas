@@ -152,12 +152,16 @@ def test_cap_keeps_the_top_ranked_slice_of_every_query(conn: Connection) -> None
     }
 
 
-def test_dedup_runs_before_the_trim_so_the_cap_is_filled(conn: Connection) -> None:
-    """Repeats from an earlier round do not consume cap slots.
+def test_the_cap_is_a_cut_by_position_not_refilled_past_it(conn: Connection) -> None:
+    """A repeat inside the cut counts as already acquired and is not replaced
+    from beyond the cut.
 
-    This is the property that makes later deep rounds work as hard as the
-    first: capping candidates instead of acquisitions would let a round of
-    mostly-repeats acquire far fewer than its budget.
+    Until task 051 this test pinned the opposite ("repeats do not consume cap
+    slots"), a property of the deleted round loop, where later rounds had to
+    work as hard as the first. The single pass hands over one ranked list
+    and the cap is a cut on it by position (contract D7): everything after the
+    cut is dropped, so a re-run of the same scope persists nothing the ranking
+    left out (review finding, 2026-10-09).
     """
     task_id, run_id = seed_task_and_run(conn)
     scope_id = seed_scope(conn, task_id)
@@ -177,11 +181,9 @@ def test_dedup_runs_before_the_trim_so_the_cap_is_filled(conn: Connection) -> No
     )
 
     assert counts["already_acquired"] == 4
-    assert counts["acquired"] == 4, "the cap should fill with new documents"
-    assert counts["dropped_over_cap"] == 0
-    assert _persisted_titles(conn, task_id) == {f"OpenAlex record a{i}" for i in range(4)} | {
-        f"OpenAlex record c{i}" for i in range(4)
-    }
+    assert counts["acquired"] == 0, "nothing past the cut is persisted"
+    assert counts["dropped_over_cap"] == 4
+    assert _persisted_titles(conn, task_id) == {f"OpenAlex record a{i}" for i in range(4)}
 
 
 def test_dedup_keeps_the_best_ranked_copy(conn: Connection) -> None:

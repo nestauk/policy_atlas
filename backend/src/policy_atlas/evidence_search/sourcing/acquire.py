@@ -868,13 +868,17 @@ def acquire_sources(
     for name in names:
         counts = by_backend[name]
         kept = 0
-        for record, origin, verb in pools.get(name, []):
-            # Cap checked before the identity guards, never after: `is_new`
-            # *claims* the keys it checks, so running it on a record we are
-            # about to drop would make a later backend's genuine record look
-            # already-acquired and lose it.
-            cap = caps.get(name)
-            if cap is not None and kept >= cap:
+        cap = caps.get(name)
+        for index, (record, origin, verb) in enumerate(pools.get(name, [])):
+            # The cap is a cut on the ranked list by position (contract D7):
+            # a ranked entry the task already holds, or that is unusable, is
+            # not refilled from beyond the cut, so what is persisted is always
+            # a subset of the first `cap` ranked entries (review finding,
+            # 2026-10-09). Checked before the identity guards, never after:
+            # `is_new` *claims* the keys it checks, so running it on a record
+            # we are about to drop would make a later backend's genuine record
+            # look already-acquired and lose it.
+            if cap is not None and index >= cap:
                 counts["dropped_over_cap"] += 1
                 continue
             candidates = map_records(

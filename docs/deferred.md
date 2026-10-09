@@ -366,9 +366,11 @@ architectural decision to defer, not an omission. Sources: architecture referenc
     not. Revisit if the multi-question IA makes per-question relevance meaningful.
   - The loop-level stop condition is written after the last screen boundary, so the
     `re_searched_still_thin` P1 check-in **trigger** can only see it on a later boundary,
-    if at all — task 031 changed the P1 display bundle, not the trigger.
+    if at all — task 031 changed the P1 display bundle, not the trigger. **Discharged by
+    task 051:** the round loop and `re_searched_still_thin` are gone (ADR 0038).
   - The frontend timeline still shows repeated "Searching sources"/"Screening" rows with
-    no round labels.
+    no round labels. **Discharged by task 051:** one acquire run and one screen run per
+    scope, so there are no rounds to label.
 
 - **Publisher-country charts truncate, so the drawn bars can sum below the population**
   (task 031, 2026-08-13). `landscape_out` guarantees the *payload* adds up (known
@@ -402,7 +404,7 @@ architectural decision to defer, not an omission. Sources: architecture referenc
   standard/deep clocks; task 029 removed rapid's 30 s clock and the whole `stop_all`
   mechanism with it — no planned call is ever skipped at any depth, and acquire's stop
   vocabulary is `completed`/`error` (`wall_clock_exceeded` stays in the CHECK constraint
-  as a historical value). Volume is bounded by `record_cap_per_backend`
+  as a historical value). Volume was bounded by `record_cap_per_backend` (since task 051: by the scope's `papers_cap` and `policy_cap` and the per-backend call budget)
   (owner-set 2026-08-06: rapid 50 / standard 100 / deep 200, per backend per round);
   nothing bounds latency anywhere — rapid's worst case is its ~21 sequential provider
   calls plus retries. If a latency bound is ever needed it belongs at the runner as a
@@ -1894,6 +1896,8 @@ first-class vocabulary. What follows is what it deliberately left out.
   own gated seam.
 - **Per-run provider-rate-limit fairness** (owner, 2026-07-21) — provider limits are
   shared across concurrent runs; the executing-walk bound is the v1 fairness mitigation.
+  Task 051 raised the per-run peak (the two legs in parallel, eight seed calls in
+  flight; the pacing lock and the 429 pause are per backend instance, so per run).
   Recorded non-goal until real contention shows up.
 - **Plan-field↔turn provenance** (025 adversarial finding 7) — ephemeral planner prose is
   not execution-bearing for continuation, but which conversation turn produced which plan
@@ -2565,3 +2569,18 @@ sent; found in task 049), now `sort=relevance` on every search, protected.
 - **`source_country` as a plan option (D18, ⏸).** The directive
   `source_country_post_filter` exists and is applied to the searches and the landmarks;
   exposing it on the plan document is a plan-vocabulary change, not a search change.
+
+- **Partial backend failure and the coverage verdict** (Codex adversarial review,
+  2026-10-09) — a backend counts as failed only when every one of its calls fails
+  (`acquire_sources`, unchanged since task 019); one failed resolve, forward page,
+  semantic or Overton call beside successful ones leaves `stop_condition completed` and
+  `adequacy_verdict adequate`, with the failure visible only on its `search.executed`
+  row. In the single pass each call is load-bearing (the eval already names such a run
+  "an undercount"). Seam: a partial status in the coverage vocabulary, or a per-call-plan
+  health flag, with the P1 check-in reading it. Not changed at review: it is the
+  pre-existing rule and the stop vocabulary is in the contract's do-not-change row.
+- **Landmarks carry no Overton wire filters** (contract verifier, 2026-10-09) — a landmark
+  fetched by id is checked only against `source_country_post_filter`; a dated or
+  publisher-typed plan can admit a landmark outside its range, as D8 is written. Seam:
+  apply the plan's Overton filters locally to landmarks, counted on the `fetch_by_id`
+  event like the country check.

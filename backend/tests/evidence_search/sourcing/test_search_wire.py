@@ -186,6 +186,7 @@ def test_semantic_retry_and_interval(monkeypatch: pytest.MonkeyPatch) -> None:
     assert len(retry_fetch.calls) == 2
     assert len(retry_fetch.calls) <= search_live.RETRY_MAX_ATTEMPTS
 
+    sleeps.clear()  # the retry half's back-off sleep must not satisfy the interval check
     values = iter([0.0, 0.0, 1.0])
     monkeypatch.setattr(search_live, "_monotonic", lambda: next(values))
     interval_fetch = CapturingFetch()
@@ -252,18 +253,34 @@ def test_a_429_pauses_every_threads_admission(monkeypatch: pytest.MonkeyPatch) -
     monkeypatch.setattr(
         search_live, "_sleep", lambda seconds: clock.__setitem__("now", clock["now"] + seconds)
     )
+    # No retry back-off: the only thing that can delay the retry is the pause
+    # itself (review finding, 2026-10-09: with the back-off in place the old
+    # assertion held with the pause deleted).
+    monkeypatch.setattr(search_live, "RETRY_BACKOFF_S", 0.0)
     fetch = ScriptedFetch(
         [search_live.SearchTransportError(429, "api.openalex.org"), {"results": []}]
     )
     backend = OpenAlexLiveBackend("openalex-test-key", fetch=fetch)
 
-    backend.search("first")  # 429 at t=100, retried after the back-off
+    backend.search("first")  # 429 at t=100, retried at once
 
     assert len(fetch.calls) == 2
     # The refused request stamped t=100; the pause moved the next admission to
-    # t=100 + RATE_LIMIT_PAUSE_S, which is where the retry (a new admission) landed.
+    # t=100 + RATE_LIMIT_PAUSE_S, which is where the retry (a new admission)
+    # landed. Without the pause it would have landed at t=100 + the interval.
+    assert backend._last_request_at == pytest.approx(100.0 + search_live.RATE_LIMIT_PAUSE_S)
+
+
+def test_rate_limit_pauses_coalesce(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Several 429 replies in the same instant pause the backend once, not once
+    each: the next admission is one pause away, whichever thread asks."""
+    monkeypatch.setattr(search_live, "_monotonic", lambda: 100.0)
+    backend = OpenAlexLiveBackend("openalex-test-key", fetch=ScriptedFetch([]))
+    for _ in range(8):
+        backend._pause_admission(search_live.RATE_LIMIT_PAUSE_S)
     assert backend._last_request_at is not None
-    assert backend._last_request_at >= 100.0 + search_live.RATE_LIMIT_PAUSE_S - 1e-9
+    next_admission = backend._last_request_at + backend._min_interval_s
+    assert next_admission == pytest.approx(100.0 + search_live.RATE_LIMIT_PAUSE_S)
 
 
 def test_new_transport_calls_redact_keys_and_urls() -> None:

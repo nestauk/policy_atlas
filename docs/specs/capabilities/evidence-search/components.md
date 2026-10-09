@@ -99,9 +99,15 @@ search is **one pass at every scope**; acquire reads `context["search"]["depth"]
 call (`search_queries_v3`, Luna) gives 5 keyword queries and 2 paraphrases; OpenAlex runs
 each query as written and with the systematic-review and randomised-trial clauses (15
 calls of 200) plus 8 semantic calls (`search.semantic`: the question, the paraphrases and
-the queries, 50 each, skipped fail-closed when the directive carries a filter the
-semantic endpoint rejects, recorded as `semantic_skipped`); the lists are interleaved by
-rank and the first 200 works are the seeds. **Citation chasing:** the 200 works most
+the queries, 50 each; the filters the semantic endpoint rejects, dates, SDGs, paratext,
+open-access status and affiliation country, go on the wire as a `publication_year`
+fence where one exists and are applied locally to the semantic results, recorded as
+`semantic_local_filters` on the coverage record; the semantic calls are never skipped);
+the lists are interleaved by rank and the first 200 works are the seeds. The two legs
+run in parallel threads and the OpenAlex seed, resolve and forward calls run in
+concurrent batches (`SEARCH_CONCURRENCY` 8) behind a per-backend paced admission lock;
+a 429 reply pauses every later admission on that backend for `RATE_LIMIT_PAUSE_S`
+(1 s), coalesced across threads. **Citation chasing:** the 200 works most
 cited by the seeds' reference lists are resolved by id (backward); for the 20 best
 in-set-cited seeds the works that cite them are fetched (forward) and scored by how many
 seeds they cite. **Paper pool:** every candidate is ranked by specificity

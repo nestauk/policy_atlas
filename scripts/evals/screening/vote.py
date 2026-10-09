@@ -65,12 +65,7 @@ def combine_reps(
     relevant_votes = sum(1 for rep in reps if _vote(rep) == "relevant")
     not_relevant_votes = len(reps) - relevant_votes
     flags: list[str] = []
-    if relevant_votes == not_relevant_votes:
-        status = "relevant"
-    elif relevant_votes > not_relevant_votes:
-        status = "relevant"
-    else:
-        status = "not_relevant"
+    status = "relevant" if relevant_votes >= not_relevant_votes else "not_relevant"
 
     mean_p = sum(_p_relevant(rep) for rep in reps) / len(reps)
     confidence = mean_p if status == "relevant" else 1.0 - mean_p
