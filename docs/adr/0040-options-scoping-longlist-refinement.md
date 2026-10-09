@@ -473,10 +473,18 @@ forms before one read as a user could take in.
 
 25. **The data faults the survey found in options-scoping prompts and
     code are fixed in this amendment.** Places that are not places (a
-    record prompt round with the rule in words and code checks against the
-    known country names); example names folded by code; the folding round
-    and guard of decision 24; the "Who decides" sentence made to name the
-    body the authority label says holds the power.
+    record prompt round with the rule in words, and one country resolver
+    over the full ISO-3166 table, the United Kingdom's names resolved to
+    one country; a country the resolver still does not know is kept as
+    written and reported, never dropped — the owner, 2026-10-09, on plan
+    review PA4-4); example names folded by code; the folding round and
+    guard of decision 24; the "Who decides" line given the plan's
+    who-can-act constraint texts as context, so that its sentence names
+    the one body whose decision the option needs, in the user's words
+    where the constraint names that body — the authority label reads the
+    sentence, so it agrees with it (contract review C1; the owner,
+    2026-10-09). The measure is two-sided: the "within your power" count
+    before and after is reported on every tuning list.
 
 26. **Two faults are Evidence search ingest faults and stay out.**
     Overton's `published_on` served as the document year (3,546 snapshots
