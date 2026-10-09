@@ -393,6 +393,95 @@ Done when:
    `round_index` 1 and the existing `runProgress` tests are untouched.
 3. Full `make verify` green (the shared 3a/3b gate; ingest-adjacent). Commit.
 
+## Phase 3c — Parallel search legs and concurrent OpenAlex calls: S13 — `lead`
+
+**Amendment at build (2026-10-09, owner, in chat, after the live check measured a
+Focused search at about 2.5 minutes per review):** the OpenAlex and Overton legs run
+side by side, and the independent OpenAlex calls run concurrently. Lead, because the
+change is thread-safety across three modules and the call-order guarantees, and small
+(about 120 lines). Reviewed at plan stage by Codex (read-only) before implementation.
+
+S13. **Concurrency, with the call order kept deterministic.**
+
+- Measured (live check, 2026-10-09, Focused): query generation 3 s; the OpenAlex leg
+  about 60 to 90 s (37 requests, one after another, 1 to 2 s of network time each); the
+  Overton leg about 30 s (24 requests paced at 1.2 s); embedding about 25 s; screening
+  about 10 s. Target: the search in about 45 s.
+- `search_live._TransportMixin`: one `threading.Lock` per backend instance around the
+  pacing (`_wait_rate_limit`, which sleeps and stamps `_last_request_at`) and the
+  `http_calls` counter; the HTTP request itself runs outside the lock so requests
+  overlap in flight. The pacing guarantee is unchanged: never two requests to one
+  provider closer than its interval, whatever the thread count. The in-process
+  response cache already has its lock.
+- `search_loop._Pass`: one per backend leg (not shared), so each leg's calls, budget and
+  record bookkeeping are single-writer. It gains `execute_many(backend, specs)`: reserves
+  the budget for each spec in plan order (a spec past the budget is skipped, as today),
+  runs the fetches in a `ThreadPoolExecutor` (width `SEARCH_CONCURRENCY = 8`) through
+  `tracing.submit_with_context` (Langfuse and structlog context into the workers), then
+  builds and records the `ExecutedCall`s in plan order. So `search.executed` events, the
+  pool order and `queries_executed` are the same as the sequential pass. `execute`
+  (sequential) stays for the calls that read per-instance state after the request
+  (Overton's `last_pages`, `last_post_filter_excluded`) and for the forward pages, which
+  stop on a short page.
+- What runs concurrently: the 15 keyword and 8 semantic seed calls as one batch (the
+  pacing serialises them per interval: about 3 s + 8 s); the backward resolve batches
+  as one batch; the verbatim fallback per variant as one batch. Sequential: the forward
+  pages within a chunk; every Overton call within its leg; the fetch-by-id landmark
+  calls stay sequential too (Overton pacing makes concurrency pointless there).
+- `run_search`: the two legs run in a two-thread pool via `submit_with_context`; the
+  executed calls are merged in backend list order (OpenAlex first, then Overton), so
+  the event order on the coverage record is unchanged. A leg that raises (generation
+  does not run inside a leg) propagates as today.
+- Not changed: the call budgets, the logical-call accounting, the request shapes, the
+  egress ceiling (the same requests, closer together: OpenAlex at most 5 per second
+  by the pacing, as before).
+
+**Plan-stage review (Codex, read-only, 2026-10-09): six findings, all folded in.**
+(1) The pacing guarantee is *paced admission*: a request is admitted (sleep and stamp)
+under the lock no closer than the interval to the previous admission; the HTTP call
+runs outside the lock, so arrival at the provider can reorder by thread scheduling.
+The test asserts the admission stamps, not arrival times. (2) The eval's
+`_RecordingBackend` appends to its shared list under a lock; its list is a diagnostic
+log in completion order, while the pass records the `ExecutedCall`s in plan order.
+Langfuse spans open under the propagated context (`submit_with_context`), as the
+screening threads do. (3) Merge contract: one `_Pass` per leg; after both legs,
+`run_search` concatenates `executed` in backend-list order, merges `calls`, `origin_of`
+(disjoint, keyed by object) and `ranked_count`; the legs never receive `conn`.
+(4) Barriers in the OpenAlex leg: the keyword and semantic seed calls are one
+concurrent batch; the fallback decision reads the completed keyword calls and runs as
+its own batch; only then seeds, backward targets (one concurrent batch of resolve
+calls) and the forward pages (sequential). (5) Tests: the scripted doubles take a lock
+on their queues and call lists; the overlap tests use `threading.Event` with bounded
+waits and clean up on failure; a plan-order recording test; a worker-context test that
+the liveness ticks and structlog context reach the worker threads. (6) The helper is a
+small `execute_batch(backend, specs)` on `_Pass` used only for the seed batch, the
+fallback batch and the resolve batch; everything else stays on the sequential
+`execute`. Checked separately: Overton's per-request instance fields
+(`last_pages`, `last_post_filter_excluded`) are read only on its sequential leg;
+`http_calls` is counted under the pacing lock; the response cache has its own lock;
+the semantic 1 s interval holds under interleaving because every admission stamps the
+same `_last_request_at`.
+
+Done when:
+1. `test_search_single_pass.py` gains: (a) the legs overlap: an Overton double whose
+   first search blocks until the OpenAlex double's first search has started (a
+   `threading.Event` with a timeout), and the recorded order is still every OpenAlex
+   call then every Overton call; (b) the seed calls overlap: an OpenAlex double that
+   counts calls in flight reports a maximum above 1, and the executed calls are in plan
+   order with the right origins; (c) the budget under concurrency: a budget of 5
+   executes exactly the first 5 planned calls; (d) an error in one concurrent call is
+   recorded as an error at its plan position and the others keep their records;
+   (e) in `test_search_wire.py`: concurrent requests on one `OpenAlexLiveBackend` with
+   the interval set to 0.05 s arrive at least 0.05 s apart (timestamps from an
+   injected fetch), and `http_calls` counts every request.
+2. The existing single-pass, pool, wire and runner tests pass unchanged (the order
+   guarantees hold).
+3. `make typecheck` and `make lint` green; the named tests green. The owner waived a
+   `make verify` run for this phase (2026-10-09); the step-6 exit still runs it.
+4. The live check re-run from the start with the same run label family
+   (`mini-051-2026-10-09b`), the wall clock per review recorded beside the sequential
+   figure in `verification.md`.
+
 ## Phase 4 — Adaptive screening: S6, S7, D10, P4 — `codex` + `lead`
 
 `codex` for the code and tests (pure decision function, the two-batch call loop, the

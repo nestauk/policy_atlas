@@ -8,6 +8,8 @@ uses and record each call, so a test can assert the exact call plan.
 
 from __future__ import annotations
 
+import threading
+import time
 import uuid
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
@@ -18,7 +20,7 @@ import sqlalchemy as sa
 from sqlalchemy import select
 from sqlalchemy.engine import Connection
 
-from policy_atlas.core import events
+from policy_atlas.core import events, liveness
 from policy_atlas.core.inference import StubEchoProvider
 from policy_atlas.core.schema import (
     evidence_scope,
@@ -110,17 +112,24 @@ class ScriptedBackend:
         self._scripts = {verb: list(values) for verb, values in (scripts or {}).items()}
         self._keyed = {verb: dict(values) for verb, values in (keyed or {}).items()}
         self.calls: list[BackendCall] = []
+        # The pass calls a backend from several threads (plan S13).
+        self._lock = threading.Lock()
 
     def _consume(self, verb: Verb, key: str) -> list[dict[str, Any]]:
-        keyed = self._keyed.get(verb, {})
-        if key in keyed:
-            result = keyed[key]
-        else:
-            queue = self._scripts.setdefault(verb, [])
-            result = queue.pop(0) if queue else []
+        with self._lock:
+            keyed = self._keyed.get(verb, {})
+            if key in keyed:
+                result = keyed[key]
+            else:
+                queue = self._scripts.setdefault(verb, [])
+                result = queue.pop(0) if queue else []
         if isinstance(result, BaseException):
             raise result
         return [dict(record) for record in result]
+
+    def _note(self, call: BackendCall) -> None:
+        with self._lock:
+            self.calls += [call]
 
     @staticmethod
     def _limit(records: list[dict[str, Any]], max_results: int | None) -> list[dict[str, Any]]:
@@ -133,7 +142,7 @@ class ScriptedBackend:
         wire_params: dict[str, str] | None = None,
         max_results: int | None = None,
     ) -> list[dict[str, Any]]:
-        self.calls.append(BackendCall("search", query, dict(wire_params or {}), max_results))
+        self._note(BackendCall("search", query, dict(wire_params or {}), max_results))
         return self._limit(self._consume("search", query), max_results)
 
     def search_semantic(
@@ -143,16 +152,14 @@ class ScriptedBackend:
         wire_params: dict[str, str] | None = None,
         max_results: int | None = None,
     ) -> list[dict[str, Any]]:
-        self.calls.append(
-            BackendCall("search_semantic", text, dict(wire_params or {}), max_results)
-        )
+        self._note(BackendCall("search_semantic", text, dict(wire_params or {}), max_results))
         return self._limit(self._consume("search_semantic", text), max_results)
 
     def lookup_ids(
         self, ids: list[str], *, wire_params: dict[str, str] | None = None
     ) -> list[dict[str, Any]]:
         key = "|".join(ids)
-        self.calls.append(BackendCall("lookup_ids", key, dict(wire_params or {}), None))
+        self._note(BackendCall("lookup_ids", key, dict(wire_params or {}), None))
         return self._consume("lookup_ids", key)
 
     def fetch_citing(
@@ -164,13 +171,11 @@ class ScriptedBackend:
         page: int = 1,
     ) -> list[dict[str, Any]]:
         key = "|".join(ids)
-        self.calls.append(
-            BackendCall("fetch_citing", key, dict(wire_params or {}), max_results, page)
-        )
+        self._note(BackendCall("fetch_citing", key, dict(wire_params or {}), max_results, page))
         return self._limit(self._consume("fetch_citing", f"{key}#{page}"), max_results)
 
     def fetch_by_id(self, record_id: str) -> dict[str, Any] | None:
-        self.calls.append(BackendCall("fetch_by_id", record_id, {}, 1))
+        self._note(BackendCall("fetch_by_id", record_id, {}, 1))
         records = self._consume("fetch_by_id", record_id)
         return records[0] if records else None
 
@@ -457,24 +462,29 @@ def test_logical_calls_count_pages_and_retries_once(
     monkeypatch.setattr(search_live, "_sleep", lambda _seconds: None)
     task_id, run_id = seed_task_and_run(conn)
     scope_id = seed_scope(conn, task_id)
-    openalex_requests: list[dict[str, str]] = []
-    state = {"failed_once": False}
+    failed_once = {"done": False}
+    failed_lock = threading.Lock()
 
     def openalex_fetch(url: str, params: dict[str, str]) -> Any:
-        openalex_requests.append(params)
-        keyword = len(
-            [p for p in openalex_requests if "title_and_abstract.search:" in p.get("filter", "")]
-        )
-        # Request 1: a full page. Request 2 fails once and request 3 is its
-        # retry (one logical call). Request 4 is the third call, a short page.
-        if "search.semantic" in params or keyword > 4:
+        # Keyed by the query text, not by arrival order: the seed calls run
+        # concurrently. "q1" as written: a full page. "q2" as written: fails
+        # once, then (its retry) a short page: one logical call, two requests.
+        # "q3" as written: a short page. Everything else: empty.
+        query_filter = params.get("filter", "")
+        if "search.semantic" in params:
             return {"results": []}
-        if keyword == 1:
+        if query_filter == "title_and_abstract.search:q1":
             return {"results": [oa_record(f"{1000 + i}") for i in range(200)]}
-        if keyword == 2 and not state["failed_once"]:
-            state["failed_once"] = True
-            raise SearchTransportError(status_code=503, host="api.openalex.org")
-        return {"results": [oa_record(f"{2000 + keyword * 10 + i}") for i in range(5)]}
+        if query_filter == "title_and_abstract.search:q2":
+            with failed_lock:
+                first = not failed_once["done"]
+                failed_once["done"] = True
+            if first:
+                raise SearchTransportError(status_code=503, host="api.openalex.org")
+            return {"results": [oa_record(f"{2000 + i}") for i in range(5)]}
+        if query_filter == "title_and_abstract.search:q3":
+            return {"results": [oa_record(f"{3000 + i}") for i in range(5)]}
+        return {"results": []}
 
     def overton_fetch(url: str, params: dict[str, str]) -> Any:
         page = int(params.get("page", "1")) if params else int(url.rsplit("page=", 1)[-1])
@@ -496,8 +506,15 @@ def test_logical_calls_count_pages_and_retries_once(
 
     payloads = _payloads(conn, task_id)
     keyword_events = [p for p in payloads if p["backend"] == "openalex" and p["verb"] == "search"]
-    assert [p["result_count"] for p in keyword_events][:3] == [200, 5, 5]
+    by_query = {p["query"]: p["result_count"] for p in keyword_events}
+    assert (by_query["q1"], by_query["q2"], by_query["q3"]) == (200, 5, 5)
     assert all(p["status"] == "ok" for p in keyword_events)
+    # Recorded in plan order whatever the thread timing.
+    assert [p["query"] for p in keyword_events][:3] == [
+        "q1",
+        f"(q1) AND {SR_CLAUSE}",
+        f"(q1) AND {RCT_CLAUSE}",
+    ]
     # Nine keyword calls (3 queries x 3 forms) plus the semantic and chasing calls,
     # each one logical call; the transport made one more HTTP request (the retry).
     assert counts["search"]["queries_executed"]["openalex"] == len(
@@ -516,9 +533,7 @@ def test_semantic_dates_are_fenced_on_the_wire_and_checked_locally(conn: Connect
     in_range = oa_record("sem-2020", year=2020)
     too_late = oa_record("sem-2021", year=2021)
     too_late["publication_date"] = "2021-01-15"
-    openalex = ScriptedBackend(
-        scripts={"search_semantic": [[in_range, too_late]] + [[] for _ in range(7)]}
-    )
+    openalex = ScriptedBackend(keyed={"search_semantic": {"Test intent": [in_range, too_late]}})
 
     counts = run_search(
         conn,
@@ -659,6 +674,197 @@ def test_fixture_mode_runs_the_single_pass_with_zero_egress(conn: Connection) ->
     assert counts["by_backend"]["overton"]["acquired"] <= DEPTH_CONSTANTS["deep"]["policy_cap"]
     assert counts["stop_condition"] == "completed"
     _assert_invariant(counts)
+
+
+# --- Concurrency (plan S13): the legs side by side, the seed calls together ---
+
+
+class _OvertonStartsFirst(ScriptedBackend):
+    """Overton double that signals when its first search has started."""
+
+    def __init__(self, started: threading.Event, **kwargs: Any) -> None:
+        super().__init__(name="overton", **kwargs)
+        self.started = started
+
+    def search(self, query: str, **kwargs: Any) -> list[dict[str, Any]]:
+        self.started.set()
+        return super().search(query, **kwargs)
+
+
+class _OpenAlexWaitsForOverton(ScriptedBackend):
+    """OpenAlex double whose searches wait until Overton's first has started.
+
+    With sequential legs (OpenAlex first) the wait times out; with the legs
+    side by side the Overton leg sets the event while OpenAlex is waiting.
+    """
+
+    def __init__(self, started: threading.Event, **kwargs: Any) -> None:
+        super().__init__(**kwargs)
+        self.started = started
+        self.overlapped: list[bool] = []
+
+    def search(self, query: str, **kwargs: Any) -> list[dict[str, Any]]:
+        self.overlapped.append(self.started.wait(timeout=5.0))
+        return super().search(query, **kwargs)
+
+
+class _InFlightCounter(ScriptedBackend):
+    """OpenAlex double that records how many searches run at the same time."""
+
+    def __init__(self, **kwargs: Any) -> None:
+        super().__init__(**kwargs)
+        self.in_flight = 0
+        self.max_in_flight = 0
+        self._gate = threading.Lock()
+
+    def search(self, query: str, **kwargs: Any) -> list[dict[str, Any]]:
+        with self._gate:
+            self.in_flight += 1
+            self.max_in_flight = max(self.max_in_flight, self.in_flight)
+        try:
+            time.sleep(0.02)
+            return super().search(query, **kwargs)
+        finally:
+            with self._gate:
+                self.in_flight -= 1
+
+
+def _planned_keyword_queries() -> list[str]:
+    return [v for q in QUERIES for v in (q, f"({q}) AND {SR_CLAUSE}", f"({q}) AND {RCT_CLAUSE}")]
+
+
+def test_the_two_legs_run_side_by_side_and_record_in_backend_order(conn: Connection) -> None:
+    task_id, run_id = seed_task_and_run(conn)
+    scope_id = seed_scope(conn, task_id)
+    started = threading.Event()
+    openalex = _OpenAlexWaitsForOverton(started, scripts={"search": [[oa_record("k0")]]})
+    overton = _OvertonStartsFirst(started, scripts={"search": [[ov_record("r0")]]})
+
+    counts = run_search(
+        conn,
+        task_id=task_id,
+        run_id=run_id,
+        context=_context(scope_id),
+        backends=[openalex, overton],
+        generation_backend=_generation(),
+    )
+
+    assert openalex.overlapped and all(openalex.overlapped), "the legs did not overlap"
+    backends_in_order = [p["backend"] for p in _payloads(conn, task_id)]
+    first_overton = backends_in_order.index("overton")
+    assert set(backends_in_order[:first_overton]) == {"openalex"}
+    assert set(backends_in_order[first_overton:]) == {"overton"}
+    assert counts["search"]["queries_executed"] == {"openalex": 24, "overton": 3}
+    _assert_invariant(counts)
+
+
+def test_seed_calls_run_concurrently_and_are_recorded_in_plan_order(conn: Connection) -> None:
+    task_id, run_id = seed_task_and_run(conn)
+    scope_id = seed_scope(conn, task_id)
+    openalex = _InFlightCounter(
+        keyed={"search": {q: [oa_record(f"kw-{i}")] for i, q in enumerate(QUERIES)}}
+    )
+
+    run_search(
+        conn,
+        task_id=task_id,
+        run_id=run_id,
+        context=_context(scope_id),
+        backends=[openalex],
+        generation_backend=_generation(),
+    )
+
+    assert openalex.max_in_flight > 1, "the seed calls did not overlap"
+    payloads = _payloads(conn, task_id)
+    assert [p["query"] for p in payloads[:15]] == _planned_keyword_queries()
+    assert [p["query"] for p in payloads[15:23]] == ["Test intent", *PARAPHRASES, *QUERIES]
+    # Each keyed query's page landed on its own event, whatever thread ran it.
+    assert [p["result_count"] for p in payloads[:15]] == [1, 0, 0] * 5
+
+
+def test_budget_under_concurrency_admits_the_first_planned_calls(
+    conn: Connection, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    task_id, run_id = seed_task_and_run(conn)
+    scope_id = seed_scope(conn, task_id)
+    monkeypatch.setitem(DEPTH_CONSTANTS["rapid"], "call_budget", {"openalex": 5, "overton": 30})
+    openalex = _InFlightCounter(scripts={"search": [[oa_record(f"kw-{i}")] for i in range(15)]})
+
+    counts = run_search(
+        conn,
+        task_id=task_id,
+        run_id=run_id,
+        context=_context(scope_id),
+        backends=[openalex],
+        generation_backend=_generation(),
+    )
+
+    planned = _planned_keyword_queries()
+    assert sorted(call.query for call in openalex.calls) == sorted(planned[:5])
+    assert [p["query"] for p in _payloads(conn, task_id)] == planned[:5]
+    assert counts["search"]["queries_executed"] == {"openalex": 5}
+
+
+def test_an_error_in_one_concurrent_call_is_recorded_at_its_plan_position(
+    conn: Connection,
+) -> None:
+    task_id, run_id = seed_task_and_run(conn)
+    scope_id = seed_scope(conn, task_id)
+    openalex = _InFlightCounter(
+        keyed={
+            "search": {
+                QUERIES[2]: RuntimeError("scripted failure"),
+                **{q: [oa_record(f"kw-{i}")] for i, q in enumerate(QUERIES) if i != 2},
+            }
+        }
+    )
+
+    counts = run_search(
+        conn,
+        task_id=task_id,
+        run_id=run_id,
+        context=_context(scope_id),
+        backends=[openalex],
+        generation_backend=_generation(),
+    )
+
+    payloads = _payloads(conn, task_id)
+    assert [p["status"] for p in payloads[:15]] == ["ok"] * 6 + ["error"] + ["ok"] * 8
+    assert payloads[6]["query"] == QUERIES[2]
+    assert "scripted failure" in payloads[6]["error"]
+    assert counts["by_backend"]["openalex"]["status"] == "ok"
+    assert counts["by_backend"]["openalex"]["acquired"] == 4
+
+
+def test_worker_threads_carry_the_task_context(conn: Connection) -> None:
+    """Liveness ticks and structlog context reach the threads the pass uses."""
+    task_id, run_id = seed_task_and_run(conn)
+    scope_id = seed_scope(conn, task_id)
+    seen: list[tuple[uuid.UUID | None, str]] = []
+    seen_lock = threading.Lock()
+
+    def fetch(url: str, params: dict[str, str]) -> Any:
+        with seen_lock:
+            seen.append((liveness._task_id.get(), threading.current_thread().name))
+        if "overton" in url:
+            return {"results": [], "next_page_url": False}
+        return {"results": []}
+
+    openalex = OpenAlexLiveBackend("key", fetch=fetch)
+    overton = OvertonLiveBackend("key", fetch=fetch)
+    with liveness.task_liveness(task_id):
+        run_search(
+            conn,
+            task_id=task_id,
+            run_id=run_id,
+            context=_context(scope_id),
+            backends=[openalex, overton],
+            generation_backend=_generation(),
+        )
+
+    assert seen
+    assert {task for task, _ in seen} == {task_id}
+    assert any(name != threading.main_thread().name for _, name in seen)
 
 
 # --- Retained from the round-loop tests (task 015), updated to the single pass ---

@@ -12,13 +12,16 @@ from __future__ import annotations
 import time
 import uuid
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import date
+from functools import partial
 from typing import Any, Literal, TypedDict, cast
 
 from sqlalchemy import func, select
 from sqlalchemy.engine import Connection
 
+from policy_atlas.core import tracing
 from policy_atlas.core.embeddings import EmbeddingBackend
 from policy_atlas.core.prompt_fields import parse_guidance_channel
 from policy_atlas.core.schema import (
@@ -204,6 +207,9 @@ _BACKEND_NAMES = {"openalex", "overton"}
 SEMANTIC_ACCEPTED_FILTER_KEYS: frozenset[str] = frozenset(
     {"types", "languages", "exclude_retracted"}
 )
+# Threads for the independent calls of one leg (the seed batch, the resolve
+# batch). The backend's pacing lock, not this number, bounds the request rate.
+SEARCH_CONCURRENCY = 8
 
 
 @dataclass(frozen=True)
@@ -986,17 +992,34 @@ def _by_id_fetch(backend: acquire.ExtendedSearchBackend, document_id: str) -> Fe
     return fetch
 
 
+@dataclass(frozen=True)
+class _CallSpec:
+    """One planned logical call: what to send and how to read the answer."""
+
+    verb: CallVerb
+    query: str
+    origin: QueryOrigin
+    wire_params: dict[str, str]
+    max_records: int
+    fetch: Fetch
+    keep: Callable[[dict[str, Any]], bool] | None = None
+
+
 @dataclass
 class _Pass:
-    """What one search pass has called so far, and the budget it works under.
+    """What one backend's leg has called so far, and the budget it works under.
+
+    One instance per backend leg (the two legs run side by side), so every
+    field has a single writer; ``run_search`` merges the legs in backend order.
 
     Attributes:
         constants: The depth's caps and call budgets.
         variant_count: Filter variants per backend (the OpenAlex budget is per variant).
-        executed: Every logical call, in order, for acquire's events and counts.
+        executed: Every logical call, in plan order, for acquire's events and counts.
         calls: Logical calls made per backend.
         origin_of: The origin and verb of the call that returned each record
             object, keyed by ``id(record)``.
+        ranked_count: How many records the ranking produced per backend.
     """
 
     constants: DepthConstants
@@ -1006,68 +1029,112 @@ class _Pass:
     origin_of: dict[int, tuple[str, str]] = field(default_factory=dict)
     ranked_count: dict[str, int] = field(default_factory=dict)
 
-    def execute(
-        self,
-        backend: acquire.SearchBackendBase,
-        *,
-        verb: CallVerb,
-        query: str,
-        origin: QueryOrigin,
-        wire_params: dict[str, str],
-        max_records: int,
-        fetch: Callable[[int], list[dict[str, Any]]],
-        keep: Callable[[dict[str, Any]], bool] | None = None,
-    ) -> ExecutedCall | None:
-        """Make one logical call, or skip it when the backend's budget is spent.
-
-        A logical call is one planned request however the transport pages or
-        retries underneath (contract D12). ``keep`` is a local filter applied
-        to the returned records; what it drops is counted on the call as
-        ``post_filter_excluded``, beside anything the backend itself excluded.
-        """
+    def _reserve(self, backend: acquire.SearchBackendBase) -> bool:
+        """Claim one logical call against the backend's budget, in plan order."""
         budget = self.constants["call_budget"].get(backend.name, 0)
         budget *= self.variant_count.get(backend.name, 1) if backend.name == "openalex" else 1
         if self.calls.get(backend.name, 0) >= budget:
-            return None
+            return False
         self.calls[backend.name] = self.calls.get(backend.name, 0) + 1
-        try:
+        return True
+
+    def _finish(
+        self,
+        backend: acquire.SearchBackendBase,
+        spec: _CallSpec,
+        fetched: list[dict[str, Any]] | BaseException,
+    ) -> ExecutedCall:
+        """Turn one fetch outcome into the executed call and record it.
+
+        A logical call is one planned request however the transport pages or
+        retries underneath (contract D12). ``spec.keep`` is a local filter
+        applied to the returned records; what it drops is counted on the call
+        as ``post_filter_excluded``, beside anything the backend itself
+        excluded. The backend's per-request fields (``last_post_filter_excluded``,
+        ``last_pages``) are read here, so a call that needs them must run
+        through ``execute``, never ``execute_batch``.
+        """
+        if isinstance(fetched, BaseException):
+            call = ExecutedCall(
+                backend_name=backend.name,
+                verb=spec.verb,
+                query=spec.query,
+                query_origin=spec.origin,
+                wire_params=spec.wire_params,
+                records=[],
+                status="error",
+                error=str(fetched),
+            )
+        else:
             # Copies: a backend may hand back the same record objects on every
             # call (the fixtures do), and the pool bookkeeping is by object.
-            records = [dict(record) for record in fetch(max_records)[:max_records]]
+            records = [dict(record) for record in fetched[: spec.max_records]]
             excluded = (
-                getattr(backend, "last_post_filter_excluded", None) if verb == "search" else None
+                getattr(backend, "last_post_filter_excluded", None)
+                if spec.verb == "search"
+                else None
             )
-            if keep is not None:
-                kept = [record for record in records if keep(record)]
+            if spec.keep is not None:
+                kept = [record for record in records if spec.keep(record)]
                 excluded = (excluded or 0) + len(records) - len(kept)
                 records = kept
             call = ExecutedCall(
                 backend_name=backend.name,
-                verb=verb,
-                query=query,
-                query_origin=origin,
-                wire_params=wire_params,
+                verb=spec.verb,
+                query=spec.query,
+                query_origin=spec.origin,
+                wire_params=spec.wire_params,
                 records=records,
                 status="ok",
                 error=None,
                 post_filter_excluded=excluded,
-                pages=getattr(backend, "last_pages", None) if verb == "search" else None,
-            )
-        except Exception as exc:
-            call = ExecutedCall(
-                backend_name=backend.name,
-                verb=verb,
-                query=query,
-                query_origin=origin,
-                wire_params=wire_params,
-                records=[],
-                status="error",
-                error=str(exc),
+                pages=getattr(backend, "last_pages", None) if spec.verb == "search" else None,
             )
         self.executed.append(call)
         for record in call.records:
-            self.origin_of.setdefault(id(record), (origin, verb))
+            self.origin_of.setdefault(id(record), (spec.origin, spec.verb))
         return call
+
+    def execute(self, backend: acquire.SearchBackendBase, spec: _CallSpec) -> ExecutedCall | None:
+        """Make one logical call now, or skip it when the backend's budget is spent."""
+        if not self._reserve(backend):
+            return None
+        try:
+            fetched: list[dict[str, Any]] | BaseException = spec.fetch(spec.max_records)
+        except Exception as exc:
+            fetched = exc
+        return self._finish(backend, spec, fetched)
+
+    def execute_batch(
+        self, backend: acquire.SearchBackendBase, specs: list[_CallSpec]
+    ) -> list[ExecutedCall | None]:
+        """Make independent logical calls concurrently, recorded in plan order.
+
+        The budget is reserved for each spec in plan order first (a spec past
+        the budget is skipped, as a sequential run would skip it), the fetches
+        run in a thread pool under the caller's tracing context, and the calls
+        are recorded in plan order, so events, counts and pool order are the
+        same as a sequential run. The backend's pacing lock keeps the request
+        rate within its interval whatever the thread count.
+        """
+        admitted = [spec for spec in specs if self._reserve(backend)]
+        outcomes: list[list[dict[str, Any]] | BaseException] = []
+        with ThreadPoolExecutor(max_workers=SEARCH_CONCURRENCY) as executor:
+            futures = [
+                tracing.submit_with_context(executor, spec.fetch, spec.max_records)
+                for spec in admitted
+            ]
+            for future in futures:
+                try:
+                    outcomes.append(future.result())
+                except Exception as exc:
+                    outcomes.append(exc)
+        results: list[ExecutedCall | None] = [
+            self._finish(backend, spec, outcome)
+            for spec, outcome in zip(admitted, outcomes, strict=True)
+        ]
+        results.extend([None] * (len(specs) - len(admitted)))
+        return results
 
     def entries(self, ranked: list[dict[str, Any]], backend_name: str) -> list[PoolEntry]:
         """The pool handed to acquire: the ranked records, then every other record.
@@ -1120,56 +1187,34 @@ def _openalex_leg(
     summary = _LegSummary()
     extended = cast(acquire.ExtendedSearchBackend, backend)
 
-    # 1. Keyword seeds: each generated query as written and with the
-    #    systematic-review and randomised-trial clauses, per filter variant.
-    keyword: list[tuple[_PlannedCall, ExecutedCall]] = []
-    for wire in wires:
+    # 1. Seeds, one concurrent batch: each generated query as written and with
+    #    the systematic-review and randomised-trial clauses, per filter variant
+    #    (keyword), then the question, the paraphrases and the queries through
+    #    the embedding search (semantic). Filters the semantic endpoint rejects
+    #    are applied locally (the country filter included), so one set of
+    #    semantic calls serves every variant.
+    keyword_plans: list[tuple[_PlannedCall, dict[str, str]]] = [
+        (plan, wire)
+        for wire in wires
         for plan in _rapid_plans(
             backend_name="openalex", intent=intent, queries=queries, overton_paraphrases=[]
-        ):
-            call = search.execute(
-                backend,
-                verb="search",
-                query=plan.query,
-                origin=plan.query_origin,
-                wire_params=wire,
-                max_records=pool.KEYWORD_PER_CALL,
-                fetch=_search_fetch(backend, plan.query, wire),
-            )
-            if call is not None:
-                keyword.append((plan, call))
-    groups: dict[str, list[ExecutedCall]] = {}
-    for plan, call in keyword:
-        groups.setdefault(plan.group_key or plan.query, []).append(call)
-    summary.zero_result_queries = sum(
-        1 for calls in groups.values() if all(c.status == "ok" and not c.records for c in calls)
-    )
-    if all(c.status == "ok" and not c.records for _, c in keyword):
-        # Every generated query came back empty: fall back to the verbatim
-        # intent, loudly (ADR 0012 decision 2), one call per filter variant.
-        summary.fallback_to_verbatim = True
-        for wire in wires:
-            call = search.execute(
-                backend,
-                verb="search",
-                query=intent,
-                origin="fallback_verbatim",
-                wire_params=wire,
-                max_records=pool.KEYWORD_PER_CALL,
-                fetch=_search_fetch(backend, intent, wire),
-            )
-            if call is not None:
-                keyword.append((_PlannedCall("openalex", intent, "fallback_verbatim"), call))
-
-    # 2. Semantic seeds: the question, the paraphrases and the queries through
-    #    the embedding search. Filters the endpoint rejects are applied here
-    #    (the country filter included), so one set of calls serves every variant.
+        )
+    ]
+    keyword_specs = [
+        _CallSpec(
+            verb="search",
+            query=plan.query,
+            origin=plan.query_origin,
+            wire_params=wire,
+            max_records=pool.KEYWORD_PER_CALL,
+            fetch=_search_fetch(backend, plan.query, wire),
+        )
+        for plan, wire in keyword_plans
+    ]
     semantic_wire, local_filters = _semantic_filter_parts(variants[0])
     keep = (lambda record: _semantic_record_passes(variants[0], record)) if local_filters else None
-    semantic: list[ExecutedCall] = []
-    for text in [intent, *paraphrases[:2], *queries[:N_QUERIES]]:
-        call = search.execute(
-            backend,
+    semantic_specs = [
+        _CallSpec(
             verb="search_semantic",
             query=text,
             origin="semantic",
@@ -1178,8 +1223,43 @@ def _openalex_leg(
             fetch=_semantic_fetch(extended, text, semantic_wire),
             keep=keep,
         )
-        if call is not None:
-            semantic.append(call)
+        for text in [intent, *paraphrases[:2], *queries[:N_QUERIES]]
+    ]
+    results = search.execute_batch(backend, [*keyword_specs, *semantic_specs])
+    keyword = [
+        (plan, call)
+        for (plan, _wire), call in zip(keyword_plans, results[: len(keyword_specs)], strict=True)
+        if call is not None
+    ]
+    semantic = [call for call in results[len(keyword_specs) :] if call is not None]
+
+    # 2. The fallback decision reads the completed keyword calls (a barrier):
+    #    every generated query came back empty, so search the verbatim intent,
+    #    loudly (ADR 0012 decision 2), one call per filter variant.
+    groups: dict[str, list[ExecutedCall]] = {}
+    for plan, call in keyword:
+        groups.setdefault(plan.group_key or plan.query, []).append(call)
+    summary.zero_result_queries = sum(
+        1 for calls in groups.values() if all(c.status == "ok" and not c.records for c in calls)
+    )
+    if all(c.status == "ok" and not c.records for _, c in keyword):
+        summary.fallback_to_verbatim = True
+        fallback_specs = [
+            _CallSpec(
+                verb="search",
+                query=intent,
+                origin="fallback_verbatim",
+                wire_params=wire,
+                max_records=pool.KEYWORD_PER_CALL,
+                fetch=_search_fetch(backend, intent, wire),
+            )
+            for wire in wires
+        ]
+        for fallback_call in search.execute_batch(backend, fallback_specs):
+            if fallback_call is not None:
+                keyword.append(
+                    (_PlannedCall("openalex", intent, "fallback_verbatim"), fallback_call)
+                )
 
     # 3. The seeds are the first SEEDS distinct works, interleaved by rank.
     lists = [call.records for _, call in keyword] + [call.records for call in semantic]
@@ -1198,14 +1278,12 @@ def _openalex_leg(
         else None
     )
 
-    # 5. Backward: resolve the works the seeds cite most, 50 ids per call.
+    # 5. Backward: resolve the works the seeds cite most, 50 ids per call, one
+    #    concurrent batch.
     targets = pool.backward_targets(counts, seed_ids, pool.BACKWARD_EXPAND)
     summary.backward_targets = len(targets)
-    backward: list[dict[str, Any]] = []
-    for start in range(0, len(targets), pool.RESOLVE_BATCH):
-        batch = targets[start : start + pool.RESOLVE_BATCH]
-        call = search.execute(
-            backend,
+    resolve_specs = [
+        _CallSpec(
             verb="fetch_references",
             query="|".join(batch),
             origin="snowball_backward",
@@ -1214,11 +1292,18 @@ def _openalex_leg(
             fetch=_lookup_fetch(extended, batch, citation_wire),
             keep=country_keep,
         )
-        if call is not None:
-            backward.extend(call.records)
+        for batch in (
+            targets[start : start + pool.RESOLVE_BATCH]
+            for start in range(0, len(targets), pool.RESOLVE_BATCH)
+        )
+    ]
+    backward: list[dict[str, Any]] = []
+    for resolved in search.execute_batch(backend, resolve_specs):
+        if resolved is not None:
+            backward.extend(resolved.records)
 
     # 6. Forward: the works that cite the best-connected seeds, paged until a
-    #    short page, 100 seed ids per request.
+    #    short page (so sequential), 100 seed ids per request.
     chased = pool.forward_seeds(
         seeds, counts, top=pool.FORWARD_TOP, max_cites=pool.FORWARD_MAX_CITES
     )
@@ -1226,20 +1311,25 @@ def _openalex_leg(
     for start in range(0, len(chased), pool.FORWARD_IDS_PER_CALL):
         ids = chased[start : start + pool.FORWARD_IDS_PER_CALL]
         for page in range(1, pool.FORWARD_PAGES + 1):
-            call = search.execute(
+            page_call = search.execute(
                 backend,
-                verb="fetch_citations",
-                query="|".join(ids),
-                origin="snowball_forward",
-                wire_params=citation_wire,
-                max_records=pool.KEYWORD_PER_CALL,
-                fetch=_citing_fetch(extended, ids, citation_wire, page),
-                keep=country_keep,
+                _CallSpec(
+                    verb="fetch_citations",
+                    query="|".join(ids),
+                    origin="snowball_forward",
+                    wire_params=citation_wire,
+                    max_records=pool.KEYWORD_PER_CALL,
+                    fetch=_citing_fetch(extended, ids, citation_wire, page),
+                    keep=country_keep,
+                ),
             )
-            if call is None or call.status != "ok":
+            if page_call is None or page_call.status != "ok":
                 break
-            citing.extend(call.records)
-            if len(call.records) + (call.post_filter_excluded or 0) < pool.KEYWORD_PER_CALL:
+            citing.extend(page_call.records)
+            if (
+                len(page_call.records) + (page_call.post_filter_excluded or 0)
+                < pool.KEYWORD_PER_CALL
+            ):
                 break
     forward = pool.score_forward(citing, seed_ids, counts, excluded_ids=set(targets))
     forward = forward[: pool.FORWARD_KEEP]
@@ -1292,12 +1382,14 @@ def _overton_leg(
     ):
         call = search.execute(
             backend,
-            verb="search",
-            query=plan.query,
-            origin=plan.query_origin,
-            wire_params=wire,
-            max_records=per_text,
-            fetch=fetch_for(plan.query),
+            _CallSpec(
+                verb="search",
+                query=plan.query,
+                origin=plan.query_origin,
+                wire_params=wire,
+                max_records=per_text,
+                fetch=fetch_for(plan.query),
+            ),
         )
         if call is not None:
             searches.append(call)
@@ -1326,13 +1418,15 @@ def _overton_leg(
     for document_id in pool.landmark_targets(counts, result_ids, pool.OVERTON_LANDMARKS):
         call = search.execute(
             backend,
-            verb="fetch_by_id",
-            query=document_id,
-            origin="landmark",
-            wire_params={},
-            max_records=1,
-            fetch=_by_id_fetch(cast(acquire.ExtendedSearchBackend, backend), document_id),
-            keep=country_keep,
+            _CallSpec(
+                verb="fetch_by_id",
+                query=document_id,
+                origin="landmark",
+                wire_params={},
+                max_records=1,
+                fetch=_by_id_fetch(cast(acquire.ExtendedSearchBackend, backend), document_id),
+                keep=country_keep,
+            ),
         )
         if call is not None:
             landmarks.extend(call.records)
@@ -1397,14 +1491,18 @@ def run_search(
     queries, paraphrases = validated_queries(wire)
     queries_dropped = len(wire.queries) - len(queries)
 
-    search = _Pass(constants, {name: len(variants[name]) for name in names})
-    pools: dict[str, list[PoolEntry]] = {}
-    summaries: dict[str, _LegSummary] = {}
-    local_filters: list[str] = []
+    # The two legs run side by side (plan S13): one pass state per backend, so
+    # each has a single writer; the legs never touch the database connection;
+    # they are merged in backend-list order below, so the events, counts and
+    # pool order are the same as a sequential run.
+    variant_count = {name: len(variants[name]) for name in names}
+    passes = {name: _Pass(constants, variant_count) for name in names}
+    leg_jobs: dict[str, Callable[[], Any]] = {}
     for backend in backends:
         if backend.name == "openalex":
-            pools[backend.name], summaries[backend.name], local_filters = _openalex_leg(
-                search,
+            leg_jobs[backend.name] = partial(
+                _openalex_leg,
+                passes[backend.name],
                 backend,
                 intent=context.intent,
                 queries=queries,
@@ -1413,14 +1511,31 @@ def run_search(
                 wires=wires[backend.name],
             )
         elif backend.name == "overton":
-            pools[backend.name], summaries[backend.name] = _overton_leg(
-                search,
+            leg_jobs[backend.name] = partial(
+                _overton_leg,
+                passes[backend.name],
                 backend,
                 intent=context.intent,
                 paraphrases=paraphrases,
                 validated=validated[backend.name],
                 wire=wires[backend.name][0],
             )
+    pools: dict[str, list[PoolEntry]] = {}
+    summaries: dict[str, _LegSummary] = {}
+    local_filters: list[str] = []
+    with ThreadPoolExecutor(max_workers=max(1, len(leg_jobs))) as executor:
+        futures = {
+            name: tracing.submit_with_context(executor, leg) for name, leg in leg_jobs.items()
+        }
+        for name, future in futures.items():
+            outcome = future.result()
+            if name == "openalex":
+                pools[name], summaries[name], local_filters = outcome
+            else:
+                pools[name], summaries[name] = outcome
+    executed = [call for name in names for call in passes.get(name, _Pass(constants, {})).executed]
+    calls_made = {name: passes[name].calls.get(name, 0) for name in names}
+    ranked_count = {name: passes[name].ranked_count.get(name, 0) for name in names}
     if scope_wire_params is not None and local_filters:
         scope_wire_params["semantic_local_filters"] = local_filters
 
@@ -1431,12 +1546,12 @@ def run_search(
         context=context,
         backends=backends,
         embedder=embedder,
-        executed_calls=search.executed,
+        executed_calls=executed,
         pools=pools,
         # The cap cuts the ranked list; records the ranking left out never fill it.
         caps={
-            "openalex": min(constants["papers_cap"], search.ranked_count.get("openalex", 0)),
-            "overton": min(constants["policy_cap"], search.ranked_count.get("overton", 0)),
+            "openalex": min(constants["papers_cap"], ranked_count.get("openalex", 0)),
+            "overton": min(constants["policy_cap"], ranked_count.get("overton", 0)),
         },
         depth=depth,
         scope_wire_params=scope_wire_params,
@@ -1446,7 +1561,7 @@ def run_search(
     counts["search"] = {
         "depth": depth,
         "round_index": round_index,
-        "queries_executed": {name: search.calls.get(name, 0) for name in names},
+        "queries_executed": calls_made,
         "queries_zero_result": {name: legs[name].zero_result_queries for name in names},
         "queries_dropped": queries_dropped,
         "fallback_to_verbatim": {name: legs[name].fallback_to_verbatim for name in names},

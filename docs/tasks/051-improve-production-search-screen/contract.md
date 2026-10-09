@@ -34,6 +34,11 @@
 > every eval item carries `published_before`; under the rule as written the live check
 > would have measured keyword-only seeds. The coverage record records the locally applied
 > keys as `semantic_local_filters`; `semantic_skipped` is not written.
+> **Amendment at build (2026-10-09, owner, in chat):** the search runs its two legs in
+> parallel and its independent OpenAlex calls concurrently (plan S13, Phase 3c), after
+> the live check measured about 2.5 minutes of search per review at Focused. Same
+> requests, same budgets, same event order; only the wall clock changes. The owner
+> waived a full `make verify` for that phase; the step-6 exit still runs it.
 
 ## Goal
 

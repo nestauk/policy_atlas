@@ -152,15 +152,74 @@ placeholders the live check fills, a short "what it replaced" section, the parke
 rendered once with headless Chrome at 1100 px and checked by eye (two over-long
 diagram lines shortened). `make okf-validate` green.
 
+**Phase 3c (parallel search, plan S13), lead, after a read-only Codex plan review
+(six findings, all folded in: paced admission as the guarantee with a stamp-based
+test, a lock in the eval recorder, an explicit merge contract across the two pass
+states, explicit batch barriers, thread-safe doubles with bounded waits, a small
+batch helper used only for the seed and resolve batches).** The first live run was
+stopped at the owner's call after 8 reviews at Focused (about 2.5 minutes of search per
+review: Overton 24 paced requests, OpenAlex 37 sequential requests). Changes:
+`search_live._TransportMixin` takes a per-instance lock around the pacing sleep and
+stamp and the request counter; `search_loop._Pass` is one per backend leg, with
+`execute_batch` (budget reserved in plan order, fetches in a thread pool under the
+tracing context, calls recorded in plan order); `run_search` runs the two legs in a
+two-thread pool and merges the executed calls in backend order; the eval's
+`_RecordingBackend` appends under a lock. Tests: the legs overlap (an event barrier,
+deterministic), the seed calls overlap and are recorded in plan order, the budget under
+concurrency admits the first planned calls, an error in one concurrent call lands at
+its plan position, the worker threads carry the liveness task context, and the
+pacing-admission stamps of six concurrent requests are one interval apart. The
+scripted double takes a lock; two tests that identified calls by arrival order are
+keyed by query text. Sourcing, runner, steering and wire suites: 533 passed; typecheck,
+lint and eval-check green. The owner waived `make verify` for this phase.
+
 _rest filled at step 6_
 
 ## End-to-end command
 
-_filled at step 6_
+The live check (Phase 8), run from the repository root with the keys in `backend/.env`
+(OpenAI, OpenAlex, Overton, Langfuse), in the background, writing to a log:
+
+```
+uv run --project backend --env-file backend/.env \
+    python scripts/evals/search/checks/production_recall.py \
+    --dataset retrieval-ground-truth-mini --depths rapid standard deep \
+    --run-label mini-051-2026-10-09
+```
+
+Then `uv run --project backend --env-file backend/.env python scripts/evals/search/history.py --since 2026-10-09`
+for the history rows. The printed tables and the per-scope numbers are in § Live check
+below.
 
 ## Diff summary
 
-_completed at step 6; the flagged deviations are collected here as they arise_
+Commits on `task/051-improve-production-search-screen`, after the design-phase commit
+`5d5c044` (tagged `search-round-loop-last`): `aa75445` probes and fixtures (0b, 0c) ·
+`f966b0a` pool module (1) · `04f57cd` transport verbs (2) · `651bb5f` app text (6) ·
+`33e0c3f` adaptive screening (4) · `dada7b5` single pass and loop deletion (3a, 3b) ·
+`59baace` eval checks (5) · `3707651` ADR, spec, deferred, tutorial (7) · the step-6
+commit (8).
+
+**What changed, in one read.** The search is one pass at every scope
+(`search_loop.run_search`: a small `_Pass` state object and two legs, OpenAlex and
+Overton, in named steps), ranking in the new pure module `pool.py`, the four new
+transport verbs in `search_live.py`, and a pool hand-off into `acquire_sources` (two
+ranked lists, two caps, the count invariant kept). The round loop, its arms, its stop
+rule and the runner's round gate are gone; the reformulate and suggest prompt pieces
+stay. Stage-1 screening is the adaptive vote (`screen.decide_stage1`) on Luna with
+`screen_v4`; query generation is on Luna with the prompt unchanged and a 1,300-character
+query cap. The app's scope hint and the planner prompt carry two caps per scope. The eval
+checks run the single pass with screening at every depth. ADR 0038, the spec sections,
+the deferred entries and the tutorial page describe the build.
+
+**Deleted code and tests, with the replacing tests** (rubric 13): see § Checks beyond
+the build, Phases 3a and 3b. No test was skipped or weakened; the deleted tests pinned
+the deleted loop, and each invariant they carried (one coverage record per run,
+`completed`, no screening rows from acquire, the fan-out events, the zero-result
+fallback, the per-call page size, guidance provenance) has a named test in
+`test_search_single_pass.py` or `test_search_single_pass_runner.py`.
+
+_The flagged deviations are collected here as they arise:_
 
 **Flagged deviations (minor, resolved within the contract's vocabulary):**
 
@@ -224,6 +283,14 @@ _filled at step 7_
 
 ## Public safety
 
+Nothing in this record, the fixtures or the probe excerpts carries a key, an abstract,
+a snippet, a document URL or a trace. The probe excerpts hold ids, titles, scores,
+dates and counts; the pool fixture holds OpenAlex ids, DOIs, titles, dates, counts and
+reference ids; the policy replay fixtures hold Overton ids, titles, dates, scores,
+counts, source names and cited ids. The eval caches and the Langfuse traces stay
+private (git-ignored, self-hosted). The live-check tables below carry recall, counts,
+cost and wall clock only.
+
 ## Owner decision on D13 (raised and answered 2026-10-09)
 
 **Decided by the owner in chat, 2026-10-09:** apply any filter the semantic endpoint
@@ -263,7 +330,35 @@ Phases 1, 2, 4, 5 and 6 do not depend on this decision; Phase 3a does.
 
 ## Review handoff (step-7/8 inputs)
 
+- **Executor provenance (for the family flip):** Codex wrote `pool.py` (Phase 1), the
+  transport verbs and doubles (Phase 2), the adaptive vote (Phase 4); the lead reviewed
+  each. Phase 3a: Codex twice partial, the lead rewrote `run_search`, deleted the loop
+  (3b) and wrote the tests; Phase 5 lead; Phase 6 fast-worker (frontend) and lead
+  (prompt); Phases 0, 7, 8 lead. The lead's own code (search_loop.py, the new tests,
+  engine.py) has had no independent review yet: the review stack should weight it.
+- **Adjudication items:** the deviations listed under § Diff summary; the D13 amendment
+  (owner-approved in chat, recorded in the contract's status line); the tutorial page's
+  measured table (filled from the live check).
 - **Knowledge candidates:**
+  - Codex in its sandbox cannot start `uv` (its cache sits outside the sandbox) and
+    cannot reach the local Postgres: every Codex brief that needs database tests must
+    say so and the lead runs them; and Codex will run `ruff format` over the whole tree
+    unless told the exact files (one round reformatted about 170 unrelated files).
+  - A fixture backend returns the same record objects on every call
+    (`functools.cache`); any bookkeeping by `id(record)` must copy what a backend
+    returns.
+  - Postgres JSONB reorders dictionary keys (by length, then name) on the way back; a
+    test that prints a dict diff against a JSONB column sees a different key order, not
+    a different value.
+  - `test_sweep_cap_overrides` mutates `DEPTH_CONSTANTS["rapid"]` for the rest of the
+    eval test process; later tests must read the live constants, not the committed
+    numbers.
+  - `TaskPlan` refuses `analysis_depth="standard"` with the default full component set
+    (`extract`, `group` are deep-only); runner tests should vary `search_effort` only.
+  - The agent's triage model borrowed `SCREEN_MODEL`; a model pin on one surface can
+    move another. Give each surface its own literal.
+  - The coverage record's `post_filter_exclusions` lists every locally filtered call,
+    zeros included; readers should not take its length as "something was excluded".
   - OpenAlex `search.semantic` rejects the date-range, SDG, paratext, OA-status and
     country filters and accepts `type`, `language`, `is_retracted` and
     `publication_year` (probe 2026-10-09). A date directive on the semantic leg needs a

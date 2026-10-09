@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import _bootstrap  # noqa: F401
 
+import threading
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -203,6 +204,13 @@ class _RecordingBackend:
         self._inner = inner
         self._calls = calls
         self._langfuse_client = langfuse_client
+        # The search's legs and seed calls run concurrently (task 051); the
+        # list is a diagnostic log in completion order, appended under a lock.
+        self._lock = threading.Lock()
+
+    def _log(self, entry: dict[str, Any]) -> None:
+        with self._lock:
+            self._calls.append(entry)
 
     @property
     def name(self) -> str:
@@ -262,7 +270,7 @@ class _RecordingBackend:
         try:
             records = call()
         except Exception as exc:
-            self._calls.append(
+            self._log(
                 {
                     "backend": self._inner.name,
                     "method": method,
@@ -274,7 +282,7 @@ class _RecordingBackend:
                 }
             )
             raise
-        self._calls.append(
+        self._log(
             {
                 "backend": self._inner.name,
                 "method": method,

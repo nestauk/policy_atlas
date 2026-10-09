@@ -193,6 +193,39 @@ def test_semantic_retry_and_interval(monkeypatch: pytest.MonkeyPatch) -> None:
     assert any(wait >= 1.0 for wait in sleeps)
 
 
+def test_pacing_admits_concurrent_requests_one_interval_apart(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Paced admission (task 051, plan S13): threads calling one backend at once
+    are admitted (the last-request stamp taken) no closer than the interval,
+    and every request is counted."""
+    import threading
+
+    monkeypatch.setenv("POLICY_ATLAS_SEARCH_CACHE_TTL_S", "0")
+    stamps: list[float] = []
+
+    class Stamping(OpenAlexLiveBackend):
+        _min_interval_s = 0.05
+
+        def _wait_rate_limit(self, *, min_interval_s: float | None = None) -> None:
+            super()._wait_rate_limit(min_interval_s=min_interval_s)
+            # Still inside the pacing lock: the stamp is this admission's.
+            assert self._last_request_at is not None
+            stamps.append(self._last_request_at)
+
+    backend = Stamping("openalex-test-key", fetch=CapturingFetch())
+    threads = [threading.Thread(target=backend.search, args=(f"q{i}",)) for i in range(6)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(timeout=10)
+
+    assert len(stamps) == 6
+    assert backend.http_calls == 6
+    gaps = [b - a for a, b in zip(stamps, stamps[1:], strict=False)]
+    assert all(gap >= 0.05 - 1e-3 for gap in gaps), gaps
+
+
 def test_new_transport_calls_redact_keys_and_urls() -> None:
     def fail(_url: str, _params: dict[str, str]) -> dict[str, Any]:
         raise search_live.SearchTransportError(400, "secret.example")

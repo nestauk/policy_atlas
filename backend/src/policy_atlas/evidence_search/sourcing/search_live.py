@@ -190,6 +190,11 @@ class _TransportMixin:
     def _init_transport(self, fetch: _Fetch | None) -> None:
         self.http_calls = 0
         self._last_request_at: float | None = None
+        # Paced admission (task 051, plan S13): one thread at a time sleeps
+        # and stamps the last request time, so concurrent callers never send
+        # two requests closer than the interval; the request itself runs
+        # outside the lock so requests overlap in flight.
+        self._pace_lock = threading.Lock()
         if fetch is None:
             self._client = httpx.Client(
                 timeout=httpx.Timeout(HTTP_TIMEOUT_S),
@@ -252,8 +257,9 @@ class _TransportMixin:
 
         attempts = 0
         while True:
-            self._wait_rate_limit(min_interval_s=min_interval_s)
-            self.http_calls += 1
+            with self._pace_lock:
+                self._wait_rate_limit(min_interval_s=min_interval_s)
+                self.http_calls += 1
             try:
                 data = self._fetch(url, dict(params))
             except Exception as exc:

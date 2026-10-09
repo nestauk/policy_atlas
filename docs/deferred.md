@@ -2550,6 +2550,18 @@ sent; found in task 049), now `sort=relevance` on every search, protected.
   records with no native and no translated title; a record whose title is a placeholder
   string ("Untitled", a file name) is kept and screened on that string. Decide whether
   to drop, keep or label them once a run shows how many there are.
+- **Run the two search legs, and the OpenAlex calls, in parallel — DISCHARGED (task 051 Phase 3c, 2026-10-09, owner's call the same day).** Built as plan S13: the legs side by side, the seed and resolve calls concurrent, paced admission under a per-backend lock, calls recorded in plan order. The original entry:
+  The live check measured a Focused search at about 2.5 minutes per review: the Overton
+  leg is 24 paced requests (about 30 s at 1.2 s each) and the OpenAlex leg 37 sequential
+  requests at 1 to 2 s of network time each (60 to 90 s); the screen of 150 documents
+  takes about 10 s. The legs are independent until the pools are ranked, and the 15
+  keyword and 8 semantic calls are independent of each other, so the search could run
+  in about 45 s. Needs: a lock on each backend's pacing (`_last_request_at` is not
+  thread-safe), a lock on the pass state that records calls, Langfuse context
+  propagation into the threads (`tracing.submit_with_context`), and the call-order
+  assertions in `test_search_single_pass.py` turned into set assertions; the
+  `search.executed` events would interleave the two backends. Measure with the recall
+  script's wall-clock column before and after.
 - **`source_country` as a plan option (D18, ⏸).** The directive
   `source_country_post_filter` exists and is applied to the searches and the landmarks;
   exposing it on the plan document is a plan-vocabulary change, not a search change.
