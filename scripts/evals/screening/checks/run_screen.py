@@ -5,10 +5,9 @@ call order, concurrency and retries as the app. Only the model, the number of
 calls per document and an optional reasoning effort can change, in this
 process only (``use_settings``).
 
-Default is the ``mini`` dataset (about 300 documents over all 30 questions),
-three replies per document, model ``SCREEN_MODEL`` (currently gpt-5.4-mini):
-the production setting. That spends money. A cheaper comparison is
-``--reps 1`` or ``--model gpt-5.6-luna``. ``--dataset full`` (about 3,000
+Default is the ``mini`` dataset (about 300 documents over all 30 questions)
+using production's adaptive vote and model. ``--vote majority --reps N`` runs
+the historical fixed-repetition experiment. ``--dataset full`` (about 3,000
 documents) is for a setting that already looks good on ``mini``.
 
     uv run --project backend --env-file backend/.env \\
@@ -27,8 +26,10 @@ import hashlib
 import json
 import logging
 import uuid
+from concurrent.futures import Future, ThreadPoolExecutor, wait
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 import _bootstrap  # noqa: F401
 import pandas as pd
@@ -37,12 +38,19 @@ import policy_atlas.evidence_search.assess.screen_prompt as product_prompt
 import policy_atlas.evidence_search.assess.screening_backend as product_backend
 from adapter import MISSING_ABSTRACT, SIZES, dataset_manifest, load_and_adapt_dataset
 from metrics import PRICE_AS_OF, PRICE_PER_MILLION, calculate_metrics, cost_usd
+from policy_atlas.core import tracing
+from policy_atlas.core.openai_client import CallBudget
 from policy_atlas.core.usage import UsageAccumulator
-from policy_atlas.evidence_search.assess.screen import _run_stage1_reps, _Stage1Doc
+from policy_atlas.evidence_search.assess.screen import (
+    MAX_CONCURRENT_STAGE1,
+    SCREEN_RETRY_CAP,
+    _RepOutcome,
+    _Stage1Doc,
+    _run_stage1_calls,
+)
 from policy_atlas.evidence_search.assess.screen_prompt import (
     SCREEN_MODEL,
     SCREEN_PROMPT_VERSION,
-    SCREEN_REPS,
     ScreenEnvelopePayload,
 )
 from policy_atlas.evidence_search.assess.screening_backend import (
@@ -50,7 +58,7 @@ from policy_atlas.evidence_search.assess.screening_backend import (
     ScreeningBackend,
 )
 from targets import TARGETS_JSON, select_targets
-from vote import combine_reps
+from vote import combine_adaptive, combine_reps
 
 logger = logging.getLogger(__name__)
 
@@ -85,17 +93,16 @@ def abstract_for_prompt(value: object) -> str | None:
 _PRODUCTION = {
     "prompt": product_prompt.SCREEN_SYSTEM_PROMPT,
     "model": product_backend.SCREEN_MODEL,
-    "reps": product_screen.SCREEN_REPS,
     "parse": product_backend.parse_structured,
 }
 
 
 def use_settings(
-    *, model: str, reps: int, effort: str | None, system_prompt: Path | None = None
+    *, model: str, effort: str | None, system_prompt: Path | None = None
 ) -> str:
     """Point the production screen at the eval's settings, in this process only.
 
-    The eval calls the production stage-1 code (``_run_stage1_reps`` and
+    The eval calls the production stage-1 code (``_run_stage1_calls`` and
     ``OpenAIScreeningBackend``), so call order, concurrency, retries and the
     prompt are the app's. Only the model, the number of calls per document, an
     optional reasoning effort and an optional system prompt change, by resetting
@@ -104,13 +111,12 @@ def use_settings(
 
     Args:
         model: OpenAI model id.
-        reps: Calls per document.
         effort: Optional ``reasoning_effort``. None leaves the call as in production.
         system_prompt: Optional file holding a replacement stage-1 system
-            prompt. None keeps the production ``screen_v2`` text.
+            prompt. None keeps the production ``screen_v4`` text.
 
     Returns:
-        A label for the system prompt used: ``screen_v2`` or the file name plus
+        A label for the system prompt used: ``screen_v4`` or the file name plus
         the first 12 characters of its SHA-256 hash.
     """
     label = SCREEN_PROMPT_VERSION
@@ -121,13 +127,83 @@ def use_settings(
         digest = hashlib.sha256(text.encode("utf-8")).hexdigest()[:12]
         label = f"{system_prompt.stem}@{digest}"
     product_backend.SCREEN_MODEL = model
-    product_screen.SCREEN_REPS = reps
     product_backend.parse_structured = _PRODUCTION["parse"]
     if effort is not None:
         product_backend.parse_structured = functools.partial(
             _PRODUCTION["parse"], reasoning_effort=effort
         )
     return label
+
+
+def _run_fixed_reps(
+    docs: list[_Stage1Doc], *, reps: int, backend: ScreeningBackend
+) -> tuple[dict[int, list[_RepOutcome]], int, dict[str, int]]:
+    """Run eval-only historical fixed repetitions with production retry mechanics."""
+    tasks = [
+        (doc_index, rep_index)
+        for doc_index in range(len(docs))
+        for rep_index in range(reps)
+    ]
+    budget = CallBudget(maximum=len(tasks) * (1 + SCREEN_RETRY_CAP))
+    results: dict[tuple[int, int], Any] = {}
+    errors: dict[tuple[int, int], Exception] = {}
+    usage = UsageAccumulator()
+    with ThreadPoolExecutor(max_workers=MAX_CONCURRENT_STAGE1) as executor:
+        submitted: list[tuple[tuple[int, int], Future[Any]]] = []
+        for key in tasks:
+            if not budget.reserve():
+                errors[key] = RuntimeError("call budget exhausted")
+                continue
+            doc_index, rep_index = key
+            submitted.append(
+                (
+                    key,
+                    tracing.submit_with_context(
+                        executor,
+                        backend.screen_envelope,
+                        docs[doc_index].payload,
+                        rep_index=rep_index,
+                    ),
+                )
+            )
+        wait([future for _, future in submitted])
+        for key, future in submitted:
+            try:
+                reply, call_usage = future.result()
+                results[key] = reply
+                usage.add(call_usage)
+            except Exception as exc:  # noqa: BLE001
+                errors[key] = exc
+    retries = 0
+    for key in list(errors):
+        if not budget.reserve():
+            continue
+        retries += 1
+        doc_index, rep_index = key
+        try:
+            reply, call_usage = backend.screen_envelope(
+                docs[doc_index].payload, rep_index=rep_index
+            )
+            results[key] = reply
+            usage.add(call_usage)
+        except Exception as exc:  # noqa: BLE001
+            errors[key] = exc
+        else:
+            del errors[key]
+    return (
+        {
+            doc_index: [
+                _RepOutcome(rep=results[key])
+                if key in results
+                else _RepOutcome(error_type=type(errors[key]).__name__)
+                for rep_index in range(reps)
+                for key in [(doc_index, rep_index)]
+            ]
+            for doc_index in range(len(docs))
+        },
+        retries,
+        usage.payload(),
+    )
 
 
 def _stage1_doc(index: int, row: pd.Series, intent: str) -> _Stage1Doc:
@@ -161,6 +237,7 @@ def screen_frame(
     *,
     backend: ScreeningBackend,
     intent: str,
+    vote: str,
     reps: int,
 ) -> tuple[pd.DataFrame, dict[str, int], int]:
     """Screen every row the way one production stage-1 batch does.
@@ -169,7 +246,8 @@ def screen_frame(
         frame: The adapted table for one target.
         backend: The production OpenAI screening backend (the stub in tests).
         intent: The target question.
-        reps: Calls per document, as set by ``use_settings``.
+        vote: ``adaptive`` for production's rule or ``majority`` for historical experiments.
+        reps: Independent calls per document for majority mode.
 
     Returns:
         The input columns plus the screen columns, in the original row order;
@@ -177,15 +255,26 @@ def screen_frame(
     """
     frame = frame.reset_index(drop=True)
     docs = [_stage1_doc(index, row, intent) for index, row in frame.iterrows()]
-    logger.info("Screening %s documents x %s calls", len(docs), reps)
-    outcomes_by_doc, retries, usage = _run_stage1_reps(docs, screening_backend=backend)
+    logger.info("Screening %s documents with %s vote", len(docs), vote)
+    if vote == "adaptive":
+        outcomes_by_doc, retries, usage = _run_stage1_calls(
+            docs, screening_backend=backend
+        )
+    elif vote == "majority":
+        outcomes_by_doc, retries, usage = _run_fixed_reps(
+            docs, reps=reps, backend=backend
+        )
+    else:
+        raise ValueError(f"unknown vote mode: {vote}")
 
     rows: list[dict] = []
     for index, doc in enumerate(docs):
         outcomes = outcomes_by_doc[index]
         parsed = [outcome.rep for outcome in outcomes if outcome.rep is not None]
-        decision = combine_reps(
-            parsed, reps_requested=reps, title_only=doc.basis == "title_only"
+        decision = (
+            combine_adaptive([outcome.rep for outcome in outcomes])
+            if vote == "adaptive"
+            else combine_reps(parsed, reps_requested=reps, title_only=False)
         )
         counts = {"relevant": 0, "not_relevant": 0, "unsure": 0}
         for rep in parsed:
@@ -249,6 +338,7 @@ def target_intent(target: dict, *, with_criteria: bool) -> str:
 def _run_name(
     dataset: str,
     model: str,
+    vote: str,
     reps: int,
     effort: str | None,
     prompt: Path | None,
@@ -256,7 +346,7 @@ def _run_name(
 ) -> str:
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     slug = model.replace("/", "-")
-    name = f"{stamp}-{dataset}-{slug}-r{reps}"
+    name = f"{stamp}-{dataset}-{slug}-{vote}-r{reps}"
     if effort:
         name += f"-e{effort}"
     if prompt is not None:
@@ -281,12 +371,17 @@ def run(args: argparse.Namespace) -> Path:
     targets = select_targets(args.targets)
     effort = args.reasoning_effort
     output = RUNS / _run_name(
-        args.dataset, args.model, args.reps, effort, args.system_prompt, args.criteria
+        args.dataset,
+        args.model,
+        args.vote,
+        args.reps,
+        effort,
+        args.system_prompt,
+        args.criteria,
     )
     output.mkdir(parents=True, exist_ok=True)
     prompt_label = use_settings(
         model=args.model,
-        reps=args.reps,
         effort=effort,
         system_prompt=args.system_prompt,
     )
@@ -312,6 +407,7 @@ def run(args: argparse.Namespace) -> Path:
             frame,
             backend=backend,
             intent=target_intent(target, with_criteria=args.criteria),
+            vote=args.vote,
             reps=args.reps,
         )
         run_usage.add_payload(usage)
@@ -348,6 +444,7 @@ def run(args: argparse.Namespace) -> Path:
         "dataset_files": dataset_manifest(),
         "targets_selected": args.targets or "all",
         "model": args.model,
+        "vote": args.vote,
         "reps": args.reps,
         "reasoning_effort": effort,
         "prompt_version": SCREEN_PROMPT_VERSION,
@@ -403,10 +500,16 @@ def parse_args() -> argparse.Namespace:
         help=f"OpenAI model (default: the product screen, {SCREEN_MODEL})",
     )
     parser.add_argument(
+        "--vote",
+        choices=("majority", "adaptive"),
+        default="adaptive",
+        help="Vote rule: adaptive production rule (default) or historical majority.",
+    )
+    parser.add_argument(
         "--reps",
         type=int,
-        default=SCREEN_REPS,
-        help=f"Independent replies per document (default: {SCREEN_REPS}, the product setting)",
+        default=3,
+        help="Independent replies per document for --vote majority (ignored for adaptive).",
     )
     parser.add_argument(
         "--criteria",
@@ -420,7 +523,7 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         default=None,
         help="File with a replacement stage-1 system prompt, for a prompt experiment "
-        "(see prompts/). Default: the production screen_v2 prompt.",
+        "(see prompts/). Default: the production screen_v4 prompt.",
     )
     parser.add_argument(
         "--reasoning-effort",
@@ -442,6 +545,8 @@ def parse_args() -> argparse.Namespace:
     args = parser.parse_args()
     if args.reps < 1:
         parser.error("--reps must be at least 1")
+    if args.vote == "adaptive" and args.reps != 3:
+        logger.info("--reps is ignored for adaptive voting")
     return args
 
 

@@ -27,8 +27,6 @@ from policy_atlas.core.usage import UsageAccumulator
 from policy_atlas.core.windowing import greedy_windows
 from policy_atlas.evidence_search.assess.screen_prompt import (
     SCREEN_INTENT_MAX,
-    SCREEN_QUORUM,
-    SCREEN_REPS,
     STAGE2_REPS,
     STAGE2_WINDOW_CHAR_BUDGET,
     ScreenEnvelopePayload,
@@ -108,6 +106,15 @@ class _RepOutcome:
 
 
 @dataclass(frozen=True)
+class Stage1Decision:
+    """The adaptive stage-1 screening decision."""
+
+    status: Literal["relevant", "not_relevant", "failed"]
+    confidence: float | None
+    flags: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class _Stage1Doc:
     tss_id: uuid.UUID
     source_snapshot_id: uuid.UUID
@@ -161,36 +168,26 @@ def effective_screen_rows(*, run_ids: set[uuid.UUID] | None = None) -> Subquery:
         A SQLAlchemy subquery exposing all ``source_screening_result`` columns
         for the effective row.
     """
-    ranked_query = (
-        sa_select(
-            source_screening_result,
-            func.row_number()
-            .over(
-                partition_by=(
-                    source_screening_result.c.evidence_scope_id,
-                    source_screening_result.c.task_source_snapshot_id,
-                ),
-                order_by=(
-                    source_screening_result.c.screen_generation.desc(),
-                    source_screening_result.c.screen_stage.desc(),
-                ),
-            )
-            .label("_screen_rank"),
+    ranked_query = sa_select(
+        source_screening_result,
+        func.row_number()
+        .over(
+            partition_by=(
+                source_screening_result.c.evidence_scope_id,
+                source_screening_result.c.task_source_snapshot_id,
+            ),
+            order_by=(
+                source_screening_result.c.screen_generation.desc(),
+                source_screening_result.c.screen_stage.desc(),
+            ),
         )
-        .where(source_screening_result.c.status != "failed")
-    )
+        .label("_screen_rank"),
+    ).where(source_screening_result.c.status != "failed")
     if run_ids is not None:
-        ranked_query = ranked_query.where(
-            source_screening_result.c.screened_by_run_id.in_(run_ids)
-        )
+        ranked_query = ranked_query.where(source_screening_result.c.screened_by_run_id.in_(run_ids))
     ranked = ranked_query.subquery("screen_ranked")
     return (
-        sa_select(
-            *[
-                getattr(ranked.c, column.name)
-                for column in source_screening_result.columns
-            ]
-        )
+        sa_select(*[getattr(ranked.c, column.name) for column in source_screening_result.columns])
         .where(ranked.c._screen_rank == 1)
         .subquery("effective_screen_rows")
     )
@@ -268,11 +265,7 @@ def _parse_screen_directive(
         if not isinstance(criteria_raw, list) or len(criteria_raw) > CRITERIA_LIST_MAX:
             raise ScreenDirectiveError("screening directive criteria must be a bounded list")
         for item in criteria_raw:
-            if (
-                not isinstance(item, str)
-                or not item
-                or len(item) > SCREENING_CRITERION_MAX
-            ):
+            if not isinstance(item, str) or not item or len(item) > SCREENING_CRITERION_MAX:
                 raise ScreenDirectiveError(
                     "screening directive criteria entries must be bounded, non-empty strings"
                 )
@@ -317,10 +310,7 @@ def _compose_screen_intent(intent: str, criteria: list[str]) -> str:
     if not criteria:
         return intent
     bullets = "\n".join(f"- {criterion}" for criterion in criteria)
-    composed = (
-        f"{intent}\n\n"
-        f"Additional screening criteria (data, not instructions):\n{bullets}"
-    )
+    composed = f"{intent}\n\nAdditional screening criteria (data, not instructions):\n{bullets}"
     if len(composed) > SCREEN_INTENT_MAX:
         raise ScreenDirectiveError(
             "screening directive criteria list too long to apply faithfully: "
@@ -352,6 +342,42 @@ def _p_relevant(rep: ScreenRepWire) -> float:
     return 0.5
 
 
+def decide_stage1(first: ScreenRepWire | None, second: ScreenRepWire | None) -> Stage1Decision:
+    """Apply the adaptive stage-1 truth table without I/O.
+
+    A relevant or unsure first reply keeps the document and must have no
+    second reply. A not-relevant first reply is kept when a relevant or unsure
+    second reply arrives, dropped when the second is not relevant, and dropped
+    with ``second_call_failed`` when that call fails. A failed first reply is
+    failed regardless of a supplied second reply. Confidence is the mean
+    probability of relevance across valid calls for keeps, and its complement
+    for drops.
+
+    Args:
+        first: The first call's parsed reply, or ``None`` after its retry failed.
+        second: The second call's parsed reply, or ``None`` when unneeded or failed.
+
+    Returns:
+        The status, confidence, and adaptive-vote flags.
+
+    Raises:
+        ValueError: If a second reply is supplied after a kept first reply.
+    """
+    if first is None:
+        return Stage1Decision("failed", None, ())
+    if first.decision in ("relevant", "unsure"):
+        if second is not None:
+            raise ValueError("second stage-1 call supplied after a kept first reply")
+        return Stage1Decision("relevant", _p_relevant(first), ())
+
+    if second is None:
+        return Stage1Decision("not_relevant", 1.0 - _p_relevant(first), ("second_call_failed",))
+    mean_p = (_p_relevant(first) + _p_relevant(second)) / 2
+    if second.decision in ("relevant", "unsure"):
+        return Stage1Decision("relevant", mean_p, ("second_call_kept",))
+    return Stage1Decision("not_relevant", 1.0 - mean_p, ())
+
+
 def _next_screen_generation(conn: Connection, *, scope_id: uuid.UUID) -> int:
     """Generation for a re-screen's fresh rows: ``max over the scope's rows + 1``.
 
@@ -361,9 +387,9 @@ def _next_screen_generation(conn: Connection, *, scope_id: uuid.UUID) -> int:
     first re-screen writes at generation 1.
     """
     current = conn.execute(
-        sa_select(
-            func.coalesce(func.max(source_screening_result.c.screen_generation), 0)
-        ).where(source_screening_result.c.evidence_scope_id == scope_id)
+        sa_select(func.coalesce(func.max(source_screening_result.c.screen_generation), 0)).where(
+            source_screening_result.c.evidence_scope_id == scope_id
+        )
     ).scalar_one()
     return int(current) + 1
 
@@ -452,8 +478,7 @@ def _load_stage1_docs(
         )
         .join(
             source_snapshot,
-            task_source_snapshot.c.source_snapshot_id
-            == source_snapshot.c.source_snapshot_id,
+            task_source_snapshot.c.source_snapshot_id == source_snapshot.c.source_snapshot_id,
         )
         .where(task_source_snapshot.c.task_id == task_id)
     )
@@ -472,9 +497,7 @@ def _load_stage1_docs(
                 & (source_screening_result.c.screen_stage == 1)
             )
         )
-    rows = conn.execute(
-        query.order_by(task_source_snapshot.c.ingested_at)
-    ).fetchall()
+    rows = conn.execute(query.order_by(task_source_snapshot.c.ingested_at)).fetchall()
 
     docs: list[_Stage1Doc] = []
     for row in rows:
@@ -500,83 +523,92 @@ def _load_stage1_docs(
     return docs
 
 
-def _run_stage1_reps(
+def _run_stage1_calls(
     docs: list[_Stage1Doc],
     *,
     screening_backend: ScreeningBackend,
 ) -> tuple[dict[int, list[_RepOutcome]], int, dict[str, int]]:
-    tasks: list[tuple[int, int]] = [
-        (doc_index, rep_index)
-        for doc_index in range(len(docs))
-        for rep_index in range(SCREEN_REPS)
-    ]
-    baseline = len(tasks)
-    budget = _CallBudget(maximum=baseline * (1 + SCREEN_RETRY_CAP))
-    log.info("screen.call_budget", stage=1, baseline=baseline, maximum=budget.maximum)
-
+    baseline = len(docs)
+    budget = _CallBudget(maximum=2 * len(docs) * (1 + SCREEN_RETRY_CAP))
     results: dict[tuple[int, int], ScreenRepWire] = {}
     errors: dict[tuple[int, int], Exception] = {}
     usage_totals = UsageAccumulator()
 
-    with ThreadPoolExecutor(max_workers=MAX_CONCURRENT_STAGE1) as executor:
+    def run_batch(tasks: list[tuple[int, int]]) -> None:
+        batch_errors: dict[tuple[int, int], Exception] = {}
         submitted: list[tuple[tuple[int, int], Future[Any]]] = []
-        for key in tasks:
-            if not budget.reserve():
-                errors[key] = RuntimeError("call budget exhausted")
-                continue
-            doc_index, rep_index = key
-            submitted.append(
-                (
-                    key,
-                    tracing.submit_with_context(
-                        executor,
-                        screening_backend.screen_envelope,
-                        docs[doc_index].payload,
-                        rep_index=rep_index,
-                    ),
+        with ThreadPoolExecutor(max_workers=MAX_CONCURRENT_STAGE1) as executor:
+            for key in tasks:
+                if not budget.reserve():
+                    batch_errors[key] = RuntimeError("call budget exhausted")
+                    continue
+                doc_index, rep_index = key
+                submitted.append(
+                    (
+                        key,
+                        tracing.submit_with_context(
+                            executor,
+                            screening_backend.screen_envelope,
+                            docs[doc_index].payload,
+                            rep_index=rep_index,
+                        ),
+                    )
                 )
-            )
-        wait([future for _, future in submitted])
+            wait([future for _, future in submitted])
         for key, future in submitted:
             try:
                 rep, usage = future.result()
                 results[key] = rep
                 usage_totals.add(usage)
             except Exception as exc:  # noqa: BLE001 - reduced to type name in events
-                errors[key] = exc
+                batch_errors[key] = exc
 
-    retry_count = 0
-    for key in list(errors):
-        if not budget.reserve():
-            continue
-        retry_count += 1
-        doc_index, rep_index = key
-        try:
-            rep, usage = screening_backend.screen_envelope(
-                docs[doc_index].payload, rep_index=rep_index
-            )
-            results[key] = rep
-            usage_totals.add(usage)
-        except Exception as exc:  # noqa: BLE001
-            errors[key] = exc
-        else:
-            del errors[key]
+        for key in list(batch_errors):
+            if not budget.reserve():
+                continue
+            retry_count[0] += 1
+            doc_index, rep_index = key
+            try:
+                rep, usage = screening_backend.screen_envelope(
+                    docs[doc_index].payload, rep_index=rep_index
+                )
+                results[key] = rep
+                usage_totals.add(usage)
+            except Exception as exc:  # noqa: BLE001
+                batch_errors[key] = exc
+            else:
+                del batch_errors[key]
+        errors.update(batch_errors)
 
-    by_doc: dict[int, list[_RepOutcome]] = {
-        doc_index: [] for doc_index in range(len(docs))
-    }
+    retry_count = [0]
+    run_batch([(doc_index, 0) for doc_index in range(len(docs))])
+    second_tasks = [
+        (doc_index, 1)
+        for doc_index in range(len(docs))
+        if (first := results.get((doc_index, 0))) is not None and first.decision == "not_relevant"
+    ]
+    log.info(
+        "screen.call_budget",
+        stage=1,
+        baseline=baseline,
+        second_calls=len(second_tasks),
+        maximum=budget.maximum,
+    )
+    run_batch(second_tasks)
+
+    by_doc: dict[int, list[_RepOutcome]] = {doc_index: [] for doc_index in range(len(docs))}
     for doc_index in range(len(docs)):
-        for rep_index in range(SCREEN_REPS):
+        for rep_index in range(2):
             key = (doc_index, rep_index)
+            if rep_index == 1 and key not in results and key not in errors:
+                continue
             if key in results:
                 by_doc[doc_index].append(_RepOutcome(rep=results[key]))
             else:
                 # Every key missing from results has an errors entry by
                 # construction (budget denial or captured exception).
-                by_doc[doc_index].append(
-                    _RepOutcome(error_type=type(errors[key]).__name__)
-                )
-    return by_doc, retry_count, usage_totals.payload()
+                by_doc[doc_index].append(_RepOutcome(error_type=type(errors[key]).__name__))
+    return by_doc, retry_count[0], usage_totals.payload()
 
 
 def _exclude_retracted_docs(
@@ -660,9 +692,7 @@ def _run_stage1(
 ) -> dict[str, Any]:
     # Generation is fixed once per run: a re-screen writes the whole batch at
     # max+1; a normal run stays at the inert generation 0.
-    generation = (
-        _next_screen_generation(conn, scope_id=context.scope_id) if rescreen else 0
-    )
+    generation = _next_screen_generation(conn, scope_id=context.scope_id) if rescreen else 0
     all_docs = _load_stage1_docs(
         conn,
         task_id=task_id,
@@ -678,7 +708,7 @@ def _run_stage1(
         all_docs=all_docs,
         generation=generation,
     )
-    outcomes_by_doc, retries, usage_totals = _run_stage1_reps(
+    outcomes_by_doc, retries, usage_totals = _run_stage1_calls(
         docs, screening_backend=screening_backend
     )
     counts: dict[str, int] = {
@@ -690,9 +720,10 @@ def _run_stage1(
         "title_abstract": sum(1 for doc in retracted_docs if doc.basis == "title_abstract"),
         "title_only": sum(1 for doc in retracted_docs if doc.basis == "title_only"),
         "unsure_reps": 0,
-        "non_unanimous": 0,
         "rep_failures": 0,
-        "tie_broken": 0,
+        "second_calls": 0,
+        "second_call_kept": 0,
+        "second_call_failed": 0,
         "retries": retries,
     }
 
@@ -704,48 +735,21 @@ def _run_stage1(
         counts["rep_failures"] += failed_reps
         counts["unsure_reps"] += sum(1 for rep in survivors if rep.decision == "unsure")
 
-        if len(survivors) < SCREEN_QUORUM:
-            status: ScreenStatus = "failed"
-            basis: ScreenBasis | None = None
-            confidence: float | None = None
-            agreement = {"agreeing": 0, "survivors": len(survivors)}
-            flags: list[str] = []
-        else:
-            relevant_votes = sum(1 for rep in survivors if _vote_decision(rep) == "relevant")
-            not_relevant_votes = len(survivors) - relevant_votes
-            flags = []
-            if relevant_votes == not_relevant_votes:
-                status = "relevant"
-                flags.append("tie_broken")
-            elif relevant_votes > not_relevant_votes:
-                status = "relevant"
-            else:
-                status = "not_relevant"
-
-            # Rev 1.11: the veto needs an AFFIRMATIVE relevant dissent — a lone
-            # unsure against a not_relevant majority lowers confidence through
-            # the probability leg but no longer flips a consensus exclusion.
-            if (
-                doc.basis == "title_only"
-                and status == "not_relevant"
-                and any(rep.decision == "relevant" for rep in survivors)
-            ):
-                status = "relevant"
-                flags.append("title_only_unanimity_applied")
-
-            mean_p = sum(_p_relevant(rep) for rep in survivors) / len(survivors)
-            confidence = mean_p if status == "relevant" else 1.0 - mean_p
-            basis = doc.basis
-            agreement = {
-                "agreeing": sum(
-                    1 for rep in survivors if _vote_decision(rep) == status
-                ),
-                "survivors": len(survivors),
-            }
-            if agreement["agreeing"] < agreement["survivors"]:
-                counts["non_unanimous"] += 1
-            if "tie_broken" in flags:
-                counts["tie_broken"] += 1
+        first = outcomes[0].rep if outcomes else None
+        second = outcomes[1].rep if len(outcomes) > 1 else None
+        decision = decide_stage1(first, second)
+        status = decision.status
+        confidence = decision.confidence
+        basis: ScreenBasis | None = doc.basis if status != "failed" else None
+        flags = list(decision.flags)
+        agreement = {
+            "agreeing": sum(1 for rep in survivors if _vote_decision(rep) == status),
+            "survivors": len(survivors),
+        }
+        if len(outcomes) > 1:
+            counts["second_calls"] += 1
+        for flag in flags:
+            counts[flag] += 1
 
         _insert_screen_row(
             conn,
@@ -863,16 +867,12 @@ def _load_stage2_docs(
         )
         .join(
             effective,
-            (
-                effective.c.task_source_snapshot_id
-                == task_source_snapshot.c.task_source_snapshot_id
-            )
+            (effective.c.task_source_snapshot_id == task_source_snapshot.c.task_source_snapshot_id)
             & (effective.c.task_id == task_source_snapshot.c.task_id),
         )
         .join(
             source_snapshot,
-            task_source_snapshot.c.source_snapshot_id
-            == source_snapshot.c.source_snapshot_id,
+            task_source_snapshot.c.source_snapshot_id == source_snapshot.c.source_snapshot_id,
         )
         .where(task_source_snapshot.c.task_id == task_id)
         .where(effective.c.evidence_scope_id == scope_id)
@@ -898,10 +898,7 @@ def _load_stage2_docs(
                     )
                     & (source_screening_result.c.status != "failed")
                     & (source_screening_result.c.screen_stage == 2)
-                    & (
-                        source_screening_result.c.screen_generation
-                        == effective.c.screen_generation
-                    )
+                    & (source_screening_result.c.screen_generation == effective.c.screen_generation)
                 )
             )
         )
@@ -921,19 +918,12 @@ def _load_stage2_docs(
                 )
                 & (source_screening_result.c.status == "relevant")
                 & (source_screening_result.c.screen_stage == 1)
-                & (
-                    source_screening_result.c.screen_generation
-                    == effective.c.screen_generation
-                )
+                & (source_screening_result.c.screen_generation == effective.c.screen_generation)
             )
         )
-    rows = conn.execute(
-        query.order_by(task_source_snapshot.c.ingested_at)
-    ).fetchall()
+    rows = conn.execute(query.order_by(task_source_snapshot.c.ingested_at)).fetchall()
 
-    candidate_records: list[
-        tuple[uuid.UUID, uuid.UUID, uuid.UUID, dict[str, Any], int]
-    ] = []
+    candidate_records: list[tuple[uuid.UUID, uuid.UUID, uuid.UUID, dict[str, Any], int]] = []
     skipped_no_fulltext = 0
     for row in rows:
         envelope_snapshot_id = cast("uuid.UUID", row.source_snapshot_id)
@@ -960,10 +950,7 @@ def _load_stage2_docs(
         _assert_no_stage2_collision(
             conn,
             scope_id=scope_id,
-            candidates=[
-                (tss_id, generation)
-                for tss_id, _, _, _, generation in candidate_records
-            ],
+            candidates=[(tss_id, generation) for tss_id, _, _, _, generation in candidate_records],
         )
 
     # Per-snapshot cache: candidate docs occasionally share a chunk_snapshot_id
@@ -971,9 +958,7 @@ def _load_stage2_docs(
     # redundant prefix query for the same snapshot within one call.
     prefix_cache: dict[uuid.UUID, list[tuple[uuid.UUID, str]]] = {}
     docs: list[_Stage2Doc] = []
-    for tss_id, source_snapshot_id, chunk_snapshot_id, metadata, generation in (
-        candidate_records
-    ):
+    for tss_id, source_snapshot_id, chunk_snapshot_id, metadata, generation in candidate_records:
         if chunk_snapshot_id not in prefix_cache:
             prefix_cache[chunk_snapshot_id] = _load_stage2_chunk_prefix(
                 conn, chunk_snapshot_id=chunk_snapshot_id
@@ -1045,8 +1030,7 @@ def _stage2_payload(doc: _Stage2Doc, *, intent: str) -> ScreenFullTextPayload | 
         intent=intent,
         window_index=0,
         segments=[
-            {"segment_id": segment_id, "content": content}
-            for segment_id, content in first_window
+            {"segment_id": segment_id, "content": content} for segment_id, content in first_window
         ],
         metadata=doc.metadata,
     )
@@ -1110,9 +1094,7 @@ def _run_stage2_reps(
         else:
             # Every index missing from results has an errors entry by
             # construction (budget denial or captured exception).
-            outcomes[doc_index] = _RepOutcome(
-                error_type=type(errors[doc_index]).__name__
-            )
+            outcomes[doc_index] = _RepOutcome(error_type=type(errors[doc_index]).__name__)
     return outcomes, retry_count, usage_totals.payload()
 
 
@@ -1197,9 +1179,7 @@ def _run_stage2(
         else:
             status = "relevant"
             basis = "full_text"
-            confidence = (
-                0.5 if outcome.rep.decision == "unsure" else float(outcome.rep.confidence)
-            )
+            confidence = 0.5 if outcome.rep.decision == "unsure" else float(outcome.rep.confidence)
             agreement = {"agreeing": 1, "survivors": 1}
             counts["confirmed"] += 1
             if outcome.rep.decision == "unsure":

@@ -600,9 +600,10 @@ def acquire_sources(
             ``search`` fan-out, applied after the rank-interleaved merge and
             after dedup, so a capped round still yields a full cap of *new*
             documents. ``None`` means uncapped. This is the run's volume brake:
-            each persisted record costs an embedding here and ``SCREEN_REPS``
-            screening calls downstream. Targeted verbs (snowball, suggest) are
-            never trimmed — they carry their own call caps upstream.
+            each persisted record costs an embedding here and about 1.3
+            screening calls downstream (the adaptive stage-1 vote). Targeted
+            verbs (snowball, suggest) are never trimmed — they carry their own
+            call caps upstream.
 
     Returns:
         Counts dict: ``acquired``, ``already_acquired``, ``skipped_unusable``,

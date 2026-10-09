@@ -123,10 +123,10 @@ class DepthConstants(TypedDict):
     result_cap_per_backend: int
     # Documents acquired per backend per round, applied after merge and dedup
     # (see `acquire_sources`). This is the run's volume brake: every acquired
-    # record is embedded on acquisition and screened afterwards at SCREEN_REPS
-    # LLM calls each, so this number — not the per-call cap — is what bounds
-    # spend. Owner-set (2026-08-06): rapid 50 / standard 100 / deep 200, per
-    # backend per round.
+    # record is embedded on acquisition and screened afterwards at about 1.3
+    # LLM calls each (the adaptive stage-1 vote), so this number — not the
+    # per-call cap — is what bounds spend. Owner-set (2026-08-06): rapid 50 /
+    # standard 100 / deep 200, per backend per round.
     #
     # ponytail: sized from methodology, not measurement. The ground-truth
     # recall eval (scripts/evals/search/, other branch) is the instrument

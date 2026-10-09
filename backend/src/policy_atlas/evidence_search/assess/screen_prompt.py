@@ -1,12 +1,17 @@
-"""The ``screen_v2`` and ``screen_fulltext_v1`` prompts — the repo's 8th and
-10th product prompt surfaces (task 014, decisions 3 and 11; ``screen_v2`` is
+"""The ``screen_v4`` and ``screen_fulltext_v1`` prompts — the repo's 8th and
+10th product prompt surfaces (task 014, decisions 3 and 11; ``screen_v2`` was
 task 015's wire-compatible text edit — the stage-1 document record gains
-``title_source``, the Overton English-first-title provenance guard).
+``title_source``, the Overton English-first-title provenance guard;
+``screen_v4`` is task 051's edit, measured in the task 050 screening eval: a
+clearly different population excludes only when the intent names one, a
+partial match on another element is ``relevant`` or ``unsure``, and a
+criterion the abstract does not report never excludes).
 
-Lead-authored and versioned. Stage 1 (``screen_v2``) is the recall-oriented
-envelope screen: three-way wire vocabulary, consensus over ``SCREEN_REPS``
-independent samples, holistic-probability confidence (never V2's additive
-facet rubric — the root cause of its FP 0.880 ≈ TP 0.904 miscalibration).
+Lead-authored and versioned. Stage 1 (``screen_v4``) is the recall-oriented
+envelope screen: three-way wire vocabulary, an adaptive vote of one or two
+calls (``screen.decide_stage1``), holistic-probability confidence (never V2's
+additive facet rubric — the root cause of its FP 0.880 ≈ TP 0.904
+miscalibration).
 Stage 2 (``screen_fulltext_v1``) is the precision-oriented full-text
 confirmation pass: single rep, demote-only (enforced in code, never here).
 
@@ -29,16 +34,14 @@ from pydantic import BaseModel, ConfigDict, Field
 from policy_atlas.core.prompt_fields import sanitize_prompt_field
 from policy_atlas.evidence_search.extract.iof_records import SegmentRecord
 
-SCREEN_PROMPT_VERSION = "screen_v2"
+SCREEN_PROMPT_VERSION = "screen_v4"
 SCREEN_FULLTEXT_PROMPT_VERSION = "screen_fulltext_v1"
 
-# The contracted model floor (the 009 nano lesson is binding); consensus reps
-# add redundancy at stage 1, full text carries the signal at stage 2.
-SCREEN_MODEL = "gpt-5.4-mini"
+# Stage-1 model (task 051, contract D10): ``screen_v4`` was tuned on Luna and
+# measured there (0.917 recall on the labelled mini set); the adaptive vote in
+# ``screen.py`` adds the redundancy, full text carries the signal at stage 2.
+SCREEN_MODEL = "gpt-5.6-luna"
 
-# Consensus shape (contract decisions 3/10, plan-pinned).
-SCREEN_REPS = 3
-SCREEN_QUORUM = 2  # a decision needs >= 2 surviving reps, else the doc fails
 STAGE2_REPS = 1
 
 # First-window char budget over canonical chunks for the stage-2 payload
@@ -139,12 +142,31 @@ Decide as follows:
 - relevant: the document plausibly bears on the scope intent — its evidence,
   findings, or subject matter could inform it, even partially or indirectly.
 - not_relevant: the document clearly does not bear on the scope intent. Say
-  this only when the envelope gives positive grounds for exclusion — a
-  clearly different subject, population, or domain.
+  this only when the envelope gives positive grounds for exclusion — its
+  subject is clearly different from the scope intent's subject, or its
+  population is clearly different from a population the scope intent names.
 - unsure: the envelope cannot support a judgment either way. This is an
   honest, expected answer — prefer it over guessing an exclusion.
 
 Rules:
+- Population. If the scope intent names a population (in the intent itself or
+  in its screening criteria), a document about a clearly different population
+  is not_relevant. A related population is relevant or unsure: one that
+  overlaps with it, is a subgroup of it, or is a wider group that includes it.
+  For example, for an intent about young people out of work, a study of
+  unemployed adults aged 16 to 30 overlaps and is kept; a study of retired
+  people is clearly different. If the scope intent names no population, the
+  document's population is never a reason to exclude.
+- Other elements. A document that matches the scope intent's main subject but
+  differs in one other element — the setting, a variant of the intervention or
+  exposure, the outcome measured, or the study design — is relevant or unsure,
+  not not_relevant. A partial match can still inform the intent.
+- The scope intent may end with additional screening criteria. They describe
+  the whole review, and many of them can only be checked in the full text
+  (study design, comparison group, data source, follow-up length, language).
+  At this first pass, a criterion is grounds for not_relevant only when the
+  title or abstract clearly contradicts it. A criterion the envelope does not
+  report, or reports only vaguely, is never a reason to exclude.
 - A missing abstract is never evidence of irrelevance. If the title alone
   cannot support a judgment, answer unsure.
 - The abstract_source field tells you where the abstract text came from.
