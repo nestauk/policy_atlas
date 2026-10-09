@@ -2826,6 +2826,23 @@ Recorded by the task 046 amendment 3 build (`amendment-3-final.md` § 7.3; the r
   the next revision that changes `finding_reference_union` must freeze a copy in
   `f1b6d3a8c2e5` as `c7e2a9f4b1d8` now does.
 
+### Overton metadata faults seen by the amendment 4 survey (deferred 2026-10-09; owner: out of amendment 4)
+
+Recorded by the task 046 amendment 4 design survey (`research/amendment-4-design/README.md`).
+Both faults sit in the Evidence search ingest path shared by every capability, so the owner kept
+them out of a longlist amendment; they need a small fix of their own or an issue for the
+Evidence search owner.
+
+- **Overton's `published_on` becomes the document year.** On the obesity longlist 84 of 196
+  documents show 2026; across the dev DB 3,546 Overton snapshots carry `year` 2026 (154 OpenAlex
+  rows do too). For grey literature `published_on` is often Overton's own indexing date (a 2024/25
+  Slovenian annual report, a 2023 Spanish consultation, both dated 2026-02). The card's document
+  meta line and the Sources tab print it as the publication year. Fix belongs in the Overton
+  adapter: prefer a date from the document's own fields, and show no year rather than a wrong one.
+- **"[THIS TITLE IS BROKEN AND HAS BEEN REMOVED]" is Overton's placeholder title**, on 114
+  snapshots; one caregiving option lists it four times. Ingest should drop or flag such records
+  rather than let them reach the option card as documents.
+
 ## System-level cost and latency (deferred by task 046, R16; owner 2026-09-28)
 
 Cost changes that edit an Evidence search component are not made inside a capability slice.

@@ -1261,6 +1261,297 @@ Gate: `make verify-fast` · `make frontend-verify`. Commit.
 
 Gate: **full `make verify`**. Commit.
 
+## Amendment 4 (2026-10-09)
+
+Rulings R76–R91 are in [contract.md](contract.md) § Amendment 4; the
+reasons in ADR 0040 § Amendment 4. This section adds phases 24 to 31 and
+changes no phase above. The working record and the design pages are local
+(`amendment-4-proposed.md`; `evidence/amendment-4-design/`).
+
+> **Status:** written 2026-10-09 from the approved record; the seams
+> S29–S36 are **proposals for the lead to confirm at the plan gate**; none
+> is the owner's. The plan-stage adversarial review follows.
+
+Executor marks as for amendment 3: prompts and their loops are `lead`;
+judgement-bearing code is `deep-reasoner`; mechanical work is
+`fast-worker`; the card's and the list's final words and polish are
+`lead`, with the `impeccable` skill. Every loop follows § The loop and
+names **one stop measure**; the others are reported (R69). A prompt change
+that a code phase needs lands as round 0 of its loop in the same commit as
+that code.
+
+**Verify gates.** No schema revision. Full `make verify` at 24.0 and 31.
+Elsewhere `make verify-fast`, plus `make prompt-guard` at 26, 26L, 27, 28,
+29; `make drift-check` and `make openapi-sync` at 25 and 26; `make
+frontend-verify` at 25, 30a, 30c, 30b. A phase that removes an API field
+deletes, in the same commit, the frontend lines and fixtures that read it
+(`OptionCard.tsx`, `LonglistView.tsx`, `longlistFacets.ts`,
+`longlistPresentation.ts`, `mock/fixtures.ts`, `mock/api.ts`). One green
+commit per phase, and one per loop round that changes a prompt.
+
+### Decisions proposed here, amendment 4 (lead seam design, to confirm)
+
+Checked against the code at `45799a47`.
+
+S29. **The evidence signal fields** (R76, R85). *Where:* `_option_summary_fields`
+(`repository.py:3348`), which already serves `document_count` and
+`evaluated_count`, gains `evaluated_countries: list[str]` and
+`outcomes_evaluated: int`. *Countries:* from the per-document top level that
+`_option_documents` computes through `document_where` (`where_tried.py:99`),
+kept only for documents whose role is `evaluated`, "not stated" and
+"multiple countries" dropped; order: the country of the plan's Where first
+(`countries_named(where_text)` on the plan's Where, `where_tried.py:47`),
+then by evaluating-document count, then name. *Outcomes:* the count of
+`outcome_counts.by_outcome[]` entries with `evaluated ≥ 1`; the total is
+the plan's outcome count, which the card and the list already hold from the
+plan. *Cost:* the summary read already joins the documents for
+`document_count`; no new query. *Words:* one presentation function in
+`longlistPresentation.ts` builds the line from the three fields and the
+plan's outcome count, used by the card header and the row (one source of
+words).
+
+S30. **The document lines' record fields** (R81). *Where:* `_option_documents`
+(`repository.py:3993`) collapses one row per document; it gains, per
+document, the member records under the option (the same join
+`source_records_out` uses, `repository.py:2577`, restricted to the option),
+ordered by `OPTION_PROFILE_ROLE_ORDER` then `created_at`, and takes the
+first: `programme_name` (after the R88 fold), `tried_on_kind` (the record's
+`unit` through the stored `folds["tried_on"]` map, the record's own text
+when the map lacks it, as S21), `measured` (the plan outcome's text when
+`outcome_tag` names one; else the `outcome` through `folds["measures"]`),
+`place_detail` (the record's `study_geography` when it differs from the top
+level), `records_count`. *Model:* `OptionDocumentOut` gains the five fields,
+all optional. *The maps:* read once per option from
+`longlist_result.option_profile["folds"]` as the coverage builder does
+(S21). A linked-task document with no record under the option carries
+nulls (as its dossier slot shows findings, R67).
+
+S31. **The place-sentence call** (R80). *Where:* `option_profile`, after the
+folding calls have returned and the folded coverage keys are written, one
+call per option in the same pool (`OPTION_PROFILE_MAX_CONCURRENT`), on
+`LONGLIST_ASSIGNMENT_MODEL` (the mini model, `longlist_backend.py:130`).
+*Input builder (code):* for the option, the `evaluated` member documents
+grouped by their top-level place (`document_where`), places ordered as S29
+with "No single place" last holding "multiple countries" and "not stated";
+each document as `{id: "d1", programme_name, unit, tried_on_kind, setting,
+outcome, measured, study_geography, tier, evidence_type, year}`; the plan's
+outcomes in the plan's words; the option's name; the folded kinds of the
+list as the vocabulary. A place with more than 12 documents sends the first
+12 by role order then quality and a count (the reviews under "No single
+place" on a rich option). *Wire:* `PlaceSentencesWire{places: [{place_id,
+sentence: str(max_length=220)}]}`, `extra="forbid"`. *Run:* one retry; an
+invalid response after the retry leaves the option on template sentences,
+logged as the folding calls' failures are, and the step continues (unlike a
+folding failure, which fails the step: a card is still complete without
+generated sentences). *Trace check (code):* for each sentence, every integer
+token equals a count of that place (documents, evaluations) or appears in
+an input field of that place (ages, years); every strength word ("very
+strong", "strong", "moderate", "limited", "weak", "not rated") is the tier
+of a document of that place; every capitalised phrase of two or more words
+that is not at the sentence start is a programme name, a place, or a word
+of the plan's outcomes of that place's input (case-folded containment).
+A failed sentence is replaced by the template and counted in the step's
+summary (`provenance.option_profile.place_sentences = {generated, template,
+failed_trace, failed_call}`). *Template (code):* "{Programme}: " when one
+programme name holds the place's documents; "{n} {strength} {type}" with
+plural forms and the commonest tier and type; "with {kind}" from the
+folded Tried on kind of the first document; "in {sub-place}" when a
+`study_geography` adds a word; "measuring {outcome}" from `measured`.
+*Store:* coverage key `place_sentences: [{place, sentence, generated:
+bool}]` on the option, written with the folded coverage keys (S21's write
+site); remade on a rebuild; absent for an added option until the profile
+runs for the list, and for a merge until then (the read model builds
+template sentences at read time from the same input builder, so the block
+never empties). *Read model:* `OptionOut.place_sentences`. *Prompt:*
+`place_sentences_prompt.py` under `option_profile/`, version
+`place_sentences_v1`, in the hash guard by name.
+
+S32. **Places** (R87). *Prompt:* `extract_interventions` v4: the rule in words
+for `study_geography` and `study_country`; `SCHEMA_VERSION` bump; the
+replay with the memo bypassed as 16R. *Checks (code, coverage time):* in
+`document_where` / `record_where` (`where_tried.py:79, 99`): a
+`study_country` not in `COUNTRY_NAMES` (`where_tried.py:139`) and not
+"multiple" is treated as not stated and counted in the coverage under
+`places_unknown_country`; a `study_geography` that case-folds to a country
+name becomes the top level with no level below; a geography under "multiple
+countries" is not served as a place; the fold key normalises hyphens and
+spaces (`_clean`, `where_tried.py:40`).
+
+S33. **Example-name fold** (R88). *Where:* `coverage.py`'s `programme_name`
+loop (the `examples` key) and S30's `programme_name` on document lines,
+through one function `fold_programme_name(name) -> (key, acronym_key)` in
+`coverage.py`: casefold; strip punctuation, possessives and a leading "the";
+a parenthesised acronym becomes a second key and two names with one acronym
+key fold together; a leading country word or adjective
+(`COUNTRY_NAMES` and the `COUNTRY_ADJECTIVES` the strip kept, if any, else a
+short list) is stripped when the remainder's key matches another name's;
+the shown spelling is the most frequent then the shortest (the setting
+rule, `coverage.py:597-606`).
+
+S34. **The folding round and the F4 guard** (R86). *Guard:* in
+`_checked_folds` (`option_profile.py`, after the kind lookup): a returned
+kind whose casefolded text contains one plan outcome's casefolded text maps
+to that outcome's own text (A4 extended); one containing two or more is
+mapped to the first and counted in the step's summary. *Round 6 (20L):* the
+rules in words in `folding_prompt.py` (no fold across an age group the plan
+names; an outcome folds to a plan outcome only when it measures it;
+abbreviations fold to their expansion); the stop measure read on 30 random
+folds per facet per list (the read-back script samples with a fixed seed).
+
+S35. **"Who decides" and the authority** (R89). *Plumbing:* the profile call
+for `who_decides` (`option_profile_prompt.py:471`, `where` only) gains the
+consideration's body when the plan holds a who-can-act consideration; the
+authority verdict for the option is computed in constrain (after the
+profile), so the body is passed as "the body that holds the user's power"
+and the prompt rule says: when this body can adopt the option, name it; the
+verdict "within your power" then agrees by construction. *Round 6 (12L):*
+the rule in words; stop measure on refugees.
+
+S36. **The frontend structure** (R77–R85). *Card:* `SECTIONS` becomes
+`how-it-works`, `what-it-would-take`, `evidence-base`; the signal line
+component (shared with the row); the lever line and reason; the lead-in
+template in `longlistPresentation.ts` (kind → preposition map with "in" as
+the default); the opener; the outcomes lines; the place block; the
+disclosure (`<details>`, closed; the groups; the lines; "+N more" to the
+dossier via the existing `source` search parameter with the option id);
+the callout reusing the exclusion callout's component; the Checks section,
+Examples, Where tried, Tried on, the roles sentence and the outcomes table
+deleted with their tests. *List:* the header's excluded link to
+`EXCLUDED_ANCHOR`; the four facets and their state removed from
+`LonglistView.tsx` and `longlistFacets.ts`; the row's grey line through the
+shared signal function. *Fixtures:* `mock/fixtures.ts` and `mock/api.ts`
+updated for the field changes in the same commits.
+
+### Phase 24.0 — Build-open baseline — `lead` (inline)
+
+Full `make verify` on the branch head before any change; the figures in `verification.md`.
+
+### Phase 24 — ADR 0040 amendment 4 — `lead`
+
+Already written in the design phase (ADR 0040 § Amendment 4); this phase
+checks it against the seams as confirmed and amends it if a seam changed.
+Own commit before 25. Gate: `make verify-fast`.
+
+### Phase 25 — Read models (R76, R81, R83; S29, S30) — `deep-reasoner` · `fast-worker`
+
+`deep-reasoner`: the document-records join of S30 and the signal fields of
+S29 with their tests. `fast-worker`: the output models, the removed served
+fields (`where_tried`, `tried_on`, `examples`, `evidence.by_role`, the kind
+rows of `outcome_counts`) with their frontend readers and fixtures deleted,
+`make openapi-sync`. Gate: `make verify-fast` · `drift-check` ·
+`openapi-sync` · `frontend-verify`. Commit.
+
+### Phase 26 — The place sentences (R80; S31) — `deep-reasoner` · `lead`
+
+`deep-reasoner`: the input builder, the wire, the call in the pool, the
+trace check, the template, the coverage write, the read-time template for
+an option without stored sentences, the read model field, the tests of
+rubric box 76. `lead`: `place_sentences_v1` as round 0 in the same commit;
+the hash guard. Gate: `make verify-fast` · `prompt-guard` · `drift-check`
+· `openapi-sync`. Commit.
+
+### Phase 26L — The sentence loop — `lead`
+
+Tuning set (obesity, refugees, caregiving, energy), then one read of the
+check set (NEET, heat pumps, cohesion); at most five rounds. Stop measure
+M15: zero sentences replaced by the trace check and zero over the ceiling
+on the tuning set. Reported: the readability read, the plan's words, the
+fold's words, no merit words. Round record in `evidence/rounds/26L-place-sentences-loop.md`.
+Gate per round: `make verify-fast` · `prompt-guard`. Commit per round.
+
+### Phase 27 — Places (R87; S32) — `lead` · `fast-worker`
+
+`fast-worker`: the coverage checks with tests on the survey's cases. `lead`:
+`extract_interventions` v4, `SCHEMA_VERSION` bump, the replays, the rounds
+(record `27-places-loop.md`); stop measure M16; M1, M2 read back. Gate:
+`make verify-fast` · `prompt-guard`. Commit per round.
+
+### Phase 27E — Example-name fold (R88; S33) — `fast-worker`
+
+The function and its tests; applied in coverage and in S30. Gate:
+`make verify-fast`. Commit.
+
+### Phase 28 — Folding round 6 and the F4 guard (R86; S34) — `lead` · `fast-worker`
+
+`fast-worker`: the guard with tests. `lead`: the rules in words, the round
+on the replays, the 30-fold read per facet per list (record
+`28-folding-round-6.md`); stop measure M17. Gate: `make verify-fast` ·
+`prompt-guard`. Commit.
+
+### Phase 29 — "Who decides" and the authority (R89; S35) — `lead` · `fast-worker`
+
+`fast-worker`: the body passed to the line, with a test. `lead`: profile
+round 6 (record `29-who-decides-round-6.md`); stop measure M18 on refugees;
+the other lists read on two runs. Gate: `make verify-fast` · `prompt-guard`.
+Commit.
+
+Phases 27, 27E, 28 and 29 touch no card code and can run beside 25 and 26,
+one test database per agent, with the index-snapshot gate the amendment 3
+build used.
+
+### Phase 30a — The card: structure (R77–R82; S36) — `fast-worker`
+
+The sections, the signal line, the lever lines, the lead-in, the opener, the
+outcomes lines, the place block, the disclosure, the callout; the removed
+blocks and their tests deleted; the vitests of rubric boxes 72–75, 78.
+Gate: `make verify-fast` · `frontend-verify`. Commit.
+
+### Phase 30c — The list: structure (R83–R85; S36) — `fast-worker`
+
+The header, the facets removed with their state and code, the row's signal;
+the vitests of box 79. Gate: `make verify-fast` · `frontend-verify`. Commit.
+
+### Phase 30b — Card and list design and final words — `lead` (`impeccable`)
+
+The signal line's words and weight; the lead-in template's prepositions;
+the opener's and the groups' words; the tint of the plan's Where row (D23
+open); the disclosure's line lengths at 390 px; the callout; checked
+against the design pages. Gate: `make verify-fast` · `frontend-verify`.
+Commit.
+
+### Phase 31 — Live check, evidence, exit — `lead`
+
+- Three live rapid runs (obesity, caregiving, refugees) on v4 records; read
+  back from saved files: M15–M18 on the live lists; per option, evaluations
+  and countries; per list, sentences generated vs template vs failed trace;
+  the "not stated" count before and after; kinds per facet per list.
+- The browser check (desktop and 390 px): a rich, a thin and an empty option
+  top to bottom; the signal line's four forms; the disclosure opened on the
+  rich option and a wrong fold looked for and recorded; the callout on
+  caregiving's failing option; the list header with and without an
+  excluded option; Group by; the grid unchanged.
+- `verification.md` § Amendment 4: gates, commits, round records, the
+  OpenAPI diff, the edited tests, the known limits, the figures above.
+  Spec-change proposals 10–14 (the owner decides the wording);
+  `docs/deferred.md` (the Overton entry committed with this amendment).
+
+Gate: **full `make verify`**. Commit.
+
+### Checks for the loops (amendment 4)
+
+| Check | Loop | Stop measure |
+|---|---|---|
+| Trace: every number, strength word, programme name and place in a sentence comes from its input; none over the ceiling | 26L | **M15** |
+| Outcomes in the plan's words; "on whom" in the fold's words where the kind fits | 26L | reported |
+| No merit words; the strength word is the tier's word | 26L | reported |
+| Readability: the lead reads every sentence of both sets; the count a reader would rewrite | 26L | reported |
+| No `study_geography` that is an organisation, a person, a programme, a document, a date or an adjective; "not stated" before and after | 27 | **M16** (reported: the count) |
+| M1, M2 do not regress | 27 | reported |
+| At most one wrong fold in a read of 30 per facet per list; kinds per list | 28 | **M17** |
+| No kind restates a plan outcome (the guard, a test) | 28 | test |
+| Every "within your power" option on refugees names the consideration's body; the other lists unchanged on two runs | 29 | **M18** |
+| The survey's duplicate example names fold to one; duplicates left on the check set | 27E | test (reported) |
+| Features that restate the setting or the target unit, per list | 30b read | reported |
+
+### Known limits (amendment 4)
+
+- An added or merged option shows template sentences until the profile step next runs for the list.
+- The trace check reads numbers, strength words and names; a wrong relation between true facts is caught by the loop's read only.
+- A wrong fold shows on the document line beside its title; the round lowers the count, it does not reach zero.
+- The signal's countries and the place order rest on `study_country` and the document role, both model fields.
+- The year and the broken-title placeholder stay on document lines until the deferred Overton fix (R91).
+- The "Who decides" sentence keeps its form ("The X must decide to …").
+
 ## Plan-review folds (2026-09-28, fallback lane)
 
 | # | Finding | Fold |

@@ -24,6 +24,9 @@ decides on. It lands before task 3 (shortlist and assessment).
 > **[0040](../../adr/0040-options-scoping-longlist-refinement.md)** —
 > Accepted 2026-09-28. **Design phase closed 2026-09-28; the build runs in
 > a fresh conversation with `task-cycle-build`.**
+> **Amendment 4 approved 2026-10-09 · owner** ("Approved, and yes to all
+> six as proposed"): rulings R76–R91 (§ Amendment 4); the contract-stage
+> adversarial review follows.
 >
 > **Branching:** `task/046-longlist-refinement` from `feat/options-scoping`
 > at `1e49a65f`. PR target: `feat/options-scoping`, merge commit, per PR #69.
@@ -430,6 +433,78 @@ item.
 | § Risk tier, rollback | `alembic downgrade -1` drops the two columns and reverses the renames; deploy the previous image (final 3 § 3) |
 | § Spec changes | New items in final 3 § 3; wording to the owner |
 
+## Amendment 4 (2026-10-09)
+
+The owner read the three live runs of amendment 3 (2026-10-01) and raised
+eight points on 2026-10-07 about the option card and the longlist, read as
+a user would. The lead surveyed the runs with a read-only agent, built a
+proposal from the obesity run's real data as two pages, and the owner
+decided on the pages between 2026-10-07 and 2026-10-09. The working
+record (`amendment-4-proposed.md`, the pages and the survey under
+`evidence/`) stays local by the owner's rule of 2026-10-09; the rulings
+are here, the design detail is in `plan.md` § Amendment 4 (seams
+S29–S36), the reasons are in ADR 0040 § Amendment 4. **Approved by the
+owner 2026-10-09 ("Approved, and yes to all six as proposed").** Nothing
+of it is built. Each ruling supersedes the matching words above; the text
+above is kept as written.
+
+Quoted words are the owner's. "(lead)" marks the lead's rule; the owner
+can change it. The six build questions (Q1–Q6 below) were answered by the
+owner as the lead proposed.
+
+**Terms added** (§ Terms applies):
+
+| Term | Meaning |
+|---|---|
+| **evidence signal** | Three facts by code, on the card header and on each list row in the same words: the documents that evaluated the option and the documents that only describe it; the countries of the evaluating documents, the plan's Where country first; the plan outcomes with at least one evaluating document over the plan's outcome count (R76). |
+| **place sentence** | One generated sentence for one place of an option's evaluating documents, on the card under "Where it has been evaluated" (R80). |
+| **describing document** | A member document whose role is `described`, `recommended` or `mentioned`. It makes no place line. |
+| **trace check** | The code check that every number, strength word, programme name and place in a place sentence comes from that place's input records; a sentence that fails is replaced by the template sentence (R80). |
+
+| # | Reopens | Ruling |
+|---|---|---|
+| R76 | R68 (the header's grey line); R59 as shown on the card; 045 D30 (the document count) | **The evidence signal.** One line under the card header's grey line and on each list row's grey line, by code, in the same words: "17 documents evaluated it · 12 more describe it · Evaluated in the United Kingdom and 5 other countries · Measures 2 of your 3 outcomes". The countries are the distinct top-level places of the documents whose role is `evaluated`, "not stated" and "multiple countries" left out, the plan's Where country first by its short English name as `COUNTRY_NAMES` spells it (owner, Q1, Q2). The "no" forms: "No documents yet"; "No evaluations, 3 documents describe it"; "No evaluation gives a place"; "Measures none of your outcomes". Owner: "Yes we can keep the row signal words on the longlist" |
+| R77 | R68 ("What it is"; the lever line; the design features); R41 unchanged | **How it works.** The section is "How it works". The lever line ("**Lever:** Subsidise, with Provide a service and Inform.") stands alone with its reason under it in grey. A templated lead-in from the option's setting kinds introduces the features: "Delivered in schools and at home. It typically involves:"; with no setting, "It typically involves:" alone. "Delivered through" as a line goes. The design prompt gains one rule: no feature that only restates the option's setting or the plan's target unit; each feature a noun phrase naming one thing the option does or provides; no hedges. Owner: "Can we separate the lever explanation into a new line?" · "there's no lead-in to it" |
+| R78 | R68 (the order); R66 (the Checks section) | **Order, and Checks as a callout.** How it works · What it would take · Evidence. The Checks section goes. A judgement with verdict `breaks` or `cannot_check` on a user consideration (a boundary or a preference the plan holds), or a guess, shows as a callout under the description in the exclusion callout's form, naming the consideration and the reason; a passing consideration shows nothing (lead; owner, Q3); the built-in checks (`relevant`, `distinct`, `in_scope`) never show on the card; constrain is unchanged. The authority label stays beside "Who decides" (R70). Owner: "Let's move the estimates to above the evidence" · "The checks section seems pointless" |
+| R79 | R64 (the outcomes table); R68 (the roles sentence); R61 (the note's place) | **The Evidence opener and your outcomes.** One line by code: "Evaluated in 17 documents. 12 more describe or recommend it." Then "Your outcomes": one line per plan outcome in the plan's words with its count of evaluating documents on the right ("11 evaluations"); "none" in grey when no evaluating document measured it; "not a target of this option" in grey when `outcomes_served` lacks it; one line "No evaluation measured any of your three outcomes." when none did. No outcomes table, no serves mark, no kind rows, no roles sentence; the any-role counts (R56) stay in coverage. The word is "targets"; never "serves", never "aimed at". The abstracts note moves to the Documents line (R81). Owner: "The 'serves' flag on the outcomes table is ambiguous. Is the table even useful?" · "I don't like the 'aimed at' terminology." · "I don't like the first block of text in the evidence section" |
+| R80 | R54 and R59/R72 as shown on the card; R63 (the Examples block) | **Where it has been evaluated: one generated sentence per place.** A labelled block, one line per place of the evaluating documents: the place in bold, the sentence beside it; the plan's Where country first and tinted, then the other countries by evaluating-document count then name, then "No single place" for "multiple countries" and "not stated". Describing documents make no line. The sentence is generated by one call per option on the mini model in `option_profile` after the folding calls, under a schema length ceiling (220 characters to start; owner, Q6), from the option's evaluating documents grouped by place, each with its programme name, `unit` and folded Tried on kind, setting, `outcome` and its plan outcome or folded Measures kind, `study_geography`, tier, evidence type and year; the folded kinds and the plan's outcomes in the plan's words are the vocabulary. The code trace-checks every sentence; a failed sentence, a failed call or an option with no stored sentences uses the template "{Programme}: {n} {strength} {type} with {kind} in {sub-place}, measuring {outcome}." The sentences are stored in the option's coverage under `place_sentences`, remade on a rebuild. A prompt and a refine loop (lead) with one stop measure (plan § Amendment 4, the checks). Examples, Where tried and Tried on leave the card as blocks; their coverage keys stay. Owner: "It's somewhere between A and C." · "It still feels too dense and hard to digest." · "I think we will probably want the sentences to be generated. We can use a fast cheap model for this. And of course the prompts would go through a refinement loop" |
+| R81 | R67 (the meta line); R61 (the note) | **The documents behind one disclosure.** "▸ Documents · 29 · read from titles and abstracts only", closed by default on every card (owner, Q4). Two groups, "Evaluated it · N" and "Describe or recommend it · M", ordered evaluated first then quality then title (R67), five lines each then "Show all N". Each line: the linked title; then programme name (bold, when the record gives one) · place (the level below in grey when it adds a word) · the folded Tried on kind · the plan outcome in the plan's words or the folded Measures kind; then tier · evidence type · year. A document with several member records shows the first by role order and "+N more", which opens the dossier's "In this option" slot (owner, Q5). `OptionDocumentOut` gains the record fields and the folded kinds; the raw words stay in the dossier's record slot. Owner: "I assume the folded term will still be shown in the expanded document table?" |
+| R82 | — | **Thin and empty cards.** The structure holds at any count and a block with nothing to say is left out: no document → the one line "No document names this option yet."; no evaluating document → the opener, "Your outcomes" as one line, no place block; one evaluating document → one place line. The abstracts note never prints on an option with no document |
+| R83 | 045 D28 | **The list header.** "N options in M themes"; " · K excluded" only when K is above zero, as a link to the Excluded section; " · N with no in-scope evidence" as built. Owner: "let's remove the number excluded under the longlist header" |
+| R84 | R57, R58 (the facets), R59 (the facet); 045 deliverable 9; D29's narrowing line | **No facets.** Setting, Where tried, Who can act and Tried on leave the list, with their state, the fold-after-8 rule and "N of 25 options match". Group by stays (Theme · Lever type). Owner: "Shall we just remove them? I think that information is useful in the card itself but they still feel to granular to be useful filters" |
+| R85 | 045 D30 (the document count on the row) | **The rows.** The grey line: "{Lever type} · {origin when not clustered} · {relations} · {the evidence signal of R76}". Owner: "Yes we can keep the row signal words on the longlist" |
+| R86 | R54, R55 (the readers); amendment 3 § 2.3 | **The folds stay, with new readers.** Both folding calls and their maps stay (`FOLDING_KINDS_MAX` 12); their kinds are the words on the document lines (R81) and the generation call's vocabulary (R80). One more folding round with a quality stop measure: in a read of 30 folds per facet per list on the tuning set, at most one wrong fold per list (a word folded to a kind of a different age group or a different kind of thing; a measure folded to a kind it does not measure; two kinds that name one measure under two spellings). A code guard: a returned kind whose text contains a plan outcome's text maps to that outcome's own text; one that contains two is reported. Owner: "I think the fold is still useful. It makes the language used across the longlist more coherent." |
+| R87 | R72 (the place fields, extended); 16R | **Places.** A record prompt round (`extract_interventions` v4): a place is a country, a region, a city or a named area; never an organisation, a person, a programme, a document, a date or an adjective; `study_geography` null when the abstract names no place. Code checks at coverage time: a `study_country` not in `COUNTRY_NAMES` and not "multiple" counts as not stated and is reported; a `study_geography` equal to a country name drops to the country; a geography under "multiple countries" shows as no place; hyphens and spaces normalised in the fold. Owner: "I'd also like to fix the data faults that were found as part of this amendment too." |
+| R88 | R63 (examples unfolded) | **Example names fold by code**, no model: casefold; punctuation, possessives and a leading "the" stripped; a parenthesised acronym as a second key; a leading country word stripped when the remainder matches another name; the most frequent then shortest spelling shown. For the `examples` key and the programme name on document lines |
+| R89 | 12L; R70 | **"Who decides" agrees with the authority label.** When the plan holds a who-can-act consideration and the option's authority verdict is "within your power", the `who_decides` line receives the consideration's body and names it. A profile prompt round with the rule in words; stop measure on refugees: every "within your power" option names the consideration's body |
+| R90 | — | **Vocabulary.** "Evaluated", "evaluations", "documents". Not "studies". Open to user testing later. Owner: "Let's keep evaluated/evaluations for now actually (the terminology is probably better refined through user testing. studies is confusing as users might think that's the same as a document)" |
+| R91 | — | **Out of this amendment.** Overton's `published_on` as the document year and the "[THIS TITLE IS BROKEN AND HAS BEEN REMOVED]" placeholder are Evidence search ingest faults, recorded in `docs/deferred.md` § Options scoping longlist refinement. Owner: "Agree with that split, let's leave out the overton fixes from this amendment" |
+
+### Earlier items that amendment 4 changes
+
+| Earlier item | What replaces it |
+|---|---|
+| R54 on the card (the "Tried on" line); R57's Tried on facet | The folded kinds on document lines and in the generation vocabulary (R81, R86); no facet (R84) |
+| R59, R72 on the card (Where tried in two levels); the Where tried facet | The place sentences (R80) and the signal's country list (R76); the level below only on document lines (R81); no facet (R84) |
+| R63 (Examples, at most 5, on the card) | The programme name on the place sentence and the document line (R80, R81), folded by code (R88); the `examples` key stays in coverage |
+| R64 and amendment 3 § 2.7 (one outcomes table) | "Your outcomes" as lines (R79) |
+| R66 (the Checks section) | A callout for a failing user consideration (R78) |
+| R67 (the meta line) | Two lines per document with the record fields and folded kinds; two groups by role (R81) |
+| R68 (the layout) | R77, R78, R79, R81 |
+| R61 (the abstracts note in the section) | On the Documents line (R81) |
+| R58 (the Who can act facet stays) | Removed (R84); the authority label stays (R70) |
+| Terms, **tried on** ("A card line and a list facet") | A coverage key and a folded vocabulary; not a line, not a facet |
+| 045 D28, D30 | R83, R85 |
+| § Constraints, Schema | **No revision** in amendment 4: `place_sentences` is a coverage key in `longlist_result` |
+| § Constraints, Prompts | Also: `place_sentences_v1` (new, one call per option on the mini model); `extract_interventions` v4 (places); the folding prompts' round 6; the profile prompt's round 6 (`who_decides`); the option design prompt's rule on features (R77); each a loop with one stop measure (R69 applies) |
+| § Constraints, Public interface | Not additive: `OptionOut` loses `where_tried`, `tried_on`, `examples`, `evidence.by_role` and the kind rows of `outcome_counts` as served fields; `OptionSummaryOut` gains `evaluated_countries` and `outcomes_evaluated`; `OptionDocumentOut` gains `programme_name`, `tried_on_kind`, `measured`, `place_detail`, `records_count`; `OptionOut` gains `place_sentences`; `LonglistOut` loses no field. OpenAPI regenerated |
+| § Model route | The place sentences on the mini model (`SCREEN_MODEL`, the folding calls' route); about 25 calls per rebuild |
+| § Acceptance checks | **M15** (26L stop measure): on the tuning set, no sentence replaced by the trace check and none over the ceiling; the readability read reported. **M16** (27 stop measure): on the tuning set, no `study_geography` that is an organisation, a person, a programme, a document, a date or an adjective; "not stated" before and after, reported; M1, M2 do not regress. **M17** (28 stop measure): at most one wrong fold in a read of 30 per facet per list; the F4 guard tested. **M18** (29 stop measure): every "within your power" option on refugees names the consideration's body. Frontend (vitest): the signal line and its "no" forms; the sections' order and names; the opener; the outcomes lines with "none" and "not a target"; the place block's order; the disclosure closed, its groups and lines; the callout; no Checks section, no Examples, Where tried or Tried on block, no facets, no "0 excluded"; no "studies", "serves" or "aimed at" in the longlist views |
+| § Known limits accepted | Added: an added or merged option carries template sentences until the profile step next runs; a place sentence is model text checked by code for numbers, strength words and names, not for the relation between them; a wrong fold shows beside its title; the signal's countries and the place order rest on `study_country` and the document role; the year and the broken-title placeholder stay on document lines until the deferred fix (R91); the "Who decides" sentence keeps its form |
+| § Spec changes | New items 10–14 below |
+
+**Build questions, answered by the owner 2026-10-09 ("yes to all six as proposed"):** Q1 the first place is the country of the plan's Where as `countries_named` resolves it (England → United Kingdom; New South Wales → Australia). Q2 the country by its short English name ("the United Kingdom"), not "the UK". Q3 a passing user consideration shows nothing. Q4 the disclosure is closed by default on every card. Q5 "+N more" opens the dossier. Q6 the sentence ceiling starts at 220 characters; the loop may lower it.
+
 ## Compile constants
 
 | Constant | Value | Source |
@@ -484,6 +559,18 @@ the build, and only accepted wording is applied.
 7. `vocabulary.md`: reader grain, variant, tried on.
 8. Decision sheet rows A9 and E4: decision column updated.
 9. One line per accepted change in `docs/specs/log.md`.
+10. **Amendment 4.** OS capability § Output structure (Longlist): the
+    card's sections (How it works · What it would take · Evidence), the
+    evidence signal, your outcomes as lines, the place sentences, the
+    documents disclosure, the callout; the list without facets, with Group
+    by and the row signal; the header's excluded count (R76–R85).
+11. OS components § 2 (the card) and § 6: the place-sentence call as a
+    component of `option_profile` (one call per option, the mini model, a
+    trace check, a template fallback); the folds' readers (R80, R86).
+12. `vocabulary.md`: evidence signal, place sentence, describing document;
+    "tried on" no longer a card line or a facet (R90).
+13. `docs/deferred.md`: the Overton faults (R91; written 2026-10-09).
+14. One line per accepted change in `docs/specs/log.md`.
 
 ## Scope / Out of scope
 

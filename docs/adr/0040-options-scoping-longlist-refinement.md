@@ -4,7 +4,9 @@
   decisions below were ruled one by one in the contract interview, the
   contract-stage review and the plan-stage review the same day).
   **Amended 2026-09-30** by § Amendment 2 (task 046 amendment 2; the owner
-  decided its rulings R34 to R53 on 2026-09-29)
+  decided its rulings R34 to R53 on 2026-09-29); **amended 2026-10-09** by
+  § Amendment 4 (rulings R76 to R91; the owner approved the contract items
+  2026-10-09)
 - **Date:** 2026-09-28
 - **Task:** 046-longlist-refinement (contract, rubric and plan under
   `docs/tasks/046-longlist-refinement/`)
@@ -386,6 +388,108 @@ decisions above stand, except where a decision below names one.
     findings slot shows the intervention profile records through one new
     owner-scoped read route. The list's facets carry no counts; Tried on
     and Where tried filter; the grid's cell limit is four.
+
+## Amendment 4 (2026-10-09)
+
+The rulings are R76 to R91 in the contract's § Amendment 4; the seams are
+in the plan's § Amendment 4. The decisions above stand, except where a
+decision below names one. The owner read the three live runs of amendment
+3 as a user would and found the card answered "what is it" and "what would
+it take" but scattered "has it been tried, where, on whom, and did anyone
+measure my outcomes" across five unlinked blocks. A survey of the runs
+(local, `evidence/amendment-4-survey/`) found the facts behind that: every
+option passed every built-in check (75 of 75); Where tried counted a
+Spanish consultation as a place the option was tried (11 countries on the
+richest option, 6 by evaluating documents; 14 of 25 options with no
+evaluating document that gives a place); the outcomes table's SERVES mark
+sat beside zeros on 8 to 14 rows per list; examples repeated the titles
+beneath them and were not folded; the facets did not narrow (Where tried
+24 chips, ten matching one option). The owner decided on a proposal built
+from the obesity run's real data; the Evidence section went through seven
+forms before one read as a user could take in.
+
+22. **The card answers the reader's three questions in order, and the
+    list carries an evidence signal.** (Amends decision 21's card and the
+    list's facets.) The sections are How it works · What it would take ·
+    Evidence. An evidence signal, by code, sits under the header and on
+    every list row in the same words: documents that evaluated the option
+    and documents that only describe it; the countries of the evaluating
+    documents, the plan's Where first; the plan's outcomes with at least
+    one evaluation. "How it works" puts the lever and its reason on their
+    own lines and introduces the features with a templated sentence from
+    the setting kinds. The Evidence section opens with one count line, then
+    the plan's outcomes as lines with their evaluation counts ("none" in
+    grey; "not a target of this option"), then one sentence per place of
+    the evaluating documents, then the documents behind one disclosure.
+    The Checks section goes; a failing user consideration is a callout
+    under the description. The list loses its four facets and shows the
+    excluded count only when it is above zero. The words stay "evaluated"
+    and "evaluations", not "studies" (owner: a reader may take a study for
+    a document; the words are for user testing).
+
+    *Rejected:* the outcomes table with a serves mark and kind rows (the
+    mark conflicted with the numbers and the kind rows restated plan
+    outcomes); a study ledger, an outcome-first list, a place-first list, a
+    three-column profile and a strength-by-outcome matrix as the Evidence
+    body (the owner: between the ledger and the place list, then "still too
+    dense"); "aimed at" and "targets" as a flag; the Checks section kept
+    for the one failing case; "studies" as the word.
+
+23. **The place sentences are generated, trace-checked and backed by a
+    template.** One call per option on the mini model in `option_profile`,
+    after the folding calls, from the option's evaluating documents grouped
+    by place with their record fields and folded kinds, the plan's outcomes
+    as vocabulary, under a schema length ceiling. The code checks every
+    number, strength word, programme name and place in each sentence
+    against the input and replaces a failing sentence with a template
+    sentence; a failed call leaves the option on template sentences and
+    does not fail the step; an added or merged option reads template
+    sentences until the profile runs. The sentences are a coverage key,
+    remade on a rebuild. The prompt goes through a refine loop with the
+    trace check as its stop measure.
+
+    *Rejected:* a template only (it reads well on the richest and the
+    thinnest option and badly on a place with several documents of mixed
+    design; the owner: "we will probably want the sentences to be
+    generated. We can use a fast cheap model for this"); a sentence written
+    by the profile's larger model (cost, no gain in a sentence of facts);
+    failing the step on a failed call (a card is complete without
+    generated sentences).
+
+24. **The folds stay; their readers are the document lines and the
+    generation call.** (Amends decision 16's readers.) The Tried on line
+    and facet go, so the folded kinds become the "on whom" and "measured"
+    words on every document line behind the disclosure, and the
+    vocabulary the generation call receives, so that 25 cards say the same
+    kind the same way. The raw record words stay in the dossier. Because a
+    wrong fold now sits beside its title, one more folding round runs with
+    a quality stop measure (at most one wrong fold in a read of 30 per
+    facet per list), and a code guard maps a kind that restates a plan
+    outcome to that outcome.
+
+    *Rejected:* dropping the Tried on fold once its line and facet were
+    gone (the lead's proposal; the owner: "the fold is still useful. It
+    makes the language used across the longlist more coherent").
+
+25. **The data faults the survey found in options-scoping prompts and
+    code are fixed in this amendment.** Places that are not places (a
+    record prompt round with the rule in words and code checks against the
+    known country names); example names folded by code; the folding round
+    and guard of decision 24; the "Who decides" sentence made to name the
+    body the authority label says holds the power.
+
+26. **Two faults are Evidence search ingest faults and stay out.**
+    Overton's `published_on` served as the document year (3,546 snapshots
+    in the dev database carry 2026) and Overton's "[THIS TITLE IS BROKEN
+    AND HAS BEEN REMOVED]" placeholder as a title (114 snapshots). Both sit
+    in the ingest adapter every capability shares; they are recorded in
+    `docs/deferred.md` for a fix of their own.
+
+**Rollback, amendment 4:** no schema revision; the place sentences, the
+signal fields and the document record fields are coverage keys and read
+model fields. Reverting the amendment's commits restores the amendment 3
+card and list; stored longlists stay readable either way (a missing
+`place_sentences` key reads as "no stored sentences").
 
 ## Rollback
 

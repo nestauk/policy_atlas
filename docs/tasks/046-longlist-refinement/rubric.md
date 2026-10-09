@@ -513,3 +513,145 @@ is reported, not passed (R69). Every question of final 3 § 7.2 is answered
     2–5 of 12L as built before this amendment.
 66. [ ] **Spec changes of amendment 3** are applied only with the owner's
     accepted wording, one line each in `docs/specs/log.md`.
+
+## Amendment 4
+
+Rulings R76–R91 are in [contract.md](contract.md) § Amendment 4; the seams
+and phases are in [plan.md](plan.md) § Amendment 4; the reasons in ADR 0040
+§ Amendment 4. The boxes above stay as written; where a box below and a box
+above differ, the box below wins for amendment 4's work. It replaces, for
+that work: box 47's card line and facet (R76, R81, R84, R86); box 48's
+table (R79); box 50 (R84); box 51's facet clause (R84); box 52's card
+levels (R80, R81); the Examples, Checks, roles-sentence and meta-line
+clauses of the amendment 3 card boxes (R77–R82). Where a box measures, it
+names the threshold; a measure that is not a loop's stop measure is
+reported, not passed (R69).
+
+### Items
+
+72. [ ] **The evidence signal (R76, R85).** `OptionSummaryOut` carries
+    `evaluated_countries` (the distinct top-level places of `evaluated`
+    documents, "not stated" and "multiple countries" left out, the plan's
+    Where country first by its short English name, then by count then
+    name) and `outcomes_evaluated` (plan outcomes with at least one
+    `evaluated` document). Tests pin: a describing document's country is
+    not in the list; England in the plan's Where puts United Kingdom first;
+    a plan with no Where keeps count order. The card header and each list
+    row print the three facts in the same words, with the "no" forms
+    (vitest, four cases: rich, no evaluations, no place, no documents).
+    No "studies" anywhere in the longlist views (vitest, R90).
+73. [ ] **How it works (R77).** The section is "How it works"; the lever
+    line on its own line with the reason under it; the lead-in from the
+    setting kinds with the preposition per kind and "and" ("Delivered in
+    schools and at home. It typically involves:"); no setting gives "It
+    typically involves:"; no "Delivered through" line (vitest). The design
+    prompt carries the feature rule; on the tuning set the lead reads the
+    features and reports the count that restate the setting or the target
+    unit (reported, not a stop measure).
+74. [ ] **Order and the callout (R78).** Sections in order How it works ·
+    What it would take · Evidence; no Checks section; a `breaks` or
+    `cannot_check` judgement or a guess on a user consideration renders as
+    the callout under the description with the consideration's text and
+    reason; a passing consideration and the built-in checks render nothing
+    (vitest, three cases). Constrain's code is unchanged (no diff under
+    `constrain/` for this item).
+75. [ ] **The opener and your outcomes (R79, R82).** The opener line's three
+    forms; "Your outcomes" lines in the plan's words with the evaluated
+    count, "none" in grey, "not a target of this option" when
+    `outcomes_served` lacks the outcome, the one-line form when no
+    evaluating document measured any; no outcomes table, no "serves", no
+    "aimed at", no roles sentence (vitest). On an option with no document
+    the section is the one line and the abstracts note is absent (vitest).
+76. [ ] **The place sentences: the call (R80; S31).** In `option_profile`
+    after the folding calls, one call per option on the mini model, in the
+    same pool; the input builder groups the option's `evaluated` documents
+    by top-level place in the contract's order with the record fields and
+    folded kinds (a test: the order; a describing document is absent);
+    short ids per document; the wire's `places[]` with a schema
+    `max_length` on the sentence (220 to start); a place left out keeps the
+    template; an id not in the input is dropped; an invalid response after
+    one retry leaves the option on template sentences and does not fail
+    the step (tests). The trace check: a sentence with a number, a strength
+    word, a programme name or a place not in its input is replaced by the
+    template and counted (tests, one per kind). The template with plural
+    forms (tests). Stored in coverage `place_sentences` as
+    `[{place, sentence, generated}]`; remade on a rebuild; an added option
+    and a merge read template sentences until the profile runs (tests).
+    `OptionOut.place_sentences` served; the card renders the block in
+    stored order with the plan's Where row tinted (vitest).
+77. [ ] **The sentence loop (R80; M15).** Rounds in `evidence/rounds/`;
+    stop measure: on the tuning set, zero sentences replaced by the trace
+    check and zero over the ceiling. Reported: the readability read (the
+    count a reader would rewrite, per list), outcomes in the plan's words,
+    kinds in the fold's words, no merit words ("effective", "promising").
+    Re-pinned in `scripts/prompt_hashes.json`.
+78. [ ] **The documents disclosure (R81; S30).** `OptionDocumentOut` gains
+    `programme_name`, `tried_on_kind`, `measured`, `place_detail`,
+    `records_count` from the document's member records under the option,
+    the first by `OPTION_PROFILE_ROLE_ORDER`, the kinds through the stored
+    fold maps, `measured` the plan outcome's text when `outcome_tag` is one
+    else the folded Measures kind (tests). The disclosure is closed by
+    default, carries the count and the abstracts note, two groups ordered
+    as R67, five then "Show all N", each line's two meta lines, "+N more"
+    opening the dossier with the option id (vitest).
+79. [ ] **The list (R83, R84, R85).** The header shows " · K excluded" only
+    when K > 0, as a link to `#excluded-options`; no Setting, Where tried,
+    Who can act or Tried on facet, no facet state, no "N of M options
+    match"; Group by Theme · Lever type works as before; the row's grey
+    line carries the signal (vitest). `longlistFacets.ts` loses the removed
+    facets' code.
+80. [ ] **The folds' readers and the folding round (R86; M17).** The
+    folding calls and maps are unchanged in mechanism (no diff to S21's
+    storage); the F4 guard in `_checked_folds` maps a kind containing a
+    plan outcome's text to that outcome and reports a kind containing two
+    (tests on the survey's case). Round 6 in `evidence/rounds/`; stop
+    measure: at most one wrong fold in a read of 30 per facet per list on
+    the tuning set, with the three wrong-fold kinds named in the record;
+    kinds per list reported; re-pinned.
+81. [ ] **Places (R87; M16).** `extract_interventions` v4 with the place
+    rules in words, `SCHEMA_VERSION` bumped, replays with the memo bypassed
+    as 16R; the coverage checks: an unknown `study_country` counts as not
+    stated and is reported; a geography equal to a country name drops to
+    the country; a geography under "multiple countries" shows no place;
+    hyphens and spaces normalised (tests on the survey's cases: "Spanish
+    Ministry of Health", "Georgia" under United Kingdom, "south-west" /
+    "southwest"). Stop measure on the tuning set as M16; M1, M2 unchanged.
+82. [ ] **Example names fold (R88).** The fold's rules as tests on the
+    survey's cases (three SDNP spellings → one; "Soft Drinks Industry Levy"
+    / "UK Soft Drinks Industry Levy" → one; "HENRY" with and without its
+    expansion → one; "Community Eligibility Option" / "Community
+    Eligibility Provision (CEP)" stay two); the shown spelling rule;
+    applied to `examples` and to the document line's programme name.
+    Duplicates left on the check set, reported.
+83. [ ] **"Who decides" and the authority (R89; M18).** The consideration's
+    body reaches the `who_decides` line when the verdict is "within your
+    power" (a test); profile round 6 in `evidence/rounds/`; stop measure
+    on refugees as M18; the other lists' sentences unchanged on two runs,
+    reported; re-pinned.
+
+### Cross-cutting
+
+84. [ ] **Every new or changed prompt went through a refine loop (R69).**
+    `place_sentences_v1` (26L), `extract_interventions` v4 (27), the
+    folding prompts' round 6 (28), the profile prompt's round 6 (29), the
+    option design prompt's feature rule (one round, reported under box
+    73). Each: rounds recorded, one stop measure, at most five rounds,
+    tuning set then one read of the check set, reported to the owner,
+    re-pinned.
+85. [ ] **Gates.** No schema revision. Full `make verify` at 24.0 and 31;
+    `prompt-guard` at 26, 26L, 27, 28, 29; `openapi-sync` and `drift-check`
+    at 25 and 26; `frontend-verify` at 25, 30a, 30b, 30c, each removal
+    phase deleting the frontend readers and fixtures of the field it
+    removes; ADR 0040 amended in its own commit before Phase 25.
+86. [ ] **The contract's lines hold.** The OpenAPI diff shows only the
+    removals and additions of R76–R81 (contract § Amendment 4, "Public
+    interface"); `verification.md` § Amendment 4 records the known limits,
+    M15–M18, the three live runs' figures (evaluations and countries per
+    option, sentences generated vs template per list, wrong folds found in
+    the browser check), and the browser check of Phase 31.
+87. [ ] **Spec changes of amendment 4** (contract § Spec changes 10–14)
+    are applied only with the owner's accepted wording, one line each in
+    `docs/specs/log.md`.
+88. [ ] **Out of scope held (R91).** No change under `evidence_search/`
+    except the intervention profile's own files; the Overton faults are in
+    `docs/deferred.md` and nowhere in the diff.
