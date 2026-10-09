@@ -203,7 +203,7 @@ class _RecordingBackend:
     its raw returned provider records, for offline diagnosis (e.g. in a
     notebook) of why recall came out low. Pure passthrough otherwise — proxies
     the exact seam ``search_loop.py`` calls on a backend (``acquire.SearchBackend``:
-    ``name``/``trust_class``/``mode``/``caps`` plus the 5 fetch/search/lookup
+    ``name``/``trust_class``/``mode``/``caps`` plus the 9 fetch/search/lookup
     methods), so it's transparent to the pipeline.
     """
 
@@ -335,6 +335,61 @@ class _RecordingBackend:
             None,
             lambda: self._inner.fetch_references(record_ids, max_results=max_results),
         )
+
+    def search_semantic(
+        self,
+        text: str,
+        *,
+        wire_params: dict[str, str] | None = None,
+        max_results: int | None = None,
+    ) -> list[dict[str, Any]]:
+        return self._record(
+            "search_semantic",
+            text,
+            wire_params,
+            lambda: self._inner.search_semantic(
+                text, wire_params=wire_params, max_results=max_results
+            ),
+        )
+
+    def lookup_ids(
+        self, ids: list[str], *, wire_params: dict[str, str] | None = None
+    ) -> list[dict[str, Any]]:
+        return self._record(
+            "lookup_ids",
+            "|".join(ids),
+            wire_params,
+            lambda: self._inner.lookup_ids(ids, wire_params=wire_params),
+        )
+
+    def fetch_citing(
+        self,
+        ids: list[str],
+        *,
+        wire_params: dict[str, str] | None = None,
+        max_results: int | None = None,
+        page: int = 1,
+    ) -> list[dict[str, Any]]:
+        return self._record(
+            "fetch_citing",
+            "|".join(ids),
+            wire_params,
+            lambda: self._inner.fetch_citing(
+                ids,
+                wire_params=wire_params,
+                max_results=max_results,
+                page=page,
+            ),
+        )
+
+    def fetch_by_id(self, record_id: str) -> dict[str, Any] | None:
+        records = self._record(
+            "fetch_by_id",
+            record_id,
+            None,
+            lambda: [record] if (record := self._inner.fetch_by_id(record_id)) else [],
+        )
+        return records[0] if records else None
 
     def lookup_title(self, title: str) -> list[dict[str, Any]]:
         return self._record(

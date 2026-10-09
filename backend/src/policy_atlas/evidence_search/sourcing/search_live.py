@@ -29,6 +29,7 @@ __all__ = (
     "OA_SELECT",
     "OPENALEX_HOST",
     "OPENALEX_MIN_INTERVAL_S",
+    "OPENALEX_SEMANTIC_MIN_INTERVAL_S",
     "OVERTON_HOST",
     "OVERTON_MIN_INTERVAL_S",
     "OpenAlexLiveBackend",
@@ -55,6 +56,7 @@ OVERTON_MIN_INTERVAL_S = 1.2
 # back; a token bucket that widens on 429 and narrows on success is the upgrade
 # if a fixed gap ever proves too blunt.
 OPENALEX_MIN_INTERVAL_S = 0.2
+OPENALEX_SEMANTIC_MIN_INTERVAL_S = 1.0
 # Transient-failure retry (see ``_TransportMixin._request_json``). Four attempts
 # with a doubling wait: try, wait 1s, try, wait 2s, try, wait 4s, try, give up.
 # OpenAlex returns 500/504 in bursts under load, and a burst usually outlasts a
@@ -126,7 +128,9 @@ _OVERTON_ALLOWED_WIRE_KEYS = frozenset(
         "language",
     }
 )
-_PROTECTED_OVERTON_PARAMS = frozenset({"squery", "min_similarity", "format", "pp", "api_key"})
+_PROTECTED_OVERTON_PARAMS = frozenset(
+    {"squery", "min_similarity", "format", "pp", "api_key", "sort"}
+)
 
 
 class SearchTransportError(RuntimeError):
@@ -210,7 +214,7 @@ class _TransportMixin:
         response.raise_for_status()
         return response.json()
 
-    def _wait_rate_limit(self) -> None:
+    def _wait_rate_limit(self, *, min_interval_s: float | None = None) -> None:
         """Sleep until ``_min_interval_s`` has passed since the last request.
 
         Shared by both backends so neither can burst past its provider's rate
@@ -218,11 +222,12 @@ class _TransportMixin:
         ignored pacing would arrive during exactly the overload that caused the
         failure.
         """
-        if self._min_interval_s <= 0:
+        interval_s = self._min_interval_s if min_interval_s is None else min_interval_s
+        if interval_s <= 0:
             return
         now = _monotonic()
         if self._last_request_at is not None:
-            wait_s = self._min_interval_s - (now - self._last_request_at)
+            wait_s = interval_s - (now - self._last_request_at)
             if wait_s > 0:
                 _sleep(wait_s)
                 now = _monotonic()
@@ -234,6 +239,7 @@ class _TransportMixin:
         params: dict[str, str],
         *,
         overton_retry_wait: bool = False,
+        min_interval_s: float | None = None,
     ) -> Any:
         host = _host_from_url(url)
         publish_current_tick(stage="acquire", note="Searching a source database.")
@@ -246,7 +252,7 @@ class _TransportMixin:
 
         attempts = 0
         while True:
-            self._wait_rate_limit()
+            self._wait_rate_limit(min_interval_s=min_interval_s)
             self.http_calls += 1
             try:
                 data = self._fetch(url, dict(params))
@@ -292,7 +298,14 @@ class OpenAlexLiveBackend(_TransportMixin):
     name = "openalex"
     trust_class = "academic_aggregator"
     mode = "live"
-    caps = BackendCaps(has_snowball=True, has_title_lookup=True, has_doi_lookup=True)
+    caps = BackendCaps(
+        has_snowball=True,
+        has_title_lookup=True,
+        has_doi_lookup=True,
+        has_semantic=True,
+        has_id_lookup=True,
+        has_forward=True,
+    )
     _min_interval_s = OPENALEX_MIN_INTERVAL_S
 
     def __init__(self, api_key: str, *, email: str | None = None, fetch: _Fetch | None = None):
@@ -338,6 +351,102 @@ class OpenAlexLiveBackend(_TransportMixin):
         """
         work_id = _normalize_openalex_work_id(record_id)
         return self._fetch_works([f"cites:{work_id}"], max_results=max_results)
+
+    def search_semantic(
+        self,
+        text: str,
+        *,
+        wire_params: dict[str, str] | None = None,
+        max_results: int | None = None,
+    ) -> list[dict[str, Any]]:
+        """Return one OpenAlex semantic-search page.
+
+        Args:
+            text: Semantic-search text.
+            wire_params: Accepted OpenAlex filter wire parameters.
+            max_results: Optional result cap for the single page.
+
+        Returns:
+            Raw OpenAlex Work dictionaries.
+        """
+        query = " ".join(text.split())
+        if not query:
+            return []
+        limit = _result_limit(max_results, 50)
+        if limit == 0:
+            return []
+        params = {
+            **self._auth_params(),
+            "search.semantic": query[:2000],
+            "select": ",".join(OA_SELECT),
+            "per-page": str(min(limit, 50)),
+            "page": "1",
+        }
+        filter_parts = _openalex_wire_filter_parts(wire_params)
+        if filter_parts:
+            params["filter"] = ",".join(filter_parts)
+        data = self._request_json(
+            f"{OPENALEX_HOST}/works",
+            params,
+            min_interval_s=OPENALEX_SEMANTIC_MIN_INTERVAL_S,
+        )
+        return _results_array(data, _host_from_url(OPENALEX_HOST))[:limit]
+
+    def lookup_ids(
+        self, ids: list[str], *, wire_params: dict[str, str] | None = None
+    ) -> list[dict[str, Any]]:
+        """Return OpenAlex Works for IDs, resolved in 50-ID batches."""
+        if not ids:
+            return []
+        filter_parts = _openalex_wire_filter_parts(wire_params)
+        records: list[dict[str, Any]] = []
+        normalized_ids = [_normalize_openalex_work_id(record_id) for record_id in ids]
+        for chunk in _chunks(normalized_ids, _OPENALEX_REFERENCE_BATCH_SIZE):
+            params = {
+                **self._auth_params(),
+                "filter": ",".join([f"ids.openalex:{'|'.join(chunk)}", *filter_parts]),
+                "select": ",".join(OA_SELECT),
+                "per-page": str(len(chunk)),
+                "page": "1",
+            }
+            data = self._request_json(f"{OPENALEX_HOST}/works", params)
+            records.extend(_results_array(data, _host_from_url(OPENALEX_HOST)))
+        return records
+
+    def fetch_citing(
+        self,
+        ids: list[str],
+        *,
+        wire_params: dict[str, str] | None = None,
+        max_results: int | None = None,
+        page: int = 1,
+    ) -> list[dict[str, Any]]:
+        """Return one OpenAlex page of works that cite any supplied work."""
+        if page < 1:
+            raise ValueError("page must be at least 1")
+        if len(ids) > 100:
+            raise ValueError("fetch_citing accepts at most 100 ids")
+        if not ids:
+            return []
+        limit = _result_limit(max_results, 200)
+        if limit == 0:
+            return []
+        normalized_ids = [_normalize_openalex_work_id(record_id) for record_id in ids]
+        filter_parts = [f"cites:{'|'.join(normalized_ids)}"]
+        filter_parts.extend(_openalex_wire_filter_parts(wire_params))
+        params = {
+            **self._auth_params(),
+            "filter": ",".join(filter_parts),
+            "select": ",".join(OA_SELECT),
+            "per-page": str(min(limit, 200)),
+            "page": str(page),
+        }
+        data = self._request_json(f"{OPENALEX_HOST}/works", params)
+        return _results_array(data, _host_from_url(OPENALEX_HOST))[:limit]
+
+    def fetch_by_id(self, record_id: str) -> dict[str, Any] | None:
+        """Raise because OpenAlex exposes no fetch-by-id capability here."""
+        raise NotImplementedError("OpenAlexLiveBackend caps.has_fetch_by_id=False")
 
     def fetch_references(
         self, record_ids: list[str], *, max_results: int | None = None
@@ -467,12 +576,13 @@ class OvertonLiveBackend(_TransportMixin):
     name = "overton"
     trust_class = "grey_literature_aggregator"
     mode = "live"
-    caps = BackendCaps(has_snowball=False, has_title_lookup=False)
+    caps = BackendCaps(has_snowball=False, has_title_lookup=False, has_fetch_by_id=True)
     _min_interval_s = OVERTON_MIN_INTERVAL_S
 
     def __init__(self, api_key: str, *, fetch: _Fetch | None = None):
         self._api_key = api_key
         self.last_post_filter_excluded: int | None = None
+        self.last_pages: int | None = None
         self._init_transport(fetch)
 
     def search(
@@ -538,6 +648,7 @@ class OvertonLiveBackend(_TransportMixin):
     ) -> list[dict[str, Any]]:
         limit = _result_limit(max_results, _DEFAULT_MAX_RESULTS)
         self.last_post_filter_excluded = 0 if source_country_post_filter is not None else None
+        self.last_pages = 0
         if limit == 0:
             return []
 
@@ -547,6 +658,7 @@ class OvertonLiveBackend(_TransportMixin):
             "min_similarity": "0.3",
             "format": "json",
             "pp": str(_OVERTON_PAGE_SIZE),
+            "sort": "relevance",
             "api_key": self._api_key,
         }
         records: list[dict[str, Any]] = []
@@ -561,6 +673,7 @@ class OvertonLiveBackend(_TransportMixin):
             else:
                 data = self._request_json(next_url, {}, overton_retry_wait=True)
             response = _json_object(data, _host_from_url(OVERTON_HOST))
+            self.last_pages += 1
             page_results = _results_array(response, _host_from_url(OVERTON_HOST))
             if source_country_post_filter is None:
                 remaining = limit - len(records)
@@ -572,9 +685,7 @@ class OvertonLiveBackend(_TransportMixin):
                     if _overton_source_country(record) in source_country_post_filter:
                         records.append(record)
                     else:
-                        self.last_post_filter_excluded = (
-                            self.last_post_filter_excluded or 0
-                        ) + 1
+                        self.last_post_filter_excluded = (self.last_post_filter_excluded or 0) + 1
             if len(records) >= limit:
                 break
             # An empty page that still advertises next_page_url must not be
@@ -587,6 +698,44 @@ class OvertonLiveBackend(_TransportMixin):
                 break
             next_url = _validate_overton_next_page_url(next_page_url)
         return records
+
+    def fetch_by_id(self, record_id: str) -> dict[str, Any] | None:
+        """Return an Overton document only when its ID exactly matches.
+
+        Args:
+            record_id: Non-empty, whitespace-free policy document identifier.
+
+        Returns:
+            The matching record, or ``None`` when it is absent or mismatched.
+        """
+        if not isinstance(record_id, str) or not record_id or any(c.isspace() for c in record_id):
+            raise ValueError("record_id must be a non-empty string without whitespace")
+        data = self._request_json(
+            f"{OVERTON_HOST}/documents.php",
+            {
+                "policy_document_id": record_id,
+                "format": "json",
+                "pp": "1",
+                "api_key": self._api_key,
+            },
+            overton_retry_wait=True,
+        )
+        results = _results_array(data, _host_from_url(OVERTON_HOST))
+        if not results or results[0].get("policy_document_id") != record_id:
+            return None
+        return results[0]
+
+    def search_semantic(self, *args: Any, **kwargs: Any) -> list[dict[str, Any]]:
+        """Raise because Overton exposes no OpenAlex semantic capability."""
+        raise NotImplementedError("OvertonLiveBackend caps.has_semantic=False")
+
+    def lookup_ids(self, *args: Any, **kwargs: Any) -> list[dict[str, Any]]:
+        """Raise because Overton exposes no OpenAlex ID-lookup capability."""
+        raise NotImplementedError("OvertonLiveBackend caps.has_id_lookup=False")
+
+    def fetch_citing(self, *args: Any, **kwargs: Any) -> list[dict[str, Any]]:
+        """Raise because Overton exposes no OpenAlex forward capability."""
+        raise NotImplementedError("OvertonLiveBackend caps.has_forward=False")
 
     def fetch_citations(
         self, record_id: str, *, max_results: int | None = None
@@ -728,7 +877,7 @@ def _normalize_doi_for_filter(doi: str) -> str | None:
         "http://dx.doi.org/",
     ):
         if candidate.startswith(prefix):
-            candidate = candidate[len(prefix):]
+            candidate = candidate[len(prefix) :]
             break
     return candidate or None
 
@@ -754,7 +903,7 @@ def _normalize_openalex_work_id(record_id: str) -> str:
         "http://api.openalex.org/works/",
     ):
         if candidate.startswith(prefix):
-            candidate = candidate[len(prefix):]
+            candidate = candidate[len(prefix) :]
             break
     if not _OPENALEX_WORK_ID_RE.fullmatch(candidate):
         raise ValueError("record_id must be a plain OpenAlex Work ID or URL")

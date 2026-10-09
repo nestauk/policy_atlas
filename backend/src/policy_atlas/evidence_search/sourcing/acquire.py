@@ -79,9 +79,13 @@ class BackendCaps:
     has_snowball: bool
     has_title_lookup: bool
     has_doi_lookup: bool = False
+    has_semantic: bool = False
+    has_id_lookup: bool = False
+    has_forward: bool = False
+    has_fetch_by_id: bool = False
 
 
-class SearchBackend(Protocol):
+class SearchBackendBase(Protocol):
     """The ``search`` seam: one configured backend with a declared trust class.
 
     Attributes:
@@ -127,6 +131,46 @@ class SearchBackend(Protocol):
     ) -> list[dict[str, Any]]:
         """Return provider records matching DOI identifiers."""
         ...
+
+
+class ExtendedSearchBackend(SearchBackendBase, Protocol):
+    """Extended search seam for single-pass search transport verbs."""
+
+    def search_semantic(
+        self,
+        text: str,
+        *,
+        wire_params: dict[str, str] | None = None,
+        max_results: int | None = None,
+    ) -> list[dict[str, Any]]:
+        """Return provider records for a semantic search."""
+        ...
+
+    def lookup_ids(
+        self, ids: list[str], *, wire_params: dict[str, str] | None = None
+    ) -> list[dict[str, Any]]:
+        """Return provider records matching provider identifiers."""
+        ...
+
+    def fetch_citing(
+        self,
+        ids: list[str],
+        *,
+        wire_params: dict[str, str] | None = None,
+        max_results: int | None = None,
+        page: int = 1,
+    ) -> list[dict[str, Any]]:
+        """Return provider records that cite the supplied identifiers."""
+        ...
+
+    def fetch_by_id(self, record_id: str) -> dict[str, Any] | None:
+        """Return one provider record by its provider identifier."""
+        ...
+
+
+# Existing search execution still accepts the established five-verb seam;
+# callers that use the Phase 2 transport additions type against this extension.
+SearchBackend = SearchBackendBase
 
 
 class ExecutedSearchCall(Protocol):
@@ -205,7 +249,7 @@ def _normalize_doi(doi: Any) -> str | None:
         "http://dx.doi.org/",
     ):
         if d.startswith(prefix):
-            d = d[len(prefix):]
+            d = d[len(prefix) :]
             break
     return d or None
 
@@ -215,9 +259,7 @@ def _slim_authorships(authorships: list[dict[str, Any]] | None) -> list[dict[str
     return [
         {
             "author_name": (a.get("author") or {}).get("display_name"),
-            "institutions": [
-                i.get("display_name") for i in (a.get("institutions") or [])
-            ],
+            "institutions": [i.get("display_name") for i in (a.get("institutions") or [])],
             "countries": a.get("countries") or [],
         }
         for a in (authorships or [])
@@ -435,9 +477,7 @@ def _provider_tags(backend_name: str, record: dict[str, Any]) -> list[tuple[str,
             values.append(primary_topic.get("display_name"))
         topics = record.get("topics")
         if isinstance(topics, list):
-            values.extend(
-                topic.get("display_name") for topic in topics if isinstance(topic, dict)
-            )
+            values.extend(topic.get("display_name") for topic in topics if isinstance(topic, dict))
         sdgs = record.get("sustainable_development_goals")
         if isinstance(sdgs, list):
             values.extend(sdg.get("display_name") for sdg in sdgs if isinstance(sdg, dict))
@@ -525,7 +565,7 @@ def acquire_sources(
     task_id: uuid.UUID,
     run_id: uuid.UUID,
     context: AcquireContext,
-    backends: list[SearchBackend],
+    backends: list[SearchBackendBase],
     embedder: EmbeddingBackend | None = None,
     executed_calls: Sequence[ExecutedSearchCall],
     depth: str = "rapid",
@@ -583,14 +623,10 @@ def acquire_sources(
         raise ValueError(f"duplicate backend names: {names}")
     backend_by_name = {backend.name: backend for backend in backends}
     unknown_call_backends = [
-        call.backend_name
-        for call in executed_calls
-        if call.backend_name not in backend_by_name
+        call.backend_name for call in executed_calls if call.backend_name not in backend_by_name
     ]
     if unknown_call_backends:
-        raise ValueError(
-            f"executed call references unknown backend(s): {unknown_call_backends}"
-        )
+        raise ValueError(f"executed call references unknown backend(s): {unknown_call_backends}")
 
     # Preload the task's existing identity keys — dedup is then in-memory,
     # and also catches duplicates within this call's own result stream.
@@ -604,8 +640,7 @@ def acquire_sources(
         .select_from(
             task_source_snapshot.join(
                 source_snapshot,
-                task_source_snapshot.c.source_snapshot_id
-                == source_snapshot.c.source_snapshot_id,
+                task_source_snapshot.c.source_snapshot_id == source_snapshot.c.source_snapshot_id,
             )
         )
         .where(task_source_snapshot.c.task_id == task_id)

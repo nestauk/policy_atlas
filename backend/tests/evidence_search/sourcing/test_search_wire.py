@@ -26,7 +26,7 @@ from policy_atlas.evidence_search.sourcing.search_loop import (
 )
 from policy_atlas.evidence_search.sourcing.search_prompts import SearchQueriesWire
 from tests.helpers import ScriptedGenerationBackend, seed_scope, seed_task_and_run
-from tests.provider_fixtures import OvertonFixtureBackend
+from tests.provider_fixtures import OpenAlexFixtureBackend, OvertonFixtureBackend
 
 
 @dataclass(frozen=True)
@@ -48,6 +48,186 @@ class CapturingFetch:
         if "overton" in url:
             return {"results": [], "next_page_url": False}
         return {"results": []}
+
+
+class ScriptedFetch(CapturingFetch):
+    """Capturing fetch seam with a deterministic response sequence."""
+
+    def __init__(self, responses: list[dict[str, Any] | Exception]) -> None:
+        super().__init__()
+        self._responses = iter(responses)
+
+    def __call__(self, url: str, params: dict[str, str]) -> dict[str, Any]:
+        self.calls.append(CapturedRequest(url=url, params=dict(params)))
+        response = next(self._responses)
+        if isinstance(response, Exception):
+            raise response
+        return response
+
+
+def test_openalex_semantic_wire_shape_and_empty_text() -> None:
+    fetch = CapturingFetch()
+    backend = OpenAlexLiveBackend("openalex-test-key", fetch=fetch)
+
+    backend.search_semantic(
+        "  housing   retrofit ", wire_params={"filter": "type:article,language:en"}
+    )
+
+    assert fetch.calls[0].params == {
+        "api_key": "openalex-test-key",
+        "search.semantic": "housing retrofit",
+        "filter": "type:article,language:en",
+        "select": ",".join(search_live.OA_SELECT),
+        "per-page": "50",
+        "page": "1",
+    }
+    backend.search_semantic("\t \n")
+    assert len(fetch.calls) == 1
+
+
+def test_openalex_semantic_omits_absent_filter() -> None:
+    fetch = CapturingFetch()
+    OpenAlexLiveBackend("openalex-test-key", fetch=fetch).search_semantic("housing")
+    assert "filter" not in fetch.calls[0].params
+
+
+def test_openalex_lookup_ids_batches_and_normalizes_urls() -> None:
+    fetch = CapturingFetch()
+    ids = [f"https://openalex.org/W{i}" for i in range(1, 121)]
+    OpenAlexLiveBackend("openalex-test-key", fetch=fetch).lookup_ids(
+        ids, wire_params={"filter": "type:article"}
+    )
+
+    assert len(fetch.calls) == 3
+    assert [call.params["per-page"] for call in fetch.calls] == ["50", "50", "20"]
+    assert fetch.calls[0].params["filter"] == (
+        f"ids.openalex:{'|'.join(f'W{i}' for i in range(1, 51))},type:article"
+    )
+    assert fetch.calls[-1].params["filter"].startswith("ids.openalex:W101|W102")
+
+
+def test_openalex_fetch_citing_wire_shape_and_bounds() -> None:
+    fetch = CapturingFetch()
+    backend = OpenAlexLiveBackend("openalex-test-key", fetch=fetch)
+    backend.fetch_citing(["W1", "https://openalex.org/W2"], page=3)
+
+    assert len(fetch.calls) == 1
+    assert fetch.calls[0].params["filter"] == "cites:W1|W2"
+    assert fetch.calls[0].params["per-page"] == "200"
+    assert fetch.calls[0].params["page"] == "3"
+    with pytest.raises(ValueError, match="at most 100"):
+        backend.fetch_citing([f"W{i}" for i in range(101)])
+    with pytest.raises(ValueError, match="at least 1"):
+        backend.fetch_citing(["W1"], page=0)
+
+
+def test_overton_fetch_by_id_wire_shape_and_mismatch(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("POLICY_ATLAS_SEARCH_CACHE_TTL_S", "0")
+    fetch = ScriptedFetch(
+        [
+            {"results": []},
+            {"results": [{"policy_document_id": "other"}]},
+            {"results": [{"policy_document_id": "target"}]},
+        ]
+    )
+    backend = OvertonLiveBackend("overton-test-key", fetch=fetch)
+    assert backend.fetch_by_id("target") is None
+    assert backend.fetch_by_id("target") is None
+    assert backend.fetch_by_id("target") == {"policy_document_id": "target"}
+    assert fetch.calls[0].params == {
+        "policy_document_id": "target",
+        "format": "json",
+        "pp": "1",
+        "api_key": "overton-test-key",
+    }
+    with pytest.raises(ValueError, match="without whitespace"):
+        backend.fetch_by_id("not valid")
+
+
+def test_overton_relevance_sort_is_protected_and_counts_pages(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("POLICY_ATLAS_SEARCH_CACHE_TTL_S", "0")
+    fetch = ScriptedFetch(
+        [
+            {
+                "results": [_overton_record("one", "UK")],
+                "next_page_url": "https://app.overton.io/documents.php?page=2",
+            },
+            {"results": [_overton_record("two", "UK")]},
+        ]
+    )
+    backend = OvertonLiveBackend("overton-test-key", fetch=fetch)
+    assert len(backend.search("housing", max_results=2)) == 2
+    assert backend.last_pages == 2
+    assert fetch.calls[0].params["sort"] == "relevance"
+    post_filter_fetch = CapturingFetch()
+    OvertonLiveBackend("overton-test-key", fetch=post_filter_fetch).search_with_post_filter(
+        "housing", source_country_post_filter=["UK"]
+    )
+    assert post_filter_fetch.calls[0].params["sort"] == "relevance"
+    with pytest.raises(ValueError, match="sort"):
+        backend.search("housing", wire_params={"sort": "date"})
+
+
+def test_semantic_retry_and_interval(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("POLICY_ATLAS_SEARCH_CACHE_TTL_S", "0")
+    sleeps: list[float] = []
+    monkeypatch.setattr(search_live, "_sleep", sleeps.append)
+    retry_fetch = ScriptedFetch(
+        [
+            search_live.SearchTransportError(429, "not-the-provider.example"),
+            {"results": []},
+        ]
+    )
+    OpenAlexLiveBackend("openalex-test-key", fetch=retry_fetch).search_semantic("housing")
+    assert len(retry_fetch.calls) == 2
+    assert len(retry_fetch.calls) <= search_live.RETRY_MAX_ATTEMPTS
+
+    values = iter([0.0, 0.0, 1.0])
+    monkeypatch.setattr(search_live, "_monotonic", lambda: next(values))
+    interval_fetch = CapturingFetch()
+    backend = OpenAlexLiveBackend("openalex-test-key", fetch=interval_fetch)
+    backend.search_semantic("first")
+    backend.search_semantic("second")
+    assert any(wait >= 1.0 for wait in sleeps)
+
+
+def test_new_transport_calls_redact_keys_and_urls() -> None:
+    def fail(_url: str, _params: dict[str, str]) -> dict[str, Any]:
+        raise search_live.SearchTransportError(400, "secret.example")
+
+    openalex = OpenAlexLiveBackend("openalex-secret", fetch=fail)
+    with pytest.raises(search_live.SearchTransportError) as error:
+        openalex.search_semantic("https://contains-a-url.example")
+    assert str(error.value) == "search transport error host=api.openalex.org status_code=400"
+    assert "openalex-secret" not in str(
+        search_live._loggable_params({"api_key": "openalex-secret"})
+    )
+    openalex_fetch = CapturingFetch()
+    openalex = OpenAlexLiveBackend("openalex-secret", fetch=openalex_fetch)
+    overton_fetch = CapturingFetch()
+    overton = OvertonLiveBackend("overton-secret", fetch=overton_fetch)
+    openalex.search_semantic("x")
+    openalex.lookup_ids(["W1"])
+    openalex.fetch_citing(["W1"])
+    overton.fetch_by_id("id")
+    assert all(
+        "secret" not in repr(search_live._search_cache_key(call.url, call.params))
+        for call in [*openalex_fetch.calls, *overton_fetch.calls]
+    )
+
+
+def test_fixture_new_verbs_are_deterministic() -> None:
+    openalex = OpenAlexFixtureBackend()
+    assert openalex.search_semantic("x") != openalex.search("x")
+    first = openalex.search("x")[0]
+    work_id = first["id"].rsplit("/", 1)[-1]
+    assert openalex.lookup_ids([work_id]) == [first]
+    overton = OvertonFixtureBackend()
+    record = overton.search("x")[0]
+    assert overton.fetch_by_id(record["policy_document_id"]) == record
+    assert overton.fetch_by_id("unknown") is None
 
 
 def _context(scope_id: uuid.UUID) -> AcquireContext:
@@ -118,8 +298,9 @@ def test_live_backends_receive_backend_native_wire_params_via_run_search(
         assert "select" in call.params
         assert "title_and_abstract.search:" in call.params["filter"]
         assert "from_publication_date:2020-01-01" in call.params["filter"]
-        assert "sustainable_development_goals.id:https://metadata.un.org/sdg/3" in (
-            call.params["filter"]
+        assert (
+            "sustainable_development_goals.id:https://metadata.un.org/sdg/3"
+            in (call.params["filter"])
         )
         assert "type:article" in call.params["filter"]
         assert "language:en" in call.params["filter"]
@@ -166,8 +347,7 @@ def test_live_backends_receive_backend_native_wire_params_via_run_search(
     }
     assert event_filters == expected_filters
     row = conn.execute(
-        select(search_coverage_record)
-        .where(search_coverage_record.c.acquired_by_run_id == run_id)
+        select(search_coverage_record).where(search_coverage_record.c.acquired_by_run_id == run_id)
     ).one()
     assert row.scope_filters == expected_filters
 
@@ -256,7 +436,6 @@ def test_overton_post_filter_exclusion_count_reaches_event_and_coverage(
     assert payloads[0]["filters"] == {}
     assert payloads[0]["post_filter_excluded"] == 1
     row = conn.execute(
-        select(search_coverage_record)
-        .where(search_coverage_record.c.acquired_by_run_id == run_id)
+        select(search_coverage_record).where(search_coverage_record.c.acquired_by_run_id == run_id)
     ).one()
     assert row.scope_filters["post_filter_exclusions"][0]["post_filter_excluded"] == 1

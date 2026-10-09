@@ -62,6 +62,8 @@ QueryOrigin = Literal[
     "fallback_verbatim",
     "snowball_forward",
     "snowball_backward",
+    "semantic",
+    "landmark",
     "suggestion_doi",
     "suggestion_title",
 ]
@@ -71,6 +73,8 @@ CallVerb = Literal[
     "fetch_references",
     "lookup_dois",
     "lookup_title",
+    "search_semantic",
+    "fetch_by_id",
 ]
 CallStatus = Literal["ok", "error"]
 ArmName = Literal["reformulate", "snowball", "suggest", "diversity"]
@@ -460,9 +464,7 @@ def _single_alpha_code_value(
     return text
 
 
-def _iso_date_value(
-    key: str, value: Any, *, error: type[Exception] = SearchDirectiveError
-) -> str:
+def _iso_date_value(key: str, value: Any, *, error: type[Exception] = SearchDirectiveError) -> str:
     if not isinstance(value, str):
         raise error(f"{key} must be an ISO date string")
     try:
@@ -496,9 +498,7 @@ def openalex_wire_params(filters: dict[str, Any] | None) -> dict[str, str]:
         elif key == "published_before":
             filter_parts.append(f"to_publication_date:{value}")
         elif key == "sdgs":
-            sdg_iris = [
-                f"https://metadata.un.org/sdg/{n}" for n in _int_values(key, value, 1, 17)
-            ]
+            sdg_iris = [f"https://metadata.un.org/sdg/{n}" for n in _int_values(key, value, 1, 17)]
             filter_parts.append(f"sustainable_development_goals.id:{'|'.join(sdg_iris)}")
         elif key == "types":
             filter_parts.append(f"type:{'|'.join(_enum_values(key, value, OPENALEX_TYPES))}")
@@ -811,9 +811,7 @@ def _filter_variants(backend_name: str, validated: dict[str, Any]) -> list[dict[
     if not isinstance(countries, list) or len(countries) <= 100:
         return [validated]
     if len(countries) > 200:
-        raise SearchDirectiveError(
-            "author_affiliation_countries must contain at most 200 codes"
-        )
+        raise SearchDirectiveError("author_affiliation_countries must contain at most 200 codes")
     return [
         {**validated, "author_affiliation_countries": countries[start : start + 100]}
         for start in range(0, len(countries), 100)
@@ -1011,10 +1009,7 @@ def finalise_deep_stop(
         raise RuntimeError("deep stop finalisation requires a coverage row")
     conn.execute(
         search_coverage_record.update()
-        .where(
-            search_coverage_record.c.search_coverage_record_id
-            == row.search_coverage_record_id
-        )
+        .where(search_coverage_record.c.search_coverage_record_id == row.search_coverage_record_id)
         .values(stop_condition=final_value)
     )
     return final_value
@@ -1104,8 +1099,7 @@ def _screened_records(
                 & (effective.c.task_id == task_source_snapshot.c.task_id),
             ).join(
                 source_snapshot,
-                task_source_snapshot.c.source_snapshot_id
-                == source_snapshot.c.source_snapshot_id,
+                task_source_snapshot.c.source_snapshot_id == source_snapshot.c.source_snapshot_id,
             )
         )
         .where(effective.c.task_id == task_id)
@@ -1166,9 +1160,12 @@ def _read_exemplars(
         limit=NEG_EXEMPLARS,
         confidence_floor=None,
     )
-    return positives, negatives, [_exemplar(record) for record in positives], [
-        _exemplar(record) for record in negatives
-    ]
+    return (
+        positives,
+        negatives,
+        [_exemplar(record) for record in positives],
+        [_exemplar(record) for record in negatives],
+    )
 
 
 def docs_screened_from_payload(payload: dict[str, Any]) -> int:
@@ -1242,7 +1239,7 @@ def run_search(
     task_id: uuid.UUID,
     run_id: uuid.UUID,
     context: acquire.AcquireContext,
-    backends: list[acquire.SearchBackend],
+    backends: list[acquire.SearchBackendBase],
     generation_backend: SearchGenerationBackend,
     embedder: EmbeddingBackend | None = None,
 ) -> dict[str, Any]:
@@ -1284,18 +1281,25 @@ def run_search(
         _scope_wire_params_payload(wire_params_by_backend) if raw_filters is not None else None
     )
 
-    round_index = count_existing_rounds(
-        conn,
-        task_id=task_id,
-        scope_id=context.scope_id,
-    ) + 1
-    prior_http_calls = _prior_deep_usage(
-        conn,
-        task_id=task_id,
-        scope_id=context.scope_id,
-        backend_names=backend_names,
-        depth=depth,
-    ) if depth in ("deep", "standard") else dict.fromkeys(backend_names, 0)
+    round_index = (
+        count_existing_rounds(
+            conn,
+            task_id=task_id,
+            scope_id=context.scope_id,
+        )
+        + 1
+    )
+    prior_http_calls = (
+        _prior_deep_usage(
+            conn,
+            task_id=task_id,
+            scope_id=context.scope_id,
+            backend_names=backend_names,
+            depth=depth,
+        )
+        if depth in ("deep", "standard")
+        else dict.fromkeys(backend_names, 0)
+    )
 
     started = time.monotonic()
     executed_calls: list[ExecutedCall] = []
@@ -1318,7 +1322,7 @@ def run_search(
     usage_totals = UsageAccumulator()
 
     def execute_call(
-        backend: acquire.SearchBackend,
+        backend: acquire.SearchBackendBase,
         *,
         verb: CallVerb,
         query: str,
@@ -1368,7 +1372,7 @@ def run_search(
         return call
 
     def execute_plan(
-        backend: acquire.SearchBackend,
+        backend: acquire.SearchBackendBase,
         plan: _PlannedCall,
         *,
         arm: ArmName | None = None,
@@ -1477,14 +1481,16 @@ def run_search(
 
         openalex_backend = next(
             (
-                backend for backend in backends
+                backend
+                for backend in backends
                 if backend.name == "openalex" and backend.caps.has_snowball
             ),
             None,
         )
         if "snowball" in constants["arms"] and openalex_backend is not None:
             seeds = [
-                record for record in positive_records
+                record
+                for record in positive_records
                 if record.metadata.get("backend") == "openalex"
                 and isinstance(record.metadata.get("backend_record_id"), str)
             ][:SNOWBALL_SEEDS]
@@ -1541,12 +1547,7 @@ def run_search(
                     break
 
             remaining_snowball = SNOWBALL_RESULTS - snowball_records
-            if (
-                referenced
-                and remaining_snowball > 0
-                and arm_calls["snowball"] < SNOWBALL_CALL_CAP
-               
-            ):
+            if referenced and remaining_snowball > 0 and arm_calls["snowball"] < SNOWBALL_CALL_CAP:
                 execute_call(
                     openalex_backend,
                     verb="fetch_references",
@@ -1563,7 +1564,8 @@ def run_search(
 
         suggest_backend = next(
             (
-                backend for backend in backends
+                backend
+                for backend in backends
                 if backend.name == "openalex"
                 and (backend.caps.has_doi_lookup or backend.caps.has_title_lookup)
             ),
@@ -1645,12 +1647,10 @@ def run_search(
                         grounded: list[dict[str, Any]] = []
                         for candidate in candidates:
                             title_matches = (
-                                _normalized_title(candidate.get("display_name"))
-                                == normalized_title
+                                _normalized_title(candidate.get("display_name")) == normalized_title
                             )
                             doi_matches = (
-                                doi is not None
-                                and _normalized_doi(candidate.get("doi")) == doi
+                                doi is not None and _normalized_doi(candidate.get("doi")) == doi
                             )
                             if title_matches or doi_matches:
                                 grounded.append(candidate)
@@ -1687,9 +1687,7 @@ def run_search(
                 # target (contract decision 15 / rubric 7): this is one extra,
                 # un-steered call, so it's deliberately smaller than a full
                 # fan-out call rather than requesting the full per-call target.
-                reserve = max(
-                    1, int(constants["result_cap_per_backend"] * DIVERSITY_FRACTION)
-                )
+                reserve = max(1, int(constants["result_cap_per_backend"] * DIVERSITY_FRACTION))
                 for plan in _with_filter_variants(
                     _PlannedCall(
                         diversity_backend.name,
