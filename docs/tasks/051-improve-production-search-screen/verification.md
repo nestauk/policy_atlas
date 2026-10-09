@@ -402,7 +402,18 @@ built from this observation; the Broad and Broadest runs carry it and drew 31 an
 (the pause is per backend, so the two legs' rates add up at the start of each review;
 every 429 was recovered by the retry; the one failed call above was not a 429).
 
-**Spend.** Mini-set runs in all, from the history rows: $1.29 (first Focused launch, 8
+**Price correction (found after the commit, 2026-10-09).** The dollar figures above
+and in the history rows are Langfuse's `total_cost`, and Langfuse's model row for
+`gpt-5.6-luna` prices it at $1.00 / $0.10 / $6.00 per million input / cached input /
+output tokens: five times the list price the repository checked on 2026-10-08 ($0.20 /
+$0.02 / $1.20, `scripts/evals/screening/metrics.py`, task 050 notes). At the list price,
+from the token counts in the table: Focused $0.50 ($0.03 per review), Broad $0.98
+($0.07), Broadest $2.13 ($0.14); the whole mini-set spend about $4.1, not $20.64, and a
+full-set Broad run about $6.5. The Langfuse row is configuration outside the repository;
+the figures here are left as reported with this note, and the spend paragraph below reads
+them at the Langfuse rate.
+
+**Spend (at the Langfuse rate).** Mini-set runs in all, from the history rows: $1.29 (first Focused launch, 8
 reviews, stopped) + $2.51 (Focused) + $1.24 (4 Broad reviews of the stopped launch) +
 $4.94 (Broad) + $10.66 (Broadest) = **$20.64**, against the contract's $10 mini-set stop
 mark and $25 ceiling. The Broad and Broadest pass ran as one background command and was
