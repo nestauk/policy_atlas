@@ -1533,7 +1533,7 @@ def run_search(
                 pools[name], summaries[name], local_filters = outcome
             else:
                 pools[name], summaries[name] = outcome
-    executed = [call for name in names for call in passes.get(name, _Pass(constants, {})).executed]
+    executed = [call for name in names for call in passes[name].executed]
     calls_made = {name: passes[name].calls.get(name, 0) for name in names}
     ranked_count = {name: passes[name].ranked_count.get(name, 0) for name in names}
     if scope_wire_params is not None and local_filters:

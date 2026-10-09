@@ -172,6 +172,16 @@ pacing-admission stamps of six concurrent requests are one interval apart. The
 scripted double takes a lock; two tests that identified calls by arrival order are
 keyed by query text. Sourcing, runner, steering and wire suites: 533 passed; typecheck,
 lint and eval-check green. The owner waived `make verify` for this phase.
+**Codex code review of Phase 3c (read-only, same session, 2026-10-09):** four
+findings, no blocker, all fixed: the eval recorder's two wrappers share one lock for
+the one list they append to; the pacing test asserts every thread finished and proves
+the requests overlap (the lock covers admission, not the request); the legs test uses
+a two-way barrier (each leg signals its start and waits for the other's), so a
+regression to sequential legs in either order fails it; the merge no longer builds a
+throwaway pass state. Codex found no correctness defect in the transport lock, the
+concurrent batches, the fallback barrier, the sequential forward and Overton paths,
+the context propagation or the backend-order merge. The fixes change tests, the eval
+log and a merge expression only, so the live check launched on `a4f471a` stays valid.
 
 _rest filled at step 6_
 

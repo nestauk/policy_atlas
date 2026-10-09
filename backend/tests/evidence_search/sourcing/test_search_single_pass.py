@@ -679,32 +679,23 @@ def test_fixture_mode_runs_the_single_pass_with_zero_egress(conn: Connection) ->
 # --- Concurrency (plan S13): the legs side by side, the seed calls together ---
 
 
-class _OvertonStartsFirst(ScriptedBackend):
-    """Overton double that signals when its first search has started."""
+class _MeetsTheOtherLeg(ScriptedBackend):
+    """Double whose first search signals its own start and waits for the other leg's.
 
-    def __init__(self, started: threading.Event, **kwargs: Any) -> None:
-        super().__init__(name="overton", **kwargs)
-        self.started = started
-
-    def search(self, query: str, **kwargs: Any) -> list[dict[str, Any]]:
-        self.started.set()
-        return super().search(query, **kwargs)
-
-
-class _OpenAlexWaitsForOverton(ScriptedBackend):
-    """OpenAlex double whose searches wait until Overton's first has started.
-
-    With sequential legs (OpenAlex first) the wait times out; with the legs
-    side by side the Overton leg sets the event while OpenAlex is waiting.
+    Only legs running side by side get both waits to return True: with the legs
+    run one after the other, in either order, the first leg waits in vain until
+    its bounded timeout.
     """
 
-    def __init__(self, started: threading.Event, **kwargs: Any) -> None:
+    def __init__(self, mine: threading.Event, theirs: threading.Event, **kwargs: Any) -> None:
         super().__init__(**kwargs)
-        self.started = started
-        self.overlapped: list[bool] = []
+        self.mine = mine
+        self.theirs = theirs
+        self.met: list[bool] = []
 
     def search(self, query: str, **kwargs: Any) -> list[dict[str, Any]]:
-        self.overlapped.append(self.started.wait(timeout=5.0))
+        self.mine.set()
+        self.met.append(self.theirs.wait(timeout=5.0))
         return super().search(query, **kwargs)
 
 
@@ -736,9 +727,13 @@ def _planned_keyword_queries() -> list[str]:
 def test_the_two_legs_run_side_by_side_and_record_in_backend_order(conn: Connection) -> None:
     task_id, run_id = seed_task_and_run(conn)
     scope_id = seed_scope(conn, task_id)
-    started = threading.Event()
-    openalex = _OpenAlexWaitsForOverton(started, scripts={"search": [[oa_record("k0")]]})
-    overton = _OvertonStartsFirst(started, scripts={"search": [[ov_record("r0")]]})
+    openalex_started, overton_started = threading.Event(), threading.Event()
+    openalex = _MeetsTheOtherLeg(
+        openalex_started, overton_started, scripts={"search": [[oa_record("k0")]]}
+    )
+    overton = _MeetsTheOtherLeg(
+        overton_started, openalex_started, name="overton", scripts={"search": [[ov_record("r0")]]}
+    )
 
     counts = run_search(
         conn,
@@ -749,7 +744,8 @@ def test_the_two_legs_run_side_by_side_and_record_in_backend_order(conn: Connect
         generation_backend=_generation(),
     )
 
-    assert openalex.overlapped and all(openalex.overlapped), "the legs did not overlap"
+    assert openalex.met and all(openalex.met), "the OpenAlex leg never saw Overton start"
+    assert overton.met and all(overton.met), "the Overton leg never saw OpenAlex start"
     backends_in_order = [p["backend"] for p in _payloads(conn, task_id)]
     first_overton = backends_in_order.index("overton")
     assert set(backends_in_order[:first_overton]) == {"openalex"}

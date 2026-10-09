@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import threading
+import time
 import uuid
 from dataclasses import dataclass
 from typing import Any
@@ -199,8 +201,6 @@ def test_pacing_admits_concurrent_requests_one_interval_apart(
     """Paced admission (task 051, plan S13): threads calling one backend at once
     are admitted (the last-request stamp taken) no closer than the interval,
     and every request is counted."""
-    import threading
-
     monkeypatch.setenv("POLICY_ATLAS_SEARCH_CACHE_TTL_S", "0")
     stamps: list[float] = []
 
@@ -213,15 +213,32 @@ def test_pacing_admits_concurrent_requests_one_interval_apart(
             assert self._last_request_at is not None
             stamps.append(self._last_request_at)
 
-    backend = Stamping("openalex-test-key", fetch=CapturingFetch())
+    in_flight = {"now": 0, "max": 0}
+    gate = threading.Lock()
+
+    def overlapping_fetch(url: str, params: dict[str, str]) -> dict[str, Any]:
+        # The request runs outside the pacing lock, so requests overlap.
+        with gate:
+            in_flight["now"] += 1
+            in_flight["max"] = max(in_flight["max"], in_flight["now"])
+        try:
+            time.sleep(0.2)
+            return {"results": []}
+        finally:
+            with gate:
+                in_flight["now"] -= 1
+
+    backend = Stamping("openalex-test-key", fetch=overlapping_fetch)
     threads = [threading.Thread(target=backend.search, args=(f"q{i}",)) for i in range(6)]
     for thread in threads:
         thread.start()
     for thread in threads:
         thread.join(timeout=10)
+    assert not any(thread.is_alive() for thread in threads), "a request thread did not finish"
 
     assert len(stamps) == 6
     assert backend.http_calls == 6
+    assert in_flight["max"] > 1, "requests did not overlap: the lock is held through the request"
     gaps = [b - a for a, b in zip(stamps, stamps[1:], strict=False)]
     assert all(gap >= 0.05 - 1e-3 for gap in gaps), gaps
 

@@ -31,8 +31,6 @@ Records past a cap were fetched and paid for, then discarded (the
 
 from __future__ import annotations
 
-import _bootstrap  # noqa: F401
-
 import threading
 import uuid
 from collections.abc import Callable
@@ -40,19 +38,19 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
+import _bootstrap  # noqa: F401
+from evals_search_utils import GroundTruth, record_key
 from langfuse import Langfuse
 from sqlalchemy import select
 from sqlalchemy.engine import Connection
 
-from evals_search_utils import GroundTruth, record_key
-
 from policy_atlas.core import tracing
 from policy_atlas.core.schema import (
     evidence_scope,
-    task,
-    task_source_snapshot,
     runs,
     source_snapshot,
+    task,
+    task_source_snapshot,
 )
 from policy_atlas.evidence_search.assess.screen import (
     ScreenContext,
@@ -200,13 +198,15 @@ class _RecordingBackend:
         inner: Any,
         calls: list[dict[str, Any]],
         langfuse_client: Langfuse | None = None,
+        lock: threading.Lock | None = None,
     ) -> None:
         self._inner = inner
         self._calls = calls
         self._langfuse_client = langfuse_client
         # The search's legs and seed calls run concurrently (task 051); the
-        # list is a diagnostic log in completion order, appended under a lock.
-        self._lock = threading.Lock()
+        # list is a diagnostic log in completion order. One lock is shared by
+        # every wrapper that appends to the same list (``run_one_query``).
+        self._lock = lock if lock is not None else threading.Lock()
 
     def _log(self, entry: dict[str, Any]) -> None:
         with self._lock:
@@ -460,8 +460,9 @@ def run_one_query(
         }
     }
     search_calls: list[dict[str, Any]] = []
+    calls_lock = threading.Lock()
     recording_backends = [
-        _RecordingBackend(b, search_calls, langfuse_client)
+        _RecordingBackend(b, search_calls, langfuse_client, lock=calls_lock)
         for b in live_search_backends()
     ]
     generation_backend = GENERATION_BACKENDS[generation_backend_variant](
