@@ -628,7 +628,12 @@ reported, not passed (R69).
 81. [ ] **Places (R87; M16).** `extract_interventions` v4 with the place
     rules in words, `SCHEMA_VERSION` bumped, replays with the memo bypassed
     as 16R; the coverage checks: an unknown `study_country` counts as not
-    stated and is reported; a geography equal to a country name drops to
+    stated and is reported — superseded by the owner's decision of
+    2026-10-09: the table is extended to ISO-3166, the resolver maps the
+    UK's names, and an unknown `study_country` is kept as written and
+    reported (tests: "Tajikistan", "Paraguay", "Jordan" resolve; "UK",
+    "England", "Britain" resolve to United Kingdom; an invented name is
+    kept and counted); a geography the resolver maps to a country drops to
     the country; a geography under "multiple countries" shows no place;
     hyphens and spaces normalised (tests on the survey's cases: "Spanish
     Ministry of Health", "Georgia" under United Kingdom, "south-west" /
@@ -640,11 +645,15 @@ reported, not passed (R69).
     Eligibility Provision (CEP)" stay two); the shown spelling rule;
     applied to `examples` and to the document line's programme name.
     Duplicates left on the check set, reported.
-83. [ ] **"Who decides" and the authority (R89; M18).** The consideration's
-    body reaches the `who_decides` line when the verdict is "within your
-    power" (a test); profile round 6 in `evidence/rounds/`; stop measure
-    on refugees as M18; the other lists' sentences unchanged on two runs,
-    reported; re-pinned.
+83. [ ] **"Who decides" and the authority (R89; M18).** The who-can-act
+    constraint's texts reach the `who_decides` line as context when the
+    plan holds the constraint (a test); the authority call is unchanged
+    (no diff to its input); profile round 6 in `evidence/rounds/`; stop
+    measure on refugees as M18, two-sided: every "within your power"
+    option read for whether its named body can adopt the option, and the
+    "within your power" count before and after on every tuning list
+    reported, a rise read option by option; the other lists' sentences
+    unchanged on two runs, reported; re-pinned.
 
 ### Cross-cutting
 

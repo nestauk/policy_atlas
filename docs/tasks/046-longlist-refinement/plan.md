@@ -1405,15 +1405,16 @@ PA4-4, PA4-18):* a `study_country` the resolver (S29a) does not know is
 **kept as written** (it is still a country to the reader: Tajikistan,
 Paraguay, Jordan and Lebanon are on the tuning lists and not in
 `COUNTRY_NAMES`), counted in the coverage under `places_unknown_country`
-with the text, and reported per list; `COUNTRY_NAMES` is extended at build
-from the ISO-3166 table the Evidence search sourcing already holds
-(`country_filters.py:21`, `ISO_3166_ALPHA2`) so the unknown count on the
-tuning lists reaches zero; a `study_geography` that the resolver maps to a
+with the text, and reported per list; `COUNTRY_NAMES` is extended to every
+country of the ISO-3166 table the Evidence search sourcing already holds
+(`country_filters.py:21`, `ISO_3166_ALPHA2`), and the resolver maps the
+UK's names (owner 2026-10-09: "add the missing countries. and resolve UK.")
+so the unknown count on the tuning lists reaches zero; a `study_geography` that the resolver maps to a
 country becomes the top level with no level below; a geography under
 "multiple countries" is not served as a place; the place key in coverage's
 `places` loop (`coverage.py:~566-570`) normalises hyphens, spaces and a
-leading "the". **R87's words "counts as not stated" are softened to "kept
-as written and reported"** (a minor contract fold put to the owner, § Plan-review folds).
+leading "the". R87's words are "kept as written and reported" for a text the resolver
+still does not know (the owner's decision, § Plan-review folds).
 
 S33. **Example-name fold** (R88; PA4-13). One function in `coverage.py`,
 `fold_programme_name(name) -> tuple[str, str | None]` (the key and the
@@ -1447,8 +1448,8 @@ authority call in constrain reads the `who_decides` sentence as its main
 input (`constrain.py:737-752, 891-895`), and constrain runs after the
 profile, so the verdict is not known when the line is written; a body
 written into the sentence would make the label agree because the label
-reads the sentence. *Proposed (for the owner, § Plan-review folds):* when
-the plan holds a who-can-act consideration, the `who_decides` line
+reads the sentence. *Decided (owner 2026-10-09: "Yes add the additional context"):* when
+the plan holds a who-can-act constraint, the `who_decides` line
 receives the consideration texts as context (there is no structured body:
 `who_decides_considerations`, `constrain.py:723-734`), with the rule in
 words: name the one body whose decision the option cannot go ahead
@@ -1570,8 +1571,7 @@ the line (the plumbing only; the data-block words are the lead's, PA4-12),
 with a test. `lead`: the data-block wording and profile round 6 (record
 `29-who-decides-round-6.md`); the two-sided M18 on refugees; the "within
 your power" counts before and after on every tuning list. Gate: `make
-verify-fast` · `prompt-guard`. Commit. **Waits on the owner's answer on
-S35.**
+verify-fast` · `prompt-guard`. Commit.
 
 ### Phase 29F — The feature rule (R77; PA4-5) — `lead`
 
