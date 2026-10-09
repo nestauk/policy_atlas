@@ -535,25 +535,33 @@ reported, not passed (R69).
     Where country first by its short English name, then by count then
     name) and `outcomes_evaluated` (plan outcomes with at least one
     `evaluated` document). Tests pin: a describing document's country is
-    not in the list; England in the plan's Where puts United Kingdom first;
-    a plan with no Where keeps count order. The card header and each list
+    not in the list; a document under "multiple countries" or "other"
+    counts for no country; England in the plan's Where puts United Kingdom
+    first through the resolver; a Where the resolver cannot map keeps count
+    order; the minimum one-outcome plan gives "1 of your 1" (contract
+    review C14); the describing count is `document_count − evaluated_count`.
+    The card header and each list
     row print the three facts in the same words, with the "no" forms
     (vitest, four cases: rich, no evaluations, no place, no documents).
-    No "studies" anywhere in the longlist views (vitest, R90).
+    No "studies" in any authored label or count copy of the longlist
+    views (vitest over the presentation strings, R90; document titles and
+    evidence types are exempt, contract review C15).
 73. [ ] **How it works (R77).** The section is "How it works"; the lever
     line on its own line with the reason under it; the lead-in from the
     setting kinds with the preposition per kind and "and" ("Delivered in
     schools and at home. It typically involves:"); no setting gives "It
-    typically involves:"; no "Delivered through" line (vitest). The design
-    prompt carries the feature rule; on the tuning set the lead reads the
-    features and reports the count that restate the setting or the target
-    unit (reported, not a stop measure).
+    typically involves:"; no "Delivered through" line (vitest). The feature rule
+    is in both design prompts (Phase 29F); stop measure: on the tuning set,
+    zero features that only restate the option's setting or the plan's
+    target unit, read by hand; the count before the round reported
+    (contract review C13).
 74. [ ] **Order and the callout (R78).** Sections in order How it works ·
-    What it would take · Evidence; no Checks section; a `breaks` or
-    `cannot_check` judgement or a guess on a user consideration renders as
-    the callout under the description with the consideration's text and
-    reason; a passing consideration and the built-in checks render nothing
-    (vitest, three cases). Constrain's code is unchanged (no diff under
+    What it would take · Evidence; no Checks section; on a user
+    constraint, a `breaks` or `cannot_check` judgement or a
+    `likely_falls_short` or `cannot_say` guess renders as the callout under
+    the description with the constraint's text and reason (the grey form
+    for `cannot_check` and `cannot_say`); `passes`, `likely_meets` and the
+    built-in checks render nothing (vitest, six cases). Constrain's code is unchanged (no diff under
     `constrain/` for this item).
 75. [ ] **The opener and your outcomes (R79, R82).** The opener line's three
     forms; "Your outcomes" lines in the plan's words with the evaluated
@@ -571,17 +579,24 @@ reported, not passed (R69).
     `max_length` on the sentence (220 to start); a place left out keeps the
     template; an id not in the input is dropped; an invalid response after
     one retry leaves the option on template sentences and does not fail
-    the step (tests). The trace check: a sentence with a number, a strength
-    word, a programme name or a place not in its input is replaced by the
-    template and counted (tests, one per kind). The template with plural
+    the step (tests). The trace check (plan S31, three rules): a sentence with a
+    number, a strength word or a capitalised run not in its place's
+    allowlist is replaced by the template and counted; tests on a seeded
+    fixture set of valid and invalid sentences (at least ten each,
+    including "Strong Start" as a programme name, a number word, a
+    sub-count by tier, an invented acronym and an invented name at position
+    0) with the expected verdict for every one (contract review C2, C3);
+    a sentence over the ceiling is replaced and counted. The template with plural
     forms (tests). Stored in coverage `place_sentences` as
     `[{place, sentence, generated}]`; remade on a rebuild; an added option
     and a merge read template sentences until the profile runs (tests).
     `OptionOut.place_sentences` served; the card renders the block in
     stored order with the plan's Where row tinted (vitest).
 77. [ ] **The sentence loop (R80; M15).** Rounds in `evidence/rounds/`;
-    stop measure: on the tuning set, zero sentences replaced by the trace
-    check and zero over the ceiling. Reported: the readability read (the
+    stop measure (M15): on the tuning set, zero `failed_trace`, zero
+    `failed_length` and zero `failed_call` (plan review PA4-9), with the
+    seeded fixture set of box 76 green beside it, so a lax checker cannot
+    pass (contract review C3). Reported: the readability read (the
     count a reader would rewrite, per list), outcomes in the plan's words,
     kinds in the fold's words, no merit words ("effective", "promising").
     Re-pinned in `scripts/prompt_hashes.json`.
@@ -602,9 +617,11 @@ reported, not passed (R69).
     facets' code.
 80. [ ] **The folds' readers and the folding round (R86; M17).** The
     folding calls and maps are unchanged in mechanism (no diff to S21's
-    storage); the F4 guard in `_checked_folds` maps a kind containing a
-    plan outcome's text to that outcome and reports a kind containing two
-    (tests on the survey's case). Round 6 in `evidence/rounds/`; stop
+    storage); the F4 guard in `_checked_folds`, Measures facet only, maps a
+    kind containing a plan outcome's text as whole words to that outcome,
+    the longest match when two match, and counts the rewrites (tests on
+    the survey's case and on "employment" / "unemployment" / "youth
+    employment", contract review C12). Round 6 in `evidence/rounds/`; stop
     measure: at most one wrong fold in a read of 30 per facet per list on
     the tuning set, with the three wrong-fold kinds named in the record;
     kinds per list reported; re-pinned.
@@ -634,8 +651,8 @@ reported, not passed (R69).
 84. [ ] **Every new or changed prompt went through a refine loop (R69).**
     `place_sentences_v1` (26L), `extract_interventions` v4 (27), the
     folding prompts' round 6 (28), the profile prompt's round 6 (29), the
-    option design prompt's feature rule (one round, reported under box
-    73). Each: rounds recorded, one stop measure, at most five rounds,
+    design prompts' feature rule (Phase 29F, stop measure in box 73).
+    Each: rounds recorded, one stop measure, at most five rounds,
     tuning set then one read of the check set, reported to the owner,
     re-pinned.
 85. [ ] **Gates.** No schema revision. Full `make verify` at 24.0 and 31;
@@ -646,12 +663,16 @@ reported, not passed (R69).
 86. [ ] **The contract's lines hold.** The OpenAPI diff shows only the
     removals and additions of R76–R81 (contract § Amendment 4, "Public
     interface"); `verification.md` § Amendment 4 records the known limits,
-    M15–M18, the three live runs' figures (evaluations and countries per
+    M15–M18, the superseded tests replaced (the roles-sentence assertions
+    at `OptionCard.test.tsx:92` and the chip and table tests of the removed
+    blocks, contract review C15), the three live runs' figures (evaluations and countries per
     option, sentences generated vs template per list, wrong folds found in
     the browser check), and the browser check of Phase 31.
 87. [ ] **Spec changes of amendment 4** (contract § Spec changes 10–14)
     are applied only with the owner's accepted wording, one line each in
     `docs/specs/log.md`.
 88. [ ] **Out of scope held (R91).** No change under `evidence_search/`
-    except the intervention profile's own files; the Overton faults are in
-    `docs/deferred.md` and nowhere in the diff.
+    except the intervention profile's own files; the only Overton-related
+    change in the diff is the `docs/deferred.md` entry; no code, contract
+    item or capability behaviour addresses the year or the broken-title
+    placeholder (contract review C18).

@@ -1379,7 +1379,8 @@ sentence is replaced by the template and counted as `failed_trace`; a
 sentence over the ceiling (220 characters to start) likewise, counted as
 `failed_length`. The counts go to
 `provenance.option_profile.place_sentences = {generated, template,
-failed_trace, failed_length, failed_call}`. *Template (code):*
+failed_trace, failed_length, failed_call}`. *Template (code; C7):* one shared read-side builder, every clause
+dropped when its field is null, down to "{n} documents":
 "{Programme}: " when one programme name holds the place's documents; "{n}
 {strength} {type}" with plural forms and the commonest tier and type; "with
 {kind}" from the folded Tried on kind of the first document; "in
@@ -1432,7 +1433,8 @@ S34. **The folding round and the F4 guard** (R86; PA4-14). *Guard:* in
 `_checked_folds` (`option_profile.py`), for the Measures facet only: a
 returned kind that contains one plan outcome's text as whole words,
 case-folded, maps to that outcome's own text (A4 extended); one containing
-two or more maps to the first and is counted; the count of rewritten kinds
+two or more maps to the longest match and is counted (C12); one containing
+none stays as returned; the count of rewritten kinds
 per list goes to provenance and the round record. *Round 6 (20L):* the
 rules in words in `folding_prompt.py` (no fold across an age group the plan
 names; an outcome folds to a plan outcome only when it measures it;
@@ -1477,8 +1479,8 @@ and `.tried_on` (so `LonglistOut.options[]` changes; `LonglistOut`'s own
 fields do not), `EvidenceProfileOut.where_tried`, `.tried_on` and
 `.measures`, `OutcomeCountsOut.other`, `OptionOut.examples`; they are
 removed in 30a and 30c with their readers, not in 25, so no in-between
-card ships. *Fixtures:* `mock/fixtures.ts` and `mock/api.ts` updated in
-the same commits.
+card ships. *Fixtures:* `mock/fixtures.ts` and `mock/api.ts` (which reads
+`card.tried_on` at `:734`, C9) updated in the same commits.
 
 ### The order of the phases (PA4-6)
 
@@ -1575,9 +1577,10 @@ S35.**
 
 Files: `longlist_cluster_prompt.py` (`design_features` for discovered
 options, `:71`) and `runtime/option_design_prompt.py` (`option_design_v3`,
-the user's own options). The rule in words in both; one round on the
-replays; the count of features that restate the setting or the target
-unit per list, before and after, reported (rubric box 73); re-pinned.
+the user's own options). The rule in words in both; rounds on the
+replays, at most five; stop measure: zero features on the tuning set that
+only restate the option's setting or the plan's target unit, read by hand
+(C13); the count before, reported (rubric box 73); re-pinned.
 Gate: `make verify-fast` · `prompt-guard`. Commit.
 
 ### Phase 30a — The card: structure (R77–R82; S36) — `fast-worker`
@@ -1637,7 +1640,7 @@ Gate: **full `make verify`**. Commit.
 | No kind restates a plan outcome (the guard, a test) | 28 | test |
 | Every "within your power" option on refugees names a body that can adopt the option; the "within your power" count before and after on every tuning list | 29 | **M18** (two-sided) |
 | The survey's duplicate example names fold to one; duplicates left on the check set | 27E | test (reported) |
-| Features that restate the setting or the target unit, per list, before and after | 29F | reported |
+| Zero features on the tuning set that only restate the setting or the target unit; the count before | 29F | **stop measure** (box 73) |
 
 ### Known limits (amendment 4)
 
@@ -1672,6 +1675,11 @@ Gate: **full `make verify`**. Commit.
 | PA4-17 | Box 76's vitests assigned to 26 | 30a (the block), 30b (the tint) |
 | PA4-18 | `_clean` is the wrong function; the country match too narrow | S32: the place key in coverage; the resolver |
 | PA4-19 | The dossier link's parameter | S36: `source=` and `option=` |
+
+The contract-stage review's findings (C1–C18) and their folds are in
+`contract.md` § Amendment 4; those that touch the plan: C2/C3 (S31's
+rules; box 76's fixtures), C7 (the template's grammar), C9 (the mock API),
+C12 (S34), C13 (29F's stop measure).
 
 ## Plan-review folds (2026-09-28, fallback lane)
 
