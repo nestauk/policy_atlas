@@ -243,6 +243,29 @@ def test_pacing_admits_concurrent_requests_one_interval_apart(
     assert all(gap >= 0.05 - 1e-3 for gap in gaps), gaps
 
 
+def test_a_429_pauses_every_threads_admission(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A rate-limit reply pushes the backend's next admission out by the pause,
+    for every caller, not only the thread that was refused (task 051, S13)."""
+    monkeypatch.setenv("POLICY_ATLAS_SEARCH_CACHE_TTL_S", "0")
+    clock = {"now": 100.0}
+    monkeypatch.setattr(search_live, "_monotonic", lambda: clock["now"])
+    monkeypatch.setattr(
+        search_live, "_sleep", lambda seconds: clock.__setitem__("now", clock["now"] + seconds)
+    )
+    fetch = ScriptedFetch(
+        [search_live.SearchTransportError(429, "api.openalex.org"), {"results": []}]
+    )
+    backend = OpenAlexLiveBackend("openalex-test-key", fetch=fetch)
+
+    backend.search("first")  # 429 at t=100, retried after the back-off
+
+    assert len(fetch.calls) == 2
+    # The refused request stamped t=100; the pause moved the next admission to
+    # t=100 + RATE_LIMIT_PAUSE_S, which is where the retry (a new admission) landed.
+    assert backend._last_request_at is not None
+    assert backend._last_request_at >= 100.0 + search_live.RATE_LIMIT_PAUSE_S - 1e-9
+
+
 def test_new_transport_calls_redact_keys_and_urls() -> None:
     def fail(_url: str, _params: dict[str, str]) -> dict[str, Any]:
         raise search_live.SearchTransportError(400, "secret.example")

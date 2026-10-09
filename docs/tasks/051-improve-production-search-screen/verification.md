@@ -182,6 +182,15 @@ throwaway pass state. Codex found no correctness defect in the transport lock, t
 concurrent batches, the fallback barrier, the sequential forward and Overton paths,
 the context propagation or the backend-order merge. The fixes change tests, the eval
 log and a merge expression only, so the live check launched on `a4f471a` stays valid.
+**Rate-limit follow-up (lead, 2026-10-09):** the relaunched live check showed nine
+OpenAlex 429 replies in its first two reviews (one retry in the whole sequential run
+before), all recovered by the retry. With concurrent callers a 429 means the backend's
+whole pacing is too fast, so `search_live` now pushes every thread's next admission
+out by `RATE_LIMIT_PAUSE_S` (1 s) on a 429, beside the refused thread's own back-off;
+sub-millisecond pacing waits are ignored as floating-point residue. Tested in
+`test_a_429_pauses_every_threads_admission`. The live check kept running on the
+commit before this change; its failed-call count is reported with its results, and
+it is restarted on this commit only if a call fails.
 
 _rest filled at step 6_
 

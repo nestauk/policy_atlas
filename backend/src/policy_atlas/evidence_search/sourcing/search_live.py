@@ -64,6 +64,10 @@ OPENALEX_SEMANTIC_MIN_INTERVAL_S = 1.0
 # back. Worst case a dead host costs 7s of waiting before the call fails.
 RETRY_BACKOFF_S = 1.0
 RETRY_MAX_ATTEMPTS = 4
+# A 429 means the provider is refusing the current rate, which with concurrent
+# callers is the backend's whole pacing, not one thread's. The refused thread
+# backs off (above) and every thread's next admission is pushed this far out.
+RATE_LIMIT_PAUSE_S = 1.0
 USER_AGENT = "policy-atlas/0.1"
 OPENALEX_HOST = "https://api.openalex.org"
 OVERTON_HOST = "https://app.overton.io"
@@ -233,10 +237,17 @@ class _TransportMixin:
         now = _monotonic()
         if self._last_request_at is not None:
             wait_s = interval_s - (now - self._last_request_at)
-            if wait_s > 0:
+            # Below a millisecond is floating-point residue, not pacing.
+            if wait_s > 0.001:
                 _sleep(wait_s)
                 now = _monotonic()
         self._last_request_at = now
+
+    def _pause_admission(self, seconds: float) -> None:
+        """Push every thread's next admission at least ``seconds`` away."""
+        with self._pace_lock:
+            latest = self._last_request_at or 0.0
+            self._last_request_at = max(latest, _monotonic()) + seconds - self._min_interval_s
 
     def _request_json(
         self,
@@ -280,6 +291,8 @@ class _TransportMixin:
                     status_code=redacted.status_code,
                     attempt=attempts + 1,
                 )
+                if redacted.status_code == 429:
+                    self._pause_admission(RATE_LIMIT_PAUSE_S)
                 _sleep(RETRY_BACKOFF_S * 2**attempts)
                 if overton_retry_wait and redacted.status_code == 429:
                     _sleep(OVERTON_MIN_INTERVAL_S)
