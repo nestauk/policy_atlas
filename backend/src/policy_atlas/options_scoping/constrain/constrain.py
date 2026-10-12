@@ -24,9 +24,9 @@ task 046 items 5, 7, 10, 11, 12, R4, R21, R38, AM6, AM7.
    among them, D21, verbatim, AM7) followed by the :data:`DEFAULT_SCREENS`
    (*relevant*, *within scope*), on the option's specified design, a compact
    coverage summary (no ``where_tried``: AM7) and the baseline. The plan
-   fields reach the prompt with their place removed (:func:`_plan_data`,
-   S6); the removed spans are recorded in ``provenance.constrain.
-   place_removed``. The response is validated fail-closed; a malformed batch
+   fields reach the prompt as the plan holds them (:func:`_plan_data`); the
+   place rule is words in the prompt (R74). The response is validated
+   fail-closed; a malformed batch
    is retried once, then its options are recorded ``cannot_check`` on every
    requirement and screen ("judgement unavailable") — never a crash, never
    an exclusion.
@@ -127,7 +127,7 @@ from policy_atlas.options_scoping.longlist.longlist import (
     membership_coverage,
 )
 from policy_atlas.options_scoping.longlist.longlist_backend import LONGLIST_JUDGMENT_MODEL
-from policy_atlas.options_scoping.longlist.where_tried import resolve_country, strip_place
+from policy_atlas.options_scoping.longlist.where_tried import resolve_country
 from policy_atlas.options_scoping.longlist_intent import who_decides_considerations
 from policy_atlas.options_scoping.suggest.suggest import baseline_sections, walk_plan
 from policy_atlas.runtime.scoping_plan import TRANSFERABILITY_DEFAULT, ScopingPlan
@@ -241,34 +241,26 @@ def user_holds_state(exclusion: object) -> bool:
     return isinstance(exclusion, Mapping) and exclusion.get("by") == "user"
 
 
-def _plan_data(plan: ScopingPlan) -> tuple[dict[str, object], list[str]]:
-    """The plan fields the per-option prompt reads, and the place spans removed.
+def _plan_data(plan: ScopingPlan) -> dict[str, object]:
+    """The plan fields the per-option prompt reads.
 
-    The question, the intended change and the target unit pass through
-    :func:`strip_place` against the plan's Where (S6, R4, AM7): the exact
-    target unit with its place removed, never the screen's widened sentence.
-    The outcomes are passed as they are; Where itself is not included.
-    Requirement texts are not stripped (they are not plan data here).
+    The question, the target unit, the intended change and the outcomes as
+    the plan holds them (R4, AM7): the exact target unit, never the screen's
+    widened sentence. Where itself is not included; the place rule is words
+    in the prompt (R74).
 
     Args:
         plan: The validated scoping plan.
 
     Returns:
-        ``(plan_data, removed)``: ``{"question", "target_unit",
-        "intended_change", "outcomes"}`` and the removed spans in field order
-        (question, target unit, intended change).
+        ``{"question", "target_unit", "intended_change", "outcomes"}``.
     """
-    where = plan.where.text
-    question, question_removed = strip_place(plan.question, where)
-    target_unit, target_removed = strip_place(plan.target_unit.text, where)
-    intended_change, change_removed = strip_place(plan.intended_change.text, where)
-    data: dict[str, object] = {
-        "question": question,
-        "target_unit": target_unit,
-        "intended_change": intended_change,
+    return {
+        "question": plan.question,
+        "target_unit": plan.target_unit.text,
+        "intended_change": plan.intended_change.text,
         "outcomes": [outcome.text for outcome in plan.outcomes],
     }
-    return data, [*question_removed, *target_removed, *change_removed]
 
 
 def _checks(requirements: list[dict[str, str]]) -> list[dict[str, str]]:
@@ -870,9 +862,7 @@ def constrain_scope(
     requirements, preferences = _constraint_lists(plan)
     checks = _checks(requirements)
     texts = {r["id"]: r["text"] for r in checks + preferences}
-    plan_data, place_removed = _plan_data(plan)
-    if place_removed:
-        log.info("constrain.place_removed", spans=len(place_removed))
+    plan_data = _plan_data(plan)
 
     considerations = who_decides_considerations(plan)
     profile = _mapping(result_row.option_profile)
@@ -1083,7 +1073,6 @@ def constrain_scope(
         "max_concurrent": CONSTRAIN_MAX_CONCURRENT,
         **stats,
         "distinct": distinct.stats,
-        "place_removed": place_removed,
         "requirements": len(requirements) - len(DEFAULT_SCREENS),
         "preferences": len(preferences),
         "authority": (

@@ -19,7 +19,6 @@ import structlog
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from policy_atlas.core.prompt_fields import scrub_nul
-from policy_atlas.options_scoping.longlist.where_tried import strip_place
 from policy_atlas.runtime.option_design_prompt import OptionDesignWire
 
 log = structlog.get_logger()
@@ -133,23 +132,21 @@ class OptionDesign(BaseModel):
         return f"{name}. {description} Design features: {features}."
 
     @classmethod
-    def from_wire(cls, wire: OptionDesignWire, *, where: str | None = None) -> OptionDesign:
+    def from_wire(cls, wire: OptionDesignWire) -> OptionDesign:
         """Build a design from the ``option_design_prompt`` output, fail-closed.
 
         An ``assumed`` entry that does not match a feature is dropped (and
         logged) rather than failing the whole proposal: the features are the
         design; ``assumed`` only marks which of them to show as supplied.
 
-        The place is taken out of the name, the description and each feature
-        (task 046, R31): the design is the option's search query, and
-        evidence from any country is wanted. The guard backs the prompt's
-        no-place rule; a feature left empty is dropped. The user's own words
-        are not part of the design and keep their place.
+        The design names no place (task 046, R31): the design is the option's
+        search query, and evidence from any country is wanted. The rule is
+        words in the design prompt (R74); no code strip backs it (the strip
+        was deleted on the owner's ruling at the review, 2026-10-12). A
+        feature left empty is dropped.
 
         Args:
             wire: The parsed model output.
-            where: The plan's Where; ``None`` strips only a place the
-                where-tried matcher knows when a preposition leads it.
 
         Returns:
             The validated design at version 1.
@@ -160,7 +157,7 @@ class OptionDesign(BaseModel):
         """
 
         def _placeless(value: str) -> str:
-            return strip_place(scrub_nul(value), where)[0].strip()
+            return scrub_nul(value).strip()
 
         features = [_placeless(item) for item in wire.design_features]
         features = [item for item in features if item]

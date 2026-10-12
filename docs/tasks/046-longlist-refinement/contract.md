@@ -546,7 +546,10 @@ owner as the lead proposed.
 ## Spec changes (proposed; the owner decides each before it is applied)
 
 Each change follows from a ruling above. The wording is put to the owner in
-the build, and only accepted wording is applied.
+the build, and only accepted wording is applied. **Applied 2026-10-12** at
+the step-7 review on the owner's word ("Make the spec changes"), in the
+final form amendments 3 and 4 gave each item; `docs/specs/log.md`
+§ 2026-10-12 lists them.
 
 0. **Applied 2026-09-28, wording accepted by the owner ("Looks good").**
    OS components (the diagram, the component table, § 6, the ⟨longlist

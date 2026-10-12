@@ -23,7 +23,8 @@ When tuning a prompt that runs on the mini model:
 4. **A phrase inside the input is a criterion whatever the prose says.** The screen's
    mini reps wrote "not in Greater Manchester" as the reason while the rule beside the
    text said the place is not a criterion; naming the place as "the user's place" cut the
-   faults from 10 to 1, not to 0, so the place strip stays in code (amendment 3, loop 18P).
+   faults from 10 to 1, not to 0 (amendment 3, loop 18P); the owner then accepted that
+   residual and the strip was deleted at the review (2026-10-12).
 5. **Stop after two targeted rounds.** Beyond them the folds and the records varied more
    between runs of one text than between rounds of the text; the next lever is the model
    tier, which is a contract decision, not a wording one (loops 16R, 20L, 27, 28).

@@ -2792,11 +2792,13 @@ Recorded by the task 046 amendment 2 build (`amendment-2-final.md` § 4 and § 2
 Recorded by the task 046 amendment 3 build (`amendment-3-final.md` § 7.3; the round records
 `16R-record-prompt-loop.md`, `18P-place-rule-loop.md`, `20L-folding-loop.md`).
 
-- **The place list's deletion is an owner decision.** With the rule in words in every prompt
-  the replays still showed one clear place-based screen rejection in 175 documents on the
-  hardest list (refugees) after three rounds, so `strip_place`, its name tables and
-  `names_place` stay (R74). The loop's texts and figures are on the record; deleting the list
-  is the owner's call at review, or a later round on a stronger screen model.
+- ~~**The place list's deletion is an owner decision.**~~ **Closed 2026-10-12.** With the rule
+  in words in every prompt the replays still showed one clear place-based screen rejection in
+  175 documents on the hardest list (refugees) after three rounds (R74). The owner accepted
+  that residual at the review ("We can delete the strip"): `strip_place` and the
+  `place_removed` provenance are gone; the name tables and `names_place` stay as amendment
+  4's place resolver and setting pass (R87). A later round on a stronger screen model is
+  the lever if a place-based rejection shows live.
 - **The folding calls' tail.** On the mini model, "the same word for the same kind" holds for
   the large kinds and fails in the tail (obesity's "BMI measures" beside the plan outcome;
   NEET's three employment kinds); a list with more than ~120 distinct unit words can collapse

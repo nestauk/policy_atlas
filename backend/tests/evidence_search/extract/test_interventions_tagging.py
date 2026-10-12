@@ -169,7 +169,8 @@ def test_the_fingerprint_does_not_change_with_the_plan_s_where() -> None:
     )
 
 
-def test_the_plan_s_context_strips_place_from_the_target_unit_and_change_only() -> None:
+def test_the_plan_s_context_carries_the_plan_s_words_as_written() -> None:
+    # R74: the place rule is words in the prompt; no strip (owner ruling 2026-10-12).
     plan = scoping_plan(
         where={"text": "United Kingdom", "origin": "your_call"},
         target_unit={
@@ -183,9 +184,8 @@ def test_the_plan_s_context_strips_place_from_the_target_unit_and_change_only() 
         outcomes=[{"text": "employment in Greater Manchester", "origin": "assumed"}],
     )
     context = plan_tagging_context(plan)
-    assert context.target_unit == "refugees and asylum seekers"
-    assert context.intended_change == "Raise employment among refugees"
-    # Outcomes are not stripped.
+    assert context.target_unit == "refugees and asylum seekers living in Greater Manchester"
+    assert context.intended_change == "Raise employment among refugees in the UK"
     assert context.outcomes == ("employment in Greater Manchester",)
 
 
@@ -287,7 +287,7 @@ def test_the_harness_passes_the_scope_plan_s_context(conn: Connection) -> None:
     summary = _run_component(conn, task_id, scope_id)
 
     expected = plan_tagging_context(scoping_plan(target_unit=target))
-    assert expected.target_unit == "refugees"
+    assert expected.target_unit == "refugees living in Greater Manchester"
     assert _provenance(summary)["context_hash"] == expected.context_hash
 
 

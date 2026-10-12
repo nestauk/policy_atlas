@@ -20,6 +20,8 @@
   a4 "commit-tree path list").
 * **Update**: [delegated-executor-practices](delegated-executor-practices.md) gains the background-gate
   and invented-attribution lines (base candidates).
+* **Update**: [mini-model-loops-examples-over-rules](mini-model-loops-examples-over-rules.md)
+  rule 4 — the owner accepted the 1-in-175 residual at step 9 and the place strip was deleted.
 * **Declined** (recorded in verification.md § Review findings, step 8): JSONB key order (textbook);
   the fold key is not a label, `head_phrase` negation, `document_where` first spelling, the
   evaluated-country rule, the first-record rule (each a code comment and a test); one screen per

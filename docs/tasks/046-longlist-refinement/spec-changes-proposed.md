@@ -1,8 +1,10 @@
 # Spec changes proposed by task 046 (for the owner's decision)
 
-> **Status:** proposed 2026-09-29 · lead. **Nothing in `docs/specs/` is
-> changed by this file.** Each item below is applied only after the owner
-> accepts its wording (contract § Spec changes; rubric box 20). Item 0 of the
+> **Status:** proposed 2026-09-29 · lead; **applied 2026-10-12** on the
+> owner's word at the review ("Make the spec changes"), in the final form
+> amendments 3 and 4 gave each item (`docs/specs/log.md` § 2026-10-12).
+> Each item below was applied only after the owner accepted it (contract
+> § Spec changes; rubric box 20). Item 0 of the
 > contract (`theme` as a component of its own) was applied on 2026-09-28 with
 > the owner's accepted wording and is not repeated here.
 

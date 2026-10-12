@@ -109,10 +109,10 @@ This file does not restate them.
 18. [x] No generated files or secrets edited by hand.
 19. [x] No tests deleted, skipped or weakened without written
     justification.
-20. [ ] Each spec change in contract § Spec changes is applied only if the
+20. [x] Each spec change in contract § Spec changes is applied only if the
     owner accepted its wording, with the owner's words quoted and one line
     in `docs/specs/log.md`.
-    *Review 2026-10-12: pending — the owner has not accepted any wording; nothing under docs/specs changed beyond R28.*
+    *Review 2026-10-12: applied on the owner's word ("Make the spec changes") in the final form amendments 3 and 4 gave each item; one line each in `docs/specs/log.md` § 2026-10-12.*
 21. [x] `docs/deferred.md` carries: a new entry for the system-level cost
     and latency task (items 21 and 24, a screen memo across scopes, L1,
     L3); the thin baselines added to § Synthesis optimisation as a second
@@ -278,10 +278,10 @@ that is not a loop's stop measure is reported, not passed (R48, R49).
     shortlist code and no limit label are written. `docs/deferred.md`
     carries burden, a grounded legal-change line, the outcome direction and
     the limits for task 3, and building an added option in place.
-43. [ ] **Spec changes of amendment 2**, `option_profile` included, are
+43. [x] **Spec changes of amendment 2**, `option_profile` included, are
     applied only with the owner's accepted wording, with one line each in
     `docs/specs/log.md`.
-    *Review 2026-10-12: pending (as box 20).*
+    *Review 2026-10-12: applied (as box 20).*
 44. [x] **Gates.** Full `make verify` passes at Phases 9.0, 10 and 14;
     Phases 9 and 12a also pass `make openapi-sync` and `make frontend-verify`.
     ADR 0040 is amended (walk, typing in `option_profile`, place exception)
@@ -395,7 +395,7 @@ is reported, not passed (R69). Every question of final 3 § 7.2 is answered
     set every non-null `programme_name` is a proper name the abstract gives
     **for this intervention**, not one it sits within (lead, A13, B19).
     Threshold: all. Misses on the check set reported.
-    *Review 2026-10-12: built; the 16R "all" threshold not met (faults 13–32 % of names on the tuning set); the owner decides at step 9.*
+    *Review 2026-10-12: built; the 16R "all" threshold not met (faults 13–32 % of names on the tuning set); the residual accepted by the owner at step 9 ("Accept 3"); the next lever is the model tier (`docs/deferred.md`).*
 58. [x] **Collapsed row (R65).** Collapsed, **seven cells**: Ambition, then
     cost, time to set up, time to effect, workforce, coordination, delivery
     complexity; no cell for who decides or dependencies; every cell shows a
@@ -464,7 +464,7 @@ is reported, not passed (R69). Every question of final 3 § 7.2 is answered
     "multiple" for a group, empty when nothing is stated, no short form or
     UK nation as a country. Threshold: all records read, no wrong country. Records
     by `study_country` value reported per list.
-    *Review 2026-10-12: built; "no wrong country" not met on the record; the owner decides at step 9.*
+    *Review 2026-10-12: built; "no wrong country" not met on the record; the residual accepted by the owner at step 9 ("Accept 3").*
 70. [x] **`unit` throughout (R73, R75).** No product code, wire, prompt or
     read model uses `population` or `population_tag` for the intervention
     record or the two finding records (a grep over `backend/src` and
@@ -480,7 +480,7 @@ is reported, not passed (R69). Every question of final 3 § 7.2 is answered
     (their schema and prompt versions as before), so the revision runs on
     production without a re-extraction; the downgrade reverses the rename
     (round-trip test on a finding row) (owner, Q24).
-71. [ ] **The place rule in words (R74).** The screen criteria, the tagging
+71. [x] **The place rule in words (R74).** The screen criteria, the tagging
     context, `constrain` and `option_design` carry "the place in the question
     is the user's place, not a criterion; judge as if the question named no
     place", and so does every other prompt that read the stripped text:
@@ -491,7 +491,7 @@ is reported, not passed (R69). Every question of final 3 § 7.2 is answered
     holds, `strip_place`, its name tables and `names_place`
     are gone from product code; if it fails, they stay and `verification.md`
     and final 3 say so. M4 on the live runs reported.
-    *Review 2026-10-12: the wording holds in every prompt; the deletion is not done (M4 one in 175 on the replay, none live) — the owner's decision at step 9.*
+    *Review 2026-10-12: the wording holds in every prompt; the deletion done on the owner's ruling at step 9 ("We can delete the strip"; M4 one in 175 on the replay, none live): `strip_place`, its prepositions and the `place_removed` provenance are gone; the name tables stay for the resolver and the setting pass (R87).*
 
 ### Cross-cutting
 
@@ -523,9 +523,9 @@ is reported, not passed (R69). Every question of final 3 § 7.2 is answered
     known limits of final 3 § 7.3, M1, M2 and M4 on the live runs, records
     with a `programme_name` per list (reported, lead A14), and names rounds
     2–5 of 12L as built before this amendment.
-66. [ ] **Spec changes of amendment 3** are applied only with the owner's
+66. [x] **Spec changes of amendment 3** are applied only with the owner's
     accepted wording, one line each in `docs/specs/log.md`.
-    *Review 2026-10-12: pending (as box 20).*
+    *Review 2026-10-12: applied (as box 20).*
 
 ## Amendment 4
 
@@ -697,10 +697,10 @@ reported, not passed (R69).
     option, sentences generated vs template per list, wrong folds found in
     the browser check), and the browser check of Phase 31.
     *Review 2026-10-12: holds after the review removed `EvidenceProfileOut.by_role` as the contract says (B3).*
-87. [ ] **Spec changes of amendment 4** (contract § Spec changes 10–14)
+87. [x] **Spec changes of amendment 4** (contract § Spec changes 10–14)
     are applied only with the owner's accepted wording, one line each in
     `docs/specs/log.md`.
-    *Review 2026-10-12: pending (as box 20).*
+    *Review 2026-10-12: applied (as box 20).*
 88. [x] **Out of scope held (R91).** No change under `evidence_search/`
     except the intervention profile's own files; the only Overton-related
     change in the diff is the `docs/deferred.md` entry; no code, contract

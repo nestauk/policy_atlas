@@ -160,20 +160,19 @@ def test_the_screen_criteria_are_the_two_lead_authored_sentences() -> None:
         "above, is the user's place, not a criterion. A study in another country, region "
         "or city passes; judge the document as if no place were named. The document "
         "evaluates, describes or proposes an intervention, programme or policy aimed at "
-        "refugees and asylum seekers, or at a wider or adjacent group, anywhere in the "
-        "world.",
+        "refugees and asylum seekers living in Greater Manchester, or at a wider or "
+        "adjacent group, anywhere in the world.",
         "It bears on at least one of these outcomes: The employment rate; "
         "Earnings after a year.",
     ]
 
 
-def test_the_screen_input_holds_no_setting_no_place_and_no_option_design() -> None:
+def test_the_screen_input_holds_no_setting_and_no_option_design() -> None:
     plan = _manchester_plan()
     intent = compile_longlist_intent(plan)
     criteria = longlist_screening_criteria(plan)
     composed = compose_longlist_screen_intent(plan)
     for text in (intent, *criteria, composed):
-        assert "Greater Manchester" not in text
         assert "Delivered through job centres" not in text
         assert "Setting" not in text
         assert ".." not in text
@@ -182,7 +181,7 @@ def test_the_screen_input_holds_no_setting_no_place_and_no_option_design() -> No
     assert "United Kingdom" not in criteria[1]
     # No option design: the intent is the plan's slots only.
     assert intent == (
-        "Interventions for refugees and asylum seekers. "
+        "Interventions for refugees and asylum seekers living in Greater Manchester. "
         "Intervention: any intervention, programme or policy (left open). "
         "Outcomes: The employment rate; Earnings after a year. "
         "The user works in United Kingdom: that place, and any place named in the group "
@@ -194,9 +193,10 @@ def test_the_screen_input_holds_no_setting_no_place_and_no_option_design() -> No
     assert setting_requirements(plan) == ["Delivered through job centres"]
 
 
-def test_the_removed_place_is_reported_for_the_scope_context() -> None:
-    assert screen_target_unit(_manchester_plan()) == (
-        "refugees and asylum seekers",
-        ["living in Greater Manchester"],
+def test_the_screen_target_unit_is_the_plan_s_own_words_without_a_trailing_stop() -> None:
+    # R74: the place stays; the rule in words makes it the user's place.
+    assert (
+        screen_target_unit(_manchester_plan())
+        == "refugees and asylum seekers living in Greater Manchester"
     )
-    assert screen_target_unit(_plan()) == ("16 to 24 year olds", [])
+    assert screen_target_unit(_plan()) == "16 to 24 year olds"

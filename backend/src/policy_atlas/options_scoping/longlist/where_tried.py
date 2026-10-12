@@ -14,9 +14,10 @@ gives the same one; "multiple countries" when they give two or more between
 them, or any gives "multiple"; else "other" when any record states a place;
 else "not stated". Countries compare with case folded only.
 
-The name tables below drive :func:`strip_place` (task 046, S6), which takes
-the place out of a plan text before it reaches the longlist, and
-:func:`names_place` (the setting pass). Task 046, amendment 4 (R87; S29a,
+The name tables below drive :func:`names_place` and :func:`named_place`
+(the setting pass). The plan-text place strip of S6 is gone (R74; the
+owner's ruling at the review, 2026-10-12): the place rule is words in the
+prompts. Task 046, amendment 4 (R87; S29a,
 S32): :data:`COUNTRY_NAMES` holds every ISO-3166 country, and one resolver
 (:func:`resolve_country`) maps a place text to one country code and one
 short English name (:data:`COUNTRY_DISPLAY_NAMES`), so "UK", "England" and
@@ -620,21 +621,8 @@ def _alternation(phrases: Iterable[str]) -> str:
     return "|".join(re.escape(phrase) for phrase in ordered)
 
 
-# --- The place strip (task 046, S6; PA11) -----------------------------------
+# --- A place in a text (the setting pass; task 046, S11; R87) -----------------
 
-#: The prepositions that lead a place the strip removes (contract PA11).
-#: "from" is not one: an origin defines a population ("migrants from
-#: India"). "living in" comes before "in" in the alternation by length, so
-#: the longer lead is removed whole.
-PLACE_PREPOSITIONS: tuple[str, ...] = ("living in", "in", "across", "within")
-
-_PREPOSITION = "(?i:{})".format(
-    "|".join(
-        r"\s+".join(re.escape(word) for word in phrase.split())
-        for phrase in sorted(PLACE_PREPOSITIONS, key=len, reverse=True)
-    )
-)
-_ARTICLE = r"(?i:the\s+)?"
 # A place is a country or sub-national name (case-insensitive) or an
 # abbreviation (case-sensitive: "us" is a pronoun). Never an adjective, and
 # never the head of a compound ("UK-wide", "London-based").
@@ -653,78 +641,6 @@ _PLACE = (
     rf"|(?:{_alternation(n.title() for n in AMBIGUOUS_COUNTRY_NAMES)})(?![\w-])"
     rf"|(?<![\w.])(?:{_alternation(ABBREVIATIONS)})(?![\w-]))"
 )
-# "in Greater Manchester and Lancashire" keeps "and Lancashire" (not a known
-# place); "across England and Wales" and "in Leeds, UK" go whole.
-_PLACE_LIST = rf"{_ARTICLE}{_PLACE}(?:\s*(?:,|(?i:and|or)|&)\s*{_ARTICLE}{_PLACE})*"
-_LED_PLACE_RE = re.compile(rf"(?<![\w])(?:{_PREPOSITION})\s+{_PLACE_LIST}")
-_TRAILING_PREPOSITION_RE = re.compile(rf"\s+(?:{_PREPOSITION})\s*(?=[.;:!?]?\s*$)")
-
-
-def _tidy(text: str) -> str:
-    """Collapse the whitespace and punctuation a removal leaves behind."""
-    text = re.sub(r"\s+", " ", text)
-    text = re.sub(r"\s+([.,;:!?])", r"\1", text)
-    text = re.sub(r"([,;:])(?:\s*[,;:])+", r"\1", text)
-    text = re.sub(r"[,;:]\s*(?=[.!?]|$)", "", text)
-    # "… in the last two years and living in X" leaves a conjunction with
-    # nothing after it; "the most deprived areas of X" leaves an "of".
-    text = re.sub(r"\s+(?i:and|or|of)(?:\s+(?i:the))?\s*(?=[.,;:!?]|$)", "", text)
-    text = _TRAILING_PREPOSITION_RE.sub("", text)
-    text = re.sub(r"^[\s,;:]+", "", text)
-    text = re.sub(r"\(\s*\)", "", text)
-    return re.sub(r"\s+", " ", text).strip()
-
-
-def strip_place(text: str, where_text: str | None) -> tuple[str, list[str]]:
-    """Remove the place from a plan text, never a population's nationality.
-
-    Two removals, in order:
-
-    1. the plan's Where text wherever it appears verbatim (case-insensitive,
-       on word boundaries), with a leading preposition and article when one
-       leads it ("in the United Kingdom" when Where is "United Kingdom");
-    2. a place the where-tried matcher knows — a country or sub-national
-       name, or an abbreviation ("UK") — **only when a preposition leads
-       it** ("in", "living in", "across", "within"), removed with
-       that preposition and a following "the"; a list of known places
-       ("across England and Wales") goes whole.
-
-    The matcher's adjective entries are never used, so "Polish migrant
-    workers" keeps "Polish"; an unled place name ("UK adults") stays unless
-    it is the Where text. The result has tidy whitespace, no space before a
-    full stop or comma and no dangling preposition. A text with no place is
-    returned unchanged.
-
-    Args:
-        text: The plan text (a target unit, an intended change, a question).
-        where_text: The plan's Where, or ``None``.
-
-    Returns:
-        ``(cleaned, removed)``: the cleaned text and the removed spans, as
-        they appeared, in removal order; ``(text, [])`` when nothing matched.
-    """
-    removed: list[str] = []
-
-    def _record(match: re.Match[str]) -> str:
-        removed.append(" ".join(match.group(0).split()))
-        return " "
-
-    cleaned = text
-    where = " ".join((where_text or "").split())
-    if where:
-        where_pattern = r"\s+".join(re.escape(word) for word in where.split(" "))
-        where_re = re.compile(
-            rf"(?<![\w-])(?:(?:{_PREPOSITION})\s+)?{_ARTICLE}(?i:{where_pattern})(?![\w-])"
-        )
-        cleaned = where_re.sub(_record, cleaned)
-    cleaned = _LED_PLACE_RE.sub(_record, cleaned)
-    if not removed:
-        return text, []
-    return _tidy(cleaned), removed
-
-
-# --- A place in a setting (task 046, S11 setting pass) ------------------------
-
 _ANY_PLACE_RE = re.compile(rf"(?<![\w-])(?:{_PLACE})")
 
 

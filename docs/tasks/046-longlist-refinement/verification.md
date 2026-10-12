@@ -10,6 +10,10 @@ defined in [contract.md](contract.md) and [plan.md](plan.md).
 > § Review findings): 44 findings across six lanes, 21 adopted and fixed,
 > 9 deferred to `docs/deferred.md`, the rest declined or recorded;
 > `make verify` green after the fixes.** Step 8 records are in this PR.
+> **Owner decisions 2026-10-12 (step 9, before the PR):** the spec changes
+> applied; the place strip deleted; the amendment 3 residuals accepted; the
+> template's "studies" kept; the two seams left for task 3 (§ Owner decisions
+> below).
 > Every figure in this file was read back from a saved result file or a
 > database query; the file is named beside the figure. The read-backs, the
 > traces, the replay tool and the round records are in the gitignored
@@ -613,7 +617,7 @@ group and the band words gone from the vitest files.
 | 40 Migration | holds: `e9a4c1f7b3d2`, round trip, full verify at its gate |
 | 41 Measures and time | M8, M10, M12, M14 reported |
 | 42 Task 3 principle recorded | `docs/deferred.md` § Amendment 2; spec item 15 proposed |
-| 43 Spec changes of amendment 2 | **not applied** (D22) |
+| 43 Spec changes of amendment 2 | **applied 2026-10-12** (§ Owner decisions) |
 | 44 Gates | full verify at 9.0 and 14 (and at 9 + 10); 9 and 12a passed `openapi-sync` and `frontend-verify`; ADR amended in its own commit before 12a |
 | 46 The corrected lines | the OpenAPI diff removes `ambition_bands` and adds the fields of final § 3; the rollback and the known limits are in ADR 0040 § Rollback and § Amendment 2 |
 
@@ -1121,7 +1125,7 @@ allowlist is in the diff; the migration carries no account id.
 | 54 Grid | `CELL_LIMIT` 4 (Phase 22c) |
 | 55 Header | no boxes, no depth chip; the abstracts note (Phase 22a) |
 | 56 Lever line | built (Phase 22a/22b) |
-| 57 Examples from `programme_name` | built (16R, Phase 19); **the 16R read's "all" threshold not met** (faults 13–32 % of names on the tuning set; the live read below) |
+| 57 Examples from `programme_name` | built (16R, Phase 19); **the 16R read's "all" threshold not met** (faults 13–32 % of names on the tuning set; the live read below); residual accepted by the owner 2026-10-12 |
 | 58 Collapsed row | seven cells with "Middle" (Phase 22a) |
 | 59 Checks | built (Phase 22a) |
 | 60 Documents | built (Phase 17, 18) |
@@ -1130,12 +1134,12 @@ allowlist is in the diff; the migration carries no account id.
 | 63 Every prompt through a loop | 16R (4 rounds, round 2 kept), 18P (3 rounds, the strip kept), 20L (5 rounds, v5 kept); 16W a word swap; the extra-files list in the hash guard (31 hashes) |
 | 64 Gates | the gate table: full `make verify` at 15.0, 16 and 23; `prompt-guard` where a prompt changed; `openapi-sync`/`drift-check`/`frontend-verify` where the API or the frontend changed; `/security-review` on the route is for the review conversation (the route's scoping is recorded above) |
 | 65 The contract's lines | the OpenAPI diff above; M1, M2, M4 on the live runs pass; records with a `programme_name` per list reported; rounds 2–5 of 12L named as built before this amendment |
-| 66 Spec changes | proposals only (`spec-changes-proposed.md`, the owner decides the wording; nothing under `docs/specs/` changed) |
+| 66 Spec changes | **applied 2026-10-12** (§ Owner decisions) |
 | 67 Migration | built (Phase 16; the data migration reaches the group-id prefix, § Deviations); production downgrade path recorded; the stored-task reference saved again |
 | 68 The authority label beside "Who decides" | built (Phase 22a/22b) |
-| 69 `study_country` | built (16R); **the "no wrong country" threshold not met** (the round record and the live read) |
+| 69 `study_country` | built (16R); **the "no wrong country" threshold not met** (the round record and the live read); residual accepted by the owner 2026-10-12 |
 | 70 `unit` throughout | built (Phases 16, 16R, 16W); no `population` in product code, wires, prompts or read models (the coverage keys `populations`/`population_tags` are gone with Phase 20's read-model change — a grep over `backend/src` and `frontend/src` finds the word only in English prose) |
-| 71 The place rule in words | the wording part built (18P); **the deletion part not done** (M4 did not reach zero on the replays: § The refine loops); M4 on the live runs passes with the strip in place |
+| 71 The place rule in words | the wording part built (18P); the deletion done 2026-10-12 on the owner's ruling (§ Owner decisions; M4 one in 175 on the replay, none live) |
 
 ### Known unverified items (amendment 3)
 
@@ -1740,7 +1744,7 @@ figures are totals.
 | 84 every prompt through a loop | yes: 27 (4 rounds + check), 28 (4 rounds + check), 26L (5 rounds + check), 29 (1 round), 29F (round 0 read on the replay's new options and the live runs) |
 | 85 gates | as the table above; Phase 24's gate a flagged deviation; two one-tree splits noted |
 | 86 the contract's lines hold | the OpenAPI diff above; the live figures above; the superseded tests named above |
-| 87 spec changes | **not applied**: proposals 10–14 of the contract's § Spec changes wait for the owner's wording (as amendment 3's did) |
+| 87 spec changes | **applied 2026-10-12** (§ Owner decisions) |
 | 88 out of scope held | no change under `evidence_search/` except `extract/extract_interventions_prompt.py` and `extract/interventions_records.py` (the intervention profile's own files) and the test pins; the only Overton-related change is `docs/deferred.md` |
 
 ### Known unverified items (amendment 4)
@@ -2018,19 +2022,64 @@ The two wrapped lines are a comment and a comment-plus-assertion move; no
 code path changed after the test run. The replay of the two rejected
 obesity sentences through the fixed `trace_check` passes both.
 
-### For the owner at step 9
+### Owner decisions (2026-10-12, step 9)
 
-1. D23: the tints on the built screen.
-2. R25 stage decisions still open from amendments 1–3: the place strip's
-   deletion (R74; M4 one place-based rejection in 175 on the replay, none
-   live), boxes 57 and 69 (`programme_name` and `study_country` residual
-   rates on the record), the 20L folding threshold.
-3. The spec changes, items 1–17 of `spec-changes-proposed.md` and the
-   amendment 3 proposals in the gitignored `amendment-3-final.md` § 3: the
-   wording.
-4. "studies" in the template sentence (LT5).
-5. The chain-duplicate semantics (C4) and the typing version key (X1), if
-   either should come before task 3.
+Put to the owner as seven items after the review; ruled in one message
+("Accept 3, leave 6 deferred, open the PR. 1 Make the spec changes. 2 We
+can delete the strip. 5 is fine.").
+
+1. **The spec changes: applied.** Items 1–17 of `spec-changes-proposed.md`
+   and the amendment 3 and 4 items of contract § Spec changes, written in
+   the final form amendments 3 and 4 gave each (the specs describe the
+   system as built, not an intermediate state): `components.md` (the
+   reuse rule, the diagram, the table with the new row 6a, § 1, § 2–5, § 6,
+   the new § 6a option_profile, § 7), `capability.md` (vocabulary, depths,
+   the plan, the baseline principle, the longlist, screening, the four
+   kinds of constraint, the shortlist principle for task 3, § Output
+   structure Longlist rewritten to the amendment 4 card and list, open
+   question 4 closed), `trust.md` (the ambition and the estimate, the depth
+   label, the guess label on the heading, the kind of action),
+   `vocabulary.md` (fourteen task 046 words), `plan-as-object.md` (the
+   three slots and the four kinds), the decision sheet rows A9 and E4, and
+   one line per item in `docs/specs/log.md` § 2026-10-12. The owner's words
+   are quoted where the proposals carried them. Boxes 20, 43, 66, 87.
+2. **The place strip: deleted** (R74; ADR 0040 decision 20 amended).
+   `strip_place`, its prepositions, `_tidy` and the `place_removed`
+   provenance key are gone from `where_tried.py`, `longlist_intent.py`,
+   `constrain.py`, `design.py` (`from_wire` takes no `where`),
+   `longlist_start.py` (the scope context holds the capability only); the
+   plan's words reach every prompt as the plan holds them, with the rule in
+   words beside them. The name tables, `names_place` and `named_place` stay:
+   amendment 4 made them the place resolver and the setting pass (R87),
+   which R74 predated. Tests: `test_strip_place.py` retired; its place-name
+   tests moved to `test_where_tried.py`; the intent, constrain, design and
+   longlist-start tests now pin the plan's words reaching the prompt with
+   their place. Box 71 ticked. The dev stack was not restarted; no live run.
+3. **The amendment 3 residuals: accepted** (boxes 57 and 69 stay unticked
+   with the owner's acceptance in their notes; the next lever is the model
+   tier, `docs/deferred.md` § Amendment 3).
+4. **The tints (D23):** not ruled on; left as built for the PR review.
+5. **"Studies" in the template sentence (LT5): kept** ("5 is fine").
+6. **The two seams (X1 typing design version; C4 chain duplicates): left
+   deferred** for task 3 (`docs/deferred.md` § Review stack seams).
+7. **The PR: opened** on the owner's word (§ Gate after the decisions).
+
+### Gate after the decisions (2026-10-12)
+
+Two full `make verify` runs after the owner's decisions landed. **Run 1**
+failed at backend pytest with three tests the strip's deletion still
+touched: the task-agent patch route passed `where=` to
+`propose_option_designs` (a 500 on `test_a_patch_rewording_an_option…`),
+and two tagging-context tests expected the stripped target unit. The
+caller lost its argument, the tests now pin the plan's words reaching the
+context as written; the design-proposal test in
+`test_scoping_plan_options.py` had been corrected the same way before run
+1. **Run 2: green end to end** — okf-validate (164 concepts), backend
+pytest (3581 passed, 28 warnings in 892.61s (0:14:52)), mypy, ruff, build, infra test (46), audit-paths
+(137 files), prompt-guard, font-guard, drift-check, frontend-verify (tsc,
+eslint, vitest 883 in 87 files, build). No prompt changed, so no hash was
+re-pinned; the generated OpenAPI files are untouched (the scope context's
+`place_removed` key was never on the wire).
 
 ## Rubric status
 
@@ -2058,7 +2107,7 @@ Build-phase view. The review conversation checks each box against the code.
 | 17 No approval-gated change beyond the contract | holds |
 | 18 No generated files or secrets edited by hand | holds (`make openapi-sync` wrote the generated files) |
 | 19 No tests deleted, skipped or weakened | holds; edits listed above |
-| 20 Spec changes only with the owner's accepted wording | **not applied**; wording proposed in [spec-changes-proposed.md](spec-changes-proposed.md) |
+| 20 Spec changes only with the owner's accepted wording | **applied 2026-10-12** on the owner's word (§ Owner decisions) |
 | 21 `docs/deferred.md` | done |
 | 22 ADR 0040 | written in the design phase (`5d9f206a`); the owner has not yet read its text |
 | 23 The review stack | ran 2026-10-12 (§ Review findings); the human deep review is step 9 |

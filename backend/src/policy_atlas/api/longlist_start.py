@@ -49,10 +49,7 @@ from policy_atlas.api.routers.runs import (
     release_when_open,
 )
 from policy_atlas.core.schema import capability_run, evidence_scope, longlist_result, task_plan
-from policy_atlas.options_scoping.longlist_intent import (
-    compile_longlist_intent,
-    screen_target_unit,
-)
+from policy_atlas.options_scoping.longlist_intent import compile_longlist_intent
 from policy_atlas.runtime.capability_registry import OPTIONS_SCOPING, validate_plan
 from policy_atlas.runtime.runner import RunnerBackends
 from policy_atlas.runtime.scoping_plan import (
@@ -211,12 +208,7 @@ def admit_and_mint(
                     evidence_scope_id=scope_id,
                     task_id=task_id,
                     intent=compile_longlist_intent(plan),
-                    # The place spans the screen input's target unit lost
-                    # (task 046, S6), recorded when the walk opens.
-                    context={
-                        "capability": OPTIONS_SCOPING,
-                        "place_removed": screen_target_unit(plan)[1],
-                    },
+                    context={"capability": OPTIONS_SCOPING},
                     created_at=datetime.now(UTC),
                     purpose=LONGLIST_PURPOSE,
                     plan_id=current["plan_id"],

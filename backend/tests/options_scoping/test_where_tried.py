@@ -230,6 +230,8 @@ def test_an_option_with_no_member_has_no_where_tried() -> None:
     [
         "where_group",
         "where_codes",
+        "strip_place",
+        "PLACE_PREPOSITIONS",
         "where_labels",
         "countries_in",
         "OECD_CODES",
@@ -601,3 +603,48 @@ def test_a_geography_under_multiple_countries_is_no_place_and_no_country() -> No
     )
     assert coverage["where_tried"][0]["places"] == []
     assert coverage["evaluated_countries"] == []
+
+
+# --- A place in a text: the setting pass (task 046, S11; R87) ------------------
+# Moved from ``test_strip_place.py`` when the plan-text strip was deleted
+# (R74; the owner's ruling at the review, 2026-10-12).
+
+
+@pytest.mark.parametrize(
+    ("place", "code"),
+    [
+        ("Greater Manchester", "GB"),
+        ("the West Midlands", "GB"),
+        ("Ontario", "CA"),
+        ("Queensland", "AU"),
+        ("West Virginia", "US"),
+    ],
+)
+def test_the_sub_national_table_resolves_a_place_to_its_country(place: str, code: str) -> None:
+    assert where_tried.names_place(place)
+    assert where_tried.SUBNATIONAL_PLACES[place.removeprefix("the ").casefold()] == code
+
+
+def test_a_country_name_that_is_a_common_noun_is_a_place_only_when_capitalised() -> None:
+    # Review of task 046 (2026-10-12): "turkey farms" is a setting; "Turkey" a place.
+    assert not where_tried.names_place("turkey farms")
+    assert not where_tried.names_place("guinea pig owners")
+    assert not where_tried.names_place("a football jersey")
+    assert not where_tried.names_place("the Jordan model of care".casefold())
+    assert where_tried.names_place("households living in Jersey")
+    assert where_tried.names_place("Turkey")
+    assert where_tried.named_place("households living in jersey") is None
+
+
+def test_georgia_is_not_read_as_a_us_state() -> None:
+    # Task 046, amendment 4 (R87): every ISO-3166 country is a place, so
+    # "Georgia" names a place, and it resolves to the country, never the state.
+    assert "georgia" not in where_tried.SUBNATIONAL_PLACES
+    assert where_tried.names_place("Georgia")
+    assert where_tried.resolve_country("Georgia") == ("GE", "Georgia")
+
+
+def test_a_nationality_adjective_and_a_pronoun_name_no_place() -> None:
+    assert not where_tried.names_place("Polish migrant workers")
+    assert not where_tried.names_place("services that work for us")
+    assert where_tried.names_place("young people in Tajikistan")

@@ -373,6 +373,13 @@ decisions above stand, except where a decision below names one.
     its name tables and the record-level setting pass are deleted only if
     M4 (no exclusion and no screen failure because of place) holds on the
     replays; if M4 fails, the list stays and the verification says so.
+    *Amended at the review (owner, 2026-10-12: "We can delete the strip"):*
+    M4 reached one place-based rejection in 175 on the replay and none on
+    the live runs, and the owner accepted that residual, so the strip
+    (`strip_place`, its prepositions, the `place_removed` provenance) is
+    deleted and the plan's words reach every prompt as the plan holds them.
+    The name tables and the setting pass stay: amendment 4 made them the
+    place resolver and the coverage-time setting check (decisions 22, 25).
 
 21. **One revision and one card.** One reversible alembic revision on
     `e9a4c1f7b3d2` carries the two new nullable columns, the renames on
@@ -508,7 +515,11 @@ niger, turkey) name a place only when capitalised (decision 25's resolver
 still knows them). `EvidenceProfileOut.by_role` left the option read model
 as the amendment 4 contract said. Revision `f1b6d3a8c2e5` freezes the view
 SQL it executes and rewrites a grouping provenance that has no
-`facet_runs` key.
+`facet_runs` key. At step 9 the owner ruled the place strip deleted
+(decision 20, amended), accepted the amendment 3 record residuals and
+the template's "studies", left the typing-version and chain-duplicate
+seams for task 3, and had the spec changes applied (`docs/specs/log.md`
+§ 2026-10-12).
 
 **Rollback, amendment 4:** no schema revision; the place sentences, the
 signal fields and the document record fields are coverage keys and read

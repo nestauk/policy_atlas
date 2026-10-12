@@ -75,7 +75,6 @@ from policy_atlas.options_scoping.longlist.longlist_cluster_prompt import (
     DiscoveredOptionWire,
     OptionDiscoveryResponse,
 )
-from policy_atlas.options_scoping.longlist.where_tried import names_place
 from policy_atlas.options_scoping.option_profile.option_profile import (
     OptionProfileContext,
     option_profile_scope,
@@ -1203,9 +1202,11 @@ def test_the_harness_runs_constrain_on_the_stub_backend(conn: Connection) -> Non
 # --- task 046: place, the payload, the baseline, the kind of action, parallel ------------
 
 
-def test_no_place_reaches_the_plan_data_and_the_removal_is_recorded(conn: Connection) -> None:
-    """Item 10 (R4, AM7): the plan fields hold no token the where-tried matcher
-    recognises; a requirement that names a place reaches the prompt verbatim."""
+def test_the_plan_data_reaches_the_prompt_as_the_plan_holds_it(conn: Connection) -> None:
+    """Item 10 (R4, AM7) as amended by R74: the plan fields reach the prompt
+    as written, their place with them (the place rule is words in the prompt;
+    the strip was deleted on the owner's ruling, 2026-10-12); Where itself is
+    not sent; a requirement that names a place reaches the prompt verbatim."""
     council = "Only options a council in England can run"
     plan = scoping_plan(
         question="What could reduce the number of young people not in work in Greater Manchester?",
@@ -1215,8 +1216,6 @@ def test_no_place_reaches_the_plan_data_and_the_removal_is_recorded(conn: Connec
         },
         constraints=[_requirement(council)],
     )
-    raw = json.dumps([plan.question, plan.intended_change.text])
-    assert names_place(raw)  # the plan names places ...
     walk = _Walk(conn, plan)
     walk.option("Youth guarantee")
     walk.build(StubLonglistBackend())
@@ -1225,18 +1224,13 @@ def test_no_place_reaches_the_plan_data_and_the_removal_is_recorded(conn: Connec
     _constrain(walk, backend)
 
     sent = backend.constrain_inputs[0]
-    # ... and none reaches the prompt's plan data.
-    assert not names_place(json.dumps(sent["plan"], ensure_ascii=False))
     assert sent["plan"] == {
-        "question": "What could reduce the number of young people not in work?",
+        "question": plan.question,
         "target_unit": "16 to 24 year olds",
-        "intended_change": "Reduce the number of young people not in work",
+        "intended_change": "Reduce the number of young people not in work in the UK",
         "outcomes": ["the NEET rate"],
     }
-    assert _latest(walk).provenance["constrain"]["place_removed"] == [
-        "in Greater Manchester",
-        "in the UK",
-    ]
+    assert "place_removed" not in _latest(walk).provenance["constrain"]
     assert sent["requirements"][0] == {"id": "req-1", "text": council}
 
 
@@ -1591,9 +1585,14 @@ def test_the_batches_and_the_distinct_call_get_no_who_decides_line_and_no_where(
     assert "who_decides" not in others
     for _, text in sentences.values():
         assert text not in others
-    assert where not in others
     assert "United Kingdom" not in others
-    assert not names_place(json.dumps(backend.constrain_inputs[0]["plan"]))
+    # The Where slot itself is never sent; the question's own words are.
+    assert set(backend.constrain_inputs[0]["plan"]) == {
+        "question",
+        "target_unit",
+        "intended_change",
+        "outcomes",
+    }
 
 
 def test_an_authority_call_malformed_twice_gives_no_label_and_the_step_succeeds(

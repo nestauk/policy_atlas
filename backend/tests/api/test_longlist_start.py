@@ -437,10 +437,12 @@ def test_a_plan_too_long_to_screen_is_refused_before_anything_is_minted(
         _cleanup(engine, task_id)
 
 
-def test_the_place_the_screen_input_lost_is_recorded_when_the_walk_opens(
+def test_the_screen_input_keeps_its_place_when_the_walk_opens(
     engine: Engine,
 ) -> None:
-    """Task 046, S6: ``place_removed`` on the longlist scope's context."""
+    """Task 046, R74: the target unit reaches the intent as the plan holds it;
+    the scope's context records no removed place (the strip was deleted on the
+    owner's ruling, 2026-10-12)."""
     task_id: uuid.UUID | None = None
     plan = scoping_plan(
         target_unit={
@@ -461,8 +463,8 @@ def test_the_place_the_screen_input_lost_is_recorded_when_the_walk_opens(
                     evidence_scope.c.evidence_scope_id == admitted.evidence_scope_id
                 )
             ).one()
-        assert record.context["place_removed"] == ["living in Greater Manchester"]
-        assert "Greater Manchester" not in record.intent
+        assert record.context == {"capability": "options_scoping"}
+        assert "living in Greater Manchester" in record.intent
     finally:
         _cleanup(engine, task_id)
 

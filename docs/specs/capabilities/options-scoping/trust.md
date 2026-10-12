@@ -26,9 +26,11 @@ supported sentence, and the sentence is what gets copied into advice.
   hypothesis ("suggested by Policy Atlas", "added by you") and enters the same funnel as
   evidence-derived options. This is how structural and thin-evidence options get in at all.
 - ✅ **Interpretation is labelled.** Mechanism sentences, failure modes, assumptions and the
-  **ambition tag** (assigned at longlist depth before any evidence is read; a tier-4 reasoning
+  **ambition tag** (assigned at longlist depth before any evidence is read, relative to the list —
+  Smaller · Middle · Bigger — by `option_profile`, task 046 R40, R65; a tier-4 reasoning
   claim, ruling 20; the option card no longer carries the words "as described, not measured" —
-  owner 2026-09-24, task 045 D33: "D33 wins, amend trust.md") reuse the ES's claim-type and
+  owner 2026-09-24, task 045 D33: "D33 wins, amend trust.md") and the eight lines of "What it
+  would take" (an estimate before assessment, task 046 amendment 2) reuse the ES's claim-type and
   grounding-tier machinery rather than a new scheme: tier-2/3 inferences
   where the literature supports them; capped, visibly labelled *reasoning* claims (tier 4,
   "reasoning, not evidence", which must not smuggle findings) where they are the model's own
@@ -36,9 +38,10 @@ supported sentence, and the sentence is what gets copied into advice.
 - ✅ **Assessment is grounded.** Anything *asserted* about an option — evidence strength, effect,
   transferability, case studies, costs — requires retrieval: tiers 1–3 only. Unassessed cells
   are honest empty states: "not yet searched" or "no credible evidence found", never a hedged
-  guess. Before assessment an option shows what the screened set holds — the **source-quality
-  profile** of its mentioning documents (counts by evidence type and appraisal tier), countries,
-  populations, outcomes — plus its labelled reasoned guesses and ambition tag, and says so;
+  guess. Before assessment an option shows what the screened set holds — the **evidence signal**
+  and the **source-quality profile** of its documents (by role, evidence type and appraisal
+  tier), where it has been evaluated, the plan outcomes with an evaluation — plus its labelled
+  reasoned guesses, its ambition and its estimate of what it would take, and says so;
   it never shows "how sure", which after assessment means confidence in the specified
   design–outcome claim from relevant evidence, documents counted until independence is known
   (ruling 33).
@@ -63,7 +66,8 @@ supported sentence, and the sentence is what gets copied into advice.
 ## Provenance labels every surface carries
 
 - ✅ **Depth label per row and per profile:** *scoping pass* (screened on titles and abstracts;
-  full text read for the documents cited; document set not confirmed) or *full run* (the ES
+  at the longlist, abstracts only; full text read for the documents an assessment cites;
+  document set not confirmed — task 046, AM12) or *full run* (the ES
   task's confirmed document set). The label describes the work done; it does not stand in for
   claim-specific support, which each claim carries itself (ruling 16).
 - ✅ **Source tier per case study:** academic · Overton grey literature · verified web. A web
@@ -148,7 +152,10 @@ supported sentence, and the sentence is what gets copied into advice.
 
 - ✅ For constraints that can only be checked after assessment (cost, effect, evidence
   strength), each option carries a **reasoned guess** — a capped reasoning claim ("cost: likely
-  low, a guess rather than evidence") — so the user can sort by it if they choose. The default
+  low") — so the user can sort by it if they choose. The label that says a guess or an estimate
+  is not evidence sits on the block's heading ("Policy Atlas's estimate", before assessment),
+  not at the end of each sentence (task 046 amendment 2, R44; owner: "we don't need 'a guess,
+  not evidence', it sounds too LLM-generated."). The default
   preference **"Transferable to *Where*"** is the exception: no guess before assessment, its row
   reading "checked at assessment" (task 045, D22; owner: "Should be a default preference"; an
   argument-only transferability cell was rejected, ruling 29).
@@ -168,8 +175,8 @@ supported sentence, and the sentence is what gets copied into advice.
 - ✅ **A restriction on evidence is not a restriction on options** (ruling 23). Evidence-scope
   constraints act on retrieval and screening and can never exclude an option; an option whose
   only example is out of scope stays, marked "no in-scope evidence". The agent asks when a
-  sentence is ambiguous. Screens judge the option's specified design; screen findings that rest
-  on the corpus are cited.
+  sentence is ambiguous. Screens judge the option as a kind of action, on its specified design
+  (task 046, R21); screen findings that rest on the corpus are cited.
 - ✅ Shortlist places carry a **single named reason** on a single axis, limited to what is known
   at that depth; study count alone is never a reason; thin evidence is a reason to assess
   (ruling 19). Coverage is one place per lever type present (ruling 20). **Never a fused

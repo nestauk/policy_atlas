@@ -346,7 +346,7 @@ def propose_design(
         outcomes=[outcome.text for outcome in plan.outcomes],
         session_id=session_id,
     )
-    return OptionDesign.from_wire(wire, where=plan.where.text)
+    return OptionDesign.from_wire(wire)
 
 
 @dataclass(frozen=True)
