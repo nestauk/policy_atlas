@@ -23,6 +23,21 @@ Measured on the 15-review ground-truth mini set (share of the review's reference
 
 The "was" figures are the task 051 run of 2026-10-09; the current figures are the task 052 run of 2026-10-12 with the new paper order (one Broadest run, the two smaller scopes read from its pool at their caps). All three targets are met (Broadest 24.6% by 0.7 points; before task 052 it was 2.3 points short and the owner had accepted that).
 
+## Size of the diff
+
+121 files, +31,970 / −4,028 lines. Two thirds of the added lines are recorded test data, not code:
+
+| what | files | added | removed |
+|---|---:|---:|---:|
+| product code (`backend/src`, `frontend/src`) | 12 | 1,876 | 1,416 |
+| tests (`backend/tests`, frontend tests) | 24 | 2,675 | 2,263 |
+| test fixtures (`backend/tests/data`: the ranking fixture and three recorded Overton replays) | 7 | 20,533 | 0 |
+| eval and experiment scripts (`scripts/evals`) | 52 | 3,806 | 318 |
+| docs (`docs/`, task records, ADR, tutorial) | 24 | 3,077 | 30 |
+| other (`.gitignore`, `Makefile`) | 2 | 3 | 1 |
+
+The product-code change to review is about 1,900 lines added and 1,400 removed. The fixtures are JSON the replay and ranking tests read; the eval scripts are dev-only tooling, not part of the runtime package. Experiment output JSON is git-ignored; only the Markdown write-ups are in the tree.
+
 ## Proof it works
 
 Evidence: `docs/tasks/051-improve-production-search-screen/verification.md`.
