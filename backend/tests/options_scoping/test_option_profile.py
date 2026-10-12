@@ -662,6 +662,63 @@ def test_where_reaches_the_who_decides_call_and_no_other(conn: Connection) -> No
         assert where not in str(messages)
 
 
+def test_the_who_can_act_texts_reach_the_who_decides_call_and_no_other(conn: Connection) -> None:
+    """Task 046, amendment 4 (R89; S35; contract review C1)."""
+    texts = ["Only the council can act", "Not the Treasury"]
+    constraints = [
+        {
+            "text": text,
+            "kind": "consideration",
+            "checked_at": "assessment",
+            "origin": "your_call",
+            "aspect": "who_decides",
+            "hard": True,
+        }
+        for text in texts
+    ]
+    walk = _Walk(conn, plan=scoping_plan(constraints=constraints))
+    walk.option("Youth guarantee")
+    walk.option("Wage subsidy")
+    walk.build(_Scripted())
+    profiler = StubLonglistBackend()
+    _profile(walk, _Scripted(profiler=profiler))
+
+    assert {i["line_key"]: i["considerations"] for i in profiler.line_inputs} == {
+        line_key: (texts if line_key == "who_decides" else None) for line_key in PROFILE_LINE_KEYS
+    }
+    who_decides = next(i for i in profiler.line_inputs if i["line_key"] == "who_decides")
+    user = str(
+        build_line_messages(
+            line_key="who_decides",
+            plan=who_decides["plan"],
+            where=who_decides["where"],
+            baseline_sections=who_decides["baseline_sections"],
+            options=who_decides["options"],
+            considerations=who_decides["considerations"],
+        )[1]["content"]
+    )
+    assert all(text in user for text in texts)
+
+
+def test_a_plan_without_a_who_can_act_constraint_sends_no_texts(conn: Connection) -> None:
+    walk = _Walk(conn, plan=scoping_plan(where={"text": "Powys", "origin": "your_call"}))
+    walk.option("Youth guarantee")
+    walk.build(_Scripted())
+    profiler = StubLonglistBackend()
+    _profile(walk, _Scripted(profiler=profiler))
+
+    assert {i["considerations"] for i in profiler.line_inputs} == {None}
+    who_decides = next(i for i in profiler.line_inputs if i["line_key"] == "who_decides")
+    with_none = build_line_messages(
+        line_key="who_decides",
+        plan=who_decides["plan"],
+        where=who_decides["where"],
+        baseline_sections=who_decides["baseline_sections"],
+        options=who_decides["options"],
+    )
+    assert "in the user's own words" not in str(with_none)
+
+
 def test_the_option_list_holds_only_the_named_keys_and_five_records_in_role_order(
     conn: Connection,
 ) -> None:

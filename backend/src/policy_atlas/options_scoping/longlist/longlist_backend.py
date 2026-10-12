@@ -250,6 +250,7 @@ class LonglistBackend(Protocol):
         where: str | None,
         baseline_sections: list[tuple[str, str]],
         options: list[dict[str, object]],
+        considerations: list[str] | None = None,
     ) -> UsageResult[MarkedLineResponse | PlainLineResponse]:
         """Write one line of "What it would take" for every option (R36, S16).
 
@@ -261,6 +262,9 @@ class LonglistBackend(Protocol):
             where: The plan's Where for ``who_decides``; ``None`` otherwise.
             baseline_sections: ``(title, markdown)`` per baseline section.
             options: Every option as data, keyed by its short ``option_id``.
+            considerations: The texts of the plan's constraints on who can
+                act, for ``who_decides`` only; ``None`` otherwise (task 046,
+                amendment 4: R89; S35).
 
         Returns:
             A :class:`MarkedLineResponse` on a marked line, else a
@@ -559,6 +563,7 @@ class OpenAILonglistBackend:
         where: str | None,
         baseline_sections: list[tuple[str, str]],
         options: list[dict[str, object]],
+        considerations: list[str] | None = None,
     ) -> UsageResult[MarkedLineResponse | PlainLineResponse]:
         """One line call on the judgment model (see :class:`LonglistBackend`).
 
@@ -570,6 +575,7 @@ class OpenAILonglistBackend:
             where=where,
             baseline_sections=baseline_sections,
             options=options,
+            considerations=considerations,
         )
         settings: dict[str, Any] = {
             "model": LONGLIST_JUDGMENT_MODEL,
@@ -989,6 +995,7 @@ class StubLonglistBackend:
         where: str | None,
         baseline_sections: list[tuple[str, str]],
         options: list[dict[str, object]],
+        considerations: list[str] | None = None,
     ) -> UsageResult[MarkedLineResponse | PlainLineResponse]:
         """Answer from the line's queue, else a stub sentence and no mark."""
         with self._lock:
@@ -1000,6 +1007,7 @@ class StubLonglistBackend:
                     "where": where,
                     "baseline_sections": list(baseline_sections),
                     "options": list(options),
+                    "considerations": considerations,
                 }
             )
             response = _next_response(

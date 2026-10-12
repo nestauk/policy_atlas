@@ -109,7 +109,10 @@ from policy_atlas.options_scoping.longlist.longlist_backend import (
     LonglistBackend,
 )
 from policy_atlas.options_scoping.longlist.where_tried import resolve_country
-from policy_atlas.options_scoping.longlist_intent import longlist_plan_data
+from policy_atlas.options_scoping.longlist_intent import (
+    longlist_plan_data,
+    who_decides_considerations,
+)
 from policy_atlas.options_scoping.option_profile.folding_prompt import (
     FOLDING_PROMPT_VERSION,
     Facet,
@@ -725,10 +728,12 @@ def _profile_calls(
     baseline: list[tuple[str, str]],
     payload: list[dict[str, object]],
     short_ids: Mapping[str, uuid.UUID],
+    considerations: list[str] | None = None,
 ) -> list[tuple[str, Callable[[], UsageResult[Any]], Callable[[Any], Mapping[str, Any] | None]]]:
     """The ten profile calls: one per line, the ambition, the setting (R36, R40, R41).
 
-    Where reaches the ``who_decides`` call only.
+    Where and the plan's who-can-act constraint texts reach the ``who_decides``
+    call only (task 046, amendment 4: R89; S35).
     """
 
     def _line(line_key: str) -> Callable[[], UsageResult[Any]]:
@@ -738,6 +743,7 @@ def _profile_calls(
             where=where if line_key == "who_decides" else None,
             baseline_sections=baseline,
             options=payload,
+            considerations=considerations if line_key == "who_decides" else None,
         )
 
     def _line_check(line_key: str) -> Callable[[Any], Mapping[str, Any] | None]:
@@ -1001,6 +1007,7 @@ def option_profile_scope(
             baseline=baseline,
             payload=payload,
             short_ids=short_ids,
+            considerations=who_decides_considerations(plan) or None,
         )
         if options
         else []

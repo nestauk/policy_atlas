@@ -128,6 +128,7 @@ from policy_atlas.options_scoping.longlist.longlist import (
 )
 from policy_atlas.options_scoping.longlist.longlist_backend import LONGLIST_JUDGMENT_MODEL
 from policy_atlas.options_scoping.longlist.where_tried import resolve_country, strip_place
+from policy_atlas.options_scoping.longlist_intent import who_decides_considerations
 from policy_atlas.options_scoping.option_profile.option_profile import PLACE_SENTENCES_KEY
 from policy_atlas.options_scoping.suggest.suggest import baseline_sections, walk_plan
 from policy_atlas.runtime.scoping_plan import TRANSFERABILITY_DEFAULT, ScopingPlan
@@ -720,20 +721,6 @@ def _move_memberships(
         )
         .values(option_id=kept)
     )
-
-
-def who_decides_considerations(plan: ScopingPlan) -> list[str]:
-    """The texts of the plan's considerations on who decides, in plan order (R38).
-
-    Args:
-        plan: The validated scoping plan.
-
-    Returns:
-        The texts; empty when the plan holds none.
-    """
-    return [
-        c.text for c in plan.constraints if c.kind == "consideration" and c.aspect == WHO_DECIDES
-    ]
 
 
 def _who_decides_sentence(profile: Mapping[str, Any], row: Any) -> str | None:

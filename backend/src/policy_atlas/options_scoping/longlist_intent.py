@@ -193,3 +193,17 @@ def plan_tagging_context(plan: ScopingPlan) -> TaggingContext:
         outcomes=tuple(outcome.text for outcome in plan.outcomes),
         intended_change=intended_change,
     )
+
+
+def who_decides_considerations(plan: ScopingPlan) -> list[str]:
+    """The texts of the plan's considerations on who decides, in plan order (R38).
+
+    Args:
+        plan: The validated scoping plan.
+
+    Returns:
+        The texts; empty when the plan holds none.
+    """
+    return [
+        c.text for c in plan.constraints if c.kind == "consideration" and c.aspect == "who_decides"
+    ]

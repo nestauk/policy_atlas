@@ -16,6 +16,7 @@ from policy_atlas.options_scoping.option_profile.option_profile_prompt import (
     LINE_QUESTIONS,
     MARKED_LINE_SYSTEM_PROMPT,
     PLAIN_LINE_SYSTEM_PROMPT,
+    WHO_DECIDES_CONSIDERATIONS_BLOCK,
     build_line_messages,
     line_is_marked,
 )
@@ -78,3 +79,59 @@ def test_the_marked_and_plain_prompts_differ_only_by_the_mark_rules() -> None:
     assert MARKED_LINE_SYSTEM_PROMPT.replace(_MARK_RULES + "\n", "", 1) == (
         PLAIN_LINE_SYSTEM_PROMPT
     )
+
+
+# --- task 046, amendment 4 (R89; S35; contract review C1) ----------------------------------
+
+_WHO_CAN_ACT = "Only the council can act; it cannot change national law"
+
+
+@pytest.mark.parametrize("line_key", [k for k in PROFILE_LINE_KEYS if k != "who_decides"])
+def test_considerations_given_to_another_line_raises(line_key: str) -> None:
+    with pytest.raises(ValueError, match="who_decides"):
+        build_line_messages(
+            line_key=line_key,
+            plan=_PLAN,
+            where=None,
+            baseline_sections=[],
+            options=_OPTIONS,
+            considerations=[_WHO_CAN_ACT],
+        )
+
+
+def test_the_considerations_reach_the_who_decides_user_message_as_a_json_list() -> None:
+    messages = build_line_messages(
+        line_key="who_decides",
+        plan=_PLAN,
+        where="Powys",
+        baseline_sections=[],
+        options=_OPTIONS,
+        considerations=[_WHO_CAN_ACT, "Not the Treasury"],
+    )
+    user = str(messages[1]["content"])
+    assert f'["{_WHO_CAN_ACT}", "Not the Treasury"]' in user
+    assert WHO_DECIDES_CONSIDERATIONS_BLOCK.split("{")[0] in user
+
+
+def test_no_considerations_leaves_the_who_decides_prompt_as_it_was() -> None:
+    omitted = build_line_messages(
+        line_key="who_decides",
+        plan=_PLAN,
+        where="Powys",
+        baseline_sections=[],
+        options=_OPTIONS,
+    )
+    none_given: list[str] | None
+    for none_given in (None, []):
+        assert (
+            build_line_messages(
+                line_key="who_decides",
+                plan=_PLAN,
+                where="Powys",
+                baseline_sections=[],
+                options=_OPTIONS,
+                considerations=none_given,
+            )
+            == omitted
+        )
+    assert WHO_DECIDES_CONSIDERATIONS_BLOCK.split("{")[0] not in str(omitted[1]["content"])
