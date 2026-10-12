@@ -1086,6 +1086,9 @@ export const mockLonglistOptionCards: Record<string, OptionOutFixture> = {
     capability_run_id: MOCK_LONGLIST_WALK_ID,
     plan_version: 1,
     tried_on: [{ kind: "18-24 year-olds in Northern England", documents: 2 }],
+    evaluated_countries: [{ country: "United Kingdom", documents: 2 }],
+    outcomes_evaluated: 1,
+    outcomes_total: 2,
     examples: [
       { name: "National sanctions regime", documents: 6 },
       { name: "Benefit sanctions pilot", documents: 2 },
@@ -1124,9 +1127,9 @@ export const mockLonglistOptionCards: Record<string, OptionOutFixture> = {
     ],
     in_scope: null,
     documents: [
-      { task_source_snapshot_id: "mock-doc-a1", title: "Conditionality and NEET outcomes: a local authority review", role: "evaluated", evidence_type: "Local evaluation", tier: "Moderate", design_feature_not_stated: false, place: "United Kingdom", source_task_id: null },
-      { task_source_snapshot_id: "mock-doc-a2", title: "Benefit sanctions for young jobseekers: a systematic review", role: "evaluated", evidence_type: "Systematic review", tier: "Strong", design_feature_not_stated: false, place: "multiple countries", source_task_id: null },
-      { task_source_snapshot_id: null, title: "National activation policy briefing", role: "mentioned", evidence_type: "Policy analysis", tier: null, design_feature_not_stated: true, place: "United Kingdom", source_task_id: MOCK_LONGLIST_LINKED_TASK_ID },
+      { task_source_snapshot_id: "mock-doc-a1", title: "Conditionality and NEET outcomes: a local authority review", role: "evaluated", evidence_type: "Local evaluation", tier: "Moderate", design_feature_not_stated: false, place: "United Kingdom", source_task_id: null, programme_name: "Benefit sanctions pilot", tried_on_kind: "18-24 year-olds", measured: "NEET rate at 6 months", place_detail: "England", records_count: 1 },
+      { task_source_snapshot_id: "mock-doc-a2", title: "Benefit sanctions for young jobseekers: a systematic review", role: "evaluated", evidence_type: "Systematic review", tier: "Strong", design_feature_not_stated: false, place: "multiple countries", source_task_id: null, programme_name: null, tried_on_kind: "18-24 year-olds", measured: "NEET rate at 6 months", place_detail: null, records_count: 2 },
+      { task_source_snapshot_id: null, title: "National activation policy briefing", role: "mentioned", evidence_type: "Policy analysis", tier: null, design_feature_not_stated: true, place: "United Kingdom", source_task_id: MOCK_LONGLIST_LINKED_TASK_ID, programme_name: null, tried_on_kind: null, measured: null, place_detail: null, records_count: 0 },
     ],
   },
   [MOCK_OPTION_ID_NO_IN_SCOPE]: {
@@ -1170,6 +1173,12 @@ export const mockLonglistOptionCards: Record<string, OptionOutFixture> = {
       { top: "not stated", documents: 1, places: [], countries: [] },
       { top: "other", documents: 1, places: [{ place: "English-speaking countries", documents: 1 }], countries: [] },
     ],
+    evaluated_countries: [
+      { country: "Australia", documents: 1 },
+      { country: "Canada", documents: 1 },
+    ],
+    outcomes_evaluated: 1,
+    outcomes_total: 2,
     relations: [],
     abstract_only: true,
     is_entrant_with_no_documents: false,
@@ -1203,10 +1212,10 @@ export const mockLonglistOptionCards: Record<string, OptionOutFixture> = {
     ],
     in_scope: { restriction: MOCK_LONGLIST_RESTRICTION_TEXT, in_scope_documents: 0, documents: 4 },
     documents: [
-      { task_source_snapshot_id: "mock-doc-b1", title: "Peer mentoring for at-risk pupils in Ontario schools", role: "evaluated", evidence_type: "Local evaluation", tier: "Moderate", design_feature_not_stated: false, place: "Canada", source_task_id: null },
-      { task_source_snapshot_id: "mock-doc-b2", title: "School mentoring and NEET risk: an Australian cohort study", role: "evaluated", evidence_type: "Local evaluation", tier: "Limited", design_feature_not_stated: false, place: "Australia", source_task_id: null },
-      { task_source_snapshot_id: "mock-doc-b3", title: "Mentoring programmes for disengaged youth: a scoping review", role: "described", evidence_type: "Policy analysis", tier: null, design_feature_not_stated: false, place: "other", source_task_id: null },
-      { task_source_snapshot_id: "mock-doc-b4", title: "Youth mentoring outcomes: unclear geography", role: "recommended", evidence_type: "Local evaluation", tier: "Moderate", design_feature_not_stated: false, place: "not stated", source_task_id: null },
+      { task_source_snapshot_id: "mock-doc-b1", title: "Peer mentoring for at-risk pupils in Ontario schools", role: "evaluated", evidence_type: "Local evaluation", tier: "Moderate", design_feature_not_stated: false, place: "Canada", source_task_id: null, programme_name: null, tried_on_kind: "pupils at risk of becoming NEET", measured: "NEET rate at 6 months", place_detail: "Ontario", records_count: 1 },
+      { task_source_snapshot_id: "mock-doc-b2", title: "School mentoring and NEET risk: an Australian cohort study", role: "evaluated", evidence_type: "Local evaluation", tier: "Limited", design_feature_not_stated: false, place: "Australia", source_task_id: null, programme_name: null, tried_on_kind: "secondary school pupils", measured: "school engagement", place_detail: "Victoria", records_count: 1 },
+      { task_source_snapshot_id: "mock-doc-b3", title: "Mentoring programmes for disengaged youth: a scoping review", role: "described", evidence_type: "Policy analysis", tier: null, design_feature_not_stated: false, place: "other", source_task_id: null, programme_name: null, tried_on_kind: "young people", measured: null, place_detail: "English-speaking countries", records_count: 1 },
+      { task_source_snapshot_id: "mock-doc-b4", title: "Youth mentoring outcomes: unclear geography", role: "recommended", evidence_type: "Local evaluation", tier: "Moderate", design_feature_not_stated: false, place: "not stated", source_task_id: null, programme_name: null, tried_on_kind: "young people", measured: null, place_detail: null, records_count: 1 },
     ],
   },
   [MOCK_OPTION_ID_ADDED_BY_YOU]: {
@@ -1249,6 +1258,9 @@ export const mockLonglistOptionCards: Record<string, OptionOutFixture> = {
     evaluated_count: 0,
     settings: [],
     where_tried: [],
+    evaluated_countries: [],
+    outcomes_evaluated: 0,
+    outcomes_total: 2,
     relations: [],
     abstract_only: false,
     is_entrant_with_no_documents: true,
@@ -1307,6 +1319,9 @@ export const mockLonglistOptionCards: Record<string, OptionOutFixture> = {
       { top: "multiple countries", documents: 3, places: [], countries: ["Canada", "Sweden"] },
       { top: "Germany", documents: 1, places: [{ place: "Hamburg", documents: 1 }], countries: [] },
     ],
+    evaluated_countries: [{ country: "United Kingdom", documents: 3 }],
+    outcomes_evaluated: 2,
+    outcomes_total: 2,
     relations: [{ kind: "has_part", other_option_id: MOCK_OPTION_ID_EXCLUDED, other_name: "National sanctions regime" }],
     abstract_only: false,
     is_entrant_with_no_documents: false,
@@ -1339,9 +1354,9 @@ export const mockLonglistOptionCards: Record<string, OptionOutFixture> = {
     ],
     in_scope: null,
     documents: [
-      { task_source_snapshot_id: "mock-doc-d1", title: "Single-application youth guarantees: a systematic review", role: "evaluated", evidence_type: "Systematic review", tier: "Very strong", design_feature_not_stated: false, place: "United Kingdom", source_task_id: null },
-      { task_source_snapshot_id: "mock-doc-d2", title: "Combining careers advice and apprenticeships: a local evaluation", role: "evaluated", evidence_type: "Local evaluation", tier: "Strong", design_feature_not_stated: false, place: "multiple countries", source_task_id: null },
-      { task_source_snapshot_id: "mock-doc-d3", title: "One-stop youth offers outside the UK: a policy analysis", role: "described", evidence_type: "Policy analysis", tier: "Moderate", design_feature_not_stated: false, place: "Germany", source_task_id: null },
+      { task_source_snapshot_id: "mock-doc-d1", title: "Single-application youth guarantees: a systematic review", role: "evaluated", evidence_type: "Systematic review", tier: "Very strong", design_feature_not_stated: false, place: "United Kingdom", source_task_id: null, programme_name: "Youth Guarantee", tried_on_kind: "18-24 year-olds", measured: "NEET rate at 6 months", place_detail: "England", records_count: 1 },
+      { task_source_snapshot_id: "mock-doc-d2", title: "Combining careers advice and apprenticeships: a local evaluation", role: "evaluated", evidence_type: "Local evaluation", tier: "Strong", design_feature_not_stated: false, place: "multiple countries", source_task_id: null, programme_name: null, tried_on_kind: "16-24 year-olds", measured: "Sustained employment or training at 12 months", place_detail: null, records_count: 2 },
+      { task_source_snapshot_id: "mock-doc-d3", title: "One-stop youth offers outside the UK: a policy analysis", role: "described", evidence_type: "Policy analysis", tier: "Moderate", design_feature_not_stated: false, place: "Germany", source_task_id: null, programme_name: "Jugendberufsagentur", tried_on_kind: "young people", measured: "apprenticeship starts", place_detail: "Hamburg", records_count: 1 },
     ],
   },
 };
@@ -1378,6 +1393,9 @@ function toLonglistOptionSummary(option: OptionOutFixture): OptionSummaryOutFixt
     is_entrant_with_no_documents: option.is_entrant_with_no_documents,
     search_pending: option.search_pending,
     tried_on: option.tried_on,
+    evaluated_countries: option.evaluated_countries,
+    outcomes_evaluated: option.outcomes_evaluated,
+    outcomes_total: option.outcomes_total,
   };
 }
 
@@ -1423,6 +1441,9 @@ export function buildMockAddedOption(text: string): OptionOutFixture {
     evaluated_count: 0,
     settings: [],
     where_tried: [],
+    evaluated_countries: [],
+    outcomes_evaluated: 0,
+    outcomes_total: 2,
     relations: [],
     abstract_only: false,
     is_entrant_with_no_documents: true,

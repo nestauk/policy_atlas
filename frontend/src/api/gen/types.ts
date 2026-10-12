@@ -2201,6 +2201,24 @@ export interface components {
             type: "delta";
         };
         /**
+         * EvaluatedCountryOut
+         * @description One country the option was evaluated in, for the evidence signal.
+         *
+         *     Task 046, amendment 4 (R76; S29): the top level of the documents with an
+         *     ``evaluated`` member, resolved to one short English name; a country the
+         *     resolver does not know is kept as written.
+         *
+         *     Args:
+         *         country: The country's short English name.
+         *         documents: Its evaluating documents (DOI-collapsed).
+         */
+        EvaluatedCountryOut: {
+            /** Country */
+            country: string;
+            /** Documents */
+            documents: number;
+        };
+        /**
          * EvidenceItemOut
          * @description One row of the paginated evidence/source list.
          *
@@ -3160,6 +3178,17 @@ export interface components {
          *         place: Where it was studied: its where-tried top level.
          *         source_task_id: The linked task the document or its labels came from,
          *             when inherited.
+         *         programme_name: The programme name of its first member record under
+         *             the option (by role order); `null` when none is given or the
+         *             document is a linked finding (task 046, amendment 4, R81).
+         *         tried_on_kind: That record's unit as its folded Tried on kind (its
+         *             own word when the fold has none).
+         *         measured: The plan outcome that record measures, in the plan's words,
+         *             else its outcome as its folded Measures kind.
+         *         place_detail: That record's place below the document's country, when
+         *             it adds one.
+         *         records_count: The document's member records under the option (0 for
+         *             a linked finding).
          */
         OptionDocumentOut: {
             /**
@@ -3169,8 +3198,19 @@ export interface components {
             design_feature_not_stated: boolean;
             /** Evidence Type */
             evidence_type?: string | null;
+            /** Measured */
+            measured?: string | null;
             /** Place */
             place?: string | null;
+            /** Place Detail */
+            place_detail?: string | null;
+            /** Programme Name */
+            programme_name?: string | null;
+            /**
+             * Records Count
+             * @default 0
+             */
+            records_count: number;
             /**
              * Role
              * @enum {string}
@@ -3184,6 +3224,8 @@ export interface components {
             tier?: string | null;
             /** Title */
             title: string;
+            /** Tried On Kind */
+            tried_on_kind?: string | null;
             /** Year */
             year?: number | null;
         };
@@ -3262,6 +3304,8 @@ export interface components {
              * @default 0
              */
             evaluated_count: number;
+            /** Evaluated Countries */
+            evaluated_countries?: components["schemas"]["EvaluatedCountryOut"][];
             evidence: components["schemas"]["EvidenceProfileOut"];
             /** Examples */
             examples?: components["schemas"]["ExampleOut"][];
@@ -3299,8 +3343,18 @@ export interface components {
              * @enum {string}
              */
             origin: "clustered" | "suggested" | "from_evidence_search" | "added_by_you";
+            /**
+             * Outcomes Evaluated
+             * @default 0
+             */
+            outcomes_evaluated: number;
             /** Outcomes Served */
             outcomes_served?: string[];
+            /**
+             * Outcomes Total
+             * @default 0
+             */
+            outcomes_total: number;
             /** Plan Version */
             plan_version?: number | null;
             /** Primary Lever Type */
@@ -3477,6 +3531,13 @@ export interface components {
          *         tried_on: The kinds of people, organisations or things its evidence
          *             covers, the plan's target unit first, then most documents first
          *             (task 046, amendment 3).
+         *         evaluated_countries: The countries of its evaluating documents, the
+         *             plan's Where country first, then most documents first (task 046,
+         *             amendment 4, R76); empty when no evaluation gives a country.
+         *         outcomes_evaluated: The plan outcomes at least one evaluating
+         *             document measured (R76).
+         *         outcomes_total: The outcome count of the plan the longlist was built
+         *             from (R76).
          */
         OptionSummaryOut: {
             /**
@@ -3505,6 +3566,8 @@ export interface components {
              * @default 0
              */
             evaluated_count: number;
+            /** Evaluated Countries */
+            evaluated_countries?: components["schemas"]["EvaluatedCountryOut"][];
             exclusion?: components["schemas"]["ExclusionOut"] | null;
             /** From Section */
             from_section?: string | null;
@@ -3534,8 +3597,18 @@ export interface components {
              * @enum {string}
              */
             origin: "clustered" | "suggested" | "from_evidence_search" | "added_by_you";
+            /**
+             * Outcomes Evaluated
+             * @default 0
+             */
+            outcomes_evaluated: number;
             /** Outcomes Served */
             outcomes_served?: string[];
+            /**
+             * Outcomes Total
+             * @default 0
+             */
+            outcomes_total: number;
             /** Primary Lever Type */
             primary_lever_type?: string | null;
             profile?: components["schemas"]["OptionProfileOut"] | null;

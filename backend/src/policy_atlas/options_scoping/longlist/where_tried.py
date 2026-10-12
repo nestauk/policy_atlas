@@ -16,13 +16,20 @@ else "not stated". Countries compare with case folded only.
 
 The name tables below drive :func:`strip_place` (task 046, S6), which takes
 the place out of a plan text before it reaches the longlist, and
-:func:`names_place` (the setting pass); they wait for Phase 18P.
+:func:`names_place` (the setting pass). Task 046, amendment 4 (R87; S29a,
+S32): :data:`COUNTRY_NAMES` holds every ISO-3166 country, and one resolver
+(:func:`resolve_country`) maps a place text to one country code and one
+short English name (:data:`COUNTRY_DISPLAY_NAMES`), so "UK", "England" and
+"Britain" are the United Kingdom; coverage reads the signal's countries and
+the place checks (:func:`country_level`, :func:`place_key`) through it.
 """
 
 from __future__ import annotations
 
 import re
 from collections.abc import Iterable
+
+from policy_atlas.evidence_search.sourcing.country_filters import ISO_3166_ALPHA2
 
 #: The top level of a record or document naming two or more countries.
 MULTIPLE_COUNTRIES = "multiple countries"
@@ -132,11 +139,12 @@ def document_where(
     return (OTHER_PLACE if place else NOT_STATED), countries
 
 
-#: Country names (lower case) → ISO-3166 alpha-2: the United Kingdom, the
-#: high-income democracies and a short list of countries that recur in
-#: policy evidence. Multi-word entries that contain another entry ("north korea",
-#: "united states of america") are matched first, so the longer place wins.
-COUNTRY_NAMES: dict[str, str] = {
+#: Country names and aliases (lower case) → ISO-3166 alpha-2, written here:
+#: the names in common use that the ISO-3166 names below do not give
+#: ("britain", "south korea", "vietnam", "drc"), merged over them. Multi-word
+#: entries that contain another entry ("north korea", "united states of
+#: america") are matched first, so the longer place wins.
+_COUNTRY_ALIASES: dict[str, str] = {
     # The United Kingdom.
     "united kingdom": "GB",
     "great britain": "GB",
@@ -145,83 +153,209 @@ COUNTRY_NAMES: dict[str, str] = {
     "north korea": "KP",
     "democratic people's republic of korea": "KP",
     "dprk": "KP",
-    # High-income democracies.
-    "australia": "AU",
-    "austria": "AT",
-    "belgium": "BE",
-    "canada": "CA",
-    "chile": "CL",
-    "colombia": "CO",
-    "costa rica": "CR",
-    "czech republic": "CZ",
-    "czechia": "CZ",
-    "denmark": "DK",
-    "estonia": "EE",
-    "finland": "FI",
-    "france": "FR",
-    "germany": "DE",
-    "greece": "GR",
-    "hungary": "HU",
-    "iceland": "IS",
-    "ireland": "IE",
-    "israel": "IL",
-    "italy": "IT",
-    "japan": "JP",
     "south korea": "KR",
     "republic of korea": "KR",
     "korea": "KR",
-    "latvia": "LV",
-    "lithuania": "LT",
-    "luxembourg": "LU",
-    "mexico": "MX",
-    "netherlands": "NL",
+    # Short names in common use.
+    "czech republic": "CZ",
+    "czechia": "CZ",
     "holland": "NL",
-    "new zealand": "NZ",
-    "norway": "NO",
-    "poland": "PL",
-    "portugal": "PT",
-    "slovakia": "SK",
-    "slovenia": "SI",
-    "spain": "ES",
-    "sweden": "SE",
-    "switzerland": "CH",
     "turkey": "TR",
     "türkiye": "TR",
+    "turkiye": "TR",
     "united states": "US",
     "united states of america": "US",
-    # Others recurring in policy evidence.
-    "argentina": "AR",
-    "bangladesh": "BD",
-    "brazil": "BR",
-    "china": "CN",
-    "egypt": "EG",
-    "ethiopia": "ET",
-    "ghana": "GH",
-    "hong kong": "HK",
-    "india": "IN",
-    "indonesia": "ID",
-    "iran": "IR",
-    "kenya": "KE",
-    "malawi": "MW",
-    "malaysia": "MY",
-    "nepal": "NP",
-    "nigeria": "NG",
-    "pakistan": "PK",
-    "peru": "PE",
-    "philippines": "PH",
     "russia": "RU",
-    "rwanda": "RW",
-    "saudi arabia": "SA",
-    "singapore": "SG",
-    "south africa": "ZA",
-    "sri lanka": "LK",
-    "taiwan": "TW",
-    "tanzania": "TZ",
-    "thailand": "TH",
-    "uganda": "UG",
     "vietnam": "VN",
-    "zambia": "ZM",
-    "zimbabwe": "ZW",
+    "viet nam": "VN",
+    "laos": "LA",
+    "lao pdr": "LA",
+    "syria": "SY",
+    "moldova": "MD",
+    "republic of moldova": "MD",
+    "tanzania": "TZ",
+    "united republic of tanzania": "TZ",
+    "venezuela": "VE",
+    "bolivia": "BO",
+    "iran": "IR",
+    "taiwan": "TW",
+    "ivory coast": "CI",
+    "cote d'ivoire": "CI",
+    "côte d'ivoire": "CI",
+    "eswatini": "SZ",
+    "swaziland": "SZ",
+    "burma": "MM",
+    "myanmar": "MM",
+    "macedonia": "MK",
+    "north macedonia": "MK",
+    "gambia": "GM",
+    "the gambia": "GM",
+    "bahamas": "BS",
+    "the bahamas": "BS",
+    "micronesia": "FM",
+    "palestine": "PS",
+    "state of palestine": "PS",
+    "vatican": "VA",
+    "vatican city": "VA",
+    "holy see": "VA",
+    "congo": "CG",
+    "republic of the congo": "CG",
+    "congo-brazzaville": "CG",
+    "democratic republic of the congo": "CD",
+    "dr congo": "CD",
+    "drc": "CD",
+    "congo-kinshasa": "CD",
+    "cape verde": "CV",
+    "cabo verde": "CV",
+    "east timor": "TL",
+    "timor-leste": "TL",
+    "brunei": "BN",
+    "hong kong": "HK",
+    "macau": "MO",
+    "macao": "MO",
+    "reunion": "RE",
+    "réunion": "RE",
+    "curacao": "CW",
+    "curaçao": "CW",
+    "british virgin islands": "VG",
+    "us virgin islands": "VI",
+    "u.s. virgin islands": "VI",
+    "falkland islands": "FK",
+    "saint helena": "SH",
+    "st helena": "SH",
+    "bonaire": "BQ",
+    "western sahara": "EH",
+    "united arab emirates": "AE",
+    "dominican republic": "DO",
+    "philippines": "PH",
+}
+
+
+def _iso_bare(name: str) -> tuple[str, str]:
+    """An ISO-3166 name, lower case: ``(full name, bare name)``.
+
+    The full name loses a trailing "(the)", a bracketed alternative
+    ("[Malvinas]") and a trailing "*"; the bare name also loses every
+    parenthesised qualifier ("Bolivia (Plurinational State of)" → "bolivia").
+    """
+    full = re.sub(r"\s*\[[^\]]*\]", "", name).replace("*", "")
+    full = re.sub(r"\s*\(the\)\s*$", "", full, flags=re.IGNORECASE)
+    full = " ".join(full.split()).casefold()
+    bare = " ".join(re.sub(r"\([^)]*\)", "", full).split())
+    return full, bare
+
+
+def _iso_country_names() -> dict[str, str]:
+    """Every ISO-3166 country by its full and its bare name (lower case).
+
+    A bare name two codes share ("korea", "congo", "virgin islands") is left
+    out here; the aliases name the one each means.
+    """
+    names: dict[str, str] = {}
+    bare_codes: dict[str, set[str]] = {}
+    for code, name in ISO_3166_ALPHA2.items():
+        full, bare = _iso_bare(name)
+        names[full] = code
+        bare_codes.setdefault(bare, set()).add(code)
+    for bare, codes in bare_codes.items():
+        if len(codes) == 1:
+            names.setdefault(bare, next(iter(codes)))
+    return names
+
+
+#: Country names (lower case) → ISO-3166 alpha-2: every country of the
+#: ISO-3166 table the Evidence search sourcing holds, by its full and its
+#: bare name, with the aliases above merged over them (task 046, amendment 4,
+#: R87; S29a).
+COUNTRY_NAMES: dict[str, str] = {**_iso_country_names(), **_COUNTRY_ALIASES}
+
+#: The short English name per ISO-3166 code where the ISO name is not the
+#: name in common use (task 046, amendment 4, R76; S29a).
+_DISPLAY_OVERRIDES: dict[str, str] = {
+    "GB": "United Kingdom",
+    "US": "United States",
+    "KR": "South Korea",
+    "KP": "North Korea",
+    "RU": "Russia",
+    "IR": "Iran",
+    "VN": "Vietnam",
+    "TW": "Taiwan",
+    "BO": "Bolivia",
+    "VE": "Venezuela",
+    "TZ": "Tanzania",
+    "LA": "Laos",
+    "SY": "Syria",
+    "MD": "Moldova",
+    "CZ": "Czech Republic",
+    "TR": "Turkey",
+    "NL": "Netherlands",
+    "FM": "Micronesia",
+    "PS": "Palestine",
+    "VA": "Vatican City",
+    "CD": "Democratic Republic of the Congo",
+    "CG": "Republic of the Congo",
+    "CI": "Côte d'Ivoire",
+    "BN": "Brunei",
+    "MK": "North Macedonia",
+    "SZ": "Eswatini",
+    "MM": "Myanmar",
+    "CV": "Cape Verde",
+    "TL": "Timor-Leste",
+    "KN": "Saint Kitts and Nevis",
+    "LC": "Saint Lucia",
+    "VC": "Saint Vincent and the Grenadines",
+    "TT": "Trinidad and Tobago",
+    "VG": "British Virgin Islands",
+    "VI": "US Virgin Islands",
+    "BS": "Bahamas",
+    "GM": "Gambia",
+    "AE": "United Arab Emirates",
+    "DO": "Dominican Republic",
+    "PH": "Philippines",
+    "MH": "Marshall Islands",
+    "SB": "Solomon Islands",
+    "KM": "Comoros",
+    "NE": "Niger",
+    "SD": "Sudan",
+    "MP": "Northern Mariana Islands",
+    "TC": "Turks and Caicos Islands",
+    "CK": "Cook Islands",
+    "FK": "Falkland Islands",
+    "FO": "Faroe Islands",
+    "KY": "Cayman Islands",
+    "GS": "South Georgia and the South Sandwich Islands",
+    "HM": "Heard Island and McDonald Islands",
+    "UM": "United States Minor Outlying Islands",
+    "IO": "British Indian Ocean Territory",
+    "TF": "French Southern Territories",
+    "SH": "Saint Helena, Ascension and Tristan da Cunha",
+    "SJ": "Svalbard and Jan Mayen",
+    "LY": "Libya",
+    "SX": "Sint Maarten",
+    "MF": "Saint Martin",
+    "BQ": "Bonaire, Sint Eustatius and Saba",
+    "BL": "Saint Barthélemy",
+    "PM": "Saint Pierre and Miquelon",
+    "WF": "Wallis and Futuna",
+    "CC": "Cocos (Keeling) Islands",
+    "CX": "Christmas Island",
+    "NF": "Norfolk Island",
+    "AX": "Åland Islands",
+}
+
+
+def _display_name(name: str) -> str:
+    """An ISO-3166 name without "(the)", a bracketed alternative, a "*" or a qualifier."""
+    text = re.sub(r"\s*\[[^\]]*\]", "", name).replace("*", "")
+    text = re.sub(r"\s*\([^)]*\)", "", text)
+    return " ".join(text.split())
+
+
+#: ISO-3166 alpha-2 → one short English name per country (task 046,
+#: amendment 4, R76; S29a): the signal's country words.
+COUNTRY_DISPLAY_NAMES: dict[str, str] = {
+    code: _DISPLAY_OVERRIDES.get(code, _display_name(name))
+    for code, name in ISO_3166_ALPHA2.items()
 }
 
 #: Recurring sub-national places (lower case) → the ISO-3166 alpha-2 code of
@@ -352,6 +486,134 @@ ABBREVIATIONS: dict[str, str] = {
     "USA": "US",
     "U.S.A.": "US",
 }
+
+#: The United Kingdom's four nations: sub-national, but each a country name
+#: to the reader, so a ``study_geography`` naming one under the United
+#: Kingdom is the country level, not a place below it (task 046,
+#: amendment 4, R87; S32).
+UK_NATIONS: frozenset[str] = frozenset({"england", "scotland", "wales", "northern ireland"})
+
+_LEADING_THE_RE = re.compile(r"^the\s+", re.IGNORECASE)
+
+
+def _lookup_text(text: str | None) -> str | None:
+    """Whitespace collapsed, curly apostrophes straightened, a leading "the" stripped."""
+    if text is None:
+        return None
+    cleaned = _LEADING_THE_RE.sub("", " ".join(text.replace("\u2019", "'").split()))
+    return cleaned or None
+
+
+def _resolve(text: str | None) -> tuple[str, str] | None:
+    """``(code, table)`` for a place text: ``country``, ``abbreviation`` or ``subnational``."""
+    cleaned = _lookup_text(text)
+    if cleaned is None:
+        return None
+    key = cleaned.casefold()
+    if key in COUNTRY_NAMES:
+        return COUNTRY_NAMES[key], "country"
+    if cleaned in ABBREVIATIONS:
+        return ABBREVIATIONS[cleaned], "abbreviation"
+    if key in SUBNATIONAL_PLACES:
+        return SUBNATIONAL_PLACES[key], "subnational"
+    return None
+
+
+def resolve_country(text: str | None) -> tuple[str, str] | None:
+    """The country a place text names, as one code and one short English name.
+
+    The text has its whitespace collapsed and a leading "the" stripped; it
+    is looked up case-folded in :data:`COUNTRY_NAMES`, then case-sensitively
+    in :data:`ABBREVIATIONS` ("UK", "U.S."), then case-folded in
+    :data:`SUBNATIONAL_PLACES` ("England", "New South Wales") (task 046,
+    amendment 4, R87; S29a).
+
+    Args:
+        text: A country or place as written, or ``None``.
+
+    Returns:
+        ``(iso_alpha2, display_name)`` (display name from
+        :data:`COUNTRY_DISPLAY_NAMES`), or ``None`` when the text names no
+        country the tables know.
+    """
+    found = _resolve(text)
+    if found is None:
+        return None
+    code = found[0]
+    return code, COUNTRY_DISPLAY_NAMES.get(code, code)
+
+
+def names_country(text: str | None) -> bool:
+    """Whether a place text is itself a country name, not a place within one.
+
+    A name or alias in :data:`COUNTRY_NAMES`, an abbreviation ("UK") or one
+    of the United Kingdom's nations (:data:`UK_NATIONS`); a city, region or
+    state ("London", "New South Wales") is a place within its country
+    (task 046, amendment 4, R87; S32).
+
+    Args:
+        text: A place as written, or ``None``.
+
+    Returns:
+        True when the text is a country name.
+    """
+    found = _resolve(text)
+    if found is None:
+        return False
+    if found[1] != "subnational":
+        return True
+    cleaned = _lookup_text(text)
+    return cleaned is not None and cleaned.casefold() in UK_NATIONS
+
+
+def place_key(text: str) -> str:
+    """The key a place's spellings are grouped under (task 046, amendment 4, R87; S32).
+
+    Case folded, a leading "the" stripped, hyphens and spaces removed, so
+    "South West", "south-west" and "southwest" are one place.
+
+    Args:
+        text: A place or top level as written.
+
+    Returns:
+        The grouping key.
+    """
+    cleaned = _lookup_text(text) or ""
+    return re.sub(r"[\s\-\u2010-\u2015]+", "", cleaned.casefold())
+
+
+def country_level(
+    study_country: str | None, study_geography: str | None
+) -> tuple[str | None, str | None]:
+    """A record's place with a geography that is a country read as the country.
+
+    When ``study_geography`` is a country name (:func:`names_country`) and
+    the record names no country, or names the one country it resolves to,
+    the geography is the country level with nothing below it: ``("United
+    Kingdom", "Scotland")`` → ``("United Kingdom", None)`` and ``(None,
+    "France")`` → ``("France", None)``. A geography that resolves to another
+    country ("Georgia" under the United Kingdom) or to no country is kept as
+    written (task 046, amendment 4, R87; S32). Nothing is written back.
+
+    Args:
+        study_country: The record's ``study_country``.
+        study_geography: The record's ``study_geography``.
+
+    Returns:
+        ``(study_country, study_geography)`` as coverage reads them.
+    """
+    geography = _clean(study_geography)
+    if geography is None or not names_country(geography):
+        return study_country, study_geography
+    countries, multiple = countries_named(study_country)
+    if not countries and not multiple:
+        return geography, None
+    if multiple or len(countries) != 1:
+        return study_country, study_geography
+    own, named = resolve_country(countries[0]), resolve_country(geography)
+    if own is not None and named is not None and own[0] == named[0]:
+        return study_country, None
+    return study_country, study_geography
 
 def _alternation(phrases: Iterable[str]) -> str:
     ordered = sorted(phrases, key=lambda phrase: (-len(phrase), phrase))

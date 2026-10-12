@@ -147,6 +147,7 @@ from policy_atlas.options_scoping.longlist.longlist_cluster_prompt import (
     OPTION_LABEL_MAX,
     DiscoveredOptionWire,
 )
+from policy_atlas.options_scoping.longlist.where_tried import resolve_country
 from policy_atlas.options_scoping.longlist_intent import longlist_plan_data, plan_tagging_context
 from policy_atlas.options_scoping.suggest.suggest import baseline_sections, walk_plan
 from policy_atlas.runtime.capability_registry import OPTIONS_SCOPING, validate_plan
@@ -1480,6 +1481,7 @@ class MembershipRead:
         plan_outcomes: Sequence[str] = (),
         folds: Mapping[str, Mapping[str, str]] | None = None,
         target_unit: str | None = None,
+        where_country: str | None = None,
     ) -> dict[str, dict[str, Any]]:
         """Each option's coverage (:func:`option_coverage`).
 
@@ -1488,6 +1490,8 @@ class MembershipRead:
             folds: The list's folding maps (task 046, amendment 3, S21), or
                 ``None``.
             target_unit: The plan's target unit, place stripped.
+            where_country: The plan's Where as one country's short name
+                (task 046, amendment 4, S29), or ``None``.
 
         Returns:
             ``{option_id: coverage}``.
@@ -1500,6 +1504,7 @@ class MembershipRead:
                 plan_outcomes=plan_outcomes,
                 folds=folds,
                 target_unit=target_unit,
+                where_country=where_country,
             )
             for oid, ms in self.members.items()
         }
@@ -1583,6 +1588,7 @@ def membership_coverage(
     plan_outcomes: Sequence[str] = (),
     folds: Mapping[str, Mapping[str, str]] | None = None,
     target_unit: str | None = None,
+    where_country: str | None = None,
 ) -> dict[str, dict[str, Any]]:
     """The options' coverage recomputed from their membership rows as they stand.
 
@@ -1598,13 +1604,20 @@ def membership_coverage(
         folds: The list's stored folding maps (task 046, amendment 3, S21),
             applied to the kinds; ``None`` leaves them empty.
         target_unit: The plan's target unit, place stripped.
+        where_country: The plan's Where as one country's short name
+            (task 046, amendment 4, S29), or ``None``.
 
     Returns:
         ``{option_id: coverage}`` for each of ``option_ids``.
     """
     return read_membership(
         conn, task_id=task_id, scope_id=scope_id, option_ids=option_ids
-    ).coverage(plan_outcomes=plan_outcomes, folds=folds, target_unit=target_unit)
+    ).coverage(
+        plan_outcomes=plan_outcomes,
+        folds=folds,
+        target_unit=target_unit,
+        where_country=where_country,
+    )
 
 
 def _title_only(conn: Connection, *, task_id: uuid.UUID, scope_id: uuid.UUID) -> int:
@@ -1894,12 +1907,16 @@ def longlist_scope(
         into = target_ids[fold.into_label]
         fold_rows.append((fold.seed.option_id, into))
         folded.setdefault(into, []).append(FoldedSeed(name=fold.seed.name, documents=0))
+    # The plan's Where leads the signal's countries (task 046, amendment 4, S29).
+    where_resolved = resolve_country(plan.where.text)
+    where_country = where_resolved[1] if where_resolved is not None else None
     coverage = {
         str(o.option_id): option_coverage(
             [_coverage_member(u, flagged=_flagged(answers, u, o.label)) for u in o.members],
             labels=labels,
             folded_seeds=folded.get(o.option_id, ()),
             plan_outcomes=plan_outcomes,
+            where_country=where_country,
         )
         for o in options
     }

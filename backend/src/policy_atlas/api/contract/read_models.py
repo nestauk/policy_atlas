@@ -855,6 +855,22 @@ class RelationOut(BaseModel):
     other_name: str
 
 
+class EvaluatedCountryOut(BaseModel):
+    """One country the option was evaluated in, for the evidence signal.
+
+    Task 046, amendment 4 (R76; S29): the top level of the documents with an
+    ``evaluated`` member, resolved to one short English name; a country the
+    resolver does not know is kept as written.
+
+    Args:
+        country: The country's short English name.
+        documents: Its evaluating documents (DOI-collapsed).
+    """
+
+    country: str
+    documents: int
+
+
 class TriedOnOut(BaseModel):
     """One kind of people, organisations or things the option's evidence covers.
 
@@ -1038,6 +1054,13 @@ class OptionSummaryOut(BaseModel):
         tried_on: The kinds of people, organisations or things its evidence
             covers, the plan's target unit first, then most documents first
             (task 046, amendment 3).
+        evaluated_countries: The countries of its evaluating documents, the
+            plan's Where country first, then most documents first (task 046,
+            amendment 4, R76); empty when no evaluation gives a country.
+        outcomes_evaluated: The plan outcomes at least one evaluating
+            document measured (R76).
+        outcomes_total: The outcome count of the plan the longlist was built
+            from (R76).
     """
 
     option_id: uuid.UUID
@@ -1070,6 +1093,9 @@ class OptionSummaryOut(BaseModel):
     from_section: str | None = None
     also_found_as: list[str] = Field(default_factory=list)
     tried_on: list[TriedOnOut] = Field(default_factory=list)
+    evaluated_countries: list[EvaluatedCountryOut] = Field(default_factory=list)
+    outcomes_evaluated: int = 0
+    outcomes_total: int = 0
 
 
 class LeverTypeOut(BaseModel):
@@ -1229,6 +1255,17 @@ class OptionDocumentOut(BaseModel):
         place: Where it was studied: its where-tried top level.
         source_task_id: The linked task the document or its labels came from,
             when inherited.
+        programme_name: The programme name of its first member record under
+            the option (by role order); `null` when none is given or the
+            document is a linked finding (task 046, amendment 4, R81).
+        tried_on_kind: That record's unit as its folded Tried on kind (its
+            own word when the fold has none).
+        measured: The plan outcome that record measures, in the plan's words,
+            else its outcome as its folded Measures kind.
+        place_detail: That record's place below the document's country, when
+            it adds one.
+        records_count: The document's member records under the option (0 for
+            a linked finding).
     """
 
     task_source_snapshot_id: uuid.UUID | None = None
@@ -1240,6 +1277,11 @@ class OptionDocumentOut(BaseModel):
     year: int | None = None
     place: str | None = None
     source_task_id: uuid.UUID | None = None
+    programme_name: str | None = None
+    tried_on_kind: str | None = None
+    measured: str | None = None
+    place_detail: str | None = None
+    records_count: int = 0
 
 
 class OptionRecordOut(BaseModel):

@@ -27,6 +27,8 @@ from policy_atlas.options_scoping.longlist.coverage import (
     FoldedSeed,
     distinct_words,
     empty_coverage,
+    fold_programme_name,
+    fold_programme_names,
     fold_setting,
     option_coverage,
     stored_folds,
@@ -236,7 +238,7 @@ def test_examples_are_distinct_programme_names_by_document() -> None:
         ]
     )
     assert coverage["examples"] == [
-        {"name": "Youth Guarantee", "documents": 2},
+        {"name": "youth guarantee", "documents": 2},  # the most frequent spelling (R88)
         {"name": "Wage subsidy", "documents": 1},
     ]
     assert "variants" not in coverage
@@ -250,6 +252,75 @@ def test_examples_are_capped_at_five_by_documents_then_name() -> None:
     assert len(examples) == EXAMPLES_MAX == 5
     assert [e["name"] for e in examples] == [f"programme {i}" for i in (7, 6, 5, 4, 3)]
     assert examples[0] == {"name": "programme 7", "documents": 8}
+
+
+# --- the example-name fold (task 046, amendment 4, R88; S33; contract review C16) ------
+
+
+def _fold(*names: str) -> dict[str, str]:
+    return fold_programme_names(names)
+
+
+def test_three_spellings_of_one_programme_fold_to_one() -> None:
+    a = "School Diet and Nutrition Programme"
+    b = "the School Diet and Nutrition Programme (SDNP)"
+    c = "SDNP"
+    folded = _fold(a, b, c)
+    assert len(set(folded.values())) == 1
+    assert fold_programme_name(b) == ("school diet and nutrition programme", "sdnp")
+    assert fold_programme_name(c) == ("sdnp", None)
+
+
+def test_a_leading_country_word_folds_when_the_remainder_is_another_name() -> None:
+    folded = _fold("Soft Drinks Industry Levy", "UK Soft Drinks Industry Levy")
+    assert set(folded.values()) == {"Soft Drinks Industry Levy"}
+
+
+def test_a_leading_country_word_is_kept_when_nothing_matches_the_remainder() -> None:
+    folded = _fold("British Heart Foundation Grants", "Wage subsidy")
+    assert folded["British Heart Foundation Grants"] == "British Heart Foundation Grants"
+
+
+def test_an_acronym_name_folds_with_its_expansion() -> None:
+    folded = _fold("HENRY", "Healthy Eating and Nutrition in the Really Young (HENRY)")
+    assert len(set(folded.values())) == 1
+
+
+def test_different_programmes_with_a_shared_prefix_stay_two() -> None:
+    folded = _fold("Community Eligibility Option", "Community Eligibility Provision (CEP)")
+    assert len(set(folded.values())) == 2
+
+
+def test_possessives_and_punctuation_fold_but_different_keys_stay_two() -> None:
+    assert len(set(_fold("Sure Start's", "Sure Start", "Sure-Start").values())) == 1
+    assert len(set(_fold("Change4Life", "Change 4 Life").values())) == 2
+
+
+def test_the_most_frequent_spelling_wins_over_the_shortest() -> None:
+    folded = fold_programme_names(["Sure Start Centres"] * 2 + ["sure start centres!"])
+    assert set(folded.values()) == {"Sure Start Centres"}
+    folded = fold_programme_names(["Sure Start", "Sure Start", "sure  start (SS)", "SURE START"])
+    assert set(folded.values()) == {"Sure Start"}
+    folded = fold_programme_names(["Long Name Scheme", "Long Name Scheme", "the Long Name Scheme"])
+    assert set(folded.values()) == {"Long Name Scheme"}
+    folded = fold_programme_names(
+        ["The Longer Spelling Scheme", "The Longer Spelling Scheme", "Longer Spelling Scheme"]
+    )
+    assert set(folded.values()) == {"The Longer Spelling Scheme"}
+
+
+def test_a_count_tie_goes_to_the_shortest_then_alphabetical() -> None:
+    assert set(_fold("the Levy", "Levy").values()) == {"Levy"}
+    assert set(_fold("levy", "Levy").values()) == {"Levy"}
+
+
+def test_the_fold_runs_before_the_cap() -> None:
+    names = ["Alpha Scheme", "UK Alpha Scheme", "Beta", "Gamma", "Delta", "Epsilon"]
+    members = [_member(f"d{i}", programme_name=name) for i, name in enumerate(names)]
+    examples = _coverage(members)["examples"]
+    assert len(examples) == EXAMPLES_MAX == 5
+    assert examples[0]["documents"] == 2
+    assert examples[0]["name"] == "Alpha Scheme"
 
 
 def test_folded_seeds_are_listed_under_folded() -> None:
@@ -347,8 +418,11 @@ def test_a_place_setting_is_dropped_when_the_geography_is_stated() -> None:
             [_member("a", setting="schools in Leeds", study_geography="Denmark")]
         )
     assert coverage["settings"] == {}
-    # The stated geography stands (no study_country: "other", Denmark below).
-    assert coverage["where_tried"][0]["places"] == [{"place": "Denmark", "documents": 1}]
+    # The stated geography stands; with no study_country, a geography that is a
+    # country is the top level with no place below (task 046, amendment 4, R87; S32).
+    assert coverage["where_tried"] == [
+        {"top": "Denmark", "documents": 1, "places": [], "countries": []}
+    ]
     assert coverage["setting_repairs"] == 1
     assert [log["action"] for log in logs if "action" in log] == ["dropped"]
 

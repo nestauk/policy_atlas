@@ -12,6 +12,7 @@ import pytest
 from policy_atlas.options_scoping.longlist.where_tried import (
     SUBNATIONAL_PLACES,
     names_place,
+    resolve_country,
     strip_place,
 )
 
@@ -86,7 +87,11 @@ def test_the_sub_national_table_resolves_a_place_to_its_country(place: str, code
 
 
 def test_georgia_is_not_read_as_a_us_state() -> None:
-    assert not names_place("Georgia")
+    # Task 046, amendment 4 (R87): every ISO-3166 country is now a place, so
+    # "Georgia" names a place, and it resolves to the country, never the state.
+    assert "georgia" not in SUBNATIONAL_PLACES
+    assert names_place("Georgia")
+    assert resolve_country("Georgia") == ("GE", "Georgia")
 
 
 def test_an_origin_is_part_of_the_population_and_stays() -> None:
@@ -111,3 +116,12 @@ def test_a_removed_where_leaves_no_dangling_of() -> None:
     )
     assert cleaned == "Reduce childhood obesity in the most deprived areas."
     assert removed == ["England"]
+
+
+def test_a_led_iso_country_is_stripped() -> None:
+    """Task 046, amendment 4 (R87): the table holds every ISO-3166 country."""
+    assert strip_place("young people in Tajikistan", None) == (
+        "young people",
+        ["in Tajikistan"],
+    )
+    assert names_place("Paraguay")

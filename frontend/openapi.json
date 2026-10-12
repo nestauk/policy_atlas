@@ -1875,6 +1875,25 @@
         "title": "DeltaEvent",
         "type": "object"
       },
+      "EvaluatedCountryOut": {
+        "description": "One country the option was evaluated in, for the evidence signal.\n\nTask 046, amendment 4 (R76; S29): the top level of the documents with an\n``evaluated`` member, resolved to one short English name; a country the\nresolver does not know is kept as written.\n\nArgs:\n    country: The country's short English name.\n    documents: Its evaluating documents (DOI-collapsed).",
+        "properties": {
+          "country": {
+            "title": "Country",
+            "type": "string"
+          },
+          "documents": {
+            "title": "Documents",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "country",
+          "documents"
+        ],
+        "title": "EvaluatedCountryOut",
+        "type": "object"
+      },
       "EvidenceItemOut": {
         "description": "One row of the paginated evidence/source list.\n\nArgs:\n    source_id: The source's identity.\n    title: Source title.\n    year: Publication year, or `None` if unknown.\n    venue: Publication venue, or `None` if unknown.\n    origin: Acquisition backend.\n    status: Position on the evidence status ladder.\n    status_reason: Optional human-readable reason for the current status\n        (e.g. why screened out).\n    evidence_type: Optional evidence type label.\n    appraisal_tier: Optional appraisal tier label.\n    cited: Whether this source is cited in the artefact.\n    url: Optional source URL.",
         "properties": {
@@ -3790,7 +3809,7 @@
         "type": "object"
       },
       "OptionDocumentOut": {
-        "description": "One document behind an option (\"Show the documents\"), one per document.\n\nArgs:\n    task_source_snapshot_id: This task's document row, when the task holds one.\n    title: The document's title.\n    role: What the document does with the intervention.\n    evidence_type: Its evidence type, when classified.\n    tier: Its quality tier label, when appraised.\n    design_feature_not_stated: It covers the intervention without stating\n        the feature that defines this option.\n    year: Its publication year, when the metadata has one.\n    place: Where it was studied: its where-tried top level.\n    source_task_id: The linked task the document or its labels came from,\n        when inherited.",
+        "description": "One document behind an option (\"Show the documents\"), one per document.\n\nArgs:\n    task_source_snapshot_id: This task's document row, when the task holds one.\n    title: The document's title.\n    role: What the document does with the intervention.\n    evidence_type: Its evidence type, when classified.\n    tier: Its quality tier label, when appraised.\n    design_feature_not_stated: It covers the intervention without stating\n        the feature that defines this option.\n    year: Its publication year, when the metadata has one.\n    place: Where it was studied: its where-tried top level.\n    source_task_id: The linked task the document or its labels came from,\n        when inherited.\n    programme_name: The programme name of its first member record under\n        the option (by role order); `null` when none is given or the\n        document is a linked finding (task 046, amendment 4, R81).\n    tried_on_kind: That record's unit as its folded Tried on kind (its\n        own word when the fold has none).\n    measured: The plan outcome that record measures, in the plan's words,\n        else its outcome as its folded Measures kind.\n    place_detail: That record's place below the document's country, when\n        it adds one.\n    records_count: The document's member records under the option (0 for\n        a linked finding).",
         "properties": {
           "design_feature_not_stated": {
             "default": false,
@@ -3808,6 +3827,17 @@
             ],
             "title": "Evidence Type"
           },
+          "measured": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Measured"
+          },
           "place": {
             "anyOf": [
               {
@@ -3818,6 +3848,33 @@
               }
             ],
             "title": "Place"
+          },
+          "place_detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Place Detail"
+          },
+          "programme_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Programme Name"
+          },
+          "records_count": {
+            "default": 0,
+            "title": "Records Count",
+            "type": "integer"
           },
           "role": {
             "enum": [
@@ -3867,6 +3924,17 @@
           "title": {
             "title": "Title",
             "type": "string"
+          },
+          "tried_on_kind": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tried On Kind"
           },
           "year": {
             "anyOf": [
@@ -4025,6 +4093,13 @@
             "title": "Evaluated Count",
             "type": "integer"
           },
+          "evaluated_countries": {
+            "items": {
+              "$ref": "#/components/schemas/EvaluatedCountryOut"
+            },
+            "title": "Evaluated Countries",
+            "type": "array"
+          },
           "evidence": {
             "$ref": "#/components/schemas/EvidenceProfileOut"
           },
@@ -4131,12 +4206,22 @@
             "title": "Origin",
             "type": "string"
           },
+          "outcomes_evaluated": {
+            "default": 0,
+            "title": "Outcomes Evaluated",
+            "type": "integer"
+          },
           "outcomes_served": {
             "items": {
               "type": "string"
             },
             "title": "Outcomes Served",
             "type": "array"
+          },
+          "outcomes_total": {
+            "default": 0,
+            "title": "Outcomes Total",
+            "type": "integer"
           },
           "plan_version": {
             "anyOf": [
@@ -4412,7 +4497,7 @@
         "type": "object"
       },
       "OptionSummaryOut": {
-        "description": "One option as the list view and the grid show it.\n\nArgs:\n    option_id: Stable option identity.\n    name: Option name.\n    description: One-sentence description.\n    outcomes_served: The plan's outcomes the option serves.\n    origin: Where it came from.\n    state: Included or excluded.\n    exclusion: Why it is excluded; `null` when included.\n    no_in_scope_evidence: Included, but none of its documents passes the\n        plan's evidence restriction.\n    restriction_text: The restriction none of its documents passes, when\n        `no_in_scope_evidence`.\n    primary_lever_type: The primary lever type; `null` when none fits or\n        the option is not typed yet.\n    lever_none_fits_reason: Why no lever type fits.\n    secondary_lever_types: The other lever types it also touches.\n    ambition: `less` \u00b7 `more` \u00b7 `null`: how big a proposal the option is\n        against the baseline, compared with the other options of the list;\n        `null` when it does not stand out or is not profiled yet.\n    ambition_reason: The one-line justification.\n    profile: What the option would take (task 046); `null` when the\n        option has no complete profile.\n    authority: Who can act on it (task 046, R43); `null` when none was\n        recorded.\n    taxonomy_version: The lever-type list version it was typed under.\n    design_version: The specified design's version.\n    document_count: Its documents (DOI-collapsed).\n    evaluated_count: Documents that evaluate it.\n    settings: The option's delivery setting, from its profile (R41);\n        empty when it has none.\n    where_tried: Where it was tried: its top levels, most documents first.\n    relations: Its relations to other options.\n    abstract_only: Every one of its documents was read from an abstract only.\n    is_entrant_with_no_documents: Suggested, drawn from the Evidence\n        search or added by the user, and no document has joined it.\n    search_pending: An option added since the build whose own option\n        search is still running or paused; its counts read zero until it ends.\n    from_section: The Evidence search report section a *from your\n        evidence search* option was drawn from; `null` for any other\n        origin, or when the section was not recorded (task 045, F3).\n    also_found_as: The names of the duplicates merged into this option\n        (their documents are its documents); empty when none.\n    lever_reason: One sentence on why the option has its lever type,\n        when the typing pass recorded one; `null` otherwise (task 046,\n        R29).\n    tried_on: The kinds of people, organisations or things its evidence\n        covers, the plan's target unit first, then most documents first\n        (task 046, amendment 3).",
+        "description": "One option as the list view and the grid show it.\n\nArgs:\n    option_id: Stable option identity.\n    name: Option name.\n    description: One-sentence description.\n    outcomes_served: The plan's outcomes the option serves.\n    origin: Where it came from.\n    state: Included or excluded.\n    exclusion: Why it is excluded; `null` when included.\n    no_in_scope_evidence: Included, but none of its documents passes the\n        plan's evidence restriction.\n    restriction_text: The restriction none of its documents passes, when\n        `no_in_scope_evidence`.\n    primary_lever_type: The primary lever type; `null` when none fits or\n        the option is not typed yet.\n    lever_none_fits_reason: Why no lever type fits.\n    secondary_lever_types: The other lever types it also touches.\n    ambition: `less` \u00b7 `more` \u00b7 `null`: how big a proposal the option is\n        against the baseline, compared with the other options of the list;\n        `null` when it does not stand out or is not profiled yet.\n    ambition_reason: The one-line justification.\n    profile: What the option would take (task 046); `null` when the\n        option has no complete profile.\n    authority: Who can act on it (task 046, R43); `null` when none was\n        recorded.\n    taxonomy_version: The lever-type list version it was typed under.\n    design_version: The specified design's version.\n    document_count: Its documents (DOI-collapsed).\n    evaluated_count: Documents that evaluate it.\n    settings: The option's delivery setting, from its profile (R41);\n        empty when it has none.\n    where_tried: Where it was tried: its top levels, most documents first.\n    relations: Its relations to other options.\n    abstract_only: Every one of its documents was read from an abstract only.\n    is_entrant_with_no_documents: Suggested, drawn from the Evidence\n        search or added by the user, and no document has joined it.\n    search_pending: An option added since the build whose own option\n        search is still running or paused; its counts read zero until it ends.\n    from_section: The Evidence search report section a *from your\n        evidence search* option was drawn from; `null` for any other\n        origin, or when the section was not recorded (task 045, F3).\n    also_found_as: The names of the duplicates merged into this option\n        (their documents are its documents); empty when none.\n    lever_reason: One sentence on why the option has its lever type,\n        when the typing pass recorded one; `null` otherwise (task 046,\n        R29).\n    tried_on: The kinds of people, organisations or things its evidence\n        covers, the plan's target unit first, then most documents first\n        (task 046, amendment 3).\n    evaluated_countries: The countries of its evaluating documents, the\n        plan's Where country first, then most documents first (task 046,\n        amendment 4, R76); empty when no evaluation gives a country.\n    outcomes_evaluated: The plan outcomes at least one evaluating\n        document measured (R76).\n    outcomes_total: The outcome count of the plan the longlist was built\n        from (R76).",
         "properties": {
           "abstract_only": {
             "default": false,
@@ -4479,6 +4564,13 @@
             "default": 0,
             "title": "Evaluated Count",
             "type": "integer"
+          },
+          "evaluated_countries": {
+            "items": {
+              "$ref": "#/components/schemas/EvaluatedCountryOut"
+            },
+            "title": "Evaluated Countries",
+            "type": "array"
           },
           "exclusion": {
             "anyOf": [
@@ -4552,12 +4644,22 @@
             "title": "Origin",
             "type": "string"
           },
+          "outcomes_evaluated": {
+            "default": 0,
+            "title": "Outcomes Evaluated",
+            "type": "integer"
+          },
           "outcomes_served": {
             "items": {
               "type": "string"
             },
             "title": "Outcomes Served",
             "type": "array"
+          },
+          "outcomes_total": {
+            "default": 0,
+            "title": "Outcomes Total",
+            "type": "integer"
           },
           "primary_lever_type": {
             "anyOf": [

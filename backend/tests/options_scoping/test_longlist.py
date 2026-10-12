@@ -851,29 +851,14 @@ def test_coverage_buckets_labels_roles_where_tried_settings_and_flags(conn: Conn
     assert coverage["tier"] == {"not rated": 3, "4": 1}
     assert coverage["role"] == {"evaluated": 1, "described": 1, "recommended": 1, "mentioned": 1}
     # Where tried from study_country (task 046, amendment 3; R59, R72): the
-    # DOI twins count once, both their places below.
+    # DOI twins count once. A geography that is the record's own country
+    # ("Denmark", "United Kingdom", "England") is the country level with no
+    # place below (amendment 4, R87; S32).
     assert coverage["where_tried"] == [
-        {
-            "top": "Denmark",
-            "documents": 1,
-            "places": [{"place": "Denmark", "documents": 1}],
-            "countries": [],
-        },
-        {
-            "top": "United Kingdom",
-            "documents": 1,
-            "places": [
-                {"place": "England", "documents": 1},
-                {"place": "United Kingdom", "documents": 1},
-            ],
-            "countries": [],
-        },
-        {
-            "top": "multiple countries",
-            "documents": 1,
-            "places": [{"place": "12 OECD countries", "documents": 1}],
-            "countries": [],
-        },
+        {"top": "Denmark", "documents": 1, "places": [], "countries": []},
+        {"top": "United Kingdom", "documents": 1, "places": [], "countries": []},
+        # No place under "multiple countries" (amendment 4, R87; S32).
+        {"top": "multiple countries", "documents": 1, "places": [], "countries": []},
         {
             "top": "other",
             "documents": 1,
@@ -1078,9 +1063,11 @@ def test_linked_findings_cluster_beside_profile_records(conn: Connection) -> Non
     coverage = walk.result(run_id).coverage[str(seed_id)]
     assert coverage["findings"] == {"iof": 1, "icf": 1}
     assert coverage["role"]["evaluated"] == 2  # the profile record and the IOF document
-    # A linked finding has no study_country: its stated place is "other".
+    # A linked finding has no study_country: a stated place that is a country
+    # name ("Scotland") is the country level, nothing below (task 046,
+    # amendment 4, R87; S32); any other stated place is "other".
     where = {entry["top"]: entry for entry in coverage["where_tried"]}
-    assert where["other"]["places"] == [{"place": "Scotland", "documents": 1}]
+    assert where["Scotland"]["places"] == []
     provenance = walk.result(run_id).provenance["links"]
     assert provenance == [
         {

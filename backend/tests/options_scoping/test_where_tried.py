@@ -150,12 +150,8 @@ def test_coverage_counts_documents_under_one_top_level_each() -> None:
             ],
             "countries": [],
         },
-        {
-            "top": "multiple countries",
-            "documents": 1,
-            "places": [{"place": "12 high-income countries", "documents": 1}],
-            "countries": [],
-        },
+        # No place under "multiple countries" (task 046, amendment 4, R87; S32).
+        {"top": "multiple countries", "documents": 1, "places": [], "countries": []},
         {"top": "not stated", "documents": 1, "places": [], "countries": []},
         {
             "top": "other",
@@ -178,10 +174,8 @@ def test_multiple_countries_carries_its_component_countries() -> None:
         {
             "top": "multiple countries",
             "documents": 2,
-            "places": [
-                {"place": "Leeds", "documents": 1},
-                {"place": "Lyon", "documents": 1},
-            ],
+            # No place under "multiple countries" (task 046, amendment 4, R87; S32).
+            "places": [],
             "countries": ["France", "United Kingdom", "United States"],
         }
     ]
@@ -324,3 +318,274 @@ def test_doi_twins_take_the_rated_twin_s_labels_in_either_id_order(rated_first: 
     assert coverage["evidence_type"] == {"RCTs and Quasi-Experimental Studies": 1}
     assert coverage["tier"] == {"4": 1}
     assert coverage["role"]["evaluated"] == 1 and coverage["role"]["mentioned"] == 1
+
+
+# --- The country resolver (task 046, amendment 4; R87, S29a) -------------------
+
+
+@pytest.mark.parametrize(
+    ("text", "code", "name"),
+    [
+        ("Tajikistan", "TJ", "Tajikistan"),
+        ("Paraguay", "PY", "Paraguay"),
+        ("Jordan", "JO", "Jordan"),
+        ("Lebanon", "LB", "Lebanon"),
+        ("New South Wales", "AU", "Australia"),
+        ("bolivia", "BO", "Bolivia"),
+        ("bolivia (plurinational state of)", "BO", "Bolivia"),
+        ("iran", "IR", "Iran"),
+        ("korea (the republic of)", "KR", "South Korea"),
+        ("North  Korea", "KP", "North Korea"),
+        ("The Netherlands", "NL", "Netherlands"),
+        ("Viet Nam", "VN", "Vietnam"),
+        ("Côte d’Ivoire", "CI", "Côte d'Ivoire"),
+        ("USA", "US", "United States"),
+    ],
+)
+def test_the_resolver_knows_every_country(text: str, code: str, name: str) -> None:
+    assert where_tried.resolve_country(text) == (code, name)
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "UK",
+        "U.K.",
+        "England",
+        "Scotland",
+        "Wales",
+        "Northern Ireland",
+        "Britain",
+        "Great Britain",
+        "the United Kingdom",
+        "united kingdom of great britain and northern ireland",
+    ],
+)
+def test_the_united_kingdom_s_names_resolve_to_it(text: str) -> None:
+    assert where_tried.resolve_country(text) == ("GB", "United Kingdom")
+
+
+@pytest.mark.parametrize("text", ["Hamburg", "Narnia", "us", "", "  ", None])
+def test_an_unknown_place_resolves_to_nothing(text: str | None) -> None:
+    assert where_tried.resolve_country(text) is None
+
+
+def test_every_iso_country_has_one_short_name_and_a_table_entry() -> None:
+    from policy_atlas.evidence_search.sourcing.country_filters import ISO_3166_ALPHA2
+
+    names = where_tried.COUNTRY_DISPLAY_NAMES
+    assert set(names) == set(ISO_3166_ALPHA2)
+    assert [name for name in names.values() if "(" in name] == ["Cocos (Keeling) Islands"]
+    assert not [name for name in names.values() if "*" in name or "[" in name]
+    assert set(where_tried.COUNTRY_NAMES.values()) == set(ISO_3166_ALPHA2)
+
+
+def test_the_old_aliases_are_kept() -> None:
+    for alias, code in (
+        ("britain", "GB"),
+        ("great britain", "GB"),
+        ("holland", "NL"),
+        ("türkiye", "TR"),
+        ("dprk", "KP"),
+        ("czechia", "CZ"),
+        ("hong kong", "HK"),
+    ):
+        assert where_tried.COUNTRY_NAMES[alias] == code
+
+
+@pytest.mark.parametrize(
+    ("text", "key"),
+    [("South West", "southwest"), ("south-west", "southwest"), ("the  Southwest", "southwest")],
+)
+def test_the_place_key_folds_hyphens_spaces_and_the(text: str, key: str) -> None:
+    assert where_tried.place_key(text) == key
+
+
+# --- The evidence signal and the place checks (R76, R87; S29, S32) ------------
+
+
+def _signal_member(
+    doc_key: str,
+    *,
+    role: str = "evaluated",
+    country: str | None = None,
+    geography: str | None = None,
+    outcome_tag: str | None = None,
+) -> CoverageMember:
+    return CoverageMember(
+        unit_kind="interventions",
+        doc_key=doc_key,
+        tss_id=None,
+        role=role,
+        basis="abstract_only",
+        flagged=False,
+        unit=None,
+        setting=None,
+        outcome=None,
+        study_geography=geography,
+        study_country=country,
+        outcome_tag=outcome_tag,
+    )
+
+
+def _countries(members: list[CoverageMember], where: str | None = None) -> list[object]:
+    coverage = option_coverage(members, labels={}, where_country=where)
+    countries: list[object] = coverage["evaluated_countries"]
+    return countries
+
+
+def test_a_describing_document_s_country_is_not_an_evaluated_country() -> None:
+    members = [
+        _signal_member("doc:a", country="France"),
+        _signal_member("doc:b", role="described", country="Germany"),
+        _signal_member("doc:c", role="recommended", country="Spain"),
+    ]
+    coverage = option_coverage(members, labels={})
+    assert coverage["evaluated_countries"] == [{"country": "France", "documents": 1}]
+    # The describing count the reader is served is documents − evaluated (C10).
+    assert coverage["documents"] - coverage["role"]["evaluated"] == 2
+
+
+def test_a_document_of_two_countries_or_other_counts_for_no_country() -> None:
+    members = [
+        _signal_member("doc:a", country="France; Germany"),
+        _signal_member("doc:b", country="multiple"),
+        _signal_member("doc:c", country="Spain"),
+        _signal_member("doc:c", country="Italy"),  # two countries between its records
+        _signal_member("doc:d", geography="a coastal town"),  # "other"
+        _signal_member("doc:e"),  # "not stated"
+    ]
+    assert _countries(members) == []
+
+
+def test_england_in_the_where_puts_the_united_kingdom_first() -> None:
+    members = [
+        _signal_member("doc:a", country="England"),
+        _signal_member("doc:b", country="United Kingdom"),
+        _signal_member("doc:c", country="France"),
+        _signal_member("doc:d", country="France"),
+        _signal_member("doc:e", country="France"),
+    ]
+    assert _countries(members) == [
+        {"country": "France", "documents": 3},
+        {"country": "United Kingdom", "documents": 2},
+    ]
+    resolved = where_tried.resolve_country("England")
+    assert resolved is not None
+    assert _countries(members, resolved[1]) == [
+        {"country": "United Kingdom", "documents": 2},
+        {"country": "France", "documents": 3},
+    ]
+    # The raw text resolves the same way.
+    assert _countries(members, "England")[0] == {"country": "United Kingdom", "documents": 2}
+
+
+def test_a_where_the_resolver_cannot_map_keeps_count_order() -> None:
+    members = [
+        _signal_member("doc:a", country="Denmark"),
+        _signal_member("doc:b", country="France"),
+        _signal_member("doc:c", country="France"),
+    ]
+    expected = [{"country": "France", "documents": 2}, {"country": "Denmark", "documents": 1}]
+    assert _countries(members, "the Shire") == expected
+    assert _countries(members, None) == expected
+
+
+def test_a_one_outcome_plan_with_one_evaluating_document_measures_one() -> None:
+    coverage = option_coverage(
+        [
+            _signal_member("doc:a", outcome_tag="The  NEET rate"),
+            _signal_member("doc:b", role="described", outcome_tag="earnings"),
+        ],
+        labels={},
+        plan_outcomes=["the NEET rate"],
+    )
+    assert coverage["outcomes_evaluated"] == 1
+    assert len(coverage["outcome_counts"]["by_outcome"]) == 1
+    described_only = option_coverage(
+        [_signal_member("doc:a", role="described", outcome_tag="the NEET rate")],
+        labels={},
+        plan_outcomes=["the NEET rate", "earnings"],
+    )
+    assert described_only["outcomes_evaluated"] == 0
+
+
+def test_an_unknown_country_is_kept_as_written_and_counted() -> None:
+    coverage = option_coverage(
+        [
+            _signal_member("doc:a", country="Narnia"),
+            _signal_member("doc:b", role="described", country="Narnia"),
+            _signal_member("doc:c", country="France"),
+        ],
+        labels={},
+    )
+    assert coverage["evaluated_countries"] == [
+        {"country": "France", "documents": 1},
+        {"country": "Narnia", "documents": 1},
+    ]
+    # Every document under the unknown top level, whatever its role (R87).
+    assert coverage["places_unknown_country"] == [{"country": "Narnia", "documents": 2}]
+
+
+def test_the_empty_coverage_carries_the_signal_keys() -> None:
+    coverage = option_coverage([], labels={})
+    assert coverage["evaluated_countries"] == []
+    assert coverage["outcomes_evaluated"] == 0
+    assert coverage["places_unknown_country"] == []
+
+
+def _places(members: list[CoverageMember]) -> dict[str, list[object]]:
+    return {entry["top"]: entry["places"] for entry in _where(members)}  # type: ignore[misc]
+
+
+def test_south_west_spellings_are_one_place() -> None:
+    places = _places(
+        [
+            _signal_member("doc:a", country="United Kingdom", geography="south-west"),
+            _signal_member("doc:b", country="United Kingdom", geography="Southwest"),
+            _signal_member("doc:c", country="United Kingdom", geography="the South West"),
+        ]
+    )
+    assert places["United Kingdom"] == [{"place": "Southwest", "documents": 3}]
+
+
+def test_an_organisation_as_a_geography_stays_as_written() -> None:
+    places = _places(
+        [_signal_member("doc:a", country="Spain", geography="Spanish Ministry of Health")]
+    )
+    assert places == {"Spain": [{"place": "Spanish Ministry of Health", "documents": 1}]}
+
+
+def test_a_geography_that_is_the_record_s_country_has_no_place_below() -> None:
+    places = _places(
+        [
+            _signal_member("doc:a", country="United Kingdom", geography="Scotland"),
+            _signal_member("doc:b", country="United Kingdom", geography="UK"),
+            _signal_member("doc:c", country="United Kingdom", geography="London"),
+        ]
+    )
+    # "London" is a place within the country, kept below it.
+    assert places == {"United Kingdom": [{"place": "London", "documents": 1}]}
+
+
+def test_a_geography_of_another_country_stays_the_place_below() -> None:
+    places = _places(
+        [_signal_member("doc:a", country="United Kingdom", geography="Georgia")]
+    )
+    assert places == {"United Kingdom": [{"place": "Georgia", "documents": 1}]}
+
+
+def test_a_country_geography_with_no_country_is_the_top_level() -> None:
+    coverage = option_coverage([_signal_member("doc:a", geography="Wales")], labels={})
+    assert coverage["where_tried"] == [
+        {"top": "Wales", "documents": 1, "places": [], "countries": []}
+    ]
+    assert coverage["evaluated_countries"] == [{"country": "United Kingdom", "documents": 1}]
+
+
+def test_a_geography_under_multiple_countries_is_no_place_and_no_country() -> None:
+    coverage = option_coverage(
+        [_signal_member("doc:a", country="multiple", geography="France")], labels={}
+    )
+    assert coverage["where_tried"][0]["places"] == []
+    assert coverage["evaluated_countries"] == []

@@ -60,9 +60,16 @@ import structlog
 
 from policy_atlas.options_scoping.labels import DocumentLabels
 from policy_atlas.options_scoping.longlist.where_tried import (
+    ABBREVIATIONS,
+    COUNTRY_NAMES,
     MULTIPLE_COUNTRIES,
+    NOT_STATED,
+    OTHER_PLACE,
+    country_level,
     document_where,
     names_place,
+    place_key,
+    resolve_country,
 )
 
 log = structlog.get_logger()
@@ -262,6 +269,124 @@ def _show(shown: dict[str, str], key: str, text: str) -> None:
         shown[key] = text
 
 
+#: Country adjectives read as a leading country word in a programme name
+#: (task 046, amendment 4, R88; S33).
+COUNTRY_ADJECTIVES: tuple[str, ...] = (
+    "british", "english", "scottish", "welsh", "irish", "american", "australian",
+    "canadian", "dutch", "german", "french", "spanish", "swedish", "danish",
+    "finnish", "estonian", "czech", "chinese", "chilean", "tajik", "portuguese",
+    "italian", "polish", "norwegian", "japanese", "indian", "brazilian",
+    "mexican", "european",
+)  # fmt: skip
+
+_ACRONYM_TAIL = re.compile(r"\(\s*([A-Z0-9]{2,8})\s*\)\s*$")
+_POSSESSIVE = re.compile(r"[\'\u2019]s\b")
+
+
+def _plain(text: str) -> str:
+    """Casefolded, possessives stripped, punctuation as spaces, spaces collapsed."""
+    text = _POSSESSIVE.sub("", text.casefold())
+    text = "".join(c if c.isalnum() or c == " " else " " for c in text)
+    return " ".join(text.split())
+
+
+_COUNTRY_WORDS: frozenset[str] = frozenset(
+    word
+    for word in (
+        *(_plain(name) for name in COUNTRY_NAMES),
+        *(_plain(name) for name in ABBREVIATIONS),
+        *COUNTRY_ADJECTIVES,
+    )
+    if word
+)
+
+
+def fold_programme_name(name: str) -> tuple[str, str | None]:
+    """The fold keys of one programme name (task 046, amendment 4, R88; S33; contract review C16).
+
+    The key is the name with whitespace collapsed, casefolded, possessives
+    and punctuation stripped, a leading "the " dropped and a trailing
+    parenthesised acronym removed. The country-word rule needs the other
+    names of the run, so it is applied by :func:`fold_programme_names`.
+
+    Args:
+        name: A programme name as the record spells it.
+
+    Returns:
+        ``(key, acronym_key)``: the acronym key is the lower-cased trailing
+        parenthesised acronym of two to eight upper-case letters or digits,
+        else ``None``.
+    """
+    text = " ".join(name.split())
+    match = _ACRONYM_TAIL.search(text)
+    acronym = match.group(1).casefold() if match else None
+    if match:
+        text = text[: match.start()]
+    key = _plain(text)
+    if key.startswith("the "):
+        key = key[4:]
+    return key, acronym
+
+
+def fold_programme_names(names: Iterable[str]) -> dict[str, str]:
+    """Group a programme's spellings and pick the shown one (task 046, amendment 4, R88; S33).
+
+    Two names fold when their keys are equal, when one's acronym key equals
+    the other's key or acronym key, or when a leading country word stripped
+    from one leaves the other's key (only when such a name is in the run).
+    The shown spelling is the most frequent in ``names``, then the shortest,
+    then the first alphabetically.
+
+    Args:
+        names: Every spelling, one entry per occurrence.
+
+    Returns:
+        Each input spelling mapped to the spelling shown for its group.
+    """
+    counts: dict[str, int] = {}
+    for name in names:
+        counts[name] = counts.get(name, 0) + 1
+    spellings = list(counts)
+    keys = {name: fold_programme_name(name) for name in spellings}
+    parent = {name: name for name in spellings}
+
+    def find(name: str) -> str:
+        while parent[name] != name:
+            parent[name] = parent[parent[name]]
+            name = parent[name]
+        return name
+
+    def union(a: str, b: str) -> None:
+        parent[find(a)] = find(b)
+
+    first_by_label: dict[str, str] = {}
+    for name in spellings:
+        key, acronym = keys[name]
+        for label in (key, acronym):
+            if not label:
+                continue
+            if label in first_by_label:
+                union(name, first_by_label[label])
+            else:
+                first_by_label[label] = name
+    for name in spellings:
+        words = keys[name][0].split()
+        for cut in range(1, len(words)):
+            if " ".join(words[:cut]) in _COUNTRY_WORDS:
+                target = first_by_label.get(" ".join(words[cut:]))
+                if target is not None:
+                    union(name, target)
+                    break
+    groups: dict[str, list[str]] = {}
+    for name in spellings:
+        groups.setdefault(find(name), []).append(name)
+    shown = {
+        root: min(members, key=lambda text: (-counts[text], len(text), text))
+        for root, members in groups.items()
+    }
+    return {name: shown[find(name)] for name in spellings}
+
+
 def _clean(value: str | None) -> str | None:
     if value is None:
         return None
@@ -359,10 +484,18 @@ def stored_folds(option_profile: object) -> dict[str, dict[str, str]] | None:
     return out
 
 
-def _fold_lookup(
+def fold_lookup(
     folds: Mapping[str, Mapping[str, str]] | None, facet: str
 ) -> dict[str, str] | None:
-    """One facet's stored map, keyed case-folded; ``None`` without maps."""
+    """One facet's stored map, keyed case-folded.
+
+    Args:
+        folds: The list's folding maps (:func:`stored_folds`), or ``None``.
+        facet: ``"tried_on"`` or ``"measures"``.
+
+    Returns:
+        ``{case-folded word: kind}``, or ``None`` without maps.
+    """
     if folds is None:
         return None
     stored = folds.get(facet)
@@ -375,12 +508,38 @@ def _fold_lookup(
     return lookup
 
 
-def _kind(lookup: Mapping[str, str], text: str | None) -> str | None:
-    """A record word's kind: the map's, else the word itself; ``None`` for no word."""
+def fold_kind(lookup: Mapping[str, str], text: str | None) -> str | None:
+    """A record word's kind: the map's, else the word itself.
+
+    Args:
+        lookup: One facet's map from :func:`fold_lookup`.
+        text: The record's word, or ``None``.
+
+    Returns:
+        The kind, the word itself when the map lacks it, ``None`` for no word.
+    """
     word = _clean(text)
     if word is None:
         return None
     return lookup.get(_fold_tag(word), word)
+
+
+def plan_outcome_named(tag: str | None, plan_outcomes: Sequence[str]) -> str | None:
+    """The plan outcome an ``outcome_tag`` names, in the plan's words.
+
+    Case and whitespace folded, as the outcome counts compare (R42).
+
+    Args:
+        tag: The record's ``outcome_tag``, or ``None``.
+        plan_outcomes: The plan's outcome texts.
+
+    Returns:
+        The plan outcome's own text, or ``None`` when the tag names none.
+    """
+    if not tag or not tag.strip():
+        return None
+    folded = _fold_tag(tag)
+    return next((outcome for outcome in plan_outcomes if _fold_tag(outcome) == folded), None)
 
 
 def _untagged(member: CoverageMember) -> bool:
@@ -405,6 +564,7 @@ def option_coverage(
     plan_outcomes: Sequence[str] = (),
     folds: Mapping[str, Mapping[str, str]] | None = None,
     target_unit: str | None = None,
+    where_country: str | None = None,
 ) -> dict[str, Any]:
     """Compute one option's source-quality profile.
 
@@ -419,6 +579,10 @@ def option_coverage(
             ``outcome_counts.other`` empty.
         target_unit: The plan's target unit as the folding call read it
             (place stripped): its kind leads ``tried_on_kinds``.
+        where_country: The plan's Where as one country's short name (the
+            caller resolves it, :func:`~.where_tried.resolve_country`); it
+            leads ``evaluated_countries``. ``None`` or a text that names no
+            country keeps the count order.
 
     Returns:
         ``members`` · ``documents`` · ``flagged_members`` ·
@@ -435,9 +599,24 @@ def option_coverage(
         ``other``: ``[{kind, documents, evaluated}]``, the Measures kinds that
         are not plan outcomes, counting only records tagged ``other`` or not
         tagged) · ``tried_on_kinds`` (``[{kind, documents}]``) ·
-        ``measures_kinds`` (``[{kind, documents, evaluated}]``) — documents
-        DOI-collapsed except the two member counts and ``setting_repairs``
-        (one per member repaired).
+        ``measures_kinds`` (``[{kind, documents, evaluated}]``) ·
+        ``evaluated_countries`` (``[{country, documents}]``: the top level of
+        each document with an ``evaluated`` member, resolved to one short
+        name, "not stated", "multiple countries" and "other" left out; a
+        country the resolver does not know kept as written; the Where
+        country first, then documents descending, then name) ·
+        ``places_unknown_country`` (``[{country, documents}]``: the top
+        levels, of documents of any role, that the resolver does not know,
+        as written) · ``outcomes_evaluated`` (the ``by_outcome`` rows with
+        ``evaluated`` ≥ 1) (task 046, amendment 4, R76, R87; S29, S32) —
+        documents DOI-collapsed except the two member counts and
+        ``setting_repairs`` (one per member repaired).
+
+    A record's ``study_geography`` that is its own country's name (or a
+    country's name on a record with no country) is read as the country
+    level with no place below (:func:`~.where_tried.country_level`); no
+    place is listed under "multiple countries"; places and top levels group
+    by :func:`~.where_tried.place_key` (S32).
     """
     by_doc: dict[str, list[CoverageMember]] = {}
     member_count = 0
@@ -460,8 +639,11 @@ def option_coverage(
                 setting=_clean(member.setting),
                 unit_kind=member.unit_kind,
             )
+        country, geography = country_level(member.study_country, geography)
         by_doc.setdefault(member.doc_key, []).append(
-            replace(member, setting=setting_label, study_geography=geography)
+            replace(
+                member, setting=setting_label, study_geography=geography, study_country=country
+            )
         )
 
     evidence_type: dict[str, int] = {}
@@ -481,16 +663,15 @@ def option_coverage(
     setting_spellings: dict[str, dict[str, int]] = {}
     tried_on: dict[str, set[str]] = {}
     tried_on_shown: dict[str, str] = {}
-    examples: dict[str, set[str]] = {}
-    examples_shown: dict[str, str] = {}
+    example_names: list[tuple[str, str]] = []
     flagged_documents = 0
     abstract_only = 0
     inherited_labels = 0
     evaluating_documents = 0
     outcome_documents = dict.fromkeys((_fold_tag(o) for o in plan_outcomes), 0)
     outcome_evaluated = dict.fromkeys(outcome_documents, 0)
-    tried_lookup = _fold_lookup(folds, "tried_on")
-    measures_lookup = _fold_lookup(folds, "measures")
+    tried_lookup = fold_lookup(folds, "tried_on")
+    measures_lookup = fold_lookup(folds, "measures")
     tried_kinds: dict[str, set[str]] = {}
     tried_kinds_shown: dict[str, str] = {}
     measure_kinds: dict[str, set[str]] = {}
@@ -498,6 +679,10 @@ def option_coverage(
     measure_kinds_shown: dict[str, str] = {}
     other_kinds: dict[str, set[str]] = {}
     other_kinds_evaluated: dict[str, set[str]] = {}
+    evaluated_countries: dict[str, set[str]] = {}
+    evaluated_countries_shown: dict[str, str] = {}
+    unknown_countries: dict[str, set[str]] = {}
+    unknown_countries_shown: dict[str, str] = {}
 
     for key in sorted(by_doc):
         doc_members = by_doc[key]
@@ -519,13 +704,13 @@ def option_coverage(
         doc_outcomes_evaluated = {_fold_tag(m.outcome_tag) for m in evaluated if m.outcome_tag}
         if tried_lookup is not None:
             for m in doc_members:
-                kind = _kind(tried_lookup, m.unit)
+                kind = fold_kind(tried_lookup, m.unit)
                 if kind is not None:
                     tried_kinds.setdefault(_fold_tag(kind), set()).add(key)
                     _show(tried_kinds_shown, _fold_tag(kind), kind)
         if measures_lookup is not None:
             for m in doc_members:
-                kind = _kind(measures_lookup, m.outcome)
+                kind = fold_kind(measures_lookup, m.outcome)
                 if kind is None:
                     continue
                 kind_key = _fold_tag(kind)
@@ -557,15 +742,27 @@ def option_coverage(
         top, doc_countries = document_where(
             (m.study_country, m.study_geography) for m in doc_members
         )
-        top_key = top.casefold()
+        top_key = place_key(top)
         where_docs.setdefault(top_key, set()).add(key)
         _show(where_shown, top_key, top)
         places = where_places.setdefault(top_key, {})
         for m in doc_members:
             place = _clean(m.study_geography)
-            if place is not None:
-                places.setdefault(place.casefold(), set()).add(key)
-                _show(places_shown, place.casefold(), place)
+            # No place under "multiple countries" (task 046, amendment 4, S32).
+            if place is not None and top != MULTIPLE_COUNTRIES and place_key(place) != top_key:
+                places.setdefault(place_key(place), set()).add(key)
+                _show(places_shown, place_key(place), place)
+        if top not in (NOT_STATED, MULTIPLE_COUNTRIES, OTHER_PLACE):
+            resolved = resolve_country(top)
+            if resolved is None:
+                # A country the resolver does not know: kept as written and
+                # reported, never dropped (R87; S32).
+                unknown_countries.setdefault(top_key, set()).add(key)
+                _show(unknown_countries_shown, top_key, top)
+            if evaluated:
+                country_key = f"iso:{resolved[0]}" if resolved else f"text:{top_key}"
+                evaluated_countries.setdefault(country_key, set()).add(key)
+                _show(evaluated_countries_shown, country_key, resolved[1] if resolved else top)
         if top == MULTIPLE_COUNTRIES:
             for country in doc_countries:
                 where_countries.setdefault(top_key, set()).add(country.casefold())
@@ -596,9 +793,14 @@ def option_coverage(
                 _show(tried_on_shown, folded, unit)
             name = _clean(m.programme_name)
             if name is not None:
-                folded = name.casefold()
-                examples.setdefault(folded, set()).add(key)
-                _show(examples_shown, folded, name)
+                example_names.append((name, key))
+
+    # The examples: the names fold before the counting, ranking and cap (R88).
+    example_fold = fold_programme_names(name for name, _ in example_names)
+    examples: dict[str, set[str]] = {}
+    for name, doc_key in example_names:
+        examples.setdefault(example_fold[name], set()).add(doc_key)
+    examples_shown = {shown_name: shown_name for shown_name in examples}
 
     # One facet label per folded setting: its most frequent original spelling
     # among the members, then the shortest, then the first alphabetically.
@@ -621,6 +823,17 @@ def option_coverage(
                 tried_kinds_shown[item[0]],
             ),
         )
+    ]
+
+    where_resolved = resolve_country(where_country)
+    where_display = where_resolved[1] if where_resolved is not None else None
+    by_outcome = [
+        {
+            "outcome": outcome,
+            "documents": outcome_documents[_fold_tag(outcome)],
+            "evaluated": outcome_evaluated[_fold_tag(outcome)],
+        }
+        for outcome in plan_outcomes
     ]
 
     def _kind_rows(
@@ -685,18 +898,29 @@ def option_coverage(
         "setting_repairs": setting_repairs,
         "outcome_counts": {
             "evaluating_documents": evaluating_documents,
-            "by_outcome": [
-                {
-                    "outcome": outcome,
-                    "documents": outcome_documents[_fold_tag(outcome)],
-                    "evaluated": outcome_evaluated[_fold_tag(outcome)],
-                }
-                for outcome in plan_outcomes
-            ],
+            "by_outcome": by_outcome,
             # Each Measures kind that is not a plan outcome, counting only
             # records tagged other or not tagged (A4).
             "other": _kind_rows(other_kinds, other_kinds_evaluated),
         },
         "tried_on_kinds": tried_on_kinds,
         "measures_kinds": _kind_rows(measure_kinds, measure_kinds_evaluated),
+        "evaluated_countries": [
+            {"country": evaluated_countries_shown[country_key], "documents": len(docs)}
+            for country_key, docs in sorted(
+                evaluated_countries.items(),
+                key=lambda item: (
+                    evaluated_countries_shown[item[0]] != where_display,
+                    -len(item[1]),
+                    evaluated_countries_shown[item[0]],
+                ),
+            )
+        ],
+        "places_unknown_country": [
+            {"country": country, "documents": documents}
+            for country, documents in _ranked(unknown_countries, unknown_countries_shown)
+        ],
+        "outcomes_evaluated": sum(
+            1 for outcome in plan_outcomes if outcome_evaluated[_fold_tag(outcome)] >= 1
+        ),
     }

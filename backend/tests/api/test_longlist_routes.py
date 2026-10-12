@@ -550,18 +550,21 @@ def test_the_list_matches_the_stored_rows(engine: Engine, tmp_path: Path) -> Non
         assert guarantee["document_count"] == coverage["documents"] == 2
         assert guarantee["evaluated_count"] == coverage["role"]["evaluated"]
         # Where tried, two levels (task 046, amendment 3; R59, R72): the DOI
-        # twins count once under their country, both texts below.
+        # twins count once under their country; "England" and "United Kingdom"
+        # are that country's own names, so no place below (amendment 4, S32).
         assert guarantee["where_tried"] == coverage["where_tried"]
         uk_entry = next(e for e in guarantee["where_tried"] if e["top"] == "United Kingdom")
         assert uk_entry == {
             "top": "United Kingdom",
             "documents": 1,
-            "places": [
-                {"place": "England", "documents": 1},
-                {"place": "United Kingdom", "documents": 1},
-            ],
+            "places": [],
             "countries": [],
         }
+        # The evidence signal (task 046, amendment 4, R76; S29): read from the
+        # stored coverage; the total is the built-from plan's outcome count.
+        assert guarantee["evaluated_countries"] == coverage["evaluated_countries"]
+        assert guarantee["outcomes_evaluated"] == coverage["outcomes_evaluated"]
+        assert guarantee["outcomes_total"] == 1
         # The list's settings are the option-level setting of its profile (R41), not coverage.
         stored_profile = result.option_profile[str(built.options["Youth guarantee"])]
         (profile_entry,) = stored_profile.values()
@@ -577,12 +580,7 @@ def test_the_list_matches_the_stored_rows(engine: Engine, tmp_path: Path) -> Non
         assert mentoring["primary_lever_type"] is None
         assert mentoring["lever_none_fits_reason"] == "Mentoring is delivered by volunteers."
         assert mentoring["where_tried"] == [
-            {
-                "top": "Denmark",
-                "documents": 1,
-                "places": [{"place": "Denmark", "documents": 1}],
-                "countries": [],
-            }
+            {"top": "Denmark", "documents": 1, "places": [], "countries": []}
         ]
 
         package = by_name["Guarantee package"]
@@ -1004,6 +1002,129 @@ def test_an_old_stored_longlist_reads_with_every_new_field_defaulted(conn: Conne
     assert card.examples == []
     assert card.also_found_as == []
     assert card.evidence.tried_on == []
+
+
+def test_the_signal_and_the_document_lines_carry_the_record_fields(conn: Connection) -> None:
+    """Task 046, amendment 4 (R76, R81; S29, S30): the build writes the signal with
+    the plan's Where country first; each document line takes its first member
+    record by role order, the kinds through the stored folds, the plan
+    outcome's words when the tag names one; a linked finding has no record."""
+    from datetime import timedelta
+
+    walk = _Walk(conn)
+    option_id = walk.option("Youth guarantee", origin="added_by_you")
+    fingerprint = _current_fingerprint(walk)
+    both, scotland = walk.doc({"title": "Both records"}), walk.doc({"title": "In Scotland"})
+    danish = [walk.doc({"title": f"Danish {i}"}) for i in range(4)]
+    sers = {
+        doc: _extraction(walk, doc, fingerprint=fingerprint) for doc in [both, scotland, *danish]
+    }
+    earlier = now() - timedelta(hours=1)
+    # A described record written first, an evaluated one later: role order wins.
+    _record_under(
+        walk,
+        sers[both],
+        "kickstart",
+        role="described",
+        created_at=earlier,
+        programme_name="Kickstart",
+        unit="school leavers",
+        outcome="wages",
+        study_geography="London",
+        study_country="United Kingdom",
+    )
+    _record_under(
+        walk,
+        sers[both],
+        "youth guarantee",
+        programme_name="  Youth   Guarantee ",
+        unit="16 to 24 Year Olds",
+        outcome="neet status",
+        outcome_tag="The  NEET rate",
+        study_geography="Leeds",
+        study_country="United Kingdom",
+    )
+    _record_under(
+        walk,
+        sers[scotland],
+        "youth guarantee",
+        unit="employers",
+        outcome="earnings",
+        outcome_tag="other",
+        study_geography="Scotland",
+        study_country="UK",
+    )
+    for doc in danish:
+        _record_under(walk, sers[doc], "youth guarantee", study_country="Denmark")
+    _rollup_of(walk, walk.scope_id, sers)
+    _linked_deep_task(conn, walk, "youth guarantee")
+    run_id, _ = walk.build(
+        _Scripted(
+            routes={
+                "youth guarantee": ("Youth guarantee", False),
+                "kickstart": ("Youth guarantee", False),
+            }
+        )
+    )
+    stored = walk.result(run_id)
+    conn.execute(
+        update(longlist_result)
+        .where(longlist_result.c.run_id == run_id)
+        .values(
+            option_profile={
+                **(stored.option_profile or {}),
+                "folds": {
+                    "tried_on": {"16 to 24 year olds": "18-24 year-olds"},
+                    "measures": {"Earnings": "income"},
+                },
+            }
+        )
+    )
+
+    listed = repository.longlist_out(conn, walk.task_id)
+    assert listed is not None
+    summary = next(o for o in listed.options if o.option_id == option_id)
+    # The Where (United Kingdom) leads although Denmark has more documents;
+    # "UK", "United Kingdom" and the linked finding's "Scotland" (no country:
+    # the geography is the country level) are one country.
+    assert [(c.country, c.documents) for c in summary.evaluated_countries] == [
+        ("United Kingdom", 3),
+        ("Denmark", 4),
+    ]
+    assert summary.outcomes_evaluated == 1 and summary.outcomes_total == 1
+
+    card = repository.option_out(conn, walk.task_id, option_id)
+    assert card is not None
+    assert card.evaluated_countries == summary.evaluated_countries
+    assert (card.outcomes_evaluated, card.outcomes_total) == (1, 1)
+    lines = {d.title: d for d in card.documents}
+    first = lines["Both records"]
+    assert (
+        first.programme_name,
+        first.tried_on_kind,
+        first.measured,
+        first.place_detail,
+        first.records_count,
+    ) == ("Youth Guarantee", "18-24 year-olds", "the NEET rate", "Leeds", 2)
+    second = lines["In Scotland"]
+    # "Scotland" is the United Kingdom's own name: no place below it (S32);
+    # an unmapped unit keeps its word; a tag of "other" reads the Measures fold.
+    assert (
+        second.programme_name,
+        second.tried_on_kind,
+        second.measured,
+        second.place_detail,
+        second.records_count,
+    ) == (None, "employers", "income", None, 1)
+    assert lines["Danish 0"].measured is None and lines["Danish 0"].records_count == 1
+    deep = lines["A deep read"]
+    assert (
+        deep.programme_name,
+        deep.tried_on_kind,
+        deep.measured,
+        deep.place_detail,
+        deep.records_count,
+    ) == (None, None, None, None, 0)
 
 
 # --- task 046 phase 14a: the profile, the authority label, the outcome counts ------
@@ -1558,24 +1679,18 @@ def test_an_added_option_reads_its_own_search_until_the_next_build(conn: Connect
     assert card.is_entrant_with_no_documents is False
     assert card.document_count == 2  # the DOI twins count once
     assert card.evaluated_count == 1
-    # The twins' countries differ in case only: one country, both texts below (R59).
+    # The twins' countries differ in case only: one country (R59); a geography
+    # that is the record's own country is no place below (amendment 4, S32).
     assert [w.model_dump() for w in card.where_tried] == [
-        {
-            "top": "Denmark",
-            "documents": 1,
-            "places": [{"place": "Denmark", "documents": 1}],
-            "countries": [],
-        },
-        {
-            "top": "United Kingdom",
-            "documents": 1,
-            "places": [
-                {"place": "England", "documents": 1},
-                {"place": "United Kingdom", "documents": 1},
-            ],
-            "countries": [],
-        },
+        {"top": "Denmark", "documents": 1, "places": [], "countries": []},
+        {"top": "United Kingdom", "documents": 1, "places": [], "countries": []},
     ]
+    # The evidence signal on the added option's path too (amendment 4, S29;
+    # PA4-10): the describing Danish document gives no country.
+    assert [c.model_dump() for c in card.evaluated_countries] == [
+        {"country": "United Kingdom", "documents": 1}
+    ]
+    assert card.outcomes_evaluated == 0 and card.outcomes_total == 1
     assert card.evidence.by_tier == {"Strong": 1, "not rated": 1}
     # An added option has no profile yet (R41): its list setting is empty; the
     # evidence profile keeps the records' own words.
@@ -1590,6 +1705,10 @@ def test_an_added_option_reads_its_own_search_until_the_next_build(conn: Connect
     assert trial.tier == "Strong" and trial.place == "United Kingdom"
     danish = next(d for d in card.documents if d.title == "A Danish wage subsidy")
     assert danish.place == "Denmark"
+    # The document lines' record fields (amendment 4, S30): the twins' two
+    # records together; the comparator is no record of the document.
+    assert trial.records_count == 2 and danish.records_count == 1
+    assert trial.place_detail is None and danish.place_detail is None
     listed = repository.longlist_out(conn, walk.task_id)
     assert listed is not None
     summary = next(o for o in listed.options if o.option_id == added)
@@ -1678,7 +1797,7 @@ def test_a_document_with_no_row_here_takes_its_twin_s_own_row() -> None:
         doc = OptionDocumentOut(
             task_source_snapshot_id=tss_id, title="Same paper", role=cast(Any, role)
         )
-        return (key, doc, None, place)
+        return (key, doc, None, place, None)
 
     out = _collapse_documents(
         [entry(None, "evaluated", "doi:10.1/x"), entry(own, "mentioned", "doi:10.1/x")]

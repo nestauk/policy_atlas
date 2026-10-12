@@ -80,6 +80,7 @@ from policy_atlas.api.contract import (
     WherePlaceOut,
     WhereTriedOut,
 )
+from policy_atlas.api.contract.read_models import EvaluatedCountryOut
 from policy_atlas.api.lifecycle import LIFECYCLE_EVENT_KINDS, both_generations
 from policy_atlas.core.schema import (
     GROUPING_FACETS,
@@ -130,8 +131,12 @@ from policy_atlas.options_scoping.longlist.coverage import (
     CoverageMember,
     document_key,
     empty_coverage,
+    fold_kind,
+    fold_lookup,
+    fold_programme_names,
     normalise_doi,
     option_coverage,
+    plan_outcome_named,
     stored_folds,
 )
 from policy_atlas.options_scoping.longlist.lever_types import (
@@ -140,7 +145,13 @@ from policy_atlas.options_scoping.longlist.lever_types import (
     TAXONOMY_VERSION,
     lever_types_by_version,
 )
-from policy_atlas.options_scoping.longlist.where_tried import document_where
+from policy_atlas.options_scoping.longlist.where_tried import (
+    MULTIPLE_COUNTRIES,
+    country_level,
+    document_where,
+    place_key,
+    resolve_country,
+)
 from policy_atlas.options_scoping.longlist_intent import longlist_plan_data
 from policy_atlas.options_scoping.option_profile.option_profile import TYPING_INVALID_REASON
 from policy_atlas.runtime.capability_registry import OPTIONS_SCOPING, validate_plan
@@ -190,30 +201,162 @@ def _document_year(metadata: Mapping[str, Any]) -> int | None:
     return None
 
 
+@dataclass(frozen=True)
+class _LineRecord:
+    """One intervention record behind a document line (task 046, amendment 4, R81; S30)."""
+
+    record_id: uuid.UUID
+    role: str
+    created_at: Any
+    programme_name: str | None
+    unit: str | None
+    outcome: str | None
+    outcome_tag: str | None
+    study_country: str | None
+    study_geography: str | None
+
+
+@dataclass(frozen=True)
+class _LineContext:
+    """What a document line's record fields are read through: the list's folds, the plan."""
+
+    tried_on: Mapping[str, str]
+    measures: Mapping[str, str]
+    plan_outcomes: Sequence[str]
+
+
+def _line_context(
+    option_profile: object, plan_outcomes: Sequence[str]
+) -> _LineContext:
+    """The stored folding maps (none before the profile has run) and the plan's outcomes."""
+    folds = stored_folds(option_profile)
+    return _LineContext(
+        tried_on=fold_lookup(folds, "tried_on") or {},
+        measures=fold_lookup(folds, "measures") or {},
+        plan_outcomes=list(plan_outcomes),
+    )
+
+
+def _clean_text(value: str | None) -> str | None:
+    if value is None:
+        return None
+    text = " ".join(value.split())
+    return text or None
+
+
+def _folded_name(name: str | None, names: Mapping[str, str] | None) -> str | None:
+    """The group's shown spelling of a programme name (task 046, amendment 4, R88; S33)."""
+    if name is None or names is None:
+        return name
+    return names.get(name, name)
+
+
+def _record_line_fields(
+    records: Sequence[_LineRecord],
+    top: str,
+    context: _LineContext,
+    names: Mapping[str, str] | None = None,
+) -> dict[str, Any]:
+    """A document line's record fields from its member records under the option (S30).
+
+    The first record by role order (:data:`ROLE_BUCKETS`, the option
+    profile's order), then ``created_at``, then record id supplies them:
+    the raw programme name; the unit through the Tried on map; the plan
+    outcome's text when the outcome tag names one, else the outcome through
+    the Measures map (the record's own word when a map lacks it); the
+    geography when it is a place below the document's top level (not the
+    record's own country, not under "multiple countries"). No record (a
+    linked finding) gives no fields and a count of 0 (contract review C6).
+
+    Args:
+        records: The document's member records under the option, DOI twins
+            together.
+        top: The document's top level.
+        context: The folds and the plan.
+        names: The option's programme-name fold (``fold_programme_names``
+            over every member record); the raw name when ``None``.
+
+    Returns:
+        ``programme_name`` · ``tried_on_kind`` · ``measured`` ·
+        ``place_detail`` · ``records_count``.
+    """
+    if not records:
+        return {
+            "programme_name": None,
+            "tried_on_kind": None,
+            "measured": None,
+            "place_detail": None,
+            "records_count": 0,
+        }
+    rank = {role: index for index, role in enumerate(ROLE_BUCKETS)}
+    first = min(
+        records,
+        key=lambda record: (
+            rank.get(record.role, len(rank)),
+            record.created_at is None,
+            record.created_at if record.created_at is not None else 0,
+            str(record.record_id),
+        ),
+    )
+    measured = plan_outcome_named(first.outcome_tag, context.plan_outcomes)
+    if measured is None:
+        measured = fold_kind(context.measures, first.outcome)
+    _country, geography = country_level(first.study_country, first.study_geography)
+    detail = _clean_text(geography)
+    if detail is not None and (top == MULTIPLE_COUNTRIES or place_key(detail) == place_key(top)):
+        detail = None
+    return {
+        "programme_name": _folded_name(_clean_text(first.programme_name), names),
+        "tried_on_kind": fold_kind(context.tried_on, first.unit),
+        "measured": measured,
+        "place_detail": detail,
+        "records_count": len(records),
+    }
+
+
 #: One record behind a document: ``(document key, document, quality score,
-#: (study_country, study_geography))``.
-_DocumentEntry = tuple[str, OptionDocumentOut, int | None, tuple[str | None, str | None]]
+#: (study_country, study_geography), the intervention record or ``None`` for a
+#: linked finding)``.
+_DocumentEntry = tuple[
+    str, OptionDocumentOut, int | None, tuple[str | None, str | None], _LineRecord | None
+]
 
 
-def _collapse_documents(entries: list[_DocumentEntry]) -> list[OptionDocumentOut]:
+def _collapse_documents(
+    entries: list[_DocumentEntry], context: _LineContext | None = None
+) -> list[OptionDocumentOut]:
     """One entry per document (task 046, amendment 3, R67), best first.
 
     Args:
         entries: ``(document key, document, quality score, (study_country,
-            study_geography))`` per record.
+            study_geography), record)`` per record.
+        context: The folds and the plan the record fields are read through
+            (task 046, amendment 4, S30); ``None`` reads them with no folds
+            and no plan.
 
     Returns:
         One document per key: the task's own row as its id when any record
         has one, the highest role, the where-tried top level of all its
-        records (R59, R72), ordered evaluated first, then quality score
-        descending (unrated last), then title and id.
+        records (R59, R72; a geography that is the record's own country is
+        that country, S32), the first record's fields (S30), ordered
+        evaluated first, then quality score descending (unrated last), then
+        title and id.
     """
+    context = context or _LineContext(tried_on={}, measures={}, plan_outcomes=())
     rank = {role: index for index, role in enumerate(ROLE_BUCKETS)}
     groups: dict[str, list[tuple[OptionDocumentOut, int | None]]] = {}
     places: dict[str, list[tuple[str | None, str | None]]] = {}
-    for key, document, score, place in entries:
+    line_records: dict[str, list[_LineRecord]] = {}
+    names = fold_programme_names(
+        name
+        for _key, _doc, _score, _place, record in entries
+        if record is not None and (name := _clean_text(record.programme_name)) is not None
+    )
+    for key, document, score, place, record in entries:
         groups.setdefault(key, []).append((document, score))
-        places.setdefault(key, []).append(place)
+        places.setdefault(key, []).append(country_level(*place))
+        if record is not None:
+            line_records.setdefault(key, []).append(record)
     merged: list[tuple[OptionDocumentOut, int | None]] = []
     for key, group in groups.items():
         best_role = min((doc.role for doc, _ in group), key=lambda role: rank[role])
@@ -227,7 +370,10 @@ def _collapse_documents(entries: list[_DocumentEntry]) -> list[OptionDocumentOut
             ),
         )
         top, _countries = document_where(places[key])
-        merged.append((document.model_copy(update={"role": best_role, "place": top}), score))
+        fields = _record_line_fields(line_records.get(key, []), top, context, names)
+        merged.append(
+            (document.model_copy(update={"role": best_role, "place": top, **fields}), score)
+        )
     merged.sort(
         key=lambda item: (
             item[0].role != "evaluated",
@@ -3064,6 +3210,19 @@ def _tried_on_out(raw: object) -> list[TriedOnOut]:
     return out
 
 
+def _evaluated_countries_out(raw: object) -> list[EvaluatedCountryOut]:
+    """Coverage's ``evaluated_countries``, read defensively (an older stored record has none)."""
+    out: list[EvaluatedCountryOut] = []
+    for item in raw if isinstance(raw, list) else []:
+        entry = _as_mapping(item)
+        country = entry.get("country")
+        if isinstance(country, str) and country:
+            out.append(
+                EvaluatedCountryOut(country=country, documents=_count(entry.get("documents")))
+            )
+    return out
+
+
 def _measures_out(raw: object) -> list[MeasureKindOut]:
     """Coverage's ``measures_kinds`` list, read defensively (an old stored record has none)."""
     out: list[MeasureKindOut] = []
@@ -3356,6 +3515,7 @@ def _option_summary_fields(
     from_section: str | None = None,
     also_found_as: list[str] | None = None,
     lever_reason: str | None = None,
+    outcomes_total: int = 0,
 ) -> dict[str, Any]:
     documents = _count(coverage.get("documents"))
     in_scope = _in_scope_out(record)
@@ -3393,6 +3553,9 @@ def _option_summary_fields(
         "from_section": from_section,
         "also_found_as": _found_as(also_found_as, coverage.get("folded")),
         "tried_on": _tried_on_out(coverage.get("tried_on_kinds")),
+        "evaluated_countries": _evaluated_countries_out(coverage.get("evaluated_countries")),
+        "outcomes_evaluated": _count(coverage.get("outcomes_evaluated")),
+        "outcomes_total": outcomes_total,
     }
 
 
@@ -3465,6 +3628,8 @@ class _SearchUnit:
     outcome_tag: str | None = None
     programme_name: str | None = None
     study_country: str | None = None
+    record_id: uuid.UUID | None = None
+    created_at: Any = None
 
 
 @dataclass(frozen=True)
@@ -3585,6 +3750,7 @@ def _added_searches(
                 ipr.c.intervention,
                 ipr.c.programme_name,
                 ipr.c.study_country,
+                ipr.c.created_at,
                 source_extraction_record.c.task_source_snapshot_id,
                 source_extraction_record.c.basis,
                 source_snapshot.c.metadata,
@@ -3631,6 +3797,8 @@ def _added_searches(
                 intervention=row.intervention,
                 programme_name=row.programme_name,
                 study_country=row.study_country,
+                record_id=row.record_id,
+                created_at=row.created_at,
             )
             for scope in scopes_of[row.extraction_record_id]:
                 units_by_scope.setdefault(scope, []).append(unit)
@@ -3674,10 +3842,12 @@ def _search_coverage(
     *,
     folds: Mapping[str, Mapping[str, str]] | None = None,
     target_unit: str | None = None,
+    where_country: str | None = None,
 ) -> Mapping[str, Any]:
     """An added option's coverage from its own search's records (DOI-collapsed).
 
-    The list's stored folding maps give its kinds (task 046, amendment 3, S21).
+    The list's stored folding maps give its kinds (task 046, amendment 3, S21);
+    the plan's Where country leads its evaluated countries (amendment 4, S29).
     """
     if not search.units:
         return empty_coverage()
@@ -3709,13 +3879,14 @@ def _search_coverage(
         plan_outcomes=plan_outcomes,
         folds=folds,
         target_unit=target_unit,
+        where_country=where_country,
     )
 
 
 def _search_documents(
-    conn: Connection, task_id: uuid.UUID, search: _AddedSearch
+    conn: Connection, task_id: uuid.UUID, search: _AddedSearch, context: _LineContext
 ) -> list[OptionDocumentOut]:
-    """An added option's documents from its own search, one per record."""
+    """An added option's documents from its own search, collapsed per document."""
     labels = labels_for_snapshots(
         conn, task_id=task_id, tss_ids={unit.tss_id for unit in search.units}
     )
@@ -3743,13 +3914,30 @@ def _search_documents(
                 ),
                 label.quality_score if label is not None else None,
                 (unit.study_country, unit.study_geography),
+                _LineRecord(
+                    record_id=unit.record_id or unit.tss_id,
+                    role=unit.role,
+                    created_at=unit.created_at,
+                    programme_name=unit.programme_name,
+                    unit=unit.unit,
+                    outcome=unit.outcome,
+                    outcome_tag=unit.outcome_tag,
+                    study_country=unit.study_country,
+                    study_geography=unit.study_geography,
+                ),
             )
         )
-    return _collapse_documents(out)
+    return _collapse_documents(out, context)
 
 
 def _plan_outcomes(plan: ScopingPlan | None) -> list[str]:
     return [outcome.text for outcome in plan.outcomes] if plan is not None else []
+
+
+def _plan_where_country(plan: ScopingPlan | None) -> str | None:
+    """The plan's Where as one country's short name, or ``None`` (task 046, amendment 4, S29a)."""
+    resolved = resolve_country(plan.where.text) if plan is not None else None
+    return resolved[1] if resolved is not None else None
 
 
 def _plan_target_unit(plan: ScopingPlan | None) -> str | None:
@@ -3816,6 +4004,7 @@ def longlist_out(conn: Connection, task_id: uuid.UUID) -> LonglistOut | None:
     )
     plan_outcomes = _plan_outcomes(built_from[1] if built_from else None)
     target_unit = _plan_target_unit(built_from[1] if built_from else None)
+    where_country = _plan_where_country(built_from[1] if built_from else None)
     folds = stored_folds(result.option_profile)
     sections = _report_sections(conn, task_id, rows)
     merged = _also_found_as(conn, task_id)
@@ -3824,7 +4013,13 @@ def longlist_out(conn: Connection, task_id: uuid.UUID) -> LonglistOut | None:
         search = searches.get(oid)
         if search is not None:
             return _search_coverage(
-                conn, task_id, search, plan_outcomes, folds=folds, target_unit=target_unit
+                conn,
+                task_id,
+                search,
+                plan_outcomes,
+                folds=folds,
+                target_unit=target_unit,
+                where_country=where_country,
             )
         return _option_coverage(result, oid)
 
@@ -3840,6 +4035,7 @@ def longlist_out(conn: Connection, task_id: uuid.UUID) -> LonglistOut | None:
                 from_section=sections.get(oid),
                 also_found_as=merged.get(oid),
                 lever_reason=_lever_reason(result, oid),
+                outcomes_total=len(plan_outcomes),
             )
         )
         for oid in [*themed, *unthemed]
@@ -3991,14 +4187,15 @@ def _label_fields(label: DocumentLabels | None) -> tuple[str | None, str | None]
 
 
 def _option_documents(
-    conn: Connection, task_id: uuid.UUID, option_id: uuid.UUID
+    conn: Connection, task_id: uuid.UUID, option_id: uuid.UUID, context: _LineContext
 ) -> list[OptionDocumentOut]:
     """The documents behind an option, one per document (DOI twins collapsed, R67).
 
     Own records resolve through this task's document row; a linked task's
     finding resolves through the source task's document row (the reach the
     longlist component already has through the link) and, where the task
-    holds the same snapshot, this task's row for its labels.
+    holds the same snapshot, this task's row for its labels. Each line
+    carries its first member record's fields (task 046, amendment 4, S30).
     """
     members = list(
         conn.execute(
@@ -4019,6 +4216,11 @@ def _option_documents(
                     intervention_profile_record.c.role,
                     intervention_profile_record.c.study_geography,
                     intervention_profile_record.c.study_country,
+                    intervention_profile_record.c.unit,
+                    intervention_profile_record.c.outcome,
+                    intervention_profile_record.c.outcome_tag,
+                    intervention_profile_record.c.programme_name,
+                    intervention_profile_record.c.created_at,
                 )
                 .where(intervention_profile_record.c.task_id == task_id)
                 .where(intervention_profile_record.c.record_id.in_(own_ids))
@@ -4136,6 +4338,17 @@ def _option_documents(
             country: str | None = record.study_country
             metadata, locator = _as_mapping(document.metadata), document.source_locator
             doc_id: uuid.UUID = tss_id
+            line_record: _LineRecord | None = _LineRecord(
+                record_id=record.record_id,
+                role=record.role,
+                created_at=record.created_at,
+                programme_name=record.programme_name,
+                unit=record.unit,
+                outcome=record.outcome,
+                outcome_tag=record.outcome_tag,
+                study_country=record.study_country,
+                study_geography=record.study_geography,
+            )
         else:
             finding = findings.get((member.unit_task_id, member.unit_id))
             if finding is None:
@@ -4147,6 +4360,7 @@ def _option_documents(
             country = None  # a linked finding carries no study_country
             metadata, locator = _as_mapping(finding.metadata), finding.source_locator
             doc_id = tss_id if tss_id is not None else finding.source_snapshot_id
+            line_record = None  # a linked finding has no intervention record (C6)
         evidence_type, tier = _label_fields(label)
         title = _title(metadata, locator)
         out.append(
@@ -4164,9 +4378,10 @@ def _option_documents(
                 ),
                 label.quality_score if label is not None else None,
                 (country, geography),
+                line_record,
             )
         )
-    return _collapse_documents(out)
+    return _collapse_documents(out, context)
 
 
 def option_out(conn: Connection, task_id: uuid.UUID, option_id: uuid.UUID) -> OptionOut | None:
@@ -4210,6 +4425,10 @@ def option_out(conn: Connection, task_id: uuid.UUID, option_id: uuid.UUID) -> Op
         conn, task_id, int(result.plan_version) if result is not None else None
     )
     plan = plan_row[1] if plan_row is not None else None
+    plan_outcomes = _plan_outcomes(plan)
+    context = _line_context(
+        result.option_profile if result is not None else None, plan_outcomes
+    )
     search = _added_searches(
         conn, task_id, _needs_search_read(rows, result, _members_by_option(conn, task_id))
     ).get(option_id)
@@ -4218,14 +4437,15 @@ def option_out(conn: Connection, task_id: uuid.UUID, option_id: uuid.UUID) -> Op
             conn,
             task_id,
             search,
-            _plan_outcomes(plan),
+            plan_outcomes,
             folds=stored_folds(result.option_profile if result is not None else None),
             target_unit=_plan_target_unit(plan),
+            where_country=_plan_where_country(plan),
         )
-        documents = _search_documents(conn, task_id, search)
+        documents = _search_documents(conn, task_id, search, context)
     else:
         coverage = _option_coverage(result, option_id)
-        documents = _option_documents(conn, task_id, option_id)
+        documents = _option_documents(conn, task_id, option_id, context)
     design = _design_out(row)
     return OptionOut(
         **_option_summary_fields(
@@ -4238,6 +4458,7 @@ def option_out(conn: Connection, task_id: uuid.UUID, option_id: uuid.UUID) -> Op
             from_section=_report_sections(conn, task_id, rows).get(option_id),
             also_found_as=_also_found_as(conn, task_id).get(option_id),
             lever_reason=_lever_reason(result, option_id),
+            outcomes_total=len(plan_outcomes),
         ),
         design=design,
         design_features=list(design.design_features),
