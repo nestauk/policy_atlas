@@ -11,6 +11,7 @@ What changed:
 - **Cheaper screening.** Stage 1 runs on `gpt-5.6-luna` with the `screen_v4` prompt. It makes one call, and a second call only if the first says "not relevant". Before: three calls and a majority vote.
 - **Faster.** The two database legs run in parallel. Search takes about 45 seconds a review at every scope. Before: about 130 seconds.
 - **Design record.** ADR 0038 (Accepted). The old loop's last commit is tagged `search-round-loop-last` with a restore recipe.
+- **Task 052, added after live testing (2026-10-12).** The paper pool now drops duplicate copies of a paper (same title and same authors, most cited copy kept) and is ordered as a mix: one paper in turn from three lists, relevant (rank fusion over the query results and "cites the seeds"), seminal (most cited by the seeds) and novel (last five years). Ranking by the citation-graph score alone had cut the question's own best match at 127 of 2,139 on a Focused search. Evidence: offline re-orderings of three captured pools and a live search plus screen per topic, in `scripts/evals/search/experiments/manual/`; notes in `docs/tasks/052-rank-mix-paper-dedupe/notes.md`. ADR 0038 decision 4 is amended.
 
 Measured on the 15-review ground-truth mini set (share of the review's reference list found by search / after screening / cost per review at list price):
 
@@ -69,8 +70,9 @@ Findings recorded in `verification.md` § Review findings.
 ## Known gaps & deferred seams
 
 - Broadest is under its target by 2.3 points. Accepted by the owner. A re-run costs about $2 at list price.
+- The recall table above was measured before task 052 changed the paper order. The mini set has not been re-run under the mix (owner's "no new evals for now"); that run is the gate for the figures, not for the code.
 - The full-set Broad run (100 reviews, about $6.50 at list price) is not made yet.
-- Deferred seams are in `docs/deferred.md` under task 051: relevance reserve, similarity damping, reformulation contingency, seminal-decile score, removed-title records, partial backend failure and the coverage verdict, landmarks without wire filters, per-run pacing under concurrent runs.
+- Deferred seams are in `docs/deferred.md` under task 051: similarity damping, reformulation contingency, seminal-decile score, removed-title records, partial backend failure and the coverage verdict, landmarks without wire filters, per-run pacing under concurrent runs.
 
 ## Public safety
 

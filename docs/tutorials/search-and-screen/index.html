@@ -137,7 +137,7 @@ footer { margin-top: 3.5rem; padding-top: 1rem; border-top: 1px solid var(--line
 
 <section class="wide">
   <figure>
-    <svg viewBox="0 0 980 600" role="img" aria-label="The question goes to one query-generation call. OpenAlex receives fifteen keyword calls and eight semantic calls, interleaved by rank to two hundred seeds; Overton receives three searches in relevance order, four hundred documents, de-duplicated by title. The seeds' reference lists feed a backward snowball of four resolve calls and a forward chase of up to ten pages; the Overton results' cited documents become fifteen landmark fetches. Papers are de-duplicated, mixed relevant, seminal and novel in turn, and cut at the papers cap; policy documents are ranked by in-set citations and cut at the policy cap. Everything kept is screened once.">
+    <svg viewBox="0 0 980 660" role="img" aria-label="The question goes to one query-generation call. OpenAlex receives fifteen keyword calls and eight semantic calls, interleaved by rank to two hundred seeds; Overton receives three searches in relevance order, four hundred documents, de-duplicated by title. The seeds' reference lists feed a backward snowball of four resolve calls and a forward chase of up to ten pages; the Overton results' cited documents become fifteen landmark fetches. Papers lose duplicate copies (same title and authors), then one paper is taken in turn from three lists, relevant by rank fusion over the queries and citing the seeds, seminal by citations from the seeds, and novel from the last five years, and the first papers cap are kept; policy documents are ranked by in-set citations and cut at the policy cap. Everything kept is screened once.">
       <defs><marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="currentColor"/></marker></defs>
       <g font-family="inherit" font-size="13">
         <rect x="20" y="30" width="140" height="70" rx="6" fill="var(--ground)" stroke="currentColor"/>
@@ -192,11 +192,25 @@ footer { margin-top: 3.5rem; padding-top: 1rem; border-top: 1px solid var(--line
           <line x1="125" y1="380" x2="125" y2="410"/><line x1="350" y1="380" x2="350" y2="410"/><line x1="800" y1="380" x2="800" y2="410"/>
         </g>
 
-        <rect x="20" y="415" width="440" height="85" rx="6" fill="var(--c-paper)" fill-opacity=".14" stroke="var(--c-paper)" stroke-width="1.5"/>
+        <rect x="20" y="415" width="440" height="140" rx="6" fill="var(--c-paper)" fill-opacity=".14" stroke="var(--c-paper)" stroke-width="1.5"/>
         <text x="32" y="438" font-weight="600">Drop duplicate copies, mix, then cut</text><text x="448" y="438" text-anchor="end" font-size="11" fill="var(--grey)">pool.dedupe_papers · pool.rank_mix</text>
-        <text x="32" y="456" font-size="12">in turn: relevant (rank fusion: queries + cites the seeds) · seminal (in-set citations) · novel (last 5 years)</text>
-        <text x="32" y="471" font-size="11" fill="var(--grey)">the rest by specificity: (in-set + coupling) ÷ log10(global citations + 10)</text>
-        <text x="32" y="491" font-size="13" font-weight="700">keep the first papers cap: 100 · 200 · 400</text>
+        <text x="32" y="455" font-size="11">duplicates (same title and authors) → most cited copy; then in turn from:</text>
+        <g font-size="11">
+          <rect x="32" y="463" width="132" height="48" rx="4" fill="var(--ground)" stroke="var(--c-paper)"/>
+          <text x="98" y="479" text-anchor="middle" font-weight="600">relevant</text>
+          <text x="98" y="492" text-anchor="middle" font-size="10">fusion of query ranks</text>
+          <text x="98" y="504" text-anchor="middle" font-size="10">+ cites the seeds</text>
+          <rect x="174" y="463" width="132" height="48" rx="4" fill="var(--ground)" stroke="var(--c-paper)"/>
+          <text x="240" y="479" text-anchor="middle" font-weight="600">seminal</text>
+          <text x="240" y="492" text-anchor="middle" font-size="10">most cited by</text>
+          <text x="240" y="504" text-anchor="middle" font-size="10">the seeds</text>
+          <rect x="316" y="463" width="132" height="48" rx="4" fill="var(--ground)" stroke="var(--c-paper)"/>
+          <text x="382" y="479" text-anchor="middle" font-weight="600">novel</text>
+          <text x="382" y="492" text-anchor="middle" font-size="10">published in</text>
+          <text x="382" y="504" text-anchor="middle" font-size="10">the last 5 years</text>
+        </g>
+        <text x="32" y="528" font-size="11" fill="var(--grey)">the rest by specificity: (in-set + coupling) ÷ log10(global citations + 10)</text>
+        <text x="32" y="546" font-size="13" font-weight="700">keep the first papers cap: 100 · 200 · 400</text>
 
         <rect x="520" y="415" width="440" height="85" rx="6" fill="var(--c-policy)" fill-opacity=".14" stroke="var(--c-policy)" stroke-width="1.5"/>
         <text x="532" y="438" font-weight="600">Rank policy documents by in-set citations, then cut</text><text x="948" y="438" text-anchor="end" font-size="11" fill="var(--grey)">pool.rank_policy</text>
@@ -204,11 +218,11 @@ footer { margin-top: 3.5rem; padding-top: 1rem; border-top: 1px solid var(--line
         <text x="532" y="471" font-size="11" fill="var(--grey)">ties by in-set count, then the search order; landmarks after results</text>
         <text x="532" y="491" font-size="13" font-weight="700">keep the first policy cap: 50 · 100 · 200</text>
 
-        <line x1="240" y1="500" x2="430" y2="530" stroke="currentColor" stroke-width="1.5" marker-end="url(#arr)"/>
-        <line x1="740" y1="500" x2="550" y2="530" stroke="currentColor" stroke-width="1.5" marker-end="url(#arr)"/>
-        <rect x="260" y="535" width="460" height="55" rx="6" fill="var(--c-sem)" fill-opacity=".12" stroke="var(--c-sem)" stroke-width="1.5"/>
-        <text x="490" y="558" text-anchor="middle" font-weight="600">Screen once · gpt-5.6-luna · prompt screen_v4</text>
-        <text x="490" y="578" text-anchor="middle" font-size="12">one call per document; a second only after a "not relevant"; keep if it keeps (Diagram B)</text>
+        <line x1="240" y1="555" x2="430" y2="588" stroke="currentColor" stroke-width="1.5" marker-end="url(#arr)"/>
+        <line x1="740" y1="500" x2="550" y2="588" stroke="currentColor" stroke-width="1.5" marker-end="url(#arr)"/>
+        <rect x="260" y="593" width="460" height="55" rx="6" fill="var(--c-sem)" fill-opacity=".12" stroke="var(--c-sem)" stroke-width="1.5"/>
+        <text x="490" y="616" text-anchor="middle" font-weight="600">Screen once · gpt-5.6-luna · prompt screen_v4</text>
+        <text x="490" y="636" text-anchor="middle" font-size="12">one call per document; a second only after a "not relevant"; keep if it keeps (Diagram B)</text>
       </g>
     </svg>
     <figcaption><b>One method, every scope.</b> Green is a free citation step; there are no language-model calls between query generation and the screen. Every call is one logical call against a per-run budget (OpenAlex 45 per filter variant, Overton 30), whatever paging or retrying the transport does underneath, and every call writes a <code>search.executed</code> event with its origin. After the screen: classify, appraise and the rest of the chain as before; stage 2 screening unchanged.</figcaption>
