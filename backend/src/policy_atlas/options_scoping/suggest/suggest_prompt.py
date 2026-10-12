@@ -32,7 +32,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from policy_atlas.core.prompt_fields import sanitize_prompt_field
 from policy_atlas.options_scoping.longlist.lever_types import lever_types_as_data
 
-SUGGEST_PROMPT_VERSION = "longlist_suggest_v2"
+SUGGEST_PROMPT_VERSION = "longlist_suggest_v3"
 
 # The suggestion bound (contract § Plan object): about ten, within the
 # option-search cap of 15 so the user's own and the report's entrants are
@@ -73,9 +73,11 @@ class SuggestedOptionWire(BaseModel):
             "The features that define this option as a specified design: the "
             "offer, the obligation or incentive, who delivers it, to whom, for "
             "how long, free or paid, universal or targeted. Short phrases, "
-            "three to six. No place and no institution of one country. These "
-            "are what the option's own search will look for and what support "
-            "will bind to."
+            "three to six, each a noun phrase naming one thing the option does "
+            "or provides; never a feature that only restates the setting it is "
+            "delivered in or who the plan is for; no hedges. No place and no "
+            "institution of one country. These are what the option's own "
+            "search will look for and what support will bind to."
         )
     )
     outcomes_served: list[str] = Field(

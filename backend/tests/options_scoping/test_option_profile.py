@@ -37,6 +37,7 @@ from policy_atlas.options_scoping.option_profile.option_profile import (
     TYPING_INVALID_REASON,
     OptionProfileContext,
     OptionProfileFailure,
+    _checked_folds,
     option_profile_scope,
 )
 from policy_atlas.options_scoping.option_profile.option_profile_prompt import (
@@ -441,7 +442,7 @@ def test_the_profile_merges_into_the_row_and_types_every_option_not_merged(
         "run_id": str(profile_run),
         "backend_mode": "stub",
         "usage_totals": after.provenance["option_profile"]["usage_totals"],
-        "prompt_version": "option_profile_v2",
+        "prompt_version": "option_profile_v3",
         "model": "stub",
         "records_max": 5,
         "calls": 10,
@@ -450,7 +451,7 @@ def test_the_profile_merges_into_the_row_and_types_every_option_not_merged(
         "ambition_marks": no_marks,
         "folding": after.provenance["option_profile"]["folding"],
     }
-    assert after.provenance["option_profile"]["folding"]["prompt_version"] == "folding_v5"
+    assert after.provenance["option_profile"]["folding"]["prompt_version"] == "folding_v8"
 
 
 def test_kept_counts_only_an_option_that_was_typed_before(conn: Connection) -> None:
@@ -1141,13 +1142,14 @@ def test_the_maps_are_stored_at_list_level_and_the_kinds_merged_into_coverage(
     assert wage["tried_on_kinds"] == [{"kind": "firms", "documents": 1}]
     folding = after.provenance["option_profile"]["folding"]
     assert folding == {
-        "prompt_version": "folding_v5",
+        "prompt_version": "folding_v8",
         "model": "stub",
         "calls": 2,
         "retries": 0,
         "words": {"tried_on": 6, "measures": 6},
         "kinds": {"tried_on": 6, "measures": 6},
         "kinds_returned": {"tried_on": 6, "measures": 6},
+        "guard_rewrites": {"tried_on": 0, "measures": 0},
     }
 
 
@@ -1253,6 +1255,48 @@ def test_an_index_out_of_range_or_a_blank_kind_keeps_the_word_s_text(conn: Conne
         "the neet rate": "the NEET rate",
         "wellbeing": "wellbeing",
     }
+
+
+def _guard_answer(*kinds: str) -> FoldingResponse:
+    """One word per kind: ``w1`` answered by the first kind, and so on."""
+    return FoldingResponse(
+        kinds=list(kinds),
+        folds=[FoldWire(word_id=f"w{i}", kind=i - 1) for i in range(1, len(kinds) + 1)],
+    )
+
+
+def test_the_guard_maps_a_kind_holding_a_plan_outcome_to_it_on_the_measures_facet() -> None:
+    """Task 046, amendment 4 (R86; S34; contract review C12): the survey's case."""
+    outcome = "Prevalence of obesity at reception"
+    answer = _guard_answer("prevalence of obesity at reception rates", "obesity measures")
+    checked = _checked_folds(
+        answer, {"w1": "a", "w2": "b"}, [outcome], facet="measures"
+    )
+    assert checked is not None
+    assert checked["folds"] == {"a": outcome, "b": "obesity measures"}
+    assert checked["guard_rewrites"] == 1
+
+
+def test_the_guard_matches_whole_words_and_takes_the_longest_outcome() -> None:
+    """C12: ``employment`` is not inside ``unemployment``; two matches, the longer wins."""
+    answer = _guard_answer("unemployment", "youth employment outcomes", "employment rates")
+    checked = _checked_folds(
+        answer,
+        {"w1": "a", "w2": "b", "w3": "c"},
+        ["employment", "youth employment"],
+        facet="measures",
+    )
+    assert checked is not None
+    assert checked["folds"] == {"a": "unemployment", "b": "youth employment", "c": "employment"}
+    assert checked["guard_rewrites"] == 2
+
+
+def test_the_guard_never_runs_on_the_tried_on_facet() -> None:
+    answer = _guard_answer("children aged 5")
+    checked = _checked_folds(answer, {"w1": "a"}, ["children"], facet="tried_on")
+    assert checked is not None
+    assert checked["folds"] == {"a": "children aged 5"}
+    assert checked["guard_rewrites"] == 0
 
 
 def test_an_answer_over_twelve_kinds_is_refused_by_the_wire() -> None:

@@ -56,6 +56,7 @@ into the row's ``coverage``.
 
 from __future__ import annotations
 
+import re
 import uuid
 from collections import Counter
 from collections.abc import Callable, Mapping, Sequence
@@ -734,8 +735,26 @@ def _folding_words(read: MembershipRead) -> dict[str, dict[str, str]]:
     }
 
 
+def _guarded_kind(kind: str, references: Sequence[str]) -> str:
+    """The plan outcome a kind contains as whole words, else the kind (R86; S34).
+
+    Case-folded, on word boundaries (``employment`` is not in
+    ``unemployment``). Several outcomes in one kind: the longest wins, the
+    first in plan order on a tie.
+    """
+    folded = kind.casefold()
+    best = ""
+    for text in references:
+        text = " ".join(text.split())
+        if not text or len(text) <= len(best):
+            continue
+        if re.search(rf"(?<!\w){re.escape(text.casefold())}(?!\w)", folded):
+            best = text
+    return best or kind
+
+
 def _checked_folds(
-    response: Any, words: Mapping[str, str], references: Sequence[str]
+    response: Any, words: Mapping[str, str], references: Sequence[str], *, facet: str
 ) -> dict[str, Any] | None:
     """One folding response mapped back to ``{word: kind}``; ``None`` when invalid.
 
@@ -747,11 +766,14 @@ def _checked_folds(
     not in the input is dropped (B10); a kind equal, case-folded, to one of
     ``references`` (the plan outcomes, or the target unit) is that plan text
     exactly (A4). More than :data:`FOLDING_KINDS_MAX` kinds is kept, and
-    logged (the refine loop measures it).
+    logged (the refine loop measures it). On the Measures facet only, a
+    returned kind that contains a plan outcome as whole words becomes that
+    outcome's text (the longest, when it contains several) before the words
+    are mapped back (task 046, amendment 4: R86; S34; contract review C12).
 
     Returns:
         ``{"folds": {word: kind}, "kinds_returned": <length of the answer's
-        kinds>}``, or ``None``.
+        kinds>, "guard_rewrites": <kinds the guard rewrote>}``, or ``None``.
     """
     if not isinstance(response, FoldingResponse):
         return None
@@ -771,7 +793,23 @@ def _checked_folds(
             kinds=len(response.kinds),
             max_kinds=FOLDING_KINDS_MAX,
         )
-    kinds = [" ".join(kind.split()) for kind in response.kinds]
+    # A kind joined by slashes is cut at the first slash (task 046, amendment
+    # 4, round 7 of the folding loop: the mini model answers a cap with
+    # "obesity / overweight / BMI"); the first member names the kind.
+    kinds = [" ".join(kind.split(" / ")[0].split(" /")[0].split()) for kind in response.kinds]
+    guard_rewrites = 0
+    if facet == "measures":
+        for position, returned in enumerate(kinds):
+            mapped = _guarded_kind(returned, references)
+            if mapped != returned:
+                kinds[position] = mapped
+                guard_rewrites += 1
+                log.info(
+                    "option_profile.folding_guard",
+                    facet=facet,
+                    returned_kind=returned,
+                    outcome=mapped,
+                )
     by_key = {
         " ".join(text.split()).casefold(): text for text in references if text and text.strip()
     }
@@ -781,7 +819,11 @@ def _checked_folds(
         kind = kinds[index] if index is not None and 0 <= index < len(kinds) else ""
         kind = kind or word
         folds[word] = by_key.get(kind.casefold(), kind)
-    return {"folds": folds, "kinds_returned": len(response.kinds)}
+    return {
+        "folds": folds,
+        "kinds_returned": len(response.kinds),
+        "guard_rewrites": guard_rewrites,
+    }
 
 
 def _folding_calls(
@@ -804,7 +846,9 @@ def _folding_calls(
         return lambda: backend.fold(facet=facet, plan=plan, words=dict(words[facet]))
 
     def _check(facet: Facet) -> Callable[[Any], Mapping[str, Any] | None]:
-        return lambda response: _checked_folds(response, words[facet], references[facet])
+        return lambda response: _checked_folds(
+            response, words[facet], references[facet], facet=facet
+        )
 
     facets: tuple[Facet, ...] = ("tried_on", "measures")
     return [
@@ -918,6 +962,11 @@ def option_profile_scope(
         for facet in FOLD_FIELDS
     }
 
+    guard_rewrites = {
+        facet: int(folded.get(_fold_call_name(facet), {}).get("guard_rewrites") or 0)
+        for facet in FOLD_FIELDS
+    }
+
     runner_ups: dict[str, dict[str, Any]] = {
         str(option_id): {"lever_type": t.runner_up}
         for option_id, t in typings.items()
@@ -999,6 +1048,7 @@ def option_profile_scope(
                     for facet in FOLD_FIELDS
                 },
                 "kinds_returned": kinds_returned,
+                "guard_rewrites": guard_rewrites,
             },
         },
     )

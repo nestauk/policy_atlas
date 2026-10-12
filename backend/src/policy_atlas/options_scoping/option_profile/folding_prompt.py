@@ -13,6 +13,18 @@ the profile calls' ``o1`` … ``oN``. A word the response leaves out keeps its
 own text as its kind; a kind returned for an id that is not in the input is
 dropped; an invalid response after one retry fails the step.
 
+``folding_v8`` (rounds 7–8): a plan outcome is copied whole; what people
+eat or do never folds into a weight measure (round 7's slash ban was
+withdrawn in round 8: the model answered it by packing words into one
+kind string; the code cuts a slash-joined kind at its first slash).
+
+``folding_v6`` (task 046 amendment 4, R86; S34, round 6): the rules name the
+two folds that are always wrong on each facet (people into their place or
+organisation and across the plan's age band; a measure into a kind it does
+not measure, and an abbreviation apart from its expansion). The code
+guards the Measures facet: a returned kind that holds a plan outcome's
+text as whole words becomes that outcome.
+
 Prompt-bearing module: hash-pinned (``scripts/prompt_hashes.json``).
 """
 
@@ -24,7 +36,7 @@ from typing import Literal
 from openai.types.chat import ChatCompletionMessageParam
 from pydantic import BaseModel, ConfigDict, Field
 
-FOLDING_PROMPT_VERSION = "folding_v5"
+FOLDING_PROMPT_VERSION = "folding_v8"
 
 Facet = Literal["tried_on", "measures"]
 
@@ -125,6 +137,14 @@ children aged 6 to 8" all get that whole text as their kind, not
 for. A wider or neighbouring group is its own kind, in its own words
 ("parents", "adolescents", "schools", "food businesses").
 
+Two folds are always wrong (the reader sees the kind beside the document's
+title): people never fold into the place or organisation they are in —
+"teachers" are not "schools", "parents" are not "homes", "patients" are
+not "hospitals"; and an age group the plan names is a boundary — a word
+naming people outside the target unit's age band ("adolescents",
+"adults", "parents", "infants") never gets the target unit's text as its
+kind, however close the group is.
+
 """
     + _RULES
 )
@@ -152,10 +172,23 @@ of obesity among children in year 6", the words "BMI", "BMI z-score",
 "adiposity", "body fatness" and "weight status" all get that whole text
 as their kind, not "BMI" or "obesity": every measure OF the outcome is
 that outcome. Check every plan outcome against the words before you make
-any other kind. A word that only leads to a plan outcome on a pathway (diet,
+any other kind, and copy the outcome's whole text, never a part of it
+("Share in settled accommodation at twelve months", not "Share in settled
+accommodation"). A word that only leads to a plan outcome on a pathway (diet,
 physical activity, screen time, for obesity) is NOT that outcome: it
 folds to a kind of its own, in its own words ("diet quality", "physical
 activity"), merged with its neighbours under the ceiling.
+
+Two folds are always wrong (the reader sees the kind beside the document's
+title): a measure folds into a kind only when it measures the same thing —
+knowledge or attitudes ("teachers' knowledge of nutrition") never fold into
+a measure of access or behaviour ("access to nutritious options"), a
+measure of what people eat or do ("snacks", "school meals", "physical
+activity", "healthy eating habits") never into a measure of weight or
+obesity, and a measure of cost never into a measure of health; and an abbreviation and
+its expansion are ONE kind, named by the expansion ("BMI" and "body mass
+index" are one kind, "body mass index"), never two kinds under two
+spellings.
 
 """
     + _RULES

@@ -34,7 +34,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from policy_atlas.options_scoping.suggest.suggest_prompt import render_baseline_blocks
 
-LONGLIST_CLUSTER_PROMPT_VERSION = "longlist_cluster_v3"
+LONGLIST_CLUSTER_PROMPT_VERSION = "longlist_cluster_v4"
 
 # The component's own label for a unit the assignment judges not to describe
 # an actionable option (a theory, a method, the problem itself). Counted
@@ -71,9 +71,14 @@ class DiscoveredOptionWire(BaseModel):
     design_features: list[str] = Field(
         description=(
             "The features that define this kind of action across the "
-            "interventions it covers. Two to six short phrases. Where the "
-            "named interventions differ on a feature (paid or free, who "
-            "delivers), say that it varies; never pick one side."
+            "interventions it covers. Two to six short phrases, each a noun "
+            "phrase naming ONE thing the option does or provides ('classroom "
+            "nutrition lessons', 'a benefit sanction for a refused offer'). "
+            "Never a feature that only restates the setting the option is "
+            "delivered in or who the plan is for: the card says both already. "
+            "No hedges ('may', 'typically', 'could'). Where the named "
+            "interventions differ on a feature (paid or free, who delivers), "
+            "name the feature and say that it varies; never pick one side."
         )
     )
 
@@ -228,6 +233,11 @@ What to return:
   seed into itself or into a seed you also fold.
 - No catch-all labels ("Other", "Miscellaneous"). No place names. Labels
   say WHAT would be done, never whether it worked: no evaluative language.
+- Design features: each a noun phrase naming one thing the option does or
+  provides. A feature that only restates the setting the option is
+  delivered in ("delivered in schools") or who the plan is for ("for
+  children aged 4 to 11") is not a feature: the card states both beside
+  the list. No hedges.
 """
 
 DISCOVERY_USER_TEMPLATE = """\

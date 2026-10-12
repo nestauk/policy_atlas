@@ -23,7 +23,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from policy_atlas.core.prompt_fields import sanitize_prompt_field
 
-OPTION_DESIGN_PROMPT_VERSION = "option_design_v3"
+OPTION_DESIGN_PROMPT_VERSION = "option_design_v4"
 
 OPTION_DESIGN_MAX_OUTPUT_TOKENS = 4_096
 OPTION_DESIGN_FIELD_MAX = 2_000
@@ -53,8 +53,11 @@ class OptionDesignWire(BaseModel):
             "how long, free or paid, universal or targeted. Short phrases, "
             "three to six. Features the user stated come first, in their "
             "words; features you supply to make the design searchable come "
-            "after and are the ones the user is most likely to edit. No place "
-            "and no institution of one country."
+            "after and are the ones the user is most likely to edit. Each a "
+            "noun phrase naming one thing the option does or provides; never "
+            "a feature that only restates the setting it is delivered in or "
+            "who the plan is for; no hedges. No place and no institution of "
+            "one country."
         )
     )
     outcomes_served: list[str] = Field(
@@ -92,6 +95,11 @@ Rules:
   most ordinary reading and list it in `assumed`. Three to six features in
   all.
 - Name what would be done, never whether it works. No evaluative words.
+- Each feature is a noun phrase naming one thing the option does or
+  provides ("a paid work placement of six months", "English tuition
+  alongside the placement"). A feature that only restates the setting the
+  option is delivered in or who the plan is for is not a feature: the
+  card states both beside the list. No hedges ("may", "typically").
 - The design is what the option's literature search looks for, and
   evidence from any country is wanted. So the name, the description and
   the design features name NO place and NO institution that exists in one
