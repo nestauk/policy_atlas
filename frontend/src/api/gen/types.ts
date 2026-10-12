@@ -3269,6 +3269,9 @@ export interface components {
          *         plan_version: The plan version that longlist was built from.
          *         examples: The option's distinct programme names, most documents first,
          *             at most five (task 046, amendment 3).
+         *         place_sentences: One sentence per place of its evaluating documents,
+         *             in the card's order: the plan's Where country first, "No single
+         *             place" last (task 046, amendment 4, R80).
          */
         OptionOut: {
             /**
@@ -3355,6 +3358,8 @@ export interface components {
              * @default 0
              */
             outcomes_total: number;
+            /** Place Sentences */
+            place_sentences?: components["schemas"]["PlaceSentenceOut"][];
             /** Plan Version */
             plan_version?: number | null;
             /** Primary Lever Type */
@@ -3861,6 +3866,27 @@ export interface components {
             step_label: string;
             /** Title */
             title: string;
+        };
+        /**
+         * PlaceSentenceOut
+         * @description One place of an option's evaluating documents and its sentence (task 046, amendment 4, R80).
+         *
+         *     Args:
+         *         place: The place: a country's short English name, or "No single place".
+         *         sentence: What the evaluations in that place are.
+         *         generated: The sentence was generated and passed the trace check;
+         *             ``false`` for the code-built template.
+         *         where: The place is the plan's Where country.
+         */
+        PlaceSentenceOut: {
+            /** Generated */
+            generated: boolean;
+            /** Place */
+            place: string;
+            /** Sentence */
+            sentence: string;
+            /** Where */
+            where: boolean;
         };
         /**
          * PlanDraft

@@ -80,7 +80,7 @@ from policy_atlas.api.contract import (
     WherePlaceOut,
     WhereTriedOut,
 )
-from policy_atlas.api.contract.read_models import EvaluatedCountryOut
+from policy_atlas.api.contract.read_models import EvaluatedCountryOut, PlaceSentenceOut
 from policy_atlas.api.lifecycle import LIFECYCLE_EVENT_KINDS, both_generations
 from policy_atlas.core.schema import (
     GROUPING_FACETS,
@@ -146,14 +146,23 @@ from policy_atlas.options_scoping.longlist.lever_types import (
     lever_types_by_version,
 )
 from policy_atlas.options_scoping.longlist.where_tried import (
-    MULTIPLE_COUNTRIES,
+    NOT_STATED,
     country_level,
     document_where,
-    place_key,
     resolve_country,
 )
 from policy_atlas.options_scoping.longlist_intent import longlist_plan_data
-from policy_atlas.options_scoping.option_profile.option_profile import TYPING_INVALID_REASON
+from policy_atlas.options_scoping.option_profile.option_profile import (
+    PLACE_SENTENCES_KEY,
+    TYPING_INVALID_REASON,
+)
+from policy_atlas.options_scoping.option_profile.place_sentences import (
+    PlaceDocument,
+    group_places,
+    place_detail,
+    place_name,
+    template_sentence,
+)
 from policy_atlas.runtime.capability_registry import OPTIONS_SCOPING, validate_plan
 from policy_atlas.runtime.scoping_plan import (
     PROFILE_LINE_KEYS,
@@ -214,6 +223,7 @@ class _LineRecord:
     outcome_tag: str | None
     study_country: str | None
     study_geography: str | None
+    setting: str | None = None
 
 
 @dataclass(frozen=True)
@@ -249,6 +259,20 @@ def _folded_name(name: str | None, names: Mapping[str, str] | None) -> str | Non
     if name is None or names is None:
         return name
     return names.get(name, name)
+
+
+def _first_line_record(records: Sequence[_LineRecord]) -> _LineRecord:
+    """The record a document line's fields come from: by role order, then ``created_at``."""
+    rank = {role: index for index, role in enumerate(ROLE_BUCKETS)}
+    return min(
+        records,
+        key=lambda record: (
+            rank.get(record.role, len(rank)),
+            record.created_at is None,
+            record.created_at if record.created_at is not None else 0,
+            str(record.record_id),
+        ),
+    )
 
 
 def _record_line_fields(
@@ -288,23 +312,11 @@ def _record_line_fields(
             "place_detail": None,
             "records_count": 0,
         }
-    rank = {role: index for index, role in enumerate(ROLE_BUCKETS)}
-    first = min(
-        records,
-        key=lambda record: (
-            rank.get(record.role, len(rank)),
-            record.created_at is None,
-            record.created_at if record.created_at is not None else 0,
-            str(record.record_id),
-        ),
-    )
+    first = _first_line_record(records)
     measured = plan_outcome_named(first.outcome_tag, context.plan_outcomes)
     if measured is None:
         measured = fold_kind(context.measures, first.outcome)
-    _country, geography = country_level(first.study_country, first.study_geography)
-    detail = _clean_text(geography)
-    if detail is not None and (top == MULTIPLE_COUNTRIES or place_key(detail) == place_key(top)):
-        detail = None
+    detail = place_detail(first.study_country, first.study_geography, top)
     return {
         "programme_name": _folded_name(_clean_text(first.programme_name), names),
         "tried_on_kind": fold_kind(context.tried_on, first.unit),
@@ -322,9 +334,32 @@ _DocumentEntry = tuple[
 ]
 
 
+@dataclass(frozen=True)
+class _DocumentLine:
+    """One collapsed document line with what the place sentences read beside it.
+
+    The first record's own ``unit``, ``setting``, ``outcome`` and
+    ``study_geography`` (task 046, amendment 4, S31) and the quality score.
+    """
+
+    document: OptionDocumentOut
+    quality_score: int | None
+    unit: str | None = None
+    setting: str | None = None
+    outcome: str | None = None
+    study_geography: str | None = None
+
+
 def _collapse_documents(
     entries: list[_DocumentEntry], context: _LineContext | None = None
 ) -> list[OptionDocumentOut]:
+    """One entry per document (:func:`_collapse_document_lines`), the documents only."""
+    return [line.document for line in _collapse_document_lines(entries, context)]
+
+
+def _collapse_document_lines(
+    entries: list[_DocumentEntry], context: _LineContext | None = None
+) -> list[_DocumentLine]:
     """One entry per document (task 046, amendment 3, R67), best first.
 
     Args:
@@ -340,7 +375,8 @@ def _collapse_documents(
         records (R59, R72; a geography that is the record's own country is
         that country, S32), the first record's fields (S30), ordered
         evaluated first, then quality score descending (unrated last), then
-        title and id.
+        title and id; beside each, its quality score and its first record's
+        own words (S31).
     """
     context = context or _LineContext(tried_on={}, measures={}, plan_outcomes=())
     rank = {role: index for index, role in enumerate(ROLE_BUCKETS)}
@@ -357,7 +393,7 @@ def _collapse_documents(
         places.setdefault(key, []).append(country_level(*place))
         if record is not None:
             line_records.setdefault(key, []).append(record)
-    merged: list[tuple[OptionDocumentOut, int | None]] = []
+    merged: list[_DocumentLine] = []
     for key, group in groups.items():
         best_role = min((doc.role for doc, _ in group), key=lambda role: rank[role])
         own = [item for item in group if item[0].task_source_snapshot_id is not None]
@@ -370,19 +406,30 @@ def _collapse_documents(
             ),
         )
         top, _countries = document_where(places[key])
-        fields = _record_line_fields(line_records.get(key, []), top, context, names)
+        records = line_records.get(key, [])
+        fields = _record_line_fields(records, top, context, names)
+        first = _first_line_record(records) if records else None
         merged.append(
-            (document.model_copy(update={"role": best_role, "place": top, **fields}), score)
+            _DocumentLine(
+                document=document.model_copy(update={"role": best_role, "place": top, **fields}),
+                quality_score=score,
+                unit=_clean_text(first.unit) if first is not None else None,
+                setting=_clean_text(first.setting) if first is not None else None,
+                outcome=_clean_text(first.outcome) if first is not None else None,
+                study_geography=(
+                    _clean_text(first.study_geography) if first is not None else None
+                ),
+            )
         )
     merged.sort(
-        key=lambda item: (
-            item[0].role != "evaluated",
-            -(item[1] if item[1] is not None else -1),
-            item[0].title.casefold(),
-            str(item[0].task_source_snapshot_id or ""),
+        key=lambda line: (
+            line.document.role != "evaluated",
+            -(line.quality_score if line.quality_score is not None else -1),
+            line.document.title.casefold(),
+            str(line.document.task_source_snapshot_id or ""),
         )
     )
-    return [document for document, _ in merged]
+    return merged
 
 
 def _venue(metadata: Mapping[str, Any]) -> str | None:
@@ -3885,7 +3932,7 @@ def _search_coverage(
 
 def _search_documents(
     conn: Connection, task_id: uuid.UUID, search: _AddedSearch, context: _LineContext
-) -> list[OptionDocumentOut]:
+) -> list[_DocumentLine]:
     """An added option's documents from its own search, collapsed per document."""
     labels = labels_for_snapshots(
         conn, task_id=task_id, tss_ids={unit.tss_id for unit in search.units}
@@ -3924,10 +3971,11 @@ def _search_documents(
                     outcome_tag=unit.outcome_tag,
                     study_country=unit.study_country,
                     study_geography=unit.study_geography,
+                    setting=unit.setting,
                 ),
             )
         )
-    return _collapse_documents(out, context)
+    return _collapse_document_lines(out, context)
 
 
 def _plan_outcomes(plan: ScopingPlan | None) -> list[str]:
@@ -4188,7 +4236,7 @@ def _label_fields(label: DocumentLabels | None) -> tuple[str | None, str | None]
 
 def _option_documents(
     conn: Connection, task_id: uuid.UUID, option_id: uuid.UUID, context: _LineContext
-) -> list[OptionDocumentOut]:
+) -> list[_DocumentLine]:
     """The documents behind an option, one per document (DOI twins collapsed, R67).
 
     Own records resolve through this task's document row; a linked task's
@@ -4217,6 +4265,7 @@ def _option_documents(
                     intervention_profile_record.c.study_geography,
                     intervention_profile_record.c.study_country,
                     intervention_profile_record.c.unit,
+                    intervention_profile_record.c.setting,
                     intervention_profile_record.c.outcome,
                     intervention_profile_record.c.outcome_tag,
                     intervention_profile_record.c.programme_name,
@@ -4348,6 +4397,7 @@ def _option_documents(
                 outcome_tag=record.outcome_tag,
                 study_country=record.study_country,
                 study_geography=record.study_geography,
+                setting=record.setting,
             )
         else:
             finding = findings.get((member.unit_task_id, member.unit_id))
@@ -4381,7 +4431,83 @@ def _option_documents(
                 line_record,
             )
         )
-    return _collapse_documents(out, context)
+    return _collapse_document_lines(out, context)
+
+
+def _place_documents(lines: Sequence[_DocumentLine]) -> list[PlaceDocument]:
+    """The evaluating documents of an option's lines, as the place sentences read them (S31).
+
+    The read side's input builder: each ``evaluated`` line with its first
+    record's words, its top level resolved to one display name.
+    """
+    out: list[PlaceDocument] = []
+    for line in lines:
+        doc = line.document
+        if doc.role != "evaluated":
+            continue
+        out.append(
+            PlaceDocument(
+                doc_key=str(doc.task_source_snapshot_id or doc.title),
+                role=doc.role,
+                place=place_name(doc.place or NOT_STATED),
+                programme_name=doc.programme_name,
+                unit=line.unit,
+                tried_on_kind=doc.tried_on_kind,
+                setting=line.setting,
+                outcome=line.outcome,
+                measured=doc.measured,
+                study_geography=line.study_geography,
+                place_detail=doc.place_detail,
+                tier=doc.tier,
+                quality_score=line.quality_score,
+                evidence_type=doc.evidence_type,
+                year=doc.year,
+                title=doc.title,
+            )
+        )
+    return out
+
+
+def _place_sentences_out(
+    stored: object,
+    lines: Sequence[_DocumentLine],
+    *,
+    where_country: str | None,
+    target_unit: str | None = None,
+) -> list[PlaceSentenceOut]:
+    """The card's place sentences (task 046, amendment 4, R80; S31; PA4-15).
+
+    The coverage's stored ``place_sentences`` when it holds the key; else
+    (an added option read from its own search, a row the profile step has not
+    run on) template sentences built from the option's document lines now,
+    ``generated`` false. No model runs on a read.
+    """
+    if isinstance(stored, list):
+        out: list[PlaceSentenceOut] = []
+        for entry in stored:
+            if not isinstance(entry, Mapping):
+                continue
+            place, sentence = entry.get("place"), entry.get("sentence")
+            if not isinstance(place, str) or not isinstance(sentence, str):
+                continue
+            out.append(
+                PlaceSentenceOut(
+                    place=place,
+                    sentence=sentence,
+                    generated=entry.get("generated") is True,
+                    where=entry.get("where") is True,
+                )
+            )
+        return out
+    return [
+        PlaceSentenceOut(
+            place=group.place,
+            sentence=template_sentence(group, target_unit=target_unit),
+            generated=False,
+            where=group.is_where,
+        )
+        for group in group_places(_place_documents(lines), where_country=where_country)
+    ]
 
 
 def option_out(conn: Connection, task_id: uuid.UUID, option_id: uuid.UUID) -> OptionOut | None:
@@ -4442,10 +4568,17 @@ def option_out(conn: Connection, task_id: uuid.UUID, option_id: uuid.UUID) -> Op
             target_unit=_plan_target_unit(plan),
             where_country=_plan_where_country(plan),
         )
-        documents = _search_documents(conn, task_id, search, context)
+        lines = _search_documents(conn, task_id, search, context)
     else:
         coverage = _option_coverage(result, option_id)
-        documents = _option_documents(conn, task_id, option_id, context)
+        lines = _option_documents(conn, task_id, option_id, context)
+    documents = [line.document for line in lines]
+    place_sentences = _place_sentences_out(
+        coverage.get(PLACE_SENTENCES_KEY),
+        lines,
+        where_country=_plan_where_country(plan),
+        target_unit=_plan_target_unit(plan),
+    )
     design = _design_out(row)
     return OptionOut(
         **_option_summary_fields(
@@ -4473,4 +4606,5 @@ def option_out(conn: Connection, task_id: uuid.UUID, option_id: uuid.UUID) -> Op
         ),
         plan_version=int(result.plan_version) if result is not None else None,
         examples=_examples_out(coverage.get("examples")),
+        place_sentences=place_sentences,
     )

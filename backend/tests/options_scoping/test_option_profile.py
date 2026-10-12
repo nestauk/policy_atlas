@@ -52,6 +52,10 @@ from policy_atlas.options_scoping.option_profile.option_profile_prompt import (
     build_line_messages,
     build_setting_messages,
 )
+from policy_atlas.options_scoping.option_profile.place_sentences_prompt import (
+    PlaceSentencesResponse,
+    PlaceSentenceWire,
+)
 from policy_atlas.runtime.harness import build_graph
 from policy_atlas.runtime.run_spec import COMPONENT_REGISTRY, Plan, compile
 from policy_atlas.runtime.runner import LLM_BEARING_COMPONENTS, NullIO, run_plan
@@ -419,7 +423,7 @@ def test_the_profile_merges_into_the_row_and_types_every_option_not_merged(
     after = walk.result(run_id)
     # The folded keys are merged into each option's coverage (S21); the
     # rest is as the build wrote it.
-    folded_keys = {"tried_on_kinds", "measures_kinds", "outcome_counts"}
+    folded_keys = {"tried_on_kinds", "measures_kinds", "outcome_counts", "place_sentences"}
     assert set(after.coverage) == set(before.coverage)
     for option_id, entry in after.coverage.items():
         assert {k: v for k, v in entry.items() if k not in folded_keys} == {
@@ -450,8 +454,12 @@ def test_the_profile_merges_into_the_row_and_types_every_option_not_merged(
         "marks": dict.fromkeys(PROFILE_LINE_KEYS, no_marks),
         "ambition_marks": no_marks,
         "folding": after.provenance["option_profile"]["folding"],
+        "place_sentences": after.provenance["option_profile"]["place_sentences"],
     }
     assert after.provenance["option_profile"]["folding"]["prompt_version"] == "folding_v8"
+    # No option has an evaluating document: no place-sentence call (S31).
+    assert all(entry["place_sentences"] == [] for entry in after.coverage.values())
+    assert after.provenance["option_profile"]["place_sentences"]["calls"] == 0
 
 
 def test_kept_counts_only_an_option_that_was_typed_before(conn: Connection) -> None:
@@ -1150,6 +1158,7 @@ def test_the_maps_are_stored_at_list_level_and_the_kinds_merged_into_coverage(
         "kinds": {"tried_on": 6, "measures": 6},
         "kinds_returned": {"tried_on": 6, "measures": 6},
         "guard_rewrites": {"tried_on": 0, "measures": 0},
+        "catch_all": {"tried_on": False, "measures": False},
     }
 
 
@@ -1308,3 +1317,337 @@ def test_an_answer_over_twelve_kinds_is_refused_by_the_wire() -> None:
             folds=[FoldWire(word_id=f"w{i}", kind=i) for i in range(1, 7)],
         )
     assert FoldingResponse.model_fields["kinds"].metadata[0].max_length == 12
+
+def _catch_all_answer(words: dict[str, str], kind: str = "people") -> FoldingResponse:
+    """Every word folded to one kind (a catch-all answer)."""
+    return FoldingResponse(kinds=[kind], folds=[FoldWire(word_id=w, kind=0) for w in words])
+
+
+def test_a_catch_all_fold_is_flagged_on_twenty_words_or_more() -> None:
+    words = {f"w{i}": f"unit {i}" for i in range(1, 21)}
+    checked = _checked_folds(_catch_all_answer(words), words, [], facet="tried_on")
+    assert checked is not None
+    assert checked["catch_all"] is True
+    # Below the minimum, or below the share, it is not a catch-all.
+    few = {f"w{i}": f"unit {i}" for i in range(1, 6)}
+    checked = _checked_folds(_catch_all_answer(few), few, [], facet="tried_on")
+    assert checked is not None and checked["catch_all"] is False
+    half = FoldingResponse(
+        kinds=["a", "b"],
+        folds=[FoldWire(word_id=w, kind=i % 2) for i, w in enumerate(words)],
+    )
+    checked = _checked_folds(half, words, [], facet="tried_on")
+    assert checked is not None and checked["catch_all"] is False
+
+
+def test_a_catch_all_answer_is_tried_once_more_and_the_retry_is_kept(conn: Connection) -> None:
+    """Task 046, amendment 4 (the folding loop's round 9): one retry, then the
+    answer stands whatever it holds; the step never fails on a catch-all."""
+    walk = _Walk(conn)
+    ids = {"yg": walk.option("Youth guarantee")}
+    docs = [walk.doc() for _ in range(20)]
+    for index, doc in enumerate(docs):
+        walk.record(
+            doc, f"youth guarantee {index}", unit=f"unit {index}", outcome=None, role="evaluated"
+        )
+    walk.rollup(walk.scope_id, docs)
+    routes = {f"youth guarantee {i}": ("Youth guarantee", False) for i in range(20)}
+    backend = _Scripted(routes=routes)
+    run_id, _summary = walk.build(backend)
+    words = {f"w{i}": f"unit {i - 1}" for i in range(1, 21)}
+    # The first answer is a catch-all; the second folds every word to itself.
+    backend.profiler._fold_queues["tried_on"] = [
+        _catch_all_answer(words),
+        FoldingResponse(
+            kinds=[f"kind {k}" for k in range(12)],
+            folds=[FoldWire(word_id=w, kind=i % 12) for i, w in enumerate(words)],
+        ),
+    ]
+    _profile(walk, backend)
+    folding = walk.result(run_id).provenance["option_profile"]["folding"]
+    assert backend.profiler.fold_calls["tried_on"] == 2
+    assert folding["retries"] == 1
+    assert folding["catch_all"]["tried_on"] is False
+    assert folding["kinds"]["tried_on"] == 12
+    assert ids["yg"] is not None
+
+
+def test_a_catch_all_answer_twice_is_kept_and_recorded(conn: Connection) -> None:
+    walk = _Walk(conn)
+    walk.option("Youth guarantee")
+    docs = [walk.doc() for _ in range(20)]
+    for index, doc in enumerate(docs):
+        walk.record(
+            doc, f"youth guarantee {index}", unit=f"unit {index}", outcome=None, role="evaluated"
+        )
+    walk.rollup(walk.scope_id, docs)
+    backend = _Scripted(
+        routes={f"youth guarantee {i}": ("Youth guarantee", False) for i in range(20)}
+    )
+    run_id, _summary = walk.build(backend)
+    words = {f"w{i}": f"unit {i - 1}" for i in range(1, 21)}
+    backend.profiler._fold_queues["tried_on"] = [_catch_all_answer(words), _catch_all_answer(words)]
+    _profile(walk, backend)
+    folding = walk.result(run_id).provenance["option_profile"]["folding"]
+    assert backend.profiler.fold_calls["tried_on"] == 2
+    assert folding["retries"] == 1
+    assert folding["catch_all"]["tried_on"] is True
+    assert folding["kinds"]["tried_on"] == 1
+
+
+# --- the place sentences (task 046, amendment 4, R80; S31; rubric box 76) ------------
+
+
+class _Placed(_Scripted):
+    """The scripted backend with the place-sentence call (the stub's) as well."""
+
+    def place_sentences(self, **kwargs: Any) -> Any:
+        return self.profiler.place_sentences(**kwargs)
+
+
+def _place_walk(walk: _Walk, *, france: bool = False) -> dict[str, uuid.UUID]:
+    """Two options. "Youth guarantee": evaluated in the United Kingdom (two
+    documents) and Canada, described in Germany (and evaluated in France when
+    asked). "Wage subsidy": described only."""
+    ids = {"yg": walk.option("Youth guarantee"), "ws": walk.option("Wage subsidy")}
+    uk_trial, uk_eval, canada, germany = walk.doc(), walk.doc(), walk.doc(), walk.doc()
+    wage = walk.doc()
+    walk.classify(uk_trial, "RCTs and Quasi-Experimental Studies", 4)
+    walk.classify(uk_eval, "Observational Research Studies", 3)
+    rows: list[tuple[uuid.UUID, str, dict[str, Any]]] = [
+        (
+            uk_trial,
+            "youth guarantee 0",
+            {
+                "study_country": "UK",
+                "study_geography": "Leeds",
+                "unit": "16 to 24 year olds",
+                "outcome": "NEET rate",
+                "programme_name": "Youth Guarantee Trial",
+            },
+        ),
+        (
+            uk_eval,
+            "youth guarantee 1",
+            {"study_country": "United Kingdom", "unit": "school leavers"},
+        ),
+        (canada, "youth guarantee 2", {"study_country": "Canada", "outcome": "employment"}),
+        (germany, "youth guarantee 3", {"study_country": "Germany", "role": "described"}),
+        (wage, "wage subsidy", {"study_country": "France", "role": "described"}),
+    ]
+    docs = [uk_trial, uk_eval, canada, germany, wage]
+    if france:
+        paris = walk.doc()
+        docs.append(paris)
+        rows.append((paris, "youth guarantee 4", {"study_country": "France"}))
+    for doc, intervention, values in rows:
+        walk.record(doc, intervention, **values)
+    walk.rollup(walk.scope_id, docs)
+    return ids
+
+
+def _place_backend(responses: Any = None) -> _Placed:
+    routes = {f"youth guarantee {i}": ("Youth guarantee", False) for i in range(5)}
+    routes["wage subsidy"] = ("Wage subsidy", False)
+    return _Placed(
+        routes=routes, profiler=StubLonglistBackend(place_sentence_responses=responses)
+    )
+
+
+def _place_stats(**counts: int) -> dict[str, int]:
+    return {
+        "generated": 0,
+        "template": 0,
+        "failed_trace": 0,
+        "failed_length": 0,
+        "failed_call": 0,
+        **counts,
+    }
+
+
+def test_the_place_sentences_are_stored_in_the_card_order_with_their_provenance(
+    conn: Connection,
+) -> None:
+    walk = _Walk(conn)
+    ids = _place_walk(walk)
+    backend = _place_backend()
+    run_id, _ = walk.build(backend)
+    _profile(walk, backend)
+    after = walk.result(run_id)
+    # One call: the option with no evaluating document gets none and no lines.
+    assert backend.profiler.place_sentence_calls == 1
+    (sent,) = backend.profiler.place_sentence_inputs
+    assert sent["option"]["name"] == "Youth guarantee"
+    assert sent["plan"] == {
+        "target_unit": "16 to 24 year olds",
+        "target_unit_short": "16 to 24 year olds",
+        "outcomes": ["the NEET rate"],
+    }
+    assert set(sent["vocabulary"]) == {"tried_on_kinds", "measures_kinds"}
+    # The plan's Where (the United Kingdom) first; the describing document absent;
+    # short ids across the option.
+    assert [(p["place_id"], p["place"], p["documents_total"]) for p in sent["places"]] == [
+        ("p1", "United Kingdom", 2),
+        ("p2", "Canada", 1),
+    ]
+    assert [d["id"] for p in sent["places"] for d in p["documents"]] == ["d1", "d2", "d3"]
+    first = sent["places"][0]["documents"][0]
+    assert first == {
+        "id": "d1",
+        "programme_name": "Youth Guarantee Trial",
+        "unit": "16 to 24 year olds",
+        "tried_on_kind": "16 to 24 year olds",
+        "setting": None,
+        "outcome": "NEET rate",
+        "measured": "neet rate",
+        "study_geography": "Leeds",
+        "tier": "Strong",
+        "evidence_type": "trial",
+        "year": None,
+    }
+    assert after.coverage[str(ids["yg"])]["place_sentences"] == [
+        {
+            "place": "United Kingdom",
+            "sentence": "2 evaluations in United Kingdom.",
+            "generated": True,
+            "where": True,
+        },
+        {
+            "place": "Canada",
+            "sentence": "1 evaluations in Canada.",
+            "generated": True,
+            "where": False,
+        },
+    ]
+    assert after.coverage[str(ids["ws"])]["place_sentences"] == []
+    stats = after.provenance["option_profile"]["place_sentences"]
+    assert isinstance(stats.pop("seconds"), float)
+    assert stats == {
+        "prompt_version": "place_sentences_v5",
+        "model": "stub",
+        "calls": 1,
+        "retries": 0,
+        "options_without_evaluations": 1,
+        **_place_stats(generated=2),
+    }
+    # Remade on a rebuild: the next profile run writes its own sentences.
+    backend.profiler._place_sentence_queue = [
+        PlaceSentencesResponse(
+            places=[
+                PlaceSentenceWire(
+                    place_id="p1", sentence="Two evaluations in Leeds and elsewhere."
+                ),
+                PlaceSentenceWire(place_id="p2", sentence="One evaluation."),
+            ]
+        )
+    ]
+    _profile(walk, backend)
+    remade = walk.result(run_id).coverage[str(ids["yg"])]["place_sentences"]
+    assert [entry["sentence"] for entry in remade] == [
+        "Two evaluations in Leeds and elsewhere.",
+        "One evaluation.",
+    ]
+
+
+def test_an_invalid_answer_after_one_retry_leaves_templates_and_the_step_writes(
+    conn: Connection,
+) -> None:
+    walk = _Walk(conn)
+    ids = _place_walk(walk)
+    duplicate = PlaceSentencesResponse(
+        places=[
+            PlaceSentenceWire(place_id="p1", sentence="2 evaluations."),
+            PlaceSentenceWire(place_id="p1", sentence="2 evaluations."),
+        ]
+    )
+    backend = _place_backend(["not a response", duplicate])
+    run_id, _ = walk.build(backend)
+    _profile(walk, backend)
+    after = walk.result(run_id)
+    assert backend.profiler.place_sentence_calls == 2
+    entries = after.coverage[str(ids["yg"])]["place_sentences"]
+    assert [entry["generated"] for entry in entries] == [False, False]
+    assert entries[1]["sentence"] == "1 document measuring employment."
+    stats = after.provenance["option_profile"]["place_sentences"]
+    assert (stats["calls"], stats["retries"]) == (1, 1)
+    assert {key: stats[key] for key in _place_stats()} == _place_stats(template=2, failed_call=1)
+    # The step's other writes land.
+    assert str(ids["yg"]) in after.option_profile
+    assert walk.options()["Youth guarantee"].ambition_reason == "Stub ambition."
+
+
+def test_a_call_that_raises_twice_leaves_templates_and_never_fails_the_step(
+    conn: Connection,
+) -> None:
+    walk = _Walk(conn)
+    ids = _place_walk(walk)
+    backend = _place_backend(RuntimeError("provider down"))
+    run_id, _ = walk.build(backend)
+    _summary = _profile(walk, backend)
+    after = walk.result(run_id)
+    entries = after.coverage[str(ids["yg"])]["place_sentences"]
+    assert [entry["place"] for entry in entries] == ["United Kingdom", "Canada"]
+    assert not any(entry["generated"] for entry in entries)
+    stats = after.provenance["option_profile"]["place_sentences"]
+    assert stats["failed_call"] == 1 and stats["retries"] == 1
+
+
+def test_a_call_that_scripted_backends_lack_is_a_failed_call(conn: Connection) -> None:
+    walk = _Walk(conn)
+    ids = _place_walk(walk)
+    routes = {f"youth guarantee {i}": ("Youth guarantee", False) for i in range(5)}
+    backend = _Scripted(routes={**routes, "wage subsidy": ("Wage subsidy", False)})
+    run_id, _ = walk.build(backend)
+    _profile(walk, backend)
+    after = walk.result(run_id)
+    assert after.provenance["option_profile"]["place_sentences"]["failed_call"] == 1
+    assert len(after.coverage[str(ids["yg"])]["place_sentences"]) == 2
+
+
+def test_a_place_left_out_an_unknown_id_a_long_and_an_untraced_sentence(
+    conn: Connection,
+) -> None:
+    walk = _Walk(conn)
+    ids = _place_walk(walk, france=True)
+    answer = PlaceSentencesResponse(
+        places=[
+            PlaceSentenceWire(place_id="p1", sentence="Two evaluations " + "x" * 220 + "."),
+            PlaceSentenceWire(place_id="p2", sentence="  Seven evaluations measured employment. "),
+            PlaceSentenceWire(place_id="p9", sentence="1 evaluations in Spain."),
+            # p3 (France) is left out.
+        ]
+    )
+    backend = _place_backend(answer)
+    run_id, _ = walk.build(backend)
+    _profile(walk, backend)
+    after = walk.result(run_id)
+    entries = after.coverage[str(ids["yg"])]["place_sentences"]
+    assert [(entry["place"], entry["generated"]) for entry in entries] == [
+        ("United Kingdom", False),
+        ("Canada", False),
+        ("France", False),
+    ]
+    assert entries[2]["sentence"] == "1 document."
+    stats = after.provenance["option_profile"]["place_sentences"]
+    assert {key: stats[key] for key in _place_stats()} == _place_stats(
+        template=3, failed_length=1, failed_trace=1
+    )
+    # A sentence within the ceiling that passes is kept, stripped.
+    backend.profiler._place_sentence_queue = [
+        PlaceSentencesResponse(
+            places=[
+                PlaceSentenceWire(
+                    place_id="p2", sentence="  One evaluation measured employment. "
+                )
+            ]
+        )
+    ]
+    _profile(walk, backend)
+    entries = walk.result(run_id).coverage[str(ids["yg"])]["place_sentences"]
+    assert entries[1] == {
+        "place": "Canada",
+        "sentence": "One evaluation measured employment.",
+        "generated": True,
+        "where": False,
+    }
+

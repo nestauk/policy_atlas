@@ -1342,6 +1342,23 @@ class ExampleOut(BaseModel):
     documents: int
 
 
+class PlaceSentenceOut(BaseModel):
+    """One place of an option's evaluating documents and its sentence (task 046, amendment 4, R80).
+
+    Args:
+        place: The place: a country's short English name, or "No single place".
+        sentence: What the evaluations in that place are.
+        generated: The sentence was generated and passed the trace check;
+            ``false`` for the code-built template.
+        where: The place is the plan's Where country.
+    """
+
+    place: str
+    sentence: str
+    generated: bool
+    where: bool
+
+
 class OptionOut(OptionSummaryOut):
     """The `option` read model: the option card, assembled (D15).
 
@@ -1359,6 +1376,9 @@ class OptionOut(OptionSummaryOut):
         plan_version: The plan version that longlist was built from.
         examples: The option's distinct programme names, most documents first,
             at most five (task 046, amendment 3).
+        place_sentences: One sentence per place of its evaluating documents,
+            in the card's order: the plan's Where country first, "No single
+            place" last (task 046, amendment 4, R80).
     """
 
     design: OptionDesignOut
@@ -1372,6 +1392,7 @@ class OptionOut(OptionSummaryOut):
     capability_run_id: uuid.UUID | None = None
     plan_version: int | None = None
     examples: list[ExampleOut] = Field(default_factory=list)
+    place_sentences: list[PlaceSentenceOut] = Field(default_factory=list)
 
 
 class OptionAddIn(BaseModel):

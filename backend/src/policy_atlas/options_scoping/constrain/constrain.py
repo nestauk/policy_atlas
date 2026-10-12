@@ -39,7 +39,8 @@ task 046 items 5, 7, 10, 11, 12, R4, R21, R38, AM6, AM7.
    (owner ruling 2026-09-24) when its kept option stays on the list:
    ``merged_into_option_id`` names the kept option, its memberships move
    there (a unit the kept option already holds stays put), the kept option's
-   coverage is recomputed, and its own ``state`` and ``exclusion`` are left
+   coverage is recomputed (its stored place sentences carried through
+   unchanged: task 046, amendment 4, S31), and its own ``state`` and ``exclusion`` are left
    as they were — it leaves the list through the merge. Its judgement record
    still shows the *distinct* verdict. When the kept option leaves the list
    (excluded), the duplicate is the one kept (``passes``,
@@ -126,7 +127,8 @@ from policy_atlas.options_scoping.longlist.longlist import (
     membership_coverage,
 )
 from policy_atlas.options_scoping.longlist.longlist_backend import LONGLIST_JUDGMENT_MODEL
-from policy_atlas.options_scoping.longlist.where_tried import strip_place
+from policy_atlas.options_scoping.longlist.where_tried import resolve_country, strip_place
+from policy_atlas.options_scoping.option_profile.option_profile import PLACE_SENTENCES_KEY
 from policy_atlas.options_scoping.suggest.suggest import baseline_sections, walk_plan
 from policy_atlas.runtime.scoping_plan import TRANSFERABILITY_DEFAULT, ScopingPlan
 
@@ -988,6 +990,7 @@ def constrain_scope(
     # the options on the list, reading the moved memberships.
     for duplicate, kept_id in merged_into.items():
         _move_memberships(conn, task_id=task_id, duplicate=duplicate, kept=kept_id)
+    where_country = resolve_country(plan.where.text)
     coverage_updates = (
         membership_coverage(
             conn,
@@ -999,10 +1002,18 @@ def constrain_scope(
             # (task 046, amendment 3, S21).
             folds=stored_folds(profile),
             target_unit=str(plan_data["target_unit"]),
+            where_country=where_country[1] if where_country is not None else None,
         )
         if merged_into
         else {}
     )
+    # The kept option's place sentences ride through the recompute unchanged
+    # (membership coverage never computes them; task 046, amendment 4, S31;
+    # contract review PA4-15).
+    for kept_key, fresh in coverage_updates.items():
+        stored_entry = coverage.get(kept_key)
+        if isinstance(stored_entry, Mapping) and PLACE_SENTENCES_KEY in stored_entry:
+            fresh[PLACE_SENTENCES_KEY] = stored_entry[PLACE_SENTENCES_KEY]
     in_scope = in_scope_evidence(
         conn,
         task_id=task_id,

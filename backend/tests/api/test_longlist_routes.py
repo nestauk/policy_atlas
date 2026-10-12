@@ -667,6 +667,13 @@ def test_the_card_carries_every_section_and_never_how_sure(
         assert evaluation["tier"] == "Strong" and evaluation["place"] == "United Kingdom"
         assert "where_tried_group" not in evaluation
         assert evaluation["source_task_id"] is None and evaluation["year"] == 2022
+        # The place sentences, as the profile step stored them (task 046,
+        # amendment 4, R80; S31): this scripted backend has no sentence call,
+        # so the step stored the templates; the plan's Where row first.
+        sentences = card["place_sentences"]
+        assert sentences[0]["place"] == "United Kingdom"
+        assert (sentences[0]["where"], sentences[0]["generated"]) == (True, False)
+        assert all(set(s) == {"place", "sentence", "generated", "where"} for s in sentences)
 
         mentoring = _card(client, built, "Mentoring", owner.headers).json()
         assert mentoring["in_scope"] == {
@@ -1117,6 +1124,13 @@ def test_the_signal_and_the_document_lines_carry_the_record_fields(conn: Connect
         second.records_count,
     ) == (None, "employers", "income", None, 1)
     assert lines["Danish 0"].measured is None and lines["Danish 0"].records_count == 1
+    # The profile step has not run: the place sentences are templates built at
+    # read time from these lines, the Where country first (task 046,
+    # amendment 4, S31; PA4-15).
+    assert [(s.place, s.sentence, s.generated, s.where) for s in card.place_sentences] == [
+        ("United Kingdom", "3 documents.", False, True),
+        ("Denmark", "4 documents.", False, False),
+    ]
     deep = lines["A deep read"]
     assert (
         deep.programme_name,
@@ -1781,6 +1795,12 @@ def test_the_documents_are_one_per_document_best_first_with_a_year(conn: Connect
         ("Weak description", "described", 2010),
     ]
     assert card.documents[0].task_source_snapshot_id in {first, twin}
+    # An added option reads template sentences from its own search's lines
+    # until the profile step runs (task 046, amendment 4, S31; PA4-15): its one
+    # evaluating document states no country.
+    assert [(s.place, s.sentence, s.generated, s.where) for s in card.place_sentences] == [
+        ("No single place", "1 moderate trial.", False, False)
+    ]
 
 
 def test_a_document_with_no_row_here_takes_its_twin_s_own_row() -> None:

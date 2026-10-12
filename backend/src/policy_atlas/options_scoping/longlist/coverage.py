@@ -433,6 +433,25 @@ def _pick_label(candidates: list[DocumentLabels]) -> DocumentLabels | None:
     )[1]
 
 
+def document_label(
+    members: Iterable[CoverageMember], labels: Mapping[uuid.UUID, DocumentLabels]
+) -> DocumentLabels | None:
+    """The label one DOI-collapsed document counts under, as the coverage counts it.
+
+    Shared with the place sentences (task 046, amendment 4, R80; S31) so the
+    two read one document's type and tier the same way.
+
+    Args:
+        members: The document's membership rows (DOI twins together).
+        labels: The label resolver's answer per ``tss_id``.
+
+    Returns:
+        The best-resolved twin's labels, or ``None`` when no member has one.
+    """
+    tss_ids = sorted({m.tss_id for m in members if m.tss_id is not None}, key=str)
+    return _pick_label([labels[t] for t in tss_ids if t in labels])
+
+
 def distinct_words(members: Iterable[CoverageMember], facet: str) -> list[str]:
     """The distinct words of one folded facet over ``members`` (S21).
 

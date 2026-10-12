@@ -1093,6 +1093,10 @@ export const mockLonglistOptionCards: Record<string, OptionOutFixture> = {
       { name: "National sanctions regime", documents: 6 },
       { name: "Benefit sanctions pilot", documents: 2 },
     ],
+    place_sentences: [
+      { place: "United Kingdom", sentence: "One moderate local evaluation of the Benefit sanctions pilot in England measured the NEET rate at 6 months in 18-24 year-olds.", generated: true, where: true },
+      { place: "No single place", sentence: "1 strong systematic review with 18-24 year-olds, measuring NEET rate at 6 months.", generated: false, where: false },
+    ],
     evidence: {
       documents: 6,
       by_evidence_type: { "Systematic review": 2, "Policy analysis": 3, "Local evaluation": 1 },
@@ -1176,6 +1180,10 @@ export const mockLonglistOptionCards: Record<string, OptionOutFixture> = {
     evaluated_countries: [
       { country: "Australia", documents: 1 },
       { country: "Canada", documents: 1 },
+    ],
+    place_sentences: [
+      { place: "Australia", sentence: "1 limited local evaluation with secondary school pupils in Victoria, measuring school engagement.", generated: false, where: false },
+      { place: "Canada", sentence: "One moderate local evaluation in Ontario measured the NEET rate at 6 months in pupils at risk of becoming NEET.", generated: true, where: false },
     ],
     outcomes_evaluated: 1,
     outcomes_total: 2,
@@ -1320,6 +1328,10 @@ export const mockLonglistOptionCards: Record<string, OptionOutFixture> = {
       { top: "Germany", documents: 1, places: [{ place: "Hamburg", documents: 1 }], countries: [] },
     ],
     evaluated_countries: [{ country: "United Kingdom", documents: 3 }],
+    place_sentences: [
+      { place: "United Kingdom", sentence: "One very strong systematic review of the Youth Guarantee in England measured the NEET rate at 6 months in 18-24 year-olds.", generated: true, where: true },
+      { place: "No single place", sentence: "One strong local evaluation measured sustained employment or training at 12 months in 16-24 year-olds.", generated: true, where: false },
+    ],
     outcomes_evaluated: 2,
     outcomes_total: 2,
     relations: [{ kind: "has_part", other_option_id: MOCK_OPTION_ID_EXCLUDED, other_name: "National sanctions regime" }],

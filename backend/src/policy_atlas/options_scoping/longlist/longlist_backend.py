@@ -33,7 +33,11 @@ backend (task 046, S20). Each call has one lead-authored prompt builder
   list's distinct record words, one per facet (Tried on: the ``unit`` words;
   Measures: the ``outcome`` words), word → kind (mini model; task 046,
   amendment 3, R54, R55;
-  :mod:`~policy_atlas.options_scoping.option_profile.folding_prompt`).
+  :mod:`~policy_atlas.options_scoping.option_profile.folding_prompt`);
+- ``place_sentences`` — the ``option_profile`` step's second wave: one call
+  per option with evaluating documents, one sentence per place (mini model;
+  task 046, amendment 4, R80; S31;
+  :mod:`~policy_atlas.options_scoping.option_profile.place_sentences_prompt`).
 
 Backends parse structurally and return the wire; the component and the shared
 clustering engine own every semantic check. :class:`StubLonglistBackend` is
@@ -111,6 +115,13 @@ from policy_atlas.options_scoping.option_profile.option_profile_prompt import (
     build_line_messages,
     build_setting_messages,
     line_is_marked,
+)
+from policy_atlas.options_scoping.option_profile.place_sentences_prompt import (
+    PLACE_SENTENCES_MAX_OUTPUT_TOKENS,
+    PLACE_SENTENCES_PROMPT_VERSION,
+    PlaceSentencesResponse,
+    PlaceSentenceWire,
+    build_place_sentences_messages,
 )
 from policy_atlas.options_scoping.theme.longlist_theme_prompt import (
     LONGLIST_THEME_PROMPT_VERSION,
@@ -304,6 +315,28 @@ class LonglistBackend(Protocol):
 
         Returns:
             The parsed word → kind entries and token usage.
+        """
+        ...
+
+    def place_sentences(
+        self,
+        *,
+        option: dict[str, Any],
+        plan: dict[str, Any],
+        vocabulary: dict[str, list[str]],
+        places: list[dict[str, Any]],
+    ) -> UsageResult[PlaceSentencesResponse]:
+        """One option's place sentences (task 046, amendment 4, R80; S31).
+
+        Args:
+            option: ``{"name", "description"}``.
+            plan: ``{"target_unit", "outcomes"}``, place stripped.
+            vocabulary: The list's folded kinds.
+            places: One entry per place (``place_id``, ``place``,
+                ``documents_total``, ``documents``).
+
+        Returns:
+            The parsed sentences and token usage.
         """
         ...
 
@@ -598,6 +631,26 @@ class OpenAILonglistBackend:
             metadata={"facet": facet},
         )
 
+    def place_sentences(
+        self,
+        *,
+        option: dict[str, Any],
+        plan: dict[str, Any],
+        vocabulary: dict[str, list[str]],
+        places: list[dict[str, Any]],
+    ) -> UsageResult[PlaceSentencesResponse]:
+        """One option's place-sentence call on the mini model (see :class:`LonglistBackend`)."""
+        return self._call(
+            build_place_sentences_messages(
+                option=option, plan=plan, vocabulary=vocabulary, places=places
+            ),
+            response_format=PlaceSentencesResponse,
+            model=LONGLIST_ASSIGNMENT_MODEL,
+            max_output_tokens=PLACE_SENTENCES_MAX_OUTPUT_TOKENS,
+            name="option_profile:place_sentences",
+            prompt_version=PLACE_SENTENCES_PROMPT_VERSION,
+        )
+
     def constrain(
         self,
         *,
@@ -698,6 +751,11 @@ class StubLonglistBackend:
       kind is that plan text; the kinds listed once each in first-seen order,
       each word answered by its kind's index. Its calls and inputs are
       recorded under the lock.
+    - ``place_sentences`` answers from its own FIFO queue the same way (a
+      queued exception is raised, so a test can fail a call); with none,
+      each place in the input gets ``"{documents_total} evaluations in
+      {place}."``, which passes the trace check. Its calls and inputs are
+      recorded under the lock.
 
     Args:
         constrain_responses: Canned :class:`ConstrainResponse` value(s), or
@@ -714,6 +772,10 @@ class StubLonglistBackend:
             ``None`` for the deterministic default.
         fold_responses: Per facet, canned :class:`FoldingResponse` value(s),
             or ``None`` for the deterministic default on both facets.
+        place_sentence_responses: Canned place-sentence answers (a
+            :class:`PlaceSentencesResponse`, any other object to answer
+            malformed, or an exception to raise), or ``None`` for the
+            deterministic default.
     """
 
     mode = "stub"
@@ -728,6 +790,7 @@ class StubLonglistBackend:
         ambition_responses: AmbitionResponse | list[AmbitionResponse] | None = None,
         setting_responses: SettingResponse | list[SettingResponse] | None = None,
         fold_responses: Mapping[str, FoldingResponse | list[FoldingResponse]] | None = None,
+        place_sentence_responses: Any = None,
     ) -> None:
         self._constrain_queue: list[ConstrainResponse] = _queue(constrain_responses)
         self._distinct_queue: list[DistinctResponse] = _queue(distinct_responses)
@@ -740,7 +803,10 @@ class StubLonglistBackend:
         self._fold_queues: dict[str, list[FoldingResponse]] = {
             key: _queue(value) for key, value in (fold_responses or {}).items()
         }
+        self._place_sentence_queue: list[Any] = _queue(place_sentence_responses)
         self._lock = threading.Lock()
+        self.place_sentence_calls = 0
+        self.place_sentence_inputs: list[dict[str, Any]] = []
         self.constrain_calls = 0
         self.constrain_inputs: list[dict[str, Any]] = []
         self.distinct_calls = 0
@@ -1005,6 +1071,40 @@ class StubLonglistBackend:
                 self._fold_queues.setdefault(facet, []),
                 lambda: _stub_folds(plan, words),
             ), None
+
+
+    def place_sentences(
+        self,
+        *,
+        option: dict[str, Any],
+        plan: dict[str, Any],
+        vocabulary: dict[str, list[str]],
+        places: list[dict[str, Any]],
+    ) -> UsageResult[PlaceSentencesResponse]:
+        """Answer from the queue (an exception is raised), else one stub sentence per place."""
+        with self._lock:
+            self.place_sentence_calls += 1
+            self.place_sentence_inputs.append(
+                {"option": option, "plan": plan, "vocabulary": vocabulary, "places": places}
+            )
+            response = _next_response(
+                self._place_sentence_queue, lambda: _stub_place_sentences(places)
+            )
+        if isinstance(response, BaseException):
+            raise response
+        return response, None
+
+
+def _stub_place_sentences(places: list[dict[str, Any]]) -> PlaceSentencesResponse:
+    return PlaceSentencesResponse(
+        places=[
+            PlaceSentenceWire(
+                place_id=str(place["place_id"]),
+                sentence=f"{place['documents_total']} evaluations in {place['place']}.",
+            )
+            for place in places
+        ]
+    )
 
 
 def _stub_folds(plan: dict[str, object], words: dict[str, str]) -> FoldingResponse:

@@ -568,6 +568,36 @@ def test_a_merge_recomputes_the_kinds_from_the_stored_maps_and_keeps_the_old_key
     assert set(sent) == {"documents", "evaluated", "roles", "tried_on", "settings"}
 
 
+def test_a_merge_carries_the_kept_option_s_place_sentences_through(conn: Connection) -> None:
+    """Task 046, amendment 4 (S31; contract review PA4-15): the merge recompute
+    has no place sentences; the kept option's stored ones ride through unchanged."""
+    walk = _walk(conn)
+    kept, dup = _duplicate_pair(walk)
+    walk.build(StubLonglistBackend())
+    _run_profile(walk)
+    stored = [
+        {"place": "United Kingdom", "sentence": "Kept sentence.", "generated": True, "where": True}
+    ]
+    coverage = dict(_latest(walk).coverage)
+    coverage[str(kept)] = {**coverage[str(kept)], "place_sentences": stored}
+    conn.execute(
+        update(longlist_result)
+        .where(longlist_result.c.longlist_result_id == _latest(walk).longlist_result_id)
+        .values(coverage=coverage)
+    )
+
+    _constrain(walk, _duplicate_breach(kept, dup))
+
+    after = _latest(walk).coverage[str(kept)]
+    assert after["documents"] == 2  # recomputed
+    assert after["place_sentences"] == stored
+    card = repository.option_out(conn, walk.task_id, kept)
+    assert card is not None
+    assert [(s.place, s.sentence, s.generated, s.where) for s in card.place_sentences] == [
+        ("United Kingdom", "Kept sentence.", True, True)
+    ]
+
+
 def test_a_user_held_duplicate_is_never_merged(conn: Connection) -> None:
     walk = _walk(conn)
     kept, dup = _duplicate_pair(

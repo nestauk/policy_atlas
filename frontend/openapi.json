@@ -3996,7 +3996,7 @@
         "type": "object"
       },
       "OptionOut": {
-        "description": "The `option` read model: the option card, assembled (D15).\n\nArgs:\n    design: The specified design.\n    design_features: The design's defining features.\n    evidence: The source-quality profile.\n    judgements: The constraint judgements on the current design version.\n    guesses: The reasoned guesses on the current design version.\n    in_scope: The in-scope check, when the plan restricts the evidence.\n    documents: The documents behind it, one per membership row.\n    run_id: The longlist component run its coverage came from; `null`\n        before a longlist is built.\n    capability_run_id: The longlist walk that run belonged to.\n    plan_version: The plan version that longlist was built from.\n    examples: The option's distinct programme names, most documents first,\n        at most five (task 046, amendment 3).",
+        "description": "The `option` read model: the option card, assembled (D15).\n\nArgs:\n    design: The specified design.\n    design_features: The design's defining features.\n    evidence: The source-quality profile.\n    judgements: The constraint judgements on the current design version.\n    guesses: The reasoned guesses on the current design version.\n    in_scope: The in-scope check, when the plan restricts the evidence.\n    documents: The documents behind it, one per membership row.\n    run_id: The longlist component run its coverage came from; `null`\n        before a longlist is built.\n    capability_run_id: The longlist walk that run belonged to.\n    plan_version: The plan version that longlist was built from.\n    examples: The option's distinct programme names, most documents first,\n        at most five (task 046, amendment 3).\n    place_sentences: One sentence per place of its evaluating documents,\n        in the card's order: the plan's Where country first, \"No single\n        place\" last (task 046, amendment 4, R80).",
         "properties": {
           "abstract_only": {
             "default": false,
@@ -4222,6 +4222,13 @@
             "default": 0,
             "title": "Outcomes Total",
             "type": "integer"
+          },
+          "place_sentences": {
+            "items": {
+              "$ref": "#/components/schemas/PlaceSentenceOut"
+            },
+            "title": "Place Sentences",
+            "type": "array"
           },
           "plan_version": {
             "anyOf": [
@@ -5216,6 +5223,35 @@
           "options"
         ],
         "title": "PartProposalOut",
+        "type": "object"
+      },
+      "PlaceSentenceOut": {
+        "description": "One place of an option's evaluating documents and its sentence (task 046, amendment 4, R80).\n\nArgs:\n    place: The place: a country's short English name, or \"No single place\".\n    sentence: What the evaluations in that place are.\n    generated: The sentence was generated and passed the trace check;\n        ``false`` for the code-built template.\n    where: The place is the plan's Where country.",
+        "properties": {
+          "generated": {
+            "title": "Generated",
+            "type": "boolean"
+          },
+          "place": {
+            "title": "Place",
+            "type": "string"
+          },
+          "sentence": {
+            "title": "Sentence",
+            "type": "string"
+          },
+          "where": {
+            "title": "Where",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "place",
+          "sentence",
+          "generated",
+          "where"
+        ],
+        "title": "PlaceSentenceOut",
         "type": "object"
       },
       "PlanDraft": {

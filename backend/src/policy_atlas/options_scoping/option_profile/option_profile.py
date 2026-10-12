@@ -52,11 +52,24 @@ merged into its JSON as ``theme`` merges, the typing keys the read side reads
 ``tried_on_kinds``, ``measures_kinds`` and ``outcome_counts`` recomputed from
 its members through the maps (a database read, no model call) and merged
 into the row's ``coverage``.
+
+**The place sentences (task 046, amendment 4, R80; S31).** A second wave,
+after the first pool has returned and before any write: per option on the
+stored coverage that has evaluating documents, one call on the mini model
+(:meth:`~policy_atlas.options_scoping.longlist.longlist_backend.LonglistBackend.place_sentences`),
+the calls in a pool of :data:`OPTION_PROFILE_MAX_CONCURRENT`, each tried once
+more. The input, the template and the trace check are code
+(:mod:`.place_sentences`). A failed call, a sentence over the ceiling or one
+that fails the trace check falls back to the template; nothing in the wave
+fails the step. The sentences are merged into each option's coverage under
+:data:`PLACE_SENTENCES_KEY` (``[{place, sentence, generated, where}]``, the
+card's order) and counted in ``provenance.option_profile.place_sentences``.
 """
 
 from __future__ import annotations
 
 import re
+import time
 import uuid
 from collections import Counter
 from collections.abc import Callable, Mapping, Sequence
@@ -75,9 +88,15 @@ from policy_atlas.core.schema import (
     longlist_result,
     option,
     option_membership,
+    source_snapshot,
+    task_source_snapshot,
 )
 from policy_atlas.core.usage import TokenUsage, UsageAccumulator, UsageResult
-from policy_atlas.options_scoping.longlist.coverage import FOLD_FIELDS, distinct_words
+from policy_atlas.options_scoping.longlist.coverage import (
+    FOLD_FIELDS,
+    distinct_words,
+    fold_programme_names,
+)
 from policy_atlas.options_scoping.longlist.lever_types import LEVER_TYPE_KEYS, TAXONOMY_VERSION
 from policy_atlas.options_scoping.longlist.longlist import (
     MembershipRead,
@@ -89,6 +108,7 @@ from policy_atlas.options_scoping.longlist.longlist_backend import (
     LONGLIST_JUDGMENT_MODEL,
     LonglistBackend,
 )
+from policy_atlas.options_scoping.longlist.where_tried import resolve_country
 from policy_atlas.options_scoping.longlist_intent import longlist_plan_data
 from policy_atlas.options_scoping.option_profile.folding_prompt import (
     FOLDING_PROMPT_VERSION,
@@ -109,6 +129,20 @@ from policy_atlas.options_scoping.option_profile.option_profile_prompt import (
     PlainLineWire,
     SettingResponse,
     line_is_marked,
+)
+from policy_atlas.options_scoping.option_profile.place_sentences import (
+    PlaceGroup,
+    call_input,
+    from_membership,
+    group_places,
+    template_sentence,
+    trace_check,
+    vocabulary_from_folds,
+)
+from policy_atlas.options_scoping.option_profile.place_sentences_prompt import (
+    PLACE_SENTENCE_MAX_CHARS,
+    PLACE_SENTENCES_PROMPT_VERSION,
+    PlaceSentencesResponse,
 )
 from policy_atlas.options_scoping.suggest.suggest import baseline_sections, walk_plan
 from policy_atlas.runtime.scoping_plan import PROFILE_LINE_KEYS
@@ -143,8 +177,20 @@ _SETTING_CALL = "setting"
 #: The kinds a folding answer should hold at most (the prompt's ceiling, A6);
 #: more is kept and logged, never invalid.
 FOLDING_KINDS_MAX = 12
+#: A folding answer is a catch-all when one kind holds more than this share
+#: of the list's words on a list of at least :data:`FOLDING_CATCH_ALL_MIN_WORDS`
+#: words (task 046, amendment 4, round 9 of the folding loop; the fault
+#: amendment 3 recorded): the call is tried once more, and the retry's answer
+#: is kept either way (a catch-all is a quality fault, never a failed step).
+FOLDING_CATCH_ALL_SHARE = 0.5
+FOLDING_CATCH_ALL_MIN_WORDS = 20
 #: The coverage keys the folding maps recompute and merge (S21, S24).
 FOLDED_COVERAGE_KEYS: tuple[str, ...] = ("tried_on_kinds", "measures_kinds", "outcome_counts")
+#: The coverage key the place sentences are merged under (task 046, amendment
+#: 4, R80; S31): ``[{place, sentence, generated, where}]`` in the card's order.
+#: Written by the second wave only; ``membership.coverage`` never computes it,
+#: so constrain's merge recompute carries it through.
+PLACE_SENTENCES_KEY = "place_sentences"
 
 
 class OptionProfileFailure(Exception):
@@ -638,11 +684,15 @@ def _profile_call(
     name: str,
     call: Callable[[], UsageResult[Any]],
     check: Callable[[Any], Mapping[str, Any] | None],
+    *,
+    final_check: Callable[[Any], Mapping[str, Any] | None] | None = None,
 ) -> _CallOutcome:
     """One profile call and one retry (R37; constrain's distinct pattern).
 
     A call that raises or answers malformed is tried once more. Runs in the
-    thread pool; it never raises.
+    thread pool; it never raises. ``final_check``, when given, checks the
+    LAST attempt in place of ``check`` (a folding call's catch-all answer is
+    refused once and accepted on the retry).
     """
     usages: list[TokenUsage | None] = []
     for attempt in range(1, OPTION_PROFILE_CALL_ATTEMPTS + 1):
@@ -657,7 +707,8 @@ def _profile_call(
             )
             continue
         usages.append(usage)
-        value = check(response)
+        last = attempt == OPTION_PROFILE_CALL_ATTEMPTS
+        value = (final_check or check)(response) if last else check(response)
         if value is not None:
             return _CallOutcome(name=name, value=value, attempts=attempt, usages=usages)
         log.warning("option_profile.call_malformed", call=name, attempt=attempt)
@@ -819,10 +870,23 @@ def _checked_folds(
         kind = kinds[index] if index is not None and 0 <= index < len(kinds) else ""
         kind = kind or word
         folds[word] = by_key.get(kind.casefold(), kind)
+    largest = max(Counter(kind.casefold() for kind in folds.values()).values(), default=0)
+    catch_all = (
+        len(folds) >= FOLDING_CATCH_ALL_MIN_WORDS
+        and largest > FOLDING_CATCH_ALL_SHARE * len(folds)
+    )
+    if catch_all:
+        log.warning(
+            "option_profile.folding_catch_all",
+            facet=facet,
+            words=len(folds),
+            largest_kind_words=largest,
+        )
     return {
         "folds": folds,
         "kinds_returned": len(response.kinds),
         "guard_rewrites": guard_rewrites,
+        "catch_all": catch_all,
     }
 
 
@@ -831,8 +895,19 @@ def _folding_calls(
     *,
     plan: dict[str, object],
     words: Mapping[str, dict[str, str]],
-) -> list[tuple[str, Callable[[], UsageResult[Any]], Callable[[Any], Mapping[str, Any] | None]]]:
-    """The two folding calls, one per facet with words (R54, R55; S21)."""
+) -> list[
+    tuple[
+        str,
+        Callable[[], UsageResult[Any]],
+        Callable[[Any], Mapping[str, Any] | None],
+        Callable[[Any], Mapping[str, Any] | None],
+    ]
+]:
+    """The two folding calls, one per facet with words (R54, R55; S21).
+
+    Each entry: the name, the call, the strict check (a catch-all answer is
+    refused) and the lenient check for the last attempt.
+    """
     outcomes = plan.get("outcomes")
     target_unit = plan.get("target_unit")
     references: dict[str, list[str]] = {
@@ -850,9 +925,20 @@ def _folding_calls(
             response, words[facet], references[facet], facet=facet
         )
 
+    def _strict(facet: Facet) -> Callable[[Any], Mapping[str, Any] | None]:
+        # A catch-all answer is refused on the first attempt (the retry's
+        # answer is kept either way).
+        lenient = _check(facet)
+
+        def check(response: Any) -> Mapping[str, Any] | None:
+            value = lenient(response)
+            return None if value is not None and value.get("catch_all") else value
+
+        return check
+
     facets: tuple[Facet, ...] = ("tried_on", "measures")
     return [
-        (_fold_call_name(facet), _call(facet), _check(facet))
+        (_fold_call_name(facet), _call(facet), _strict(facet), _check(facet))
         for facet in facets
         if words.get(facet)
     ]
@@ -929,8 +1015,10 @@ def option_profile_scope(
             for name, call, check in calls
         ]
         fold_futures: list[Future[_CallOutcome]] = [
-            tracing.submit_with_context(pool, _profile_call, name, call, check)
-            for name, call, check in fold_calls
+            tracing.submit_with_context(
+                pool, _profile_call, name, call, check, final_check=final_check
+            )
+            for name, call, check, final_check in fold_calls
         ]
         # Typing (S12): batches in parallel; a kept typing carries forward.
         typings, kept_typings, typing_stats = _type_options(
@@ -966,6 +1054,27 @@ def option_profile_scope(
         facet: int(folded.get(_fold_call_name(facet), {}).get("guard_rewrites") or 0)
         for facet in FOLD_FIELDS
     }
+    catch_all = {
+        facet: bool(folded.get(_fold_call_name(facet), {}).get("catch_all"))
+        for facet in FOLD_FIELDS
+    }
+
+    # The second wave (S31): the place sentences, once the folds are known
+    # and before any write. It never fails the step.
+    resolved_where = resolve_country(plan.where.text)
+    where_country = resolved_where[1] if resolved_where is not None else None
+    stored_coverage = result_row.coverage if isinstance(result_row.coverage, Mapping) else {}
+    place_sentences, place_stats = _place_sentence_wave(
+        conn,
+        backend,
+        task_id=task_id,
+        options=[o for o in options if isinstance(stored_coverage.get(str(o.option_id)), Mapping)],
+        membership=membership,
+        folds=folds,
+        plan=plan_data,
+        where_country=where_country,
+        usage=usage,
+    )
 
     runner_ups: dict[str, dict[str, Any]] = {
         str(option_id): {"lever_type": t.runner_up}
@@ -1003,7 +1112,14 @@ def option_profile_scope(
             .values(**values)
         )
     profile = _profile_column(options, short_ids, answers)
-    coverage = _folded_coverage(result_row.coverage, membership, plan_data, folds)
+    coverage = _folded_coverage(
+        result_row.coverage,
+        membership,
+        plan_data,
+        folds,
+        where_country=where_country,
+        place_sentences=place_sentences,
+    )
 
     none_fits = sum(1 for t in typings.values() if t.primary is None)
     counts = dict(result_row.counts) if isinstance(result_row.counts, Mapping) else {}
@@ -1049,6 +1165,12 @@ def option_profile_scope(
                 },
                 "kinds_returned": kinds_returned,
                 "guard_rewrites": guard_rewrites,
+                "catch_all": catch_all,
+            },
+            "place_sentences": {
+                "prompt_version": PLACE_SENTENCES_PROMPT_VERSION,
+                "model": LONGLIST_ASSIGNMENT_MODEL if live else "stub",
+                **place_stats,
             },
         },
     )
@@ -1082,13 +1204,18 @@ def _folded_coverage(
     membership: MembershipRead,
     plan: Mapping[str, object],
     folds: Mapping[str, Mapping[str, str]],
+    *,
+    where_country: str | None = None,
+    place_sentences: Mapping[str, list[dict[str, Any]]] | None = None,
 ) -> dict[str, Any]:
     """The row's coverage with each option's folded keys recomputed (S21, S24).
 
     Each option the stored coverage holds and the membership read covers gets
-    :data:`FOLDED_COVERAGE_KEYS` from its members through the maps; every
-    other key, and every other option (an option added since, read from its
-    own search at read time), is left as it is.
+    :data:`FOLDED_COVERAGE_KEYS` from its members through the maps, and each
+    option the second wave wrote sentences for gets :data:`PLACE_SENTENCES_KEY`
+    (task 046, amendment 4, S31); every other key, and every other option (an
+    option added since, read from its own search at read time), is left as
+    it is.
     """
     coverage = dict(stored) if isinstance(stored, Mapping) else {}
     outcomes = plan.get("outcomes")
@@ -1099,6 +1226,7 @@ def _folded_coverage(
         else [],
         folds=folds,
         target_unit=target_unit if isinstance(target_unit, str) else None,
+        where_country=where_country,
     )
     for option_id, fresh in recomputed.items():
         entry = coverage.get(option_id)
@@ -1107,7 +1235,229 @@ def _folded_coverage(
                 **entry,
                 **{key: fresh[key] for key in FOLDED_COVERAGE_KEYS},
             }
+    for option_id, sentences in (place_sentences or {}).items():
+        entry = coverage.get(option_id)
+        if isinstance(entry, Mapping):
+            coverage[option_id] = {**entry, PLACE_SENTENCES_KEY: sentences}
     return coverage
+
+
+def _document_meta(
+    conn: Connection, *, task_id: uuid.UUID, tss_ids: set[uuid.UUID]
+) -> tuple[dict[uuid.UUID, int | None], dict[uuid.UUID, str]]:
+    """Each document row's publication year and title, from its snapshot's metadata."""
+    if not tss_ids:
+        return {}, {}
+    years: dict[uuid.UUID, int | None] = {}
+    titles: dict[uuid.UUID, str] = {}
+    for tss_id, metadata in conn.execute(
+        select(task_source_snapshot.c.task_source_snapshot_id, source_snapshot.c.metadata)
+        .select_from(
+            task_source_snapshot.join(
+                source_snapshot,
+                source_snapshot.c.source_snapshot_id == task_source_snapshot.c.source_snapshot_id,
+            )
+        )
+        .where(task_source_snapshot.c.task_id == task_id)
+        .where(task_source_snapshot.c.task_source_snapshot_id.in_(tss_ids))
+    ):
+        meta = metadata if isinstance(metadata, Mapping) else {}
+        years[tss_id] = _metadata_year(meta)
+        title = meta.get("title")
+        if isinstance(title, str) and title.strip():
+            titles[tss_id] = " ".join(title.split())
+    return years, titles
+
+
+def _metadata_year(metadata: Mapping[str, Any]) -> int | None:
+    """The four-digit publication year of a document's metadata (the read side's rule)."""
+    for key in ("publication_year", "year", "publication_date", "published"):
+        value = metadata.get(key)
+        if isinstance(value, int) and not isinstance(value, bool):
+            return value
+        if isinstance(value, str) and re.match(r"\d{4}", value.strip()):
+            return int(value.strip()[:4])
+    return None
+
+
+def _checked_places(response: Any) -> Mapping[str, Any] | None:
+    """A place-sentence answer, checked; ``None`` when malformed (S31).
+
+    Malformed: not a :class:`PlaceSentencesResponse`, or one place id twice.
+    """
+    if not isinstance(response, PlaceSentencesResponse):
+        return None
+    ids = [wire.place_id.strip() for wire in response.places]
+    if len(ids) != len(set(ids)):
+        return None
+    return {"places": {pid: wire.sentence for pid, wire in zip(ids, response.places, strict=True)}}
+
+
+def _checked_places_within_ceiling(response: Any) -> Mapping[str, Any] | None:
+    """The place-sentence check for the first attempt: an answer with a
+    sentence over the ceiling is refused once, so the retry can come in under
+    it (loop 26L, round 3); the last attempt accepts it and the ceiling check
+    then replaces that sentence with the template."""
+    value = _checked_places(response)
+    if value is None:
+        return None
+    places = value.get("places") or {}
+    if any(len(str(text).strip()) > PLACE_SENTENCE_MAX_CHARS for text in places.values()):
+        return None
+    return value
+
+
+
+def _place_sentence_wave(
+    conn: Connection,
+    backend: LonglistBackend,
+    *,
+    task_id: uuid.UUID,
+    options: Sequence[_ProfiledOption],
+    membership: MembershipRead,
+    folds: Mapping[str, Mapping[str, str]],
+    plan: Mapping[str, object],
+    where_country: str | None,
+    usage: UsageAccumulator,
+) -> tuple[dict[str, list[dict[str, Any]]], dict[str, Any]]:
+    """The place sentences of every option given (task 046, amendment 4, R80; S31).
+
+    Per option, its evaluating documents grouped by place
+    (:func:`~.place_sentences.group_places`, the Where country first); one call
+    per option with at least one, in a pool of
+    :data:`OPTION_PROFILE_MAX_CONCURRENT`, each tried once more. Per place:
+    the answer's sentence, stripped, when it is within
+    :data:`~.place_sentences_prompt.PLACE_SENTENCE_MAX_CHARS` and passes the
+    trace check; else the template. A place the answer leaves out (or answers
+    blank) keeps the template; an id not in the input is dropped; a call that
+    raises or answers malformed twice leaves the option on templates. It
+    never raises.
+
+    Returns:
+        ``({option_id: [{"place", "sentence", "generated", "where"}]}, stats)``;
+        an option with no evaluating document maps to ``[]``.
+    """
+    started = time.monotonic()
+    outcomes = plan.get("outcomes")
+    plan_outcomes = (
+        [o for o in outcomes if isinstance(o, str)] if isinstance(outcomes, list) else []
+    )
+    target = plan.get("target_unit")
+    target_unit = target if isinstance(target, str) else None
+    vocabulary = vocabulary_from_folds(folds)
+    members = [m for o in options for m in membership.members.get(o.option_id, [])]
+    years, titles = _document_meta(
+        conn, task_id=task_id, tss_ids={m.tss_id for m in members if m.tss_id is not None}
+    )
+    groups: dict[str, list[PlaceGroup]] = {}
+    for o in options:
+        option_members = membership.members.get(o.option_id, [])
+        documents = from_membership(
+            option_members,
+            labels=membership.labels,
+            folds=folds,
+            plan_outcomes=plan_outcomes,
+            programme_fold=fold_programme_names(
+                name
+                for m in option_members
+                if m.programme_name is not None and (name := " ".join(m.programme_name.split()))
+            ),
+            year_by_tss=years,
+            title_by_tss=titles,
+        )
+        groups[str(o.option_id)] = group_places(documents, where_country=where_country)
+    called = [o for o in options if groups[str(o.option_id)]]
+
+    def _call(o: _ProfiledOption) -> Callable[[], UsageResult[Any]]:
+        data = call_input(o.label, o.description, plan, vocabulary, groups[str(o.option_id)])
+        return lambda: backend.place_sentences(**data)
+
+    with ThreadPoolExecutor(max_workers=OPTION_PROFILE_MAX_CONCURRENT) as pool:
+        futures = {
+            str(o.option_id): tracing.submit_with_context(
+                pool,
+                _profile_call,
+                f"place sentences {o.option_id}",
+                _call(o),
+                _checked_places_within_ceiling,
+                final_check=_checked_places,
+            )
+            for o in called
+        }
+        answers = {option_id: future.result() for option_id, future in futures.items()}
+    stats: dict[str, Any] = {
+        "calls": len(called),
+        "retries": 0,
+        "options_without_evaluations": len(options) - len(called),
+        "generated": 0,
+        "template": 0,
+        "failed_trace": 0,
+        "failed_length": 0,
+        "failed_call": 0,
+    }
+    sentences: dict[str, list[dict[str, Any]]] = {}
+    for o in options:
+        option_id = str(o.option_id)
+        outcome = answers.get(option_id)
+        answered: Mapping[str, str] | None = None
+        if outcome is not None:
+            for call_usage in outcome.usages:
+                usage.add(call_usage)
+            stats["retries"] += outcome.attempts - 1
+            if outcome.value is None:
+                stats["failed_call"] += 1
+                log.warning("option_profile.place_sentences_failed", option_id=option_id)
+            else:
+                answered = outcome.value["places"]
+        entries: list[dict[str, Any]] = []
+        for group in groups[option_id]:
+            sentence = (answered or {}).get(group.place_id, "").strip()
+            generated = False
+            if sentence and len(sentence) > PLACE_SENTENCE_MAX_CHARS:
+                stats["failed_length"] += 1
+                log.info(
+                    "option_profile.place_sentence_too_long",
+                    option_id=option_id,
+                    place=group.place,
+                    length=len(sentence),
+                    sentence=sentence[:300],
+                )
+            elif sentence:
+                rule = trace_check(
+                    sentence,
+                    group,
+                    plan_outcomes=plan_outcomes,
+                    vocabulary=vocabulary,
+                    target_unit=target_unit,
+                )
+                if rule is None:
+                    generated = True
+                else:
+                    stats["failed_trace"] += 1
+                    log.info(
+                        "option_profile.place_sentence_trace_failed",
+                        option_id=option_id,
+                        place=group.place,
+                        rule=rule,
+                        sentence=sentence[:240],
+                    )
+            stats["generated" if generated else "template"] += 1
+            entries.append(
+                {
+                    "place": group.place,
+                    "sentence": (
+                        sentence
+                        if generated
+                        else template_sentence(group, target_unit=target_unit)
+                    ),
+                    "generated": generated,
+                    "where": group.is_where,
+                }
+            )
+        sentences[option_id] = entries
+    stats["seconds"] = round(time.monotonic() - started, 2)
+    log.info("option_profile.place_sentences", **stats)
+    return sentences, stats
 
 
 def _mark_counts(answers: Mapping[str, _Line]) -> dict[str, int]:
