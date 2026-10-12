@@ -1310,6 +1310,20 @@ back from a saved file (named beside it) or a database query. The round
 records and the readback scripts are local (`evidence/rounds/`,
 `evidence/pre-contract-runs/`, gitignored).
 
+**Step 6 exit, 2026-10-12: complete.** The build skill's phase-exit list
+holds: `make verify` green on the committed code tree (`gate-31.log`,
+exit 0); the end-to-end flow driven on three new live tasks and recorded
+with its exact command (§ End-to-end command); this record complete; every
+plan checkpoint committed (`8834dfe8` to `9c7ab244`, one commit per phase
+or per shared gated tree, § Commits). Three loops (27, 28, 26L) ended
+without their stop measure: by contract R26 (owner-accepted) a loop stops
+when its measures pass or after five rounds and the lead then stops and
+reports, and by R25 the owner decides if the stage is good at review; the
+figures and the residual families are in § The refine loops and § Review
+handoff. M18 is met; M1 and M2 pass on the live runs. The review stack is
+step 7 and runs in a fresh conversation, as the skill's phase exit
+requires ("do not run the review stack here").
+
 ### Commands run (the gates)
 
 The gate of each phase ran on a **snapshot of the git index** in the second
