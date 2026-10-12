@@ -94,7 +94,7 @@ footer { margin-top: 3.5rem; padding-top: 1rem; border-top: 1px solid var(--line
 <header class="masthead wrap">
   <div class="eyebrow">Policy Atlas · evidence search · task 051 · as built, October 2026</div>
   <h1>How search and screening work</h1>
-  <p class="lede">This page explains what the app does when a user asks it to find evidence for a research question, and how it then decides which of the documents it found are worth keeping. In short: the question is turned into a handful of database searches; the papers those searches return are used to find more papers through their citations; the whole pool is ordered so that the most relevant, the most cited and the most recent papers come first; the top of the list is kept, more or less of it depending on the scope the user chose; and a language model then reads each kept document and says whether it is relevant. Every number on this page is either read from the code or measured on a test set of published reviews; the measured ones say when they were measured.</p>
+  <p class="lede">This page explains what the app does when a user asks it to find evidence for a research question, and how it then decides which of the documents it found are worth keeping. In short: the question is turned into a handful of database searches; the papers those searches return are used to find more papers through their citations; the whole pool is ordered so that the most relevant, the most cited and the most recent papers come first; the top of the list is kept, more or less of it depending on the scope the user chose; and a language model then reads each kept document and says whether it is relevant.</p>
   <div class="tiles" role="list">
     <div class="tile" role="listitem"><div class="num">1</div><div class="lab">search method, the same at every scope. The three scopes differ only in how many documents they keep</div></div>
     <div class="tile" role="listitem"><div class="num accent">100 · 200 · 400</div><div class="lab">papers kept at Focused, Broad, Broadest; policy documents 50 · 100 · 200</div></div>
@@ -133,15 +133,15 @@ footer { margin-top: 3.5rem; padding-top: 1rem; border-top: 1px solid var(--line
 
         <rect x="20" y="145" width="440" height="100" rx="6" fill="var(--c-paper)" fill-opacity=".14" stroke="var(--c-paper)" stroke-width="1.5"/>
         <text x="32" y="168" font-weight="600">OpenAlex seeds · 23 calls</text><text x="448" y="168" text-anchor="end" font-size="11" fill="var(--grey)">search, search_semantic</text>
-        <text x="32" y="190" font-size="11">5 queries, each as written, as reviews only, as trials only: 15 calls of 200;</text>
-        <text x="32" y="206" font-size="11">the question, 2 paraphrases, 5 queries to the meaning search: 8 calls of 50</text>
-        <text x="32" y="228" font-size="12" font-weight="600">top of each list in turn until 200 different papers: the seeds</text>
+        <text x="32" y="190" font-size="11">5 generated queries × 3 forms (plain, reviews-only, trials-only): 15 keyword calls × 200</text>
+        <text x="32" y="206" font-size="11">the question + 2 paraphrases + the 5 queries to the embedding search: 8 calls × 50</text>
+        <text x="32" y="228" font-size="11" font-weight="600">rank-merge the 23 lists (top of each in turn); the first 200 distinct papers are the seeds</text>
 
         <rect x="520" y="145" width="440" height="100" rx="6" fill="var(--c-policy)" fill-opacity=".14" stroke="var(--c-policy)" stroke-width="1.5"/>
         <text x="532" y="168" font-weight="600">Overton results · 3 calls</text><text x="948" y="168" text-anchor="end" font-size="11" fill="var(--grey)">search, sort=relevance</text>
-        <text x="532" y="190" font-size="11">the question and its 2 paraphrases, 134 documents each, best matches first,</text>
-        <text x="532" y="206" font-size="11">lists merged top-first in turn; a repeated title keeps its best-ranked copy</text>
-        <text x="532" y="228" font-size="12" font-weight="600">each record lists the policy documents it cites, at no extra cost</text>
+        <text x="532" y="190" font-size="11">the question + 2 paraphrases, best-match order, 134 documents each (3 pages × 50)</text>
+        <text x="532" y="206" font-size="11">rank-merged; a repeated title (normalised) keeps only its best-ranked copy</text>
+        <text x="532" y="228" font-size="11" font-weight="600">each record already lists the policy documents it cites: no extra calls</text>
 
         <g stroke="currentColor" stroke-width="1.5" marker-end="url(#arr)">
           <line x1="125" y1="245" x2="125" y2="275"/><line x1="350" y1="245" x2="350" y2="275"/><line x1="740" y1="245" x2="740" y2="275"/>
@@ -149,62 +149,63 @@ footer { margin-top: 3.5rem; padding-top: 1rem; border-top: 1px solid var(--line
 
         <rect x="20" y="280" width="210" height="100" rx="6" fill="var(--c-land)" fill-opacity=".14" stroke="var(--c-land)" stroke-width="1.5"/>
         <text x="32" y="303" font-weight="600">Backward snowball</text>
-        <text x="32" y="323" font-size="12">count how many of the seeds cite</text>
-        <text x="32" y="339" font-size="12">each paper; fetch the 200 cited most</text>
-        <text x="32" y="355" font-size="12">often that are not seeds, 50 per call</text>
+        <text x="32" y="323" font-size="11">from the seeds' reference lists, count</text>
+        <text x="32" y="339" font-size="11">how many seeds cite each one; fetch</text>
+        <text x="32" y="355" font-size="11">the 200 most cited non-seeds, 50 a call</text>
         <text x="32" y="372" font-size="11" fill="var(--grey)">lookup_ids · 4 calls</text>
 
         <rect x="245" y="280" width="215" height="100" rx="6" fill="var(--c-land)" fill-opacity=".14" stroke="var(--c-land)" stroke-width="1.5"/>
         <text x="257" y="303" font-weight="600">Forward chasing</text>
-        <text x="257" y="323" font-size="11">for the 20 seeds other seeds cite most</text>
-        <text x="257" y="339" font-size="11">(skipping any cited 300+ times), fetch the</text>
-        <text x="257" y="355" font-size="11">papers citing them; keep the best 200</text>
+        <text x="257" y="323" font-size="11">the 20 seeds most cited by other seeds,</text>
+        <text x="257" y="339" font-size="11">each cited ≤300 times in all: fetch the</text>
+        <text x="257" y="355" font-size="11">papers citing them; keep the 200 best-linked</text>
         <text x="257" y="372" font-size="11" fill="var(--grey)">fetch_citing · up to 10 pages of 200</text>
 
         <rect x="520" y="280" width="450" height="100" rx="6" fill="var(--c-land)" fill-opacity=".14" stroke="var(--c-land)" stroke-width="1.5"/>
         <text x="532" y="303" font-weight="600">Landmarks</text><text x="958" y="303" text-anchor="end" font-size="11" fill="var(--grey)">fetch_by_id · 15 calls</text>
-        <text x="532" y="323" font-size="12">count the policy documents the results cite; fetch the 15 cited most</text>
-        <text x="532" y="339" font-size="12">often that the search missed. (Overton also lists the academic papers</text>
-        <text x="532" y="355" font-size="12">each document cites; those are not fetched, by product decision.)</text>
+        <text x="532" y="323" font-size="12">count the policy documents the results cite; fetch by id the 15 cited</text>
+        <text x="532" y="339" font-size="12">most that the search did not return. The academic papers Overton says</text>
+        <text x="532" y="355" font-size="12">each document cites are not fetched: the paper pool is OpenAlex only.</text>
 
         <g stroke="currentColor" stroke-width="1.5" marker-end="url(#arr)">
           <line x1="125" y1="380" x2="125" y2="410"/><line x1="350" y1="380" x2="350" y2="410"/><line x1="800" y1="380" x2="800" y2="410"/>
         </g>
 
         <rect x="20" y="415" width="440" height="140" rx="6" fill="var(--c-paper)" fill-opacity=".14" stroke="var(--c-paper)" stroke-width="1.5"/>
-        <text x="32" y="438" font-weight="600">Remove duplicate copies, order, then cut</text><text x="448" y="438" text-anchor="end" font-size="11" fill="var(--grey)">pool.dedupe_papers · pool.rank_mix</text>
-        <text x="32" y="455" font-size="11">one copy per paper (same title and authors); then one at a time from:</text>
+        <text x="32" y="438" font-weight="600">De-duplicate, order, then cut</text><text x="448" y="438" text-anchor="end" font-size="11" fill="var(--grey)">pool.dedupe_papers · pool.rank_mix</text>
+        <text x="32" y="455" font-size="11">same title + authors → one copy (the most cited); then one from each list in turn:</text>
         <g font-size="11">
           <rect x="32" y="463" width="132" height="48" rx="4" fill="var(--ground)" stroke="var(--c-paper)"/>
           <text x="98" y="479" text-anchor="middle" font-weight="600">relevant</text>
-          <text x="98" y="492" text-anchor="middle" font-size="10">high in several searches,</text>
-          <text x="98" y="504" text-anchor="middle" font-size="10">or cites many seeds</text>
+          <text x="98" y="492" text-anchor="middle" font-size="10">reciprocal rank fusion:</text>
+          <text x="98" y="504" text-anchor="middle" font-size="10">query lists + cites seeds</text>
           <rect x="174" y="463" width="132" height="48" rx="4" fill="var(--ground)" stroke="var(--c-paper)"/>
           <text x="240" y="479" text-anchor="middle" font-weight="600">established</text>
-          <text x="240" y="492" text-anchor="middle" font-size="10">cited by the</text>
-          <text x="240" y="504" text-anchor="middle" font-size="10">most seeds</text>
+          <text x="240" y="492" text-anchor="middle" font-size="10">most cited by seeds,</text>
+          <text x="240" y="504" text-anchor="middle" font-size="10">then by all citations</text>
           <rect x="316" y="463" width="132" height="48" rx="4" fill="var(--ground)" stroke="var(--c-paper)"/>
           <text x="382" y="479" text-anchor="middle" font-weight="600">recent</text>
-          <text x="382" y="492" text-anchor="middle" font-size="10">published in</text>
-          <text x="382" y="504" text-anchor="middle" font-size="10">the last 5 years</text>
+          <text x="382" y="492" text-anchor="middle" font-size="10">published in the last</text>
+          <text x="382" y="504" text-anchor="middle" font-size="10">5 years, by relevance</text>
         </g>
-        <text x="32" y="528" font-size="11" fill="var(--grey)">any paper left over follows, ordered by how tied it is to the seeds</text>
+        <text x="32" y="528" font-size="11" fill="var(--grey)">rest by tie score = (cited by seeds + cites seeds) ÷ log10(citations + 10)</text>
         <text x="32" y="546" font-size="13" font-weight="700">keep the first 100 · 200 · 400 papers</text>
 
         <rect x="520" y="415" width="440" height="85" rx="6" fill="var(--c-policy)" fill-opacity=".14" stroke="var(--c-policy)" stroke-width="1.5"/>
         <text x="532" y="438" font-weight="600">Order policy documents by citations, then cut</text><text x="948" y="438" text-anchor="end" font-size="11" fill="var(--grey)">pool.rank_policy</text>
-        <text x="532" y="456" font-size="12">cited by most other results first; widely cited ones discounted</text>
-        <text x="532" y="471" font-size="11" fill="var(--grey)">ties broken by the search order; landmarks come after the search results</text>
+        <text x="532" y="456" font-size="11">tie score = citations from the other results ÷ log10(total citations + 10)</text>
+        <text x="532" y="471" font-size="11" fill="var(--grey)">ties by that citation count, then search order; landmarks after results</text>
         <text x="532" y="491" font-size="13" font-weight="700">keep the first 50 · 100 · 200 policy documents</text>
 
         <line x1="240" y1="555" x2="430" y2="588" stroke="currentColor" stroke-width="1.5" marker-end="url(#arr)"/>
         <line x1="740" y1="500" x2="550" y2="588" stroke="currentColor" stroke-width="1.5" marker-end="url(#arr)"/>
         <rect x="260" y="593" width="460" height="55" rx="6" fill="var(--c-sem)" fill-opacity=".12" stroke="var(--c-sem)" stroke-width="1.5"/>
         <text x="490" y="616" text-anchor="middle" font-weight="600">Screen once · gpt-5.6-luna · prompt screen_v4</text>
-        <text x="490" y="636" text-anchor="middle" font-size="12">one call per document; a second only after "not relevant" (Diagram B)</text>
+        <text x="490" y="636" text-anchor="middle" font-size="11">1 call per document; a 2nd only after "not relevant"; relevant or unsure keeps (Diagram B)</text>
       </g>
     </svg>
-    <figcaption><b>One method, every scope.</b> The green boxes are citation lookups, which cost nothing; the only language-model calls are the query generation at the top and the screen at the bottom. Each search has a budget of calls per database (45 to OpenAlex per set of filters, 30 to Overton); a call that has to fetch several pages or retry still counts once. Every call is recorded with the reason it was made. After the screen, the rest of the app's chain (classify, appraise, and so on) runs as before.</figcaption>
+    <figcaption><b>One method, every scope.</b> The green boxes are citation lookups, which cost nothing; the only language-model calls are the query generation at the top and the screen at the bottom. Each search has a budget of calls per database (45 to OpenAlex per set of filters, 30 to Overton); a call that fetches several pages or retries still counts once. Every call is recorded with the reason it was made. After the screen, the rest of the app's chain (classify, appraise, and so on) runs as before.
+    <br><br><b>Terms.</b> <b>Seeds</b>: the 200 papers the 23 OpenAlex calls return, merged by rank. <b>Backward snowball</b>: papers the seeds cite. <b>Forward chasing</b>: papers that cite the seeds. <b>Landmarks</b>: policy documents the Overton results cite but the search did not return. <b>Reciprocal rank fusion</b>: a standard way to merge ranked lists; a paper scores 1 ÷ (60 + its position) in every list that holds it, summed, so a paper near the top of several lists scores highest. The lists fused are the 23 query result lists plus the pool ordered by how many seeds each paper cites, that last list counted three times. <b>Tie score</b> (called specificity in the code): how strongly a document is tied to this search, from the citations between it and the search's own results, divided by the log of its total citation count so that a paper cited by everything is not favoured for that alone. Papers use it only for whatever the three lists leave over; policy documents are ordered by it directly. <b>Normalised title</b>: lower case, punctuation removed, so the same title in two spellings counts once.</figcaption>
   </figure>
 </section>
 
