@@ -1167,6 +1167,7 @@ class _LegSummary:
     seeds: int = 0
     backward_targets: int = 0
     forward_candidates: int = 0
+    duplicate_papers: int = 0
     landmarks: int = 0
 
 
@@ -1340,9 +1341,14 @@ def _openalex_leg(
     forward = forward[: pool.FORWARD_KEEP]
     summary.forward_candidates = len(forward)
 
-    # 7. One ranked pool over seeds, backward and forward candidates.
+    # 7. One pool over seeds, backward and forward candidates: duplicate copies
+    #    of a paper (same title and authors) dropped, then the relevant /
+    #    seminal / novel mix so every cut holds all three (ADR 0038, amended).
     seeded = [(record, search.origin_of[id(record)][0]) for record in seeds]
-    ranked = pool.rank_papers(pool.paper_candidates(seeded, backward, forward, counts))
+    cands = pool.paper_candidates(seeded, backward, forward, counts)
+    unique = pool.dedupe_papers(cands)
+    summary.duplicate_papers = len(cands) - len(unique)
+    ranked = pool.rank_mix(unique, lists, novel_from_year=date.today().year - pool.NOVEL_YEARS)
     return search.entries([c.record for c in ranked], "openalex"), summary, local_filters
 
 
@@ -1576,6 +1582,7 @@ def run_search(
         "seeds": legs["openalex"].seeds if "openalex" in legs else 0,
         "backward_targets": legs["openalex"].backward_targets if "openalex" in legs else 0,
         "forward_candidates": legs["openalex"].forward_candidates if "openalex" in legs else 0,
+        "duplicate_papers": legs["openalex"].duplicate_papers if "openalex" in legs else 0,
         "landmarks": legs["overton"].landmarks if "overton" in legs else 0,
         "pool_sizes": {name: len(pools.get(name, [])) for name in names},
     }

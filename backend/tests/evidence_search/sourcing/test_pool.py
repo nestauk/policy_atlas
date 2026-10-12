@@ -8,14 +8,17 @@ from pathlib import Path
 from typing import Any
 
 from policy_atlas.evidence_search.sourcing.pool import (
+    PaperCandidate,
     backward_targets,
     count_references,
     country_predicate,
+    dedupe_papers,
     forward_seeds,
     interleave,
     normalised_title,
     paper_candidates,
     policy_key,
+    rank_mix,
     rank_papers,
     score_forward,
 )
@@ -150,3 +153,93 @@ def test_country_predicate_is_case_insensitive_and_fails_closed() -> None:
     assert country_predicate({"authorships": [{"countries": ["gb"]}]}, {"GB"})
     assert not country_predicate({"authorships": [{"countries": ["US"]}]}, {"gb"})
     assert not country_predicate({}, {"GB"})
+
+
+def _cand(work_id: str, **fields: Any) -> PaperCandidate:
+    record = {
+        "id": f"https://openalex.org/{work_id}",
+        "display_name": fields.pop("title", work_id),
+        "publication_year": fields.pop("year", 2010),
+        "authorships": [
+            {"author": {"display_name": name}} for name in fields.pop("authors", ["A Author"])
+        ],
+    }
+    cited = fields.pop("cited", 0)
+    inset = fields.pop("inset", 0)
+    return PaperCandidate(
+        record=record,
+        origin=fields.pop("origin", "generated"),
+        seed_rank=fields.pop("seed_rank", 0),
+        inset=inset,
+        coupling=fields.pop("coupling", 0),
+        wcoupling=fields.pop("wcoupling", 0.0),
+        forward_rank=0,
+        cited_by_count=cited,
+        specificity=fields.pop("specificity", float(inset)),
+    )
+
+
+def test_dedupe_papers_needs_same_title_and_authors_and_keeps_the_cited_copy() -> None:
+    """A preprint and its journal copy collapse to the cited copy; other authors stay."""
+    preprint = _cand("W1", title="Criticality in networks", cited=0, seed_rank=0)
+    journal = _cand("W2", title="Criticality in Networks.", cited=36, seed_rank=5)
+    other_authors = _cand("W3", title="Criticality in networks", authors=["B Other"], cited=2)
+    untitled_a = _cand("W4", title="", cited=0)
+    untitled_b = _cand("W5", title="", cited=0)
+
+    kept = dedupe_papers([preprint, journal, other_authors, untitled_a, untitled_b])
+
+    assert [c.openalex_id for c in kept] == ["W2", "W3", "W4", "W5"]
+
+
+def test_rank_mix_alternates_relevant_seminal_and_novel_then_the_rest() -> None:
+    """Round-robin over the three strata, each paper once, specificity order for the rest."""
+    hit_twice = _cand("W1", year=2010, cited=5, inset=1, specificity=1.0)
+    hit_once = _cand("W2", year=2024, cited=1, inset=0, specificity=0.5)
+    seminal = _cand(
+        "W3", year=2003, cited=900, inset=40, specificity=20.0, origin="snowball_backward"
+    )
+    novel_graph = _cand(
+        "W4", year=2025, cited=0, inset=0, specificity=3.0, origin="snowball_forward"
+    )
+    old_graph = _cand(
+        "W5", year=1999, cited=10, inset=2, specificity=2.0, origin="snowball_backward"
+    )
+    lists = [[hit_twice.record, hit_once.record], [hit_twice.record]]
+
+    order = [
+        c.openalex_id
+        for c in rank_mix(
+            [old_graph, novel_graph, seminal, hit_once, hit_twice], lists, novel_from_year=2021
+        )
+    ]
+
+    # relevant W1, seminal W3, novel W2 (query-returned beats graph-only), relevant W2 taken,
+    # so next relevant is exhausted; seminal next is W5 (inset 2), novel W4, then the rest.
+    assert order == ["W1", "W3", "W2", "W5", "W4"]
+
+
+def test_rank_mix_counts_citing_the_seeds_as_three_query_lists() -> None:
+    """A paper no query returned but that cites many seeds joins the relevant stratum."""
+    hit_once = _cand("W1", year=2010, cited=5, inset=0)
+    couples = _cand(
+        "W2", year=2010, cited=0, inset=0, coupling=6, wcoupling=9.5, origin="snowball_forward"
+    )
+    seminal = _cand(
+        "W3", year=2003, cited=900, inset=40, specificity=20.0, origin="snowball_backward"
+    )
+    lists = [[hit_once.record]]
+
+    with_coupling = [
+        c.openalex_id for c in rank_mix([seminal, couples, hit_once], lists, novel_from_year=2021)
+    ]
+    without = [
+        c.openalex_id
+        for c in rank_mix(
+            [seminal, couples, hit_once], lists, novel_from_year=2021, coupling_lists=0
+        )
+    ]
+
+    # Three lists at rank 1 (3/61) beat one list at rank 1 (1/61): W2 leads relevant.
+    assert with_coupling == ["W2", "W3", "W1"]
+    assert without == ["W1", "W3", "W2"]

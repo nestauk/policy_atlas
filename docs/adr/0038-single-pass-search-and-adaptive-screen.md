@@ -49,7 +49,24 @@ it cites; the owner's decisions are in the task's `notes.md`.
 4. **Papers are ranked by specificity, then cut.** `specificity = (in-set citations +
    coupling) / log10(cited_by_count + 10)`, ties by weighted coupling, in-set count, seed
    rank; the first `papers_cap` distinct works after task-level dedup are persisted and
-   embedded. The pool is built in memory before persistence; `acquire_sources` takes
+   embedded. *Amended 2026-10-12 (task 052):* specificity alone let graph-found papers
+   push the question's most direct matches past the Focused cap (one case: the target
+   paper, returned by 9 of 33 queries, ranked 127 of 2,139). The pool is now first
+   de-duplicated (same normalised title and same author names, the most cited copy
+   kept, `pool.dedupe_papers`) and then ordered by `pool.rank_mix`: a round-robin over
+   three strata, one paper from each in turn — *relevant* (reciprocal rank fusion,
+   k = 60, over every keyword and semantic result list plus the pool ordered by
+   weighted coupling, "cites the seeds", that order counted as three lists, so a paper
+   that cites many seeds ranks as if a few queries had returned it), *seminal* (most
+   cited by the seed set, then globally) and *novel* (published in the last five
+   years, fused first). Papers the strata leave follow in
+   specificity order. Every cut depth therefore holds all three kinds. Chosen over a
+   single blended score because the guarantee holds at any cap, and over the
+   relevance reserve (deferred D6) because a broad query's raw results carry
+   off-topic papers into the reserve. Evidence: three pool re-orderings in
+   `scripts/evals/search/experiments/manual/2026-10-12-rank-mix-*.md` (not scored
+   against ground truth; the mini-set recall thresholds of task 051 have not been
+   re-measured under the mix yet). The pool is built in memory before persistence; `acquire_sources` takes
    two ranked pools and two caps and keeps its count invariant; `source.acquired` and
    `search.executed` carry `query_origin` (contract D6, D7).
 5. **Overton: relevance order, 400 documents, title dedup, policy snowball, cut.**

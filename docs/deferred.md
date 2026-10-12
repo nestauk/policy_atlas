@@ -2527,11 +2527,13 @@ Context: [ADR 0038](adr/0038-single-pass-search-and-adaptive-screen.md), contrac
 it cites. Fixed in passing, not a seam: Overton searches were sorted by date (no `sort`
 sent; found in task 049), now `sort=relevance` on every search, protected.
 
-- **Relevance reserve (D6, 🟡 unmeasured).** The experiment write-up proposed holding the
-  first 50 keyword results in their own order before the specificity-ranked pool, so a
-  query that matches exactly is not out-ranked by graph signals. Never implemented or
-  measured; the production cut is specificity only. Measure it on the mini set before
-  building: one flag on `rank_papers` and a recall row.
+- **Relevance reserve (D6, ✅ superseded 2026-10-12 by task 052).** The experiment
+  write-up proposed holding the first 50 keyword results in their own order before the
+  specificity-ranked pool. Tried offline on three questions
+  (`scripts/evals/search/experiments/manual/2026-10-12-rank-mix-*.md`): it carries a
+  broad query's off-topic results into the reserve. Replaced by the relevant / seminal /
+  novel round-robin (`pool.rank_mix`, ADR 0038 decision 4 as amended). Still open: the
+  mini-set recall thresholds of task 051 have not been re-measured under the mix.
 - **Similarity damping of the policy ranking (D8, 🟡 leaning, agreed in principle
   2026-10-07).** `(specificity + 0.5) × (similarity + 0.2)` with the document's title and
   excerpt embedded against the question (`policy_rank.py --embed`): by eye it demotes

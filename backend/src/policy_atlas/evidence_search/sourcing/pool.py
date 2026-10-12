@@ -29,6 +29,9 @@ FORWARD_KEEP = 200
 OVERTON_DOCS = 400
 OVERTON_LANDMARKS = 15
 SEED_RANK_SENTINEL = 10**6
+RRF_K = 60  # the usual constant for reciprocal rank fusion (Cormack, Clarke and Buettcher 2009)
+NOVEL_YEARS = 5  # a paper counts as novel when it is at most this many years old
+COUPLING_LISTS = 3  # how many query lists the "cites the seeds" order counts as in the fusion
 
 
 def short_id(openalex_id: str | None) -> str | None:
@@ -314,6 +317,152 @@ def rank_papers(cands: list[PaperCandidate]) -> list[PaperCandidate]:
             candidate.seed_rank,
         ),
     )
+
+
+def paper_key(record: dict[str, Any]) -> str:
+    """Identity for duplicate detection: the exact normalised title plus the author names.
+
+    OpenAlex often holds a preprint and the journal copy of one paper.  Two records
+    are the same paper only when the title and the full author list match; a shared
+    title with other authors (a common review title, say) stays two papers.
+
+    Args:
+        record: An OpenAlex work record.
+
+    Returns:
+        A comparison key, or the work id when the record has no title.
+    """
+    title = normalised_title(record.get("display_name"))
+    if not title:
+        return record_short_id(record) or ""
+    authors = sorted(
+        normalised_title((authorship.get("author") or {}).get("display_name"))
+        for authorship in record.get("authorships") or []
+    )
+    return title + "|" + ",".join(authors)
+
+
+def dedupe_papers(cands: list[PaperCandidate]) -> list[PaperCandidate]:
+    """Keep one copy per paper: the most cited, then the earliest seed, in input order.
+
+    Args:
+        cands: Candidates from every path, possibly holding the same paper twice.
+
+    Returns:
+        The candidates with the lesser copies removed, original order preserved.
+    """
+    best: dict[str, PaperCandidate] = {}
+    for candidate in sorted(cands, key=lambda c: (-c.cited_by_count, c.seed_rank)):
+        best.setdefault(paper_key(candidate.record), candidate)
+    kept = {id(candidate) for candidate in best.values()}
+    return [candidate for candidate in cands if id(candidate) in kept]
+
+
+def query_fusion(lists: list[list[dict[str, Any]]]) -> dict[str, float]:
+    """Score each work by reciprocal rank fusion over every query's result list.
+
+    A work returned near the top of many queries scores high; one returned once,
+    low down, scores little.  Works no query returned are absent.
+
+    Args:
+        lists: Keyword and semantic result lists in rank order.
+
+    Returns:
+        Fusion scores keyed by short OpenAlex work id.
+    """
+    scores: dict[str, float] = {}
+    for records in lists:
+        for rank, record in enumerate(records):
+            work_id = record_short_id(record)
+            if work_id:
+                scores[work_id] = scores.get(work_id, 0.0) + 1.0 / (RRF_K + rank + 1)
+    return scores
+
+
+def mix_strata(
+    cands: list[PaperCandidate],
+    lists: list[list[dict[str, Any]]],
+    *,
+    novel_from_year: int,
+    coupling_lists: int = COUPLING_LISTS,
+) -> tuple[list[PaperCandidate], list[PaperCandidate], list[PaperCandidate]]:
+    """Build the three ordered strata the mix draws from.
+
+    * relevant: papers with a fusion score, highest first.  The fusion runs over every
+      query's result list plus the pool ordered by weighted coupling ("cites the
+      seeds"), that order counted ``coupling_lists`` times, so a paper that cites
+      many seeds ranks as if a few queries had returned it;
+    * seminal: papers the seed set cites most, then the most cited globally;
+    * novel: papers from ``novel_from_year`` on, fused ones first, then the rest in
+      specificity order.
+
+    Args:
+        cands: De-duplicated candidates with graph signals.
+        lists: Every keyword and semantic result list.
+        novel_from_year: First publication year that counts as novel.
+        coupling_lists: Weight of the coupling order in the fusion; 0 leaves it out.
+
+    Returns:
+        The relevant, seminal and novel strata, each in its own order.
+    """
+    coupling_order = [
+        c.record for c in sorted(cands, key=lambda c: -c.wcoupling) if c.wcoupling > 0
+    ]
+    fusion = query_fusion([*lists, *([coupling_order] * coupling_lists)])
+    baseline = rank_papers(cands)
+
+    def score(candidate: PaperCandidate) -> float:
+        return fusion.get(candidate.openalex_id or "", 0.0)
+
+    def year(candidate: PaperCandidate) -> int:
+        return int(candidate.record.get("publication_year") or 0)
+
+    relevant = sorted((c for c in baseline if score(c) > 0), key=lambda c: -score(c))
+    seminal = sorted(baseline, key=lambda c: (-c.inset, -c.cited_by_count))
+    novel = [c for c in relevant if year(c) >= novel_from_year] + [
+        c for c in baseline if year(c) >= novel_from_year and score(c) == 0
+    ]
+    return relevant, seminal, novel
+
+
+def rank_mix(
+    cands: list[PaperCandidate],
+    lists: list[list[dict[str, Any]]],
+    *,
+    novel_from_year: int,
+    coupling_lists: int = COUPLING_LISTS,
+) -> list[PaperCandidate]:
+    """Order the pool so every cut holds relevant, seminal and novel papers.
+
+    The three strata of :func:`mix_strata` are read round-robin, one paper from each
+    in turn, skipping a paper already placed.  Papers left when the strata run dry
+    follow in specificity order.
+
+    Args:
+        cands: De-duplicated candidates with graph signals.
+        lists: Every keyword and semantic result list, for the fusion score.
+        novel_from_year: First publication year that counts as novel.
+        coupling_lists: Weight of the "cites the seeds" order in the fusion.
+
+    Returns:
+        The full pool in its final order.
+    """
+    strata = mix_strata(
+        cands, lists, novel_from_year=novel_from_year, coupling_lists=coupling_lists
+    )
+    out: list[PaperCandidate] = []
+    seen: set[int] = set()
+    cursors = [iter(stratum) for stratum in strata]
+    while cursors:
+        for cursor in list(cursors):
+            for candidate in cursor:
+                if id(candidate) not in seen:
+                    seen.add(id(candidate))
+                    out.append(candidate)
+                    break
+            else:
+                cursors.remove(cursor)
+    return out + [c for c in rank_papers(cands) if id(c) not in seen]
 
 
 def country_predicate(record: dict[str, Any], countries: set[str]) -> bool:

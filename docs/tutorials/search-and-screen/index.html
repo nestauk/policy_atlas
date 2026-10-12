@@ -94,7 +94,7 @@ footer { margin-top: 3.5rem; padding-top: 1rem; border-top: 1px solid var(--line
 <header class="masthead wrap">
   <div class="eyebrow">Policy Atlas · evidence search · task 051 · as built, October 2026</div>
   <h1>How search and screening work</h1>
-  <p class="lede">What the app does when it searches for evidence and screens the results, as built in task 051: one search method at every scope, built from generated queries plus free citation chasing on both databases, ranked by specificity and cut at a scope-dependent size; then one cheap, recall-first screen. Every number on this page is either read from the code or measured against ground truth; the measured ones say when.</p>
+  <p class="lede">What the app does when it searches for evidence and screens the results, as built in task 051: one search method at every scope, built from generated queries plus free citation chasing on both databases, ranked so the cut holds the most relevant, the seminal and the newest papers (task 052; specificity alone before that) and cut at a scope-dependent size; then one cheap, recall-first screen. Every number on this page is either read from the code or measured against ground truth; the measured ones say when.</p>
   <div class="tiles" role="list">
     <div class="tile" role="listitem"><div class="num">1</div><div class="lab">search pass at every scope. The three scopes differ only in how many documents they keep</div></div>
     <div class="tile" role="listitem"><div class="num accent">100 · 200 · 400</div><div class="lab">papers kept at Focused, Broad, Broadest; policy documents 50 · 100 · 200</div></div>
@@ -120,7 +120,8 @@ footer { margin-top: 3.5rem; padding-top: 1rem; border-top: 1px solid var(--line
       <tr><td>Seeds</td><td>the first 200 of <code>pool.interleave</code></td><td>The papers the searches return before any citation chasing.</td></tr>
       <tr><td>Backward snowball, forward chasing</td><td><code>lookup_ids</code>, <code>fetch_citing</code></td><td>Papers the seeds cite, and papers that cite the seeds. Free: no language model.</td></tr>
       <tr><td>Landmarks</td><td><code>fetch_by_id</code>, origin <code>landmark</code></td><td>Policy documents the Overton results cite most but the search did not return.</td></tr>
-      <tr><td>Specificity</td><td><code>pool.rank_papers</code>, <code>pool.rank_policy</code></td><td>How tied a candidate is to this search's results, damped by how widely it is cited overall. The ranking the cut is made on.</td></tr>
+      <tr><td>Specificity</td><td><code>pool.rank_papers</code>, <code>pool.rank_policy</code></td><td>How tied a candidate is to this search's results, damped by how widely it is cited overall. The ranking the policy cut is made on, and the fallback order for papers.</td></tr>
+      <tr><td>Mix</td><td><code>pool.rank_mix</code>, <code>pool.dedupe_papers</code></td><td>Since task 052: duplicate copies of a paper (same title and authors) dropped, then papers taken in turn from three lists — most relevant (returned by many queries near the top, or citing many of the seeds), seminal (most cited by the seeds), novel (last five years) — so every cut holds all three.</td></tr>
       <tr><td>Screening</td><td><code>screen_abstract</code> (stage 1), <code>screen_full</code> (stage 2)</td><td>A language model reads each kept document and says relevant, not relevant, or unsure. Stage 1 is the adaptive vote on this page; stage 2 is unchanged.</td></tr>
       <tr><td>Research question</td><td><code>intent</code></td><td>The sentence the user wrote, plus any screening criteria from the plan.</td></tr>
       <tr><td>Recall</td><td>&nbsp;</td><td>The share of a published review's reference list that the search found, scored on DOIs (Digital Object Identifiers, the permanent ids of papers). The mini ground truth has 15 reviews, the full one 100. It measures papers only.</td></tr>
@@ -136,7 +137,7 @@ footer { margin-top: 3.5rem; padding-top: 1rem; border-top: 1px solid var(--line
 
 <section class="wide">
   <figure>
-    <svg viewBox="0 0 980 600" role="img" aria-label="The question goes to one query-generation call. OpenAlex receives fifteen keyword calls and eight semantic calls, interleaved by rank to two hundred seeds; Overton receives three searches in relevance order, four hundred documents, de-duplicated by title. The seeds' reference lists feed a backward snowball of four resolve calls and a forward chase of up to ten pages; the Overton results' cited documents become fifteen landmark fetches. Papers are ranked by specificity and cut at the papers cap; policy documents are ranked by in-set citations and cut at the policy cap. Everything kept is screened once.">
+    <svg viewBox="0 0 980 600" role="img" aria-label="The question goes to one query-generation call. OpenAlex receives fifteen keyword calls and eight semantic calls, interleaved by rank to two hundred seeds; Overton receives three searches in relevance order, four hundred documents, de-duplicated by title. The seeds' reference lists feed a backward snowball of four resolve calls and a forward chase of up to ten pages; the Overton results' cited documents become fifteen landmark fetches. Papers are de-duplicated, mixed relevant, seminal and novel in turn, and cut at the papers cap; policy documents are ranked by in-set citations and cut at the policy cap. Everything kept is screened once.">
       <defs><marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="currentColor"/></marker></defs>
       <g font-family="inherit" font-size="13">
         <rect x="20" y="30" width="140" height="70" rx="6" fill="var(--ground)" stroke="currentColor"/>
@@ -192,9 +193,9 @@ footer { margin-top: 3.5rem; padding-top: 1rem; border-top: 1px solid var(--line
         </g>
 
         <rect x="20" y="415" width="440" height="85" rx="6" fill="var(--c-paper)" fill-opacity=".14" stroke="var(--c-paper)" stroke-width="1.5"/>
-        <text x="32" y="438" font-weight="600">Rank papers by specificity, then cut</text><text x="448" y="438" text-anchor="end" font-size="11" fill="var(--grey)">pool.rank_papers</text>
-        <text x="32" y="456" font-size="12">(in-set citations + coupling) ÷ log10(global citations + 10)</text>
-        <text x="32" y="471" font-size="11" fill="var(--grey)">ties by weighted coupling, then in-set citations, then seed rank</text>
+        <text x="32" y="438" font-weight="600">Drop duplicate copies, mix, then cut</text><text x="448" y="438" text-anchor="end" font-size="11" fill="var(--grey)">pool.dedupe_papers · pool.rank_mix</text>
+        <text x="32" y="456" font-size="12">in turn: relevant (rank fusion: queries + cites the seeds) · seminal (in-set citations) · novel (last 5 years)</text>
+        <text x="32" y="471" font-size="11" fill="var(--grey)">the rest by specificity: (in-set + coupling) ÷ log10(global citations + 10)</text>
         <text x="32" y="491" font-size="13" font-weight="700">keep the first papers cap: 100 · 200 · 400</text>
 
         <rect x="520" y="415" width="440" height="85" rx="6" fill="var(--c-policy)" fill-opacity=".14" stroke="var(--c-policy)" stroke-width="1.5"/>
@@ -318,7 +319,7 @@ footer { margin-top: 3.5rem; padding-top: 1rem; border-top: 1px solid var(--line
   <div class="didnt">
     <div><b>Reformulation for Broadest.</b> Search, screen, reformulate from screened exemplars, one more search: +3.9 points at the ceiling (experiment 4). The one arm with measured value. Parked in <code>docs/deferred.md</code>; its orchestration is at the tag.</div>
     <div><b>Similarity damping of the policy ranking.</b> Agreed in principle; needs about 5 embedding calls before the cut and its measured numbers are without it.</div>
-    <div><b>The relevance reserve.</b> Holding the first 50 keyword results in their own order ahead of the ranked pool. Never measured; not built.</div>
+    <div><b>The relevance reserve.</b> Holding the first 50 keyword results in their own order ahead of the ranked pool. Tried offline in task 052 and replaced by the relevant / seminal / novel mix.</div>
     <div><b>Seminal-decile recall as an eval score.</b> The experiment script reports it; the production check does not yet.</div>
     <div><b>Overton records with a placeholder title</b> and <b><code>source_country</code> as a plan option.</b> Out of this slice.</div>
   </div>
