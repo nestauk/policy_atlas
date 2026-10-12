@@ -94,13 +94,13 @@ footer { margin-top: 3.5rem; padding-top: 1rem; border-top: 1px solid var(--line
 <header class="masthead wrap">
   <div class="eyebrow">Policy Atlas · evidence search · task 051 · as built, October 2026</div>
   <h1>How search and screening work</h1>
-  <p class="lede">What the app does when it searches for evidence and screens the results, as built in task 051: one search method at every scope, built from generated queries plus free citation chasing on both databases, ranked so the cut holds the most relevant, the seminal and the newest papers (task 052; specificity alone before that) and cut at a scope-dependent size; then one cheap, recall-first screen. Every number on this page is either read from the code or measured against ground truth; the measured ones say when.</p>
+  <p class="lede">This page explains what the app does when a user asks it to find evidence for a research question, and how it then decides which of the documents it found are worth keeping. In short: the question is turned into a handful of database searches; the papers those searches return are used to find more papers through their citations; the whole pool is ordered so that the most relevant, the most cited and the most recent papers come first; the top of the list is kept, more or less of it depending on the scope the user chose; and a language model then reads each kept document and says whether it is relevant. Every number on this page is either read from the code or measured on a test set of published reviews; the measured ones say when they were measured.</p>
   <div class="tiles" role="list">
-    <div class="tile" role="listitem"><div class="num">1</div><div class="lab">search pass at every scope. The three scopes differ only in how many documents they keep</div></div>
+    <div class="tile" role="listitem"><div class="num">1</div><div class="lab">search method, the same at every scope. The three scopes differ only in how many documents they keep</div></div>
     <div class="tile" role="listitem"><div class="num accent">100 · 200 · 400</div><div class="lab">papers kept at Focused, Broad, Broadest; policy documents 50 · 100 · 200</div></div>
-    <div class="tile" role="listitem"><div class="num accent" data-phase8="search_recall_standard">19.7%</div><div class="lab">of a review's reference list found by a Broad search (live check of 2026-10-12 on the 15-review mini set, with the task 052 paper order; 17.8% on 2026-10-09 before it; the design experiment measured 20.3%)</div></div>
-    <div class="tile" role="listitem"><div class="num">1.1</div><div class="lab">screening calls per document with the adaptive vote (1.08 to 1.12 in the live check; the task 050 eval estimated 1.3), down from 3</div></div>
-    <div class="tile" role="listitem"><div class="num" data-phase8="cost_per_review_standard">$0.07</div><div class="lab">cost per review at Broad, search and screen, at list price (live check of 2026-10-09; Langfuse reported $0.33 on a price row five times list)</div></div>
+    <div class="tile" role="listitem"><div class="num accent" data-phase8="search_recall_standard">19.7%</div><div class="lab">of a published review's reference list found by a Broad search, on average over 15 test reviews (measured 12 October 2026; 17.8% on 9 October, before the ordering change described below)</div></div>
+    <div class="tile" role="listitem"><div class="num">1.1</div><div class="lab">language-model calls per document at screening (measured 1.08 to 1.12), down from 3 before this work</div></div>
+    <div class="tile" role="listitem"><div class="num" data-phase8="cost_per_review_standard">$0.07</div><div class="lab">cost of one Broad search and screen, at the model's list price (measured 9 October 2026)</div></div>
   </div>
   <p class="toc">
     <a href="#words">Words</a><a href="#pass">A: The search pass</a><a href="#scopes">Scopes</a><a href="#filters">Filters</a><a href="#screen">B: Screening</a><a href="#measured">Measured</a><a href="#replaced">What it replaced</a><a href="#parked">Parked</a>
@@ -110,29 +110,29 @@ footer { margin-top: 3.5rem; padding-top: 1rem; border-top: 1px solid var(--line
 <main>
 <section class="wrap" id="words">
   <h2>The words we use</h2>
-  <p>The app and the code use different names for the same things. This page uses the app's names and gives the code name once.</p>
+  <p>The app and the code use different names for the same things. This page uses the app's names; the code name is given once here so that a reader can find the place in the code.</p>
   <div class="scroll"><table>
     <thead><tr><th>in the app</th><th>in the code</th><th>what it means</th></tr></thead>
     <tbody>
-      <tr><td><b>Search scope</b>: Focused, Broad, Broadest</td><td><code>search_effort</code>: <code>rapid</code>, <code>standard</code>, <code>deep</code>; the caps in <code>DEPTH_CONSTANTS</code></td><td>How much the search keeps: a papers cap and a policy-documents cap. Nothing else differs between the scopes.</td></tr>
-      <tr><td><b>Analysis level</b>: Landscape, Standard, Deep</td><td><code>analysis_depth</code></td><td>What runs after the search: full-text screening, selection, findings extraction. It does not change the search.</td></tr>
-      <tr><td>Search</td><td><code>acquire</code>; the pass in <code>sourcing/search_loop.py</code>, the ranking in <code>sourcing/pool.py</code>, the database calls in <code>sourcing/search_live.py</code></td><td>Turning the research question into database calls, ranking what comes back, and keeping the best.</td></tr>
-      <tr><td>Seeds</td><td>the first 200 of <code>pool.interleave</code></td><td>The papers the searches return before any citation chasing.</td></tr>
-      <tr><td>Backward snowball, forward chasing</td><td><code>lookup_ids</code>, <code>fetch_citing</code></td><td>Papers the seeds cite, and papers that cite the seeds. Free: no language model.</td></tr>
-      <tr><td>Landmarks</td><td><code>fetch_by_id</code>, origin <code>landmark</code></td><td>Policy documents the Overton results cite most but the search did not return.</td></tr>
-      <tr><td>Specificity</td><td><code>pool.rank_papers</code>, <code>pool.rank_policy</code></td><td>How tied a candidate is to this search's results, damped by how widely it is cited overall. The ranking the policy cut is made on, and the fallback order for papers.</td></tr>
-      <tr><td>Mix</td><td><code>pool.rank_mix</code>, <code>pool.dedupe_papers</code></td><td>Since task 052: duplicate copies of a paper (same title and authors) dropped, then papers taken in turn from three lists — most relevant (returned by many queries near the top, or citing many of the seeds), seminal (most cited by the seeds), novel (last five years) — so every cut holds all three.</td></tr>
-      <tr><td>Screening</td><td><code>screen_abstract</code> (stage 1), <code>screen_full</code> (stage 2)</td><td>A language model reads each kept document and says relevant, not relevant, or unsure. Stage 1 is the adaptive vote on this page; stage 2 is unchanged.</td></tr>
-      <tr><td>Research question</td><td><code>intent</code></td><td>The sentence the user wrote, plus any screening criteria from the plan.</td></tr>
-      <tr><td>Recall</td><td>&nbsp;</td><td>The share of a published review's reference list that the search found, scored on DOIs (Digital Object Identifiers, the permanent ids of papers). The mini ground truth has 15 reviews, the full one 100. It measures papers only.</td></tr>
+      <tr><td><b>Search scope</b>: Focused, Broad, Broadest</td><td><code>search_effort</code>: <code>rapid</code>, <code>standard</code>, <code>deep</code>; the caps in <code>DEPTH_CONSTANTS</code></td><td>How many documents the search keeps: a limit on papers and a limit on policy documents. Nothing else differs between the scopes.</td></tr>
+      <tr><td><b>Analysis level</b>: Landscape, Standard, Deep</td><td><code>analysis_depth</code></td><td>What happens after the search: reading full texts, selecting sources, extracting findings. It does not change the search.</td></tr>
+      <tr><td>Search</td><td><code>acquire</code>; the pass in <code>sourcing/search_loop.py</code>, the ranking in <code>sourcing/pool.py</code>, the database calls in <code>sourcing/search_live.py</code></td><td>Turning the research question into database searches, ordering what comes back, and keeping the best of it.</td></tr>
+      <tr><td>Seeds</td><td>the first 200 of <code>pool.interleave</code></td><td>The first 200 papers the database searches return. Everything else on the paper side is found by following their citations.</td></tr>
+      <tr><td>Backward snowball, forward chasing</td><td><code>lookup_ids</code>, <code>fetch_citing</code></td><td>Two ways of finding more papers from the seeds: the papers the seeds cite (backward), and the papers that cite the seeds (forward). Both are plain database lookups with no language model involved.</td></tr>
+      <tr><td>Landmarks</td><td><code>fetch_by_id</code>, origin <code>landmark</code></td><td>Policy documents that the policy search results cite often but that the search itself did not return. They are fetched by id and added to the pool.</td></tr>
+      <tr><td>Specificity</td><td><code>pool.rank_papers</code>, <code>pool.rank_policy</code></td><td>A score for how strongly a document is tied to this particular search: how many of the search's own results cite it, or how many of them it cites, discounted when the document is very widely cited in general (a famous paper is cited by everything, which says little about this question). Policy documents are ordered by this score. For papers it is only the tie-breaker, after the three lists below.</td></tr>
+      <tr><td>Mix</td><td><code>pool.rank_mix</code>, <code>pool.dedupe_papers</code></td><td>How the paper pool is ordered before the cut. Duplicate copies of a paper (same title and same authors, such as a preprint and the journal version) are reduced to one. Then papers are taken in turn, one at a time, from three lists: the most relevant (returned near the top by several searches, or citing many of the seeds), the most established (cited by the most seeds) and the most recent (published in the last five years). Taking them in turn means that however few documents the scope keeps, all three kinds are in it.</td></tr>
+      <tr><td>Screening</td><td><code>screen_abstract</code> (stage 1), <code>screen_full</code> (stage 2)</td><td>A language model reads each kept document's title and abstract and says relevant, not relevant, or unsure. This page describes stage 1, the title-and-abstract screen. Stage 2, which reads full texts, is unchanged.</td></tr>
+      <tr><td>Research question</td><td><code>intent</code></td><td>The sentence the user wrote, plus any inclusion criteria the plan added.</td></tr>
+      <tr><td>Recall</td><td>&nbsp;</td><td>How the search is measured. A published systematic review lists the papers it included; recall is the share of that list the app's search found, matched on DOIs (Digital Object Identifiers, the permanent ids of papers). The small test set has 15 reviews, the full one 100. Policy documents have no such list, so recall measures papers only.</td></tr>
     </tbody>
   </table></div>
 </section>
 
 <section class="wrap" id="pass">
   <h2>Diagram A: the search pass</h2>
-  <p>The two databases are searched at the same time, on two threads, and within the OpenAlex leg the seed, resolve and forward calls go out in batches of up to 8 at once. The transport admits one request per interval per database (a lock), and a rate-limit reply pauses every later request to that database for one second. This is why a search takes about 45 seconds at every scope instead of about 130.</p>
-  <p>Every search runs this once, at every scope. Two databases: <b>OpenAlex</b>, a free index of about 250 million scholarly works with keyword search, an embedding search, and on every record the reference list and citation count; and <b>Overton</b>, a subscription index of policy documents with a semantic search that takes a sentence, and on every record the policy documents it cites. The call counts are the plan for one filter variant; a plan naming more than 100 author countries doubles the keyword calls.</p>
+  <p>Every search follows the diagram below once, whatever the scope. It uses two databases. <b>OpenAlex</b> is a free index of about 250 million academic works. It offers a keyword search and a meaning-based search (one that matches on what a sentence means rather than the words in it), and every record carries the paper's reference list and the number of times it has been cited. <b>Overton</b> is a subscription index of policy documents (government reports, think-tank papers and the like). It offers a meaning-based search that takes a whole sentence, and every record lists the other policy documents it cites.</p>
+  <p>The two databases are searched at the same time, and within the OpenAlex side up to 8 requests go out together. Requests to each database are spaced out, and a "too many requests" reply pauses that database for a second. This is why a search takes about 45 seconds at every scope, where the earlier version took about 130. The call counts in the diagram are for a plan with one set of filters; a plan that names more than 100 author countries has to split its keyword searches in two, which doubles those calls.</p>
 </section>
 
 <section class="wide">
@@ -154,15 +154,15 @@ footer { margin-top: 3.5rem; padding-top: 1rem; border-top: 1px solid var(--line
 
         <rect x="20" y="145" width="440" height="100" rx="6" fill="var(--c-paper)" fill-opacity=".14" stroke="var(--c-paper)" stroke-width="1.5"/>
         <text x="32" y="168" font-weight="600">OpenAlex seeds · 23 calls</text><text x="448" y="168" text-anchor="end" font-size="11" fill="var(--grey)">search, search_semantic</text>
-        <text x="32" y="190" font-size="11">each query as written, with a review clause, with a trial clause (15 calls of 200),</text>
-        <text x="32" y="206" font-size="11">plus the question, 2 paraphrases, 5 queries to the embedding search (8 calls of 50)</text>
-        <text x="32" y="228" font-size="12" font-weight="600">interleave by rank: the first 200 distinct works are the seeds</text>
+        <text x="32" y="190" font-size="11">5 queries, each as written, as reviews only, as trials only: 15 calls of 200;</text>
+        <text x="32" y="206" font-size="11">the question, 2 paraphrases, 5 queries to the meaning search: 8 calls of 50</text>
+        <text x="32" y="228" font-size="12" font-weight="600">top of each list in turn until 200 different papers: the seeds</text>
 
         <rect x="520" y="145" width="440" height="100" rx="6" fill="var(--c-policy)" fill-opacity=".14" stroke="var(--c-policy)" stroke-width="1.5"/>
         <text x="532" y="168" font-weight="600">Overton results · 3 calls</text><text x="948" y="168" text-anchor="end" font-size="11" fill="var(--grey)">search, sort=relevance</text>
-        <text x="532" y="190" font-size="11">the question and 2 paraphrases, 134 documents each (3 pages of 50),</text>
-        <text x="532" y="206" font-size="11">interleaved by rank, de-duplicated by normalised title (best-ranked copy kept)</text>
-        <text x="532" y="228" font-size="12" font-weight="600">each lists the policy documents it cites, free</text>
+        <text x="532" y="190" font-size="11">the question and its 2 paraphrases, 134 documents each, best matches first,</text>
+        <text x="532" y="206" font-size="11">lists merged top-first in turn; a repeated title keeps its best-ranked copy</text>
+        <text x="532" y="228" font-size="12" font-weight="600">each record lists the policy documents it cites, at no extra cost</text>
 
         <g stroke="currentColor" stroke-width="1.5" marker-end="url(#arr)">
           <line x1="125" y1="245" x2="125" y2="275"/><line x1="350" y1="245" x2="350" y2="275"/><line x1="740" y1="245" x2="740" y2="275"/>
@@ -170,68 +170,68 @@ footer { margin-top: 3.5rem; padding-top: 1rem; border-top: 1px solid var(--line
 
         <rect x="20" y="280" width="210" height="100" rx="6" fill="var(--c-land)" fill-opacity=".14" stroke="var(--c-land)" stroke-width="1.5"/>
         <text x="32" y="303" font-weight="600">Backward snowball</text>
-        <text x="32" y="323" font-size="12">count how many seeds cite</text>
-        <text x="32" y="339" font-size="12">each work; resolve the 200</text>
-        <text x="32" y="355" font-size="12">most-cited non-seeds, 50 per call</text>
+        <text x="32" y="323" font-size="12">count how many of the seeds cite</text>
+        <text x="32" y="339" font-size="12">each paper; fetch the 200 cited most</text>
+        <text x="32" y="355" font-size="12">often that are not seeds, 50 per call</text>
         <text x="32" y="372" font-size="11" fill="var(--grey)">lookup_ids · 4 calls</text>
 
         <rect x="245" y="280" width="215" height="100" rx="6" fill="var(--c-land)" fill-opacity=".14" stroke="var(--c-land)" stroke-width="1.5"/>
         <text x="257" y="303" font-weight="600">Forward chasing</text>
-        <text x="257" y="323" font-size="11">for the 20 best-connected seeds (cited</text>
-        <text x="257" y="339" font-size="11">at most 300 times), fetch the works that</text>
-        <text x="257" y="355" font-size="11">cite them; keep the 200 that cite most seeds</text>
+        <text x="257" y="323" font-size="11">for the 20 seeds other seeds cite most</text>
+        <text x="257" y="339" font-size="11">(skipping any cited 300+ times), fetch the</text>
+        <text x="257" y="355" font-size="11">papers citing them; keep the best 200</text>
         <text x="257" y="372" font-size="11" fill="var(--grey)">fetch_citing · up to 10 pages of 200</text>
 
         <rect x="520" y="280" width="450" height="100" rx="6" fill="var(--c-land)" fill-opacity=".14" stroke="var(--c-land)" stroke-width="1.5"/>
         <text x="532" y="303" font-weight="600">Landmarks</text><text x="958" y="303" text-anchor="end" font-size="11" fill="var(--grey)">fetch_by_id · 15 calls</text>
-        <text x="532" y="323" font-size="12">count the policy documents the results cite; fetch the 15 most-cited</text>
-        <text x="532" y="339" font-size="12">that the search did not return. The papers the results cite are not</text>
-        <text x="532" y="355" font-size="12">read: they stay out of the paper pool (owner decision)</text>
+        <text x="532" y="323" font-size="12">count the policy documents the results cite; fetch the 15 cited most</text>
+        <text x="532" y="339" font-size="12">often that the search missed. (Overton also lists the academic papers</text>
+        <text x="532" y="355" font-size="12">each document cites; those are not fetched, by product decision.)</text>
 
         <g stroke="currentColor" stroke-width="1.5" marker-end="url(#arr)">
           <line x1="125" y1="380" x2="125" y2="410"/><line x1="350" y1="380" x2="350" y2="410"/><line x1="800" y1="380" x2="800" y2="410"/>
         </g>
 
         <rect x="20" y="415" width="440" height="140" rx="6" fill="var(--c-paper)" fill-opacity=".14" stroke="var(--c-paper)" stroke-width="1.5"/>
-        <text x="32" y="438" font-weight="600">Drop duplicate copies, mix, then cut</text><text x="448" y="438" text-anchor="end" font-size="11" fill="var(--grey)">pool.dedupe_papers · pool.rank_mix</text>
-        <text x="32" y="455" font-size="11">duplicates (same title and authors) → most cited copy; then in turn from:</text>
+        <text x="32" y="438" font-weight="600">Remove duplicate copies, order, then cut</text><text x="448" y="438" text-anchor="end" font-size="11" fill="var(--grey)">pool.dedupe_papers · pool.rank_mix</text>
+        <text x="32" y="455" font-size="11">one copy per paper (same title and authors); then one at a time from:</text>
         <g font-size="11">
           <rect x="32" y="463" width="132" height="48" rx="4" fill="var(--ground)" stroke="var(--c-paper)"/>
           <text x="98" y="479" text-anchor="middle" font-weight="600">relevant</text>
-          <text x="98" y="492" text-anchor="middle" font-size="10">fusion of query ranks</text>
-          <text x="98" y="504" text-anchor="middle" font-size="10">+ cites the seeds</text>
+          <text x="98" y="492" text-anchor="middle" font-size="10">high in several searches,</text>
+          <text x="98" y="504" text-anchor="middle" font-size="10">or cites many seeds</text>
           <rect x="174" y="463" width="132" height="48" rx="4" fill="var(--ground)" stroke="var(--c-paper)"/>
-          <text x="240" y="479" text-anchor="middle" font-weight="600">seminal</text>
-          <text x="240" y="492" text-anchor="middle" font-size="10">most cited by</text>
-          <text x="240" y="504" text-anchor="middle" font-size="10">the seeds</text>
+          <text x="240" y="479" text-anchor="middle" font-weight="600">established</text>
+          <text x="240" y="492" text-anchor="middle" font-size="10">cited by the</text>
+          <text x="240" y="504" text-anchor="middle" font-size="10">most seeds</text>
           <rect x="316" y="463" width="132" height="48" rx="4" fill="var(--ground)" stroke="var(--c-paper)"/>
-          <text x="382" y="479" text-anchor="middle" font-weight="600">novel</text>
+          <text x="382" y="479" text-anchor="middle" font-weight="600">recent</text>
           <text x="382" y="492" text-anchor="middle" font-size="10">published in</text>
           <text x="382" y="504" text-anchor="middle" font-size="10">the last 5 years</text>
         </g>
-        <text x="32" y="528" font-size="11" fill="var(--grey)">the rest by specificity: (in-set + coupling) ÷ log10(global citations + 10)</text>
-        <text x="32" y="546" font-size="13" font-weight="700">keep the first papers cap: 100 · 200 · 400</text>
+        <text x="32" y="528" font-size="11" fill="var(--grey)">any paper left over follows, ordered by how tied it is to the seeds</text>
+        <text x="32" y="546" font-size="13" font-weight="700">keep the first 100 · 200 · 400 papers</text>
 
         <rect x="520" y="415" width="440" height="85" rx="6" fill="var(--c-policy)" fill-opacity=".14" stroke="var(--c-policy)" stroke-width="1.5"/>
-        <text x="532" y="438" font-weight="600">Rank policy documents by in-set citations, then cut</text><text x="948" y="438" text-anchor="end" font-size="11" fill="var(--grey)">pool.rank_policy</text>
-        <text x="532" y="456" font-size="12">in-set citations ÷ log10(global citations + 10)</text>
-        <text x="532" y="471" font-size="11" fill="var(--grey)">ties by in-set count, then the search order; landmarks after results</text>
-        <text x="532" y="491" font-size="13" font-weight="700">keep the first policy cap: 50 · 100 · 200</text>
+        <text x="532" y="438" font-weight="600">Order policy documents by citations, then cut</text><text x="948" y="438" text-anchor="end" font-size="11" fill="var(--grey)">pool.rank_policy</text>
+        <text x="532" y="456" font-size="12">cited by most other results first; widely cited ones discounted</text>
+        <text x="532" y="471" font-size="11" fill="var(--grey)">ties broken by the search order; landmarks come after the search results</text>
+        <text x="532" y="491" font-size="13" font-weight="700">keep the first 50 · 100 · 200 policy documents</text>
 
         <line x1="240" y1="555" x2="430" y2="588" stroke="currentColor" stroke-width="1.5" marker-end="url(#arr)"/>
         <line x1="740" y1="500" x2="550" y2="588" stroke="currentColor" stroke-width="1.5" marker-end="url(#arr)"/>
         <rect x="260" y="593" width="460" height="55" rx="6" fill="var(--c-sem)" fill-opacity=".12" stroke="var(--c-sem)" stroke-width="1.5"/>
         <text x="490" y="616" text-anchor="middle" font-weight="600">Screen once · gpt-5.6-luna · prompt screen_v4</text>
-        <text x="490" y="636" text-anchor="middle" font-size="12">one call per document; a second only after a "not relevant"; keep if it keeps (Diagram B)</text>
+        <text x="490" y="636" text-anchor="middle" font-size="12">one call per document; a second only after "not relevant" (Diagram B)</text>
       </g>
     </svg>
-    <figcaption><b>One method, every scope.</b> Green is a free citation step; there are no language-model calls between query generation and the screen. Every call is one logical call against a per-run budget (OpenAlex 45 per filter variant, Overton 30), whatever paging or retrying the transport does underneath, and every call writes a <code>search.executed</code> event with its origin. After the screen: classify, appraise and the rest of the chain as before; stage 2 screening unchanged.</figcaption>
+    <figcaption><b>One method, every scope.</b> The green boxes are citation lookups, which cost nothing; the only language-model calls are the query generation at the top and the screen at the bottom. Each search has a budget of calls per database (45 to OpenAlex per set of filters, 30 to Overton); a call that has to fetch several pages or retry still counts once. Every call is recorded with the reason it was made. After the screen, the rest of the app's chain (classify, appraise, and so on) runs as before.</figcaption>
   </figure>
 </section>
 
 <section class="wrap">
-  <h3>What acquire does with the two pools</h3>
-  <p>The search hands acquire the two ranked lists and the two caps. Acquire maps each record, drops duplicates of a work already in the task (by record id, DOI, or identical text; the best-ranked copy claims the identity), cuts at the cap, and persists and embeds only what it keeps. Every record a call returned is counted exactly once: acquired, already acquired, unusable (no title), or dropped over the cap, and these sum to the raw number returned. The coverage record carries the counts per database; every kept record's <code>source.acquired</code> event carries the origin of the call that found it (<code>generated</code>, <code>variant_sr</code>, <code>variant_rct</code>, <code>semantic</code>, <code>snowball_backward</code>, <code>snowball_forward</code>, <code>verbatim</code>, <code>paraphrase</code>, <code>landmark</code>).</p>
+  <h3>Keeping the top of each list</h3>
+  <p>The search ends with two ordered lists, one of papers and one of policy documents, and a limit for each. The app walks down each list, skips any document the task already holds (matched by record id, DOI or identical text), stops at the limit, and stores only what it kept. Every record a call returned is accounted for exactly once, as kept, already held, unusable (no title) or over the limit, so the counts add up to the number returned. Each kept document records which call found it: a generated query, one of its narrowed variants, the meaning-based search, a backward or forward citation lookup, or a landmark fetch.</p>
 </section>
 
 <section class="wrap" id="scopes">
@@ -241,24 +241,24 @@ footer { margin-top: 3.5rem; padding-top: 1rem; border-top: 1px solid var(--line
     <div class="tile" role="listitem"><div class="num accent">200 + 100</div><div class="lab"><b>Broad.</b> About 300 documents screened.</div></div>
     <div class="tile" role="listitem"><div class="num accent">400 + 200</div><div class="lab"><b>Broadest.</b> About 600 documents screened.</div></div>
   </div>
-  <p style="margin-top:1rem">Why pool size and not mechanism: the design experiments found no knee in the cap curve (every 100 papers bought 2 to 5 points up to 400), and the screen is now cheap enough to read the larger pool. The policy caps are half the paper caps because the policy snowball reached 90% of its pool by 50 documents and 97% by 100. One code path for the three scopes is also easier to test: one method, one eval, three pairs of constants. The scope hint in the app says exactly this: "Focused: up to 100 papers and 50 policy documents".</p>
+  <p style="margin-top:1rem">Why the scopes differ only in how much they keep, not in how they search: in the design experiments every extra 100 papers kept raised recall by 2 to 5 points, with no point at which it stopped paying, and screening is now cheap enough to read the larger pool. The policy limits are half the paper limits because the policy side found 90% of everything it would ever find within 50 documents and 97% within 100. One method for all three scopes is also easier to test: one search, one measurement, three pairs of numbers. The scope hint in the app says exactly this: "Focused: up to 100 papers and 50 policy documents".</p>
 </section>
 
 <section class="wrap" id="filters">
   <h2>Where the plan's filters go</h2>
-  <p>A plan can carry filters (dates, SDGs, document types, languages, open-access status, author countries; for Overton publisher type, country, region, source and language). They are never weakened. Where each one is applied:</p>
+  <p>A plan can carry filters: publication dates, Sustainable Development Goals, document types, languages, open-access status and author countries for papers; publisher type, country, region, source and language for policy documents. A filter is never relaxed. Where each one is applied:</p>
   <ul>
-    <li><b>Keyword searches:</b> every OpenAlex filter on the wire, as before. Overton searches carry the Overton filters.</li>
-    <li><b>Semantic searches:</b> OpenAlex's embedding endpoint accepts only the type, language and retraction filters and a publication-year fence (probe of 9 October 2026). A date range goes on the wire as a year fence and the exact dates are checked locally on the returned records; SDGs, paratext, open-access status and author countries are checked locally too. The coverage record lists the locally applied keys as <code>semantic_local_filters</code>.</li>
-    <li><b>Backward and forward calls:</b> every OpenAlex filter except the author-country clause, which is checked locally on the citation-found papers (a paper with no affiliation data is dropped under a country filter: fail closed), so a plan with more than 100 countries does not double those calls.</li>
-    <li><b>Landmarks:</b> the plan's <code>source_country</code> post-filter applies to the fetched documents as it does to the search results.</li>
+    <li><b>Keyword searches:</b> every filter is sent to the database with the query, so only matching records come back. The same for the policy searches.</li>
+    <li><b>Meaning-based searches:</b> OpenAlex's meaning-based search accepts only the document type, language and retraction filters, plus a year range. So a date range is sent as whole years and the exact dates are checked by the app on the records that come back; the Sustainable Development Goal, open-access and author-country filters are checked by the app in the same way. The search record lists which filters were checked by the app rather than the database.</li>
+    <li><b>Citation lookups:</b> every filter is sent except the author-country one, which the app checks on the papers that come back. A paper with no affiliation data fails that check and is dropped: when in doubt, the filter wins.</li>
+    <li><b>Landmarks:</b> a plan's country filter on policy documents applies to the fetched landmarks as it does to the search results.</li>
   </ul>
-  <p>What a local filter dropped is counted on the call's event as <code>post_filter_excluded</code>, zero included.</p>
+  <p>Each call records how many of its results the app's own checks removed.</p>
 </section>
 
 <section class="wrap" id="screen">
   <h2>Diagram B: screening, stage 1</h2>
-  <p>Every kept document goes to the stage-1 screen: its title and abstract (or the title alone, when there is no abstract) with the research question and the plan's screening criteria, to <code>gpt-5.6-luna</code> with the prompt <code>screen_v4</code>. The model answers relevant, not relevant, or unsure with a confidence. The vote is adaptive: one call; a second call only when the first says not relevant.</p>
+  <p>Every kept document goes to the title-and-abstract screen. The model (<code>gpt-5.6-luna</code>, prompt <code>screen_v4</code>) is given the document's title and abstract, or the title alone when there is no abstract, together with the research question and any inclusion criteria from the plan. It answers relevant, not relevant or unsure, with a confidence. One call is usually enough: a second call is made only when the first says not relevant, so that a single hasty "no" does not lose a relevant document.</p>
 </section>
 
 <section class="wide">
@@ -303,13 +303,13 @@ footer { margin-top: 3.5rem; padding-top: 1rem; border-top: 1px solid var(--line
         <text x="892" y="208" text-anchor="middle" font-size="10" fill="var(--grey)">on call 1 · second_call_failed</text>
       </g>
     </svg>
-    <figcaption><b>The adaptive vote</b> (<code>screen.decide_stage1</code>, contract D10). A document with no abstract follows the same table. The stored confidence is the mean probability of relevance over the calls made, stored as that mean when kept and one minus it when dropped: a "not relevant" at 0.9 followed by "unsure" stores 0.3, kept but shaky. The event for each document lists its one or two calls in order. Measured in the task 050 eval: 0.917 recall on the labelled mini set with criteria, 0.900 on the full set, 1.54 calls per document; on real search candidates, 97% of the ground-truth seeds kept at 1.3 calls per document.</figcaption>
+    <figcaption><b>The one-or-two-call screen</b> (<code>screen.decide_stage1</code>). A document with no abstract follows the same table. The stored confidence is the model's average probability that the document is relevant over the one or two calls, so that a confident "not relevant" followed by an "unsure" is kept but marked as shaky. The record for each document lists its calls in order. Measured on a labelled test set (task 050): 92% of the documents human reviewers had included were kept, at 1.5 calls per document; on real search results, 97% of the known relevant papers were kept at 1.3 calls per document.</figcaption>
   </figure>
 </section>
 
 <section class="wrap" id="measured">
   <h2>What it finds and what it costs</h2>
-  <p>The acceptance measurement of the slice: <code>scripts/evals/search/checks/production_recall.py</code> runs the real search and screen on the 15-review mini set at each scope and reports search recall, screen recall, documents, calls, tokens, cost and wall clock per review. The rows below are that run, on 2026-10-09, at the step-6 exit of task 051 (<code>verification.md</code> has the per-review figures, the token counts and the failed calls).</p>
+  <p>The search is measured against 15 published systematic reviews. For each one, the app is given the review's question and must find the papers the review included; recall is the share it found. <code>scripts/evals/search/checks/production_recall.py</code> runs the real search and screen on those reviews and reports recall, documents, cost and time per review. The recall figures below were measured on 12 October 2026 with one Broadest run; the Focused and Broad rows are the same run's pool cut at their smaller limits, so the three rows share one set of generated queries. The documents, cost and time columns are from the runs of 9 October 2026; the ordering change made on the 12th does not alter them.</p>
   <div class="scroll"><table>
     <thead><tr><th>scope</th><th class="n">papers + policy kept</th><th class="n">search recall</th><th class="n">screen recall</th><th class="n">documents screened</th><th class="n">cost per review (list price)</th><th class="n">wall clock per review</th></tr></thead>
     <tbody>
@@ -318,24 +318,24 @@ footer { margin-top: 3.5rem; padding-top: 1rem; border-top: 1px solid var(--line
       <tr><td>Broadest</td><td class="n">400 + 200</td><td class="n" data-phase8="search_recall_deep">25.3%</td><td class="n" data-phase8="screen_recall_deep">24.3%</td><td class="n" data-phase8="docs_deep">574–600</td><td class="n" data-phase8="cost_deep">$0.14</td><td class="n" data-phase8="wall_deep">197 s</td></tr>
     </tbody>
   </table></div>
-  <p class="note"><b>Thresholds</b> (contract § Acceptance checks): mini-set search recall at least 12.5% / 17.3% / 24.6% at Focused / Broad / Broadest (the experiment's numbers minus 3 points of noise and production differences); screen recall at least 90% of search recall at each scope; 0 failed provider calls or the undercount named. The recall figures in the table are the task 052 run of 2026-10-12 (one Broadest run; the Focused and Broad rows are its pool cut at their caps, so all three share one set of generated queries); all three thresholds are met. The documents, cost and wall-clock columns are from the task 051 runs of 2026-10-09, which the paper order does not change. For comparison, the search before task 051 found 5.0% at Broad on the same reviews (<code>scripts/evals/search/results/history.md</code>, 2026-10-05). <b>Cost note:</b> the dollar figures are at the Luna list price of 2026-10-08. Langfuse reported five times these ($0.17, $0.33 and $0.71) because its price row for Luna is five times list; the verification record carries both. <b>Result:</b> Focused and Broad meet their thresholds by 0.4 and 0.5 points; Broadest does not (22.3% against 24.6%, 2.3 points short); the owner accepted the measured figure on 2026-10-12, since Broadest beats Broad on 11 of the 15 reviews and ties on 3. Screening keeps 96% to 97% of what the search found at every scope. Two calls failed, one Overton call at Focused and one at Broadest, both on the whole-school review: its policy side is an undercount, its paper side complete.</p>
-  <p>The policy side has no DOI ground truth. It is pinned by replay tests built from recorded Overton responses of three task 049 questions (<code>backend/tests/data/policy_replay/</code>): relevance order, title dedup, the 15 landmarks, the specificity order, the UK-only post-filter and the policy cap.</p>
+  <p class="note"><b>Targets.</b> The task set a minimum search recall of 12.5% / 17.3% / 24.6% at Focused / Broad / Broadest (what the design experiments reached, less 3 points for noise), and required the screen to keep at least 90% of what the search found. All three are met: before the ordering change of 12 October the figures were 12.9% / 17.8% / 22.3%, with Broadest 2.3 points short. The screen keeps 96% to 97% of what the search found at every scope. One database call failed in the 12 October run, a policy-document search on the human-rights review, so that review's policy side is an undercount. For comparison, the search before this work found 5.0% at Broad on the same reviews (<code>scripts/evals/search/results/history.md</code>, 5 October 2026). <b>Cost note:</b> the dollar figures use the model's list price. The monitoring tool reports five times these amounts because its price entry for the model is five times the list price.</p>
+  <p>The policy side cannot be measured this way, because published reviews do not list the policy documents they drew on. Instead it is pinned by tests that replay recorded Overton responses for three questions (<code>backend/tests/data/policy_replay/</code>) and check the order of results, the removal of repeated titles, the 15 landmarks, the ordering score, a UK-only filter and the limit.</p>
 </section>
 
 <section class="wrap" id="replaced">
   <h2>What it replaced</h2>
-  <p>Before task 051 (task 015, <a href="../../adr/0012-depth-graded-agentic-search.md">ADR 0012</a>), a Focused search was one round of the 15 keyword calls and 3 Overton calls, interleaved by rank and cut at 50 documents per database; Broad and Broadest repeated acquire and screen up to three times, steered by the screening verdicts through four arms (reformulate from screened exemplars, a 5-seed snowball, model-suggested papers, a diversity reserve) and a stop rule with its own vocabulary. Stage-1 screening made three calls per document on <code>gpt-5.4-mini</code> and took a majority with a quorum of two. Overton results were sorted by date, not relevance, because no sort was sent.</p>
-  <p>None of the four arms was measured on its own. The whole three-round Broadest measured 15.3% paper recall on four reviews; one pass of the method above measured 20.3% on fifteen at the same pool size, with no screening inside the search (screened seeds changed nothing). The round loop's orchestration is deleted; its last working commit is tagged <code>search-round-loop-last</code>, with the restore recipe in <a href="../../adr/0038-single-pass-search-and-adaptive-screen.md">ADR 0038</a>. The reformulate and suggest prompt builders stay in the tree, tested and unreachable. The old stop values stay valid on historical coverage rows.</p>
+  <p>Before this work (<a href="../../adr/0012-depth-graded-agentic-search.md">ADR 0012</a>), a Focused search was the 15 keyword searches and 3 policy searches, merged and cut at 50 documents per database, with no citation lookups. Broad and Broadest then repeated search and screen up to three times, each round choosing among four strategies (rewriting the queries from the documents the screen had kept, a small citation lookup, papers suggested by a language model, and a reserve of varied results) and stopping by a rule of its own. The screen asked the model three times per document and took a majority. The policy search returned documents newest first rather than best match first, because no sort order was being requested.</p>
+  <p>None of the four strategies had been measured on its own. The whole three-round Broadest found 15.3% of the reference lists on four reviews; one pass of the method above found 20.3% on fifteen reviews at the same pool size. The old loop is deleted; its last working version is tagged <code>search-round-loop-last</code>, with the restore recipe in <a href="../../adr/0038-single-pass-search-and-adaptive-screen.md">ADR 0038</a>. Old search records keep their old vocabulary and remain readable.</p>
 </section>
 
 <section class="wrap" id="parked">
   <h2>Parked, with their measurements</h2>
   <div class="didnt">
-    <div><b>Reformulation for Broadest.</b> Search, screen, reformulate from screened exemplars, one more search: +3.9 points at the ceiling (experiment 4). The one arm with measured value. Parked in <code>docs/deferred.md</code>; its orchestration is at the tag.</div>
-    <div><b>Similarity damping of the policy ranking.</b> Agreed in principle; needs about 5 embedding calls before the cut and its measured numbers are without it.</div>
-    <div><b>The relevance reserve.</b> Holding the first 50 keyword results in their own order ahead of the ranked pool. Tried offline in task 052 and replaced by the relevant / seminal / novel mix.</div>
-    <div><b>Seminal-decile recall as an eval score.</b> The experiment script reports it; the production check does not yet.</div>
-    <div><b>Overton records with a placeholder title</b> and <b><code>source_country</code> as a plan option.</b> Out of this slice.</div>
+    <div><b>A second search for Broadest.</b> Search, screen, rewrite the queries from the documents the screen kept, and search once more: measured at about 4 points more recall. The one old strategy that showed value. Parked in <code>docs/deferred.md</code>.</div>
+    <div><b>Weighting policy documents by how close their text is to the question.</b> Agreed in principle; it needs about 5 extra model calls per search, and the measurements above are without it.</div>
+    <div><b>Putting the first 50 keyword results ahead of everything else.</b> Tried offline in October 2026: it let a broad query's off-topic results in. Replaced by the three-list ordering described above.</div>
+    <div><b>Measuring recall on the most-cited papers separately.</b> The experiment script reports it; the production check does not yet.</div>
+    <div><b>Policy documents with a placeholder title</b> and <b>a country-of-origin option in the plan.</b> Out of this piece of work.</div>
   </div>
 </section>
 </main>
