@@ -2826,6 +2826,50 @@ Recorded by the task 046 amendment 3 build (`amendment-3-final.md` § 7.3; the r
   the next revision that changes `finding_reference_union` must freeze a copy in
   `f1b6d3a8c2e5` as `c7e2a9f4b1d8` now does.
 
+### Amendment 4 (2026-10-12)
+
+Built 2026-10-09 to 2026-10-12 (`docs/tasks/046-longlist-refinement/verification.md`
+§ Amendment 4). Seams left open:
+
+- **The record prompt's residual on places (R87; M16 not met).** After four
+  rounds on the mini model, a hospital's, a committee's or an organisation's
+  own name still reaches `study_geography` where the abstract gives no town
+  (61 records on the tuning set, from 223): the next lever is the model
+  tier for `extract_interventions`, not the wording. A geography that is a
+  body's name shows as the level below on the document line and as a
+  sub-place in a place sentence's input.
+- **The folds' quality (R86; M17 not met).** At most one wrong fold in 30
+  per facet per list was not reached on any of four rounds; the folds vary
+  more between runs of one text than between rounds. Two code guards stand
+  (a slash-joined kind is cut; a catch-all of more than half the words is
+  retried once). A catch-all of a third of the words (NEET's check-set run)
+  passes the one-half share; a kind of twenty words (the "at most six
+  words" rule ignored) reaches the sentences. Candidates: the judgment
+  model for the folding calls on long lists; a share threshold tied to the
+  target unit's own share; a word-count guard on a kind.
+- **The place sentences (R80; M15 not met).** 4 of 56 tuning-set sentences
+  fall back to the template at round 4; a programme name of twenty words
+  the model will not cut and two upstream faults. A `max_length` on the
+  wire would bind the model but fails the whole call (PA4-9); a per-place
+  second call on an over-length sentence would cost one more call per such
+  place.
+- **The template's length.** Template sentences are not length-checked; a
+  twenty-word fold kind or programme name puts one over the ceiling (238
+  and 334 characters seen). A ceiling on the template's clauses is a small
+  code change.
+- **Phase 29F's measure on the tuning set.** The replay cannot re-mint an
+  existing option's design (the clone keeps the stored task's options as
+  seeds), so the feature rule was read on the 14 options the replay minted
+  under it and on the live runs; a from-scratch replay (a clone with its
+  option rows dropped) would read it on the whole tuning set.
+- **A theme heading's summary at 390 px** overflows when a list has no
+  themes and every option sits under "No theme" (the clones; a live list's
+  summaries are short). Pre-existing markup; one `min-w-0`/wrap away.
+- **`names_place` over the full ISO-3166 table**: a setting holding
+  "Jersey", "Jordan", "Chad", "Niger" or "Guinea" as a whole word now reads
+  as a place in the setting pass. Not seen on the tuning or check sets;
+  for the review.
+
 ### Overton metadata faults seen by the amendment 4 survey (deferred 2026-10-09; owner: out of amendment 4)
 
 Recorded by the task 046 amendment 4 design survey (`research/amendment-4-design/README.md`).

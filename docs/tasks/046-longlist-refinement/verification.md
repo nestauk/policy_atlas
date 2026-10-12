@@ -1300,6 +1300,533 @@ basis: Title and abstract" beside the card's "Read from titles and
 abstracts only".
 
 
+## Amendment 4 (build 2026-10-09)
+
+Rulings R76–R91 are in [contract.md](contract.md) § Amendment 4; the seams
+S29–S36 and phases 24.0 to 31 in [plan.md](plan.md) § Amendment 4; the
+reasons in ADR 0040 § Amendment 4 (decisions 22–26). Steps 5 and 6 only;
+the review stack runs in a fresh conversation. Every figure below was read
+back from a saved file (named beside it) or a database query. The round
+records and the readback scripts are local (`evidence/rounds/`,
+`evidence/pre-contract-runs/`, gitignored).
+
+### Commands run (the gates)
+
+The gate of each phase ran on a **snapshot of the git index** in the second
+worktree (`../policy_atlas-gate`; `gate.sh` in
+`evidence/pre-contract-runs/a4-session/`), so the next phase could be built
+while the gate ran; a commit was made only from a gated tree
+(`split_commit.py`: a temporary index over the gated snapshot, the hash
+list regenerated for each commit's own tree). A first build-open run on
+the working tree was stopped at 9 % when the agents' edits were about to
+land in it; the baseline below is the rerun on the untouched HEAD in the
+gate worktree.
+
+| Gate | Result | Notes |
+|---|---:|---|
+| `make verify` (Phase 24.0, build-open baseline, HEAD `d5232c2f` in the gate worktree) | pass | backend 3461 passed (1129 s); infra 46; okf 157 concepts; prompt-guard unchanged; drift-check OK; frontend 87 files, 875 tests (`gate-24.0.log`, exit 0) |
+| Phase 24 (ADR, docs only) | — | committed on the baseline tree plus one markdown file (the same flagged deviation from the plan's `verify-fast` as Phase 15 of amendment 3) |
+| `make verify-fast` · `prompt-guard` · `drift-check` · `frontend-verify` (25 + 27 rounds 0–3 + 28's guard + the round-0 prompt texts, one tree, first try) | **fail**, 4 tests | 3510 passed, 4 failed: `test_interventions_tagging.py` pins the extraction fingerprint, which carries the prompt and schema versions bumped for the record prompt's round 0 (`gate-25.log`); the pins were recomputed (the test's own comment names them as version pins) |
+| the same targets (+ 27E; second try) | **fail**, lint | backend 3523 passed (846 s); mypy 408 files clean; `ruff` E501 on one line of the new `place_sentences_prompt.py` (`gate-25b.log`); the line was wrapped and the hash re-pinned |
+| `make verify-fast` · `prompt-guard` · `drift-check` · `frontend-verify` (26 + 26L, tree `4b6fc484`) | pass, in three runs | backend 3574 passed (964 s); mypy and lint clean; prompt-guard 32 unchanged; drift OK (`gate-26b.log`); the frontend step failed twice on a 5-second timeout in an unrelated test under machine load (`SourcesView` then `LonglistView`'s exclude form) and passed on a quieter machine, 875 tests (`gate-26b-frontend-2.log`). A first run of this gate (`gate-26.log`) found one mypy error in the new test file (the agent had run `mypy src` only); fixed |
+| the same targets (29 + 30a, tree `1bb6b6ae`) | **fail**, mypy | backend 3585 passed (795 s); one missing annotation in `test_option_profile_prompt.py` (`gate-30a.log`); fixed in the next tree |
+| the same targets (29 + 30a + 30c + 30b, tree `939df91d`) | pass | backend 3584 passed (747 s); mypy and lint clean; prompt-guard 32 unchanged; drift OK; frontend 87 files, 883 tests (`gate-30c.log`, exit 0). The four commits below are this one tree split by phase |
+| **`make verify` (Phase 31, step-6 exit, tree `f65485aa` = the final code tree `939df91d` plus this file and `docs/deferred.md`)** | **pass** | okf 157 concepts, 0 violations; backend 3584 passed (953 s); infra 46; prompt-guard 32 unchanged; drift-check OK; frontend 87 files, 883 tests (`gate-31.log`, exit 0). The Phase 31 commit adds this file's later sections and `docs/deferred.md` on top (docs only; `git diff <gated> HEAD -- . ':!docs'` is empty) |
+| the same targets (third try, `25c`, tree `823f6164`) | pass | backend 3523 passed (815 s); mypy clean; lint clean; prompt-guard 32 unchanged; drift-check OK; frontend 87 files, 875 tests (`gate-25c.log`, `gate-25c-frontend.log`: the frontend step was re-run alone after the session's interruption killed it mid-way). The three commits below are this one tree split by phase (`split_commit.py`); HEAD's tree after the third equals the gated tree |
+
+### Commits on `task/046-longlist-refinement` (local, not pushed)
+
+| Commit | Phase |
+|---|---|
+| `8834dfe8` | 24 — ADR 0040 decision 25 checked against the confirmed seams (S29a, S35) |
+| `9eef3704` | 25 + 27E — the read models, additive; the resolver; S32's checks; the example-name fold (one commit: the two phases share `coverage.py` and `repository.py`) |
+| `7f6476bd` | 28 (code) — the F4 guard and the slash cut; the round-0 prompt texts of 26 (`place_sentences_v1`), 29 (`option_profile_v3`), 29F (`longlist_cluster_v4`, `longlist_suggest_v3`, `option_design_v4`) and the folding rounds 6–8 (`folding_v8`) |
+| `ad3d3a8f` | 27 — the record prompt's rounds 0–3 (`extract_interventions_v4`, `interventions_v3`; round 3's text) |
+| `57a4883a` | 26 + 26L — the place sentences: the code, the second wave, the trace check, the template, the read model; the sentence loop's rounds 0–4 (`place_sentences_v5`); the catch-all retry of loop 28's round 9 |
+| `eeb9e5e7` | 29 — the who-decides plumbing and the profile prompt's round 6 read |
+| `74aa7988` | 30a — the card's structure; the removed card fields (one gated tree with 30c and 30b, split by path; the shared files land here) |
+| `f7e00e54` | 30c — the list's structure; the removed summary fields |
+| `81b73675` | 30b — the design pass (the `head_phrase` fix and its test; the card and list words are in the 30a commit's files) |
+| (the step-6 exit commit) | 31 — this file, `docs/deferred.md` |
+
+### The refine loops (R69; rubric box 84)
+
+**27 — places (`extract_interventions_v4`, `interventions_v3`; M16).** Four
+rounds on the tuning set (`evidence/rounds/27-places-loop.md`; the figures
+from `27-<round>-<slug>.json`, the hand read over
+`27-<round>-places-<slug>.txt`: every distinct `(study_country,
+study_geography)` pair). Faults by hand (a geography that is an
+organisation, a person, a programme, a document, a date or an adjective),
+records: before 47 / 21 / 92 / 63 (obesity / refugees / caregiving /
+energy; 223), round 0 26 / 20 / 49 / 27, round 1 23 / 19 / 51 / 22, round
+2 15 / 17 / 50 / 7, **round 3 10 / 15 / 32 / 4 (61)**. Documents with a
+not-stated record: 50 / 16 / 50 / 14 before, 51 / 19 / 52 / 15 at round
+3. The stop measure (none) is **not met**; round 3's text is shipped (each
+round improved on the one before; the residual is one family — a
+hospital's, a committee's or an organisation's own name where the abstract
+gives no town; the next lever is the model tier). The check set, read
+once: NEET 10 → 4, heat pumps 38 → 23, cohesion 39 → 7. Rubric box 81's
+"no `study_geography` that is an organisation…" is therefore **not met at
+its "none" threshold**; reported to the owner (R25).
+
+**28 — folding rounds 6–9 and the F4 guard (M17).** The guard is built and
+tested (`_checked_folds`, Measures only, whole words, the longest match,
+counted in provenance); on the tuning set it rewrote nothing on any
+round: no returned kind holds a plan outcome's whole text. Four rounds
+(`evidence/rounds/28-folding-round-6.md`; the seeded 30-fold read per
+facet per list from `28-<round>-read-<slug>.txt`): round 6 (the always-
+wrong folds named) 4/9, 3/1, 2/3, 4/3 wrong in 30 (Tried on / Measures;
+obesity, refugees, caregiving, energy; obesity's obesity kind a
+slash-joined label); round 7 (slashes banned, the plan outcome copied
+whole, eat-or-do never a weight measure) packed words into one kind
+string on obesity and made a "groups" catch-all on refugees; round 8
+(the slash ban withdrawn, the code cutting a slash-joined kind at its
+first slash) clean on obesity and refugees and a 128-of-148-word
+catch-all on caregiving; round 9 (the same text, plus a code guard that
+refuses a catch-all answer once and keeps the retry) 2/3, 2/1, 2/2, 3/2.
+**`folding_v8` is shipped** with the two code guards. The stop measure
+(at most one wrong fold in 30 per facet per list) is **not met** on any
+round; the folds vary more between runs of one text than between rounds
+of the text (the 20L lesson of amendment 3 holds). The check set, read
+once: NEET 10/4 (a catch-all of 39 of 106 words under the one-half
+share), heat pumps 3/1, cohesion 5/1; the F4 guard fired once (heat
+pumps). Rubric box 80's stop measure is therefore **not met**; reported
+to the owner (R25).
+
+**29F — the feature rule (rubric box 73).** In three prompts (the cluster
+and option-design prompts the plan named, and the suggest prompt, which
+also writes design features and carried the refugees restatements).
+Before: 14 features restating the setting or the target unit and 51
+hedges over 640 features on the tuning set. The replay cannot re-mint an
+existing option's design (the clone keeps the stored task's options as
+seeds), so the rule shows on the 14 options the `27final` chain minted
+under it: **0 restatements and 0 hedges over 70 features** (stop measure
+met on those; the full read is the three live runs of Phase 31).
+Record: `evidence/rounds/29F-feature-rule.md`.
+
+**29 — "Who decides" (M18).** The plumbing (the constraint texts reach
+the `who_decides` line as a data block, no other line; the authority call
+unchanged; tests) and the profile prompt's round 6 (the rule in words, the
+block's words). Replayed on the two tuning lists with a who-can-act
+constraint (`evidence/rounds/29-who-decides-round-6.md`; every sentence
+beside its label in `29-r6-read-<slug>.txt`): "within your power" obesity
+20 → 25 of 38, refugees 32 → 33 of 34; caregiving and energy hold no
+constraint (the prompt is byte-identical without it, tested). Read
+two-sided: every "within your power" option on refugees names one
+English council for a thing a council can fund, commission, employ, set
+or enforce; the one Parliament case is labelled so; on obesity every
+"within" sentence names the local authority for a thing it can run (two
+borderline on scope, said in the sentence) and the 13 "needs action by"
+name the right body. **M18 met**; `option_profile_v3` shipped.
+
+**26L — the place sentences (M15).** Five rounds (0–4) on the tuning
+set (`evidence/rounds/26L-place-sentences-loop.md`; the provenance block
+and every stored sentence in `26L-<round>-<slug>.json`, the hand read in
+`26L-<round>-read-<slug>.txt`). Sentences replaced by the template
+(trace + length + call) over the 56 sentences of the four lists: round 0
+15 (5 trace, 10 length, 0 call), round 1 4, round 2 10, round 3 5,
+**round 4 4 (2 trace, 2 length, 0 call)**. The rounds: plain type words in
+the call input in place of the classifier's labels and "in {kind}"
+phrasing (round 1: the trace failures went with the labels); the target
+unit's head noun phrase computed by code and named in the prompt (round
+2); a one-retry on an answer with a sentence over the ceiling and a
+summing-up rule for a place with several documents (round 3); long
+programme names and fold kinds cut by rule (round 4). The residual is a
+twenty-word programme name the model will not cut and two records whose
+data are faults upstream (a date as a geography; a twenty-word fold
+kind). Readability: 52 of 56 generated sentences read cleanly on round
+4; no merit word on any round; the plan's outcomes in the plan's words;
+the wave's wall-clock 1.3–3.5 s per list. `place_sentences_v5` shipped.
+The stop measure is **not met**; the seeded fixture set (11 valid, 13
+invalid) is green beside it. The check set, read once: 39 sentences, all
+generated, zero failures; a `head_phrase` code fault on a target unit
+whose head holds "not in …" (NEET) was found there and fixed with a
+test (a code fix, flagged below, not a prompt round). Rubric boxes
+76–77: the call, the check, the template and the store are built and
+tested; the stop measure is reported (R25).
+
+### Deviations, flagged (amendment 4)
+
+1. **Executor marks.** Phase 27's code checks (the extended country
+   table, the place key, the geography-to-country rule) were built by the
+   Phase 25 `deep-reasoner`, not a `fast-worker`: both phases own
+   `where_tried.py` and `coverage.py`, and two agents never hold one file.
+   The Phase 25 output models and fixtures (marked `fast-worker`) were
+   built by the same agent for the same reason.
+2. **The suggest prompt** gained the feature rule beside the two prompts
+   Phase 29F named (R24–R27 open every longlist prompt to the loop; the
+   restatements sat on suggested options).
+3. **The record prompt's round 3 added a second worked example** to the
+   system prompt (a hospital trust → its town), pre-flight validated as the
+   first; the example's policy context is the first example's.
+4. **Two code lines in the folding loop beyond S34's guard**: a returned
+   kind joined by " / " is cut at its first slash before the guard (round
+   7's finding), and a catch-all answer (one kind holding more than half
+   of at least 20 words) is refused on the first attempt and the retry's
+   answer kept either way (round 8's finding; the guard amendment 3
+   deferred). Both counted in provenance, both tested.
+5. **Phase 24's gate** was the baseline's `make verify` plus a docs-only
+   diff, not a `verify-fast` of its own.
+6. **The extraction fingerprint pins** in `test_interventions_tagging.py`
+   were recomputed for `extract_interventions_v4` / `interventions_v3` (a
+   version pin, not a behaviour change).
+7. **`names_place` now knows every ISO-3166 country** (the table extension
+   R87 asked for), so a setting holding "Jersey", "Jordan", "Chad",
+   "Niger" or "Guinea" as a whole word reads as a place in the setting pass
+   (moved to the geography or dropped from the facet). Not special-cased;
+   for the review.
+8. **A geography that resolves to the record's own country** drops to the
+   country only when it is a country name itself (a `COUNTRY_NAMES` entry,
+   an abbreviation or one of the UK's four nations); a city or region of
+   the same country stays as the level below (the narrow reading of R87's
+   "equal to a country name"; the wide one would remove every UK city).
+9. **`places_unknown_country`** counts documents of any role (a data-fault
+   report), while `evaluated_countries` counts evaluating documents only.
+10. **`head_phrase` was fixed after the check-set read** (a target unit
+    whose head holds "not in …" was cut at the "in"); the fix is code with
+    a test, found on the check set but not a prompt change, so the check
+    set stays untuned on the prompt.
+11. **M1 on the replay** is inflated by the replay's accumulation of
+    options (every chain run keeps the clone's options as seeds and adds
+    the new discoveries: 38 / 34 / 32 / 37 live options after the `27final`
+    chain); M1 and M2 are read on the live runs (Phase 31).
+
+### The card, the list and the design pass (Phases 30a, 30c, 30b)
+
+Built to seam S36 by two `fast-worker` phases and read by the lead against
+the design pages on the obesity clone (`evidence/live-shots/a4/`, before
+and after the pass, 1440 and 390 px). The structure stands as built; the
+lead's changes in 30b: the signal line reads in navy under the grey line
+(it is the card's facts, not its meta); a breaking judgement on the
+constraint an option is already excluded for is said once, by the
+exclusion line (the empty obesity card showed it twice); two code fixes
+found on the way (`head_phrase` on "not in …", a mypy annotation). The
+words authored in 30a and kept: the signal ("17 documents evaluated it ·
+12 more describe it · Evaluated in the United Kingdom and 5 other
+countries · Measures 2 of your 3 outcomes"; "No evaluations, 3 documents
+describe it"; "No evaluation gives a place"; "No documents yet"; "Measures
+none of your outcomes"; the country's article by a short list), the opener
+("Evaluated in 14 documents. 10 more describe or recommend it."; "No
+evaluations. N documents describe or recommend it."; "No document names
+this option yet."), the outcome lines ("2 evaluations", "none", "not a
+target of this option", "No evaluation measured any of your three
+outcomes."), the lead-in ("Delivered in schools and at home. It typically
+involves:" by a kind → phrase map with a default "in {plural}"), the
+disclosure ("Documents · 24 · read from titles and abstracts only";
+"Evaluated it · 14"; "Describe or recommend it · 10"; "Show all N"; "+N
+more"), the callout's chips ("breaks", "may fall short", "cannot check").
+Singular forms where the count is one (a 30a reading beyond the
+contract's plural examples). The list: "38 options in 0 themes · 2
+excluded" with the link; no facets; the row's grey line "{lever} · {origin}
+· {relations} · {signal}". Known, not changed: at 390 px a theme heading's
+summary line ("36 options · regulation, subsidies, …") overflows on the
+clone, whose longlist has no themes and puts 36 options under "No theme"
+(a live list's theme summaries are short); the "Where it has been
+evaluated" sentences carry the fold's kind words as they are.
+
+### The OpenAPI diff (rubric box 86; against the baseline `d5232c2f`)
+
+Additions (Phases 25, 26): `OptionSummaryOut.evaluated_countries`
+(`EvaluatedCountryOut{country, documents}`), `.outcomes_evaluated`,
+`.outcomes_total`; `OptionDocumentOut.programme_name`, `.tried_on_kind`,
+`.measured`, `.place_detail`, `.records_count`; `OptionOut.place_sentences`
+(`PlaceSentenceOut{place, sentence, generated, where}`). Removals (30a,
+30c): `EvidenceProfileOut.where_tried`, `.tried_on`, `.measures`;
+`OutcomeCountsOut.other`; `OptionOut.examples`; `OptionSummaryOut.where_tried`,
+`.tried_on`; the schemas `ExampleOut`, `MeasureKindOut`, `OutcomeKindOut`,
+`WhereTriedOut`, `WherePlaceOut`, `TriedOnOut`. `LonglistOut`'s own fields
+unchanged. Read from `git diff d5232c2f -- frontend/openapi.json`.
+
+### Existing tests edited (rubric box 19; amendment 4)
+
+- `test_interventions_tagging.py`: the two pinned extraction fingerprints
+  (a version pin).
+- `test_option_profile.py`: the prompt-version pins (`folding_v8`,
+  `option_profile_v3`, `place_sentences_v5`), the provenance block's new
+  keys (`guard_rewrites`, `catch_all`, `place_sentences`), the stub input's
+  plain type word and `target_unit_short`.
+- `test_strip_place.py::test_georgia_is_not_read_as_a_us_state`: Georgia
+  is a country now; the test checks it is not a US state and resolves to
+  GE.
+- `test_where_tried.py`, `test_longlist.py`, `test_longlist_coverage_046.py`,
+  `test_longlist_routes.py`: the S32 rules (no place under "multiple
+  countries"; a geography that is the record's own country drops to it; a
+  country geography with no country is the top level); the examples' shown
+  spelling is the most frequent (27E); the removed fields' assertions
+  deleted (30a, 30c) and "not served" assertions added.
+- `OptionCard.test.tsx`: twenty superseded tests deleted by name (the
+  roles sentence, where tried, tried on, examples, the outcomes table and
+  its serves mark, the delivery-setting line, the Checks section, the
+  built-in checks) and twenty-five added; `longlistPresentation.test.ts`:
+  the tried-on, example-line, delivery-setting and facet tests replaced by
+  the signal, opener, outcome-line, lead-in, callout, documents-summary,
+  place-detail, counts-line and row-meta tests; `LonglistView.test.tsx`:
+  ten facet tests deleted by name, five added.
+
+### End-to-end command (amendment 4)
+
+The live check drove three new tasks through the local API with the
+amendment-2 driver (`evidence/pre-contract-runs/drive_live.py`, state in
+`live-out/<slug>/`; the amendment-3 state moved to `live-out-2026-10-01-a3/`):
+
+```
+cd backend && uv run python -m policy_atlas.api.dev_issuer mint --dir .dev-issuer --sub dev-user --client-id policy-atlas-dev --ttl 14400 | tail -1 > ../docs/tasks/046-longlist-refinement/evidence/token.txt
+cd backend && uv run --env-file .env uvicorn policy_atlas.api.app:create_app --factory --port 8000
+cd frontend && VITE_DEV_TOKEN="$(cat ../docs/tasks/046-longlist-refinement/evidence/token.txt)" pnpm dev
+cd docs/tasks/046-longlist-refinement/evidence/pre-contract-runs
+python3 drive_live.py create obesity && python3 drive_live.py pipeline obesity      # likewise caregiving, refugees
+evidence/pre-contract-runs/a4-session/read_live.sh obesity caregiving refugees    # live_metrics, the five a4 readbacks, analyse_*
+cd backend && uv run --env-file .env python $P/live_cost.py <task_id>               # M7 (Langfuse)
+cd docs/tasks/046-longlist-refinement/evidence/live-shots/a4 && TASK=<task_id> TAG=live-<slug> node shots.mjs
+```
+
+The replays (loops 27, 28, 26L, 29, 29F): `replay.py stage <stage> <slug>
+--fresh --label <round>` on the seven clones, `run_chain.sh` for the
+option chain, the `read_*_a4.py` readbacks; every figure in the round
+records is read from the saved `replay-out/` and `evidence/rounds/*.json`
+files.
+
+### Live check (Phase 31): three rapid runs on new tasks
+
+Driven 2026-10-12 12:08–13:19 through the local API on the final code
+(commits through `81b73675`), unattended, with `drive_live.py`. Tasks (dev
+database): obesity `53d235f7`, caregiving `8e8bd2b9`, refugees `ed0f0ab5`.
+Every figure read from `live_metrics.py`, `live_cost.py` (Langfuse), the
+readbacks (`27-live-live-<slug>.json`, `28-live-…`, `26L-live-…`,
+`29F-live-…`, `29-live-…`), `analyse_longlist.py` / `analyse_constrain.py`.
+
+| Measure | Obesity | Caregiving | Refugees | Result |
+|---|---|---|---|---|
+| M1 options per run (13 to 25) | 24 | 25 | 25 (23 on the list read; 25 live rows with the user's two own options) | **pass** |
+| M2 rows that are one named trial (the option names read by the lead) | none | none | none | **pass** |
+| M15 sentences: generated / template (trace, length, call) | 25: 23 / 2 (2, 0, 0) | 19: 15 / 4 (0, 4, 0) | 7: 7 / 0 (0, 0, 0) | reported: 6 of 51 on the template |
+| M15 the second wave's wall-clock (s) · calls · retries | 3.5 · 14 · 1 | 5.1 · 10 · 4 | 1.4 · 5 · 0 | reported |
+| M16 `study_geography` that is a body, a document, a date, an adjective or a non-place (records, read by hand) | 15 of 329 ("international" ×11 under "multiple"; NHS Boards 2; European Commission 1; Sydney Local Health District 1) | 11 of 517 (King's Mill Hospital 5; German Register for Clinical Studies 2; Darent Valley Hospital 2; NHS Lothian 1; Warwick Hospital 1) | 0 of 292 | **not met** at "none"; reported |
+| M16 documents with a not-stated record (of documents with records) | 38 of 114 | 56 (of 160) | 13 (of 86) | reported (amendment 3 live: 55, 71, 16) |
+| M16 unknown countries (`places_unknown_country`) | 0 | 0 | 0 | reported |
+| M17 wrong folds in 30 sampled, Tried on / Measures | 3 / 2 (18 Measures words left unfolded by the answer: 30 kinds in the map, 12 returned) | 4 / 4 (an eleven-word Measures kind took "screening", "symptoms", "social support networks") | 2 / 1 | **not met**; reported |
+| M17 the plan's text used (target unit / outcomes) | no ("children aged 4 to 11 years") / 1 of 3 | yes / 3 of 3 | no / 3 of 3 | reported |
+| M18 authority on refugees ("Only the council. It cannot change national law.") | — | — | 21 within your power, 2 needs action by (NHS Greater Manchester Integrated Care Board; the Home Office), 0 unclear; every "within" sentence names the council for a thing it funds, commissions or sets | **met** |
+| 29F features that only restate the setting or the target unit, read by hand (features) | 0 of 120 | 0 of 122 | 1 borderline of 124 ("free participation for adults granted refugee status", the user's own option) | **met** (the "varies" form on 7 features is the field description's own rule, not a hedge) |
+| Options with evaluations · countries on the signal (rich option) | 14 of 24 · United Kingdom and 3 other countries | 10 of 25 · United Kingdom and Australia | 5 of 23 · United Kingdom and 2 other countries | reported |
+| Kinds per folding facet (Tried on / Measures) | 12 / 30 | 12 / 12 | 12 / 12 | reported |
+| Records with a `programme_name` (distinct) | 95 of 329 (77) | — | — | reported |
+| Exclusions · `cannot_check` | 0 · 0 | 0 · 0 (req-1 passes on all 25) | 0 · 0 | reported (M4 trivially pass) |
+
+| Measure | Obesity (amendment 3 → now) | Caregiving | Refugees |
+|---|---|---|---|
+| M7 cost per task (Langfuse, USD) | 6.19 → 6.01 | 6.13 → 5.57 | 4.84 → 4.84 |
+| M7 of which `option_profile` (now with the sentence wave) | 1.78 → 1.72 | 1.81 → 1.69 | 1.76 → 1.56 |
+| M8 longlist walk, seconds | 618 → 854 | 735 → 1604 (the `longlist` step 1109 s: provider waits) | 559 → 486 |
+| M8 `option_profile` step, seconds | 50 → 59 | 45 → 59 | 70 → 71 |
+| M8 `extract_interventions` step, seconds (v4) | 107 → 315 | 131 → 125 | 58 → 58 |
+| M9 pool (documents) · relevant in the longlist scope | 344 → 335 · 184 → 157 | 255 → 253 · 171 → 146 | 215 → 244 · 78 → 97 |
+
+### The live records, read by hand (Phase 31)
+
+- **Places (M16).** The three families of the tuning set: a body's own
+  name where the abstract gives no town (hospitals on caregiving, NHS
+  bodies on obesity), a group word under "multiple" ("international"),
+  and nothing on refugees. No adjective, no date, no person on any live
+  list (the survey's "Estonian", "2010-2013", "Georgia" families are gone).
+- **Folds (M17).** The plan's outcomes are kinds on caregiving and
+  refugees and the target unit's text on caregiving; obesity's answer left
+  18 of 66 Measures words unfolded (the words keep their own text, as S21
+  says) and named the target unit "children aged 4 to 11 years". The
+  wrong folds are of the tuning set's kinds (people into a place: "school
+  food service personnel" → schools; a catch-all-ish kind on caregiving's
+  Measures).
+- **Sentences (M15).** Read in full on the three lists: no merit word;
+  the plan's outcomes in the plan's words; the "on whom" in the fold's
+  words. Would rewrite: one obesity sentence naming "consumer
+  understanding" beside the obesity outcome (a fold kind); the two
+  caregiving template sentences over the ceiling (a long programme name
+  and a long kind, as on the tuning set).
+- **The authority (M18)**: above.
+- **Features (29F)**: above; every option minted under the rule.
+
+### Browser check (Phase 31; Playwright over the live dev app, desktop 1440 px and 390 px; screenshots in `evidence/live-shots/a4/`, gitignored)
+
+Read-only (GET requests only; the script blocks anything else). The
+obesity clone before and after the 30b pass (`before-*`, `after-*`), then
+the three live tasks (`live-<slug>-*`): the rich, a thin, a no-evaluation
+and (refugees) an empty option, each with the documents disclosure
+opened; the list in list and grid mode, expanded. Seen as built: the
+signal line's four forms (rich; "No evaluations, 3 documents describe it";
+"No evaluation gives a place"; "No documents yet" on the refugees option
+the user added); the sections How it works · What it would take ·
+Evidence and no Checks; the lever and its reason on their own lines; the
+lead-in ("Delivered in schools and at home. It typically involves:";
+"Delivered in family centres."; "It typically involves:" on a levy); the
+opener; "Your outcomes" with "none" in grey and the one-line form on the
+thin card; "Where it has been evaluated" with the plan's Where row tinted
+and "No single place" last; the disclosure closed, its two groups, five
+lines then "Show all", a document's three lines (programme in bold ·
+place with the level below in brackets · the folded kind · the outcome;
+tier · type · year), "+2 more" to the dossier; the callout once on an
+excluded option (after 30b); the list header "24 options in 7 themes"
+with no excluded part, "38 options in 0 themes · 2 excluded" with the
+link on the clone; Group by; the grid unchanged; no facets. A wrong fold
+seen on the disclosure: obesity's "school food service personnel" under
+the kind "schools" (recorded above). No overflow at 390 px on a live
+list; the clone's "No theme" summary overflows (§ The card, the list and
+the design pass). The caregiving live run excluded nothing, so the
+callout on a failing constraint is covered by the vitest (six cases) and
+the clone's excluded option, not by a live card.
+
+### Public safety
+
+The round records, the readbacks and the screenshots live under the
+gitignored `evidence/` tree; the hand-read files hold abstracts and are
+not committed. This file holds counts, option names and sentences the
+model wrote from public abstracts, no raw abstract text. The dev token
+file is gitignored. No secret in any committed file; the Langfuse
+figures are totals.
+
+### Rubric status (amendment 4 boxes 72–88; the review conversation ticks them)
+
+| Box | Status |
+|---|---|
+| 72 the evidence signal | built and tested (the five pinned cases, the describing count, the vitest's four forms, the vocabulary vitest) |
+| 73 How it works | built; the feature rule in three prompts; stop measure met on the options minted under it (replay 14, live 72); the count before reported |
+| 74 order and the callout | built (six vitest cases); no diff under `constrain/` except the import move of `who_decides_considerations` (Phase 29) |
+| 75 the opener and your outcomes | built and tested |
+| 76 the place sentences: the call | built and tested; **one deviation**: no `max_length` on the wire (the plan's S31 and PA4-9 over the box's words; the ceiling is checked in code per sentence) |
+| 77 the sentence loop | five rounds; stop measure **not met** (4 of 56 on the template at round 4); the fixture set green; re-pinned |
+| 78 the documents disclosure | built and tested |
+| 79 the list | built and tested |
+| 80 the folds' readers and the folding round | the guard built and tested; four rounds; stop measure **not met**; re-pinned |
+| 81 places | v4 with the rules; `SCHEMA_VERSION` bumped; the resolver and the coverage checks tested on the survey's cases; stop measure **not met** at "none" (61 of 1,323 records on the tuning set at round 3) |
+| 82 example names fold | built and tested on the survey's cases |
+| 83 "Who decides" and the authority | built and tested; round 6 read two-sided; **met** |
+| 84 every prompt through a loop | yes: 27 (4 rounds + check), 28 (4 rounds + check), 26L (5 rounds + check), 29 (1 round), 29F (round 0 read on the replay's new options and the live runs) |
+| 85 gates | as the table above; Phase 24's gate a flagged deviation; two one-tree splits noted |
+| 86 the contract's lines hold | the OpenAPI diff above; the live figures above; the superseded tests named above |
+| 87 spec changes | **not applied**: proposals 10–14 of the contract's § Spec changes wait for the owner's wording (as amendment 3's did) |
+| 88 out of scope held | no change under `evidence_search/` except `extract/extract_interventions_prompt.py` and `extract/interventions_records.py` (the intervention profile's own files) and the test pins; the only Overton-related change is `docs/deferred.md` |
+
+### Known unverified items (amendment 4)
+
+- The catch-all retry fired on no replay or live run (every answer under
+  the one-half share); its path is covered by the stub tests only.
+- The place-sentence call's failure path (a raised call twice) is
+  covered by tests; no live or replay run raised.
+- The `+N more` link opens the dossier's "In this option" slot: clicked
+  on the clone in the a3 browser check's method; not re-driven here (the
+  URL is unchanged, the vitest pins it).
+- The callout on a live failing constraint: no live run produced one.
+- M1 and M2 on the replay clones are not comparable (the clones
+  accumulate options); read on the live runs only.
+- Rubric box 82's "duplicates left on the check set" was not read: the
+  fold is tested on the survey's cases and seen on the live refugees
+  disclosure (three "San Diego Newcomers Project (SDNP)" spellings folded;
+  "Refugee Support Services" and "Refugee Support Services program" not,
+  the suffix making two keys); no readback over the check set's
+  `examples` keys was written.
+
+### Review handoff (amendment 4; step-7/8 inputs)
+
+**Adjudication items for the review conversation**
+
+1. Three stop measures **not met** and reported (R25): M15 (4 of 56
+   tuning-set sentences on the template; 6 of 51 live), M16 (61 records
+   on the tuning set; 26 live), M17 (two to ten wrong folds in 30 per
+   facet). Each loop's record names the residual family and the lever
+   left (the model tier for the record prompt and the folds; a wire
+   ceiling for the sentences). The reviewer decides whether the card may
+   ship with them.
+2. Rubric box 76's `max_length` on the wire was not built (the plan and
+   the prompt module say none; the box says one).
+3. The two code guards beyond S34 in the folding loop (the slash cut; the
+   catch-all retry) and the two beyond S31 in the sentence loop (the
+   over-length retry; `head_phrase`).
+4. The suggest prompt gained the feature rule beside the two prompts the
+   plan named.
+5. `names_place` over the full ISO-3166 table (a setting holding
+   "Jersey", "Jordan", "Chad", "Niger" or "Guinea" reads as a place).
+6. The narrow reading of "a geography equal to a country name" (a city of
+   the record's own country stays as the level below).
+7. The second worked example in the record prompt (a hospital trust).
+8. One gated tree split by phase twice (25 + 27E; 29 + 30a + 30c + 30b),
+   with the shared files in the earlier commit.
+9. The 30b judgement calls: the signal in navy; a breaking judgement said
+   once on an excluded option; the words of 30a kept as authored.
+10. The owner's open design item D23 (the Where row's tint).
+
+**Executor provenance (for the family flip).** Claude built everything:
+the lead wrote every prompt and its rounds (27, 28, 26L, 29, 29F), the
+place-sentence prompt module, the ADR check, the 30b pass, the round
+records and this file; `deep-reasoner` (Opus) built Phases 25 (with 27's
+code checks) and 26; `fast-worker` (Sonnet) built the Phase 28 guard, 27E,
+the Phase 29 plumbing, 30a and 30c. No Codex job in the build; Codex
+anchors the review.
+
+**Diff-scoping exclusions.** `frontend/openapi.json`,
+`frontend/src/api/gen/types.ts` (generated), `scripts/prompt_hashes.json`,
+`docs/tasks/046-longlist-refinement/**` (this record), `docs/deferred.md`,
+`docs/adr/0040-*.md` (reviewed as prose, not code). The evidence tree is
+gitignored.
+
+**Live-trace pointers.** Langfuse sessions = the task ids above (obesity
+`53d235f7-7cd8-4bae-b840-cef3eee1f9a2`, caregiving
+`8e8bd2b9-7834-4365-ac25-8eee17e5407c`, refugees
+`ed0f0ab5-9c07-454e-a9d0-1a4f41081cae`); the replay clones' runs are in
+the dev database under the clone task ids (`replay-out/<slug>/clone.json`).
+The local API on :8000 and the Vite server on :5173 started by this
+build are still running (the owner's `make dev` was not running).
+
+### Knowledge candidates (amendment 4)
+
+- **A worked example moves a mini model where a rule and a schema
+  description do not.** The record prompt's hospital family fell only on
+  the round that added a second few-shot example (caregiving 50 → 32
+  faults); the rule with examples (round 1) and the field description
+  (round 2) each moved other families and left this one.
+- **A ban on one joiner is answered with another.** Forbidding
+  slash-joined kinds made the model pack words into one kind string with
+  quote-separated items and leave thirty words unfolded; the code cut
+  (take the first member) was the lever, not the ban.
+- **A catch-all share needs the target unit's own share as its floor.**
+  The one-half rule catches the 128-of-148 collapse but not a
+  39-of-106 one; the target unit's kind rightly holds a third of the
+  words on two lists, so a lower threshold needs the plan in the rule.
+- **The mini model will not count characters; it will sum up.** "At most
+  220 characters" did nothing; "sum a place up: the count, the commonest
+  kind and strength, at most one programme name" cut the over-length
+  answers in half, and a one-retry did the rest except for data the
+  rules keep whole (a twenty-word programme name).
+- **Plain words in the data beat plain-word rules.** The trace check's
+  name failures and the "RCTs and Quasi-Experimental Studies" sentences
+  vanished when the call input carried the template's type word instead
+  of the classifier's label; the prompt's "in plain words" rule had not
+  bound.
+- **`head_phrase` on a plan text must respect its own negation.** Cutting
+  "16 to 24 year olds not in education, employment or training" at " in "
+  yields "16 to 24 year olds not"; a qualifying-clause cut needs the word
+  before it checked.
+- **The replay cannot re-mint existing options' designs.** `suggest
+  --fresh` and `longlist --fresh` keep the clone's options as seeds, so a
+  design-prompt round shows only on newly discovered options; a
+  from-scratch read needs a clone without option rows or a live run.
+- **A replay on a clone whose documents were re-profiled needs the chain
+  rerun before any option-level read**: the memberships still point at
+  the superseded records (0 words, 0 sentences on the check set until the
+  chain ran).
+- **The gate's frontend step times out under load.** Two unrelated vitest
+  timeouts (5 s) on a machine running a replay chain and two agents'
+  test suites; a quiet rerun passed. Treat a lone 5-second timeout as
+  load, not as the tree.
+- **Docker is down after a restart.** A resumed session's first replay
+  failed on "connection refused"; `open -a Docker` then `docker compose
+  up -d db`.
+- **`git commit-tree` from a path list needs the path to exist in the
+  snapshot.** A wrong directory in a split-commit path list silently
+  commits nothing for that file; compare the final HEAD tree with the
+  gated tree id after the last split.
+- **A refreshed dev token lives 4 hours**; the a3 token was 11 days old
+  and expired. Mint before a browser check.
+
+
 ## Review findings
 
 Not yet. The review stack (step 7) runs in a fresh conversation.
