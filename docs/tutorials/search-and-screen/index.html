@@ -103,32 +103,11 @@ footer { margin-top: 3.5rem; padding-top: 1rem; border-top: 1px solid var(--line
     <div class="tile" role="listitem"><div class="num" data-phase8="cost_per_review_standard">$0.07</div><div class="lab">cost of one Broad search and screen, at the model's list price (measured 9 October 2026)</div></div>
   </div>
   <p class="toc">
-    <a href="#words">Words</a><a href="#pass">A: The search pass</a><a href="#scopes">Scopes</a><a href="#filters">Filters</a><a href="#screen">B: Screening</a><a href="#measured">Measured</a><a href="#replaced">What it replaced</a><a href="#parked">Parked</a>
+    <a href="#pass">A: The search pass</a><a href="#scopes">Scopes</a><a href="#filters">Filters</a><a href="#screen">B: Screening</a><a href="#measured">Measured</a><a href="#replaced">What it replaced</a><a href="#parked">Parked</a>
   </p>
 </header>
 
 <main>
-<section class="wrap" id="words">
-  <h2>The words we use</h2>
-  <p>The app and the code use different names for the same things. This page uses the app's names; the code name is given once here so that a reader can find the place in the code.</p>
-  <div class="scroll"><table>
-    <thead><tr><th>in the app</th><th>in the code</th><th>what it means</th></tr></thead>
-    <tbody>
-      <tr><td><b>Search scope</b>: Focused, Broad, Broadest</td><td><code>search_effort</code>: <code>rapid</code>, <code>standard</code>, <code>deep</code>; the caps in <code>DEPTH_CONSTANTS</code></td><td>How many documents the search keeps: a limit on papers and a limit on policy documents. Nothing else differs between the scopes.</td></tr>
-      <tr><td><b>Analysis level</b>: Landscape, Standard, Deep</td><td><code>analysis_depth</code></td><td>What happens after the search: reading full texts, selecting sources, extracting findings. It does not change the search.</td></tr>
-      <tr><td>Search</td><td><code>acquire</code>; the pass in <code>sourcing/search_loop.py</code>, the ranking in <code>sourcing/pool.py</code>, the database calls in <code>sourcing/search_live.py</code></td><td>Turning the research question into database searches, ordering what comes back, and keeping the best of it.</td></tr>
-      <tr><td>Seeds</td><td>the first 200 of <code>pool.interleave</code></td><td>The first 200 papers the database searches return. Everything else on the paper side is found by following their citations.</td></tr>
-      <tr><td>Backward snowball, forward chasing</td><td><code>lookup_ids</code>, <code>fetch_citing</code></td><td>Two ways of finding more papers from the seeds: the papers the seeds cite (backward), and the papers that cite the seeds (forward). Both are plain database lookups with no language model involved.</td></tr>
-      <tr><td>Landmarks</td><td><code>fetch_by_id</code>, origin <code>landmark</code></td><td>Policy documents that the policy search results cite often but that the search itself did not return. They are fetched by id and added to the pool.</td></tr>
-      <tr><td>Specificity</td><td><code>pool.rank_papers</code>, <code>pool.rank_policy</code></td><td>A score for how strongly a document is tied to this particular search: how many of the search's own results cite it, or how many of them it cites, discounted when the document is very widely cited in general (a famous paper is cited by everything, which says little about this question). Policy documents are ordered by this score. For papers it is only the tie-breaker, after the three lists below.</td></tr>
-      <tr><td>Mix</td><td><code>pool.rank_mix</code>, <code>pool.dedupe_papers</code></td><td>How the paper pool is ordered before the cut. Duplicate copies of a paper (same title and same authors, such as a preprint and the journal version) are reduced to one. Then papers are taken in turn, one at a time, from three lists: the most relevant (returned near the top by several searches, or citing many of the seeds), the most established (cited by the most seeds) and the most recent (published in the last five years). Taking them in turn means that however few documents the scope keeps, all three kinds are in it.</td></tr>
-      <tr><td>Screening</td><td><code>screen_abstract</code> (stage 1), <code>screen_full</code> (stage 2)</td><td>A language model reads each kept document's title and abstract and says relevant, not relevant, or unsure. This page describes stage 1, the title-and-abstract screen. Stage 2, which reads full texts, is unchanged.</td></tr>
-      <tr><td>Research question</td><td><code>intent</code></td><td>The sentence the user wrote, plus any inclusion criteria the plan added.</td></tr>
-      <tr><td>Recall</td><td>&nbsp;</td><td>How the search is measured. A published systematic review lists the papers it included; recall is the share of that list the app's search found, matched on DOIs (Digital Object Identifiers, the permanent ids of papers). The small test set has 15 reviews, the full one 100. Policy documents have no such list, so recall measures papers only.</td></tr>
-    </tbody>
-  </table></div>
-</section>
-
 <section class="wrap" id="pass">
   <h2>Diagram A: the search pass</h2>
   <p>Every search follows the diagram below once, whatever the scope. It uses two databases. <b>OpenAlex</b> is a free index of about 250 million academic works. It offers a keyword search and a meaning-based search (one that matches on what a sentence means rather than the words in it), and every record carries the paper's reference list and the number of times it has been cited. <b>Overton</b> is a subscription index of policy documents (government reports, think-tank papers and the like). It offers a meaning-based search that takes a whole sentence, and every record lists the other policy documents it cites.</p>
