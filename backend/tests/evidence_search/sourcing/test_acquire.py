@@ -735,6 +735,7 @@ def test_source_acquired_events(conn: Connection) -> None:
         assert set(payload) == {
             "source_snapshot_id", "task_source_snapshot_id",
             "evidence_scope_id", "backend", "backend_record_id", "query_origin",
+            "pool_rank",
         }
         assert payload["evidence_scope_id"] == str(scope_id)
 

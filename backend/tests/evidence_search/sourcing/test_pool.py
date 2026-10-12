@@ -186,10 +186,15 @@ def test_dedupe_papers_needs_same_title_and_authors_and_keeps_the_cited_copy() -
     other_authors = _cand("W3", title="Criticality in networks", authors=["B Other"], cited=2)
     untitled_a = _cand("W4", title="", cited=0)
     untitled_b = _cand("W5", title="", cited=0)
+    no_authors_a = _cand("W6", title="Annual report", authors=[], cited=0)
+    no_authors_b = _cand("W7", title="Annual report", authors=[], cited=0)
 
-    kept = dedupe_papers([preprint, journal, other_authors, untitled_a, untitled_b])
+    kept = dedupe_papers(
+        [preprint, journal, other_authors, untitled_a, untitled_b, no_authors_a, no_authors_b]
+    )
 
-    assert [c.openalex_id for c in kept] == ["W2", "W3", "W4", "W5"]
+    # Untitled or author-less records are never merged: too little evidence.
+    assert [c.openalex_id for c in kept] == ["W2", "W3", "W4", "W5", "W6", "W7"]
 
 
 def test_rank_mix_alternates_relevant_seminal_and_novel_then_the_rest() -> None:
@@ -243,3 +248,13 @@ def test_rank_mix_counts_citing_the_seeds_as_three_query_lists() -> None:
     # Three lists at rank 1 (3/61) beat one list at rank 1 (1/61): W2 leads relevant.
     assert with_coupling == ["W2", "W3", "W1"]
     assert without == ["W1", "W3", "W2"]
+
+
+def test_rank_mix_with_an_empty_stratum_still_places_every_paper_once() -> None:
+    """No recent paper and no query hit: the seminal list carries the whole pool."""
+    old_a = _cand("W1", year=1999, cited=10, inset=3)
+    old_b = _cand("W2", year=2001, cited=50, inset=1)
+
+    order = [c.openalex_id for c in rank_mix([old_b, old_a], [], novel_from_year=2021)]
+
+    assert order == ["W1", "W2"]

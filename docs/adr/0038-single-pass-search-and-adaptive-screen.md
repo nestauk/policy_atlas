@@ -53,14 +53,15 @@ it cites; the owner's decisions are in the task's `notes.md`.
    push the question's most direct matches past the Focused cap (one case: the target
    paper, returned by 9 of 33 queries, ranked 127 of 2,139). The pool is now first
    de-duplicated (same normalised title and same author names, the most cited copy
-   kept, `pool.dedupe_papers`) and then ordered by `pool.rank_mix`: a round-robin over
+   kept; a record with no title or no author names is never merged, `pool.dedupe_papers`) and then ordered by `pool.rank_mix`: a round-robin over
    three strata, one paper from each in turn — *relevant* (reciprocal rank fusion,
    k = 60, over every keyword and semantic result list plus the pool ordered by
    weighted coupling, "cites the seeds", that order counted as three lists, so a paper
    that cites many seeds ranks as if a few queries had returned it), *seminal* (most
    cited by the seed set, then globally) and *novel* (published in the last five
    years, fused first). Papers the strata leave follow in
-   specificity order. Every cut depth therefore holds all three kinds. Chosen over a
+   specificity order. Every cut depth therefore holds all three kinds, as far as the
+   pool has them (a stratum can be empty). Chosen over a
    single blended score because the guarantee holds at any cap, and over the
    relevance reserve (deferred D6) because a broad query's raw results carry
    off-topic papers into the reserve. Evidence: three pool re-orderings in

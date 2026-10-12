@@ -1,16 +1,16 @@
 # Pool orderings: What are the effects of erythropoietin (EPO) on the brain and on the GABAergic system?
 
-Run 2026-10-12T14:08:18+00:00. Depth `rapid`, cap 100. Pool 595 papers (590 distinct papers) from 23 query calls. No ground truth; this compares orderings of one pool.
+Run 2026-10-12T17:31:28+00:00. Depth `rapid`, cap 100. Pool 595 papers (590 distinct papers) from 23 query calls. No ground truth; this compares orderings of one pool.
 
 ## Where the probe papers rank
 
 | paper | baseline | reserve | hits | rrf | blend | mix_c | mix_q | mix_f1 | mix |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
 | Erythropoietin crosses the blood–brain barrier to protect against expe | 1 | 51 | 106 | 103 | 4 | 2 | 2 | 2 | 2 |
-| Erythropoietin in the brain: can the promise to protect be fulfilled? | 349 | 384 | 487 | 487 | 428 | 308 | 308 | 304 | 308 |
+| Erythropoietin in the brain: can the promise to protect be fulfilled? | 349 | 384 | 487 | 487 | 428 | 294 | 294 | 292 | 294 |
 | Improvement of cognitive functions in chronic schizophrenic patients b | 67 | 112 | 279 | 279 | 134 | 101 | 101 | 101 | 101 |
 | Erythropoietin Stimulates GABAergic Maturation in the Mouse Hippocampu | 245 | 2 | 7 | 5 | 9 | 3 | 3 | 3 | 3 |
-| Erythropoietin: a multimodal neuroprotective agent | 82 | 125 | 118 | 129 | 74 | 61 | 263 | 173 | 91 |
+| Erythropoietin: a multimodal neuroprotective agent | 82 | 125 | 118 | 129 | 74 | 61 | 257 | 165 | 91 |
 
 A number at or under 100 means the paper survives the cut at this scope.
 
@@ -18,15 +18,15 @@ A number at or under 100 means the paper survives the cut at this scope.
 
 | ordering | overlap with baseline | median_year | share_from_2020 | median_cited_by | share_two_plus_queries | share_no_query | origins |
 |---|---:|---:|---:|---:|---:|---:|---|
-| baseline | 100 | 2006.5 | 0.12 | 131.0 | 0.15 | 0.66 | {'semantic': 18, 'snowball_forward': 31, 'snowball_backward': 38, 'generated': 13} |
-| reserve | 57 | 2010.0 | 0.16 | 52.0 | 0.39 | 0.38 | {'variant_sr': 12, 'generated': 29, 'variant_rct': 9, 'semantic': 11, 'snowball_forward': 15, 'snowball_backward': 24} |
-| hits | 15 | 2010.0 | 0.12 | 23.0 | 1.0 | 0.0 | {'semantic': 61, 'generated': 24, 'variant_rct': 7, 'variant_sr': 6, 'snowball_forward': 1, 'snowball_backward': 1} |
-| rrf | 15 | 2010.0 | 0.13 | 19.5 | 1.0 | 0.0 | {'generated': 22, 'semantic': 65, 'variant_rct': 7, 'variant_sr': 6} |
+| baseline | 100 | 2006.5 | 0.1 | 131.0 | 0.15 | 0.66 | {'semantic': 18, 'snowball_forward': 31, 'snowball_backward': 38, 'generated': 13} |
+| reserve | 57 | 2010.0 | 0.13 | 52.0 | 0.39 | 0.38 | {'variant_sr': 12, 'generated': 29, 'variant_rct': 9, 'semantic': 11, 'snowball_forward': 15, 'snowball_backward': 24} |
+| hits | 15 | 2010.0 | 0.08 | 23.0 | 1.0 | 0.0 | {'semantic': 61, 'generated': 24, 'variant_rct': 7, 'variant_sr': 6, 'snowball_forward': 1, 'snowball_backward': 1} |
+| rrf | 15 | 2010.0 | 0.09 | 19.5 | 1.0 | 0.0 | {'generated': 22, 'semantic': 65, 'variant_rct': 7, 'variant_sr': 6} |
 | blend | 61 | 2006.5 | 0.06 | 68.5 | 0.52 | 0.28 | {'semantic': 44, 'generated': 23, 'snowball_forward': 9, 'snowball_backward': 21, 'variant_sr': 1, 'variant_rct': 2} |
-| mix_c | 64 | 2008.0 | 0.33 | 88.5 | 0.32 | 0.54 | {'generated': 14, 'semantic': 29, 'snowball_backward': 26, 'snowball_forward': 31} |
-| mix_q | 51 | 2008.0 | 0.33 | 47.5 | 0.48 | 0.34 | {'generated': 15, 'semantic': 38, 'snowball_backward': 26, 'variant_sr': 7, 'variant_rct': 4, 'snowball_forward': 10} |
-| mix_f1 | 50 | 2008.0 | 0.33 | 47.5 | 0.48 | 0.34 | {'generated': 15, 'semantic': 38, 'snowball_backward': 26, 'variant_sr': 7, 'variant_rct': 4, 'snowball_forward': 10} |
-| mix | 56 | 2008.0 | 0.33 | 72.0 | 0.45 | 0.39 | {'generated': 15, 'semantic': 38, 'snowball_backward': 26, 'snowball_forward': 15, 'variant_sr': 3, 'variant_rct': 3} |
+| mix_c | 62 | 2008.0 | 0.33 | 68.0 | 0.34 | 0.49 | {'generated': 14, 'semantic': 31, 'snowball_backward': 26, 'snowball_forward': 25, 'variant_sr': 4} |
+| mix_q | 51 | 2008.0 | 0.33 | 40.0 | 0.44 | 0.4 | {'generated': 15, 'semantic': 35, 'snowball_backward': 26, 'variant_sr': 7, 'variant_rct': 2, 'snowball_forward': 15} |
+| mix_f1 | 50 | 2008.0 | 0.33 | 36.5 | 0.44 | 0.4 | {'generated': 15, 'semantic': 35, 'snowball_backward': 26, 'variant_sr': 7, 'variant_rct': 2, 'snowball_forward': 15} |
+| mix | 55 | 2008.0 | 0.33 | 64.0 | 0.41 | 0.4 | {'generated': 15, 'semantic': 36, 'snowball_backward': 26, 'snowball_forward': 15, 'variant_sr': 6, 'variant_rct': 2} |
 
 ## Top 15 under `baseline`
 
@@ -146,13 +146,13 @@ A number at or under 100 means the paper survives the cut at this scope.
 6. 2021 · Erythropoietin and derivatives: Potential beneficial effects on the brain · cited 68 · queries 6 · inset 3 · wcoup 12.214 · spec 4.757 · generated
 7. 2001 · The Biology of Erythropoietin in the Central Nervous System and Its Neurotrophic and Neuroprotective Potential · cited 177 · queries 8 · inset 6 · wcoup 10.745 · spec 3.521 · semantic
 8. 1996 · Erythropoietin receptor is expressed in rat hippocampal and cerebral cortical neurons, and erythropoietin prevents in vitro glutamate-induced neuronal death · cited 661 · queries 0 · inset 51 · wcoup 0.0 · spec 18.042 · snowball_backward
-9. 2020 · Gamma-Aminobutyric Acid Increases Erythropoietin by Activation of Citrate Cycle and Stimulation of Hypoxia-Inducible Factors Expression in Rats · cited 9 · queries 3 · inset 1 · wcoup 1.585 · spec 1.564 · semantic
+9. 2023 · Is erythropoietin beneficial and safe as an adjunctive therapy to therapeutic hypothermia in newborns with hypoxic ischemic injury? · cited 0 · queries 3 · inset 0 · wcoup 0 · spec 0.0 · variant_sr
 10. 2003 · The Pleiotropic Effects of Erythropoietin in the Central Nervous System · cited 138 · queries 6 · inset 8 · wcoup 27.653 · spec 6.451 · semantic
 11. 1999 · A Potential Role for Erythropoietin in Focal Permanent Cerebral Ischemia in Mice · cited 715 · queries 0 · inset 50 · wcoup 0.0 · spec 17.48 · snowball_backward
-12. 2023 · Is erythropoietin beneficial and safe as an adjunctive therapy to therapeutic hypothermia in newborns with hypoxic ischemic injury? · cited 0 · queries 3 · inset 0 · wcoup 0 · spec 0.0 · variant_sr
+12. 2021 · Effects of GABA on Erythropoiesis in the Hep3B Cell and Rat Exposed to Hypoxia · cited 0 · queries 3 · inset 0 · wcoup 5.755 · spec 3.0 · semantic
 13. 2008 · Erythropoietin affects GABAergic transmission in hippocampal neurons in vitro · cited 7 · queries 6 · inset 4 · wcoup 23.613 · spec 8.94 · generated
 14. 2001 · Erythropoietin-mediated neuroprotection involves cross-talk between Jak2 and NF-κB signalling cascades · cited 923 · queries 0 · inset 45 · wcoup 0.0 · spec 15.152 · snowball_backward
-15. 2021 · Effects of GABA on Erythropoiesis in the Hep3B Cell and Rat Exposed to Hypoxia · cited 0 · queries 3 · inset 0 · wcoup 5.755 · spec 3.0 · semantic
+15. 2021 · Transfusions and neurodevelopmental outcomes in extremely low gestation neonates: to transfuse or not to transfuse, that is the question… · cited 2 · queries 2 · inset 0 · wcoup 0 · spec 0.0 · variant_sr
 
 ## Top 15 under `mix_f1`
 
@@ -164,13 +164,13 @@ A number at or under 100 means the paper survives the cut at this scope.
 6. 2021 · Erythropoietin and derivatives: Potential beneficial effects on the brain · cited 68 · queries 6 · inset 3 · wcoup 12.214 · spec 4.757 · generated
 7. 2001 · The Biology of Erythropoietin in the Central Nervous System and Its Neurotrophic and Neuroprotective Potential · cited 177 · queries 8 · inset 6 · wcoup 10.745 · spec 3.521 · semantic
 8. 1996 · Erythropoietin receptor is expressed in rat hippocampal and cerebral cortical neurons, and erythropoietin prevents in vitro glutamate-induced neuronal death · cited 661 · queries 0 · inset 51 · wcoup 0.0 · spec 18.042 · snowball_backward
-9. 2020 · Gamma-Aminobutyric Acid Increases Erythropoietin by Activation of Citrate Cycle and Stimulation of Hypoxia-Inducible Factors Expression in Rats · cited 9 · queries 3 · inset 1 · wcoup 1.585 · spec 1.564 · semantic
+9. 2021 · Effects of GABA on Erythropoiesis in the Hep3B Cell and Rat Exposed to Hypoxia · cited 0 · queries 3 · inset 0 · wcoup 5.755 · spec 3.0 · semantic
 10. 2003 · The Pleiotropic Effects of Erythropoietin in the Central Nervous System · cited 138 · queries 6 · inset 8 · wcoup 27.653 · spec 6.451 · semantic
 11. 1999 · A Potential Role for Erythropoietin in Focal Permanent Cerebral Ischemia in Mice · cited 715 · queries 0 · inset 50 · wcoup 0.0 · spec 17.48 · snowball_backward
-12. 2021 · Effects of GABA on Erythropoiesis in the Hep3B Cell and Rat Exposed to Hypoxia · cited 0 · queries 3 · inset 0 · wcoup 5.755 · spec 3.0 · semantic
+12. 2023 · Is erythropoietin beneficial and safe as an adjunctive therapy to therapeutic hypothermia in newborns with hypoxic ischemic injury? · cited 0 · queries 3 · inset 0 · wcoup 0 · spec 0.0 · variant_sr
 13. 2008 · Therapeutic Potential of Erythropoietin and its Structural or Functional Variants in the Nervous System · cited 222 · queries 5 · inset 15 · wcoup 45.681 · spec 10.991 · semantic
 14. 2001 · Erythropoietin-mediated neuroprotection involves cross-talk between Jak2 and NF-κB signalling cascades · cited 923 · queries 0 · inset 45 · wcoup 0.0 · spec 15.152 · snowball_backward
-15. 2023 · Is erythropoietin beneficial and safe as an adjunctive therapy to therapeutic hypothermia in newborns with hypoxic ischemic injury? · cited 0 · queries 3 · inset 0 · wcoup 0 · spec 0.0 · variant_sr
+15. 2026 · Erythropoietin mediated neuroprotection across neurological disorders through molecular signaling and cellular repair · cited 0 · queries 2 · inset 0 · wcoup 31.592 · spec 14.0 · generated
 
 ## Top 15 under `mix`
 
@@ -182,10 +182,10 @@ A number at or under 100 means the paper survives the cut at this scope.
 6. 2021 · Erythropoietin and derivatives: Potential beneficial effects on the brain · cited 68 · queries 6 · inset 3 · wcoup 12.214 · spec 4.757 · generated
 7. 2001 · The Biology of Erythropoietin in the Central Nervous System and Its Neurotrophic and Neuroprotective Potential · cited 177 · queries 8 · inset 6 · wcoup 10.745 · spec 3.521 · semantic
 8. 1996 · Erythropoietin receptor is expressed in rat hippocampal and cerebral cortical neurons, and erythropoietin prevents in vitro glutamate-induced neuronal death · cited 661 · queries 0 · inset 51 · wcoup 0.0 · spec 18.042 · snowball_backward
-9. 2020 · Gamma-Aminobutyric Acid Increases Erythropoietin by Activation of Citrate Cycle and Stimulation of Hypoxia-Inducible Factors Expression in Rats · cited 9 · queries 3 · inset 1 · wcoup 1.585 · spec 1.564 · semantic
+9. 2026 · Erythropoietin mediated neuroprotection across neurological disorders through molecular signaling and cellular repair · cited 0 · queries 2 · inset 0 · wcoup 31.592 · spec 14.0 · generated
 10. 2008 · Therapeutic Potential of Erythropoietin and its Structural or Functional Variants in the Nervous System · cited 222 · queries 5 · inset 15 · wcoup 45.681 · spec 10.991 · semantic
 11. 1999 · A Potential Role for Erythropoietin in Focal Permanent Cerebral Ischemia in Mice · cited 715 · queries 0 · inset 50 · wcoup 0.0 · spec 17.48 · snowball_backward
-12. 2026 · Erythropoietin mediated neuroprotection across neurological disorders through molecular signaling and cellular repair · cited 0 · queries 2 · inset 0 · wcoup 31.592 · spec 14.0 · generated
+12. 2025 · Elucidating the Pivotal Neuroprotective Mechanisms and Therapeutic Variants of Erythropoietin in Neonatal Brain Injury · cited 1 · queries 0 · inset 0 · wcoup 47.769 · spec 15.364 · snowball_forward
 13. 2003 · The Pleiotropic Effects of Erythropoietin in the Central Nervous System · cited 138 · queries 6 · inset 8 · wcoup 27.653 · spec 6.451 · semantic
 14. 2001 · Erythropoietin-mediated neuroprotection involves cross-talk between Jak2 and NF-κB signalling cascades · cited 923 · queries 0 · inset 45 · wcoup 0.0 · spec 15.152 · snowball_backward
-15. 2025 · Elucidating the Pivotal Neuroprotective Mechanisms and Therapeutic Variants of Erythropoietin in Neonatal Brain Injury · cited 1 · queries 0 · inset 0 · wcoup 47.769 · spec 15.364 · snowball_forward
+15. 2021 · Effects of GABA on Erythropoiesis in the Hep3B Cell and Rat Exposed to Hypoxia · cited 0 · queries 3 · inset 0 · wcoup 5.755 · spec 3.0 · semantic

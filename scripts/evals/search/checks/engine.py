@@ -188,16 +188,20 @@ def _recall(found: set[str], target: set[str]) -> float:
     return len(found & target) / len(target)
 
 
-def _acquired_in_order(
+def _acquired_ranks(
     conn: Connection, task_id: uuid.UUID
-) -> list[tuple[str, dict[str, Any]]]:
-    """Every acquired document as (backend, metadata), in the order acquire persisted
-    them: the ranked order, so a document's index within its backend is its rank."""
+) -> list[tuple[str, int, dict[str, Any]]]:
+    """Every acquired document as (backend, pool rank, metadata).
+
+    The rank is the one acquire wrote on the ``source.acquired`` event: the
+    document's 1-based position in its backend's ranked pool, counting every
+    entry, duplicates and unusable records included.  So ``rank <= cap`` is
+    exactly "a run cut at ``cap`` would have kept this document".
+    """
     events = conn.execute(
         select(event_log.c.payload)
         .where(event_log.c.task_id == task_id)
         .where(event_log.c.event_type == "source.acquired")
-        .order_by(event_log.c.sequence)
     ).fetchall()
     ids = [uuid.UUID(payload["source_snapshot_id"]) for (payload,) in events]
     metadata = dict(
@@ -208,13 +212,17 @@ def _acquired_in_order(
         ).fetchall()
     )
     return [
-        (payload["backend"], metadata[uuid.UUID(payload["source_snapshot_id"])])
+        (
+            payload["backend"],
+            int(payload["pool_rank"]),
+            metadata[uuid.UUID(payload["source_snapshot_id"])],
+        )
         for (payload,) in events
     ]
 
 
 def recall_at_smaller_caps(
-    acquired: list[tuple[str, dict[str, Any]]],
+    acquired: list[tuple[str, int, dict[str, Any]]],
     screened_keys: set[str],
     target: set[str],
     *,
@@ -225,8 +233,10 @@ def recall_at_smaller_caps(
     The scopes differ only in where the same ranked pools are cut (papers cap
     100 / 200 / 400, policy cap 50 / 100 / 200), and the screen judges each document
     on its own. So one run at a larger scope says what a smaller scope would have
-    found with the same generated queries: the documents in the first ``papers_cap``
-    of its OpenAlex order and the first ``policy_cap`` of its Overton order.
+    found with the same generated queries: the documents whose pool rank is within
+    ``papers_cap`` on the OpenAlex side and ``policy_cap`` on the Overton side. The
+    rank comes from the acquire event and counts every pool entry, so a duplicate
+    or unusable record inside the cut takes its slot here exactly as in a real run.
 
     Returns:
         Per smaller depth: ``search_recall``, ``n_found``, ``screen_recall``,
@@ -238,12 +248,9 @@ def recall_at_smaller_caps(
         if name == depth or constants["papers_cap"] > own["papers_cap"]:
             continue
         cap = {"openalex": constants["papers_cap"], "overton": constants["policy_cap"]}
-        seen: dict[str, int] = {}
         within: set[str] = set()
-        for backend, metadata in acquired:
-            position = seen.get(backend, 0)
-            seen[backend] = position + 1
-            if position < cap.get(backend, 0) and (key := record_key(metadata)):
+        for backend, rank, metadata in acquired:
+            if rank <= cap.get(backend, 0) and (key := record_key(metadata)):
                 within.add(key)
         out[name] = {
             "search_recall": _recall(within, target),
@@ -568,7 +575,7 @@ def run_one_query(
     screened = _screened_relevant_docs(conn, task_id, scope_id) if run_screen else []
     screened_dois = _keys_of(screened)
     recall_at = recall_at_smaller_caps(
-        _acquired_in_order(conn, task_id), screened_dois, ground_truth.keys, depth=depth
+        _acquired_ranks(conn, task_id), screened_dois, ground_truth.keys, depth=depth
     )
 
     return QueryResult(

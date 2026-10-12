@@ -324,21 +324,24 @@ def paper_key(record: dict[str, Any]) -> str:
 
     OpenAlex often holds a preprint and the journal copy of one paper.  Two records
     are the same paper only when the title and the full author list match; a shared
-    title with other authors (a common review title, say) stays two papers.
+    title with other authors (a common review title, say) stays two papers.  A record
+    with no title, or no author names, is never merged with anything: there is not
+    enough evidence that it is the same work (review finding, 2026-10-12).
 
     Args:
         record: An OpenAlex work record.
 
     Returns:
-        A comparison key, or the work id when the record has no title.
+        A comparison key, or the work id when the record cannot be compared.
     """
     title = normalised_title(record.get("display_name"))
-    if not title:
-        return record_short_id(record) or ""
     authors = sorted(
-        normalised_title((authorship.get("author") or {}).get("display_name"))
+        name
         for authorship in record.get("authorships") or []
+        if (name := normalised_title((authorship.get("author") or {}).get("display_name")))
     )
+    if not title or not authors:
+        return record_short_id(record) or ""
     return title + "|" + ",".join(authors)
 
 
@@ -395,6 +398,10 @@ def mix_strata(
     * seminal: papers the seed set cites most, then the most cited globally;
     * novel: papers from ``novel_from_year`` on, fused ones first, then the rest in
       specificity order.
+
+    A stratum can be empty (a pool with nothing recent, say); the round-robin then
+    draws from the strata that have papers, so the guarantee is "all three kinds,
+    as far as the pool holds them".
 
     Args:
         cands: De-duplicated candidates with graph signals.

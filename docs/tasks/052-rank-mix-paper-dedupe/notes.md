@@ -49,12 +49,14 @@ Findings, the same on all three:
   coupling joins the rank fusion as one more ranked list, counted three times
   (`pool.COUPLING_LISTS`). Offline on the three pools: counted once it changes almost
   nothing (the fusion has 23 query lists); counted three times it brings back the
-  graph-found papers that are on topic (the Dutch healthy-checkout experiments 321 →
-  87, "Erythropoietin: a multimodal neuroprotective agent" 263 → 91, "Being critical of
-  criticality" 103 → 73) while the direct matches stay at 1 and the top 100 keeps about
-  half its papers from two or more queries. An additive version outside the fusion
-  (`mix_c` in the probe) pulled harder toward the graph and dropped the novel nanowire
-  paper out of the cut, so it was not adopted. Columns `mix_q` (no coupling), `mix_f1`
+  graph-found papers that are on topic (the Dutch healthy-checkout experiments 565 →
+  160, "Erythropoietin: a multimodal neuroprotective agent" 257 → 91, "Being critical of
+  criticality" 110 → 82) while the direct matches stay at 1 and the top 100 keeps 41%
+  to 49% of its papers from two or more queries. An additive version outside the
+  fusion (`mix_c` in the probe) pulled harder toward the graph (about half of its top
+  100 never returned by any query), so it was not adopted. These ranks are from the
+  regenerated results with the production novelty year (2021); the first pass of the
+  experiment used 2020, which put the 2020 checkout paper in the novel stratum. Columns `mix_q` (no coupling), `mix_f1`
   (once) and `mix` (three times, production) in the result files.
 - `search_loop._openalex_leg` step 7 uses both; `counts["search"]["duplicate_papers"]`
   reports how many copies were dropped.
@@ -71,9 +73,15 @@ first 100 + 50 and 200 + 100 documents of the Broadest order are what the smalle
 would have kept with the same queries (`engine.recall_at_smaller_caps`, written to
 Langfuse as `search_recall_at_rapid` and so on). This replaces three passes with one,
 about 50 minutes instead of 90, and makes the three scopes directly comparable
-(same generated queries). The small-scope figures count positions among persisted
-documents, so a duplicate the task-level dedupe dropped inside the cut is not counted
-against the cap; rare, and a slight overcount if anything.
+(same generated queries). Since the review of 2026-10-12 the derivation reads each
+document's rank in its backend's pool from the `source.acquired` event (`pool_rank`,
+counting every pool entry, duplicates and unusable records included), so "rank within
+the cap" is exactly what a run at that scope would have kept. The 12 October figures
+below were computed before that fix, from positions among persisted documents only: a
+duplicate or unusable record inside the cut did not take its slot, so the derived
+Focused and Broad figures may be slightly high (by at most the number of such records
+in the first 100 or 200 ranks of each review). The Broadest figures are measured
+directly and unaffected. The next run writes the exact figures.
 
 | scope | search recall | after screen | task 051 run (search / screen) | threshold |
 |---|---:|---:|---:|---:|
@@ -120,3 +128,29 @@ reach, only what survives the cut.
 - "Being critical of criticality in the brain" (a seminal review) sits at 103 under the
   mix on the avalanche question: it has few in-set citations in that pool. The seminal
   stratum reads in-set citations first; global citations only break ties.
+
+## Review findings (2026-10-12, Codex adversarial lane, read-only)
+
+Run on the task 052 delta (commits `472d6e0` to `d1428f7`) at the owner's request, with
+the Claude author adjudicating in the build conversation (the task-cycle skill asks for a
+fresh conversation; the owner chose otherwise, as in task 051). Verify gate green before
+and after the fixes.
+
+| # | severity | finding | decision |
+|---|---|---|---|
+| 1 | MAJOR | `pool.dedupe_papers` merged two different titled papers when both had no author names (both keys became `title|`). | **Adopted.** `paper_key` now falls back to the work id when the title or the author list is empty, so such records are never merged. Test extended. |
+| 2 | MAJOR | `engine.recall_at_smaller_caps` counted positions among persisted documents, so any non-persisted pool entry inside the cut (unusable record, task-level duplicate) let a lower-ranked document into the simulated cap. The notes' caveat named only the duplicate case. | **Adopted at the root.** `acquire` now writes `pool_rank` (1-based, every entry counted) on each `source.acquired` event; the engine reads that rank, so the derivation is exact. Tests pin the rank in `test_acquire_pools.py` and the payload keys in `test_acquire.py`. The 12 October derived figures carry the old caveat (see above). |
+| 3 | MINOR | `rank_mix_probe.py` fixed novelty at 2020 while production uses today's year minus five (2021 in 2026), so the committed evidence could describe a different cut from the shipped code. | **Adopted.** The probe derives the year from `pool.NOVEL_YEARS`; the three result files were regenerated from the cached pools. |
+| 4 | NIT | ADR 0038 said every cut "holds all three kinds", stronger than the code guarantees when a stratum is empty. | **Adopted.** Wording qualified in the ADR and the `mix_strata` docstring; a unit test covers the empty-stratum case. |
+
+Checked and found sound by the lane: fusion ignores records without an OpenAlex id;
+the coupling order is genuinely fused three times; the round-robin places every
+candidate exactly once; the experiment scripts persist no abstracts or credentials.
+Named as unreviewed by the lane and checked by the author: the final order is
+deterministic across processes (every sort key is a number or a stable tuple, and the
+fusion sums floats in list order); records with no DOI cannot count toward recall at
+any scope, derived or measured, which is the existing rule of the eval. The lane noted
+that backward-found papers have zero weighted coupling by construction (their
+reference lists are not loaded), so they enter the relevant stratum only through
+query hits; they remain eligible through the seminal stratum and the specificity
+tail. Recorded, not changed.

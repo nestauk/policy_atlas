@@ -665,3 +665,14 @@ Phases 1, 2, 4, 5 and 6 do not depend on this decision; Phase 3a does.
   task 051 (Phase 7); the parallel-search entry there is marked discharged by Phase 3c.
 - Seminal-decile recall as a Langfuse score (D17) stays deferred; the experiment
   script reports it.
+
+
+## Addendum: task 052 on the same branch (2026-10-12)
+
+After the sign-off above the branch gained task 052 (the paper pool ordered as a
+relevant / seminal / novel mix, duplicate copies dropped) and its mini-set run. Its
+records live in `docs/tasks/052-rank-mix-paper-dedupe/notes.md`: the experiments, the
+measured recall (Focused 15.3%, Broad 19.7%, Broadest 25.3% search recall against
+12.9% / 17.8% / 22.3% above; all three thresholds met) and the review findings of the
+Codex adversarial lane with their adjudication. One product-side change rode with the
+review fixes: `source.acquired` events now carry `pool_rank`.

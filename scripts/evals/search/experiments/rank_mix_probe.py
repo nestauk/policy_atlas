@@ -55,7 +55,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from collections import defaultdict
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
 
@@ -80,7 +80,7 @@ HITS: dict[str, int] = {}
 RRF: dict[str, float] = {}
 REL: dict[str, float] = {}
 RRF_K = 60
-NOVEL_FROM_YEAR = 2020
+NOVEL_FROM_YEAR = date.today().year - pool.NOVEL_YEARS  # the production rule, same day
 TOP = 100
 DEFAULT_PROBES = [
     "Avalanche and edge-of-chaos criticality do not necessarily co-occur in neural networks",

@@ -724,8 +724,13 @@ def acquire_sources(
             seen_dois.add(doi)
         return True
 
-    def persist(candidate: _Candidate) -> None:
-        """Write one accepted candidate: snapshot, chunk, task link, tags."""
+    def persist(candidate: _Candidate, *, pool_rank: int) -> None:
+        """Write one accepted candidate: snapshot, chunk, task link, tags.
+
+        ``pool_rank`` is the candidate's 1-based position in its backend's ranked
+        pool, counting every entry (duplicates and unusable records included), so
+        the event says exactly where the cap would have fallen for it.
+        """
         backend_name = candidate.backend_name
         verb = candidate.verb
         record = candidate.record
@@ -812,6 +817,7 @@ def acquire_sources(
                 "backend": backend_name,
                 "backend_record_id": record_id,
                 "query_origin": candidate.origin,
+                "pool_rank": pool_rank,
             },
         )
 
@@ -895,7 +901,7 @@ def acquire_sources(
             if not is_new(candidate):
                 counts["already_acquired"] += 1
                 continue
-            persist(candidate)
+            persist(candidate, pool_rank=index + 1)
             kept += 1
         if counts["dropped_over_cap"]:
             log.info(

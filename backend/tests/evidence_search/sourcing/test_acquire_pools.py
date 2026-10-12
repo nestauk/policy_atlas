@@ -196,6 +196,7 @@ def test_pool_order_decides_which_copy_is_kept_and_the_rest_is_counted(
         if event["event_type"] == "source.acquired"
     ]
     assert [payload["query_origin"] for payload in acquired] == ["semantic"]
+    assert [payload["pool_rank"] for payload in acquired] == [1]
     _assert_invariant(counts)
 
 
@@ -253,6 +254,13 @@ def test_events_carry_the_origin_and_verb_of_every_call(conn: Connection) -> Non
         "generated",
         "landmark",
         "snowball_backward",
+    ]
+    # The rank counts every entry of the backend's pool, so a kept record's rank
+    # says where the cap would have fallen for it (used by the eval's derived scopes).
+    assert sorted((p["backend"], p["pool_rank"]) for p in acquired) == [
+        ("openalex", 1),
+        ("openalex", 2),
+        ("overton", 1),
     ]
 
 
