@@ -68,6 +68,20 @@ Claude designed the pass, ran the experiments, built the search, the eval change
 
 ## Review focus
 
+**Where to look** (product code, in reading order; sizes are lines added / removed against `dev`):
+
+1. [`search_loop.py`](https://github.com/nestauk/policy_atlas/blob/task/051-improve-production-search-screen/backend/src/policy_atlas/evidence_search/sourcing/search_loop.py) (+708 / −928) — the single search pass: query generation, the OpenAlex leg (`_openalex_leg`: seeds, backward snowball, forward chase, de-duplicate, mix), the Overton leg (`_overton_leg`: relevance search, title dedup, landmarks), the two legs run in parallel in `run_search`, the call budgets and the 429 pause. The old round loop is removed from here.
+2. [`pool.py`](https://github.com/nestauk/policy_atlas/blob/task/051-improve-production-search-screen/backend/src/policy_atlas/evidence_search/sourcing/pool.py) (+630, new) — pure ranking rules with no I/O: `interleave`, `count_references`, `backward_targets`, `forward_seeds`, `score_forward`, `paper_candidates`, `rank_papers` (specificity), `dedupe_papers`, `query_fusion`, `mix_strata`, `rank_mix` (task 052), and the policy side `dedupe_policy`, `landmark_targets`, `rank_policy`.
+3. [`acquire.py`](https://github.com/nestauk/policy_atlas/blob/task/051-improve-production-search-screen/backend/src/policy_atlas/evidence_search/sourcing/acquire.py) (+108 / −84) — `acquire_sources` now takes two ranked pools and two caps, cuts by position, and keeps the count invariant; `source.acquired` carries `query_origin`.
+4. [`search_live.py`](https://github.com/nestauk/policy_atlas/blob/task/051-improve-production-search-screen/backend/src/policy_atlas/evidence_search/sourcing/search_live.py) (+188 / −14) — the new provider verbs: OpenAlex `search_semantic`, `lookup_ids`, `fetch_citing`; Overton `fetch_by_id` and `sort=relevance` on every search; the per-backend pacing and the 429 pause.
+5. [`screen.py`](https://github.com/nestauk/policy_atlas/blob/task/051-improve-production-search-screen/backend/src/policy_atlas/evidence_search/assess/screen.py) (+160 / −180) — stage 1 as the adaptive vote: `decide_stage1` (one call, a second only after "not relevant"), the stored confidence, the per-document event.
+6. [`screen_prompt.py`](https://github.com/nestauk/policy_atlas/blob/task/051-improve-production-search-screen/backend/src/policy_atlas/evidence_search/assess/screen_prompt.py) (+39 / −17) — prompt `screen_v4` (hash-pinned) and the model pin to `gpt-5.6-luna`.
+7. [`runner.py`](https://github.com/nestauk/policy_atlas/blob/task/051-improve-production-search-screen/backend/src/policy_atlas/runtime/runner.py) (−144) — the round-loop orchestration deleted; [`agent_backend.py`](https://github.com/nestauk/policy_atlas/blob/task/051-improve-production-search-screen/backend/src/policy_atlas/runtime/agent_backend.py), [`planner_prompt.py`](https://github.com/nestauk/policy_atlas/blob/task/051-improve-production-search-screen/backend/src/policy_atlas/runtime/planner_prompt.py) and [`search_prompts.py`](https://github.com/nestauk/policy_atlas/blob/task/051-improve-production-search-screen/backend/src/policy_atlas/evidence_search/sourcing/search_prompts.py) carry small follow-on edits (model id, scope wording, query length).
+
+The tests that pin each piece: `backend/tests/evidence_search/sourcing/test_search_single_pass.py` (the whole pass on scripted backends, call plan and caps), `test_pool.py` (ranking rules, replay of the recorded fixture), `test_acquire_pools.py` (two pools, two caps, count invariant), `test_search_wire.py` (filters on the wire and locally), and `backend/tests/evidence_search/assess/` for the vote.
+
+**Questions for the reviewer:**
+
 - The local filters on semantic and citation-found records: the review fixed a case where a second country in a plan was dropped. Check the combined predicate.
 - The pool cap is a cut by position. A repeat inside the cut is not refilled. Confirm this is the wanted behaviour on a re-run of the same task.
 - Egress: the pause after a 429 reply, the per-run concurrency, the call budgets.
