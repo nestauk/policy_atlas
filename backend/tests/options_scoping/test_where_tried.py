@@ -446,6 +446,18 @@ def test_a_describing_document_s_country_is_not_an_evaluated_country() -> None:
     assert coverage["documents"] - coverage["role"]["evaluated"] == 2
 
 
+def test_an_evaluated_country_comes_from_the_evaluating_members_only() -> None:
+    # Review of task 046 (2026-10-12): a describing record of the same
+    # document names no evaluated place, and does not make it "multiple".
+    members = [
+        _signal_member("doc:a"),  # evaluated, no country
+        _signal_member("doc:a", role="described", country="France"),
+        _signal_member("doc:b", country="United Kingdom"),
+        _signal_member("doc:b", role="described", country="France"),
+    ]
+    assert _countries(members) == [{"country": "United Kingdom", "documents": 1}]
+
+
 def test_a_document_of_two_countries_or_other_counts_for_no_country() -> None:
     members = [
         _signal_member("doc:a", country="France; Germany"),

@@ -129,7 +129,6 @@ from policy_atlas.options_scoping.longlist.longlist import (
 from policy_atlas.options_scoping.longlist.longlist_backend import LONGLIST_JUDGMENT_MODEL
 from policy_atlas.options_scoping.longlist.where_tried import resolve_country, strip_place
 from policy_atlas.options_scoping.longlist_intent import who_decides_considerations
-from policy_atlas.options_scoping.option_profile.option_profile import PLACE_SENTENCES_KEY
 from policy_atlas.options_scoping.suggest.suggest import baseline_sections, walk_plan
 from policy_atlas.runtime.scoping_plan import TRANSFERABILITY_DEFAULT, ScopingPlan
 
@@ -994,13 +993,10 @@ def constrain_scope(
         if merged_into
         else {}
     )
-    # The kept option's place sentences ride through the recompute unchanged
-    # (membership coverage never computes them; task 046, amendment 4, S31;
-    # contract review PA4-15).
-    for kept_key, fresh in coverage_updates.items():
-        stored_entry = coverage.get(kept_key)
-        if isinstance(stored_entry, Mapping) and PLACE_SENTENCES_KEY in stored_entry:
-            fresh[PLACE_SENTENCES_KEY] = stored_entry[PLACE_SENTENCES_KEY]
+    # The kept option's stored place sentences describe the documents before
+    # the merge, so they do not ride through the recompute: the merged option
+    # reads template sentences until the profile runs again (rubric box 76;
+    # ADR 0040 decision 23; review of task 046, 2026-10-12).
     in_scope = in_scope_evidence(
         conn,
         task_id=task_id,

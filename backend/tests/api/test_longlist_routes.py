@@ -631,7 +631,8 @@ def test_the_card_carries_every_section_and_never_how_sure(
         assert evidence["by_evidence_type"] == {RCT: 2}
         assert evidence["inherited_labels"] == 1
         assert evidence["flagged_not_stated"] == 0  # the DOI twin states the feature
-        assert evidence["by_role"]["evaluated"] >= 1
+        # Removed by task 046, amendment 4 (contract § Public interface).
+        assert "by_role" not in evidence
         # The record-level lists are gone (B13), and so are the kind lists
         # (task 046, amendment 4, S36).
         removed = {"units", "settings", "outcomes", "tried_on", "measures", "where_tried"}

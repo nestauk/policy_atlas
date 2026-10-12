@@ -61,7 +61,52 @@ from typing import Sequence, Union
 import sqlalchemy as sa
 from alembic import op
 
-from policy_atlas.core.schema import FINDING_REFERENCE_UNION_SQL
+#: The union view as this revision leaves it: frozen here, not imported, so a
+#: later change to ``schema.FINDING_REFERENCE_UNION_SQL`` cannot break a fresh
+#: ``upgrade head`` at this revision (the fault that forced the edit to
+#: ``c7e2a9f4b1d8``; review of task 046, 2026-10-12). The next view change
+#: freezes its own copy in its own revision.
+_UNIT_UNION_SQL = """
+CREATE VIEW finding_reference_union AS
+SELECT
+    finding_id,
+    'iof'::text AS kind,
+    extraction_record_id,
+    task_id,
+    intervention,
+    outcome,
+    unit,
+    setting,
+    study_geography,
+    study_design
+FROM intervention_outcome_finding
+UNION ALL
+SELECT
+    finding_id,
+    'icf'::text AS kind,
+    extraction_record_id,
+    task_id,
+    intervention,
+    outcome,
+    unit,
+    setting,
+    study_geography,
+    study_design
+FROM implementation_context_finding
+UNION ALL
+SELECT
+    record_id AS finding_id,
+    'interventions'::text AS kind,
+    extraction_record_id,
+    task_id,
+    intervention,
+    outcome,
+    unit,
+    setting,
+    study_geography,
+    study_design
+FROM intervention_profile_record
+"""
 
 revision: str = "f1b6d3a8c2e5"
 down_revision: Union[str, None] = "e9a4c1f7b3d2"
@@ -370,14 +415,19 @@ _REWRITES_SQL = (
     "UPDATE grouping_result SET flags = pg_temp.pa_swap_key(flags, :old, :new) "
     "WHERE jsonb_typeof(flags) = 'object' AND flags ? :old",
     # grouping_result.grouping_provenance: facet, facets[], facet_runs key
-    "UPDATE grouping_result SET grouping_provenance = jsonb_set("
+    # A provenance written before ``facet_runs`` existed (the facet-grain
+    # revision added ``facets`` only) is rewritten too (review of task 046).
+    "UPDATE grouping_result SET grouping_provenance = CASE "
+    "WHEN jsonb_typeof(grouping_provenance -> 'facet_runs') = 'object' THEN jsonb_set("
     "pg_temp.pa_swap_grouping(grouping_provenance, :old, :new), '{facet_runs}', "
     "pg_temp.pa_swap_key(grouping_provenance -> 'facet_runs', :old, :new)) "
-    "WHERE jsonb_typeof(grouping_provenance -> 'facet_runs') = 'object' "
+    "ELSE pg_temp.pa_swap_grouping(grouping_provenance, :old, :new) END "
+    "WHERE jsonb_typeof(grouping_provenance) = 'object' "
     "AND (grouping_provenance -> 'facet' = to_jsonb(CAST(:old AS text)) "
     "  OR (jsonb_typeof(grouping_provenance -> 'facets') = 'array' "
     "      AND grouping_provenance -> 'facets' ? :old) "
-    "  OR grouping_provenance -> 'facet_runs' ? :old)",
+    "  OR (jsonb_typeof(grouping_provenance -> 'facet_runs') = 'object' "
+    "      AND grouping_provenance -> 'facet_runs' ? :old))",
     # annotation.payload.theme.referenced_ids[] (grouping source): id prefix
     "UPDATE annotation SET payload = jsonb_set(payload, '{theme,referenced_ids}', "
     "pg_temp.pa_swap_id_list(payload #> '{theme,referenced_ids}', :old, :new)) "
@@ -429,7 +479,7 @@ def upgrade() -> None:
     )
     for table in _FINDING_TABLES:
         op.alter_column(table, "population", new_column_name="unit")
-    op.execute(FINDING_REFERENCE_UNION_SQL)
+    op.execute(_UNIT_UNION_SQL)
 
     _swap_facet("population", "unit")
 

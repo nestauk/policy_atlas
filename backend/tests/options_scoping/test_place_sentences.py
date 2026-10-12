@@ -389,6 +389,14 @@ _VOCABULARY = {
 
 #: The valid sentences over the fixed place: each passes (verdict ``None``).
 _VALID: list[tuple[str, str | None]] = [
+    # A second sentence after a full stop starts with a number word (review of
+    # task 046, 2026-10-12: the live obesity run lost two accurate sentences
+    # to the name rule on "… year 6. One was …").
+    (
+        "Two strong trials of Strong Start measured diet quality in children. "
+        "One was in England.",
+        None,
+    ),
     # "Strong Start" as a programme name; a sub-count by tier; a unit with digits.
     (
         "Four evaluations: two strong trials of Strong Start in Leeds and Sheffield "
@@ -437,6 +445,8 @@ _VALID: list[tuple[str, str | None]] = [
 
 #: The invalid sentences over the fixed place, each with the rule it fails.
 _INVALID: list[tuple[str, str | None]] = [
+    # An invented name at the start of a second sentence.
+    ("Two strong trials of Strong Start measured diet quality. Bristol ran one.", "name"),
     # An invented acronym.
     ("Four evaluations, including NCMP data, measured diet quality.", "name"),
     # An invented name at position 0.

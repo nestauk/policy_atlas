@@ -2114,7 +2114,7 @@
         "type": "object"
       },
       "EvidenceProfileOut": {
-        "description": "An option's source-quality profile \u2014 what the evidence base holds so far.\n\nEvery count is of documents, DOI-collapsed. Display only; never a verdict.\n\nArgs:\n    documents: Its documents.\n    by_evidence_type: Documents per evidence type; \"Unknown\" and\n        non-evidence documents are their own keys, \"not rated\" when unclassified.\n    by_tier: Documents per quality tier label, \"not rated\" when unappraised.\n    by_role: Documents per role.\n    flagged_not_stated: Documents that cover the intervention without\n        stating the feature that defines this option.\n    inherited_labels: Documents whose type and tier were read from a\n        linked task.\n    abstract_only: Documents read from an abstract only.\n    outcome_counts: The documents that evaluate the option, by plan\n        outcome (task 046, R42; amendment 4, R79).",
+        "description": "An option's source-quality profile \u2014 what the evidence base holds so far.\n\nEvery count is of documents, DOI-collapsed. Display only; never a verdict.\n\nArgs:\n    documents: Its documents.\n    by_evidence_type: Documents per evidence type; \"Unknown\" and\n        non-evidence documents are their own keys, \"not rated\" when unclassified.\n    by_tier: Documents per quality tier label, \"not rated\" when unappraised.\n    flagged_not_stated: Documents that cover the intervention without\n        stating the feature that defines this option.\n    inherited_labels: Documents whose type and tier were read from a\n        linked task.\n    abstract_only: Documents read from an abstract only.\n    outcome_counts: The documents that evaluate the option, by plan\n        outcome (task 046, R42; amendment 4, R79).",
         "properties": {
           "abstract_only": {
             "default": 0,
@@ -2126,13 +2126,6 @@
               "type": "integer"
             },
             "title": "By Evidence Type",
-            "type": "object"
-          },
-          "by_role": {
-            "additionalProperties": {
-              "type": "integer"
-            },
-            "title": "By Role",
             "type": "object"
           },
           "by_tier": {

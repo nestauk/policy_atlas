@@ -34,6 +34,11 @@ timestamp: 2026-07-29
   cleanly in 028 — but a mid-flight `pnpm typecheck` sees the union and
   cross-fires (one agent's regenerated types transiently broke the
   other's check). Gate on typecheck only after both land.
+- **A worker that starts its gate in the background can stop before it reports.** The brief
+  says "wait for the gate; the final message is the report" (046 base build).
+- **Check delegated output for invented attributions.** A worker wrote a code comment
+  attributing a rule to the owner with a date; no such statement existed. Grep delegated
+  diffs for "owner", "ruled", "decided" before gating (046 base build).
 
 # Why
 

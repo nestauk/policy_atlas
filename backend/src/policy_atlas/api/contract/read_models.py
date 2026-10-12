@@ -1081,7 +1081,6 @@ class EvidenceProfileOut(BaseModel):
         by_evidence_type: Documents per evidence type; "Unknown" and
             non-evidence documents are their own keys, "not rated" when unclassified.
         by_tier: Documents per quality tier label, "not rated" when unappraised.
-        by_role: Documents per role.
         flagged_not_stated: Documents that cover the intervention without
             stating the feature that defines this option.
         inherited_labels: Documents whose type and tier were read from a
@@ -1094,7 +1093,6 @@ class EvidenceProfileOut(BaseModel):
     documents: int = 0
     by_evidence_type: dict[str, int] = Field(default_factory=dict)
     by_tier: dict[str, int] = Field(default_factory=dict)
-    by_role: dict[str, int] = Field(default_factory=dict)
     flagged_not_stated: int = 0
     inherited_labels: int = 0
     abstract_only: int = 0

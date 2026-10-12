@@ -2301,7 +2301,6 @@ export interface components {
          *         by_evidence_type: Documents per evidence type; "Unknown" and
          *             non-evidence documents are their own keys, "not rated" when unclassified.
          *         by_tier: Documents per quality tier label, "not rated" when unappraised.
-         *         by_role: Documents per role.
          *         flagged_not_stated: Documents that cover the intervention without
          *             stating the feature that defines this option.
          *         inherited_labels: Documents whose type and tier were read from a
@@ -2318,10 +2317,6 @@ export interface components {
             abstract_only: number;
             /** By Evidence Type */
             by_evidence_type?: {
-                [key: string]: number;
-            };
-            /** By Role */
-            by_role?: {
                 [key: string]: number;
             };
             /** By Tier */

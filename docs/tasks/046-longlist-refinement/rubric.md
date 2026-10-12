@@ -1,12 +1,12 @@
 # Rubric: 046-longlist-refinement
 
-The task is **done only if every box holds**. Terms, item numbers, rulings
+The task is **done only if every box holds**. Ticked by the review conversation on 2026-10-12 (`verification.md` § Review findings); an unticked box carries its reason in italics. Terms, item numbers, rulings
 (R1–R28), amendments and measures (M1–M9) are defined in [contract.md](contract.md).
 This file does not restate them.
 
 ## Items (one box per group; each cites the contract's item numbers)
 
-1. [ ] **Discovery at reader grain (items 1, 4, 9; R1, R2, R9, R14, R20).**
+1. [x] **Discovery at reader grain (items 1, 4, 9; R1, R2, R9, R14, R20).**
    Suggestions are named at reader grain, and their designs name no place
    and no institution of one country. Discovery receives the plan, the
    baseline, the seeds and the corpus digest, and no unit payload. The
@@ -15,11 +15,11 @@ This file does not restate them.
    renamed. At most one residual pass runs and its outcome is in
    `provenance`. Discovery mints no package. Variants are computed from
    members and shown on the card.
-2. [ ] **Assignment (items 2, 3).** The new rule is in the prompt. Prompts
+2. [x] **Assignment (items 2, 3).** The new rule is in the prompt. Prompts
    carry short ids only. The flag reads "not stated in the abstract". The
    model tier is the mini model, or the move is justified by a recorded
    measurement.
-3. [ ] **Typing and themes (items 7, 8, 26).** `lever_types_v2` is in
+3. [x] **Typing and themes (items 7, 8, 26).** `lever_types_v2` is in
    force and each option records its taxonomy version. Typing receives the
    plan and the baseline. Typing and constrain batches run in parallel. The
    typing wire has no `lever_reason` and no `runner_up_reason`. The
@@ -27,22 +27,23 @@ This file does not restate them.
    typing. `theme` is a component of its own after `constrain` (R28): it
    holds included options only, it is not a spine step, `longlist` writes
    no theme, and `constrain` has no theme code.
-4. [ ] **Constrain (items 5, 6, 10, 11, 12; R4, R21).** No place token
+    *Review 2026-10-12: holds; the `lever_reason` clause is replaced by R29 (A4).*
+4. [x] **Constrain (items 5, 6, 10, 11, 12; R4, R21).** No place token
    reaches the prompt. Population overlap does not exclude. Silence about
    the target unit or the setting passes. A setting requirement excludes
    only a kind of action that cannot be delivered through the setting. The relevant screen
    accepts a stated pathway. The distinct screen sees the whole list. A
    discovered option's outcomes come from its members' tags. Constrain
    receives the baseline.
-5. [ ] **The intervention profile (items 13, 14, 16; R3).** Each new
+5. [x] **The intervention profile (items 13, 14, 16; R3).** Each new
    record carries the three tags. The fingerprint includes the
    tagging-context hash and no place. The setting rule and the negative
    examples are in the prompt. The code pass folds setting labels and moves
    places to geography with a logged repair.
-6. [ ] **Thinning (item 15; R17).** The three unit rules hold. Title-only
+6. [x] **Thinning (item 15; R17).** The three unit rules hold. Title-only
    documents are not profiled. Non-evidence documents are profiled. Each
    rule's count is in `provenance`. No rule reads a tag.
-7. [ ] **Screening (items 10, 18, 23; R5, R15, R16, R18, R19).** The
+7. [x] **Screening (items 10, 18, 23; R5, R15, R16, R18, R19).** The
    planning prompt keeps target unit, setting and geography apart. The
    screen input of a longlist run holds the wide target unit and the
    outcomes, and no setting, no place and no option design. An option
@@ -52,18 +53,19 @@ This file does not restate them.
    Units come from the longlist scope and from add-walk scopes only (AM5).
    The add walk is as built in task 045, without ingest (AM1). No file of
    the Evidence search screen changes.
+    *Review 2026-10-12: holds; the screen text names Where once inside the place rule (R74, 18P), the "no place" clause replaced (A4).*
 8. [ ] *Withdrawn by AM1 (item 20, the classify skip list for the add
    walk). The number is kept so that later numbers do not move.*
-9. [ ] **Ingest (item 22; R13).** Neither chain contains
+9. [x] **Ingest (item 22; R13).** Neither chain contains
    `ingest_full_text`. The chat answers over a longlist from abstract
    chunks and its citations are labelled *abstract only*.
-10. [ ] **Tried on (item 23).** Coverage counts members by population tag.
+10. [x] **Tried on (item 23).** Coverage counts members by population tag.
     The card shows the *tried on* line. The list has the facet. Neither
     filters or excludes.
-11. [ ] **Small (item 26).** The sub-national table. No double full stop
+11. [x] **Small (item 26).** The sub-national table. No double full stop
     in the composed intent or criteria.
 
-12a. [ ] **Amendments from the review.** Each amendment in contract
+12a. [x] **Amendments from the review.** Each amendment in contract
     § Amendments from the review holds (AM1, AM3, AM7, AM8 and AM9 as the
     owner accepted them on 2026-09-28). Where an amendment and an item above differ,
     the amendment wins. A record with null tags reads as "not tagged". The
@@ -71,7 +73,7 @@ This file does not restate them.
 
 ## Cross-cutting
 
-12. [ ] **The reuse rule (R16, AM1, AM3).** Under `evidence_search/`,
+12. [x] **The reuse rule (R16, AM1, AM3).** Under `evidence_search/`,
     outside the intervention profile's own files, the only edits are the
     optional `interventions_context` argument on the extract path
     (`extract.py`, `extraction_backend.py`) and the title-only rule of the
@@ -79,15 +81,16 @@ This file does not restate them.
     are byte-identical. `screen.py` has no source change. The existing
     Evidence search tests pass with no edit. The search loop, the search prompts, the
     synthesis backend and the baseline targets are unchanged.
-13. [ ] `make verify` passes (okf-validate · test · typecheck · lint ·
+    *Review 2026-10-12: holds in substance; the IOF/ICF byte-identity and unchanged-synthesis clauses are replaced by R73/R75 (18 files against the merge base, each a rename, a pin or the title-only rule).*
+13. [x] `make verify` passes (okf-validate · test · typecheck · lint ·
     build · drift-check · prompt-guard).
-14. [ ] Each prompt revision is re-pinned, and each round's diff is
+14. [x] Each prompt revision is re-pinned, and each round's diff is
     recorded with the finding that caused it (R27). The planned six are
     `task_agent_scoping_v4`, `longlist_suggest_v2`, `extract_interventions_v2`,
     `longlist_cluster_v2`, `lever_typing_v2`, `constrain_v2`; the theme and
     option design prompts changed only on a recorded finding. The Evidence
     search prompts and the longlist verbs prompt are unchanged.
-15. [ ] **The staged check (R12, R24–R26).** Each stage's loop is recorded
+15. [x] **The staged check (R12, R24–R26).** Each stage's loop is recorded
     round by round (the change, the figures, the reading), ran at most five
     rounds, and was reported to the owner at its end. The prompts were
     tuned on the tuning set only; the check set was read and not tuned on.
@@ -98,17 +101,19 @@ This file does not restate them.
     are reported beside the pre-contract figures. Each figure was read back
     from a saved result file. The other four live runs ran only if the
     owner asked for them.
-16. [ ] One reversible alembic revision adds three nullable columns, with
+    *Review 2026-10-12: holds; the owner's stage decisions for the amendment 1–3 loops are step-9 items.*
+16. [x] One reversible alembic revision adds three nullable columns, with
     a check constraint on the two that hold fixed values, and nothing else.
     No new table.
-17. [ ] No approval-gated change beyond the contract's § Constraints.
-18. [ ] No generated files or secrets edited by hand.
-19. [ ] No tests deleted, skipped or weakened without written
+17. [x] No approval-gated change beyond the contract's § Constraints.
+18. [x] No generated files or secrets edited by hand.
+19. [x] No tests deleted, skipped or weakened without written
     justification.
 20. [ ] Each spec change in contract § Spec changes is applied only if the
     owner accepted its wording, with the owner's words quoted and one line
     in `docs/specs/log.md`.
-21. [ ] `docs/deferred.md` carries: a new entry for the system-level cost
+    *Review 2026-10-12: pending — the owner has not accepted any wording; nothing under docs/specs changed beyond R28.*
+21. [x] `docs/deferred.md` carries: a new entry for the system-level cost
     and latency task (items 21 and 24, a screen memo across scopes, L1,
     L3); the thin baselines added to § Synthesis optimisation as a second
     case; the full-text fetch for shortlisted options and its failure rate
@@ -116,11 +121,12 @@ This file does not restate them.
     (provider-written abstracts, duplicates without a DOI, the untested
     guesses path, the process-wide option-search pool, empty OpenAlex
     queries). Open question 4 is marked closed.
-22. [ ] ADR 0040 written, Accepted, with the rollback commands.
-23. [ ] The Tier-4 review stack ran (contract verifier · `/code-review
+22. [x] ADR 0040 written, Accepted, with the rollback commands.
+23. [x] The Tier-4 review stack ran (contract verifier · `/code-review
     medium` · one security lane · `/simplify` · adversarial at contract and
     plan · human deep review). Findings are adjudicated in
     [verification.md](verification.md).
+    *Review 2026-10-12: ran (verification.md § Review findings); the human deep review is step 9.*
 
 ## Amendment 2 (2026-09-29)
 
@@ -133,7 +139,7 @@ that is not a loop's stop measure is reported, not passed (R48, R49).
 
 ### Items (one box per group; each cites the contract's item numbers)
 
-24. [ ] **The plan (R34; R35 withdrawn).** In `runtime/scoping_plan.py`:
+24. [x] **The plan (R34; R35 withdrawn).** In `runtime/scoping_plan.py`:
     the kinds are `boundary`, `consideration` (with `aspect` whose values are
     the eight line keys of box 40 or `transferability`, and `hard`),
     `preference` and `evidence_restriction`; `CHECKED_AT_BY_KIND` maps
@@ -146,7 +152,7 @@ that is not a loop's stop measure is reported, not passed (R48, R49).
     "time to effect" when the user speaks of results; one consideration per
     line; the answer about who can act → a consideration on "who decides").
     Threshold (the 9L stop measure): all, read by hand.
-25. [ ] **The component `option_profile` (R37).** A spine component between
+25. [x] **The component `option_profile` (R37).** A spine component between
     `longlist` and `constrain`. The chain in `runtime/scoping_plan.py`, the
     registry (`run_spec.py`), the harness graph, the plan mapping
     (`task_plan.py`), `LLM_BEARING_COMPONENTS` (`runner.py`), the stage key
@@ -163,7 +169,7 @@ that is not a loop's stop measure is reported, not passed (R48, R49).
     (Where only for "who decides"), the baseline, and per option its design
     and at most 5 records by role; the caps are named constants; the model
     is the judgment model.
-26. [ ] **"What it would take" (R36).** Each option has eight lines with a
+26. [x] **"What it would take" (R36).** Each option has eight lines with a
     sentence each: cost, time to set up, time to effect, workforce
     requirements, who decides, dependencies, coordination requirements,
     delivery complexity. One call per line reads the whole list. Marks follow
@@ -171,7 +177,7 @@ that is not a loop's stop measure is reported, not passed (R48, R49).
     value; no basis mark in the wire or the storage. M10 (every option has a
     sentence on every line) is reported.
 27. [ ] *Withdrawn with R51 (the add-one form). The number is kept.*
-28. [ ] **Who decides and the authority label (R38).** The line names one
+28. [x] **Who decides and the authority label (R38).** The line names one
     body by its full name and the country from the plan's Where, and a legal
     means only when the baseline or a document states it (read on the
     tuning set). Constrain reads that line and no other place text (its
@@ -184,8 +190,9 @@ that is not a loop's stop measure is reported, not passed (R48, R49).
     and the 13L round record). The label is a filter on the list, not the
     sort order. M11 on the hard-requirement data: threshold 9 of 10 options
     (the 13L stop measure).
+    *Review 2026-10-12: holds; "and the country from the plan's Where" was removed by 12L round 5 at the owner's direction (A2).*
 29. [ ] *Withdrawn with R50 (the limit label). The number is kept.*
-30. [ ] **Ambition (R40).** One call over the whole list in
+30. [x] **Ambition (R40).** One call over the whole list in
     `option_profile`: relative (Smaller · Bigger · no mark) with one sentence
     against the baseline; no option called "do minimum". Stored in
     `option.ambition` (mark `less`, `more` or null) and
@@ -194,20 +201,20 @@ that is not a loop's stop measure is reported, not passed (R48, R49).
     ambition word on a list row are gone from the read model, the repository
     and the views. On the card, ambition is in "What it is", after the lever
     line.
-31. [ ] **The delivery setting (R41).** One call over the whole list writes
+31. [x] **The delivery setting (R41).** One call over the whole list writes
     one main setting and at most one more per option, empty for a
     system-level instrument; stored in `longlist_result.option_profile`. No
     fixed list of settings in code or prompt. The Setting facet reads it; on
     the card it is in "What it is". M12 (at most 10 labels, no place or body name) is
     reported.
-32. [ ] **Outcome counts (R42).** Per option, in documents: the documents
+32. [x] **Outcome counts (R42).** Per option, in documents: the documents
     that evaluate it and, among them, the documents for each plan outcome (a
     document counts when one of its evaluating records has that
     `outcome_tag`; a document with records on two outcomes counts for both).
     A test pins this rule. No new field; `extract_interventions` unchanged;
     no direction, size or verdict anywhere. Shown in "What the evidence base
     holds so far".
-33. [ ] **The reader and the words (R43, R44).** List rows carry no marks and
+33. [x] **The reader and the words (R43, R44).** List rows carry no marks and
     no ambition word; the list groups by theme and lever type only. "What it
     would take" is collapsible and collapsed when the card opens: collapsed,
     a row of eight cells (line name above, level word below; the cells open
@@ -221,10 +228,10 @@ that is not a loop's stop measure is reported, not passed (R48, R49).
     Costlier, Quicker · Slower, Lower · Higher, Simpler · More complex,
     Smaller · Bigger; none of "less than most", "like most", "more than
     most". Checked in the vitest tests and on the browser check.
-34. [ ] **Out of the first version (R39).** No acceptability line, no
+34. [x] **Out of the first version (R39).** No acceptability line, no
     burden line, no legal-change line and no "powers" line in code, prompt
     or screen.
-45. [ ] **The rename (R53).** No product code or prompt holds the kind
+45. [x] **The rename (R53).** No product code or prompt holds the kind
     `requirement`. The one-off script is in the gitignored evidence folder;
     after it ran, a round record shows the clones' test plans read as valid
     plans and their statements about who can act are considerations on
@@ -240,21 +247,22 @@ that is not a loop's stop measure is reported, not passed (R48, R49).
     rounds, was tuned on the tuning set and read once on the check set, and
     was reported to the owner. Each is re-pinned in
     `scripts/prompt_hashes.json`. `extract_interventions` is unchanged.
-36. [ ] **No fixed lists, bands or anchor examples (R37).** No line,
+    *Review 2026-10-12: deviation — the who-decides loop (12L) ran seven rounds over its life (0–5, then round 6 in amendment 4), each reported under R25 (A1).*
+36. [x] **No fixed lists, bands or anchor examples (R37).** No line,
     ambition or setting prompt holds a fixed list of answers, a
     low/medium/high band, or an example option from a named domain. The
     lead's three guards are not in the code.
-37. [ ] **The known faults were tested (final § 6.1).** A 12L round record
+37. [x] **The known faults were tested (final § 6.1).** A 12L round record
     reads each of the six faults on the tuning set and states the count.
     Threshold (the 12L stop measure): none of the six, read by hand.
-38. [ ] **The overlap of coordination requirements with delivery complexity
+38. [x] **The overlap of coordination requirements with delivery complexity
     was measured** with the decided coordination question, and the figure
     (same level; opposite) is in `verification.md` beside the figures of
     final § 6.3, read back from a saved file. Reported.
-39. [ ] **No code handles old longlists (R52).** No branch, migration or
+39. [x] **No code handles old longlists (R52).** No branch, migration or
     read-model rule for old ambition words, old plan kinds or a longlist
     with no profile made by an earlier development iteration.
-40. [ ] **Migration (R45).** Exactly one reversible alembic revision on
+40. [x] **Migration (R45).** Exactly one reversible alembic revision on
     `d8f3b6a2c4e1`: the JSON column `longlist_result.option_profile`, keyed
     by option id and design version; per option the line keys `cost`,
     `time_to_set_up`, `time_to_effect`, `workforce`, `who_decides`,
@@ -262,10 +270,10 @@ that is not a loop's stop measure is reported, not passed (R48, R49).
     sentence and a mark stored as `less`, `more` or null, and the setting; no
     entry for an option not yet profiled; a round-trip test; full `make verify` at Phase 10.
     No other schema change; no new table.
-41. [ ] **Measures and time (R46, R49).** M8, M10, M12 and M14 are reported
+41. [x] **Measures and time (R46, R49).** M8, M10, M12 and M14 are reported
     in `verification.md`, read back from saved files; M11 is the 13L stop
     measure (box 28). The walk has no side branch.
-42. [ ] **Task 3 principle recorded, not built (R47).** The shortlist
+42. [x] **Task 3 principle recorded, not built (R47).** The shortlist
     principle is in the spec-change list for the owner's wording; no
     shortlist code and no limit label are written. `docs/deferred.md`
     carries burden, a grounded legal-change line, the outcome direction and
@@ -273,11 +281,12 @@ that is not a loop's stop measure is reported, not passed (R48, R49).
 43. [ ] **Spec changes of amendment 2**, `option_profile` included, are
     applied only with the owner's accepted wording, with one line each in
     `docs/specs/log.md`.
-44. [ ] **Gates.** Full `make verify` passes at Phases 9.0, 10 and 14;
+    *Review 2026-10-12: pending (as box 20).*
+44. [x] **Gates.** Full `make verify` passes at Phases 9.0, 10 and 14;
     Phases 9 and 12a also pass `make openapi-sync` and `make frontend-verify`.
     ADR 0040 is amended (walk, typing in `option_profile`, place exception)
     in its own commit before Phase 12a.
-46. [ ] **The contract's corrected lines hold.** The OpenAPI diff shows the
+46. [x] **The contract's corrected lines hold.** The OpenAPI diff shows the
     removal of `ambition_bands` and the additions of final § 3 and nothing
     else; `verification.md` records the rollback as the contract states it
     (not additive) and the known limits of final § 2.10.
@@ -303,7 +312,7 @@ is reported, not passed (R69). Every question of final 3 § 7.2 is answered
 
 ### Items
 
-47. [ ] **Tried on (R54, R55).** One folding call over the list's distinct
+47. [x] **Tried on (R54, R55).** One folding call over the list's distinct
     `unit` words (read from the whole list's coverage) writes word → kind, on
     the mini model, in `option_profile`, with the plan's target unit and
     outcomes as reference; the maps are stored at list level in
@@ -320,7 +329,7 @@ is reported, not passed (R69). Every question of final 3 § 7.2 is answered
     kinds in code or prompt. **M6's replacement** (M6 retired, lead Q9): on
     the live runs, Tried on shows kinds beyond the plan's target unit where
     the evidence has them (read by hand; reported).
-48. [ ] **Measures and the outcomes table (R55, R56, R64).** A second folding
+48. [x] **Measures and the outcomes table (R55, R56, R64).** A second folding
     call writes word → kind for the records' `outcome` words (one kind per
     record). The card's evidence section holds one table: a row per plan
     outcome with its "serves" mark from `outcomes_served`, and a row per other
@@ -330,24 +339,24 @@ is reported, not passed (R69). Every question of final 3 § 7.2 is answered
     kind row counts only `other`/null records; one document counts once on
     one row. No "What it is for" section, no "Outcomes measured" line
     (vitest).
-49. [ ] **Counts over any role (R56).** A plan outcome's count includes a
+49. [x] **Counts over any role (R56).** A plan outcome's count includes a
     document whose only member with that outcome is `described`,
     `recommended` or `mentioned`; the evaluated count counts `evaluated`
     members only; DOI collapse as before (the old "described counts for
     nothing" test replaced with a written reason).
-50. [ ] **The list's facets (R57).** Setting, Tried on and Where tried carry
+50. [x] **The list's facets (R57).** Setting, Tried on and Where tried carry
     labels only (vitest: no digit in a chip); Tried on and Where tried (top
     level) filter the list as Setting does; a country chip also matches a
     document under "multiple countries" whose `study_country` holds that
     country, read from the `countries` that each "multiple countries" entry
     of the coverage carries (lead, Q22; plan review 5; a test and a vitest); each folds after 8 chips; no Measures
     facet (vitest).
-51. [ ] **The authority label's rule unchanged (R58).** The label shows only
+51. [x] **The authority label's rule unchanged (R58).** The label shows only
     with a consideration on who can act; box 28's tests are edited for the
     label's new place (`OptionCard.test.tsx:241-259`) and listed in
     `verification.md`'s edited-tests section (lead, B14); the facet shows only
     when an option has a label.
-52. [ ] **Where tried (R59, R72).** No `WHERE_GROUPS`, `COMPARABLE_LABEL`,
+52. [x] **Where tried (R59, R72).** No `WHERE_GROUPS`, `COMPARABLE_LABEL`,
     `OECD_CODES`, `OECD_MARKERS`, `countries_in`, `where_group` or
     `where_labels` in product code; no "comparable" or "OECD" as a group label
     or heading (the level below may show the record's text: lead, A3).
@@ -363,17 +372,17 @@ is reported, not passed (R69). Every question of final 3 § 7.2 is answered
     below; no read of publisher, journal, institution or publication country.
     The facet shows the top level with no counts; the card both levels with
     counts.
-53. [ ] **The "not stated" check (R59).** A round record gives, on the three
+53. [x] **The "not stated" check (R59).** A round record gives, on the three
     live lists, the records with "not stated", how many abstracts name the
     place of the study, and the faults (read by hand), reading
     `study_geography` and `study_country`. Reported. A fault leads to a round
     of the record prompt's loop (box 63).
-54. [ ] **Grid (R60).** `CELL_LIMIT` is 4 in `LonglistGrid.tsx`; a vitest
+54. [x] **Grid (R60).** `CELL_LIMIT` is 4 in `LonglistGrid.tsx`; a vitest
     shows the fold at 5 options in a cell.
-55. [ ] **Header (R61).** No `SnapshotCells` and no depth chip on the card;
+55. [x] **Header (R61).** No `SnapshotCells` and no depth chip on the card;
     the evidence section carries the grey note "Read from titles and
     abstracts only".
-56. [ ] **Lever line (R62).** "Lever:" with the primary type, "with" the
+56. [x] **Lever line (R62).** "Lever:" with the primary type, "with" the
     secondary types, the reason sentence under it; no "also touches"; no
     runner-up line on the card (vitest).
 57. [ ] **Examples from `programme_name` (R63).** `extract_interventions`
@@ -386,16 +395,17 @@ is reported, not passed (R69). Every question of final 3 § 7.2 is answered
     set every non-null `programme_name` is a proper name the abstract gives
     **for this intervention**, not one it sits within (lead, A13, B19).
     Threshold: all. Misses on the check set reported.
-58. [ ] **Collapsed row (R65).** Collapsed, **seven cells**: Ambition, then
+    *Review 2026-10-12: built; the 16R "all" threshold not met (faults 13–32 % of names on the tuning set); the owner decides at step 9.*
+58. [x] **Collapsed row (R65).** Collapsed, **seven cells**: Ambition, then
     cost, time to set up, time to effect, workforce, coordination, delivery
     complexity; no cell for who decides or dependencies; every cell shows a
     word, "Middle" for no mark, also on a line with few or no marks; a blank
     cell only for an option with no profile (vitest). Expanded, the table's
     first row is Ambition.
-59. [ ] **Checks (R66).** The user's boundaries and preferences first, each
+59. [x] **Checks (R66).** The user's boundaries and preferences first, each
     verdict as a word with its colour; the three built-in checks as one line
     when all pass, in full when one fails; no transferability line (vitest).
-60. [ ] **Documents (R67, R68).** One entry per document (a test: the same DOI
+60. [x] **Documents (R67, R68).** One entry per document (a test: the same DOI
     under two snapshot ids gives one entry, and the task's own row opens the
     dossier); evaluated first, then by quality; the highest role under the
     option, the top-level place and `year` (from the snapshot metadata) on
@@ -403,7 +413,7 @@ is reported, not passed (R69). Every question of final 3 § 7.2 is answered
     linked title and one grey meta line, no chips (the "inherited" chip
     included), five documents then "Show all N", and "No documents found
     yet." with none (vitest).
-61. [ ] **The dossier from the card (R67).** A document title on the card
+61. [x] **The dossier from the card (R67).** A document title on the card
     opens the Evidence search source dossier (`SourceDossier`), not the
     citation panel (vitest); a document with no row in this task shows its
     title as plain text; nothing else on the card opens the dossier. On an
@@ -415,14 +425,14 @@ is reported, not passed (R69). Every question of final 3 § 7.2 is answered
     the document's records, one per option holding it. On an Evidence search
     task the slot is unchanged (a vitest for each case, and the browser
     check).
-62. [ ] **The layout and the critique items (R68).** The card's parts are in
+62. [x] **The layout and the critique items (R68).** The card's parts are in
     the order of final 3 § 2.5; ambition is the first row of "What it would
     take"; its label reads "Policy Atlas's estimate"; no "Where it came from"
     section; origin and relations on the header's grey line. At 16 px, not
     `text-meta` (lead, A10): every sentence of the lines, the abstracts note,
     "also found as", the design features, the lever reason (vitest on the
     classes).
-67. [ ] **Migration (R71).** Exactly one reversible alembic revision on
+67. [x] **Migration (R71).** Exactly one reversible alembic revision on
     `e9a4c1f7b3d2`: nullable Text columns `intervention_profile_record.
     programme_name` and `study_country`; `population` → `unit` and
     `population_tag` → `unit_tag` (check constraint renamed with it) on
@@ -441,7 +451,7 @@ is reported, not passed (R69). Every question of final 3 § 7.2 is answered
     production (`alembic downgrade -1`, which also writes the facet key back;
     the previous image) and the stored-task reference saved again after the
     migration (plan review 9).
-68. [ ] **The authority label beside "Who decides" (R70).** In "What it
+68. [x] **The authority label beside "Who decides" (R70).** In "What it
     would take", the "Who decides" row carries the label word with its colour,
     then the sentence, only when the option has an authority entry; no
     authority line in "What it is"; the Who can act facet unchanged (vitest).
@@ -454,7 +464,8 @@ is reported, not passed (R69). Every question of final 3 § 7.2 is answered
     "multiple" for a group, empty when nothing is stated, no short form or
     UK nation as a country. Threshold: all records read, no wrong country. Records
     by `study_country` value reported per list.
-70. [ ] **`unit` throughout (R73, R75).** No product code, wire, prompt or
+    *Review 2026-10-12: built; "no wrong country" not met on the record; the owner decides at step 9.*
+70. [x] **`unit` throughout (R73, R75).** No product code, wire, prompt or
     read model uses `population` or `population_tag` for the intervention
     record or the two finding records (a grep over `backend/src` and
     `frontend/src`, the words "population" in prose aside); the intervention
@@ -480,10 +491,11 @@ is reported, not passed (R69). Every question of final 3 § 7.2 is answered
     holds, `strip_place`, its name tables and `names_place`
     are gone from product code; if it fails, they stay and `verification.md`
     and final 3 say so. M4 on the live runs reported.
+    *Review 2026-10-12: the wording holds in every prompt; the deletion is not done (M4 one in 175 on the replay, none live) — the owner's decision at step 9.*
 
 ### Cross-cutting
 
-63. [ ] **Every new or changed prompt went through a refine loop (R69, R74,
+63. [x] **Every new or changed prompt went through a refine loop (R69, R74,
     R75).** The two folding prompts; `extract_interventions` v3 with
     `SCHEMA_VERSION` bumped and the three fields in `_NULLABLE_TEXT_FIELDS`
     as needed, replayed with the memo bypassed (lead, B1, Q19); any round the
@@ -499,20 +511,21 @@ is reported, not passed (R69). Every question of final 3 § 7.2 is answered
     two kinds on one list name the same kind, and at most 12 kinds per list
     per facet (lead, A6); kinds per list and plan-word matches reported. The
     16W word swap is not a loop (R75). The cluster prompt is unchanged for examples; its discovery prompt takes the place rule (18P).
-64. [ ] **Gates (lead, A14; plan review).** Full `make verify` at 15.0, 16
+64. [x] **Gates (lead, A14; plan review).** Full `make verify` at 15.0, 16
     (the schema) and 23; `prompt-guard` at 16R, 16W, 18P, 20 and 20L (and 18C
     if a round runs); `openapi-sync` at 16, 16W, 17, 18 and 21;
     `frontend-verify` at 16, 16W, 17, 18, 21, 22a, 22c and 22b, each removal
     phase deleting the frontend readers and fixtures of the field it removes;
     `/security-review` on the new route of Phase 21; ADR 0040 amended in its
     own commit before Phase 16.
-65. [ ] **The contract's lines hold.** The OpenAPI diff shows only the
+65. [x] **The contract's lines hold.** The OpenAPI diff shows only the
     removals and additions of final 3 § 3; `verification.md` records the
     known limits of final 3 § 7.3, M1, M2 and M4 on the live runs, records
     with a `programme_name` per list (reported, lead A14), and names rounds
     2–5 of 12L as built before this amendment.
 66. [ ] **Spec changes of amendment 3** are applied only with the owner's
     accepted wording, one line each in `docs/specs/log.md`.
+    *Review 2026-10-12: pending (as box 20).*
 
 ## Amendment 4
 
@@ -529,7 +542,7 @@ reported, not passed (R69).
 
 ### Items
 
-72. [ ] **The evidence signal (R76, R85).** `OptionSummaryOut` carries
+72. [x] **The evidence signal (R76, R85).** `OptionSummaryOut` carries
     `evaluated_countries` (the distinct top-level places of `evaluated`
     documents, "not stated" and "multiple countries" left out, the plan's
     Where country first by its short English name, then by count then
@@ -546,7 +559,7 @@ reported, not passed (R69).
     No "studies" in any authored label or count copy of the longlist
     views (vitest over the presentation strings, R90; document titles and
     evidence types are exempt, contract review C15).
-73. [ ] **How it works (R77).** The section is "How it works"; the lever
+73. [x] **How it works (R77).** The section is "How it works"; the lever
     line on its own line with the reason under it; the lead-in from the
     setting kinds with the preposition per kind and "and" ("Delivered in
     schools and at home. It typically involves:"); no setting gives "It
@@ -555,7 +568,7 @@ reported, not passed (R69).
     zero features that only restate the option's setting or the plan's
     target unit, read by hand; the count before the round reported
     (contract review C13).
-74. [ ] **Order and the callout (R78).** Sections in order How it works ·
+74. [x] **Order and the callout (R78).** Sections in order How it works ·
     What it would take · Evidence; no Checks section; on a user
     constraint, a `breaks` or `cannot_check` judgement or a
     `likely_falls_short` or `cannot_say` guess renders as the callout under
@@ -563,14 +576,14 @@ reported, not passed (R69).
     for `cannot_check` and `cannot_say`); `passes`, `likely_meets` and the
     built-in checks render nothing (vitest, six cases). Constrain's code is unchanged (no diff under
     `constrain/` for this item).
-75. [ ] **The opener and your outcomes (R79, R82).** The opener line's three
+75. [x] **The opener and your outcomes (R79, R82).** The opener line's three
     forms; "Your outcomes" lines in the plan's words with the evaluated
     count, "none" in grey, "not a target of this option" when
     `outcomes_served` lacks the outcome, the one-line form when no
     evaluating document measured any; no outcomes table, no "serves", no
     "aimed at", no roles sentence (vitest). On an option with no document
     the section is the one line and the abstracts note is absent (vitest).
-76. [ ] **The place sentences: the call (R80; S31).** In `option_profile`
+76. [x] **The place sentences: the call (R80; S31).** In `option_profile`
     after the folding calls, one call per option on the mini model, in the
     same pool; the input builder groups the option's `evaluated` documents
     by top-level place in the contract's order with the record fields and
@@ -592,6 +605,7 @@ reported, not passed (R69).
     and a merge read template sentences until the profile runs (tests).
     `OptionOut.place_sentences` served; the card renders the block in
     stored order with the plan's Where row tinted (vitest).
+    *Review 2026-10-12: holds with one deviation (no wire `max_length`; the ceiling is checked in code, ADR decision 23 corrected); the merge now reads template sentences (B1); each entry stores its reason (LT2).*
 77. [ ] **The sentence loop (R80; M15).** Rounds in `evidence/rounds/`;
     stop measure (M15): on the tuning set, zero `failed_trace`, zero
     `failed_length` and zero `failed_call` (plan review PA4-9), with the
@@ -600,7 +614,8 @@ reported, not passed (R69).
     count a reader would rewrite, per list), outcomes in the plan's words,
     kinds in the fold's words, no merit words ("effective", "promising").
     Re-pinned in `scripts/prompt_hashes.json`.
-78. [ ] **The documents disclosure (R81; S30).** `OptionDocumentOut` gains
+    *Review 2026-10-12: not met (4 of 56 on the tuning set; 6 of 51 live), accepted by the owner 2026-10-12; the sentence-start fault behind the two live obesity cases fixed (LT3).*
+78. [x] **The documents disclosure (R81; S30).** `OptionDocumentOut` gains
     `programme_name`, `tried_on_kind`, `measured`, `place_detail`,
     `records_count` from the document's member records under the option,
     the first by `OPTION_PROFILE_ROLE_ORDER`, the kinds through the stored
@@ -609,7 +624,7 @@ reported, not passed (R69).
     default, carries the count and the abstracts note, two groups ordered
     as R67, five then "Show all N", each line's two meta lines, "+N more"
     opening the dossier with the option id (vitest).
-79. [ ] **The list (R83, R84, R85).** The header shows " · K excluded" only
+79. [x] **The list (R83, R84, R85).** The header shows " · K excluded" only
     when K > 0, as a link to `#excluded-options`; no Setting, Where tried,
     Who can act or Tried on facet, no facet state, no "N of M options
     match"; Group by Theme · Lever type works as before; the row's grey
@@ -625,6 +640,7 @@ reported, not passed (R69).
     measure: at most one wrong fold in a read of 30 per facet per list on
     the tuning set, with the three wrong-fold kinds named in the record;
     kinds per list reported; re-pinned.
+    *Review 2026-10-12: the guard holds; the stop measure not met, accepted by the owner 2026-10-12; the slash cut now counted (B2).*
 81. [ ] **Places (R87; M16).** `extract_interventions` v4 with the place
     rules in words, `SCHEMA_VERSION` bumped, replays with the memo bypassed
     as 16R; the coverage checks: an unknown `study_country` counts as not
@@ -638,6 +654,7 @@ reported, not passed (R69).
     hyphens and spaces normalised (tests on the survey's cases: "Spanish
     Ministry of Health", "Georgia" under United Kingdom, "south-west" /
     "southwest"). Stop measure on the tuning set as M16; M1, M2 unchanged.
+    *Review 2026-10-12: the code holds; M16 not met at "none" (61 on the tuning set), accepted by the owner 2026-10-12; the six ambiguous country names match capitalised only (B4).*
 82. [ ] **Example names fold (R88).** The fold's rules as tests on the
     survey's cases (three SDNP spellings → one; "Soft Drinks Industry Levy"
     / "UK Soft Drinks Industry Levy" → one; "HENRY" with and without its
@@ -645,7 +662,8 @@ reported, not passed (R69).
     Eligibility Provision (CEP)" stay two); the shown spelling rule;
     applied to `examples` and to the document line's programme name.
     Duplicates left on the check set, reported.
-83. [ ] **"Who decides" and the authority (R89; M18).** The who-can-act
+    *Review 2026-10-12: the fold holds on the survey's cases; "duplicates left on the check set" was not read (the build says so).*
+83. [x] **"Who decides" and the authority (R89; M18).** The who-can-act
     constraint's texts reach the `who_decides` line as context when the
     plan holds the constraint (a test); the authority call is unchanged
     (no diff to its input); profile round 6 in `evidence/rounds/`; stop
@@ -657,19 +675,20 @@ reported, not passed (R69).
 
 ### Cross-cutting
 
-84. [ ] **Every new or changed prompt went through a refine loop (R69).**
+84. [x] **Every new or changed prompt went through a refine loop (R69).**
     `place_sentences_v1` (26L), `extract_interventions` v4 (27), the
     folding prompts' round 6 (28), the profile prompt's round 6 (29), the
     design prompts' feature rule (Phase 29F, stop measure in box 73).
     Each: rounds recorded, one stop measure, at most five rounds,
     tuning set then one read of the check set, reported to the owner,
     re-pinned.
-85. [ ] **Gates.** No schema revision. Full `make verify` at 24.0 and 31;
+    *Review 2026-10-12: holds per loop; the who-decides loop's seventh round is the box 35 deviation (A1).*
+85. [x] **Gates.** No schema revision. Full `make verify` at 24.0 and 31;
     `prompt-guard` at 26, 26L, 27, 28, 29; `openapi-sync` and `drift-check`
     at 25 and 26; `frontend-verify` at 25, 30a, 30b, 30c, each removal
     phase deleting the frontend readers and fixtures of the field it
     removes; ADR 0040 amended in its own commit before Phase 25.
-86. [ ] **The contract's lines hold.** The OpenAPI diff shows only the
+86. [x] **The contract's lines hold.** The OpenAPI diff shows only the
     removals and additions of R76–R81 (contract § Amendment 4, "Public
     interface"); `verification.md` § Amendment 4 records the known limits,
     M15–M18, the superseded tests replaced (the roles-sentence assertions
@@ -677,11 +696,14 @@ reported, not passed (R69).
     blocks, contract review C15), the three live runs' figures (evaluations and countries per
     option, sentences generated vs template per list, wrong folds found in
     the browser check), and the browser check of Phase 31.
+    *Review 2026-10-12: holds after the review removed `EvidenceProfileOut.by_role` as the contract says (B3).*
 87. [ ] **Spec changes of amendment 4** (contract § Spec changes 10–14)
     are applied only with the owner's accepted wording, one line each in
     `docs/specs/log.md`.
-88. [ ] **Out of scope held (R91).** No change under `evidence_search/`
+    *Review 2026-10-12: pending (as box 20).*
+88. [x] **Out of scope held (R91).** No change under `evidence_search/`
     except the intervention profile's own files; the only Overton-related
     change in the diff is the `docs/deferred.md` entry; no code, contract
     item or capability behaviour addresses the year or the broken-title
     placeholder (contract review C18).
+    *Review 2026-10-12: holds.*

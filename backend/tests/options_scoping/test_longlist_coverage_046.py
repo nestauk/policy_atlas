@@ -412,6 +412,22 @@ def test_a_setting_that_is_a_place_moves_to_an_empty_geography_and_is_logged() -
     ]
 
 
+def test_a_setting_naming_a_place_moves_the_place_only() -> None:
+    # Review of task 046 (2026-10-12): the geography is the place the setting
+    # names, not the whole setting phrase.
+    coverage = _coverage([_member("a", setting="community centres in Leeds")])
+    assert coverage["settings"] == {}
+    assert coverage["where_tried"] == [
+        {
+            "top": "other",
+            "documents": 1,
+            "places": [{"place": "Leeds", "documents": 1}],
+            "countries": [],
+        }
+    ]
+    assert coverage["setting_repairs"] == 1
+
+
 def test_a_place_setting_is_dropped_when_the_geography_is_stated() -> None:
     with capture_logs() as logs:
         coverage = _coverage(

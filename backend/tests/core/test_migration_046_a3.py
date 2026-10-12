@@ -378,6 +378,15 @@ def _seed_grouping_chain(conn: Connection) -> tuple[uuid.UUID, dict[str, uuid.UU
             {"intervention": {"status": "succeeded"}},
             {**_PROVENANCE, "facets": ["intervention"], "facet_runs": {"intervention": {}}},
         ),
+        # A provenance written before ``facet_runs`` existed (the facet-grain
+        # revision added ``facets`` only; review of task 046, 2026-10-12).
+        (
+            "legacy",
+            {"population": _bucket("population")},
+            {"population": {}},
+            {"population": {}},
+            {"prompt_version": "group_v1", "facet": "population", "facets": ["population"]},
+        ),
     )
     grouping_runs: dict[str, uuid.UUID] = {}
     for name, groups, counts, flags, provenance in rows:
@@ -550,6 +559,9 @@ def test_the_facet_key_and_its_group_ids_move_everywhere_and_back(engine: Engine
             assert set(after["provenance"]["facet_runs"]) == {"intervention", "unit"}
             single = _grouping(conn, ids["grouping_single"])["provenance"]
             assert (single["facet"], single["facets"]) == ("unit", ["unit"])
+            legacy = _grouping(conn, ids["grouping_legacy"])["provenance"]
+            assert (legacy["facet"], legacy["facets"]) == ("unit", ["unit"])
+            assert "facet_runs" not in legacy
 
             theme = _annotation(conn, ids["annotation_theme"])
             assert theme["theme"]["referenced_ids"] == ["unit:g01", "intervention:g01"]

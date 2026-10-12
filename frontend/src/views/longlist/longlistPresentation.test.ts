@@ -57,6 +57,8 @@ describe("longlist presentation (task 046)", () => {
     const counts = { options: 40, themes: 12, excluded: 3, no_in_scope: 2 } as Parameters<typeof countsLine>[0];
     expect(countsLine(counts)).toBe("40 options in 12 themes · 3 excluded · 2 with no in-scope evidence");
     expect(countsLine({ ...counts, excluded: 0, no_in_scope: 0 })).toBe("40 options in 12 themes");
+    // Before the theme step runs the line carries no theme count.
+    expect(countsLine({ ...counts, themes: 0, excluded: 0, no_in_scope: 0 })).toBe("40 options");
     expect(countsLine({ ...counts, options: 1, themes: 1, excluded: 0 })).toBe(
       "1 option in 1 theme · 2 with no in-scope evidence",
     );

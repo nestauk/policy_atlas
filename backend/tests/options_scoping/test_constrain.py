@@ -568,9 +568,11 @@ def test_a_merge_recomputes_the_kinds_from_the_stored_maps_and_keeps_the_old_key
     assert set(sent) == {"documents", "evaluated", "roles", "tried_on", "settings"}
 
 
-def test_a_merge_carries_the_kept_option_s_place_sentences_through(conn: Connection) -> None:
-    """Task 046, amendment 4 (S31; contract review PA4-15): the merge recompute
-    has no place sentences; the kept option's stored ones ride through unchanged."""
+def test_a_merge_drops_the_kept_option_s_stored_place_sentences(conn: Connection) -> None:
+    """Task 046, amendment 4 (rubric box 76; ADR 0040 decision 23): the merged
+    option's documents changed, so its stored sentences do not ride through the
+    recompute; the card reads template sentences until the profile runs again
+    (review of task 046, 2026-10-12)."""
     walk = _walk(conn)
     kept, dup = _duplicate_pair(walk)
     walk.build(StubLonglistBackend())
@@ -590,12 +592,11 @@ def test_a_merge_carries_the_kept_option_s_place_sentences_through(conn: Connect
 
     after = _latest(walk).coverage[str(kept)]
     assert after["documents"] == 2  # recomputed
-    assert after["place_sentences"] == stored
+    assert "place_sentences" not in after
     card = repository.option_out(conn, walk.task_id, kept)
     assert card is not None
-    assert [(s.place, s.sentence, s.generated, s.where) for s in card.place_sentences] == [
-        ("United Kingdom", "Kept sentence.", True, True)
-    ]
+    assert card.place_sentences and not any(s.generated for s in card.place_sentences)
+    assert "Kept sentence." not in [s.sentence for s in card.place_sentences]
 
 
 def test_a_user_held_duplicate_is_never_merged(conn: Connection) -> None:

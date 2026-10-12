@@ -1091,7 +1091,6 @@ export const mockLonglistOptionCards: Record<string, OptionOutFixture> = {
     evidence: {
       documents: 6,
       by_evidence_type: { "Systematic review": 2, "Policy analysis": 3, "Local evaluation": 1 },
-      by_role: { evaluated: 3, described: 2, recommended: 0, mentioned: 1 },
       by_tier: { Strong: 2, Moderate: 3, "not rated": 1 },
       flagged_not_stated: 1,
       inherited_labels: 1,
@@ -1172,7 +1171,6 @@ export const mockLonglistOptionCards: Record<string, OptionOutFixture> = {
     evidence: {
       documents: 4,
       by_evidence_type: { "Local evaluation": 3, "Policy analysis": 1 },
-      by_role: { evaluated: 2, described: 1, recommended: 1, mentioned: 0 },
       by_tier: { Moderate: 2, Limited: 1, "not rated": 1 },
       flagged_not_stated: 0,
       inherited_labels: 0,
@@ -1247,7 +1245,6 @@ export const mockLonglistOptionCards: Record<string, OptionOutFixture> = {
     evidence: {
       documents: 0,
       by_evidence_type: {},
-      by_role: {},
       by_tier: {},
       flagged_not_stated: 0,
       inherited_labels: 0,
@@ -1306,7 +1303,6 @@ export const mockLonglistOptionCards: Record<string, OptionOutFixture> = {
     evidence: {
       documents: 9,
       by_evidence_type: { "Systematic review": 4, "Local evaluation": 3, "Policy analysis": 2 },
-      by_role: { evaluated: 5, described: 3, recommended: 1, mentioned: 0 },
       by_tier: { "Very strong": 2, Strong: 4, Moderate: 3 },
       flagged_not_stated: 0,
       inherited_labels: 0,
@@ -1420,7 +1416,6 @@ export function buildMockAddedOption(text: string): OptionOutFixture {
     evidence: {
       documents: 0,
       by_evidence_type: {},
-      by_role: {},
       by_tier: {},
       flagged_not_stated: 0,
       inherited_labels: 0,

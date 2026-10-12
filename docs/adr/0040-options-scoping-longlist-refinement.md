@@ -275,7 +275,8 @@ decisions above stand, except where a decision below names one.
     that line and the user's consideration on "who decides", and writes an
     authority label (*within your power* · *needs action by <body>* ·
     *unclear*) into `longlist_result.judgements`. The label never excludes;
-    the reader can filter by it. With no such consideration there is no
+    it shows beside the "Who decides" row (the list's facet on it went with
+    decision 22). With no such consideration there is no
     label. The rule stands for all else: `constrain`'s plan data is still
     place-stripped, and evidence from another place is never excluded for
     its place.
@@ -439,7 +440,9 @@ forms before one read as a user could take in.
     template.** One call per option on the mini model in `option_profile`,
     after the folding calls, from the option's evaluating documents grouped
     by place with their record fields and folded kinds, the plan's outcomes
-    as vocabulary, under a schema length ceiling. The code checks every
+    as vocabulary, under a length ceiling checked in code per sentence (a
+    schema `max_length` would fail the whole call for one long sentence;
+    plan review PA4-9). The code checks every
     number, strength word, programme name and place in each sentence
     against the input and replaces a failing sentence with a template
     sentence; a failed call leaves the option on template sentences and
@@ -492,6 +495,20 @@ forms before one read as a user could take in.
     AND HAS BEEN REMOVED]" placeholder as a title (114 snapshots). Both sit
     in the ingest adapter every capability shares; they are recorded in
     `docs/deferred.md` for a fix of their own.
+
+**Review of the four amendments (2026-10-12):** the review stack changed
+four behaviours within these decisions. A merged option reads template
+sentences until the profile runs again (decision 23 as written; the build
+had carried the kept option's sentences through the merge). The trace
+check's sentence-start rule runs after every terminator, and each template
+entry stores its reason. An evaluated country is read from a document's
+evaluating records only (decision 22's signal). The six ISO-3166 country
+names that are common nouns or given names (chad, guinea, jersey, jordan,
+niger, turkey) name a place only when capitalised (decision 25's resolver
+still knows them). `EvidenceProfileOut.by_role` left the option read model
+as the amendment 4 contract said. Revision `f1b6d3a8c2e5` freezes the view
+SQL it executes and rewrites a grouping provenance that has no
+`facet_runs` key.
 
 **Rollback, amendment 4:** no schema revision; the place sentences, the
 signal fields and the document record fields are coverage keys and read

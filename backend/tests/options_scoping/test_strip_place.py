@@ -86,6 +86,22 @@ def test_the_sub_national_table_resolves_a_place_to_its_country(place: str, code
     assert SUBNATIONAL_PLACES[place.removeprefix("the ").casefold()] == code
 
 
+def test_a_country_name_that_is_a_common_noun_is_a_place_only_when_capitalised() -> None:
+    # Review of task 046 (2026-10-12): "turkey farms" is a setting; "Turkey" a place.
+    from policy_atlas.options_scoping.longlist.where_tried import strip_place
+
+    assert not names_place("turkey farms")
+    assert not names_place("guinea pig owners")
+    assert not names_place("a football jersey")
+    assert not names_place("the Jordan model of care".casefold())
+    assert names_place("households living in Jersey")
+    assert names_place("Turkey")
+    assert strip_place("households living in jersey", None) == (
+        "households living in jersey",
+        [],
+    )
+
+
 def test_georgia_is_not_read_as_a_us_state() -> None:
     # Task 046, amendment 4 (R87): every ISO-3166 country is now a place, so
     # "Georgia" names a place, and it resolves to the country, never the state.

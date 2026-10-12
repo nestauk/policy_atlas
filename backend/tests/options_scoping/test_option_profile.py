@@ -1215,6 +1215,7 @@ def test_the_maps_are_stored_at_list_level_and_the_kinds_merged_into_coverage(
         "kinds": {"tried_on": 6, "measures": 6},
         "kinds_returned": {"tried_on": 6, "measures": 6},
         "guard_rewrites": {"tried_on": 0, "measures": 0},
+        "slash_cuts": {"tried_on": 0, "measures": 0},
         "catch_all": {"tried_on": False, "measures": False},
     }
 
@@ -1397,6 +1398,21 @@ def test_a_catch_all_fold_is_flagged_on_twenty_words_or_more() -> None:
     assert checked is not None and checked["catch_all"] is False
 
 
+def test_a_kind_joined_by_slashes_is_cut_at_the_first_and_counted() -> None:
+    """Task 046, amendment 4 (the folding loop's round 7): the mini model answers
+    a cap with "obesity / overweight / BMI"; the first member names the kind,
+    and the cut is counted in provenance (review of task 046, 2026-10-12)."""
+    words = {"w1": "obesity", "w2": "bmi"}
+    answer = FoldingResponse(
+        kinds=["obesity / overweight / BMI", "weight"],
+        folds=[FoldWire(word_id="w1", kind=0), FoldWire(word_id="w2", kind=1)],
+    )
+    checked = _checked_folds(answer, words, [], facet="measures")
+    assert checked is not None
+    assert checked["folds"] == {"obesity": "obesity", "bmi": "weight"}
+    assert checked["slash_cuts"] == 1
+
+
 def test_a_catch_all_answer_is_tried_once_more_and_the_retry_is_kept(conn: Connection) -> None:
     """Task 046, amendment 4 (the folding loop's round 9): one retry, then the
     answer stands whatever it holds; the step never fails on a catch-all."""
@@ -1568,12 +1584,14 @@ def test_the_place_sentences_are_stored_in_the_card_order_with_their_provenance(
             "sentence": "2 evaluations in United Kingdom.",
             "generated": True,
             "where": True,
+            "reason": None,
         },
         {
             "place": "Canada",
             "sentence": "1 evaluations in Canada.",
             "generated": True,
             "where": False,
+            "reason": None,
         },
     ]
     assert after.coverage[str(ids["ws"])]["place_sentences"] == []
@@ -1689,6 +1707,10 @@ def test_a_place_left_out_an_unknown_id_a_long_and_an_untraced_sentence(
     assert {key: stats[key] for key in _place_stats()} == _place_stats(
         template=3, failed_length=1, failed_trace=1
     )
+    # The over-length sentence was refused once and the retry's answer kept.
+    assert stats["retries"] == 1
+    # Each template entry says why it stands (review of task 046, 2026-10-12).
+    assert [entry["reason"] for entry in entries] == ["length", "number", "missing"]
     # A sentence within the ceiling that passes is kept, stripped.
     backend.profiler._place_sentence_queue = [
         PlaceSentencesResponse(
@@ -1706,5 +1728,6 @@ def test_a_place_left_out_an_unknown_id_a_long_and_an_untraced_sentence(
         "sentence": "One evaluation measured employment.",
         "generated": True,
         "where": False,
+        "reason": None,
     }
 

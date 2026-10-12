@@ -2867,10 +2867,62 @@ are the levers left for each. Seams left open:
 - **A theme heading's summary at 390 px** overflows when a list has no
   themes and every option sits under "No theme" (the clones; a live list's
   summaries are short). Pre-existing markup; one `min-w-0`/wrap away.
-- **`names_place` over the full ISO-3166 table**: a setting holding
-  "Jersey", "Jordan", "Chad", "Niger" or "Guinea" as a whole word now reads
-  as a place in the setting pass. Not seen on the tuning or check sets;
-  for the review.
+- **`names_place` over the full ISO-3166 table** — closed by the review
+  (2026-10-12): the six country names that are common nouns or given names
+  (`AMBIGUOUS_COUNTRY_NAMES`: chad, guinea, jersey, jordan, niger, turkey)
+  match only when capitalised; the resolver still knows them. "Georgia" with
+  no context stays the country (a place either way).
+
+### Review stack seams (2026-10-12)
+
+Found by the step-7 lanes (`verification.md` § Review findings) and deferred
+by the lead with a reason; none blocks the merge.
+
+- **A failed typing keeps a typing made for an earlier design version**
+  (Codex X1). The keep-previous rule (box 3, S12) keys the lever columns by
+  option id only; after a design edit whose typing batch fails, the card
+  shows the old design's lever until a batch succeeds. The profile lines
+  are keyed by `(option_id, design_version)`; typing and ambition need the
+  same key (a stored version beside the lever columns), which is a shape
+  change. Not seen live (`typing_invalid` 0 on every live run).
+- **The read models take the newest `longlist_result` whatever the walk's
+  status** (Codex X4). A walk whose `longlist` step wrote its row and whose
+  `option_profile` step then failed serves that row's coverage with an
+  empty profile beside the task-wide option columns of the last good walk.
+  The fail-closed step is by design; a "last completed walk" selector (or a
+  snapshot per completed walk, Codex's approach) is the seam.
+- **At the ceiling, a suggested seed cannot fold into a newly discovered
+  broader option** (Codex X5; the build's D7). With no room under 25 the
+  new option is dropped before the folds are read, so a fold that would
+  leave the list at 25 is rejected as `unknown_target`. Apply accepted folds
+  before computing the room.
+- **A duplicate reported in a chain (A → B, B → C) is dropped and A reads
+  "no other option is the same kind of action"** (code review C4). Follow
+  the chain to its end (with a visited set for a cycle) or give A
+  `cannot_check`. No live list has reported a duplicate yet.
+- **Security hardening, all Low** (security lane S1–S3): the trace check is
+  lexical, so a lower-case injected clause in a place sentence passes
+  (plain-text render bounds it; a token-containment or URL-scheme reject is
+  the fix); model-written folding kinds widen the trace check's allowlist and
+  have no item length cap; most stored free-text wire fields
+  (`MarkedLineWire.answer`, `AmbitionWire.reason`, `SettingWire.*`,
+  `LeverTypingWire.lever_reason`, `ConstraintJudgementWire.reason`,
+  `AuthorityWire.*`, `FoldingResponse.kinds[]`) have no `max_length` and no
+  control-character strip before storage (the display strips them). One
+  pass over the wires with ceilings is the fix.
+- **`_constraint_lists` and `_checks` build one ordered list by undoing
+  each other** (code review C7): the default screens are appended, filtered
+  out and re-inserted around `distinct`; a user requirement whose id ever
+  collides with a screen id is dropped silently. Build the user list once.
+- **`theme.py` imports private names from `longlist.py`** (`_engine_stats`,
+  `_forbidden_label`, `_key`; build handoff item 3). Make them public or
+  move them to a shared module.
+- **`test_option_search.py` stalls at 0 % CPU under load** (a thread-join
+  timing test; four times in the amendment 3 build, never on a quiet
+  machine). A timeout on that join.
+- **The template sentence says "studies"** ("3 moderate observational
+  studies"): a study-design word, exempt under R90/C15 as an evidence type,
+  but the one place the card's own copy uses the word. For the owner.
 
 ### Overton metadata faults seen by the amendment 4 survey (deferred 2026-10-09; owner: out of amendment 4)
 

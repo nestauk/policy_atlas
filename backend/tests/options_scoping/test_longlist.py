@@ -1435,7 +1435,7 @@ def test_the_option_count_never_exceeds_the_hard_ceiling(conn: Connection) -> No
     assert len(walk.options()) == LONGLIST_HARD_CEILING
 
 
-def test_a_suggested_seed_folds_into_a_wider_option_and_shows_as_its_variant(
+def test_a_suggested_seed_folds_into_a_wider_option_and_is_counted_as_folded(
     conn: Connection,
 ) -> None:
     walk = _Walk(conn)

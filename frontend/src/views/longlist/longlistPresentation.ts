@@ -245,9 +245,11 @@ export function countsParts(counts: LonglistCountsOut): {
   noInScope: string | null;
 } {
   return {
-    head: `${counts.options} ${counts.options === 1 ? "option" : "options"} in ${counts.themes} ${
-      counts.themes === 1 ? "theme" : "themes"
-    }`,
+    // No theme count before the theme step has run (or when it wrote none):
+    // "in 0 themes" would read as a result (review of task 046, 2026-10-12).
+    head:
+      `${counts.options} ${counts.options === 1 ? "option" : "options"}` +
+      (counts.themes > 0 ? ` in ${counts.themes} ${counts.themes === 1 ? "theme" : "themes"}` : ""),
     excluded: counts.excluded > 0 ? `${counts.excluded} excluded` : null,
     noInScope: counts.no_in_scope > 0 ? `${counts.no_in_scope} with no in-scope evidence` : null,
   };

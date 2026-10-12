@@ -72,10 +72,11 @@ import re
 import time
 import uuid
 from collections import Counter
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Collection, Mapping, Sequence
 from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from functools import partial
 from typing import Any
 
 import structlog
@@ -138,6 +139,7 @@ from policy_atlas.options_scoping.option_profile.place_sentences import (
     call_input,
     from_membership,
     group_places,
+    metadata_year,
     template_sentence,
     trace_check,
     vocabulary_from_folds,
@@ -854,6 +856,9 @@ def _checked_folds(
     # 4, round 7 of the folding loop: the mini model answers a cap with
     # "obesity / overweight / BMI"); the first member names the kind.
     kinds = [" ".join(kind.split(" / ")[0].split(" /")[0].split()) for kind in response.kinds]
+    slash_cuts = sum(
+        1 for before, after in zip(response.kinds, kinds, strict=True) if before.strip() != after
+    )
     guard_rewrites = 0
     if facet == "measures":
         for position, returned in enumerate(kinds):
@@ -892,6 +897,7 @@ def _checked_folds(
         "folds": folds,
         "kinds_returned": len(response.kinds),
         "guard_rewrites": guard_rewrites,
+        "slash_cuts": slash_cuts,
         "catch_all": catch_all,
     }
 
@@ -1061,6 +1067,10 @@ def option_profile_scope(
         facet: int(folded.get(_fold_call_name(facet), {}).get("guard_rewrites") or 0)
         for facet in FOLD_FIELDS
     }
+    slash_cuts = {
+        facet: int(folded.get(_fold_call_name(facet), {}).get("slash_cuts") or 0)
+        for facet in FOLD_FIELDS
+    }
     catch_all = {
         facet: bool(folded.get(_fold_call_name(facet), {}).get("catch_all"))
         for facet in FOLD_FIELDS
@@ -1172,6 +1182,7 @@ def option_profile_scope(
                 },
                 "kinds_returned": kinds_returned,
                 "guard_rewrites": guard_rewrites,
+                "slash_cuts": slash_cuts,
                 "catch_all": catch_all,
             },
             "place_sentences": {
@@ -1269,43 +1280,41 @@ def _document_meta(
         .where(task_source_snapshot.c.task_source_snapshot_id.in_(tss_ids))
     ):
         meta = metadata if isinstance(metadata, Mapping) else {}
-        years[tss_id] = _metadata_year(meta)
+        years[tss_id] = metadata_year(meta)
         title = meta.get("title")
         if isinstance(title, str) and title.strip():
             titles[tss_id] = " ".join(title.split())
     return years, titles
 
 
-def _metadata_year(metadata: Mapping[str, Any]) -> int | None:
-    """The four-digit publication year of a document's metadata (the read side's rule)."""
-    for key in ("publication_year", "year", "publication_date", "published"):
-        value = metadata.get(key)
-        if isinstance(value, int) and not isinstance(value, bool):
-            return value
-        if isinstance(value, str) and re.match(r"\d{4}", value.strip()):
-            return int(value.strip()[:4])
-    return None
-
-
-def _checked_places(response: Any) -> Mapping[str, Any] | None:
+def _checked_places(
+    response: Any, known: Collection[str] | None = None
+) -> Mapping[str, Any] | None:
     """A place-sentence answer, checked; ``None`` when malformed (S31).
 
-    Malformed: not a :class:`PlaceSentencesResponse`, or one place id twice.
+    An id not in ``known`` (the input's place ids) is dropped first, so an
+    unknown id never makes the answer malformed; malformed is not a
+    :class:`PlaceSentencesResponse`, or one known place id twice.
     """
     if not isinstance(response, PlaceSentencesResponse):
         return None
-    ids = [wire.place_id.strip() for wire in response.places]
+    pairs = [(wire.place_id.strip(), wire) for wire in response.places]
+    if known is not None:
+        pairs = [(pid, wire) for pid, wire in pairs if pid in known]
+    ids = [pid for pid, _ in pairs]
     if len(ids) != len(set(ids)):
         return None
-    return {"places": {pid: wire.sentence for pid, wire in zip(ids, response.places, strict=True)}}
+    return {"places": {pid: wire.sentence for pid, wire in pairs}}
 
 
-def _checked_places_within_ceiling(response: Any) -> Mapping[str, Any] | None:
+def _checked_places_within_ceiling(
+    response: Any, known: Collection[str] | None = None
+) -> Mapping[str, Any] | None:
     """The place-sentence check for the first attempt: an answer with a
     sentence over the ceiling is refused once, so the retry can come in under
     it (loop 26L, round 3); the last attempt accepts it and the ceiling check
     then replaces that sentence with the template."""
-    value = _checked_places(response)
+    value = _checked_places(response, known)
     if value is None:
         return None
     places = value.get("places") or {}
@@ -1341,7 +1350,7 @@ def _place_sentence_wave(
     never raises.
 
     Returns:
-        ``({option_id: [{"place", "sentence", "generated", "where"}]}, stats)``;
+        ``({option_id: [{"place", "sentence", "generated", "where", "reason"}]}, stats)``;
         an option with no evaluating document maps to ``[]``.
     """
     started = time.monotonic()
@@ -1379,6 +1388,9 @@ def _place_sentence_wave(
         data = call_input(o.label, o.description, plan, vocabulary, groups[str(o.option_id)])
         return lambda: backend.place_sentences(**data)
 
+    def _place_ids(o: _ProfiledOption) -> frozenset[str]:
+        return frozenset(group.place_id for group in groups[str(o.option_id)])
+
     with ThreadPoolExecutor(max_workers=OPTION_PROFILE_MAX_CONCURRENT) as pool:
         futures = {
             str(o.option_id): tracing.submit_with_context(
@@ -1386,8 +1398,8 @@ def _place_sentence_wave(
                 _profile_call,
                 f"place sentences {o.option_id}",
                 _call(o),
-                _checked_places_within_ceiling,
-                final_check=_checked_places,
+                partial(_checked_places_within_ceiling, known=_place_ids(o)),
+                final_check=partial(_checked_places, known=_place_ids(o)),
             )
             for o in called
         }
@@ -1420,7 +1432,14 @@ def _place_sentence_wave(
         for group in groups[option_id]:
             sentence = (answered or {}).get(group.place_id, "").strip()
             generated = False
+            # Why the template stands, kept with the entry so that a card's
+            # sentence can be diagnosed without the log (review of task 046,
+            # 2026-10-12): "call", "missing", "length" or the trace rule.
+            reason: str | None = (
+                "call" if outcome is not None and outcome.value is None else "missing"
+            )
             if sentence and len(sentence) > PLACE_SENTENCE_MAX_CHARS:
+                reason = "length"
                 stats["failed_length"] += 1
                 log.info(
                     "option_profile.place_sentence_too_long",
@@ -1438,8 +1457,9 @@ def _place_sentence_wave(
                     target_unit=target_unit,
                 )
                 if rule is None:
-                    generated = True
+                    generated, reason = True, None
                 else:
+                    reason = rule
                     stats["failed_trace"] += 1
                     log.info(
                         "option_profile.place_sentence_trace_failed",
@@ -1459,6 +1479,7 @@ def _place_sentence_wave(
                     ),
                     "generated": generated,
                     "where": group.is_where,
+                    "reason": reason,
                 }
             )
         sentences[option_id] = entries

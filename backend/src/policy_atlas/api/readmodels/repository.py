@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import html
-import re
 import uuid
 from collections import Counter
 from collections.abc import Collection, Iterable, Mapping, Sequence
@@ -153,6 +152,7 @@ from policy_atlas.options_scoping.option_profile.option_profile import (
 from policy_atlas.options_scoping.option_profile.place_sentences import (
     PlaceDocument,
     group_places,
+    metadata_year,
     place_detail,
     place_name,
     template_sentence,
@@ -193,15 +193,8 @@ def _year(metadata: Mapping[str, Any]) -> int | None:
 
 
 def _document_year(metadata: Mapping[str, Any]) -> int | None:
-    """The four-digit year of a document's metadata, or ``None``."""
-    year = _year(metadata)
-    if year is not None:
-        return year
-    for key in ("publication_year", "year", "publication_date", "published"):
-        value = metadata.get(key)
-        if isinstance(value, str) and re.match(r"\d{4}", value.strip()):
-            return int(value.strip()[:4])
-    return None
+    """The four-digit year of a document's metadata, or ``None``; one rule with the profile step."""
+    return metadata_year(metadata)
 
 
 @dataclass(frozen=True)
@@ -256,14 +249,28 @@ def _folded_name(name: str | None, names: Mapping[str, str] | None) -> str | Non
 
 
 def _first_line_record(records: Sequence[_LineRecord]) -> _LineRecord:
-    """The record a document line's fields come from: by role order, then ``created_at``."""
+    """The record a document line's fields come from: by role order, then its words.
+
+    The same rule as the profile step's ``place_sentences._first_member``, so
+    the document line and the place sentence read one record (review of task
+    046, 2026-10-12); a membership row carries no creation time.
+    """
     rank = {role: index for index, role in enumerate(ROLE_BUCKETS)}
     return min(
         records,
         key=lambda record: (
             rank.get(record.role, len(rank)),
-            record.created_at is None,
-            record.created_at if record.created_at is not None else 0,
+            tuple(
+                _clean_text(value) or ""
+                for value in (
+                    record.programme_name,
+                    record.unit,
+                    record.outcome,
+                    record.setting,
+                    record.study_geography,
+                    record.study_country,
+                )
+            ),
             str(record.record_id),
         ),
     )
@@ -4107,15 +4114,10 @@ def _tier_labels(tiers: object) -> dict[str, int]:
 
 
 def _evidence_profile(coverage: Mapping[str, Any]) -> EvidenceProfileOut:
-    roles = _as_mapping(coverage.get("role"))
     return EvidenceProfileOut(
         documents=_count(coverage.get("documents")),
         by_evidence_type=_ranked(coverage.get("evidence_type")),
         by_tier=_tier_labels(coverage.get("tier")),
-        by_role={
-            role: _count(roles.get(role))
-            for role in ("evaluated", "described", "recommended", "mentioned")
-        },
         flagged_not_stated=_count(coverage.get("flagged_documents")),
         inherited_labels=_count(coverage.get("inherited_labels")),
         abstract_only=_count(coverage.get("abstract_only")),
@@ -4466,6 +4468,7 @@ def option_out(conn: Connection, task_id: uuid.UUID, option_id: uuid.UUID) -> Op
     search = _added_searches(
         conn, task_id, _needs_search_read(rows, result, _members_by_option(conn, task_id))
     ).get(option_id)
+    target_unit, where_country = _plan_target_unit(plan), _plan_where_country(plan)
     if search is not None:
         coverage = _search_coverage(
             conn,
@@ -4473,8 +4476,8 @@ def option_out(conn: Connection, task_id: uuid.UUID, option_id: uuid.UUID) -> Op
             search,
             plan_outcomes,
             folds=stored_folds(result.option_profile if result is not None else None),
-            target_unit=_plan_target_unit(plan),
-            where_country=_plan_where_country(plan),
+            target_unit=target_unit,
+            where_country=where_country,
         )
         lines = _search_documents(conn, task_id, search, context)
     else:
@@ -4484,8 +4487,8 @@ def option_out(conn: Connection, task_id: uuid.UUID, option_id: uuid.UUID) -> Op
     place_sentences = _place_sentences_out(
         coverage.get(PLACE_SENTENCES_KEY),
         lines,
-        where_country=_plan_where_country(plan),
-        target_unit=_plan_target_unit(plan),
+        where_country=where_country,
+        target_unit=target_unit,
     )
     design = _design_out(row)
     return OptionOut(

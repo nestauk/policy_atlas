@@ -638,8 +638,19 @@ _ARTICLE = r"(?i:the\s+)?"
 # A place is a country or sub-national name (case-insensitive) or an
 # abbreviation (case-sensitive: "us" is a pronoun). Never an adjective, and
 # never the head of a compound ("UK-wide", "London-based").
+#: Country names that are also common nouns or given names ("turkey farms",
+#: "guinea pig", "a football jersey", "the Jordan model of care"): the matcher
+#: reads them as a place only when capitalised (review of task 046,
+#: 2026-10-12). The resolver (:func:`resolve_country`) still knows them.
+AMBIGUOUS_COUNTRY_NAMES: frozenset[str] = frozenset(
+    {"chad", "guinea", "jersey", "jordan", "niger", "turkey"}
+)
+_UNAMBIGUOUS_PLACES = [
+    n for n in [*COUNTRY_NAMES, *SUBNATIONAL_PLACES] if n not in AMBIGUOUS_COUNTRY_NAMES
+]
 _PLACE = (
-    rf"(?:(?i:{_alternation([*COUNTRY_NAMES, *SUBNATIONAL_PLACES])})(?![\w-])"
+    rf"(?:(?i:{_alternation(_UNAMBIGUOUS_PLACES)})(?![\w-])"
+    rf"|(?:{_alternation(n.title() for n in AMBIGUOUS_COUNTRY_NAMES)})(?![\w-])"
     rf"|(?<![\w.])(?:{_alternation(ABBREVIATIONS)})(?![\w-]))"
 )
 # "in Greater Manchester and Lancashire" keeps "and Lancashire" (not a known
@@ -715,6 +726,18 @@ def strip_place(text: str, where_text: str | None) -> tuple[str, list[str]]:
 # --- A place in a setting (task 046, S11 setting pass) ------------------------
 
 _ANY_PLACE_RE = re.compile(rf"(?<![\w-])(?:{_PLACE})")
+
+
+def named_place(text: str | None) -> str | None:
+    """The first place a text names, as written; ``None`` when it names none.
+
+    The setting pass in ``coverage`` moves this, not the whole setting, into
+    an empty geography ("community centres in Leeds" → "Leeds").
+    """
+    if not text:
+        return None
+    match = _ANY_PLACE_RE.search(text)
+    return match.group(0) if match else None
 
 
 def names_place(text: str | None) -> bool:

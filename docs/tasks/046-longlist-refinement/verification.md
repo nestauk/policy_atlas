@@ -5,8 +5,11 @@ Evidence for the build phase (steps 5 and 6) of task 046. Items, rulings
 defined in [contract.md](contract.md) and [plan.md](plan.md).
 
 > **Status:** build complete 2026-09-29 · lead; **amendment 2 build complete
-> 2026-09-30** (§ Amendment 2 below). Steps 5 and 6 only. The review stack
-> (step 7) has not run; it runs in a fresh conversation.
+> 2026-09-30** (§ Amendment 2 below); amendments 3 and 4 built 2026-10-01 and
+> 2026-10-12. **Review stack run 2026-10-12 in a fresh conversation (step 7;
+> § Review findings): 44 findings across six lanes, 21 adopted and fixed,
+> 9 deferred to `docs/deferred.md`, the rest declined or recorded;
+> `make verify` green after the fixes.** Step 8 records are in this PR.
 > Every figure in this file was read back from a saved result file or a
 > database query; the file is named beside the figure. The read-backs, the
 > traces, the replay tool and the round records are in the gitignored
@@ -234,13 +237,21 @@ uv run --env-file .env python $P/replay.py stage longlist obesity --label r4 --f
 
 ### Files under `evidence_search/` (the reuse rule, rubric box 12)
 
-Five files, all on the contract's list: `extract/extract.py` (the optional
+At the base build, five files, all on the contract's list: `extract/extract.py` (the optional
 `interventions_context` argument, the title-only rule of the selection-free
 path, the repair counter in the summary), `extract/extraction_backend.py`,
 and the intervention profile's own files `extract_interventions_prompt.py`,
 `interventions_records.py`, `interventions_profile.py`. `assess/screen.py`,
 the search loop, the search prompts, the synthesis backend, the clustering
-engine and the baseline targets have no change.
+engine and the baseline targets have no change. **Against the merge base
+after four amendments** (review, 2026-10-12): 18 files, the thirteen more
+being the `population` → `unit` word swap of amendment 3 (R73, R75;
+`iof_records.py`, `icf_records.py`, `iof_prompt.py`, `icf_prompt.py`,
+`finding_references.py`, `quote_verify.py`, `group/facet_values.py`,
+`group/group.py`, `synthesis/synthesis_tools.py`, `synthesise.py`,
+`synthesis_prompts_v6.py`, `grounding_judge.py`) and the R63/R72/R87 fields
+of the intervention record; each is a rename, a version pin, the title-only
+rule or a stub signature, and `assess/` is untouched.
 
 ### Deviations, flagged
 
@@ -262,8 +273,11 @@ engine and the baseline targets have no change.
 
 ### Existing tests edited (rubric box 19)
 
-No test was deleted or skipped. Each edit follows a behaviour that the
-contract changes.
+No test was deleted or skipped; tests rewritten under a new name for a
+changed behaviour are listed here and in the amendments' lists (the review
+counted 26 backend and 12 frontend names retired against the merge base,
+each with a successor or a contract reason; no loosened assertion). Each
+edit follows a behaviour that the contract changes.
 
 | File | Edit | Reason |
 |---|---|---|
@@ -554,7 +568,7 @@ Against `74729ba7`: 70 files outside `docs/`, about 6,250 lines added and 1,000 
 |---|---|---|---|
 | D14 | The plan screen shows no kind word for a boundary ("Requirement" was built, then dropped). A consideration shows "Consideration · <line>" and "Stated limit". | The effect sentence already says what a boundary is; just enough text. | minor |
 | D15 | The who-can-act question is asked as a part `who_can_act` with two buttons ("Only what <the body> can adopt" · "Also options that need national action"), not in the exact words of A2 ("Should I keep only options…"). | "Keep only" would promise an exclusion the label never makes; the reply says every option stays and is labelled. | minor |
-| D16 | The heading label reads "Estimate, before assessment", not "Policy Atlas's estimate before assessment". | The long form overflowed the heading row at phone width; the short form keeps the meaning. Final § 7.1 left the exact words open. | minor |
+| D16 (superseded by R68, amendment 3) | The heading label reads "Estimate, before assessment", not "Policy Atlas's estimate before assessment". | The long form overflowed the heading row at phone width; the short form keeps the meaning. Final § 7.1 left the exact words open. | minor |
 | D17 | The gates ran on index snapshots in a second worktree, and two pairs of phases (9 + 10, 11 + 12a) shared one gate tree. | So that building and gating could overlap; the plan's gate classes were not reduced. | process |
 | D18 | The `option_profile` column loses the line order in storage (JSONB sorts keys); the read model orders by `PROFILE_LINE_KEYS`. | Postgres. | minor |
 | D19 | `kept` in the `option_profile` summary counts only options that had a typing before; `invalid` counts every option with no valid typing from this run. | The two numbers were otherwise always equal. Agent decision, accepted. | minor |
@@ -892,7 +906,9 @@ Computed from `frontend/openapi.json` at the two trees. **Removed:**
 `IofFindingOut.unit`, `IcfFindingOut.unit`; `OptionDocumentOut.place`,
 `.year`; `OptionOut.examples`; `OutcomeCountOut.evaluated`;
 `OutcomeCountsOut.other`; `TriedOnOut.kind`; `WhereTriedOut.top/documents/
-places/countries`; the path `GET /api/v1/tasks/{task_id}/sources/{source_id}/records`.
+places/countries`; the path `GET /api/v1/tasks/{task_id}/sources/{source_id}/records`;
+and (added by the review, B10) the enum of `PlanDraft.grouping_facets`
+(`population` → `unit`).
 Kept on purpose: `LonglistOut.depth_label` (the header). Every removal and
 addition is in final 3 § 3's public-interface row, plus the route's read
 models, and `where_label` stays nowhere else.
@@ -1180,9 +1196,8 @@ documents), `docs/deferred.md`, `docs/adr/0040-*.md` (reviewed as prose,
 not code). The evidence tree is gitignored.
 
 **Live-trace pointers.** Langfuse sessions = the task ids above (obesity
-`1df1ca78-5065-43a8-bb1d-63bd03fe9c1a`, caregiving
-`52345ffc-523a-4820-a180-8c89ce204b4e`, refugees
-`7f3abe38-768c-415d-90a9-45ee4583ad44`); the replay clones' runs are in
+`1df1ca78`, caregiving `52345ffc`, refugees `7f3abe38`; the full ids are in
+the dev database, `task.task_id::text like '<prefix>%'`); the replay clones' runs are in
 the dev database under the clone task ids (`replay-out/<slug>/clone.json`).
 
 ### Knowledge candidates (amendment 3)
@@ -1556,6 +1571,9 @@ Additions (Phases 25, 26): `OptionSummaryOut.evaluated_countries`
 `.tried_on`; the schemas `ExampleOut`, `MeasureKindOut`, `OutcomeKindOut`,
 `WhereTriedOut`, `WherePlaceOut`, `TriedOnOut`. `LonglistOut`'s own fields
 unchanged. Read from `git diff d5232c2f -- frontend/openapi.json`.
+**Added by the review (2026-10-12, B3):** `EvidenceProfileOut.by_role`
+removed, as the amendment 4 contract's public-interface row says (the build
+had left it; no frontend view read it).
 
 ### Existing tests edited (rubric box 19; amendment 4)
 
@@ -1617,12 +1635,12 @@ readbacks (`27-live-live-<slug>.json`, `28-live-…`, `26L-live-…`,
 
 | Measure | Obesity | Caregiving | Refugees | Result |
 |---|---|---|---|---|
-| M1 options per run (13 to 25) | 24 | 25 | 25 (23 on the list read; 25 live rows with the user's two own options) | **pass** |
+| M1 options per run (13 to 25) | 24 | 24 (22 included, 2 excluded) | 23 | **pass** (corrected by the review from the stored rows: the build's readback read the 2026-09-29 tasks, § Review findings LT1) |
 | M2 rows that are one named trial (the option names read by the lead) | none | none | none | **pass** |
 | M15 sentences: generated / template (trace, length, call) | 25: 23 / 2 (2, 0, 0) | 19: 15 / 4 (0, 4, 0) | 7: 7 / 0 (0, 0, 0) | reported: 6 of 51 on the template |
 | M15 the second wave's wall-clock (s) · calls · retries | 3.5 · 14 · 1 | 5.1 · 10 · 4 | 1.4 · 5 · 0 | reported |
 | M16 `study_geography` that is a body, a document, a date, an adjective or a non-place (records, read by hand) | 15 of 329 ("international" ×11 under "multiple"; NHS Boards 2; European Commission 1; Sydney Local Health District 1) | 11 of 517 (King's Mill Hospital 5; German Register for Clinical Studies 2; Darent Valley Hospital 2; NHS Lothian 1; Warwick Hospital 1) | 0 of 292 | **not met** at "none"; reported |
-| M16 documents with a not-stated record (of documents with records) | 38 of 114 | 56 (of 160) | 13 (of 86) | reported (amendment 3 live: 55, 71, 16) |
+| M16 documents with a not-stated record (of documents with records; `study_country` and `study_geography` both empty) | 45 of 129 | 60 of 131 | 13 of 91 | reported (corrected by the review from the stored records, LT1; amendment 3 live: 55, 71, 16) |
 | M16 unknown countries (`places_unknown_country`) | 0 | 0 | 0 | reported |
 | M17 wrong folds in 30 sampled, Tried on / Measures | 3 / 2 (18 Measures words left unfolded by the answer: 30 kinds in the map, 12 returned) | 4 / 4 (an eleven-word Measures kind took "screening", "symptoms", "social support networks") | 2 / 1 | **not met**; reported |
 | M17 the plan's text used (target unit / outcomes) | no ("children aged 4 to 11 years") / 1 of 3 | yes / 3 of 3 | no / 3 of 3 | reported |
@@ -1631,7 +1649,7 @@ readbacks (`27-live-live-<slug>.json`, `28-live-…`, `26L-live-…`,
 | Options with evaluations · countries on the signal (rich option) | 14 of 24 · United Kingdom and 3 other countries | 10 of 25 · United Kingdom and Australia | 5 of 23 · United Kingdom and 2 other countries | reported |
 | Kinds per folding facet (Tried on / Measures) | 12 / 30 | 12 / 12 | 12 / 12 | reported |
 | Records with a `programme_name` (distinct) | 95 of 329 (77) | — | — | reported |
-| Exclusions · `cannot_check` | 0 · 0 | 0 · 0 (req-1 passes on all 25) | 0 · 0 | reported (M4 trivially pass) |
+| Exclusions · `cannot_check` | 0 · 0 | 2 · 0 (two neonatal-unit options break req-1, the setting requirement; the other 22 pass) | 0 · 0 | reported (corrected by the review, LT1; M4 passes: neither exclusion names a place) |
 
 | Measure | Obesity (amendment 3 → now) | Caregiving | Refugees |
 |---|---|---|---|
@@ -1709,9 +1727,9 @@ figures are totals.
 |---|---|
 | 72 the evidence signal | built and tested (the five pinned cases, the describing count, the vitest's four forms, the vocabulary vitest) |
 | 73 How it works | built; the feature rule in three prompts; stop measure met on the options minted under it (replay 14, live 72); the count before reported |
-| 74 order and the callout | built (six vitest cases); no diff under `constrain/` except the import move of `who_decides_considerations` (Phase 29) |
+| 74 order and the callout | built (six vitest cases); for this item no diff under `constrain/` beyond the import move of `who_decides_considerations` (Phase 29); Phase 26 did change `constrain.py` (the resolver and the Where country in the merge recompute, and the sentence carry-through the review removed) — corrected by the review, B5 |
 | 75 the opener and your outcomes | built and tested |
-| 76 the place sentences: the call | built and tested; **one deviation**: no `max_length` on the wire (the plan's S31 and PA4-9 over the box's words; the ceiling is checked in code per sentence) |
+| 76 the place sentences: the call | built and tested; **one deviation**: no `max_length` on the wire (the plan's S31 and PA4-9 over the box's words; the ceiling is checked in code per sentence); the "a merge reads template sentences" clause was not built and is now (review B1) |
 | 77 the sentence loop | five rounds; stop measure **not met** (4 of 56 on the template at round 4); the fixture set green; re-pinned |
 | 78 the documents disclosure | built and tested |
 | 79 the list | built and tested |
@@ -1734,7 +1752,13 @@ figures are totals.
 - The `+N more` link opens the dossier's "In this option" slot: clicked
   on the clone in the a3 browser check's method; not re-driven here (the
   URL is unchanged, the vitest pins it).
-- The callout on a live failing constraint: no live run produced one.
+- The callout on a live failing constraint: the live caregiving run
+  (`8e8bd2b9`) excluded two options on the setting requirement ("Neonatal
+  unit environmental redesign", "Family-integrated neonatal care", both
+  `breaks` req-1); the API serves each with its `exclusion` and the
+  `breaks` judgement (read 2026-10-12 by the review); the render is the
+  vitest's. The build's readback had said no live run produced one
+  (§ Review findings, LT1).
 - M1 and M2 on the replay clones are not comparable (the clones
   accumulate options); read on the live runs only.
 - Rubric box 82's "duplicates left on the check set" was not read: the
@@ -1788,9 +1812,8 @@ anchors the review.
 gitignored.
 
 **Live-trace pointers.** Langfuse sessions = the task ids above (obesity
-`53d235f7-7cd8-4bae-b840-cef3eee1f9a2`, caregiving
-`8e8bd2b9-7834-4365-ac25-8eee17e5407c`, refugees
-`ed0f0ab5-9c07-454e-a9d0-1a4f41081cae`); the replay clones' runs are in
+`53d235f7`, caregiving `8e8bd2b9`, refugees `ed0f0ab5`; the full ids are in
+the dev database by prefix); the replay clones' runs are in
 the dev database under the clone task ids (`replay-out/<slug>/clone.json`).
 The local API on :8000 and the Vite server on :5173 started by this
 build are still running (the owner's `make dev` was not running).
@@ -1849,7 +1872,165 @@ build are still running (the owner's `make dev` was not running).
 
 ## Review findings
 
-Not yet. The review stack (step 7) runs in a fresh conversation.
+**Step 7 ran 2026-10-12 in a fresh conversation** (the adjudicator did not
+write the code), over all four amendments at once, against the merge base
+`1e49a65f` (175 files, 32,162 insertions, 113 commits). The self-verify gate
+was green at the open: the backend half from the build's last run (3,584
+passed; okf, mypy, ruff, infra, audit-paths, prompt-guard, drift-check) and
+`make frontend-verify` rerun after a session restart killed the first gate
+inside vitest.
+
+### The lanes
+
+| Lane | Reviewer | Scope | Tokens | Findings |
+|---|---|---|---|---|
+| Contract verifier A | `contract-verifier` (Opus, read-only) | boxes 1–23, 12a, 24–46; verification.md base + amendment 2; ADR decisions + amendment 2; deviations D1–D23 | 178K | A1–A9 |
+| Contract verifier B | `contract-verifier` (Opus, read-only) | boxes 47–88; verification.md amendments 3–4; ADR amendments 3–4 + rollback; the flagged deviations | 242K | B1–B10 |
+| Security | `agent-skills:security-auditor` | the new route, the repository additions, the four revisions, prompt-injection and output handling, secrets, frontend | 158K | S1–S7 |
+| Adversarial (the family flip) | Codex `codex-rescue`, read-only (job `task-mv5ab70d-7q9df3`) | the backend core: `option_profile.py`, `place_sentences.py`, `longlist.py`, `coverage.py`, `where_tried.py`, the data migration, `constrain.py`, the read models | Codex quota | X1–X8 |
+| `/code-review medium` | the Claude half of the pair | the slice diff with the generated files, the pin file and the records excluded | 510K (finder fan-out, fast-worker class) | C1–C10 |
+| Live-trace content | the lead | the three amendment 4 live tasks: the stored rows, the Langfuse traces (v1 API), a replay through the real `trace_check`, the API | lead | LT1–LT5 |
+| OKF bundle | `make okf-validate` (inside `make verify`) | 157 concepts, 0 violations | — | — |
+
+`/simplify` was not run: `/code-review` carried the reuse, simplification,
+efficiency and altitude angles (C5–C8) and their fixes were applied.
+`/security-review` on the records route (the amendment 3 handoff's open
+item) is covered by the security lane's surface 1. Executor provenance: every
+line was Claude-built (lead, `deep-reasoner`, `fast-worker`), so the Codex
+pass anchored the adversarial read of the backend core; the two Claude
+verifiers and `/code-review` read the whole diff. **Token economy:** the
+reasoning-class lanes used about 578K against the 250K guideline for one
+slice, and the finder fan-out 510K against 500K; this review covered the
+builds of four amendments (a four-slice diff), which the lead accepts as the
+reason and records here.
+
+### Findings and adjudication
+
+Adopt = fixed in this review (the commit after the gate); defer = recorded
+in `docs/deferred.md` § Options scoping longlist refinement § Review stack
+seams; decline = reason given; record = a record corrected, no code.
+
+| # | Lane | Severity | Finding | Adjudication |
+|---|---|---|---|---|
+| LT1 | trace | major (record) | The Phase 31 `analyse_longlist.py live-*` readbacks read the 2026-09-29 base-slice tasks (`replay-out/live-*/clone.json` still pointed at `3f6b79b9` / `ff6ef83c` / `42dd142c`), so the amendment 4 live table's M1, "Exclusions · cannot_check" and "documents with a not-stated record" rows were wrong (caregiving: 25 options, 0 exclusions, "56 of 160" against the stored 24 options, 2 exclusions, 130 documents). | record: the three rows corrected from the stored rows (above); the live `breaks` case recorded under § Known unverified items; a knowledge concept and a build-tool rule (the readback prints its task id). |
+| LT2 | trace | minor | A failed place sentence stores only `generated: false`; the failing rule went to the app log, which was not kept. A decision diagnosable only from a log is the 013 fault. | adopt: `reason` (`call` · `missing` · `length` · the rule) stored on the entry; `_place_stats` unchanged. |
+| LT3 | trace | major | `_START_AFTER` was `[:;]$`, so the name rule read "One" after a full stop as a capitalised run; both obesity `failed_trace` cases on the live run were accurate two-sentence answers ("… year 6. One was Families for Health in the West Midlands …"), replaced by a less accurate template ("3 moderate observational studies" for one strong trial and two moderate observational studies). Replayed through the real `trace_check` with the trace's own input: rule `name`; with "; one was", pass. | adopt: `_START_AFTER` names every terminator; two fixture cases (the accurate second sentence passes; an invented name after a full stop still fails). M15's figures may improve on the next run; the loop record stands as read. |
+| LT4 | trace | note | The obesity `option_profile` trace holds 15 place-sentence generations (14 calls + 1 retry), 8 line calls, 3 folds (2 + 1 retry), 2 typing, one setting, one ambition — the stored provenance to the call. The 26L, 27 and 28 round records' figures match this file's. | record. |
+| LT5 | trace | question | The template sentence says "3 moderate observational studies": a study-design word, exempt under R90/C15, but the one place the card's own copy uses "studies". | for the owner (deferred.md). |
+| A1 | verifier A | medium | The 12L who-decides loop ran rounds 0–5 (two in amendment 2, four on 2026-09-30 after it) and round 6 in amendment 4: seven rounds over its life against box 35/84's five per loop; amendment 2's "no loop ran more than two rounds" counts its own rounds only. | record: a deviation of boxes 35 and 84, each round reported to the owner under R25; no code change. |
+| A2 | verifier A | low | Box 28's "names the body and the country from the plan's Where" no longer holds: 12L round 5 (owner-directed) tells the model not to name the place. Not in the deviation list. | record: superseded by 12L r5; rubric box 28 annotated. |
+| A3 | verifier A | low | ADR decision 14 still says the reader can filter by the authority label; decision 22 removed the facets. | adopt: the ADR line corrected. |
+| A4 | verifier A | low | The rubric preambles' lists of replaced clauses omit box 3 (`lever_reason`, R29), box 7 (Where once in the screen text, R74) and box 12 (IOF/ICF byte-identity and the synthesis files, R73/R75). | record: the boxes annotated in rubric.md. |
+| A5 | verifier A | low | § Files under `evidence_search/` said five files; against the merge base it is 18. | adopt: the section extended (above). |
+| A6 | verifier A | low | "No test was deleted or skipped" (box 19) hides tests rewritten under new names; the retired transferability test and the `test_migration_045_slice.py` INSERT edit were listed in the wrong amendment. | adopt: the box 19 text made precise. |
+| A7 | verifier A | low | `f1b6d3a8c2e5` imported the live `FINDING_REFERENCE_UNION_SQL`, the pattern that forced the edit to `c7e2a9f4b1d8`. (= B7.) | adopt: the revision freezes `_UNIT_UNION_SQL`; `schema.py`'s comment says a revision never imports the constant. |
+| A8 | verifier A | low | Stale wording: D16 not marked superseded by R68; `spec-changes-proposed.md:432` quotes the old heading. | adopt: D16 marked; the proposal file is the owner's input and is left for the wording decision. |
+| A9 | verifier A | info | `_evaluated_countries_out` reads "an older stored record" defensively; R52 covers amendment 2's fields only. | record: not a box 39 breach; left. |
+| B1 | verifier B | medium | A merge carried the kept option's stored place sentences through the recompute (`constrain.py`); box 76 and ADR decision 23 say a merged option reads template sentences until the profile runs; the sentences described the pre-merge documents. Plan S31 contradicted itself; the build had not flagged it. | adopt: the carry removed; `test_a_merge_drops_the_kept_option_s_stored_place_sentences` replaces the test that pinned the carry. |
+| B2 | verifier B | medium | Amendment 4 deviation 4 said the slash cut was "counted in provenance" and tested; it was neither. | adopt: `slash_cuts` per facet in `provenance.option_profile.folding`; a test. |
+| B3 | verifier B | low-medium | The amendment 4 contract's public-interface row removes `OptionOut.evidence.by_role`; it was still served; nothing read it. | adopt: removed from `EvidenceProfileOut`, the repository and the mock fixtures; `make openapi-sync`; the OpenAPI section above extended. |
+| B4 | verifier B | low-medium | Amendment 4 deviation 7 understated `names_place`: the matcher is case-insensitive over the ISO table, so "turkey farms", "guinea pig", "china clay" read as places and the setting pass moves or drops them. (= C1, = X7: three lanes.) | adopt: `AMBIGUOUS_COUNTRY_NAMES` (chad, guinea, jersey, jordan, niger, turkey) match only when capitalised; the resolver unchanged; tests. "Georgia" stays a place (declined: a place either way). |
+| B5 | verifier B | low | The amendment 4 rubric status said "no diff under `constrain/` except the import move"; Phase 26 changed `constrain.py` (the resolver in the merge recompute; the sentence carry-through). | adopt: the row corrected (above). |
+| B6 | verifier B | low | ADR decision 23 says "under a schema length ceiling"; the code checks the ceiling per sentence and the wire carries none (PA4-9). | adopt: the ADR line corrected. |
+| B7 | verifier B | low | As A7; `schema.py:1146` comment stale. | adopt (with A7). |
+| B8 | verifier B | low | (a) The provenance rewrite was gated on `facet_runs` being an object, skipping rows the facet-grain revision `7a4d9c2e1f6b` left with `facets` and no `facet_runs` (= C3, = X3). (b) Task-agent transcript drafts with `grouping_facets: ["population"]` are not rewritten. | (a) adopt: a `CASE` in the SQL, the `WHERE` no longer needs `facet_runs`; a "legacy" provenance row in the round-trip test. (b) record as a known limit: no transcript in the dev database holds a facet list; the draft is re-validated against the API contract when applied. |
+| B9 | verifier B | low | The over-length retry was exercised but not asserted. | adopt: `stats["retries"] == 1` and the per-entry reasons asserted in the same test. |
+| B10 | verifier B | trivial | A stale test name (`…shows_as_its_variant`); `relevance_prompt.py:118` docstring says "population"; the amendment 3 OpenAPI list omits `PlanDraft.grouping_facets`. | adopt the rename and the list line; the prompt docstring declined (a prose edit to a hash-pinned prompt module forces a re-pin for no behaviour change). |
+| S1 | security | low | The trace check is lexical: a lower-case injected clause passes; rendered as a text node, so no injection today. (= X6 in part.) | defer (hardening: token containment, URL-scheme reject). |
+| S2 | security | low | Model-written folding kinds widen the trace check's allowlist and have no item length cap. | defer. |
+| S3 | security | low | Most stored free-text wire fields have no `max_length` and no control-character strip before storage (the display strips). | defer (one pass over the wires). |
+| S4 | security | low | Nine full task ids in this file; the project rule names prefixes; the repository is public. | adopt: prefixes (the full ids are in the dev database by prefix). |
+| S5–S7 | security | info | `html.unescape` on every title (note for a future HTML export); rejected fold labels in provenance are not served; the records route is unpaginated like its sibling. | record. |
+| X1 | Codex | high (by Codex) | A failed typing keeps the lever columns of an earlier design version (keyed by option id only); the profile lines are keyed by design version. | defer: a stored version beside the lever columns is a shape change; `typing_invalid` is 0 on every live run. Severity read as medium by the lead. |
+| X2 | Codex | high (by Codex) | `evaluated_countries` took the document's all-member place: a describing record's country entered the list when an evaluating record of the same DOI had none, and a describing record of another country made the document "multiple countries" and contributed nothing. | adopt: the evaluated place is read from the evaluating members only; a test with both cases. |
+| X3 | Codex | medium | As B8(a): the facet-grain revision's rows. | adopt (with B8). |
+| X4 | Codex | medium | The read models take the newest `longlist_result` whatever the walk's status; a failed profile step serves a hybrid of the new coverage and the old option columns. | defer (a design seam: a "last completed walk" selector). |
+| X5 | Codex | medium | At the ceiling a suggested seed cannot fold into a newly discovered broader option (the new option is dropped before the folds are read); the "can fold" test supplies no fold. | defer (the build's D7 names the same path; apply folds before computing the room). |
+| X6 | Codex | medium | The trace check admits a false lower-case predicate and rejects a true "2020 trial" (the year is sent but not allowlisted). | the first part = S1 (defer); the second declined: the prompt forbids years in a sentence, so the check matches the prompt. |
+| X7 | Codex | medium | As B4/C1 (the whole-word country match on settings). | adopt (with B4). |
+| X8 | Codex | low | Unknown place ids were not dropped before the duplicate check: an unknown id twice made the whole answer malformed. | adopt: the known ids are passed to the check; unknown ids dropped first. |
+| C1 | code-review | — | As B4/X7; verified live by the lane (`names_place("turkey farms")` True). | adopt. |
+| C2 | code-review | — | The read side's "first record" of a document (role, then `created_at`) differed from the profile step's (role, then the record's words), so a document line and its place sentence could read different records. | adopt: `_first_line_record` uses the profile's rule. |
+| C3 | code-review | — | As B8(a)/X3. | adopt. |
+| C4 | code-review | — | A duplicate pair dropped as a "chain" (A → B, B → C) leaves A `passes` with "no other option is the same kind of action". | defer (follow the chain, or `cannot_check`); no live list has reported a duplicate. |
+| C5 | code-review | — | `_document_year` re-implemented `_metadata_year` with a different precedence. | adopt: one `place_sentences.metadata_year` for both. |
+| C6 | code-review | — | Four byte-identical `_clean` helpers. | adopt in part: `place_sentences` imports `coverage._clean`; `where_tried` keeps its own (an import cycle); `repository._clean_text` left. |
+| C7 | code-review | — | `_constraint_lists` and `_checks` build one list by undoing each other. | defer (a simplification with a silent-drop edge). |
+| C8 | code-review | — | `option_out` computed the plan's target unit and Where country twice. | adopt: once per read. |
+| C9 | code-review | — | The setting pass moved the WHOLE setting text into an empty geography ("community centres in Leeds" became the place). | adopt: `named_place` moves the place the setting names; a test. |
+| C10 | code-review | — | "N options in 0 themes" shows between the longlist step and the theme step and after a degraded theme step. | adopt: no theme count when `themes` is 0; the vitest extended. |
+
+**Convergence.** Three lanes found the country-name match (B4, C1, X7) and
+three the `facet_runs` gate (B8, C3, X3): both adopted with high confidence.
+The lexical limits of the trace check were seen by two lanes (S1, X6) and
+the sentence-start fault by the trace lane alone (LT3), which is the lane
+that read the model's actual output. Unique to one lane and adopted: LT1
+(trace), B1 and B2 (verifier B), X2 and X8 (Codex), C2, C5, C8, C9, C10
+(code review): each lane paid for itself.
+
+### The deviations, re-examined
+
+Every flagged deviation (D1–D23; the amendment 3 list; the amendment 4
+eleven) was confirmed against the code by the verifiers and adopted as-is,
+except: amendment 4 deviation 4 (the slash cut was not counted or tested:
+now both, B2), amendment 4 deviation 7 (`names_place` reached common nouns:
+narrowed, B4), D16 (superseded by R68, marked), and one resolution the build
+had not flagged — the merge's sentence carry-through (contested; changed,
+B1). The handoff's adjudication items: base 1–7 all true of the code (item
+3's private imports deferred; 4 and 6 left, harmless; 5 and 7 by design);
+amendment 3 items 1–7 (1: the strip stays, M4 one in 175 on the replay and
+none live — the deletion is the owner's decision; 2: boxes 57 and 69 ship
+with their residual rates on the record — the owner's decision; 3: the
+rollback path confirmed by the security lane, tests up and down; 4: the
+`c7e2a9f4b1d8` edit is a freeze only, confirmed by both verifiers and the
+security lane; 5: Where once in the screen text stands, recorded under box 7;
+6: the 22b calls adopted as the lead's taste; 7: the route's scoping
+confirmed clean); amendment 4 items 1–10 (1: the figures read and found
+consistent with the round records, the acceptance not re-litigated; 2: the
+`max_length` deviation adopted and the ADR corrected; 3: the four guards
+exist, the slash cut now counted; 4: the suggest prompt's feature rule
+adopted; 5: narrowed; 6: the narrow country-name reading adopted; 7: the
+second worked example adopted; 8: the shared-tree splits confirmed by HEAD
+tree = gated tree; 9: the 30b calls adopted; 10: D23 for the owner).
+
+### Fake-done check of the fixes
+
+No test was relaxed. The merge test was inverted to the rubric's rule and
+asserts the stored key is absent and the card's sentences are templates;
+the `by_role` assertion became an absence assertion; the provenance and
+entry-shape assertions were extended, not loosened; every new behaviour has
+a test (`test_place_sentences.py` two fixture cases,
+`test_option_profile.py` the slash cut and the reasons, `test_strip_place.py`
+the ambiguous names, `test_longlist_coverage_046.py` the place-only move,
+`test_where_tried.py` the evaluated-member rule, `test_migration_046_a3.py`
+the legacy provenance row, `longlistPresentation.test.ts` the no-theme line).
+
+### The gate after the fixes
+
+`make verify` on the fixed tree, 2026-10-12: okf-validate 164 concepts, 0
+violations; backend 3,590 passed in 24 min 28 s; mypy 410 files clean; the
+lint step then failed on two over-long comment lines of the review's own
+(`schema.py`, `test_longlist_routes.py`), which were wrapped, and the gate
+rerun from the lint step to the end on that tree: ruff clean, build, infra
+46 passed, audit-paths 137 files, prompt-guard 32 modules unchanged,
+font-guard, drift-check OK, frontend typecheck + lint + 883 vitest + build.
+The two wrapped lines are a comment and a comment-plus-assertion move; no
+code path changed after the test run. The replay of the two rejected
+obesity sentences through the fixed `trace_check` passes both.
+
+### For the owner at step 9
+
+1. D23: the tints on the built screen.
+2. R25 stage decisions still open from amendments 1–3: the place strip's
+   deletion (R74; M4 one place-based rejection in 175 on the replay, none
+   live), boxes 57 and 69 (`programme_name` and `study_country` residual
+   rates on the record), the 20L folding threshold.
+3. The spec changes, items 1–17 of `spec-changes-proposed.md` and the
+   amendment 3 proposals in the gitignored `amendment-3-final.md` § 3: the
+   wording.
+4. "studies" in the template sentence (LT5).
+5. The chain-duplicate semantics (C4) and the typing version key (X1), if
+   either should come before task 3.
 
 ## Rubric status
 
@@ -1880,7 +2061,7 @@ Build-phase view. The review conversation checks each box against the code.
 | 20 Spec changes only with the owner's accepted wording | **not applied**; wording proposed in [spec-changes-proposed.md](spec-changes-proposed.md) |
 | 21 `docs/deferred.md` | done |
 | 22 ADR 0040 | written in the design phase (`5d9f206a`); the owner has not yet read its text |
-| 23 The review stack | not run (step 7) |
+| 23 The review stack | ran 2026-10-12 (§ Review findings); the human deep review is step 9 |
 
 ## Intent & assumptions
 
@@ -1978,9 +2159,9 @@ anchors the step-7 review.
 
 ### Live-trace pointers
 
-Langfuse session id = task id. Live tasks: `3f6b79b9-3e4b-4b37-8bf5-e9ec26db5833`
-(obesity), `42dd142c-5cb3-4e77-88a3-584bd49243ce` (refugees),
-`ff6ef83c-d137-44a0-8460-c02b86adf6ff` (caregiving). The replay clones are
+Langfuse session id = task id. Live tasks: `3f6b79b9` (obesity), `42dd142c`
+(refugees), `ff6ef83c` (caregiving); full ids in the dev database by prefix.
+The replay clones are
 tasks named "… — 046 replay clone" in the dev database; `clone.py <slug>
 --drop` removes one.
 

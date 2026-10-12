@@ -67,6 +67,7 @@ from policy_atlas.options_scoping.longlist.where_tried import (
     OTHER_PLACE,
     country_level,
     document_where,
+    named_place,
     names_place,
     place_key,
     resolve_country,
@@ -236,8 +237,8 @@ def fold_setting(setting: str) -> str:
 def _read_setting(member: CoverageMember) -> tuple[str | None, str | None, str | None]:
     """The setting pass on one member: ``(setting_label, study_geography, repair)``.
 
-    A setting that names a place (:func:`names_place`) is not a setting: it
-    is read as the study geography when the record has none (``moved``),
+    A setting that names a place (:func:`names_place`) is not a setting: the
+    place it names is read as the study geography when the record has none (``moved``),
     else it leaves the facet (``dropped``). Any other setting is kept as
     written, to be grouped by :func:`fold_setting`. Nothing is written back.
     """
@@ -247,7 +248,7 @@ def _read_setting(member: CoverageMember) -> tuple[str | None, str | None, str |
         return None, geography, None
     if names_place(setting):
         if _clean(geography) is None:
-            return None, setting, "moved"
+            return None, named_place(setting), "moved"
         return None, geography, "dropped"
     return setting, geography, None
 
@@ -778,10 +779,26 @@ def option_coverage(
                 # reported, never dropped (R87; S32).
                 unknown_countries.setdefault(top_key, set()).add(key)
                 _show(unknown_countries_shown, top_key, top)
-            if evaluated:
-                country_key = f"iso:{resolved[0]}" if resolved else f"text:{top_key}"
+        if evaluated:
+            # The evaluated country is read from the evaluating members only: a
+            # describing record of the same document names no evaluated place
+            # (review of task 046, 2026-10-12).
+            evaluated_top, _ = document_where(
+                (m.study_country, m.study_geography) for m in evaluated
+            )
+            if evaluated_top not in (NOT_STATED, MULTIPLE_COUNTRIES, OTHER_PLACE):
+                resolved_evaluated = resolve_country(evaluated_top)
+                country_key = (
+                    f"iso:{resolved_evaluated[0]}"
+                    if resolved_evaluated
+                    else f"text:{place_key(evaluated_top)}"
+                )
                 evaluated_countries.setdefault(country_key, set()).add(key)
-                _show(evaluated_countries_shown, country_key, resolved[1] if resolved else top)
+                _show(
+                    evaluated_countries_shown,
+                    country_key,
+                    resolved_evaluated[1] if resolved_evaluated else evaluated_top,
+                )
         if top == MULTIPLE_COUNTRIES:
             for country in doc_countries:
                 where_countries.setdefault(top_key, set()).add(country.casefold())

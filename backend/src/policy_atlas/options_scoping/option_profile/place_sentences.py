@@ -39,6 +39,7 @@ from policy_atlas.options_scoping.labels import DocumentLabels
 from policy_atlas.options_scoping.longlist.coverage import (
     ROLE_BUCKETS,
     CoverageMember,
+    _clean,
     document_label,
     fold_kind,
     fold_lookup,
@@ -138,7 +139,7 @@ _ALLOWLIST_FIELDS: tuple[str, ...] = (
 _EDGE_PUNCTUATION = ".,;:!?()[]{}\"'‘’“”"
 _BREAK_AFTER = re.compile(r"[,;:.!?)\]\"”]$")
 _BREAK_BEFORE = re.compile(r"^[(\[\"“]")
-_START_AFTER = re.compile(r"[:;]$")
+_START_AFTER = re.compile(r"[:;.!?]$")
 _POSSESSIVE_END = re.compile(r"['’]s$", re.IGNORECASE)
 
 
@@ -209,11 +210,20 @@ class PlaceGroup:
     documents_total: int
 
 
-def _clean(value: str | None) -> str | None:
-    if value is None:
-        return None
-    text = " ".join(value.split())
-    return text or None
+def metadata_year(metadata: Mapping[str, object]) -> int | None:
+    """The four-digit publication year of a document's metadata, or ``None``.
+
+    One rule for the profile step and the read side: the first of
+    ``publication_year``, ``year``, ``publication_date`` and ``published``
+    that is an integer or a text starting with four digits.
+    """
+    for key in ("publication_year", "year", "publication_date", "published"):
+        value = metadata.get(key)
+        if isinstance(value, int) and not isinstance(value, bool):
+            return value
+        if isinstance(value, str) and re.match(r"\d{4}", value.strip()):
+            return int(value.strip()[:4])
+    return None
 
 
 def place_name(top: str) -> str:
@@ -921,7 +931,7 @@ def trace_check(
     3. ``name`` — every run of capitalised tokens (joined across "of",
        "and", "the", "for", "&", "de") occurs in an allowlisted text, or
        else each of its tokens does; a sentence-start token (the first, or
-       one after ":" or ";") may also be a number word, a function word or
+       one after ".", ":", ";", "!" or "?") may also be a number word, a function word or
        a generic word (:data:`SENTENCE_START_WORDS`) or a word of the
        allowlist.
 
