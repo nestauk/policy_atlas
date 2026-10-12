@@ -618,7 +618,16 @@ def head_phrase(text: str | None) -> str | None:
     """
     if not text:
         return text
-    cut = min((text.find(word) for word in _HEAD_CUTS if text.find(word) > 0), default=-1)
+    cuts = []
+    for word in _HEAD_CUTS:
+        start = 0
+        while (cut := text.find(word, start)) > 0:
+            # "not in education" is the head's own clause, not a qualifier.
+            before = text[:cut].split()
+            if before and before[-1].casefold() not in ("not", "no", "never"):
+                cuts.append(cut)
+            start = cut + 1
+    cut = min(cuts, default=-1)
     return text[:cut].strip() if cut > 0 else text
 
 

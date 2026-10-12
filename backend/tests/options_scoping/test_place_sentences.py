@@ -576,6 +576,9 @@ def test_the_head_phrase_cuts_a_target_unit_at_its_qualifying_clause() -> None:
     )
     firms = "Energy-intensive manufacturing firms"
     assert head_phrase(firms) == firms
+    neet = "16 to 24 year olds not in education, employment or training"
+    assert head_phrase(neet) == neet  # "not in …" is the head's own clause
+    assert head_phrase("Young people not in work who live in Leeds") == "Young people not in work"
     assert head_phrase(None) is None
     doc = _doc(
         "a", tier="Strong", evidence_type="RCTs and Quasi-Experimental Studies", tried_on_kind=long
