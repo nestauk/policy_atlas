@@ -2302,19 +2302,13 @@ export interface components {
          *             non-evidence documents are their own keys, "not rated" when unclassified.
          *         by_tier: Documents per quality tier label, "not rated" when unappraised.
          *         by_role: Documents per role.
-         *         where_tried: Where it was tried: its top levels, most documents first.
          *         flagged_not_stated: Documents that cover the intervention without
          *             stating the feature that defines this option.
          *         inherited_labels: Documents whose type and tier were read from a
          *             linked task.
          *         abstract_only: Documents read from an abstract only.
-         *         tried_on: The kinds of people, organisations or things its evidence
-         *             covers, the plan's target unit first, then most documents first
-         *             (task 046, amendment 3).
-         *         measures: The kinds of outcome its evidence measures, most documents
-         *             first (task 046, amendment 3).
          *         outcome_counts: The documents that evaluate the option, by plan
-         *             outcome, and the other kinds of outcome (task 046, R42, A4).
+         *             outcome (task 046, R42; amendment 4, R79).
          */
         EvidenceProfileOut: {
             /**
@@ -2349,27 +2343,7 @@ export interface components {
              * @default 0
              */
             inherited_labels: number;
-            /** Measures */
-            measures?: components["schemas"]["MeasureKindOut"][];
             outcome_counts?: components["schemas"]["OutcomeCountsOut"];
-            /** Tried On */
-            tried_on?: components["schemas"]["TriedOnOut"][];
-            /** Where Tried */
-            where_tried?: components["schemas"]["WhereTriedOut"][];
-        };
-        /**
-         * ExampleOut
-         * @description One distinct programme name among the option's members (task 046, R63).
-         *
-         *     Args:
-         *         name: The programme's name (a member's ``programme_name``).
-         *         documents: Its documents (DOI-collapsed).
-         */
-        ExampleOut: {
-            /** Documents */
-            documents: number;
-            /** Name */
-            name: string;
         };
         /**
          * ExclusionOut
@@ -3074,26 +3048,6 @@ export interface components {
             user_id: string;
         };
         /**
-         * MeasureKindOut
-         * @description One kind of outcome the option's evidence measures (task 046, amendment 3, R55).
-         *
-         *     Args:
-         *         kind: The kind, in words.
-         *         documents: Documents of any role that measure it (DOI-collapsed).
-         *         evaluated: Of those, the documents that evaluate the option.
-         */
-        MeasureKindOut: {
-            /** Documents */
-            documents: number;
-            /**
-             * Evaluated
-             * @default 0
-             */
-            evaluated: number;
-            /** Kind */
-            kind: string;
-        };
-        /**
          * MostRelevantNoteOut
          * @description A grounded one-liner note for a top cited source.
          *
@@ -3267,8 +3221,6 @@ export interface components {
          *             before a longlist is built.
          *         capability_run_id: The longlist walk that run belonged to.
          *         plan_version: The plan version that longlist was built from.
-         *         examples: The option's distinct programme names, most documents first,
-         *             at most five (task 046, amendment 3).
          *         place_sentences: One sentence per place of its evaluating documents,
          *             in the card's order: the plan's Where country first, "No single
          *             place" last (task 046, amendment 4, R80).
@@ -3310,8 +3262,6 @@ export interface components {
             /** Evaluated Countries */
             evaluated_countries?: components["schemas"]["EvaluatedCountryOut"][];
             evidence: components["schemas"]["EvidenceProfileOut"];
-            /** Examples */
-            examples?: components["schemas"]["ExampleOut"][];
             exclusion?: components["schemas"]["ExclusionOut"] | null;
             /** From Section */
             from_section?: string | null;
@@ -3387,10 +3337,6 @@ export interface components {
             state: "included" | "excluded";
             /** Taxonomy Version */
             taxonomy_version?: string | null;
-            /** Tried On */
-            tried_on?: components["schemas"]["TriedOnOut"][];
-            /** Where Tried */
-            where_tried?: components["schemas"]["WhereTriedOut"][];
         };
         /**
          * OptionProfileOut
@@ -3518,7 +3464,6 @@ export interface components {
          *         evaluated_count: Documents that evaluate it.
          *         settings: The option's delivery setting, from its profile (R41);
          *             empty when it has none.
-         *         where_tried: Where it was tried: its top levels, most documents first.
          *         relations: Its relations to other options.
          *         abstract_only: Every one of its documents was read from an abstract only.
          *         is_entrant_with_no_documents: Suggested, drawn from the Evidence
@@ -3533,9 +3478,6 @@ export interface components {
          *         lever_reason: One sentence on why the option has its lever type,
          *             when the typing pass recorded one; `null` otherwise (task 046,
          *             R29).
-         *         tried_on: The kinds of people, organisations or things its evidence
-         *             covers, the plan's target unit first, then most documents first
-         *             (task 046, amendment 3).
          *         evaluated_countries: The countries of its evaluating documents, the
          *             plan's Where country first, then most documents first (task 046,
          *             amendment 4, R76); empty when no evaluation gives a country.
@@ -3637,10 +3579,6 @@ export interface components {
             state: "included" | "excluded";
             /** Taxonomy Version */
             taxonomy_version?: string | null;
-            /** Tried On */
-            tried_on?: components["schemas"]["TriedOnOut"][];
-            /** Where Tried */
-            where_tried?: components["schemas"]["WhereTriedOut"][];
         };
         /**
          * OrganisationRef
@@ -3686,8 +3624,6 @@ export interface components {
          *     Args:
          *         evaluating_documents: Documents that evaluate the option.
          *         by_outcome: The count for each plan outcome, in the plan's order.
-         *         other: The kinds of outcome that are not plan outcomes, counting only
-         *             records tagged `other` or not tagged, most documents first.
          */
         OutcomeCountsOut: {
             /** By Outcome */
@@ -3697,28 +3633,6 @@ export interface components {
              * @default 0
              */
             evaluating_documents: number;
-            /** Other */
-            other?: components["schemas"]["OutcomeKindOut"][];
-        };
-        /**
-         * OutcomeKindOut
-         * @description One kind of outcome that is not a plan outcome (task 046, amendment 3, A4).
-         *
-         *     Args:
-         *         kind: The kind, in words.
-         *         documents: Documents of any role that report it (DOI-collapsed).
-         *         evaluated: Of those, the documents that evaluate the option against it.
-         */
-        OutcomeKindOut: {
-            /** Documents */
-            documents: number;
-            /**
-             * Evaluated
-             * @default 0
-             */
-            evaluated: number;
-            /** Kind */
-            kind: string;
         };
         /**
          * PageMeta
@@ -5511,23 +5425,6 @@ export interface components {
             type: "tick";
         };
         /**
-         * TriedOnOut
-         * @description One kind of people, organisations or things the option's evidence covers.
-         *
-         *     Task 046, amendment 3 (R54): the records' unit words folded into kinds
-         *     over the whole list.
-         *
-         *     Args:
-         *         kind: The kind, in words (its facet label).
-         *         documents: Its documents (DOI-collapsed).
-         */
-        TriedOnOut: {
-            /** Documents */
-            documents: number;
-            /** Kind */
-            kind: string;
-        };
-        /**
          * TurnActionOut
          * @description The longlist verb a Task Agent turn applied, once the user confirmed it.
          *
@@ -5649,43 +5546,6 @@ export interface components {
              * Format: uuid
              */
             entry_id: string;
-        };
-        /**
-         * WherePlaceOut
-         * @description One place under a where-tried top level: a record's study geography as written.
-         *
-         *     Args:
-         *         place: The study geography text.
-         *         documents: Its documents (DOI-collapsed).
-         */
-        WherePlaceOut: {
-            /** Documents */
-            documents: number;
-            /** Place */
-            place: string;
-        };
-        /**
-         * WhereTriedOut
-         * @description One where-tried top level with its documents (task 046, amendment 3; R59, R72).
-         *
-         *     Args:
-         *         top: The country the records name, "multiple countries", "other"
-         *             (a place stated with no country) or "not stated".
-         *         documents: Its documents (DOI-collapsed); each document counts
-         *             under one top level.
-         *         places: The records' study geographies under it, most documents first.
-         *         countries: Under "multiple countries", every country its documents'
-         *             records name (the facet filter reads it); empty otherwise.
-         */
-        WhereTriedOut: {
-            /** Countries */
-            countries?: string[];
-            /** Documents */
-            documents: number;
-            /** Places */
-            places?: components["schemas"]["WherePlaceOut"][];
-            /** Top */
-            top: string;
         };
         /**
          * YourContextOut

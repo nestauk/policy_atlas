@@ -809,37 +809,6 @@ class ExclusionOut(BaseModel):
     by: ExclusionBy
 
 
-class WherePlaceOut(BaseModel):
-    """One place under a where-tried top level: a record's study geography as written.
-
-    Args:
-        place: The study geography text.
-        documents: Its documents (DOI-collapsed).
-    """
-
-    place: str
-    documents: int
-
-
-class WhereTriedOut(BaseModel):
-    """One where-tried top level with its documents (task 046, amendment 3; R59, R72).
-
-    Args:
-        top: The country the records name, "multiple countries", "other"
-            (a place stated with no country) or "not stated".
-        documents: Its documents (DOI-collapsed); each document counts
-            under one top level.
-        places: The records' study geographies under it, most documents first.
-        countries: Under "multiple countries", every country its documents'
-            records name (the facet filter reads it); empty otherwise.
-    """
-
-    top: str
-    documents: int
-    places: list[WherePlaceOut] = Field(default_factory=list)
-    countries: list[str] = Field(default_factory=list)
-
-
 class RelationOut(BaseModel):
     """A relation between two options, read from this option's side.
 
@@ -869,35 +838,6 @@ class EvaluatedCountryOut(BaseModel):
 
     country: str
     documents: int
-
-
-class TriedOnOut(BaseModel):
-    """One kind of people, organisations or things the option's evidence covers.
-
-    Task 046, amendment 3 (R54): the records' unit words folded into kinds
-    over the whole list.
-
-    Args:
-        kind: The kind, in words (its facet label).
-        documents: Its documents (DOI-collapsed).
-    """
-
-    kind: str
-    documents: int
-
-
-class MeasureKindOut(BaseModel):
-    """One kind of outcome the option's evidence measures (task 046, amendment 3, R55).
-
-    Args:
-        kind: The kind, in words.
-        documents: Documents of any role that measure it (DOI-collapsed).
-        evaluated: Of those, the documents that evaluate the option.
-    """
-
-    kind: str
-    documents: int
-    evaluated: int = 0
 
 
 ProfileLineKey = Literal[
@@ -974,33 +914,16 @@ class OutcomeCountOut(BaseModel):
     evaluated: int = 0
 
 
-class OutcomeKindOut(BaseModel):
-    """One kind of outcome that is not a plan outcome (task 046, amendment 3, A4).
-
-    Args:
-        kind: The kind, in words.
-        documents: Documents of any role that report it (DOI-collapsed).
-        evaluated: Of those, the documents that evaluate the option against it.
-    """
-
-    kind: str
-    documents: int
-    evaluated: int = 0
-
-
 class OutcomeCountsOut(BaseModel):
     """How many documents evaluate the option, and against which outcomes (R42).
 
     Args:
         evaluating_documents: Documents that evaluate the option.
         by_outcome: The count for each plan outcome, in the plan's order.
-        other: The kinds of outcome that are not plan outcomes, counting only
-            records tagged `other` or not tagged, most documents first.
     """
 
     evaluating_documents: int = 0
     by_outcome: list[OutcomeCountOut] = Field(default_factory=list)
-    other: list[OutcomeKindOut] = Field(default_factory=list)
 
 
 class OptionSummaryOut(BaseModel):
@@ -1036,7 +959,6 @@ class OptionSummaryOut(BaseModel):
         evaluated_count: Documents that evaluate it.
         settings: The option's delivery setting, from its profile (R41);
             empty when it has none.
-        where_tried: Where it was tried: its top levels, most documents first.
         relations: Its relations to other options.
         abstract_only: Every one of its documents was read from an abstract only.
         is_entrant_with_no_documents: Suggested, drawn from the Evidence
@@ -1051,9 +973,6 @@ class OptionSummaryOut(BaseModel):
         lever_reason: One sentence on why the option has its lever type,
             when the typing pass recorded one; `null` otherwise (task 046,
             R29).
-        tried_on: The kinds of people, organisations or things its evidence
-            covers, the plan's target unit first, then most documents first
-            (task 046, amendment 3).
         evaluated_countries: The countries of its evaluating documents, the
             plan's Where country first, then most documents first (task 046,
             amendment 4, R76); empty when no evaluation gives a country.
@@ -1085,14 +1004,12 @@ class OptionSummaryOut(BaseModel):
     document_count: int = 0
     evaluated_count: int = 0
     settings: list[str] = Field(default_factory=list)
-    where_tried: list[WhereTriedOut] = Field(default_factory=list)
     relations: list[RelationOut] = Field(default_factory=list)
     abstract_only: bool = False
     is_entrant_with_no_documents: bool = False
     search_pending: bool = False
     from_section: str | None = None
     also_found_as: list[str] = Field(default_factory=list)
-    tried_on: list[TriedOnOut] = Field(default_factory=list)
     evaluated_countries: list[EvaluatedCountryOut] = Field(default_factory=list)
     outcomes_evaluated: int = 0
     outcomes_total: int = 0
@@ -1165,31 +1082,22 @@ class EvidenceProfileOut(BaseModel):
             non-evidence documents are their own keys, "not rated" when unclassified.
         by_tier: Documents per quality tier label, "not rated" when unappraised.
         by_role: Documents per role.
-        where_tried: Where it was tried: its top levels, most documents first.
         flagged_not_stated: Documents that cover the intervention without
             stating the feature that defines this option.
         inherited_labels: Documents whose type and tier were read from a
             linked task.
         abstract_only: Documents read from an abstract only.
-        tried_on: The kinds of people, organisations or things its evidence
-            covers, the plan's target unit first, then most documents first
-            (task 046, amendment 3).
-        measures: The kinds of outcome its evidence measures, most documents
-            first (task 046, amendment 3).
         outcome_counts: The documents that evaluate the option, by plan
-            outcome, and the other kinds of outcome (task 046, R42, A4).
+            outcome (task 046, R42; amendment 4, R79).
     """
 
     documents: int = 0
     by_evidence_type: dict[str, int] = Field(default_factory=dict)
     by_tier: dict[str, int] = Field(default_factory=dict)
     by_role: dict[str, int] = Field(default_factory=dict)
-    where_tried: list[WhereTriedOut] = Field(default_factory=list)
     flagged_not_stated: int = 0
     inherited_labels: int = 0
     abstract_only: int = 0
-    tried_on: list[TriedOnOut] = Field(default_factory=list)
-    measures: list[MeasureKindOut] = Field(default_factory=list)
     outcome_counts: OutcomeCountsOut = Field(default_factory=OutcomeCountsOut)
 
 
@@ -1330,18 +1238,6 @@ class SourceRecordsOut(BaseModel):
     records: list[OptionRecordOut] = Field(default_factory=list)
 
 
-class ExampleOut(BaseModel):
-    """One distinct programme name among the option's members (task 046, R63).
-
-    Args:
-        name: The programme's name (a member's ``programme_name``).
-        documents: Its documents (DOI-collapsed).
-    """
-
-    name: str
-    documents: int
-
-
 class PlaceSentenceOut(BaseModel):
     """One place of an option's evaluating documents and its sentence (task 046, amendment 4, R80).
 
@@ -1374,8 +1270,6 @@ class OptionOut(OptionSummaryOut):
             before a longlist is built.
         capability_run_id: The longlist walk that run belonged to.
         plan_version: The plan version that longlist was built from.
-        examples: The option's distinct programme names, most documents first,
-            at most five (task 046, amendment 3).
         place_sentences: One sentence per place of its evaluating documents,
             in the card's order: the plan's Where country first, "No single
             place" last (task 046, amendment 4, R80).
@@ -1391,7 +1285,6 @@ class OptionOut(OptionSummaryOut):
     run_id: uuid.UUID | None = None
     capability_run_id: uuid.UUID | None = None
     plan_version: int | None = None
-    examples: list[ExampleOut] = Field(default_factory=list)
     place_sentences: list[PlaceSentenceOut] = Field(default_factory=list)
 
 

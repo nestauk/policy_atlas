@@ -731,7 +731,7 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
             record_id: `${card.option_id}-${sourceId}`,
             intervention: card.name,
             setting: card.settings?.[0] ?? null,
-            unit: card.tried_on?.[0]?.kind ?? null,
+            unit: card.documents?.[0]?.tried_on_kind ?? null,
             outcome: card.outcomes_served?.[0] ?? null,
             study_geography: document.place ?? null,
             role: document.role,

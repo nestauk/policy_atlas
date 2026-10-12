@@ -31,7 +31,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select, update
 from sqlalchemy.engine import Connection, Engine
 
-from policy_atlas.api.contract import ExampleOut, MeasureKindOut, OptionDocumentOut, TriedOnOut
+from policy_atlas.api.contract import OptionDocumentOut, OptionOut, OptionSummaryOut
 from policy_atlas.api.deps import get_agent_backend, get_runner_backends
 from policy_atlas.api.readmodels import repository
 from policy_atlas.core.schema import (
@@ -549,17 +549,10 @@ def test_the_list_matches_the_stored_rows(engine: Engine, tmp_path: Path) -> Non
         assert guarantee["state"] == "included" and guarantee["exclusion"] is None
         assert guarantee["document_count"] == coverage["documents"] == 2
         assert guarantee["evaluated_count"] == coverage["role"]["evaluated"]
-        # Where tried, two levels (task 046, amendment 3; R59, R72): the DOI
-        # twins count once under their country; "England" and "United Kingdom"
-        # are that country's own names, so no place below (amendment 4, S32).
-        assert guarantee["where_tried"] == coverage["where_tried"]
-        uk_entry = next(e for e in guarantee["where_tried"] if e["top"] == "United Kingdom")
-        assert uk_entry == {
-            "top": "United Kingdom",
-            "documents": 1,
-            "places": [],
-            "countries": [],
-        }
+        # The list serves no where-tried or tried-on field (amendment 4, R84; S36):
+        # the coverage keys stay stored for the constraint step.
+        assert "where_tried" not in guarantee and "tried_on" not in guarantee
+        assert coverage["where_tried"]
         # The evidence signal (task 046, amendment 4, R76; S29): read from the
         # stored coverage; the total is the built-from plan's outcome count.
         assert guarantee["evaluated_countries"] == coverage["evaluated_countries"]
@@ -579,9 +572,7 @@ def test_the_list_matches_the_stored_rows(engine: Engine, tmp_path: Path) -> Non
         assert mentoring["restriction_text"] == RESTRICTION
         assert mentoring["primary_lever_type"] is None
         assert mentoring["lever_none_fits_reason"] == "Mentoring is delivered by volunteers."
-        assert mentoring["where_tried"] == [
-            {"top": "Denmark", "documents": 1, "places": [], "countries": []}
-        ]
+        assert "where_tried" not in mentoring
 
         package = by_name["Guarantee package"]
         expected = {
@@ -641,11 +632,11 @@ def test_the_card_carries_every_section_and_never_how_sure(
         assert evidence["inherited_labels"] == 1
         assert evidence["flagged_not_stated"] == 0  # the DOI twin states the feature
         assert evidence["by_role"]["evaluated"] >= 1
-        # The record-level lists are gone (B13); Tried on and Measures are
-        # the kinds the folding calls give (task 046, amendment 3).
-        assert not {"units", "settings", "outcomes"} & set(evidence)
-        assert evidence["tried_on"] == [{"kind": "16 to 24 year olds", "documents": 1}]
-        assert isinstance(evidence["measures"], list)
+        # The record-level lists are gone (B13), and so are the kind lists
+        # (task 046, amendment 4, S36).
+        removed = {"units", "settings", "outcomes", "tried_on", "measures", "where_tried"}
+        assert not removed & set(evidence)
+        assert "examples" not in card
         # The documents: one per document, DOI twins collapsed (R67).
         documents = card["documents"]
         with engine.connect() as conn:
@@ -706,7 +697,6 @@ def test_an_option_added_since_the_build_reads_with_an_empty_profile(conn: Conne
     card = repository.option_out(conn, walk.task_id, late)
     assert card is not None
     assert card.document_count == 0 and card.documents == []
-    assert card.evidence.where_tried == []
 
 
 # --- task 046: the read models gain runner-up, tried on, variants, thinning --------
@@ -769,62 +759,6 @@ def test_the_card_and_list_serve_the_lever_reason(conn: Connection) -> None:
     assert card.lever_reason == "The state pays employers to hire."
 
 
-def test_the_card_and_list_serve_tried_on_and_examples(conn: Connection) -> None:
-    """Task 046, amendment 3 (R54, R55): Tried on and Measures are the kinds
-    the folding calls give (the stub: each word lower-cased, the plan's text
-    where one matches), the target unit's kind first."""
-    walk = _Walk(conn)
-    option_id = walk.option("Youth guarantee", origin="added_by_you")
-    fingerprint = _current_fingerprint(walk)
-    docs: dict[uuid.UUID, uuid.UUID] = {}
-    for intervention, population, population_tag, outcome in (
-        ("youth guarantee", "16 to 24 Year Olds", "on_target", "The NEET rate"),
-        ("youth guarantee", "young adults", "adjacent", "earnings"),
-        ("youth guarantee", "Young adults", "adjacent", "earnings"),
-    ):
-        doc = walk.doc()
-        ser = _extraction(walk, doc, fingerprint=fingerprint)
-        _record_under(
-            walk,
-            ser,
-            intervention,
-            programme_name="Youth Guarantee",
-            unit=population,
-            unit_tag=population_tag,
-            outcome=outcome,
-        )
-        docs[doc] = ser
-    _rollup_of(walk, walk.scope_id, docs)
-    backend = _Scripted(routes={"youth guarantee": ("Youth guarantee", False)})
-    walk.build(backend)
-
-    # Before the profile step has run, the list holds no maps: no kinds.
-    card = repository.option_out(conn, walk.task_id, option_id)
-    assert card is not None and card.tried_on == [] and card.evidence.measures == []
-
-    _profile(walk, backend)
-    expected_tried_on = [
-        TriedOnOut(kind="16 to 24 year olds", documents=1),
-        TriedOnOut(kind="young adults", documents=2),
-    ]
-    listed = repository.longlist_out(conn, walk.task_id)
-    assert listed is not None
-    summary = next(o for o in listed.options if o.option_id == option_id)
-    assert summary.tried_on == expected_tried_on
-
-    card = repository.option_out(conn, walk.task_id, option_id)
-    assert card is not None
-    assert card.tried_on == expected_tried_on
-    assert card.evidence.tried_on == expected_tried_on
-    assert card.evidence.measures == [
-        MeasureKindOut(kind="earnings", documents=2, evaluated=2),
-        MeasureKindOut(kind="the NEET rate", documents=1, evaluated=1),
-    ]
-    assert card.examples == [ExampleOut(name="Youth Guarantee", documents=3)]
-    served = card.evidence.model_dump()
-    assert not {"units", "settings", "outcomes"} & set(served)
-
-
 def test_the_list_serves_title_only_and_the_thinning_counts(conn: Connection) -> None:
     """The read model's field names, mapped from the component's own (task 046):
     ``thinned_mentioned`` = ``mentioned_without_features_or_outcome``,
@@ -874,65 +808,6 @@ def test_the_list_serves_every_lever_type_taxonomy_version(conn: Connection) -> 
         assert [d.definition for d in listed.lever_type_definitions_by_version[version]] == [
             lever.definition for lever in levers
         ]
-
-
-def test_an_added_option_s_own_search_serves_tried_on_and_examples(conn: Connection) -> None:
-    """Item 6: ``_search_coverage`` carries ``unit_tag`` and
-    ``programme_name`` so an added option's own search fills ``tried_on`` and
-    ``examples`` too, not only a built option's coverage."""
-    walk = _Walk(conn)
-    walk.option("Youth guarantee", origin="added_by_you")
-    first = walk.doc()
-    walk.record(first, "youth guarantee", unit="school leavers")
-    walk.rollup(walk.scope_id, [first])
-    backend = _Scripted(routes={"youth guarantee": ("Youth guarantee", False)})
-    walk.build(backend)
-    # The profile step stores the list's maps; the added option's read-time
-    # coverage applies them (task 046, amendment 3, S21).
-    _profile(walk, backend)
-    added = walk.option("Wage subsidy", origin="added_by_you")
-    scope_id = uuid.uuid4()
-    conn.execute(
-        evidence_scope.insert().values(
-            evidence_scope_id=scope_id,
-            task_id=walk.task_id,
-            intent="Wage subsidy.",
-            context={"capability": "options_scoping", "option_id": str(added)},
-            created_at=now(),
-            purpose="targeted",
-            plan_id=walk.plan_id,
-        )
-    )
-    conn.execute(
-        capability_run.insert().values(
-            capability_run_id=uuid.uuid4(),
-            task_id=walk.task_id,
-            evidence_scope_id=scope_id,
-            capability="options_scoping",
-            plan_id=walk.plan_id,
-            plan_version=2,
-            status="succeeded",
-            started_at=now(),
-            ended_at=now(),
-            parent_capability_run_id=None,
-        )
-    )
-    doc = walk.doc()
-    walk.record(
-        doc,
-        "Wage subsidy",
-        programme_name="Wage Subsidy Scheme",
-        unit="SCHOOL LEAVERS",
-        unit_tag="adjacent",
-    )
-    walk.rollup(scope_id, [doc])
-
-    card = repository.option_out(conn, walk.task_id, added)
-    assert card is not None
-    # The stored map folds its word ("school leavers", from the build's own
-    # record) to the list's kind.
-    assert card.tried_on == [TriedOnOut(kind="school leavers", documents=1)]
-    assert card.examples == [ExampleOut(name="Wage Subsidy Scheme", documents=1)]
 
 
 def test_a_longlist_walk_s_child_search_never_hides_the_option_s_membership_evidence(
@@ -1002,13 +877,11 @@ def test_an_old_stored_longlist_reads_with_every_new_field_defaulted(conn: Conne
     assert listed.counts.thinned_collapsed == 0
     assert listed.counts.thinned_capped == 0
     summary = next(o for o in listed.options if o.option_id == option_id)
-    assert summary.tried_on == []
+    assert summary.option_id == option_id
 
     card = repository.option_out(conn, walk.task_id, option_id)
     assert card is not None
-    assert card.examples == []
     assert card.also_found_as == []
-    assert card.evidence.tried_on == []
 
 
 def test_the_signal_and_the_document_lines_carry_the_record_fields(conn: Connection) -> None:
@@ -1280,7 +1153,6 @@ def test_the_outcome_counts_are_served_on_the_evidence_profile(conn: Connection)
             {"outcome": "Employment", "documents": 2, "evaluated": 1},
             {"outcome": "Wellbeing", "documents": 0, "evaluated": 0},
         ],
-        "other": [],
     }
     conn.execute(
         update(longlist_result).where(longlist_result.c.run_id == run_id).values(coverage=coverage)
@@ -1293,7 +1165,6 @@ def test_the_outcome_counts_are_served_on_the_evidence_profile(conn: Connection)
             {"outcome": "Employment", "documents": 2, "evaluated": 1},
             {"outcome": "Wellbeing", "documents": 0, "evaluated": 0},
         ],
-        "other": [],
     }
     late = walk.option("Wage subsidy", origin="added_by_you")
     late_card = repository.option_out(conn, walk.task_id, late)
@@ -1301,7 +1172,6 @@ def test_the_outcome_counts_are_served_on_the_evidence_profile(conn: Connection)
     assert late_card.evidence.outcome_counts.model_dump() == {
         "evaluating_documents": 0,
         "by_outcome": [],
-        "other": [],
     }
 
 
@@ -1695,10 +1565,6 @@ def test_an_added_option_reads_its_own_search_until_the_next_build(conn: Connect
     assert card.evaluated_count == 1
     # The twins' countries differ in case only: one country (R59); a geography
     # that is the record's own country is no place below (amendment 4, S32).
-    assert [w.model_dump() for w in card.where_tried] == [
-        {"top": "Denmark", "documents": 1, "places": [], "countries": []},
-        {"top": "United Kingdom", "documents": 1, "places": [], "countries": []},
-    ]
     # The evidence signal on the added option's path too (amendment 4, S29;
     # PA4-10): the describing Danish document gives no country.
     assert [c.model_dump() for c in card.evaluated_countries] == [
@@ -1984,3 +1850,10 @@ def test_an_option_from_the_evidence_search_names_its_report_section(
     card = repository.option_out(conn, walk.task_id, drawn)
     assert card is not None
     assert card.from_section == "What works for employers"
+
+
+def test_the_list_and_card_serve_no_where_tried_or_tried_on() -> None:
+    """Task 046, amendment 4 (R84; S36, PA4-11): the two facet fields are gone
+    from the list's options and the card; the coverage keys stay stored."""
+    for model in (OptionSummaryOut, OptionOut):
+        assert not {"where_tried", "tried_on"} & set(model.model_fields)

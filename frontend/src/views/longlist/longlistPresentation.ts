@@ -10,7 +10,6 @@ import { PROFILE_LINE_LABELS } from "../workspace/planVocabulary";
  * call — the option card is assembled, not written (D15).
  */
 
-type WhereTriedOut = components["schemas"]["WhereTriedOut"];
 type RelationOut = components["schemas"]["RelationOut"];
 type OptionSummaryOut = components["schemas"]["OptionSummaryOut"];
 
@@ -55,54 +54,7 @@ export function relationLabel(relation: RelationOut): string {
   return relation.kind === "part_of" ? `part of ${relation.other_name}` : `includes ${relation.other_name}`;
 }
 
-/** The top level a document or record reads under when it names two or
- *  more countries (task 046, amendment 3; R59). */
-export const MULTIPLE_COUNTRIES = "multiple countries";
-
 const fold = (text: string): string => text.trim().toLowerCase();
-
-/** The Where tried facet's chips (R72): every top level on the list, no
- *  counts — the most options first, then by name; case folded, the first
- *  spelling kept. */
-export function whereTriedFacet(options: readonly { where_tried?: readonly WhereTriedOut[] }[]): string[] {
-  const counts = new Map<string, { label: string; options: number }>();
-  for (const option of options) {
-    const seen = new Set<string>();
-    for (const entry of option.where_tried ?? []) {
-      const key = fold(entry.top);
-      if (key === "" || seen.has(key)) continue;
-      seen.add(key);
-      const current = counts.get(key);
-      if (current === undefined) counts.set(key, { label: entry.top, options: 1 });
-      else current.options += 1;
-    }
-  }
-  return [...counts.values()]
-    .sort((a, b) => b.options - a.options || a.label.localeCompare(b.label))
-    .map((chip) => chip.label);
-}
-
-/** Whether an option passes one Where tried chip (R72; Q22): a top level of
- *  its own, or — for a country — a "multiple countries" entry whose
- *  countries include it. */
-export function matchesWhereTried(whereTried: readonly WhereTriedOut[] | undefined, chip: string): boolean {
-  const key = fold(chip);
-  return (whereTried ?? []).some(
-    (entry) =>
-      fold(entry.top) === key ||
-      (fold(entry.top) === MULTIPLE_COUNTRIES && (entry.countries ?? []).some((country) => fold(country) === key)),
-  );
-}
-
-/** One top level on the card: "United Kingdom · 4 documents". */
-export function whereTopLine(entry: { top: string; documents: number }): string {
-  return `${capitalise(entry.top)} · ${documentCount(entry.documents)}`;
-}
-
-/** One place under a top level on the card: "England · 2 documents". */
-export function wherePlaceLine(place: { place: string; documents: number }): string {
-  return `${place.place} · ${documentCount(place.documents)}`;
-}
 
 /** A document's place on its meta line: its top level, with the two
  *  non-country values said as places. */
@@ -121,23 +73,6 @@ export function joinCounts(counts: Record<string, number> | undefined, lowercase
   return Object.entries(counts ?? {})
     .map(([label, n]) => `${n} ${lowercase ? label.toLowerCase() : label}`)
     .join(", ");
-}
-
-/** "{n} documents name this option: 3 evaluated it, 2 described it and 1
- *  mentioned it." Zero roles are dropped; a missing evaluation is said. */
-export function documentsSentence(
-  documents: number,
-  byRole: Partial<Record<"evaluated" | "described" | "recommended" | "mentioned", number>>,
-): string {
-  if (documents === 0) return "No document names this option yet.";
-  const roles = (["evaluated", "described", "recommended", "mentioned"] as const)
-    .map((role) => [byRole[role] ?? 0, role] as const)
-    .filter(([n]) => n > 0)
-    .map(([n, role]) => `${n} ${role} it`);
-  const head = `${documents} ${documents === 1 ? "document names" : "documents name"} this option`;
-  const list = roles.length === 0 ? "" : `: ${joinAnd(roles)}`;
-  const noEvaluation = (byRole.evaluated ?? 0) === 0 ? " None evaluated it." : "";
-  return `${head}${list}.${noEvaluation}`;
 }
 
 /** The notice a failed add / exclude / include shows (task 045, F15): the
@@ -160,8 +95,8 @@ export function joinAnd(parts: readonly string[]): string {
   return `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}`;
 }
 
-/** The card's grey note on how the documents were read (task 046, amendment 3). */
-export const ABSTRACTS_NOTE = "Read from titles and abstracts only";
+/** The note on the documents line about how they were read (task 046, amendment 4, R81). */
+export const ABSTRACTS_NOTE = "read from titles and abstracts only";
 
 /** The short origin: the count says "clustered"; the other three origins
  *  are the tag itself (the snapshot cell and the row meta). */
@@ -181,16 +116,17 @@ export function originShort(
   }
 }
 
-/** A list row's grey meta parts: the document count (or why there is
- *  none yet), the origin when it is not "clustered", then relations. */
+/** A list row's grey meta parts after the lever type (task 046, amendment 4, R85):
+ *  the origin when it is not "clustered", the relations, then the evidence signal's
+ *  own parts (no document count of its own). "searching for its evidence…" stands
+ *  alone while the option's own search runs. */
 export function rowMetaParts(option: OptionSummaryOut): string[] {
   const parts: string[] = [];
-  if (option.search_pending) parts.push("searching for its evidence…");
-  else if (option.is_entrant_with_no_documents) parts.push("no documents found yet");
-  else parts.push(`${option.document_count} ${option.document_count === 1 ? "document" : "documents"}`);
   const origin = originShort(option.origin, option.from_section);
   if (origin !== null) parts.push(origin);
   for (const relation of option.relations ?? []) parts.push(relationLabel(relation));
+  if (option.search_pending) parts.push("searching for its evidence…");
+  else parts.push(...evidenceSignal(option).split(" · "));
   return parts;
 }
 
@@ -288,52 +224,9 @@ export function leverDefinitionFor(
   return typed === undefined ? current : definitionSentence(typed.definition);
 }
 
-/** The list's Tried on facet (task 046, amendment 3, R54): the kinds the
- *  options' evidence covers, ordered by how many options carry each, the most
- *  common first, at most `limit` shown. The chips are labels: no count. */
-export function triedOnFacet(
-  options: readonly { tried_on?: readonly { kind: string }[] | null }[],
-  limit: number,
-): { shown: [string, number][]; hidden: number } {
-  const counts = new Map<string, number>();
-  for (const option of options) {
-    for (const entry of option.tried_on ?? []) {
-      counts.set(entry.kind, (counts.get(entry.kind) ?? 0) + 1);
-    }
-  }
-  const all = [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
-  return { shown: all.slice(0, limit), hidden: Math.max(all.length - limit, 0) };
-}
-
 /** "{n} document(s)", the unit the card counts evidence in. */
 export function documentCount(n: number): string {
   return `${n} ${n === 1 ? "document" : "documents"}`;
-}
-
-/** The card's "Tried on" sentence (task 046, amendment 3, R54): the kinds an
- *  option's evidence covers, the plan's target unit first, the unit said
- *  once — "Tried on: adolescents (2 documents), preschool children (1)." */
-export function triedOnSentence(
-  triedOn: readonly { kind: string; documents: number }[],
-): string {
-  const parts = triedOn.map((entry, index) =>
-    index === 0
-      ? `${entry.kind} (${documentCount(entry.documents)})`
-      : `${entry.kind} (${entry.documents})`,
-  );
-  return `Tried on: ${parts.join(", ")}.`;
-}
-
-/** One example row on the card (task 046, amendment 3, R63): a programme name
- *  and its documents, "Name (3 documents)". */
-export function exampleLine(example: { name: string; documents: number }): string {
-  return example.documents > 0 ? `${example.name} (${documentCount(example.documents)})` : example.name;
-}
-
-/** A judgement's verdict, rendered as prose ("breaks", "passes", "cannot
- *  check" — `cannot_check`'s underscore is the only value needing it). */
-export function verdictLabel(verdict: "passes" | "breaks" | "cannot_check"): string {
-  return verdict === "cannot_check" ? "cannot check" : verdict;
 }
 
 export const SCOPING_PASS_SENTENCE =
@@ -342,19 +235,28 @@ export const SCOPING_PASS_SENTENCE =
 
 type LonglistCountsOut = components["schemas"]["LonglistCountsOut"];
 
-/** The counts line under the longlist title: "40 options in 12 themes ·
- *  3 excluded", with "with no in-scope evidence" only when it is not zero
- *  (the contract's header counts, minus the internal unclustered figure —
- *  owner, 2026-09-23). */
-export function countsLine(counts: LonglistCountsOut): string {
-  const parts = [
-    `${counts.options} ${counts.options === 1 ? "option" : "options"} in ${counts.themes} ${
+/** The counts line under the longlist title (task 046, amendment 4, R83), as parts:
+ *  "40 options in 12 themes", then " · 3 excluded" only when some are (the view
+ *  links it in list mode), then " · 2 with no in-scope evidence" only when some
+ *  are. One source of the words. */
+export function countsParts(counts: LonglistCountsOut): {
+  head: string;
+  excluded: string | null;
+  noInScope: string | null;
+} {
+  return {
+    head: `${counts.options} ${counts.options === 1 ? "option" : "options"} in ${counts.themes} ${
       counts.themes === 1 ? "theme" : "themes"
     }`,
-    `${counts.excluded} excluded`,
-  ];
-  if (counts.no_in_scope > 0) parts.push(`${counts.no_in_scope} with no in-scope evidence`);
-  return parts.join(" · ");
+    excluded: counts.excluded > 0 ? `${counts.excluded} excluded` : null,
+    noInScope: counts.no_in_scope > 0 ? `${counts.no_in_scope} with no in-scope evidence` : null,
+  };
+}
+
+/** The counts line as one string: the excluded part only when K > 0 (R83). */
+export function countsLine(counts: LonglistCountsOut): string {
+  const { head, excluded, noInScope } = countsParts(counts);
+  return [head, excluded, noInScope].filter((part): part is string => part !== null).join(" · ");
 }
 
 /** The longlist's title: the plan's question, else its title, else the
@@ -459,27 +361,197 @@ export function servesOutcome(served: readonly string[] | undefined, outcome: st
   return (served ?? []).some((name) => name.trim().toLowerCase() === key);
 }
 
-/** The card's delivery-setting line (R41): "Delivered through: a · b". */
-export function deliveredThroughLine(settings: readonly string[] | undefined): string {
-  return (settings ?? []).length === 0 ? "" : `Delivered through: ${(settings ?? []).join(" · ")}`;
-}
-
-/** The constraints section's collapsed line: "2 break, 1 passes, 1 cannot
- *  be checked yet." — the verb agrees with the count. */
-export function checksSummary(verdicts: readonly ("passes" | "breaks" | "cannot_check")[]): string {
-  const forms: Record<"breaks" | "passes" | "cannot_check", [one: string, many: string]> = {
-    breaks: ["breaks", "break"],
-    passes: ["passes", "pass"],
-    cannot_check: ["cannot be checked yet", "cannot be checked yet"],
-  };
-  const parts = (["breaks", "passes", "cannot_check"] as const)
-    .map((verdict) => [verdicts.filter((v) => v === verdict).length, verdict] as const)
-    .filter(([n]) => n > 0)
-    .map(([n, verdict]) => `${n} ${forms[verdict][n === 1 ? 0 : 1]}`);
-  return parts.length === 0 ? "" : `${parts.join(", ")}.`;
-}
-
 /** A document's role on the option, as a chip: "Evaluated it". */
 export function roleLabel(role: "evaluated" | "described" | "recommended" | "mentioned"): string {
   return `${capitalise(role)} it`;
+}
+
+type EvaluatedCountryOut = components["schemas"]["EvaluatedCountryOut"];
+type JudgementOut = components["schemas"]["JudgementOut"];
+type GuessOut = components["schemas"]["GuessOut"];
+
+/** Countries whose name takes "the" in running text (task 046, amendment 4, R76). */
+const COUNTRIES_WITH_THE: readonly string[] = [
+  "netherlands",
+  "philippines",
+  "czech republic",
+  "gambia",
+  "bahamas",
+  "maldives",
+  "dominican republic",
+  "democratic republic of the congo",
+  "republic of the congo",
+];
+
+/** A country's name as it reads in a sentence: "the United Kingdom", "Denmark". */
+export function countryWithArticle(name: string): string {
+  const key = fold(name);
+  return key.startsWith("united") || COUNTRIES_WITH_THE.includes(key) ? `the ${name}` : name;
+}
+
+/** "1 document" / "3 documents" with the number. */
+const countOf = (n: number, one: string, many: string): string => `${n} ${n === 1 ? one : many}`;
+
+/** The countries part of the evidence signal (R76): the countries in served order. */
+function evaluatedInPart(countries: readonly EvaluatedCountryOut[]): string {
+  if (countries.length === 0) return "No evaluation gives a place";
+  const first = countryWithArticle(countries[0].country);
+  if (countries.length === 1) return `Evaluated in ${first}`;
+  if (countries.length === 2) return `Evaluated in ${first} and ${countryWithArticle(countries[1].country)}`;
+  const others = countries.length - 1;
+  return `Evaluated in ${first} and ${countOf(others, "other country", "other countries")}`;
+}
+
+/**
+ * The evidence signal (task 046, amendment 4, R76), one line shared by the card
+ * header and the list row: the documents that evaluated the option and those
+ * that describe it, where it was evaluated, how many of the plan's outcomes it
+ * measures.
+ *
+ * Args:
+ *   option: The option, read for its document counts, countries and outcome counts.
+ *
+ * Returns:
+ *   The parts joined by " · ".
+ */
+export function evidenceSignal(
+  option: Pick<
+    OptionSummaryOut,
+    "document_count" | "evaluated_count" | "evaluated_countries" | "outcomes_evaluated" | "outcomes_total"
+  >,
+): string {
+  const documents = option.document_count;
+  if (documents === 0) return "No documents yet";
+  const evaluated = option.evaluated_count;
+  const describing = documents - evaluated;
+  if (evaluated === 0) {
+    return `No evaluations, ${countOf(describing, "document describes", "documents describe")} it`;
+  }
+  const parts = [`${countOf(evaluated, "document", "documents")} evaluated it`];
+  if (describing > 0) parts.push(`${describing} more describe it`);
+  parts.push(evaluatedInPart(option.evaluated_countries ?? []));
+  const measured = option.outcomes_evaluated;
+  const total = option.outcomes_total;
+  parts.push(
+    measured === 0
+      ? "Measures none of your outcomes"
+      : `Measures ${measured} of your ${countOf(total, "outcome", "outcomes")}`,
+  );
+  return parts.join(" · ");
+}
+
+/** The opener of the card's Evidence section (R79, R82), by code. */
+export function evidenceOpener(evaluated: number, documents: number): string {
+  if (documents === 0) return "No document names this option yet.";
+  if (evaluated === 0) {
+    return `No evaluations. ${countOf(documents, "document describes", "documents describe")} or recommend${documents === 1 ? "s" : ""} it.`;
+  }
+  const describing = documents - evaluated;
+  const more =
+    describing > 0 ? ` ${describing} more describe${describing === 1 ? "s" : ""} or recommend${describing === 1 ? "s" : ""} it.` : "";
+  return `Evaluated in ${countOf(evaluated, "document", "documents")}.${more}`;
+}
+
+const NUMBER_WORDS = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"];
+
+/** The one line that stands for "Your outcomes" when no evaluation measured any (R79). */
+export function noOutcomeMeasuredLine(outcomes: number): string {
+  if (outcomes === 1) return "No evaluation measured any of your outcome.";
+  const count = outcomes >= 2 && outcomes <= 10 ? NUMBER_WORDS[outcomes] : String(outcomes);
+  return `No evaluation measured any of your ${count} outcomes.`;
+}
+
+/** An outcome's count on its "Your outcomes" line (R79): "11 evaluations". */
+export function outcomeCountLabel(evaluated: number): string {
+  return countOf(evaluated, "evaluation", "evaluations");
+}
+
+/** The words after "Delivered" for each setting kind (R77); other kinds read "in {plural}". */
+const SETTING_PHRASES: Record<string, string> = {
+  home: "at home",
+  online: "online",
+  workplace: "at work",
+  community: "in the community",
+  "primary care": "in primary care",
+  "secondary care": "in secondary care",
+  hospital: "in hospitals",
+  school: "in schools",
+  shop: "in shops",
+};
+
+/** A small pluraliser for a setting kind: "clinic" → "clinics", "library" → "libraries". */
+function plural(word: string): string {
+  if (/[^aeiou]y$/i.test(word)) return `${word.slice(0, -1)}ies`;
+  if (/(s|x|ch|sh)$/i.test(word)) return `${word}es`;
+  return `${word}s`;
+}
+
+/** One setting kind as a place phrase: "in schools", "at home". */
+export function settingPhrase(kind: string): string {
+  const key = fold(kind);
+  return SETTING_PHRASES[key] ?? `in ${plural(key)}`;
+}
+
+/**
+ * The lead-in to the design features (R77): "Delivered in schools and at home.
+ * It typically involves:", or "It typically involves:" alone with no setting.
+ */
+export function deliveredLeadIn(settings: readonly string[] | undefined): string {
+  const phrases = (settings ?? []).filter((kind) => kind.trim() !== "").map(settingPhrase);
+  return phrases.length === 0 ? "It typically involves:" : `Delivered ${joinAnd(phrases)}. It typically involves:`;
+}
+
+/** One line of the callout under the description (R78). */
+export type ConstraintNotice = {
+  key: string;
+  /** The constraint's label, so the card can drop the notice the exclusion line already states. */
+  constraint: string;
+  tone: "red" | "yellow" | "soft";
+  chip: string;
+  text: string;
+};
+
+/**
+ * The callout's lines (R78): a user constraint that breaks or cannot be
+ * checked, a guess that likely falls short or cannot be said. A pass, a
+ * likely-meets and the built-in checks show nothing.
+ */
+export function constraintNotices(
+  judgements: readonly JudgementOut[],
+  guesses: readonly GuessOut[],
+): ConstraintNotice[] {
+  const notices: ConstraintNotice[] = [];
+  for (const judgement of judgements) {
+    if (BUILT_IN_CHECK_IDS.includes(judgement.constraint_id)) continue;
+    const label = constraintLabel(judgement.constraint_text);
+    if (judgement.verdict === "breaks") {
+      notices.push({ key: judgement.constraint_id, constraint: label, tone: "red", chip: "breaks", text: `Breaks "${label}". ${judgement.reason}` });
+    } else if (judgement.verdict === "cannot_check") {
+      notices.push({ key: judgement.constraint_id, constraint: label, tone: "soft", chip: "cannot check", text: `Cannot check "${label}". ${judgement.reason}` });
+    }
+  }
+  for (const guess of guesses) {
+    const label = constraintLabel(guess.constraint_text);
+    if (guess.leaning === "likely_falls_short") {
+      notices.push({ key: guess.constraint_id, constraint: label, tone: "yellow", chip: "may fall short", text: `"${label}". ${guess.guess}` });
+    } else if (guess.leaning === "cannot_say") {
+      notices.push({ key: guess.constraint_id, constraint: label, tone: "soft", chip: "cannot check", text: `Cannot check "${label}". ${guess.guess}` });
+    }
+  }
+  return notices;
+}
+
+/** The documents disclosure's summary (R81): "Documents · 29 · read from titles and abstracts only". */
+export function documentsSummary(count: number): string {
+  return count > 0 ? `Documents · ${count} · ${ABSTRACTS_NOTE}` : `Documents · ${count}`;
+}
+
+/** A document's place and, in grey brackets, the level below when it adds a word (R81). */
+export function placeWithDetail(
+  place: string | null | undefined,
+  detail: string | null | undefined,
+): { place: string | null; detail: string | null } {
+  const label = documentPlaceLabel(place);
+  const below = (detail ?? "").trim();
+  return { place: label, detail: below !== "" && fold(below) !== fold(place ?? "") ? below : null };
 }

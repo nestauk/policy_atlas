@@ -11,6 +11,7 @@ import {
 } from "../../mock/fixtures";
 import { TooltipProvider } from "../../ui/radix/Tooltip";
 import { OptionCard } from "./OptionCard";
+import * as presentation from "./longlistPresentation";
 import * as queries from "../../api/queries";
 import * as mutations from "../../api/mutations";
 
@@ -84,27 +85,13 @@ describe("OptionCard", () => {
     expect(screen.queryByRole("button", { name: /Where it came from/ })).not.toBeInTheDocument();
   });
 
-  it("renders the evidence-base sentences, where tried, and the documents as source cards", () => {
-    renderCard(MOCK_OPTION_ID_EXCLUDED);
-    expect(screen.getByRole("heading", { name: "Evidence" })).toBeInTheDocument();
-    expect(screen.queryByText(/comparable systems|OECD/)).not.toBeInTheDocument();
-    expect(
-      screen.getAllByText("6 documents name this option: 3 evaluated it, 2 described it and 1 mentioned it.").length,
-    ).toBeGreaterThan(0);
-    expect(screen.getByText("Read from titles and abstracts only")).toBeInTheDocument();
-    expect(screen.queryByText(/were read from the abstract only/)).not.toBeInTheDocument();
-    expect(screen.getByText("Benefit sanctions for young jobseekers: a systematic review")).toBeInTheDocument();
-    expect(screen.getByText("Strong · Systematic review · Evaluated it · multiple countries")).toBeInTheDocument();
-    expect(screen.queryByText("A mention is not support.")).not.toBeInTheDocument();
-  });
-
   // Task 046, amendment 3 (R66): the transferability line goes.
   it("renders the no-in-scope-evidence row where it applies and no transferability row", () => {
     renderCard(MOCK_OPTION_ID_NO_IN_SCOPE);
     expect(screen.queryByText(/Transferable to/)).not.toBeInTheDocument();
     expect(
       screen.getByText(
-        "No in-scope evidence: none of the 4 documents pass Evidence from the UK and other high-income countries only.",
+        /None of its 4 documents pass Evidence from the UK and other high-income countries only\./,
       ),
     ).toBeInTheDocument();
   });
@@ -113,7 +100,7 @@ describe("OptionCard", () => {
   // scope; the line is for the options with none in scope only.
   it("hides the no-in-scope-evidence row for an option with in-scope evidence", () => {
     renderCard(MOCK_OPTION_ID_NO_IN_SCOPE, { no_in_scope_evidence: false });
-    expect(screen.queryByText(/No in-scope evidence:/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/None of its \d+ documents pass/)).not.toBeInTheDocument();
   });
 
   // F3: the evidence-search origin names the report section it came from.
@@ -137,135 +124,6 @@ describe("OptionCard", () => {
   it("says nothing about merges when there are none", () => {
     renderCard(MOCK_OPTION_ID_NO_IN_SCOPE);
     expect(screen.queryByText(/also found as/i)).not.toBeInTheDocument();
-  });
-
-  // Task 046, amendment 3 (R67): one linked title (plain without a row), one grey meta line.
-  it("shows each document with a linked or plain title and one meta line", () => {
-    renderCard(MOCK_OPTION_ID_EXCLUDED, {
-      documents: [
-        { task_source_snapshot_id: "doc-1", title: "Linked paper", role: "evaluated", evidence_type: "Systematic review", tier: "Strong", year: 2021, place: "United Kingdom" },
-        { task_source_snapshot_id: null, title: "Plain paper", role: "mentioned", evidence_type: null, tier: null, year: null, place: null },
-      ],
-    });
-    expect(screen.getByRole("link", { name: "Linked paper" })).toHaveAttribute(
-      "href",
-      `/tasks/${TASK_ID}/sources/all?source=doc-1&option=${MOCK_OPTION_ID_EXCLUDED}`,
-    );
-    expect(screen.getByText("Plain paper")).toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: "Plain paper" })).not.toBeInTheDocument();
-    // The place follows the role (task 046, amendment 3; R72).
-    expect(screen.getByText("Strong · Systematic review · Evaluated it · United Kingdom · 2021")).toBeInTheDocument();
-    expect(screen.queryByText(/inherited from a linked task/)).not.toBeInTheDocument();
-  });
-
-  // Task 046, amendment 3 (R59, R72): where tried as two levels, with document counts.
-  it("shows where tried as the top levels with the places below, each with its documents", () => {
-    renderCard(MOCK_OPTION_ID_EXCLUDED);
-    const list = screen.getByRole("list", { name: "Where tried" });
-    const tops = within(list).getAllByRole("listitem").filter((item) => item.parentElement === list);
-    expect(tops.map((item) => item.firstChild?.textContent)).toEqual([
-      "United Kingdom · 4 documents",
-      "Multiple countries · 2 documents",
-    ]);
-    expect(within(tops[0]).getByText("England · 3 documents")).toBeInTheDocument();
-    // A place that repeats its top level is not listed below it (22b, after the browser check).
-    expect(within(tops[0]).queryByText("United Kingdom · 1 document")).not.toBeInTheDocument();
-    expect(within(tops[1]).getByText("12 high-income countries · 1 document")).toBeInTheDocument();
-  });
-
-  it("says the two non-country places as places on a document's meta line", () => {
-    renderCard(MOCK_OPTION_ID_EXCLUDED, {
-      documents: [
-        { task_source_snapshot_id: "doc-1", title: "Stated", role: "evaluated", evidence_type: null, tier: null, year: null, place: "other" },
-        { task_source_snapshot_id: "doc-2", title: "Unstated", role: "evaluated", evidence_type: null, tier: null, year: null, place: "not stated" },
-      ],
-    });
-    expect(screen.getByText("Evaluated it · other place")).toBeInTheDocument();
-    expect(screen.getByText("Evaluated it · place not stated")).toBeInTheDocument();
-  });
-
-  it("shows five documents, then all of them on request", async () => {
-    const documents = Array.from({ length: 7 }, (_, index) => ({
-      task_source_snapshot_id: `doc-${index}`,
-      title: `Paper ${index}`,
-      role: "described",
-      evidence_type: null,
-      tier: null,
-      year: null,
-      place: null,
-    }));
-    renderCard(MOCK_OPTION_ID_EXCLUDED, { documents });
-    expect(screen.getByText("Paper 4")).toBeInTheDocument();
-    expect(screen.queryByText("Paper 5")).not.toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "Show all 7" }));
-    expect(screen.getByText("Paper 6")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /Show all/ })).not.toBeInTheDocument();
-  });
-
-  it("says so when no documents are found", () => {
-    renderCard(MOCK_OPTION_ID_EXCLUDED, { documents: [] });
-    expect(screen.getByText("No documents found yet.")).toBeInTheDocument();
-  });
-
-  // Task 046, contract item 1: the tried-on line, from the evidence profile.
-  it("shows the tried-on line when the evidence profile carries one", () => {
-    renderCard(MOCK_OPTION_ID_EXCLUDED);
-    expect(screen.getByText("Tried on: 18-24 year-olds in Northern England (2 documents).")).toBeInTheDocument();
-  });
-
-  it("shows every tried-on kind with its count, the target unit first", () => {
-    const evidence = mockLonglistOptionCards[MOCK_OPTION_ID_EXCLUDED].evidence;
-    renderCard(MOCK_OPTION_ID_EXCLUDED, {
-      evidence: {
-        ...evidence,
-        tried_on: [
-          { kind: "young people", documents: 3 },
-          { kind: "schools", documents: 2 },
-          { kind: "councils", documents: 1 },
-        ],
-      },
-    });
-    expect(screen.getByText("Tried on: young people (3 documents), schools (2), councils (1).")).toBeInTheDocument();
-  });
-
-  // Task 046, amendment 3 (B13): the record-level lines are gone.
-  it("shows no Populations, Settings or Outcomes measured line", () => {
-    renderCard(MOCK_OPTION_ID_EXCLUDED);
-    expect(screen.queryByText(/^Populations:/)).not.toBeInTheDocument();
-    expect(screen.queryByText(/^Settings:/)).not.toBeInTheDocument();
-    expect(screen.queryByText(/^Outcomes measured:/)).not.toBeInTheDocument();
-  });
-
-  it("shows no tried-on line when the evidence profile carries none", () => {
-    renderCard(MOCK_OPTION_ID_NO_IN_SCOPE, { evidence: { ...mockLonglistOptionCards[MOCK_OPTION_ID_NO_IN_SCOPE].evidence, tried_on: [] } });
-    expect(screen.queryByText(/Tried on:/)).not.toBeInTheDocument();
-  });
-
-  // Task 046, amendment 3 (R63): the Examples block, the programme names.
-  it("shows the Examples block, each programme name with its documents", () => {
-    renderCard(MOCK_OPTION_ID_EXCLUDED);
-    expect(screen.getByText("Examples")).toBeInTheDocument();
-    expect(screen.getByText("National sanctions regime (6 documents)")).toBeInTheDocument();
-    expect(screen.getByText("Benefit sanctions pilot (2 documents)")).toBeInTheDocument();
-  });
-
-  it("shows at most five examples and at most six design features", () => {
-    renderCard(MOCK_OPTION_ID_EXCLUDED, {
-      examples: Array.from({ length: 7 }, (_, index) => ({ name: `Programme ${index}`, documents: 1 })),
-      design: {
-        ...mockLonglistOptionCards[MOCK_OPTION_ID_EXCLUDED].design,
-        design_features: Array.from({ length: 8 }, (_, index) => `feature ${index}`),
-      },
-    });
-    expect(screen.getByText("Programme 4 (1 document)")).toBeInTheDocument();
-    expect(screen.queryByText("Programme 5 (1 document)")).not.toBeInTheDocument();
-    expect(screen.getByText("Feature 5")).toBeInTheDocument();
-    expect(screen.queryByText("Feature 6")).not.toBeInTheDocument();
-  });
-
-  it("shows no Examples block when the option has none", () => {
-    renderCard(MOCK_OPTION_ID_NO_IN_SCOPE);
-    expect(screen.queryByText("Examples")).not.toBeInTheDocument();
   });
 
   // Task 046, amendment 3 (§ 2.5): "Lever: <primary>, with <secondary>." and the reason under it.
@@ -297,8 +155,6 @@ describe("OptionCard", () => {
     expect(reason).toHaveClass("text-body");
     expect(reason).not.toHaveClass("text-meta");
     expect(screen.getByText("A duty to withdraw benefits on refusal of an offer").closest("li")?.parentElement).toHaveClass("text-body");
-    expect(screen.getByText("Read from titles and abstracts only")).toHaveClass("text-body");
-    expect(screen.getByText("Read from titles and abstracts only")).not.toHaveClass("text-meta");
     const header = screen.getByText(/^Enforce existing powers · clustered/);
     expect(header).toHaveClass("text-body");
     expect(header).not.toHaveClass("text-meta");
@@ -336,16 +192,6 @@ describe("OptionCard", () => {
     expect(includeMutate).toHaveBeenCalledWith({ optionId: MOCK_OPTION_ID_EXCLUDED }, expect.anything());
   });
 
-  // Task 046, amendment 3 (§ 2.5): ambition leaves "What it is"; Delivered through stays.
-  it("shows the delivery setting in What it is, and no ambition or authority line there", () => {
-    renderCard(MOCK_OPTION_ID_EXCLUDED);
-    const lever = screen.getByText(/Enforce existing powers, with Regulate\./);
-    const delivered = screen.getByText("Delivered through: Jobcentre · Secondary school");
-    expect(lever.compareDocumentPosition(delivered) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(screen.queryByText(/^Ambition:/)).not.toBeInTheDocument();
-    expect(screen.queryByText(/^Needs action by/)).not.toBeInTheDocument();
-  });
-
   it("has no 'What it is for' section and no Populations, Settings or Outcomes measured line", () => {
     renderCard(MOCK_OPTION_ID_EXCLUDED);
     expect(screen.queryByRole("heading", { name: /What it is for/ })).not.toBeInTheDocument();
@@ -360,7 +206,7 @@ describe("OptionCard", () => {
     renderCard(MOCK_OPTION_ID_EXCLUDED);
     const headings = screen.getAllByRole("heading", { level: 2 }).map((heading) => heading.textContent);
     const at = (title: string) => headings.findIndex((text) => text?.startsWith(title));
-    expect(at("What it is")).toBeLessThan(at("What it would take"));
+    expect(at("How it works")).toBeLessThan(at("What it would take"));
     expect(at("What it would take")).toBeLessThan(at("Evidence"));
     const toggle = screen.getByRole("button", { name: /What it would take/ });
     expect(toggle).toHaveAttribute("aria-expanded", "false");
@@ -452,83 +298,365 @@ describe("OptionCard", () => {
     expect(document.getElementById("what-it-would-take")).toBeNull();
   });
 
-  // Amendment 3 (§ 2.7): one outcomes table.
-  it("shows the outcomes table: a plan row with its serves mark, then a row for each other kind", () => {
+
+  // --- Task 046, amendment 4 (R76-R82; S36): the card's structure ----------------------------
+
+  const doc = (index: number, role: string, extra: Record<string, unknown> = {}) => ({
+    task_source_snapshot_id: `doc-${index}`,
+    title: `Paper ${index}`,
+    role,
+    evidence_type: "Systematic review",
+    tier: "Strong",
+    year: 2021,
+    place: "United Kingdom",
+    place_detail: null,
+    programme_name: null,
+    tried_on_kind: null,
+    measured: null,
+    records_count: 1,
+    design_feature_not_stated: false,
+    source_task_id: null,
+    ...extra,
+  });
+  const evidenceOf = (id: string) => mockLonglistOptionCards[id].evidence;
+  const evidenceSection = () => document.getElementById("evidence-base") as HTMLElement;
+
+  it("shows the evidence signal under the grey line, in the rich form", () => {
     renderCard(MOCK_OPTION_ID_EXCLUDED);
-    const evidence = document.getElementById("evidence-base") as HTMLElement;
-    const table = within(evidence).getAllByRole("table")[0];
-    const headers = within(table).getAllByRole("columnheader").map((header) => header.textContent);
-    expect(headers).toEqual(["Outcome", "Documents", "Evaluated"]);
-    const rows = within(table).getAllByRole("row").slice(1);
-    expect(rows.map((row) => row.textContent)).toEqual([
-      "NEET rate at 6 monthsserves33",
-      "earnings10",
-    ]);
+    const signal = screen.getByText(
+      "3 documents evaluated it · 3 more describe it · Evaluated in the United Kingdom · Measures 1 of your 2 outcomes",
+    );
+    const grey = screen.getByText(/^Enforce existing powers · clustered/);
+    expect(grey.compareDocumentPosition(signal) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
-  it("puts a plan outcome the option does not serve in the table without the mark, in plan order", () => {
-    const evidence = mockLonglistOptionCards[MOCK_OPTION_ID_EXCLUDED].evidence;
+  it("shows the evidence signal in its no-evaluation, no-place and no-document forms", () => {
+    const first = renderCard(MOCK_OPTION_ID_EXCLUDED, { evaluated_count: 0, document_count: 3 });
+    expect(screen.getByText("No evaluations, 3 documents describe it")).toBeInTheDocument();
+    first.unmount();
+    const second = renderCard(MOCK_OPTION_ID_EXCLUDED, { evaluated_countries: [], outcomes_evaluated: 0 });
+    expect(
+      screen.getByText(
+        "3 documents evaluated it · 3 more describe it · No evaluation gives a place · Measures none of your outcomes",
+      ),
+    ).toBeInTheDocument();
+    second.unmount();
+    renderCard(MOCK_OPTION_ID_EXCLUDED, { document_count: 0, evaluated_count: 0, documents: [] });
+    expect(screen.getByText("No documents yet")).toBeInTheDocument();
+  });
+
+  it("orders the sections How it works, What it would take, Evidence, with no Checks", () => {
+    renderCard(MOCK_OPTION_ID_EXCLUDED);
+    const headings = screen.getAllByRole("heading", { level: 2 }).map((heading) => heading.textContent ?? "");
+    expect(headings.map((text) => ["How it works", "What it would take", "Evidence"].find((name) => text.startsWith(name)))).toEqual([
+      "How it works",
+      "What it would take",
+      "Evidence",
+    ]);
+    expect(document.getElementById("constraints")).toBeNull();
+    expect(screen.queryByText(/Built-in checks/)).not.toBeInTheDocument();
+    expect(document.getElementById("how-it-works")).not.toBeNull();
+  });
+
+  it("puts the lever reason under the lever line in grey", () => {
+    renderCard(MOCK_OPTION_ID_EXCLUDED);
+    const reason = screen.getByText("The council withholds a benefit payment when a young person refuses an offer.");
+    expect(reason).toHaveClass("text-grey");
+  });
+
+  it("introduces the features with the lead-in, and has no Delivered through line or Examples block", () => {
+    const first = renderCard(MOCK_OPTION_ID_EXCLUDED);
+    expect(screen.getByText("Delivered in jobcentres and in secondary schools. It typically involves:")).toBeInTheDocument();
+    expect(screen.queryByText(/Delivered through/)).not.toBeInTheDocument();
+    expect(screen.queryByText("Examples")).not.toBeInTheDocument();
+    first.unmount();
+    const second = renderCard(MOCK_OPTION_ID_ADDED_BY_YOU);
+    expect(screen.getByText("It typically involves:")).toBeInTheDocument();
+    second.unmount();
+    renderCard(MOCK_OPTION_ID_EXCLUDED, {
+      profile: { ...mockLonglistOptionCards[MOCK_OPTION_ID_EXCLUDED].profile, settings: ["school", "home"] },
+    });
+    expect(screen.getByText("Delivered in schools and at home. It typically involves:")).toBeInTheDocument();
+  });
+
+  it("shows at most six design features", () => {
+    renderCard(MOCK_OPTION_ID_EXCLUDED, {
+      design: {
+        ...mockLonglistOptionCards[MOCK_OPTION_ID_EXCLUDED].design,
+        design_features: Array.from({ length: 8 }, (_, index) => `feature ${index}`),
+      },
+    });
+    expect(screen.getByText("Feature 5")).toBeInTheDocument();
+    expect(screen.queryByText("Feature 6")).not.toBeInTheDocument();
+  });
+
+  it("opens the Evidence section with the opener in its three forms", () => {
+    const first = renderCard(MOCK_OPTION_ID_EXCLUDED);
+    expect(within(evidenceSection()).getAllByText("Evaluated in 3 documents. 3 more describe or recommend it.").length).toBeGreaterThan(0);
+    first.unmount();
+    const second = renderCard(MOCK_OPTION_ID_EXCLUDED, { evaluated_count: 0, document_count: 4 });
+    expect(within(evidenceSection()).getAllByText("No evaluations. 4 documents describe or recommend it.").length).toBeGreaterThan(0);
+    second.unmount();
+    renderCard(MOCK_OPTION_ID_EXCLUDED, { evaluated_count: 0, document_count: 0, documents: [] });
+    expect(within(evidenceSection()).getAllByText("No document names this option yet.").length).toBeGreaterThan(0);
+  });
+
+  it("lists your outcomes with counts, 'none' and 'not a target of this option'", () => {
     renderCard(MOCK_OPTION_ID_EXCLUDED, {
       evidence: {
-        ...evidence,
+        ...evidenceOf(MOCK_OPTION_ID_EXCLUDED),
         outcome_counts: {
-          evaluating_documents: 1,
+          evaluating_documents: 3,
           by_outcome: [
+            { outcome: "NEET rate at 6 months", documents: 3, evaluated: 3 },
             { outcome: "Attendance", documents: 0, evaluated: 0 },
-            { outcome: "NEET rate at 6 months", documents: 1, evaluated: 1 },
+            { outcome: "Wellbeing", documents: 1, evaluated: 1 },
           ],
-          other: [],
         },
       },
     });
-    const table = within(document.getElementById("evidence-base") as HTMLElement).getAllByRole("table")[0];
-    const rows = within(table).getAllByRole("row").slice(1);
-    expect(rows.map((row) => row.textContent)).toEqual(["Attendance00", "NEET rate at 6 monthsserves11"]);
+    const section = evidenceSection();
+    expect(within(section).getByText("Your outcomes")).toBeInTheDocument();
+    const rows = within(within(section).getByRole("list", { name: "Your outcomes" })).getAllByRole("listitem");
+    expect(rows.map((row) => row.textContent)).toEqual([
+      "NEET rate at 6 months3 evaluations",
+      "Attendancenonenot a target of this option",
+      "Wellbeing1 evaluationnot a target of this option",
+    ]);
+    expect(within(rows[1]).getByText("none")).toHaveClass("text-grey");
+    expect(within(section).queryByRole("table")).not.toBeInTheDocument();
+    expect(within(section).queryByText(/serves/i)).not.toBeInTheDocument();
   });
 
-  it("shows no outcomes table when the option has no outcome counts", () => {
+  it("says in one line when no evaluation measured any outcome, and shows no line when the plan has none", () => {
+    const outcome = (name: string) => ({ outcome: name, documents: 1, evaluated: 0 });
+    const first = renderCard(MOCK_OPTION_ID_EXCLUDED, {
+      evidence: {
+        ...evidenceOf(MOCK_OPTION_ID_EXCLUDED),
+        outcome_counts: { evaluating_documents: 0, by_outcome: [outcome("A"), outcome("B"), outcome("C")] },
+      },
+    });
+    expect(screen.getByText("No evaluation measured any of your three outcomes.")).toBeInTheDocument();
+    expect(screen.queryByRole("list", { name: "Your outcomes" })).not.toBeInTheDocument();
+    first.unmount();
     renderCard(MOCK_OPTION_ID_NO_IN_SCOPE);
-    const evidence = document.getElementById("evidence-base") as HTMLElement;
-    expect(within(evidence).queryByRole("table")).not.toBeInTheDocument();
+    expect(screen.queryByText("Your outcomes")).not.toBeInTheDocument();
   });
 
-  // Amendment 3 (§ 2.5): the order inside the evidence section.
-  it("orders the evidence section: outcomes table, roles, where tried, tried on, the note, the documents", () => {
+  it("shows the place sentences in served order, the Where country tinted", () => {
     renderCard(MOCK_OPTION_ID_EXCLUDED);
-    const evidence = document.getElementById("evidence-base") as HTMLElement;
-    const nodes = [
-      within(evidence).getByRole("table"),
-      within(evidence).getAllByText("6 documents name this option: 3 evaluated it, 2 described it and 1 mentioned it.").pop() as HTMLElement,
-      within(evidence).getByText("Where tried"),
-      within(evidence).getByText(/^Tried on:/),
-      within(evidence).getByText("Read from titles and abstracts only"),
-      within(evidence).getByText("Conditionality and NEET outcomes: a local authority review"),
+    const block = evidenceSection();
+    const places = within(block).getAllByRole("term").map((term) => term.textContent);
+    expect(places).toEqual(["United Kingdom", "No single place"]);
+    const terms = within(block).getAllByRole("term");
+    expect(terms[0].closest("div")).toHaveClass("bg-aqua-tint");
+    expect(terms[1].closest("div")).not.toHaveClass("bg-aqua-tint");
+    expect(within(block).getByText(/One moderate local evaluation of the Benefit sanctions pilot/)).toBeInTheDocument();
+  });
+
+  it("leaves the place block out when no place has a sentence", () => {
+    renderCard(MOCK_OPTION_ID_EXCLUDED, { place_sentences: [] });
+    expect(screen.queryByText("Where it has been evaluated")).not.toBeInTheDocument();
+  });
+
+  it("puts the documents behind a closed disclosure with the note, in two groups", () => {
+    renderCard(MOCK_OPTION_ID_EXCLUDED, {
+      documents: [doc(1, "evaluated"), doc(2, "evaluated"), doc(3, "described"), doc(4, "mentioned"), doc(5, "recommended")],
+    });
+    const details = evidenceSection().querySelector("details") as HTMLDetailsElement;
+    expect(details.open).toBe(false);
+    expect(within(details).getByText("Documents · 5 · read from titles and abstracts only")).toBeInTheDocument();
+    expect(within(details).getByText("Evaluated it · 2")).toBeInTheDocument();
+    expect(within(details).getByText("Describe or recommend it · 3")).toBeInTheDocument();
+    const titles = within(details).getAllByRole("link").map((link) => link.textContent);
+    expect(titles).toEqual(["Paper 1", "Paper 2", "Paper 3", "Paper 4", "Paper 5"]);
+  });
+
+  it("leaves out a group with no documents", () => {
+    renderCard(MOCK_OPTION_ID_EXCLUDED, { documents: [doc(1, "described")] });
+    expect(screen.queryByText(/^Evaluated it · /)).not.toBeInTheDocument();
+    expect(screen.getByText("Describe or recommend it · 1")).toBeInTheDocument();
+  });
+
+  it("shows a document in three lines: title, record parts, quality parts", () => {
+    renderCard(MOCK_OPTION_ID_EXCLUDED, {
+      documents: [
+        doc(1, "evaluated", {
+          programme_name: "Youth Guarantee",
+          place: "United Kingdom",
+          place_detail: "south-west England",
+          tried_on_kind: "16-24 year-olds",
+          measured: "NEET rate at 6 months",
+        }),
+      ],
+    });
+    const title = screen.getByRole("link", { name: "Paper 1" });
+    const recordLine = title.closest("li")?.querySelectorAll("p")[1] as HTMLElement;
+    expect(recordLine).toHaveTextContent(
+      "Youth Guarantee · United Kingdom (south-west England) · 16-24 year-olds · NEET rate at 6 months",
+    );
+    expect(recordLine).toHaveClass("text-grey");
+    expect(within(recordLine).getByText("Youth Guarantee").tagName).toBe("STRONG");
+    expect(screen.getByText("Strong · Systematic review · 2021")).toHaveClass("text-grey");
+  });
+
+  it("shows five lines a group, then all on request", async () => {
+    renderCard(MOCK_OPTION_ID_EXCLUDED, {
+      documents: Array.from({ length: 7 }, (_, index) => doc(index, "evaluated")),
+    });
+    expect(screen.queryByText("Paper 5")).not.toBeInTheDocument();
+    expect(screen.getByText("Paper 4")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Show all 7" }));
+    expect(screen.getByText("Paper 6")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Show all/ })).not.toBeInTheDocument();
+  });
+
+  it("links '+N more' to the dossier with the option, only when several records name the option", () => {
+    renderCard(MOCK_OPTION_ID_EXCLUDED, {
+      documents: [doc(1, "evaluated", { records_count: 3 }), doc(2, "evaluated", { records_count: 1 })],
+    });
+    expect(screen.getByRole("link", { name: "+2 more" })).toHaveAttribute(
+      "href",
+      `/tasks/${TASK_ID}/sources/all?source=doc-1&option=${MOCK_OPTION_ID_EXCLUDED}`,
+    );
+    expect(screen.getAllByRole("link", { name: /more$/ })).toHaveLength(1);
+  });
+
+  it("shows a linked-task document with its title and quality line only", () => {
+    renderCard(MOCK_OPTION_ID_EXCLUDED, {
+      documents: [
+        doc(1, "mentioned", {
+          task_source_snapshot_id: null,
+          source_task_id: "linked",
+          records_count: 0,
+          programme_name: "Ignored",
+          tried_on_kind: "Ignored kind",
+        }),
+      ],
+    });
+    expect(screen.getByText("Paper 1")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Paper 1" })).not.toBeInTheDocument();
+    expect(screen.queryByText(/Ignored/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/more$/)).not.toBeInTheDocument();
+    expect(screen.getByText("Strong · Systematic review · 2021")).toBeInTheDocument();
+  });
+
+  it("shows the thin card: the opener, one outcomes line and no place block", () => {
+    renderCard(MOCK_OPTION_ID_EXCLUDED, {
+      evaluated_count: 0,
+      document_count: 2,
+      place_sentences: [],
+      documents: [doc(1, "described"), doc(2, "recommended")],
+      evidence: {
+        ...evidenceOf(MOCK_OPTION_ID_EXCLUDED),
+        outcome_counts: { evaluating_documents: 0, by_outcome: [{ outcome: "A", documents: 2, evaluated: 0 }] },
+      },
+    });
+    const section = evidenceSection();
+    expect(within(section).getAllByText("No evaluations. 2 documents describe or recommend it.").length).toBeGreaterThan(0);
+    expect(within(section).getByText("No evaluation measured any of your outcome.")).toBeInTheDocument();
+    expect(within(section).queryByText("Where it has been evaluated")).not.toBeInTheDocument();
+  });
+
+  it("shows the empty card: one line, no list, no note", () => {
+    renderCard(MOCK_OPTION_ID_EXCLUDED, { document_count: 0, evaluated_count: 0, documents: [], place_sentences: [] });
+    const section = evidenceSection();
+    expect(within(section).getAllByText("No document names this option yet.").length).toBeGreaterThan(0);
+    expect(section.querySelector("details")).toBeNull();
+    expect(within(section).queryByText(/read from titles and abstracts only/)).not.toBeInTheDocument();
+    expect(within(section).queryByText("Your outcomes")).not.toBeInTheDocument();
+  });
+
+  describe("the callout under the description (R78)", () => {
+    const judgement = (constraint_id: string, verdict: string) => ({
+      constraint_id,
+      constraint_text: `Rule ${constraint_id}.`,
+      verdict,
+      reason: "Because.",
+    });
+    const guess = (constraint_id: string, leaning: string) => ({
+      constraint_id,
+      constraint_text: `Rule ${constraint_id}.`,
+      guess: "A guess.",
+      leaning,
+    });
+    const calloutOf = (overrides: Record<string, unknown>) =>
+      renderCard(MOCK_OPTION_ID_NO_IN_SCOPE, {
+        no_in_scope_evidence: false,
+        judgements: [],
+        guesses: [],
+        ...overrides,
+      });
+
+    it("says a breaking judgement once when it is the constraint the option is excluded for (30b)", () => {
+      const constraint = mockLonglistOptionCards[MOCK_OPTION_ID_EXCLUDED].exclusion?.constraint ?? "";
+      renderCard(MOCK_OPTION_ID_EXCLUDED, {
+        judgements: [{ constraint_id: "req-1", constraint_text: constraint, verdict: "breaks", reason: "It is a levy." }],
+      });
+      const callout = screen.getByText(/^excluded$/).closest("p")?.parentElement;
+      expect(callout).not.toBeNull();
+      expect(callout?.querySelectorAll("p").length).toBe(1);
+      expect(screen.queryByText(/^breaks$/)).toBeNull();
+    });
+
+    it("shows a broken constraint with the red chip", () => {
+      calloutOf({ judgements: [judgement("req-1", "breaks")] });
+      expect(screen.getByText("breaks")).toBeInTheDocument();
+      expect(screen.getByText('Breaks "Rule req-1". Because.', { exact: false })).toBeInTheDocument();
+    });
+
+    it("shows a constraint that cannot be checked in the grey form", () => {
+      calloutOf({ judgements: [judgement("req-1", "cannot_check")] });
+      expect(screen.getByText('Cannot check "Rule req-1". Because.', { exact: false })).toBeInTheDocument();
+    });
+
+    it("shows a guess that likely falls short with the yellow chip", () => {
+      calloutOf({ guesses: [guess("pref-1", "likely_falls_short")] });
+      expect(screen.getByText("may fall short")).toBeInTheDocument();
+      expect(screen.getByText('"Rule pref-1". A guess.', { exact: false })).toBeInTheDocument();
+    });
+
+    it("shows a guess that cannot be said in the grey form", () => {
+      calloutOf({ guesses: [guess("pref-1", "cannot_say")] });
+      expect(screen.getByText('Cannot check "Rule pref-1". A guess.', { exact: false })).toBeInTheDocument();
+    });
+
+    it("shows nothing for a pass or a likely meets", () => {
+      calloutOf({ judgements: [judgement("req-1", "passes")], guesses: [guess("pref-1", "likely_meets")] });
+      expect(screen.queryByText(/Rule req-1|Rule pref-1/)).not.toBeInTheDocument();
+    });
+
+    it("shows nothing for a built-in check that breaks", () => {
+      calloutOf({ judgements: [judgement("relevant", "breaks"), judgement("in_scope", "cannot_check")] });
+      expect(screen.queryByText(/Rule relevant|Rule in_scope/)).not.toBeInTheDocument();
+    });
+  });
+
+  // R90: the words "studies", "serves", "aimed at" and "study" are not authored on the card.
+  it("uses none of the retired words in its authored text", () => {
+    renderCard(MOCK_OPTION_ID_EXCLUDED);
+    const clone = (document.querySelector("main") ?? document.body).cloneNode(true) as HTMLElement;
+    // Source text (document titles, evidence types) may hold them; the authored text may not.
+    clone.querySelectorAll("li a, li p.font-bold").forEach((node) => node.remove());
+    expect(clone.textContent ?? "").not.toMatch(/\bstud(y|ies)\b|\bserves?\b|aimed at/i);
+  });
+
+  it("uses none of the retired words in the presentation module's exported strings", () => {
+    const exported = Object.values(presentation).filter((value) => typeof value !== "function");
+    expect(JSON.stringify(exported)).not.toMatch(/\bstud(y|ies)\b|\bserves?\b|aimed at/i);
+    const samples = [
+      presentation.evidenceOpener(2, 5),
+      presentation.evidenceSignal({
+        document_count: 5,
+        evaluated_count: 2,
+        evaluated_countries: [{ country: "Denmark", documents: 2 }],
+        outcomes_evaluated: 1,
+        outcomes_total: 2,
+      }),
+      presentation.deliveredLeadIn(["school"]),
+      presentation.noOutcomeMeasuredLine(3),
+      presentation.documentsSummary(4),
     ];
-    for (let index = 1; index < nodes.length; index += 1) {
-      expect(nodes[index - 1].compareDocumentPosition(nodes[index]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    }
-  });
-
-  // Checks: the user's boundaries and preferences first; the built-ins in one line unless one fails.
-  it("shows the user's boundary and preference first and the built-in checks in one line when all pass", () => {
-    renderCard(MOCK_OPTION_ID_EXCLUDED);
-    const section = document.getElementById("constraints") as HTMLElement;
-    const items = within(section).getAllByRole("listitem").map((item) => item.textContent ?? "");
-    expect(items[0]).toMatch(/breaks\./);
-    expect(items[1]).toMatch(/^Prefer options with a lower cost per participant/);
-    expect(items[2]).toBe("Built-in checks: all pass.");
-    expect(items).toHaveLength(3);
-    expect(within(section).queryByText(/Relevant to the stated outcomes/)).not.toBeInTheDocument();
-    expect(within(section).getByText("breaks.")).toHaveClass("text-red");
-  });
-
-  it("shows the built-in checks in full when one fails or cannot be checked", () => {
-    renderCard(MOCK_OPTION_ID_NO_IN_SCOPE);
-    const section = document.getElementById("constraints") as HTMLElement;
-    expect(within(section).queryByText("Built-in checks:")).not.toBeInTheDocument();
-    expect(within(section).getByText(/Relevant to the stated outcomes/)).toBeInTheDocument();
-    expect(within(section).getByText(/Distinct from the other options/)).toBeInTheDocument();
-    expect(within(section).getByText(/Within scope/)).toBeInTheDocument();
-    expect(within(section).getByText("cannot check.")).toHaveClass("text-grey");
+    expect(samples.join(" ")).not.toMatch(/\bstud(y|ies)\b|\bserves?\b|aimed at/i);
   });
 });

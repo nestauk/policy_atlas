@@ -18,10 +18,8 @@ import { SectionDisclosure, type SidebarEntry } from "../ArtefactOutline";
 import { LIFECYCLE_PAGE_CLASS } from "../listPageChrome";
 import { REPORT_TITLE_CLASS, ReportKindRow, ReportPage } from "../reportPage";
 import {
-  ABSTRACTS_NOTE,
   actionFailedNotice,
   authorityWords,
-  BUILT_IN_CHECK_IDS,
   GRID_COLUMN_LINES,
   LEVEL_WORD_CLASS,
   LEVEL_WORDS,
@@ -29,72 +27,127 @@ import {
   MIDDLE_WORD,
   PROFILE_LINE_KEYS,
   capitalise,
-  checksSummary,
   constraintLabel,
-  deliveredThroughLine,
-  documentPlaceLabel,
-  documentsSentence,
+  constraintNotices,
+  deliveredLeadIn,
+  documentsSummary,
+  evidenceOpener,
+  evidenceSignal,
   leverLine,
-  triedOnSentence,
-  exampleLine,
+  noOutcomeMeasuredLine,
   originLabel,
+  outcomeCountLabel,
+  placeWithDetail,
   relationLabel,
-  roleLabel,
   servesOutcome,
-  verdictLabel,
-  wherePlaceLine,
-  whereTopLine,
 } from "./longlistPresentation";
 
 type OptionDocumentOut = components["schemas"]["OptionDocumentOut"];
 
-/** Documents shown before "Show all N". */
+/** Documents shown in a group before "Show all N". */
 const DOCUMENTS_SHOWN = 5;
-/** Design features and examples shown on the card (R63; § 2.5). */
+/** Design features shown on the card (R63; § 2.5). */
 const FEATURES_SHOWN = 6;
-const EXAMPLES_SHOWN = 5;
 
-/** The document's grey meta line: quality, type, role, place, year (task 046,
- *  amendment 3, R67; the place is its where-tried top level, R72). */
-const documentMeta = (document: OptionDocumentOut): string =>
-  [document.tier, document.evidence_type, roleLabel(document.role), documentPlaceLabel(document.place), document.year]
+/** The names that join the parts of a document's second line. */
+const Dot = () => <span aria-hidden="true"> · </span>;
+
+/** One document in the disclosure (task 046, amendment 4, R81): the linked title; a grey line of
+ *  programme, place (the level below in brackets), the folded kind and what it measured; a grey
+ *  line of tier, evidence type and year; "+N more" to the dossier when several records name it. */
+function DocumentLine({
+  taskId,
+  optionId,
+  document,
+}: {
+  taskId: string | undefined;
+  optionId: string;
+  document: OptionDocumentOut;
+}) {
+  const linked = document.task_source_snapshot_id != null && taskId !== undefined;
+  const dossier = linked
+    ? `/tasks/${taskId}/sources/all?source=${document.task_source_snapshot_id}&option=${optionId}`
+    : null;
+  const { place, detail } = placeWithDetail(document.place, document.place_detail);
+  const recordParts: ReactNode[] = [];
+  if (linked && document.programme_name != null && document.programme_name !== "") {
+    recordParts.push(<strong key="programme" className="font-bold">{scrub(document.programme_name)}</strong>);
+  }
+  if (linked && place !== null) {
+    recordParts.push(
+      <span key="place">
+        {scrub(place)}
+        {detail !== null && <span className="text-grey"> ({scrub(detail)})</span>}
+      </span>,
+    );
+  }
+  if (linked && document.tried_on_kind != null && document.tried_on_kind !== "") {
+    recordParts.push(<span key="kind">{scrub(document.tried_on_kind)}</span>);
+  }
+  if (linked && document.measured != null && document.measured !== "") {
+    recordParts.push(<span key="measured">{scrub(document.measured)}</span>);
+  }
+  const qualityLine = [document.tier, document.evidence_type, document.year]
     .filter((part) => part !== null && part !== undefined && part !== "")
     .map((part) => scrub(String(part)))
     .join(" · ");
+  const more = (document.records_count ?? 0) - 1;
+  return (
+    <li>
+      <p className={`${REPORT_BODY_CLASS} font-bold`}>
+        {dossier !== null ? (
+          <Link className="underline underline-offset-2" to={dossier}>
+            {scrub(document.title)}
+          </Link>
+        ) : (
+          scrub(document.title)
+        )}
+      </p>
+      {recordParts.length > 0 && (
+        <p className="text-meta text-grey">
+          {recordParts.flatMap((part, index) => (index === 0 ? [part] : [<Dot key={`dot-${index}`} />, part]))}
+        </p>
+      )}
+      {qualityLine !== "" && <p className="text-meta text-grey">{qualityLine}</p>}
+      {dossier !== null && more > 0 && (
+        <p className="text-meta">
+          <Link className="text-blue underline underline-offset-2" to={dossier}>
+            +{more} more
+          </Link>
+        </p>
+      )}
+    </li>
+  );
+}
 
-/** The option's documents: a linked title (plain when this task holds no row),
- *  one grey meta line each, five shown then "Show all N". */
-function DocumentList({
+/** One group of the disclosure: a heading with its count, five lines, then "Show all N". */
+function DocumentGroup({
+  heading,
   taskId,
   optionId,
   documents,
 }: {
+  heading: string;
   taskId: string | undefined;
   optionId: string;
   documents: OptionDocumentOut[];
 }) {
   const [showAll, setShowAll] = useState(false);
-  if (documents.length === 0) return <p className="text-grey">No documents found yet.</p>;
+  if (documents.length === 0) return null;
   const shown = showAll ? documents : documents.slice(0, DOCUMENTS_SHOWN);
   return (
-    <>
+    <div className="space-y-3">
+      <p className="font-bold text-navy">
+        {heading} · {documents.length}
+      </p>
       <ul role="list" className="grid gap-3">
         {shown.map((document, index) => (
-          <li key={document.task_source_snapshot_id ?? `${document.title}-${index}`}>
-            <p className={`${REPORT_BODY_CLASS} font-bold`}>
-              {document.task_source_snapshot_id != null && taskId !== undefined ? (
-                <Link
-                  className="underline underline-offset-2"
-                  to={`/tasks/${taskId}/sources/all?source=${document.task_source_snapshot_id}&option=${optionId}`}
-                >
-                  {scrub(document.title)}
-                </Link>
-              ) : (
-                scrub(document.title)
-              )}
-            </p>
-            <p className="text-meta text-grey">{documentMeta(document)}</p>
-          </li>
+          <DocumentLine
+            key={document.task_source_snapshot_id ?? `${document.title}-${index}`}
+            taskId={taskId}
+            optionId={optionId}
+            document={document}
+          />
         ))}
       </ul>
       {!showAll && documents.length > DOCUMENTS_SHOWN && (
@@ -102,19 +155,17 @@ function DocumentList({
           Show all {documents.length}
         </Button>
       )}
-    </>
+    </div>
   );
 }
 
 const PAGE_CLASS = `${LIFECYCLE_PAGE_CLASS} py-8`;
 
-/** The card's sections, in contract order (deliverable 9; Where tried folds
- *  into the evidence section — owner, 2026-09-23). */
+/** The card's sections, in order (task 046, amendment 4, R78). */
 const SECTIONS = [
-  { id: "what-it-is", title: "What it is" },
+  { id: "how-it-works", title: "How it works" },
   { id: "what-it-would-take", title: "What it would take" },
   { id: "evidence-base", title: "Evidence" },
-  { id: "constraints", title: "Checks" },
 ] as const;
 type SectionId = (typeof SECTIONS)[number]["id"];
 
@@ -171,12 +222,6 @@ const AUTHORITY_WORD_CLASS: Record<"within_your_power" | "needs_action_by" | "un
 const PROFILE_NAME_CELL = "block pt-2.5 pr-4 align-top font-semibold text-navy sm:w-48 sm:table-cell sm:py-2.5";
 const PROFILE_WORD_CELL = "block pr-4 align-top sm:w-40 sm:table-cell sm:py-2.5";
 const PROFILE_SENTENCE_CELL = "block pb-2.5 align-top sm:table-cell sm:py-2.5";
-
-const VERDICT_CLASS: Record<"passes" | "breaks" | "cannot_check", string> = {
-  passes: "text-navy",
-  breaks: "text-red",
-  cannot_check: "text-grey",
-};
 
 /**
  * The option card (contract deliverable 9, D15) on the report's page chrome:
@@ -245,18 +290,22 @@ export function OptionCard() {
 
   const item = option.data;
   const evidence = item.evidence;
-  const byRole = evidence.by_role ?? {};
   const excluded = item.state === "excluded";
-  const judgements = item.judgements ?? [];
-  const documentsLine = documentsSentence(evidence.documents, byRole);
+  // The constraint callout (R78); a judgement on the constraint the option is already
+  // excluded for is said once, by the exclusion line (30b).
+  const excludedFor = item.state === "excluded" ? constraintLabel(item.exclusion?.constraint ?? "") : null;
+  const notices = constraintNotices(item.judgements ?? [], item.guesses ?? []).filter(
+    (notice) => excludedFor === null || notice.constraint !== excludedFor,
+  );
   // One entry per document, evaluated first then by quality (the read model, R67).
   const documents = item.documents ?? [];
-  const whereTried = item.where_tried ?? [];
-  const outcomeCounts = evidence.outcome_counts;
-  const planOutcomes = outcomeCounts?.by_outcome ?? [];
-  const otherOutcomes = outcomeCounts?.other ?? [];
+  const evaluatedDocuments = documents.filter((document) => document.role === "evaluated");
+  const describingDocuments = documents.filter((document) => document.role !== "evaluated");
+  const placeSentences = item.place_sentences ?? [];
+  const planOutcomes = evidence.outcome_counts?.by_outcome ?? [];
+  const noneMeasured = planOutcomes.length > 0 && planOutcomes.every((entry) => entry.evaluated === 0);
+  const opener = evidenceOpener(item.evaluated_count, item.document_count);
   const profile = item.profile ?? null;
-  const deliveredLine = deliveredThroughLine(profile?.settings);
   const profileLines = profile === null ? [] : PROFILE_LINE_KEYS.map((key) => ({ key, line: profile.lines.find((line) => line.key === key) }));
   const cellLines = profile === null ? [] : GRID_COLUMN_LINES.map((key) => ({
     key,
@@ -266,10 +315,6 @@ export function OptionCard() {
   const leverText = leverLine(item.primary_lever_type, item.secondary_lever_types);
   // One reason only: the none-fits reason says what the option does instead.
   const leverReason = (item.primary_lever_type == null ? (item.lever_none_fits_reason ?? item.lever_reason) : item.lever_reason) ?? "";
-  const userJudgements = judgements.filter((judgement) => !BUILT_IN_CHECK_IDS.includes(judgement.constraint_id));
-  const builtInJudgements = judgements.filter((judgement) => BUILT_IN_CHECK_IDS.includes(judgement.constraint_id));
-  const builtInsPass = builtInJudgements.every((judgement) => judgement.verdict === "passes");
-  const checksLine = checksSummary(judgements.map((judgement) => judgement.verdict));
   const headerLine = [
     item.primary_lever_type == null ? "No lever fits" : capitalise(item.primary_lever_type),
     originLabel(item.origin, item.document_count, item.from_section),
@@ -337,6 +382,7 @@ export function OptionCard() {
         <h1 className={cn(REPORT_TITLE_CLASS, excluded && "text-grey")}>{scrub(item.name)}</h1>
         <p className={`mt-3 max-w-prose-measure ${REPORT_BODY_CLASS}`}>{scrub(item.description)}</p>
         <p className="mt-2 text-body text-grey">{scrub(headerLine)}</p>
+        <p className="mt-1.5 text-body text-navy">{evidenceSignal(item)}</p>
 
         {excluding && (
           <form
@@ -369,7 +415,7 @@ export function OptionCard() {
           </p>
         )}
 
-        {(excluded || item.no_in_scope_evidence || item.search_pending) && (
+        {(excluded || item.no_in_scope_evidence || item.search_pending || notices.length > 0) && (
           <Card className="mt-5 space-y-2 p-4 text-body text-ink">
             {excluded && item.exclusion != null && (
               <p>
@@ -385,34 +431,30 @@ export function OptionCard() {
               </p>
             )}
             {item.search_pending && <p className="text-grey">Its own evidence search is still running.</p>}
+            {notices.map((notice) => (
+              <p key={notice.key}>
+                <Chip tone={notice.tone} className="mr-2 align-middle">{notice.chip}</Chip>
+                {scrub(notice.text)}
+              </p>
+            ))}
           </Card>
         )}
       </header>
 
-      <CardSection id="what-it-is" summary={leverText}>
+      <CardSection id="how-it-works" summary={leverText}>
         <div>
           <p>
             <strong className="font-bold text-navy">Lever:</strong> {leverText.replace(/^Lever: /, "")}
           </p>
-          {leverReason.trim() !== "" && <p className="text-body">{scrub(leverReason)}</p>}
+          {leverReason.trim() !== "" && <p className="text-body text-grey">{scrub(leverReason)}</p>}
         </div>
-        {deliveredLine !== "" && <p>{scrub(deliveredLine)}</p>}
+        <p>{scrub(deliveredLeadIn(profile?.settings))}</p>
         {item.design.design_features.length > 0 && (
           <ul className="list-disc space-y-1 pl-5 text-body">
             {item.design.design_features.slice(0, FEATURES_SHOWN).map((feature, index) => (
               <li key={index}>{capitalise(scrub(feature))}</li>
             ))}
           </ul>
-        )}
-        {(item.examples ?? []).length > 0 && (
-          <div>
-            <p className="font-bold text-navy">Examples</p>
-            <ul className="list-disc space-y-1 pl-5 text-body">
-              {(item.examples ?? []).slice(0, EXAMPLES_SHOWN).map((example, index) => (
-                <li key={index}>{scrub(exampleLine(example))}</li>
-              ))}
-            </ul>
-          </div>
         )}
       </CardSection>
 
@@ -477,100 +519,69 @@ export function OptionCard() {
         </CardSection>
       )}
 
-      <CardSection id="evidence-base" summary={documentsLine}>
-        {(planOutcomes.length > 0 || otherOutcomes.length > 0) && (
-          <table className="w-full border-collapse text-left">
-            <thead>
-              <tr className="text-meta text-grey">
-                <th scope="col" className="py-1.5 pr-4 font-semibold">Outcome</th>
-                <th scope="col" className="py-1.5 pr-4 font-semibold">Documents</th>
-                <th scope="col" className="py-1.5 font-semibold">Evaluated</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-line">
-              {planOutcomes.map((entry) => (
-                <tr key={`plan-${entry.outcome}`}>
-                  <th scope="row" className="py-2 pr-4 align-top font-normal">
-                    {scrub(entry.outcome)}
-                    {servesOutcome(item.outcomes_served, entry.outcome) && (
-                      <span className="ml-2 align-middle text-caption font-bold uppercase tracking-wide text-blue">serves</span>
-                    )}
-                  </th>
-                  <td className="py-2 pr-4 align-top">{entry.documents}</td>
-                  <td className="py-2 align-top">{entry.evaluated}</td>
-                </tr>
-              ))}
-              {otherOutcomes.map((entry) => (
-                <tr key={`other-${entry.kind}`}>
-                  <th scope="row" className="py-2 pr-4 align-top font-normal">{scrub(entry.kind)}</th>
-                  <td className="py-2 pr-4 align-top">{entry.documents}</td>
-                  <td className="py-2 align-top">{entry.evaluated}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+      <CardSection id="evidence-base" summary={opener}>
+        <p>{opener}</p>
+        {item.document_count > 0 && (
+          <>
+            {planOutcomes.length > 0 && (
+              <div>
+                <p className="font-bold text-navy">Your outcomes</p>
+                {noneMeasured ? (
+                  <p>{noOutcomeMeasuredLine(planOutcomes.length)}</p>
+                ) : (
+                  <ul role="list" aria-label="Your outcomes" className="divide-y divide-line">
+                    {planOutcomes.map((entry) => (
+                      <li key={entry.outcome} className="flex items-baseline justify-between gap-4 py-1.5">
+                        <span>{scrub(entry.outcome)}</span>
+                        <span className="shrink-0 text-right">
+                          {entry.evaluated === 0 ? (
+                            <span className="text-grey">none</span>
+                          ) : (
+                            outcomeCountLabel(entry.evaluated)
+                          )}
+                          {!servesOutcome(item.outcomes_served, entry.outcome) && (
+                            <span className="ml-2 text-grey">not a target of this option</span>
+                          )}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
+            {placeSentences.length > 0 && (
+              <div>
+                <p className="font-bold text-navy">Where it has been evaluated</p>
+                <dl aria-label="Where it has been evaluated" className="divide-y divide-line">
+                  {placeSentences.map((entry) => (
+                    <div
+                      key={entry.place}
+                      data-where={entry.where ? "true" : undefined}
+                      className={cn("grid gap-x-4 py-1.5 sm:grid-cols-[10rem_1fr]", entry.where && "bg-aqua-tint")}
+                    >
+                      <dt className="font-bold text-navy">{scrub(entry.place)}</dt>
+                      <dd>{scrub(entry.sentence)}</dd>
+                    </div>
+                  ))}
+                </dl>
+              </div>
+            )}
+            <details className="group">
+              <summary className="cursor-pointer font-bold text-navy">
+                {documentsSummary(documents.length)}
+              </summary>
+              <div className="mt-3 space-y-4">
+                <DocumentGroup heading="Evaluated it" taskId={taskId} optionId={item.option_id} documents={evaluatedDocuments} />
+                <DocumentGroup
+                  heading="Describe or recommend it"
+                  taskId={taskId}
+                  optionId={item.option_id}
+                  documents={describingDocuments}
+                />
+              </div>
+            </details>
+          </>
         )}
-        <p>{documentsLine}</p>
-        {whereTried.length > 0 && (
-          <div>
-            <p className="font-bold text-navy">Where tried</p>
-            <ul aria-label="Where tried" className="list-disc space-y-1 pl-5">
-              {whereTried.map((entry) => (
-                <li key={entry.top}>
-                  {scrub(whereTopLine(entry))}
-                  {(entry.places ?? []).some((place) => place.place.trim().toLowerCase() !== entry.top.trim().toLowerCase()) && (
-                    <ul className="list-[circle] space-y-0.5 pl-5 text-grey">
-                      {(entry.places ?? []).filter((place) => place.place.trim().toLowerCase() !== entry.top.trim().toLowerCase()).map((place) => (
-                        <li key={place.place}>{scrub(wherePlaceLine(place))}</li>
-                      ))}
-                    </ul>
-                  )}
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-        {(evidence.tried_on ?? []).length > 0 && <p>{scrub(triedOnSentence(evidence.tried_on ?? []))}</p>}
-        <p className="text-body text-grey">{ABSTRACTS_NOTE}</p>
-        <DocumentList taskId={taskId} optionId={item.option_id} documents={documents} />
-      </CardSection>
-
-      <CardSection id="constraints" summary={checksLine}>
-        <ul className="space-y-2">
-          {userJudgements.map((judgement) => (
-            <li key={judgement.constraint_id}>
-              <span className="font-semibold text-navy">{capitalise(constraintLabel(scrub(judgement.constraint_text)))}:</span>{" "}
-              <span className={VERDICT_CLASS[judgement.verdict]}>{verdictLabel(judgement.verdict)}.</span>{" "}
-              <span className="text-grey">{scrub(judgement.reason)}</span>
-            </li>
-          ))}
-          {(item.guesses ?? []).map((guess) => (
-            <li key={guess.constraint_id}>
-              <span className="font-semibold text-navy">{capitalise(constraintLabel(scrub(guess.constraint_text)))}:</span>{" "}
-              <span className="text-grey">{scrub(guess.guess)}</span>
-            </li>
-          ))}
-          {builtInJudgements.length > 0 && builtInsPass && (
-            <li>
-              <span className="font-semibold text-navy">Built-in checks:</span>{" "}
-              <span className={VERDICT_CLASS.passes}>all pass.</span>
-            </li>
-          )}
-          {!builtInsPass &&
-            builtInJudgements.map((judgement) => (
-              <li key={judgement.constraint_id}>
-                <span className="font-semibold text-navy">{capitalise(constraintLabel(scrub(judgement.constraint_text)))}:</span>{" "}
-                <span className={VERDICT_CLASS[judgement.verdict]}>{verdictLabel(judgement.verdict)}.</span>{" "}
-                <span className="text-grey">{scrub(judgement.reason)}</span>
-              </li>
-            ))}
-          {item.no_in_scope_evidence && item.in_scope != null && (
-            <li>
-              No in-scope evidence: none of the {item.in_scope.documents} documents pass{" "}
-              {scrub(item.in_scope.restriction)}.
-            </li>
-          )}
-        </ul>
       </CardSection>
     </ReportPage>
   );

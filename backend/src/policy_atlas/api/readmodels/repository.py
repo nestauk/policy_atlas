@@ -33,7 +33,6 @@ from policy_atlas.api.contract import (
     DecisionOut,
     EvidenceItemOut,
     EvidenceProfileOut,
-    ExampleOut,
     ExclusionOut,
     FacetGroupsOut,
     FindingOut,
@@ -52,7 +51,6 @@ from policy_atlas.api.contract import (
     LonglistCountsOut,
     LonglistOut,
     LonglistThemeOut,
-    MeasureKindOut,
     MostRelevantNoteOut,
     OptionDesignOut,
     OptionDocumentOut,
@@ -62,7 +60,6 @@ from policy_atlas.api.contract import (
     OptionSummaryOut,
     OutcomeCountOut,
     OutcomeCountsOut,
-    OutcomeKindOut,
     Page,
     PageMeta,
     ProfileLineOut,
@@ -76,9 +73,6 @@ from policy_atlas.api.contract import (
     ThemeRefItemOut,
     ThemeRefOut,
     ThemeSourceOut,
-    TriedOnOut,
-    WherePlaceOut,
-    WhereTriedOut,
 )
 from policy_atlas.api.contract.read_models import EvaluatedCountryOut, PlaceSentenceOut
 from policy_atlas.api.lifecycle import LIFECYCLE_EVENT_KINDS, both_generations
@@ -3214,47 +3208,8 @@ def _ranked(counts: object) -> dict[str, int]:
     return dict(sorted(items, key=lambda item: (-item[1], item[0])))
 
 
-def _where_tried_out(raw: object) -> list[WhereTriedOut]:
-    """Coverage's ``where_tried`` list, read defensively (task 046, amendment 3).
-
-    A stored record of the old shape (a mapping of groups) reads as none.
-    """
-    out: list[WhereTriedOut] = []
-    for item in raw if isinstance(raw, list) else []:
-        entry = _as_mapping(item)
-        top = entry.get("top")
-        if not isinstance(top, str) or not top:
-            continue
-        places = [
-            WherePlaceOut(place=place, documents=_count(place_entry.get("documents")))
-            for place_entry in (_as_mapping(p) for p in _list(entry.get("places")))
-            for place in (place_entry.get("place"),)
-            if isinstance(place, str) and place
-        ]
-        out.append(
-            WhereTriedOut(
-                top=top,
-                documents=_count(entry.get("documents")),
-                places=places,
-                countries=[c for c in _list(entry.get("countries")) if isinstance(c, str)],
-            )
-        )
-    return out
-
-
 def _list(value: object) -> list[Any]:
     return value if isinstance(value, list) else []
-
-
-def _tried_on_out(raw: object) -> list[TriedOnOut]:
-    """Coverage's ``tried_on_kinds`` list, read defensively (an old stored record has none)."""
-    out: list[TriedOnOut] = []
-    for item in raw if isinstance(raw, list) else []:
-        entry = _as_mapping(item)
-        kind = entry.get("kind")
-        if isinstance(kind, str) and kind:
-            out.append(TriedOnOut(kind=kind, documents=_count(entry.get("documents"))))
-    return out
 
 
 def _evaluated_countries_out(raw: object) -> list[EvaluatedCountryOut]:
@@ -3267,34 +3222,6 @@ def _evaluated_countries_out(raw: object) -> list[EvaluatedCountryOut]:
             out.append(
                 EvaluatedCountryOut(country=country, documents=_count(entry.get("documents")))
             )
-    return out
-
-
-def _measures_out(raw: object) -> list[MeasureKindOut]:
-    """Coverage's ``measures_kinds`` list, read defensively (an old stored record has none)."""
-    out: list[MeasureKindOut] = []
-    for item in raw if isinstance(raw, list) else []:
-        entry = _as_mapping(item)
-        kind = entry.get("kind")
-        if isinstance(kind, str) and kind:
-            out.append(
-                MeasureKindOut(
-                    kind=kind,
-                    documents=_count(entry.get("documents")),
-                    evaluated=_count(entry.get("evaluated")),
-                )
-            )
-    return out
-
-
-def _examples_out(raw: object) -> list[ExampleOut]:
-    """Coverage's ``examples`` list, read defensively (an old stored record has none)."""
-    out: list[ExampleOut] = []
-    for item in raw if isinstance(raw, list) else []:
-        entry = _as_mapping(item)
-        name = entry.get("name")
-        if isinstance(name, str) and name:
-            out.append(ExampleOut(name=name, documents=_count(entry.get("documents"))))
     return out
 
 
@@ -3531,23 +3458,9 @@ def _outcome_counts_out(raw: object) -> OutcomeCountsOut:
                     evaluated=_count(entry.get("evaluated")),
                 )
             )
-    other: list[OutcomeKindOut] = []
-    kinds = counts.get("other")
-    for item in kinds if isinstance(kinds, list) else []:
-        entry = _as_mapping(item)
-        kind = entry.get("kind")
-        if isinstance(kind, str) and kind:
-            other.append(
-                OutcomeKindOut(
-                    kind=kind,
-                    documents=_count(entry.get("documents")),
-                    evaluated=_count(entry.get("evaluated")),
-                )
-            )
     return OutcomeCountsOut(
         evaluating_documents=_count(counts.get("evaluating_documents")),
         by_outcome=by_outcome,
-        other=other,
     )
 
 
@@ -3592,14 +3505,12 @@ def _option_summary_fields(
         "document_count": documents,
         "evaluated_count": _count(_as_mapping(coverage.get("role")).get("evaluated")),
         "settings": list(profile.settings) if profile is not None else [],
-        "where_tried": _where_tried_out(coverage.get("where_tried")),
         "relations": relations,
         "abstract_only": documents > 0 and _count(coverage.get("abstract_only")) == documents,
         "is_entrant_with_no_documents": row.origin != "clustered" and documents == 0,
         "search_pending": search_pending,
         "from_section": from_section,
         "also_found_as": _found_as(also_found_as, coverage.get("folded")),
-        "tried_on": _tried_on_out(coverage.get("tried_on_kinds")),
         "evaluated_countries": _evaluated_countries_out(coverage.get("evaluated_countries")),
         "outcomes_evaluated": _count(coverage.get("outcomes_evaluated")),
         "outcomes_total": outcomes_total,
@@ -4205,12 +4116,9 @@ def _evidence_profile(coverage: Mapping[str, Any]) -> EvidenceProfileOut:
             role: _count(roles.get(role))
             for role in ("evaluated", "described", "recommended", "mentioned")
         },
-        where_tried=_where_tried_out(coverage.get("where_tried")),
         flagged_not_stated=_count(coverage.get("flagged_documents")),
         inherited_labels=_count(coverage.get("inherited_labels")),
         abstract_only=_count(coverage.get("abstract_only")),
-        tried_on=_tried_on_out(coverage.get("tried_on_kinds")),
-        measures=_measures_out(coverage.get("measures_kinds")),
         outcome_counts=_outcome_counts_out(coverage.get("outcome_counts")),
     )
 
@@ -4605,6 +4513,5 @@ def option_out(conn: Connection, task_id: uuid.UUID, option_id: uuid.UUID) -> Op
             _walk_of_run(conn, task_id, result.run_id) if result is not None else None
         ),
         plan_version=int(result.plan_version) if result is not None else None,
-        examples=_examples_out(coverage.get("examples")),
         place_sentences=place_sentences,
     )

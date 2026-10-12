@@ -8,13 +8,20 @@ import {
   PROFILE_LINE_KEYS,
   authorityWords,
   servesOutcome,
-  deliveredThroughLine,
   leverDefinitionFor,
   leverLabel,
   leverLine,
-  triedOnFacet,
-  triedOnSentence,
-  exampleLine,
+  constraintNotices,
+  countsLine,
+  rowMetaParts,
+  countryWithArticle,
+  deliveredLeadIn,
+  documentsSummary,
+  evidenceOpener,
+  evidenceSignal,
+  noOutcomeMeasuredLine,
+  outcomeCountLabel,
+  placeWithDetail,
 } from "./longlistPresentation";
 
 // Task 046: the card's new lines and the lever definition by version.
@@ -36,20 +43,6 @@ describe("longlist presentation (task 046)", () => {
     expect(leverDefinitionFor("subsidise", [], undefined, "Current.")).toBe("Current.");
   });
 
-  it("says the unit of the tried-on counts once", () => {
-    expect(
-      triedOnSentence([
-        { kind: "adolescents", documents: 2 },
-        { kind: "preschool children", documents: 1 },
-      ]),
-    ).toBe("Tried on: adolescents (2 documents), preschool children (1).");
-  });
-
-  it("words an example with its documents and drops a zero count", () => {
-    expect(exampleLine({ name: "HENRY", documents: 1 })).toBe("HENRY (1 document)");
-    expect(exampleLine({ name: "Breakfast clubs", documents: 0 })).toBe("Breakfast clubs");
-  });
-
   // Task 046, amendment 3 (§ 2.5): the lever line, the secondary types after "with".
   it("words the lever line with its secondary types joined by and", () => {
     expect(leverLine("subsidise", ["inform", "provide a service"])).toBe("Lever: Subsidise, with Inform and Provide a service.");
@@ -59,19 +52,34 @@ describe("longlist presentation (task 046)", () => {
     expect(leverLine(null, [])).toBe("Lever: none fits.");
   });
 
-  it("limits the Tried on facet and counts what it hides", () => {
-    const options = [
-      { tried_on: [{ kind: "adolescents" }, { kind: "families" }] },
-      { tried_on: [{ kind: "adolescents" }, { kind: "parents" }] },
-      { tried_on: null },
-    ];
-    expect(triedOnFacet(options, 2)).toEqual({
-      shown: [
-        ["adolescents", 2],
-        ["families", 1],
-      ],
-      hidden: 1,
-    });
+  // Task 046, amendment 4 (R83): the header never says "0 excluded".
+  it("words the counts line without an excluded part at zero", () => {
+    const counts = { options: 40, themes: 12, excluded: 3, no_in_scope: 2 } as Parameters<typeof countsLine>[0];
+    expect(countsLine(counts)).toBe("40 options in 12 themes · 3 excluded · 2 with no in-scope evidence");
+    expect(countsLine({ ...counts, excluded: 0, no_in_scope: 0 })).toBe("40 options in 12 themes");
+    expect(countsLine({ ...counts, options: 1, themes: 1, excluded: 0 })).toBe(
+      "1 option in 1 theme · 2 with no in-scope evidence",
+    );
+  });
+
+  // R85: the signal's parts close the grey line; pending search stands in for them.
+  it("ends a row's meta parts with the evidence signal and drops the document count", () => {
+    const option = {
+      origin: "clustered",
+      relations: [],
+      search_pending: false,
+      document_count: 3,
+      evaluated_count: 0,
+      evaluated_countries: [],
+      outcomes_evaluated: 0,
+      outcomes_total: 2,
+    } as unknown as Parameters<typeof rowMetaParts>[0];
+    expect(rowMetaParts(option)).toEqual(["No evaluations, 3 documents describe it"]);
+    expect(rowMetaParts({ ...option, search_pending: true })).toEqual(["searching for its evidence…"]);
+    expect(rowMetaParts({ ...option, origin: "added_by_you", document_count: 0 })).toEqual([
+      "added by you",
+      "No documents yet",
+    ]);
   });
 });
 
@@ -138,13 +146,122 @@ describe("longlist presentation (amendment 2 words)", () => {
     expect(servesOutcome(undefined, "Wellbeing")).toBe(false);
   });
 
-  it("words the delivery setting", () => {
-    expect(deliveredThroughLine(["Jobcentre", "School"])).toBe("Delivered through: Jobcentre · School");
-    expect(deliveredThroughLine([])).toBe("");
-  });
-
   it("labels a row with its lever only", () => {
     expect(leverLabel({ primary_lever_type: "provide a service", ambition: "more" } as never)).toBe("Provide a service");
     expect(leverLabel({ primary_lever_type: null, ambition: "less" } as never)).toBe("No lever fits");
+  });
+});
+
+// Task 046, amendment 4 (R76-R82; S36): the card's new words.
+describe("longlist presentation (amendment 4)", () => {
+  const signal = {
+    document_count: 29,
+    evaluated_count: 17,
+    evaluated_countries: [
+      { country: "United Kingdom", documents: 6 },
+      { country: "Denmark", documents: 3 },
+      { country: "Germany", documents: 2 },
+    ],
+    outcomes_evaluated: 2,
+    outcomes_total: 3,
+  };
+
+  it("words the evidence signal in its four forms", () => {
+    expect(evidenceSignal(signal)).toBe(
+      "17 documents evaluated it · 12 more describe it · Evaluated in the United Kingdom and 2 other countries · Measures 2 of your 3 outcomes",
+    );
+    expect(evidenceSignal({ ...signal, evaluated_count: 0, document_count: 3 })).toBe(
+      "No evaluations, 3 documents describe it",
+    );
+    expect(evidenceSignal({ ...signal, evaluated_countries: [] })).toContain(" · No evaluation gives a place · ");
+    expect(evidenceSignal({ ...signal, document_count: 0, evaluated_count: 0 })).toBe("No documents yet");
+  });
+
+  it("words the signal's small cases", () => {
+    const one = { ...signal, document_count: 1, evaluated_count: 1, outcomes_evaluated: 1, outcomes_total: 1 };
+    expect(evidenceSignal({ ...one, evaluated_countries: [{ country: "Denmark", documents: 1 }] })).toBe(
+      "1 document evaluated it · Evaluated in Denmark · Measures 1 of your 1 outcome",
+    );
+    expect(evidenceSignal({ ...one, evaluated_countries: signal.evaluated_countries.slice(0, 2) })).toContain(
+      "Evaluated in the United Kingdom and Denmark",
+    );
+    expect(evidenceSignal({ ...signal, evaluated_countries: signal.evaluated_countries.slice(0, 3) })).toContain(
+      "and 2 other countries",
+    );
+    expect(
+      evidenceSignal({ ...signal, evaluated_countries: [signal.evaluated_countries[0], signal.evaluated_countries[1], ...signal.evaluated_countries.slice(0, 0)] }),
+    ).toContain("Evaluated in the United Kingdom and Denmark");
+    expect(evidenceSignal({ ...signal, outcomes_evaluated: 0 })).toMatch(/ · Measures none of your outcomes$/);
+  });
+
+  it("puts 'the' before the countries that take it", () => {
+    for (const name of ["United States", "Netherlands", "Philippines", "Czech Republic", "Gambia", "Bahamas", "Maldives", "Dominican Republic", "Democratic Republic of the Congo", "Republic of the Congo"]) {
+      expect(countryWithArticle(name)).toBe(`the ${name}`);
+    }
+    expect(countryWithArticle("Denmark")).toBe("Denmark");
+  });
+
+  it("words the evidence opener in its three forms", () => {
+    expect(evidenceOpener(17, 29)).toBe("Evaluated in 17 documents. 12 more describe or recommend it.");
+    expect(evidenceOpener(2, 2)).toBe("Evaluated in 2 documents.");
+    expect(evidenceOpener(0, 4)).toBe("No evaluations. 4 documents describe or recommend it.");
+    expect(evidenceOpener(0, 0)).toBe("No document names this option yet.");
+  });
+
+  it("words the outcomes lines", () => {
+    expect(noOutcomeMeasuredLine(3)).toBe("No evaluation measured any of your three outcomes.");
+    expect(noOutcomeMeasuredLine(12)).toBe("No evaluation measured any of your 12 outcomes.");
+    expect(noOutcomeMeasuredLine(1)).toBe("No evaluation measured any of your outcome.");
+    expect(outcomeCountLabel(11)).toBe("11 evaluations");
+    expect(outcomeCountLabel(1)).toBe("1 evaluation");
+  });
+
+  it("words the lead-in in its three forms", () => {
+    expect(deliveredLeadIn([])).toBe("It typically involves:");
+    expect(deliveredLeadIn(undefined)).toBe("It typically involves:");
+    expect(deliveredLeadIn(["school"])).toBe("Delivered in schools. It typically involves:");
+    expect(deliveredLeadIn(["school", "home"])).toBe("Delivered in schools and at home. It typically involves:");
+    expect(deliveredLeadIn(["workplace", "online"])).toBe("Delivered at work and online. It typically involves:");
+    expect(deliveredLeadIn(["clinic"])).toBe("Delivered in clinics. It typically involves:");
+    expect(deliveredLeadIn(["library"])).toBe("Delivered in libraries. It typically involves:");
+    expect(deliveredLeadIn(["church"])).toBe("Delivered in churches. It typically involves:");
+    expect(deliveredLeadIn(["Delivered through"])).not.toMatch(/^Delivered through/);
+  });
+
+  it("words the callout's six cases and shows nothing for a pass", () => {
+    const judgement = (constraint_id: string, verdict: "passes" | "breaks" | "cannot_check") => ({
+      constraint_id,
+      constraint_text: `Rule ${constraint_id}.`,
+      verdict,
+      reason: "Because.",
+    });
+    const guess = (constraint_id: string, leaning: "likely_meets" | "likely_falls_short" | "cannot_say") => ({
+      constraint_id,
+      constraint_text: `Rule ${constraint_id}.`,
+      guess: "A guess.",
+      leaning,
+    });
+    expect(
+      constraintNotices(
+        [judgement("req-1", "breaks"), judgement("req-2", "cannot_check"), judgement("req-3", "passes"), judgement("relevant", "breaks")],
+        [guess("pref-1", "likely_falls_short"), guess("pref-2", "cannot_say"), guess("pref-3", "likely_meets")],
+      ).map(({ tone, chip, text }) => [tone, chip, text]),
+    ).toEqual([
+      ["red", "breaks", 'Breaks "Rule req-1". Because.'],
+      ["soft", "cannot check", 'Cannot check "Rule req-2". Because.'],
+      ["yellow", "may fall short", '"Rule pref-1". A guess.'],
+      ["soft", "cannot check", 'Cannot check "Rule pref-2". A guess.'],
+    ]);
+  });
+
+  it("words the documents summary and a document's place", () => {
+    expect(documentsSummary(29)).toBe("Documents · 29 · read from titles and abstracts only");
+    expect(documentsSummary(0)).toBe("Documents · 0");
+    expect(placeWithDetail("United Kingdom", "south-west England")).toEqual({
+      place: "United Kingdom",
+      detail: "south-west England",
+    });
+    expect(placeWithDetail("Denmark", "denmark").detail).toBeNull();
+    expect(placeWithDetail("not stated", null)).toEqual({ place: "place not stated", detail: null });
   });
 });
