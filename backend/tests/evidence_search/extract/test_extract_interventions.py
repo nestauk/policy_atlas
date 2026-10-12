@@ -543,8 +543,8 @@ def test_the_intervention_fingerprint_names_its_components() -> None:
     digest, components = interventions_fingerprint("stub", retry_cap=1)
     assert len(digest) == 64
     assert components["profile"] == INTERVENTIONS_PROFILE_ID
-    assert components["schema"] == "interventions_v2"
-    assert components["prompt"] == "extract_interventions_v3"
+    assert components["schema"] == "interventions_v3"
+    assert components["prompt"] == "extract_interventions_v4"
     assert components["finding_vetter"] is None
     assert "window" not in components
     assert digest != interventions_fingerprint("live", retry_cap=1)[0]
@@ -826,7 +826,7 @@ def _carrier(**over: Any) -> InterventionsRecordCarrier:
 def test_the_schema_version_names_the_second_record_shape() -> None:
     from policy_atlas.evidence_search.extract.interventions_records import SCHEMA_VERSION
 
-    assert SCHEMA_VERSION == "interventions_v2"
+    assert SCHEMA_VERSION == "interventions_v3"
 
 
 def test_a_record_with_a_programme_name_and_one_without() -> None:

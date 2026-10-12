@@ -64,12 +64,12 @@ from tests.runtime.test_baseline_gate import scoping_plan
 
 #: The intervention profile's fingerprint with no tagging context, pinned so a
 #: context-free run keeps reusing every stored record. Re-pinned for the
-#: prompt version ``extract_interventions_v3`` and schema ``interventions_v2``
-#: (task 046, amendment 3, Phase 16R): both are fingerprint components, so the
-#: earlier values no longer apply.
+#: prompt version ``extract_interventions_v4`` and schema ``interventions_v3``
+#: (task 046, amendment 4, Phase 27; before that for amendment 3's v3 and v2):
+#: both are fingerprint components, so the earlier values no longer apply.
 PINNED_NO_CONTEXT = {
-    "stub": "130fbbc1e817f950bd5cc489ae414881b3daf7891db0c996788dda9c35105f7a",
-    "live": "4e4284db0c516cbfc84715451b979a6e05b8bf22d449eb7c28429d6ae450394a",
+    "stub": "cc524fa6a1275adf4e45e3e366f50018dc3297051355756dd0ed3e2563edc5da",
+    "live": "fbc7077be3896e20aa41c3ff33b89d6556e4ceecc9083b07167b80d6e793b3a5",
 }
 
 CONTEXT = TaggingContext(

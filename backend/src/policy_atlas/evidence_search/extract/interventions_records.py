@@ -25,7 +25,7 @@ from policy_atlas.evidence_search.extract.finding_references import render_field
 from policy_atlas.evidence_search.extract.quote_verify import NULL_LIKE_STRINGS
 
 PROFILE_ID = "os_interventions_base_v1"
-SCHEMA_VERSION = "interventions_v2"
+SCHEMA_VERSION = "interventions_v3"
 
 InterventionRole = Literal["evaluated", "described", "recommended", "comparator", "mentioned"]
 
@@ -128,10 +128,16 @@ class InterventionsRecordWire(BaseModel):
     )
     study_geography: str | None = Field(
         description=(
-            "Where the evidence about this intervention was gathered, exactly as "
-            "the abstract states it ('United Kingdom', 'Denmark', '12 OECD "
-            "countries'), or null. Never inferred from the publisher, journal or "
-            "authors."
+            "The place where the evidence about this intervention was gathered, "
+            "written as the place's own name ('United Kingdom', 'Scotland', "
+            "'Hamburg', '12 OECD countries'): a country, region, city, town or "
+            "named area. A hospital, trust, clinic, university, council, "
+            "committee or company is a body, not a place: write the town, area "
+            "or country its name carries ('Royal Berkshire NHS Foundation Trust' "
+            "gives 'Berkshire'; 'King's Mill Hospital' gives 'United Kingdom'), "
+            "never its name. Never a person, a programme, a document, a date or "
+            "an adjective; null when no place is stated. Never inferred from the "
+            "publisher, journal or authors."
         )
     )
     study_country: str | None = Field(
