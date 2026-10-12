@@ -34,6 +34,8 @@ scripts/recordings/
 scripts/evals/search/results/*
 !scripts/evals/search/results/history.md
 !scripts/evals/search/results/analyses/
+# Manual experiment outputs: the JSON data stays local, the .md write-ups are kept
+scripts/evals/search/experiments/manual/*.json
 
 # Screening eval: downloaded ground truth and per-run outputs
 scripts/evals/screening/datasets/
