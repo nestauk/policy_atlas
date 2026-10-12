@@ -2829,7 +2829,9 @@ Recorded by the task 046 amendment 3 build (`amendment-3-final.md` § 7.3; the r
 ### Amendment 4 (2026-10-12)
 
 Built 2026-10-09 to 2026-10-12 (`docs/tasks/046-longlist-refinement/verification.md`
-§ Amendment 4). Seams left open:
+§ Amendment 4). The owner accepted the three loops' unmet stop measures as
+reported (2026-10-12: "Okay fine let's accept"); the first three items below
+are the levers left for each. Seams left open:
 
 - **The record prompt's residual on places (R87; M16 not met).** After four
   rounds on the mini model, a hospital's, a committee's or an organisation's

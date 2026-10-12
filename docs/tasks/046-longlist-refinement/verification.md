@@ -1320,7 +1320,13 @@ without their stop measure: by contract R26 (owner-accepted) a loop stops
 when its measures pass or after five rounds and the lead then stops and
 reports, and by R25 the owner decides if the stage is good at review; the
 figures and the residual families are in § The refine loops and § Review
-handoff. M18 is met; M1 and M2 pass on the live runs. The review stack is
+handoff. **Owner, 2026-10-12: "Okay fine let's accept"** — the three
+loops' outcomes (M15, M16, M17) are accepted as reported, on the lead's
+recommendation (places: the wording levers are spent and the next lever is
+the model tier; folds: the mini model's folds vary more between runs than
+between rounds, the two code guards stand, and a judgment-model trial on
+the folding calls is the next step; sentences: the template stands in for
+the residual). M18 is met; M1 and M2 pass on the live runs. The review stack is
 step 7 and runs in a fresh conversation, as the skill's phase exit
 requires ("do not run the review stack here").
 
@@ -1747,8 +1753,8 @@ figures are totals.
    on the tuning set; 26 live), M17 (two to ten wrong folds in 30 per
    facet). Each loop's record names the residual family and the lever
    left (the model tier for the record prompt and the folds; a wire
-   ceiling for the sentences). The reviewer decides whether the card may
-   ship with them.
+   ceiling for the sentences). **Accepted by the owner, 2026-10-12** ("Okay
+   fine let's accept"); the reviewer reads the figures, not the decision.
 2. Rubric box 76's `max_length` on the wire was not built (the plan and
    the prompt module say none; the box says one).
 3. The two code guards beyond S34 in the folding loop (the slash cut; the
