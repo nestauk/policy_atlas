@@ -2,44 +2,42 @@
 
 Task: `docs/tasks/051-improve-production-search-screen/`
 
-Production search found 5% of a review's reference list at Broad for $1.06 a review
-(2026-10-05). This slice replaces the three-round search loop (task 015, ADR 0012) with
-**one search pass at every scope**: generated queries on both databases, OpenAlex semantic
-seeds, a backward citation snowball and a forward citation chase, ranked by specificity and
-cut at two caps per scope (papers 100 / 200 / 400, policy documents 50 / 100 / 200); Overton
-searched in relevance order, de-duplicated by title, with the 15 most-cited missing
-documents fetched as landmarks. Stage-1 screening moves to `gpt-5.6-luna` with the
-`screen_v4` prompt and an **adaptive two-call vote** (a second call only on a first
-"not relevant"), replacing three calls and a majority. Query generation moves to Luna. The
-two search legs run in parallel with concurrent OpenAlex calls behind a paced admission
-lock. ADR 0038 records the design; the round loop's last working commit is tagged
-`search-round-loop-last` with a restore recipe.
+Production search found 5% of a review's reference list at Broad, for about $1 a review. This PR replaces the three-round search loop with one search pass and makes screening cheaper.
 
-Measured on the 15-review mini set (search recall / screen recall / cost per review at
-Langfuse's rate): Focused 12.9% / 12.5% / $0.17, Broad 17.8% / 17.3% / $0.33, Broadest
-22.3% / 21.3% / $0.71. Search takes about 45 s a review at every scope (130 s before).
-Against the 2026-10-05 loop at Broad: 17.8% for $0.33 where it gave 5.0% for $1.06.
+What changed:
+
+- **One search pass at every scope.** Generated queries on OpenAlex and Overton, OpenAlex semantic seeds, a backward citation snowball (the papers our results cite) and a forward citation chase (the papers that cite our results). Results are ranked and cut at two caps per scope: papers 100 / 200 / 400 and policy documents 50 / 100 / 200.
+- **Overton searched properly.** Relevance order instead of date order, duplicates removed by title, and the 15 most-cited documents the search missed fetched as "landmarks".
+- **Cheaper screening.** Stage 1 runs on `gpt-5.6-luna` with the `screen_v4` prompt. It makes one call, and a second call only if the first says "not relevant". Before: three calls and a majority vote.
+- **Faster.** The two database legs run in parallel. Search takes about 45 seconds a review at every scope. Before: about 130 seconds.
+- **Design record.** ADR 0038 (Accepted). The old loop's last commit is tagged `search-round-loop-last` with a restore recipe.
+
+Measured on the 15-review ground-truth mini set (share of the review's reference list found by search / after screening / cost per review at list price):
+
+| scope | search recall | after screening | cost per review | search time |
+|---|---:|---:|---:|---:|
+| Focused | 12.9% | 12.5% | $0.03 | 47 s |
+| Broad | 17.8% | 17.3% | $0.07 | 41 s |
+| Broadest | 22.3% | 21.3% | $0.14 | 44 s |
+
+Broadest is 2.3 points under its 24.6% target. The owner accepted the measured figure (it beats Broad on 11 of 15 reviews). Focused and Broad meet their targets.
 
 ## Proof it works
 
-Evidence lives in `docs/tasks/051-improve-production-search-screen/verification.md`.
+Evidence: `docs/tasks/051-improve-production-search-screen/verification.md`.
 
-- **`make verify`:** pass (step-6 exit and again after the review fixes; backend 2,600+
-  tests, frontend 617, typecheck, lint, build, eval-check, OKF).
-- **Manual / end-to-end:** the live check
-  `scripts/evals/search/checks/production_recall.py --dataset retrieval-ground-truth-mini --depths rapid standard deep`
-  (three launches, labels `mini-051-2026-10-09`, `b`, `c`; history rows in
-  `scripts/evals/search/results/history.md`); one app run at Focused on the obesity
-  question through the real planning flow, completed, 13 landmarks in the Sources view.
-- **Thresholds:** Focused and Broad met (by 0.4 and 0.5 points). **Broadest missed:
-  22.3% against 24.6%**, recorded with the candidate causes for the owner's call.
-- **Cost note:** Langfuse's price row for Luna is five times the list price; at list
-  price the mini set cost about $4, not $20.64.
+- **`make verify`:** pass, at the build exit and again after the review fixes (backend 2,614 tests, frontend 617, typecheck, lint, build, eval check, OKF).
+- **Manual / end-to-end:** the live check on the mini set at all three scopes, with the command below. History rows are in `scripts/evals/search/results/history.md`. One app run at Focused on the obesity question completed, with 13 landmarks in the Sources view.
+
+```
+scripts/evals/search/checks/production_recall.py --dataset retrieval-ground-truth-mini --depths rapid standard deep
+```
+
+- **Cost note:** Langfuse prices Luna at five times the list price, so its cost figures for this run are five times too high. At list price the mini set cost about $4. The Langfuse price row needs correcting before the next eval run.
 
 ## Risk tier
 
-Tier 3 — runtime egress changes (four new provider request shapes, parallel legs), model
-id changes on two surfaces, a prompt transplant, and the deletion of the round loop.
+Tier 3. The running product makes four new kinds of request to the search providers, the legs run in parallel, two model ids change, one prompt moves, and the round loop is deleted.
 
 | Tier | Review |
 |---|---|
@@ -50,24 +48,13 @@ id changes on two surfaces, a prompt transplant, and the deletion of the round l
 
 ## AI role
 
-Claude (lead) designed, ran the experiments, built the search pass, the eval changes, the
-records and the live check; Codex built the pool module, the transport verbs and the
-adaptive vote and reviewed the plan and the parallel-search phase; a fast-worker did the
-frontend text. The owner decided D13's amendment (local filters, no skipped semantic leg),
-the parallel-search phase, the prompt and model pins, the spend ceiling, and the review
-instruction (no new evals at review). The review stack (contract verifier, Claude code
-review, security lane, Codex adversarial) ran as fresh agents; the lead adjudicated in the
-build conversation at the owner's instruction.
+Claude designed the pass, ran the experiments, built the search, the eval changes and the records, and ran the live check. Codex built the ranking module, the transport verbs and the adaptive vote, and reviewed the plan and the parallel-search phase. The owner decided the filter design (D13), the parallel-search phase, the prompt and model pins, the spend ceiling, the "no new evals at review" rule, the Broadest acceptance and the ADR sign-off. The review stack ran as fresh agents; Claude adjudicated the findings in the build conversation at the owner's instruction.
 
 ## Review focus
 
-- The single pass's local filtering of semantic and citation-found records (D13): the
-  review fixed a dropped second country variant; is the union predicate right?
-- The pool cut by position (D7, corrected at review): a repeat inside the cut is not
-  refilled; confirm that is the behaviour wanted on a re-run of the same task.
-- The Broadest threshold miss (rubric 10) and whether the measured 22.3% is accepted,
-  re-run, or re-based.
-- Egress: the 429 pause, the per-run concurrency, the budgets.
+- The local filters on semantic and citation-found records: the review fixed a case where a second country in a plan was dropped. Check the combined predicate.
+- The pool cap is a cut by position. A repeat inside the cut is not refilled. Confirm this is the wanted behaviour on a re-run of the same task.
+- Egress: the pause after a 429 reply, the per-run concurrency, the call budgets.
 
 ## Reviews run
 
@@ -77,26 +64,18 @@ Findings recorded in `verification.md` § Review findings.
 - [x] `/code-review` (fresh Claude agent, medium)
 - [x] `/security-review` (fresh Claude agent)
 - [x] Adversarial review (Codex, read-only)
-- [x] `/simplify` (carried by the code-review lane's cleanup lenses; recorded)
+- [x] `/simplify` (covered by the code-review cleanup lenses; recorded)
 
 ## Known gaps & deferred seams
 
-- Broadest 22.3% against the 24.6% threshold; full-set Broad run not made (owner: no new
-  evals at review; the Langfuse price row to be corrected first).
-- `docs/deferred.md` (task 051 section): relevance reserve (D6), similarity damping (D8),
-  reformulation contingency (D11), seminal-decile score (D17), removed-title records and
-  the `source_country` plan option (D18), partial backend failure and the coverage
-  verdict, landmarks without wire filters, per-run pacing under concurrent runs.
-- ADR 0038 is Proposed until the owner signs off.
+- Broadest is under its target by 2.3 points. Accepted by the owner. A re-run costs about $2 at list price.
+- The full-set Broad run (100 reviews, about $6.50 at list price) is not made yet.
+- Deferred seams are in `docs/deferred.md` under task 051: relevance reserve, similarity damping, reformulation contingency, seminal-decile score, removed-title records, partial backend failure and the coverage verdict, landmarks without wire filters, per-run pacing under concurrent runs.
 
 ## Public safety
 
-- [x] No secrets, credentials, or real/acquired source text in the diff or evidence
-  (fixtures hold ids, titles, dates and counts only; probe error excerpts key-redacted).
-- [x] Logs / traces / screenshots are public-safe (Langfuse links are to the private
-  project; the app screenshot shows public policy document titles).
-- [x] No approval-gated change beyond those the contract names: the new egress shapes,
-  the model ids and the prompt edits are the contract's D2, D8, D10, D12, D13; no
-  schema, auth, dependency, CI or production-config change.
+- [x] No secrets, credentials, or real/acquired source text in the diff or evidence. Fixtures hold ids, titles, dates and counts only. Probe error excerpts have keys redacted.
+- [x] Logs / traces / screenshots are public-safe. Langfuse links go to the private project. The app screenshot shows public policy document titles.
+- [x] No approval-gated change beyond those the contract names. The new request shapes, the model ids and the prompt edits are the contract's D2, D8, D10, D12 and D13. No schema, auth, dependency, CI or production-config change.
 
 🤖 Generated with [Claude Code](https://claude.com/claude-code)

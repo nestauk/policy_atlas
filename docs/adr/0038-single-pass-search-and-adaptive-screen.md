@@ -1,7 +1,7 @@
 # ADR 0038 — Single-pass search with citation chasing, and an adaptive screening vote
 
-- **Status:** Proposed — 2026-10-09 (task 051 build; Accepted when the owner signs the
-  slice off at the step-6 exit)
+- **Status:** Accepted — 2026-10-12 (owner sign-off after the task 051 review; Proposed
+  from 2026-10-09)
 - **Date:** 2026-10-09
 - **Task:** [051-improve-production-search-screen](../tasks/051-improve-production-search-screen/contract.md)
 - **Supersedes:** [ADR 0012](0012-depth-graded-agentic-search.md) decisions 1 (the round

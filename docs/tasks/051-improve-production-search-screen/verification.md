@@ -416,18 +416,20 @@ verdict (Codex).
 | 7 | holds | Luna with the unchanged prompt; 1,300 characters |
 | 8 | holds | two caps per scope in the hint, the constant and the planner prompt |
 | 9 | holds | every verb through the shared transport; budgets; zero-egress doubles; probes recorded |
-| 10 | **partly** | Focused and Broad meet their thresholds; **Broadest 22.3% against 24.6% does not**; screen ≥ 90% at every scope; documents, calls, tokens and cost recorded; replay tests pass; app smoke done; full-set run deferred by the owner (no new evals at review) |
+| 10 | holds (owner decision) | Focused and Broad meet their thresholds; Broadest 22.3% against 24.6% does not, and the owner accepted the measured figure on 2026-10-12 with the reading in § Live check (above Broad on 11 of 15 reviews); screen ≥ 90% at every scope; documents, calls, tokens and cost recorded; replay tests pass; app smoke done; full-set run deferred by the owner (no new evals at review) |
 | 11 | holds | no schema, auth, dependency, CI or production-config change |
 | 12 | holds | hashes by the script; no generated file by hand |
 | 13 | holds after review | the deleted loop and vote tests listed with replacements; one test re-pinned with justification |
 | 14 | holds after review | placeholders filled, numbers made consistent |
 | 15 | holds after review | stale loop seams marked discharged; two new seams |
-| 16 | pending owner | ADR 0038 Proposed, decision 9 added; spec and tutorial corrected |
+| 16 | holds | ADR 0038 Accepted by the owner on 2026-10-12 (decision 9 added); spec and tutorial corrected |
 | 17 | holds | four lanes run and adjudicated above; the contract-stage Codex review is in the contract's status line |
 
-The task is **not done** under the rubric's own rule until item 10's Broadest threshold
-is adjudicated by the owner (accept the measured 22.3% with the reading above, re-run, or
-re-base the threshold) and item 16's ADR status is flipped.
+**Owner adjudication, 2026-10-12.** Item 10: the measured Broadest 22.3% is accepted
+as it stands (the owner chose "accept" over a re-run at about $2 list price or a re-based
+threshold); the 24.6% threshold stays in the contract as the figure the experiment
+measured, and the gap is on record in § Live check. Item 16: ADR 0038 flipped to
+Accepted. The task is done under the rubric; live testing by the owner follows the PR.
 
 ## Intent & assumptions
 
