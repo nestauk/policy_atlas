@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { MOCK_OPTION_ID_EXCLUDED, MOCK_OPTION_ID_NO_IN_SCOPE, mockLonglist } from "../../mock/fixtures";
 import { LonglistView } from "./LonglistView";
-import { checksSummary, rowMetaParts } from "./longlistPresentation";
+import { rowMetaParts } from "./longlistPresentation";
 import * as queries from "../../api/queries";
 import * as mutations from "../../api/mutations";
 
@@ -75,7 +75,29 @@ describe("LonglistView", () => {
       "Screened on titles and abstracts · nothing read in full · document set not confirmed",
     );
     expect(screen.getByRole("heading", { name: "How can we cut the NEET rate?" })).toBeInTheDocument();
-    expect(screen.getByText("4 options in 2 themes · 1 excluded · 1 with no in-scope evidence")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "1 excluded" })).toHaveAttribute("href", "#excluded-options");
+    expect(screen.getByText(/^4 options in 2 themes/)).toHaveTextContent(
+      "4 options in 2 themes · 1 excluded · 1 with no in-scope evidence",
+    );
+  });
+
+  // Task 046, amendment 4 (R83): no "0 excluded"; the excluded part is a link in list mode, text in grid mode.
+  it("leaves the excluded part out of the header when none is excluded", () => {
+    renderLonglist({}, (longlist) => {
+      longlist.counts.excluded = 0;
+    });
+    expect(screen.getByText(/^4 options in 2 themes/)).toHaveTextContent(
+      "4 options in 2 themes · 1 with no in-scope evidence",
+    );
+    expect(screen.queryByText(/excluded/)).not.toBeInTheDocument();
+  });
+
+  it("shows the excluded part as plain text in grid mode", async () => {
+    const user = userEvent.setup();
+    renderLonglist();
+    await user.click(screen.getByRole("button", { name: "Grid" }));
+    expect(screen.queryByRole("link", { name: "1 excluded" })).not.toBeInTheDocument();
+    expect(screen.getByText(/^4 options in 2 themes/)).toHaveTextContent("· 1 excluded ·");
   });
 
   it("opens with every theme collapsed and Expand all opens them", async () => {
@@ -121,107 +143,6 @@ describe("LonglistView", () => {
     expect(screen.queryByRole("button", { name: /^Untagged/ })).not.toBeInTheDocument();
   });
 
-  it("filters rows with the Setting facet", async () => {
-    const user = userEvent.setup();
-    renderLonglist();
-    const settingGroup = screen.getByRole("group", { name: "Setting" });
-    await user.click(within(settingGroup).getByRole("button", { name: "Community centre" }));
-    expect(screen.getByText("School-based mentoring")).toBeInTheDocument();
-    expect(screen.queryByText("Youth guarantee")).not.toBeInTheDocument();
-  });
-
-  it("filters rows with the Where tried facet", async () => {
-    const user = userEvent.setup();
-    renderLonglist();
-    const whereGroup = screen.getByRole("group", { name: "Where tried" });
-    await user.click(within(whereGroup).getByRole("button", { name: "Other" }));
-    expect(screen.getByText("School-based mentoring")).toBeInTheDocument();
-    expect(screen.queryByText("Youth guarantee")).not.toBeInTheDocument();
-  });
-
-  // Task 046, amendment 3 (R72): the top levels as chips, no counts.
-  it("shows the Where tried top levels as chips, most options first, with no count", () => {
-    renderLonglist();
-    const whereGroup = screen.getByRole("group", { name: "Where tried" });
-    const chips = within(whereGroup).getAllByRole("button").map((button) => button.textContent ?? "");
-    expect(chips).toEqual(["Multiple countries", "United Kingdom", "Australia", "Canada", "Germany", "Not stated", "Other"]);
-    for (const chip of chips) expect(chip).not.toMatch(/\d/);
-    expect(whereGroup).not.toHaveTextContent(/comparable|OECD/i);
-  });
-
-  // Q22: a country chip also matches an option whose "multiple countries" documents name it.
-  it("matches a country chip against the countries under multiple countries", async () => {
-    const user = userEvent.setup();
-    renderLonglist();
-    const whereGroup = screen.getByRole("group", { name: "Where tried" });
-    await user.click(within(whereGroup).getByRole("button", { name: "Canada" }));
-    expect(screen.getByText("School-based mentoring")).toBeInTheDocument(); // Canada, its own top level
-    expect(screen.getByText("Universal youth offer bundle")).toBeInTheDocument(); // Canada under multiple countries
-    expect(screen.queryByText("Youth guarantee")).not.toBeInTheDocument();
-    expect(screen.getByText("2 of 4 options match.")).toBeInTheDocument();
-  });
-
-  it("folds the Where tried facet after eight chips, like the Setting facet", async () => {
-    const user = userEvent.setup();
-    const tops = ["Austria", "Belgium", "Chile", "Denmark", "Estonia", "Finland", "Greece", "Hungary", "Iceland", "Japan"];
-    renderLonglist({}, (longlist) => {
-      const option = (longlist.options ?? []).find((o) => o.name === "Youth guarantee");
-      if (option) option.where_tried = tops.map((top) => ({ top, documents: 1, places: [], countries: [] }));
-    });
-    const whereGroup = screen.getByRole("group", { name: "Where tried" });
-    const pressable = () => within(whereGroup).getAllByRole("button").filter((b) => b.hasAttribute("aria-pressed"));
-    expect(pressable()).toHaveLength(8);
-    await user.click(within(whereGroup).getByRole("button", { name: /more$/ }));
-    expect(pressable()).toHaveLength(17);
-    await user.click(within(whereGroup).getByRole("button", { name: "fewer" }));
-    expect(pressable()).toHaveLength(8);
-  });
-
-  // R43: the Who can act facet is a filter only.
-  it("shows the Who can act facet with three chips in order, and only when an option has an authority", () => {
-    const first = renderLonglist();
-    const group = screen.getByRole("group", { name: "Who can act" });
-    expect(within(group).getAllByRole("button").map((button) => button.textContent)).toEqual([
-      "Within your power",
-      "Needs action by another body",
-      "Unclear who can act",
-    ]);
-    for (const button of within(group).getAllByRole("button")) expect(button).toHaveAttribute("aria-pressed", "false");
-    first.unmount();
-    renderLonglist({}, (longlist) => {
-      for (const option of longlist.options ?? []) option.authority = null;
-    });
-    expect(screen.queryByRole("group", { name: "Who can act" })).not.toBeInTheDocument();
-  });
-
-  it("filters by Who can act without reordering, and an unlabelled option does not pass", async () => {
-    const user = userEvent.setup();
-    renderLonglist();
-    await user.click(screen.getByRole("button", { name: "Expand all" }));
-    const tracked = ["School-based mentoring", "Universal youth offer bundle", "Youth guarantee"];
-    const rowNames = () =>
-      screen
-        .getAllByRole("link")
-        .map((link) => link.textContent ?? "")
-        .filter((name) => tracked.includes(name));
-    const before = rowNames();
-    expect(before).toContain("Youth guarantee");
-    const group = screen.getByRole("group", { name: "Who can act" });
-    await user.click(within(group).getByRole("button", { name: "Within your power" }));
-    await user.click(within(group).getByRole("button", { name: "Unclear who can act" }));
-    expect(within(group).getByRole("button", { name: "Within your power" })).toHaveAttribute("aria-pressed", "true");
-    expect(screen.queryByText("Youth guarantee")).not.toBeInTheDocument();
-    expect(rowNames()).toEqual(before.filter((name) => name !== "Youth guarantee"));
-    expect(rowNames()).toHaveLength(2);
-    // The option that needs action elsewhere is filtered out, not moved to the excluded section.
-    expect(screen.queryByText("National sanctions regime")).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /Excluded options/ })).not.toBeInTheDocument();
-    await user.click(within(group).getByRole("button", { name: "Within your power" }));
-    await user.click(within(group).getByRole("button", { name: "Unclear who can act" }));
-    await user.click(screen.getByRole("button", { name: "Expand all" }));
-    expect(screen.getByText("Youth guarantee")).toBeInTheDocument();
-  });
-
   it("keeps the retired words and 'Middle' out of the list", async () => {
     const user = userEvent.setup();
     const { container } = renderLonglist();
@@ -231,46 +152,45 @@ describe("LonglistView", () => {
     }
   });
 
-  // Task 046, amendment 3 (R54): the Tried on facet: labels, no counts, and it filters.
-  it("shows the Tried on facet as chips without counts, and filters like Setting", async () => {
+  // Task 046, amendment 4 (R84): the list has no facet chips and no match line.
+  it("has no Setting, Where tried, Who can act or Tried on facet and no match line", () => {
+    renderLonglist();
+    for (const name of ["Setting", "Where tried", "Who can act", "Tried on", "Measures"]) {
+      expect(screen.queryByRole("group", { name })).not.toBeInTheDocument();
+    }
+    expect(screen.queryByText(/options? match/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/No option matches/)).not.toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "Group by" })).toBeInTheDocument();
+  });
+
+  // R85: the grey line ends in the evidence signal; the document count is not its own part.
+  it("carries the evidence signal on the grey line, without a document count part", async () => {
     const user = userEvent.setup();
     renderLonglist({}, (longlist) => {
       const mentoring = (longlist.options ?? []).find((o) => o.name === "School-based mentoring");
-      if (mentoring) mentoring.tried_on = [{ kind: "preschool children", documents: 1 }];
+      if (mentoring) {
+        mentoring.document_count = 3;
+        mentoring.evaluated_count = 0;
+      }
     });
-    const triedOnGroup = screen.getByRole("group", { name: "Tried on" });
-    const chips = within(triedOnGroup).getAllByRole("button").map((button) => button.textContent ?? "");
-    expect(chips).toContain("18-24 year-olds in Northern England");
-    for (const chip of chips) expect(chip).not.toMatch(/\d+\)|\(\d/);
-    await user.click(within(triedOnGroup).getByRole("button", { name: "preschool children" }));
-    expect(screen.getByText("School-based mentoring")).toBeInTheDocument();
-    expect(screen.queryByText("Youth guarantee")).not.toBeInTheDocument();
-    await user.click(within(triedOnGroup).getByRole("button", { name: "preschool children" }));
     await user.click(screen.getByRole("button", { name: "Expand all" }));
-    expect(screen.getByText("Youth guarantee")).toBeInTheDocument();
+    const rich = within(screen.getByText("Universal youth offer bundle").closest("li") as HTMLElement);
+    expect(rich.getByText("5 documents evaluated it")).toBeInTheDocument();
+    expect(rich.getByText("4 more describe it")).toBeInTheDocument();
+    expect(rich.getByText("Evaluated in the United Kingdom")).toBeInTheDocument();
+    expect(rich.getByText("Measures 2 of your 2 outcomes")).toBeInTheDocument();
+    expect(rich.queryByText("9 documents")).not.toBeInTheDocument();
+    const bare = within(screen.getByText("School-based mentoring").closest("li") as HTMLElement);
+    expect(bare.getByText("No evaluations, 3 documents describe it")).toBeInTheDocument();
+    expect(bare.queryByText("3 documents")).not.toBeInTheDocument();
   });
 
-  it("folds the Tried on facet after eight chips", async () => {
+  it("keeps the list's own words free of 'studies', 'serves' and 'aimed at'", async () => {
     const user = userEvent.setup();
-    const kinds = ["a1", "b2", "c3", "d4", "e5", "f6", "g7", "h8", "i9", "j10"];
-    renderLonglist({}, (longlist) => {
-      const option = (longlist.options ?? []).find((o) => o.name === "Youth guarantee");
-      if (option) option.tried_on = kinds.map((kind) => ({ kind, documents: 1 }));
-    });
-    const group = screen.getByRole("group", { name: "Tried on" });
-    const pressable = () => within(group).getAllByRole("button").filter((b) => b.hasAttribute("aria-pressed"));
-    expect(pressable()).toHaveLength(8);
-    await user.click(within(group).getByRole("button", { name: /more$/ }));
-    expect(pressable()).toHaveLength(11);
-    await user.click(within(group).getByRole("button", { name: "fewer" }));
-    expect(pressable()).toHaveLength(8);
-  });
-
-  it("has no Measures facet and no digit in any Setting chip", () => {
-    renderLonglist();
-    expect(screen.queryByRole("group", { name: "Measures" })).not.toBeInTheDocument();
-    const group = screen.getByRole("group", { name: "Setting" });
-    for (const button of within(group).getAllByRole("button")) expect(button.textContent).not.toMatch(/\d/);
+    const { container } = renderLonglist();
+    await user.click(screen.getByRole("button", { name: "Expand all" }));
+    await user.click(screen.getByRole("button", { name: /Excluded options/ }));
+    expect(container).not.toHaveTextContent(/\bstudies\b|\bserves\b|aimed at/i);
   });
 
   it("summarises a collapsed theme with its description and option names, plus a No theme section", () => {
@@ -288,21 +208,22 @@ describe("LonglistView", () => {
     const row = screen.getByText("National sanctions regime").closest("li");
     expect(row).not.toBeNull();
     const scoped = within(row as HTMLElement);
-    expect(scoped.getByText("6 documents")).toBeInTheDocument();
+    expect(scoped.getByText("3 documents evaluated it")).toBeInTheDocument();
+    expect(scoped.queryByText("6 documents")).not.toBeInTheDocument();
     expect(
       scoped.getByText('excluded: breaks "Only include options a local authority can fund directly"'),
     ).toBeInTheDocument();
     expect(scoped.getByText("part of Universal youth offer bundle")).toBeInTheDocument();
   });
 
-  it("shows a package's has_part relation and the added-by-you entrant's zero-document note", async () => {
+  it("shows a package's has_part relation and the added-by-you entrant's no-documents signal", async () => {
     const user = userEvent.setup();
     renderLonglist();
     await user.click(screen.getByRole("button", { name: "Expand all" }));
     const packageRow = screen.getByText("Universal youth offer bundle").closest("li");
     expect(within(packageRow as HTMLElement).getByText("includes National sanctions regime")).toBeInTheDocument();
     const addedRow = screen.getByText("Youth guarantee").closest("li");
-    expect(within(addedRow as HTMLElement).getByText("no documents found yet")).toBeInTheDocument();
+    expect(within(addedRow as HTMLElement).getByText("No documents yet")).toBeInTheDocument();
     expect(within(addedRow as HTMLElement).getByText("added by you")).toBeInTheDocument();
   });
 
@@ -403,15 +324,5 @@ describe("LonglistView", () => {
     expect(screen.queryByText("National sanctions regime")).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /Show excluded/ }));
     expect(screen.getByText("National sanctions regime")).toBeInTheDocument();
-  });
-});
-
-describe("longlistPresentation", () => {
-  it("agrees the verdict verb with the count", () => {
-    expect(checksSummary(["passes"])).toBe("1 passes.");
-    expect(checksSummary(["breaks", "breaks", "passes", "cannot_check"])).toBe(
-      "2 break, 1 passes, 1 cannot be checked yet.",
-    );
-    expect(checksSummary([])).toBe("");
   });
 });
