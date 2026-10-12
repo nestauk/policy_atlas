@@ -283,7 +283,7 @@ def main() -> None:
                 "usage": counts.get("usage_totals"),
                 "papers": papers,
             },
-            indent=1,
+            separators=(",", ":"),  # one line: the file is read by scripts, not people
             default=str,
         )
     )

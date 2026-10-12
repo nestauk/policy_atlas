@@ -447,7 +447,7 @@ def main() -> None:
                     for name, order in orders.items()
                 },
             },
-            indent=1,
+            separators=(",", ":"),  # one line: the file is read by scripts, not people
         )
     )
     print("\n".join(lines[: 12 + len(probes)]))
