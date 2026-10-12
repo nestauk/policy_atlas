@@ -34,7 +34,7 @@ from __future__ import annotations
 import threading
 import uuid
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
 
@@ -46,6 +46,7 @@ from sqlalchemy.engine import Connection
 
 from policy_atlas.core import tracing
 from policy_atlas.core.schema import (
+    event_log,
     evidence_scope,
     runs,
     source_snapshot,
@@ -64,7 +65,10 @@ from policy_atlas.evidence_search.sourcing.search_generation import (
     V2SearchGenerationBackend,
 )
 from policy_atlas.evidence_search.sourcing.search_live import live_search_backends
-from policy_atlas.evidence_search.sourcing.search_loop import run_search
+from policy_atlas.evidence_search.sourcing.search_loop import (
+    DEPTH_CONSTANTS,
+    run_search,
+)
 
 # The two query-generation methodologies this eval compares, named by how
 # they prompt:
@@ -182,6 +186,72 @@ def _recall(found: set[str], target: set[str]) -> float:
     if not target:
         return 0.0
     return len(found & target) / len(target)
+
+
+def _acquired_in_order(
+    conn: Connection, task_id: uuid.UUID
+) -> list[tuple[str, dict[str, Any]]]:
+    """Every acquired document as (backend, metadata), in the order acquire persisted
+    them: the ranked order, so a document's index within its backend is its rank."""
+    events = conn.execute(
+        select(event_log.c.payload)
+        .where(event_log.c.task_id == task_id)
+        .where(event_log.c.event_type == "source.acquired")
+        .order_by(event_log.c.sequence)
+    ).fetchall()
+    ids = [uuid.UUID(payload["source_snapshot_id"]) for (payload,) in events]
+    metadata = dict(
+        conn.execute(
+            select(
+                source_snapshot.c.source_snapshot_id, source_snapshot.c.metadata
+            ).where(source_snapshot.c.source_snapshot_id.in_(ids))
+        ).fetchall()
+    )
+    return [
+        (payload["backend"], metadata[uuid.UUID(payload["source_snapshot_id"])])
+        for (payload,) in events
+    ]
+
+
+def recall_at_smaller_caps(
+    acquired: list[tuple[str, dict[str, Any]]],
+    screened_keys: set[str],
+    target: set[str],
+    *,
+    depth: str,
+) -> dict[str, dict[str, float | int]]:
+    """Score the depths whose caps fit inside this run's, from this run's own pool.
+
+    The scopes differ only in where the same ranked pools are cut (papers cap
+    100 / 200 / 400, policy cap 50 / 100 / 200), and the screen judges each document
+    on its own. So one run at a larger scope says what a smaller scope would have
+    found with the same generated queries: the documents in the first ``papers_cap``
+    of its OpenAlex order and the first ``policy_cap`` of its Overton order.
+
+    Returns:
+        Per smaller depth: ``search_recall``, ``n_found``, ``screen_recall``,
+        ``n_screened_in``.
+    """
+    own = DEPTH_CONSTANTS[depth]
+    out: dict[str, dict[str, float | int]] = {}
+    for name, constants in DEPTH_CONSTANTS.items():
+        if name == depth or constants["papers_cap"] > own["papers_cap"]:
+            continue
+        cap = {"openalex": constants["papers_cap"], "overton": constants["policy_cap"]}
+        seen: dict[str, int] = {}
+        within: set[str] = set()
+        for backend, metadata in acquired:
+            position = seen.get(backend, 0)
+            seen[backend] = position + 1
+            if position < cap.get(backend, 0) and (key := record_key(metadata)):
+                within.add(key)
+        out[name] = {
+            "search_recall": _recall(within, target),
+            "n_found": len(within & target),
+            "screen_recall": _recall(within & screened_keys, target),
+            "n_screened_in": len(within & screened_keys),
+        }
+    return out
 
 
 class _RecordingBackend:
@@ -426,6 +496,9 @@ class QueryResult:
     history's columns do not change."""
     stop_condition: str | None = None
     """The coverage record's ``stop_condition`` (``completed`` or ``error``)."""
+    recall_at: dict[str, dict[str, float | int]] = field(default_factory=dict)
+    """What the smaller depths would have scored on this run's pool and screen
+    (``recall_at_smaller_caps``). Empty for ``rapid``."""
 
 
 def run_one_query(
@@ -494,6 +567,9 @@ def run_one_query(
     search_dois = _keys_of(search_docs)
     screened = _screened_relevant_docs(conn, task_id, scope_id) if run_screen else []
     screened_dois = _keys_of(screened)
+    recall_at = recall_at_smaller_caps(
+        _acquired_in_order(conn, task_id), screened_dois, ground_truth.keys, depth=depth
+    )
 
     return QueryResult(
         query=query,
@@ -506,4 +582,5 @@ def run_one_query(
         screened_docs=screened,
         rounds_run=1,
         stop_condition=stop_condition,
+        recall_at=recall_at,
     )

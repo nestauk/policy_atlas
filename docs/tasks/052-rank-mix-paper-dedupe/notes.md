@@ -1,6 +1,6 @@
 # Task 052 — Rank the paper pool as a relevant / seminal / novel mix, and drop duplicate copies
 
-- **Status:** built on branch `task/052-rank-mix-paper-dedupe` (from task 051's branch, 2026-10-12); not yet measured on the mini set.
+- **Status:** built and merged into task 051's branch (PR 96) on 2026-10-12; measured on the mini set the same day (below).
 - **Owner ask (2026-10-12):** "we still get THE MOST relevant papers upfront as well as a mix of prominent literature. The mix of relevant, novel and seminal is key." Plus duplicate papers removed before the cap, only when the title and the authors are the same.
 
 ## Why
@@ -62,11 +62,58 @@ Findings, the same on all three:
 - The probe script calls the shipped functions for its `mix` column, so re-running it
   from the cached pools checks production against the experiment.
 
+## Mini-set recall under the mix (2026-10-12)
+
+One Broadest run over the 15 reviews (`mini-052-2026-10-12/deep`, commit `3dcfebe`), with
+the Focused and Broad figures read from the same run's pool: the scopes differ only in
+where the ranked pools are cut, and the screen judges each document on its own, so the
+first 100 + 50 and 200 + 100 documents of the Broadest order are what the smaller scopes
+would have kept with the same queries (`engine.recall_at_smaller_caps`, written to
+Langfuse as `search_recall_at_rapid` and so on). This replaces three passes with one,
+about 50 minutes instead of 90, and makes the three scopes directly comparable
+(same generated queries). The small-scope figures count positions among persisted
+documents, so a duplicate the task-level dedupe dropped inside the cut is not counted
+against the cap; rare, and a slight overcount if anything.
+
+| scope | search recall | after screen | task 051 run (search / screen) | threshold |
+|---|---:|---:|---:|---:|
+| Focused (derived) | 15.3% | 14.8% | 12.9% / 12.5% | 12.5% met |
+| Broad (derived) | 19.7% | 19.0% | 17.8% / 17.3% | 17.3% met |
+| Broadest (measured) | **25.3%** | 24.3% | 22.3% / 21.3% | **24.6% met** |
+
+Broadest is above the task 051 run on 10 of 15 reviews, below on 3, ties 2. One failed
+Overton call (human rights row, transport error, no status code); 34 OpenAlex 429 replies,
+all recovered. Cost $10.96 at the Langfuse rate (Luna still priced at five times list):
+about $2.19 at list price.
+
+Per review (search / screen):
+
+| review | Focused | Broad | Broadest |
+|---|---:|---:|---:|
+| Tackling loneliness | 11% / 11% | 13% / 13% | 24% / 24% (20 of 84) |
+| Parental leave and parents' mental health | 38% / 38% | 40% / 40% | 52% / 52% (27 of 52) |
+| Social care privatisation | 29% / 29% | 43% / 43% | 43% / 43% (3 of 7) |
+| Adverse childhood experiences | 24% / 18% | 31% / 25% | 33% / 27% (18 of 55) |
+| Youth violence interventions | 18% / 18% | 20% / 20% | 33% / 33% (16 of 49) |
+| Sleep duration and obesity | 29% / 26% | 37% / 35% | 50% / 45% (42 of 84) |
+| Adolescent drug abuse | 0% / 0% | 1% / 1% | 1% / 1% (1 of 70) |
+| Learning (meta-analysis) | 37% / 37% | 46% / 44% | 54% / 50% (29 of 54) |
+| Intimate partner violence and health | 3% / 3% | 5% / 5% | 8% / 8% (5 of 65) |
+| Human rights education (gap map) | 0% / 0% | 0% / 0% | 0% / 0% (0 of 22) |
+| Nutrition-sensitive agriculture (gap map) | 0% / 0% | 3% / 3% | 4% / 4% (3 of 69) |
+| Learning to earning (gap map) | 19% / 19% | 22% / 22% | 26% / 26% (7 of 27) |
+| Residential energy efficiency | 9% / 9% | 13% / 13% | 17% / 16% (23 of 135) |
+| Whole-school interventions (gap map) | 14% / 14% | 21% / 21% | 32% / 32% (23 of 73) |
+| Health and social care, 80 and over | 0% / 0% | 0% / 0% | 4% / 4% (4 of 95) |
+
+Reading: the gain is on the paper side at every scope (about 2 to 3 points), and it is
+largest where the specificity order had been filling the cut with graph-found papers
+no query returned. The reviews that score near zero (drug abuse, human rights, the
+80-year-olds) are the same ones as before; the mix does not change what the queries
+reach, only what survives the cut.
+
 ## Not done
 
-- The task 051 mini-set recall thresholds (Focused 12.9%, Broad 17.8%, Broadest 22.3%)
-  are not re-measured under the mix. The owner asked for no new eval runs for now. Run
-  `scripts/evals/search/checks/production_recall.py` before merging to `dev`.
 - The stratum a paper came from is not persisted on `source.acquired`; `query_origin`
   still says which call first returned it. `mix_screen_probe.py` replays the strata
   offline for the screening check instead.

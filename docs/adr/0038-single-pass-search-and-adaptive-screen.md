@@ -65,8 +65,10 @@ it cites; the owner's decisions are in the task's `notes.md`.
    relevance reserve (deferred D6) because a broad query's raw results carry
    off-topic papers into the reserve. Evidence: three pool re-orderings in
    `scripts/evals/search/experiments/manual/2026-10-12-rank-mix-*.md` (not scored
-   against ground truth; the mini-set recall thresholds of task 051 have not been
-   re-measured under the mix yet). The pool is built in memory before persistence; `acquire_sources` takes
+   against ground truth) and the mini-set run of 2026-10-12 (`mini-052-2026-10-12/deep`
+   in `results/history.md`): search recall 15.3% / 19.7% / 25.3% at Focused / Broad /
+   Broadest against 12.9% / 17.8% / 22.3% under specificity alone; all three task 051
+   thresholds met. The pool is built in memory before persistence; `acquire_sources` takes
    two ranked pools and two caps and keeps its count invariant; `source.acquired` and
    `search.executed` carry `query_origin` (contract D6, D7).
 5. **Overton: relevance order, 400 documents, title dedup, policy snowball, cut.**

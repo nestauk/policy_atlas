@@ -17,11 +17,11 @@ Measured on the 15-review ground-truth mini set (share of the review's reference
 
 | scope | search recall | after screening | cost per review | search time |
 |---|---:|---:|---:|---:|
-| Focused | 12.9% | 12.5% | $0.03 | 47 s |
-| Broad | 17.8% | 17.3% | $0.07 | 41 s |
-| Broadest | 22.3% | 21.3% | $0.14 | 44 s |
+| Focused | 15.3% (was 12.9%) | 14.8% | $0.03 | 47 s |
+| Broad | 19.7% (was 17.8%) | 19.0% | $0.07 | 41 s |
+| Broadest | 25.3% (was 22.3%) | 24.3% | $0.14 | 44 s |
 
-Broadest is 2.3 points under its 24.6% target. The owner accepted the measured figure (it beats Broad on 11 of 15 reviews). Focused and Broad meet their targets.
+The "was" figures are the task 051 run of 2026-10-09; the current figures are the task 052 run of 2026-10-12 with the new paper order (one Broadest run, the two smaller scopes read from its pool at their caps). All three targets are met (Broadest 24.6% by 0.7 points; before task 052 it was 2.3 points short and the owner had accepted that).
 
 ## Proof it works
 
@@ -70,7 +70,7 @@ Findings recorded in `verification.md` § Review findings.
 ## Known gaps & deferred seams
 
 - Broadest is under its target by 2.3 points. Accepted by the owner. A re-run costs about $2 at list price.
-- The recall table above was measured before task 052 changed the paper order. The mini set has not been re-run under the mix (owner's "no new evals for now"); that run is the gate for the figures, not for the code.
+- The three scopes' figures come from one Broadest run; the Focused and Broad rows are its pool cut at their caps, not separate runs (`engine.recall_at_smaller_caps`). The run-to-run variance of query generation is of the order of the gaps between scopes, so "met by 0.7 points" is "met, not comfortably".
 - The full-set Broad run (100 reviews, about $6.50 at list price) is not made yet.
 - Deferred seams are in `docs/deferred.md` under task 051: similarity damping, reformulation contingency, seminal-decile score, removed-title records, partial backend failure and the coverage verdict, landmarks without wire filters, per-run pacing under concurrent runs.
 

@@ -77,10 +77,17 @@ GENERATION_BACKEND = "shared"
 
 
 def item_scores(*, output: dict[str, Any], **_: Any) -> list[Evaluation]:
-    """Per-review scores: the sweep's numbers plus how many rounds ran."""
+    """Per-review scores: the sweep's numbers, how many rounds ran, and what the
+    smaller depths would have scored on this run's pool (``search_recall_at_rapid``
+    and so on; see ``engine.recall_at_smaller_caps``)."""
     return [
         *score_summary(output=output),
         Evaluation(name="rounds_run", value=output["rounds_run"]),
+        *(
+            Evaluation(name=f"{key}_at_{smaller}", value=value)
+            for smaller, scores in output.get("recall_at", {}).items()
+            for key, value in scores.items()
+        ),
     ]
 
 
@@ -99,10 +106,14 @@ def _describe(title: str, s: dict[str, Any]) -> str:
         if s["n_failed_calls"]
         else ""
     )
+    at = "".join(
+        f"; at {smaller}: {r['search_recall']:.0%} / {r['screen_recall']:.0%}"
+        for smaller, r in s.get("recall_at", {}).items()
+    )
     return (
         f"  {title[:60]}: search_recall={s['search_recall']:.0%} "
         f"({s['n_found']}/{s['n_ground_truth']}){screened}; "
-        f"{s['rounds_run']} round(s), stop={s['stop_condition']}{failed}"
+        f"{s['rounds_run']} round(s), stop={s['stop_condition']}{failed}{at}"
     )
 
 
@@ -143,6 +154,8 @@ def _run_depth(
         f"screening {'ON' if screen else 'OFF'}) ==="
     )
 
+    summaries: list[dict[str, Any]] = []
+
     def task(*, item: Any, **_: Any) -> dict[str, Any]:
         ground_truth = ground_truth_from_item(item)
         intent, published_before = item.input["intent"], item.input["published_before"]
@@ -171,13 +184,15 @@ def _run_depth(
             **_summary(runs),
             "rounds_run": result.rounds_run,
             "stop_condition": result.stop_condition,
+            "recall_at": result.recall_at,
         }
         print(_describe(item.metadata.get("review_title", review_id), summary))
+        summaries.append(summary)
         return summary
 
     # What dataset.run_experiment does, but over our own item list, so --reviews
     # can narrow the run while it still attaches to the dataset (and its version).
-    return client.run_experiment(
+    experiment = client.run_experiment(
         name=EXPERIMENT,
         run_name=run_name,
         data=items,
@@ -187,6 +202,19 @@ def _run_depth(
         metadata=meta,
         _dataset_version=dataset.version,
     )
+    for smaller in DEPTHS:
+        scores = [
+            s["recall_at"][smaller]
+            for s in summaries
+            if smaller in s.get("recall_at", {})
+        ]
+        if scores:
+            print(
+                f"  derived {smaller} from this run's pool over {len(scores)} reviews: "
+                f"search_recall {_mean([r['search_recall'] for r in scores]):.1%}, "
+                f"screen_recall {_mean([r['screen_recall'] for r in scores]):.1%}"
+            )
+    return experiment
 
 
 def main() -> None:

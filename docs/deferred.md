@@ -2532,8 +2532,9 @@ sent; found in task 049), now `sort=relevance` on every search, protected.
   specificity-ranked pool. Tried offline on three questions
   (`scripts/evals/search/experiments/manual/2026-10-12-rank-mix-*.md`): it carries a
   broad query's off-topic results into the reserve. Replaced by the relevant / seminal /
-  novel round-robin (`pool.rank_mix`, ADR 0038 decision 4 as amended). Still open: the
-  mini-set recall thresholds of task 051 have not been re-measured under the mix.
+  novel round-robin (`pool.rank_mix`, ADR 0038 decision 4 as amended), measured on the
+  mini set on 2026-10-12: 15.3% / 19.7% / 25.3% search recall at the three scopes
+  against 12.9% / 17.8% / 22.3% before.
 - **Similarity damping of the policy ranking (D8, 🟡 leaning, agreed in principle
   2026-10-07).** `(specificity + 0.5) × (similarity + 0.2)` with the document's title and
   excerpt embedded against the question (`policy_rank.py --embed`): by eye it demotes
