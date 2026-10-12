@@ -641,7 +641,7 @@ fi
 
 if [[ "$METABASE_ALLOWLIST_PARAMETER" != "-" ]]; then
     gate_check \
-        "Metabase allowlist SSM parameter contains one to three valid IPv4 CIDRs" \
+        "Metabase allowlist SSM parameter contains one to five valid IPv4 CIDRs" \
         check_metabase_allowlist_parameter
 fi
 
