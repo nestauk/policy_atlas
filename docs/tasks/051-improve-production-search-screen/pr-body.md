@@ -68,6 +68,8 @@ Claude designed the pass, ran the experiments, built the search, the eval change
 
 ## Review focus
 
+**Start with the tutorial page**, which explains the method with diagrams and the measured numbers: [`docs/tutorials/search-and-screen/index.html`](https://github.com/nestauk/policy_atlas/blob/task/051-improve-production-search-screen/docs/tutorials/search-and-screen/index.html) (GitHub shows the source; open the file from a checkout in a browser to read it rendered).
+
 **Where to look** (product code, in reading order; sizes are lines added / removed against `dev`):
 
 1. [`search_loop.py`](https://github.com/nestauk/policy_atlas/blob/task/051-improve-production-search-screen/backend/src/policy_atlas/evidence_search/sourcing/search_loop.py) (+708 / −928) — the single search pass: query generation, the OpenAlex leg (`_openalex_leg`: seeds, backward snowball, forward chase, de-duplicate, mix), the Overton leg (`_overton_leg`: relevance search, title dedup, landmarks), the two legs run in parallel in `run_search`, the call budgets and the 429 pause. The old round loop is removed from here.
