@@ -23,7 +23,8 @@ belongs to the human operator, not to a task role.
 **No password ever passes through this CLI** (contract § 9). ``user create``
 calls ``AdminCreateUser`` with ``DesiredDeliveryMediums=["EMAIL"]`` — AWS
 defaults that to SMS — and lets Cognito send its own invitation. There is no
-``--temporary-password`` flag and no code path calls ``AdminDeleteUser``:
+``--temporary-password`` flag (``--invite manual`` and ``user reissue`` mint
+their own and print it once) and no code path calls ``AdminDeleteUser``:
 deleting a user is Out (owner call (h)), because it is coupled to ownership
 transfer.
 

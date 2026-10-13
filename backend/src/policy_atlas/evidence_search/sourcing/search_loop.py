@@ -125,7 +125,7 @@ class DepthConstants(TypedDict):
     # backend per round.
     #
     # ponytail: sized from methodology, not measurement. The ground-truth
-    # recall eval (scripts/eval_ground_truth/, other branch) is the instrument
+    # recall eval (scripts/evals/search/, other branch) is the instrument
     # for revising these once rounds + arms are live.
     record_cap_per_backend: int
     round_cap: int

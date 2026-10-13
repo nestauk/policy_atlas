@@ -1,0 +1,56 @@
+# Search and screening recall against the golden dataset at production depth
+# settings, recorded as Langfuse dataset runs
+# (scripts/evals/search/README.md § Production recall).
+#
+# This job MEASURES; it does not gate. A red run means "could not measure"
+# (a provider or Langfuse was unreachable, a review's run crashed), never
+# "recall fell".
+#
+# PARKED: this folder is not read by GitHub, so the workflow is not live. Move
+# it back to .github/workflows/ to enable it. It is parked because each run
+# spends live provider/LLM credits and up to an hour of Actions minutes, and
+# the eval's open questions (gating, thresholds, cost) are not yet settled.
+#
+# Manual only: start it from the Actions tab ("Run workflow"), picking the
+# branch to measure and which depths. It calls live providers and screens
+# with an LLM at standard/deep, so it is not attached to pushes or merges.
+# Runs are labelled <branch>-<short sha>/<depth> in Langfuse.
+name: production recall
+
+on:
+  workflow_dispatch:
+    inputs:
+      depths:
+        description: "Depths to measure (space-separated: rapid standard deep)"
+        required: false
+        default: "rapid standard deep"
+
+permissions:
+  contents: read
+
+jobs:
+  eval-search-recall:
+    runs-on: ubuntu-latest
+    # standard and deep screen every kept candidate each round: a few hundred
+    # LLM calls per review per depth, serially (providers are rate-limited).
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      # The copied example config has empty keys. Variables already set in the
+      # job environment take precedence, so the secrets below win.
+      - run: cp backend/.env.example backend/.env
+      # Compose Postgres + migrations, the same as the verify gate. The eval
+      # runs the real search stage inside a transaction it rolls back.
+      - run: make setup
+      - name: Measure recall and record it in Langfuse
+        env:
+          LANGFUSE_HOST: ${{ secrets.LANGFUSE_HOST }}
+          LANGFUSE_PUBLIC_KEY: ${{ secrets.LANGFUSE_PUBLIC_KEY }}
+          LANGFUSE_SECRET_KEY: ${{ secrets.LANGFUSE_SECRET_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENALEX_API_KEY: ${{ secrets.OPENALEX_API_KEY }}
+          OPENALEX_EMAIL: ${{ secrets.OPENALEX_EMAIL }}
+          OVERTON_API_KEY: ${{ secrets.OVERTON_API_KEY }}
+        run: |
+          make eval-search-recall ARGS="--run-label ${GITHUB_REF_NAME}-${GITHUB_SHA::7} --depths ${{ inputs.depths || 'rapid standard deep' }}"

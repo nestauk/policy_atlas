@@ -71,7 +71,7 @@ can consume another's allowance.
   screening time. Owner-set (task 030): rapid 50 / standard 100 / deep 200 per
   backend per round — sized from methodology, not against the provider's
   willingness to return rows. Replace with a measurement from
-  `scripts/eval_ground_truth/` (other branch), which scores search recall
+  `scripts/evals/search/` (other branch), which scores search recall
   against published systematic-review ground truth.
 - Bounds sized on fixtures need one live run where they actually bind before
   they are trusted (see also

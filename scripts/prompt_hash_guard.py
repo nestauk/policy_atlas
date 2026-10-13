@@ -1,19 +1,18 @@
-"""Prompt-family content-hash guard (task 025 C.4, plan pin 11/12).
+"""Prompt-family content-hash guard.
 
-Product prompt text is taste-bearing, reviewed work — it must never drift as
-a side effect of unrelated refactoring (e.g. the runner's parking/
-continuation seam, or the web-app foundation build generally). This script
-hashes every prompt-bearing module under `backend/src/policy_atlas/` and
-compares against a committed hash list (`scripts/prompt_hashes.json`):
+Product prompt text is reviewed work. It must never change as a side effect
+of an unrelated refactor. This script hashes every prompt-bearing file under
+`backend/src/policy_atlas/` (Python modules with "prompt" in the name, and
+every `.txt` file, which is where prompt wordings that are kept out of Python
+live) and compares against a committed hash list (`scripts/prompt_hashes.json`):
 
     python3 scripts/prompt_hash_guard.py           # verify (exit 1 on drift)
     python3 scripts/prompt_hash_guard.py --update  # rewrite the hash list
 
-The rule: prompt surfaces change only as named, deliberate slice work — task
-025 ships no prompt changes. A drifted or missing hash means a prompt module
-changed (or was added/removed) without that being the explicit subject of
-the commit; re-run with --update only when the prompt change itself is the
-reviewed, intentional deliverable.
+The rule: prompt surfaces change only as named, deliberate slice work. A
+drifted or missing hash means a prompt file changed (or was added/removed)
+without that being the explicit subject of the commit; re-run with --update
+only when the prompt change itself is the reviewed, intentional deliverable.
 
 Stdlib only, no dependency on the synced environment (mirrors
 scripts/audit_paths.py).
@@ -26,10 +25,7 @@ import json
 import sys
 from pathlib import Path
 
-RULE_MESSAGE = (
-    "prompt surfaces change only as named, deliberate slice work — task 025 "
-    "ships no prompt changes"
-)
+RULE_MESSAGE = "prompt surfaces change only as named, deliberate slice work"
 
 HASH_LIST_PATH = Path(__file__).resolve().parent / "prompt_hashes.json"
 PROMPT_ROOT = Path(__file__).resolve().parent.parent / "backend" / "src" / "policy_atlas"
@@ -37,10 +33,16 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
 def prompt_files() -> list[Path]:
-    """Every file under backend/src/policy_atlas whose name contains "prompt"."""
-    return sorted(
-        path for path in PROMPT_ROOT.rglob("*.py") if "prompt" in path.name.lower()
-    )
+    """Every prompt-bearing file under backend/src/policy_atlas.
+
+    That is every Python module whose name contains "prompt", plus every
+    ``.txt`` file: prompt wordings kept out of Python (for example the
+    ``search_queries_system_v3.txt`` family) live in text files beside the
+    module that reads them, and they must be guarded just the same.
+    """
+    modules = (path for path in PROMPT_ROOT.rglob("*.py") if "prompt" in path.name.lower())
+    texts = PROMPT_ROOT.rglob("*.txt")
+    return sorted([*modules, *texts])
 
 
 def rel(path: Path) -> str:
@@ -85,7 +87,7 @@ def main(argv: list[str]) -> int:
     removed = sorted(path for path in committed if path not in current)
 
     if not drifted and not missing and not removed:
-        print(f"prompt-hash-guard: {len(current)} prompt module(s) unchanged")
+        print(f"prompt-hash-guard: {len(current)} prompt file(s) unchanged")
         return 0
 
     print(f"FAIL prompt-hash-guard: {RULE_MESSAGE}", file=sys.stderr)

@@ -7,7 +7,7 @@ and recovery.
 
 ## 1. Overview
 
-Four CloudFormation stacks:
+Four core CloudFormation stacks, plus a staging-only analytics stack:
 
 | Stack | Region | Contents |
 | --- | --- | --- |
@@ -15,15 +15,17 @@ Four CloudFormation stacks:
 | `PaV3DatabaseStack` | `eu-west-2` | Aurora Postgres cluster, generated credentials secret, `load_secret` Lambda, SSM jumpbox |
 | `PaV3AppStack` | `eu-west-2` | ECS Fargate API service + migration task, Cognito, S3 + CloudFront frontend, font bucket |
 | `PaV3CertStack` | `us-east-1` | CloudFront's ACM certificate (AWS requires this region for CloudFront certs) |
+| `PaV3AnalyticsStack` (staging only) | `eu-west-2` | Metabase Fargate service, dedicated RDS PostgreSQL application database, secrets, shared-ALB route + DNS |
 
-All four synth from `infra/app.py`, driven by `-c env_name=<env>` and, on first
+The stacks synth from `infra/app.py`, driven by `-c env_name=<env>` and, on first
 deploy only, `-c stage=network|all`. `scripts/deploy.sh` wraps `cdk deploy` of the
-three eu-west-2 stacks plus `PaV3CertStack`, and owns the imperative steps
+eu-west-2 stacks plus `PaV3CertStack`, and owns the imperative steps
 CloudFormation can't: migration task invocation, frontend build/sync/invalidation,
 font injection.
 
 **Public/private boundary (repo is public, AGPL-3.0):** CDK code and the
-`*_config.json` files (`network_config.json`, `db_config.json`, `pa_config.json`)
+`*_config.json` files (`network_config.json`, `db_config.json`, `pa_config.json`,
+and `metabase_config.json`)
 are committed. The AWS account id is never committed — `app.py` reads it from
 `CDK_DEFAULT_ACCOUNT` at synth/deploy time. `infra/cdk.context.json` is gitignored
 (it caches `from_lookup` results, including the account id). Secrets live only in
@@ -47,13 +49,40 @@ Two workflows automate only steady-state updates:
 
 | Workflow | Trigger | Ref deployed | GitHub Environment |
 | --- | --- | --- | --- |
-| `deploy-staging.yml` | engineer runs `workflow_dispatch` | dispatch SHA, accepted only when the selected ref is `dev` | `staging` |
-| `deploy-production.yml` | stable GitHub Release is published | immutable Release SHA, accepted only when it is in `dev` history | `prod` |
+| `deploy-staging.yml` | automatically when `verify` passes on a push to `dev`, or an engineer runs `workflow_dispatch` from `dev` | the commit `verify` passed (or the dispatch SHA), accepted only from `dev` | `staging` |
+| `deploy-production.yml` | engineer runs `workflow_dispatch` from `main` with a new `vX.Y.Z` version | the tip of `main`, accepted only when it is in `dev` history | `prod` |
 
-`release.published` includes prereleases; the workflow explicitly skips them. A
-failed configuration/ref validation job never reaches the protected Environment
+`dev` remains the repository default branch. Pull requests, continuous
+integration, and staging deploys stay on `dev`. Every merge to `dev` that passes
+`verify` redeploys staging, which briefly stops the staging API while
+migrations run.
+
+`main` is the production branch only, and pushing to it deploys nothing. A
+ruleset blocks force-pushes and deletion, so `main` only ever moves forward. To
+release:
+
+1. Pick the `dev` commit that is working on staging (usually the latest
+   successful **deploy staging** run).
+2. Move `main` forward to it: `git fetch origin && git push origin <commit>:main`.
+   Pull requests into `main` are not used: every GitHub merge method creates a
+   commit that is not in `dev` history, which the workflow would refuse.
+3. Run **deploy production** from `main` in the Actions tab, entering a new
+   version such as `v1.4.0`
+   (`gh workflow run deploy-production.yml --ref main -f version=v1.4.0`).
+4. A `prod` reviewer other than the person who started the run approves it.
+
+The workflow refuses any other branch, any `main` commit that is not already in
+`dev` history, and any version that is not `vX.Y.Z` or is already a tag. These
+checks run before the deploy, so a mistake fails before the API is stopped.
+After a successful deploy, a separate job tags the commit with the version and
+publishes a GitHub Release with generated notes listing the merged pull
+requests. If only that job fails, the deploy has already happened: re-run the
+failed job rather than the whole workflow.
+
+A failed configuration/ref validation job never reaches the protected Environment
 and never requests an OIDC token. Deploy jobs have only `contents: read` and
-`id-token: write`. Concurrency queues a later deployment and deliberately does not
+`id-token: write`. The release job has only `contents: write` and never receives
+AWS credentials. Concurrency queues a later deployment and deliberately does not
 cancel the active stop→migrate→scale→publish sequence.
 
 Create protected GitHub Environments named exactly `staging` and `prod`.
@@ -70,10 +99,11 @@ one-hour default fails during credential setup instead of expiring partway throu
 an outage-sensitive deploy.
 
 Restrict `staging` deployment branches to `dev`. Restrict `prod` deployment
-tags to the repository's release-tag pattern (for example `v*`) and require a
-reviewer for prod. These restrictions are security controls, not just UI:
-an environment-based GitHub OIDC token has a subject naming the Environment rather
-than its branch/tag. The workflow performs a second ref check in code.
+branches to `main`, require a reviewer for prod, and enable "prevent
+self-review" so the person who starts a release cannot approve it. These restrictions are
+security controls, not just UI: an environment-based GitHub OIDC token has a
+subject naming the Environment rather than its branch or tag. The workflow
+performs a second ref check in code.
 
 Create GitHub's OIDC provider in each AWS account with URL
 `https://token.actions.githubusercontent.com` and audience `sts.amazonaws.com`.
@@ -190,6 +220,46 @@ session. Once gate B passes, GitHub Actions owns steady-state `deploy-update` ru
    export CDK_DEFAULT_ACCOUNT=<account-id>
    ```
 
+6. **Metabase UI allowlist provisioned in Parameter Store (staging only).**
+   Create `/policy_atlas_v3/metabase/allowed_cidrs` in `eu-west-2` as a standard
+   `StringList` before deploying the analytics stack:
+
+   ```bash
+   aws ssm put-parameter \
+     --region eu-west-2 \
+     --name /policy_atlas_v3/metabase/allowed_cidrs \
+     --type StringList \
+     --value '<cidr-1>,<cidr-2>' \
+     --overwrite
+   ```
+
+   Supply one to five canonical **IPv4** CIDRs, separated by commas with no
+   spaces. IPv6 entries are rejected: the shared ALB is IPv4-only (IPv4 security
+   group ingress, an `A` alias record, default address type), so an IPv6 entry
+   could never match a client and an IPv6-only list would lock everyone out
+   with a silent 404. Universal `/0` ranges are rejected because they do not
+   form an allowlist. The deployment validates the type and CIDRs without
+   printing their values; failures name the entry's position, not its address.
+   The ALB compares the address that connects directly to it, not
+   `X-Forwarded-For`; for users behind a VPN or proxy, allowlist its egress
+   CIDR.
+
+   **How a change reaches the ALB rule.** The synthesized template carries only
+   the parameter *name*, as an `AWS::SSM::Parameter::Value<List<String>>`
+   template parameter; CloudFormation resolves the value at every stack
+   create/update ("use previous value" keeps the key, not the value), and the
+   pinned CDK CLI never skips a stack whose template carries an SSM-typed
+   parameter, even when the template itself is unchanged. So editing the
+   parameter alone changes nothing — a removed address keeps access until the
+   next deploy — and the normal staging deployment (`make deploy-update
+   DEPLOY_ENV=staging`) is what applies it. Rather than rely on that CLI
+   behaviour, `deploy.sh` verifies it: after `cdk deploy` it reads the live rule
+   on the shared HTTPS listener and fails the deploy if the rule's source-IP set
+   differs from the parameter (`elasticloadbalancing:DescribeRules` is required
+   by the deploy role). To confirm the effect by hand, look at the analytics
+   stack's **Parameters** tab in CloudFormation: it shows the resolved value the
+   rule was last deployed with.
+
 ## 3. First deploy (staged bootstrap)
 
 Bootstrap is staged, not circular: `Vpc.from_lookup` in the consumer stacks is a
@@ -264,9 +334,12 @@ synth-time context query and must not run before the VPC exists.
      swallow), add `INVITE=manual` (CLI: `--invite manual`): the email is
      suppressed and the CLI **mints** a single-use temporary password, printed
      once for out-of-band handover — the person sets their own at first
-     sign-in (`FORCE_CHANGE_PASSWORD`, 7-day validity). The CLI still accepts
+     sign-in (`FORCE_CHANGE_PASSWORD`, 30-day validity). The CLI still accepts
      no password from anyone, and the mode needs no IAM beyond
-     `AdminCreateUser`. The durable fix is SES-backed pool email
+     `AdminCreateUser`. If that password expires or is lost before first
+     sign-in, `make user-reissue ENV=<env> EMAIL=<user-email>` mints and prints
+     a replacement on the same terms (it refuses any account that has already
+     signed in; needs `AdminSetUserPassword`). The durable fix is SES-backed pool email
      (docs/deferred.md § Organisations — SES entry).
 
      The invitation goes through the `COGNITO_DEFAULT` sender (the pool has no
@@ -286,6 +359,40 @@ synth-time context query and must not run before the VPC exists.
 
 6. **Frontend publish** — `vite build` (with `VITE_*` baked at build time) →
    `aws s3 sync` → CloudFront invalidation.
+
+### Staging Metabase first-admin setup
+
+`pa_config.json` enables `PaV3AnalyticsStack` only for staging. Its application
+database is deliberately separate from the Policy Atlas database. The service
+runs one task in private subnets and is exposed only through the shared ALB at
+`https://metabase.v3.policyatlas.uk`.
+
+That hostname's listener rule also requires a source match from the SSM-backed
+allowlist. This restriction applies only to the Metabase route; the Policy Atlas
+web application and API listener rules are unchanged. A non-matching address
+falls through to the shared listener's default response and is never forwarded
+to the Metabase target group.
+
+Treat the initial setup as an attended operation: open that address as soon as
+the analytics stack reports healthy and create the staging administrator. Until
+that account exists, Metabase's first-user setup surface is reachable through the
+public staging hostname. Do not leave a first deployment unattended.
+
+Do **not** add the Policy Atlas production/application database with its owner
+credentials. This stack creates network reachability only. Source onboarding
+requires a separately reviewed, least-privilege login restricted to curated
+owner-safe analytics views (or equivalent row-level controls), stored in Secrets
+Manager. Configure that connection with SSL after the data-access change is
+approved. The Metabase connection-details encryption key is retained in Secrets
+Manager because losing or replacing it makes stored source credentials
+unreadable. The secret has a CloudFormation-generated name (no fixed name), so
+`cdk destroy` followed by a redeploy creates a fresh key rather than failing on
+a name collision with the retained one. That fresh key cannot read a database
+restored from the destroyed instance's snapshot: to restore, copy the retained
+secret's value into the new secret (`aws secretsmanager put-secret-value`)
+before the service first starts against the restored database, then delete the
+orphaned secret. With no data source connected yet, a lost key costs only the
+re-entry of source credentials.
 
 ## 4. Steady-state deploys + the deploy invariant
 
@@ -318,8 +425,9 @@ restore service manually with
 For normal operator recovery use
 `make deploy-update DEPLOY_ENV=<environment>` so local and GitHub execution stay on
 the same interface. A GitHub rerun uses the same event SHA. For prod code
-rollback, publish a new reviewed Release pointing at the chosen prior commit; do
-not move or republish an existing Release tag.
+rollback, revert the bad change on `dev` (so staging redeploys it first), move
+`main` forward to that revert commit, then run **deploy production** from `main`
+with a new version. `main` cannot be moved backwards or force-pushed.
 
 **One-time pending step — encrypting the Aurora cluster (026 review hardening).**
 The committed template sets `StorageEncrypted` (+ deletion protection, 7-day
@@ -377,12 +485,15 @@ bash scripts/deploy.sh update        # migrate → scale → publish on the fres
   replaced under the same name, run `npx cdk context --reset` (or delete
   `infra/cdk.context.json`) before the next synth — a stale cache pins
   consumer stacks to deleted resource IDs without any error.
-- **SSM-coupled stack references resolve at deploy time only.** The app stack
-  consumes ALB/DB/SG identifiers via constant SSM parameter names. If a
-  network/database resource is replaced (new physical ID, same parameter
-  name), the app stack template is byte-identical and a `cdk deploy` of it is
-  a no-op — redeploy the app stack with a forcing change (or `--force`) after
-  any replacement of an SSM-exported resource.
+- **SSM-coupled stack references resolve at deploy time only.** The app and
+  analytics stacks consume ALB/DB/SG identifiers via constant SSM parameter
+  names. If a network/database resource is replaced (new physical ID, same
+  parameter name), the consumer template is byte-identical; the pinned CDK CLI
+  still submits it because it never skips a stack carrying SSM-typed template
+  parameters, and CloudFormation re-resolves the new IDs. Nothing outside a
+  deploy re-resolves them, though, so always redeploy the consumer stacks after
+  replacing an SSM-exported resource; `--force` is a harmless belt-and-braces
+  on that path and the Aurora encryption runbook above keeps it.
 
 ## 5. Env & secret map
 
@@ -465,8 +576,8 @@ laptop, `uv run python -m policy_atlas.ops --env staging|prod ...` with
 wrappers (`make user-create ENV=... EMAIL=... NAME=... ORG=...` — see the
 Makefile's ops block; `scripts/ops_run.sh` performs this section's setup
 and tunnel automatically, reusing an already-open one), under the operator's own IAM
-(Cognito `cognito-idp:ListUsers` + `cognito-idp:AdminCreateUser`, nothing
-more — see `JUMPBOX.md` § Security notes). It is **not** run as an ECS
+(Cognito `cognito-idp:ListUsers` + `cognito-idp:AdminCreateUser` +
+`cognito-idp:AdminSetUserPassword`, nothing more — see `JUMPBOX.md` § Security notes). It is **not** run as an ECS
 task: Cognito permission belongs to the human operator, not to a task
 role, and the API task role gains no Cognito permission. Every command
 verifies the resolved AWS account and user pool against the connected
