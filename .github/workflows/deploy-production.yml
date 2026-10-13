@@ -1,17 +1,19 @@
 name: deploy production
-run-name: Deploy release ${{ github.event.release.tag_name }} to production
+run-name: Deploy main (${{ github.sha }}) to production as ${{ inputs.version }}
 
 on:
-  release:
-    types: [published]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version to publish after a successful deploy (vX.Y.Z)"
+        required: true
+        type: string
 
 permissions: {}
 
 jobs:
   validate:
     name: validate production release
-    # release.published includes prereleases; only stable Releases reach production.
-    if: github.event.release.prerelease == false
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -22,11 +24,32 @@ jobs:
           ref: ${{ github.sha }}
           fetch-depth: 0
           persist-credentials: false
+      - name: Require the main branch
+        shell: bash
+        run: |
+          if [[ "$GITHUB_REF" != "refs/heads/main" ]]; then
+            echo "Refusing production deployment from $GITHUB_REF; dispatch this workflow from main." >&2
+            exit 1
+          fi
       - name: Require a release from dev history
         shell: bash
         run: |
           if ! git merge-base --is-ancestor "$GITHUB_SHA" refs/remotes/origin/dev; then
             echo "Refusing production deployment: release commit is not in dev history." >&2
+            exit 1
+          fi
+      # Checked before the deploy so a typo fails before the API is stopped.
+      - name: Require a new release version
+        shell: bash
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          if [[ ! "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Refusing production deployment: version '$VERSION' is not in vX.Y.Z format." >&2
+            exit 1
+          fi
+          if git rev-parse --quiet --verify "refs/tags/$VERSION" > /dev/null; then
+            echo "Refusing production deployment: tag $VERSION already exists." >&2
             exit 1
           fi
       - name: Validate production CDK configuration
@@ -77,3 +100,23 @@ jobs:
           unset-current-credentials: true
       - name: Deploy production
         run: make deploy-update DEPLOY_ENV=prod
+
+  # Separate from deploy so the job holding AWS credentials cannot write to the
+  # repository, and this job cannot reach AWS.
+  release:
+    name: publish release
+    needs: deploy
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Tag the deployed commit and publish a GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          gh release create "$VERSION" \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "$VERSION" \
+            --generate-notes

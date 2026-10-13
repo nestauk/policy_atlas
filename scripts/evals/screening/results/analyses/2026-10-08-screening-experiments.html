@@ -1,0 +1,285 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Screening Experiments</title>
+<meta name="description" content="Tests of the Policy Atlas screening step on 8 October 2026: a cheaper model, published titles as questions, three prompt versions, how many times to ask the model, and methods without a language model.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;800&family=Manrope:wght@400;500;600;700&display=swap">
+<style>
+/* Same layout and palette as the 6 and 7 October search pages: one reading column,
+   figures break out wider, Nesta navy with electric blue as the single accent. Charts
+   highlight one mark in blue against grey; every mark is labelled and each chart has a
+   table beside it, so nothing depends on colour alone. */
+:root {
+  --paper: #ffffff; --ground: #f4f4f5; --ink: #1c1c1e; --ink-2: #4b4b4f; --grey: #646363; --line: #e4e4e7;
+  --navy: #0f294a; --blue: #0000ff; --blue-tint: #ececff;
+  --yellow: #fdb633; --yellow-tint: #fff6e3;
+  --c-accent: #2d3ff0; --c-plain: #7c7c86;
+  --font-display: "Zosia Display", "Archivo", "Helvetica Neue", Arial, sans-serif;
+  --font-body: "Averta", "Manrope", "Helvetica Neue", Arial, sans-serif;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #0f294a; --ground: #0b1f38; --ink: #f4f6fa; --ink-2: #c8d6e6; --grey: #a9b7c9; --line: #27405f;
+    --navy: #f4f6fa; --blue: #8c9bff; --blue-tint: #1a2f52;
+    --yellow: #fdb633; --yellow-tint: #2b2a1a;
+    --c-accent: #5f6dff; --c-plain: #6f7d93;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #0f294a; --ground: #0b1f38; --ink: #f4f6fa; --ink-2: #c8d6e6; --grey: #a9b7c9; --line: #27405f;
+  --navy: #f4f6fa; --blue: #8c9bff; --blue-tint: #1a2f52;
+  --yellow: #fdb633; --yellow-tint: #2b2a1a;
+  --c-accent: #5f6dff; --c-plain: #6f7d93;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { background: var(--paper); color: var(--ink); font-family: var(--font-body); font-size: 17px; line-height: 1.55; padding-block: 0 4rem; padding-inline: 16px; -webkit-font-smoothing: antialiased; }
+.wrap { max-width: 72ch; margin: 0 auto; }
+.wide { max-width: 980px; margin-inline: auto; }
+header.masthead { border-bottom: 3px solid var(--navy); padding-block: 1.25rem 1.5rem; margin-bottom: 2.5rem; }
+.eyebrow { font-size: .8rem; letter-spacing: .08em; text-transform: uppercase; color: var(--grey); font-weight: 600; }
+h1, h2, h3 { font-family: var(--font-display); color: var(--navy); text-wrap: balance; line-height: 1.1; margin: 0; }
+h1 { font-size: clamp(2.1rem, 5vw, 3.4rem); font-weight: 800; margin-top: .4rem; }
+h2 { font-size: clamp(1.5rem, 3vw, 2.1rem); font-weight: 800; margin-top: 3rem; margin-bottom: .75rem; }
+p { margin: 0 0 1rem; }
+.lede { font-size: 1.2rem; color: var(--ink-2); max-width: 60ch; margin-top: 1rem; }
+a { color: var(--blue); }
+code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .9em; background: var(--ground); padding: .05em .35em; border-radius: 3px; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); margin: 1.5rem 0 0; }
+.tile { background: var(--paper); padding: 1rem 1.1rem; }
+.tile .num { font-family: var(--font-display); font-size: 2.6rem; font-weight: 800; line-height: 1; color: var(--navy); font-variant-numeric: tabular-nums; }
+.tile .num.accent { color: var(--blue); }
+.tile .lab { font-size: .85rem; color: var(--grey); margin-top: .35rem; line-height: 1.3; }
+figure { margin: 1.5rem 0 2rem; }
+figure svg { display: block; width: 100%; height: auto; max-width: 100%; color: var(--ink); }
+figcaption { font-size: .9rem; color: var(--ink-2); margin-top: .6rem; max-width: 70ch; }
+figcaption b { color: var(--ink); }
+svg .mark { transition: opacity .15s; }
+svg .mark:hover { opacity: .75; }
+table { border-collapse: collapse; width: 100%; font-size: .92rem; font-variant-numeric: tabular-nums; }
+th, td { text-align: left; padding: .45rem .6rem; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-size: .78rem; letter-spacing: .05em; text-transform: uppercase; color: var(--grey); font-weight: 600; }
+td.n, th.n { text-align: right; }
+tr.hl td { background: var(--blue-tint); font-weight: 600; }
+.scroll { overflow-x: auto; }
+.note { border-left: 4px solid var(--yellow); background: var(--yellow-tint); padding: .8rem 1rem; margin: 1.25rem 0; font-size: .95rem; }
+.steps { counter-reset: step; list-style: none; padding: 0; margin: 1rem 0; display: grid; gap: .6rem; }
+.steps li { position: relative; padding-left: 2.6rem; }
+.steps li::before { counter-increment: step; content: counter(step); position: absolute; left: 0; top: .05rem; width: 1.9rem; height: 1.9rem; border-radius: 50%; background: var(--navy); color: var(--paper); font-family: var(--font-display); font-weight: 800; display: grid; place-items: center; font-size: .95rem; }
+.didnt { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: .8rem; margin: 1rem 0; }
+.didnt div { border-top: 2px solid var(--line); padding-top: .6rem; font-size: .93rem; }
+.didnt b { display: block; color: var(--navy); margin-bottom: .2rem; }
+.example { display: grid; gap: 1px; background: var(--line); border: 1px solid var(--line); margin: 1.25rem 0 1.5rem; }
+.example > div { background: var(--paper); padding: .6rem .9rem; display: grid; grid-template-columns: 8.5rem 1fr; gap: .2rem 1rem; align-items: baseline; }
+.example .k { font-size: .78rem; letter-spacing: .05em; text-transform: uppercase; color: var(--grey); font-weight: 600; grid-row: span 2; }
+.example .sub { display: block; font-size: .82rem; color: var(--grey); }
+@media (max-width: 520px) { .example > div { grid-template-columns: 1fr; } .example .k { grid-row: auto; } }
+footer code { overflow-wrap: anywhere; }
+td.n, th.n { white-space: nowrap; }
+.scroll { margin-bottom: 1.5rem; }
+footer { margin-top: 3.5rem; padding-top: 1rem; border-top: 1px solid var(--line); font-size: .85rem; color: var(--grey); }
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+</style>
+</head>
+<body>
+<header class="masthead wrap">
+  <div class="eyebrow">Policy Atlas · evidence search · task 050 · 8 October 2026</div>
+  <h1>Screening experiments</h1>
+  <p class="lede">Screening is the step that reads the title and abstract of each search result and decides whether to keep it. We tested this step against decisions made by human reviewers. A cheaper language model, with a revised prompt and each review's inclusion criteria, kept more of the relevant studies than the setting we use today, and cost about a fifth as much. It also did clearly better than methods that do not use a language model. The experiments took one day and cost about $9.</p>
+  <div class="tiles" role="list">
+    <div class="tile" role="listitem"><div class="num accent">0.90</div><div class="lab">recall on the full test set: the share of relevant studies that were kept</div></div>
+    <div class="tile" role="listitem"><div class="num">+6 pts</div><div class="lab">higher recall than today's setting, on the small test set (0.854 to 0.917)</div></div>
+    <div class="tile" role="listitem"><div class="num">⅕</div><div class="lab">of today's cost per test run ($0.19 instead of $0.97)</div></div>
+    <div class="tile" role="listitem"><div class="num accent">+10 pts</div><div class="lab">higher recall than the best method without a language model, with the same number of documents kept</div></div>
+    <div class="tile" role="listitem"><div class="num">0.7 pts</div><div class="lab">the recall gained by asking the model three times instead of once</div></div>
+  </div>
+</header>
+
+<main>
+<section class="wrap">
+  <h2>Main results</h2>
+  <ol class="steps">
+    <li><b>The cheaper model is at least as good.</b> gpt-5.6-luna kept as many relevant studies as today's model, gpt-5.4-mini, or more, in every comparison. It costs about a quarter as much per call. gpt-5.4-mini does no reasoning before it answers. gpt-5.6-luna does a little.</li>
+    <li><b>Today's prompt handles inclusion criteria badly.</b> The app adds a plan's inclusion criteria below the research question. In our tests, adding each review's published criteria lowered recall by 4 to 7 points. Today's prompt does not tell the model how to use criteria, so the model treated every criterion as a strict rule. It dropped studies because of details that a reader can only check in the full paper, such as the study design.</li>
+    <li><b>Three changes to the prompt fixed this.</b> The new prompt says that a criterion is a reason to drop a study only when the abstract clearly contradicts it. It says that a study about the right subject is kept even if one detail differs. If the user names a population, a clearly different population is dropped and a related population is kept. With the criteria included, recall rose from 0.854 (today's model and prompt) to 0.917. <b>This is the final setting: it uses the criteria.</b></li>
+    <li><b>The result holds on the full test set.</b> With the final setting (Luna, new prompt, criteria included), recall was 0.900 on 2,949 documents. The best method without a language model reached 0.799 when it kept the same number of documents. The difference was largest for the development-policy questions from 3ie (0.884 against 0.750). Precision on SYNERGY was 0.688 for the language model and 0.633 for the best other method.</li>
+    <li><b>Asking the model three times adds little.</b> Today the model answers three times for each document, and the majority answer counts. This adds 0.7 points of recall compared with one answer. A cheaper rule adds 2.4 points: ask once, and ask a second time only if the first answer is "drop".</li>
+  </ol>
+
+  <h2>How we reached the final setting</h2>
+  <p>All rows use each review's published title as the research question. The first group adds the review's inclusion criteria, as the app does. Each row in that group adds one change to the row above it. The second group shows the same settings without criteria, for comparison. These results are from the small test set (144 relevant studies), so differences under about 5 points could be chance.</p>
+</section>
+<section class="wide">
+  <div class="scroll wrap">
+    <table>
+      <thead><tr><th>Setting</th><th>Model</th><th>Prompt</th><th class="n">Recall</th><th class="n">Precision</th><th class="n">Cost per run</th></tr></thead>
+      <tbody>
+        <tr><td colspan="6"><b>With criteria (as the app works)</b></td></tr>
+        <tr><td>Today's setting</td><td>gpt-5.4-mini</td><td>Today's</td><td class="n">0.854</td><td class="n">0.695</td><td class="n">$0.97</td></tr>
+        <tr><td>1. Cheaper model</td><td>gpt-5.6-luna</td><td>Today's</td><td class="n">0.868</td><td class="n">0.714</td><td class="n">$0.23</td></tr>
+        <tr class="hl"><td>2. New prompt: final setting</td><td>gpt-5.6-luna</td><td>New (v4)</td><td class="n">0.917</td><td class="n">0.698</td><td class="n">$0.19</td></tr>
+        <tr><td colspan="6"><b>Without criteria (for comparison)</b></td></tr>
+        <tr><td>Today's model and prompt</td><td>gpt-5.4-mini</td><td>Today's</td><td class="n">0.896</td><td class="n">0.620</td><td class="n">$0.91</td></tr>
+        <tr><td>Cheaper model</td><td>gpt-5.6-luna</td><td>Today's</td><td class="n">0.938</td><td class="n">0.659</td><td class="n">$0.23</td></tr>
+        <tr><td>Cheaper model, new prompt</td><td>gpt-5.6-luna</td><td>New (v4)</td><td class="n">0.958</td><td class="n">0.639</td><td class="n">$0.17</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+<section class="wrap">
+  <p>With today's prompt, adding criteria lowers recall by 4 to 7 points, because the model uses them as strict rules. The new prompt restores most of that recall and keeps most of the gain in precision. Without criteria, recall is higher but precision is lower. We keep the criteria because the app passes them to the screen and because precision matters too. On the full test set, the final setting reached a recall of 0.900. Its precision was 0.688 on SYNERGY, the only source where every dropped study was judged by a human on title and abstract, and 0.642 across all sources.</p>
+
+  <h2>Ground truth</h2>
+  <p>For each test, the model gets a research question and the title and abstract of one study. It answers "keep" or "drop". To score these answers, we need cases where the correct answer is known. Published systematic reviews and evidence gap maps provide them. Their authors decided, study by study, which studies to include. We give the model the same question and study, and count how often it agrees with the authors.</p>
+  <div class="example" role="group" aria-label="One test item">
+    <div><span class="k">Question</span>Long-term Outcomes of Cognitive Behavioral Therapy for Anxiety-Related Disorders <span class="sub">the published title of the review; its published criteria can be added below it</span></div>
+    <div><span class="k">Study</span>Applied relaxation vs. cognitive therapy in the treatment of generalized anxiety disorder <span class="sub">title and abstract</span></div>
+    <div><span class="k">Correct answer</span><b>Keep</b> <span class="sub">the review's authors included this study</span></div>
+    <div><span class="k">Model's answer</span>Keep or drop <span class="sub">this is what we score</span></div>
+  </div>
+  <h3>How we add the criteria</h3>
+  <p>Each question can also carry the review's own inclusion criteria. A script copies them from the published source, in the same way as the titles, so no language model writes them. The source differs by dataset:</p>
+  <ul>
+    <li><b>Cochrane (CSMeD):</b> the "Objectives" section of the review's abstract.</li>
+    <li><b>SYNERGY:</b> the eligibility criteria that SYNERGY quotes from each review paper, one criterion per line.</li>
+    <li><b>3ie:</b> the map's own list of intervention groups and outcome groups. Two maps (climate and anaemia) do not publish this list in a form we can read, so they have no criteria.</li>
+  </ul>
+  <p>The criteria are added below the question by the app's own code, under the heading "Additional screening criteria". This is exactly what the app does when a plan includes screening criteria. The app accepts at most 2,000 characters in total and 1,000 per criterion. A longer criterion is split into sentences, and if the total is still too long the last criteria are left out. This happened for one review. For example, the question above is followed by six criteria, starting with: "Randomized clinical trials were included that examined effects of CBT (ie, any therapy with cognitive restructuring and/or a behavioral therapy, such as exposure, as core component)…"</p>
+  <p>The 30 questions come from three public sources, 10 from each. The meaning of a "drop" answer is different in each source. This affects what each source can tell us.</p>
+</section>
+<section class="wide">
+  <div class="scroll wrap">
+    <table>
+      <thead><tr><th>Source</th><th>What it is</th><th>A study marked "drop" is</th><th>What it can measure</th></tr></thead>
+      <tbody>
+        <tr><td><b>SYNERGY</b></td><td>26 systematic reviews, with every screening decision recorded. Topics: psychology, medicine, software</td><td>A study that a human reviewer dropped after reading the title and abstract</td><td>Recall and precision</td></tr>
+        <tr><td><b>CSMeD</b></td><td>Cochrane health reviews. We use the decisions made after reading the full paper</td><td>A study that a human reviewer <i>kept</i> after reading the abstract, then dropped after reading the full paper</td><td>Recall only. The model is right to keep many of these studies</td></tr>
+        <tr><td><b>3ie</b></td><td>10 evidence gap maps on development policy: climate, governance, migration, food, health, water, energy, land use, resilience</td><td>A study taken from one of the other 9 maps. Nobody checked it against this question</td><td>Recall on policy topics</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+<section class="wrap">
+  <p>We used two test sets. The small set has 288 documents, and half of them should be kept. One run on it costs less than $1, so we used it to try ideas. The full set has 2,949 documents, and a third of them should be kept. We used it to confirm the best setting. The questions are the published titles. A script copied them from the sources, so no language model wrote them. Every experiment used the app's own screening code and changed only one setting at a time.</p>
+  <div class="note"><b>Limits of this test.</b> In real search results, only a few per cent of documents are relevant. Here, a third to a half are. So precision in these tests is much higher than it will be in the app. Most of the "drop" studies are easy to reject: for the anxiety question above, they include studies of knee injuries and vertigo. Two thirds of the questions are about health. The test sets have no full texts, so the second screening step, which reads the full paper, is not tested. Recall is the most reliable number here.</div>
+</section>
+
+<section class="wide">
+  <figure>
+    <svg viewBox="0 0 760 250" role="img" aria-label="Recall on the full test set when every method keeps the same 1,339 of 2,949 documents and gets the same question and criteria: language model 0.900, embeddings 0.799, hybrid 0.773, BM25 0.689, random choice 0.467.">
+      <g font-family="inherit" font-size="14" fill="currentColor">
+        <g stroke="var(--line)" stroke-width="1">
+          <line x1="240" y1="10" x2="240" y2="222"/><line x1="470" y1="10" x2="470" y2="222" stroke-dasharray="3 4"/><line x1="700" y1="10" x2="700" y2="222" stroke-dasharray="3 4"/>
+        </g>
+        <g font-size="12" fill="var(--grey)" text-anchor="middle"><text x="240" y="240">0</text><text x="470" y="240">0.5</text><text x="700" y="240">1.0 recall</text></g>
+        <g text-anchor="end">
+          <text x="228" y="38" font-weight="700">Language model (Luna)</text>
+          <text x="228" y="80">Embedding similarity</text>
+          <text x="228" y="122">Embeddings + BM25</text>
+          <text x="228" y="164">BM25 keyword score</text>
+          <text x="228" y="206" fill="var(--grey)">Random choice</text>
+        </g>
+        <rect class="mark" x="240" y="20" width="414" height="26" rx="4" fill="var(--c-accent)"><title>Language model: recall 0.900 (859 of 954)</title></rect>
+        <rect class="mark" x="240" y="62" width="368" height="26" rx="4" fill="var(--c-plain)"><title>Embedding similarity: recall 0.799 (762 of 954)</title></rect>
+        <rect class="mark" x="240" y="104" width="356" height="26" rx="4" fill="var(--c-plain)"><title>Embeddings + BM25: recall 0.773 (737 of 954)</title></rect>
+        <rect class="mark" x="240" y="146" width="317" height="26" rx="4" fill="var(--c-plain)"><title>BM25: recall 0.689 (657 of 954)</title></rect>
+        <rect class="mark" x="240" y="188" width="215" height="26" rx="4" fill="var(--c-plain)" fill-opacity=".45"><title>Random choice: expected recall 0.467</title></rect>
+        <g font-size="13" font-weight="600">
+          <text x="662" y="38">0.900</text><text x="616" y="80">0.799</text><text x="604" y="122">0.773</text><text x="565" y="164">0.689</text><text x="463" y="206">0.467</text>
+        </g>
+      </g>
+    </svg>
+    <figcaption><b>The language model keeps more relevant studies than the other methods.</b> Full test set, 954 relevant studies. Every method gets the same question and criteria, and keeps the same number of documents for each question as the language model did (1,339 of 2,949). So the methods differ only in which documents they keep. Embedding similarity scores how close the meaning of a study is to the question. BM25 scores shared keywords. If the embedding method gets only the question, without the criteria, its recall is 0.811.</figcaption>
+  </figure>
+  <div class="scroll wrap">
+    <table>
+      <thead><tr><th>Full test set, same number kept</th><th class="n">Recall</th><th class="n">Precision, SYNERGY</th><th class="n">Precision, all sources</th><th class="n">F2</th></tr></thead>
+      <tbody>
+        <tr class="hl"><td>Language model (final setting)</td><td class="n">0.900</td><td class="n">0.688</td><td class="n">0.642</td><td class="n">0.833</td></tr>
+        <tr><td>Embedding similarity</td><td class="n">0.799</td><td class="n">0.633</td><td class="n">0.569</td><td class="n">0.739</td></tr>
+        <tr><td>Embeddings + BM25</td><td class="n">0.773</td><td class="n">0.611</td><td class="n">0.550</td><td class="n">0.715</td></tr>
+        <tr><td>BM25 keyword score</td><td class="n">0.689</td><td class="n">0.535</td><td class="n">0.491</td><td class="n">0.637</td></tr>
+        <tr><td>Random choice</td><td class="n">0.467</td><td class="n">—</td><td class="n">0.333</td><td class="n">—</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="wrap">
+  <h2>Do we need to ask the model three times?</h2>
+  <p>Today the model answers three times for each document, and the document is kept if at least two answers say "keep". We saved all three answers in every run. So we could test other rules on the same answers, without making new calls to the model.</p>
+  <p>A majority vote corrects a wrong "keep" as often as a wrong "drop". But for screening, a wrong "drop" is the worse mistake, because the study is lost. A wrong "keep" is less serious, because the second step reads the full paper and can still drop it. So it makes sense to ask again only when the first answer is "drop".</p>
+</section>
+
+<section class="wide">
+  <figure>
+    <svg viewBox="0 0 760 300" role="img" aria-label="Recall against model calls per document for five rules. One answer: 0.893 at 1 call. Ask again once after a drop: 0.917 at 1.54 calls. Ask twice more after a drop, then majority: 0.905 at 2.09 calls. Majority of three: 0.900 at 3 calls. Keep if any of three says keep: 0.927 at 3 calls.">
+      <g font-family="inherit" font-size="13" fill="currentColor">
+        <g stroke="var(--line)" stroke-width="1">
+          <line x1="90" y1="30" x2="690" y2="30"/><line x1="90" y1="103.3" x2="690" y2="103.3"/><line x1="90" y1="176.7" x2="690" y2="176.7"/><line x1="90" y1="250" x2="690" y2="250"/>
+        </g>
+        <g font-size="12" fill="var(--grey)" text-anchor="end"><text x="80" y="34">0.94</text><text x="80" y="107">0.92</text><text x="80" y="181">0.90</text><text x="80" y="254">0.88</text></g>
+        <g font-size="12" fill="var(--grey)" text-anchor="middle"><text x="90" y="272">1</text><text x="390" y="272">2</text><text x="690" y="272">3</text><text x="390" y="292">calls to the model per document</text></g>
+        <text x="16" y="20" font-size="12" fill="var(--grey)">recall</text>
+        <g stroke="var(--paper)" stroke-width="2">
+          <circle class="mark" cx="90" cy="202.3" r="7" fill="var(--c-plain)"><title>One answer: recall 0.893, 1 call per document</title></circle>
+          <circle class="mark" cx="417" cy="158.3" r="7" fill="var(--c-plain)"><title>After a drop, ask twice more, then majority: recall 0.905, 2.09 calls</title></circle>
+          <circle class="mark" cx="690" cy="176.7" r="7" fill="var(--c-plain)"><title>Majority of three (today): recall 0.900, 3 calls</title></circle>
+          <circle class="mark" cx="690" cy="77.7" r="7" fill="var(--c-plain)"><title>Keep if any of three says keep: recall 0.927, 3 calls</title></circle>
+          <circle class="mark" cx="252" cy="114.3" r="9" fill="var(--c-accent)"><title>After a drop, ask once more: recall 0.917, 1.54 calls</title></circle>
+        </g>
+        <text x="104" y="222">One answer · 0.893</text>
+        <text x="265" y="100" font-weight="700">After a drop, ask once more · 0.917</text>
+        <text x="430" y="148">After a drop, ask twice more · 0.905</text>
+        <text x="676" y="198" text-anchor="end">Majority of three (today) · 0.900</text>
+        <text x="676" y="70" text-anchor="end">Keep if any of three says keep · 0.927</text>
+      </g>
+    </svg>
+    <figcaption><b>Asking again only after a "drop" gives most of the gain with about half the calls.</b> Full test set, Luna with the new prompt and criteria. Each dot is a different rule applied to the same saved answers. All rules use the app's existing rule for documents with no abstract.</figcaption>
+  </figure>
+  <div class="scroll wrap">
+    <table>
+      <thead><tr><th>Rule</th><th class="n">Recall</th><th class="n">Precision</th><th class="n">F1</th><th class="n">F2</th><th class="n">Calls per document</th></tr></thead>
+      <tbody>
+        <tr><td>One answer</td><td class="n">0.893</td><td class="n">0.634</td><td class="n">0.742</td><td class="n">0.826</td><td class="n">1.00</td></tr>
+        <tr><td>Majority of three (today)</td><td class="n">0.900</td><td class="n">0.642</td><td class="n">0.749</td><td class="n">0.833</td><td class="n">3.00</td></tr>
+        <tr><td>Keep if any of three says keep</td><td class="n">0.927</td><td class="n">0.609</td><td class="n">0.735</td><td class="n">0.839</td><td class="n">3.00</td></tr>
+        <tr><td>After a drop, ask twice more, then majority</td><td class="n">0.905</td><td class="n">0.629</td><td class="n">0.742</td><td class="n">0.832</td><td class="n">2.09</td></tr>
+        <tr class="hl"><td>After a drop, ask once more; keep if it says keep</td><td class="n">0.917</td><td class="n">0.619</td><td class="n">0.739</td><td class="n">0.837</td><td class="n">1.54</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="wrap">
+  <p>Precision is the share of kept documents that are relevant. F1 is a score that weighs precision and recall equally. F2 counts recall twice as much as precision. The rules differ by about one point on F1 and F2. Each rule gives up a little precision for a little recall. The majority vote has the best precision and F1. The rules that keep more have the best F2. F2 is the better guide for this step, because a wrongly dropped study is the worse mistake.</p>
+  <p>There is one good reason to ask more than once: consistency. If we ran the screen twice with one answer each time, about 5% of documents would get a different decision. A published study found 8% with a similar model. Asking again after a "drop" reduces the risk that matters most, which is losing a relevant study.</p>
+
+  <h2>What did not work</h2>
+  <div class="didnt">
+    <div><b>A shorter prompt</b>We kept the same rules but used 59% fewer words. Recall fell by 3 points with both models. The models stopped answering "unsure". The cost saving was small, and there was no saving with Luna, because short prompts do not get the discount for repeated text.</div>
+    <div><b>Adding criteria to today's prompt</b>With today's prompt, adding the published inclusion criteria lowered recall by 4 to 7 points. The models dropped studies because of the study design, the data source or the comparison group, which an abstract rarely shows. The app adds a plan's criteria to today's prompt in the same way. The new prompt fixes this, so the final setting keeps the criteria.</div>
+    <div><b>Asking again when the model is unsure</b>The model reports a confidence score with each answer. It gave scores of 0.8 to 0.99 to its wrong "drop" answers, the same as to its correct ones. So a rule based on this score would not catch the mistakes.</div>
+    <div><b>Keyword search instead of a model</b>BM25 was only a little better than random choice on the small test set. Combining it with embedding similarity made the result worse than embedding similarity alone.</div>
+  </div>
+
+  <h2>What we recommend</h2>
+  <ol class="steps">
+    <li><b>Switch screening to gpt-5.6-luna with the new prompt</b> (<code>screen_v4</code>), and pass the plan's criteria to it.</li>
+    <li><b>Replace the majority of three with "after a drop, ask once more"</b>. First, confirm the result with one real run on the full test set.</li>
+    <li><b>Before the switch, test on real search results.</b> Label a small sample of real search results by hand. Check how many extra documents are kept and what the second step does with them.</li>
+  </ol>
+</section>
+</main>
+
+<footer class="wrap">
+  Details: <code>scripts/evals/screening/results/analyses/2026-10-08-screening-experiments.md</code>. Dated log: <code>docs/tasks/050-improve-screening/notes.md</code>. Sources: run-to-run differences, Figalová et al. 2026, arXiv 2608.26885; criteria applied as strict rules, Behrouzian et al. 2026, doi 10.3390/info17050449. Data: CSMeD (Kusa et al. 2023), SYNERGY (ASReview), 3ie Development Evidence Portal.
+</footer>
+</body>
+</html>

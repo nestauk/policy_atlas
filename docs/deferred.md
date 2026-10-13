@@ -339,7 +339,7 @@ architectural decision to defer, not an omission. Sources: architecture referenc
   `test_acquire_record_cap.py` bounds total volume, replacing the `results_returned == 45`
   assertion that per-call semantics had removed. **Still provisional:** 200 is sized from
   purpose (the deep loop's confident-relevant goal), not measured.
-  `scripts/eval_ground_truth/` (lives on a different branch) scores search recall against
+  `scripts/evals/search/` (lives on a different branch) scores search recall against
   published-review ground truth (baseline: mean 2.4%, max 9.1%, at rapid depth under the
   divided quota) — after this branch and that one merge, re-run it and set the caps from
   where recall stops improving. With rounds + arms live (task 029) that re-run is the
@@ -2200,9 +2200,9 @@ omissions.
   `/api/v1/projects/*` and every bookmarked URL; the frontend and the e2e specs are the
   only consumers. Until it lands, `frontend/src/lib/vocabulary.ts` stays the single place
   the mapping is written down.
-- **MFA on the Cognito pool** — the pool is `MfaConfiguration: None` and sets no explicit
-  password policy (`Policies: null`, so Cognito's account defaults apply: 8 characters,
-  upper/lower/number/symbol). That was proportionate while every account could read only
+- **MFA on the Cognito pool** — the pool is `MfaConfiguration: None` and its password
+  policy restates Cognito's defaults (8 characters, upper/lower/number/symbol; explicit
+  since 2026-10-01, when temporary-password validity went to 30 days). That was proportionate while every account could read only
   its owner's work. 033's `is_admin` (owner call (f)) changes the calculus: an admin
   account reads every row in every organisation, `private` included, behind a password
   alone. **Owner ruling 2026-08-24: recorded as a known accepted risk, not fixed in 033** —
@@ -2275,6 +2275,24 @@ omissions.
   `index.css` token list and the tailwind-merge registration in `cn.ts` stay in sync
   (`src/ui/brand/typeScale.test.ts`), which is the failure that actually shipped in
   028.
+- **Portfolio surfaces in the mock API** — **discharged in 033**: mock
+  `/api/v1/portfolios` plus membership on the project so Share and the
+  projects list work under `VITE_MOCK=1`.
+
+## Metabase staging (task 034 seams)
+
+- **Owner-safe Policy Atlas source model and login** — the staging stack provides
+  private network reachability but deliberately creates no Policy Atlas database
+  credentials or grants. Direct table access would bypass the API's owner scoping.
+  A follow-up must approve curated analytics views (or equivalent row-level
+  controls), create a least-privilege read role, store it in Secrets Manager and
+  onboard that source in Metabase.
+- **Single sign-on and embedding** — Metabase uses its own accounts in this slice.
+  Cognito/OIDC integration, user lifecycle, embedding and any Policy Atlas UI
+  integration require a separate authentication and product decision.
+- **Production analytics** — `deploy_analytics` is fail-closed outside staging.
+  Production capacity, availability, backup/restore rehearsal, access controls and
+  operational ownership must be reviewed before a production config is added.
 - **Project surfaces in the mock API** — ~~`src/mock/api.ts` serves no
   `/api/v1/portfolios`~~ **discharged by 033** (Phase 10a + ux-snags): the mock now
   serves `/api/v1/me`, `GET /api/v1/projects`, `GET /api/v1/projects/{id}`,
@@ -3061,3 +3079,41 @@ chunk citation carries a verbatim quote of about 250 characters (first section:
   `source_snapshot_id` OR `full_text_snapshot_id`); Langfuse v3 REST
   `/api/public/observations` by run window (the CLI refuses both the legacy and
   v2 endpoints on this project).
+## Search recall baselines (task 046 seams)
+
+Context: `scripts/evals/search/measure/baseline_recall.py` and `results/history.md` (rows dated
+2026-09-25). Contract at `docs/tasks/046-search-baselines/contract.md`.
+
+- **P2 — grey-literature scoring keys, with the raw Overton arm.** The ground truth has 34
+  references with no DOI and no Overton id (31 in the loneliness review), so every recall
+  number, baseline and pipeline alike, is scholarly recall only. Fixing it is labelling
+  work on the ground truth: fill the `overton_id` column, then add the `overton` arm to
+  the baselines so Overton's contribution becomes visible. The design that was drafted (a
+  suggest-only title lookup on OpenAlex and Overton with a human accepting each key) is in
+  git history at commit `37d496c`. Lands with the owner's planned ground-truth expansion
+  to more reviews, not before. **Update 2026-09-25:** the expansion has its inputs: the four
+  fetchers (`scripts/evals/search/get_*.py`, contract § Amendment 2) write candidate reviews
+  from Campbell, 3ie gap maps, the YEF gap map and SR4ALL into `results/ground_truth/`. The
+  gap-map rows carry about 9,500 grey-literature studies with a URL and no DOI; that is the
+  `overton_id` labelling set. Still to do: choose the rows, label the reference-list sources,
+  fill `overton_id`, upload, then the `overton` arm.
+- **The "swap" slice.** The baselines show one Semantic Scholar semantic (snippet) search
+  reaching 18.1% at the 1,000 ceiling, above the pipeline's deep depth (15.3%), and one plain
+  Consensus search beating the pipeline's rapid depth, while one plain OpenAlex search falls
+  below it. Whether to add a Semantic Scholar snippet or Consensus backend to the pipeline,
+  or to change how queries are written for OpenAlex, is a separate decision on these results.
+  Open questions for that slice: the snippet arm leans towards open-access papers (body
+  text), returns about 550 unique papers per 1,000 snippets, and needs a DOI lookup step;
+  Semantic Scholar's keyword search needs every word to match and is the wrong shape for a
+  title-length intent, so a keyword-shaped query would test it fairly. If the cost
+  trade-off matters for that decision, price a cap as a request sized to the cap (one
+  Consensus call per 100 results), not as the 300-result pages the baselines fetched: the
+  cap-50 to cap-200 Consensus rows overstate that price by up to 3x (review stack,
+  2026-09-25).
+- **Upload the cache to S3.** `results/cache/` is one laptop's copy of what each service
+  ranked where (about 25 MB for three arms and four reviews). Worth keeping if the results
+  are ever cited; today a `--refresh` refetch is the only recovery, and Consensus bills
+  every call.
+- **Ranking-stability test.** Fetch the same query several times and measure how much the
+  ranking moves, so a recall difference of a point or two between runs can be told from
+  noise. Not run; each Consensus repeat costs about $0.50 per review.

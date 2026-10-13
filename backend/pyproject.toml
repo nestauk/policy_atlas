@@ -57,6 +57,7 @@ dependencies = [
     # >=50: PYSEC-2026-3552/3553/3554 against 48.x (owner-approved bump,
     # 2026-08-05, task 028 PR #41 audit gate)
     "cryptography>=50,<51",
+    "pandas>=3.0.5",
 ]
 
 [build-system]
@@ -96,6 +97,7 @@ dev = [
     "ruff>=0.4",
     "types-psycopg2",
     "pytest-socket>=0.8.0",
+    "ipykernel>=7.3.0",
 ]
 
 # Task 033 (approved dependency gate, contract rev 3.0 § 10): the operator CLI's
