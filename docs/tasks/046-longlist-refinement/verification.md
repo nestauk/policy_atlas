@@ -2081,6 +2081,14 @@ eslint, vitest 883 in 87 files, build). No prompt changed, so no hash was
 re-pinned; the generated OpenAPI files are untouched (the scope context's
 `place_removed` key was never on the wire).
 
+**CI audit on PR #98 (2026-10-13).** The PR's `audit` job failed on 18
+advisories in three packages the branch inherited from `feat/options-scoping`
+(pyjwt 2.13.0, urllib3 2.7.0, langgraph-sdk 0.4.2). `dev` had already fixed
+the same three by a lock-only bump (690854bd). The same bump was applied here
+with `uv lock --upgrade-package` (pyjwt 2.15.1, urllib3 2.8.0,
+langgraph-sdk 0.4.7; `uv.lock` only, no pin change); `make audit` is clean and
+the 41 tests that use JWTs pass. The full gate re-runs on CI.
+
 ## Rubric status
 
 Build-phase view. The review conversation checks each box against the code.
