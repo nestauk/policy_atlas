@@ -2089,6 +2089,19 @@ with `uv lock --upgrade-package` (pyjwt 2.15.1, urllib3 2.8.0,
 langgraph-sdk 0.4.7; `uv.lock` only, no pin change); `make audit` is clean and
 the 41 tests that use JWTs pass. The full gate re-runs on CI.
 
+**The stack brought up to dev (2026-10-13/14).** On the owner's word, `dev` was
+merged into `feat/options-scoping` first (26b6bcbd; six ledger conflicts, both
+sides kept; dev's lock pins, which supersede the narrow bump above), then the
+merged feat into this branch (dcf5dfc1; `prompt_hash_guard.py` now guards
+modules, `.txt` prompts and the extra files together). Each merge was gated in
+a throwaway worktree before its push: feat — pytest 3204, infra 86, guards,
+vitest 805 in 86 files; this branch — okf-validate, pytest 3603 passed in
+840.08s, mypy, ruff, build, infra 86, audit-paths, prompt-guard (35 files
+unchanged), font-guard, drift-check, vitest 883 in 87 files, build. One
+earlier run of this branch's gate failed on 692 tests because Docker Desktop
+stopped mid-run (Postgres gone); rerun green. Noted for the owner: `dev` carries
+`docs/tasks/046-search-baselines`, a second task 046 — the number is used twice.
+
 ## Rubric status
 
 Build-phase view. The review conversation checks each box against the code.
