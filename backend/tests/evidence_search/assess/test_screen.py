@@ -66,6 +66,7 @@ from tests.helpers import (
 
 # --- Schema / structure ---
 
+
 def test_screen_table_count(conn: Connection) -> None:
     # 33 -> 36: task 033 adds `organisation` and `app_user` (tenancy above the
     # entity hierarchy) and ADR 0032 adds `project_membership`; 36 -> 37:
@@ -89,13 +90,21 @@ def test_ssr_columns(conn: Connection) -> None:
     inspector = inspect(conn)
     cols = {c["name"] for c in inspector.get_columns("source_screening_result")}
     assert {
-        "source_screening_result_id", "evidence_scope_id", "task_source_snapshot_id",
-        "task_id", "screened_by_run_id", "status", "screen_basis",
-        "screen_decision_confidence", "screen_stage", "screened_at",
+        "source_screening_result_id",
+        "evidence_scope_id",
+        "task_source_snapshot_id",
+        "task_id",
+        "screened_by_run_id",
+        "status",
+        "screen_basis",
+        "screen_decision_confidence",
+        "screen_stage",
+        "screened_at",
     } <= cols
 
 
 # --- Stub logic (pure Python, no DB) ---
+
 
 def test_stub_relevant_with_abstract() -> None:
     result, usage = StubScreeningBackend().screen_envelope(
@@ -177,8 +186,15 @@ def test_stub_failed() -> None:
 
 # --- Check constraints ---
 
-def _ssr_insert(conn: Connection, task_id: uuid.UUID, run_id: uuid.UUID,
-                scope_id: uuid.UUID, tss_id: uuid.UUID, **overrides: object) -> None:
+
+def _ssr_insert(
+    conn: Connection,
+    task_id: uuid.UUID,
+    run_id: uuid.UUID,
+    scope_id: uuid.UUID,
+    tss_id: uuid.UUID,
+    **overrides: object,
+) -> None:
     """Raw insert into source_screening_result for constraint testing."""
     defaults = dict(
         source_screening_result_id=uuid.uuid4(),
@@ -230,8 +246,16 @@ def test_ck_failed_with_non_null_basis(conn: Connection) -> None:
     scope_id = seed_scope(conn, pid)
     _, tss_id = seed_source(conn, pid)
     with pytest.raises(IntegrityError):
-        _ssr_insert(conn, pid, rid, scope_id, tss_id,
-                    status="failed", screen_basis="title_only", screen_decision_confidence=None)
+        _ssr_insert(
+            conn,
+            pid,
+            rid,
+            scope_id,
+            tss_id,
+            status="failed",
+            screen_basis="title_only",
+            screen_decision_confidence=None,
+        )
     conn.rollback()
     conn.begin()
 
@@ -242,8 +266,14 @@ def test_ck_relevant_with_null_confidence(conn: Connection) -> None:
     _, tss_id = seed_source(conn, pid)
     with pytest.raises(IntegrityError):
         _ssr_insert(
-            conn, pid, rid, scope_id, tss_id,
-            status="relevant", screen_basis="title_abstract", screen_decision_confidence=None,
+            conn,
+            pid,
+            rid,
+            scope_id,
+            tss_id,
+            status="relevant",
+            screen_basis="title_abstract",
+            screen_decision_confidence=None,
         )
     conn.rollback()
     conn.begin()
@@ -264,21 +294,43 @@ def test_partial_unique_stage_matrix(conn: Connection) -> None:
         _ssr_insert(conn, pid, rid, scope_id, tss_id, screen_stage=2, screen_basis="full_text")
 
     _ssr_insert(
-        conn, pid, rid, scope_id, tss_id, screen_stage=1,
-        status="failed", screen_basis=None, screen_decision_confidence=None,
+        conn,
+        pid,
+        rid,
+        scope_id,
+        tss_id,
+        screen_stage=1,
+        status="failed",
+        screen_basis=None,
+        screen_decision_confidence=None,
     )
     _ssr_insert(
-        conn, pid, rid, scope_id, tss_id, screen_stage=2,
-        status="failed", screen_basis=None, screen_decision_confidence=None,
+        conn,
+        pid,
+        rid,
+        scope_id,
+        tss_id,
+        screen_stage=2,
+        status="failed",
+        screen_basis=None,
+        screen_decision_confidence=None,
     )
     _ssr_insert(
-        conn, pid, rid, scope_id, tss_id, screen_stage=2,
-        status="failed", screen_basis=None, screen_decision_confidence=None,
+        conn,
+        pid,
+        rid,
+        scope_id,
+        tss_id,
+        screen_stage=2,
+        status="failed",
+        screen_basis=None,
+        screen_decision_confidence=None,
     )
 
     rows = conn.execute(
-        select(source_screening_result.c.screen_stage, source_screening_result.c.status)
-        .where(source_screening_result.c.task_source_snapshot_id == tss_id)
+        select(source_screening_result.c.screen_stage, source_screening_result.c.status).where(
+            source_screening_result.c.task_source_snapshot_id == tss_id
+        )
     ).fetchall()
     assert len(rows) == 5
     assert sum(1 for r in rows if r.status == "failed") == 3
@@ -286,6 +338,7 @@ def test_partial_unique_stage_matrix(conn: Connection) -> None:
 
 
 # --- Round-trips ---
+
 
 def test_screen_sources_relevant_with_abstract(conn: Connection) -> None:
     pid, rid = seed_task_and_run(conn)
@@ -351,9 +404,9 @@ def test_screen_sources_failed(conn: Connection) -> None:
 def test_screen_sources_mixed_counts(conn: Connection) -> None:
     pid, rid = seed_task_and_run(conn)
     scope_id = seed_scope(conn, pid)
-    seed_source(conn, pid, meta={"abstract": "X"})            # relevant, title_abstract
+    seed_source(conn, pid, meta={"abstract": "X"})  # relevant, title_abstract
     seed_source(conn, pid, meta={"_stub_not_relevant": True, "abstract": "X"})  # not_relevant
-    seed_source(conn, pid, meta={"_stub_failed": True})        # failed
+    seed_source(conn, pid, meta={"_stub_failed": True})  # failed
     ctx = ScreenContext(scope_id=scope_id, intent="Test", context={})
 
     counts = screen_sources(conn, task_id=pid, run_id=rid, context=ctx)
@@ -362,12 +415,12 @@ def test_screen_sources_mixed_counts(conn: Connection) -> None:
     assert counts["relevant"] == 1
     assert counts["not_relevant"] == 1
     assert counts["failed"] == 1
-    assert counts["title_abstract"] == 2   # relevant + not_relevant both have abstract
+    assert counts["title_abstract"] == 2  # relevant + not_relevant both have abstract
     assert counts["title_only"] == 0
 
 
-def test_screen_sources_unsure_unanimous_relevant_at_half_confidence(conn: Connection) -> None:
-    """Three unanimous ``_stub_unsure`` reps vote relevant and average to p=0.5."""
+def test_screen_sources_unsure_relevant_at_half_confidence(conn: Connection) -> None:
+    """One ``_stub_unsure`` reply keeps the document at p=0.5."""
     pid, rid = seed_task_and_run(conn)
     scope_id = seed_scope(conn, pid)
     seed_source(conn, pid, meta={"_stub_unsure": True, "abstract": "Ambiguous evidence."})
@@ -381,8 +434,8 @@ def test_screen_sources_unsure_unanimous_relevant_at_half_confidence(conn: Conne
     assert row.status == "relevant"
     assert row.screen_decision_confidence == pytest.approx(0.5)
     assert counts["relevant"] == 1
-    assert counts["unsure_reps"] == 3
-    assert counts["non_unanimous"] == 0
+    assert counts["unsure_reps"] == 1
+    assert counts["second_calls"] == 0
 
 
 def test_screen_sources_retry_after_failure_preserves_failed_rows_and_adds_new(
@@ -451,6 +504,7 @@ def test_screen_sources_idempotent_rerun(conn: Connection) -> None:
 
 def test_screen_sources_doc_exception_isolated(conn: Connection) -> None:
     """One document's screening exception lands as status='failed'; other docs still process."""
+
     class FlakyBackend:
         mode = "stub"
 
@@ -467,9 +521,7 @@ def test_screen_sources_doc_exception_isolated(conn: Connection) -> None:
                 raise RuntimeError("simulated per-doc failure")
             return self._stub.screen_envelope(payload, rep_index=rep_index)
 
-        def screen_fulltext(
-            self, payload: ScreenFullTextPayload
-        ) -> UsageResult[ScreenRepWire]:
+        def screen_fulltext(self, payload: ScreenFullTextPayload) -> UsageResult[ScreenRepWire]:
             return self._stub.screen_fulltext(payload)
 
     pid, rid = seed_task_and_run(conn)
@@ -503,9 +555,7 @@ def test_screen_context_from_jsonb(conn: Connection) -> None:
 
     plan = Plan(component="screen", evidence_scope_id=scope_id)
     config = compile(plan)
-    run_harness(
-        conn, config=config, task_id=pid, run_id=rid, provider=StubEchoProvider()
-    )
+    run_harness(conn, config=config, task_id=pid, run_id=rid, provider=StubEchoProvider())
 
     # Verify the JSONB round-trips through the harness DB load path (harness.py: dict(row.context))
     row = conn.execute(
@@ -538,19 +588,9 @@ def test_source_screened_event_payload(conn: Connection) -> None:
             "decision": "relevant",
             "confidence": 0.9,
             "reason": "Deterministic stub inclusion.",
-        },
-        {
-            "decision": "relevant",
-            "confidence": 0.9,
-            "reason": "Deterministic stub inclusion.",
-        },
-        {
-            "decision": "relevant",
-            "confidence": 0.9,
-            "reason": "Deterministic stub inclusion.",
-        },
+        }
     ]
-    assert payload["agreement"] == {"agreeing": 3, "survivors": 3}
+    assert payload["agreement"] == {"agreeing": 1, "survivors": 1}
     assert payload["aggregation_flags"] == []
 
 
@@ -582,23 +622,27 @@ def test_cross_task_fk_rejected(conn: Connection) -> None:
         "screen_decision_confidence, screened_at"
     )
     with pytest.raises(IntegrityError):
-        conn.execute(sa.text(
-            f"INSERT INTO source_screening_result ({_cross_cols}) "
-            "VALUES (:ssrid, :scope_id, :tss_id, :pid_a, :rid_a, "
-            "'relevant', 'title_abstract', 0.9, :screened_at)"
-        ), {
-            "ssrid": uuid.uuid4(),
-            "scope_id": scope_id,
-            "tss_id": tss_id_b,
-            "pid_a": pid_a,
-            "rid_a": rid_a,
-            "screened_at": now(),
-        })
+        conn.execute(
+            sa.text(
+                f"INSERT INTO source_screening_result ({_cross_cols}) "
+                "VALUES (:ssrid, :scope_id, :tss_id, :pid_a, :rid_a, "
+                "'relevant', 'title_abstract', 0.9, :screened_at)"
+            ),
+            {
+                "ssrid": uuid.uuid4(),
+                "scope_id": scope_id,
+                "tss_id": tss_id_b,
+                "pid_a": pid_a,
+                "rid_a": rid_a,
+                "screened_at": now(),
+            },
+        )
     conn.rollback()
     conn.begin()
 
 
 # --- is_retracted screening exclusion (task 019 item 8) ---
+
 
 class _CallCountingBackend:
     """Delegates to the deterministic stub but records which tss_id every
@@ -620,9 +664,7 @@ class _CallCountingBackend:
         self.envelope_tss_ids.append(payload.tss_id)
         return self._stub.screen_envelope(payload, rep_index=rep_index)
 
-    def screen_fulltext(
-        self, payload: ScreenFullTextPayload
-    ) -> UsageResult[ScreenRepWire]:
+    def screen_fulltext(self, payload: ScreenFullTextPayload) -> UsageResult[ScreenRepWire]:
         return self._stub.screen_fulltext(payload)
 
 
@@ -643,24 +685,24 @@ def test_screen_sources_excludes_retracted_doc_without_backend_call(conn: Connec
     ctx = ScreenContext(scope_id=scope_id, intent="Test", context={})
     backend = _CallCountingBackend()
 
-    counts = screen_sources(
-        conn, task_id=pid, run_id=rid, context=ctx, screening_backend=backend
-    )
+    counts = screen_sources(conn, task_id=pid, run_id=rid, context=ctx, screening_backend=backend)
 
     assert str(retracted_tss) not in backend.envelope_tss_ids
     assert str(clean_tss) in backend.envelope_tss_ids
 
     retracted_row = conn.execute(
-        select(source_screening_result)
-        .where(source_screening_result.c.task_source_snapshot_id == retracted_tss)
+        select(source_screening_result).where(
+            source_screening_result.c.task_source_snapshot_id == retracted_tss
+        )
     ).one()
     assert retracted_row.status == "excluded_retracted"
     assert retracted_row.screen_basis == "title_abstract"
     assert retracted_row.screen_decision_confidence is not None
 
     clean_row = conn.execute(
-        select(source_screening_result)
-        .where(source_screening_result.c.task_source_snapshot_id == clean_tss)
+        select(source_screening_result).where(
+            source_screening_result.c.task_source_snapshot_id == clean_tss
+        )
     ).one()
     assert clean_row.status == "relevant"
 
@@ -699,17 +741,14 @@ def test_excluded_retracted_effective_row_has_no_stage2_row(conn: Connection) ->
     ctx1 = ScreenContext(scope_id=scope_id, intent="Test", context={})
     screen_sources(conn, task_id=pid, run_id=rid, context=ctx1)
 
-    ctx2 = ScreenContext(
-        scope_id=scope_id, intent="Test", context={"screening": {"stage": 2}}
-    )
-    stage2_counts = screen_sources(
-        conn, task_id=pid, run_id=seed_run(conn, pid), context=ctx2
-    )
+    ctx2 = ScreenContext(scope_id=scope_id, intent="Test", context={"screening": {"stage": 2}})
+    stage2_counts = screen_sources(conn, task_id=pid, run_id=seed_run(conn, pid), context=ctx2)
     assert stage2_counts["stage2_screened"] == 0
 
     rows = conn.execute(
-        select(source_screening_result)
-        .where(source_screening_result.c.task_source_snapshot_id == retracted_tss)
+        select(source_screening_result).where(
+            source_screening_result.c.task_source_snapshot_id == retracted_tss
+        )
     ).fetchall()
     assert len(rows) == 1
     assert rows[0].status == "excluded_retracted"
@@ -733,13 +772,15 @@ def test_screen_sources_excluded_retracted_idempotent_rerun(conn: Connection) ->
     assert second["excluded_retracted"] == 0
 
     rows = conn.execute(
-        select(source_screening_result)
-        .where(source_screening_result.c.task_source_snapshot_id == retracted_tss)
+        select(source_screening_result).where(
+            source_screening_result.c.task_source_snapshot_id == retracted_tss
+        )
     ).fetchall()
     assert len(rows) == 1
 
 
 # --- Harness integration ---
+
 
 def test_harness_screen_component(conn: Connection) -> None:
     pid, rid = seed_task_and_run(conn)
@@ -750,9 +791,7 @@ def test_harness_screen_component(conn: Connection) -> None:
     plan = Plan(component="screen", evidence_scope_id=scope_id)
     config = compile(plan)
 
-    outcome = run_harness(
-        conn, config=config, task_id=pid, run_id=rid, provider=StubEchoProvider()
-    )
+    outcome = run_harness(conn, config=config, task_id=pid, run_id=rid, provider=StubEchoProvider())
 
     # Two result rows
     result_rows = conn.execute(
@@ -763,10 +802,23 @@ def test_harness_screen_component(conn: Connection) -> None:
     summary = outcome["summary"]
     assert summary is not None
     expected_keys = {
-        "component", "screened", "relevant", "not_relevant",
-        "failed", "excluded_retracted", "title_abstract", "title_only", "unsure_reps",
-        "non_unanimous", "rep_failures", "tie_broken", "retries",
-        "usage_totals", "screen_generation", "rescreen",
+        "component",
+        "screened",
+        "relevant",
+        "not_relevant",
+        "failed",
+        "excluded_retracted",
+        "title_abstract",
+        "title_only",
+        "unsure_reps",
+        "rep_failures",
+        "second_calls",
+        "second_call_kept",
+        "second_call_failed",
+        "retries",
+        "usage_totals",
+        "screen_generation",
+        "rescreen",
     }
     assert set(summary.keys()) == expected_keys - {"component"}
 
@@ -776,6 +828,7 @@ def test_harness_screen_component(conn: Connection) -> None:
 
 
 # --- Stage-2 prefix hydration (contract decision 11, rider on _load_stage2_docs) ---
+
 
 def _all_chunk_segments(conn: Connection, snapshot_id: uuid.UUID) -> list[tuple[str, str]]:
     """Full ``(segment_id, content)`` list for a chunk snapshot, in sequence order."""
@@ -788,7 +841,11 @@ def _all_chunk_segments(conn: Connection, snapshot_id: uuid.UUID) -> list[tuple[
 
 
 def _seed_stage2_candidate(
-    conn: Connection, pid: uuid.UUID, rid: uuid.UUID, scope_id: uuid.UUID, chunks: list[str],
+    conn: Connection,
+    pid: uuid.UUID,
+    rid: uuid.UUID,
+    scope_id: uuid.UUID,
+    chunks: list[str],
 ) -> tuple[uuid.UUID, uuid.UUID]:
     """Seed a stage-1-relevant doc with ingested full-text chunks.
 
@@ -856,9 +913,7 @@ def test_stage2_prefix_hydration_oversize_single_chunk(conn: Connection) -> None
     pid, rid = seed_task_and_run(conn)
     scope_id = seed_scope(conn, pid)
     oversize_chunk = "y" * (STAGE2_WINDOW_CHAR_BUDGET + 10_000)
-    _tss_id, chunk_snapshot_id = _seed_stage2_candidate(
-        conn, pid, rid, scope_id, [oversize_chunk]
-    )
+    _tss_id, chunk_snapshot_id = _seed_stage2_candidate(conn, pid, rid, scope_id, [oversize_chunk])
 
     all_segments = _all_chunk_segments(conn, chunk_snapshot_id)
     assert len(all_segments) == 1
@@ -902,6 +957,7 @@ def test_stage2_prefix_hydration_small_doc_unchanged(conn: Connection) -> None:
 
 # --- Screening-directive grammar widening (contract decision 2 rev 2.5,
 # plan rev 2 finding 3): {stage?, criteria?} ---
+
 
 def test_parse_screen_directive_default_no_screening_key() -> None:
     assert _parse_screen_directive({}) == (1, [], False)
@@ -979,9 +1035,7 @@ def test_parse_screen_directive_criteria_over_cap_string_rejects() -> None:
     not the shared `DIRECTIVE_STRING_MAX` (200) — real screening rules
     outgrew 200 chars."""
     with pytest.raises(ScreenDirectiveError):
-        _parse_screen_directive(
-            {"screening": {"criteria": ["x" * (SCREENING_CRITERION_MAX + 1)]}}
-        )
+        _parse_screen_directive({"screening": {"criteria": ["x" * (SCREENING_CRITERION_MAX + 1)]}})
 
 
 def test_parse_screen_directive_criteria_at_cap_string_accepted() -> None:
@@ -1004,6 +1058,7 @@ def test_parse_screen_directive_criteria_over_old_200_cap_now_accepted() -> None
 
 # --- Criteria composition into the screen intent INPUT (never evidence_scope.intent) ---
 
+
 class _RecordingScreeningBackend:
     """Delegates to the deterministic stub but records the intent each
     payload carried, so tests can assert on the effective intent the
@@ -1025,9 +1080,7 @@ class _RecordingScreeningBackend:
         self.envelope_intents.append(payload.intent)
         return self._stub.screen_envelope(payload, rep_index=rep_index)
 
-    def screen_fulltext(
-        self, payload: ScreenFullTextPayload
-    ) -> UsageResult[ScreenRepWire]:
+    def screen_fulltext(self, payload: ScreenFullTextPayload) -> UsageResult[ScreenRepWire]:
         self.fulltext_intents.append(payload.intent)
         return self._stub.screen_fulltext(payload)
 
@@ -1165,6 +1218,7 @@ def test_screen_sources_criteria_over_cap_refused_before_screening(
 # --- Isolation: criteria never rewrite evidence_scope.intent, and only screen.py
 # consumes the screening criteria key (contract decision 2 rev 2.5) ---
 
+
 def test_screen_criteria_leave_evidence_scope_intent_unchanged(conn: Connection) -> None:
     """``evidence_scope.intent`` is unchanged after a screen run with criteria —
     the DB-row assertion is the load-bearing isolation check."""
@@ -1204,9 +1258,8 @@ def test_criteria_key_handling_confined_to_screen_module() -> None:
 
 # --- Generation supersession (task 024 decision 7b, ADR 0022) ---
 
-def _effective_row(
-    conn: Connection, pid: uuid.UUID, scope_id: uuid.UUID, tss_id: uuid.UUID
-) -> Any:
+
+def _effective_row(conn: Connection, pid: uuid.UUID, scope_id: uuid.UUID, tss_id: uuid.UUID) -> Any:
     effective = effective_screen_rows()
     return conn.execute(
         select(effective)
@@ -1238,12 +1291,23 @@ def test_effective_row_newest_generation_supersedes_stale_stage2(conn: Connectio
     pid, rid = seed_task_and_run(conn)
     scope_id = seed_scope(conn, pid)
     _, tss_id = seed_source(conn, pid, meta={"abstract": "x"})
-    seed_screening_result(conn, pid, rid, scope_id, tss_id, status="relevant",
-                          screen_stage=1, screen_generation=0)
-    seed_screening_result(conn, pid, rid, scope_id, tss_id, status="relevant",
-                          screen_stage=2, screen_basis="full_text", screen_generation=0)
-    seed_screening_result(conn, pid, rid, scope_id, tss_id, status="not_relevant",
-                          screen_stage=1, screen_generation=1)
+    seed_screening_result(
+        conn, pid, rid, scope_id, tss_id, status="relevant", screen_stage=1, screen_generation=0
+    )
+    seed_screening_result(
+        conn,
+        pid,
+        rid,
+        scope_id,
+        tss_id,
+        status="relevant",
+        screen_stage=2,
+        screen_basis="full_text",
+        screen_generation=0,
+    )
+    seed_screening_result(
+        conn, pid, rid, scope_id, tss_id, status="not_relevant", screen_stage=1, screen_generation=1
+    )
 
     row = _effective_row(conn, pid, scope_id, tss_id)
     assert row.screen_generation == 1
@@ -1257,10 +1321,12 @@ def test_failed_rows_never_effective_at_any_generation(conn: Connection) -> None
     pid, rid = seed_task_and_run(conn)
     scope_id = seed_scope(conn, pid)
     _, tss_id = seed_source(conn, pid, meta={"abstract": "x"})
-    seed_screening_result(conn, pid, rid, scope_id, tss_id, status="relevant",
-                          screen_stage=1, screen_generation=0)
-    seed_screening_result(conn, pid, rid, scope_id, tss_id, status="failed",
-                          screen_stage=1, screen_generation=1)
+    seed_screening_result(
+        conn, pid, rid, scope_id, tss_id, status="relevant", screen_stage=1, screen_generation=0
+    )
+    seed_screening_result(
+        conn, pid, rid, scope_id, tss_id, status="failed", screen_stage=1, screen_generation=1
+    )
 
     row = _effective_row(conn, pid, scope_id, tss_id)
     assert row.screen_generation == 0
@@ -1277,7 +1343,9 @@ def test_rescreen_writes_next_generation_bypasses_skip_and_leaves_old_rows_ident
     _, tss_id = seed_source(conn, pid, meta={"abstract": "Policy text."})
 
     first = screen_sources(
-        conn, task_id=pid, run_id=rid,
+        conn,
+        task_id=pid,
+        run_id=rid,
         context=ScreenContext(scope_id=scope_id, intent="Test", context={}),
     )
     assert first["screen_generation"] == 0
@@ -1288,9 +1356,12 @@ def test_rescreen_writes_next_generation_bypasses_skip_and_leaves_old_rows_ident
 
     rescreen_run = seed_run(conn, pid)
     summary = screen_sources(
-        conn, task_id=pid, run_id=rescreen_run,
+        conn,
+        task_id=pid,
+        run_id=rescreen_run,
         context=ScreenContext(
-            scope_id=scope_id, intent="Test",
+            scope_id=scope_id,
+            intent="Test",
             context={"screening": {"rescreen": True}},
         ),
     )
@@ -1339,17 +1410,21 @@ def test_stage2_inherits_stage1_generation_and_demote_only_within_generation(
     scope_id = seed_scope(conn, pid)
 
     _, confirm = seed_source(conn, pid, meta={"title": "confirm"})
-    seed_screening_result(conn, pid, rid, scope_id, confirm, status="relevant",
-                          screen_stage=1, screen_generation=1)
+    seed_screening_result(
+        conn, pid, rid, scope_id, confirm, status="relevant", screen_stage=1, screen_generation=1
+    )
     seed_ingested_full_text(conn, tss_id=confirm, chunks=["confirm full text evidence."])
 
     _, demote = seed_source(conn, pid, meta={"title": "demote", "_stub_stage2_demote": True})
-    seed_screening_result(conn, pid, rid, scope_id, demote, status="relevant",
-                          screen_stage=1, screen_generation=1)
+    seed_screening_result(
+        conn, pid, rid, scope_id, demote, status="relevant", screen_stage=1, screen_generation=1
+    )
     seed_ingested_full_text(conn, tss_id=demote, chunks=["demote full text evidence."])
 
     summary = screen_sources(
-        conn, task_id=pid, run_id=rid,
+        conn,
+        task_id=pid,
+        run_id=rid,
         context=ScreenContext(
             scope_id=scope_id, intent="Test", context={"screening": {"stage": 2}}
         ),
@@ -1359,11 +1434,15 @@ def test_stage2_inherits_stage1_generation_and_demote_only_within_generation(
 
     confirm_row = _effective_row(conn, pid, scope_id, confirm)
     assert (confirm_row.screen_stage, confirm_row.screen_generation, confirm_row.status) == (
-        2, 1, "relevant",
+        2,
+        1,
+        "relevant",
     )
     demote_row = _effective_row(conn, pid, scope_id, demote)
     assert (demote_row.screen_stage, demote_row.screen_generation, demote_row.status) == (
-        2, 1, "not_relevant",
+        2,
+        1,
+        "not_relevant",
     )
 
 
@@ -1376,17 +1455,30 @@ def test_stage2_rescreen_same_generation_collision_is_loud_and_reason_coded(
     pid, rid = seed_task_and_run(conn)
     scope_id = seed_scope(conn, pid)
     _, tss_id = seed_source(conn, pid, meta={"title": "collide"})
-    seed_screening_result(conn, pid, rid, scope_id, tss_id, status="relevant",
-                          screen_stage=1, screen_generation=1)
-    seed_screening_result(conn, pid, rid, scope_id, tss_id, status="relevant",
-                          screen_stage=2, screen_basis="full_text", screen_generation=1)
+    seed_screening_result(
+        conn, pid, rid, scope_id, tss_id, status="relevant", screen_stage=1, screen_generation=1
+    )
+    seed_screening_result(
+        conn,
+        pid,
+        rid,
+        scope_id,
+        tss_id,
+        status="relevant",
+        screen_stage=2,
+        screen_basis="full_text",
+        screen_generation=1,
+    )
     seed_ingested_full_text(conn, tss_id=tss_id, chunks=["full text evidence."])
 
     with pytest.raises(ScreenSupersessionError) as excinfo:
         screen_sources(
-            conn, task_id=pid, run_id=seed_run(conn, pid),
+            conn,
+            task_id=pid,
+            run_id=seed_run(conn, pid),
             context=ScreenContext(
-                scope_id=scope_id, intent="Test",
+                scope_id=scope_id,
+                intent="Test",
                 context={"screening": {"stage": 2, "rescreen": True}},
             ),
         )
@@ -1401,12 +1493,14 @@ def test_next_screen_generation_counts_all_rows_including_failed(conn: Connectio
     scope_id = seed_scope(conn, pid)
     _, tss_id = seed_source(conn, pid, meta={"abstract": "x"})
     assert _next_screen_generation(conn, scope_id=scope_id) == 1
-    seed_screening_result(conn, pid, rid, scope_id, tss_id, status="failed",
-                          screen_stage=1, screen_generation=3)
+    seed_screening_result(
+        conn, pid, rid, scope_id, tss_id, status="failed", screen_stage=1, screen_generation=3
+    )
     assert _next_screen_generation(conn, scope_id=scope_id) == 4
 
 
 # --- Consumer lockstep after a re-screen (seeded rows, no LLM) ---
+
 
 def _seed_flip_and_stable(
     conn: Connection, pid: uuid.UUID, rid: uuid.UUID, scope_id: uuid.UUID
@@ -1414,13 +1508,23 @@ def _seed_flip_and_stable(
     """Two docs: ``flipped`` was relevant at gen0 then re-screened not_relevant at
     gen1; ``stable`` is relevant at gen0 only. Returns (flipped, stable)."""
     _, flipped = seed_source(conn, pid, meta={"abstract": "flip", "title": "flip"})
-    seed_screening_result(conn, pid, rid, scope_id, flipped, status="relevant",
-                          screen_stage=1, screen_generation=0)
-    seed_screening_result(conn, pid, rid, scope_id, flipped, status="not_relevant",
-                          screen_stage=1, screen_generation=1)
+    seed_screening_result(
+        conn, pid, rid, scope_id, flipped, status="relevant", screen_stage=1, screen_generation=0
+    )
+    seed_screening_result(
+        conn,
+        pid,
+        rid,
+        scope_id,
+        flipped,
+        status="not_relevant",
+        screen_stage=1,
+        screen_generation=1,
+    )
     _, stable = seed_source(conn, pid, meta={"abstract": "stay", "title": "stay"})
-    seed_screening_result(conn, pid, rid, scope_id, stable, status="relevant",
-                          screen_stage=1, screen_generation=0)
+    seed_screening_result(
+        conn, pid, rid, scope_id, stable, status="relevant", screen_stage=1, screen_generation=0
+    )
     return flipped, stable
 
 
@@ -1460,12 +1564,23 @@ def test_consumer_stage2_skip_advances_doc_at_new_generation(conn: Connection) -
     pid, rid = seed_task_and_run(conn)
     scope_id = seed_scope(conn, pid)
     _, tss_id = seed_source(conn, pid, meta={"title": "advance"})
-    seed_screening_result(conn, pid, rid, scope_id, tss_id, status="relevant",
-                          screen_stage=1, screen_generation=0)
-    seed_screening_result(conn, pid, rid, scope_id, tss_id, status="relevant",
-                          screen_stage=2, screen_basis="full_text", screen_generation=0)
-    seed_screening_result(conn, pid, rid, scope_id, tss_id, status="relevant",
-                          screen_stage=1, screen_generation=1)
+    seed_screening_result(
+        conn, pid, rid, scope_id, tss_id, status="relevant", screen_stage=1, screen_generation=0
+    )
+    seed_screening_result(
+        conn,
+        pid,
+        rid,
+        scope_id,
+        tss_id,
+        status="relevant",
+        screen_stage=2,
+        screen_basis="full_text",
+        screen_generation=0,
+    )
+    seed_screening_result(
+        conn, pid, rid, scope_id, tss_id, status="relevant", screen_stage=1, screen_generation=1
+    )
     seed_ingested_full_text(conn, tss_id=tss_id, chunks=["full text evidence."])
 
     docs, skipped = _load_stage2_docs(conn, task_id=pid, scope_id=scope_id)

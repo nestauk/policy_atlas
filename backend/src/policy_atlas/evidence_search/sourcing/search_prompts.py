@@ -52,20 +52,20 @@ SEARCH_QUERIES_V2_OVERTON_PROMPT_FILE = (
 )
 # e.g. "search_queries_system_v3.txt" -> "search_queries_v3"
 SEARCH_QUERIES_PROMPT_VERSION = SEARCH_QUERIES_PROMPT_FILE.stem.replace("_system", "")
-SEARCH_QUERIES_V2_OPENALEX_PROMPT_VERSION = (
-    SEARCH_QUERIES_V2_OPENALEX_PROMPT_FILE.stem.replace("_system", "")
+SEARCH_QUERIES_V2_OPENALEX_PROMPT_VERSION = SEARCH_QUERIES_V2_OPENALEX_PROMPT_FILE.stem.replace(
+    "_system", ""
 )
-SEARCH_QUERIES_V2_OVERTON_PROMPT_VERSION = (
-    SEARCH_QUERIES_V2_OVERTON_PROMPT_FILE.stem.replace("_system", "")
+SEARCH_QUERIES_V2_OVERTON_PROMPT_VERSION = SEARCH_QUERIES_V2_OVERTON_PROMPT_FILE.stem.replace(
+    "_system", ""
 )
 SEARCH_REFORMULATE_PROMPT_VERSION = "search_reformulate_v1"
 SEARCH_SUGGEST_PROMPT_VERSION = "search_suggest_v1"
 
 # All three are volume surfaces; mini is the 009-lesson floor (plan-pinned;
 # a queries-model swap-up is an eval-seam question).
-SEARCH_QUERIES_MODEL = "gpt-5.4-mini"
-SEARCH_REFORMULATE_MODEL = "gpt-5.4-mini"
-SEARCH_SUGGEST_MODEL = "gpt-5.4-mini"
+SEARCH_QUERIES_MODEL = "gpt-5.6-luna"
+SEARCH_REFORMULATE_MODEL = "gpt-5.6-luna"
+SEARCH_SUGGEST_MODEL = "gpt-5.6-luna"
 
 # Reasoning model: the cap covers reasoning + output tokens (extract's 011
 # lesson). All three outputs are small lists; 8K leaves ample headroom.
@@ -79,14 +79,15 @@ SEARCH_GEN_MAX_OUTPUT_TOKENS = 8_192
 # HTTP client. Over-length values are dropped, never trimmed — see
 # ``validated_queries``.
 #
-# 2,000 is derived from OpenAlex's own limit: it rejects any request whose URL
-# exceeds 8,190 bytes ("Request URL too long"). Our fixed overhead — host, path,
-# the 286-character `select` field list, paging and credentials — is ~500 bytes,
-# and URL-encoding expands a query by at most 3x (every character escaped). So
-# 2,000 characters is ~6,500 bytes worst case, comfortably inside the limit,
-# and far longer than any real systematic-review boolean.
+# 1,300 comes from OpenAlex's search-string limit: it refuses any `search`
+# value over 1,500 characters ("Your search is too long (1558 characters; the
+# limit is 1500)", seen in task 047 and re-checked 2026-10-14). The URL length
+# limit (8,190 bytes) that set the earlier 2,000 is no longer the binding one.
+# The search pass appends the systematic-review or randomised-trial clause to
+# each query (`_compose_variant`), up to about 130 characters, so a query of
+# 1,300 characters keeps every variant under 1,500.
 N_QUERIES = 5
-QUERY_MAX_CHARS = 2_000
+QUERY_MAX_CHARS = 1_300
 MAX_PARAPHRASES = 2
 # Same posture for the Overton paraphrases: the schema asks the model for at
 # most 300 characters, and this is only the ceiling that catches a runaway.
@@ -134,12 +135,8 @@ class SuggestedPaper(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    title: str = Field(
-        description="The paper's exact title, at most 200 characters."
-    )
-    year: int | None = Field(
-        description="Publication year if you are confident of it, else null."
-    )
+    title: str = Field(description="The paper's exact title, at most 200 characters.")
+    year: int | None = Field(description="Publication year if you are confident of it, else null.")
     doi: str | None = Field(
         description=(
             "The paper's DOI only if you actually know it. Never guess or "

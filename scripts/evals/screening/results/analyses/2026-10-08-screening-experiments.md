@@ -294,15 +294,15 @@ All from the repository root. The model calls use `OPENAI_API_KEY` in `backend/.
 
 ```
 # a run (defaults: mini, gpt-5.4-mini, three calls, production prompt, title only)
-uv run --project backend --env-file backend/.env python scripts/evals/screening/measure/run_screen.py \
+uv run --project backend --env-file backend/.env python scripts/evals/screening/checks/run_screen.py \
     --model gpt-5.6-luna --criteria --system-prompt scripts/evals/screening/prompts/screen_v4.txt
 
 # summarise and compare saved runs, including the vote-rule replay (no model calls)
-uv run --project backend python scripts/evals/screening/measure/analyse_runs.py \
+uv run --project backend python scripts/evals/screening/checks/analyse_runs.py \
     scripts/evals/screening/results/runs/<run A> [<run B> ...]
 
 # non-AI baselines matched to a run
-uv run --project backend --env-file backend/.env python scripts/evals/screening/measure/rank_baselines.py \
+uv run --project backend --env-file backend/.env python scripts/evals/screening/experiments/rank_baselines.py \
     --dataset full --match scripts/evals/screening/results/runs/<run>
 
 # rebuild the questions from the published sources

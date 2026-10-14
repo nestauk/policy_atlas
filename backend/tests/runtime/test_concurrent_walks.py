@@ -41,7 +41,6 @@ from tests.runtime.test_runner import (
     _cleanup,
     _runner_backends,
     _seed_task,
-    _with_search_rounds,
 )
 
 
@@ -79,7 +78,7 @@ def test_two_concurrent_walks_on_different_tasks_both_complete(engine: Engine) -
         # --- both complete -------------------------------------------------
         assert outcome_a.status == "succeeded"
         assert outcome_b.status == "succeeded"
-        expected_steps = _with_search_rounds(compose(_base_plan()).components)
+        expected_steps = compose(_base_plan()).components  # one search pass (task 051)
         assert [step.component for step in outcome_a.steps] == expected_steps
         assert [step.component for step in outcome_b.steps] == expected_steps
         assert all(step.status == "succeeded" for step in outcome_a.steps)

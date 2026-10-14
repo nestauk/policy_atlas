@@ -384,24 +384,24 @@ The two axes those presets compile are named on the plan panel as
 **Search scope** (Focused / Broad / Broadest) and **Analysis level**
 (Evidence overview / Full-text synthesis / Findings synthesis). Use
 those screen words if you name an axis; never the internal keys (rapid,
-landscape, analysis-depth "deep"). Search-scope acquire caps — the
-maximum relevant results collected per database — are Focused 50,
-Broad 100, Broadest 200. Always include that number in the matching
-option's `sub`.
+landscape, analysis-depth "deep"). Search-scope caps — the maximum
+papers and policy documents kept — are Focused 100 papers and 50 policy
+documents, Broad 200 and 100, Broadest 400 and 200. Always include both
+numbers in the matching option's `sub`.
 
 Emit the options with these labels and subs (the bands are measured; never
 invent other timing numbers):
 
 - id 'quick_look', label "Rapid overview", sub "Get a fast picture of the
-  evidence. Focused search (up to 50 relevant results per database) with
+  evidence. Focused search (up to 100 papers and 50 policy documents) with
   an evidence overview of themes, coverage and gaps. · ~5-10 min".
   Compiles search_effort=rapid, analysis_depth=landscape, section_budget=3.
 - id 'standard_review', label "Standard report", sub "Get a cited answer
-  from the strongest sources. Broad search (up to 100 relevant results per database),
+  from the strongest sources. Broad search (up to 200 papers and 100 policy documents),
   then full-text synthesis of about 15 shortlisted sources. · ~10-20 min".
   Compiles standard × standard, section_budget null. Primary by default.
 - id 'deep_analysis', label "Detailed report", sub "Get a deeper synthesis
-  with structured findings. Broadest search (up to 200 relevant results per database),
+  with structured findings. Broadest search (up to 400 papers and 200 policy documents),
   then extract and synthesise findings from about 25 shortlisted sources.
   · ~90-100 min". Compiles deep × deep with the findings chain,
   section_budget null.
@@ -412,7 +412,7 @@ Intent-awareness — binding:
   that are NOT about interventions and their effects or delivery, Detailed
   report must NOT promise a findings database — re-describe the option
   in plain language (e.g. "Get a deeper synthesis from the broadest
-  search (up to 200 relevant results per database) · ~90-100 min") and
+  search (up to 400 papers and 200 policy documents) · ~90-100 min") and
   compose the plan without the chain at any depth. In `reply`, say it
   will search more widely and write a deeper synthesis, not build a
   findings table. Never say "extraction chain" or "findings-database".
@@ -529,12 +529,12 @@ Intent-awareness — binding:
   publishers generally (publisher_country "Australia") plus academic search.
   If the user later widens sources beyond grey literature, drop
   publisher_source and say so. Never invent other collection values.
-- search_effort: rapid (one quick search pass; a thin result stays thin and
-  is flagged) | standard (a bounded iterative search loop, ~2.5-3.5 min) |
-  deep (the full iterative loop with citation snowballing, ~6 min of
+- search_effort: rapid (one search pass with the smallest caps; a thin
+  result stays thin and is flagged) | standard (the same pass, larger caps,
+  ~2.5-3.5 min) | deep (the same pass, the largest caps, ~6 min of
   searching). Compile these keys. The screen word is Search scope:
-  rapid → Focused (up to 50 relevant results per database), standard →
-  Broad (up to 100), deep → Broadest (up to 200).
+  rapid → Focused (up to 100 papers and 50 policy documents), standard →
+  Broad (up to 200 and 100), deep → Broadest (up to 400 and 200).
 - analysis_depth: landscape (map the evidence base: coverage, themes, gaps —
   no per-document extraction) | standard (screen, appraise, purposively
   select the strongest-fit documents to guide synthesis emphasis, and

@@ -16,7 +16,7 @@ from policy_atlas.evidence_search.assess.classify_prompt import (
     ClassifyWire,
 )
 from policy_atlas.evidence_search.assess.screen import (
-    _run_stage1_reps,
+    _run_stage1_calls,
     _run_stage2_reps,
     _Stage1Doc,
 )
@@ -132,9 +132,7 @@ class _ScoreClient:
     def __init__(self) -> None:
         self.scores: dict[str, float] = {}
 
-    def score_current_trace(
-        self, *, name: str, value: float, data_type: str
-    ) -> None:
+    def score_current_trace(self, *, name: str, value: float, data_type: str) -> None:
         assert data_type == "NUMERIC"
         self.scores[name] = value
 
@@ -204,14 +202,12 @@ def test_screening_score_summary_reads_both_stage_shapes() -> None:
             "relevant": 6,
             "not_relevant": 3,
             "failed": 1,
-            "non_unanimous": 2,
-            "tie_broken": 1,
+            "second_call_kept": 1,
         },
     )
     assert stage1.scores == {
         "screen_failure_count": 1.0,
-        "non_unanimous_share": 2 / 9,
-        "tie_broken_count": 1.0,
+        "second_call_kept_count": 1.0,
     }
 
     stage2 = _ScoreClient()
@@ -304,9 +300,7 @@ class _ContextScreeningBackend:
         self.stage1_seen.append(_WORKER_CONTEXT.get())
         return ScreenRepWire(decision="relevant", confidence=0.8, reason="Relevant."), None
 
-    def screen_fulltext(
-        self, payload: ScreenFullTextPayload
-    ) -> UsageResult[ScreenRepWire]:
+    def screen_fulltext(self, payload: ScreenFullTextPayload) -> UsageResult[ScreenRepWire]:
         del payload
         self.stage2_seen.append(_WORKER_CONTEXT.get())
         return ScreenRepWire(decision="relevant", confidence=0.8, reason="Relevant."), None
@@ -337,7 +331,7 @@ def test_screening_fanouts_propagate_context() -> None:
 
     token = _WORKER_CONTEXT.set("screen-context")
     try:
-        _run_stage1_reps([stage1_doc], screening_backend=backend)
+        _run_stage1_calls([stage1_doc], screening_backend=backend)
         _run_stage2_reps({0: stage2_payload}, screening_backend=backend)
     finally:
         _WORKER_CONTEXT.reset(token)
@@ -456,14 +450,11 @@ class _ContextRankingBackend:
     def __init__(self) -> None:
         self.seen: list[str] = []
 
-    def rank(
-        self, batch: list[GroupingDoc], *, intent: str
-    ) -> UsageResult[list[RankedDoc]]:
+    def rank(self, batch: list[GroupingDoc], *, intent: str) -> UsageResult[list[RankedDoc]]:
         del intent
         self.seen.append(_WORKER_CONTEXT.get())
         return [
-            {"doc_id": doc["id"], "score": 5, "reason": "Context propagated."}
-            for doc in batch
+            {"doc_id": doc["id"], "score": 5, "reason": "Context propagated."} for doc in batch
         ], None
 
 

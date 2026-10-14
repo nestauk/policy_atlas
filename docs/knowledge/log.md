@@ -1,5 +1,39 @@
 # Knowledge update log
 
+## 2026-10-09 (task 051 step 8)
+* **Creation**: Added
+  [openalex-semantic-search-filter-support](openalex-semantic-search-filter-support.md) —
+  the probe table, the year fence plus local check, the union predicate for split
+  filters (051 D13 amendment; review finding F2, convergent Codex and contract verifier).
+* **Creation**: Added
+  [overton-relevance-order-needs-sort-parameter](overton-relevance-order-needs-sort-parameter.md) —
+  date order and no scores without `sort=relevance`; the echo check on fetch-by-id;
+  landmarks carry no wire filters (049 experiments, 051 D8).
+* **Creation**: Added
+  [transport-response-cache-is-process-global](transport-response-cache-is-process-global.md) —
+  the shared response cache across tests, the autouse fixture, the cross-file bisect
+  (051 review, test hygiene).
+* **Creation**: Added
+  [timing-test-removes-the-other-delay](timing-test-removes-the-other-delay.md) — the
+  429-pause test that passed with the pause deleted; coalesced pauses (051 review,
+  code-review and security lanes).
+* **Creation**: Added [model-pin-per-surface](model-pin-per-surface.md) — the triage
+  default that borrowed `SCREEN_MODEL` (051 Phase 4 deviation).
+* **Creation**: Added [jsonb-reorders-dict-keys](jsonb-reorders-dict-keys.md) — key
+  order on JSONB read-back (051 build candidate).
+* **Update**: [delegated-executor-practices](delegated-executor-practices.md) — Codex
+  cannot start `uv`; it formats the whole tree unless told the files; fixture doubles
+  return shared objects (051 build candidates).
+* **Update**: [eval-cost-figures-name-their-unit](eval-cost-figures-name-their-unit.md) —
+  an `llm` figure is Langfuse's configured price row; the Luna row was five times list
+  (051 review F11).
+* **Declined** (recorded in the 051 verification handoff, not durable beyond the task):
+  the eval test that mutates `DEPTH_CONSTANTS` (test-local), `TaskPlan`'s depth and
+  component rule (derivable from the validator), the zero-valued `post_filter_exclusions`
+  entries (spec-level), the `Counter`-from-`set` ordering (a Python fact the fixture
+  export already handles), the experiment's forward-chase ceiling (task-level, in the
+  verification record and the history notes).
+
 ## 2026-10-05 (task 046, mini-dataset runs)
 * **Update**: [langfuse-dataset-run-name-reuse-appends](langfuse-dataset-run-name-reuse-appends.md) —
   corrected from "appends" to "upserts per dataset item" after a verified full re-run of

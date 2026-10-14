@@ -79,9 +79,13 @@ class BackendCaps:
     has_snowball: bool
     has_title_lookup: bool
     has_doi_lookup: bool = False
+    has_semantic: bool = False
+    has_id_lookup: bool = False
+    has_forward: bool = False
+    has_fetch_by_id: bool = False
 
 
-class SearchBackend(Protocol):
+class SearchBackendBase(Protocol):
     """The ``search`` seam: one configured backend with a declared trust class.
 
     Attributes:
@@ -127,6 +131,46 @@ class SearchBackend(Protocol):
     ) -> list[dict[str, Any]]:
         """Return provider records matching DOI identifiers."""
         ...
+
+
+class ExtendedSearchBackend(SearchBackendBase, Protocol):
+    """Extended search seam for single-pass search transport verbs."""
+
+    def search_semantic(
+        self,
+        text: str,
+        *,
+        wire_params: dict[str, str] | None = None,
+        max_results: int | None = None,
+    ) -> list[dict[str, Any]]:
+        """Return provider records for a semantic search."""
+        ...
+
+    def lookup_ids(
+        self, ids: list[str], *, wire_params: dict[str, str] | None = None
+    ) -> list[dict[str, Any]]:
+        """Return provider records matching provider identifiers."""
+        ...
+
+    def fetch_citing(
+        self,
+        ids: list[str],
+        *,
+        wire_params: dict[str, str] | None = None,
+        max_results: int | None = None,
+        page: int = 1,
+    ) -> list[dict[str, Any]]:
+        """Return provider records that cite the supplied identifiers."""
+        ...
+
+    def fetch_by_id(self, record_id: str) -> dict[str, Any] | None:
+        """Return one provider record by its provider identifier."""
+        ...
+
+
+# Existing search execution still accepts the established five-verb seam;
+# callers that use the Phase 2 transport additions type against this extension.
+SearchBackend = SearchBackendBase
 
 
 class ExecutedSearchCall(Protocol):
@@ -205,7 +249,7 @@ def _normalize_doi(doi: Any) -> str | None:
         "http://dx.doi.org/",
     ):
         if d.startswith(prefix):
-            d = d[len(prefix):]
+            d = d[len(prefix) :]
             break
     return d or None
 
@@ -215,9 +259,7 @@ def _slim_authorships(authorships: list[dict[str, Any]] | None) -> list[dict[str
     return [
         {
             "author_name": (a.get("author") or {}).get("display_name"),
-            "institutions": [
-                i.get("display_name") for i in (a.get("institutions") or [])
-            ],
+            "institutions": [i.get("display_name") for i in (a.get("institutions") or [])],
             "countries": a.get("countries") or [],
         }
         for a in (authorships or [])
@@ -435,9 +477,7 @@ def _provider_tags(backend_name: str, record: dict[str, Any]) -> list[tuple[str,
             values.append(primary_topic.get("display_name"))
         topics = record.get("topics")
         if isinstance(topics, list):
-            values.extend(
-                topic.get("display_name") for topic in topics if isinstance(topic, dict)
-            )
+            values.extend(topic.get("display_name") for topic in topics if isinstance(topic, dict))
         sdgs = record.get("sustainable_development_goals")
         if isinstance(sdgs, list):
             values.extend(sdg.get("display_name") for sdg in sdgs if isinstance(sdg, dict))
@@ -489,34 +529,11 @@ class _Candidate(NamedTuple):
 
     backend_name: str
     verb: str
+    origin: str
     record: dict[str, Any]
     mapped: dict[str, Any]
     text: str
     chash: str
-
-
-def _interleave(per_call: list[list[_Candidate]]) -> list[_Candidate]:
-    """Merge per-call candidate lists round-robin by rank position.
-
-    Providers return each call's records in rank order (OpenAlex relevance,
-    Overton similarity), so taking every call's rank-1 record, then every
-    rank-2, and so on, is a merge that keeps the fan-out's query diversity: a
-    later trim removes the tail of every query rather than every record of the
-    later queries. Sorting the merged set by score instead would need a score
-    that is comparable across queries, which provider relevance scores are not.
-
-    Args:
-        per_call: One candidate list per call, each already in provider order.
-
-    Returns:
-        A single list, rank-interleaved across the calls in the given order.
-    """
-    merged: list[_Candidate] = []
-    for rank in range(max((len(candidates) for candidates in per_call), default=0)):
-        for candidates in per_call:
-            if rank < len(candidates):
-                merged.append(candidates[rank])
-    return merged
 
 
 def acquire_sources(
@@ -525,13 +542,14 @@ def acquire_sources(
     task_id: uuid.UUID,
     run_id: uuid.UUID,
     context: AcquireContext,
-    backends: list[SearchBackend],
+    backends: list[SearchBackendBase],
     embedder: EmbeddingBackend | None = None,
     executed_calls: Sequence[ExecutedSearchCall],
     depth: str = "rapid",
     scope_wire_params: dict[str, Any] | None = None,
     search_guidance: list[str] | None = None,
-    record_cap_per_backend: int | None = None,
+    pools: dict[str, list[tuple[dict[str, Any], str, str]]] | None = None,
+    caps: dict[str, int] | None = None,
 ) -> dict[str, Any]:
     """Acquire metadata-only sources for an evidence scope over the given backends.
 
@@ -556,13 +574,12 @@ def acquire_sources(
         search_guidance: B1 (024 steering surface) executed ``search.guidance``
             list, echoed verbatim onto ``search_coverage_record.scope_filters``
             as a sibling ``guidance`` key when present.
-        record_cap_per_backend: Maximum records persisted per backend from the
-            ``search`` fan-out, applied after the rank-interleaved merge and
-            after dedup, so a capped round still yields a full cap of *new*
-            documents. ``None`` means uncapped. This is the run's volume brake:
-            each persisted record costs an embedding here and ``SCREEN_REPS``
-            screening calls downstream. Targeted verbs (snowball, suggest) are
-            never trimmed — they carry their own call caps upstream.
+        pools: Ranked raw records as ``(record, origin, verb)`` tuples. When
+            omitted, no ranking is applied: every successful call's records
+            are consumed in call order with that call's origin and verb.
+        caps: Maximum persisted records for each backend's ranked pool. When
+            omitted (or missing a backend), there is no cut: this is what a
+            caller that only has executed calls gets.
 
     Returns:
         Counts dict: ``acquired``, ``already_acquired``, ``skipped_unusable``,
@@ -582,15 +599,25 @@ def acquire_sources(
     if len(set(names)) != len(names):
         raise ValueError(f"duplicate backend names: {names}")
     backend_by_name = {backend.name: backend for backend in backends}
+    if pools is None:
+        pools = {
+            name: [
+                (record, call.query_origin, call.verb)
+                for call in executed_calls
+                if call.backend_name == name and call.status == "ok"
+                for record in call.records
+            ]
+            for name in names
+        }
+    caps = caps or {}
+    unknown_pool_backends = [name for name in pools if name not in backend_by_name]
+    if unknown_pool_backends:
+        raise ValueError(f"pool references unknown backend(s): {unknown_pool_backends}")
     unknown_call_backends = [
-        call.backend_name
-        for call in executed_calls
-        if call.backend_name not in backend_by_name
+        call.backend_name for call in executed_calls if call.backend_name not in backend_by_name
     ]
     if unknown_call_backends:
-        raise ValueError(
-            f"executed call references unknown backend(s): {unknown_call_backends}"
-        )
+        raise ValueError(f"executed call references unknown backend(s): {unknown_call_backends}")
 
     # Preload the task's existing identity keys — dedup is then in-memory,
     # and also catches duplicates within this call's own result stream.
@@ -604,8 +631,7 @@ def acquire_sources(
         .select_from(
             task_source_snapshot.join(
                 source_snapshot,
-                task_source_snapshot.c.source_snapshot_id
-                == source_snapshot.c.source_snapshot_id,
+                task_source_snapshot.c.source_snapshot_id == source_snapshot.c.source_snapshot_id,
             )
         )
         .where(task_source_snapshot.c.task_id == task_id)
@@ -645,9 +671,12 @@ def acquire_sources(
         verb: str,
         records: list[dict[str, Any]],
         counts: dict[str, Any],
+        origin: str = "generated",
+        count_results: bool = True,
     ) -> list[_Candidate]:
         """Map one call's raw records to candidates. No dedup, no writes."""
-        counts["results_returned"] += len(records)
+        if count_results:
+            counts["results_returned"] += len(records)
         mapper = _MAPPERS[backend_name]  # validated upfront
 
         candidates: list[_Candidate] = []
@@ -663,6 +692,7 @@ def acquire_sources(
                 _Candidate(
                     backend_name=backend_name,
                     verb=verb,
+                    origin=origin,
                     record=record,
                     mapped=mapped,
                     text=text,
@@ -694,8 +724,13 @@ def acquire_sources(
             seen_dois.add(doi)
         return True
 
-    def persist(candidate: _Candidate) -> None:
-        """Write one accepted candidate: snapshot, chunk, task link, tags."""
+    def persist(candidate: _Candidate, *, pool_rank: int) -> None:
+        """Write one accepted candidate: snapshot, chunk, task link, tags.
+
+        ``pool_rank`` is the candidate's 1-based position in its backend's ranked
+        pool, counting every entry (duplicates and unusable records included), so
+        the event says exactly where the cap would have fallen for it.
+        """
         backend_name = candidate.backend_name
         verb = candidate.verb
         record = candidate.record
@@ -781,16 +816,13 @@ def acquire_sources(
                 "evidence_scope_id": str(context.scope_id),
                 "backend": backend_name,
                 "backend_record_id": record_id,
+                "query_origin": candidate.origin,
+                "pool_rank": pool_rank,
             },
         )
 
         counts["acquired"] += 1
         acquired_tss_by_verb.setdefault(verb, []).append(str(tss_id))
-
-    # Per-backend candidate lists, kept apart by verb: the `search` fan-out is
-    # merged and trimmed, targeted verbs are not.
-    search_candidates: dict[str, list[list[_Candidate]]] = {name: [] for name in names}
-    targeted_candidates: dict[str, list[_Candidate]] = {name: [] for name in names}
 
     for call in executed_calls:
         backend = backend_by_name[call.backend_name]
@@ -816,6 +848,9 @@ def acquire_sources(
         }
         if post_filter_excluded is not None:
             event_payload["post_filter_excluded"] = post_filter_excluded
+        pages = getattr(call, "pages", None)
+        if pages is not None:
+            event_payload["pages"] = pages
         events.append(
             conn,
             task_id=task_id,
@@ -825,16 +860,7 @@ def acquire_sources(
         )
         if call.status == "ok":
             ok_calls_by_backend[backend.name] += 1
-            candidates = map_records(
-                backend_name=backend.name,
-                verb=call.verb,
-                records=call.records,
-                counts=counts,
-            )
-            if call.verb == "search":
-                search_candidates[backend.name].append(candidates)
-            else:
-                targeted_candidates[backend.name].extend(candidates)
+            counts["results_returned"] += len(call.records)
         else:
             errors_by_backend[backend.name].append(error or "unknown search error")
             log.warning(
@@ -845,33 +871,37 @@ def acquire_sources(
                 error=error,
             )
 
-    # Merge, dedup, trim, persist — in that order, per backend. Dedup runs
-    # *before* the trim so a capped round still yields a full cap of new
-    # documents however many repeats the queries returned; and it runs over the
-    # interleaved stream so the best-ranked copy of a document is the one kept.
-    # Targeted verbs are deduped first and never trimmed: snowball and suggest
-    # results are individually chosen, and their arms are capped upstream.
     for name in names:
         counts = by_backend[name]
-        for candidate in targeted_candidates[name]:
-            if is_new(candidate):
-                persist(candidate)
-            else:
-                counts["already_acquired"] += 1
-
         kept = 0
-        for candidate in _interleave(search_candidates[name]):
-            # Cap checked before the identity guards, never after: `is_new`
-            # *claims* the keys it checks, so running it on a record we are
-            # about to drop would make a later backend's genuine record look
-            # already-acquired and lose it.
-            if record_cap_per_backend is not None and kept >= record_cap_per_backend:
+        cap = caps.get(name)
+        for index, (record, origin, verb) in enumerate(pools.get(name, [])):
+            # The cap is a cut on the ranked list by position (contract D7):
+            # a ranked entry the task already holds, or that is unusable, is
+            # not refilled from beyond the cut, so what is persisted is always
+            # a subset of the first `cap` ranked entries (review finding,
+            # 2026-10-09). Checked before the identity guards, never after:
+            # `is_new` *claims* the keys it checks, so running it on a record
+            # we are about to drop would make a later backend's genuine record
+            # look already-acquired and lose it.
+            if cap is not None and index >= cap:
                 counts["dropped_over_cap"] += 1
                 continue
+            candidates = map_records(
+                backend_name=name,
+                verb=verb,
+                records=[record],
+                counts=counts,
+                origin=origin,
+                count_results=False,
+            )
+            if not candidates:
+                continue
+            candidate = candidates[0]
             if not is_new(candidate):
                 counts["already_acquired"] += 1
                 continue
-            persist(candidate)
+            persist(candidate, pool_rank=index + 1)
             kept += 1
         if counts["dropped_over_cap"]:
             log.info(
@@ -881,7 +911,7 @@ def acquire_sources(
                 run_id=str(run_id),
                 kept=kept,
                 dropped=counts["dropped_over_cap"],
-                cap=record_cap_per_backend,
+                cap=cap,
             )
 
     any_error = False

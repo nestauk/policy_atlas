@@ -26,7 +26,7 @@ from analyse_runs import f_score, keep_share, mcnemar_exact_p, wilson_interval
 from rank_baselines import auc, average_precision, bm25_scores, tokens
 from run_screen import screen_frame, use_settings
 from targets import select_targets
-from vote import combine_reps
+from vote import combine_adaptive, combine_reps
 
 
 def _rep(decision: str, confidence: float = 0.8) -> ScreenRepWire:
@@ -225,26 +225,44 @@ def test_keep_rule() -> None:
         title_only=False,
     )
     assert tie.status == "relevant"
-    assert "tie_broken" in tie.flags
-
-    veto = combine_reps(
-        [_rep("relevant"), _rep("not_relevant"), _rep("not_relevant")],
-        reps_requested=3,
-        title_only=True,
-    )
-    assert veto.status == "relevant"
-    assert "title_only_unanimity_applied" in veto.flags
-
-    unsure_does_not_veto = combine_reps(
-        [_rep("unsure"), _rep("not_relevant"), _rep("not_relevant")],
-        reps_requested=3,
-        title_only=True,
-    )
-    assert unsure_does_not_veto.status == "not_relevant"
 
     short = combine_reps([_rep("relevant")], reps_requested=3, title_only=False)
     assert short.status == "failed"
     assert short.confidence is None
+
+
+def test_adaptive_rule() -> None:
+    cases = [
+        ([_rep("relevant", 0.8)], "relevant", 0.8, ()),
+        ([_rep("unsure", 0.9)], "relevant", 0.5, ()),
+        (
+            [_rep("not_relevant", 0.9), _rep("unsure", 0.8)],
+            "relevant",
+            0.3,
+            ("second_call_kept",),
+        ),
+        (
+            [_rep("not_relevant", 0.7), _rep("not_relevant", 0.9)],
+            "not_relevant",
+            0.8,
+            (),
+        ),
+        (
+            [_rep("not_relevant", 0.7), None],
+            "not_relevant",
+            0.7,
+            ("second_call_failed",),
+        ),
+        ([None], "failed", None, ()),
+    ]
+    for attempts, status, confidence, flags in cases:
+        decision = combine_adaptive(attempts)
+        assert decision.status == status
+        assert decision.flags == flags
+        if confidence is None:
+            assert decision.confidence is None
+        else:
+            assert decision.confidence == confidence
 
 
 def test_metrics_and_cost() -> None:
@@ -307,9 +325,11 @@ def test_screen_frame_runs_the_production_loop() -> None:
             "ground_truth_relevant": [1, 0],
         }
     )
-    use_settings(model="gpt-5.4-mini", reps=3, effort=None)
+    use_settings(model="gpt-5.4-mini", effort=None)
     stub = CountingStub()
-    screened, _usage, retries = screen_frame(frame, backend=stub, intent="q", reps=3)
+    screened, _usage, retries = screen_frame(
+        frame, backend=stub, intent="q", vote="majority", reps=3
+    )
     assert len(stub.payloads) == 6 and retries == 0
     sources = {payload.tss_id: payload.abstract_source for payload in stub.payloads}
     assert sources == {"a": "publisher_abstract", "b": "none"}
@@ -318,6 +338,17 @@ def test_screen_frame_runs_the_production_loop() -> None:
     assert list(screened["predicted_relevant"]) == [1, 1]
     first = json.loads(screened.iloc[0]["rep_answers"])
     assert first == [{"decision": "relevant", "confidence": 0.9}] * 3
+
+    class AdaptiveStub(CountingStub):
+        def screen_envelope(self, payload, *, rep_index=0):
+            self.payloads.append(payload)
+            if payload.tss_id == "a" and rep_index == 0:
+                return _rep("not_relevant", 0.9), None
+            return _rep("relevant", 0.9), None
+
+    adaptive = AdaptiveStub()
+    screen_frame(frame, backend=adaptive, intent="q", vote="adaptive", reps=3)
+    assert len(adaptive.payloads) == 3
 
 
 def test_system_prompt_override_reaches_the_messages() -> None:
@@ -332,18 +363,18 @@ def test_system_prompt_override_reaches_the_messages() -> None:
     prompt_file.write_text("Short prompt.", encoding="utf-8")
     try:
         label = use_settings(
-            model="gpt-5.4-mini", reps=3, effort=None, system_prompt=prompt_file
+            model="gpt-5.4-mini", effort=None, system_prompt=prompt_file
         )
         payload = ScreenEnvelopePayload(
             tss_id="x", title="t", abstract=None, abstract_source=None, intent="q"
         )
         assert build_screen_messages(payload)[0]["content"] == "Short prompt."
         assert label.startswith("short@") and len(label) == len("short@") + 12
-        assert use_settings(model="gpt-5.4-mini", reps=3, effort=None) == "screen_v2"
+        assert use_settings(model="gpt-5.4-mini", effort=None) == "screen_v4"
         # A later run without a prompt file gets the production prompt back.
         assert build_screen_messages(payload)[0]["content"] == original
-        use_settings(model="gpt-5.4-mini", reps=3, effort="low")
-        use_settings(model="gpt-5.4-mini", reps=3, effort=None)
+        use_settings(model="gpt-5.4-mini", effort="low")
+        use_settings(model="gpt-5.4-mini", effort=None)
         import policy_atlas.evidence_search.assess.screening_backend as backend_module
 
         assert not hasattr(backend_module.parse_structured, "keywords")

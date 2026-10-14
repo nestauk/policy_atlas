@@ -68,7 +68,7 @@ There are three kinds of run. Each answers a different question.
 
 ### Production runs: how good is the real pipeline?
 
-`measure/production_recall.py` runs the search exactly as the app does, at each depth:
+`checks/production_recall.py` runs the search exactly as the app does, at each depth:
 
 | Depth | What runs | Scores |
 |---|---|---|
@@ -81,7 +81,7 @@ Nothing is saved to the database. Each run is rolled back.
 
 ### Baselines: what does "good" look like?
 
-A production recall of, say, 6% means nothing alone. The baselines give a number to compare it with. `measure/baseline_recall.py` sends each intent **once, unchanged**, to one search service. There is no language model, no screening and no second round. Each service is called an **arm**:
+A production recall of, say, 6% means nothing alone. The baselines give a number to compare it with. `checks/baseline_recall.py` sends each intent **once, unchanged**, to one search service. There is no language model, no screening and no second round. Each service is called an **arm**:
 
 | Arm | Service | Notes |
 |---|---|---|
@@ -96,7 +96,7 @@ Each arm is scored at several caps (the first 50, 100, 200 and 1,000 results).
 
 ### Record-cap sweep: an experiment
 
-`measure/sweep_record_cap.py` asks a research question: does recall go up if the search keeps more results? It runs a `rapid` search many times. Each time it changes:
+`experiments/sweep_record_cap.py` asks a research question: does recall go up if the search keeps more results? It runs a `rapid` search many times. Each time it changes:
 
 - the cap on results kept from each service (50, 100, 250, 500, 1,000, 2,000), and
 - the query-writing method: `shared` (v3, one prompt writes queries for both services) or `per-provider` (v2, one prompt per service).
@@ -105,7 +105,7 @@ Keeping more results costs more later: every kept result is screened and stored 
 
 ### Experiments
 
-Search R&D experiments that are not part of the measured baselines or the production runs live in [results/analyses/2026-10-06-search-experiments.md](results/analyses/2026-10-06-search-experiments.md), one section per experiment script, with the dated results in `docs/tasks/047-search-rnd/notes.md`. As of 2026-10-06 the best measured configuration there (generated queries plus semantic search as seeds, a reference-frequency snowball, forward citation chasing, specificity ranking) reaches about 22% recall at 200 candidates on the mini set, against 3% for a plain OpenAlex search; see the file for the numbers and the caveats. The Overton side (what carries over, how the two sources share one cap, the date-order finding) is in [results/analyses/2026-10-07-overton-experiments.md](results/analyses/2026-10-07-overton-experiments.md), with notes in `docs/tasks/049-improve-overton-search/notes.md`.
+Search R&D experiments that are not part of the measured baselines or the production runs live in [results/analyses/2026-10-06-search-experiments.md](results/analyses/2026-10-06-search-experiments.md), one section per experiment script, with the dated results in `docs/tasks/047-search-rnd/notes.md`. As of 2026-10-06 the best measured configuration there (generated queries plus semantic search as seeds, a reference-frequency snowball, forward citation chasing, specificity ranking) reaches about 22% recall at 200 candidates on the mini set, against 3% for a plain OpenAlex search; see the file for the numbers and the caveats. The Overton side (what carries over, how the two sources share one cap, the date-order finding) is in [results/analyses/2026-10-07-overton-experiments.md](results/analyses/2026-10-07-overton-experiments.md), with notes in `docs/tasks/049-improve-overton-search/notes.md`. The design experiments that settled the task 051 proposal (cap curve on Luna, screened seeds, reformulation, the policy-document cap) are in [results/analyses/2026-10-09-design-experiments.md](results/analyses/2026-10-09-design-experiments.md), notes in `docs/tasks/051-improve-production-search-screen/notes.md`.
 
 ### Cost
 
@@ -126,20 +126,23 @@ scripts/evals/search/
 │   ├── fetch_helpers.py    shared code for the getters
 │   ├── select_sample.py    quality check, makes the mini and full samples
 │   ├── upload.py           CSV files -> Langfuse dataset
-│   └── policy_gt_specific.csv  15 topic-specific gov.uk documents and questions (task 049, policy-side ground truth)
-├── measure/                runs the measurements
-│   ├── production_recall.py
-│   ├── baseline_recall.py
-│   ├── snowball_recall.py  R&D experiment, see results/analyses/2026-10-06-search-experiments.md
-│   ├── pool_rerank.py      R&D experiment, see results/analyses/2026-10-06-search-experiments.md
-│   ├── overton_recall.py   R&D experiment, see results/analyses/2026-10-07-overton-experiments.md
-│   ├── merge_rank.py       R&D experiment: OpenAlex + Overton merged ranking, same write-up
-│   ├── title_match.py      R&D experiment: what the DOI-only metric hides, same write-up
-│   ├── policy_rank.py      R&D experiment: key policy documents from Overton's citation graph, same write-up
-│   ├── policy_gt.py        R&D experiment: a policy-side ground truth from gov.uk documents, same write-up
-│   ├── sweep_record_cap.py
+│   └── policy_gt_specific.csv  15 topic-specific gov.uk documents and questions (task 049, policy-side ground truth; not in git, from S3)
+├── checks/                 measures the app as built (the numbers in results/history.md)
+│   ├── production_recall.py  the real pipeline at each depth
+│   ├── baseline_recall.py    one plain search per service, no language model
 │   ├── engine.py           runs one intent through the real search (no command line)
 │   └── inspect_run.py      tables of one run's raw output (no command line)
+├── experiments/            research scripts; each has a write-up under results/analyses/
+│   ├── snowball_recall.py  citation snowball, forward chasing, semantic seeds (2026-10-06 write-up)
+│   ├── pool_rerank.py      re-ranking a larger pool before the cut (same write-up)
+│   ├── sweep_record_cap.py does recall rise with the record cap? (task 046)
+│   ├── overton_recall.py   Overton probes (2026-10-07 write-up)
+│   ├── merge_rank.py       OpenAlex + Overton merged ranking (same write-up)
+│   ├── title_match.py      what the DOI-only metric hides (same write-up)
+│   ├── policy_rank.py      key policy documents from Overton's citation graph (same write-up)
+│   ├── policy_gt.py        a policy-side ground truth from gov.uk documents (same write-up)
+│   ├── screened_seeds.py   seeds screened with the production code path, snowball rebuilt (2026-10-09 write-up)
+│   └── reformulate_gain.py the production reformulate call against a bigger snowball (same write-up)
 ├── tests                   self-checks, no network and no database
 ├── input/                  the 4 hand-made reviews as CSV (git-ignored; from the labelling repo)
 └── results/                outputs (git-ignored, except history.md and analyses/)
@@ -148,8 +151,10 @@ scripts/evals/search/
     ├── cache/              raw baseline results, one JSON file per arm and review
     ├── snowball/           snowball scores, ranked candidates, manual-question exports; pool/ for the re-rank experiment
     ├── overton/            scores of the Overton probes (overton_recall.py); merge/, policy/, policy_gt*/ for the other 049 scripts
-    └── ground_truth/       fetched collections and the two samples
+    └── ground_truth/       fetched collections and the two samples (not in git, from S3)
 ```
+
+`../sync_s3.py` (shared with the screening eval) copies the ground-truth files between S3 and these folders.
 
 Each script starts with `import _bootstrap`. This short file lets the script import its neighbours, so you can run any script directly.
 
@@ -168,6 +173,24 @@ getters ──> select_sample.py ──> upload.py ──> Langfuse dataset
 ```
 
 The measuring scripts read the ground truth from Langfuse, not from the CSV files. Upload the dataset first.
+
+### Where the data lives
+
+| Copy | Where | What |
+| --- | --- | --- |
+| Master | `s3://discovery-policy-atlas/eval/datasets/search/ground_truth/` | The fetched collections and the two samples as CSV, about 30 MB |
+| Master | `s3://discovery-policy-atlas/eval/datasets/search/policy_gt/` | The policy-side ground truth (`policy_gt_specific.csv` and its targets) |
+| Working | `results/ground_truth/` and `ground_truth/policy_gt_specific*`, not in git | What `sync_s3.py search download` fetched |
+| Langfuse | `retrieval-ground-truth`, `-mini`, `-full` | What the measuring scripts read: one item per review (1.2 MB for the 100) |
+| Runs | `s3://discovery-policy-atlas/eval/results/search/<folder>/` | Run folders uploaded with `sync_s3.py search upload` |
+
+The 1.6 GB SR4ALL source file is not on S3: download it by its DOI (step 1 below). The Langfuse datasets are not versioned, so after `upload.py` changes one, note it in `history.md`.
+
+```
+# fetch the ground-truth files; after a new fetch or sample, push them back
+uv run --project backend python scripts/evals/sync_s3.py search download
+uv run --project backend python scripts/evals/sync_s3.py search upload-datasets
+```
 
 ## Commands
 
@@ -208,15 +231,15 @@ An upload adds and updates items. It never deletes them. If a review drops out o
 
 ```
 # Production: one Langfuse run per depth
-uv run --project backend --env-file backend/.env python scripts/evals/search/measure/production_recall.py --dataset retrieval-ground-truth-mini --depths rapid
+uv run --project backend --env-file backend/.env python scripts/evals/search/checks/production_recall.py --dataset retrieval-ground-truth-mini --depths rapid
 make eval-search-recall ARGS="--depths rapid"         # same, on the 4 hand-made reviews (retrieval-ground-truth, the default when --dataset is not given)
 
 # Baselines: one Langfuse run per arm and cap
-uv run --project backend --env-file backend/.env python scripts/evals/search/measure/baseline_recall.py --dataset retrieval-ground-truth-mini
+uv run --project backend --env-file backend/.env python scripts/evals/search/checks/baseline_recall.py --dataset retrieval-ground-truth-mini
 
 # Sweep: smoke test, then the full sweep
-uv run --project backend --env-file backend/.env python scripts/evals/search/measure/sweep_record_cap.py --caps 50 --generation-backends shared --repeats 1
-uv run --project backend --env-file backend/.env python scripts/evals/search/measure/sweep_record_cap.py
+uv run --project backend --env-file backend/.env python scripts/evals/search/experiments/sweep_record_cap.py --caps 50 --generation-backends shared --repeats 1
+uv run --project backend --env-file backend/.env python scripts/evals/search/experiments/sweep_record_cap.py
 ```
 
 The baselines call each service **once** and save the raw results in `results/cache/`. Later runs score from the cache and cost nothing. Use `--refresh` only when you need fresh results: Consensus charges for every call.

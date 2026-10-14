@@ -86,9 +86,10 @@ def test_planner_prompt_plain_language_and_ready_update() -> None:
 def test_planner_prompt_thoroughness_screen_words_and_caps() -> None:
     assert 'label "Standard report"' in PLANNER_SYSTEM_PROMPT
     assert 'label "Detailed report"' in PLANNER_SYSTEM_PROMPT
-    assert "up to 50 relevant results per database" in PLANNER_SYSTEM_PROMPT
-    assert "up to 100 relevant results per database" in PLANNER_SYSTEM_PROMPT
-    assert "up to 200 relevant results per database" in PLANNER_SYSTEM_PROMPT
+    assert "up to 100 papers and 50 policy documents" in PLANNER_SYSTEM_PROMPT
+    assert "up to 200 papers and 100 policy documents" in PLANNER_SYSTEM_PROMPT
+    assert "up to 400 papers and 200 policy documents" in PLANNER_SYSTEM_PROMPT
+    assert "relevant results per database" not in PLANNER_SYSTEM_PROMPT
     assert "Evidence overview / Full-text synthesis / Findings synthesis" in PLANNER_SYSTEM_PROMPT
     assert "Standard review" not in PLANNER_SYSTEM_PROMPT
     assert "Detailed review" not in PLANNER_SYSTEM_PROMPT

@@ -102,9 +102,9 @@ describe("scopeChips", () => {
 
 describe("plan-panel hints", () => {
   it("states the acquire caps on Search scope and the shortlist sizes on Analysis level", () => {
-    expect(SEARCH_SCOPE_HINT).toContain(`Focused: up to ${SEARCH_SCOPE_RECORD_CAP.rapid} relevant results per database`);
-    expect(SEARCH_SCOPE_HINT).toContain(`Broad: up to ${SEARCH_SCOPE_RECORD_CAP.standard} relevant results per database`);
-    expect(SEARCH_SCOPE_HINT).toContain(`Broadest: up to ${SEARCH_SCOPE_RECORD_CAP.deep} relevant results per database`);
+    expect(SEARCH_SCOPE_HINT).toContain(`Focused: up to ${SEARCH_SCOPE_RECORD_CAP.rapid.papers} papers and ${SEARCH_SCOPE_RECORD_CAP.rapid.policy} policy documents`);
+    expect(SEARCH_SCOPE_HINT).toContain(`Broad: up to ${SEARCH_SCOPE_RECORD_CAP.standard.papers} papers and ${SEARCH_SCOPE_RECORD_CAP.standard.policy} policy documents`);
+    expect(SEARCH_SCOPE_HINT).toContain(`Broadest: up to ${SEARCH_SCOPE_RECORD_CAP.deep.papers} papers and ${SEARCH_SCOPE_RECORD_CAP.deep.policy} policy documents`);
     expect(ANALYSIS_QUESTION).toContain("Overview: Themes, coverage and gaps across the screened evidence");
     expect(ANALYSIS_QUESTION).toContain(
       `Full-text synthesis: Synthesise about ${ANALYSIS_SHORTLIST_CAP.standard} shortlisted sources`,

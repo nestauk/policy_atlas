@@ -34,6 +34,8 @@ scripts/recordings/
 scripts/evals/search/results/*
 !scripts/evals/search/results/history.md
 !scripts/evals/search/results/analyses/
+# Manual experiment outputs: the JSON data stays local, the .md write-ups are kept
+scripts/evals/search/experiments/manual/*.json
 
 # Screening eval: downloaded ground truth and per-run outputs
 scripts/evals/screening/datasets/
@@ -75,3 +77,5 @@ scripts/.rename_038_state.json
 
 # Data
 *.csv
+# Search eval: the policy-side ground truth lives on S3 (sync_s3.py search download)
+scripts/evals/search/ground_truth/policy_gt_specific*

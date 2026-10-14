@@ -42,7 +42,14 @@ class OpenAlexFixtureBackend:
     name = "openalex"
     trust_class = "academic_aggregator"
     mode = "fixture"
-    caps = BackendCaps(has_snowball=True, has_title_lookup=True, has_doi_lookup=True)
+    caps = BackendCaps(
+        has_snowball=True,
+        has_title_lookup=True,
+        has_doi_lookup=True,
+        has_semantic=True,
+        has_id_lookup=True,
+        has_forward=True,
+    )
 
     def search(
         self,
@@ -81,6 +88,46 @@ class OpenAlexFixtureBackend:
             max_results: Optional result cap applied to the reference slice.
         """
         return _limit_fixture_records(_load_fixture("openalex_works.json")[:3], max_results)
+
+    def search_semantic(
+        self,
+        text: str,
+        *,
+        wire_params: dict[str, str] | None = None,
+        max_results: int | None = None,
+    ) -> list[dict[str, Any]]:
+        """Return fixture Works in reverse order for semantic searches."""
+        return _limit_fixture_records(
+            list(reversed(_load_fixture("openalex_works.json"))), max_results
+        )
+
+    def lookup_ids(
+        self, ids: list[str], *, wire_params: dict[str, str] | None = None
+    ) -> list[dict[str, Any]]:
+        """Return fixture Works whose short IDs were requested."""
+        wanted = {record_id.rsplit("/", 1)[-1] for record_id in ids}
+        return [
+            record
+            for record in _load_fixture("openalex_works.json")
+            if str(record.get("id", "")).rsplit("/", 1)[-1] in wanted
+        ]
+
+    def fetch_citing(
+        self,
+        ids: list[str],
+        *,
+        wire_params: dict[str, str] | None = None,
+        max_results: int | None = None,
+        page: int = 1,
+    ) -> list[dict[str, Any]]:
+        """Return one deterministic fixture forward-citation page."""
+        if page > 1:
+            return []
+        return _limit_fixture_records(_load_fixture("openalex_works.json")[3:9], max_results)
+
+    def fetch_by_id(self, record_id: str) -> dict[str, Any] | None:
+        """Raise because OpenAlex fixture exposes no policy-document fetch capability."""
+        raise NotImplementedError("OpenAlexFixtureBackend caps.has_fetch_by_id=False")
 
     def lookup_title(self, title: str) -> list[dict[str, Any]]:
         """Return fixture records whose titles contain the query string.
@@ -122,7 +169,7 @@ class OvertonFixtureBackend:
     name = "overton"
     trust_class = "grey_literature_aggregator"
     mode = "fixture"
-    caps = BackendCaps(has_snowball=False, has_title_lookup=False)
+    caps = BackendCaps(has_snowball=False, has_title_lookup=False, has_fetch_by_id=True)
 
     def search(
         self,
@@ -168,6 +215,29 @@ class OvertonFixtureBackend:
         """
         raise NotImplementedError("OvertonFixtureBackend caps.has_snowball=False")
 
+    def fetch_by_id(self, record_id: str) -> dict[str, Any] | None:
+        """Return the fixture policy document matching its exact identifier."""
+        return next(
+            (
+                record
+                for record in _load_fixture("overton_documents.json")
+                if record.get("policy_document_id") == record_id
+            ),
+            None,
+        )
+
+    def search_semantic(self, *args: Any, **kwargs: Any) -> list[dict[str, Any]]:
+        """Raise because Overton exposes no OpenAlex semantic capability."""
+        raise NotImplementedError("OvertonFixtureBackend caps.has_semantic=False")
+
+    def lookup_ids(self, *args: Any, **kwargs: Any) -> list[dict[str, Any]]:
+        """Raise because Overton exposes no OpenAlex ID-lookup capability."""
+        raise NotImplementedError("OvertonFixtureBackend caps.has_id_lookup=False")
+
+    def fetch_citing(self, *args: Any, **kwargs: Any) -> list[dict[str, Any]]:
+        """Raise because Overton exposes no OpenAlex forward capability."""
+        raise NotImplementedError("OvertonFixtureBackend caps.has_forward=False")
+
     def lookup_title(self, title: str) -> list[dict[str, Any]]:
         """Raise because Overton v1 declares no title-lookup capability.
 
@@ -195,5 +265,3 @@ class OvertonFixtureBackend:
 
 
 # --- Mapping layer (private): raw provider record -> normalized envelope + chunk ---
-
-

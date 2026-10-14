@@ -1,7 +1,7 @@
 # Environment
 
 How to bring up a working local environment and the gotchas that bite. Reflects the repo as it
-stands (tasks 001–040; 040 is frontend-only and changes no env; 039 adds the APO test-mod (`publisher_source`,
+stands (tasks 001–040; 040 is frontend-only and changes no env; 051 changes no env and no schema (the single-pass search and the Luna model ids are code constants; nothing new to set); 039 adds the APO test-mod (`publisher_source`,
 Overton `source=apo`) plus planning/artefact bug fixes — no migration; when
 another checkout of this repo may be running tests, isolate the gate with a
 per-checkout `TEST_DATABASE_URL` `*_test` override; 038 renames the catalog (`project`→`task`,

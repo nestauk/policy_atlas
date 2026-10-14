@@ -9,7 +9,7 @@ how a number should be read.
 
 ## How to add a run
 
-1. Run `measure/run_screen.py`. It prints recall, precision, F2 and the dollar
+1. Run `checks/run_screen.py`. It prints recall, precision, F2 and the dollar
    cost, and writes `eval_results.json` in the run folder.
 2. Copy the row that matters into the table below. Say what changed (the model,
    how many replies per document) and anything that affects the reading.

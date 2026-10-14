@@ -318,6 +318,10 @@ architectural decision to defer, not an omission. Sources: architecture referenc
   divided quota) — after this branch and that one merge, re-run it and set the caps from
   where recall stops improving. With rounds + arms live (task 029) that re-run is the
   acceptance test for the whole change.
+  **Update (task 051, 2026-10-09):** `record_cap_per_backend` is gone. A scope is now two
+  caps set from the measured recall curve (experiment 1, 2026-10-09): `papers_cap`
+  100 / 200 / 400 and `policy_cap` 50 / 100 / 200, applied to two ranked pools built
+  before persistence. `dropped_over_cap` is still counted per backend.
 
 - **Multi-round search wired into the runner — DISCHARGED (task 029, 2026-08-06).** The
   round loop found unwired on 2026-08-05 (orphaned since task 023's skeleton retirement,
@@ -333,6 +337,12 @@ architectural decision to defer, not an omission. Sources: architecture referenc
   stop condition lands on the final round's coverage row via `finalise_deep_stop`, whose
   thin-evidence overlay now keys on `THIN_CONFIDENT_RELEVANT` (8). Pinned by
   `tests/runtime/test_search_rounds.py`.
+  **Update — the round loop is DELETED (task 051, 2026-10-09, ADR 0038).** One pass at
+  every scope replaced it (measured: 20.3% paper recall at Broad against 15.3% for the
+  three-round Broadest, at the same pool size). The runner gate, `evaluate_deep_stop`,
+  `finalise_deep_stop`, the four arms and `test_search_rounds.py` are gone; the restore
+  point is the tag `search-round-loop-last` (recipe in ADR 0038). The reformulation
+  contingency is parked below under task 051.
   **Accepted blemishes — the per-round *counts* are DISCHARGED (task 031, 2026-08-13).**
   The "Where I looked" pane now sums query hits across every acquire run that wrote a
   coverage record for the task, so `results` and `relevant` are both cumulative. The
@@ -356,9 +366,11 @@ architectural decision to defer, not an omission. Sources: architecture referenc
     not. Revisit if the multi-question IA makes per-question relevance meaningful.
   - The loop-level stop condition is written after the last screen boundary, so the
     `re_searched_still_thin` P1 check-in **trigger** can only see it on a later boundary,
-    if at all — task 031 changed the P1 display bundle, not the trigger.
+    if at all — task 031 changed the P1 display bundle, not the trigger. **Discharged by
+    task 051:** the round loop and `re_searched_still_thin` are gone (ADR 0038).
   - The frontend timeline still shows repeated "Searching sources"/"Screening" rows with
-    no round labels.
+    no round labels. **Discharged by task 051:** one acquire run and one screen run per
+    scope, so there are no rounds to label.
 
 - **Publisher-country charts truncate, so the drawn bars can sum below the population**
   (task 031, 2026-08-13). `landscape_out` guarantees the *payload* adds up (known
@@ -392,7 +404,7 @@ architectural decision to defer, not an omission. Sources: architecture referenc
   standard/deep clocks; task 029 removed rapid's 30 s clock and the whole `stop_all`
   mechanism with it — no planned call is ever skipped at any depth, and acquire's stop
   vocabulary is `completed`/`error` (`wall_clock_exceeded` stays in the CHECK constraint
-  as a historical value). Volume is bounded by `record_cap_per_backend`
+  as a historical value). Volume was bounded by `record_cap_per_backend` (since task 051: by the scope's `papers_cap` and `policy_cap` and the per-backend call budget)
   (owner-set 2026-08-06: rapid 50 / standard 100 / deep 200, per backend per round);
   nothing bounds latency anywhere — rapid's worst case is its ~21 sequential provider
   calls plus retries. If a latency bound is ever needed it belongs at the runner as a
@@ -1884,6 +1896,8 @@ first-class vocabulary. What follows is what it deliberately left out.
   own gated seam.
 - **Per-run provider-rate-limit fairness** (owner, 2026-07-21) — provider limits are
   shared across concurrent runs; the executing-walk bound is the v1 fairness mitigation.
+  Task 051 raised the per-run peak (the two legs in parallel, eight seed calls in
+  flight; the pacing lock and the 429 pause are per backend instance, so per run).
   Recorded non-goal until real contention shows up.
 - **Plan-field↔turn provenance** (025 adversarial finding 7) — ephemeral planner prose is
   not execution-bearing for continuation, but which conversation turn produced which plan
@@ -2504,3 +2518,74 @@ Context: `scripts/evals/search/measure/baseline_recall.py` and `results/history.
 - **Ranking-stability test.** Fetch the same query several times and measure how much the
   ranking moves, so a recall difference of a point or two between runs can be told from
   noise. Not run; each Consensus repeat costs about $0.50 per review.
+
+## Single-pass search and adaptive screen (task 051 seams)
+
+Context: [ADR 0038](adr/0038-single-pass-search-and-adaptive-screen.md), contract at
+`docs/tasks/051-improve-production-search-screen/contract.md`, measurements in
+`scripts/evals/search/results/analyses/2026-10-09-design-experiments.md` and the write-ups
+it cites. Fixed in passing, not a seam: Overton searches were sorted by date (no `sort`
+sent; found in task 049), now `sort=relevance` on every search, protected.
+
+- **Relevance reserve (D6, ✅ superseded 2026-10-12 by task 052).** The experiment
+  write-up proposed holding the first 50 keyword results in their own order before the
+  specificity-ranked pool. Tried offline on three questions
+  (`scripts/evals/search/experiments/manual/2026-10-12-rank-mix-*.md`): it carries a
+  broad query's off-topic results into the reserve. Replaced by the relevant / seminal /
+  novel round-robin (`pool.rank_mix`, ADR 0038 decision 4 as amended), measured on the
+  mini set on 2026-10-12: 15.3% / 19.7% / 25.3% search recall at the three scopes
+  against 12.9% / 17.8% / 22.3% before.
+- **Similarity damping of the policy ranking (D8, 🟡 leaning, agreed in principle
+  2026-10-07).** `(specificity + 0.5) × (similarity + 0.2)` with the document's title and
+  excerpt embedded against the question (`policy_rank.py --embed`): by eye it demotes
+  the added documents that are off the question and keeps the on-question ones. Not
+  built: about 5 embedding calls before the cut, one side effect (an added document with
+  no excerpt scores on its title alone) has an untested fix, and the measured policy
+  numbers are without it.
+- **Reformulation contingency for Broadest (D11, 🟡 measured, parked).** Search, screen,
+  reformulate the queries from screened exemplars, one more search, screen the new
+  documents: +3.9 points at the ceiling in experiment 4 (`reformulate_gain.py`,
+  2026-10-09), the one arm of the old loop with measured value. The prompt builders,
+  wires and backend methods (`ReformulatePayload`, `SuggestPayload`, `ExemplarRecord`,
+  `reformulate`, `suggest`) stay in the tree, tested and unreachable; the orchestration
+  is at the tag `search-round-loop-last` (restore recipe in ADR 0038). Build it as one
+  more pass after the screen, not as a loop. `confident_relevant_count` and its two
+  thresholds (`CONFIDENT_FLOOR`, `THIN_CONFIDENT_RELEVANT`) were deleted at the PR 96
+  review (2026-10-14); they are at the same tag.
+- **Seminal-decile recall as a Langfuse score (D17, ⏸).** The experiment script reports
+  it (the share of a review's ten most-cited references found); `production_recall.py`
+  does not. Add the score when the ground truth carries citation counts per reference.
+- **Overton records with a removed title (D18, ⏸, owner-parked).** The mapper skips
+  records with no native and no translated title; a record whose title is a placeholder
+  string ("Untitled", a file name) is kept and screened on that string. Decide whether
+  to drop, keep or label them once a run shows how many there are.
+- **Run the two search legs, and the OpenAlex calls, in parallel — DISCHARGED (task 051 Phase 3c, 2026-10-09, owner's call the same day).** Built as plan S13: the legs side by side, the seed and resolve calls concurrent, paced admission under a per-backend lock, calls recorded in plan order. The original entry:
+  The live check measured a Focused search at about 2.5 minutes per review: the Overton
+  leg is 24 paced requests (about 30 s at 1.2 s each) and the OpenAlex leg 37 sequential
+  requests at 1 to 2 s of network time each (60 to 90 s); the screen of 150 documents
+  takes about 10 s. The legs are independent until the pools are ranked, and the 15
+  keyword and 8 semantic calls are independent of each other, so the search could run
+  in about 45 s. Needs: a lock on each backend's pacing (`_last_request_at` is not
+  thread-safe), a lock on the pass state that records calls, Langfuse context
+  propagation into the threads (`tracing.submit_with_context`), and the call-order
+  assertions in `test_search_single_pass.py` turned into set assertions; the
+  `search.executed` events would interleave the two backends. Measure with the recall
+  script's wall-clock column before and after.
+- **`source_country` as a plan option (D18, ⏸).** The directive
+  `source_country_post_filter` exists and is applied to the searches and the landmarks;
+  exposing it on the plan document is a plan-vocabulary change, not a search change.
+
+- **Partial backend failure and the coverage verdict** (Codex adversarial review,
+  2026-10-09) — a backend counts as failed only when every one of its calls fails
+  (`acquire_sources`, unchanged since task 019); one failed resolve, forward page,
+  semantic or Overton call beside successful ones leaves `stop_condition completed` and
+  `adequacy_verdict adequate`, with the failure visible only on its `search.executed`
+  row. In the single pass each call is load-bearing (the eval already names such a run
+  "an undercount"). Seam: a partial status in the coverage vocabulary, or a per-call-plan
+  health flag, with the P1 check-in reading it. Not changed at review: it is the
+  pre-existing rule and the stop vocabulary is in the contract's do-not-change row.
+- **Landmarks carry no Overton wire filters** (contract verifier, 2026-10-09) — a landmark
+  fetched by id is checked only against `source_country_post_filter`; a dated or
+  publisher-typed plan can admit a landmark outside its range, as D8 is written. Seam:
+  apply the plan's Overton filters locally to landmarks, counted on the `fetch_by_id`
+  event like the country check.
