@@ -24,8 +24,7 @@ const excludeMutate = vi.fn();
 const includeMutate = vi.fn();
 
 vi.mock("../../api/mutations", () => ({
-  useExcludeOption: vi.fn(),
-  useIncludeOption: vi.fn(),
+  useOptionVerb: vi.fn(),
 }));
 
 const TASK_ID = "11111111-1111-1111-1111-111111111111";
@@ -41,11 +40,11 @@ function renderCard(optionId: string, overrides: Record<string, unknown> = {}) {
       isError: false,
     } as unknown as ReturnType<typeof queries.useOption>,
   );
-  vi.mocked(mutations.useExcludeOption).mockReturnValue(
-    { mutate: excludeMutate, isPending: false } as unknown as ReturnType<typeof mutations.useExcludeOption>,
-  );
-  vi.mocked(mutations.useIncludeOption).mockReturnValue(
-    { mutate: includeMutate, isPending: false } as unknown as ReturnType<typeof mutations.useIncludeOption>,
+  vi.mocked(mutations.useOptionVerb).mockImplementation(
+    (_taskId, verb) =>
+      ({ mutate: verb === "exclude" ? excludeMutate : includeMutate, isPending: false }) as unknown as ReturnType<
+        typeof mutations.useOptionVerb
+      >,
   );
   return render(
     <TooltipProvider>

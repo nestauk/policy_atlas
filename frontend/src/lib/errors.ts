@@ -54,6 +54,13 @@ export function isConflictCode(code: string | undefined | null): code is Conflic
   return code !== undefined && code !== null && code in conflictSentences;
 }
 
+/** A failed action's notice: the API's conflict sentence when the thrown
+ *  error names one, else the action's own fallback. */
+export function actionFailedNotice(error: unknown, fallback: string): string {
+  const code = (error as { code?: string } | null | undefined)?.code;
+  return isConflictCode(code) ? conflictSentences[code] : fallback;
+}
+
 /**
  * Extract the API's machine-readable error `code` from a thrown
  * query/mutation error envelope (`{ error: { code, message } }`).

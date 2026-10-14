@@ -2,9 +2,11 @@ import { useState, type FormEvent } from "react";
 import { Link } from "react-router";
 
 import type { components } from "../../api/gen/types";
-import { useAddOption, useExcludeOption, useIncludeOption } from "../../api/mutations";
+import { useAddOption } from "../../api/mutations";
 import { usePlan, useTask } from "../../api/queries";
+import { actionFailedNotice } from "../../lib/errors";
 import { scrub } from "../../lib/scrub";
+import { countOf } from "../../lib/vocabulary";
 import { Button } from "../../ui/brand/Button";
 import { Chip } from "../../ui/brand/Chip";
 import { cn } from "../../ui/brand/cn";
@@ -22,7 +24,6 @@ import { FILTER_CHIP_CLASS } from "../sourcesPresentation";
 import { LonglistGrid } from "./LonglistGrid";
 import {
   SCOPING_PASS_SENTENCE,
-  actionFailedNotice,
   byLeverThenName,
   capitalise,
   constraintLabel,
@@ -35,6 +36,7 @@ import {
   rowMetaParts,
   themeSummary,
 } from "./longlistPresentation";
+import { ExcludeReasonForm, OptionActionButton, REASON_INPUT_CLASS, useOptionActions } from "./optionActions";
 
 type LonglistOut = components["schemas"]["LonglistOut"];
 type OptionSummaryOut = components["schemas"]["OptionSummaryOut"];
@@ -43,6 +45,11 @@ type GroupBy = "theme" | "lever";
 const GROUP_BY: { key: GroupBy; label: string }[] = [
   { key: "theme", label: "Theme" },
   { key: "lever", label: "Lever type" },
+];
+
+const MODES: { key: "list" | "grid"; label: string }[] = [
+  { key: "list", label: "List" },
+  { key: "grid", label: "Grid" },
 ];
 
 const ADD_OPTION_ANCHOR = "add-option";
@@ -59,10 +66,6 @@ function facetChipClass(active: boolean): string {
 
 const FACET_LABEL_CLASS = "w-20 flex-none pt-1.5 text-meta font-semibold text-grey max-md:w-full max-md:pt-0";
 
-const REASON_INPUT_CLASS =
-  "min-w-0 flex-1 border border-line-2 bg-paper px-3 py-1.5 text-body text-ink placeholder:text-grey/80 " +
-  "focus-visible:outline-2 focus-visible:outline-blue";
-
 /**
  * The longlist's list view (contract deliverable 9, plan S13) on the
  * report's page chrome (EB-modified: `ReportPage`, `SectionDisclosure`):
@@ -75,18 +78,11 @@ export function LonglistView({ taskId, longlist }: { taskId: string; longlist: L
   const task = useTask(taskId);
   const plan = usePlan(taskId);
   const addOption = useAddOption(taskId);
-  const excludeOption = useExcludeOption(taskId);
-  const includeOption = useIncludeOption(taskId);
 
   const [mode, setMode] = useState<"list" | "grid">("list");
   const [groupBy, setGroupBy] = useState<GroupBy>("theme");
   const [showExcludedInGrid, setShowExcludedInGrid] = useState(false);
   const [addText, setAddText] = useState("");
-  const [excludingId, setExcludingId] = useState<string | null>(null);
-  const [excludeReason, setExcludeReason] = useState("");
-  // Task 045 (F15): a refused add / exclude / include says so, next to the
-  // control it came from (`optionId` null: the add row).
-  const [notice, setNotice] = useState<{ optionId: string | null; text: string } | null>(null);
 
   const options = longlist.options ?? [];
   const optionsById = new Map(options.map((option) => [option.option_id, option]));
@@ -99,8 +95,9 @@ export function LonglistView({ taskId, longlist }: { taskId: string; longlist: L
     for (const id of theme.option_ids ?? []) themeOfOption.set(id, theme.name);
   }
 
-
   const walkActive = isRunActive(task.data);
+  const actions = useOptionActions(taskId, walkActive);
+  const { notice, setNotice } = actions;
 
   const handleAddOption = (event: FormEvent) => {
     event.preventDefault();
@@ -113,36 +110,6 @@ export function LonglistView({ taskId, longlist }: { taskId: string; longlist: L
         onSuccess: () => setAddText(""),
         onError: (error) =>
           setNotice({ optionId: null, text: actionFailedNotice(error, "The option couldn't be added. Try again.") }),
-      },
-    );
-  };
-
-  // The reason is optional (owner, 2026-09-24): blank sends none.
-  const submitExclude = (optionId: string) => {
-    const reason = excludeReason.trim();
-    if (excludeOption.isPending || walkActive) return;
-    setNotice(null);
-    excludeOption.mutate(
-      reason === "" ? { optionId } : { optionId, reason },
-      {
-        onSuccess: () => {
-          setExcludingId(null);
-          setExcludeReason("");
-        },
-        onError: (error) =>
-          setNotice({ optionId, text: actionFailedNotice(error, "The option couldn't be excluded. Try again.") }),
-      },
-    );
-  };
-
-  const handleInclude = (optionId: string) => {
-    if (includeOption.isPending || walkActive) return;
-    setNotice(null);
-    includeOption.mutate(
-      { optionId },
-      {
-        onError: (error) =>
-          setNotice({ optionId, text: actionFailedNotice(error, "The option couldn't be included again. Try again.") }),
       },
     );
   };
@@ -161,32 +128,12 @@ export function LonglistView({ taskId, longlist }: { taskId: string; longlist: L
           >
             {scrub(option.name)}
           </Link>
-          {excluded ? (
-            <Button
-              variant="secondary"
-              size="sm"
-              className="-my-2 flex-none"
-              disabled={includeOption.isPending || walkActive}
-              onClick={() => handleInclude(option.option_id)}
-            >
-              Include again
-            </Button>
-          ) : (
-            excludingId !== option.option_id && (
-              <Button
-                variant="secondary"
-                size="sm"
-                className="-my-2 flex-none"
-                disabled={walkActive}
-                onClick={() => {
-                  setExcludeReason("");
-                  setExcludingId(option.option_id);
-                }}
-              >
-                Exclude
-              </Button>
-            )
-          )}
+          <OptionActionButton
+            actions={actions}
+            optionId={option.option_id}
+            excluded={excluded}
+            className="-my-2 flex-none"
+          />
         </div>
         <p className={cn("mt-1 max-w-[44em] text-body", excluded ? "text-grey" : "text-ink")}>
           {scrub(option.description)}
@@ -207,35 +154,11 @@ export function LonglistView({ taskId, longlist }: { taskId: string; longlist: L
             </span>
           ))}
         </p>
-        {excludingId === option.option_id && (
-          <form
-            className="mt-3 flex flex-wrap items-center gap-2"
-            onSubmit={(event) => {
-              event.preventDefault();
-              submitExclude(option.option_id);
-            }}
-          >
-            <input
-              autoFocus
-              aria-label="Why exclude this option?"
-              value={excludeReason}
-              onChange={(event) => setExcludeReason(event.target.value)}
-              placeholder="Why exclude this option?"
-              className={REASON_INPUT_CLASS}
-            />
-            <Button
-              type="submit"
-              variant="secondary"
-              size="sm"
-              disabled={excludeOption.isPending || walkActive}
-            >
-              Exclude
-            </Button>
-            <Button variant="ghost" size="sm" onClick={() => setExcludingId(null)}>
-              Cancel
-            </Button>
-          </form>
-        )}
+        <ExcludeReasonForm
+          actions={actions}
+          optionId={option.option_id}
+          className="mt-3 flex flex-wrap items-center gap-2"
+        />
         {notice !== null && notice.optionId === option.option_id && (
           <p role="alert" className="mt-2 text-body text-red">
             {notice.text}
@@ -258,28 +181,22 @@ export function LonglistView({ taskId, longlist }: { taskId: string; longlist: L
       .filter(included)
       .sort(sortRows);
   const includedOptions = options.filter(included);
-  const themesOf = (group: readonly OptionSummaryOut[]) =>
-    new Set(group.map((option) => themeOfOption.get(option.option_id) ?? "No theme")).size;
-  const themeCount = (group: readonly OptionSummaryOut[]) => {
-    const n = themesOf(group);
-    return `${n} ${n === 1 ? "theme" : "themes"}`;
-  };
+  const themeCount = (group: readonly OptionSummaryOut[]) =>
+    countOf(new Set(group.map((option) => themeOfOption.get(option.option_id) ?? "No theme")).size, "theme", "themes");
   const byTheme = [
     ...(longlist.themes ?? []).map((theme) => ({
       key: theme.theme_id,
       name: theme.name,
-      summary: themeSummary(theme.description),
-      description: theme.description,
+      description: themeSummary(theme.description),
       options: collect(theme.option_ids ?? []),
     })),
-    { key: "no-theme", name: "No theme", summary: "", description: "", options: collect(longlist.unthemed_option_ids ?? []) },
+    { key: "no-theme", name: "No theme", description: "", options: collect(longlist.unthemed_option_ids ?? []) },
   ];
   // A lever group's description is the taxonomy's own one-line
   // definition; the heading's meta adds how many themes the group spans.
   const withDefinition = <T extends { options: OptionSummaryOut[] }>(group: T, definition: string) => ({
     ...group,
     description: definition,
-    summary: definition,
   });
   const byLever = [
     ...leverTypes.map((lever) => {
@@ -329,22 +246,17 @@ export function LonglistView({ taskId, longlist }: { taskId: string; longlist: L
       <header className="mb-8">
         <ReportKindRow kind="Longlist" tag={<Chip tone="blue" title={SCOPING_PASS_SENTENCE}>{scrub(longlist.depth_label)}</Chip>}>
           <div role="group" aria-label="View" className="print-hide flex items-center gap-1.5">
-            <button
-              type="button"
-              aria-pressed={mode === "list"}
-              onClick={() => setMode("list")}
-              className={facetChipClass(mode === "list")}
-            >
-              List
-            </button>
-            <button
-              type="button"
-              aria-pressed={mode === "grid"}
-              onClick={() => setMode("grid")}
-              className={facetChipClass(mode === "grid")}
-            >
-              Grid
-            </button>
+            {MODES.map((choice) => (
+              <button
+                key={choice.key}
+                type="button"
+                aria-pressed={mode === choice.key}
+                onClick={() => setMode(choice.key)}
+                className={facetChipClass(mode === choice.key)}
+              >
+                {choice.label}
+              </button>
+            ))}
             {mode === "grid" && longlist.counts.excluded > 0 && (
               <button
                 type="button"
@@ -410,13 +322,13 @@ export function LonglistView({ taskId, longlist }: { taskId: string; longlist: L
               section={{
                 title: group.name,
                 role: "standard",
-                summary: group.summary,
+                summary: group.description,
                 summary_status: "verified",
               }}
               defaultOpen={false}
               collapsible
               meta={[
-                `${group.options.length} ${group.options.length === 1 ? "option" : "options"}`,
+                countOf(group.options.length, "option", "options"),
                 groupBy === "theme" ? instrumentsSummary(group.options, leverTypes) : themeCount(group.options),
               ]
                 .filter((part) => part !== "")
@@ -434,31 +346,27 @@ export function LonglistView({ taskId, longlist }: { taskId: string; longlist: L
       )}
       {/* Outside the provider on purpose: Expand all opens the themes, not
           the set-aside options. */}
-      {mode === "list" && (
-        <>
-        {excludedOptions.length > 0 && (
-          <SectionDisclosure
-            key={sectionKey("excluded")}
-            id={EXCLUDED_ANCHOR}
-            section={{
-              title: "Excluded options",
-              role: "conclusions",
-              summary: "Set aside by a constraint or by you, with the reason.",
-              summary_status: "verified",
-            }}
-            defaultOpen={false}
-            collapsible
-            meta={String(excludedOptions.length)}
-          >
-            <p className="max-w-prose-measure text-body text-grey">
-              Set aside by a constraint or by you, with the reason. Include again puts one back in its theme.
-            </p>
-            <ul role="list" className="divide-y divide-line border-t border-line">
-              {excludedOptions.map(renderOptionRow)}
-            </ul>
-          </SectionDisclosure>
-        )}
-        </>
+      {mode === "list" && excludedOptions.length > 0 && (
+        <SectionDisclosure
+          key={sectionKey("excluded")}
+          id={EXCLUDED_ANCHOR}
+          section={{
+            title: "Excluded options",
+            role: "conclusions",
+            summary: "Set aside by a constraint or by you, with the reason.",
+            summary_status: "verified",
+          }}
+          defaultOpen={false}
+          collapsible
+          meta={String(excludedOptions.length)}
+        >
+          <p className="max-w-prose-measure text-body text-grey">
+            Set aside by a constraint or by you, with the reason. Include again puts one back in its theme.
+          </p>
+          <ul role="list" className="divide-y divide-line border-t border-line">
+            {excludedOptions.map(renderOptionRow)}
+          </ul>
+        </SectionDisclosure>
       )}
 
       <form id={ADD_OPTION_ANCHOR} onSubmit={handleAddOption} className="print-hide mt-12 border-t border-line pt-6">

@@ -20,8 +20,7 @@ const addMutate = vi.fn();
 
 vi.mock("../../api/mutations", () => ({
   useAddOption: vi.fn(),
-  useExcludeOption: vi.fn(),
-  useIncludeOption: vi.fn(),
+  useOptionVerb: vi.fn(),
 }));
 
 const TASK_ID = "11111111-1111-1111-1111-111111111111";
@@ -40,11 +39,11 @@ function renderLonglist(
   vi.mocked(queries.usePlan).mockReturnValue(
     { data: { scoping: { question: "How can we cut the NEET rate?" } } } as unknown as ReturnType<typeof queries.usePlan>,
   );
-  vi.mocked(mutations.useExcludeOption).mockReturnValue(
-    { mutate: excludeMutate, isPending: false } as unknown as ReturnType<typeof mutations.useExcludeOption>,
-  );
-  vi.mocked(mutations.useIncludeOption).mockReturnValue(
-    { mutate: includeMutate, isPending: false } as unknown as ReturnType<typeof mutations.useIncludeOption>,
+  vi.mocked(mutations.useOptionVerb).mockImplementation(
+    (_taskId, verb) =>
+      ({ mutate: verb === "exclude" ? excludeMutate : includeMutate, isPending: false }) as unknown as ReturnType<
+        typeof mutations.useOptionVerb
+      >,
   );
   vi.mocked(mutations.useAddOption).mockReturnValue(
     { mutate: addMutate, isPending: false } as unknown as ReturnType<typeof mutations.useAddOption>,

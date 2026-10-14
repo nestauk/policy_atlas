@@ -28,6 +28,11 @@ export const PROJECT = {
   lowerMany: "projects",
 } as const;
 
+/** A count with its noun: `countOf(1, "option", "options")` → "1 option". */
+export function countOf(n: number, one: string, many: string): string {
+  return `${n} ${n === 1 ? one : many}`;
+}
+
 /** The five task-level lifecycle tabs, in their fixed order. */
 export const LIFECYCLE_LABELS = {
   agent: "Agent",
