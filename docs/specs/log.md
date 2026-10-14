@@ -1,5 +1,81 @@
 # Spec update log
 
+## 2026-10-12
+Task 046 (the longlist refinement), contract § Spec changes, applied at the step-7 review on the
+owner's word ("Make the spec changes"; items 1–17 of `spec-changes-proposed.md` and the amendment 3
+and 4 items of the contract). Items that amendments 3 and 4 superseded are applied in their final
+form, so the specs describe the system as built. Contract:
+`docs/tasks/046-longlist-refinement/contract.md`; decisions in ADR 0040.
+* **Update** (item 1; R1, R2, R9, R14; owner: "even 40 feels like a lot of options to expect the
+  user to decide on" · "user options aren't folded"): [OS components § 6](capabilities/options-scoping/components.md)
+  and [OS capability § Longlist](capabilities/options-scoping/capability.md) — reader grain; target 20,
+  ceiling 25 in place of the formula; the corpus digest; the fold and *also found as*; the residual
+  pass; the flag's meaning; discovery mints no package; lever list v2; open question 4 closed.
+* **Update** (item 2; R3, R17, R63, R72, R73, R87): [OS components § 2–5 and § 10](capabilities/options-scoping/components.md)
+  — the record's fields (unit, outcome, programme name, study geography and study country) and the
+  three tags against the plan; the setting and place rules; title-only documents are not profiled.
+* **Update** (item 3; R13, R15, R18, R19; owner: "remove ingest, full text fetched in task 3" · "we
+  shouldn't let that stop potentially transferable evidence not getting in at the screen step"):
+  [OS components § 2–5 and ⟨longlist depth⟩](capabilities/options-scoping/components.md) and
+  [OS capability § Depths and modes, § Plan](capabilities/options-scoping/capability.md) — no ingest at
+  longlist depth; the option search only acquires in a longlist walk and the pool is screened once;
+  the screen input is the wide target unit and the outcomes, no setting.
+* **Update** (item 3a; R19; owner: "We should separate the target unit … from the target
+  intervention setting and geography"): [OS components § 1](capabilities/options-scoping/components.md),
+  [OS capability § Plan](capabilities/options-scoping/capability.md) and
+  [plan-as-object § What a plan contains](system/plan-as-object.md) — target unit, setting and place
+  kept apart.
+* **Update** (item 4; R4, R21, item 5; R74, the strip deleted on the owner's ruling 2026-10-12):
+  [OS components § 7](capabilities/options-scoping/components.md), [OS capability § Screening](capabilities/options-scoping/capability.md)
+  and [OS trust § Screening](capabilities/options-scoping/trust.md) — the option judged as a kind of
+  action; place never reaches `constrain`, by a rule in words; a wider population never excludes;
+  the pathway rule; the distinct screen over the whole list.
+* **Update** (items 5, 13 and the amendment 4 items 10–12; R42, R43, R60–R68, R76–R90; owner: "Let's
+  move the estimates to above the evidence" · "Shall we just remove them?" · "Let's keep
+  evaluated/evaluations for now"): [OS capability § Output structure (Longlist)](capabilities/options-scoping/capability.md)
+  — the list header, no facets, the row's grey line and the evidence signal, the grid cell limit;
+  the card: the callout, How it works, What it would take (Policy Atlas's estimate; seven cells with
+  "Middle"), Evidence (the opener, Your outcomes, the place sentences, the Documents disclosure);
+  thin and empty cards; the vocabulary rule. *Tried on* as a line and a facet, the where-tried
+  groups, the examples block and the transferability line are gone.
+* **Update** (item 6; item 9, R13; owner: "using the baseline more to inform judgements … is
+  especially important"): [OS capability § Baseline](capabilities/options-scoping/capability.md) — the
+  baseline is the reference for every judgement after it; task 3 fetches full text for shortlisted
+  options.
+* **Update** (items 7, 12, 16; R90): [vocabulary.md](vocabulary.md) — reader grain, boundary,
+  consideration, preference, option profile, line, mark, authority label, setting, tried on and
+  measures as folded kinds, evidence signal, place sentence, describing document, also found as;
+  option search, intervention profile and where tried redefined.
+* **Update** (item 8): [decision sheet rows A9 and E4](../tasks/035-options-scoping/checks/decision-sheet.md).
+* **Update** (items 10–12, amendment 2; R34, R36–R38, R40, R43, R53, R58, R70; owner: "Yes these 5
+  kinds feel right." · "I think it is its own step." · "Why don't we just run profile before
+  constrain" · "Yes leave as is"): [OS components § 1, § 6, new § 6a, § 7 and the table](capabilities/options-scoping/components.md),
+  [OS capability § Plan, § Four kinds of constraint](capabilities/options-scoping/capability.md) and
+  [plan-as-object](system/plan-as-object.md) — the four kinds of statement; the aim and the
+  who-can-act question; `option_profile` as a spine component; ambition relative to the list; the
+  authority label.
+* **Update** (item 14; R44; owner: "we don't need 'a guess, not evidence', it sounds too
+  LLM-generated."): [OS trust § Reasoned guesses](capabilities/options-scoping/trust.md) — the label
+  sits on the block heading.
+* **Update** (item 15; R47; owner: "the guesses are useful for how the shortlist selects"):
+  [OS capability § Shortlist](capabilities/options-scoping/capability.md) — the task 3 principle for
+  the cut; rulings 12 and 19 reopened for the profile only.
+* **Update** (amendment 3 items; R54–R59, R64, R66, R67; owner: "is population the right concept"
+  · "that OECD rule feels weak" · "just because a document is published in one country, it doesn't
+  necessarily mean that's where the option was tried"): [OS components § 2–5, § 6, § 6a](capabilities/options-scoping/components.md)
+  and [vocabulary.md](vocabulary.md) — `unit` in place of population; the folding calls; where
+  tried in two levels from `study_country`; the dossier's records slot.
+* **Update** (AM12): [OS trust § Provenance labels](capabilities/options-scoping/trust.md) and
+  [OS capability § Depths and modes](capabilities/options-scoping/capability.md) — the *scoping pass*
+  label reads "at the longlist, abstracts only".
+
+## 2026-09-28
+* **Update**: [OS components](capabilities/options-scoping/components.md) and
+  [OS capability](capabilities/options-scoping/capability.md) — `theme` is a component of its own
+  after `constrain` (§ 7a): it groups the included options into themes; `longlist` no longer makes
+  themes. Owner ruling R28, task 046 contract; ADR 0040 decision 5. Wording accepted by the owner
+  2026-09-28 ("Looks good").
+
 ## 2026-09-24
 Task 045 step-7 review (contract-verifier finding F1: D33 had removed the words from the card
 while the trust rule still required them). Contract: `docs/tasks/045-scoping-longlist/contract.md`.

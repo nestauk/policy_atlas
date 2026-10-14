@@ -69,11 +69,28 @@ Each Task should (more or less) feature similar "Lifecycle Tabs" (**Tabs**):
 **Options scoping words** *(task 045, the longlist; owner rulings 2026-09-22 — [contract § Terms](../tasks/045-scoping-longlist/contract.md))*:
 
 - **Entrant:** an option that did not come from clustering the evidence — *suggested by Policy Atlas*, *from your evidence search* or *added by you*. Every entrant gets an option search.
-- **Option search:** an option's own small search (acquire, screen, classify, appraise, ingest, intervention profile), run from its specified design. Owner: "let's go with option search". Not the **mini evidence search**, which is the assessment-depth reading of a shortlisted option.
+- **Option search:** an option's own small search, run from its specified design. In a longlist walk it only acquires, and the walk screens, classifies, appraises and profiles the whole pool once; the search that *Add an option* starts keeps the chain, without ingest (task 046, R13, R18). Owner: "let's go with option search". Not the **mini evidence search**, which is the assessment-depth reading of a shortlisted option.
 - **Child walk:** a walk started by another walk — an option search under the longlist walk that asked for it (code: `capability_run.parent_capability_run_id`). An option search the Task Agent starts to add an option has no parent.
-- **Intervention profile:** the `extract` profile that reads every screened-in document's abstract for the interventions it covers, each with its role (evaluated · described · recommended · comparator · mentioned). Owner naming, replacing "abstract profile" (code: `os_interventions_base_v1`).
+- **Intervention profile:** the `extract` profile that reads every screened-in document's abstract for the interventions it covers, each with its role (evaluated · described · recommended · comparator · mentioned), its design features, setting, unit, outcome, programme name, study geography and study country, and three tags against the plan (task 046, R3, R63, R72, R73). Owner naming, replacing "abstract profile" (code: `os_interventions_base_v1`).
 - **Intervention profile record** (`intervention_profile_record`): one row per intervention a document covers — the unit the longlist clusters into options. Not a finding of effect. Owner naming, replacing "intervention mention". On screen: a document *covers* or *names* an option.
-- **Where tried:** the countries an option's documents were studied in, grouped against the plan's Where (*United Kingdom · comparable systems (OECD) · other*). A facet and a card line, never a filter or a verdict.
+- **Where tried:** where an option's documents were studied, in two levels from the record: the country the study names (a country · *multiple countries* · *other* · *not stated*), then the place as written. Never grouped against the plan's Where, never a filter, never a verdict; on the card it is told as place sentences (task 046, R59, R72, R80).
+
+*Task 046 (the longlist refinement; owner rulings 2026-09-28 to 2026-10-09 — [contract](../tasks/046-longlist-refinement/contract.md)):*
+
+- **Reader grain:** the grain of a longlist row: one kind of action a government can take. A named programme, a trial's version and a delivery form are never rows (R2).
+- **Boundary:** a plan constraint that says what the option is or must not be; it can exclude at the longlist; shown as "requirement" (amendment 2, R34).
+- **Consideration:** a plan constraint about what the adopter has or lacks, who can act, or how far evidence from elsewhere applies. It names the line of "What it would take" it speaks of; it never excludes (R34, R53).
+- **Preference:** a plan constraint about what the option achieves; checked at assessment; a reasoned guess before it.
+- **Option profile:** the spine component after `longlist` that writes, per option, the lever type, the ambition, the eight lines of "What it would take", the setting and the place sentences (R37).
+- **Line:** one row of "What it would take" (cost · time to set up · time to effect · workforce requirements · who decides · dependencies · coordination requirements · delivery complexity).
+- **Mark:** the level word an option gets on a line, relative to the list (the lower word · Middle · the higher word); never added, weighted or ranked (R43, R65).
+- **Authority label:** *within your power · needs action by <body> · unclear*, written by `constrain` beside "Who decides" when the plan holds a consideration on who can act; never an exclusion (R38, R70).
+- **Setting (of an option):** the kind of place where the recipient meets the intervention (school, home, workplace, primary care); never a country, a region or a named body (R17; amendment 2's "delivery setting").
+- **Tried on · Measures:** the folded kinds of the records' `unit` and `outcome` words, one folding call each over the list (R55). The words on the card's document lines and in the place sentences; no longer a card line or a facet (R90).
+- **Evidence signal:** the one line by code under the card header and on each row: the documents that evaluated the option, the documents that describe it, the countries of the evaluations, the plan outcomes measured (amendment 4, R76).
+- **Place sentence:** one generated sentence per place an option's evaluating documents name, on the card under "Where it has been evaluated"; trace-checked, with a template fallback (R80).
+- **Describing document:** a document whose role under the option is not *evaluated* (described · recommended · comparator · mentioned); counted as "N more describe it" (R76, R81).
+- **Also found as:** the names a merged duplicate or a folded seed carried, shown on the kept option (R14, R63).
 
 ## Future direction (information only; not in scope of task 038)
 

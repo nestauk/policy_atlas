@@ -665,7 +665,7 @@ def test_authored_options_rendered_and_pickable() -> None:
             label="Re-group by population — 14 findings",
             why="population splits the corpus more usefully here",
             component="group",
-            delta={"grouping": {"facets": ["population"]}},
+            delta={"grouping": {"facets": ["unit"]}},
         ).model_dump()
     ]
     payload = _steer_point_payload(
@@ -679,7 +679,7 @@ def test_authored_options_rendered_and_pickable() -> None:
     console = ScriptedConsole([authored_number])
     response = CliIO(console).pause(payload, "group: succeeded")
     assert isinstance(response, Adjust)
-    assert response.directive_deltas == {"group": {"grouping": {"facets": ["population"]}}}
+    assert response.directive_deltas == {"group": {"grouping": {"facets": ["unit"]}}}
     assert _printed(console, "suggested by the agent")
     assert _printed(console, "Re-group by population — 14 findings")
     assert _printed(console, "population splits the corpus more usefully here")
@@ -745,7 +745,7 @@ _GROUP_FACET_FRAGMENT = _frag(
     fragment_text="group by population",
     compiles=True,
     component="group",
-    delta={"grouping": {"facets": ["population"]}},
+    delta={"grouping": {"facets": ["unit"]}},
 )
 
 
@@ -826,7 +826,7 @@ def test_confirmed_free_text_steer_applies_in_a_full_run(engine: Engine) -> None
                     grouping_result.c.task_id == result.task_id
                 )
             ).scalar_one()["facets"]
-        assert facets == ["population"]
+        assert facets == ["unit"]
     finally:
         _cleanup(engine, result.task_id if result else None)
 

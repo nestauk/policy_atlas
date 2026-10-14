@@ -222,6 +222,10 @@ def _resolve_citation_sources(
 ) -> list[dict[str, Any]]:
     """Attach source display facts to floored citations (title + document id).
 
+    Also carries the cited snapshot's ``text_basis`` (``abstract_only`` or
+    ``full_text``, task 046) straight through from ``source_snapshot`` — the
+    exact snapshot the quote/finding came from, not envelope-resolved.
+
     References must read as documents, not durable ids (owner live check,
     2026-08-11). Bibliographic authority is the ENVELOPE snapshot per the
     artefact read model's rule; the tss id joins to the sources/dossier
@@ -280,6 +284,7 @@ def _resolve_citation_sources(
                     task_source_snapshot.c.task_source_snapshot_id,
                     source_snapshot.c.metadata,
                     source_snapshot.c.source_locator,
+                    source_snapshot.c.text_basis,
                 )
                 .select_from(
                     chunk_table.join(
@@ -299,6 +304,7 @@ def _resolve_citation_sources(
                 facts[str(row.chunk_id)] = {
                     "source_title": title,
                     "source_id": str(row.task_source_snapshot_id),
+                    "text_basis": row.text_basis,
                 }
                 chunk_contents[str(row.chunk_id)] = row.content
         if finding_ids:
@@ -309,6 +315,7 @@ def _resolve_citation_sources(
                         task_source_snapshot.c.task_source_snapshot_id,
                         source_snapshot.c.metadata,
                         source_snapshot.c.source_locator,
+                        source_snapshot.c.text_basis,
                     )
                     .select_from(
                         table.join(
@@ -334,6 +341,7 @@ def _resolve_citation_sources(
                     facts[str(row.finding_id)] = {
                         "source_title": meta.get("title") or row.source_locator,
                         "source_id": str(row.task_source_snapshot_id),
+                        "text_basis": row.text_basis,
                     }
         resolved_tss_ids = {uuid.UUID(fact["source_id"]) for fact in facts.values()}
         if resolved_tss_ids:

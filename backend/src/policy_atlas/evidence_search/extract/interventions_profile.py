@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import threading
 import uuid
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -47,6 +48,8 @@ from policy_atlas.evidence_search.extract.interventions_records import (
     SCHEMA_VERSION,
     InterventionsRecord,
     InterventionsRecordCarrier,
+    TaggingContext,
+    apply_tagging_rules,
 )
 from policy_atlas.evidence_search.extract.iof_records import (
     ABSTRACT_SEGMENT_ID,
@@ -69,17 +72,24 @@ INTERVENTIONS_BASIS = "title_and_abstract"
 INTERVENTIONS_LOCATOR = "locate_unique_span"
 
 
-def interventions_fingerprint(mode: str, *, retry_cap: int) -> tuple[str, dict[str, Any]]:
+def interventions_fingerprint(
+    mode: str, *, retry_cap: int, context: TaggingContext | None = None
+) -> tuple[str, dict[str, Any]]:
     """Build the intervention profile's fingerprint and component map.
 
     The ``extraction_fingerprint`` pattern: a full sha256 hex over the
     canonical JSON of every output-affecting knob. No scope intent enters it,
     so one profile of a document serves the longlist scope and every targeted
-    scope of the task (A21).
+    scope of the task (A21). A tagging context (task 046, S4) adds its
+    ``context_hash`` — the plan's place-stripped target unit, outcomes and
+    intended change, never Where — so records tagged under one plan are not
+    reused under another. With no context the map, and so the digest, is
+    exactly the pre-046 one.
 
     Args:
         mode: The backend mode (``"live"`` or ``"stub"``).
         retry_cap: The per-call retry cap the shared pipeline applies.
+        context: The tagging context, or ``None``.
 
     Returns:
         ``(fingerprint_hex, components)``; ``components`` is recorded verbatim
@@ -99,6 +109,8 @@ def interventions_fingerprint(mode: str, *, retry_cap: int) -> tuple[str, dict[s
         "retry_cap": retry_cap,
         "finding_vetter": None,
     }
+    if context is not None:
+        components["context_hash"] = context.context_hash
     canonical = json.dumps(components, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest(), components
 
@@ -211,11 +223,16 @@ def write_interventions_record(
             is_bundle=record.is_bundle,
             components=list(record.components),
             outcome=record.outcome,
-            population=record.population,
+            unit=record.unit,
+            programme_name=record.programme_name,
+            study_country=record.study_country,
             setting=record.setting,
             study_geography=record.study_geography,
             study_design=record.study_design,
             covers_no_intervention=record.covers_no_intervention,
+            unit_tag=record.unit_tag,
+            outcome_tag=record.outcome_tag,
+            object_tag=record.object_tag,
             field_coverage=coverage,
             grounding=grounding,
             created_at=created_at,
@@ -235,14 +252,31 @@ class InterventionsWindowAdapter:
 
     The pipeline reads ``response.findings`` per call; the profile answers
     ``records`` plus a document-level ``covers_no_intervention``. The adapter
-    carries the flag onto each record and renames nothing else.
+    carries the flag onto each record and renames nothing else. It also holds
+    the run's tagging context (task 046, S4), hands it to the backend on each
+    call (with no context the backend is called exactly as before) and
+    settles each record's tags by :func:`apply_tagging_rules`, counting the
+    outcome tags repaired to ``other`` in :attr:`outcome_tag_repairs`. Calls
+    run on the pipeline's thread pool, so the count is locked.
 
     Args:
         backend: The intervention profile backend.
+        context: The tagging context, or ``None``.
     """
 
-    def __init__(self, backend: InterventionsBackend) -> None:
+    def __init__(
+        self, backend: InterventionsBackend, context: TaggingContext | None = None
+    ) -> None:
         self._backend = backend
+        self._context = context
+        self._lock = threading.Lock()
+        self._outcome_tag_repairs = 0
+
+    @property
+    def outcome_tag_repairs(self) -> int:
+        """Outcome tags repaired to ``other`` across this adapter's successful calls."""
+        with self._lock:
+            return self._outcome_tag_repairs
 
     @property
     def mode(self) -> str:
@@ -250,7 +284,7 @@ class InterventionsWindowAdapter:
         return self._backend.mode
 
     def extract(self, payload: ExtractionWindowPayload) -> UsageResult[_CarriedResponse]:
-        """Profile one document and carry the document flag onto each record.
+        """Profile one document, settle its tags and carry the document flag onto each record.
 
         Args:
             payload: The document's single payload.
@@ -258,12 +292,20 @@ class InterventionsWindowAdapter:
         Returns:
             The carried records plus the call's token usage.
         """
-        response, usage = self._backend.extract(payload)
+        if self._context is None:
+            response, usage = self._backend.extract(payload)
+        else:
+            response, usage = self._backend.extract(payload, context=self._context)
+        tagged = [apply_tagging_rules(record, self._context) for record in response.records]
+        repairs = sum(1 for item in tagged if item.outcome_tag_repaired)
+        if repairs:
+            with self._lock:
+                self._outcome_tag_repairs += repairs
         carried = [
             InterventionsRecordCarrier(
-                **record.model_dump(),
+                **item.record.model_dump(),
                 covers_no_intervention=response.covers_no_intervention,
             )
-            for record in response.records
+            for item in tagged
         ]
         return _CarriedResponse(findings=carried), usage

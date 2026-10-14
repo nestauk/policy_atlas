@@ -81,9 +81,10 @@ class CapabilitySpec:
         plan_model: The pydantic model that validates this capability's plan
             payload.
         compose: Builds the deterministic component chain from a validated
-            plan of ``plan_model`` and the intent record's ``purpose`` (task
-            045: options scoping composes a different chain per purpose; the
-            Evidence search ignores it).
+            plan of ``plan_model``, the intent record's ``purpose`` and its
+            ``context`` (task 045: options scoping composes a different chain
+            per purpose; task 046: a targeted record's context can mark it
+            acquire-only; the Evidence search ignores both).
         task_agent_prompt_module: Dotted path of the module holding this
             capability's Task Agent prompt. A string, not the module: the
             prompt modules are hash-pinned and importing them all eagerly
@@ -95,7 +96,7 @@ class CapabilitySpec:
 
     key: str
     plan_model: type[AnyPlan]
-    compose: Callable[[Any, str | None], ComposedChain]
+    compose: Callable[[Any, str | None, Mapping[str, Any] | None], ComposedChain]
     task_agent_prompt_module: str
     steer_points: frozenset[str]
     lattice: dict[str, PausePoint]
@@ -165,7 +166,11 @@ def validate_plan(capability: str, payload: Mapping[str, Any] | Any) -> AnyPlan:
 
 
 def compose_plan(
-    capability: str, plan: AnyPlan, *, purpose: str | None = None
+    capability: str,
+    plan: AnyPlan,
+    *,
+    purpose: str | None = None,
+    context: Mapping[str, Any] | None = None,
 ) -> ComposedChain:
     """Compose a validated plan into its capability's component chain.
 
@@ -177,6 +182,9 @@ def compose_plan(
             path and on both resume paths, so a parked walk recomposes the
             chain it started on. ``None`` for every Evidence search walk and
             every pre-045 scoping walk.
+        context: The walk's intent-record ``context``, read beside the
+            purpose (ADR 0040 decision 1: the chain is recoverable from the
+            purpose and the context). ``None`` where the caller has none.
 
     Returns:
         The composed chain.
@@ -184,7 +192,7 @@ def compose_plan(
     Raises:
         UnknownCapability: If the capability is not registered.
     """
-    return spec_for(capability).compose(plan, purpose)
+    return spec_for(capability).compose(plan, purpose, context)
 
 
 def lattice_for(capability: str) -> dict[str, PausePoint]:
@@ -304,6 +312,65 @@ def purpose_of_scope(
     if row is None:
         raise LookupError(f"intent record {evidence_scope_id} does not exist")
     return None if row.purpose is None else str(row.purpose)
+
+
+def context_of_scope(
+    conn: Connection, *, task_id: uuid.UUID, evidence_scope_id: uuid.UUID
+) -> dict[str, Any]:
+    """Read one intent record's ``context``, which composes beside its purpose.
+
+    Args:
+        conn: Open database connection.
+        task_id: The task owning the record.
+        evidence_scope_id: The intent record.
+
+    Returns:
+        The context mapping (empty when the stored value is not a mapping).
+
+    Raises:
+        LookupError: If the record does not exist for the task.
+    """
+    row = conn.execute(
+        select(evidence_scope.c.context)
+        .where(evidence_scope.c.task_id == task_id)
+        .where(evidence_scope.c.evidence_scope_id == evidence_scope_id)
+    ).one_or_none()
+    if row is None:
+        raise LookupError(f"intent record {evidence_scope_id} does not exist")
+    return dict(row.context) if isinstance(row.context, Mapping) else {}
+
+
+def context_of_walk(
+    conn: Connection, *, task_id: uuid.UUID, capability_run_id: uuid.UUID
+) -> dict[str, Any]:
+    """Read the ``context`` of the intent record one walk runs under.
+
+    Args:
+        conn: Open database connection.
+        task_id: The task owning the walk.
+        capability_run_id: The walk.
+
+    Returns:
+        The context mapping (empty when the stored value is not a mapping).
+
+    Raises:
+        LookupError: If the walk does not exist for the task.
+    """
+    row = conn.execute(
+        select(evidence_scope.c.context)
+        .select_from(
+            capability_run.join(
+                evidence_scope,
+                (evidence_scope.c.evidence_scope_id == capability_run.c.evidence_scope_id)
+                & (evidence_scope.c.task_id == capability_run.c.task_id),
+            )
+        )
+        .where(capability_run.c.task_id == task_id)
+        .where(capability_run.c.capability_run_id == capability_run_id)
+    ).one_or_none()
+    if row is None:
+        raise LookupError(f"capability run {capability_run_id} does not exist")
+    return dict(row.context) if isinstance(row.context, Mapping) else {}
 
 
 def expect_task_plan(plan: BaseModel) -> TaskPlan:

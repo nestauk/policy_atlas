@@ -236,7 +236,7 @@ def test_adjust_emits_decision_paired_with_plan_version_row(engine: Engine) -> N
         plan = _base_plan(steering_mode="minimal")  # pauses after select
         plan_id = _insert_plan_row(engine, task_id=task_id, scope_id=scope_id, plan=plan)
         io = ScriptedIO(
-            [Adjust(directive_deltas={"group": {"grouping": {"facets": ["population"]}}})]
+            [Adjust(directive_deltas={"group": {"grouping": {"facets": ["unit"]}}})]
         )
 
         outcome = run_plan(
@@ -271,7 +271,7 @@ def test_adjust_emits_decision_paired_with_plan_version_row(engine: Engine) -> N
         assert payload["confirmed"] is True
         assert payload["rerun_mode"] is None
         assert payload["interpreted_action"] == {
-            "directive_deltas": {"group": {"grouping": {"facets": ["population"]}}}
+            "directive_deltas": {"group": {"grouping": {"facets": ["unit"]}}}
         }
         # The decision records the version decided-over (pre-adjustment).
         assert payload["plan_version"] == 1

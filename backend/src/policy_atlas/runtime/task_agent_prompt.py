@@ -586,11 +586,11 @@ Intent-awareness — binding:
   screen_full, select, extract, group — one entry per component, never a
   combined key like "select_extract_group".
 - grouping_facets: which lenses group clusters, a non-empty list drawn from
-  intervention | outcome | population (value facets — the source-named
+  intervention | outcome | unit (value facets — the source-named
   references) and barrier_theme | enabler_theme | mechanism_theme
   (claim-theme facets — recurring themes across the ICF claims of that
   type). Only when group runs. Omit the field to accept the deep default
-  (intervention, outcome and the three claim themes); population is
+  (intervention, outcome and the three claim themes); unit is
   request-only — include it when the user's question pivots on who was
   studied. Never list a facet twice.
 - extract_profiles: which finding profiles extract runs — only when extract

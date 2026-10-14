@@ -32,7 +32,7 @@ def _wire(
     *,
     intervention: str | None = "home visiting",
     outcome: str | None = "hospital admissions",
-    population: str | None = None,
+    unit: str | None = None,
     setting: str | None = None,
     comparator: str | None = "usual care",
     effect_direction: str = "decrease",
@@ -66,7 +66,7 @@ def _wire(
     return IOFRecordWire(
         intervention=intervention,
         outcome=outcome,
-        population=population,
+        unit=unit,
         setting=setting,
         comparator=comparator,
         effect_direction=effect_direction,  # type: ignore[arg-type]
@@ -282,12 +282,12 @@ def test_locate_unique_span_composed_decomposed_nfc_pair_is_honest_absence() -> 
 
 def test_null_like_coercion_free_text() -> None:
     for token in ("null", "N/A", ""):
-        wire = _wire(population=token)
+        wire = _wire(unit=token)
         result = validate_record(wire)
         assert result.record is not None
-        assert result.record.population is None
-        assert result.field_coverage["population"] == "not_extracted"
-        assert "population" in result.coerced_null_fields
+        assert result.record.unit is None
+        assert result.field_coverage["unit"] == "not_extracted"
+        assert "unit" in result.coerced_null_fields
 
 
 def test_enum_exemption_no_effect_survives() -> None:
@@ -458,7 +458,7 @@ def test_grain_invalid_zero_anchors() -> None:
     assert result.grain_invalid is True
     assert result.record is None
     # Field coverage still computed despite the ungroundable emission.
-    assert "k" in result.field_coverage or "population" in result.field_coverage
+    assert "k" in result.field_coverage or "unit" in result.field_coverage
 
 
 # --- stratum canonicalisation ---------------------------------------------
@@ -624,7 +624,7 @@ def test_v1_null_vs_v2_null_coverage_distinguisher() -> None:
     assert result.field_coverage["study_geography"] == "not_extracted"
     assert result.field_coverage["effect_basis"] == "not_extracted"
 
-    v1_shaped_coverage: dict[str, str] = {"population": "not_extracted"}
+    v1_shaped_coverage: dict[str, str] = {"unit": "not_extracted"}
     assert "study_geography" not in v1_shaped_coverage
     assert "effect_basis" not in v1_shaped_coverage
 

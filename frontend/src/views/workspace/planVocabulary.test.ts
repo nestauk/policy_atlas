@@ -11,6 +11,8 @@ import {
   COMPONENT_LABEL,
   CONSTRAINT_CHECKED_AT_LABEL,
   constraintEffectLines,
+  constraintKindLines,
+  PROFILE_LINE_LABELS,
   RESEARCH_APPROACH_CUSTOM,
   researchApproachId,
   researchApproachLabel,
@@ -189,7 +191,7 @@ describe("options-scoping plan vocabulary (task 044)", () => {
   function constraint(overrides: Partial<ScopingConstraint> = {}): ScopingConstraint {
     return {
       text: "Only options a council can fund directly",
-      kind: "requirement",
+      kind: "boundary",
       origin: "your_call",
       checked_at: "longlist",
       country_group: null,
@@ -198,6 +200,8 @@ describe("options-scoping plan vocabulary (task 044)", () => {
       languages: null,
       setting: false,
       default: null,
+      aspect: null,
+      hard: false,
       ...overrides,
     };
   }
@@ -234,7 +238,7 @@ describe("options-scoping plan vocabulary (task 044)", () => {
   });
 
   it("gives each constraint kind its fixed What-happens sentence", () => {
-    expect(constraintEffectLines(constraint({ kind: "requirement" }))).toEqual([
+    expect(constraintEffectLines(constraint({ kind: "boundary" }))).toEqual([
       "Options that conflict are excluded, with the reason shown. You can include them again.",
     ]);
     expect(constraintEffectLines(constraint({ kind: "preference" }))).toEqual([
@@ -245,6 +249,28 @@ describe("options-scoping plan vocabulary (task 044)", () => {
     ]);
   });
 
+  it("gives a consideration its sentence by profile line (R34, R53)", () => {
+    const c = (aspect: ScopingConstraint["aspect"]) => constraint({ kind: "consideration", aspect });
+    expect(constraintEffectLines(c("who_decides"))).toEqual([
+      "Each option on the longlist is labelled by who can adopt it. It excludes nothing.",
+    ]);
+    expect(constraintEffectLines(c("transferability"))).toEqual(["Kept for the assessment. It excludes nothing."]);
+    expect(constraintEffectLines(c("cost"))).toEqual([
+      "Kept with the plan for the shortlist and the assessment. It excludes nothing.",
+    ]);
+  });
+
+  it("names the nine profile lines and labels a consideration only", () => {
+    expect(Object.keys(PROFILE_LINE_LABELS)).toHaveLength(9);
+    expect(PROFILE_LINE_LABELS.workforce).toBe("Workforce requirements");
+    expect(constraintKindLines(constraint({ kind: "boundary" }))).toEqual([]);
+    expect(constraintKindLines(constraint({ kind: "consideration", aspect: "cost", hard: true }))).toEqual([
+      "Consideration · Cost",
+      "Stated limit",
+    ]);
+    expect(constraintKindLines(constraint({ kind: "preference" }))).toEqual([]);
+  });
+
   it("adds the not-yet-applied language rider only when languages are set", () => {
     expect(
       constraintEffectLines(constraint({ kind: "evidence_restriction", languages: ["English"] })),
@@ -252,6 +278,6 @@ describe("options-scoping plan vocabulary (task 044)", () => {
       'Other documents are set aside and counted. Known options stay, marked "no in-scope evidence" if none of their evidence is in scope.',
       "Language: not yet applied at retrieval",
     ]);
-    expect(constraintEffectLines(constraint({ kind: "requirement", languages: [] }))).toHaveLength(1);
+    expect(constraintEffectLines(constraint({ kind: "boundary", languages: [] }))).toHaveLength(1);
   });
 });

@@ -29,7 +29,10 @@ from policy_atlas.evidence_search.extract.icf_prompt import (
     build_icf_extract_messages,
 )
 from policy_atlas.evidence_search.extract.icf_records import ICFExtractionResponse
-from policy_atlas.evidence_search.extract.interventions_records import InterventionsResponse
+from policy_atlas.evidence_search.extract.interventions_records import (
+    InterventionsResponse,
+    TaggingContext,
+)
 from policy_atlas.evidence_search.extract.iof_prompt import (
     EXTRACT_MAX_OUTPUT_TOKENS,
     EXTRACTION_MODEL,
@@ -382,10 +385,17 @@ _INTERVENTIONS_RECORD_DEFAULTS: dict[str, Any] = {
     "is_bundle": False,
     "components": [],
     "outcome": None,
-    "population": None,
+    "unit": None,
+    "programme_name": None,
     "setting": None,
     "study_geography": None,
+    "study_country": None,
     "study_design": None,
+    # The plan-relative tags (task 046, S4): a sentinel record may omit them;
+    # absent is "not tagged", the context-free value.
+    "unit_tag": None,
+    "outcome_tag": None,
+    "object_tag": None,
 }
 
 
@@ -395,7 +405,9 @@ class InterventionsBackend(Protocol):
     The payload is the shared extraction payload; the profile reads only its
     ``title``, ``abstract`` and ``primary_evidence_type`` (never a segment of
     full text). A transport or parse failure raises so the caller applies the
-    retry and per-document failure policy.
+    retry and per-document failure policy. The tagging context (task 046, S4)
+    is passed as a keyword only when the run has one; a caller with none
+    calls ``extract(payload)`` exactly as before.
     """
 
     @property
@@ -403,11 +415,14 @@ class InterventionsBackend(Protocol):
         """``"live"`` or ``"stub"``; read-only so wrappers can proxy it."""
         ...
 
-    def extract(self, payload: ExtractionWindowPayload) -> UsageResult[InterventionsResponse]:
+    def extract(
+        self, payload: ExtractionWindowPayload, context: TaggingContext | None = None
+    ) -> UsageResult[InterventionsResponse]:
         """Profile one document's title and abstract.
 
         Args:
             payload: The document's single payload (window 0).
+            context: The run's tagging context, or ``None``.
 
         Returns:
             The parsed profile plus token usage.
@@ -443,11 +458,17 @@ class OpenAIInterventionsBackend:
         )
         self._langfuse_client = langfuse_client
 
-    def extract(self, payload: ExtractionWindowPayload) -> UsageResult[InterventionsResponse]:
+    def extract(
+        self, payload: ExtractionWindowPayload, context: TaggingContext | None = None
+    ) -> UsageResult[InterventionsResponse]:
         """Profile one document through structured OpenAI output.
 
         Args:
             payload: The document's single payload (window 0).
+            context: The run's tagging context, or ``None``. It enters the
+                user message as the policy context the three tags are read
+                against (``null`` when absent); the response schema is the
+                same either way.
 
         Returns:
             The parsed profile plus token usage.
@@ -459,6 +480,7 @@ class OpenAIInterventionsBackend:
             title=payload.title,
             abstract=payload.abstract,
             primary_evidence_type=payload.primary_evidence_type,
+            context=context,
         )
 
         def _update(span: Any, result: UsageResult[InterventionsResponse]) -> None:
@@ -500,7 +522,9 @@ class StubInterventionsBackend:
 
     mode = "stub"
 
-    def extract(self, payload: ExtractionWindowPayload) -> UsageResult[InterventionsResponse]:
+    def extract(
+        self, payload: ExtractionWindowPayload, context: TaggingContext | None = None
+    ) -> UsageResult[InterventionsResponse]:
         """Return the sentinel-driven profile from the payload's envelope metadata.
 
         Sentinels (stub only; never in a live prompt): ``_stub_interventions``
@@ -511,6 +535,7 @@ class StubInterventionsBackend:
 
         Args:
             payload: The document's single payload.
+            context: The run's tagging context, or ``None``; ignored by the stub.
 
         Returns:
             Deterministic profile output plus no token usage.
@@ -518,6 +543,7 @@ class StubInterventionsBackend:
         Raises:
             RuntimeError: If ``_stub_interventions_failed`` is truthy.
         """
+        del context  # the stub's output is driven by the sentinels alone
         if payload.metadata.get("_stub_interventions_failed"):
             raise RuntimeError("Stub intervention profile failure sentinel.")
         raw = payload.metadata.get("_stub_interventions")

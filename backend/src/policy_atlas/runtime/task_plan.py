@@ -7,6 +7,7 @@ executing any component or widening any existing runtime directive grammar.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from datetime import date
 from typing import Any, Literal, Self, TypedDict
 
@@ -45,7 +46,7 @@ DiscretionaryComponent = Literal[
 GroupingFacet = Literal[
     "intervention",
     "outcome",
-    "population",
+    "unit",
     "barrier_theme",
     "enabler_theme",
     "mechanism_theme",
@@ -121,7 +122,9 @@ OPTIONS_SCOPING_STEPS: tuple[str, ...] = (
     "suggest",
     "extract_interventions",
     "longlist",
+    "option_profile",
     "constrain",
+    "theme",
 )
 DEEP_CHAIN_COMPONENTS: frozenset[DiscretionaryComponent] = frozenset(("select", "extract", "group"))
 DEEP_GROUPING_FACETS: tuple[GroupingFacet, ...] = (
@@ -1106,7 +1109,11 @@ def _directive_delta(component: str, plan: TaskPlan) -> dict[str, Any]:
     return {}
 
 
-def compose(plan: TaskPlan, purpose: str | None = None) -> ComposedChain:
+def compose(
+    plan: TaskPlan,
+    purpose: str | None = None,
+    context: Mapping[str, Any] | None = None,
+) -> ComposedChain:
     """Compose an approved task plan into a fixed ES chain.
 
     Args:
@@ -1114,6 +1121,8 @@ def compose(plan: TaskPlan, purpose: str | None = None) -> ComposedChain:
         purpose: The intent record's purpose. Accepted for the registry's
             compose-by-purpose signature (task 045) and ignored: an Evidence
             search has one chain, and its intent records carry no purpose.
+        context: The intent record's context. Accepted for the registry's
+            signature (task 046) and ignored, like ``purpose``.
 
     Returns:
         A composed chain whose mandatory spine is present in order and whose
@@ -1123,7 +1132,7 @@ def compose(plan: TaskPlan, purpose: str | None = None) -> ComposedChain:
         ValueError: If the component registry no longer contains a referenced
             underlying component.
     """
-    del purpose
+    del purpose, context
     _validate_registry()
     selected = set(plan.components)
     ordered_components: list[str] = [

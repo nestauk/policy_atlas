@@ -110,6 +110,8 @@
   --color-green-tint: #e7f5f2;
   --color-yellow-tint: #fff6e3;
   --color-red-tint: #fde8ed;
+  --color-violet-tint: #efedfc; /* the higher level word on a profile line (046) */
+  --color-aqua-tint: #e6f5f7; /* the lower level word on a profile line (046) */
 
   /* Nesta = 0 radius, everywhere */
   /* Motion curves (design-engineering pass, 2026-09-05): the built-in CSS

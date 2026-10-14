@@ -40,6 +40,9 @@ interface ChatCitation {
   appraisal_label?: string;
   evidence_type?: string;
   quote_snapped?: boolean;
+  // Task 046: the cited document's extraction basis, carried through
+  // unchanged from `answer_payload`'s citation dicts.
+  text_basis?: string;
 }
 
 // The wire shape is `answer_payload.claims[]`: loose (typed as
@@ -425,6 +428,7 @@ function ChatCitationBlock({ taskId, turn, citation, onOpenDossier }: { taskId: 
           {citation.appraisal_label !== null && citation.appraisal_label !== undefined && (
             <AppraisalChip label={citation.appraisal_label} evidenceType={citation.evidence_type} />
           )}
+          {citation.text_basis === "abstract_only" && <Chip tone="soft">abstract only</Chip>}
         </>
       }
       context={context}

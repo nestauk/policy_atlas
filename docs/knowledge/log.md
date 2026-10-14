@@ -1,5 +1,35 @@
 # Knowledge update log
 
+## 2026-10-12 (task 046 step 8, all four amendments)
+* **Creation**: Added [mini-model-limits-live-in-the-schema-and-code](mini-model-limits-live-in-the-schema-and-code.md)
+  (build candidates a3 "a ceiling in words does not bind", a4 "will not count characters",
+  "a ban on one joiner", base "memo key holds the version") and
+  [mini-model-loops-examples-over-rules](mini-model-loops-examples-over-rules.md) (a3 "never X",
+  "the reps quote the criterion", "each rule moved faults"; a4 "a worked example"; base "reason
+  before the label", "two ways out").
+* **Creation**: Added [alembic-revision-freezes-the-sql-it-executes](alembic-revision-freezes-the-sql-it-executes.md)
+  (a3 candidate; review A7/B7 — the fix landed in the review) and
+  [facet-key-rename-rewrites-stored-id-prefixes](facet-key-rename-rewrites-stored-id-prefixes.md)
+  (a3 candidate; review C3/X3/B8 on `facet_runs`).
+* **Creation**: Added [evidence-readbacks-name-the-task-they-read](evidence-readbacks-name-the-task-they-read.md)
+  (review LT1; a2 "put_state merges", a3 "replay stage order", a4 "cannot re-mint", "re-profiled clone")
+  and [trace-check-is-lexical-not-semantic](trace-check-is-lexical-not-semantic.md) (review LT2, LT3,
+  S1, X6, X8; a4 "plain words in the data").
+* **Creation**: Added [gate-snapshots-commit-from-tree-ids](gate-snapshots-commit-from-tree-ids.md)
+  (a2 "index snapshot", "one test DB per agent"; a3 "shared working tree", "commit <pathspec>";
+  a4 "commit-tree path list").
+* **Update**: [delegated-executor-practices](delegated-executor-practices.md) gains the background-gate
+  and invented-attribution lines (base candidates).
+* **Update**: [mini-model-loops-examples-over-rules](mini-model-loops-examples-over-rules.md)
+  rule 4 — the owner accepted the 1-in-175 residual at step 9 and the place strip was deleted.
+* **Declined** (recorded in verification.md § Review findings, step 8): JSONB key order (textbook);
+  the fold key is not a label, `head_phrase` negation, `document_where` first spelling, the
+  evaluated-country rule, the first-record rule (each a code comment and a test); one screen per
+  document as the cost lever (the system-level cost task in `docs/deferred.md` carries the figures);
+  `test_capability_registry` (covered by [capability-registry-one-plan-reader](capability-registry-one-plan-reader.md));
+  environment gotchas (token TTL, vitest timeouts under load, open event streams and `networkidle`,
+  a new stage key and `drift-check`) went to `docs/agentic-ops/environment.md`.
+
 ## 2026-10-05 (task 046, mini-dataset runs)
 * **Update**: [langfuse-dataset-run-name-reuse-appends](langfuse-dataset-run-name-reuse-appends.md) —
   corrected from "appends" to "upserts per dataset item" after a verified full re-run of

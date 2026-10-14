@@ -184,7 +184,7 @@ def _seed_read_model_ladder(
                 claim="Staff time constrained implementation.",
                 intervention="Training",
                 outcome="Uptake",
-                population="School staff",
+                unit="School staff",
                 setting="Schools",
                 study_geography="GB",
                 study_design="Process evaluation",
@@ -755,6 +755,8 @@ def test_read_model_goldens_and_owner_scope(tmp_path: Path, engine: Engine) -> N
             # The appraisal band's scoring input rides with the label.
             assert citation_out["evidence_type"] == "RCTs and Quasi-Experimental Studies"
             assert citation_out["appraisal_label"] == "Moderate"
+            # The cited chunk's own snapshot basis (task 046): ingested full text.
+            assert citation_out["text_basis"] == "full_text"
             # Reference identity is the document: three citations over three
             # full-text chunks of one source yield exactly one reference entry.
             assert [
@@ -1877,7 +1879,7 @@ def _seed_findings_filter_fixture(
                 claim="Staff time constrained implementation.",
                 intervention="Training",
                 outcome="Uptake",
-                population="School staff",
+                unit="School staff",
                 setting="Schools",
                 study_geography="GB",
                 study_design="Process evaluation",

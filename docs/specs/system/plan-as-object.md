@@ -75,6 +75,12 @@ may be refined as implementation lands.
   the user named, in their own words, each with the turn that produced it and a specified design the
   Task Agent proposes back. Each becomes an entrant, *added by you*, with its own option search in
   the longlist walk.
+- **Target unit, setting and place are kept apart** *(options scoping; [task 046 contract](../tasks/046-longlist-refinement/contract.md), R19)* — the
+  target unit says who or what should change and holds no place and no setting; the place is
+  Where; a setting is either a requirement or, when the user states it without requiring it, an
+  entry in Your context. A scoping plan's constraints are of four kinds — boundary ·
+  consideration · preference · evidence restriction (amendment 2, R34); a statement of who can
+  act is a consideration on the line "who decides", and there is no plan slot for it (R53).
 - **The default transferability preference** *(options scoping; [task 045 contract](../tasks/045-scoping-longlist/contract.md), D22; owner:
   "Should be a default preference")* — every scoping plan carries the constraint "Transferable to
   *Where*": kind preference, origin *assumed*, checked at assessment, its text following Where until

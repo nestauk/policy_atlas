@@ -119,7 +119,7 @@ _SELECT_RERUN = _frag(
 _GROUP_ADJUST = _frag(
     "group by population",
     component="group",
-    delta={"grouping": {"facets": ["population"]}},
+    delta={"grouping": {"facets": ["unit"]}},
 )
 _REFUSED = _frag(
     "rank by author reputation",
@@ -207,7 +207,7 @@ def test_free_text_fanout_applies_confirmed_adjustment_and_rerun(engine: Engine)
                     grouping_result.c.task_id == task_id
                 )
             ).scalar_one()["facets"]
-        assert facets == ["population"]
+        assert facets == ["unit"]
 
         # New user-attributed plan versions record the fan-out (adjustment + rerun).
         rows = _plan_rows(engine, task_id)
@@ -416,7 +416,7 @@ def test_free_text_out_of_grammar_fragment_demoted_to_refused(engine: Engine) ->
                     grouping_result.c.task_id == task_id
                 )
             ).scalar_one()["facets"]
-        assert facets == ["population"]
+        assert facets == ["unit"]
     finally:
         _cleanup_task(engine, task_id)
 

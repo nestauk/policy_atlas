@@ -363,8 +363,14 @@ def test_a_completed_walk_with_a_degrading_step_ends_degraded(
             links=1, failed_link_ids=[failed_link], failed_reasons=["pinned walk missing"]
         )
 
-    def _inherit_only(capability: str, plan: Any, *, purpose: str | None = None) -> Any:
-        del capability, plan, purpose
+    def _inherit_only(
+        capability: str,
+        plan: Any,
+        *,
+        purpose: str | None = None,
+        context: Any = None,
+    ) -> Any:
+        del capability, plan, purpose, context
         return ComposedChain(
             steps=[ComponentStep(component="inherit", directive_delta={}, spine=False)]
         )

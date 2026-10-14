@@ -72,7 +72,7 @@ EXAMPLE_RESPONSE = ExtractionResponse(
         IOFRecordWire(
             intervention="structured home-visiting programmes",
             outcome="unplanned child hospital admissions",
-            population=None,
+            unit=None,
             setting="families' homes",
             comparator="usual care",
             effect_direction="decrease",
@@ -111,7 +111,7 @@ EXAMPLE_RESPONSE = ExtractionResponse(
         IOFRecordWire(
             intervention="structured home-visiting programmes",
             outcome="unplanned child hospital admissions",
-            population=None,
+            unit=None,
             setting="families' homes",
             comparator="usual care",
             effect_direction="no_effect",

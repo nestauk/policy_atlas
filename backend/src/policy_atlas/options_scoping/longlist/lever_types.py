@@ -10,13 +10,19 @@ typed under. The list is a Python constant, not prompt-internal text
 
 The ten entries are ruling 11's curated list as the 035 feasibility check
 ran it (check 3), with the definitions the typing prompt renders as data.
+
+v2 (task 046, item 7): "provide a service" is direct delivery by the state;
+funding a provider is "subsidise"; buying from a provider is "procure or
+commission". The keys are unchanged. v1 stays as :data:`LEVER_TYPES_V1`, so
+the page can show an option typed under v1 with v1's definitions (AM19).
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 
-TAXONOMY_VERSION = "lever_types_v1"
+TAXONOMY_VERSION = "lever_types_v2"
+TAXONOMY_VERSION_V1 = "lever_types_v1"
 
 
 @dataclass(frozen=True)
@@ -38,7 +44,7 @@ class LeverType:
 # (`mockLonglist`). The definitions reach the page through the longlist read
 # model (`lever_type_definitions`), so only the keys need a matching edit
 # there when this list changes.
-LEVER_TYPES: tuple[LeverType, ...] = (
+LEVER_TYPES_V1: tuple[LeverType, ...] = (
     LeverType(
         "regulate",
         "set or change rules, standards, bans, licensing or planning requirements",
@@ -83,33 +89,61 @@ LEVER_TYPES: tuple[LeverType, ...] = (
     ),
 )
 
+LEVER_TYPES: tuple[LeverType, ...] = (
+    LeverType(
+        "regulate",
+        "set or change rules, standards, bans, licensing or planning requirements",
+    ),
+    LeverType(
+        "subsidise",
+        "pay for, grant-fund, discount or otherwise lower the price of something "
+        "for people, or fund a provider to deliver it",
+    ),
+    LeverType(
+        "tax or charge",
+        "raise the price of something through a tax, levy, fee or charge",
+    ),
+    LeverType(
+        "inform",
+        "give information, advice, campaigns, labelling or guidance to change behaviour",
+    ),
+    LeverType(
+        "provide a service",
+        "deliver a service or programme to people directly, by the state's own "
+        "bodies and staff (a public service, a facility, a scheme run by a public body)",
+    ),
+    LeverType(
+        "enforce existing powers",
+        "apply, inspect or enforce rules and duties that already exist",
+    ),
+    LeverType(
+        "devolve",
+        "move a decision, budget or power to a lower tier of government or a local body",
+    ),
+    LeverType(
+        "change who runs the system",
+        "reorganise institutions, commissioning, ownership or accountability for a service",
+    ),
+    LeverType(
+        "build or change infrastructure",
+        "create or alter physical environments, routes, facilities or estates",
+    ),
+    LeverType(
+        "procure or commission",
+        "buy a service or goods from a provider, or use public purchasing or "
+        "commissioning rules to change what is bought or from whom",
+    ),
+)
+
 LEVER_TYPE_KEYS: tuple[str, ...] = tuple(lever.key for lever in LEVER_TYPES)
 
-# The ambition tag (concept ruling 20): per option, "as described, not
-# measured". Three bands, the reduced grid's columns.
-AMBITION_BANDS: tuple[str, ...] = ("do_minimum", "incremental", "structural")
+def lever_types_by_version() -> dict[str, tuple[LeverType, ...]]:
+    """Every taxonomy version an option can carry, with its list.
 
-AMBITION_LABELS: dict[str, str] = {
-    "do_minimum": "Do minimum",
-    "incremental": "Incremental",
-    "structural": "Structural",
-}
-
-# One line per band, the typing prompt's own words, for the longlist's
-# group-by-ambition headings. Served through the longlist read model
-# (`ambition_bands[].definition`); the frontend mock in
-# frontend/src/mock/fixtures.ts (`mockLonglist`) carries a copy of the
-# bands, labels and definitions, so update it when these change.
-AMBITION_DEFINITIONS: dict[str, str] = {
-    "do_minimum": (
-        "adjusts, extends, enforces or better funds what already exists; the arrangement stays"
-    ),
-    "incremental": "adds a new scheme, service, rule, charge or offer inside the present structure",
-    "structural": (
-        "changes the structure itself: who is entitled, who runs it, how it is funded, "
-        "or what the system is"
-    ),
-}
+    Returns:
+        ``{version: lever types}``, the current version first.
+    """
+    return {TAXONOMY_VERSION: LEVER_TYPES, TAXONOMY_VERSION_V1: LEVER_TYPES_V1}
 
 
 def lever_types_as_data() -> list[dict[str, str]]:

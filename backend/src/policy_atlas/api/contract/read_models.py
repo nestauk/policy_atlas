@@ -274,7 +274,7 @@ class IofFindingOut(FindingBaseOut):
     stratum_qualifiers: list[dict[str, str]] = Field(default_factory=list)
     effect_basis: str | None = None
     study_geography: str | None = None
-    population: str | None = None
+    unit: str | None = None
     setting: str | None = None
     study_design: str | None = None
     quote: str | None = None
@@ -291,7 +291,7 @@ class IcfFindingOut(FindingBaseOut):
     context_label: str | None = None
     intervention: str
     outcome: str | None = None
-    population: str | None = None
+    unit: str | None = None
     setting: str | None = None
     study_geography: str | None = None
     study_design: str | None = None
@@ -392,6 +392,8 @@ class CitationOut(BaseModel):
         appraisal_label: Optional appraisal label.
         evidence_type: The cited document's classified evidence type — the
             input the appraisal rubric scores from.
+        text_basis: The cited document's extraction basis (`abstract_only`
+            or `full_text`), when known (task 046).
     """
 
     citation_id: uuid.UUID
@@ -403,6 +405,7 @@ class CitationOut(BaseModel):
     grounding_rationale: str | None = None
     appraisal_label: str | None = None
     evidence_type: str | None = None
+    text_basis: str | None = None
 
 
 class GapCaveatOut(BaseModel):
@@ -725,11 +728,6 @@ ExclusionBy = Literal["constrain", "user"]
 #: count as membership, so they have no value here).
 OptionDocumentRole = Literal["evaluated", "described", "recommended", "mentioned"]
 
-#: A document's study geography grouped against the plan's Where: ``where``
-#: (in Where, shown under ``where_label``) · ``comparable`` (comparable
-#: systems, OECD) · ``other`` · ``unknown``.
-WhereTriedGroup = Literal["where", "comparable", "other", "unknown"]
-
 #: A constraint judgement's verdict.
 JudgementVerdict = Literal["passes", "breaks", "cannot_check"]
 
@@ -757,6 +755,14 @@ class LonglistCountsOut(BaseModel):
         unclustered: Records assigned to no option.
         not_an_option: Records judged not to describe an actionable option.
         none_fits: Options no lever type fits.
+        title_only: Records the pool held with a title only (task 046).
+        thinned_mentioned: Records dropped for stating no design feature and
+            no outcome (`mentioned_without_features_or_outcome`, task 046).
+        thinned_collapsed: Records collapsed onto one per document for
+            sharing a folded intervention name (`same_name_in_document`,
+            task 046).
+        thinned_capped: Records dropped over the per-document cap
+            (`over_document_cap`, task 046).
     """
 
     options: int
@@ -767,6 +773,10 @@ class LonglistCountsOut(BaseModel):
     unclustered: int
     not_an_option: int
     none_fits: int
+    title_only: int = 0
+    thinned_mentioned: int = 0
+    thinned_collapsed: int = 0
+    thinned_capped: int = 0
 
 
 class LonglistThemeOut(BaseModel):
@@ -799,22 +809,6 @@ class ExclusionOut(BaseModel):
     by: ExclusionBy
 
 
-class WhereTriedOut(BaseModel):
-    """Documents per where-tried group (DOI-collapsed).
-
-    Args:
-        where: Studied in the plan's Where.
-        comparable: Studied in a comparable system (OECD).
-        other: Studied in another named country.
-        unknown: No recognisable geography.
-    """
-
-    where: int = 0
-    comparable: int = 0
-    other: int = 0
-    unknown: int = 0
-
-
 class RelationOut(BaseModel):
     """A relation between two options, read from this option's side.
 
@@ -828,6 +822,108 @@ class RelationOut(BaseModel):
     kind: OptionRelationKind
     other_option_id: uuid.UUID
     other_name: str
+
+
+class EvaluatedCountryOut(BaseModel):
+    """One country the option was evaluated in, for the evidence signal.
+
+    Task 046, amendment 4 (R76; S29): the top level of the documents with an
+    ``evaluated`` member, resolved to one short English name; a country the
+    resolver does not know is kept as written.
+
+    Args:
+        country: The country's short English name.
+        documents: Its evaluating documents (DOI-collapsed).
+    """
+
+    country: str
+    documents: int
+
+
+ProfileLineKey = Literal[
+    "cost",
+    "time_to_set_up",
+    "time_to_effect",
+    "workforce",
+    "who_decides",
+    "dependencies",
+    "coordination",
+    "delivery_complexity",
+]
+ProfileMark = Literal["less", "more"]
+AuthorityLabel = Literal["within_your_power", "needs_action_by", "unclear"]
+
+
+class ProfileLineOut(BaseModel):
+    """One line of an option's profile (task 046, R37).
+
+    Args:
+        key: The line: cost, time to set up, time to effect, workforce, who
+            decides, dependencies, coordination or delivery complexity.
+        sentence: The line, in one sentence.
+        mark: `less` · `more` when the option stands out on this line against
+            the other options of the list; `null` otherwise, and always for
+            `who_decides` and `dependencies`.
+    """
+
+    key: ProfileLineKey
+    sentence: str
+    mark: ProfileMark | None = None
+
+
+class OptionProfileOut(BaseModel):
+    """What the option would take, in eight lines and its delivery setting.
+
+    Policy Atlas's estimate before assessment, not a finding.
+
+    Args:
+        lines: The eight lines, in display order.
+        settings: The delivery setting, main first, then the second; empty
+            when none is named (R41).
+    """
+
+    lines: list[ProfileLineOut]
+    settings: list[str]
+
+
+class AuthorityOut(BaseModel):
+    """Who can act on the option (task 046, R43): a label, not a verdict.
+
+    Args:
+        label: `within_your_power` · `needs_action_by` · `unclear`.
+        body: The body that must act, when the label is `needs_action_by`.
+        reason: Why, in one sentence.
+    """
+
+    label: AuthorityLabel
+    body: str | None = None
+    reason: str | None = None
+
+
+class OutcomeCountOut(BaseModel):
+    """The documents of one plan outcome (task 046, amendment 3, R56).
+
+    Args:
+        outcome: The plan's outcome, in its words.
+        documents: Documents of any role that report it (DOI-collapsed).
+        evaluated: Of those, the documents that evaluate the option against it.
+    """
+
+    outcome: str
+    documents: int
+    evaluated: int = 0
+
+
+class OutcomeCountsOut(BaseModel):
+    """How many documents evaluate the option, and against which outcomes (R42).
+
+    Args:
+        evaluating_documents: Documents that evaluate the option.
+        by_outcome: The count for each plan outcome, in the plan's order.
+    """
+
+    evaluating_documents: int = 0
+    by_outcome: list[OutcomeCountOut] = Field(default_factory=list)
 
 
 class OptionSummaryOut(BaseModel):
@@ -849,15 +945,20 @@ class OptionSummaryOut(BaseModel):
             the option is not typed yet.
         lever_none_fits_reason: Why no lever type fits.
         secondary_lever_types: The other lever types it also touches.
-        ambition: `do_minimum` · `incremental` · `structural`, as described,
-            not measured.
+        ambition: `less` · `more` · `null`: how big a proposal the option is
+            against the baseline, compared with the other options of the list;
+            `null` when it does not stand out or is not profiled yet.
         ambition_reason: The one-line justification.
+        profile: What the option would take (task 046); `null` when the
+            option has no complete profile.
+        authority: Who can act on it (task 046, R43); `null` when none was
+            recorded.
         taxonomy_version: The lever-type list version it was typed under.
         design_version: The specified design's version.
         document_count: Its documents (DOI-collapsed).
         evaluated_count: Documents that evaluate it.
-        settings: The settings its documents name, most frequent first.
-        where_tried: Documents per where-tried group.
+        settings: The option's delivery setting, from its profile (R41);
+            empty when it has none.
         relations: Its relations to other options.
         abstract_only: Every one of its documents was read from an abstract only.
         is_entrant_with_no_documents: Suggested, drawn from the Evidence
@@ -869,6 +970,16 @@ class OptionSummaryOut(BaseModel):
             origin, or when the section was not recorded (task 045, F3).
         also_found_as: The names of the duplicates merged into this option
             (their documents are its documents); empty when none.
+        lever_reason: One sentence on why the option has its lever type,
+            when the typing pass recorded one; `null` otherwise (task 046,
+            R29).
+        evaluated_countries: The countries of its evaluating documents, the
+            plan's Where country first, then most documents first (task 046,
+            amendment 4, R76); empty when no evaluation gives a country.
+        outcomes_evaluated: The plan outcomes at least one evaluating
+            document measured (R76).
+        outcomes_total: The outcome count of the plan the longlist was built
+            from (R76).
     """
 
     option_id: uuid.UUID
@@ -882,35 +993,26 @@ class OptionSummaryOut(BaseModel):
     restriction_text: str | None = None
     primary_lever_type: str | None = None
     lever_none_fits_reason: str | None = None
+    lever_reason: str | None = None
     secondary_lever_types: list[str] = Field(default_factory=list)
-    ambition: str | None = None
+    ambition: ProfileMark | None = None
     ambition_reason: str | None = None
+    profile: OptionProfileOut | None = None
+    authority: AuthorityOut | None = None
     taxonomy_version: str | None = None
     design_version: int
     document_count: int = 0
     evaluated_count: int = 0
     settings: list[str] = Field(default_factory=list)
-    where_tried: WhereTriedOut
     relations: list[RelationOut] = Field(default_factory=list)
     abstract_only: bool = False
     is_entrant_with_no_documents: bool = False
     search_pending: bool = False
     from_section: str | None = None
     also_found_as: list[str] = Field(default_factory=list)
-
-
-class AmbitionBandOut(BaseModel):
-    """One ambition band, a column of the reduced grid.
-
-    Args:
-        key: The stored value.
-        label: The display label.
-        definition: One line saying what the band means, for a group heading.
-    """
-
-    key: str
-    label: str
-    definition: str | None = None
+    evaluated_countries: list[EvaluatedCountryOut] = Field(default_factory=list)
+    outcomes_evaluated: int = 0
+    outcomes_total: int = 0
 
 
 class LeverTypeOut(BaseModel):
@@ -940,13 +1042,13 @@ class LonglistOut(BaseModel):
         unthemed_option_ids: Options in no theme (including options added
             since the build).
         options: Every option of the task, themed ones first in theme order.
-        where_label: The words the `where` group is shown under (the plan's
-            Where).
         lever_types: The lever-type list the options were typed against, in
             order (the grid's rows).
         lever_type_definitions: The same list with each type's one-line
             definition (the list view's group headings).
-        ambition_bands: The ambition bands, in order (the grid's columns).
+        lever_type_definitions_by_version: Every lever-type taxonomy version's
+            definitions, keyed by version, so an option typed under an
+            earlier version can show that version's wording (task 046).
         taxonomy_version: The lever-type list version.
         depth_label: The depth label every longlist surface carries.
     """
@@ -960,10 +1062,11 @@ class LonglistOut(BaseModel):
     themes: list[LonglistThemeOut] = Field(default_factory=list)
     unthemed_option_ids: list[uuid.UUID] = Field(default_factory=list)
     options: list[OptionSummaryOut] = Field(default_factory=list)
-    where_label: str
     lever_types: list[str] = Field(default_factory=list)
     lever_type_definitions: list[LeverTypeOut] = Field(default_factory=list)
-    ambition_bands: list[AmbitionBandOut] = Field(default_factory=list)
+    lever_type_definitions_by_version: dict[str, list[LeverTypeOut]] = Field(
+        default_factory=dict
+    )
     taxonomy_version: str | None = None
     depth_label: Literal["scoping pass"] = "scoping pass"
 
@@ -978,29 +1081,22 @@ class EvidenceProfileOut(BaseModel):
         by_evidence_type: Documents per evidence type; "Unknown" and
             non-evidence documents are their own keys, "not rated" when unclassified.
         by_tier: Documents per quality tier label, "not rated" when unappraised.
-        by_role: Documents per role.
-        where_tried: Documents per where-tried group.
-        populations: Populations its documents name, most frequent first.
-        settings: Settings its documents name, most frequent first.
-        outcomes: Outcomes its documents measure, most frequent first.
         flagged_not_stated: Documents that cover the intervention without
             stating the feature that defines this option.
         inherited_labels: Documents whose type and tier were read from a
             linked task.
         abstract_only: Documents read from an abstract only.
+        outcome_counts: The documents that evaluate the option, by plan
+            outcome (task 046, R42; amendment 4, R79).
     """
 
     documents: int = 0
     by_evidence_type: dict[str, int] = Field(default_factory=dict)
     by_tier: dict[str, int] = Field(default_factory=dict)
-    by_role: dict[str, int] = Field(default_factory=dict)
-    where_tried: WhereTriedOut
-    populations: list[str] = Field(default_factory=list)
-    settings: list[str] = Field(default_factory=list)
-    outcomes: list[str] = Field(default_factory=list)
     flagged_not_stated: int = 0
     inherited_labels: int = 0
     abstract_only: int = 0
+    outcome_counts: OutcomeCountsOut = Field(default_factory=OutcomeCountsOut)
 
 
 class JudgementOut(BaseModel):
@@ -1051,7 +1147,7 @@ class InScopeOut(BaseModel):
 
 
 class OptionDocumentOut(BaseModel):
-    """One document behind an option ("Show the documents"), one per membership row.
+    """One document behind an option ("Show the documents"), one per document.
 
     Args:
         task_source_snapshot_id: This task's document row, when the task holds one.
@@ -1061,9 +1157,21 @@ class OptionDocumentOut(BaseModel):
         tier: Its quality tier label, when appraised.
         design_feature_not_stated: It covers the intervention without stating
             the feature that defines this option.
-        where_tried_group: Where it was studied, grouped against Where.
+        year: Its publication year, when the metadata has one.
+        place: Where it was studied: its where-tried top level.
         source_task_id: The linked task the document or its labels came from,
             when inherited.
+        programme_name: The programme name of its first member record under
+            the option (by role order); `null` when none is given or the
+            document is a linked finding (task 046, amendment 4, R81).
+        tried_on_kind: That record's unit as its folded Tried on kind (its
+            own word when the fold has none).
+        measured: The plan outcome that record measures, in the plan's words,
+            else its outcome as its folded Measures kind.
+        place_detail: That record's place below the document's country, when
+            it adds one.
+        records_count: The document's member records under the option (0 for
+            a linked finding).
     """
 
     task_source_snapshot_id: uuid.UUID | None = None
@@ -1072,8 +1180,77 @@ class OptionDocumentOut(BaseModel):
     evidence_type: str | None = None
     tier: str | None = None
     design_feature_not_stated: bool = False
-    where_tried_group: WhereTriedGroup
+    year: int | None = None
+    place: str | None = None
     source_task_id: uuid.UUID | None = None
+    programme_name: str | None = None
+    tried_on_kind: str | None = None
+    measured: str | None = None
+    place_detail: str | None = None
+    records_count: int = 0
+
+
+class OptionRecordOut(BaseModel):
+    """One intervention profile record of a document, under one option (R67).
+
+    The record in its own words, as the extraction wrote it: the source
+    dossier's slot shows it in place of findings on an options-scoping task
+    (task 046, amendment 3).
+
+    Args:
+        option_id: The option the record is a member of.
+        option_name: That option's name.
+        record_id: The intervention profile record.
+        intervention: The intervention, as the document names it.
+        setting: Where it was delivered, as the document says.
+        unit: What it was tried on (the unit), as the document says.
+        outcome: The outcomes measured, as the document says.
+        study_geography: Where it was studied, as the document says.
+        role: What the document does with the intervention.
+    """
+
+    option_id: uuid.UUID
+    option_name: str
+    record_id: uuid.UUID
+    intervention: str
+    setting: str | None = None
+    unit: str | None = None
+    outcome: str | None = None
+    study_geography: str | None = None
+    role: OptionDocumentRole
+
+
+class SourceRecordsOut(BaseModel):
+    """The `source records` read model: a document's records under the options.
+
+    One entry per (option, record), the document's DOI twins in this task
+    included; empty when no record of the document is a member of an option
+    (the dossier then shows the document's findings, B8).
+
+    Args:
+        task_source_snapshot_id: The document row the dossier opened.
+        records: The records, options by name, then by role, then oldest first.
+    """
+
+    task_source_snapshot_id: uuid.UUID
+    records: list[OptionRecordOut] = Field(default_factory=list)
+
+
+class PlaceSentenceOut(BaseModel):
+    """One place of an option's evaluating documents and its sentence (task 046, amendment 4, R80).
+
+    Args:
+        place: The place: a country's short English name, or "No single place".
+        sentence: What the evaluations in that place are.
+        generated: The sentence was generated and passed the trace check;
+            ``false`` for the code-built template.
+        where: The place is the plan's Where country.
+    """
+
+    place: str
+    sentence: str
+    generated: bool
+    where: bool
 
 
 class OptionOut(OptionSummaryOut):
@@ -1085,16 +1262,15 @@ class OptionOut(OptionSummaryOut):
         evidence: The source-quality profile.
         judgements: The constraint judgements on the current design version.
         guesses: The reasoned guesses on the current design version.
-        transferability: "checked at assessment" when the plan carries the
-            default transferability preference; `null` otherwise.
         in_scope: The in-scope check, when the plan restricts the evidence.
         documents: The documents behind it, one per membership row.
         run_id: The longlist component run its coverage came from; `null`
             before a longlist is built.
         capability_run_id: The longlist walk that run belonged to.
         plan_version: The plan version that longlist was built from.
-        where_label: The words the `where` group is shown under.
-        depth_label: The depth label every longlist surface carries.
+        place_sentences: One sentence per place of its evaluating documents,
+            in the card's order: the plan's Where country first, "No single
+            place" last (task 046, amendment 4, R80).
     """
 
     design: OptionDesignOut
@@ -1102,14 +1278,12 @@ class OptionOut(OptionSummaryOut):
     evidence: EvidenceProfileOut
     judgements: list[JudgementOut] = Field(default_factory=list)
     guesses: list[GuessOut] = Field(default_factory=list)
-    transferability: Literal["checked at assessment"] | None = None
     in_scope: InScopeOut | None = None
     documents: list[OptionDocumentOut] = Field(default_factory=list)
     run_id: uuid.UUID | None = None
     capability_run_id: uuid.UUID | None = None
     plan_version: int | None = None
-    where_label: str
-    depth_label: Literal["scoping pass"] = "scoping pass"
+    place_sentences: list[PlaceSentenceOut] = Field(default_factory=list)
 
 
 class OptionAddIn(BaseModel):

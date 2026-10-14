@@ -1,7 +1,7 @@
 import { useId, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { useParams, useSearchParams } from "react-router";
 
-import { useApiClient, useCoverage, useEvidence, useFindings, useLandscape, useTask, useSourceDossier } from "../api/queries";
+import { useApiClient, useCoverage, useEvidence, useFindings, useLandscape, useTask, useSourceDossier, useSourceRecords } from "../api/queries";
 import type { components } from "../api/gen/types";
 import { errorCode } from "../lib/errors";
 import { safeHref } from "../lib/safeHref";
@@ -62,6 +62,10 @@ export function SourcesView() {
   const rawPage = Number(searchParams.get("page") ?? "1");
   const page = Number.isInteger(rawPage) && rawPage >= 1 ? rawPage : 1;
   const sourceId = searchParams.get("source");
+  // Task 046, amendment 3 (R67): an option card's document link adds the
+  // option, so the dossier's slot reads "In this option"; a row here opens
+  // the document with no option (its records under every option).
+  const optionId = searchParams.get("option");
   const requestedSort = searchParams.get("sort");
   const sortField = SOURCE_SORT_COLUMNS.find((column) => column.key === requestedSort)?.key ?? null;
   const requestedOrder = searchParams.get("order");
@@ -97,6 +101,8 @@ export function SourcesView() {
   });
   const dossier = useSourceDossier(taskId, sourceId);
   const findings = useFindings(taskId, sourceId ? { page_size: 200, source_id: sourceId } : undefined);
+  const scoping = task.data?.capability === "options_scoping";
+  const records = useSourceRecords(taskId, sourceId, optionId, { enabled: scoping });
   const queryBackends = (coverage.data?.backends_detail ?? []).filter(
     (backend) => (backend.queries ?? []).length > 0,
   );
@@ -299,7 +305,7 @@ export function SourcesView() {
               {evidence.data.data.map((item) => (
                 <tr key={item.source_id} className="border-b border-line last:border-b-0">
                   <td className="max-w-md px-4 py-3 align-top max-md:px-3 max-md:py-2.5">
-                    <TitleWithDescription item={item} onOpen={() => updateParams((next) => next.set("source", item.source_id))} />
+                    <TitleWithDescription item={item} onOpen={() => updateParams((next) => { next.set("source", item.source_id); next.delete("option"); })} />
                     {item.venue && <p className="mt-0.5 text-body text-grey max-md:text-caption">{scrub(item.venue)}</p>}
                   </td>
                   <td className="px-3 py-3 align-top text-body text-navy max-md:px-2 max-md:py-2.5 max-md:text-meta">{item.year ?? ""}</td>
@@ -422,7 +428,10 @@ export function SourcesView() {
         isError={dossier.isError}
         findings={findings.data?.data}
         findingsPending={findings.isPending}
-        onClose={() => updateParams((next) => next.delete("source"))}
+        records={scoping ? records.data?.records : undefined}
+        recordsPending={scoping && records.isPending}
+        fromOption={optionId !== null}
+        onClose={() => updateParams((next) => { next.delete("source"); next.delete("option"); })}
       />
     </main>
   );
@@ -888,6 +897,9 @@ function SourceDossier({
   isError,
   findings,
   findingsPending,
+  records,
+  recordsPending,
+  fromOption,
   onClose,
 }: {
   sourceId: string | null;
@@ -896,6 +908,9 @@ function SourceDossier({
   isError: boolean;
   findings: components["schemas"]["FindingOut"][] | undefined;
   findingsPending: boolean;
+  records: components["schemas"]["OptionRecordOut"][] | undefined;
+  recordsPending: boolean;
+  fromOption: boolean;
   onClose: () => void;
 }) {
   if (!sourceId) return null;
@@ -904,7 +919,16 @@ function SourceDossier({
       <SheetContent title={source ? scrub(source.title) : "Source dossier"}>
         {isPending && <p role="status" className="animate-pulse text-body text-grey">Loading the dossier…</p>}
         {isError && <p role="alert" className="text-body text-navy">This source dossier couldn't be loaded.</p>}
-        {source && <SourceDossierBody source={source} findings={findings} findingsPending={findingsPending} />}
+        {source && (
+          <SourceDossierBody
+            source={source}
+            findings={findings}
+            findingsPending={findingsPending}
+            records={records}
+            recordsPending={recordsPending}
+            fromOption={fromOption}
+          />
+        )}
       </SheetContent>
     </Sheet>
   );
@@ -958,15 +982,64 @@ export function InstitutionsLine({
   );
 }
 
-/** Full source provenance, used by every route into the source dossier sheet. */
+/** The labelled lines of one intervention profile record, in its own words
+ *  (task 046, amendment 3, R67). A field the record does not state is left out. */
+const RECORD_LINES = [
+  ["Intervention", "intervention"],
+  ["Setting", "setting"],
+  ["Tried on", "unit"],
+  ["Outcomes measured", "outcome"],
+  ["Where", "study_geography"],
+  ["Role", "role"],
+] as const;
+
+function RecordEntry({
+  record,
+  withOption,
+}: {
+  record: components["schemas"]["OptionRecordOut"];
+  withOption: boolean;
+}) {
+  return (
+    <div className="border-l-2 border-line-2 pl-3">
+      {withOption && <p className="text-body font-semibold text-navy">{scrub(record.option_name)}</p>}
+      <dl className="mt-1 space-y-1">
+        {RECORD_LINES.map(([label, key]) => {
+          const value = record[key];
+          if (value === null || value === undefined || value.trim() === "") return null;
+          return (
+            <div key={key} className="flex gap-3">
+              <dt className="w-36 shrink-0 text-grey">{label}</dt>
+              <dd className="text-navy">{scrub(value)}</dd>
+            </div>
+          );
+        })}
+      </dl>
+    </div>
+  );
+}
+
+/** Full source provenance, used by every route into the source dossier sheet.
+ *
+ *  On an options-scoping task the parent passes the document's intervention
+ *  profile records (`records`); when there are any they fill the findings slot,
+ *  under "In this option" when the dossier was opened from an option card
+ *  (`fromOption`) or "Records" otherwise, one per option. With none, the slot
+ *  shows the findings as on an Evidence search task (task 046, amendment 3, R67). */
 export function SourceDossierBody({
   source,
   findings,
   findingsPending,
+  records,
+  recordsPending = false,
+  fromOption = false,
 }: {
   source: components["schemas"]["SourceDossierOut"];
   findings: components["schemas"]["FindingOut"][] | undefined;
   findingsPending: boolean;
+  records?: components["schemas"]["OptionRecordOut"][];
+  recordsPending?: boolean;
+  fromOption?: boolean;
 }) {
   const byAsserter = new Map<string, NonNullable<typeof source.tags>>();
   for (const tag of source.tags ?? []) {
@@ -1052,16 +1125,26 @@ export function SourceDossierBody({
           ))}</div>
         </DossierSection>
       )}
+      {records !== undefined && records.length > 0 ? (
+        <DossierSection title={fromOption ? "In this option" : "Records"}>
+          <div className="space-y-3">
+            {records.map((record) => (
+              <RecordEntry key={`${record.option_id}-${record.record_id}`} record={record} withOption={!fromOption} />
+            ))}
+          </div>
+        </DossierSection>
+      ) : (
       <DossierSection title="Findings from this source">
-        {findingsPending && <p className="text-body text-grey">Loading findings…</p>}
-        {!findingsPending && (!findings || findings.length === 0) && <p className="text-body text-grey">No findings extracted from this source.</p>}
-        {findings && findings.length > 0 && <div className="space-y-2">{findings.map((finding) => (
+        {(findingsPending || recordsPending) && <p className="text-body text-grey">Loading findings…</p>}
+        {!findingsPending && !recordsPending && (!findings || findings.length === 0) && <p className="text-body text-grey">No findings extracted from this source.</p>}
+        {!recordsPending && findings && findings.length > 0 && <div className="space-y-2">{findings.map((finding) => (
           <div key={finding.finding_id} className="border-l-2 border-line-2 pl-3">
             <Chip tone="soft">{finding.profile === "iof" ? "Intervention–outcome" : "Implementation context"}</Chip>
             <p className="mt-1 text-body leading-snug text-navy">{scrub(finding.statement)}</p>
           </div>
         ))}</div>}
       </DossierSection>
+      )}
     </div>
   );
 }

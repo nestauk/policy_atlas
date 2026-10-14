@@ -443,7 +443,8 @@ describe("RunningCard — a longlist walk's beats (task 045)", () => {
       ["Suggesting options", "Suggested 6 options · 2 from your evidence search"],
       ["Searching for each option", "Searched for 7 of 8 options · 1 failed"],
       ["Reading the abstracts", "Read 120 abstracts · 64 interventions covered"],
-      ["Building the longlist", "14 options in 4 themes · 3 records unclustered"],
+      // Task 046: the longlist step's sentence no longer reads a theme count.
+      ["Building the longlist", "14 options · 3 records unclustered"],
     ];
     for (const [label, beat] of beats) {
       await user.click(screen.getByRole("button", { name: label }));
@@ -457,6 +458,7 @@ describe("walk kinds (task 045)", () => {
     expect(walkKind("evidence_search", [])).toBe("evidence_search");
     expect(walkKind("options_scoping", [])).toBe("baseline");
     expect(walkKind("options_scoping", [{ stage: "suggest", label: "Suggesting options", status: "completed" } as never])).toBe("longlist");
+    expect(walkKind("options_scoping", [{ stage: "option_profile", label: "Writing what each option would take", status: "started" } as never])).toBe("longlist");
   });
 
   // A7: an added option's own search is parentless but not the baseline.

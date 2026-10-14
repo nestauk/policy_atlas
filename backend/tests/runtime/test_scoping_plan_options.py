@@ -121,6 +121,26 @@ def test_a_reworded_option_loses_its_design_and_is_proposed_again() -> None:
     assert all(o.design is not None for o in again.your_options)
 
 
+def test_the_design_and_the_users_words_are_stored_as_written() -> None:
+    """R31 holds in the design prompt's words (R74): the code strips no place from
+    the design (deleted on the owner's ruling, 2026-10-12); the user's own words
+    are verbatim."""
+    words = "Employment support for adults granted refugee status in Greater Manchester"
+    agent = StubAgentBackend()
+    plan = build_scoping_plan(
+        _draft(
+            where=TaggedText(text="Greater Manchester", origin="your_call"),
+            your_options=_options(words),
+        )
+    )
+    option = ensure_option_designs(plan, agent).your_options[0]
+    assert agent.option_design_words == [words]
+    assert option.text == words
+    assert option.design is not None
+    assert option.design.description == words
+    assert option.design.design_features == [words]
+
+
 def test_a_draft_that_leaves_options_null_keeps_the_previous_ones() -> None:
     first = build_scoping_plan(_draft(your_options=_options("a youth guarantee")))
     assert build_scoping_plan(_draft(), previous=first).your_options == first.your_options
@@ -158,7 +178,7 @@ def test_the_wire_draft_carries_the_options_words_only() -> None:
 # --- the setting flag -----------------------------------------------------------
 
 
-def test_only_a_requirement_may_name_a_setting() -> None:
+def test_only_a_boundary_may_name_a_setting() -> None:
     with pytest.raises(ValidationError):
         build_scoping_plan(
             _draft(
@@ -181,7 +201,7 @@ def test_the_setting_flag_survives_the_wire_round_trip() -> None:
             constraints=[
                 ScopingConstraintWire(
                     text="Delivered through schools",
-                    kind="requirement",
+                    kind="boundary",
                     origin="your_call",
                     checked_at="longlist",
                     setting=True,
@@ -190,7 +210,7 @@ def test_the_setting_flag_survives_the_wire_round_trip() -> None:
         )
     )
     again = build_scoping_plan(ScopingPlanDraftWire.model_validate(wire_draft_from_plan(plan)))
-    assert [c.setting for c in again.constraints if c.kind == "requirement"] == [True]
+    assert [c.setting for c in again.constraints if c.kind == "boundary"] == [True]
 
 
 # --- the default transferability preference -------------------------------------
@@ -274,7 +294,7 @@ def test_the_default_is_a_preference_only() -> None:
     with pytest.raises(ValidationError):
         ScopingConstraint(
             text="Transferable to Wales",
-            kind="requirement",
+            kind="boundary",
             origin="assumed",
             checked_at="longlist",
             default=TRANSFERABILITY_DEFAULT,
@@ -309,4 +329,6 @@ def test_the_longlist_and_targeted_screens_carry_the_criteria_without_where(
     criteria = screen.directive_delta["screening"]["criteria"]
     assert any("16 to 24 year olds" in c for c in criteria)
     assert any("the NEET rate" in c for c in criteria)
-    assert all("Northumberland" not in c for c in criteria)
+    # 18P (R74): the plan's Where is named once, inside the rule sentence of criterion 1.
+    assert sum("Northumberland" in c for c in criteria) == 1
+    assert any("is the user's place, not a criterion" in c for c in criteria)

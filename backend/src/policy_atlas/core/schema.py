@@ -956,7 +956,8 @@ intervention_outcome_finding = Table(
     # Source-named references — never canonical entities (data-model findings layer).
     Column("intervention", Text, nullable=False),
     Column("outcome", Text, nullable=False),  # base measure only; qualifiers are stratum
-    Column("population", Text, nullable=True),
+    # Who or what the intervention was delivered to (task 046, amendment 3, R71).
+    Column("unit", Text, nullable=True),
     Column("setting", Text, nullable=True),
     Column("comparator", Text, nullable=True),
     Column("effect_direction", Text, nullable=False),  # a reported null result is a finding
@@ -1016,7 +1017,7 @@ implementation_context_finding = Table(
     # Source-named references — shared meaning with IOF; requiredness is per schema.
     Column("intervention", Text, nullable=False),
     Column("outcome", Text, nullable=True),
-    Column("population", Text, nullable=True),
+    Column("unit", Text, nullable=True),
     Column("setting", Text, nullable=True),
     Column("study_geography", Text, nullable=True),
     Column("study_design", Text, nullable=True),
@@ -1074,6 +1075,17 @@ INTERVENTION_ROLES: tuple[str, ...] = (
 )
 _INTERVENTION_ROLES_SQL = ", ".join(f"'{r}'" for r in INTERVENTION_ROLES)
 
+#: How a record's unit stands to the plan's target unit (task 046, S5):
+#: the target unit itself, a wider or adjacent unit, or neither. Null
+#: means "not tagged" (a record profiled before the tagging context existed).
+UNIT_TAGS: tuple[str, ...] = ("on_target", "adjacent", "other")
+_UNIT_TAGS_SQL = ", ".join(f"'{t}'" for t in UNIT_TAGS)
+
+#: Whether a record names the plan's object of change, an option, or neither
+#: (task 046, S5). Null means "not tagged".
+OBJECT_TAGS: tuple[str, ...] = ("plan_object", "option", "neither")
+_OBJECT_TAGS_SQL = ", ".join(f"'{t}'" for t in OBJECT_TAGS)
+
 intervention_profile_record = Table(
     "intervention_profile_record",
     metadata,
@@ -1089,12 +1101,21 @@ intervention_profile_record = Table(
     # The bundle's parts when ``is_bundle``, as a JSON array.
     Column("components", JSONB, nullable=False),
     Column("outcome", Text, nullable=True),
-    Column("population", Text, nullable=True),
+    Column("unit", Text, nullable=True),
     Column("setting", Text, nullable=True),
     Column("study_geography", Text, nullable=True),
     Column("study_design", Text, nullable=True),
+    # The programme's own name and the countries of the stated place (task 046,
+    # amendment 3, R71); null on a record written before that revision.
+    Column("programme_name", Text, nullable=True),
+    Column("study_country", Text, nullable=True),
     # Document level, carried on each record: the abstract covers no intervention.
     Column("covers_no_intervention", Boolean, nullable=False, server_default=text("false")),
+    # The plan-relative tags (task 046, S5): null is "not tagged".
+    # ``outcome_tag`` is free text — a plan outcome's text, or ``other``.
+    Column("unit_tag", Text, nullable=True),
+    Column("outcome_tag", Text, nullable=True),
+    Column("object_tag", Text, nullable=True),
     Column("field_coverage", JSONB, nullable=False),
     # Anchors: the qv_v1 grounding payload shape the IOF/ICF rows use.
     Column("grounding", JSONB, nullable=False),
@@ -1108,16 +1129,25 @@ intervention_profile_record = Table(
         name="fk_ipr_record_task",
     ),
     CheckConstraint(f"role IN ({_INTERVENTION_ROLES_SQL})", name="ck_ipr_role"),
+    CheckConstraint(
+        f"unit_tag IS NULL OR unit_tag IN ({_UNIT_TAGS_SQL})",
+        name="ck_ipr_unit_tag",
+    ),
+    CheckConstraint(
+        f"object_tag IS NULL OR object_tag IN ({_OBJECT_TAGS_SQL})",
+        name="ck_ipr_object_tag",
+    ),
     CheckConstraint("jsonb_typeof(design_features) = 'array'", name="ck_ipr_design_features_array"),
     CheckConstraint("jsonb_typeof(components) = 'array'", name="ck_ipr_components_array"),
     CheckConstraint("jsonb_typeof(grounding) = 'array'", name="ck_ipr_grounding_array"),
     Index("ix_ipr_record", "extraction_record_id"),
 )
 
-#: The union view's definition — the single copy (task 045, S4). The revision
-#: that adds the third branch executes this constant; the view's shape is the
-#: ``finding_reference_union`` stub below. Every shared column exists on all
-#: three tables, so no branch aliases a NULL.
+#: The union view's definition — the single copy for the running code (task
+#: 045, S4); each alembic revision that creates the view freezes its own copy
+#: (a revision that imports this constant breaks a fresh ``upgrade head`` once
+#: it changes). The view's shape is the ``finding_reference_union`` stub below.
+#: Every shared column exists on all three tables, so no branch aliases a NULL.
 FINDING_REFERENCE_UNION_SQL = """
 CREATE VIEW finding_reference_union AS
 SELECT
@@ -1127,7 +1157,7 @@ SELECT
     task_id,
     intervention,
     outcome,
-    population,
+    unit,
     setting,
     study_geography,
     study_design
@@ -1140,7 +1170,7 @@ SELECT
     task_id,
     intervention,
     outcome,
-    population,
+    unit,
     setting,
     study_geography,
     study_design
@@ -1153,7 +1183,7 @@ SELECT
     task_id,
     intervention,
     outcome,
-    population,
+    unit,
     setting,
     study_geography,
     study_design
@@ -1169,7 +1199,7 @@ finding_reference_union = Table(
     Column("task_id", UUID(as_uuid=True)),
     Column("intervention", Text),
     Column("outcome", Text),
-    Column("population", Text),
+    Column("unit", Text),
     Column("setting", Text),
     Column("study_geography", Text),
     Column("study_design", Text),
@@ -1222,7 +1252,7 @@ extraction_result = Table(
 GROUPING_FACETS: tuple[str, ...] = (
     "intervention",
     "outcome",
-    "population",
+    "unit",
     "barrier_theme",
     "enabler_theme",
     "mechanism_theme",
@@ -1692,6 +1722,9 @@ longlist_result = Table(
     # Keyed ``(option_id, design_version)`` so a changed design cannot inherit them.
     Column("judgements", JSONB, nullable=False),
     Column("guesses", JSONB, nullable=False),
+    # Keyed ``[option_id][design_version]``: the eight lines (sentence, mark)
+    # and the setting (task 046, R45).
+    Column("option_profile", JSONB, nullable=False),
     Column("counts", JSONB, nullable=False),
     Column("provenance", JSONB, nullable=False),
     Column("created_at", DateTime(timezone=True), nullable=False),

@@ -2675,8 +2675,9 @@ Recorded by the task 045 contract, plan and build (`docs/tasks/045-scoping-longl
   written summaries are not built before assessment.
 - **Starting retrieval during the baseline pause** (D18) — stays deferred; the longlist walk
   starts when the user confirms the plan.
-- **Open question 4, as bounded here** — the discovery ceiling is `clamp(ceil(N/4), 8, 40)` and
-  the unclustered residual is a number the user sees; the target longlist size stays open (D4).
+- **Open question 4 — CLOSED by task 046 (R1).** The longlist has a target size of 20 and a hard
+  ceiling of 25, seeds included; the unclustered records get one residual pass and are then a
+  number the user sees. The formula `clamp(ceil(N/4), 8, 40)` is removed.
 - **Open question 7 — update the longlist in place instead of rebuilding it (task 3; owner ruling
   2026-09-24).** 045 ships "Rebuild longlist": after a plan change it re-runs the whole chain,
   seeded with the existing options so ids, exclusions and additions survive. Owner: "I think a
@@ -2739,7 +2740,252 @@ Recorded by the task 045 contract, plan and build (`docs/tasks/045-scoping-longl
   deviation 41) — `delete_task_data` deletes snapshots the other task still references, so
   `test_longlist_routes` builds its add fixture without the link.
 
+## Options scoping longlist refinement (task 046 seams)
+
+Recorded by the task 046 contract, plan and build (`docs/tasks/046-longlist-refinement/`).
+
+- **Full text for shortlisted options (task 3; R13).** No longlist or targeted chain fetches full
+  text; the chat answers from abstract chunks, and its citations say *abstract only*. Task 3
+  fetches full text for the shortlisted options. In the seven pre-contract runs about half of
+  the fetches failed (obesity: 52 of 74 attempts), so task 3 must plan for a missing full text.
+- **No themes between `longlist` and `theme` (R28).** The list shows its options with no themes
+  from the end of `longlist` to the end of `theme` (20 to 45 s in the replays). Holding the
+  Result on the baseline until `theme` ends changes the rule for "a longlist exists"; for task 3.
+  Themes also go out of date after a user's own exclusion; `theme` can run alone, so task 3's
+  update in place can run it again.
+- **User-visible loop budgets (R11).** The target size, the ceiling, the residual pass count and
+  the records-per-document cap are constants; the user does not see or set them.
+- **The not-stated flag at reader grain (R23).** The flag is on 76 to 96 percent of memberships
+  in the replays. Its future is the owner's decision (round record 5.2).
+- **The records-per-document cap of 8** removes 15 to 116 records per run where a review names
+  many interventions. The thinning counts are served; a review-aware rule is a seam.
+- **A setting that names a place moves or drops as a whole** ("primary schools in England" is
+  not kept as "primary schools"); on the read side only.
+- **A late child search can add documents after the screen (PA21).** A child that the join
+  timeout cut off can still acquire; its documents have no screen row in the longlist scope
+  until the next build.
+- **The profile memo key holds the prompt version, not the prompt text.** A text change without
+  a version change would reuse old records in the product. The slice changes the version once.
+- **`suggest` writes its token use to a log line only**, not to its summary (found by the
+  replay tool).
+- **Known limits recorded and not fixed (R22):** provider-written abstracts (32 to 52 percent
+  of "abstracts" are machine summaries); duplicate documents without a DOI (6 to 27 duplicate
+  titles per run; issue #75); the reasoned-guess path has no live test (no plan of the seven had
+  a preference); the option-search pool is shared by every task in the process; OpenAlex
+  returned nothing for 27 to 47 of 50 to 60 generated option-search queries.
+
+### Amendment 2 (2026-09-30)
+
+Recorded by the task 046 amendment 2 build (`amendment-2-final.md` § 4 and § 2.10).
+
+- **A "burden" line** on "What it would take" — only after a test across a range of domains
+  (R39; owner: "Maybe burden could be a good substitute but I feel like we would have to test a
+  range of domains to decide if it's right to include").
+- **A grounded legal-change line.** Out of the first version: a line that says whether a new
+  law is needed rests on the model's knowledge; a form grounded in the baseline or a document is
+  later work (R38, R39).
+- **The direction of reported outcomes, and the outcome-count limits, for task 3.** The
+  longlist shows counts only (R42). A record carries one plan outcome, so a record that reports
+  on two counts for one; a document counts for each outcome it has an evaluating record on.
+  The direction of an effect belongs to the shortlist assessment.
+- **Building an added option in place (task 3).** "Add an option" does not change: the added
+  option has no lever type, no ambition, no lines and no setting until the next rebuild of the
+  list, and the card hides "What it would take" for it (R51 withdrawn).
+- **"Studied in" on each document.** The record keeps its setting words in the database; no
+  read-model field and no place on the screen (B4).
+- **The list shows no lever type, no ambition and no lines from the end of `longlist` to the
+  end of `option_profile`** (44 to 77 s in the replays), as it shows no themes until `theme`
+  ends.
+- **The marks of a merged pair.** The lines were written with the duplicate on the list; the
+  kept option keeps its own lines (final § 2.8).
+- **Marks on a list split in two kinds of action.** On the obesity list about two thirds of
+  the options carry a cost mark, because rules and programmes stand out against each other. A
+  rule that caps the count would be a quota; the owner reads the built screen (loop 12L).
+- **The authority label reads the user's powers from the line "who decides".** Two doubts in
+  the loop read: NHS commissioning and school food enforcement, where a council has a part but
+  not the whole (loop 13L).
+
+### Amendment 3 (2026-10-01)
+
+Recorded by the task 046 amendment 3 build (`amendment-3-final.md` § 7.3; the round records
+`16R-record-prompt-loop.md`, `18P-place-rule-loop.md`, `20L-folding-loop.md`).
+
+- ~~**The place list's deletion is an owner decision.**~~ **Closed 2026-10-12.** With the rule
+  in words in every prompt the replays still showed one clear place-based screen rejection in
+  175 documents on the hardest list (refugees) after three rounds (R74). The owner accepted
+  that residual at the review ("We can delete the strip"): `strip_place` and the
+  `place_removed` provenance are gone; the name tables and `names_place` stay as amendment
+  4's place resolver and setting pass (R87). A later round on a stronger screen model is
+  the lever if a place-based rejection shows live.
+- **The folding calls' tail.** On the mini model, "the same word for the same kind" holds for
+  the large kinds and fails in the tail (obesity's "BMI measures" beside the plan outcome;
+  NEET's three employment kinds); a list with more than ~120 distinct unit words can collapse
+  into one catch-all kind under the schema cap of 12 (cohesion's Tried on). Follow-ups: a code
+  guard (a kind holding more than half the words → one retry with the count named), and the
+  judgment model for the folding calls on long lists, both costed in the system-level cost and
+  latency task.
+- **`programme_name` and `study_country` on the mini model** (rubric boxes 57 and 69, not met
+  at "all"): 13–32 per cent of programme names are the name of the study, provider, fund or
+  parent scheme; "not stated" hides a stated place on 4 to 34 records per list. A stronger
+  record model, or a second pass over the named records only, is later work.
+- **The replay tool's stage order.** Running `suggest --fresh` before `longlist --fresh` on a
+  clone makes the clone's earlier options count as seeds, so the longlist fills its ceiling
+  with seeds. A clone reset per round (18P.0 does it for the screen) for the option stages too.
+- **Stored run history keeps the old facet key.** The data migration rewrites every place a
+  reader resolves (plans, groups, counts, flags, provenance, annotations, synthesis blocks);
+  `synthesis_result.synthesis_provenance`, `counts.groups_unsectioned_by_facet` and
+  `event_log` payloads keep `population` as history (R52).
+- **The screen's `not_relevant_naming_place` flag is a keyword.** It over-matches (OECD
+  country notes); reading whether place was the reason stays a hand read. A structured reason
+  code from the screen would make M4 a count.
+- **`OptionOut.where_label`** left the option read model; `LonglistOut.depth_label` stays for
+  the longlist header (R61 takes the chip off the card only).
+- **The constrain reason on the "Who decides" row** is served and not shown (22b: the row
+  keeps the line's own sentence; "just enough text"); the owner may want it back.
+- **The old revision `c7e2a9f4b1d8` and the new one both freeze / import the union view's SQL**:
+  the next revision that changes `finding_reference_union` must freeze a copy in
+  `f1b6d3a8c2e5` as `c7e2a9f4b1d8` now does.
+
+### Amendment 4 (2026-10-12)
+
+Built 2026-10-09 to 2026-10-12 (`docs/tasks/046-longlist-refinement/verification.md`
+§ Amendment 4). The owner accepted the three loops' unmet stop measures as
+reported (2026-10-12: "Okay fine let's accept"); the first three items below
+are the levers left for each. Seams left open:
+
+- **The record prompt's residual on places (R87; M16 not met).** After four
+  rounds on the mini model, a hospital's, a committee's or an organisation's
+  own name still reaches `study_geography` where the abstract gives no town
+  (61 records on the tuning set, from 223): the next lever is the model
+  tier for `extract_interventions`, not the wording. A geography that is a
+  body's name shows as the level below on the document line and as a
+  sub-place in a place sentence's input.
+- **The folds' quality (R86; M17 not met).** At most one wrong fold in 30
+  per facet per list was not reached on any of four rounds; the folds vary
+  more between runs of one text than between rounds. Two code guards stand
+  (a slash-joined kind is cut; a catch-all of more than half the words is
+  retried once). A catch-all of a third of the words (NEET's check-set run)
+  passes the one-half share; a kind of twenty words (the "at most six
+  words" rule ignored) reaches the sentences. Candidates: the judgment
+  model for the folding calls on long lists; a share threshold tied to the
+  target unit's own share; a word-count guard on a kind.
+- **The place sentences (R80; M15 not met).** 4 of 56 tuning-set sentences
+  fall back to the template at round 4; a programme name of twenty words
+  the model will not cut and two upstream faults. A `max_length` on the
+  wire would bind the model but fails the whole call (PA4-9); a per-place
+  second call on an over-length sentence would cost one more call per such
+  place.
+- **The template's length.** Template sentences are not length-checked; a
+  twenty-word fold kind or programme name puts one over the ceiling (238
+  and 334 characters seen). A ceiling on the template's clauses is a small
+  code change.
+- **Phase 29F's measure on the tuning set.** The replay cannot re-mint an
+  existing option's design (the clone keeps the stored task's options as
+  seeds), so the feature rule was read on the 14 options the replay minted
+  under it and on the live runs; a from-scratch replay (a clone with its
+  option rows dropped) would read it on the whole tuning set.
+- **A theme heading's summary at 390 px** overflows when a list has no
+  themes and every option sits under "No theme" (the clones; a live list's
+  summaries are short). Pre-existing markup; one `min-w-0`/wrap away.
+- **`names_place` over the full ISO-3166 table** — closed by the review
+  (2026-10-12): the six country names that are common nouns or given names
+  (`AMBIGUOUS_COUNTRY_NAMES`: chad, guinea, jersey, jordan, niger, turkey)
+  match only when capitalised; the resolver still knows them. "Georgia" with
+  no context stays the country (a place either way).
+
+### Review stack seams (2026-10-12)
+
+Found by the step-7 lanes (`verification.md` § Review findings) and deferred
+by the lead with a reason; none blocks the merge.
+
+- **A failed typing keeps a typing made for an earlier design version**
+  (Codex X1). The keep-previous rule (box 3, S12) keys the lever columns by
+  option id only; after a design edit whose typing batch fails, the card
+  shows the old design's lever until a batch succeeds. The profile lines
+  are keyed by `(option_id, design_version)`; typing and ambition need the
+  same key (a stored version beside the lever columns), which is a shape
+  change. Not seen live (`typing_invalid` 0 on every live run).
+- **The read models take the newest `longlist_result` whatever the walk's
+  status** (Codex X4). A walk whose `longlist` step wrote its row and whose
+  `option_profile` step then failed serves that row's coverage with an
+  empty profile beside the task-wide option columns of the last good walk.
+  The fail-closed step is by design; a "last completed walk" selector (or a
+  snapshot per completed walk, Codex's approach) is the seam.
+- **At the ceiling, a suggested seed cannot fold into a newly discovered
+  broader option** (Codex X5; the build's D7). With no room under 25 the
+  new option is dropped before the folds are read, so a fold that would
+  leave the list at 25 is rejected as `unknown_target`. Apply accepted folds
+  before computing the room.
+- **A duplicate reported in a chain (A → B, B → C) is dropped and A reads
+  "no other option is the same kind of action"** (code review C4). Follow
+  the chain to its end (with a visited set for a cycle) or give A
+  `cannot_check`. No live list has reported a duplicate yet.
+- **Security hardening, all Low** (security lane S1–S3): the trace check is
+  lexical, so a lower-case injected clause in a place sentence passes
+  (plain-text render bounds it; a token-containment or URL-scheme reject is
+  the fix); model-written folding kinds widen the trace check's allowlist and
+  have no item length cap; most stored free-text wire fields
+  (`MarkedLineWire.answer`, `AmbitionWire.reason`, `SettingWire.*`,
+  `LeverTypingWire.lever_reason`, `ConstraintJudgementWire.reason`,
+  `AuthorityWire.*`, `FoldingResponse.kinds[]`) have no `max_length` and no
+  control-character strip before storage (the display strips them). One
+  pass over the wires with ceilings is the fix.
+- **`_constraint_lists` and `_checks` build one ordered list by undoing
+  each other** (code review C7): the default screens are appended, filtered
+  out and re-inserted around `distinct`; a user requirement whose id ever
+  collides with a screen id is dropped silently. Build the user list once.
+- **`theme.py` imports private names from `longlist.py`** (`_engine_stats`,
+  `_forbidden_label`, `_key`; build handoff item 3). Make them public or
+  move them to a shared module.
+- **`test_option_search.py` stalls at 0 % CPU under load** (a thread-join
+  timing test; four times in the amendment 3 build, never on a quiet
+  machine). A timeout on that join.
+- **The template sentence says "studies"** ("3 moderate observational
+  studies"): a study-design word, exempt under R90/C15 as an evidence type,
+  but the one place the card's own copy uses the word. For the owner.
+
+### Overton metadata faults seen by the amendment 4 survey (deferred 2026-10-09; owner: out of amendment 4)
+
+Recorded by the task 046 amendment 4 design survey (`research/amendment-4-design/README.md`).
+Both faults sit in the Evidence search ingest path shared by every capability, so the owner kept
+them out of a longlist amendment; they need a small fix of their own or an issue for the
+Evidence search owner.
+
+- **Overton's `published_on` becomes the document year.** On the obesity longlist 84 of 196
+  documents show 2026; across the dev DB 3,546 Overton snapshots carry `year` 2026 (154 OpenAlex
+  rows do too). For grey literature `published_on` is often Overton's own indexing date (a 2024/25
+  Slovenian annual report, a 2023 Spanish consultation, both dated 2026-02). The card's document
+  meta line and the Sources tab print it as the publication year. Fix belongs in the Overton
+  adapter: prefer a date from the document's own fields, and show no year rather than a wrong one.
+- **"[THIS TITLE IS BROKEN AND HAS BEEN REMOVED]" is Overton's placeholder title**, on 114
+  snapshots; one caregiving option lists it four times. Ingest should drop or flag such records
+  rather than let them reach the option card as documents.
+
+## System-level cost and latency (deferred by task 046, R16; owner 2026-09-28)
+
+Cost changes that edit an Evidence search component are not made inside a capability slice.
+Owner: "If cost optimisations require changes to the underlying evidence search components,
+then maybe they don't fit into this task and should be considered later at a system level cost
+and latency optimisation task."
+
+- **Query variants and a fallback ladder** (046 item 21) — the option searches keep three query
+  forms; the review and trial variants nearly always return nothing, and Overton receives the
+  whole design paragraph as its query.
+- **The baseline writer's tool list** (046 item 24) — the writer asks for tools the scoping
+  chain never fills (4 to 7 `characterisation_summary` errors per baseline).
+- **A screen memo across scopes** — the add walk's screen loads the task's whole pool and
+  judges it against the option's design (AM1 kept it as built).
+- **The option-search loop (L1)** and **allocation by corpus size (L3)** — bounded loops that
+  need a stop condition in the search loop.
+
 ## Synthesis optimisation (deferred 2026-09-17; owner intends a task after options scoping lands)
+
+**Second case (task 046, R7):** the rapid baselines of the seven pre-contract runs cited 2 to
+15 sources, and their screens kept few documents (heat pumps 2 of 11, refugees 4 of 11, energy 6
+of 20). The baseline target stays at 10. Owner: "I think the low number of citations is more
+likely to be an issue with the RAG implementation and associated parts of synthesis, as I've
+noticed it in evidence search syntheses as well." The baseline is now the reference for
+discovery, typing and constrain, so a thin baseline weakens those judgements too.
 
 Cost, latency and quality together. Measured on the task 044 NEET baseline
 (Langfuse trace `run:synthesise:3baa5bc1`, 9 sections, 180 s wall clock, 170 s

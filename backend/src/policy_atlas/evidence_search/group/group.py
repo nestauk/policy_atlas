@@ -1184,7 +1184,7 @@ def _load_finding_references(
             finding_reference_union.c.extraction_record_id,
             finding_reference_union.c.intervention,
             finding_reference_union.c.outcome,
-            finding_reference_union.c.population,
+            finding_reference_union.c.unit,
         )
         .where(finding_reference_union.c.task_id == task_id)
         .where(finding_reference_union.c.extraction_record_id.in_(record_ids))

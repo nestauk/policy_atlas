@@ -33,9 +33,9 @@ INTERVENTION_DESC = (
     "The intervention exactly as this document names it (source-named, never "
     "a standardised term). Control or comparison arms are not interventions."
 )
-POPULATION_DESC = (
-    "The study population exactly as the document describes it, or null if "
-    "not reported."
+UNIT_DESC = (
+    "Who or what the intervention was delivered to (people, organisations, sites "
+    "or things), exactly as the document describes them, or null if not reported."
 )
 STUDY_GEOGRAPHY_DESC = (
     "Where the evidence underlying this finding was conducted, exactly as the document "
@@ -53,7 +53,7 @@ STUDY_DESIGN_DESC = (
 SHARED_REFERENCE_FIELDS = (
     "intervention",
     "outcome",
-    "population",
+    "unit",
     "setting",
     "study_geography",
     "study_design",
@@ -63,7 +63,7 @@ SHARED_REFERENCE_FIELDS = (
 REFERENCE_REQUIREDNESS = {
     "intervention": {"iof": True, "icf": True},
     "outcome": {"iof": True, "icf": False},
-    "population": {"iof": False, "icf": False},
+    "unit": {"iof": False, "icf": False},
     "setting": {"iof": False, "icf": False},
     "study_geography": {"iof": False, "icf": False},
     "study_design": {"iof": False, "icf": False},

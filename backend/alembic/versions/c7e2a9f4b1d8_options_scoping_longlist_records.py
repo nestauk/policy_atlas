@@ -26,8 +26,11 @@ Upgrade
                                     MATCH SIMPLE passes a NULL.
     ``finding_reference_union``     dropped and recreated with a third branch
                                     over ``intervention_profile_record``. The
-                                    definition is ``core/schema.py``'s
-                                    ``FINDING_REFERENCE_UNION_SQL`` (one copy).
+                                    definition is frozen below as it stood at
+                                    this revision (``_THREE_BRANCH_UNION_SQL``);
+                                    ``core/schema.py``'s
+                                    ``FINDING_REFERENCE_UNION_SQL`` has since
+                                    moved on (task 046, amendment 3, R71).
 
     ``evidence_scope.ck_scope_purpose`` already admits ``longlist`` and
     ``targeted`` (044 decision C4, revision ``b5e1d7a4c026``): not touched.
@@ -53,8 +56,6 @@ from typing import Sequence, Union
 import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
-
-from policy_atlas.core.schema import FINDING_REFERENCE_UNION_SQL
 
 revision: str = "c7e2a9f4b1d8"
 down_revision: Union[str, None] = "b5e1d7a4c026"
@@ -91,6 +92,26 @@ SELECT
     study_design
 FROM implementation_context_finding
 """
+
+#: The three-branch view this revision creates — frozen here, because the
+#: column names moved on in a later revision (task 046, amendment 3, R71).
+_THREE_BRANCH_UNION_SQL = (
+    _TWO_BRANCH_UNION_SQL
+    + """UNION ALL
+SELECT
+    record_id AS finding_id,
+    'interventions'::text AS kind,
+    extraction_record_id,
+    task_id,
+    intervention,
+    outcome,
+    population,
+    setting,
+    study_geography,
+    study_design
+FROM intervention_profile_record
+"""
+)
 
 _ROLES = "('evaluated', 'described', 'recommended', 'comparator', 'mentioned')"
 _ORIGINS = "('clustered', 'suggested', 'from_evidence_search', 'added_by_you')"
@@ -352,7 +373,7 @@ def upgrade() -> None:
     op.alter_column("extraction_result", "selection_run_id", nullable=True)
 
     op.execute("DROP VIEW finding_reference_union")
-    op.execute(FINDING_REFERENCE_UNION_SQL)
+    op.execute(_THREE_BRANCH_UNION_SQL)
 
 
 def downgrade() -> None:

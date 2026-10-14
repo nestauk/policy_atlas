@@ -26,29 +26,25 @@ import {
   byLeverThenName,
   capitalise,
   constraintLabel,
-  countsLine,
+  countsParts,
   definitionSentence,
+  leverDefinitionFor,
   instrumentsSummary,
-  leverAmbitionLabel,
+  leverLabel,
   longlistTitle,
   rowMetaParts,
   themeSummary,
-  whereTriedFacetChips,
 } from "./longlistPresentation";
 
 type LonglistOut = components["schemas"]["LonglistOut"];
 type OptionSummaryOut = components["schemas"]["OptionSummaryOut"];
-type WhereTriedGroup = "where" | "comparable" | "other" | "unknown";
-type GroupBy = "theme" | "lever" | "ambition";
+type GroupBy = "theme" | "lever";
 
 const GROUP_BY: { key: GroupBy; label: string }[] = [
   { key: "theme", label: "Theme" },
   { key: "lever", label: "Lever type" },
-  { key: "ambition", label: "Ambition" },
 ];
 
-/** The setting facet shows this many chips before "more". */
-const SETTING_FACET_LIMIT = 8;
 const ADD_OPTION_ANCHOR = "add-option";
 const EXCLUDED_ANCHOR = "excluded-options";
 
@@ -67,18 +63,11 @@ const REASON_INPUT_CLASS =
   "min-w-0 flex-1 border border-line-2 bg-paper px-3 py-1.5 text-body text-ink placeholder:text-grey/80 " +
   "focus-visible:outline-2 focus-visible:outline-blue";
 
-function toggleInSet<T>(set: Set<T>, value: T): Set<T> {
-  const next = new Set(set);
-  if (next.has(value)) next.delete(value);
-  else next.add(value);
-  return next;
-}
-
 /**
  * The longlist's list view (contract deliverable 9, plan S13) on the
  * report's page chrome (EB-modified: `ReportPage`, `SectionDisclosure`):
  * the kind row with the List · Grid switch, the counts as the title and
- * snapshot cells, the Show/Setting/Where-tried facets, theme sections that
+ * snapshot cells, the Group by switch, theme sections that
  * expand and collapse like report sections, option rows, the "Do nothing"
  * reference, and an add-option row. The grid (D12) widens the paper.
  */
@@ -89,8 +78,6 @@ export function LonglistView({ taskId, longlist }: { taskId: string; longlist: L
   const excludeOption = useExcludeOption(taskId);
   const includeOption = useIncludeOption(taskId);
 
-  const [settingsFilter, setSettingsFilter] = useState<Set<string>>(new Set());
-  const [whereFilter, setWhereFilter] = useState<Set<WhereTriedGroup>>(new Set());
   const [mode, setMode] = useState<"list" | "grid">("list");
   const [groupBy, setGroupBy] = useState<GroupBy>("theme");
   const [showExcludedInGrid, setShowExcludedInGrid] = useState(false);
@@ -112,36 +99,6 @@ export function LonglistView({ taskId, longlist }: { taskId: string; longlist: L
     for (const id of theme.option_ids ?? []) themeOfOption.set(id, theme.name);
   }
 
-  // Settings are source-named and long-tailed (a live NEET longlist carried
-  // 28 of them): the facet shows the commonest few and folds the rest.
-  const settingCounts = new Map<string, number>();
-  for (const option of options) {
-    for (const setting of option.settings ?? []) {
-      settingCounts.set(setting, (settingCounts.get(setting) ?? 0) + 1);
-    }
-  }
-  const allSettings = [...settingCounts.entries()]
-    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
-    .map(([setting]) => setting);
-  const [allSettingsShown, setAllSettingsShown] = useState(false);
-  const shownSettings =
-    allSettingsShown || allSettings.length <= SETTING_FACET_LIMIT
-      ? allSettings
-      : allSettings.filter((setting) => settingsFilter.has(setting) || allSettings.indexOf(setting) < SETTING_FACET_LIMIT);
-  const hiddenSettings = allSettings.length - shownSettings.length;
-  const whereChips = whereTriedFacetChips(longlist.where_label);
-
-  const passesFilters = (option: OptionSummaryOut): boolean => {
-    if (settingsFilter.size > 0) {
-      const optionSettings = option.settings ?? [];
-      if (![...settingsFilter].some((setting) => optionSettings.includes(setting))) return false;
-    }
-    if (whereFilter.size > 0) {
-      const whereTried = option.where_tried;
-      if (![...whereFilter].some((group) => (whereTried[group] ?? 0) > 0)) return false;
-    }
-    return true;
-  };
 
   const walkActive = isRunActive(task.data);
 
@@ -239,12 +196,12 @@ export function LonglistView({ taskId, longlist }: { taskId: string; longlist: L
             <Chip tone="red">excluded: breaks "{constraintLabel(scrub(option.exclusion.constraint))}"</Chip>
           )}
           {option.no_in_scope_evidence && <Chip tone="yellow">no in-scope evidence</Chip>}
-          <span className={cn("font-semibold", excluded ? "text-grey" : "text-navy")}>{scrub(leverAmbitionLabel(option))}</span>
+          <span className={cn("font-semibold", excluded ? "text-grey" : "text-navy")}>{scrub(leverLabel(option))}</span>
           {[
             ...(groupBy !== "theme" || excluded ? [themeOfOption.get(option.option_id) ?? "No theme"] : []),
             ...rowMetaParts(option),
-          ].map((part) => (
-            <span key={part} className="inline-flex items-center gap-x-2">
+          ].map((part, index) => (
+            <span key={`${index}-${part}`} className="inline-flex items-center gap-x-2">
               <span aria-hidden="true">·</span>
               <span>{scrub(part)}</span>
             </span>
@@ -299,9 +256,8 @@ export function LonglistView({ taskId, longlist }: { taskId: string; longlist: L
       .map((id) => optionsById.get(id))
       .filter((option): option is OptionSummaryOut => option !== undefined)
       .filter(included)
-      .filter(passesFilters)
       .sort(sortRows);
-  const includedOptions = options.filter(included).filter(passesFilters);
+  const includedOptions = options.filter(included);
   const themesOf = (group: readonly OptionSummaryOut[]) =>
     new Set(group.map((option) => themeOfOption.get(option.option_id) ?? "No theme")).size;
   const themeCount = (group: readonly OptionSummaryOut[]) => {
@@ -318,7 +274,7 @@ export function LonglistView({ taskId, longlist }: { taskId: string; longlist: L
     })),
     { key: "no-theme", name: "No theme", summary: "", description: "", options: collect(longlist.unthemed_option_ids ?? []) },
   ];
-  // A lever or ambition group's description is the taxonomy's own one-line
+  // A lever group's description is the taxonomy's own one-line
   // definition; the heading's meta adds how many themes the group spans.
   const withDefinition = <T extends { options: OptionSummaryOut[] }>(group: T, definition: string) => ({
     ...group,
@@ -326,16 +282,20 @@ export function LonglistView({ taskId, longlist }: { taskId: string; longlist: L
     summary: definition,
   });
   const byLever = [
-    ...leverTypes.map((lever) =>
-      withDefinition(
-        {
-          key: lever,
-          name: capitalise(lever),
-          options: includedOptions.filter((option) => option.primary_lever_type === lever).sort((a, b) => a.name.localeCompare(b.name)),
-        },
-        leverDefinitions.get(lever) ?? "",
-      ),
-    ),
+    ...leverTypes.map((lever) => {
+      const group = includedOptions
+        .filter((option) => option.primary_lever_type === lever)
+        .sort((a, b) => a.name.localeCompare(b.name));
+      return withDefinition(
+        { key: lever, name: capitalise(lever), options: group },
+        leverDefinitionFor(
+          lever,
+          group,
+          longlist.lever_type_definitions_by_version,
+          leverDefinitions.get(lever) ?? "",
+        ),
+      );
+    }),
     withDefinition(
       {
         key: "none-fits",
@@ -345,26 +305,10 @@ export function LonglistView({ taskId, longlist }: { taskId: string; longlist: L
       "Options that no lever type on the list names; each says what it does instead.",
     ),
   ];
-  const byAmbition = [
-    ...(longlist.ambition_bands ?? []).map((band) =>
-      withDefinition(
-        {
-          key: band.key,
-          name: band.label,
-          options: includedOptions.filter((option) => option.ambition === band.key).sort(sortRows),
-        },
-        definitionSentence(band.definition),
-      ),
-    ),
-    withDefinition(
-      { key: "untagged", name: "Untagged", options: includedOptions.filter((option) => option.ambition == null).sort(sortRows) },
-      "Options without an ambition band yet.",
-    ),
-  ];
-  const themeGroups = (groupBy === "theme" ? byTheme : groupBy === "lever" ? byLever : byAmbition)
+  const themeGroups = (groupBy === "theme" ? byTheme : byLever)
     .filter((group) => group.options.length > 0)
     .map((group, index) => ({ ...group, id: sectionAnchor(group.name, index) }));
-  const excludedOptions = options.filter((option) => option.state === "excluded").filter(passesFilters);
+  const excludedOptions = options.filter((option) => option.state === "excluded");
 
   const entries: SidebarEntry[] =
     mode === "grid"
@@ -375,11 +319,10 @@ export function LonglistView({ taskId, longlist }: { taskId: string; longlist: L
           { id: ADD_OPTION_ANCHOR, title: "Add an option" },
         ];
 
-  const shownCount = includedOptions.length;
-  const filtersActive = settingsFilter.size > 0 || whereFilter.size > 0;
-  // A filter opens the sections it narrowed; the key remounts them with the
-  // matching default. A new grouping remounts them closed.
-  const sectionKey = (key: string) => `${groupBy}-${key}-${filtersActive ? "filtered" : "all"}`;
+  // A new grouping remounts the sections closed.
+  const sectionKey = (key: string) => `${groupBy}-${key}`;
+
+  const counts = countsParts(longlist.counts);
 
   return (
     <ReportPage entries={entries} className={mode === "grid" ? "md:max-w-[1180px]" : undefined}>
@@ -416,12 +359,27 @@ export function LonglistView({ taskId, longlist }: { taskId: string; longlist: L
           </div>
         </ReportKindRow>
         <h1 className={REPORT_TITLE_CLASS}>{scrub(longlistTitle(plan.data?.scoping, task.data?.name))}</h1>
-        <p className="mt-2 text-lead text-grey">{countsLine(longlist.counts)}</p>
+        <p className="mt-2 text-lead text-grey">
+          {counts.head}
+          {counts.excluded !== null && (
+            <>
+              {" · "}
+              {mode === "list" ? (
+                <a href={`#${EXCLUDED_ANCHOR}`} className="underline underline-offset-4 hover:text-navy">
+                  {counts.excluded}
+                </a>
+              ) : (
+                counts.excluded
+              )}
+            </>
+          )}
+          {counts.noInScope !== null && ` · ${counts.noInScope}`}
+        </p>
       </header>
 
-      <div className="print-hide mb-8 border-y border-line py-3">
-        {mode === "list" && (
-          <div role="group" aria-label="Group by" className="mb-2 flex flex-wrap items-start gap-1.5">
+      {mode === "list" && (
+        <div className="print-hide mb-8 border-y border-line py-3">
+          <div role="group" aria-label="Group by" className="flex flex-wrap items-start gap-1.5">
             <span className={FACET_LABEL_CLASS}>Group by</span>
             {GROUP_BY.map((choice) => (
               <button
@@ -435,63 +393,8 @@ export function LonglistView({ taskId, longlist }: { taskId: string; longlist: L
               </button>
             ))}
           </div>
-        )}
-        {allSettings.length > 0 && (
-          <div role="group" aria-label="Setting" className="flex flex-wrap items-start gap-1.5">
-            <span className={FACET_LABEL_CLASS}>Setting</span>
-            {shownSettings.map((setting) => (
-              <button
-                key={setting}
-                type="button"
-                aria-pressed={settingsFilter.has(setting)}
-                onClick={() => setSettingsFilter((current) => toggleInSet(current, setting))}
-                className={facetChipClass(settingsFilter.has(setting))}
-              >
-                {scrub(setting)}
-              </button>
-            ))}
-            {hiddenSettings > 0 && (
-              <button
-                type="button"
-                onClick={() => setAllSettingsShown(true)}
-                className="cursor-pointer px-1 py-1.5 text-meta font-semibold text-blue underline-offset-4 hover:underline"
-              >
-                +{hiddenSettings} more
-              </button>
-            )}
-            {allSettingsShown && allSettings.length > SETTING_FACET_LIMIT && (
-              <button
-                type="button"
-                onClick={() => setAllSettingsShown(false)}
-                className="cursor-pointer px-1 py-1.5 text-meta font-semibold text-blue underline-offset-4 hover:underline"
-              >
-                fewer
-              </button>
-            )}
-          </div>
-        )}
-        <div role="group" aria-label="Where tried" className="mt-2 flex flex-wrap items-start gap-1.5">
-          <span className={FACET_LABEL_CLASS}>Where tried</span>
-          {whereChips.map((chip) => (
-            <button
-              key={chip.group}
-              type="button"
-              aria-pressed={whereFilter.has(chip.group)}
-              onClick={() => setWhereFilter((current) => toggleInSet(current, chip.group))}
-              className={facetChipClass(whereFilter.has(chip.group))}
-            >
-              {scrub(chip.label)}
-            </button>
-          ))}
         </div>
-        {filtersActive && (
-          <p className="mt-3 text-meta text-grey" role="status">
-            {shownCount === 0
-              ? "No option matches these filters."
-              : `${shownCount} of ${longlist.counts.options} options match.`}
-          </p>
-        )}
-      </div>
+      )}
 
       {mode === "grid" ? (
         <LonglistGrid taskId={taskId} longlist={longlist} showExcluded={showExcludedInGrid} />
@@ -510,7 +413,7 @@ export function LonglistView({ taskId, longlist }: { taskId: string; longlist: L
                 summary: group.summary,
                 summary_status: "verified",
               }}
-              defaultOpen={filtersActive}
+              defaultOpen={false}
               collapsible
               meta={[
                 `${group.options.length} ${group.options.length === 1 ? "option" : "options"}`,

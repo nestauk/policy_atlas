@@ -24,13 +24,14 @@ import uuid
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select, update
 from sqlalchemy.engine import Connection, Engine
 
+from policy_atlas.api.contract import OptionDocumentOut, OptionOut, OptionSummaryOut
 from policy_atlas.api.deps import get_agent_backend, get_runner_backends
 from policy_atlas.api.readmodels import repository
 from policy_atlas.core.schema import (
@@ -52,10 +53,16 @@ from policy_atlas.options_scoping.constrain.constrain import (
     constrain_scope,
 )
 from policy_atlas.options_scoping.constrain.constrain_prompt import ConstrainResponse
+from policy_atlas.options_scoping.longlist.lever_types import lever_types_by_version
 from policy_atlas.options_scoping.longlist.longlist_backend import StubLonglistBackend
 from policy_atlas.runtime.agent_backend import StubAgentBackend
 from policy_atlas.runtime.option_design_prompt import OptionDesignWire
-from policy_atlas.runtime.scoping_plan import CHECKED_AT_BY_KIND, ScopingConstraint, ScopingPlan
+from policy_atlas.runtime.scoping_plan import (
+    CHECKED_AT_BY_KIND,
+    PROFILE_LINE_KEYS,
+    ScopingConstraint,
+    ScopingPlan,
+)
 from tests.api.org_support import (
     Principal,
     make_org,
@@ -67,11 +74,16 @@ from tests.api.resource_support import api_client, create_task
 from tests.helpers import delete_task_data, now
 from tests.options_scoping.test_longlist import (
     RCT,
+    _current_fingerprint,
     _discovered,
+    _extraction,
     _linked_deep_task,
+    _record_under,
+    _rollup_of,
     _Scripted,
     _Walk,
 )
+from tests.options_scoping.test_option_profile import _profile
 from tests.runtime.test_baseline_gate import scoping_plan
 from tests.runtime.test_runner import _runner_backends
 
@@ -148,9 +160,9 @@ def _plan() -> ScopingPlan:
     extra = [
         ScopingConstraint(
             text=REQUIREMENT,
-            kind="requirement",
+            kind="boundary",
             origin="your_call",
-            checked_at=CHECKED_AT_BY_KIND["requirement"],
+            checked_at=CHECKED_AT_BY_KIND["boundary"],
         ),
         ScopingConstraint(
             text=PREFERENCE,
@@ -190,12 +202,17 @@ class _Breaks(StubLonglistBackend):
         self,
         *,
         plan: dict[str, object],
+        baseline_sections: list[tuple[str, str]],
         requirements: list[dict[str, str]],
         preferences: list[dict[str, str]],
         options: list[dict[str, object]],
     ) -> tuple[ConstrainResponse, Any]:
         response, usage = super().constrain(
-            plan=plan, requirements=requirements, preferences=preferences, options=options
+            plan=plan,
+            baseline_sections=baseline_sections,
+            requirements=requirements,
+            preferences=preferences,
+            options=options,
         )
         for wire in response.options:
             if wire.option_id in self.breaking:
@@ -297,12 +314,24 @@ def _build(
             uk,
             "youth guarantee",
             study_geography="England",
+            study_country="United Kingdom",
             setting="Jobcentres",
-            population="16 to 24 year olds",
+            unit="16 to 24 year olds",
             outcome="employment",
         )
-        walk.record(preprint, "youth guarantee flagged", study_geography="United Kingdom")
-        walk.record(old, "mentoring", role="described", study_geography="Denmark")
+        walk.record(
+            preprint,
+            "youth guarantee flagged",
+            study_geography="United Kingdom",
+            study_country="United Kingdom",
+        )
+        walk.record(
+            old,
+            "mentoring",
+            role="described",
+            study_geography="Denmark",
+            study_country="Denmark",
+        )
         walk.record(
             uk, "guarantee package", is_bundle=True, components=["Youth guarantee", "mentoring"]
         )
@@ -312,14 +341,7 @@ def _build(
             source_task_id = _linked_deep_task(conn, walk, "youth guarantee")
             _inherit_label(conn, target=walk, source_task_id=source_task_id)
         backend = _Scripted(
-            discovered=[
-                _discovered("Mentoring"),
-                _discovered(
-                    "Guarantee package",
-                    is_bundle=True,
-                    components=["Mentoring", "Youth guarantee"],
-                ),
-            ],
+            discovered=[_discovered("Mentoring"), _discovered("Guarantee package")],
             routes={
                 "youth guarantee": ("Youth guarantee", False),
                 "youth guarantee flagged": ("Youth guarantee", True),
@@ -335,6 +357,26 @@ def _build(
             },
         )
         run_id, _ = walk.build(backend)
+        # The walk's next step types the options (task 046, S20).
+        _profile(walk, backend)
+        # The longlist mints no package (task 046, item 4); ``part_of`` rows
+        # are the user's, so the fixture writes the package's two as a user.
+        by_name = {
+            row.name: row.option_id
+            for row in conn.execute(select(option).where(option.c.task_id == walk.task_id))
+        }
+        for part in ("Mentoring", "Youth guarantee"):
+            conn.execute(
+                option_relation.insert().values(
+                    relation_id=uuid.uuid4(),
+                    task_id=walk.task_id,
+                    from_option_id=by_name[part],
+                    to_option_id=by_name["Guarantee package"],
+                    kind="part_of",
+                    created_by="user",
+                    created_at=now(),
+                )
+            )
         conn.execute(
             capability_run.update()
             .where(capability_run.c.capability_run_id == walk.walk_id)
@@ -483,13 +525,9 @@ def test_the_list_matches_the_stored_rows(engine: Engine, tmp_path: Path) -> Non
         assert body["plan_version"] == body["built_from_plan_version"] == 2
         assert body["current_plan_version"] == 2
         assert body["depth_label"] == "scoping pass"
-        assert body["where_label"] == "United Kingdom"
+        assert "where_label" not in body  # the facet shows the top levels (R72)
         assert body["lever_types"][0] == "regulate" and len(body["lever_types"]) == 10
-        assert [band["key"] for band in body["ambition_bands"]] == [
-            "do_minimum",
-            "incremental",
-            "structural",
-        ]
+        assert "ambition_bands" not in body
         counts = body["counts"]
         assert counts["options"] == len(rows) == 3
         assert counts["themes"] == len(result.themes)
@@ -511,15 +549,22 @@ def test_the_list_matches_the_stored_rows(engine: Engine, tmp_path: Path) -> Non
         assert guarantee["state"] == "included" and guarantee["exclusion"] is None
         assert guarantee["document_count"] == coverage["documents"] == 2
         assert guarantee["evaluated_count"] == coverage["role"]["evaluated"]
-        assert guarantee["where_tried"] == {
-            "where": coverage["where_tried"]["where"],
-            "comparable": coverage["where_tried"]["comparable"],
-            "other": coverage["where_tried"]["other"],
-            "unknown": coverage["where_tried"]["unknown"],
-        }
-        assert guarantee["settings"] == ["Jobcentres"]
+        # The list serves no where-tried or tried-on field (amendment 4, R84; S36):
+        # the coverage keys stay stored for the constraint step.
+        assert "where_tried" not in guarantee and "tried_on" not in guarantee
+        assert coverage["where_tried"]
+        # The evidence signal (task 046, amendment 4, R76; S29): read from the
+        # stored coverage; the total is the built-from plan's outcome count.
+        assert guarantee["evaluated_countries"] == coverage["evaluated_countries"]
+        assert guarantee["outcomes_evaluated"] == coverage["outcomes_evaluated"]
+        assert guarantee["outcomes_total"] == 1
+        # The list's settings are the option-level setting of its profile (R41), not coverage.
+        stored_profile = result.option_profile[str(built.options["Youth guarantee"])]
+        (profile_entry,) = stored_profile.values()
+        assert guarantee["settings"] == [profile_entry["setting"]["main"]] == ["stub setting"]
         assert guarantee["primary_lever_type"] == "subsidise"
-        assert guarantee["ambition"] == "incremental"
+        # Ambition is the profile's own call (task 046, R40): the stub marks none.
+        assert guarantee["ambition"] is None
         assert guarantee["is_entrant_with_no_documents"] is False
 
         mentoring = by_name["Mentoring"]
@@ -527,7 +572,7 @@ def test_the_list_matches_the_stored_rows(engine: Engine, tmp_path: Path) -> Non
         assert mentoring["restriction_text"] == RESTRICTION
         assert mentoring["primary_lever_type"] is None
         assert mentoring["lever_none_fits_reason"] == "Mentoring is delivered by volunteers."
-        assert mentoring["where_tried"]["comparable"] == 1  # Denmark
+        assert "where_tried" not in mentoring
 
         package = by_name["Guarantee package"]
         expected = {
@@ -560,8 +605,9 @@ def test_the_card_carries_every_section_and_never_how_sure(
         card = response.json()
         assert card["design"]["name"] == "Youth guarantee"
         assert card["design_features"] == ["Youth guarantee feature"]
-        assert card["transferability"] == "checked at assessment"
-        assert card["depth_label"] == "scoping pass"
+        # Task 046, amendment 3 (R61, R66): no depth label, transferability or
+        # Where label on the card.
+        assert not {"transferability", "depth_label", "where_label"} & card.keys()
         assert card["run_id"] == str(built.run_id) and card["plan_version"] == 2
         # Judgements: the requirement, then the three screens; the guess on the
         # preference; no guess for the transferability preference.
@@ -585,9 +631,14 @@ def test_the_card_carries_every_section_and_never_how_sure(
         assert evidence["by_evidence_type"] == {RCT: 2}
         assert evidence["inherited_labels"] == 1
         assert evidence["flagged_not_stated"] == 0  # the DOI twin states the feature
-        assert evidence["by_role"]["evaluated"] >= 1
-        assert evidence["populations"] == ["16 to 24 year olds"]
-        # The documents: one per membership row, never DOI-collapsed.
+        # Removed by task 046, amendment 4 (contract § Public interface).
+        assert "by_role" not in evidence
+        # The record-level lists are gone (B13), and so are the kind lists
+        # (task 046, amendment 4, S36).
+        removed = {"units", "settings", "outcomes", "tried_on", "measures", "where_tried"}
+        assert not removed & set(evidence)
+        assert "examples" not in card
+        # The documents: one per document, DOI twins collapsed (R67).
         documents = card["documents"]
         with engine.connect() as conn:
             members = conn.execute(
@@ -595,25 +646,26 @@ def test_the_card_carries_every_section_and_never_how_sure(
                     option_membership.c.option_id == built.options["Youth guarantee"]
                 )
             ).all()
-        assert len(documents) == len(members) == 4
+        assert len(members) == 4 and len(documents) == 2
         titles = sorted(d["title"] for d in documents)
-        assert titles == [
-            "A deep read",
-            "A deep read",
-            "UK guarantee evaluation",
-            "UK guarantee preprint",
-        ]
+        assert titles == ["A deep read", "UK guarantee evaluation"]
         inherited = [d for d in documents if d["title"] == "A deep read"]
         assert {d["source_task_id"] for d in inherited} == {str(built.source_task_id)}
-        assert {d["role"] for d in inherited} == {"evaluated", "described"}
+        assert {d["role"] for d in inherited} == {"evaluated"}
         # The label came through the link, read by the resolver.
         assert {d["evidence_type"] for d in inherited} == {RCT}
         assert all(d["task_source_snapshot_id"] is not None for d in inherited)
         evaluation = next(d for d in documents if d["title"] == "UK guarantee evaluation")
-        assert evaluation["tier"] == "Strong" and evaluation["where_tried_group"] == "where"
-        assert evaluation["source_task_id"] is None
-        preprint = next(d for d in documents if d["title"] == "UK guarantee preprint")
-        assert preprint["design_feature_not_stated"] is True
+        assert evaluation["tier"] == "Strong" and evaluation["place"] == "United Kingdom"
+        assert "where_tried_group" not in evaluation
+        assert evaluation["source_task_id"] is None and evaluation["year"] == 2022
+        # The place sentences, as the profile step stored them (task 046,
+        # amendment 4, R80; S31): this scripted backend has no sentence call,
+        # so the step stored the templates; the plan's Where row first.
+        sentences = card["place_sentences"]
+        assert sentences[0]["place"] == "United Kingdom"
+        assert (sentences[0]["where"], sentences[0]["generated"]) == (True, False)
+        assert all(set(s) == {"place", "sentence", "generated", "where"} for s in sentences)
 
         mentoring = _card(client, built, "Mentoring", owner.headers).json()
         assert mentoring["in_scope"] == {
@@ -631,24 +683,6 @@ def test_the_card_carries_every_section_and_never_how_sure(
             assert "how sure" not in body.lower()
 
 
-def test_the_transferability_row_follows_the_plan(conn: Connection) -> None:
-    """No default preference on the plan: the card carries no transferability row."""
-    plan = _plan()
-    stripped = plan.model_copy(
-        update={
-            "constraints": [c for c in plan.constraints if c.default is None],
-            "removed_defaults": ["transferability"],
-        }
-    )
-    walk = _Walk(conn, stripped)
-    option_id = walk.option("Youth guarantee", origin="added_by_you")
-    walk.build(_Scripted())
-    card = repository.option_out(conn, walk.task_id, option_id)
-    assert card is not None
-    assert card.transferability is None
-    assert card.document_count == 0 and card.is_entrant_with_no_documents is True
-
-
 def test_the_in_scope_key_is_constrains(conn: Connection) -> None:
     assert repository.LONGLIST_IN_SCOPE_KEY == IN_SCOPE_EVIDENCE_KEY
 
@@ -664,12 +698,510 @@ def test_an_option_added_since_the_build_reads_with_an_empty_profile(conn: Conne
     card = repository.option_out(conn, walk.task_id, late)
     assert card is not None
     assert card.document_count == 0 and card.documents == []
-    assert card.evidence.where_tried.model_dump() == {
-        "where": 0,
-        "comparable": 0,
-        "other": 0,
-        "unknown": 0,
+
+
+# --- task 046: the read models gain runner-up, tried on, variants, thinning --------
+
+
+def test_the_card_and_list_serve_no_runner_up_lever_type(conn: Connection) -> None:
+    """Task 046, amendment 3 (B13): the runner-up stays in provenance, off the read models."""
+    walk = _Walk(conn)
+    walk.option("Youth guarantee", origin="added_by_you")
+    doc = walk.doc()
+    walk.record(doc, "youth guarantee")
+    walk.rollup(walk.scope_id, [doc])
+    backend = _Scripted(
+        routes={"youth guarantee": ("Youth guarantee", False)},
+        typings={"Youth guarantee": {"runner_up_lever_type": "inform"}},
+    )
+    walk.build(backend)
+    _profile(walk, backend)
+    option_id = walk.options()["Youth guarantee"].option_id
+
+    listed = repository.longlist_out(conn, walk.task_id)
+    assert listed is not None
+    summary = next(o for o in listed.options if o.option_id == option_id)
+    assert "runner_up_lever_type" not in summary.model_dump()
+
+    card = repository.option_out(conn, walk.task_id, option_id)
+    assert card is not None
+    assert "runner_up_lever_type" not in card.model_dump()
+
+
+def test_the_card_and_list_serve_the_lever_reason(conn: Connection) -> None:
+    """R29: the reason for the lever type is read like the runner-up."""
+    walk = _Walk(conn)
+    walk.option("Youth guarantee", origin="added_by_you")
+    walk.option("No reason", origin="added_by_you")
+    doc = walk.doc()
+    walk.record(doc, "youth guarantee")
+    walk.rollup(walk.scope_id, [doc])
+    backend = _Scripted(
+        routes={"youth guarantee": ("Youth guarantee", False)},
+        typings={
+            "Youth guarantee": {"lever_reason": "The state pays employers to hire."},
+            "No reason": {"lever_reason": ""},
+        },
+    )
+    walk.build(backend)
+    _profile(walk, backend)
+    options = walk.options()
+
+    listed = repository.longlist_out(conn, walk.task_id)
+    assert listed is not None
+    by_id = {o.option_id: o for o in listed.options}
+    assert by_id[options["Youth guarantee"].option_id].lever_reason == (
+        "The state pays employers to hire."
+    )
+    assert by_id[options["No reason"].option_id].lever_reason is None
+
+    card = repository.option_out(conn, walk.task_id, options["Youth guarantee"].option_id)
+    assert card is not None
+    assert card.lever_reason == "The state pays employers to hire."
+
+
+def test_the_list_serves_title_only_and_the_thinning_counts(conn: Connection) -> None:
+    """The read model's field names, mapped from the component's own (task 046):
+    ``thinned_mentioned`` = ``mentioned_without_features_or_outcome``,
+    ``thinned_collapsed`` = ``same_name_in_document``,
+    ``thinned_capped`` = ``over_document_cap``.
+    """
+    walk = _Walk(conn)
+    walk.option("Youth guarantee", origin="added_by_you")
+    bare, collapse, crowded = walk.doc(), walk.doc(), walk.doc()
+    # Rule 1: a bare mention goes; a mention with a feature or an outcome stays.
+    walk.record(bare, "passing mention", role="mentioned")
+    walk.record(bare, "featured mention", role="mentioned", design_features=["free"])
+    walk.record(bare, "outcome mention", role="mentioned", outcome="employment")
+    # Rule 2: the same folded name in one document collapses to the highest role.
+    walk.record(collapse, "Youth guarantee", role="described")
+    walk.record(collapse, "youth  GUARANTEE", role="evaluated")
+    # Rule 3: at most eight a document, by role; the two mentions go.
+    for i in range(7):
+        walk.record(crowded, f"programme {i}", role="evaluated")
+    walk.record(crowded, "recommended one", role="recommended")
+    for i in range(2):
+        walk.record(crowded, f"mentioned {i}", role="mentioned", outcome="x")
+    walk.rollup(walk.scope_id, [bare, collapse, crowded], counts={"title_only": 5})
+    walk.build(_Scripted(routes={"youth GUARANTEE": ("Youth guarantee", False)}))
+
+    listed = repository.longlist_out(conn, walk.task_id)
+    assert listed is not None
+    counts = listed.counts
+    assert counts.title_only == 5
+    assert counts.thinned_mentioned == 1
+    assert counts.thinned_collapsed == 1
+    assert counts.thinned_capped == 2
+
+
+def test_the_list_serves_every_lever_type_taxonomy_version(conn: Connection) -> None:
+    walk = _Walk(conn)
+    walk.option("Youth guarantee", origin="added_by_you")
+    walk.build(_Scripted())
+    listed = repository.longlist_out(conn, walk.task_id)
+    assert listed is not None
+    by_version = lever_types_by_version()
+    assert set(listed.lever_type_definitions_by_version) == set(by_version)
+    for version, levers in by_version.items():
+        assert [d.key for d in listed.lever_type_definitions_by_version[version]] == [
+            lever.key for lever in levers
+        ]
+        assert [d.definition for d in listed.lever_type_definitions_by_version[version]] == [
+            lever.definition for lever in levers
+        ]
+
+
+def test_a_longlist_walk_s_child_search_never_hides_the_option_s_membership_evidence(
+    conn: Connection,
+) -> None:
+    """Item 9: a longlist walk's own child option search is acquire-only
+    (task 046 phase 2) — it has no screen rows or records of its own. The
+    option card and the list still read the option's evidence through its
+    memberships in the longlist scope, never through that child search
+    (``_added_searches`` only ever reads a *parentless* targeted scope)."""
+    walk = _Walk(conn)
+    walk.option("Youth guarantee", origin="added_by_you")
+    doc = walk.doc()
+    walk.record(doc, "youth guarantee")
+    walk.rollup(walk.scope_id, [doc])
+    walk.build(_Scripted(routes={"youth guarantee": ("Youth guarantee", False)}))
+    option_id = walk.options()["Youth guarantee"].option_id
+    # The child acquire-only search this option got during the build: a
+    # parented targeted scope naming it, with no screen or extraction rows.
+    walk.child_scope(option_id)
+
+    card = repository.option_out(conn, walk.task_id, option_id)
+    assert card is not None
+    assert card.search_pending is False
+    assert card.document_count == 1 and len(card.documents) == 1
+
+    listed = repository.longlist_out(conn, walk.task_id)
+    assert listed is not None
+    summary = next(o for o in listed.options if o.option_id == option_id)
+    assert summary.search_pending is False and summary.document_count == 1
+
+
+def test_an_old_stored_longlist_reads_with_every_new_field_defaulted(conn: Connection) -> None:
+    """Item 8: a longlist stored before this slice has no ``tried_on``,
+    ``examples``, thinning counts or ``runner_up`` and was typed under
+    ``lever_types_v1`` — every new field falls back to its default."""
+    walk = _Walk(conn)
+    option_id = walk.option("Youth guarantee", origin="added_by_you")
+    doc = walk.doc()
+    walk.record(doc, "youth guarantee")
+    walk.rollup(walk.scope_id, [doc])
+    run_id, _ = walk.build(_Scripted(routes={"youth guarantee": ("Youth guarantee", False)}))
+    stored = walk.result(run_id)
+    old_coverage = {
+        oid: {
+            k: v
+            for k, v in cov.items()
+            if k not in ("tried_on", "examples", "folded", "unit_tags", "setting_repairs")
+        }
+        for oid, cov in stored.coverage.items()
     }
+    old_provenance = {k: v for k, v in stored.provenance.items() if k != "runner_up"}
+    old_provenance["thinning"] = {}
+    old_provenance["taxonomy_version"] = "lever_types_v1"
+    old_counts = {k: v for k, v in stored.counts.items() if k != "title_only"}
+    conn.execute(
+        update(longlist_result)
+        .where(longlist_result.c.run_id == run_id)
+        .values(coverage=old_coverage, provenance=old_provenance, counts=old_counts)
+    )
+
+    listed = repository.longlist_out(conn, walk.task_id)
+    assert listed is not None
+    assert listed.taxonomy_version == "lever_types_v1"
+    assert listed.counts.title_only == 0
+    assert listed.counts.thinned_mentioned == 0
+    assert listed.counts.thinned_collapsed == 0
+    assert listed.counts.thinned_capped == 0
+    summary = next(o for o in listed.options if o.option_id == option_id)
+    assert summary.option_id == option_id
+
+    card = repository.option_out(conn, walk.task_id, option_id)
+    assert card is not None
+    assert card.also_found_as == []
+
+
+def test_the_signal_and_the_document_lines_carry_the_record_fields(conn: Connection) -> None:
+    """Task 046, amendment 4 (R76, R81; S29, S30): the build writes the signal with
+    the plan's Where country first; each document line takes its first member
+    record by role order, the kinds through the stored folds, the plan
+    outcome's words when the tag names one; a linked finding has no record."""
+    from datetime import timedelta
+
+    walk = _Walk(conn)
+    option_id = walk.option("Youth guarantee", origin="added_by_you")
+    fingerprint = _current_fingerprint(walk)
+    both, scotland = walk.doc({"title": "Both records"}), walk.doc({"title": "In Scotland"})
+    danish = [walk.doc({"title": f"Danish {i}"}) for i in range(4)]
+    sers = {
+        doc: _extraction(walk, doc, fingerprint=fingerprint) for doc in [both, scotland, *danish]
+    }
+    earlier = now() - timedelta(hours=1)
+    # A described record written first, an evaluated one later: role order wins.
+    _record_under(
+        walk,
+        sers[both],
+        "kickstart",
+        role="described",
+        created_at=earlier,
+        programme_name="Kickstart",
+        unit="school leavers",
+        outcome="wages",
+        study_geography="London",
+        study_country="United Kingdom",
+    )
+    _record_under(
+        walk,
+        sers[both],
+        "youth guarantee",
+        programme_name="  Youth   Guarantee ",
+        unit="16 to 24 Year Olds",
+        outcome="neet status",
+        outcome_tag="The  NEET rate",
+        study_geography="Leeds",
+        study_country="United Kingdom",
+    )
+    _record_under(
+        walk,
+        sers[scotland],
+        "youth guarantee",
+        unit="employers",
+        outcome="earnings",
+        outcome_tag="other",
+        study_geography="Scotland",
+        study_country="UK",
+    )
+    for doc in danish:
+        _record_under(walk, sers[doc], "youth guarantee", study_country="Denmark")
+    _rollup_of(walk, walk.scope_id, sers)
+    _linked_deep_task(conn, walk, "youth guarantee")
+    run_id, _ = walk.build(
+        _Scripted(
+            routes={
+                "youth guarantee": ("Youth guarantee", False),
+                "kickstart": ("Youth guarantee", False),
+            }
+        )
+    )
+    stored = walk.result(run_id)
+    conn.execute(
+        update(longlist_result)
+        .where(longlist_result.c.run_id == run_id)
+        .values(
+            option_profile={
+                **(stored.option_profile or {}),
+                "folds": {
+                    "tried_on": {"16 to 24 year olds": "18-24 year-olds"},
+                    "measures": {"Earnings": "income"},
+                },
+            }
+        )
+    )
+
+    listed = repository.longlist_out(conn, walk.task_id)
+    assert listed is not None
+    summary = next(o for o in listed.options if o.option_id == option_id)
+    # The Where (United Kingdom) leads although Denmark has more documents;
+    # "UK", "United Kingdom" and the linked finding's "Scotland" (no country:
+    # the geography is the country level) are one country.
+    assert [(c.country, c.documents) for c in summary.evaluated_countries] == [
+        ("United Kingdom", 3),
+        ("Denmark", 4),
+    ]
+    assert summary.outcomes_evaluated == 1 and summary.outcomes_total == 1
+
+    card = repository.option_out(conn, walk.task_id, option_id)
+    assert card is not None
+    assert card.evaluated_countries == summary.evaluated_countries
+    assert (card.outcomes_evaluated, card.outcomes_total) == (1, 1)
+    lines = {d.title: d for d in card.documents}
+    first = lines["Both records"]
+    assert (
+        first.programme_name,
+        first.tried_on_kind,
+        first.measured,
+        first.place_detail,
+        first.records_count,
+    ) == ("Youth Guarantee", "18-24 year-olds", "the NEET rate", "Leeds", 2)
+    second = lines["In Scotland"]
+    # "Scotland" is the United Kingdom's own name: no place below it (S32);
+    # an unmapped unit keeps its word; a tag of "other" reads the Measures fold.
+    assert (
+        second.programme_name,
+        second.tried_on_kind,
+        second.measured,
+        second.place_detail,
+        second.records_count,
+    ) == (None, "employers", "income", None, 1)
+    assert lines["Danish 0"].measured is None and lines["Danish 0"].records_count == 1
+    # The profile step has not run: the place sentences are templates built at
+    # read time from these lines, the Where country first (task 046,
+    # amendment 4, S31; PA4-15).
+    assert [(s.place, s.sentence, s.generated, s.where) for s in card.place_sentences] == [
+        ("United Kingdom", "3 documents.", False, True),
+        ("Denmark", "4 documents.", False, False),
+    ]
+    deep = lines["A deep read"]
+    assert (
+        deep.programme_name,
+        deep.tried_on_kind,
+        deep.measured,
+        deep.place_detail,
+        deep.records_count,
+    ) == (None, None, None, None, 0)
+
+
+# --- task 046 phase 14a: the profile, the authority label, the outcome counts ------
+
+
+def _stored_profile(
+    main: str | None = "Jobcentres", second: str | None = "Schools"
+) -> dict[str, Any]:
+    lines = {
+        key: {"sentence": f"The {key} sentence.", "mark": "more" if key == "cost" else None}
+        for key in PROFILE_LINE_KEYS
+    }
+    # A mark on a fact line is never served.
+    lines["who_decides"]["mark"] = "less"
+    return {"lines": lines, "setting": {"main": main, "second": second}}
+
+
+def _profiled(
+    conn: Connection, *, profile: dict[str, Any] | None, authority: dict[str, Any] | None = None
+) -> tuple[_Walk, uuid.UUID]:
+    """One built option with a stored profile and authority entry on its design version."""
+    walk = _Walk(conn)
+    option_id = walk.option("Youth guarantee", origin="added_by_you")
+    run_id, _ = walk.build(_Scripted())
+    version = str(walk.options()["Youth guarantee"].design_version)
+    stored = walk.result(run_id)
+    judgements = {k: dict(v) for k, v in (stored.judgements or {}).items()}
+    if authority is not None:
+        judgements.setdefault(str(option_id), {}).setdefault(version, {})[
+            repository.LONGLIST_AUTHORITY_KEY
+        ] = authority
+    conn.execute(
+        update(longlist_result)
+        .where(longlist_result.c.run_id == run_id)
+        .values(
+            option_profile={str(option_id): {version: profile}} if profile is not None else {},
+            judgements=judgements,
+        )
+    )
+    return walk, option_id
+
+
+def _summary_and_card(conn: Connection, walk: _Walk, option_id: uuid.UUID) -> tuple[Any, Any]:
+    listed = repository.longlist_out(conn, walk.task_id)
+    assert listed is not None
+    card = repository.option_out(conn, walk.task_id, option_id)
+    assert card is not None
+    return next(o for o in listed.options if o.option_id == option_id), card
+
+
+def test_a_stored_profile_is_served_with_its_marks_and_settings(conn: Connection) -> None:
+    walk, option_id = _profiled(conn, profile=_stored_profile())
+    for out in _summary_and_card(conn, walk, option_id):
+        assert out.profile is not None
+        assert [line.key for line in out.profile.lines] == list(PROFILE_LINE_KEYS)
+        by_key = {line.key: line for line in out.profile.lines}
+        assert by_key["cost"].mark == "more"
+        assert by_key["time_to_set_up"].mark is None
+        assert by_key["who_decides"].mark is None and by_key["dependencies"].mark is None
+        assert out.profile.settings == ["Jobcentres", "Schools"]
+        assert out.settings == ["Jobcentres", "Schools"]
+
+
+def test_the_settings_follow_what_the_profile_names(conn: Connection) -> None:
+    walk, option_id = _profiled(conn, profile=_stored_profile(second=None))
+    assert _summary_and_card(conn, walk, option_id)[0].settings == ["Jobcentres"]
+    walk, option_id = _profiled(conn, profile=_stored_profile(main=None, second=None))
+    summary, card = _summary_and_card(conn, walk, option_id)
+    assert summary.profile is not None and summary.settings == [] == card.settings
+
+
+def test_the_summary_settings_come_from_the_profile_not_from_coverage(conn: Connection) -> None:
+    walk, option_id = _profiled(conn, profile=_stored_profile(main="Libraries", second=None))
+    summary, card = _summary_and_card(conn, walk, option_id)
+    assert summary.settings == ["Libraries"]
+    # The evidence profile has no record-level settings (B13).
+    assert "settings" not in card.evidence.model_dump()
+
+
+def test_an_option_without_a_profile_entry_or_with_an_incomplete_one_has_none(
+    conn: Connection,
+) -> None:
+    walk, option_id = _profiled(conn, profile=None)
+    summary, card = _summary_and_card(conn, walk, option_id)
+    assert summary.profile is None and card.profile is None and summary.settings == []
+    incomplete = _stored_profile()
+    del incomplete["lines"]["coordination"]
+    walk, option_id = _profiled(conn, profile=incomplete)
+    assert _summary_and_card(conn, walk, option_id)[0].profile is None
+    blank = _stored_profile()
+    blank["lines"]["cost"]["sentence"] = "  "
+    walk, option_id = _profiled(conn, profile=blank)
+    assert _summary_and_card(conn, walk, option_id)[1].profile is None
+
+
+def test_the_authority_label_is_served_and_is_not_a_judgement(conn: Connection) -> None:
+    entry = {
+        "label": "needs_action_by",
+        "body": "the Treasury",
+        "reason": "It sets the funding.",
+        "consideration_text": "Nothing here.",
+    }
+    walk, option_id = _profiled(conn, profile=None, authority=entry)
+    for out in _summary_and_card(conn, walk, option_id):
+        assert out.authority is not None
+        assert out.authority.model_dump() == {
+            "label": "needs_action_by",
+            "body": "the Treasury",
+            "reason": "It sets the funding.",
+        }
+    card = _summary_and_card(conn, walk, option_id)[1]
+    assert repository.LONGLIST_AUTHORITY_KEY not in [j.constraint_id for j in card.judgements]
+
+
+def test_an_option_without_an_authority_entry_has_none(conn: Connection) -> None:
+    walk, option_id = _profiled(conn, profile=None)
+    for out in _summary_and_card(conn, walk, option_id):
+        assert out.authority is None
+
+
+def test_the_ambition_is_less_more_or_null(conn: Connection) -> None:
+    walk, option_id = _profiled(conn, profile=None)
+    for stored, served in (("less", "less"), ("more", "more"), (None, None), ("incremental", None)):
+        conn.execute(update(option).where(option.c.option_id == option_id).values(ambition=stored))
+        summary, card = _summary_and_card(conn, walk, option_id)
+        assert summary.ambition == served and card.ambition == served
+
+
+def test_the_outcome_counts_are_served_on_the_evidence_profile(conn: Connection) -> None:
+    walk, option_id = _profiled(conn, profile=None)
+    latest = repository._latest_longlist_row(conn, walk.task_id)
+    assert latest is not None
+    run_id = latest.run_id
+    stored = walk.result(run_id)
+    coverage = {oid: dict(cov) for oid, cov in stored.coverage.items()}
+    coverage[str(option_id)]["outcome_counts"] = {
+        "evaluating_documents": 3,
+        "by_outcome": [
+            {"outcome": "Employment", "documents": 2, "evaluated": 1},
+            {"outcome": "Wellbeing", "documents": 0, "evaluated": 0},
+        ],
+    }
+    conn.execute(
+        update(longlist_result).where(longlist_result.c.run_id == run_id).values(coverage=coverage)
+    )
+    card = repository.option_out(conn, walk.task_id, option_id)
+    assert card is not None
+    assert card.evidence.outcome_counts.model_dump() == {
+        "evaluating_documents": 3,
+        "by_outcome": [
+            {"outcome": "Employment", "documents": 2, "evaluated": 1},
+            {"outcome": "Wellbeing", "documents": 0, "evaluated": 0},
+        ],
+    }
+    late = walk.option("Wage subsidy", origin="added_by_you")
+    late_card = repository.option_out(conn, walk.task_id, late)
+    assert late_card is not None
+    assert late_card.evidence.outcome_counts.model_dump() == {
+        "evaluating_documents": 0,
+        "by_outcome": [],
+    }
+
+
+def test_also_found_as_joins_a_merged_duplicate_and_a_folded_seed(conn: Connection) -> None:
+    """R63: the folded seeds' names (coverage ``folded``) join the merged duplicates',
+    de-duplicated on the case-folded name, in the card and the list."""
+    walk, option_id = _profiled(conn, profile=None)
+    walk.option("Jobs guarantee", merged_into_option_id=option_id)
+    latest = repository._latest_longlist_row(conn, walk.task_id)
+    assert latest is not None
+    stored = walk.result(latest.run_id)
+    coverage = {oid: dict(cov) for oid, cov in stored.coverage.items()}
+    coverage[str(option_id)]["folded"] = ["jobs guarantee", "Apprenticeship grants"]
+    conn.execute(
+        update(longlist_result)
+        .where(longlist_result.c.run_id == latest.run_id)
+        .values(coverage=coverage)
+    )
+    summary, card = _summary_and_card(conn, walk, option_id)
+    assert summary.also_found_as == ["Jobs guarantee", "Apprenticeship grants"]
+    assert card.also_found_as == ["Jobs guarantee", "Apprenticeship grants"]
+
+
+def test_the_longlist_has_no_ambition_bands(conn: Connection) -> None:
+    walk, _ = _profiled(conn, profile=None)
+    listed = repository.longlist_out(conn, walk.task_id)
+    assert listed is not None
+    assert "ambition_bands" not in type(listed).model_fields
+    assert "ambition_bands" not in listed.model_dump()
 
 
 # --- the buttons -------------------------------------------------------------------
@@ -1001,9 +1533,23 @@ def test_an_added_option_reads_its_own_search_until_the_next_build(conn: Connect
     other = walk.doc({"title": "A Danish wage subsidy"})
     walk.classify(first, RCT, 4)
     walk.classify(twin, RCT, 4)
-    walk.record(first, "wage subsidy", study_geography="England", setting="Employers")
-    walk.record(twin, "wage subsidy", study_geography="United Kingdom")
-    walk.record(other, "wage subsidy", role="described", study_geography="Denmark")
+    walk.record(
+        first,
+        "wage subsidy",
+        study_geography="England",
+        study_country="United Kingdom",
+        setting="Employers",
+    )
+    walk.record(
+        twin, "wage subsidy", study_geography="United Kingdom", study_country="united kingdom"
+    )
+    walk.record(
+        other,
+        "wage subsidy",
+        role="described",
+        study_geography="Denmark",
+        study_country="Denmark",
+    )
     walk.record(other, "unemployment benefit", role="comparator")
     walk.rollup(scope_id, [first, twin, other])
     conn.execute(
@@ -1018,22 +1564,32 @@ def test_an_added_option_reads_its_own_search_until_the_next_build(conn: Connect
     assert card.is_entrant_with_no_documents is False
     assert card.document_count == 2  # the DOI twins count once
     assert card.evaluated_count == 1
-    assert card.where_tried.model_dump() == {
-        "where": 1,
-        "comparable": 1,
-        "other": 0,
-        "unknown": 0,
-    }
+    # The twins' countries differ in case only: one country (R59); a geography
+    # that is the record's own country is no place below (amendment 4, S32).
+    # The evidence signal on the added option's path too (amendment 4, S29;
+    # PA4-10): the describing Danish document gives no country.
+    assert [c.model_dump() for c in card.evaluated_countries] == [
+        {"country": "United Kingdom", "documents": 1}
+    ]
+    assert card.outcomes_evaluated == 0 and card.outcomes_total == 1
     assert card.evidence.by_tier == {"Strong": 1, "not rated": 1}
-    assert card.settings == ["Employers"]
-    # One per record, never collapsed; the comparator is not a document.
+    # An added option has no profile yet (R41): its list setting is empty; the
+    # evidence profile keeps the records' own words.
+    assert card.settings == []
+    assert "settings" not in card.evidence.model_dump()
+    # One per document, the DOI twins collapsed; the comparator is not a document.
     assert sorted(d.title for d in card.documents) == [
         "A Danish wage subsidy",
         "Wage subsidy trial",
-        "Wage subsidy trial (preprint)",
     ]
     trial = next(d for d in card.documents if d.title == "Wage subsidy trial")
-    assert trial.tier == "Strong" and trial.where_tried_group == "where"
+    assert trial.tier == "Strong" and trial.place == "United Kingdom"
+    danish = next(d for d in card.documents if d.title == "A Danish wage subsidy")
+    assert danish.place == "Denmark"
+    # The document lines' record fields (amendment 4, S30): the twins' two
+    # records together; the comparator is no record of the document.
+    assert trial.records_count == 2 and danish.records_count == 1
+    assert trial.place_detail is None and danish.place_detail is None
     listed = repository.longlist_out(conn, walk.task_id)
     assert listed is not None
     summary = next(o for o in listed.options if o.option_id == added)
@@ -1041,6 +1597,111 @@ def test_an_added_option_reads_its_own_search_until_the_next_build(conn: Connect
     # A build-assigned option is untouched by the rule.
     seeded = next(o for o in listed.options if o.name == "Youth guarantee")
     assert seeded.search_pending is False
+
+
+def _added_option_search(conn: Connection) -> tuple[_Walk, uuid.UUID, uuid.UUID]:
+    """An added option with a succeeded option search; returns the walk, option and scope."""
+    walk = _Walk(conn)
+    walk.option("Youth guarantee", origin="added_by_you")
+    walk.build(_Scripted())
+    added = walk.option("Wage subsidy", origin="added_by_you")
+    scope_id = uuid.uuid4()
+    conn.execute(
+        evidence_scope.insert().values(
+            evidence_scope_id=scope_id,
+            task_id=walk.task_id,
+            intent="Wage subsidy.",
+            context={"capability": "options_scoping", "option_id": str(added)},
+            created_at=now(),
+            purpose="targeted",
+            plan_id=walk.plan_id,
+        )
+    )
+    conn.execute(
+        capability_run.insert().values(
+            capability_run_id=uuid.uuid4(),
+            task_id=walk.task_id,
+            evidence_scope_id=scope_id,
+            capability="options_scoping",
+            plan_id=walk.plan_id,
+            plan_version=2,
+            status="succeeded",
+            started_at=now(),
+            ended_at=now(),
+            parent_capability_run_id=None,
+        )
+    )
+    return walk, added, scope_id
+
+
+def test_the_documents_are_one_per_document_best_first_with_a_year(conn: Connection) -> None:
+    """Task 046, amendment 3 (R67): DOI twins collapse to one entry with the highest
+    role; evaluated first, then quality descending; year from the metadata; entities
+    decoded in the title."""
+    walk, added, scope_id = _added_option_search(conn)
+    first = walk.doc({"title": "Wage subsidy trial", "doi": "10.9/ws", "publication_year": 2021})
+    twin = walk.doc({"title": "Wage subsidy trial (preprint)", "doi": "https://doi.org/10.9/WS"})
+    strong = walk.doc({"title": "Strong description", "publication_date": "2018-05-01"})
+    weak = walk.doc({"title": "Weak description", "publication_year": 2010})
+    entity = walk.doc({"title": "R&amp;D credits", "publication_year": 2019})
+    for doc, score in ((first, 3), (twin, 3), (strong, 5), (weak, 2), (entity, 5)):
+        walk.classify(doc, RCT, score)
+    walk.record(first, "wage subsidy", role="mentioned")
+    walk.record(twin, "wage subsidy", role="evaluated")
+    walk.record(strong, "wage subsidy", role="described")
+    walk.record(weak, "wage subsidy", role="described")
+    walk.record(entity, "wage subsidy", role="described")
+    walk.rollup(scope_id, [first, twin, strong, weak, entity])
+
+    card = repository.option_out(conn, walk.task_id, added)
+    assert card is not None
+    assert [(d.title, d.role, d.year) for d in card.documents] == [
+        ("Wage subsidy trial", "evaluated", 2021),
+        ("R&D credits", "described", 2019),
+        ("Strong description", "described", 2018),
+        ("Weak description", "described", 2010),
+    ]
+    assert card.documents[0].task_source_snapshot_id in {first, twin}
+    # An added option reads template sentences from its own search's lines
+    # until the profile step runs (task 046, amendment 4, S31; PA4-15): its one
+    # evaluating document states no country.
+    assert [(s.place, s.sentence, s.generated, s.where) for s in card.place_sentences] == [
+        ("No single place", "1 moderate trial.", False, False)
+    ]
+
+
+def test_a_document_with_no_row_here_takes_its_twin_s_own_row() -> None:
+    from policy_atlas.api.readmodels.repository import _collapse_documents
+
+    own = uuid.uuid4()
+
+    def entry(
+        tss_id: uuid.UUID | None,
+        role: str,
+        key: str,
+        place: tuple[str | None, str | None] = (None, None),
+    ) -> Any:
+        doc = OptionDocumentOut(
+            task_source_snapshot_id=tss_id, title="Same paper", role=cast(Any, role)
+        )
+        return (key, doc, None, place, None)
+
+    out = _collapse_documents(
+        [entry(None, "evaluated", "doi:10.1/x"), entry(own, "mentioned", "doi:10.1/x")]
+    )
+    assert len(out) == 1
+    assert out[0].task_source_snapshot_id == own and out[0].role == "evaluated"
+    assert out[0].place == "not stated"
+    only = _collapse_documents([entry(None, "described", "doi:10.1/y", (None, "a town"))])
+    assert only[0].task_source_snapshot_id is None and only[0].place == "other"
+    # A document's place reads all its records (R72): two countries between them.
+    twins = _collapse_documents(
+        [
+            entry(None, "evaluated", "doi:10.1/z", ("Germany", "Hamburg")),
+            entry(own, "described", "doi:10.1/z", ("France", None)),
+        ]
+    )
+    assert twins[0].place == "multiple countries"
 
 
 # --- step-7 fixes (A4, A5, S2, F3) ----------------------------------------------------
@@ -1190,3 +1851,10 @@ def test_an_option_from_the_evidence_search_names_its_report_section(
     card = repository.option_out(conn, walk.task_id, drawn)
     assert card is not None
     assert card.from_section == "What works for employers"
+
+
+def test_the_list_and_card_serve_no_where_tried_or_tried_on() -> None:
+    """Task 046, amendment 4 (R84; S36, PA4-11): the two facet fields are gone
+    from the list's options and the card; the coverage keys stay stored."""
+    for model in (OptionSummaryOut, OptionOut):
+        assert not {"where_tried", "tried_on"} & set(model.model_fields)

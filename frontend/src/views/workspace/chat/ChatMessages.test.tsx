@@ -177,6 +177,31 @@ describe("ChatMessages", () => {
     expect(screen.queryByText("moderate")).not.toBeInTheDocument();
   });
 
+  // Task 046, contract item 7: the "abstract only" label in the sheet's
+  // citation block, gated on text_basis alone (honest absence otherwise).
+  it("shows the abstract-only label in the citation sheet when text_basis is abstract_only", async () => {
+    mockGet.mockResolvedValueOnce({ data: { context: "context text", year: 2024 }, error: undefined });
+    renderChat([
+      turn({
+        citations: [{ id: "chunk-1", n: 1, quote: "Costs fell", state: "verdict:tier_2", text_basis: "abstract_only" }],
+      }),
+    ]);
+    const [marker] = screen.getAllByRole("button", { name: "[1]" });
+    await userEvent.setup().click(marker);
+    expect(await screen.findByText("abstract only")).toBeInTheDocument();
+  });
+
+  it("omits the abstract-only label in the citation sheet when text_basis is full_text", async () => {
+    mockGet.mockResolvedValueOnce({ data: { context: "context text", year: 2024 }, error: undefined });
+    renderChat([
+      turn({ citations: [{ id: "chunk-1", n: 1, quote: "Costs fell", state: "verdict:tier_2", text_basis: "full_text" }] }),
+    ]);
+    const [marker] = screen.getAllByRole("button", { name: "[1]" });
+    await userEvent.setup().click(marker);
+    await screen.findByText("Where this comes from");
+    expect(screen.queryByText("abstract only")).not.toBeInTheDocument();
+  });
+
   it("keeps a cancelled turn's inline markers inert — clickable but no verdict tooltip promised", async () => {
     renderChat([turn({ id: "t5", client_turn_id: "ct5", status: "cancelled", stopped_before_evidence_check: true })]);
     const [marker] = screen.getAllByRole("button", { name: "[1]" });

@@ -17,12 +17,17 @@ The chain it compiles to is chosen by the intent record's ``purpose`` (task
 - ``baseline`` (or no purpose): ``acquire → screen_abstract → classify →
   appraise → ingest_full_text → synthesise``, with synthesise in baseline mode;
 - ``longlist``: ``inherit → suggest → acquire → screen_abstract → classify →
-  appraise → ingest_full_text → extract_interventions → longlist →
-  constrain`` — the option searches are dispatched and joined by the runner,
-  not by a component;
-- ``targeted`` (one option search, a child walk): ``acquire →
-  screen_abstract → classify → appraise → ingest_full_text →
-  extract_interventions``.
+  appraise → extract_interventions → longlist → option_profile → constrain →
+  theme`` — the
+  option searches are dispatched and joined (before ``screen_abstract``) by
+  the runner, not by a component (task 046, ADR 0040 decision 1);
+- ``targeted``: an option search a longlist walk dispatched carries
+  ``acquire_only: true`` in its intent record's context and runs ``acquire``
+  alone; the verb *add*'s parentless search runs ``acquire →
+  screen_abstract → classify → appraise → extract_interventions``.
+
+No longlist or targeted chain ingests full text (task 046, R13): task 3 fetches
+it for shortlisted options.
 
 The shortlist is described in :data:`SCOPING_STEPS` and not composed.
 
@@ -36,7 +41,8 @@ the registry's ``options_scoping`` entry.
 from __future__ import annotations
 
 import uuid
-from typing import TYPE_CHECKING, Annotated, Any, Literal, Self
+from collections.abc import Mapping
+from typing import TYPE_CHECKING, Annotated, Any, Literal, Self, get_args
 
 import structlog
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -84,21 +90,54 @@ log = structlog.get_logger()
 #: Where one plan field came from. Shown to the user beside the field.
 Origin = Literal["from_your_question", "assumed", "your_call"]
 
-#: What a constraint sentence is *about* — the option's design, what the option
-#: does or costs, or where evidence may come from.
-ConstraintKind = Literal["requirement", "preference", "evidence_restriction"]
+#: What a constraint sentence is *about* (task 046, R34): what the option is or
+#: must not be (``boundary``; the screen calls it a requirement), what the
+#: adopter has or lacks, who can act or how far evidence from elsewhere applies
+#: (``consideration``; it never excludes an option), what the option achieves
+#: (``preference``), or where evidence may come from.
+ConstraintKind = Literal["boundary", "consideration", "preference", "evidence_restriction"]
 
 #: When a constraint bites. Fixed by the kind, never chosen independently.
 CheckedAt = Literal["longlist", "assessment", "retrieval"]
 
 #: kind → the one stage it is checked at (contract § Plan object). A constraint
 #: typed one way and checked at another silently changes what the run excludes,
-#: so the pairing is validated rather than trusted.
+#: so the pairing is validated rather than trusted. A consideration is checked
+#: at assessment, with no stage of its own (B3).
 CHECKED_AT_BY_KIND: dict[ConstraintKind, CheckedAt] = {
-    "requirement": "longlist",
+    "boundary": "longlist",
+    "consideration": "assessment",
     "preference": "assessment",
     "evidence_restriction": "retrieval",
 }
+
+#: The eight lines of an option's profile, in the order they are shown
+#: (task 046, R37). A consideration's ``aspect`` names one of them, or
+#: ``transferability`` (B1).
+PROFILE_LINE_KEYS: tuple[str, ...] = (
+    "cost",
+    "time_to_set_up",
+    "time_to_effect",
+    "workforce",
+    "who_decides",
+    "dependencies",
+    "coordination",
+    "delivery_complexity",
+)
+
+#: The line a consideration speaks of: one of :data:`PROFILE_LINE_KEYS`, or
+#: ``transferability`` (B1). A guard test pins the two together.
+ConsiderationAspect = Literal[
+    "cost",
+    "time_to_set_up",
+    "time_to_effect",
+    "workforce",
+    "who_decides",
+    "dependencies",
+    "coordination",
+    "delivery_complexity",
+    "transferability",
+]
 
 #: The scoping steering lattice's point names. Pinned here (not imported from
 #: the registry, which imports this module); ``test_scoping_plan.py`` asserts
@@ -178,8 +217,12 @@ SCOPING_SPINE: tuple[str, ...] = (
 )
 
 #: The longlist walk's chain, with each step's spine flag (A6, P16b; owner:
-#: "inherit non-spine"). ``inherit`` and ``suggest`` degrade the walk when they
-#: fail; every other step fails it.
+#: "inherit non-spine"). ``inherit``, ``suggest`` and ``theme`` degrade the walk
+#: when they fail; every other step fails it. ``option_profile`` runs between
+#: ``longlist`` and ``constrain``: ``longlist`` makes the list,
+#: ``option_profile`` writes what is said about each option (task 046, R37).
+#: ``theme`` runs after ``constrain`` has committed, so its failure cannot
+#: touch the verdicts (task 046, R28). No step ingests full text (R13).
 LONGLIST_CHAIN: tuple[tuple[str, bool], ...] = (
     ("inherit", False),
     ("suggest", False),
@@ -187,22 +230,33 @@ LONGLIST_CHAIN: tuple[tuple[str, bool], ...] = (
     ("screen_abstract", True),
     ("classify", True),
     ("appraise", True),
-    ("ingest_full_text", True),
     ("extract_interventions", True),
     ("longlist", True),
+    ("option_profile", True),
     ("constrain", True),
+    ("theme", False),
 )
 
-#: One option search's chain (a child walk). Every step is spine *for the
-#: child*; the child's failure only degrades its parent (the runner's join).
+#: The verb *add*'s option search (a targeted walk with no parent). Every step
+#: is spine for that walk. Its intent is the option's design (task 046, AM1).
 TARGETED_CHAIN: tuple[str, ...] = (
     "acquire",
     "screen_abstract",
     "classify",
     "appraise",
-    "ingest_full_text",
     "extract_interventions",
 )
+
+#: An option search a longlist walk dispatched (task 046, R18, AM4): it only
+#: acquires. Its documents join the task's pool, and the longlist scope's one
+#: screen judges them after the runner's join. A failed child only degrades
+#: its parent.
+ACQUIRE_ONLY_CHAIN: tuple[str, ...] = ("acquire",)
+
+#: The intent-record context key that marks a longlist walk's option search
+#: (task 046, AM4). Written by ``option_search.run_option_search`` when the
+#: walk has a parent; read by :func:`compose_scoping`.
+ACQUIRE_ONLY_KEY = "acquire_only"
 
 #: The three steps the plan document shows. Code-supplied, never authored by
 #: the Task Agent: only the first runs in this slice, and a model that could
@@ -271,22 +325,26 @@ class ScopingConstraint(BaseModel):
     """One constraint or preference, typed by what it is about.
 
     The retrieval fields (``country_group``, the publication-date bounds,
-    ``languages``) belong to an evidence restriction alone; a requirement or a
-    preference carrying them would claim to filter retrieval and would not.
+    ``languages``) belong to an evidence restriction alone; any other kind
+    carrying them would claim to filter retrieval and would not.
 
     Args:
         text: The user's ask, in their words or a plain paraphrase.
         kind: What the constraint is about.
         origin: Where it came from.
         checked_at: When it bites. Pinned to ``kind``.
+        aspect: The line a consideration speaks of (R34, B1). Required on a
+            consideration, ``None`` on every other kind.
+        hard: True on a consideration that states a limit (an amount, a
+            date, "only"). False on every other kind.
         country_group: Source-origin restriction, as the ES takes it.
         published_after: ISO date floor for a year restriction.
         published_before: ISO date ceiling for a year restriction.
         languages: Language names. **Stored and shown as not yet applied at
             retrieval** — the ES search grammar has no language filter (C8).
-        setting: True only on a requirement that names the delivery setting
+        setting: True only on a boundary that names the delivery setting
             the options must be delivered through (D21). The longlist intent
-            carries such a requirement as its S; nothing else reads a setting.
+            carries such a boundary as its S; nothing else reads a setting.
         default: The marker of a code-minted default constraint (D22), or
             ``None`` for a constraint the user asked for. Only the default
             transferability preference carries one in this slice.
@@ -298,6 +356,8 @@ class ScopingConstraint(BaseModel):
     kind: ConstraintKind
     origin: Origin
     checked_at: CheckedAt
+    aspect: ConsiderationAspect | None = None
+    hard: bool = False
     country_group: CountryGroup | None = None
     published_after: str | None = None
     published_before: str | None = None
@@ -343,7 +403,7 @@ class ScopingConstraint(BaseModel):
 
     @model_validator(mode="after")
     def validate_kind_pairing(self) -> Self:
-        """Pin ``checked_at`` to ``kind`` and fence the retrieval fields.
+        """Pin ``checked_at`` to ``kind`` and fence the kind-bound fields.
 
         Returns:
             The validated constraint.
@@ -351,11 +411,22 @@ class ScopingConstraint(BaseModel):
         Raises:
             ValueError: If ``checked_at`` does not match ``kind``, a
                 non-restriction carries a retrieval field, a setting is not a
-                requirement, or the transferability default is not a
-                preference.
+                boundary, a consideration has no aspect, another kind carries
+                an aspect or ``hard``, or the transferability default is not
+                a preference.
         """
-        if self.setting and self.kind != "requirement":
-            raise ValueError(f"only a requirement may name a setting; kind is {self.kind!r}")
+        if self.kind == "consideration":
+            if self.aspect is None:
+                raise ValueError("a consideration must name the aspect it speaks of")
+        else:
+            if self.aspect is not None:
+                raise ValueError(
+                    f"only a consideration may carry an aspect; kind is {self.kind!r}"
+                )
+            if self.hard:
+                raise ValueError(f"only a consideration may be hard; kind is {self.kind!r}")
+        if self.setting and self.kind != "boundary":
+            raise ValueError(f"only a boundary may name a setting; kind is {self.kind!r}")
         if self.default == TRANSFERABILITY_DEFAULT and self.kind != "preference":
             raise ValueError(
                 f"the transferability default is a preference; kind is {self.kind!r}"
@@ -701,11 +772,13 @@ def _constraint_from_wire(wire: ScopingConstraintWire, index: int) -> ScopingCon
         The validated constraint.
 
     Raises:
-        ValueError: If the kind, origin or checked_at is not a known value, or
-            the pairing rules reject it.
+        ValueError: If the kind, aspect, origin or checked_at is not a known
+            value, or the pairing rules reject it.
     """
     if wire.kind not in CHECKED_AT_BY_KIND:
         raise ValueError(f"constraints[{index}].kind {wire.kind!r} is not a known kind")
+    if wire.aspect is not None and wire.aspect not in get_args(ConsiderationAspect):
+        raise ValueError(f"constraints[{index}].aspect {wire.aspect!r} is not a known aspect")
     group = None
     if wire.country_group is not None:
         raw = wire.country_group.model_dump(exclude_none=True)
@@ -723,6 +796,8 @@ def _constraint_from_wire(wire: ScopingConstraintWire, index: int) -> ScopingCon
             "kind": wire.kind,
             "origin": wire.origin,
             "checked_at": wire.checked_at,
+            "aspect": wire.aspect,
+            "hard": wire.hard,
             "country_group": group,
             "published_after": wire.published_after,
             "published_before": wire.published_before,
@@ -830,6 +905,8 @@ def wire_draft_from_plan(plan: ScopingPlan) -> dict[str, Any]:
                 "kind": c["kind"],
                 "origin": c["origin"],
                 "checked_at": c["checked_at"],
+                "aspect": c.get("aspect"),
+                "hard": c.get("hard", False),
                 "country_group": (
                     {"label": group["label"], "countries": group.get("countries")}
                     if isinstance(group, dict)
@@ -1374,8 +1451,8 @@ def _longlist_directive_delta(component: str, plan: ScopingPlan) -> dict[str, An
     """Return one longlist-chain step's directive delta.
 
     The acquire carries the broad search's depth target and the evidence
-    restrictions; the screen carries the longlist screening criteria (target
-    unit, outcomes, setting when required, **no place** — D20, D21). The
+    restrictions; the screen carries the longlist screening criteria (the wide
+    target unit and the outcomes; no setting, no place — task 046, S7). The
     PICO-shaped intent itself (:func:`compile_longlist_intent`) is the
     longlist intent record's text, written by the start surface, not a
     directive. The other steps' components read no directive.
@@ -1393,9 +1470,9 @@ def _targeted_directive_delta(component: str, plan: ScopingPlan) -> dict[str, An
     The acquire carries the option search target at either depth and the
     evidence restrictions; the intent (the entrant's specified design,
     ``OptionDesign.as_intent()``) is the targeted intent record's own, written
-    by the option search tool (S2). The screen still carries the plan's
-    criteria — target unit, outcomes, setting when required, no place — so an
-    option search screens for the same problem the longlist does.
+    by the option search tool (S2). The add walk's screen carries the same two
+    plan criteria as the longlist's (task 046, AM1): the wide target unit and
+    the outcomes. An acquire-only search composes its acquire step alone.
     """
     if component == "acquire":
         return {"search": _search_directive(plan, OPTION_SEARCH_TARGET)}
@@ -1404,7 +1481,11 @@ def _targeted_directive_delta(component: str, plan: ScopingPlan) -> dict[str, An
     return {}
 
 
-def compose_scoping(plan: ScopingPlan, purpose: str | None = None) -> ComposedChain:
+def compose_scoping(
+    plan: ScopingPlan,
+    purpose: str | None = None,
+    context: Mapping[str, Any] | None = None,
+) -> ComposedChain:
     """Compose an approved scoping plan into the chain its intent record names.
 
     Args:
@@ -1412,6 +1493,11 @@ def compose_scoping(plan: ScopingPlan, purpose: str | None = None) -> ComposedCh
         purpose: The intent record's ``purpose``. ``None`` or ``"baseline"``
             compose the baseline; ``"longlist"`` and ``"targeted"`` compose
             the longlist walk's chain and one option search's chain.
+        context: The intent record's ``context``. A ``targeted`` record whose
+            context carries ``acquire_only: true`` (a longlist walk's option
+            search, task 046, AM4) composes :data:`ACQUIRE_ONLY_CHAIN`; without
+            it (the verb *add*'s search) :data:`TARGETED_CHAIN`. Ignored for
+            every other purpose.
 
     Returns:
         The composed chain. The baseline is the six-step chain ``acquire →
@@ -1450,6 +1536,8 @@ def compose_scoping(plan: ScopingPlan, purpose: str | None = None) -> ComposedCh
             ]
         )
     if purpose == TARGETED_PURPOSE:
+        acquire_only = bool(context is not None and context.get(ACQUIRE_ONLY_KEY) is True)
+        chain = ACQUIRE_ONLY_CHAIN if acquire_only else TARGETED_CHAIN
         return ComposedChain(
             steps=[
                 ComponentStep(
@@ -1457,7 +1545,7 @@ def compose_scoping(plan: ScopingPlan, purpose: str | None = None) -> ComposedCh
                     directive_delta=_targeted_directive_delta(component, plan),
                     spine=True,
                 )
-                for component in TARGETED_CHAIN
+                for component in chain
             ]
         )
     raise ValueError(f"no options-scoping chain for intent-record purpose {purpose!r}")

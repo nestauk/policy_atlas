@@ -71,3 +71,46 @@ def test_from_wire_keeps_the_features_and_drops_a_stray_assumed() -> None:
     assert design.design_features == ["an offer", "a delivery point"]
     assert design.assumed == ["a delivery point"]
     assert design.version == 1
+
+
+def test_from_wire_keeps_the_design_words_as_written() -> None:
+    """R31 holds in the prompt's words (R74): the code no longer strips a place
+    from the design (the strip was deleted on the owner's ruling, 2026-10-12)."""
+    wire = OptionDesignWire(
+        name="Employment support in Greater Manchester",
+        description="Job coaching for adults granted refugee status in Greater Manchester.",
+        design_features=[
+            "for adults granted refugee status in Greater Manchester",
+            "in Greater Manchester",
+            "a named job coach",
+        ],
+        outcomes_served=[],
+        assumed=["a named job coach"],
+    )
+    design = OptionDesign.from_wire(wire)
+    assert design.name == "Employment support in Greater Manchester"
+    assert design.description == (
+        "Job coaching for adults granted refugee status in Greater Manchester."
+    )
+    assert design.design_features == [
+        "for adults granted refugee status in Greater Manchester",
+        "in Greater Manchester",
+        "a named job coach",
+    ]
+    assert design.assumed == ["a named job coach"]
+
+
+def test_from_wire_without_a_place_is_unchanged() -> None:
+    wire = OptionDesignWire(
+        name="Youth guarantee",
+        description="An offer for every young person.",
+        design_features=["an offer within four months"],
+        outcomes_served=[],
+        assumed=[],
+    )
+    design = OptionDesign.from_wire(wire)
+    assert (design.name, design.description, design.design_features) == (
+        "Youth guarantee",
+        "An offer for every young person.",
+        ["an offer within four months"],
+    )

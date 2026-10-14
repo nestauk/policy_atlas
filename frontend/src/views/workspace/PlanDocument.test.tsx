@@ -130,7 +130,7 @@ function fullScopingPlan(overrides: Partial<ScopingPlanDraft> = {}): ScopingPlan
     constraints: [
       {
         text: "Only options a council can fund directly",
-        kind: "requirement",
+        kind: "boundary",
         origin: "your_call",
         checked_at: "longlist",
         country_group: null,
@@ -139,6 +139,8 @@ function fullScopingPlan(overrides: Partial<ScopingPlanDraft> = {}): ScopingPlan
         languages: null,
         setting: false,
         default: null,
+        aspect: null,
+        hard: false,
       },
       {
         text: "Prefer a lower cost per participant",
@@ -151,6 +153,8 @@ function fullScopingPlan(overrides: Partial<ScopingPlanDraft> = {}): ScopingPlan
         languages: null,
         setting: false,
         default: null,
+        aspect: null,
+        hard: false,
       },
       {
         text: "UK evidence only",
@@ -163,6 +167,8 @@ function fullScopingPlan(overrides: Partial<ScopingPlanDraft> = {}): ScopingPlan
         languages: ["English"],
         setting: false,
         default: null,
+        aspect: null,
+        hard: false,
       },
     ],
     your_context: [
@@ -848,6 +854,8 @@ describe("PlanDocument — options scoping, task 045 slots", () => {
     languages: null,
     setting: false,
     default: "transferability",
+    aspect: null,
+    hard: false,
   };
 
   function withSlots(overrides: Partial<ScopingPlanDraft> = {}): PlanOut {
@@ -947,5 +955,46 @@ describe("PlanDocument — options scoping, task 045 slots", () => {
     );
     expect(screen.queryByRole("button", { name: "Remove" })).toBeNull();
     expect(screen.getByText("checked at assessment · assumed")).toBeInTheDocument();
+  });
+
+  it("shows a boundary with no kind word and a consideration with its line, sentence and stated limit", () => {
+    const base = fullScopingPlan();
+    const consideration: ScopingConstraintOut = {
+      ...transferability,
+      text: "Only options a local authority can run",
+      kind: "consideration",
+      origin: "your_call",
+      default: null,
+      aspect: "who_decides",
+      hard: true,
+    };
+    mockUsePlan({ data: scopingPlanOut({ constraints: [...(base.constraints ?? []), consideration] }) });
+    renderPlan();
+    const boundaryRow = screen.getByText("Only options a council can fund directly").closest("tr");
+    expect(boundaryRow).not.toHaveTextContent("Requirement");
+    expect(boundaryRow).toHaveTextContent("Options that conflict are excluded");
+    const row = screen.getByText("Only options a local authority can run").closest("tr");
+    expect(row).toHaveTextContent("Consideration · Who decides");
+    expect(row).toHaveTextContent("Stated limit");
+    expect(row).toHaveTextContent("Each option on the longlist is labelled by who can adopt it. It excludes nothing.");
+  });
+
+  it("lists a transferability consideration directly under the default preference", () => {
+    const base = fullScopingPlan();
+    const consideration: ScopingConstraintOut = {
+      ...transferability,
+      text: "Evidence should carry to a rural county",
+      kind: "consideration",
+      default: null,
+      aspect: "transferability",
+    };
+    mockUsePlan({
+      data: scopingPlanOut({ constraints: [transferability, ...(base.constraints ?? []), consideration] }),
+    });
+    renderPlan();
+    const rows = screen.getAllByRole("row").map((r) => r.textContent ?? "");
+    const at = rows.findIndex((t) => t.includes("Transferable to United Kingdom"));
+    expect(rows[at + 1]).toContain("Evidence should carry to a rural county");
+    expect(rows[at + 1]).toContain("Kept for the assessment. It excludes nothing.");
   });
 });

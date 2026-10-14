@@ -313,12 +313,52 @@ export const CONSTRAINT_CHECKED_AT_LABEL: Record<string, string> = {
  *  "constraint kind"). One sentence per kind, never composed from parts, so
  *  it reads the same on every plan. */
 const CONSTRAINT_KIND_EFFECT: Record<ScopingConstraint["kind"], string> = {
-  requirement: "Options that conflict are excluded, with the reason shown. You can include them again.",
+  boundary: "Options that conflict are excluded, with the reason shown. You can include them again.",
+  consideration: "Kept with the plan for the shortlist and the assessment. It excludes nothing.",
   preference:
     "Checked after assessment where costs or effects are comparable. Until then, a labelled guess that sorts and never excludes.",
   evidence_restriction:
     'Other documents are set aside and counted. Known options stay, marked "no in-scope evidence" if none of their evidence is in scope.',
 };
+
+/** The consideration sentences that replace the generic one for two profile
+ *  lines (R34). */
+const CONSIDERATION_ASPECT_EFFECT: Record<string, string> = {
+  who_decides: "Each option on the longlist is labelled by who can adopt it. It excludes nothing.",
+  transferability: "Kept for the assessment. It excludes nothing.",
+};
+
+/** The nine profile lines' screen names (R36). Reused by later phases. */
+export const PROFILE_LINE_LABELS: Record<string, string> = {
+  cost: "Cost",
+  time_to_set_up: "Time to set up",
+  time_to_effect: "Time to effect",
+  workforce: "Workforce requirements",
+  who_decides: "Who decides",
+  dependencies: "Dependencies",
+  coordination: "Coordination requirements",
+  delivery_complexity: "Delivery complexity",
+  transferability: "Transferability",
+};
+
+/** The kind word shown under a consideration. The other kinds show none:
+ *  their "What happens" sentence says what they are. */
+export const CONSTRAINT_KIND_LABEL: Partial<Record<ScopingConstraint["kind"], string>> = {
+  consideration: "Consideration",
+};
+
+export const STATED_LIMIT_LABEL = "Stated limit";
+
+/** The small lines shown under a consideration's text: the kind word with
+ *  the profile line's name, and "Stated limit" when hard. */
+export function constraintKindLines(constraint: ScopingConstraint): string[] {
+  const kind = CONSTRAINT_KIND_LABEL[constraint.kind];
+  if (kind === undefined) return [];
+  if (constraint.kind !== "consideration") return [kind];
+  const line = constraint.aspect != null ? (PROFILE_LINE_LABELS[constraint.aspect] ?? constraint.aspect) : null;
+  const first = line != null ? `${kind} · ${line}` : kind;
+  return constraint.hard ? [first, STATED_LIMIT_LABEL] : [first];
+}
 
 /** The "What happens" sentence for a code-minted default constraint (task
  *  045, D22), replacing its kind's sentence: the transferability preference
@@ -346,7 +386,11 @@ export const YOUR_OPTIONS_ASSUMED_TAG = "assumed";
 export function constraintEffectLines(constraint: ScopingConstraint): string[] {
   const defaultEffect =
     constraint.default != null ? DEFAULT_CONSTRAINT_EFFECT[constraint.default] : undefined;
-  const lines = [defaultEffect ?? CONSTRAINT_KIND_EFFECT[constraint.kind]];
+  const considerationEffect =
+    constraint.kind === "consideration" && constraint.aspect != null
+      ? CONSIDERATION_ASPECT_EFFECT[constraint.aspect]
+      : undefined;
+  const lines = [defaultEffect ?? considerationEffect ?? CONSTRAINT_KIND_EFFECT[constraint.kind]];
   if (constraint.languages != null && constraint.languages.length > 0) {
     lines.push("Language: not yet applied at retrieval");
   }

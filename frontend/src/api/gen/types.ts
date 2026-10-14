@@ -1032,6 +1032,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/tasks/{task_id}/sources/{source_id}/records": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Source Records
+         * @description Return a document's intervention profile records under the options (R67).
+         *
+         *     The dossier's slot on an options-scoping task (task 046, amendment 3).
+         *     Scoped as the sibling dossier route: an unreadable task is the
+         *     indistinguishable 404; every read below is keyed by ``task_id``, so an
+         *     ``option_id`` or ``source_id`` of another task yields an empty list.
+         */
+        get: operations["source_records_api_v1_tasks__task_id__sources__source_id__records_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/tasks/{task_id}/task-agent-turns": {
         parameters: {
             query?: never;
@@ -1165,23 +1190,6 @@ export interface components {
              * @enum {string}
              */
             kind: "abort";
-        };
-        /**
-         * AmbitionBandOut
-         * @description One ambition band, a column of the reduced grid.
-         *
-         *     Args:
-         *         key: The stored value.
-         *         label: The display label.
-         *         definition: One line saying what the band means, for a group heading.
-         */
-        AmbitionBandOut: {
-            /** Definition */
-            definition?: string | null;
-            /** Key */
-            key: string;
-            /** Label */
-            label: string;
         };
         /**
          * AnswerPayloadOut
@@ -1352,6 +1360,26 @@ export interface components {
              * @enum {string}
              */
             type: "artefact.skeleton";
+        };
+        /**
+         * AuthorityOut
+         * @description Who can act on the option (task 046, R43): a label, not a verdict.
+         *
+         *     Args:
+         *         label: `within_your_power` · `needs_action_by` · `unclear`.
+         *         body: The body that must act, when the label is `needs_action_by`.
+         *         reason: Why, in one sentence.
+         */
+        AuthorityOut: {
+            /** Body */
+            body?: string | null;
+            /**
+             * Label
+             * @enum {string}
+             */
+            label: "within_your_power" | "needs_action_by" | "unclear";
+            /** Reason */
+            reason?: string | null;
         };
         /**
          * AuthorshipOut
@@ -1791,6 +1819,8 @@ export interface components {
          *         appraisal_label: Optional appraisal label.
          *         evidence_type: The cited document's classified evidence type — the
          *             input the appraisal rubric scores from.
+         *         text_basis: The cited document's extraction basis (`abstract_only`
+         *             or `full_text`), when known (task 046).
          */
         CitationOut: {
             /** Appraisal Label */
@@ -1814,6 +1844,8 @@ export interface components {
             source_id?: string | null;
             /** Source Title */
             source_title: string;
+            /** Text Basis */
+            text_basis?: string | null;
         };
         /**
          * CitedInOut
@@ -2169,6 +2201,24 @@ export interface components {
             type: "delta";
         };
         /**
+         * EvaluatedCountryOut
+         * @description One country the option was evaluated in, for the evidence signal.
+         *
+         *     Task 046, amendment 4 (R76; S29): the top level of the documents with an
+         *     ``evaluated`` member, resolved to one short English name; a country the
+         *     resolver does not know is kept as written.
+         *
+         *     Args:
+         *         country: The country's short English name.
+         *         documents: Its evaluating documents (DOI-collapsed).
+         */
+        EvaluatedCountryOut: {
+            /** Country */
+            country: string;
+            /** Documents */
+            documents: number;
+        };
+        /**
          * EvidenceItemOut
          * @description One row of the paginated evidence/source list.
          *
@@ -2251,16 +2301,13 @@ export interface components {
          *         by_evidence_type: Documents per evidence type; "Unknown" and
          *             non-evidence documents are their own keys, "not rated" when unclassified.
          *         by_tier: Documents per quality tier label, "not rated" when unappraised.
-         *         by_role: Documents per role.
-         *         where_tried: Documents per where-tried group.
-         *         populations: Populations its documents name, most frequent first.
-         *         settings: Settings its documents name, most frequent first.
-         *         outcomes: Outcomes its documents measure, most frequent first.
          *         flagged_not_stated: Documents that cover the intervention without
          *             stating the feature that defines this option.
          *         inherited_labels: Documents whose type and tier were read from a
          *             linked task.
          *         abstract_only: Documents read from an abstract only.
+         *         outcome_counts: The documents that evaluate the option, by plan
+         *             outcome (task 046, R42; amendment 4, R79).
          */
         EvidenceProfileOut: {
             /**
@@ -2270,10 +2317,6 @@ export interface components {
             abstract_only: number;
             /** By Evidence Type */
             by_evidence_type?: {
-                [key: string]: number;
-            };
-            /** By Role */
-            by_role?: {
                 [key: string]: number;
             };
             /** By Tier */
@@ -2295,13 +2338,7 @@ export interface components {
              * @default 0
              */
             inherited_labels: number;
-            /** Outcomes */
-            outcomes?: string[];
-            /** Populations */
-            populations?: string[];
-            /** Settings */
-            settings?: string[];
-            where_tried: components["schemas"]["WhereTriedOut"];
+            outcome_counts?: components["schemas"]["OutcomeCountsOut"];
         };
         /**
          * ExclusionOut
@@ -2569,8 +2606,6 @@ export interface components {
             level?: string | null;
             /** Outcome */
             outcome?: string | null;
-            /** Population */
-            population?: string | null;
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -2599,6 +2634,8 @@ export interface components {
             study_design?: string | null;
             /** Study Geography */
             study_geography?: string | null;
+            /** Unit */
+            unit?: string | null;
             /** Workforce Requirements */
             workforce_requirements?: string | null;
         };
@@ -2651,8 +2688,6 @@ export interface components {
             is_primary?: boolean | null;
             /** Outcome */
             outcome: string;
-            /** Population */
-            population?: string | null;
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -2684,6 +2719,8 @@ export interface components {
             study_design?: string | null;
             /** Study Geography */
             study_geography?: string | null;
+            /** Unit */
+            unit?: string | null;
         };
         /**
          * IofStatisticsOut
@@ -2839,6 +2876,14 @@ export interface components {
          *         unclustered: Records assigned to no option.
          *         not_an_option: Records judged not to describe an actionable option.
          *         none_fits: Options no lever type fits.
+         *         title_only: Records the pool held with a title only (task 046).
+         *         thinned_mentioned: Records dropped for stating no design feature and
+         *             no outcome (`mentioned_without_features_or_outcome`, task 046).
+         *         thinned_collapsed: Records collapsed onto one per document for
+         *             sharing a folded intervention name (`same_name_in_document`,
+         *             task 046).
+         *         thinned_capped: Records dropped over the per-document cap
+         *             (`over_document_cap`, task 046).
          */
         LonglistCountsOut: {
             /** Excluded */
@@ -2855,6 +2900,26 @@ export interface components {
             options: number;
             /** Themes */
             themes: number;
+            /**
+             * Thinned Capped
+             * @default 0
+             */
+            thinned_capped: number;
+            /**
+             * Thinned Collapsed
+             * @default 0
+             */
+            thinned_collapsed: number;
+            /**
+             * Thinned Mentioned
+             * @default 0
+             */
+            thinned_mentioned: number;
+            /**
+             * Title Only
+             * @default 0
+             */
+            title_only: number;
             /** Unclustered */
             unclustered: number;
         };
@@ -2874,19 +2939,17 @@ export interface components {
          *         unthemed_option_ids: Options in no theme (including options added
          *             since the build).
          *         options: Every option of the task, themed ones first in theme order.
-         *         where_label: The words the `where` group is shown under (the plan's
-         *             Where).
          *         lever_types: The lever-type list the options were typed against, in
          *             order (the grid's rows).
          *         lever_type_definitions: The same list with each type's one-line
          *             definition (the list view's group headings).
-         *         ambition_bands: The ambition bands, in order (the grid's columns).
+         *         lever_type_definitions_by_version: Every lever-type taxonomy version's
+         *             definitions, keyed by version, so an option typed under an
+         *             earlier version can show that version's wording (task 046).
          *         taxonomy_version: The lever-type list version.
          *         depth_label: The depth label every longlist surface carries.
          */
         LonglistOut: {
-            /** Ambition Bands */
-            ambition_bands?: components["schemas"]["AmbitionBandOut"][];
             /** Built From Plan Version */
             built_from_plan_version: number;
             /** Capability Run Id */
@@ -2902,6 +2965,10 @@ export interface components {
             depth_label: "scoping pass";
             /** Lever Type Definitions */
             lever_type_definitions?: components["schemas"]["LeverTypeOut"][];
+            /** Lever Type Definitions By Version */
+            lever_type_definitions_by_version?: {
+                [key: string]: components["schemas"]["LeverTypeOut"][];
+            };
             /** Lever Types */
             lever_types?: string[];
             /** Options */
@@ -2919,8 +2986,6 @@ export interface components {
             themes?: components["schemas"]["LonglistThemeOut"][];
             /** Unthemed Option Ids */
             unthemed_option_ids?: string[];
-            /** Where Label */
-            where_label: string;
         };
         /**
          * LonglistThemeOut
@@ -3048,7 +3113,7 @@ export interface components {
         };
         /**
          * OptionDocumentOut
-         * @description One document behind an option ("Show the documents"), one per membership row.
+         * @description One document behind an option ("Show the documents"), one per document.
          *
          *     Args:
          *         task_source_snapshot_id: This task's document row, when the task holds one.
@@ -3058,9 +3123,21 @@ export interface components {
          *         tier: Its quality tier label, when appraised.
          *         design_feature_not_stated: It covers the intervention without stating
          *             the feature that defines this option.
-         *         where_tried_group: Where it was studied, grouped against Where.
+         *         year: Its publication year, when the metadata has one.
+         *         place: Where it was studied: its where-tried top level.
          *         source_task_id: The linked task the document or its labels came from,
          *             when inherited.
+         *         programme_name: The programme name of its first member record under
+         *             the option (by role order); `null` when none is given or the
+         *             document is a linked finding (task 046, amendment 4, R81).
+         *         tried_on_kind: That record's unit as its folded Tried on kind (its
+         *             own word when the fold has none).
+         *         measured: The plan outcome that record measures, in the plan's words,
+         *             else its outcome as its folded Measures kind.
+         *         place_detail: That record's place below the document's country, when
+         *             it adds one.
+         *         records_count: The document's member records under the option (0 for
+         *             a linked finding).
          */
         OptionDocumentOut: {
             /**
@@ -3070,6 +3147,19 @@ export interface components {
             design_feature_not_stated: boolean;
             /** Evidence Type */
             evidence_type?: string | null;
+            /** Measured */
+            measured?: string | null;
+            /** Place */
+            place?: string | null;
+            /** Place Detail */
+            place_detail?: string | null;
+            /** Programme Name */
+            programme_name?: string | null;
+            /**
+             * Records Count
+             * @default 0
+             */
+            records_count: number;
             /**
              * Role
              * @enum {string}
@@ -3083,11 +3173,10 @@ export interface components {
             tier?: string | null;
             /** Title */
             title: string;
-            /**
-             * Where Tried Group
-             * @enum {string}
-             */
-            where_tried_group: "where" | "comparable" | "other" | "unknown";
+            /** Tried On Kind */
+            tried_on_kind?: string | null;
+            /** Year */
+            year?: number | null;
         };
         /**
          * OptionExcludeIn
@@ -3121,16 +3210,15 @@ export interface components {
          *         evidence: The source-quality profile.
          *         judgements: The constraint judgements on the current design version.
          *         guesses: The reasoned guesses on the current design version.
-         *         transferability: "checked at assessment" when the plan carries the
-         *             default transferability preference; `null` otherwise.
          *         in_scope: The in-scope check, when the plan restricts the evidence.
          *         documents: The documents behind it, one per membership row.
          *         run_id: The longlist component run its coverage came from; `null`
          *             before a longlist is built.
          *         capability_run_id: The longlist walk that run belonged to.
          *         plan_version: The plan version that longlist was built from.
-         *         where_label: The words the `where` group is shown under.
-         *         depth_label: The depth label every longlist surface carries.
+         *         place_sentences: One sentence per place of its evaluating documents,
+         *             in the card's order: the plan's Where country first, "No single
+         *             place" last (task 046, amendment 4, R80).
          */
         OptionOut: {
             /**
@@ -3141,17 +3229,12 @@ export interface components {
             /** Also Found As */
             also_found_as?: string[];
             /** Ambition */
-            ambition?: string | null;
+            ambition?: ("less" | "more") | null;
             /** Ambition Reason */
             ambition_reason?: string | null;
+            authority?: components["schemas"]["AuthorityOut"] | null;
             /** Capability Run Id */
             capability_run_id?: string | null;
-            /**
-             * Depth Label
-             * @default scoping pass
-             * @constant
-             */
-            depth_label: "scoping pass";
             /** Description */
             description: string;
             design: components["schemas"]["OptionDesignOut"];
@@ -3171,6 +3254,8 @@ export interface components {
              * @default 0
              */
             evaluated_count: number;
+            /** Evaluated Countries */
+            evaluated_countries?: components["schemas"]["EvaluatedCountryOut"][];
             evidence: components["schemas"]["EvidenceProfileOut"];
             exclusion?: components["schemas"]["ExclusionOut"] | null;
             /** From Section */
@@ -3187,6 +3272,8 @@ export interface components {
             judgements?: components["schemas"]["JudgementOut"][];
             /** Lever None Fits Reason */
             lever_none_fits_reason?: string | null;
+            /** Lever Reason */
+            lever_reason?: string | null;
             /** Name */
             name: string;
             /**
@@ -3204,12 +3291,25 @@ export interface components {
              * @enum {string}
              */
             origin: "clustered" | "suggested" | "from_evidence_search" | "added_by_you";
+            /**
+             * Outcomes Evaluated
+             * @default 0
+             */
+            outcomes_evaluated: number;
             /** Outcomes Served */
             outcomes_served?: string[];
+            /**
+             * Outcomes Total
+             * @default 0
+             */
+            outcomes_total: number;
+            /** Place Sentences */
+            place_sentences?: components["schemas"]["PlaceSentenceOut"][];
             /** Plan Version */
             plan_version?: number | null;
             /** Primary Lever Type */
             primary_lever_type?: string | null;
+            profile?: components["schemas"]["OptionProfileOut"] | null;
             /** Relations */
             relations?: components["schemas"]["RelationOut"][];
             /** Restriction Text */
@@ -3232,11 +3332,71 @@ export interface components {
             state: "included" | "excluded";
             /** Taxonomy Version */
             taxonomy_version?: string | null;
-            /** Transferability */
-            transferability?: "checked at assessment" | null;
-            /** Where Label */
-            where_label: string;
-            where_tried: components["schemas"]["WhereTriedOut"];
+        };
+        /**
+         * OptionProfileOut
+         * @description What the option would take, in eight lines and its delivery setting.
+         *
+         *     Policy Atlas's estimate before assessment, not a finding.
+         *
+         *     Args:
+         *         lines: The eight lines, in display order.
+         *         settings: The delivery setting, main first, then the second; empty
+         *             when none is named (R41).
+         */
+        OptionProfileOut: {
+            /** Lines */
+            lines: components["schemas"]["ProfileLineOut"][];
+            /** Settings */
+            settings: string[];
+        };
+        /**
+         * OptionRecordOut
+         * @description One intervention profile record of a document, under one option (R67).
+         *
+         *     The record in its own words, as the extraction wrote it: the source
+         *     dossier's slot shows it in place of findings on an options-scoping task
+         *     (task 046, amendment 3).
+         *
+         *     Args:
+         *         option_id: The option the record is a member of.
+         *         option_name: That option's name.
+         *         record_id: The intervention profile record.
+         *         intervention: The intervention, as the document names it.
+         *         setting: Where it was delivered, as the document says.
+         *         unit: What it was tried on (the unit), as the document says.
+         *         outcome: The outcomes measured, as the document says.
+         *         study_geography: Where it was studied, as the document says.
+         *         role: What the document does with the intervention.
+         */
+        OptionRecordOut: {
+            /** Intervention */
+            intervention: string;
+            /**
+             * Option Id
+             * Format: uuid
+             */
+            option_id: string;
+            /** Option Name */
+            option_name: string;
+            /** Outcome */
+            outcome?: string | null;
+            /**
+             * Record Id
+             * Format: uuid
+             */
+            record_id: string;
+            /**
+             * Role
+             * @enum {string}
+             */
+            role: "evaluated" | "described" | "recommended" | "mentioned";
+            /** Setting */
+            setting?: string | null;
+            /** Study Geography */
+            study_geography?: string | null;
+            /** Unit */
+            unit?: string | null;
         };
         /**
          * OptionResponse
@@ -3285,15 +3445,20 @@ export interface components {
          *             the option is not typed yet.
          *         lever_none_fits_reason: Why no lever type fits.
          *         secondary_lever_types: The other lever types it also touches.
-         *         ambition: `do_minimum` · `incremental` · `structural`, as described,
-         *             not measured.
+         *         ambition: `less` · `more` · `null`: how big a proposal the option is
+         *             against the baseline, compared with the other options of the list;
+         *             `null` when it does not stand out or is not profiled yet.
          *         ambition_reason: The one-line justification.
+         *         profile: What the option would take (task 046); `null` when the
+         *             option has no complete profile.
+         *         authority: Who can act on it (task 046, R43); `null` when none was
+         *             recorded.
          *         taxonomy_version: The lever-type list version it was typed under.
          *         design_version: The specified design's version.
          *         document_count: Its documents (DOI-collapsed).
          *         evaluated_count: Documents that evaluate it.
-         *         settings: The settings its documents name, most frequent first.
-         *         where_tried: Documents per where-tried group.
+         *         settings: The option's delivery setting, from its profile (R41);
+         *             empty when it has none.
          *         relations: Its relations to other options.
          *         abstract_only: Every one of its documents was read from an abstract only.
          *         is_entrant_with_no_documents: Suggested, drawn from the Evidence
@@ -3305,6 +3470,16 @@ export interface components {
          *             origin, or when the section was not recorded (task 045, F3).
          *         also_found_as: The names of the duplicates merged into this option
          *             (their documents are its documents); empty when none.
+         *         lever_reason: One sentence on why the option has its lever type,
+         *             when the typing pass recorded one; `null` otherwise (task 046,
+         *             R29).
+         *         evaluated_countries: The countries of its evaluating documents, the
+         *             plan's Where country first, then most documents first (task 046,
+         *             amendment 4, R76); empty when no evaluation gives a country.
+         *         outcomes_evaluated: The plan outcomes at least one evaluating
+         *             document measured (R76).
+         *         outcomes_total: The outcome count of the plan the longlist was built
+         *             from (R76).
          */
         OptionSummaryOut: {
             /**
@@ -3315,9 +3490,10 @@ export interface components {
             /** Also Found As */
             also_found_as?: string[];
             /** Ambition */
-            ambition?: string | null;
+            ambition?: ("less" | "more") | null;
             /** Ambition Reason */
             ambition_reason?: string | null;
+            authority?: components["schemas"]["AuthorityOut"] | null;
             /** Description */
             description: string;
             /** Design Version */
@@ -3332,6 +3508,8 @@ export interface components {
              * @default 0
              */
             evaluated_count: number;
+            /** Evaluated Countries */
+            evaluated_countries?: components["schemas"]["EvaluatedCountryOut"][];
             exclusion?: components["schemas"]["ExclusionOut"] | null;
             /** From Section */
             from_section?: string | null;
@@ -3342,6 +3520,8 @@ export interface components {
             is_entrant_with_no_documents: boolean;
             /** Lever None Fits Reason */
             lever_none_fits_reason?: string | null;
+            /** Lever Reason */
+            lever_reason?: string | null;
             /** Name */
             name: string;
             /**
@@ -3359,10 +3539,21 @@ export interface components {
              * @enum {string}
              */
             origin: "clustered" | "suggested" | "from_evidence_search" | "added_by_you";
+            /**
+             * Outcomes Evaluated
+             * @default 0
+             */
+            outcomes_evaluated: number;
             /** Outcomes Served */
             outcomes_served?: string[];
+            /**
+             * Outcomes Total
+             * @default 0
+             */
+            outcomes_total: number;
             /** Primary Lever Type */
             primary_lever_type?: string | null;
+            profile?: components["schemas"]["OptionProfileOut"] | null;
             /** Relations */
             relations?: components["schemas"]["RelationOut"][];
             /** Restriction Text */
@@ -3383,7 +3574,6 @@ export interface components {
             state: "included" | "excluded";
             /** Taxonomy Version */
             taxonomy_version?: string | null;
-            where_tried: components["schemas"]["WhereTriedOut"];
         };
         /**
          * OrganisationRef
@@ -3401,6 +3591,43 @@ export interface components {
              * Format: uuid
              */
             org_id: string;
+        };
+        /**
+         * OutcomeCountOut
+         * @description The documents of one plan outcome (task 046, amendment 3, R56).
+         *
+         *     Args:
+         *         outcome: The plan's outcome, in its words.
+         *         documents: Documents of any role that report it (DOI-collapsed).
+         *         evaluated: Of those, the documents that evaluate the option against it.
+         */
+        OutcomeCountOut: {
+            /** Documents */
+            documents: number;
+            /**
+             * Evaluated
+             * @default 0
+             */
+            evaluated: number;
+            /** Outcome */
+            outcome: string;
+        };
+        /**
+         * OutcomeCountsOut
+         * @description How many documents evaluate the option, and against which outcomes (R42).
+         *
+         *     Args:
+         *         evaluating_documents: Documents that evaluate the option.
+         *         by_outcome: The count for each plan outcome, in the plan's order.
+         */
+        OutcomeCountsOut: {
+            /** By Outcome */
+            by_outcome?: components["schemas"]["OutcomeCountOut"][];
+            /**
+             * Evaluating Documents
+             * @default 0
+             */
+            evaluating_documents: number;
         };
         /**
          * PageMeta
@@ -3550,6 +3777,27 @@ export interface components {
             title: string;
         };
         /**
+         * PlaceSentenceOut
+         * @description One place of an option's evaluating documents and its sentence (task 046, amendment 4, R80).
+         *
+         *     Args:
+         *         place: The place: a country's short English name, or "No single place".
+         *         sentence: What the evaluations in that place are.
+         *         generated: The sentence was generated and passed the trace check;
+         *             ``false`` for the code-built template.
+         *         where: The place is the plan's Where country.
+         */
+        PlaceSentenceOut: {
+            /** Generated */
+            generated: boolean;
+            /** Place */
+            place: string;
+            /** Sentence */
+            sentence: string;
+            /** Where */
+            where: boolean;
+        };
+        /**
          * PlanDraft
          * @description Draft or approved task plan, as surfaced to the client.
          *
@@ -3623,7 +3871,7 @@ export interface components {
              * Grouping Facets
              * @default null
              */
-            grouping_facets: ("intervention" | "outcome" | "population" | "barrier_theme" | "enabler_theme" | "mechanism_theme")[] | null;
+            grouping_facets: ("intervention" | "outcome" | "unit" | "barrier_theme" | "enabler_theme" | "mechanism_theme")[] | null;
             /**
              * Question
              * @default null
@@ -3768,7 +4016,7 @@ export interface components {
              * Stage
              * @enum {string}
              */
-            stage: "acquire" | "screen" | "classify" | "appraise" | "characterise" | "select" | "extract" | "group" | "synthesise" | "inherit" | "suggest" | "option_searches" | "extract_interventions" | "longlist" | "constrain";
+            stage: "acquire" | "screen" | "classify" | "appraise" | "characterise" | "select" | "extract" | "group" | "synthesise" | "inherit" | "suggest" | "option_searches" | "extract_interventions" | "longlist" | "option_profile" | "constrain" | "theme";
         };
         /**
          * PlanUpdatedFrame
@@ -3793,6 +4041,29 @@ export interface components {
             type: "plan.updated";
             /** Version */
             version: number;
+        };
+        /**
+         * ProfileLineOut
+         * @description One line of an option's profile (task 046, R37).
+         *
+         *     Args:
+         *         key: The line: cost, time to set up, time to effect, workforce, who
+         *             decides, dependencies, coordination or delivery complexity.
+         *         sentence: The line, in one sentence.
+         *         mark: `less` · `more` when the option stands out on this line against
+         *             the other options of the list; `null` otherwise, and always for
+         *             `who_decides` and `dependencies`.
+         */
+        ProfileLineOut: {
+            /**
+             * Key
+             * @enum {string}
+             */
+            key: "cost" | "time_to_set_up" | "time_to_effect" | "workforce" | "who_decides" | "dependencies" | "coordination" | "delivery_complexity";
+            /** Mark */
+            mark?: ("less" | "more") | null;
+            /** Sentence */
+            sentence: string;
         };
         /**
          * ProgressEvent
@@ -4120,12 +4391,16 @@ export interface components {
          *         kind: What the constraint is about.
          *         origin: Where it came from.
          *         checked_at: When it bites; fixed by `kind`.
+         *         aspect: The line a consideration speaks of; required on a
+         *             consideration, `null` on every other kind.
+         *         hard: True on a consideration that states a limit; false on every
+         *             other kind.
          *         country_group: Source-origin restriction, when there is one.
          *         published_after: ISO date floor, when there is one.
          *         published_before: ISO date ceiling, when there is one.
          *         languages: Language names. Stored and shown as not yet applied at
          *             retrieval — the search grammar has no language filter.
-         *         setting: True on a requirement naming the delivery setting the
+         *         setting: True on a boundary naming the delivery setting the
          *             options must be delivered through; the longlist search carries it.
          *         default: `transferability` on the default transferability preference
          *             every scoping plan carries (checked at assessment, assumed, follows
@@ -4133,6 +4408,11 @@ export interface components {
          *             Omitting the default from a patch removes it.
          */
         ScopingConstraintOut: {
+            /**
+             * Aspect
+             * @default null
+             */
+            aspect: ("cost" | "time_to_set_up" | "time_to_effect" | "workforce" | "who_decides" | "dependencies" | "coordination" | "delivery_complexity" | "transferability") | null;
             /**
              * Checked At
              * @enum {string}
@@ -4146,10 +4426,15 @@ export interface components {
              */
             default: "transferability" | null;
             /**
+             * Hard
+             * @default false
+             */
+            hard: boolean;
+            /**
              * Kind
              * @enum {string}
              */
-            kind: "requirement" | "preference" | "evidence_restriction";
+            kind: "boundary" | "consideration" | "preference" | "evidence_restriction";
             /**
              * Languages
              * @default null
@@ -4462,6 +4747,27 @@ export interface components {
             year?: number | null;
         };
         /**
+         * SourceRecordsOut
+         * @description The `source records` read model: a document's records under the options.
+         *
+         *     One entry per (option, record), the document's DOI twins in this task
+         *     included; empty when no record of the document is a member of an option
+         *     (the dossier then shows the document's findings, B8).
+         *
+         *     Args:
+         *         task_source_snapshot_id: The document row the dossier opened.
+         *         records: The records, options by name, then by role, then oldest first.
+         */
+        SourceRecordsOut: {
+            /** Records */
+            records?: components["schemas"]["OptionRecordOut"][];
+            /**
+             * Task Source Snapshot Id
+             * Format: uuid
+             */
+            task_source_snapshot_id: string;
+        };
+        /**
          * SourceTagOut
          * @description One source tag assertion and its provenance.
          */
@@ -4502,7 +4808,7 @@ export interface components {
              * Stage
              * @enum {string}
              */
-            stage: "acquire" | "screen" | "classify" | "appraise" | "characterise" | "select" | "extract" | "group" | "synthesise" | "inherit" | "suggest" | "option_searches" | "extract_interventions" | "longlist" | "constrain";
+            stage: "acquire" | "screen" | "classify" | "appraise" | "characterise" | "select" | "extract" | "group" | "synthesise" | "inherit" | "suggest" | "option_searches" | "extract_interventions" | "longlist" | "option_profile" | "constrain" | "theme";
             /** Summary */
             summary?: {
                 [key: string]: number | string;
@@ -4540,7 +4846,7 @@ export interface components {
              * Stage
              * @enum {string}
              */
-            stage: "acquire" | "screen" | "classify" | "appraise" | "characterise" | "select" | "extract" | "group" | "synthesise" | "inherit" | "suggest" | "option_searches" | "extract_interventions" | "longlist" | "constrain";
+            stage: "acquire" | "screen" | "classify" | "appraise" | "characterise" | "select" | "extract" | "group" | "synthesise" | "inherit" | "suggest" | "option_searches" | "extract_interventions" | "longlist" | "option_profile" | "constrain" | "theme";
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -4572,7 +4878,7 @@ export interface components {
              * Stage
              * @enum {string}
              */
-            stage: "acquire" | "screen" | "classify" | "appraise" | "characterise" | "select" | "extract" | "group" | "synthesise" | "inherit" | "suggest" | "option_searches" | "extract_interventions" | "longlist" | "constrain";
+            stage: "acquire" | "screen" | "classify" | "appraise" | "characterise" | "select" | "extract" | "group" | "synthesise" | "inherit" | "suggest" | "option_searches" | "extract_interventions" | "longlist" | "option_profile" | "constrain" | "theme";
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -5106,7 +5412,7 @@ export interface components {
              * Stage
              * @default null
              */
-            stage: ("acquire" | "screen" | "classify" | "appraise" | "characterise" | "select" | "extract" | "group" | "synthesise" | "inherit" | "suggest" | "option_searches" | "extract_interventions" | "longlist" | "constrain") | null;
+            stage: ("acquire" | "screen" | "classify" | "appraise" | "characterise" | "select" | "extract" | "group" | "synthesise" | "inherit" | "suggest" | "option_searches" | "extract_interventions" | "longlist" | "option_profile" | "constrain" | "theme") | null;
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -5235,38 +5541,6 @@ export interface components {
              * Format: uuid
              */
             entry_id: string;
-        };
-        /**
-         * WhereTriedOut
-         * @description Documents per where-tried group (DOI-collapsed).
-         *
-         *     Args:
-         *         where: Studied in the plan's Where.
-         *         comparable: Studied in a comparable system (OECD).
-         *         other: Studied in another named country.
-         *         unknown: No recognisable geography.
-         */
-        WhereTriedOut: {
-            /**
-             * Comparable
-             * @default 0
-             */
-            comparable: number;
-            /**
-             * Other
-             * @default 0
-             */
-            other: number;
-            /**
-             * Unknown
-             * @default 0
-             */
-            unknown: number;
-            /**
-             * Where
-             * @default 0
-             */
-            where: number;
         };
         /**
          * YourContextOut
@@ -6791,6 +7065,40 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SourceDossierOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    source_records_api_v1_tasks__task_id__sources__source_id__records_get: {
+        parameters: {
+            query?: {
+                option_id?: string | null;
+            };
+            header?: never;
+            path: {
+                task_id: string;
+                source_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourceRecordsOut"];
                 };
             };
             /** @description Validation Error */
