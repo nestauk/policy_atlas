@@ -15,7 +15,6 @@ vi.mock("../../api/queries", () => ({
   usePlan: vi.fn(),
   useTask: vi.fn(),
   useRuns: vi.fn(),
-  useArtefact: vi.fn(),
   useLonglist: vi.fn(),
 }));
 
@@ -230,14 +229,6 @@ function mockUseRuns(runs: RunOut[] = []) {
   );
 }
 
-function mockUseArtefact(artefactId: string | null) {
-  vi.mocked(queries.useArtefact).mockReturnValue(
-    { data: artefactId != null ? { artefact_id: artefactId } : null } as unknown as ReturnType<
-      typeof queries.useArtefact
-    >,
-  );
-}
-
 function baselineRun(overrides: Partial<RunOut> = {}): RunOut {
   return {
     capability_run_id: "run-1",
@@ -259,7 +250,6 @@ beforeEach(() => {
   vi.mocked(queries.usePlan).mockReset();
   mockUseTask([]);
   mockUseRuns([]);
-  mockUseArtefact(null);
   mockUseLonglist(null);
   confirmMutate.mockReset();
 });
@@ -719,7 +709,6 @@ describe("PlanDocument — options scoping (task 044)", () => {
     it("the latest walk finished and the plan has since moved to a later version: two actions", () => {
       mockUsePlan({ data: scopingPlanOut(undefined, 2) });
       mockUseRuns([baselineRun({ plan_version: 1 })]);
-      mockUseArtefact("artefact-1");
       renderPlan();
       expect(screen.getByRole("button", { name: "Rebuild baseline" })).toBeInTheDocument();
       expect(screen.getByRole("button", { name: "Confirm plan and build longlist" })).toBeInTheDocument();
@@ -729,7 +718,6 @@ describe("PlanDocument — options scoping (task 044)", () => {
     it("an aborted walk (Change the plan) at the same version: also two actions", () => {
       mockUsePlan({ data: scopingPlanOut(undefined, 1) });
       mockUseRuns([baselineRun({ status: "aborted", plan_version: 1 })]);
-      mockUseArtefact("artefact-1");
       renderPlan();
       expect(screen.getByRole("button", { name: "Rebuild baseline" })).toBeInTheDocument();
       expect(screen.getByRole("button", { name: "Confirm plan and build longlist" })).toBeInTheDocument();
@@ -740,7 +728,6 @@ describe("PlanDocument — options scoping (task 044)", () => {
         data: scopingPlanOut({ baseline_confirmed: { artefact_id: "artefact-1", plan_version: 1 } }, 1),
       });
       mockUseRuns([baselineRun({ plan_version: 1 })]);
-      mockUseArtefact("artefact-1");
       renderPlan();
       expect(screen.getByText("Plan confirmed · no longlist yet")).toBeInTheDocument();
       expect(screen.queryByRole("button", { name: "Rebuild baseline" })).toBeNull();
@@ -755,7 +742,6 @@ describe("PlanDocument — options scoping (task 044)", () => {
     it("the latest walk succeeded and the plan hasn't moved since: confirmed, even with no baseline_confirmed record yet", () => {
       mockUsePlan({ data: scopingPlanOut({ baseline_confirmed: null }, 1) });
       mockUseRuns([baselineRun({ plan_version: 1 })]);
-      mockUseArtefact("artefact-1");
       renderPlan();
       expect(screen.getByText("Plan confirmed · no longlist yet")).toBeInTheDocument();
     });
