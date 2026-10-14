@@ -5,7 +5,7 @@ task 046 items 5, 7, 10, 11, 12, R4, R21, R38, AM6, AM7.
 
 1. **Distinct** (task 046, S13). One call over the whole list — every option
    that is not merged, with its label, description, design features, origin
-   and relations — made before the batches (``constrain_v2``'s distinct
+   and relations — made beside the batches (``constrain_v2``'s distinct
    prompt). Each reported pair is checked: a pair naming an unknown id, the
    same id twice, a duplicate already reported, or a chain (the option
    named as kept is itself reported as a duplicate) is dropped and counted.
