@@ -23,6 +23,7 @@ measures peak connection use with four children running.
 
 from __future__ import annotations
 
+import functools
 import threading
 from concurrent.futures import ThreadPoolExecutor
 
@@ -36,10 +37,7 @@ CLASSIFY_SLOTS = threading.BoundedSemaphore(MAX_CONCURRENT_CLASSIFY)
 #: Live parse-job worker processes across every walk in the process.
 INGEST_SLOTS = threading.BoundedSemaphore(DEFAULT_MAX_WORKERS)
 
-_pool_lock = threading.Lock()
-_pool: ThreadPoolExecutor | None = None
-
-
+@functools.cache
 def option_search_pool() -> ThreadPoolExecutor:
     """Return the process-wide option-search pool, creating it on first use.
 
@@ -49,11 +47,7 @@ def option_search_pool() -> ThreadPoolExecutor:
     Returns:
         The pool, ``max_workers=OPTION_SEARCH_WIDTH``.
     """
-    global _pool
-    with _pool_lock:
-        if _pool is None:
-            _pool = ThreadPoolExecutor(
-                max_workers=OPTION_SEARCH_WIDTH,
-                thread_name_prefix="policy-atlas-option-search",
-            )
-        return _pool
+    # ponytail: two racing first calls could each build a pool; the spare one starts no thread.
+    return ThreadPoolExecutor(
+        max_workers=OPTION_SEARCH_WIDTH, thread_name_prefix="policy-atlas-option-search"
+    )
