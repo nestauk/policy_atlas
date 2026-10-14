@@ -131,8 +131,8 @@ class _Entrant:
 
 def walk_plan(
     conn: Connection, *, task_id: uuid.UUID, run_id: uuid.UUID, scope_id: uuid.UUID
-) -> ScopingPlan:
-    """Read the scoping plan the walk runs on.
+) -> tuple[ScopingPlan, int]:
+    """Read the scoping plan the walk runs on, with its version.
 
     The walk's own plan version (``capability_run.plan_id`` through the run
     row), else the intent record's ``plan_id``.
@@ -144,7 +144,7 @@ def walk_plan(
         scope_id: The walk's intent record.
 
     Returns:
-        The validated plan.
+        ``(plan, version)``: the validated plan and its plan version.
 
     Raises:
         ValueError: If no plan version can be found for the walk.
@@ -167,21 +167,21 @@ def walk_plan(
                 evidence_scope.c.task_id == task_id,
             )
         ).scalar_one_or_none()
-    payload = (
+    row = (
         conn.execute(
-            select(task_plan.c.payload).where(
+            select(task_plan.c.payload, task_plan.c.version).where(
                 task_plan.c.plan_id == plan_id, task_plan.c.task_id == task_id
             )
-        ).scalar_one_or_none()
+        ).one_or_none()
         if plan_id is not None
         else None
     )
-    if payload is None:
+    if row is None or row.payload is None:
         raise ValueError("suggest: no plan version found for the walk")
-    plan = validate_plan(OPTIONS_SCOPING, payload)
+    plan = validate_plan(OPTIONS_SCOPING, row.payload)
     if not isinstance(plan, ScopingPlan):  # pragma: no cover - the registry's model
         raise ValueError("suggest: the walk's plan is not a scoping plan")
-    return plan
+    return plan, int(row.version)
 
 
 def suggest_plan_context(
@@ -375,7 +375,7 @@ def suggest_options(
         ``report_sections`` (``{option_id: heading}`` for the report's; a
         heading the model named but no linked report carries is ``None``).
     """
-    plan = walk_plan(conn, task_id=task_id, run_id=run_id, scope_id=context.scope_id)
+    plan, _ = walk_plan(conn, task_id=task_id, run_id=run_id, scope_id=context.scope_id)
     # Every option already on the task, every origin, in creation order: on a
     # rebuild the model is shown them and must not propose one again; a
     # suggestion repeating one by name or description is dropped in code too.

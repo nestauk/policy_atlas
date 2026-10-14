@@ -74,7 +74,7 @@ import threading
 import unicodedata
 import uuid
 from collections.abc import Iterable, Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 from typing import Any, Literal
 
@@ -304,7 +304,7 @@ def _latest_rollup_record_ids(
             extraction_result.c.created_at.desc(),
             extraction_result.c.extraction_result_id.desc(),
         )
-    ).all()
+    )
     for row in rows:
         docs = row.docs if isinstance(row.docs, list) else []
         by_profile = record_ids_by_profile([d for d in docs if isinstance(d, Mapping)])
@@ -1248,20 +1248,10 @@ def _option_policy(max_labels: int) -> ClusteringPolicy:
 def _engine_stats(result: ClusteringResult | None) -> dict[str, Any]:
     if result is None:
         return {"ran": False}
-    return {
-        "ran": True,
-        "calls_used": result.calls_used,
-        "call_budget": {
-            "batch_count": result.call_budget.batch_count,
-            "baseline": result.call_budget.baseline,
-            "maximum": result.call_budget.maximum,
-        },
-        "discovery_retries_used": result.discovery_retries_used,
-        "assignment_repair_calls_used": result.assignment_repair_calls_used,
-        "discovery_rejections": result.discovery_rejections,
-        "rejection_reasons": result.rejection_reasons,
-        "usage_totals": result.usage_totals,
-    }
+    stats = asdict(result)
+    for unit_field in ("labels", "assignments", "residual_ids"):
+        del stats[unit_field]
+    return {"ran": True, **stats}
 
 
 # --- options ---------------------------------------------------------------
@@ -1319,46 +1309,6 @@ def _discovered_design(
 
 
 # --- the component -----------------------------------------------------------------
-
-
-def _walk_ref(
-    conn: Connection, *, task_id: uuid.UUID, run_id: uuid.UUID, scope_id: uuid.UUID
-) -> tuple[uuid.UUID | None, int]:
-    """This run's walk and its plan version (else the intent record's plan version)."""
-    row = conn.execute(
-        select(capability_run.c.capability_run_id, capability_run.c.plan_version)
-        .select_from(
-            runs.join(
-                capability_run,
-                and_(
-                    capability_run.c.capability_run_id == runs.c.capability_run_id,
-                    capability_run.c.task_id == runs.c.task_id,
-                ),
-            )
-        )
-        .where(runs.c.run_id == run_id, runs.c.task_id == task_id)
-    ).one_or_none()
-    if row is not None:
-        return row.capability_run_id, int(row.plan_version)
-    version = conn.execute(
-        select(task_plan.c.version)
-        .select_from(
-            evidence_scope.join(
-                task_plan,
-                and_(
-                    task_plan.c.plan_id == evidence_scope.c.plan_id,
-                    task_plan.c.task_id == evidence_scope.c.task_id,
-                ),
-            )
-        )
-        .where(
-            evidence_scope.c.evidence_scope_id == scope_id,
-            evidence_scope.c.task_id == task_id,
-        )
-    ).scalar_one_or_none()
-    if version is None:
-        raise LonglistFailure("longlist: no plan version found for the walk")
-    return None, int(version)
 
 
 def _option_search_scopes(conn: Connection, *, task_id: uuid.UUID) -> list[uuid.UUID]:
@@ -1575,6 +1525,24 @@ def read_membership(
     )
 
 
+def latest_longlist(
+    conn: Connection, *, task_id: uuid.UUID, scope_id: uuid.UUID | None = None
+) -> Any | None:
+    """The task's newest ``longlist_result`` row (of one walk when ``scope_id`` is given).
+
+    Returns:
+        The row, or ``None`` when there is none.
+    """
+    query = select(longlist_result).where(longlist_result.c.task_id == task_id)
+    if scope_id is not None:
+        query = query.where(longlist_result.c.evidence_scope_id == scope_id)
+    return conn.execute(
+        query.order_by(
+            longlist_result.c.created_at.desc(), longlist_result.c.longlist_result_id.desc()
+        ).limit(1)
+    ).one_or_none()
+
+
 def _title_only(conn: Connection, *, task_id: uuid.UUID, scope_id: uuid.UUID) -> int:
     """The title-only documents the scope's latest extraction left unprofiled (S10)."""
     counts = conn.execute(
@@ -1683,8 +1651,7 @@ def longlist_scope(
         LonglistFailure: If clustering fails or the exhaustiveness invariant
             (units = memberships + unclustered + not an option) breaks.
     """
-    plan = walk_plan(conn, task_id=task_id, run_id=run_id, scope_id=context.scope_id)
-    _walk_id, plan_version = _walk_ref(
+    plan, plan_version = walk_plan(
         conn, task_id=task_id, run_id=run_id, scope_id=context.scope_id
     )
     plan_data = longlist_plan_data(plan)
@@ -1878,27 +1845,27 @@ def longlist_scope(
 
     # 7. Writes, all after every model call. New option rows first, then the
     # folds' merges (which may name them).
-    for o in options:
-        minted = o.design
-        if o.seed or minted is None:
-            continue
-        conn.execute(
-            option.insert().values(
-                option_id=o.option_id,
-                task_id=task_id,
-                name=minted.name,
-                description=minted.description,
-                design=minted.model_dump(mode="json"),
-                design_version=minted.version,
-                outcomes=list(minted.outcomes_served),
-                origin="clustered",
-                state="included",
-                secondary_lever_types=[],
-                created_by_run_id=run_id,
-                created_at=now,
-                updated_at=now,
-            )
-        )
+    option_rows = [
+        {
+            "option_id": o.option_id,
+            "task_id": task_id,
+            "name": minted.name,
+            "description": minted.description,
+            "design": minted.model_dump(mode="json"),
+            "design_version": minted.version,
+            "outcomes": list(minted.outcomes_served),
+            "origin": "clustered",
+            "state": "included",
+            "secondary_lever_types": [],
+            "created_by_run_id": run_id,
+            "created_at": now,
+            "updated_at": now,
+        }
+        for o in options
+        if not o.seed and (minted := o.design) is not None
+    ]
+    if option_rows:
+        conn.execute(option.insert(), option_rows)
     for seed_id, into in fold_rows:
         # A duplicate merged into the folded seed follows it, so a merge
         # always names an option on the list.

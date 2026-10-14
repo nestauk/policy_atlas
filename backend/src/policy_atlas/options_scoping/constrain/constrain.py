@@ -124,6 +124,7 @@ from policy_atlas.options_scoping.longlist.coverage import stored_folds
 from policy_atlas.options_scoping.longlist.longlist import (
     ON_THE_LIST,
     ORIGIN_WORDS,
+    latest_longlist,
     read_membership,
 )
 from policy_atlas.options_scoping.longlist.longlist_backend import LONGLIST_JUDGMENT_MODEL
@@ -300,21 +301,6 @@ def _constraint_lists(
         )
     ]
     return requirements, preferences
-
-
-def _latest_longlist(conn: Connection, *, task_id: uuid.UUID, scope_id: uuid.UUID) -> Any:
-    row = conn.execute(
-        select(longlist_result)
-        .where(longlist_result.c.task_id == task_id)
-        .where(longlist_result.c.evidence_scope_id == scope_id)
-        .order_by(
-            longlist_result.c.created_at.desc(), longlist_result.c.longlist_result_id.desc()
-        )
-        .limit(1)
-    ).one_or_none()
-    if row is None:
-        raise ConstrainFailure("constrain: no longlist exists for this walk")
-    return row
 
 
 def _relations(
@@ -845,8 +831,10 @@ def constrain_scope(
     Raises:
         ConstrainFailure: If the walk has no ``longlist_result``.
     """
-    plan = walk_plan(conn, task_id=task_id, run_id=run_id, scope_id=context.scope_id)
-    result_row = _latest_longlist(conn, task_id=task_id, scope_id=context.scope_id)
+    plan, _ = walk_plan(conn, task_id=task_id, run_id=run_id, scope_id=context.scope_id)
+    result_row = latest_longlist(conn, task_id=task_id, scope_id=context.scope_id)
+    if result_row is None:
+        raise ConstrainFailure("constrain: no longlist exists for this walk")
     rows = list(
         conn.execute(
             select(option)

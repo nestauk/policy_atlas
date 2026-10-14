@@ -102,6 +102,7 @@ from policy_atlas.options_scoping.longlist.lever_types import LEVER_TYPE_KEYS, T
 from policy_atlas.options_scoping.longlist.longlist import (
     MembershipRead,
     _seeds,
+    latest_longlist,
     read_membership,
 )
 from policy_atlas.options_scoping.longlist.longlist_backend import (
@@ -243,21 +244,6 @@ class _Typing:
     none_fits_reason: str | None
     runner_up: str | None
     lever_reason: str | None = None
-
-
-def _latest_longlist(conn: Connection, *, task_id: uuid.UUID, scope_id: uuid.UUID) -> Any:
-    row = conn.execute(
-        select(longlist_result)
-        .where(longlist_result.c.task_id == task_id)
-        .where(longlist_result.c.evidence_scope_id == scope_id)
-        .order_by(
-            longlist_result.c.created_at.desc(), longlist_result.c.longlist_result_id.desc()
-        )
-        .limit(1)
-    ).one_or_none()
-    if row is None:
-        raise OptionProfileFailure("option_profile: no longlist exists for this walk")
-    return row
 
 
 def _profiled_options(conn: Connection, *, task_id: uuid.UUID) -> list[_ProfiledOption]:
@@ -990,8 +976,10 @@ def option_profile_scope(
         OptionProfileFailure: If the walk has no ``longlist_result``, or a
             profile call or a folding call failed twice (nothing is written).
     """
-    plan = walk_plan(conn, task_id=task_id, run_id=run_id, scope_id=context.scope_id)
-    result_row = _latest_longlist(conn, task_id=task_id, scope_id=context.scope_id)
+    plan, _ = walk_plan(conn, task_id=task_id, run_id=run_id, scope_id=context.scope_id)
+    result_row = latest_longlist(conn, task_id=task_id, scope_id=context.scope_id)
+    if result_row is None:
+        raise OptionProfileFailure("option_profile: no longlist exists for this walk")
     plan_data = longlist_plan_data(plan)
     baseline = baseline_sections(conn, task_id)
     options = _profiled_options(conn, task_id=task_id)
