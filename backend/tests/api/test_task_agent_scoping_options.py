@@ -26,7 +26,6 @@ from policy_atlas.api.deps import get_agent_backend, get_scoping_task_agent_back
 from policy_atlas.api.routers.task_agent import _baseline_state
 from policy_atlas.core.schema import (
     capability_run,
-    evidence_scope,
     longlist_result,
     runs,
     task_plan,
@@ -45,6 +44,7 @@ from tests.api.resource_support import (
     task_agent_turn_ok,
     to_ready,
 )
+from tests.helpers import seed_walk
 
 
 class _OptionsScopingAgent(StubScopingTaskAgentBackend):
@@ -307,32 +307,19 @@ _T0 = datetime(2026, 9, 22, 9, 0, tzinfo=UTC)
 def _walk(
     engine: Engine, task_id: uuid.UUID, *, purpose: str, status: str
 ) -> tuple[uuid.UUID, uuid.UUID]:
-    scope_id, walk_id = uuid.uuid4(), uuid.uuid4()
     with engine.begin() as conn:
-        conn.execute(
-            evidence_scope.insert().values(
-                evidence_scope_id=scope_id,
-                task_id=task_id,
-                intent="intent",
-                context={},
-                created_at=_T0,
-                purpose=purpose,
-            )
+        walk = seed_walk(
+            conn,
+            task_id,
+            purpose=purpose,
+            status=status,
+            plan_version=2,
+            intent="intent",
+            scope_created_at=_T0,
+            started_at=_T0 + timedelta(minutes=5),
+            ended_at=_T0,
         )
-        conn.execute(
-            capability_run.insert().values(
-                capability_run_id=walk_id,
-                task_id=task_id,
-                evidence_scope_id=scope_id,
-                capability="options_scoping",
-                plan_id=uuid.uuid4(),
-                plan_version=2,
-                status=status,
-                started_at=_T0 + timedelta(minutes=5),
-                ended_at=None if status in ("running", "paused") else _T0,
-            )
-        )
-    return scope_id, walk_id
+    return walk.scope_id, walk.walk_id
 
 
 def test_the_baseline_state_names_the_longlist_states(engine: Engine, tmp_path: Path) -> None:

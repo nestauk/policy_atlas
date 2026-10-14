@@ -71,14 +71,14 @@ from tests.api.resource_support import (  # noqa: F401 — the autouse teardown
     create_task,
     remove_committed_tasks_after_walks,
 )
+from tests.api.resource_support import await_walks_ended as _await_walks_ended
 from tests.api.resource_support import task_agent_turn as _turn
 from tests.api.test_longlist_routes import (
-    _await_walks_ended,
     _Built,
     _decisions,
     _org_build,
 )
-from tests.helpers import now, seed_ingested_full_text
+from tests.helpers import now, seed_ingested_full_text, seed_walk
 from tests.options_scoping.test_longlist import RCT
 from tests.runtime.test_option_search import (
     _design,
@@ -169,41 +169,17 @@ def _walk(
     Returns:
         ``(scope_id, walk_id, run_id)``.
     """
-    scope_id, walk_id, run_id = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
-    conn.execute(
-        evidence_scope.insert().values(
-            evidence_scope_id=scope_id,
-            task_id=built.task_id,
-            intent=f"{purpose} intent",
-            context={},
-            created_at=now(),
-            purpose=purpose,
-        )
+    walk = seed_walk(
+        conn,
+        built.task_id,
+        purpose=purpose,
+        status=status,
+        parent=parent,
+        plan_version=2,
+        with_run=True,
     )
-    conn.execute(
-        capability_run.insert().values(
-            capability_run_id=walk_id,
-            task_id=built.task_id,
-            evidence_scope_id=scope_id,
-            capability="options_scoping",
-            plan_id=uuid.uuid4(),
-            plan_version=2,
-            status=status,
-            started_at=now(),
-            ended_at=now() if status in ("succeeded", "degraded") else None,
-            parent_capability_run_id=parent,
-        )
-    )
-    conn.execute(
-        runs.insert().values(
-            run_id=run_id,
-            task_id=built.task_id,
-            status="succeeded",
-            started_at=now(),
-            capability_run_id=walk_id,
-        )
-    )
-    return scope_id, walk_id, run_id
+    assert walk.run_id is not None
+    return walk.scope_id, walk.walk_id, walk.run_id
 
 
 def _doc(conn: Connection, task_id: uuid.UUID, title: str) -> uuid.UUID:

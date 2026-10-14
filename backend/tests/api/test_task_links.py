@@ -17,7 +17,6 @@ alone:
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, datetime
 from pathlib import Path
 
 import httpx
@@ -27,13 +26,12 @@ from sqlalchemy.engine import Connection, Engine
 
 from policy_atlas.core.schema import (
     capability_run,
-    evidence_scope,
     project_membership,
     task,
-    task_plan,
 )
 from tests.api.org_support import make_org, make_project, ops_enrol, seeded, tenancy_client
 from tests.api.resource_support import remove_committed_tasks  # noqa: F401 — autouse
+from tests.helpers import seed_walk
 
 
 def _finish_walk(
@@ -44,44 +42,7 @@ def _finish_walk(
     capability: str = "evidence_search",
 ) -> uuid.UUID:
     """Give a task one walk in ``status``; return its ``capability_run_id``."""
-    now = datetime.now(UTC)
-    scope_id = uuid.uuid4()
-    plan_id = uuid.uuid4()
-    run_id = uuid.uuid4()
-    conn.execute(
-        evidence_scope.insert().values(
-            evidence_scope_id=scope_id,
-            task_id=task_id,
-            intent="es",
-            context={},
-            created_at=now,
-        )
-    )
-    conn.execute(
-        task_plan.insert().values(
-            plan_id=plan_id,
-            task_id=task_id,
-            version=1,
-            status="approved",
-            payload={},
-            created_at=now,
-            created_by="user",
-        )
-    )
-    conn.execute(
-        capability_run.insert().values(
-            capability_run_id=run_id,
-            task_id=task_id,
-            evidence_scope_id=scope_id,
-            capability=capability,
-            plan_id=plan_id,
-            plan_version=1,
-            status=status,
-            started_at=now,
-            ended_at=now if status not in ("running", "paused") else None,
-        )
-    )
-    return run_id
+    return seed_walk(conn, task_id, capability=capability, status=status, plan_payload={}).walk_id
 
 
 def _create(

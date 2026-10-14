@@ -22,17 +22,14 @@ from policy_atlas.core.schema import (
     artefact,
     block,
     capability_run,
-    evidence_scope,
-    runs,
     search_coverage_record,
     synthesis_result,
-    task,
     task_link,
-    task_plan,
 )
 from policy_atlas.runtime.inherit import linked_context
 from policy_atlas.runtime.task_agent_scoping_prompt import LinkedTaskContext
-from tests.helpers import now
+from tests.api.org_support import make_task
+from tests.helpers import now, seed_walk
 
 _REFERENCES_TAIL = (
     "\n\n### References\n\n1. Some Study (2020) — A. Author.\n"
@@ -41,22 +38,6 @@ _REFERENCES_TAIL = (
 
 #: Owns every seeded task, so inherit's build-time read check (review S1) passes.
 OWNER = "inherit-owner"
-
-
-def _make_task(conn: Connection, *, name: str, capability: str = "evidence_search") -> uuid.UUID:
-    task_id = uuid.uuid4()
-    conn.execute(
-        task.insert().values(
-            task_id=task_id,
-            created_at=now(),
-            name=name,
-            status="active",
-            updated_at=now(),
-            capability=capability,
-            owner_user_id=OWNER,
-        )
-    )
-    return task_id
 
 
 def _seed_linked_source(
@@ -83,54 +64,22 @@ def _seed_linked_source(
     the pinned walk at a plan row that does not exist, leaving the task's own
     approved plan row in place as the substitute a fallback would reach for.
     """
-    source_task_id = _make_task(conn, name=name)
-    scope_id = uuid.uuid4()
-    conn.execute(
-        evidence_scope.insert().values(
-            evidence_scope_id=scope_id,
-            task_id=source_task_id,
-            intent="es",
-            context={},
-            created_at=now(),
-        )
+    source_task_id = make_task(conn, owner_user_id=OWNER, name=name)
+    walk = seed_walk(
+        conn,
+        source_task_id,
+        capability="evidence_search",
+        plan_payload=plan_payload,
+        with_run=True,
     )
-    plan_id = uuid.uuid4()
-    conn.execute(
-        task_plan.insert().values(
-            plan_id=plan_id,
-            task_id=source_task_id,
-            version=1,
-            status="approved",
-            payload=plan_payload,
-            created_at=now(),
-            created_by="user",
+    scope_id, plan_id, capability_run_id = walk.scope_id, walk.plan_id, walk.walk_id
+    run_id = walk.run_id
+    if orphan_plan:
+        conn.execute(
+            capability_run.update()
+            .where(capability_run.c.capability_run_id == capability_run_id)
+            .values(plan_id=uuid.uuid4())
         )
-    )
-    capability_run_id = uuid.uuid4()
-    conn.execute(
-        capability_run.insert().values(
-            capability_run_id=capability_run_id,
-            task_id=source_task_id,
-            evidence_scope_id=scope_id,
-            capability="evidence_search",
-            plan_id=uuid.uuid4() if orphan_plan else plan_id,
-            plan_version=1,
-            status="succeeded",
-            started_at=now(),
-            ended_at=now(),
-        )
-    )
-    run_id = uuid.uuid4()
-    conn.execute(
-        runs.insert().values(
-            run_id=run_id,
-            task_id=source_task_id,
-            capability_run_id=capability_run_id,
-            status="succeeded",
-            started_at=now(),
-            ended_at=now(),
-        )
-    )
     artefact_id = uuid.uuid4()
     conn.execute(
         artefact.insert().values(
@@ -183,31 +132,16 @@ def _seed_linked_source(
         )
     )
     if later_walk_adequacy is not None:
-        later_walk_id = uuid.uuid4()
-        conn.execute(
-            capability_run.insert().values(
-                capability_run_id=later_walk_id,
-                task_id=source_task_id,
-                evidence_scope_id=scope_id,
-                capability="evidence_search",
-                plan_id=plan_id,
-                plan_version=1,
-                status="succeeded",
-                started_at=now() + timedelta(seconds=10),
-                ended_at=now() + timedelta(seconds=20),
-            )
-        )
-        later_run_id = uuid.uuid4()
-        conn.execute(
-            runs.insert().values(
-                run_id=later_run_id,
-                task_id=source_task_id,
-                capability_run_id=later_walk_id,
-                status="succeeded",
-                started_at=now() + timedelta(seconds=10),
-                ended_at=now() + timedelta(seconds=20),
-            )
-        )
+        later_run_id = seed_walk(
+            conn,
+            source_task_id,
+            capability="evidence_search",
+            scope_id=scope_id,
+            plan_id=plan_id,
+            started_at=now() + timedelta(seconds=10),
+            ended_at=now() + timedelta(seconds=20),
+            with_run=True,
+        ).run_id
         conn.execute(
             search_coverage_record.insert().values(
                 search_coverage_record_id=uuid.uuid4(),
@@ -237,12 +171,12 @@ def _seed_linked_source(
 
 
 def test_no_links_returns_empty_list(conn: Connection) -> None:
-    target_id = _make_task(conn, name="Scoping", capability="options_scoping")
+    target_id = make_task(conn, owner_user_id=OWNER, name="Scoping", capability="options_scoping")
     assert linked_context(conn, target_id) == []
 
 
 def test_one_link_carries_plan_markdown_and_coverage(conn: Connection) -> None:
-    target_id = _make_task(conn, name="Scoping", capability="options_scoping")
+    target_id = make_task(conn, owner_user_id=OWNER, name="Scoping", capability="options_scoping")
     _seed_linked_source(
         conn,
         target_id,
@@ -264,7 +198,7 @@ def test_one_link_carries_plan_markdown_and_coverage(conn: Connection) -> None:
 
 
 def test_two_links_are_returned_in_link_order(conn: Connection) -> None:
-    target_id = _make_task(conn, name="Scoping", capability="options_scoping")
+    target_id = make_task(conn, owner_user_id=OWNER, name="Scoping", capability="options_scoping")
     base = now()
     _seed_linked_source(
         conn,
@@ -289,7 +223,7 @@ def test_two_links_are_returned_in_link_order(conn: Connection) -> None:
 
 
 def test_result_is_byte_stable_across_two_calls(conn: Connection) -> None:
-    target_id = _make_task(conn, name="Scoping", capability="options_scoping")
+    target_id = make_task(conn, owner_user_id=OWNER, name="Scoping", capability="options_scoping")
     _seed_linked_source(
         conn,
         target_id,
@@ -312,7 +246,7 @@ def test_result_is_byte_stable_across_two_calls(conn: Connection) -> None:
 
 
 def test_a_walk_whose_artefact_has_no_blocks_renders_an_empty_report(conn: Connection) -> None:
-    target_id = _make_task(conn, name="Scoping", capability="options_scoping")
+    target_id = make_task(conn, owner_user_id=OWNER, name="Scoping", capability="options_scoping")
     _seed_linked_source(
         conn,
         target_id,
@@ -333,7 +267,7 @@ def test_coverage_is_the_pinned_walks_not_the_scopes_latest(conn: Connection) ->
     scope, so a second walk on that scope leaves a newer record there. Reading
     the scope's latest handed the link the rerun's verdict.
     """
-    target_id = _make_task(conn, name="Scoping", capability="options_scoping")
+    target_id = make_task(conn, owner_user_id=OWNER, name="Scoping", capability="options_scoping")
     _seed_linked_source(
         conn,
         target_id,
@@ -356,7 +290,7 @@ def test_a_missing_pinned_plan_row_inherits_nothing(conn: Connection) -> None:
     gone (a data fault), the fenced block is empty rather than quietly showing
     the source task's current plan under the link's pinned-walk claim.
     """
-    target_id = _make_task(conn, name="Scoping", capability="options_scoping")
+    target_id = make_task(conn, owner_user_id=OWNER, name="Scoping", capability="options_scoping")
     _seed_linked_source(
         conn,
         target_id,

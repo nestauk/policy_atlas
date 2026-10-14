@@ -38,7 +38,7 @@ from policy_atlas.runtime.scoping_plan import (
     ScopingPlan,
     YourOption,
 )
-from tests.helpers import now
+from tests.helpers import now, seed_scope, seed_walk
 from tests.runtime.test_baseline_gate import (
     insert_scoping_plan_row,
     scoping_plan,
@@ -76,18 +76,14 @@ def _seed_longlist(engine: Engine, plan: ScopingPlan) -> tuple[uuid.UUID, uuid.U
     """
     task_id, baseline_scope = seed_scoping_task(engine)
     plan_id = insert_scoping_plan_row(engine, task_id=task_id, scope_id=baseline_scope, plan=plan)
-    scope_id = uuid.uuid4()
     with engine.begin() as conn:
-        conn.execute(
-            evidence_scope.insert().values(
-                evidence_scope_id=scope_id,
-                task_id=task_id,
-                intent="longlist intent",
-                context={"capability": "options_scoping"},
-                created_at=now(),
-                purpose="longlist",
-                plan_id=plan_id,
-            )
+        scope_id = seed_scope(
+            conn,
+            task_id,
+            {"capability": "options_scoping"},
+            intent="longlist intent",
+            purpose="longlist",
+            plan_id=plan_id,
         )
     return task_id, scope_id, plan_id
 
@@ -212,22 +208,10 @@ def _seed_walk(
     parent: uuid.UUID | None = None,
     status: str = "running",
 ) -> uuid.UUID:
-    walk_id = uuid.uuid4()
     with engine.begin() as conn:
-        conn.execute(
-            capability_run.insert().values(
-                capability_run_id=walk_id,
-                task_id=task_id,
-                evidence_scope_id=scope_id,
-                capability="options_scoping",
-                plan_id=plan_id,
-                plan_version=1,
-                status=status,
-                started_at=now(),
-                parent_capability_run_id=parent,
-            )
-        )
-    return walk_id
+        return seed_walk(
+            conn, task_id, scope_id=scope_id, plan_id=plan_id, parent=parent, status=status
+        ).walk_id
 
 
 @pytest.fixture
@@ -547,18 +531,15 @@ def test_the_fan_out_runs_once_across_a_resume(engine: Engine, child_run_plan: A
 def _open_row(engine: Engine, kwargs: dict[str, Any]) -> None:
     """Open a child walk's row as the runner would, from ``run_plan``'s kwargs."""
     with engine.begin() as conn:
-        conn.execute(
-            capability_run.insert().values(
-                capability_run_id=kwargs["capability_run_id"],
-                task_id=kwargs["task_id"],
-                evidence_scope_id=kwargs["evidence_scope_id"],
-                capability="options_scoping",
-                plan_id=kwargs["plan_id"],
-                plan_version=kwargs["plan_version"],
-                status="running",
-                started_at=now(),
-                parent_capability_run_id=kwargs["parent_capability_run_id"],
-            )
+        seed_walk(
+            conn,
+            kwargs["task_id"],
+            walk_id=kwargs["capability_run_id"],
+            scope_id=kwargs["evidence_scope_id"],
+            plan_id=kwargs["plan_id"],
+            plan_version=kwargs["plan_version"],
+            status="running",
+            parent=kwargs["parent_capability_run_id"],
         )
 
 

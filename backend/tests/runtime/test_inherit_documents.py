@@ -18,17 +18,15 @@ from sqlalchemy.engine import Connection, Engine
 from sqlalchemy.exc import OperationalError
 
 from policy_atlas.core.schema import (
-    capability_run,
     source_snapshot,
-    task,
     task_link,
-    task_plan,
     task_source_snapshot,
 )
 from policy_atlas.runtime import harness, inherit
 from policy_atlas.runtime.inherit import InheritSummary, inherit_documents
 from policy_atlas.runtime.runner import NullIO, run_plan
-from tests.helpers import now, seed_run, seed_scope, seed_screening_result, seed_source
+from tests.api.org_support import make_task
+from tests.helpers import now, seed_run, seed_scope, seed_screening_result, seed_source, seed_walk
 from tests.runtime.test_baseline_gate import (
     insert_scoping_plan_row,
     scoping_plan,
@@ -41,56 +39,21 @@ from tests.runtime.test_runner import _cleanup, _runner_backends
 OWNER = "inherit-owner"
 
 
-def _make_task(
-    conn: Connection, *, capability: str = "evidence_search", owner: str = OWNER
-) -> uuid.UUID:
-    task_id = uuid.uuid4()
-    conn.execute(
-        task.insert().values(
-            task_id=task_id,
-            created_at=now(),
-            name=f"Task {task_id.hex[:6]}",
-            status="active",
-            updated_at=now(),
-            capability=capability,
-            owner_user_id=owner,
-        )
-    )
-    return task_id
-
-
 class _Source:
     """One linked Evidence search task with a finished walk over one scope."""
 
     def __init__(self, conn: Connection, *, owner: str = OWNER) -> None:
-        self.task_id = _make_task(conn, owner=owner)
+        self.task_id = make_task(conn, owner_user_id=owner)
         self.run_id = seed_run(conn, self.task_id)
-        self.scope_id = seed_scope(conn, self.task_id)
-        plan_id = uuid.uuid4()
-        conn.execute(
-            task_plan.insert().values(
-                plan_id=plan_id,
-                task_id=self.task_id,
-                version=1,
-                status="approved",
-                payload={},
-                created_at=now(),
-                created_by="test",
-            )
+        walk = seed_walk(
+            conn,
+            self.task_id,
+            capability="evidence_search",
+            scope_id=seed_scope(conn, self.task_id),
+            plan_payload={},
+            plan_created_by="test",
         )
-        self.walk_id = uuid.uuid4()
-        conn.execute(
-            capability_run.insert().values(
-                capability_run_id=self.walk_id,
-                task_id=self.task_id,
-                evidence_scope_id=self.scope_id,
-                capability="evidence_search",
-                plan_id=plan_id,
-                plan_version=1,
-                status="succeeded",
-                started_at=now(),
-            )
-        )
+        self.scope_id, self.walk_id = walk.scope_id, walk.walk_id
 
     def document(
         self, conn: Connection, *, status: str = "relevant", origin: str = "acquired"
@@ -121,7 +84,7 @@ class _Source:
 
 
 def _target(conn: Connection) -> tuple[uuid.UUID, uuid.UUID]:
-    target_id = _make_task(conn, capability="options_scoping")
+    target_id = make_task(conn, owner_user_id=OWNER, capability="options_scoping")
     return target_id, seed_run(conn, target_id)
 
 

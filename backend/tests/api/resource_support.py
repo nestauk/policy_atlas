@@ -111,11 +111,12 @@ def task_agent_turn(
     client_turn_id: uuid.UUID | None = None,
 ) -> httpx.Response:
     """Post one Task Agent turn and return the raw response."""
-    return client.post(
+    response = client.post(
         f"/api/v1/tasks/{task_id}/task-agent-turns",
         headers=headers,
         json={"message": message, "client_turn_id": str(client_turn_id or uuid.uuid4())},
     )
+    return cast(httpx.Response, response)
 
 
 def task_agent_turn_ok(

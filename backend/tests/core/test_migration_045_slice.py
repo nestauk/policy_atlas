@@ -31,7 +31,6 @@ from sqlalchemy.exc import IntegrityError
 
 from policy_atlas.core.schema import (
     capability_run,
-    evidence_scope,
     extraction_result,
     finding_reference_union,
     intervention_profile_record,
@@ -42,7 +41,14 @@ from policy_atlas.core.schema import (
     task_plan,
 )
 from tests.conftest import _alembic_cfg
-from tests.helpers import delete_task_data, now, seed_scope, seed_source, seed_task_and_run
+from tests.helpers import (
+    delete_task_data,
+    now,
+    seed_scope,
+    seed_source,
+    seed_task_and_run,
+    seed_walk,
+)
 
 PRE_SLICE_REVISION = "b5e1d7a4c026"
 SLICE_REVISION = "c7e2a9f4b1d8"
@@ -106,32 +112,17 @@ def _seed_walk(
     capability: str = "options_scoping",
 ) -> tuple[uuid.UUID, uuid.UUID]:
     """Insert an intent record of ``purpose`` and one walk under it."""
-    scope_id = uuid.uuid4()
-    conn.execute(
-        evidence_scope.insert().values(
-            evidence_scope_id=scope_id,
-            task_id=task_id,
-            intent="intent",
-            context={},
-            created_at=now(),
-            purpose=purpose,
-        )
+    walk = seed_walk(
+        conn,
+        task_id,
+        capability=capability,
+        purpose=purpose,
+        plan_id=plan_id,
+        parent=parent,
+        status=status,
+        intent="intent",
     )
-    walk_id = uuid.uuid4()
-    conn.execute(
-        capability_run.insert().values(
-            capability_run_id=walk_id,
-            task_id=task_id,
-            evidence_scope_id=scope_id,
-            capability=capability,
-            plan_id=plan_id,
-            plan_version=1,
-            status=status,
-            started_at=now(),
-            parent_capability_run_id=parent,
-        )
-    )
-    return scope_id, walk_id
+    return walk.scope_id, walk.walk_id
 
 
 def _seed_scoping_task(engine: Engine, *, purpose: str) -> uuid.UUID:

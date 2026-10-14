@@ -22,7 +22,6 @@ import threading
 import time
 import uuid
 from collections.abc import Callable
-from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -63,7 +62,7 @@ from policy_atlas.runtime.task_agent_scoping_prompt import (
 from tests.api.resource_support import api_client, create_task, task_agent_turn
 from tests.api.test_answer_core import _citing_tools, _first_seeded_chunk
 from tests.api.test_baseline_gate_checkin import _own, _park_at_gate
-from tests.helpers import now
+from tests.helpers import now, seed_walk
 from tests.runtime.test_runner import _cleanup, _runner_backends
 
 _CHANGE_WHERE = "Change it to England only"
@@ -138,17 +137,14 @@ class _RunStartsMeanwhileAgent(_ReadyScopingAgent):
                 .order_by(task_plan.c.version.desc())
                 .limit(1)
             ).mappings().one()
-            conn.execute(
-                capability_run.insert().values(
-                    capability_run_id=uuid.uuid4(),
-                    task_id=self._task_id,
-                    evidence_scope_id=row["evidence_scope_id"],
-                    capability=OPTIONS_SCOPING,
-                    plan_id=row["plan_id"],
-                    plan_version=row["version"],
-                    status="paused",
-                    started_at=datetime.now(UTC),
-                )
+            seed_walk(
+                conn,
+                self._task_id,
+                capability=OPTIONS_SCOPING,
+                scope_id=row["evidence_scope_id"],
+                plan_id=row["plan_id"],
+                plan_version=row["version"],
+                status="paused",
             )
         return turn
 
@@ -988,17 +984,14 @@ def test_an_evidence_search_pause_still_refuses_turns(
                     .order_by(task_plan.c.version.desc())
                     .limit(1)
                 ).mappings().one()
-                conn.execute(
-                    capability_run.insert().values(
-                        capability_run_id=uuid.uuid4(),
-                        task_id=task_id,
-                        evidence_scope_id=row["evidence_scope_id"],
-                        capability="evidence_search",
-                        plan_id=row["plan_id"],
-                        plan_version=row["version"],
-                        status="paused",
-                        started_at=now(),
-                    )
+                seed_walk(
+                    conn,
+                    task_id,
+                    capability="evidence_search",
+                    scope_id=row["evidence_scope_id"],
+                    plan_id=row["plan_id"],
+                    plan_version=row["version"],
+                    status="paused",
                 )
             refused = task_agent_turn(client, owner, task_id, "Is the rise real?")
             assert refused.status_code == 409, refused.text
@@ -1094,21 +1087,10 @@ def test_an_aborted_walk_that_wrote_nothing_is_not_a_baseline(engine: Engine) ->
         plan_id = insert_scoping_plan_row(
             engine, task_id=task_id, scope_id=scope_id, plan=scoping_plan()
         )
-        walk_id = uuid.uuid4()
         with engine.begin() as conn:
-            conn.execute(
-                capability_run.insert().values(
-                    capability_run_id=walk_id,
-                    task_id=task_id,
-                    evidence_scope_id=scope_id,
-                    capability=OPTIONS_SCOPING,
-                    plan_id=plan_id,
-                    plan_version=1,
-                    status="aborted",
-                    started_at=now(),
-                    ended_at=now(),
-                )
-            )
+            walk_id = seed_walk(
+                conn, task_id, scope_id=scope_id, plan_id=plan_id, status="aborted"
+            ).walk_id
         with engine.connect() as conn:
             assert task_agent_router._baseline_state(conn, task_id) == NO_BASELINE_STATE
 

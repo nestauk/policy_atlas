@@ -30,7 +30,6 @@ from sqlalchemy import func, select
 from sqlalchemy.engine import Connection
 
 from policy_atlas.core.schema import (
-    capability_run,
     evidence_scope,
     extraction_result,
     implementation_context_finding,
@@ -45,7 +44,6 @@ from policy_atlas.core.schema import (
     source_classification_result,
     source_extraction_record,
     source_snapshot,
-    task,
     task_link,
     task_plan,
     task_source_snapshot,
@@ -91,7 +89,8 @@ from policy_atlas.options_scoping.theme.longlist_theme_prompt import (
     ThemeWire,
 )
 from policy_atlas.runtime.scoping_plan import ScopingPlan
-from tests.helpers import now
+from tests.api.org_support import make_task
+from tests.helpers import now, seed_walk
 from tests.runtime.test_baseline_gate import scoping_plan
 
 UNKNOWN = "Unknown / Insufficient information"
@@ -260,27 +259,12 @@ class _Scripted:
 # --- the fixture -------------------------------------------------------------------
 
 
-def _task_row(conn: Connection, *, capability: str) -> uuid.UUID:
-    task_id = uuid.uuid4()
-    conn.execute(
-        task.insert().values(
-            task_id=task_id,
-            created_at=now(),
-            name="Task",
-            status="active",
-            updated_at=now(),
-            capability=capability,
-        )
-    )
-    return task_id
-
-
 class _Walk:
     """A scoping task with a longlist walk, its intent record and runs."""
 
     def __init__(self, conn: Connection, plan: ScopingPlan | None = None) -> None:
         self.conn = conn
-        self.task_id = _task_row(conn, capability="options_scoping")
+        self.task_id = make_task(conn, owner_user_id=None, capability="options_scoping")
         self.plan_id = uuid.uuid4()
         conn.execute(
             task_plan.insert().values(
@@ -320,21 +304,16 @@ class _Walk:
         status: str = "running",
         started_at: datetime | None = None,
     ) -> uuid.UUID:
-        walk_id = uuid.uuid4()
-        self.conn.execute(
-            capability_run.insert().values(
-                capability_run_id=walk_id,
-                task_id=self.task_id,
-                evidence_scope_id=scope_id,
-                capability="options_scoping",
-                plan_id=self.plan_id,
-                plan_version=2,
-                status=status,
-                started_at=started_at or now(),
-                parent_capability_run_id=parent,
-            )
-        )
-        return walk_id
+        return seed_walk(
+            self.conn,
+            self.task_id,
+            scope_id=scope_id,
+            plan_id=self.plan_id,
+            plan_version=2,
+            status=status,
+            started_at=started_at,
+            parent=parent,
+        ).walk_id
 
     def child_scope(
         self,
@@ -891,52 +870,11 @@ def test_a_document_without_a_doi_counts_as_itself(conn: Connection) -> None:
 
 def _linked_deep_task(conn: Connection, target: _Walk, intervention: str) -> uuid.UUID:
     """An Evidence search task whose pinned walk ran ``extract`` (one IOF, one ICF)."""
-    source_id = _task_row(conn, capability="evidence_search")
-    scope_id = uuid.uuid4()
-    conn.execute(
-        evidence_scope.insert().values(
-            evidence_scope_id=scope_id,
-            task_id=source_id,
-            intent="es",
-            context={},
-            created_at=now(),
-        )
+    source_id = make_task(conn, owner_user_id=None)
+    walk = seed_walk(
+        conn, source_id, capability="evidence_search", plan_payload={}, with_run=True
     )
-    plan_id = uuid.uuid4()
-    conn.execute(
-        task_plan.insert().values(
-            plan_id=plan_id,
-            task_id=source_id,
-            version=1,
-            status="approved",
-            payload={},
-            created_at=now(),
-            created_by="user",
-        )
-    )
-    walk_id = uuid.uuid4()
-    conn.execute(
-        capability_run.insert().values(
-            capability_run_id=walk_id,
-            task_id=source_id,
-            evidence_scope_id=scope_id,
-            capability="evidence_search",
-            plan_id=plan_id,
-            plan_version=1,
-            status="succeeded",
-            started_at=now(),
-        )
-    )
-    run_id = uuid.uuid4()
-    conn.execute(
-        runs.insert().values(
-            run_id=run_id,
-            task_id=source_id,
-            status="succeeded",
-            started_at=now(),
-            capability_run_id=walk_id,
-        )
-    )
+    scope_id, walk_id, run_id = walk.scope_id, walk.walk_id, walk.run_id
     snapshot_id = uuid.uuid4()
     conn.execute(
         source_snapshot.insert().values(

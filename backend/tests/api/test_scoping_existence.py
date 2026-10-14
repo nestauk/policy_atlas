@@ -23,7 +23,6 @@ from sqlalchemy.engine import Engine
 from policy_atlas.core.schema import (
     artefact,
     capability_run,
-    evidence_scope,
     longlist_result,
     runs,
     task_plan,
@@ -36,6 +35,7 @@ from tests.api.resource_support import (
     to_ready,
 )
 from tests.api.test_task_agent_scoping import _overrides
+from tests.helpers import seed_walk
 
 _T0 = datetime(2026, 9, 22, 9, 0, tzinfo=UTC)
 
@@ -51,35 +51,19 @@ def _walk(
     capability: str = "options_scoping",
 ) -> uuid.UUID:
     """Commit an intent record of ``purpose`` and one walk under it."""
-    tid = uuid.UUID(task_id)
-    scope_id = uuid.uuid4()
-    walk_id = uuid.uuid4()
     with engine.begin() as conn:
-        conn.execute(
-            evidence_scope.insert().values(
-                evidence_scope_id=scope_id,
-                task_id=tid,
-                intent="intent",
-                context={},
-                created_at=_T0,
-                purpose=purpose,
-            )
-        )
-        conn.execute(
-            capability_run.insert().values(
-                capability_run_id=walk_id,
-                task_id=tid,
-                evidence_scope_id=scope_id,
-                capability=capability,
-                plan_id=uuid.uuid4(),
-                plan_version=1,
-                status=status,
-                started_at=_T0 + timedelta(minutes=minutes),
-                ended_at=None if status in ("running", "paused") else _T0,
-                parent_capability_run_id=parent,
-            )
-        )
-    return walk_id
+        return seed_walk(
+            conn,
+            uuid.UUID(task_id),
+            capability=capability,
+            purpose=purpose,
+            status=status,
+            parent=parent,
+            intent="intent",
+            scope_created_at=_T0,
+            started_at=_T0 + timedelta(minutes=minutes),
+            ended_at=_T0,
+        ).walk_id
 
 
 def _get(client: TestClient, headers: dict[str, str], task_id: str) -> dict[str, Any]:
