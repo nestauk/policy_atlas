@@ -51,10 +51,8 @@ from langfuse import Langfuse
 from openai.types.chat import ChatCompletionMessageParam
 from pydantic import BaseModel
 
-from policy_atlas.core import tracing
-from policy_atlas.core.openai_client import parse_structured, resolve_openai_client
+from policy_atlas.core.openai_client import resolve_openai_client, traced_parse
 from policy_atlas.core.prompt_fields import scrub_nul
-from policy_atlas.core.usage import UsageResult, usage_details, usage_metadata
 from policy_atlas.options_scoping.suggest.suggest_prompt import (
     SUGGEST_BOUND,
     SUGGEST_MAX_OUTPUT_TOKENS,
@@ -594,38 +592,19 @@ class OpenAIAgentBackend:
         session_id: uuid.UUID | None,
         metadata: dict[str, Any] | None = None,
     ) -> T:
-        def _call() -> UsageResult[T]:
-            return parse_structured(
-                self._client,
-                messages=messages,
-                response_format=response_format,
-                usage_event=usage_event,
-                label=label,
-                model=model,
-                max_completion_tokens=max_output_tokens,
-            )
-
-        def _update(span: Any, result: UsageResult[T]) -> None:
-            parsed, usage = result
-            span.update(
-                usage_details=usage_details(usage),
-                input={"messages": messages},
-                output=parsed.model_dump(),
-                model=model,
-                metadata={
-                    "prompt_version": prompt_version,
-                    **(metadata or {}),
-                    **usage_metadata(usage),
-                },
-            )
-
-        parsed, _usage = tracing.traced_call(
+        parsed, _usage = traced_parse(
+            self._client,
             self._langfuse_client,
+            messages=messages,
+            response_format=response_format,
+            model=model,
+            max_output_tokens=max_output_tokens,
+            usage_event=usage_event,
+            label=label,
             name=name,
-            as_type="generation",
-            call=_call,
+            prompt_version=prompt_version,
             session_id=session_id,
-            update=_update,
+            metadata=metadata,
         )
         return parsed
 

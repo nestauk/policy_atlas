@@ -36,7 +36,7 @@ from policy_atlas.api.deps import (
     get_chat_backend,
     get_chat_embedding_backend,
     get_runner_backends,
-    get_scoping_task_agent_backend,
+    get_task_agent_backend,
 )
 from policy_atlas.core import events
 from policy_atlas.core.embeddings import StubEmbeddingBackend
@@ -97,7 +97,7 @@ _OTHER_TYPE = next(kind for kind in EVIDENCE_TYPES if kind != RCT)
 class _NoPlanner:
     """The scoping planner: never reached while a longlist exists."""
 
-    def scope_turn(self, *args: Any, **kwargs: Any) -> Any:
+    def turn(self, *args: Any, **kwargs: Any) -> Any:
         raise AssertionError("a longlist turn reached the planner")
 
 
@@ -131,7 +131,7 @@ def _overrides(
     holder = agent if isinstance(agent, _Holder) else _Holder(agent)
     return {
         get_agent_backend: lambda: holder.agent,
-        get_scoping_task_agent_backend: lambda: _NoPlanner(),
+        get_task_agent_backend: lambda: _NoPlanner(),
         get_chat_backend: lambda: StubChatBackend(),
         get_chat_embedding_backend: lambda: StubEmbeddingBackend(),
         get_runner_backends: _runner_backends,
@@ -961,7 +961,7 @@ def test_a_turn_while_a_walk_runs_is_run_active(engine: Engine, tmp_path: Path) 
 def test_an_evidence_search_task_never_reaches_the_longlist_sort(tmp_path: Path) -> None:
     agent = _agent(_sort("question"))
     overrides = _overrides(agent)
-    del overrides[get_scoping_task_agent_backend]
+    del overrides[get_task_agent_backend]
     with api_client(tmp_path, overrides) as (client, owner, _other):
         task_id = create_task(client, owner)
         response = _turn(client, owner, task_id, "What works to reduce NEET rates?")

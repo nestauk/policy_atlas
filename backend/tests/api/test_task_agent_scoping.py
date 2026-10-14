@@ -26,7 +26,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.engine import Connection, Engine
 
-from policy_atlas.api.deps import get_executor, get_scoping_task_agent_backend
+from policy_atlas.api.deps import get_executor, get_task_agent_backend
 from policy_atlas.core.schema import (
     artefact,
     capability_run,
@@ -76,7 +76,7 @@ def _overrides() -> dict[Callable[..., object], Callable[..., object]]:
     # nothing.
     executor = RecordingExecutor(status="succeeded")
     return {
-        get_scoping_task_agent_backend: lambda: StubScopingTaskAgentBackend(),
+        get_task_agent_backend: lambda: StubScopingTaskAgentBackend(),
         get_executor: lambda: executor,
     }
 

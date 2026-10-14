@@ -24,18 +24,23 @@ from policy_atlas.core.schema import (
     task_agent_transcript,
     task_plan,
 )
+from policy_atlas.runtime.capability_registry import TaskAgentProfile
 from policy_atlas.runtime.conversation_lifecycle import (
     close_task_agent_conversation,
     ensure_active_task_agent_conversation,
     seed_draft_from_executed_plan,
 )
-from policy_atlas.runtime.task_agent import StubTaskAgentBackend
+from policy_atlas.runtime.task_agent import (
+    StubTaskAgentBackend,
+    TaskAgentTurnWire,
+    draft_from_plan,
+    draft_from_wire,
+)
 from policy_atlas.runtime.task_agent_prompt import (
     PartChipWire,
     PartOptionWire,
     PartProposalWire,
     PlanDraftWire,
-    PlannerTurnWire,
 )
 from policy_atlas.runtime.task_plan import TIME_BANDS, TaskPlan, compose
 from tests.api.resource_support import api_client, create_task
@@ -48,38 +53,42 @@ class CountingTaskAgent(StubTaskAgentBackend):
         self.calls: list[tuple[list[dict[str, str]], dict[str, object] | None]] = []
         self.session_ids: list[uuid.UUID | None] = []
 
-    def plan_turn(
+    def turn(
         self,
+        profile: TaskAgentProfile,
         turns: list[dict[str, str]],
         previous_draft: dict[str, object] | None,
         *,
+        inputs: Any = None,
         session_id: uuid.UUID | None = None,
         conversation_id: uuid.UUID | None = None,
-    ) -> PlannerTurnWire:
+    ) -> TaskAgentTurnWire:
         """Record and delegate the deterministic task_agent turn."""
         del conversation_id
         self.calls.append((turns, previous_draft))
         self.session_ids.append(session_id)
-        return super().plan_turn(turns, previous_draft)
+        return super().turn(profile, turns, previous_draft)
 
 
 class FailOnceTaskAgent(CountingTaskAgent):
     """Task Agent double that leaves a durable failed transcript row once."""
 
-    def plan_turn(
+    def turn(
         self,
+        profile: TaskAgentProfile,
         turns: list[dict[str, str]],
         previous_draft: dict[str, object] | None,
         *,
+        inputs: Any = None,
         session_id: uuid.UUID | None = None,
         conversation_id: uuid.UUID | None = None,
-    ) -> PlannerTurnWire:
+    ) -> TaskAgentTurnWire:
         """Fail once, then use the ordinary deterministic reply."""
         if not self.calls:
             self.calls.append((turns, previous_draft))
             raise RuntimeError("planned test failure")
-        return super().plan_turn(
-            turns, previous_draft, session_id=session_id, conversation_id=conversation_id
+        return super().turn(
+            profile, turns, previous_draft, session_id=session_id, conversation_id=conversation_id
         )
 
 
@@ -90,17 +99,19 @@ class PartTaskAgent(CountingTaskAgent):
         super().__init__()
         self.part = part
 
-    def plan_turn(
+    def turn(
         self,
+        profile: TaskAgentProfile,
         turns: list[dict[str, str]],
         previous_draft: dict[str, object] | None,
         *,
+        inputs: Any = None,
         session_id: uuid.UUID | None = None,
         conversation_id: uuid.UUID | None = None,
-    ) -> PlannerTurnWire:
+    ) -> TaskAgentTurnWire:
         """Return the ordinary stub turn with the configured structured part."""
-        turn = super().plan_turn(
-            turns, previous_draft, session_id=session_id, conversation_id=conversation_id
+        turn = super().turn(
+            profile, turns, previous_draft, session_id=session_id, conversation_id=conversation_id
         )
         return turn.model_copy(update={"part": self.part})
 
@@ -141,15 +152,15 @@ def _pending_values(
 
 def test_draft_from_wire_normalises_loose_publisher_source() -> None:
     """A sloppy task_agent value must degrade the draft, never 500 the turn."""
-    spelled = task_agent._draft_from_wire(
+    spelled = draft_from_wire(
         PlanDraftWire(publisher_source=" Australian Policy Online "), ready=False
     )
     assert spelled.scope_constraints is not None
     assert spelled.scope_constraints.publisher_source == "apo"
-    upper = task_agent._draft_from_wire(PlanDraftWire(publisher_source="APO"), ready=False)
+    upper = draft_from_wire(PlanDraftWire(publisher_source="APO"), ready=False)
     assert upper.scope_constraints is not None
     assert upper.scope_constraints.publisher_source == "apo"
-    unsupported = task_agent._draft_from_wire(
+    unsupported = draft_from_wire(
         PlanDraftWire(publisher_source="worldbank"), ready=False
     )
     assert (
@@ -160,7 +171,7 @@ def test_draft_from_wire_normalises_loose_publisher_source() -> None:
 
 def test_draft_projection_derives_time_band_and_deduplicates_public_stages() -> None:
     """Drafts gain an honest time band; approved steps use presentation vocabulary."""
-    draft = task_agent._draft_from_wire(
+    draft = draft_from_wire(
         PlanDraftWire(search_effort="rapid", analysis_depth="standard"), ready=False
     )
     assert draft.time_band == TIME_BANDS[("rapid", "standard")]
@@ -181,7 +192,7 @@ def test_draft_projection_derives_time_band_and_deduplicates_public_stages() -> 
         grouping_facets=["intervention"],
         steering_mode="moderate",
     )
-    projected = task_agent._draft_from_plan(plan)
+    projected = draft_from_plan(plan)
     assert [step.stage for step in projected.steps].count("acquire") == 1
     assert [step.stage for step in projected.steps].count("screen") == 1
     assert projected.steps[0].label == "Searching sources"
@@ -908,16 +919,22 @@ def test_run_starting_mid_task_agent_call_fails_turn_and_persists_no_plan(
 
         task_id: str | None = None
 
-        def plan_turn(
+        def turn(
             self,
+            profile: TaskAgentProfile,
             turns: list[dict[str, str]],
             previous_draft: dict[str, object] | None,
             *,
+            inputs: Any = None,
             session_id: uuid.UUID | None = None,
             conversation_id: uuid.UUID | None = None,
-        ) -> PlannerTurnWire:
-            wire = super().plan_turn(
-                turns, previous_draft, session_id=session_id, conversation_id=conversation_id
+        ) -> TaskAgentTurnWire:
+            wire = super().turn(
+                profile,
+                turns,
+                previous_draft,
+                session_id=session_id,
+                conversation_id=conversation_id,
             )
             if wire.ready and self.task_id is not None:
                 scope_id = uuid.uuid4()

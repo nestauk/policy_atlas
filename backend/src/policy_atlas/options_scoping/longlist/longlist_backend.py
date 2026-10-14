@@ -57,9 +57,8 @@ from langfuse import Langfuse
 from openai.types.chat import ChatCompletionMessageParam
 from pydantic import BaseModel
 
-from policy_atlas.core import tracing
-from policy_atlas.core.openai_client import parse_structured, resolve_openai_client
-from policy_atlas.core.usage import UsageResult, usage_details, usage_metadata
+from policy_atlas.core.openai_client import resolve_openai_client, traced_parse
+from policy_atlas.core.usage import UsageResult
 from policy_atlas.options_scoping.constrain.constrain_prompt import (
     AUTHORITY_MAX_OUTPUT_TOKENS,
     CONSTRAIN_MAX_OUTPUT_TOKENS,
@@ -440,35 +439,19 @@ class OpenAILonglistBackend:
         prompt_version: str,
         metadata: dict[str, str] | None = None,
     ) -> UsageResult[T]:
-        def _update(span: Any, result: UsageResult[T]) -> None:
-            parsed, usage = result
-            span.update(
-                usage_details=usage_details(usage),
-                input={"messages": messages},
-                output=parsed.model_dump(),
-                model=model,
-                metadata={
-                    "prompt_version": prompt_version,
-                    **(metadata or {}),
-                    **usage_metadata(usage),
-                },
-            )
-
-        return tracing.traced_call(
+        return traced_parse(
+            self._client,
             self._langfuse_client,
+            messages=messages,
+            response_format=response_format,
+            model=model,
+            max_output_tokens=max_output_tokens,
+            usage_event=f"{name.replace(':', '.')}.usage",
+            label=name,
             name=name,
-            as_type="generation",
-            call=lambda: parse_structured(
-                self._client,
-                messages=messages,
-                response_format=response_format,
-                usage_event=f"{name.replace(':', '.')}.usage",
-                label=name,
-                model=model,
-                max_completion_tokens=max_output_tokens,
-            ),
+            prompt_version=prompt_version,
             session_id=self._session_id,
-            update=_update,
+            metadata=metadata,
         )
 
     def discover(

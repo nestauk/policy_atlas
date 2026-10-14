@@ -62,8 +62,39 @@ def test_the_evidence_search_entry_resolves_to_what_the_es_code_already_used() -
     spec = registry.spec_for(registry.EVIDENCE_SEARCH)
     assert spec.plan_model is TaskPlan
     assert spec.compose is compose
-    assert spec.task_agent_prompt_module == "policy_atlas.runtime.task_agent_prompt"
     assert spec.lattice is LATTICE_POINTS
+
+
+def test_each_capability_resolves_its_own_task_agent_profile() -> None:
+    from policy_atlas.runtime.task_agent import EVIDENCE_SEARCH_TASK_AGENT
+    from policy_atlas.runtime.task_agent_prompt import PLANNER_PROMPT_VERSION, PlannerTurnWire
+    from policy_atlas.runtime.task_agent_scoping import OPTIONS_SCOPING_TASK_AGENT
+    from policy_atlas.runtime.task_agent_scoping_prompt import (
+        TASK_AGENT_SCOPING_PROMPT_VERSION,
+        ScopingTurnWire,
+    )
+
+    es = registry.spec_for(registry.EVIDENCE_SEARCH).task_agent
+    scoping = registry.spec_for(registry.OPTIONS_SCOPING).task_agent
+    assert es is EVIDENCE_SEARCH_TASK_AGENT
+    assert scoping is OPTIONS_SCOPING_TASK_AGENT
+    assert (es.capability, es.wire, es.prompt_version) == (
+        registry.EVIDENCE_SEARCH,
+        PlannerTurnWire,
+        PLANNER_PROMPT_VERSION,
+    )
+    assert (scoping.capability, scoping.wire, scoping.prompt_version) == (
+        registry.OPTIONS_SCOPING,
+        ScopingTurnWire,
+        TASK_AGENT_SCOPING_PROMPT_VERSION,
+    )
+    # Static trace names, one per capability (PR #81's convention).
+    assert (es.trace_name, scoping.trace_name) == ("task_agent:turn", "task_agent_scoping:turn")
+    assert es.part_ids == {"question", "scope", "thoroughness"}
+    assert scoping.part_ids == {"question", "settings", "constraints", "depth"}
+    assert not es.no_primary_parts
+    assert scoping.no_primary_parts == {"depth"}
+    assert es.after_approve is None and scoping.after_approve is not None
 
 
 def test_the_registry_holds_the_two_capabilities_this_build_knows() -> None:

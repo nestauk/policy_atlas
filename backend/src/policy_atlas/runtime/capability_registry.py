@@ -33,7 +33,7 @@ from typing import Any
 
 from pydantic import BaseModel
 from sqlalchemy import select
-from sqlalchemy.engine import Connection, RowMapping
+from sqlalchemy.engine import Connection, Engine, RowMapping
 
 from policy_atlas.core.schema import capability_run, evidence_scope, task, task_plan
 from policy_atlas.runtime.scoping_plan import (
@@ -71,6 +71,68 @@ class UnknownCapability(LookupError):
 
 
 @dataclass(frozen=True)
+class TaskAgentProfile:
+    """What the Task Agent (the planning assistant) does for one capability.
+
+    The turn route and the live backend read everything capability-specific
+    from here, so they have one code path. Drafts, inputs and turns are typed
+    loosely: each profile's functions know their own shapes.
+
+    Args:
+        capability: The capability key.
+        wire: The structured-output turn model the model fills.
+        build_messages: ``(turns, previous_draft, inputs)`` → chat messages,
+            from the capability's hash-pinned prompt module.
+        model: Model id.
+        max_output_tokens: Completion token cap.
+        prompt_version: Recorded on every trace.
+        trace_name: Static Langfuse observation name.
+        usage_event: structlog event name for usage logging.
+        label: Call label for parse errors.
+        load_inputs: ``(conn, task_id)`` → the extra inputs a turn needs
+            (linked context, baseline state, previous plan); ``None`` when
+            there are none.
+        build_plan: ``(draft, inputs, turn_index)`` → the executable plan, or
+            raises ``ValidationError`` / ``ValueError``.
+        draft_from_plan: Approved plan → its API draft.
+        draft_from_wire: ``(draft, ready, inputs)`` → the API draft of a
+            not-yet-approved wire draft.
+        seed_draft: Executed plan → the wire draft dict a successor
+            conversation starts from.
+        stub_turn: Zero-egress turn for tests and keyless runs, from the
+            conversation turns alone.
+        part_ids: The part (card) ids this Task Agent may propose.
+        no_primary_parts: Part ids whose options carry no primary.
+        degrade_suggestions: Whether malformed suggested answers are dropped.
+        after_approve: Optional ``(engine, task_id, plan, agent)`` →
+            ``(plan, reply note)``, run outside any transaction once a turn
+            approves a plan.
+    """
+
+    capability: str
+    wire: type[BaseModel]
+    build_messages: Callable[[list[dict[str, str]], dict[str, object] | None, Any], list[Any]]
+    model: str
+    max_output_tokens: int
+    prompt_version: str
+    trace_name: str
+    usage_event: str
+    label: str
+    load_inputs: Callable[[Connection, uuid.UUID], Any]
+    build_plan: Callable[[Any, Any, int], AnyPlan]
+    draft_from_plan: Callable[[Any], BaseModel]
+    draft_from_wire: Callable[[Any, bool, Any], BaseModel]
+    seed_draft: Callable[[Any], dict[str, object]]
+    stub_turn: Callable[[list[dict[str, str]]], Any]
+    part_ids: frozenset[str]
+    no_primary_parts: frozenset[str] = frozenset()
+    degrade_suggestions: bool = False
+    after_approve: (
+        Callable[[Engine, uuid.UUID, Any, Any], tuple[AnyPlan, str | None]] | None
+    ) = None
+
+
+@dataclass(frozen=True)
 class CapabilitySpec:
     """Everything a reader needs to know about one kind of work.
 
@@ -82,17 +144,35 @@ class CapabilitySpec:
             ``context`` (task 045: options scoping composes a different chain
             per purpose; task 046: a targeted record's context can mark it
             acquire-only; the Evidence search ignores both).
-        task_agent_prompt_module: Dotted path of the module holding this
-            capability's Task Agent prompt. A string, not the module: the
-            prompt modules are hash-pinned and importing them all eagerly
-            would drag every prompt into every process that reads a plan.
         lattice: Point name → the component boundary it sits on.
+        load_task_agent: Returns the capability's :class:`TaskAgentProfile`.
+            A loader, not the profile: the profile modules import this
+            registry (and the Evidence search one imports ``runtime.agent``,
+            which imports it too), and a plan reader should not pull in every
+            prompt.
     """
 
     plan_model: type[AnyPlan]
     compose: Callable[[Any, str | None, Mapping[str, Any] | None], ComposedChain]
-    task_agent_prompt_module: str
     lattice: dict[str, PausePoint]
+    load_task_agent: Callable[[], TaskAgentProfile]
+
+    @property
+    def task_agent(self) -> TaskAgentProfile:
+        """The capability's Task Agent profile."""
+        return self.load_task_agent()
+
+
+def _evidence_search_task_agent() -> TaskAgentProfile:
+    from policy_atlas.runtime.task_agent import EVIDENCE_SEARCH_TASK_AGENT
+
+    return EVIDENCE_SEARCH_TASK_AGENT
+
+
+def _options_scoping_task_agent() -> TaskAgentProfile:
+    from policy_atlas.runtime.task_agent_scoping import OPTIONS_SCOPING_TASK_AGENT
+
+    return OPTIONS_SCOPING_TASK_AGENT
 
 
 #: The registry. Both capabilities as of phase 3.2 (X3).
@@ -100,18 +180,18 @@ CAPABILITIES: dict[str, CapabilitySpec] = {
     EVIDENCE_SEARCH: CapabilitySpec(
         plan_model=TaskPlan,
         compose=compose,
-        task_agent_prompt_module="policy_atlas.runtime.task_agent_prompt",
         lattice=LATTICE_POINTS,
+        load_task_agent=_evidence_search_task_agent,
     ),
     OPTIONS_SCOPING: CapabilitySpec(
         plan_model=ScopingPlan,
         compose=compose_scoping,
-        task_agent_prompt_module="policy_atlas.runtime.task_agent_scoping_prompt",
         # The gate is registered here as *data* — the point exists on the
         # scoping chain and nowhere else (A2), so an Evidence search walk can
         # never resolve it. Its options, card, unattended recording and
         # end-walk disposition are phase 5.2.
         lattice={BASELINE_CONFIRM: PausePoint("after_component", "synthesise")},
+        load_task_agent=_options_scoping_task_agent,
     ),
 }
 
