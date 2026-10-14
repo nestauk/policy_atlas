@@ -25,6 +25,10 @@ load_dotenv()
 # product-egress keys the .env may carry; DATABASE_URL and friends survive.
 for _egress_key in (
     "OPENAI_API_KEY",
+    "OPENAI_BASE_URL",
+    "AWS_BEARER_TOKEN_BEDROCK",
+    "POLICY_ATLAS_MODEL_ROUTE",
+    "POLICY_ATLAS_MODEL_ROUTE_FILE",
     "LANGFUSE_PUBLIC_KEY",
     "LANGFUSE_SECRET_KEY",
     "LANGFUSE_HOST",

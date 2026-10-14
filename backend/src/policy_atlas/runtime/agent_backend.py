@@ -37,6 +37,7 @@ from openai.types.chat import ChatCompletionMessageParam
 from pydantic import BaseModel
 
 from policy_atlas.core import tracing
+from policy_atlas.core.model_routes import route
 from policy_atlas.core.openai_client import parse_structured, resolve_openai_client
 from policy_atlas.core.prompt_fields import scrub_nul
 from policy_atlas.core.usage import UsageResult, usage_details, usage_metadata
@@ -60,14 +61,9 @@ if TYPE_CHECKING:
 
 log = structlog.get_logger()
 
-# Model routing by moment (contract decision 3 — cost tiering, not agent identity).
-# route/decide are judgment-class (the planner's default judgment model); triage is
-# mini-class. Both env-overridable so ops can pin a different model without a code
-# change (the SYNTHESIS_MODEL/PLANNER_MODEL pattern). Triage used to borrow the
-# stage-1 screening model; task 051 moved screening to gpt-5.6-luna and left triage
-# where it was, so the default is a literal here.
-AGENT_MODEL = os.environ.get("POLICY_ATLAS_AGENT_MODEL", "gpt-5.5")
-AGENT_TRIAGE_MODEL = os.environ.get("POLICY_ATLAS_AGENT_TRIAGE_MODEL", "gpt-5.4-mini")
+# Model from the route file (task 045); see core/model_routes.py.
+AGENT_MODEL = route().model_for("agent")
+AGENT_TRIAGE_MODEL = route().model_for("agent_triage")
 
 
 def _warn_stale_agent_env(environ: Mapping[str, str]) -> list[str]:

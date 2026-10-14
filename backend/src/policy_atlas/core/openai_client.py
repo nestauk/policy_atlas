@@ -16,6 +16,7 @@ from typing import Any
 from openai import OpenAI
 from pydantic import BaseModel
 
+from policy_atlas.core.model_routes import route
 from policy_atlas.core.usage import UsageResult, log_usage, token_usage_from_provider
 
 
@@ -48,6 +49,8 @@ def resolve_openai_client(
     """Resolve the OpenAI API key and construct a client, failing loudly.
 
     Shared by both live backends so key-resolution policy lives in one place.
+    The base address always comes from the selected route, so ``OPENAI_BASE_URL``
+    in the environment is never consulted.
 
     Args:
         api_key: Explicit key, or ``None`` to read ``OPENAI_API_KEY``.
@@ -61,7 +64,12 @@ def resolve_openai_client(
     resolved_key = api_key or os.environ.get("OPENAI_API_KEY")
     if not resolved_key:
         raise RuntimeError(f"{backend_name} requires OPENAI_API_KEY or an explicit api_key.")
-    return OpenAI(api_key=resolved_key, timeout=timeout, max_retries=max_retries)
+    return OpenAI(
+        api_key=resolved_key,
+        base_url=route().openai_base_url,
+        timeout=timeout,
+        max_retries=max_retries,
+    )
 
 
 def openai_kwargs(model: str, *, reasoning_effort: str | None = None) -> dict[str, Any]:

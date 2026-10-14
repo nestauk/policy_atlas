@@ -38,6 +38,7 @@ from openai.types.chat import ChatCompletionMessageParam
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from policy_atlas.core import tracing
+from policy_atlas.core.model_routes import route
 from policy_atlas.core.openai_client import openai_kwargs, parse_structured, resolve_openai_client
 from policy_atlas.core.prompt_fields import scrub_nul
 from policy_atlas.core.usage import UsageResult, usage_details, usage_metadata
@@ -45,7 +46,7 @@ from policy_atlas.core.usage import UsageResult, usage_details, usage_metadata
 # --- IOF (intervention-outcome) vetter surface --------------------------------
 
 FINDING_VETTER_PROMPT_VERSION = "extract_finding_vetter_v3"
-FINDING_VETTER_MODEL = "gpt-5.4-mini"
+FINDING_VETTER_MODEL = route().model_for("finding_vetter")
 # effort per the 018 C2 classify A/B evidence — xhigh exhausts completion caps
 # on 5.4-mini judgment calls
 FINDING_VETTER_REASONING_EFFORT = "high"
@@ -213,7 +214,7 @@ def validate_verdict_coverage(
 # --- ICF (implementation-context) vetter surface ------------------------------
 
 ICF_FINDING_VETTER_PROMPT_VERSION = "extract_icf_vetter_v2"
-ICF_FINDING_VETTER_MODEL = "gpt-5.4-mini"
+ICF_FINDING_VETTER_MODEL = route().model_for("icf_finding_vetter")
 ICF_FINDING_VETTER_REASONING_EFFORT = "high"
 ICF_FINDING_VETTER_MAX_OUTPUT_TOKENS = 32_768
 

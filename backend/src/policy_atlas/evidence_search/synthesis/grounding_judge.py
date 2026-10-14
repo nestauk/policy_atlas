@@ -24,6 +24,7 @@ from langfuse import Langfuse
 from pydantic import BaseModel, ConfigDict
 
 from policy_atlas.core import tracing
+from policy_atlas.core.model_routes import route
 from policy_atlas.core.openai_client import require_parsed, resolve_openai_client
 from policy_atlas.core.usage import (
     UsageResult,
@@ -38,7 +39,7 @@ ENVELOPE_VERSION = "synthesis_envelope_v2"
 
 # The contracted model floor; judge calibration is eval-workstream territory —
 # this slice's bar is mechanism correctness.
-JUDGE_MODEL = "gpt-5.4-mini"
+JUDGE_MODEL = route().model_for("grounding_judge")
 
 VERDICTS = ("tier_1", "tier_2", "tier_3", "tier_4", "unsupported_mis_cited")
 

@@ -31,6 +31,7 @@ from typing import Any, Literal
 from openai.types.chat import ChatCompletionMessageParam
 from pydantic import BaseModel, ConfigDict, Field
 
+from policy_atlas.core.model_routes import route
 from policy_atlas.core.prompt_fields import sanitize_prompt_field
 from policy_atlas.evidence_search.extract.iof_records import SegmentRecord
 
@@ -40,7 +41,7 @@ SCREEN_FULLTEXT_PROMPT_VERSION = "screen_fulltext_v1"
 # Stage-1 model (task 051, contract D10): ``screen_v4`` was tuned on Luna and
 # measured there (0.917 recall on the labelled mini set); the adaptive vote in
 # ``screen.py`` adds the redundancy, full text carries the signal at stage 2.
-SCREEN_MODEL = "gpt-5.6-luna"
+SCREEN_MODEL = route().model_for("screen")
 
 STAGE2_REPS = 1
 

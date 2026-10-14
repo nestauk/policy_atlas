@@ -24,13 +24,13 @@ optional Langfuse tracing). Two differences from the vetter, both deliberate:
 
 from __future__ import annotations
 
-import os
 from collections.abc import Sequence
 from typing import Any, Protocol
 
 from langfuse import Langfuse
 
 from policy_atlas.core import tracing
+from policy_atlas.core.model_routes import route
 from policy_atlas.core.openai_client import openai_kwargs, parse_structured, resolve_openai_client
 from policy_atlas.core.usage import UsageResult, usage_details, usage_metadata
 from policy_atlas.evidence_search.extract.relevance_prompt import (
@@ -43,9 +43,8 @@ from policy_atlas.evidence_search.extract.relevance_prompt import (
     RELEVANCE_MAX_OUTPUT_TOKENS as RELEVANCE_ANNOTATOR_MAX_OUTPUT_TOKENS,
 )
 
-# Mini-class model, env-overridable — the same convention as the vetter's model
-# constant, with the contract's B2′ env name (model route: mini-class).
-RELEVANCE_ANNOTATOR_MODEL = os.environ.get("POLICY_ATLAS_RELEVANCE_MODEL", "gpt-5.4-mini")
+# Model from the route file (task 045); see core/model_routes.py.
+RELEVANCE_ANNOTATOR_MODEL = route().model_for("relevance")
 # Effort per the vetter precedent (xhigh exhausts completion caps on 5.4-mini
 # judgment calls); the marking task is lighter than vetting, but the ceiling is
 # shared for consistency.

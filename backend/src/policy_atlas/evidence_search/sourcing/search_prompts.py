@@ -32,6 +32,7 @@ from typing import Any
 from openai.types.chat import ChatCompletionMessageParam
 from pydantic import BaseModel, ConfigDict, Field
 
+from policy_atlas.core.model_routes import route
 from policy_atlas.core.prompt_fields import (
     sanitize_prompt_field,
     scrub_nul,
@@ -63,9 +64,9 @@ SEARCH_SUGGEST_PROMPT_VERSION = "search_suggest_v1"
 
 # All three are volume surfaces; mini is the 009-lesson floor (plan-pinned;
 # a queries-model swap-up is an eval-seam question).
-SEARCH_QUERIES_MODEL = "gpt-5.6-luna"
-SEARCH_REFORMULATE_MODEL = "gpt-5.6-luna"
-SEARCH_SUGGEST_MODEL = "gpt-5.6-luna"
+SEARCH_QUERIES_MODEL = route().model_for("search_queries")
+SEARCH_REFORMULATE_MODEL = route().model_for("search_reformulate")
+SEARCH_SUGGEST_MODEL = route().model_for("search_suggest")
 
 # Reasoning model: the cap covers reasoning + output tokens (extract's 011
 # lesson). All three outputs are small lists; 8K leaves ample headroom.

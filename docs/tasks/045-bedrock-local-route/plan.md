@@ -5,7 +5,7 @@
 > adjudicated and folded in ([adversarial-review-plan.md](adversarial-review-plan.md)).
 > **Approved by the owner 2026-09-25** (Karlis Kanders). Contract:
 > [contract.md](contract.md) (approved 2026-09-25). Rubric: [rubric.md](rubric.md). ADR:
-> [0038](../../adr/0038-bedrock-inference-route-and-model-route-file.md), Accepted
+> [0039](../../adr/0039-bedrock-inference-route-and-model-route-file.md), Accepted
 > 2026-09-25. Terms and need numbers (N1 to N8) are defined in the contract and are not
 > restated here.
 
@@ -305,7 +305,7 @@ in total. The key is a short-term Bedrock key in `OPENAI_API_KEY` and
 5. `docs/deferred.md`: supersede the "Bedrock routes" entry (contract F7); add the known
    gaps from contract § Verification evidence expected; record the nine retired
    variables so anyone who finds them in an old `.env` knows why they do nothing.
-6. ADR 0038: set Status to Accepted with the owner's sign-off date from the plan gate.
+6. ADR 0039: set Status to Accepted with the owner's sign-off date from the plan gate.
 7. `verification.md`: everything contract § Verification evidence expected lists,
    including the five prompt-module diffs (P5) and both adversarial-review records.
 

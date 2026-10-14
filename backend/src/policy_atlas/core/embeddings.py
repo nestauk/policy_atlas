@@ -25,14 +25,15 @@ from sqlalchemy import exists, func, select, union
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.engine import Connection
 
+from policy_atlas.core.model_routes import route
 from policy_atlas.core.openai_client import resolve_openai_client
 from policy_atlas.core.schema import chunk as chunk_table
 from policy_atlas.core.schema import chunk_embedding, task_source_snapshot
 
 log = structlog.get_logger()
 
-EMBEDDING_PROFILE = "openai_text_embedding_3_small_v1"
-EMBEDDING_MODEL = "text-embedding-3-small"
+EMBEDDING_PROFILE = route().embeddings.profile
+EMBEDDING_MODEL = route().embeddings.model
 EMBEDDING_DIMENSIONS = 1536
 
 UNIT_POLICY = "embedding_unit_policy_v1"

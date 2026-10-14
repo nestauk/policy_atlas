@@ -1,4 +1,4 @@
-# ADR 0038 — Inference moves to Amazon Bedrock; models are named in a committed route file
+# ADR 0039 — Inference moves to Amazon Bedrock; models are named in a committed route file
 
 - **Status:** Accepted — 2026-09-25 (Karlis Kanders, owner, task 045 plan gate).
 - **Date:** 2026-09-25

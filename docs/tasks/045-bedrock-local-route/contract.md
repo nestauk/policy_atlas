@@ -13,7 +13,7 @@ One implementation slice. Boundaries are in [AGENTS.md](../../../AGENTS.md); spe
 > only. **Plan approved (before implementation): 2026-09-25 · Karlis Kanders (owner)**,
 > with two later owner decisions folded in the same day: an overlay route file for
 > evaluations, and retirement of the nine per-step model environment variables. ADR:
-> [0038](../../adr/0038-bedrock-inference-route-and-model-route-file.md), Accepted
+> [0039](../../adr/0039-bedrock-inference-route-and-model-route-file.md), Accepted
 > 2026-09-25. Adversarial reviews: contract-stage 10 findings, plan-stage 13 plus one
 > lead finding, all adopted ([adversarial-review-contract.md](adversarial-review-contract.md),
 > [adversarial-review-plan.md](adversarial-review-plan.md)). Branch:
@@ -32,6 +32,16 @@ This is the first of three slices in the Bedrock programme. It covers local deve
 only. The staging slice (task role permissions, CDK changes, short-lived keys,
 re-embedding the deployed database) and the model quality slice (running the evaluation
 set on the new models and re-tuning prompts) come later and are out of scope here.
+
+> **Build-time note (2026-10-14).** `dev` was merged into this branch between design and
+> build (tasks 046 to 052). Four facts below moved; each is resolved within this
+> contract's own vocabulary and flagged in `verification.md`: (1) task 051 put screening
+> and the three search-generation steps on gpt-5.6-luna, so the app now uses four OpenAI
+> models and the route file gains a fourth text tier, `fast`, so that the default route
+> still reproduces today's values; (2) agent triage no longer follows screen, so only the
+> case-studies "follows" rule remains to retire; (3) `chat_prompt.py` is now a hash-pinned
+> prompt module, so six pinned modules lose a model constant, not five; (4) task 051 took
+> ADR number 0038, so this slice's ADR is 0039.
 
 ## Why this is safe to do now
 
@@ -517,7 +527,7 @@ have to undo, and to name the seams they will pick up.
 - `backend/pyproject.toml`: move `boto3` to main dependencies; add the `bedrock-runtime`
   type stubs beside the existing stubs (N7).
 - `backend/.env.example`, `docs/deferred.md`,
-  `docs/adr/0038-bedrock-inference-route-and-model-route-file.md` (N8).
+  `docs/adr/0039-bedrock-inference-route-and-model-route-file.md` (N8).
 
 **Out:**
 

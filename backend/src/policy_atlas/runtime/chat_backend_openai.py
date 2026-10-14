@@ -6,7 +6,8 @@ import json
 from collections.abc import Callable
 from typing import Any
 
-from policy_atlas.core.openai_client import require_parsed, resolve_openai_client
+from policy_atlas.core.model_routes import route
+from policy_atlas.core.openai_client import openai_kwargs, require_parsed, resolve_openai_client
 from policy_atlas.core.usage import UsageResult, token_usage_from_provider
 from policy_atlas.evidence_search.synthesis.synthesis_backend import (
     LOOKUP_TOOL_SCHEMA,
@@ -22,6 +23,11 @@ _CHAT_READ_TOOL_SCHEMAS = [
     QUERY_FINDINGS_TOOL_SCHEMA,
     LOOKUP_TOOL_SCHEMA,
 ]
+
+
+def _chat_kwargs() -> dict[str, Any]:
+    """Model kwargs for every live chat call: the chat model plus its route knob."""
+    return openai_kwargs(CHAT_MODEL, reasoning_effort=route().reasoning_effort_for(CHAT_MODEL))
 
 
 class OpenAIChatBackend(ChatBackend):
@@ -76,17 +82,15 @@ class OpenAIChatBackend(ChatBackend):
         self, messages: list[dict[str, Any]], *, max_output_tokens: int | None
     ) -> UsageResult[ChatTurn]:
         completions: Any = self._client.chat.completions
-        # gpt-5.6-terra rejects function tools unless reasoning_effort is
-        # 'none' on /v1/chat/completions (H3 live check, 2026-08-11) — which
-        # also matches the model's fast-conversational selection intent.
+        # The reasoning-effort pin the chat model needs (Terra refuses function
+        # tools without it, H3 live check 2026-08-11) comes from the route file.
         response = completions.create(
-            model=CHAT_MODEL,
+            **_chat_kwargs(),
             messages=messages,
             tools=_CHAT_READ_TOOL_SCHEMAS,
             parallel_tool_calls=True,
             tool_choice="required",
             max_completion_tokens=max_output_tokens,
-            reasoning_effort="none",
         )
         if not response.choices:
             raise RuntimeError("OpenAI chat tool turn returned no choices.")
@@ -137,8 +141,7 @@ class OpenAIChatBackend(ChatBackend):
             },
         ]
         stream = completions.create(
-            model=CHAT_MODEL,
-            reasoning_effort="none",
+            **_chat_kwargs(),
             messages=prose_messages,
             stream=True,
             max_completion_tokens=max_output_tokens,
@@ -163,8 +166,7 @@ class OpenAIChatBackend(ChatBackend):
             },
         ]
         response = completions.parse(
-            model=CHAT_MODEL,
-            reasoning_effort="none",
+            **_chat_kwargs(),
             messages=structured_messages,
             response_format=ChatAnswerWire,
             max_completion_tokens=max_output_tokens,

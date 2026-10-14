@@ -9,7 +9,6 @@ decision 5, sequencing invariant).
 
 from __future__ import annotations
 
-import os
 import uuid
 from typing import Any, Protocol
 
@@ -18,6 +17,7 @@ from langfuse import Langfuse
 from openai.types.chat import ChatCompletionMessageParam
 
 from policy_atlas.core import tracing
+from policy_atlas.core.model_routes import route
 from policy_atlas.core.openai_client import parse_structured, resolve_openai_client
 from policy_atlas.core.prompt_fields import scrub_nul
 from policy_atlas.core.usage import UsageResult, usage_details, usage_metadata
@@ -32,9 +32,8 @@ from policy_atlas.runtime.planner_prompt import (
 
 log = structlog.get_logger()
 
-# Judgment-class model; env-overridable so ops can pin a different model
-# without a code change (the `SYNTHESIS_MODEL` pattern).
-PLANNER_MODEL = os.environ.get("POLICY_ATLAS_PLANNER_MODEL", "gpt-5.5")
+# Model from the route file (task 045); see core/model_routes.py.
+PLANNER_MODEL = route().model_for("planner")
 
 # The planner turn as emitted by any backend; the wire model IS the turn
 # shape, code-side and model-side — no separate dataclass to keep in sync.

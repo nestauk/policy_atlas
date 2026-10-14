@@ -10,6 +10,7 @@ import structlog
 from openai.types.chat import ChatCompletionMessageParam
 from pydantic import BaseModel, ConfigDict
 
+from policy_atlas.core.model_routes import route
 from policy_atlas.core.openai_client import parse_structured, resolve_openai_client
 from policy_atlas.core.prompt_fields import splice_guidance
 from policy_atlas.core.tags import has_control_character
@@ -18,12 +19,12 @@ from policy_atlas.core.usage import UsageResult
 log = structlog.get_logger()
 
 PROMPT_VERSION = "characterise_grouping_v1"
-DISCOVERY_MODEL = "gpt-5.4-mini"
+DISCOVERY_MODEL = route().model_for("theme_discovery")
 # Plan pinned gpt-5-nano; flipped to gpt-5-mini on live evidence (2026-07-06): nano
 # emits an empty assignments list on realistic 25-doc batches at any reasoning effort
 # (16K reasoning tokens -> `{"assignments":[]}`), mini assigns 25/25 cleanly. Deviation
 # flagged in verification.md; the nano-class pin was plan-gate detail, not contract.
-ASSIGNMENT_MODEL = "gpt-5.4-mini"
+ASSIGNMENT_MODEL = route().model_for("theme_assignment")
 BATCH_SIZE = 40
 MAX_CONCURRENT_BATCHES = 4
 DISCOVERY_RETRY_CAP = 1
