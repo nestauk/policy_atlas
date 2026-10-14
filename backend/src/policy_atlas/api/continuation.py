@@ -30,10 +30,9 @@ from policy_atlas.runtime.agent_backend import AgentBackend
 from policy_atlas.runtime.capability_registry import (
     capability_of_task,
     compose_plan,
-    context_of_walk,
     expect_task_plan,
+    intent_record,
     lattice_for,
-    purpose_of_walk,
 )
 from policy_atlas.runtime.continuation_state import ResumeDecision, build
 from policy_atlas.runtime.conversation_lifecycle import close_task_agent_conversation
@@ -1159,21 +1158,20 @@ def _persist_fanout(
             action=action,
             user_text=user_text,
         )
+        # The parked walk's intent record picks its chain (task 045, S1;
+        # task 046, AM4: its context too); _with_plan holds no connection,
+        # so both are read here.
+        purpose, scope_context = intent_record(
+            conn, task_id=task_id, walk_id=pause.capability_run_id
+        )
         current_state = _with_plan(
             current_state,
             amended,
             plan_id,
             version,
             capability_of_task(conn, task_id),
-            # The parked walk's intent record picks its chain (task 045, S1;
-            # task 046, AM4: its context too); _with_plan holds no connection,
-            # so both are read here.
-            purpose=purpose_of_walk(
-                conn, task_id=task_id, capability_run_id=pause.capability_run_id
-            ),
-            scope_context=context_of_walk(
-                conn, task_id=task_id, capability_run_id=pause.capability_run_id
-            ),
+            purpose=purpose,
+            scope_context=scope_context,
         )
     rerun = fanout.rerun
     if rerun is not None:

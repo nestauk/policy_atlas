@@ -9,9 +9,9 @@ chain for a scoping task. The same argument applies to the steering lattice
 (A2): a flat, global point table would fire a scoping pause on an Evidence
 search walk in frequent mode.
 
-So: one :class:`CapabilitySpec` per capability, and four lookups
-(:func:`validate_plan`, :func:`compose_plan`, :func:`lattice_for`,
-:func:`steer_points_for`) that every reader goes through. Unknown capability is
+So: one :class:`CapabilitySpec` per capability, and three lookups
+(:func:`validate_plan`, :func:`compose_plan`, :func:`lattice_for`) that every
+reader goes through. Unknown capability is
 a typed error, never a default — a row whose ``capability`` this build does not
 know is a row this build must not run.
 
@@ -33,17 +33,16 @@ from typing import Any
 
 from pydantic import BaseModel
 from sqlalchemy import select
-from sqlalchemy.engine import Connection
+from sqlalchemy.engine import Connection, RowMapping
 
-from policy_atlas.core.schema import capability_run, evidence_scope, task
+from policy_atlas.core.schema import capability_run, evidence_scope, task, task_plan
 from policy_atlas.runtime.scoping_plan import (
     BASELINE_CONFIRM,
-    SCOPING_STEER_POINTS,
     ScopingPlan,
     compose_scoping,
 )
 from policy_atlas.runtime.steering import LATTICE_POINTS, PausePoint
-from policy_atlas.runtime.task_plan import STEER_POINTS, ComposedChain, TaskPlan, compose
+from policy_atlas.runtime.task_plan import ComposedChain, TaskPlan, compose
 
 #: The Evidence search capability key. Named rather than spelled out at each
 #: call site so the constant-capability readers (the ones whose *input type* is
@@ -76,8 +75,6 @@ class CapabilitySpec:
     """Everything a reader needs to know about one kind of work.
 
     Args:
-        key: The stored ``task.capability`` / ``capability_run.capability``
-            value.
         plan_model: The pydantic model that validates this capability's plan
             payload.
         compose: Builds the deterministic component chain from a validated
@@ -89,35 +86,27 @@ class CapabilitySpec:
             capability's Task Agent prompt. A string, not the module: the
             prompt modules are hash-pinned and importing them all eagerly
             would drag every prompt into every process that reads a plan.
-        steer_points: The lattice point names a plan of this capability may
-            pre-declare standing defaults for.
         lattice: Point name → the component boundary it sits on.
     """
 
-    key: str
     plan_model: type[AnyPlan]
     compose: Callable[[Any, str | None, Mapping[str, Any] | None], ComposedChain]
     task_agent_prompt_module: str
-    steer_points: frozenset[str]
     lattice: dict[str, PausePoint]
 
 
 #: The registry. Both capabilities as of phase 3.2 (X3).
 CAPABILITIES: dict[str, CapabilitySpec] = {
     EVIDENCE_SEARCH: CapabilitySpec(
-        key=EVIDENCE_SEARCH,
         plan_model=TaskPlan,
         compose=compose,
         task_agent_prompt_module="policy_atlas.runtime.task_agent_prompt",
-        steer_points=frozenset(STEER_POINTS),
         lattice=LATTICE_POINTS,
     ),
     OPTIONS_SCOPING: CapabilitySpec(
-        key=OPTIONS_SCOPING,
         plan_model=ScopingPlan,
         compose=compose_scoping,
         task_agent_prompt_module="policy_atlas.runtime.task_agent_scoping_prompt",
-        steer_points=SCOPING_STEER_POINTS,
         # The gate is registered here as *data* — the point exists on the
         # scoping chain and nowhere else (A2), so an Evidence search walk can
         # never resolve it. Its options, card, unattended recording and
@@ -210,21 +199,6 @@ def lattice_for(capability: str) -> dict[str, PausePoint]:
     return spec_for(capability).lattice
 
 
-def steer_points_for(capability: str) -> frozenset[str]:
-    """Return the steer-point names a plan of one capability may name (A18d).
-
-    Args:
-        capability: The owning task's capability.
-
-    Returns:
-        The valid standing-default point names.
-
-    Raises:
-        UnknownCapability: If the capability is not registered.
-    """
-    return spec_for(capability).steer_points
-
-
 def capability_of_task(conn: Connection, task_id: uuid.UUID) -> str:
     """Read one task's capability.
 
@@ -250,127 +224,93 @@ def capability_of_task(conn: Connection, task_id: uuid.UUID) -> str:
     return str(value)
 
 
-def purpose_of_walk(
-    conn: Connection, *, task_id: uuid.UUID, capability_run_id: uuid.UUID
-) -> str | None:
-    """Read the ``purpose`` of the intent record one walk runs under.
+def intent_record(
+    conn: Connection,
+    *,
+    task_id: uuid.UUID,
+    walk_id: uuid.UUID | None = None,
+    scope_id: uuid.UUID | None = None,
+) -> tuple[str | None, dict[str, Any]]:
+    """Read the ``purpose`` and ``context`` of one intent record.
 
-    The purpose selects the chain :func:`compose_plan` composes (task 045).
-    It lives on the intent record, not the walk, so it is read through the
-    walk's ``evidence_scope_id``; both rows are task-scoped.
+    The purpose selects the chain :func:`compose_plan` composes (task 045) and
+    the context composes beside it. Pass ``walk_id`` to read the record a walk
+    runs under (through its ``evidence_scope_id``; both rows are task-scoped),
+    or ``scope_id`` to read a record directly.
 
     Args:
         conn: Open database connection.
-        task_id: The task owning the walk.
-        capability_run_id: The walk.
+        task_id: The task owning the record.
+        walk_id: The walk whose record is wanted.
+        scope_id: The record itself.
 
     Returns:
-        The purpose, or ``None`` for an intent record that carries none (every
-        Evidence search record).
+        The purpose (``None`` for a record that carries none, as every
+        Evidence search record) and the context mapping (empty when the stored
+        value is not a mapping).
 
     Raises:
-        LookupError: If the walk does not exist for the task.
+        LookupError: If the walk or record does not exist for the task.
     """
-    row = conn.execute(
-        select(evidence_scope.c.purpose)
-        .select_from(
-            capability_run.join(
-                evidence_scope,
-                (evidence_scope.c.evidence_scope_id == capability_run.c.evidence_scope_id)
-                & (evidence_scope.c.task_id == capability_run.c.task_id),
+    columns = select(evidence_scope.c.purpose, evidence_scope.c.context)
+    if walk_id is not None:
+        query = (
+            columns.select_from(
+                capability_run.join(
+                    evidence_scope,
+                    (evidence_scope.c.evidence_scope_id == capability_run.c.evidence_scope_id)
+                    & (evidence_scope.c.task_id == capability_run.c.task_id),
+                )
             )
+            .where(capability_run.c.task_id == task_id)
+            .where(capability_run.c.capability_run_id == walk_id)
         )
-        .where(capability_run.c.task_id == task_id)
-        .where(capability_run.c.capability_run_id == capability_run_id)
-    ).one_or_none()
+        missing = f"capability run {walk_id} does not exist"
+    else:
+        query = (
+            columns.where(evidence_scope.c.task_id == task_id)
+            .where(evidence_scope.c.evidence_scope_id == scope_id)
+        )
+        missing = f"intent record {scope_id} does not exist"
+    row = conn.execute(query).one_or_none()
     if row is None:
-        raise LookupError(f"capability run {capability_run_id} does not exist")
-    return None if row.purpose is None else str(row.purpose)
+        raise LookupError(missing)
+    purpose = None if row.purpose is None else str(row.purpose)
+    context = dict(row.context) if isinstance(row.context, Mapping) else {}
+    return purpose, context
 
 
 def purpose_of_scope(
     conn: Connection, *, task_id: uuid.UUID, evidence_scope_id: uuid.UUID
 ) -> str | None:
-    """Read one intent record's ``purpose``.
-
-    Args:
-        conn: Open database connection.
-        task_id: The task owning the record.
-        evidence_scope_id: The intent record.
-
-    Returns:
-        The purpose, or ``None`` when the record carries none.
-
-    Raises:
-        LookupError: If the record does not exist for the task.
-    """
-    row = conn.execute(
-        select(evidence_scope.c.purpose)
-        .where(evidence_scope.c.task_id == task_id)
-        .where(evidence_scope.c.evidence_scope_id == evidence_scope_id)
-    ).one_or_none()
-    if row is None:
-        raise LookupError(f"intent record {evidence_scope_id} does not exist")
-    return None if row.purpose is None else str(row.purpose)
+    """Read one intent record's ``purpose`` (see :func:`intent_record`)."""
+    return intent_record(conn, task_id=task_id, scope_id=evidence_scope_id)[0]
 
 
 def context_of_scope(
     conn: Connection, *, task_id: uuid.UUID, evidence_scope_id: uuid.UUID
 ) -> dict[str, Any]:
-    """Read one intent record's ``context``, which composes beside its purpose.
+    """Read one intent record's ``context`` (see :func:`intent_record`)."""
+    return intent_record(conn, task_id=task_id, scope_id=evidence_scope_id)[1]
+
+
+def latest_approved_plan_row(conn: Connection, task_id: uuid.UUID) -> RowMapping | None:
+    """Return the task's current approved ``task_plan`` row, or ``None`` before the first.
 
     Args:
         conn: Open database connection.
-        task_id: The task owning the record.
-        evidence_scope_id: The intent record.
+        task_id: The task.
 
     Returns:
-        The context mapping (empty when the stored value is not a mapping).
-
-    Raises:
-        LookupError: If the record does not exist for the task.
+        The highest-version approved row.
     """
-    row = conn.execute(
-        select(evidence_scope.c.context)
-        .where(evidence_scope.c.task_id == task_id)
-        .where(evidence_scope.c.evidence_scope_id == evidence_scope_id)
-    ).one_or_none()
-    if row is None:
-        raise LookupError(f"intent record {evidence_scope_id} does not exist")
-    return dict(row.context) if isinstance(row.context, Mapping) else {}
-
-
-def context_of_walk(
-    conn: Connection, *, task_id: uuid.UUID, capability_run_id: uuid.UUID
-) -> dict[str, Any]:
-    """Read the ``context`` of the intent record one walk runs under.
-
-    Args:
-        conn: Open database connection.
-        task_id: The task owning the walk.
-        capability_run_id: The walk.
-
-    Returns:
-        The context mapping (empty when the stored value is not a mapping).
-
-    Raises:
-        LookupError: If the walk does not exist for the task.
-    """
-    row = conn.execute(
-        select(evidence_scope.c.context)
-        .select_from(
-            capability_run.join(
-                evidence_scope,
-                (evidence_scope.c.evidence_scope_id == capability_run.c.evidence_scope_id)
-                & (evidence_scope.c.task_id == capability_run.c.task_id),
-            )
-        )
-        .where(capability_run.c.task_id == task_id)
-        .where(capability_run.c.capability_run_id == capability_run_id)
-    ).one_or_none()
-    if row is None:
-        raise LookupError(f"capability run {capability_run_id} does not exist")
-    return dict(row.context) if isinstance(row.context, Mapping) else {}
+    return conn.execute(
+        select(task_plan)
+        .where(task_plan.c.task_id == task_id)
+        .where(task_plan.c.status == "approved")
+        .order_by(task_plan.c.version.desc())
+        .limit(1)
+    ).mappings().one_or_none()
 
 
 def expect_task_plan(plan: BaseModel) -> TaskPlan:
@@ -396,4 +336,23 @@ def expect_task_plan(plan: BaseModel) -> TaskPlan:
         raise TypeError(
             f"this path handles Evidence search plans only, got {type(plan).__name__}"
         )
+    return plan
+
+
+def expect_scoping_plan(plan: BaseModel) -> ScopingPlan:
+    """Narrow a registry-validated plan to the options-scoping model.
+
+    The mirror of :func:`expect_task_plan` for the scoping paths.
+
+    Args:
+        plan: A plan returned by :func:`validate_plan`.
+
+    Returns:
+        The same object, typed.
+
+    Raises:
+        TypeError: If the plan is not an options-scoping plan.
+    """
+    if not isinstance(plan, ScopingPlan):
+        raise TypeError(f"this path handles scoping plans only, got {type(plan).__name__}")
     return plan

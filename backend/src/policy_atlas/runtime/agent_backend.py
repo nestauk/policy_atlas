@@ -147,7 +147,6 @@ WATCH_READ_TOOLS: tuple[str, ...] = ("lookup", "query_findings")
 RouterCompile = RouterCompileWire
 WatchTriage = WatchTriageWire
 WatchDecision = WatchDecisionWire
-GateSort = GateSortWire
 
 
 # --- The backend protocol --------------------------------------------------
@@ -357,25 +356,14 @@ def _scrub_triage(triage: WatchTriageWire) -> WatchTriageWire:
     return triage.model_copy(update={"reason": scrub_nul(triage.reason)})
 
 
-def _scrub_gate_sort(sort: GateSortWire) -> GateSortWire:
-    updates: dict[str, Any] = {"kind": scrub_nul(sort.kind), "reason": scrub_nul(sort.reason)}
-    if sort.option_id is not None:
-        updates["option_id"] = scrub_nul(sort.option_id)
-    if sort.carried_text is not None:
-        updates["carried_text"] = scrub_nul(sort.carried_text)
-    return sort.model_copy(update=updates)
-
-
-def _scrub_longlist_sort(sort: LonglistVerbWire) -> LonglistVerbWire:
-    updates: dict[str, Any] = {
-        "kind": scrub_nul(sort.kind),
-        "sort_reason": scrub_nul(sort.sort_reason),
+def scrub_model[M: BaseModel](model: M) -> M:
+    """Return a copy of a flat wire model with NUL bytes scrubbed from its text fields."""
+    updates = {
+        name: scrub_nul(value)
+        for name in type(model).model_fields
+        if isinstance(value := getattr(model, name), str)
     }
-    for name in ("option_id", "reason", "design_words"):
-        value = getattr(sort, name)
-        if value is not None:
-            updates[name] = scrub_nul(value)
-    return sort.model_copy(update=updates)
+    return model.model_copy(update=updates)
 
 
 def _scrub_decision(decision: WatchDecisionWire) -> WatchDecisionWire:
@@ -514,7 +502,7 @@ class OpenAIAgentBackend:
             name="agent:gate_sort",
             session_id=session_id,
         )
-        return _scrub_gate_sort(parsed)
+        return scrub_model(parsed)
 
     def sort_longlist_turn(
         self,
@@ -537,7 +525,7 @@ class OpenAIAgentBackend:
             name="agent:longlist_sort",
             session_id=session_id,
         )
-        return _scrub_longlist_sort(parsed)
+        return scrub_model(parsed)
 
     def propose_option_design(
         self,

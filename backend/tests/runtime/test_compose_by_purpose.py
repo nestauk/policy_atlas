@@ -30,7 +30,7 @@ from policy_atlas.runtime.capability_registry import (
     EVIDENCE_SEARCH,
     OPTIONS_SCOPING,
     compose_plan,
-    purpose_of_walk,
+    intent_record,
 )
 from policy_atlas.runtime.continuation_state import build
 from policy_atlas.runtime.harness import build_graph
@@ -462,7 +462,7 @@ def test_the_api_resume_path_recomposes_the_walk_s_own_purpose(engine: Engine) -
             }
         )
         with engine.connect() as conn:
-            purpose = purpose_of_walk(conn, task_id=task_id, capability_run_id=walk_id)
+            purpose, _context = intent_record(conn, task_id=task_id, walk_id=walk_id)
         assert purpose == "longlist"
         rebuilt = _with_plan(
             state, built.plan, built.plan_id, built.plan_version, OPTIONS_SCOPING, purpose=purpose
@@ -476,7 +476,7 @@ def test_the_api_resume_path_recomposes_the_walk_s_own_purpose(engine: Engine) -
         _cleanup(engine, task_id)
 
 
-def test_purpose_of_walk_reads_none_for_an_evidence_search_walk(engine: Engine) -> None:
+def test_intent_record_reads_no_purpose_for_an_evidence_search_walk(engine: Engine) -> None:
     task_id: uuid.UUID | None = None
     try:
         task_id, _scope_id, walk_id = _parked_scoping_walk(engine)
@@ -486,9 +486,9 @@ def test_purpose_of_walk_reads_none_for_an_evidence_search_walk(engine: Engine) 
                 .where(evidence_scope.c.task_id == task_id)
                 .values(purpose=None)
             )
-            assert purpose_of_walk(conn, task_id=task_id, capability_run_id=walk_id) is None
+            assert intent_record(conn, task_id=task_id, walk_id=walk_id)[0] is None
             with pytest.raises(LookupError):
-                purpose_of_walk(conn, task_id=task_id, capability_run_id=uuid.uuid4())
+                intent_record(conn, task_id=task_id, walk_id=uuid.uuid4())
             assert (
                 conn.execute(
                     capability_run.select().where(capability_run.c.capability_run_id == walk_id)
