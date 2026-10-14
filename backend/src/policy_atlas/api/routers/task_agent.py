@@ -960,9 +960,9 @@ def create_task_agent_turn(
     Two capabilities share this route, and everything durable about it — the
     phase-one reservation, the idempotency key, the run fences, the transaction
     that joins the turn to the plan it approved — is shared with them. What the
-    capability picks — through its registry profile — is which Task Agent is
-    called, which plan model validates what it returns, and which of the two
-    draft projections the turn carries back (task 044, C9).
+    capability picks is which Task Agent is called, which plan model validates
+    what it returns, and which of the two draft projections the turn carries
+    back (task 044, C9).
 
     A turn that arrives while an options-scoping walk is paused on its baseline
     gate is admitted, sorted, and dispatched to an answer or a decision before
