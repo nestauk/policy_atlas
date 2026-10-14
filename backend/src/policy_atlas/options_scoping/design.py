@@ -15,8 +15,10 @@ shows them as such.
 
 from __future__ import annotations
 
+from typing import Annotated
+
 import structlog
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
 
 from policy_atlas.core.prompt_fields import scrub_nul
 from policy_atlas.runtime.option_design_prompt import OptionDesignWire
@@ -28,14 +30,10 @@ log = structlog.get_logger()
 DESIGN_TEXT_MAX = 2_000
 
 
-def _clean(value: str, *, field_name: str) -> str:
-    """Return ``value`` stripped, refusing a blank or oversized string."""
-    text = value.strip()
-    if not text:
-        raise ValueError(f"{field_name} must not be blank")
-    if len(text) > DESIGN_TEXT_MAX:
-        raise ValueError(f"{field_name} exceeds {DESIGN_TEXT_MAX} characters")
-    return text
+#: A design text: stripped, never blank, at most :data:`DESIGN_TEXT_MAX` characters.
+DesignText = Annotated[
+    str, StringConstraints(strip_whitespace=True, min_length=1, max_length=DESIGN_TEXT_MAX)
+]
 
 
 class OptionDesign(BaseModel):
@@ -55,47 +53,12 @@ class OptionDesign(BaseModel):
 
     model_config = ConfigDict(extra="forbid", strict=True)
 
-    name: str
-    description: str
-    design_features: list[str] = Field(min_length=1)
-    outcomes_served: list[str] = Field(default_factory=list)
-    assumed: list[str] = Field(default_factory=list)
+    name: DesignText
+    description: DesignText
+    design_features: list[DesignText] = Field(min_length=1)
+    outcomes_served: list[DesignText] = Field(default_factory=list)
+    assumed: list[DesignText] = Field(default_factory=list)
     version: int = Field(default=1, ge=1)
-
-    @field_validator("name", "description")
-    @classmethod
-    def validate_text(cls, value: str, info: object) -> str:
-        """Validate a required text field.
-
-        Args:
-            value: Candidate text.
-            info: Pydantic field metadata.
-
-        Returns:
-            The stripped text.
-
-        Raises:
-            ValueError: If it is blank or oversized.
-        """
-        return _clean(value, field_name=getattr(info, "field_name", "design"))
-
-    @field_validator("design_features", "outcomes_served", "assumed")
-    @classmethod
-    def validate_items(cls, values: list[str], info: object) -> list[str]:
-        """Validate a list of short phrases.
-
-        Args:
-            values: Candidate phrases.
-            info: Pydantic field metadata.
-
-        Returns:
-            The stripped phrases, in order.
-
-        Raises:
-            ValueError: If a phrase is blank or oversized.
-        """
-        name = getattr(info, "field_name", "design")
-        return [_clean(value, field_name=name) for value in values]
 
     @model_validator(mode="after")
     def validate_assumed_subset(self) -> OptionDesign:

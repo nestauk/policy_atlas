@@ -27,6 +27,7 @@ from policy_atlas.api.routers import sse
 from policy_atlas.api.stage_vocabulary import STAGE_BY_REGISTRY, STAGE_PRESENTATION
 from policy_atlas.core import events
 from policy_atlas.core.schema import longlist_result, option
+from policy_atlas.options_scoping.context import ScopeContext
 from policy_atlas.options_scoping.longlist.lever_types import LEVER_TYPE_KEYS, TAXONOMY_VERSION
 from policy_atlas.options_scoping.longlist.longlist_backend import StubLonglistBackend
 from policy_atlas.options_scoping.option_profile.folding_prompt import FoldingResponse, FoldWire
@@ -34,8 +35,6 @@ from policy_atlas.options_scoping.option_profile.lever_typing_prompt import (
     build_lever_typing_messages,
 )
 from policy_atlas.options_scoping.option_profile.option_profile import (
-    TYPING_INVALID_REASON,
-    OptionProfileContext,
     OptionProfileFailure,
     _checked_folds,
     option_profile_scope,
@@ -56,6 +55,7 @@ from policy_atlas.options_scoping.option_profile.place_sentences_prompt import (
     PlaceSentencesResponse,
     PlaceSentenceWire,
 )
+from policy_atlas.runtime import harness
 from policy_atlas.runtime.harness import build_graph
 from policy_atlas.runtime.run_spec import COMPONENT_REGISTRY, Plan, compile
 from policy_atlas.runtime.runner import LLM_BEARING_COMPONENTS, NullIO, run_plan
@@ -78,7 +78,7 @@ def _profile(walk: _Walk, backend: Any) -> tuple[uuid.UUID, dict[str, Any]]:
         walk.conn,
         task_id=walk.task_id,
         run_id=run_id,
-        context=OptionProfileContext(scope_id=walk.scope_id, intent="longlist intent", context={}),
+        context=ScopeContext(scope_id=walk.scope_id, intent="longlist intent", context={}),
         backend=backend,
     )
     return run_id, summary
@@ -257,7 +257,6 @@ def test_a_failed_typing_call_is_counted_never_a_crash(conn: Connection) -> None
     # The option's columns are left as they were (task 046, S12).
     row = walk.options()["Youth guarantee"]
     assert (row.lever_none_fits_reason, row.taxonomy_version) == (None, None)
-    assert row.lever_none_fits_reason != TYPING_INVALID_REASON
     # The step still succeeds: the profile is written (Phase 12b), and the
     # folding maps at list level (task 046, amendment 3, S21).
     assert set(result.option_profile) == {str(row.option_id), "folds"}
@@ -423,7 +422,7 @@ def test_the_profile_merges_into_the_row_and_types_every_option_not_merged(
     after = walk.result(run_id)
     # The folded keys are merged into each option's coverage (S21); the
     # rest is as the build wrote it.
-    folded_keys = {"tried_on_kinds", "measures_kinds", "outcome_counts", "place_sentences"}
+    folded_keys = {"outcome_counts", "place_sentences"}
     assert set(after.coverage) == set(before.coverage)
     for option_id, entry in after.coverage.items():
         assert {k: v for k, v in entry.items() if k not in folded_keys} == {
@@ -634,7 +633,7 @@ def test_where_reaches_the_who_decides_call_and_no_other(conn: Connection) -> No
     _profile(walk, backend)
 
     assert sorted(profiler.line_calls) == sorted(PROFILE_LINE_KEYS)
-    assert {i["line_key"]: i["where"] for i in profiler.line_inputs} == {
+    assert {i["line_key"]: i["where"] for i in profiler.inputs["line"]} == {
         line_key: (where if line_key == "who_decides" else None) for line_key in PROFILE_LINE_KEYS
     }
     # The built messages: Where is in the who_decides call and in no other.
@@ -646,12 +645,12 @@ def test_where_reaches_the_who_decides_call_and_no_other(conn: Connection) -> No
             baseline_sections=i["baseline_sections"],
             options=i["options"],
         )
-        for i in profiler.line_inputs
+        for i in profiler.inputs["line"]
     }
     assert where in str(by_line.pop("who_decides"))
     others: list[Any] = list(by_line.values())
-    others.append(build_ambition_messages(**profiler.ambition_inputs[0]))
-    others.append(build_setting_messages(**profiler.setting_inputs[0]))
+    others.append(build_ambition_messages(**profiler.inputs["ambition"][0]))
+    others.append(build_setting_messages(**profiler.inputs["setting"][0]))
     others.extend(
         build_lever_typing_messages(
             options=call["options"], plan=call["plan"], baseline_sections=call["baseline_sections"]
@@ -683,10 +682,10 @@ def test_the_who_can_act_texts_reach_the_who_decides_call_and_no_other(conn: Con
     profiler = StubLonglistBackend()
     _profile(walk, _Scripted(profiler=profiler))
 
-    assert {i["line_key"]: i["considerations"] for i in profiler.line_inputs} == {
+    assert {i["line_key"]: i["considerations"] for i in profiler.inputs["line"]} == {
         line_key: (texts if line_key == "who_decides" else None) for line_key in PROFILE_LINE_KEYS
     }
-    who_decides = next(i for i in profiler.line_inputs if i["line_key"] == "who_decides")
+    who_decides = next(i for i in profiler.inputs["line"] if i["line_key"] == "who_decides")
     user = str(
         build_line_messages(
             line_key="who_decides",
@@ -707,8 +706,8 @@ def test_a_plan_without_a_who_can_act_constraint_sends_no_texts(conn: Connection
     profiler = StubLonglistBackend()
     _profile(walk, _Scripted(profiler=profiler))
 
-    assert {i["considerations"] for i in profiler.line_inputs} == {None}
-    who_decides = next(i for i in profiler.line_inputs if i["line_key"] == "who_decides")
+    assert {i["considerations"] for i in profiler.inputs["line"]} == {None}
+    who_decides = next(i for i in profiler.inputs["line"] if i["line_key"] == "who_decides")
     with_none = build_line_messages(
         line_key="who_decides",
         plan=who_decides["plan"],
@@ -745,9 +744,9 @@ def test_the_option_list_holds_only_the_named_keys_and_five_records_in_role_orde
     _profile(walk, profiler)
 
     inputs = [
-        *(i["options"] for i in profiler.line_inputs),
-        *(i["options"] for i in profiler.ambition_inputs),
-        *(i["options"] for i in profiler.setting_inputs),
+        *(i["options"] for i in profiler.inputs["line"]),
+        *(i["options"] for i in profiler.inputs["ambition"]),
+        *(i["options"] for i in profiler.inputs["setting"]),
     ]
     assert len(inputs) == 10
     assert all(payload == inputs[0] for payload in inputs)  # one list for all ten calls
@@ -845,7 +844,7 @@ def test_a_malformed_setting_fails_the_step(conn: Connection, bad_setting: Setti
     )
     with pytest.raises(OptionProfileFailure, match="setting"):
         _profile(walk, backend)
-    assert backend.setting_calls == 2
+    assert backend.calls["setting"] == 2
 
 
 def test_a_call_malformed_once_then_right_succeeds_with_the_retry_counted(
@@ -974,7 +973,7 @@ def test_a_failed_option_profile_step_fails_the_walk(
     def _down(*args: Any, **kwargs: Any) -> Any:
         raise OptionProfileFailure("option_profile: down")
 
-    monkeypatch.setattr("policy_atlas.runtime.harness.option_profile_scope", _down)
+    monkeypatch.setitem(harness._SCOPING_STEPS, "option_profile", (_down, "longlist_backend"))
     task_id: uuid.UUID | None = None
     try:
         task_id, outcome = _longlist_walk(engine)
@@ -1105,7 +1104,7 @@ def test_the_folding_calls_read_every_member_s_words_not_five(conn: Connection) 
     backend = _folding_routes()
     walk.build(backend)
     _profile(walk, backend)
-    inputs = {i["facet"]: i for i in backend.profiler.fold_inputs}
+    inputs = {i["facet"]: i for i in backend.profiler.inputs["fold"]}
     assert backend.profiler.fold_calls == {"tried_on": 1, "measures": 1}
     # Every member of every option, sorted, one spelling per case-folded word;
     # the bare mention ("employers") is thinned away, so it is no member.
@@ -1174,29 +1173,20 @@ def test_the_maps_are_stored_at_list_level_and_the_kinds_merged_into_coverage(
     }
     coverage = after.coverage[str(ids["yg"])]
     # The old keys stay as the build wrote them (constrain reads them).
-    for key in ("tried_on", "units", "settings", "unit_tags", "outcomes"):
+    for key in ("tried_on", "settings"):
         assert coverage[key] == before.coverage[str(ids["yg"])][key]
-    # Target unit first; two words of one kind in one document count once.
-    assert coverage["tried_on_kinds"] == [
-        {"kind": "16 to 24 year olds", "documents": 1},
-        {"kind": "graduates", "documents": 1},
-        {"kind": "parents", "documents": 1},
-        {"kind": "school leavers", "documents": 1},
-        {"kind": "young adults", "documents": 1},
-    ]
-    assert coverage["measures_kinds"] == [
+    # These records carry no tag of this plan's context (read as not tagged):
+    # every kind that is not the plan outcome is an ``other`` row.
+    assert coverage["outcome_counts"]["other"] == [
         {"kind": "employment", "documents": 2, "evaluated": 1},
         {"kind": "earnings", "documents": 1, "evaluated": 0},
         {"kind": "neet rate", "documents": 1, "evaluated": 1},
         {"kind": "neet status", "documents": 1, "evaluated": 1},
         {"kind": "wellbeing", "documents": 1, "evaluated": 0},
     ]
-    # These records carry no tag of this plan's context (read as not tagged):
-    # every kind that is not the plan outcome is an ``other`` row.
     assert coverage["outcome_counts"]["by_outcome"] == [
         {"outcome": "the NEET rate", "documents": 0, "evaluated": 0}
     ]
-    assert coverage["outcome_counts"]["other"] == coverage["measures_kinds"]
     wage = after.coverage[str(ids["ws"])]
     # An ``other`` record whose kind is the plan outcome counts on its row, not
     # under ``other``.
@@ -1204,7 +1194,6 @@ def test_the_maps_are_stored_at_list_level_and_the_kinds_merged_into_coverage(
         {"outcome": "the NEET rate", "documents": 1, "evaluated": 1}
     ]
     assert wage["outcome_counts"]["other"] == []
-    assert wage["tried_on_kinds"] == [{"kind": "firms", "documents": 1}]
     folding = after.provenance["option_profile"]["folding"]
     assert folding == {
         "prompt_version": "folding_v8",
@@ -1213,9 +1202,6 @@ def test_the_maps_are_stored_at_list_level_and_the_kinds_merged_into_coverage(
         "retries": 0,
         "words": {"tried_on": 6, "measures": 6},
         "kinds": {"tried_on": 6, "measures": 6},
-        "kinds_returned": {"tried_on": 6, "measures": 6},
-        "guard_rewrites": {"tried_on": 0, "measures": 0},
-        "slash_cuts": {"tried_on": 0, "measures": 0},
         "catch_all": {"tried_on": False, "measures": False},
     }
 
@@ -1341,7 +1327,6 @@ def test_the_guard_maps_a_kind_holding_a_plan_outcome_to_it_on_the_measures_face
     )
     assert checked is not None
     assert checked["folds"] == {"a": outcome, "b": "obesity measures"}
-    assert checked["guard_rewrites"] == 1
 
 
 def test_the_guard_matches_whole_words_and_takes_the_longest_outcome() -> None:
@@ -1355,7 +1340,6 @@ def test_the_guard_matches_whole_words_and_takes_the_longest_outcome() -> None:
     )
     assert checked is not None
     assert checked["folds"] == {"a": "unemployment", "b": "youth employment", "c": "employment"}
-    assert checked["guard_rewrites"] == 2
 
 
 def test_the_guard_never_runs_on_the_tried_on_facet() -> None:
@@ -1363,7 +1347,6 @@ def test_the_guard_never_runs_on_the_tried_on_facet() -> None:
     checked = _checked_folds(answer, {"w1": "a"}, ["children"], facet="tried_on")
     assert checked is not None
     assert checked["folds"] == {"a": "children aged 5"}
-    assert checked["guard_rewrites"] == 0
 
 
 def test_an_answer_over_twelve_kinds_is_refused_by_the_wire() -> None:
@@ -1398,10 +1381,9 @@ def test_a_catch_all_fold_is_flagged_on_twenty_words_or_more() -> None:
     assert checked is not None and checked["catch_all"] is False
 
 
-def test_a_kind_joined_by_slashes_is_cut_at_the_first_and_counted() -> None:
+def test_a_kind_joined_by_slashes_is_cut_at_the_first() -> None:
     """Task 046, amendment 4 (the folding loop's round 7): the mini model answers
-    a cap with "obesity / overweight / BMI"; the first member names the kind,
-    and the cut is counted in provenance (review of task 046, 2026-10-12)."""
+    a cap with "obesity / overweight / BMI"; the first member names the kind."""
     words = {"w1": "obesity", "w2": "bmi"}
     answer = FoldingResponse(
         kinds=["obesity / overweight / BMI", "weight"],
@@ -1410,7 +1392,6 @@ def test_a_kind_joined_by_slashes_is_cut_at_the_first_and_counted() -> None:
     checked = _checked_folds(answer, words, [], facet="measures")
     assert checked is not None
     assert checked["folds"] == {"obesity": "obesity", "bmi": "weight"}
-    assert checked["slash_cuts"] == 1
 
 
 def test_a_catch_all_answer_is_tried_once_more_and_the_retry_is_kept(conn: Connection) -> None:
@@ -1429,7 +1410,7 @@ def test_a_catch_all_answer_is_tried_once_more_and_the_retry_is_kept(conn: Conne
     run_id, _summary = walk.build(backend)
     words = {f"w{i}": f"unit {i - 1}" for i in range(1, 21)}
     # The first answer is a catch-all; the second folds every word to itself.
-    backend.profiler._fold_queues["tried_on"] = [
+    backend.profiler._queues["fold:tried_on"] = [
         _catch_all_answer(words),
         FoldingResponse(
             kinds=[f"kind {k}" for k in range(12)],
@@ -1459,7 +1440,7 @@ def test_a_catch_all_answer_twice_is_kept_and_recorded(conn: Connection) -> None
     )
     run_id, _summary = walk.build(backend)
     words = {f"w{i}": f"unit {i - 1}" for i in range(1, 21)}
-    backend.profiler._fold_queues["tried_on"] = [_catch_all_answer(words), _catch_all_answer(words)]
+    backend.profiler._queues["fold:tried_on"] = [_catch_all_answer(words), _catch_all_answer(words)]
     _profile(walk, backend)
     folding = walk.result(run_id).provenance["option_profile"]["folding"]
     assert backend.profiler.fold_calls["tried_on"] == 2
@@ -1531,8 +1512,6 @@ def _place_stats(**counts: int) -> dict[str, int]:
     return {
         "generated": 0,
         "template": 0,
-        "failed_trace": 0,
-        "failed_length": 0,
         "failed_call": 0,
         **counts,
     }
@@ -1548,8 +1527,8 @@ def test_the_place_sentences_are_stored_in_the_card_order_with_their_provenance(
     _profile(walk, backend)
     after = walk.result(run_id)
     # One call: the option with no evaluating document gets none and no lines.
-    assert backend.profiler.place_sentence_calls == 1
-    (sent,) = backend.profiler.place_sentence_inputs
+    assert backend.profiler.calls["place_sentence"] == 1
+    (sent,) = backend.profiler.inputs["place_sentence"]
     assert sent["option"]["name"] == "Youth guarantee"
     assert sent["plan"] == {
         "target_unit": "16 to 24 year olds",
@@ -1602,11 +1581,10 @@ def test_the_place_sentences_are_stored_in_the_card_order_with_their_provenance(
         "model": "stub",
         "calls": 1,
         "retries": 0,
-        "options_without_evaluations": 1,
         **_place_stats(generated=2),
     }
     # Remade on a rebuild: the next profile run writes its own sentences.
-    backend.profiler._place_sentence_queue = [
+    backend.profiler._queues["place_sentence"] = [
         PlaceSentencesResponse(
             places=[
                 PlaceSentenceWire(
@@ -1639,7 +1617,7 @@ def test_an_invalid_answer_after_one_retry_leaves_templates_and_the_step_writes(
     run_id, _ = walk.build(backend)
     _profile(walk, backend)
     after = walk.result(run_id)
-    assert backend.profiler.place_sentence_calls == 2
+    assert backend.profiler.calls["place_sentence"] == 2
     entries = after.coverage[str(ids["yg"])]["place_sentences"]
     assert [entry["generated"] for entry in entries] == [False, False]
     assert entries[1]["sentence"] == "1 document measuring employment."
@@ -1704,15 +1682,13 @@ def test_a_place_left_out_an_unknown_id_a_long_and_an_untraced_sentence(
     ]
     assert entries[2]["sentence"] == "1 document."
     stats = after.provenance["option_profile"]["place_sentences"]
-    assert {key: stats[key] for key in _place_stats()} == _place_stats(
-        template=3, failed_length=1, failed_trace=1
-    )
+    assert {key: stats[key] for key in _place_stats()} == _place_stats(template=3)
     # The over-length sentence was refused once and the retry's answer kept.
     assert stats["retries"] == 1
     # Each template entry says why it stands (review of task 046, 2026-10-12).
     assert [entry["reason"] for entry in entries] == ["length", "number", "missing"]
     # A sentence within the ceiling that passes is kept, stripped.
-    backend.profiler._place_sentence_queue = [
+    backend.profiler._queues["place_sentence"] = [
         PlaceSentencesResponse(
             places=[
                 PlaceSentenceWire(

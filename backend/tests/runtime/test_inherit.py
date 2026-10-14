@@ -248,7 +248,7 @@ def test_one_link_carries_plan_markdown_and_coverage(conn: Connection) -> None:
         target_id,
         name="NEET search",
         plan_payload={"question": "What works for NEET?", "components": ["characterise"]},
-        block_specs=[("Key findings", f"Something sourced [1,2].{_REFERENCES_TAIL}")],
+        block_specs=[("Key findings", f"Something sourced.{_REFERENCES_TAIL}")],
     )
 
     [ctx] = linked_context(conn, target_id)
@@ -257,8 +257,6 @@ def test_one_link_carries_plan_markdown_and_coverage(conn: Connection) -> None:
     assert ctx.plan == {"question": "What works for NEET?", "components": ["characterise"]}
     assert "## Key findings" in ctx.report_markdown
     assert "Something sourced" in ctx.report_markdown
-    assert "[1,2]" not in ctx.report_markdown
-    assert "[1]" not in ctx.report_markdown
     assert "References" not in ctx.report_markdown
     assert ctx.coverage_text == "Searching completed. Coverage was judged adequate."
 

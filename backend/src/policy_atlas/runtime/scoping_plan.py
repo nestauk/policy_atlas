@@ -42,12 +42,21 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Mapping
+from concurrent.futures import ThreadPoolExecutor
 from typing import TYPE_CHECKING, Annotated, Any, Literal, Self, get_args
 
 import structlog
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import (
+    AfterValidator,
+    BaseModel,
+    ConfigDict,
+    Field,
+    field_validator,
+    model_validator,
+)
 
 from policy_atlas.api.contract.task_agent import PlanStep
+from policy_atlas.core import tracing
 from policy_atlas.evidence_search.assess.screen import (
     ScreenDirectiveError,
     _compose_screen_intent,
@@ -114,7 +123,7 @@ CHECKED_AT_BY_KIND: dict[ConstraintKind, CheckedAt] = {
 #: The eight lines of an option's profile, in the order they are shown
 #: (task 046, R37). A consideration's ``aspect`` names one of them, or
 #: ``transferability`` (B1).
-PROFILE_LINE_KEYS: tuple[str, ...] = (
+ProfileLineKey = Literal[
     "cost",
     "time_to_set_up",
     "time_to_effect",
@@ -123,21 +132,12 @@ PROFILE_LINE_KEYS: tuple[str, ...] = (
     "dependencies",
     "coordination",
     "delivery_complexity",
-)
+]
+PROFILE_LINE_KEYS: tuple[str, ...] = get_args(ProfileLineKey)
 
 #: The line a consideration speaks of: one of :data:`PROFILE_LINE_KEYS`, or
-#: ``transferability`` (B1). A guard test pins the two together.
-ConsiderationAspect = Literal[
-    "cost",
-    "time_to_set_up",
-    "time_to_effect",
-    "workforce",
-    "who_decides",
-    "dependencies",
-    "coordination",
-    "delivery_complexity",
-    "transferability",
-]
+#: ``transferability`` (B1).
+ConsiderationAspect = Literal[ProfileLineKey, "transferability"]
 
 #: The scoping steering lattice's point names. Pinned here (not imported from
 #: the registry, which imports this module); ``test_scoping_plan.py`` asserts
@@ -291,6 +291,22 @@ SCOPING_STEPS: tuple[PlanStep, ...] = (
 )
 
 
+def _clean(field_name: str) -> AfterValidator:
+    """A text that is not empty and not padded with whitespace."""
+    return AfterValidator(lambda value: _require_clean_string(value, field_name=field_name))
+
+
+def _not_blank(field_name: str) -> AfterValidator:
+    """A verbatim text: kept as written, but never blank."""
+
+    def check(value: str) -> str:
+        if not value.strip():
+            raise ValueError(f"{field_name} must not be blank")
+        return value
+
+    return AfterValidator(check)
+
+
 class Tagged(BaseModel):
     """One plan field with the origin tag the user sees.
 
@@ -301,24 +317,8 @@ class Tagged(BaseModel):
 
     model_config = ConfigDict(extra="forbid", strict=True)
 
-    text: str
+    text: Annotated[str, _clean("text")]
     origin: Origin
-
-    @field_validator("text")
-    @classmethod
-    def validate_text(cls, value: str) -> str:
-        """Validate the field text.
-
-        Args:
-            value: Candidate text.
-
-        Returns:
-            The validated text.
-
-        Raises:
-            ValueError: If it is empty or padded with whitespace.
-        """
-        return _require_clean_string(value, field_name="text")
 
 
 class ScopingConstraint(BaseModel):
@@ -352,7 +352,7 @@ class ScopingConstraint(BaseModel):
 
     model_config = ConfigDict(extra="forbid", strict=True)
 
-    text: str
+    text: Annotated[str, _clean("constraint.text")]
     kind: ConstraintKind
     origin: Origin
     checked_at: CheckedAt
@@ -364,22 +364,6 @@ class ScopingConstraint(BaseModel):
     languages: list[str] | None = None
     setting: bool = False
     default: DefaultPreference | None = None
-
-    @field_validator("text")
-    @classmethod
-    def validate_text(cls, value: str) -> str:
-        """Validate the constraint sentence.
-
-        Args:
-            value: Candidate text.
-
-        Returns:
-            The validated text.
-
-        Raises:
-            ValueError: If it is empty or padded with whitespace.
-        """
-        return _require_clean_string(value, field_name="constraint.text")
 
     @field_validator("languages")
     @classmethod
@@ -465,28 +449,10 @@ class YourContextEntry(BaseModel):
 
     model_config = ConfigDict(extra="forbid", strict=True)
 
-    text: str
+    text: Annotated[str, _not_blank("your_context.text")]
     type: Literal["present_fact", "commitment"]
     turn_index: int = Field(ge=0)
     test_as_condition: bool = False
-
-    @field_validator("text")
-    @classmethod
-    def validate_text(cls, value: str) -> str:
-        """Validate the verbatim entry.
-
-        Args:
-            value: Candidate text.
-
-        Returns:
-            The text, unchanged — not stripped, not tidied.
-
-        Raises:
-            ValueError: If it is blank.
-        """
-        if not value.strip():
-            raise ValueError("your_context.text must not be blank")
-        return value
 
 
 class YourOption(BaseModel):
@@ -504,27 +470,9 @@ class YourOption(BaseModel):
 
     model_config = ConfigDict(extra="forbid", strict=True)
 
-    text: str
+    text: Annotated[str, _not_blank("your_options.text")]
     design: OptionDesign | None = None
     turn_index: int = Field(ge=0)
-
-    @field_validator("text")
-    @classmethod
-    def validate_text(cls, value: str) -> str:
-        """Validate the verbatim words.
-
-        Args:
-            value: Candidate text.
-
-        Returns:
-            The text, unchanged.
-
-        Raises:
-            ValueError: If it is blank.
-        """
-        if not value.strip():
-            raise ValueError("your_options.text must not be blank")
-        return value
 
 
 class ScopingSteerPointDefault(BaseModel):
@@ -625,8 +573,8 @@ class ScopingPlan(BaseModel):
 
     model_config = ConfigDict(extra="forbid", strict=True)
 
-    title: str
-    question: str
+    title: Annotated[str, _clean("title")]
+    question: Annotated[str, _clean("question")]
     intended_change: Tagged
     target_unit: Tagged
     where: Tagged = Field(
@@ -649,44 +597,11 @@ class ScopingPlan(BaseModel):
     )
     steering_mode: SteeringMode = "moderate"
     steer_point_defaults: list[ScopingSteerPointDefault] = Field(default_factory=list)
-    assumptions: list[str] = Field(default_factory=list)
+    assumptions: list[Annotated[str, _clean("assumptions")]] = Field(default_factory=list)
     steps: list[PlanStep] = Field(default_factory=lambda: list(SCOPING_STEPS))
     time_band: str = BASELINE_TIME_BAND
     source_turn_index: int | None = None
     baseline_confirmed: BaselineConfirmed | None = None
-
-    @field_validator("title", "question")
-    @classmethod
-    def validate_required_text(cls, value: str, info: Any) -> str:
-        """Validate the required text fields.
-
-        Args:
-            value: Candidate value.
-            info: Pydantic field metadata.
-
-        Returns:
-            The validated string.
-
-        Raises:
-            ValueError: If it is empty or padded with whitespace.
-        """
-        return _require_clean_string(value, field_name=info.field_name)
-
-    @field_validator("assumptions")
-    @classmethod
-    def validate_assumptions(cls, values: list[str]) -> list[str]:
-        """Validate the assumptions list.
-
-        Args:
-            values: Candidate assumptions.
-
-        Returns:
-            The validated list.
-
-        Raises:
-            ValueError: If an entry is empty or padded with whitespace.
-        """
-        return [_require_clean_string(value, field_name="assumptions") for value in values]
 
     @model_validator(mode="after")
     def validate_default_constraints(self) -> Self:
@@ -754,10 +669,9 @@ def _tagged_from_wire(value: TaggedText, *, field_name: str) -> Tagged:
         The validated tagged value.
 
     Raises:
-        ValueError: If ``origin`` is not one of the three tags.
+        ValidationError: If ``origin`` is not one of the three tags.
     """
-    if value.origin not in ("from_your_question", "assumed", "your_call"):
-        raise ValueError(f"{field_name}.origin {value.origin!r} is not a known origin tag")
+    del field_name
     return Tagged.model_validate({"text": value.text, "origin": value.origin})
 
 
@@ -772,13 +686,10 @@ def _constraint_from_wire(wire: ScopingConstraintWire, index: int) -> ScopingCon
         The validated constraint.
 
     Raises:
-        ValueError: If the kind, aspect, origin or checked_at is not a known
-            value, or the pairing rules reject it.
+        ValidationError: If the kind, aspect, origin or checked_at is not a
+            known value, or the pairing rules reject it.
     """
-    if wire.kind not in CHECKED_AT_BY_KIND:
-        raise ValueError(f"constraints[{index}].kind {wire.kind!r} is not a known kind")
-    if wire.aspect is not None and wire.aspect not in get_args(ConsiderationAspect):
-        raise ValueError(f"constraints[{index}].aspect {wire.aspect!r} is not a known aspect")
+    del index
     group = None
     if wire.country_group is not None:
         raw = wire.country_group.model_dump(exclude_none=True)
@@ -891,55 +802,55 @@ def wire_draft_from_plan(plan: ScopingPlan) -> dict[str, Any]:
     Returns:
         A ``ScopingPlanDraftWire``-shaped dict (JSON types only).
     """
-    payload = plan.model_dump(mode="json")
-    constraints = []
-    for c in payload.get("constraints", []):
-        # A code-minted default is the product's, never the Task Agent's
-        # (v3: "Never put it in your draft's constraints").
-        if c.get("default") is not None:
-            continue
-        group = c.get("country_group")
-        constraints.append(
-            {
-                "text": c["text"],
-                "kind": c["kind"],
-                "origin": c["origin"],
-                "checked_at": c["checked_at"],
-                "aspect": c.get("aspect"),
-                "hard": c.get("hard", False),
-                "country_group": (
-                    {"label": group["label"], "countries": group.get("countries")}
-                    if isinstance(group, dict)
-                    else None
-                ),
-                "published_after": c.get("published_after"),
-                "published_before": c.get("published_before"),
-                "languages": c.get("languages"),
-                "setting": c.get("setting", False),
+    every = "__all__"
+    payload = plan.model_dump(
+        mode="json",
+        include={
+            "title": True,
+            "question": True,
+            "intended_change": True,
+            "target_unit": True,
+            "where": True,
+            "outcomes": True,
+            "depth": True,
+            "constraints": {every: set(_WIRE_CONSTRAINT_FIELDS) | {"default"}},
+            "your_context": {every: {"text", "type", "test_as_condition"}},
+            "your_options": {every: {"text"}},
+            "steering_mode": True,
+            "steer_point_defaults": {every: {"steer_point", "action"}},
+            "assumptions": True,
+        },
+    )
+    # A code-minted default is the product's, never the Task Agent's
+    # (v3: "Never put it in your draft's constraints").
+    payload["constraints"] = [
+        c for c in payload["constraints"] if c.pop("default") is None
+    ]
+    for c in payload["constraints"]:
+        if c["country_group"] is not None:
+            c["country_group"] = {
+                "label": c["country_group"]["label"],
+                "countries": c["country_group"]["countries"],
             }
-        )
-    return {
-        "title": payload.get("title"),
-        "question": payload.get("question"),
-        "intended_change": payload.get("intended_change"),
-        "target_unit": payload.get("target_unit"),
-        "where": payload.get("where"),
-        "outcomes": payload.get("outcomes"),
-        "depth": payload.get("depth"),
-        "constraints": constraints,
-        "your_context": [
-            {"text": e["text"], "type": e["type"], "test_as_condition": e["test_as_condition"]}
-            for e in payload.get("your_context", [])
-        ],
-        "your_options": [{"text": o["text"]} for o in payload.get("your_options", [])],
-        "steering_mode": payload.get("steering_mode"),
-        "steer_point_defaults": [
-            {"steer_point": d["steer_point"], "action": d["action"]}
-            for d in payload.get("steer_point_defaults", [])
-        ]
-        or None,
-        "assumptions": payload.get("assumptions") or None,
-    }
+    payload["steer_point_defaults"] = payload["steer_point_defaults"] or None
+    payload["assumptions"] = payload["assumptions"] or None
+    return payload
+
+
+#: The constraint fields the Task Agent's wire draft carries, in wire order.
+_WIRE_CONSTRAINT_FIELDS: tuple[str, ...] = (
+    "text",
+    "kind",
+    "origin",
+    "checked_at",
+    "aspect",
+    "hard",
+    "country_group",
+    "published_after",
+    "published_before",
+    "languages",
+    "setting",
+)
 
 
 # --- The default transferability preference (task 045, D22) ---------------
@@ -1100,6 +1011,10 @@ def merge_your_options(
     return merged
 
 
+#: Option design calls in flight at once.
+OPTION_DESIGN_MAX_CONCURRENT = 4
+
+
 def propose_option_designs(
     texts: list[str],
     *,
@@ -1111,7 +1026,8 @@ def propose_option_designs(
 ) -> dict[str, OptionDesign]:
     """Propose a design for each distinct text through ``option_design_v1``.
 
-    One judgment-model call per distinct text. A failed call is logged and the
+    One judgment-model call per distinct text, at most
+    :data:`OPTION_DESIGN_MAX_CONCURRENT` at a time. A failed call is logged and the
     text is left without a design — a plan approval never fails for a side
     call — so a reader that needs a design (the longlist walk's entrants)
     proposes it again through :func:`ensure_option_designs`.
@@ -1127,8 +1043,8 @@ def propose_option_designs(
     Returns:
         ``{text: design}`` for each text a design was proposed for.
     """
-    designs: dict[str, OptionDesign] = {}
-    for text in dict.fromkeys(texts):
+
+    def _propose(text: str) -> OptionDesign | None:
         try:
             wire = backend.propose_option_design(
                 text,
@@ -1137,10 +1053,20 @@ def propose_option_designs(
                 outcomes=outcomes,
                 session_id=session_id,
             )
-            designs[text] = OptionDesign.from_wire(wire)
+            return OptionDesign.from_wire(wire)
         except Exception as exc:  # noqa: BLE001 - a side call never fails the approval
             log.warning("option_design_failed", error_type=type(exc).__name__)
-    return designs
+            return None
+
+    distinct = list(dict.fromkeys(texts))
+    if not distinct:
+        return {}
+    with ThreadPoolExecutor(max_workers=min(len(distinct), OPTION_DESIGN_MAX_CONCURRENT)) as pool:
+        futures = [tracing.submit_with_context(pool, _propose, text) for text in distinct]
+        proposed = [future.result() for future in futures]
+    return {
+        text: design for text, design in zip(distinct, proposed, strict=True) if design is not None
+    }
 
 
 def with_option_designs(plan: ScopingPlan, designs: dict[str, OptionDesign]) -> ScopingPlan:
@@ -1410,8 +1336,8 @@ def _search_directive(plan: ScopingPlan, record_cap: int) -> dict[str, Any]:
     """Return one acquire directive: the per-backend target and the restrictions.
 
     The shape the baseline has always used (``search_loop`` admits only
-    ``depth · filters · guidance · record_cap``): one round at ``rapid`` —
-    multi-round search is an Evidence search dial — capped per backend, with
+    ``depth · filters · guidance · record_cap``): depth ``rapid`` (search is
+    a single pass at every depth since task 051), capped per backend, with
     the plan's evidence restrictions as ``filters``.
     """
     search: dict[str, Any] = {"depth": "rapid", "record_cap": record_cap}
@@ -1447,35 +1373,21 @@ def compose_longlist_screen_intent(plan: ScopingPlan) -> str:
         raise ValueError(str(exc)) from exc
 
 
-def _longlist_directive_delta(component: str, plan: ScopingPlan) -> dict[str, Any]:
-    """Return one longlist-chain step's directive delta.
+def _walk_directive_delta(component: str, plan: ScopingPlan, record_cap: int) -> dict[str, Any]:
+    """Return one longlist-chain or option-search step's directive delta.
 
-    The acquire carries the broad search's depth target and the evidence
-    restrictions; the screen carries the longlist screening criteria (the wide
-    target unit and the outcomes; no setting, no place — task 046, S7). The
-    PICO-shaped intent itself (:func:`compile_longlist_intent`) is the
-    longlist intent record's text, written by the start surface, not a
-    directive. The other steps' components read no directive.
+    The acquire carries ``record_cap`` (the broad search's depth target, or
+    the option search target at either depth) and the evidence restrictions;
+    the screen carries the longlist screening criteria (the wide target unit
+    and the outcomes; no setting, no place — task 046, S7, AM1). The intents
+    themselves (:func:`compile_longlist_intent`, an entrant's
+    ``OptionDesign.as_intent()``) are the intent records' own text, written by
+    the start surface and the option search tool, not directives. The other
+    steps' components read no directive; an acquire-only search composes its
+    acquire step alone.
     """
     if component == "acquire":
-        return {"search": _search_directive(plan, LONGLIST_ACQUISITION_TARGETS[plan.depth])}
-    if component == "screen_abstract":
-        return {"screening": {"criteria": longlist_screening_criteria(plan)}}
-    return {}
-
-
-def _targeted_directive_delta(component: str, plan: ScopingPlan) -> dict[str, Any]:
-    """Return one option search step's directive delta.
-
-    The acquire carries the option search target at either depth and the
-    evidence restrictions; the intent (the entrant's specified design,
-    ``OptionDesign.as_intent()``) is the targeted intent record's own, written
-    by the option search tool (S2). The add walk's screen carries the same two
-    plan criteria as the longlist's (task 046, AM1): the wide target unit and
-    the outcomes. An acquire-only search composes its acquire step alone.
-    """
-    if component == "acquire":
-        return {"search": _search_directive(plan, OPTION_SEARCH_TARGET)}
+        return {"search": _search_directive(plan, record_cap)}
     if component == "screen_abstract":
         return {"screening": {"criteria": longlist_screening_criteria(plan)}}
     return {}
@@ -1529,7 +1441,9 @@ def compose_scoping(
             steps=[
                 ComponentStep(
                     component=component,
-                    directive_delta=_longlist_directive_delta(component, plan),
+                    directive_delta=_walk_directive_delta(
+                        component, plan, LONGLIST_ACQUISITION_TARGETS[plan.depth]
+                    ),
                     spine=spine,
                 )
                 for component, spine in LONGLIST_CHAIN
@@ -1542,7 +1456,7 @@ def compose_scoping(
             steps=[
                 ComponentStep(
                     component=component,
-                    directive_delta=_targeted_directive_delta(component, plan),
+                    directive_delta=_walk_directive_delta(component, plan, OPTION_SEARCH_TARGET),
                     spine=True,
                 )
                 for component in chain

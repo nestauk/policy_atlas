@@ -202,9 +202,12 @@ def test_the_call_input_numbers_places_and_documents_across_the_option() -> None
     data = call_input(
         "Youth guarantee",
         "A guaranteed offer.",
-        {"target_unit": "16 to 24 year olds", "outcomes": ["the NEET rate"], "question": "q"},
-        vocabulary_from_folds({"tried_on": {"a": "pupils", "b": "Pupils"}, "measures": {}}),
-        groups,
+        plan_outcomes=["the NEET rate"],
+        target_unit="16 to 24 year olds",
+        vocabulary=vocabulary_from_folds(
+            {"tried_on": {"a": "pupils", "b": "Pupils"}, "measures": {}}
+        ),
+        groups=groups,
     )
     assert data["option"] == {"name": "Youth guarantee", "description": "A guaranteed offer."}
     assert data["plan"] == {

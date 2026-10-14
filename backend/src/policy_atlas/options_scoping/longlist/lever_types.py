@@ -13,8 +13,7 @@ ran it (check 3), with the definitions the typing prompt renders as data.
 
 v2 (task 046, item 7): "provide a service" is direct delivery by the state;
 funding a provider is "subsidise"; buying from a provider is "procure or
-commission". The keys are unchanged. v1 stays as :data:`LEVER_TYPES_V1`, so
-the page can show an option typed under v1 with v1's definitions (AM19).
+commission". The keys are unchanged.
 """
 
 from __future__ import annotations
@@ -22,7 +21,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 TAXONOMY_VERSION = "lever_types_v2"
-TAXONOMY_VERSION_V1 = "lever_types_v1"
 
 
 @dataclass(frozen=True)
@@ -44,51 +42,6 @@ class LeverType:
 # (`mockLonglist`). The definitions reach the page through the longlist read
 # model (`lever_type_definitions`), so only the keys need a matching edit
 # there when this list changes.
-LEVER_TYPES_V1: tuple[LeverType, ...] = (
-    LeverType(
-        "regulate",
-        "set or change rules, standards, bans, licensing or planning requirements",
-    ),
-    LeverType(
-        "subsidise",
-        "pay for, grant-fund, discount or otherwise lower the price of something "
-        "for people or providers",
-    ),
-    LeverType(
-        "tax or charge",
-        "raise the price of something through a tax, levy, fee or charge",
-    ),
-    LeverType(
-        "inform",
-        "give information, advice, campaigns, labelling or guidance to change behaviour",
-    ),
-    LeverType(
-        "provide a service",
-        "deliver or fund a service or programme directly to people (a scheme, a "
-        "programme, a facility)",
-    ),
-    LeverType(
-        "enforce existing powers",
-        "apply, inspect or enforce rules and duties that already exist",
-    ),
-    LeverType(
-        "devolve",
-        "move a decision, budget or power to a lower tier of government or a local body",
-    ),
-    LeverType(
-        "change who runs the system",
-        "reorganise institutions, commissioning, ownership or accountability for a service",
-    ),
-    LeverType(
-        "build or change infrastructure",
-        "create or alter physical environments, routes, facilities or estates",
-    ),
-    LeverType(
-        "procure or commission",
-        "use public purchasing or commissioning rules to change what is bought or from whom",
-    ),
-)
-
 LEVER_TYPES: tuple[LeverType, ...] = (
     LeverType(
         "regulate",
@@ -137,13 +90,11 @@ LEVER_TYPES: tuple[LeverType, ...] = (
 
 LEVER_TYPE_KEYS: tuple[str, ...] = tuple(lever.key for lever in LEVER_TYPES)
 
-def lever_types_by_version() -> dict[str, tuple[LeverType, ...]]:
-    """Every taxonomy version an option can carry, with its list.
 
-    Returns:
-        ``{version: lever types}``, the current version first.
-    """
-    return {TAXONOMY_VERSION: LEVER_TYPES, TAXONOMY_VERSION_V1: LEVER_TYPES_V1}
+def lever_types_by_version() -> dict[str, tuple[LeverType, ...]]:
+    """The current taxonomy version with its list."""
+    # ponytail: kept only for the read-model loop another cleanup lane deletes; delete then.
+    return {TAXONOMY_VERSION: LEVER_TYPES}
 
 
 def lever_types_as_data() -> list[dict[str, str]]:

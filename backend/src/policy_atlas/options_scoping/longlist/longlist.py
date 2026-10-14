@@ -74,7 +74,7 @@ import threading
 import unicodedata
 import uuid
 from collections.abc import Iterable, Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 from typing import Any, Literal
 
@@ -125,6 +125,7 @@ from policy_atlas.evidence_search.extract.interventions_records import (
     PROFILE_ID as INTERVENTIONS_PROFILE_ID,
 )
 from policy_atlas.evidence_search.extract.iof_records import PROFILE_ID as IOF_PROFILE_ID
+from policy_atlas.options_scoping.context import ScopeContext
 from policy_atlas.options_scoping.design import OptionDesign
 from policy_atlas.options_scoping.labels import DocumentLabels, labels_for_snapshots
 from policy_atlas.options_scoping.longlist.coverage import (
@@ -150,6 +151,7 @@ from policy_atlas.options_scoping.longlist.longlist_cluster_prompt import (
 from policy_atlas.options_scoping.longlist.where_tried import resolve_country
 from policy_atlas.options_scoping.longlist_intent import longlist_plan_data, plan_tagging_context
 from policy_atlas.options_scoping.suggest.suggest import baseline_sections, walk_plan
+from policy_atlas.options_scoping.text import fold_text
 from policy_atlas.runtime.capability_registry import OPTIONS_SCOPING, validate_plan
 from policy_atlas.runtime.scoping_plan import TARGETED_PURPOSE, ScopingPlan
 
@@ -222,21 +224,6 @@ class LonglistFailure(Exception):
     """The longlist could not be built (clustering failed or an invariant broke)."""
 
 
-@dataclass
-class LonglistContext:
-    """Scope-level input to a ``longlist`` run.
-
-    Attributes:
-        scope_id: The longlist walk's intent record.
-        intent: Its intent text (unused: the plan is read whole).
-        context: Its context JSONB (unused: no directive in this slice).
-    """
-
-    scope_id: uuid.UUID
-    intent: str
-    context: dict[str, Any]
-
-
 # --- units ----------------------------------------------------------------------
 
 
@@ -303,7 +290,7 @@ def _latest_rollup_record_ids(
             extraction_result.c.created_at.desc(),
             extraction_result.c.extraction_result_id.desc(),
         )
-    ).all()
+    )
     for row in rows:
         docs = row.docs if isinstance(row.docs, list) else []
         by_profile = record_ids_by_profile([d for d in docs if isinstance(d, Mapping)])
@@ -420,7 +407,7 @@ def _thin(rows: Sequence[Any]) -> tuple[set[uuid.UUID], dict[str, int]]:
     for row in sorted(survivors, key=_thin_order):
         name = _bound(row.intervention)
         if name is not None:
-            doc_name = (row.task_source_snapshot_id, _key(name))
+            doc_name = (row.task_source_snapshot_id, fold_text(name))
             if doc_name in named:
                 collapsed += 1
                 continue
@@ -898,10 +885,6 @@ class _Answer:
     design_feature_not_stated: bool
 
 
-def _key(value: str) -> str:
-    return " ".join(value.split()).casefold()
-
-
 def corpus_digest(
     entries: Iterable[tuple[object, object]], *, limit: int = DIGEST_NAMES_MAX
 ) -> tuple[list[dict[str, object]], int]:
@@ -930,7 +913,7 @@ def corpus_digest(
         name = _bound(intervention)
         if name is None:
             continue
-        key = _key(name)
+        key = fold_text(name)
         records[key] = records.get(key, 0) + 1
         by_role = roles.setdefault(key, {})
         if isinstance(role, str) and role in _ROLE_RANK:
@@ -1021,7 +1004,9 @@ class LonglistClusteringBackend(ClusteringBackend):
         self._baseline = baseline
         self._seeds = seeds
         self._residual = residual
-        self._seed_keys = {_key(seed.label) for seed in seeds} | {_key(n) for n in retired}
+        self._seed_keys = {fold_text(seed.label) for seed in seeds} | {
+            fold_text(n) for n in retired
+        }
         self._lock = threading.Lock()
         self.discovered: dict[str, DiscoveredOptionWire] = {}
         self.folds: dict[uuid.UUID, _Fold] = {}
@@ -1092,7 +1077,7 @@ class LonglistClusteringBackend(ClusteringBackend):
         taken: set[str] = set()
         for wire in response.options:
             label = wire.label.strip()
-            key = _key(label)
+            key = fold_text(label)
             if key in self._seed_keys:
                 self.restated_seeds_dropped += 1
                 continue
@@ -1110,12 +1095,12 @@ class LonglistClusteringBackend(ClusteringBackend):
 
     def _fold(self, seed_label: str, into_label: str) -> None:
         """Accept one fold, or record why it is rejected (the four guards, S8)."""
-        seeds = {_key(seed.label): seed for seed in self._seeds}
-        new = {_key(label): label for label in self.discovered}
-        seed = seeds.get(_key(seed_label))
-        target_key = _key(into_label)
+        seeds = {fold_text(seed.label): seed for seed in self._seeds}
+        new = {fold_text(label): label for label in self.discovered}
+        seed = seeds.get(fold_text(seed_label))
+        target_key = fold_text(into_label)
         folded = {fold.seed.option_id for fold in self.folds.values()}
-        targets = {_key(fold.into_label) for fold in self.folds.values()}
+        targets = {fold_text(fold.into_label) for fold in self.folds.values()}
         reason: str | None = None
         if self._residual:
             reason = "residual_pass"
@@ -1125,7 +1110,7 @@ class LonglistClusteringBackend(ClusteringBackend):
             reason = "added_by_you"
         elif seed.user_held:
             reason = "user_held"
-        elif target_key == _key(seed.label):
+        elif target_key == fold_text(seed.label):
             reason = "into_itself"
         elif target_key not in seeds and target_key not in new:
             reason = "unknown_target"
@@ -1133,7 +1118,7 @@ class LonglistClusteringBackend(ClusteringBackend):
             reason = "already_folded"
         elif target_key in seeds and seeds[target_key].option_id in folded:
             reason = "into_folded_seed"
-        elif _key(seed.label) in targets:
+        elif fold_text(seed.label) in targets:
             reason = "seed_is_fold_target"
         if reason is not None or seed is None:
             self.rejected_folds.append(
@@ -1196,16 +1181,16 @@ class LonglistClusteringBackend(ClusteringBackend):
             options=[self._option_data(label) for label in labels],
             records=records,
         )
-        by_key = {_key(label.label): label.label for label in labels}
-        not_an_option = _key(NOT_AN_OPTION_LABEL)
-        residual_keys = {_key(MODEL_RESIDUAL_LABEL), _key(RESIDUAL_LABEL)}
+        by_key = {fold_text(label.label): label.label for label in labels}
+        not_an_option = fold_text(NOT_AN_OPTION_LABEL)
+        residual_keys = {fold_text(MODEL_RESIDUAL_LABEL), fold_text(RESIDUAL_LABEL)}
         known = set(short.values())
         assignments: list[ClusterAssignment] = []
         with self._lock:
             for wire in response.assignments:
                 unit_id, repaired = _short_id(wire.unit_id, short)
                 self.short_id_repairs += int(repaired)
-                raw = _key(wire.option_label)
+                raw = fold_text(wire.option_label)
                 if raw == not_an_option:
                     answer = _Answer("not_an_option", RESIDUAL_LABEL, wire.reason, False)
                 elif raw in residual_keys:
@@ -1249,20 +1234,10 @@ def _option_policy(max_labels: int) -> ClusteringPolicy:
 def _engine_stats(result: ClusteringResult | None) -> dict[str, Any]:
     if result is None:
         return {"ran": False}
-    return {
-        "ran": True,
-        "calls_used": result.calls_used,
-        "call_budget": {
-            "batch_count": result.call_budget.batch_count,
-            "baseline": result.call_budget.baseline,
-            "maximum": result.call_budget.maximum,
-        },
-        "discovery_retries_used": result.discovery_retries_used,
-        "assignment_repair_calls_used": result.assignment_repair_calls_used,
-        "discovery_rejections": result.discovery_rejections,
-        "rejection_reasons": result.rejection_reasons,
-        "usage_totals": result.usage_totals,
-    }
+    stats = asdict(result)
+    for unit_field in ("labels", "assignments", "residual_ids"):
+        del stats[unit_field]
+    return {"ran": True, **stats}
 
 
 # --- options ---------------------------------------------------------------
@@ -1287,8 +1262,8 @@ def _member_outcomes(members: Sequence[_Unit], plan_outcomes: Sequence[str]) -> 
     ``other`` and a tag that names no plan outcome are left out; empty when no
     member has a plan outcome.
     """
-    tags = {_key(unit.outcome_tag) for unit in members if unit.outcome_tag}
-    return [outcome for outcome in plan_outcomes if _key(outcome) in tags]
+    tags = {fold_text(unit.outcome_tag) for unit in members if unit.outcome_tag}
+    return [outcome for outcome in plan_outcomes if fold_text(outcome) in tags]
 
 
 def _discovered_design(
@@ -1320,46 +1295,6 @@ def _discovered_design(
 
 
 # --- the component -----------------------------------------------------------------
-
-
-def _walk_ref(
-    conn: Connection, *, task_id: uuid.UUID, run_id: uuid.UUID, scope_id: uuid.UUID
-) -> tuple[uuid.UUID | None, int]:
-    """This run's walk and its plan version (else the intent record's plan version)."""
-    row = conn.execute(
-        select(capability_run.c.capability_run_id, capability_run.c.plan_version)
-        .select_from(
-            runs.join(
-                capability_run,
-                and_(
-                    capability_run.c.capability_run_id == runs.c.capability_run_id,
-                    capability_run.c.task_id == runs.c.task_id,
-                ),
-            )
-        )
-        .where(runs.c.run_id == run_id, runs.c.task_id == task_id)
-    ).one_or_none()
-    if row is not None:
-        return row.capability_run_id, int(row.plan_version)
-    version = conn.execute(
-        select(task_plan.c.version)
-        .select_from(
-            evidence_scope.join(
-                task_plan,
-                and_(
-                    task_plan.c.plan_id == evidence_scope.c.plan_id,
-                    task_plan.c.task_id == evidence_scope.c.task_id,
-                ),
-            )
-        )
-        .where(
-            evidence_scope.c.evidence_scope_id == scope_id,
-            evidence_scope.c.task_id == task_id,
-        )
-    ).scalar_one_or_none()
-    if version is None:
-        raise LonglistFailure("longlist: no plan version found for the walk")
-    return None, int(version)
 
 
 def _option_search_scopes(conn: Connection, *, task_id: uuid.UUID) -> list[uuid.UUID]:
@@ -1480,7 +1415,6 @@ class MembershipRead:
         *,
         plan_outcomes: Sequence[str] = (),
         folds: Mapping[str, Mapping[str, str]] | None = None,
-        target_unit: str | None = None,
         where_country: str | None = None,
     ) -> dict[str, dict[str, Any]]:
         """Each option's coverage (:func:`option_coverage`).
@@ -1489,7 +1423,6 @@ class MembershipRead:
             plan_outcomes: The plan's outcome texts, in plan order (R42).
             folds: The list's folding maps (task 046, amendment 3, S21), or
                 ``None``.
-            target_unit: The plan's target unit, place stripped.
             where_country: The plan's Where as one country's short name
                 (task 046, amendment 4, S29), or ``None``.
 
@@ -1503,7 +1436,6 @@ class MembershipRead:
                 folded_seeds=self.folded.get(oid, ()),
                 plan_outcomes=plan_outcomes,
                 folds=folds,
-                target_unit=target_unit,
                 where_country=where_country,
             )
             for oid, ms in self.members.items()
@@ -1579,45 +1511,22 @@ def read_membership(
     )
 
 
-def membership_coverage(
-    conn: Connection,
-    *,
-    task_id: uuid.UUID,
-    scope_id: uuid.UUID,
-    option_ids: Sequence[uuid.UUID],
-    plan_outcomes: Sequence[str] = (),
-    folds: Mapping[str, Mapping[str, str]] | None = None,
-    target_unit: str | None = None,
-    where_country: str | None = None,
-) -> dict[str, dict[str, Any]]:
-    """The options' coverage recomputed from their membership rows as they stand.
-
-    For constrain's *distinct* merge, which moves a duplicate's memberships
-    to the kept option after the build wrote its coverage (:func:`read_membership`).
-
-    Args:
-        conn: Open connection.
-        task_id: The scoping task.
-        scope_id: The longlist walk's intent record.
-        option_ids: The options to recompute.
-        plan_outcomes: The plan's outcome texts, in plan order (R42).
-        folds: The list's stored folding maps (task 046, amendment 3, S21),
-            applied to the kinds; ``None`` leaves them empty.
-        target_unit: The plan's target unit, place stripped.
-        where_country: The plan's Where as one country's short name
-            (task 046, amendment 4, S29), or ``None``.
+def latest_longlist(
+    conn: Connection, *, task_id: uuid.UUID, scope_id: uuid.UUID | None = None
+) -> Any | None:
+    """The task's newest ``longlist_result`` row (of one walk when ``scope_id`` is given).
 
     Returns:
-        ``{option_id: coverage}`` for each of ``option_ids``.
+        The row, or ``None`` when there is none.
     """
-    return read_membership(
-        conn, task_id=task_id, scope_id=scope_id, option_ids=option_ids
-    ).coverage(
-        plan_outcomes=plan_outcomes,
-        folds=folds,
-        target_unit=target_unit,
-        where_country=where_country,
-    )
+    query = select(longlist_result).where(longlist_result.c.task_id == task_id)
+    if scope_id is not None:
+        query = query.where(longlist_result.c.evidence_scope_id == scope_id)
+    return conn.execute(
+        query.order_by(
+            longlist_result.c.created_at.desc(), longlist_result.c.longlist_result_id.desc()
+        ).limit(1)
+    ).one_or_none()
 
 
 def _title_only(conn: Connection, *, task_id: uuid.UUID, scope_id: uuid.UUID) -> int:
@@ -1702,7 +1611,7 @@ def longlist_scope(
     *,
     task_id: uuid.UUID,
     run_id: uuid.UUID,
-    context: LonglistContext,
+    context: ScopeContext,
     backend: LonglistBackend,
 ) -> dict[str, Any]:
     """Build the longlist for one longlist walk.
@@ -1728,8 +1637,7 @@ def longlist_scope(
         LonglistFailure: If clustering fails or the exhaustiveness invariant
             (units = memberships + unclustered + not an option) breaks.
     """
-    plan = walk_plan(conn, task_id=task_id, run_id=run_id, scope_id=context.scope_id)
-    _walk_id, plan_version = _walk_ref(
+    plan, plan_version = walk_plan(
         conn, task_id=task_id, run_id=run_id, scope_id=context.scope_id
     )
     plan_data = longlist_plan_data(plan)
@@ -1923,27 +1831,27 @@ def longlist_scope(
 
     # 7. Writes, all after every model call. New option rows first, then the
     # folds' merges (which may name them).
-    for o in options:
-        minted = o.design
-        if o.seed or minted is None:
-            continue
-        conn.execute(
-            option.insert().values(
-                option_id=o.option_id,
-                task_id=task_id,
-                name=minted.name,
-                description=minted.description,
-                design=minted.model_dump(mode="json"),
-                design_version=minted.version,
-                outcomes=list(minted.outcomes_served),
-                origin="clustered",
-                state="included",
-                secondary_lever_types=[],
-                created_by_run_id=run_id,
-                created_at=now,
-                updated_at=now,
-            )
-        )
+    option_rows = [
+        {
+            "option_id": o.option_id,
+            "task_id": task_id,
+            "name": minted.name,
+            "description": minted.description,
+            "design": minted.model_dump(mode="json"),
+            "design_version": minted.version,
+            "outcomes": list(minted.outcomes_served),
+            "origin": "clustered",
+            "state": "included",
+            "secondary_lever_types": [],
+            "created_by_run_id": run_id,
+            "created_at": now,
+            "updated_at": now,
+        }
+        for o in options
+        if not o.seed and (minted := o.design) is not None
+    ]
+    if option_rows:
+        conn.execute(option.insert(), option_rows)
     for seed_id, into in fold_rows:
         # A duplicate merged into the folded seed follows it, so a merge
         # always names an option on the list.

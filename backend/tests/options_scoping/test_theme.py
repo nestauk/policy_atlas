@@ -21,9 +21,9 @@ from policy_atlas.api.routers import sse
 from policy_atlas.api.stage_vocabulary import STAGE_BY_REGISTRY, STAGE_PRESENTATION
 from policy_atlas.core import events
 from policy_atlas.core.schema import longlist_result, option
+from policy_atlas.options_scoping.context import ScopeContext
 from policy_atlas.options_scoping.longlist.longlist_backend import StubLonglistBackend
 from policy_atlas.options_scoping.theme.theme import (
-    ThemeContext,
     ThemeFailure,
     theme_ceiling,
     theme_scope,
@@ -62,7 +62,7 @@ def _theme(walk: _Walk, backend: Any) -> tuple[uuid.UUID, dict[str, Any]]:
         walk.conn,
         task_id=walk.task_id,
         run_id=run_id,
-        context=ThemeContext(scope_id=walk.scope_id, intent="longlist intent", context={}),
+        context=ScopeContext(scope_id=walk.scope_id, intent="longlist intent", context={}),
         backend=backend,
     )
     return run_id, summary

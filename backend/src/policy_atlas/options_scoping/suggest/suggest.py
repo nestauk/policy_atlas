@@ -53,6 +53,7 @@ from policy_atlas.core.schema import (
     synthesis_result,
     task_plan,
 )
+from policy_atlas.options_scoping.context import ScopeContext
 from policy_atlas.options_scoping.design import DESIGN_TEXT_MAX, OptionDesign
 from policy_atlas.options_scoping.suggest.suggest_prompt import (
     SUGGEST_BOUND,
@@ -61,6 +62,7 @@ from policy_atlas.options_scoping.suggest.suggest_prompt import (
     SuggestPlanContext,
     SuggestResponse,
 )
+from policy_atlas.options_scoping.text import fold_text
 from policy_atlas.runtime.capability_registry import OPTIONS_SCOPING, validate_plan
 from policy_atlas.runtime.inherit import linked_reports, report_sections_from_blocks
 from policy_atlas.runtime.scoping_plan import ScopingPlan, YourOption
@@ -106,21 +108,6 @@ class SuggestBackend(Protocol):
         ...
 
 
-@dataclass
-class SuggestContext:
-    """Scope-level input to a ``suggest`` run.
-
-    Attributes:
-        scope_id: The longlist walk's intent record.
-        intent: Its intent text (unused: the plan is read whole).
-        context: Its context JSONB (unused: ``suggest`` reads no directive).
-    """
-
-    scope_id: uuid.UUID
-    intent: str
-    context: dict[str, Any]
-
-
 @dataclass(frozen=True)
 class _Entrant:
     origin: EntrantOrigin
@@ -130,8 +117,8 @@ class _Entrant:
 
 def walk_plan(
     conn: Connection, *, task_id: uuid.UUID, run_id: uuid.UUID, scope_id: uuid.UUID
-) -> ScopingPlan:
-    """Read the scoping plan the walk runs on.
+) -> tuple[ScopingPlan, int]:
+    """Read the scoping plan the walk runs on, with its version.
 
     The walk's own plan version (``capability_run.plan_id`` through the run
     row), else the intent record's ``plan_id``.
@@ -143,7 +130,7 @@ def walk_plan(
         scope_id: The walk's intent record.
 
     Returns:
-        The validated plan.
+        ``(plan, version)``: the validated plan and its plan version.
 
     Raises:
         ValueError: If no plan version can be found for the walk.
@@ -166,21 +153,21 @@ def walk_plan(
                 evidence_scope.c.task_id == task_id,
             )
         ).scalar_one_or_none()
-    payload = (
+    row = (
         conn.execute(
-            select(task_plan.c.payload).where(
+            select(task_plan.c.payload, task_plan.c.version).where(
                 task_plan.c.plan_id == plan_id, task_plan.c.task_id == task_id
             )
-        ).scalar_one_or_none()
+        ).one_or_none()
         if plan_id is not None
         else None
     )
-    if payload is None:
+    if row is None or row.payload is None:
         raise ValueError("suggest: no plan version found for the walk")
-    plan = validate_plan(OPTIONS_SCOPING, payload)
+    plan = validate_plan(OPTIONS_SCOPING, row.payload)
     if not isinstance(plan, ScopingPlan):  # pragma: no cover - the registry's model
         raise ValueError("suggest: the walk's plan is not a scoping plan")
-    return plan
+    return plan, int(row.version)
 
 
 def suggest_plan_context(
@@ -271,12 +258,8 @@ def _headings(reports: list[LinkedReportContext]) -> dict[str, str]:
         for line in report.report_markdown.splitlines():
             if line.startswith("## ") and line[3:].strip():
                 heading = line[3:].strip()
-                headings.setdefault(_norm(heading), heading)
+                headings.setdefault(fold_text(heading), heading)
     return headings
-
-
-def _norm(text: str) -> str:
-    return " ".join(text.split()).casefold()
 
 
 def _suggested_entrant(
@@ -305,7 +288,7 @@ def _suggested_entrant(
         # Nothing was linked, so nothing can be "from your evidence search".
         log.warning("suggest.report_source_without_report")
         return _Entrant(origin="suggested", design=design)
-    section = headings.get(_norm(wire.report_section or ""))
+    section = headings.get(fold_text(wire.report_section or ""))
     if section is None:
         log.warning("suggest.report_section_unmatched")
     return _Entrant(origin="from_evidence_search", design=design, report_section=section)
@@ -351,7 +334,7 @@ def suggest_options(
     *,
     task_id: uuid.UUID,
     run_id: uuid.UUID,
-    context: SuggestContext,
+    context: ScopeContext,
     backend: SuggestBackend,
 ) -> dict[str, Any]:
     """Suggest options and mint the longlist walk's entrants.
@@ -378,7 +361,7 @@ def suggest_options(
         ``report_sections`` (``{option_id: heading}`` for the report's; a
         heading the model named but no linked report carries is ``None``).
     """
-    plan = walk_plan(conn, task_id=task_id, run_id=run_id, scope_id=context.scope_id)
+    plan, _ = walk_plan(conn, task_id=task_id, run_id=run_id, scope_id=context.scope_id)
     # Every option already on the task, every origin, in creation order: on a
     # rebuild the model is shown them and must not propose one again; a
     # suggestion repeating one by name or description is dropped in code too.
@@ -395,7 +378,7 @@ def suggest_options(
     existing_options = [
         {"name": row.name, "description": row.description} for row in prior_rows
     ]
-    prior_descriptions = {_norm(row.description) for row in prior_rows}
+    prior_descriptions = {fold_text(row.description) for row in prior_rows}
     counts = dict.fromkeys(ENTRANT_ORDER, 0)
     minted = 0
     minted_ids: dict[EntrantOrigin, list[str]] = {origin: [] for origin in ENTRANT_ORDER}
@@ -412,15 +395,15 @@ def suggest_options(
         if entrant.origin == "from_evidence_search":
             report_sections[str(option_id)] = entrant.report_section
 
-    taken: set[str] = {_norm(row.name) for row in prior_rows}
+    taken: set[str] = {fold_text(row.name) for row in prior_rows}
     own_taken: set[str] = set()
     fallback_designs = 0
     for own in plan.your_options:
         design, fell_back = _own_option_design(own)
-        if _norm(design.name) in own_taken:
+        if fold_text(design.name) in own_taken:
             continue
-        own_taken.add(_norm(design.name))
-        taken.add(_norm(design.name))
+        own_taken.add(fold_text(design.name))
+        taken.add(fold_text(design.name))
         fallback_designs += int(fell_back)
         _enter(_Entrant(origin="added_by_you", design=design))
     if fallback_designs:
@@ -444,13 +427,13 @@ def suggest_options(
         entrant = _suggested_entrant(wire, headings=headings, has_reports=bool(reports))
         if (
             entrant is None
-            or _norm(entrant.design.name) in taken
-            or _norm(entrant.design.description) in prior_descriptions
+            or fold_text(entrant.design.name) in taken
+            or fold_text(entrant.design.description) in prior_descriptions
         ):
             dropped += 1
             continue
-        taken.add(_norm(entrant.design.name))
-        prior_descriptions.add(_norm(entrant.design.description))
+        taken.add(fold_text(entrant.design.name))
+        prior_descriptions.add(fold_text(entrant.design.description))
         _enter(entrant)
 
     log.info(

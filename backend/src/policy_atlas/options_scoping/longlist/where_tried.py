@@ -6,10 +6,7 @@ below is the record's ``study_geography`` as written. No fixed list of
 names decides the top level, and nothing else of the document (publisher,
 journal, institutions, publication country) is read.
 
-Per record (:func:`record_where`): one country → that country; two or more,
-or any part "multiple" → "multiple countries"; no country but a stated
-geography → "other"; nothing → "not stated". Per document
-(:func:`document_where`): one country when every record that has a country
+Per document (:func:`document_where`): one country when every record that has a country
 gives the same one; "multiple countries" when they give two or more between
 them, or any gives "multiple"; else "other" when any record states a place;
 else "not stated". Countries compare with case folded only.
@@ -31,6 +28,7 @@ import re
 from collections.abc import Iterable
 
 from policy_atlas.evidence_search.sourcing.country_filters import ISO_3166_ALPHA2
+from policy_atlas.options_scoping.text import clean_text
 
 #: The top level of a record or document naming two or more countries.
 MULTIPLE_COUNTRIES = "multiple countries"
@@ -43,13 +41,6 @@ NOT_STATED = "not stated"
 
 #: The ``study_country`` part that names a group of countries.
 _MULTIPLE = "multiple"
-
-
-def _clean(value: str | None) -> str | None:
-    if value is None:
-        return None
-    text = " ".join(value.split())
-    return text or None
 
 
 def countries_named(study_country: str | None) -> tuple[list[str], bool]:
@@ -68,7 +59,7 @@ def countries_named(study_country: str | None) -> tuple[list[str], bool]:
     seen: dict[str, int] = {}
     multiple = False
     for part in (study_country or "").split(";"):
-        name = _clean(part)
+        name = clean_text(part)
         if name is None:
             continue
         key = name.casefold()
@@ -82,26 +73,6 @@ def countries_named(study_country: str | None) -> tuple[list[str], bool]:
             # amendment 3): the smallest spelling wins ("United Kingdom" < "united kingdom").
             countries[seen[key]] = min(countries[seen[key]], name)
     return countries, multiple
-
-
-def record_where(study_country: str | None, study_geography: str | None) -> str:
-    """One record's top level.
-
-    Args:
-        study_country: The record's ``study_country``.
-        study_geography: The record's ``study_geography``.
-
-    Returns:
-        The country (as written) when one is named; "multiple countries"
-        when two or more are, or any part is "multiple"; "other" when no
-        country is named but the geography is stated; else "not stated".
-    """
-    countries, multiple = countries_named(study_country)
-    if multiple or len(countries) > 1:
-        return MULTIPLE_COUNTRIES
-    if countries:
-        return countries[0]
-    return OTHER_PLACE if _clean(study_geography) is not None else NOT_STATED
 
 
 def document_where(
@@ -118,21 +89,9 @@ def document_where(
         spelling, "multiple countries", "other" or "not stated") and every
         country its records name, one per case-folded name, in order.
     """
-    countries: list[str] = []
-    seen: dict[str, int] = {}
-    multiple = False
-    place = False
-    for study_country, study_geography in records:
-        named, group = countries_named(study_country)
-        multiple = multiple or group
-        place = place or _clean(study_geography) is not None
-        for name in named:
-            key = name.casefold()
-            if key not in seen:
-                seen[key] = len(countries)
-                countries.append(name)
-            else:
-                countries[seen[key]] = min(countries[seen[key]], name)
+    rows = list(records)
+    countries, multiple = countries_named(";".join(country or "" for country, _ in rows))
+    place = any(clean_text(geography) is not None for _, geography in rows)
     if multiple or len(countries) > 1:
         return MULTIPLE_COUNTRIES, countries
     if countries:
@@ -603,7 +562,7 @@ def country_level(
     Returns:
         ``(study_country, study_geography)`` as coverage reads them.
     """
-    geography = _clean(study_geography)
+    geography = clean_text(study_geography)
     if geography is None or not names_country(geography):
         return study_country, study_geography
     countries, multiple = countries_named(study_country)

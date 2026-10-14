@@ -183,7 +183,8 @@ def test_the_approving_turn_proposes_a_design_for_each_option(
         assert options[1]["design"]["name"] == "wage subsidies"
         turn = _latest_source_turn(engine, task_id)
         assert {o["turn_index"] for o in options} == {turn}
-        assert agent.option_design_words == ["  a youth guarantee  ", "wage subsidies"]
+        # The design calls run in parallel: the stub records them in any order.
+        assert sorted(agent.option_design_words) == ["  a youth guarantee  ", "wage subsidies"]
         assert _plan(client, owner, task_id)["your_options"] == options
 
 

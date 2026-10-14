@@ -56,12 +56,12 @@ from policy_atlas.evidence_search.extract.interventions_records import (
     PROFILE_ID as INTERVENTIONS_PROFILE_ID,
 )
 from policy_atlas.evidence_search.extract.iof_records import PROFILE_ID as IOF_PROFILE_ID
+from policy_atlas.options_scoping.context import ScopeContext
 from policy_atlas.options_scoping.design import OptionDesign
 from policy_atlas.options_scoping.longlist.longlist import (
     LONGLIST_HARD_CEILING,
     LONGLIST_TARGET_SIZE,
     RECORDS_PER_DOCUMENT_MAX,
-    LonglistContext,
     LonglistFailure,
     corpus_digest,
     current_profile_fingerprints,
@@ -533,7 +533,7 @@ class _Walk:
             self.conn,
             task_id=self.task_id,
             run_id=run_id,
-            context=LonglistContext(scope_id=self.scope_id, intent="longlist intent", context={}),
+            context=ScopeContext(scope_id=self.scope_id, intent="longlist intent", context={}),
             backend=backend,
         )
         return run_id, summary
@@ -757,7 +757,7 @@ def test_seeds_over_the_ceiling_survive_and_discovery_adds_none(conn: Connection
     ceiling = result.provenance["ceiling"]
     assert (ceiling["max_labels"], ceiling["max_new"], ceiling["excess"]) == (26, 0, 1)
     empty = result.coverage[str(seeds[5])]
-    assert empty["members"] == 0 and empty["documents"] == 0
+    assert empty["documents"] == 0
     assert result.counts["seeds_without_members"] == 25
     assert set(walk.options()) == {f"Seed option {i}" for i in range(26)}
 
@@ -844,31 +844,14 @@ def test_coverage_buckets_labels_roles_where_tried_settings_and_flags(conn: Conn
     )
     coverage = walk.result(run_id).coverage[str(seed_id)]
     # Two documents sharing a normalised DOI count once, and stay two rows.
-    assert coverage["members"] == 5
     assert len([m for m in walk.memberships() if m.option_id == seed_id]) == 5
     assert coverage["documents"] == 4
     assert coverage["evidence_type"] == {RCT: 1, UNKNOWN: 1, NON_EVIDENCE: 1, "not rated": 1}
     assert coverage["tier"] == {"not rated": 3, "4": 1}
     assert coverage["role"] == {"evaluated": 1, "described": 1, "recommended": 1, "mentioned": 1}
-    # Where tried from study_country (task 046, amendment 3; R59, R72): the
-    # DOI twins count once. A geography that is the record's own country
-    # ("Denmark", "United Kingdom", "England") is the country level with no
-    # place below (amendment 4, R87; S32).
-    assert coverage["where_tried"] == [
-        {"top": "Denmark", "documents": 1, "places": [], "countries": []},
-        {"top": "United Kingdom", "documents": 1, "places": [], "countries": []},
-        # No place under "multiple countries" (amendment 4, R87; S32).
-        {"top": "multiple countries", "documents": 1, "places": [], "countries": []},
-        {
-            "top": "other",
-            "documents": 1,
-            "places": [{"place": "a large city", "documents": 1}],
-            "countries": [],
-        },
-    ]
     assert "countries" not in coverage
     assert coverage["settings"] == {"Jobcentres": 1}
-    assert coverage["flagged_members"] == 1 and coverage["flagged_documents"] == 1
+    assert coverage["flagged_documents"] == 1
     assert coverage["abstract_only"] == 4
     result = walk.result(run_id)
     assert result.counts["documents"] == 4
@@ -1061,13 +1044,7 @@ def test_linked_findings_cluster_beside_profile_records(conn: Connection) -> Non
     assert all(m.unit_task_id == source_id and m.task_source_snapshot_id is None for m in findings)
     assert all(m.option_id == seed_id for m in members)
     coverage = walk.result(run_id).coverage[str(seed_id)]
-    assert coverage["findings"] == {"iof": 1, "icf": 1}
     assert coverage["role"]["evaluated"] == 2  # the profile record and the IOF document
-    # A linked finding has no study_country: a stated place that is a country
-    # name ("Scotland") is the country level, nothing below (task 046,
-    # amendment 4, R87; S32); any other stated place is "other".
-    where = {entry["top"]: entry for entry in coverage["where_tried"]}
-    assert where["Scotland"]["places"] == []
     provenance = walk.result(run_id).provenance["links"]
     assert provenance == [
         {
@@ -1124,7 +1101,7 @@ def test_the_rebuild_keeps_ids_and_user_state_and_deletes_nothing(conn: Connecti
     assert {m.assigned_by_run_id for m in members} == {run_id}
     assert summary["unclustered"] == 1
     result = walk.result(run_id)
-    assert result.coverage[str(after["Wage subsidy"].option_id)]["members"] == 0
+    assert result.coverage[str(after["Wage subsidy"].option_id)]["documents"] == 0
     assert result.counts["excluded"] == 1 and result.counts["included"] == 1
     assert conn.execute(
         select(func.count()).select_from(longlist_result).where(
@@ -1200,7 +1177,7 @@ def test_the_harness_runs_longlist_on_the_stub_backends(conn: Connection) -> Non
         "not_an_option": 0,
         "units": 0,
     }
-    assert walk.result(run_id).coverage[str(seed_id)]["members"] == 0
+    assert walk.result(run_id).coverage[str(seed_id)]["documents"] == 0
 
 
 # --- task 046: units from the longlist scope and the add walks (S3, AM5) ---------

@@ -39,7 +39,6 @@ from policy_atlas.options_scoping.labels import DocumentLabels
 from policy_atlas.options_scoping.longlist.coverage import (
     ROLE_BUCKETS,
     CoverageMember,
-    _clean,
     document_label,
     fold_kind,
     fold_lookup,
@@ -59,6 +58,7 @@ from policy_atlas.options_scoping.option_profile.place_sentences_prompt import (
     PLACE_DOCUMENTS_MAX,
     STRENGTH_WORDS,
 )
+from policy_atlas.options_scoping.text import clean_text
 
 #: The last group's name: the documents with no one country (PA4-3).
 NO_SINGLE_PLACE = "No single place"
@@ -256,7 +256,7 @@ def place_detail(study_country: str | None, study_geography: str | None, top: st
         itself, or under "multiple countries".
     """
     _country, geography = country_level(study_country, study_geography)
-    detail = _clean(geography)
+    detail = clean_text(geography)
     if detail is None or top == MULTIPLE_COUNTRIES or place_key(detail) == place_key(top):
         return None
     return detail
@@ -297,7 +297,7 @@ def _first_member(members: Sequence[CoverageMember]) -> CoverageMember:
             _role_rank(m.role),
             m.unit_kind != "interventions",
             tuple(
-                _clean(value) or ""
+                clean_text(value) or ""
                 for value in (
                     m.programme_name,
                     m.unit,
@@ -347,7 +347,7 @@ def from_membership(
     """
     if programme_fold is None:
         programme_fold = fold_programme_names(
-            name for m in members if (name := _clean(m.programme_name)) is not None
+            name for m in members if (name := clean_text(m.programme_name)) is not None
         )
     tried_on = fold_lookup(folds, "tried_on") or {}
     measures = fold_lookup(folds, "measures") or {}
@@ -372,19 +372,19 @@ def from_membership(
         measured = plan_outcome_named(first.outcome_tag, plan_outcomes)
         if measured is None:
             measured = fold_kind(measures, first.outcome)
-        name = _clean(first.programme_name)
+        name = clean_text(first.programme_name)
         out.append(
             PlaceDocument(
                 doc_key=key,
                 role="evaluated",
                 place=place_name(top),
                 programme_name=programme_fold.get(name, name) if name is not None else None,
-                unit=_clean(first.unit),
+                unit=clean_text(first.unit),
                 tried_on_kind=fold_kind(tried_on, first.unit),
-                setting=_clean(first.setting),
-                outcome=_clean(first.outcome),
+                setting=clean_text(first.setting),
+                outcome=clean_text(first.outcome),
                 measured=measured,
-                study_geography=_clean(first.study_geography),
+                study_geography=clean_text(first.study_geography),
                 place_detail=place_detail(first.study_country, first.study_geography, top),
                 tier=tier,
                 quality_score=score,
@@ -473,7 +473,7 @@ def vocabulary_from_folds(folds: Mapping[str, Mapping[str, str]] | None) -> dict
         stored = (folds or {}).get(facet) or {}
         seen: dict[str, str] = {}
         for kind in stored.values():
-            text = _clean(kind) if isinstance(kind, str) else None
+            text = clean_text(kind) if isinstance(kind, str) else None
             if text is not None:
                 seen.setdefault(text.casefold(), text)
         out[key] = list(seen.values())
@@ -483,7 +483,9 @@ def vocabulary_from_folds(folds: Mapping[str, Mapping[str, str]] | None) -> dict
 def call_input(
     option_name: str,
     option_description: str,
-    plan: Mapping[str, object],
+    *,
+    plan_outcomes: Sequence[str],
+    target_unit: str | None,
     vocabulary: Mapping[str, Sequence[str]],
     groups: Sequence[PlaceGroup],
 ) -> dict[str, Any]:
@@ -496,8 +498,8 @@ def call_input(
     Args:
         option_name: The option's name.
         option_description: Its description.
-        plan: The place-stripped plan data (``target_unit`` and ``outcomes``
-            are read).
+        plan_outcomes: The plan's outcome texts.
+        target_unit: The plan's target unit.
         vocabulary: :func:`vocabulary_from_folds`.
         groups: :func:`group_places`.
 
@@ -505,8 +507,6 @@ def call_input(
         The keyword arguments of ``build_place_sentences_messages``:
         ``{"option", "plan", "vocabulary", "places"}``.
     """
-    outcomes = plan.get("outcomes")
-    target_unit = plan.get("target_unit")
     places: list[dict[str, Any]] = []
     counter = 0
     for group in groups:
@@ -541,13 +541,9 @@ def call_input(
     return {
         "option": {"name": option_name, "description": option_description},
         "plan": {
-            "target_unit": target_unit if isinstance(target_unit, str) else None,
-            "target_unit_short": (
-                head_phrase(target_unit) if isinstance(target_unit, str) else None
-            ),
-            "outcomes": [o for o in outcomes if isinstance(o, str)]
-            if isinstance(outcomes, list)
-            else [],
+            "target_unit": target_unit,
+            "target_unit_short": head_phrase(target_unit) if target_unit is not None else None,
+            "outcomes": list(plan_outcomes),
         },
         "vocabulary": {
             "tried_on_kinds": list(vocabulary.get("tried_on_kinds", [])),
@@ -586,7 +582,7 @@ def type_word(evidence_type: str | None) -> str | None:
         The plain word, the type lower-cased when not listed, ``None`` for no
         type, Unknown and Non-evidence.
     """
-    text = _clean(evidence_type)
+    text = clean_text(evidence_type)
     if text is None:
         return None
     if text in EVIDENCE_TYPE_WORDS:

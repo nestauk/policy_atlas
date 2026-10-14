@@ -56,16 +56,6 @@ from policy_atlas.runtime.task_agent_scoping_prompt import LinkedTaskContext
 
 logger = structlog.get_logger(__name__)
 
-# Matches the inline "[1]" / "[1,2]" citation markers the frontend's
-# `citationMarker` (frontend/src/views/artefactPresentation.ts) paints back
-# into report prose from claim spans at export time. Stored block prose
-# never carries these markers to begin with — that same file's comment on
-# `proseWithCitationMarkers` says so explicitly ("Report prose does not
-# store those markers"). This strip is therefore defensive, not routine: it
-# uses the identical marker shape the frontend paints on, so the two
-# definitions of "a citation marker" can never quietly drift apart.
-_CITATION_MARKER_RE = re.compile(r"\[\d+(?:,\d+)*\]")
-
 # Drops a trailing references/sources section a block's prose might carry,
 # from its heading to the end of that block's content. Case-insensitive,
 # matches "References", "Sources" or "Most relevant sources" at any heading
@@ -242,7 +232,7 @@ def report_sections_from_blocks(conn: Connection, specs_raw: Any) -> list[tuple[
         raw_title = spec.get("title")
         title = raw_title if isinstance(raw_title, str) else ""
         cleaned = _TRAILING_SECTION_RE.sub("", raw_content)
-        cleaned = _CITATION_MARKER_RE.sub("", cleaned).strip()
+        cleaned = cleaned.strip()
         sections.append((title, cleaned))
     return sections
 
@@ -259,7 +249,7 @@ def _coverage_text(
     verdict. The join through ``runs.capability_run_id`` keeps the read to the
     acquire runs of the pinned walk, and a walk with no record of its own
     inherits no coverage sentence rather than the newest one. Within one walk
-    (a deep run acquires more than once) the last record stands. The sentence
+    the last record stands. The sentence
     formula is the backend's own coverage composition
     (``api.readmodels.repository.coverage_out``), ported here scoped-by-walk
     rather than latest-for-task; no frontend equivalent exists to reuse.
@@ -415,29 +405,33 @@ def _inherit_one_link(
         .order_by(task_source_snapshot.c.ingested_at, task_source_snapshot.c.source_snapshot_id)
     ).all()
 
-    created = 0
-    for row in rows:
-        inserted = conn.execute(
-            pg_insert(task_source_snapshot)
-            .values(
-                task_source_snapshot_id=uuid.uuid4(),
-                task_id=task_id,
-                source_snapshot_id=row.source_snapshot_id,
-                # Origin unchanged (A3): the row is inherited because this
-                # step created it, not because of an origin value.
-                origin=row.origin,
-                run_id=run_id,
-                ingested_at=datetime.now(UTC),
-                # Copied so ingest does not refetch what the source task holds.
-                full_text_snapshot_id=row.full_text_snapshot_id,
-                full_text_status=row.full_text_status,
-                full_text_error=row.full_text_error,
-            )
-            .on_conflict_do_nothing(constraint="uq_task_source_snapshot")
-            .returning(task_source_snapshot.c.task_source_snapshot_id)
-        ).scalar_one_or_none()
-        if inserted is not None:
-            created += 1
+    if not rows:
+        return 0, 0
+    inserted = conn.execute(
+        pg_insert(task_source_snapshot)
+        .values(
+            [
+                {
+                    "task_source_snapshot_id": uuid.uuid4(),
+                    "task_id": task_id,
+                    "source_snapshot_id": row.source_snapshot_id,
+                    # Origin unchanged (A3): the row is inherited because this
+                    # step created it, not because of an origin value.
+                    "origin": row.origin,
+                    "run_id": run_id,
+                    "ingested_at": datetime.now(UTC),
+                    # Copied so ingest does not refetch what the source task holds.
+                    "full_text_snapshot_id": row.full_text_snapshot_id,
+                    "full_text_status": row.full_text_status,
+                    "full_text_error": row.full_text_error,
+                }
+                for row in rows
+            ]
+        )
+        .on_conflict_do_nothing(constraint="uq_task_source_snapshot")
+        .returning(task_source_snapshot.c.task_source_snapshot_id)
+    ).all()
+    created = len(inserted)
     return created, len(rows) - created
 
 

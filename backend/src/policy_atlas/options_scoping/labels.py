@@ -96,15 +96,6 @@ _ABSENT = DocumentLabels(
 )
 
 
-def _latest_by_tss(rows: Any, time_key: str) -> dict[uuid.UUID, Any]:
-    latest: dict[uuid.UUID, Any] = {}
-    for row in rows:
-        previous = latest.get(row.task_source_snapshot_id)
-        if previous is None or getattr(row, time_key) > getattr(previous, time_key):
-            latest[row.task_source_snapshot_id] = row
-    return latest
-
-
 def _has_inbound_link(conn: Connection, task_id: uuid.UUID) -> bool:
     return bool(
         conn.execute(select(exists().where(task_link.c.target_task_id == task_id))).scalar()
@@ -197,10 +188,13 @@ def labels_for_snapshots(
         One entry per requested id — ``provenance="absent"`` where the task
         and its links hold no label for the document.
     """
+    # Imported here: the read models import this module, so a module-level import cycles.
+    from policy_atlas.api.readmodels.repository import latest_row_by_id
+
     ids = set(tss_ids)
     if not ids:
         return {}
-    classifications = _latest_by_tss(
+    classifications = latest_row_by_id(
         conn.execute(
             select(
                 source_classification_result.c.task_source_snapshot_id,
@@ -210,9 +204,10 @@ def labels_for_snapshots(
             .where(source_classification_result.c.task_id == task_id)
             .where(source_classification_result.c.task_source_snapshot_id.in_(ids))
         ).all(),
+        "task_source_snapshot_id",
         "classified_at",
     )
-    appraisals = _latest_by_tss(
+    appraisals = latest_row_by_id(
         conn.execute(
             select(
                 source_appraisal_result.c.task_source_snapshot_id,
@@ -223,6 +218,7 @@ def labels_for_snapshots(
             .where(source_appraisal_result.c.task_id == task_id)
             .where(source_appraisal_result.c.task_source_snapshot_id.in_(ids))
         ).all(),
+        "task_source_snapshot_id",
         "appraised_at",
     )
     # Own rows only, and no other table touched, unless something links here.

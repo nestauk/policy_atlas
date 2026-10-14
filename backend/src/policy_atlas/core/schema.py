@@ -1143,53 +1143,8 @@ intervention_profile_record = Table(
     Index("ix_ipr_record", "extraction_record_id"),
 )
 
-#: The union view's definition — the single copy for the running code (task
-#: 045, S4); each alembic revision that creates the view freezes its own copy
-#: (a revision that imports this constant breaks a fresh ``upgrade head`` once
-#: it changes). The view's shape is the ``finding_reference_union`` stub below.
-#: Every shared column exists on all three tables, so no branch aliases a NULL.
-FINDING_REFERENCE_UNION_SQL = """
-CREATE VIEW finding_reference_union AS
-SELECT
-    finding_id,
-    'iof'::text AS kind,
-    extraction_record_id,
-    task_id,
-    intervention,
-    outcome,
-    unit,
-    setting,
-    study_geography,
-    study_design
-FROM intervention_outcome_finding
-UNION ALL
-SELECT
-    finding_id,
-    'icf'::text AS kind,
-    extraction_record_id,
-    task_id,
-    intervention,
-    outcome,
-    unit,
-    setting,
-    study_geography,
-    study_design
-FROM implementation_context_finding
-UNION ALL
-SELECT
-    record_id AS finding_id,
-    'interventions'::text AS kind,
-    extraction_record_id,
-    task_id,
-    intervention,
-    outcome,
-    unit,
-    setting,
-    study_geography,
-    study_design
-FROM intervention_profile_record
-"""
-
+#: The union view of the three finding tables (task 045, S4): the alembic
+#: revisions create it, each with its own frozen definition.
 finding_reference_union = Table(
     "finding_reference_union",
     metadata,

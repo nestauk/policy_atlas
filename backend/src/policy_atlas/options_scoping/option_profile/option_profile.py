@@ -77,7 +77,8 @@ from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from functools import partial
-from typing import Any
+from itertools import batched
+from typing import Any, cast
 
 import structlog
 from sqlalchemy import select
@@ -92,7 +93,8 @@ from policy_atlas.core.schema import (
     source_snapshot,
     task_source_snapshot,
 )
-from policy_atlas.core.usage import TokenUsage, UsageAccumulator, UsageResult
+from policy_atlas.core.usage import UsageAccumulator, UsageResult
+from policy_atlas.options_scoping.context import ScopeContext
 from policy_atlas.options_scoping.longlist.coverage import (
     FOLD_FIELDS,
     distinct_words,
@@ -102,6 +104,7 @@ from policy_atlas.options_scoping.longlist.lever_types import LEVER_TYPE_KEYS, T
 from policy_atlas.options_scoping.longlist.longlist import (
     MembershipRead,
     _seeds,
+    latest_longlist,
     read_membership,
 )
 from policy_atlas.options_scoping.longlist.longlist_backend import (
@@ -114,6 +117,7 @@ from policy_atlas.options_scoping.longlist_intent import (
     longlist_plan_data,
     who_decides_considerations,
 )
+from policy_atlas.options_scoping.model_calls import CALL_ATTEMPTS, CallOutcome, call_with_retry
 from policy_atlas.options_scoping.option_profile.folding_prompt import (
     FOLDING_PROMPT_VERSION,
     Facet,
@@ -128,9 +132,7 @@ from policy_atlas.options_scoping.option_profile.option_profile_prompt import (
     OPTION_PROFILE_PROMPT_VERSION,
     AmbitionResponse,
     MarkedLineResponse,
-    MarkedLineWire,
     PlainLineResponse,
-    PlainLineWire,
     SettingResponse,
     line_is_marked,
 )
@@ -150,22 +152,18 @@ from policy_atlas.options_scoping.option_profile.place_sentences_prompt import (
     PlaceSentencesResponse,
 )
 from policy_atlas.options_scoping.suggest.suggest import baseline_sections, walk_plan
+from policy_atlas.options_scoping.text import clean_text, fold_text
 from policy_atlas.runtime.scoping_plan import PROFILE_LINE_KEYS
 
 log = structlog.get_logger()
 
 #: Typing batches in flight at once (task 046, S12).
 TYPING_MAX_CONCURRENT = 4
-#: The reason an unusable typing was recorded under before task 046 (a
-#: stored row can still carry it; the read models leave it out of *none
-#: fits*). A typing that fails now leaves the option's columns as they are.
+# ponytail: kept only for the read-model import another cleanup lane deletes; delete then.
 TYPING_INVALID_REASON = "typing invalid"
 #: The ten profile calls and the two folding calls in flight at once: all
 #: of them (R37; task 046, amendment 3, S21).
 OPTION_PROFILE_MAX_CONCURRENT = 12
-#: Attempts per profile call: the call and one retry (the pattern of
-#: constrain's distinct call).
-OPTION_PROFILE_CALL_ATTEMPTS = 2
 #: Member records each option carries into the profile calls (S16).
 OPTION_PROFILE_RECORDS_MAX = 5
 #: Design features each of those records carries (S16).
@@ -190,7 +188,7 @@ FOLDING_KINDS_MAX = 12
 FOLDING_CATCH_ALL_SHARE = 0.5
 FOLDING_CATCH_ALL_MIN_WORDS = 20
 #: The coverage keys the folding maps recompute and merge (S21, S24).
-FOLDED_COVERAGE_KEYS: tuple[str, ...] = ("tried_on_kinds", "measures_kinds", "outcome_counts")
+FOLDED_COVERAGE_KEYS: tuple[str, ...] = ("outcome_counts",)
 #: The coverage key the place sentences are merged under (task 046, amendment
 #: 4, R80; S31): ``[{place, sentence, generated, where}]`` in the card's order.
 #: Written by the second wave only; ``membership.coverage`` never computes it,
@@ -204,21 +202,6 @@ class OptionProfileFailure(Exception):
     No longlist exists for the walk, or a profile call (a line, the ambition,
     the setting or a folding call) failed twice.
     """
-
-
-@dataclass
-class OptionProfileContext:
-    """Scope-level input to an ``option_profile`` run.
-
-    Attributes:
-        scope_id: The longlist walk's intent record.
-        intent: Its intent text (unused).
-        context: Its context JSONB (unused).
-    """
-
-    scope_id: uuid.UUID
-    intent: str
-    context: dict[str, Any]
 
 
 @dataclass(frozen=True)
@@ -242,21 +225,6 @@ class _Typing:
     none_fits_reason: str | None
     runner_up: str | None
     lever_reason: str | None = None
-
-
-def _latest_longlist(conn: Connection, *, task_id: uuid.UUID, scope_id: uuid.UUID) -> Any:
-    row = conn.execute(
-        select(longlist_result)
-        .where(longlist_result.c.task_id == task_id)
-        .where(longlist_result.c.evidence_scope_id == scope_id)
-        .order_by(
-            longlist_result.c.created_at.desc(), longlist_result.c.longlist_result_id.desc()
-        )
-        .limit(1)
-    ).one_or_none()
-    if row is None:
-        raise OptionProfileFailure("option_profile: no longlist exists for this walk")
-    return row
 
 
 def _profiled_options(conn: Connection, *, task_id: uuid.UUID) -> list[_ProfiledOption]:
@@ -327,10 +295,7 @@ def _type_options(
         is invalid, missing or in a failed batch is *kept* — its columns are
         left as they are.
     """
-    batches = [
-        options[start : start + LEVER_TYPING_BATCH_SIZE]
-        for start in range(0, len(options), LEVER_TYPING_BATCH_SIZE)
-    ]
+    batches = [list(batch) for batch in batched(options, LEVER_TYPING_BATCH_SIZE)]
     typings: dict[uuid.UUID, _Typing] = {}
     answered: set[uuid.UUID] = set()
     failed_batches = 0
@@ -386,40 +351,36 @@ def _type_options(
     }
 
 
-def _earlier_runner_ups(
+def _runner_up_entry(entry: Any) -> dict[str, Any] | None:
+    lever = entry.get("lever_type") if isinstance(entry, Mapping) else None
+    if isinstance(lever, str) and lever in LEVER_TYPE_KEYS:
+        return {"lever_type": lever, "carried_forward": True}
+    return None
+
+
+def _lever_reason_entry(entry: Any) -> str | None:
+    return (entry.strip() or None) if isinstance(entry, str) else None
+
+
+#: The typing entries a kept typing carries forward, and how each stored entry is read.
+_CARRIED_ENTRIES: dict[str, Callable[[Any], Any]] = {
+    "runner_up": _runner_up_entry,
+    "lever_reason": _lever_reason_entry,
+}
+
+
+def _earlier_typing_entries(
     conn: Connection, *, task_id: uuid.UUID, option_ids: Sequence[uuid.UUID]
-) -> dict[str, dict[str, Any]]:
-    """The runner-up a kept typing carries forward (S12).
+) -> tuple[dict[str, dict[str, Any]], dict[str, str]]:
+    """Per kept option, the runner-up and the lever reason it carries forward (S12, R29).
 
-    Per option, the runner-up of the latest earlier ``longlist_result`` of
-    the task that records one for it. A result that typed the option validly
-    with no runner-up (it lists the option among its options and not among
-    its ``typing.kept_ids``) ends the search: the typing that stands has none.
-
-    Args:
-        conn: Open connection.
-        task_id: The scoping task.
-        option_ids: The options whose typing was kept.
-
-    Returns:
-        ``{option_id: {"lever_type", "carried_forward": True}}``.
-    """
-
-    def _runner_up(entry: Any) -> dict[str, Any] | None:
-        lever = entry.get("lever_type") if isinstance(entry, Mapping) else None
-        if isinstance(lever, str) and lever in LEVER_TYPE_KEYS:
-            return {"lever_type": lever, "carried_forward": True}
-        return None
-
-    return _earlier_typing_entries(
-        conn, task_id=task_id, option_ids=option_ids, key="runner_up", read=_runner_up
-    )
-
-
-def _earlier_lever_reasons(
-    conn: Connection, *, task_id: uuid.UUID, option_ids: Sequence[uuid.UUID]
-) -> dict[str, str]:
-    """The lever reason a kept typing carries forward (R29), as the runner-up does.
+    One walk over the task's ``longlist_result`` rows, newest first, reading
+    ``provenance[key][option_id]`` for each key of :data:`_CARRIED_ENTRIES`.
+    For each key, a result that typed the option validly without the entry
+    (it lists the option among its options and not among its
+    ``typing.kept_ids``) ends that key's search: the typing that stands has
+    none. The row this walk's ``longlist`` wrote holds no typing yet, so it
+    neither supplies an entry nor ends a search.
 
     Args:
         conn: Open connection.
@@ -427,76 +388,45 @@ def _earlier_lever_reasons(
         option_ids: The options whose typing was kept.
 
     Returns:
-        ``{option_id: reason}``.
-    """
-
-    def _reason(entry: Any) -> str | None:
-        return (entry.strip() or None) if isinstance(entry, str) else None
-
-    return _earlier_typing_entries(
-        conn, task_id=task_id, option_ids=option_ids, key="lever_reason", read=_reason
-    )
-
-
-def _earlier_typing_entries[T](
-    conn: Connection,
-    *,
-    task_id: uuid.UUID,
-    option_ids: Sequence[uuid.UUID],
-    key: str,
-    read: Callable[[Any], T | None],
-) -> dict[str, T]:
-    """Per kept option, one typing entry of the latest earlier result that has it.
-
-    Walks the task's ``longlist_result`` rows newest first and reads
-    ``provenance[key][option_id]`` through ``read``. A result that typed the
-    option validly without the entry (it lists the option among its options
-    and not among its ``typing.kept_ids``) ends the search: the typing that
-    stands has none. The row this walk's ``longlist`` wrote holds no typing
-    yet, so it neither supplies an entry nor ends a search.
-
-    Args:
-        conn: Open connection.
-        task_id: The scoping task.
-        option_ids: The options whose typing was kept.
-        key: The provenance key (``runner_up``, ``lever_reason``).
-        read: Returns the usable value of a stored entry, or ``None``.
-
-    Returns:
-        ``{option_id: value}`` for each option an earlier result supplies.
+        ``(runner_ups, lever_reasons)``: ``{option_id: {"lever_type",
+        "carried_forward": True}}`` and ``{option_id: reason}``.
     """
     wanted = {str(option_id) for option_id in option_ids}
-    found: dict[str, T] = {}
-    if not wanted:
-        return found
-    settled: set[str] = set()
-    for (provenance,) in conn.execute(
-        select(longlist_result.c.provenance)
-        .where(longlist_result.c.task_id == task_id)
-        .order_by(
-            longlist_result.c.created_at.desc(), longlist_result.c.longlist_result_id.desc()
-        )
-    ):
-        record = provenance if isinstance(provenance, Mapping) else {}
-        entries = record.get(key)
-        entries = entries if isinstance(entries, Mapping) else {}
-        typing = record.get("typing")
-        kept_ids = typing.get("kept_ids") if isinstance(typing, Mapping) else None
-        listed = {
-            str(option_id)
-            for list_key in ("seed_ids", "discovered_ids")
-            for option_id in (record.get(list_key) or [])
-        }
-        for option_id in wanted - settled:
-            value = read(entries.get(option_id))
-            if value is not None:
-                found[option_id] = value
-                settled.add(option_id)
-            elif isinstance(kept_ids, list) and option_id in listed and option_id not in kept_ids:
-                settled.add(option_id)
-        if settled >= wanted:
-            break
-    return found
+    found: dict[str, dict[str, Any]] = {key: {} for key in _CARRIED_ENTRIES}
+    settled: dict[str, set[str]] = {key: set() for key in _CARRIED_ENTRIES}
+    if wanted:
+        for (provenance,) in conn.execute(
+            select(longlist_result.c.provenance)
+            .where(longlist_result.c.task_id == task_id)
+            .order_by(
+                longlist_result.c.created_at.desc(), longlist_result.c.longlist_result_id.desc()
+            )
+        ):
+            record = provenance if isinstance(provenance, Mapping) else {}
+            typing = record.get("typing")
+            kept_ids = typing.get("kept_ids") if isinstance(typing, Mapping) else None
+            listed = {
+                str(option_id)
+                for list_key in ("seed_ids", "discovered_ids")
+                for option_id in (record.get(list_key) or [])
+            }
+            for key, read in _CARRIED_ENTRIES.items():
+                entries = record.get(key)
+                entries = entries if isinstance(entries, Mapping) else {}
+                for option_id in wanted - settled[key]:
+                    value = read(entries.get(option_id))
+                    if value is not None:
+                        found[key][option_id] = value
+                        settled[key].add(option_id)
+                    elif (
+                        isinstance(kept_ids, list)
+                        and option_id in listed
+                        and option_id not in kept_ids
+                    ):
+                        settled[key].add(option_id)
+            if all(done >= wanted for done in settled.values()):
+                break
+    return found["runner_up"], found["lever_reason"]
 
 
 @dataclass(frozen=True)
@@ -514,16 +444,6 @@ class _Setting:
 
     main: str | None
     second: str | None
-
-
-@dataclass(frozen=True)
-class _CallOutcome:
-    """One profile call after its attempts: the checked value, or ``None``."""
-
-    name: str
-    value: Mapping[str, Any] | None
-    attempts: int
-    usages: list[TokenUsage | None]
 
 
 def _evidence_records(
@@ -619,6 +539,20 @@ def _mark(stands_out: str) -> str | None:
     return None if stands_out == "no" else stands_out
 
 
+def _answered(
+    response: Any, kind: type | tuple[type, ...], short_ids: Mapping[str, uuid.UUID]
+) -> list[tuple[str, Any]] | None:
+    """``(short id, wire)`` per option answered, or ``None`` when the response is
+    not of ``kind`` or does not cover the list exactly once."""
+    if not isinstance(response, kind):
+        return None
+    wires: Sequence[Any] = cast(Any, response).options
+    answered = [wire.option_id.strip() for wire in wires]
+    if not _covers_the_list(answered, short_ids):
+        return None
+    return list(zip(answered, wires, strict=True))
+
+
 def _checked_line(
     line_key: str, response: Any, short_ids: Mapping[str, uuid.UUID]
 ) -> dict[str, _Line] | None:
@@ -627,15 +561,12 @@ def _checked_line(
     On ``who_decides`` and ``dependencies`` the mark is ``None`` whatever
     the response holds (R36).
     """
-    if not isinstance(response, MarkedLineResponse | PlainLineResponse):
-        return None
-    wires: Sequence[MarkedLineWire | PlainLineWire] = response.options
-    answered = [wire.option_id.strip() for wire in wires]
-    if not _covers_the_list(answered, short_ids):
+    pairs = _answered(response, (MarkedLineResponse, PlainLineResponse), short_ids)
+    if pairs is None:
         return None
     marked = line_is_marked(line_key)
     lines: dict[str, _Line] = {}
-    for short_id, wire in zip(answered, wires, strict=True):
+    for short_id, wire in pairs:
         sentence = wire.answer.strip()
         if not sentence:
             return None
@@ -648,13 +579,11 @@ def _checked_ambition(
     response: Any, short_ids: Mapping[str, uuid.UUID]
 ) -> dict[str, _Line] | None:
     """The ambition response, checked fail-closed; ``None`` when malformed (R40)."""
-    if not isinstance(response, AmbitionResponse):
-        return None
-    answered = [wire.option_id.strip() for wire in response.options]
-    if not _covers_the_list(answered, short_ids):
+    pairs = _answered(response, AmbitionResponse, short_ids)
+    if pairs is None:
         return None
     ambitions: dict[str, _Line] = {}
-    for short_id, wire in zip(answered, response.options, strict=True):
+    for short_id, wire in pairs:
         reason = wire.reason.strip()
         if not reason:
             return None
@@ -670,56 +599,17 @@ def _checked_setting(
     A setting is null or a non-blank word, lower-cased; the second setting is
     null when the main one is.
     """
-    if not isinstance(response, SettingResponse):
-        return None
-    answered = [wire.option_id.strip() for wire in response.options]
-    if not _covers_the_list(answered, short_ids):
+    pairs = _answered(response, SettingResponse, short_ids)
+    if pairs is None:
         return None
     settings: dict[str, _Setting] = {}
-    for short_id, wire in zip(answered, response.options, strict=True):
+    for short_id, wire in pairs:
         main = None if wire.main_setting is None else wire.main_setting.strip().lower()
         second = None if wire.second_setting is None else wire.second_setting.strip().lower()
         if main == "" or second == "" or (main is None and second is not None):
             return None
         settings[short_id] = _Setting(main=main, second=second)
     return settings
-
-
-def _profile_call(
-    name: str,
-    call: Callable[[], UsageResult[Any]],
-    check: Callable[[Any], Mapping[str, Any] | None],
-    *,
-    final_check: Callable[[Any], Mapping[str, Any] | None] | None = None,
-) -> _CallOutcome:
-    """One profile call and one retry (R37; constrain's distinct pattern).
-
-    A call that raises or answers malformed is tried once more. Runs in the
-    thread pool; it never raises. ``final_check``, when given, checks the
-    LAST attempt in place of ``check`` (a folding call's catch-all answer is
-    refused once and accepted on the retry).
-    """
-    usages: list[TokenUsage | None] = []
-    for attempt in range(1, OPTION_PROFILE_CALL_ATTEMPTS + 1):
-        try:
-            response, usage = call()
-        except Exception as exc:  # fail-closed: tried again, then the step fails
-            log.warning(
-                "option_profile.call_failed",
-                call=name,
-                attempt=attempt,
-                error_type=type(exc).__name__,
-            )
-            continue
-        usages.append(usage)
-        last = attempt == OPTION_PROFILE_CALL_ATTEMPTS
-        value = (final_check or check)(response) if last else check(response)
-        if value is not None:
-            return _CallOutcome(name=name, value=value, attempts=attempt, usages=usages)
-        log.warning("option_profile.call_malformed", call=name, attempt=attempt)
-    return _CallOutcome(
-        name=name, value=None, attempts=OPTION_PROFILE_CALL_ATTEMPTS, usages=usages
-    )
 
 
 def _profile_calls(
@@ -831,8 +721,7 @@ def _checked_folds(
     are mapped back (task 046, amendment 4: R86; S34; contract review C12).
 
     Returns:
-        ``{"folds": {word: kind}, "kinds_returned": <length of the answer's
-        kinds>, "guard_rewrites": <kinds the guard rewrote>}``, or ``None``.
+        ``{"folds": {word: kind}, "catch_all": bool}``, or ``None``.
     """
     if not isinstance(response, FoldingResponse):
         return None
@@ -856,16 +745,11 @@ def _checked_folds(
     # 4, round 7 of the folding loop: the mini model answers a cap with
     # "obesity / overweight / BMI"); the first member names the kind.
     kinds = [" ".join(kind.split(" / ")[0].split(" /")[0].split()) for kind in response.kinds]
-    slash_cuts = sum(
-        1 for before, after in zip(response.kinds, kinds, strict=True) if before.strip() != after
-    )
-    guard_rewrites = 0
     if facet == "measures":
         for position, returned in enumerate(kinds):
             mapped = _guarded_kind(returned, references)
             if mapped != returned:
                 kinds[position] = mapped
-                guard_rewrites += 1
                 log.info(
                     "option_profile.folding_guard",
                     facet=facet,
@@ -873,7 +757,7 @@ def _checked_folds(
                     outcome=mapped,
                 )
     by_key = {
-        " ".join(text.split()).casefold(): text for text in references if text and text.strip()
+        fold_text(text): text for text in references if text and text.strip()
     }
     folds: dict[str, str] = {}
     for word_id, word in words.items():
@@ -893,13 +777,7 @@ def _checked_folds(
             words=len(folds),
             largest_kind_words=largest,
         )
-    return {
-        "folds": folds,
-        "kinds_returned": len(response.kinds),
-        "guard_rewrites": guard_rewrites,
-        "slash_cuts": slash_cuts,
-        "catch_all": catch_all,
-    }
+    return {"folds": folds, "catch_all": catch_all}
 
 
 def _folding_calls(
@@ -907,6 +785,8 @@ def _folding_calls(
     *,
     plan: dict[str, object],
     words: Mapping[str, dict[str, str]],
+    plan_outcomes: Sequence[str],
+    target_unit: str,
 ) -> list[
     tuple[
         str,
@@ -920,14 +800,7 @@ def _folding_calls(
     Each entry: the name, the call, the strict check (a catch-all answer is
     refused) and the lenient check for the last attempt.
     """
-    outcomes = plan.get("outcomes")
-    target_unit = plan.get("target_unit")
-    references: dict[str, list[str]] = {
-        "tried_on": [target_unit] if isinstance(target_unit, str) else [],
-        "measures": (
-            [o for o in outcomes if isinstance(o, str)] if isinstance(outcomes, list) else []
-        ),
-    }
+    references: dict[str, list[str]] = {"tried_on": [target_unit], "measures": list(plan_outcomes)}
 
     def _call(facet: Facet) -> Callable[[], UsageResult[Any]]:
         return lambda: backend.fold(facet=facet, plan=plan, words=dict(words[facet]))
@@ -961,7 +834,7 @@ def option_profile_scope(
     *,
     task_id: uuid.UUID,
     run_id: uuid.UUID,
-    context: OptionProfileContext,
+    context: ScopeContext,
     backend: LonglistBackend,
 ) -> dict[str, Any]:
     """Write what is said about each option of the walk's list (S16, S17, S20).
@@ -989,8 +862,10 @@ def option_profile_scope(
         OptionProfileFailure: If the walk has no ``longlist_result``, or a
             profile call or a folding call failed twice (nothing is written).
     """
-    plan = walk_plan(conn, task_id=task_id, run_id=run_id, scope_id=context.scope_id)
-    result_row = _latest_longlist(conn, task_id=task_id, scope_id=context.scope_id)
+    plan, _ = walk_plan(conn, task_id=task_id, run_id=run_id, scope_id=context.scope_id)
+    result_row = latest_longlist(conn, task_id=task_id, scope_id=context.scope_id)
+    if result_row is None:
+        raise OptionProfileFailure("option_profile: no longlist exists for this walk")
     plan_data = longlist_plan_data(plan)
     baseline = baseline_sections(conn, task_id)
     options = _profiled_options(conn, task_id=task_id)
@@ -1004,7 +879,11 @@ def option_profile_scope(
         option_ids=[o.option_id for o in options],
     )
     words = _folding_words(membership)
-    fold_calls = _folding_calls(backend, plan=plan_data, words=words)
+    plan_outcomes = [outcome.text for outcome in plan.outcomes]
+    target_unit = plan.target_unit.text
+    fold_calls = _folding_calls(
+        backend, plan=plan_data, words=words, plan_outcomes=plan_outcomes, target_unit=target_unit
+    )
     calls = (
         _profile_calls(
             backend,
@@ -1023,13 +902,21 @@ def option_profile_scope(
     # at one time.
     usage = UsageAccumulator()
     with ThreadPoolExecutor(max_workers=OPTION_PROFILE_MAX_CONCURRENT) as pool:
-        futures: list[Future[_CallOutcome]] = [
-            tracing.submit_with_context(pool, _profile_call, name, call, check)
+        futures: list[Future[CallOutcome[Mapping[str, Any]]]] = [
+            tracing.submit_with_context(
+                pool, call_with_retry, name, call, check, event="option_profile"
+            )
             for name, call, check in calls
         ]
-        fold_futures: list[Future[_CallOutcome]] = [
+        fold_futures: list[Future[CallOutcome[Mapping[str, Any]]]] = [
             tracing.submit_with_context(
-                pool, _profile_call, name, call, check, final_check=final_check
+                pool,
+                call_with_retry,
+                name,
+                call,
+                check,
+                final_check=final_check,
+                event="option_profile",
             )
             for name, call, check, final_check in fold_calls
         ]
@@ -1049,32 +936,16 @@ def option_profile_scope(
         log.warning("option_profile.failed", calls=failed)
         raise OptionProfileFailure(
             f"option_profile: the {', '.join(failed)} call failed after "
-            f"{OPTION_PROFILE_CALL_ATTEMPTS} attempts"
+            f"{CALL_ATTEMPTS} attempts"
         )
     answers = {outcome.name: outcome.value for outcome in outcomes}
     retries = sum(outcome.attempts - 1 for outcome in outcomes)
     folded = {outcome.name: outcome.value or {} for outcome in fold_outcomes}
+    by_facet = {facet: folded.get(_fold_call_name(facet), {}) for facet in FOLD_FIELDS}
     folds: dict[str, dict[str, str]] = {
-        facet: dict(folded.get(_fold_call_name(facet), {}).get("folds") or {})
-        for facet in FOLD_FIELDS
+        facet: dict(value.get("folds") or {}) for facet, value in by_facet.items()
     }
-    kinds_returned = {
-        facet: int(folded.get(_fold_call_name(facet), {}).get("kinds_returned") or 0)
-        for facet in FOLD_FIELDS
-    }
-
-    guard_rewrites = {
-        facet: int(folded.get(_fold_call_name(facet), {}).get("guard_rewrites") or 0)
-        for facet in FOLD_FIELDS
-    }
-    slash_cuts = {
-        facet: int(folded.get(_fold_call_name(facet), {}).get("slash_cuts") or 0)
-        for facet in FOLD_FIELDS
-    }
-    catch_all = {
-        facet: bool(folded.get(_fold_call_name(facet), {}).get("catch_all"))
-        for facet in FOLD_FIELDS
-    }
+    catch_all = {facet: bool(value.get("catch_all")) for facet, value in by_facet.items()}
 
     # The second wave (S31): the place sentences, once the folds are known
     # and before any write. It never fails the step.
@@ -1088,7 +959,8 @@ def option_profile_scope(
         options=[o for o in options if isinstance(stored_coverage.get(str(o.option_id)), Mapping)],
         membership=membership,
         folds=folds,
-        plan=plan_data,
+        plan_outcomes=plan_outcomes,
+        target_unit=target_unit,
         where_country=where_country,
         usage=usage,
     )
@@ -1098,13 +970,16 @@ def option_profile_scope(
         for option_id, t in typings.items()
         if t.runner_up is not None
     }
-    runner_ups.update(_earlier_runner_ups(conn, task_id=task_id, option_ids=kept_typings))
+    earlier_runner_ups, earlier_reasons = _earlier_typing_entries(
+        conn, task_id=task_id, option_ids=kept_typings
+    )
+    runner_ups.update(earlier_runner_ups)
     lever_reasons: dict[str, str] = {
         str(option_id): t.lever_reason
         for option_id, t in typings.items()
         if t.lever_reason is not None
     }
-    lever_reasons.update(_earlier_lever_reasons(conn, task_id=task_id, option_ids=kept_typings))
+    lever_reasons.update(earlier_reasons)
 
     # Writes, all after every model call.
     now = datetime.now(UTC)
@@ -1132,8 +1007,8 @@ def option_profile_scope(
     coverage = _folded_coverage(
         result_row.coverage,
         membership,
-        plan_data,
         folds,
+        plan_outcomes=plan_outcomes,
         where_country=where_country,
         place_sentences=place_sentences,
     )
@@ -1180,9 +1055,6 @@ def option_profile_scope(
                     facet: len({kind.casefold() for kind in folds[facet].values()})
                     for facet in FOLD_FIELDS
                 },
-                "kinds_returned": kinds_returned,
-                "guard_rewrites": guard_rewrites,
-                "slash_cuts": slash_cuts,
                 "catch_all": catch_all,
             },
             "place_sentences": {
@@ -1220,9 +1092,9 @@ def option_profile_scope(
 def _folded_coverage(
     stored: Any,
     membership: MembershipRead,
-    plan: Mapping[str, object],
     folds: Mapping[str, Mapping[str, str]],
     *,
+    plan_outcomes: Sequence[str],
     where_country: str | None = None,
     place_sentences: Mapping[str, list[dict[str, Any]]] | None = None,
 ) -> dict[str, Any]:
@@ -1236,14 +1108,9 @@ def _folded_coverage(
     it is.
     """
     coverage = dict(stored) if isinstance(stored, Mapping) else {}
-    outcomes = plan.get("outcomes")
-    target_unit = plan.get("target_unit")
     recomputed = membership.coverage(
-        plan_outcomes=[o for o in outcomes if isinstance(o, str)]
-        if isinstance(outcomes, list)
-        else [],
+        plan_outcomes=plan_outcomes,
         folds=folds,
-        target_unit=target_unit if isinstance(target_unit, str) else None,
         where_country=where_country,
     )
     for option_id, fresh in recomputed.items():
@@ -1332,7 +1199,8 @@ def _place_sentence_wave(
     options: Sequence[_ProfiledOption],
     membership: MembershipRead,
     folds: Mapping[str, Mapping[str, str]],
-    plan: Mapping[str, object],
+    plan_outcomes: Sequence[str],
+    target_unit: str,
     where_country: str | None,
     usage: UsageAccumulator,
 ) -> tuple[dict[str, list[dict[str, Any]]], dict[str, Any]]:
@@ -1354,12 +1222,6 @@ def _place_sentence_wave(
         an option with no evaluating document maps to ``[]``.
     """
     started = time.monotonic()
-    outcomes = plan.get("outcomes")
-    plan_outcomes = (
-        [o for o in outcomes if isinstance(o, str)] if isinstance(outcomes, list) else []
-    )
-    target = plan.get("target_unit")
-    target_unit = target if isinstance(target, str) else None
     vocabulary = vocabulary_from_folds(folds)
     members = [m for o in options for m in membership.members.get(o.option_id, [])]
     years, titles = _document_meta(
@@ -1376,7 +1238,7 @@ def _place_sentence_wave(
             programme_fold=fold_programme_names(
                 name
                 for m in option_members
-                if m.programme_name is not None and (name := " ".join(m.programme_name.split()))
+                if (name := clean_text(m.programme_name)) is not None
             ),
             year_by_tss=years,
             title_by_tss=titles,
@@ -1385,7 +1247,14 @@ def _place_sentence_wave(
     called = [o for o in options if groups[str(o.option_id)]]
 
     def _call(o: _ProfiledOption) -> Callable[[], UsageResult[Any]]:
-        data = call_input(o.label, o.description, plan, vocabulary, groups[str(o.option_id)])
+        data = call_input(
+            o.label,
+            o.description,
+            plan_outcomes=plan_outcomes,
+            target_unit=target_unit,
+            vocabulary=vocabulary,
+            groups=groups[str(o.option_id)],
+        )
         return lambda: backend.place_sentences(**data)
 
     def _place_ids(o: _ProfiledOption) -> frozenset[str]:
@@ -1395,11 +1264,12 @@ def _place_sentence_wave(
         futures = {
             str(o.option_id): tracing.submit_with_context(
                 pool,
-                _profile_call,
+                call_with_retry,
                 f"place sentences {o.option_id}",
                 _call(o),
                 partial(_checked_places_within_ceiling, known=_place_ids(o)),
                 final_check=partial(_checked_places, known=_place_ids(o)),
+                event="option_profile",
             )
             for o in called
         }
@@ -1407,11 +1277,8 @@ def _place_sentence_wave(
     stats: dict[str, Any] = {
         "calls": len(called),
         "retries": 0,
-        "options_without_evaluations": len(options) - len(called),
         "generated": 0,
         "template": 0,
-        "failed_trace": 0,
-        "failed_length": 0,
         "failed_call": 0,
     }
     sentences: dict[str, list[dict[str, Any]]] = {}
@@ -1440,7 +1307,6 @@ def _place_sentence_wave(
             )
             if sentence and len(sentence) > PLACE_SENTENCE_MAX_CHARS:
                 reason = "length"
-                stats["failed_length"] += 1
                 log.info(
                     "option_profile.place_sentence_too_long",
                     option_id=option_id,
@@ -1460,7 +1326,6 @@ def _place_sentence_wave(
                     generated, reason = True, None
                 else:
                     reason = rule
-                    stats["failed_trace"] += 1
                     log.info(
                         "option_profile.place_sentence_trace_failed",
                         option_id=option_id,
