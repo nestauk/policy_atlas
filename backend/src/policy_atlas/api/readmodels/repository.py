@@ -3795,7 +3795,6 @@ def _search_coverage(
     *,
     labels: Mapping[uuid.UUID, DocumentLabels],
     folds: Mapping[str, Mapping[str, str]] | None = None,
-    target_unit: str | None = None,
     where_country: str | None = None,
 ) -> Mapping[str, Any]:
     """An added option's coverage from its own search's records (DOI-collapsed).
@@ -3832,7 +3831,6 @@ def _search_coverage(
         labels=labels,
         plan_outcomes=plan_outcomes,
         folds=folds,
-        target_unit=target_unit,
         where_country=where_country,
     )
 
@@ -3957,7 +3955,6 @@ def longlist_out(conn: Connection, task_id: uuid.UUID) -> LonglistOut | None:
         conn, task_id, _needs_search_read(rows, result, _members_by_option(conn, task_id))
     )
     plan_outcomes = _plan_outcomes(built_from[1] if built_from else None)
-    target_unit = _plan_target_unit(built_from[1] if built_from else None)
     where_country = _plan_where_country(built_from[1] if built_from else None)
     folds = stored_folds(result.option_profile)
     sections = _report_sections(conn, task_id, rows)
@@ -3974,7 +3971,6 @@ def longlist_out(conn: Connection, task_id: uuid.UUID) -> LonglistOut | None:
                 plan_outcomes,
                 labels=search_labels,
                 folds=folds,
-                target_unit=target_unit,
                 where_country=where_country,
             )
         return _option_coverage(result, oid)
@@ -4471,7 +4467,6 @@ def option_out(conn: Connection, task_id: uuid.UUID, option_id: uuid.UUID) -> Op
             plan_outcomes,
             labels=labels,
             folds=stored_folds(result.option_profile if result is not None else None),
-            target_unit=target_unit,
             where_country=where_country,
         )
         lines = _search_documents(search, context, labels)
@@ -4482,8 +4477,8 @@ def option_out(conn: Connection, task_id: uuid.UUID, option_id: uuid.UUID) -> Op
     place_sentences = _place_sentences_out(
         coverage.get(PLACE_SENTENCES_KEY),
         lines,
-        where_country=where_country,
         target_unit=target_unit,
+        where_country=where_country,
     )
     design = _design_out(row)
     return OptionOut(

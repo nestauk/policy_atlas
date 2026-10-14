@@ -139,9 +139,8 @@ PROFILE_LINE_KEYS: tuple[str, ...] = get_args(ProfileLineKey)
 #: ``transferability`` (B1).
 ConsiderationAspect = Literal[ProfileLineKey, "transferability"]
 
-#: The scoping steering lattice's point names. Pinned here (not imported from
-#: the registry, which imports this module); ``test_scoping_plan.py`` asserts
-#: equality with ``steer_points_for("options_scoping")``.
+#: The scoping steering lattice's point names. Pinned here, not imported from
+#: the registry, which imports this module.
 SCOPING_STEER_POINTS: frozenset[str] = frozenset({"baseline_confirm"})
 
 #: The one steer point this slice's chain carries.

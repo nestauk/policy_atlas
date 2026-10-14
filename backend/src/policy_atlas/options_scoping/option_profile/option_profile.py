@@ -159,8 +159,6 @@ log = structlog.get_logger()
 
 #: Typing batches in flight at once (task 046, S12).
 TYPING_MAX_CONCURRENT = 4
-# ponytail: kept only for the read-model import another cleanup lane deletes; delete then.
-TYPING_INVALID_REASON = "typing invalid"
 #: The ten profile calls and the two folding calls in flight at once: all
 #: of them (R37; task 046, amendment 3, S21).
 OPTION_PROFILE_MAX_CONCURRENT = 12

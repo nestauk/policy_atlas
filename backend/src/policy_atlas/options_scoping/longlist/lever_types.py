@@ -91,12 +91,6 @@ LEVER_TYPES: tuple[LeverType, ...] = (
 LEVER_TYPE_KEYS: tuple[str, ...] = tuple(lever.key for lever in LEVER_TYPES)
 
 
-def lever_types_by_version() -> dict[str, tuple[LeverType, ...]]:
-    """The current taxonomy version with its list."""
-    # ponytail: kept only for the read-model loop another cleanup lane deletes; delete then.
-    return {TAXONOMY_VERSION: LEVER_TYPES}
-
-
 def lever_types_as_data() -> list[dict[str, str]]:
     """Render the list for a prompt's data block.
 

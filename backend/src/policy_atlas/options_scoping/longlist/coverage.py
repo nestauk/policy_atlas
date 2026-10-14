@@ -555,7 +555,6 @@ def option_coverage(
     folded_seeds: Sequence[FoldedSeed] = (),
     plan_outcomes: Sequence[str] = (),
     folds: Mapping[str, Mapping[str, str]] | None = None,
-    target_unit: str | None = None,
     where_country: str | None = None,
 ) -> dict[str, Any]:
     """Compute one option's source-quality profile.
@@ -569,7 +568,6 @@ def option_coverage(
         folds: The list's folding maps, ``{"tried_on": {word: kind},
             "measures": {word: kind}}`` (S21); ``None`` leaves
             ``outcome_counts.other`` empty.
-        target_unit: Ignored (kept for the read-model caller).
         where_country: The plan's Where as one country's short name (the
             caller resolves it, :func:`~.where_tried.resolve_country`); it
             leads ``evaluated_countries``. ``None`` or a text that names no
@@ -596,7 +594,6 @@ def option_coverage(
     country's name on a record with no country) is read as the country
     level with no place below (:func:`~.where_tried.country_level`).
     """
-    del target_unit
     by_doc: dict[str, list[CoverageMember]] = {}
     # The setting pass, member by member: each member is read with its
     # setting label and its (possibly moved-in) geography.
