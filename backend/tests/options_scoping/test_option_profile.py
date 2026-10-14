@@ -634,7 +634,7 @@ def test_where_reaches_the_who_decides_call_and_no_other(conn: Connection) -> No
     _profile(walk, backend)
 
     assert sorted(profiler.line_calls) == sorted(PROFILE_LINE_KEYS)
-    assert {i["line_key"]: i["where"] for i in profiler.line_inputs} == {
+    assert {i["line_key"]: i["where"] for i in profiler.inputs["line"]} == {
         line_key: (where if line_key == "who_decides" else None) for line_key in PROFILE_LINE_KEYS
     }
     # The built messages: Where is in the who_decides call and in no other.
@@ -646,12 +646,12 @@ def test_where_reaches_the_who_decides_call_and_no_other(conn: Connection) -> No
             baseline_sections=i["baseline_sections"],
             options=i["options"],
         )
-        for i in profiler.line_inputs
+        for i in profiler.inputs["line"]
     }
     assert where in str(by_line.pop("who_decides"))
     others: list[Any] = list(by_line.values())
-    others.append(build_ambition_messages(**profiler.ambition_inputs[0]))
-    others.append(build_setting_messages(**profiler.setting_inputs[0]))
+    others.append(build_ambition_messages(**profiler.inputs["ambition"][0]))
+    others.append(build_setting_messages(**profiler.inputs["setting"][0]))
     others.extend(
         build_lever_typing_messages(
             options=call["options"], plan=call["plan"], baseline_sections=call["baseline_sections"]
@@ -683,10 +683,10 @@ def test_the_who_can_act_texts_reach_the_who_decides_call_and_no_other(conn: Con
     profiler = StubLonglistBackend()
     _profile(walk, _Scripted(profiler=profiler))
 
-    assert {i["line_key"]: i["considerations"] for i in profiler.line_inputs} == {
+    assert {i["line_key"]: i["considerations"] for i in profiler.inputs["line"]} == {
         line_key: (texts if line_key == "who_decides" else None) for line_key in PROFILE_LINE_KEYS
     }
-    who_decides = next(i for i in profiler.line_inputs if i["line_key"] == "who_decides")
+    who_decides = next(i for i in profiler.inputs["line"] if i["line_key"] == "who_decides")
     user = str(
         build_line_messages(
             line_key="who_decides",
@@ -707,8 +707,8 @@ def test_a_plan_without_a_who_can_act_constraint_sends_no_texts(conn: Connection
     profiler = StubLonglistBackend()
     _profile(walk, _Scripted(profiler=profiler))
 
-    assert {i["considerations"] for i in profiler.line_inputs} == {None}
-    who_decides = next(i for i in profiler.line_inputs if i["line_key"] == "who_decides")
+    assert {i["considerations"] for i in profiler.inputs["line"]} == {None}
+    who_decides = next(i for i in profiler.inputs["line"] if i["line_key"] == "who_decides")
     with_none = build_line_messages(
         line_key="who_decides",
         plan=who_decides["plan"],
@@ -745,9 +745,9 @@ def test_the_option_list_holds_only_the_named_keys_and_five_records_in_role_orde
     _profile(walk, profiler)
 
     inputs = [
-        *(i["options"] for i in profiler.line_inputs),
-        *(i["options"] for i in profiler.ambition_inputs),
-        *(i["options"] for i in profiler.setting_inputs),
+        *(i["options"] for i in profiler.inputs["line"]),
+        *(i["options"] for i in profiler.inputs["ambition"]),
+        *(i["options"] for i in profiler.inputs["setting"]),
     ]
     assert len(inputs) == 10
     assert all(payload == inputs[0] for payload in inputs)  # one list for all ten calls
@@ -845,7 +845,7 @@ def test_a_malformed_setting_fails_the_step(conn: Connection, bad_setting: Setti
     )
     with pytest.raises(OptionProfileFailure, match="setting"):
         _profile(walk, backend)
-    assert backend.setting_calls == 2
+    assert backend.calls["setting"] == 2
 
 
 def test_a_call_malformed_once_then_right_succeeds_with_the_retry_counted(
@@ -1105,7 +1105,7 @@ def test_the_folding_calls_read_every_member_s_words_not_five(conn: Connection) 
     backend = _folding_routes()
     walk.build(backend)
     _profile(walk, backend)
-    inputs = {i["facet"]: i for i in backend.profiler.fold_inputs}
+    inputs = {i["facet"]: i for i in backend.profiler.inputs["fold"]}
     assert backend.profiler.fold_calls == {"tried_on": 1, "measures": 1}
     # Every member of every option, sorted, one spelling per case-folded word;
     # the bare mention ("employers") is thinned away, so it is no member.
@@ -1419,7 +1419,7 @@ def test_a_catch_all_answer_is_tried_once_more_and_the_retry_is_kept(conn: Conne
     run_id, _summary = walk.build(backend)
     words = {f"w{i}": f"unit {i - 1}" for i in range(1, 21)}
     # The first answer is a catch-all; the second folds every word to itself.
-    backend.profiler._fold_queues["tried_on"] = [
+    backend.profiler._queues["fold:tried_on"] = [
         _catch_all_answer(words),
         FoldingResponse(
             kinds=[f"kind {k}" for k in range(12)],
@@ -1449,7 +1449,7 @@ def test_a_catch_all_answer_twice_is_kept_and_recorded(conn: Connection) -> None
     )
     run_id, _summary = walk.build(backend)
     words = {f"w{i}": f"unit {i - 1}" for i in range(1, 21)}
-    backend.profiler._fold_queues["tried_on"] = [_catch_all_answer(words), _catch_all_answer(words)]
+    backend.profiler._queues["fold:tried_on"] = [_catch_all_answer(words), _catch_all_answer(words)]
     _profile(walk, backend)
     folding = walk.result(run_id).provenance["option_profile"]["folding"]
     assert backend.profiler.fold_calls["tried_on"] == 2
@@ -1538,8 +1538,8 @@ def test_the_place_sentences_are_stored_in_the_card_order_with_their_provenance(
     _profile(walk, backend)
     after = walk.result(run_id)
     # One call: the option with no evaluating document gets none and no lines.
-    assert backend.profiler.place_sentence_calls == 1
-    (sent,) = backend.profiler.place_sentence_inputs
+    assert backend.profiler.calls["place_sentence"] == 1
+    (sent,) = backend.profiler.inputs["place_sentence"]
     assert sent["option"]["name"] == "Youth guarantee"
     assert sent["plan"] == {
         "target_unit": "16 to 24 year olds",
@@ -1596,7 +1596,7 @@ def test_the_place_sentences_are_stored_in_the_card_order_with_their_provenance(
         **_place_stats(generated=2),
     }
     # Remade on a rebuild: the next profile run writes its own sentences.
-    backend.profiler._place_sentence_queue = [
+    backend.profiler._queues["place_sentence"] = [
         PlaceSentencesResponse(
             places=[
                 PlaceSentenceWire(
@@ -1629,7 +1629,7 @@ def test_an_invalid_answer_after_one_retry_leaves_templates_and_the_step_writes(
     run_id, _ = walk.build(backend)
     _profile(walk, backend)
     after = walk.result(run_id)
-    assert backend.profiler.place_sentence_calls == 2
+    assert backend.profiler.calls["place_sentence"] == 2
     entries = after.coverage[str(ids["yg"])]["place_sentences"]
     assert [entry["generated"] for entry in entries] == [False, False]
     assert entries[1]["sentence"] == "1 document measuring employment."
@@ -1702,7 +1702,7 @@ def test_a_place_left_out_an_unknown_id_a_long_and_an_untraced_sentence(
     # Each template entry says why it stands (review of task 046, 2026-10-12).
     assert [entry["reason"] for entry in entries] == ["length", "number", "missing"]
     # A sentence within the ceiling that passes is kept, stripped.
-    backend.profiler._place_sentence_queue = [
+    backend.profiler._queues["place_sentence"] = [
         PlaceSentencesResponse(
             places=[
                 PlaceSentenceWire(

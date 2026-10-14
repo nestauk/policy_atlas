@@ -49,8 +49,9 @@ from __future__ import annotations
 import os
 import threading
 import uuid
+from collections import Counter, defaultdict
 from collections.abc import Callable, Mapping
-from typing import Any, Protocol
+from typing import Any, Protocol, cast
 
 from langfuse import Langfuse
 from openai.types.chat import ChatCompletionMessageParam
@@ -134,6 +135,7 @@ from policy_atlas.options_scoping.theme.longlist_theme_prompt import (
     build_theme_assignment_messages,
     build_theme_discovery_messages,
 )
+from policy_atlas.runtime.agent_backend import _as_queue, _next
 
 #: The judgment model (discovery, themes, typing, the profile) and the small
 #: model (assignment, folding, place sentences) — contract § Model route.
@@ -762,6 +764,12 @@ class StubLonglistBackend:
       {place}."``, which passes the trace check. Its calls and inputs are
       recorded under the lock.
 
+    Each call is counted in :attr:`calls` (``line`` and ``fold`` per key in
+    :attr:`line_calls` and :attr:`fold_calls`) and its inputs appended to
+    ``inputs[name]``, the name being ``constrain``, ``distinct``,
+    ``authority``, ``line``, ``ambition``, ``setting``, ``fold`` or
+    ``place_sentence``.
+
     Args:
         constrain_responses: Canned :class:`ConstrainResponse` value(s), or
             ``None`` for the deterministic default.
@@ -797,35 +805,34 @@ class StubLonglistBackend:
         fold_responses: Mapping[str, FoldingResponse | list[FoldingResponse]] | None = None,
         place_sentence_responses: Any = None,
     ) -> None:
-        self._constrain_queue: list[ConstrainResponse] = _queue(constrain_responses)
-        self._distinct_queue: list[DistinctResponse] = _queue(distinct_responses)
-        self._authority_queue: list[AuthorityResponse] = _queue(authority_responses)
-        self._line_queues: dict[str, list[_LineResponse]] = {
-            key: _queue(value) for key, value in (line_responses or {}).items()
+        self._queues: dict[str, list[Any]] = {
+            "constrain": _as_queue(constrain_responses),
+            "distinct": _as_queue(distinct_responses),
+            "authority": _as_queue(authority_responses),
+            "ambition": _as_queue(ambition_responses),
+            "setting": _as_queue(setting_responses),
+            "place_sentence": _as_queue(place_sentence_responses),
+            **{f"line:{k}": _as_queue(v) for k, v in (line_responses or {}).items()},
+            **{f"fold:{k}": _as_queue(v) for k, v in (fold_responses or {}).items()},
         }
-        self._ambition_queue: list[AmbitionResponse] = _queue(ambition_responses)
-        self._setting_queue: list[SettingResponse] = _queue(setting_responses)
-        self._fold_queues: dict[str, list[FoldingResponse]] = {
-            key: _queue(value) for key, value in (fold_responses or {}).items()
-        }
-        self._place_sentence_queue: list[Any] = _queue(place_sentence_responses)
         self._lock = threading.Lock()
-        self.place_sentence_calls = 0
-        self.place_sentence_inputs: list[dict[str, Any]] = []
-        self.constrain_calls = 0
-        self.constrain_inputs: list[dict[str, Any]] = []
-        self.distinct_calls = 0
-        self.distinct_inputs: list[list[dict[str, object]]] = []
-        self.authority_calls = 0
-        self.authority_inputs: list[dict[str, Any]] = []
-        self.line_calls: dict[str, int] = {}
-        self.line_inputs: list[dict[str, Any]] = []
-        self.ambition_calls = 0
-        self.ambition_inputs: list[dict[str, Any]] = []
-        self.setting_calls = 0
-        self.setting_inputs: list[dict[str, Any]] = []
-        self.fold_calls: dict[str, int] = {}
-        self.fold_inputs: list[dict[str, Any]] = []
+        self.calls: Counter[str] = Counter()
+        self.line_calls: Counter[str] = Counter()
+        self.fold_calls: Counter[str] = Counter()
+        self.inputs: defaultdict[str, list[Any]] = defaultdict(list)
+
+    def _answer[T](
+        self, name: str, inputs: Any, default: Callable[[], T], *, key: str | None = None
+    ) -> T:
+        """Count the call and record its inputs, then answer from its queue or ``default``."""
+        with self._lock:
+            self.inputs[name].append(inputs)
+            if key is None:
+                self.calls[name] += 1
+            else:
+                (self.line_calls if name == "line" else self.fold_calls)[key] += 1
+            queue = self._queues.setdefault(name if key is None else f"{name}:{key}", [])
+            return cast(T, _next(queue, default))
 
     def discover(
         self,
@@ -939,54 +946,42 @@ class StubLonglistBackend:
         options: list[dict[str, object]],
     ) -> UsageResult[ConstrainResponse]:
         """Answer from the queue, else pass everything and guess ``cannot_say``."""
-        with self._lock:
-            self.constrain_calls += 1
-            self.constrain_inputs.append(
-                {
-                    "plan": plan,
-                    "baseline_sections": list(baseline_sections),
-                    "requirements": list(requirements),
-                    "preferences": list(preferences),
-                    "options": list(options),
-                }
-            )
-            return _next_response(
-                self._constrain_queue,
-                lambda: _pass_everything(requirements, preferences, options),
-            ), None
+        inputs = {
+            "plan": plan,
+            "baseline_sections": list(baseline_sections),
+            "requirements": list(requirements),
+            "preferences": list(preferences),
+            "options": list(options),
+        }
+        return self._answer(
+            "constrain", inputs, lambda: _pass_everything(requirements, preferences, options)
+        ), None
 
     def distinct(self, *, options: list[dict[str, object]]) -> UsageResult[DistinctResponse]:
         """Answer from the queue, else report no duplicate."""
-        with self._lock:
-            self.distinct_calls += 1
-            self.distinct_inputs.append(list(options))
-            return _next_response(
-                self._distinct_queue, lambda: DistinctResponse(duplicates=[])
-            ), None
+        return self._answer(
+            "distinct", list(options), lambda: DistinctResponse(duplicates=[])
+        ), None
 
     def authority(
         self, *, considerations: list[str], options: list[dict[str, object]]
     ) -> UsageResult[AuthorityResponse]:
         """Answer from the queue, else every option ``unclear``."""
-        with self._lock:
-            self.authority_calls += 1
-            self.authority_inputs.append(
-                {"considerations": list(considerations), "options": list(options)}
-            )
-            return _next_response(
-                self._authority_queue,
-                lambda: AuthorityResponse(
-                    options=[
-                        AuthorityWire(
-                            option_id=str(o["option_id"]),
-                            reason="Stub: unclear.",
-                            label="unclear",
-                            body=None,
-                        )
-                        for o in options
-                    ]
-                ),
-            ), None
+        return self._answer(
+            "authority",
+            {"considerations": list(considerations), "options": list(options)},
+            lambda: AuthorityResponse(
+                options=[
+                    AuthorityWire(
+                        option_id=str(o["option_id"]),
+                        reason="Stub: unclear.",
+                        label="unclear",
+                        body=None,
+                    )
+                    for o in options
+                ]
+            ),
+        ), None
 
     def profile_line(
         self,
@@ -999,23 +994,17 @@ class StubLonglistBackend:
         considerations: list[str] | None = None,
     ) -> UsageResult[MarkedLineResponse | PlainLineResponse]:
         """Answer from the line's queue, else a stub sentence and no mark."""
-        with self._lock:
-            self.line_calls[line_key] = self.line_calls.get(line_key, 0) + 1
-            self.line_inputs.append(
-                {
-                    "line_key": line_key,
-                    "plan": plan,
-                    "where": where,
-                    "baseline_sections": list(baseline_sections),
-                    "options": list(options),
-                    "considerations": considerations,
-                }
-            )
-            response = _next_response(
-                self._line_queues.setdefault(line_key, []),
-                lambda: _stub_line(line_key, options),
-            )
-        return response, None
+        inputs = {
+            "line_key": line_key,
+            "plan": plan,
+            "where": where,
+            "baseline_sections": list(baseline_sections),
+            "options": list(options),
+            "considerations": considerations,
+        }
+        return self._answer(
+            "line", inputs, lambda: _stub_line(line_key, options), key=line_key
+        ), None
 
     def profile_ambition(
         self,
@@ -1025,62 +1014,48 @@ class StubLonglistBackend:
         options: list[dict[str, object]],
     ) -> UsageResult[AmbitionResponse]:
         """Answer from the queue, else a stub reason and no mark."""
-        with self._lock:
-            self.ambition_calls += 1
-            self.ambition_inputs.append(
-                {
-                    "plan": plan,
-                    "baseline_sections": list(baseline_sections),
-                    "options": list(options),
-                }
-            )
-            return _next_response(
-                self._ambition_queue,
-                lambda: AmbitionResponse(
-                    options=[
-                        AmbitionWire(
-                            option_id=str(o["option_id"]),
-                            reason="Stub ambition.",
-                            stands_out="no",
-                        )
-                        for o in options
-                    ]
-                ),
-            ), None
+        return self._answer(
+            "ambition",
+            {"plan": plan, "baseline_sections": list(baseline_sections), "options": list(options)},
+            lambda: AmbitionResponse(
+                options=[
+                    AmbitionWire(
+                        option_id=str(o["option_id"]), reason="Stub ambition.", stands_out="no"
+                    )
+                    for o in options
+                ]
+            ),
+        ), None
 
     def profile_setting(
         self, *, plan: dict[str, object], options: list[dict[str, object]]
     ) -> UsageResult[SettingResponse]:
         """Answer from the queue, else ``stub setting`` and no second setting."""
-        with self._lock:
-            self.setting_calls += 1
-            self.setting_inputs.append({"plan": plan, "options": list(options)})
-            return _next_response(
-                self._setting_queue,
-                lambda: SettingResponse(
-                    options=[
-                        SettingWire(
-                            option_id=str(o["option_id"]),
-                            main_setting="stub setting",
-                            second_setting=None,
-                        )
-                        for o in options
-                    ]
-                ),
-            ), None
+        return self._answer(
+            "setting",
+            {"plan": plan, "options": list(options)},
+            lambda: SettingResponse(
+                options=[
+                    SettingWire(
+                        option_id=str(o["option_id"]),
+                        main_setting="stub setting",
+                        second_setting=None,
+                    )
+                    for o in options
+                ]
+            ),
+        ), None
 
     def fold(
         self, *, facet: Facet, plan: dict[str, object], words: dict[str, str]
     ) -> UsageResult[FoldingResponse]:
         """Answer from the facet's queue, else each word lower-cased or its plan text."""
-        with self._lock:
-            self.fold_calls[facet] = self.fold_calls.get(facet, 0) + 1
-            self.fold_inputs.append({"facet": facet, "plan": plan, "words": dict(words)})
-            return _next_response(
-                self._fold_queues.setdefault(facet, []),
-                lambda: _stub_folds(plan, words),
-            ), None
-
+        return self._answer(
+            "fold",
+            {"facet": facet, "plan": plan, "words": dict(words)},
+            lambda: _stub_folds(plan, words),
+            key=facet,
+        ), None
 
     def place_sentences(
         self,
@@ -1091,14 +1066,11 @@ class StubLonglistBackend:
         places: list[dict[str, Any]],
     ) -> UsageResult[PlaceSentencesResponse]:
         """Answer from the queue (an exception is raised), else one stub sentence per place."""
-        with self._lock:
-            self.place_sentence_calls += 1
-            self.place_sentence_inputs.append(
-                {"option": option, "plan": plan, "vocabulary": vocabulary, "places": places}
-            )
-            response = _next_response(
-                self._place_sentence_queue, lambda: _stub_place_sentences(places)
-            )
+        response: Any = self._answer(
+            "place_sentence",
+            {"option": option, "plan": plan, "vocabulary": vocabulary, "places": places},
+            lambda: _stub_place_sentences(places),
+        )
         if isinstance(response, BaseException):
             raise response
         return response, None
@@ -1146,22 +1118,6 @@ def _stub_line(line_key: str, options: list[dict[str, object]]) -> _LineResponse
     return PlainLineResponse(
         options=[PlainLineWire(option_id=str(o["option_id"]), answer=sentence) for o in options]
     )
-
-
-def _queue[T](responses: T | list[T] | None) -> list[T]:
-    if responses is None:
-        return []
-    if isinstance(responses, list):
-        return list(responses)
-    return [responses]
-
-
-def _next_response[T](queue: list[T], default: Callable[[], T]) -> T:
-    if not queue:
-        return default()
-    if len(queue) == 1:
-        return queue[0]
-    return queue.pop(0)
 
 
 def _pass_everything(

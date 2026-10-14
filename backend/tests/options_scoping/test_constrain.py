@@ -256,7 +256,7 @@ def test_a_setting_requirement_is_judged_like_any_requirement(conn: Connection) 
 
     _constrain(walk, backend)
 
-    sent = backend.constrain_inputs[0]["requirements"]
+    sent = backend.inputs["constrain"][0]["requirements"]
     assert sent[:2] == [
         {"id": "req-1", "text": "No benefit sanctions"},
         {"id": "req-2", "text": "Delivered through schools"},
@@ -294,7 +294,7 @@ def test_a_consideration_reaches_neither_list_and_excludes_nothing(conn: Connect
     _, summary = _constrain(walk, backend)
 
     requirements, preferences = _constraint_lists(without_plan)
-    sent = backend.constrain_inputs[0]
+    sent = backend.inputs["constrain"][0]
     assert sent["requirements"] == requirements
     assert sent["preferences"] == preferences
     assert all(hard_limit["text"] not in json.dumps(value, default=str) for value in sent.values())
@@ -317,7 +317,7 @@ def test_the_default_screens_run_and_cite(conn: Connection) -> None:
 
     # The plan has no requirement: the batch still carries its two screens;
     # *distinct* is judged by its own call, never in the batch.
-    assert backend.constrain_inputs[0]["requirements"] == [
+    assert backend.inputs["constrain"][0]["requirements"] == [
         {"id": key, "text": label} for key, label in DEFAULT_SCREENS
     ]
     assert "distinct" not in SCREEN_IDS
@@ -371,8 +371,8 @@ def test_distinct_never_excludes_a_part_of_row(conn: Connection) -> None:
     assert _row(walk, duplicate).merged_into_option_id == component
     assert _row(walk, duplicate).state == "included"
     # Both ends of the relation reach both prompts.
-    batch = {o["option_id"]: o["relations"] for o in backend.constrain_inputs[0]["options"]}
-    sent: dict[Any, Any] = {o["option_id"]: o["relations"] for o in backend.distinct_inputs[0]}
+    batch = {o["option_id"]: o["relations"] for o in backend.inputs["constrain"][0]["options"]}
+    sent: dict[Any, Any] = {o["option_id"]: o["relations"] for o in backend.inputs["distinct"][0]}
     assert batch == sent
     assert sent[str(component)] == [
         {
@@ -559,7 +559,7 @@ def test_a_merge_recomputes_the_kinds_from_the_stored_maps_and_keeps_the_old_key
     # The old keys constrain reads stay in the coverage, and in its payload.
     for key in ("tried_on", "settings"):
         assert key in coverage
-    sent = backend.constrain_inputs[0]["options"][0]["coverage"]
+    sent = backend.inputs["constrain"][0]["options"][0]["coverage"]
     assert set(sent) == {"documents", "evaluated", "roles", "tried_on", "settings"}
 
 
@@ -722,9 +722,9 @@ def test_the_distinct_call_receives_every_option_before_the_batches(conn: Connec
 
     _constrain(walk, backend)
 
-    assert backend.distinct_calls == 1
+    assert backend.calls["distinct"] == 1
     assert calls == ["distinct", "batch", "batch"]
-    sent = backend.distinct_inputs[0]
+    sent = backend.inputs["distinct"][0]
     assert {o["option_id"] for o in sent} == {str(oid) for oid in [*ids, users]}
     assert set(sent[0]) == {
         "option_id",
@@ -746,14 +746,14 @@ def test_a_failed_distinct_call_gives_cannot_check_and_no_merge(conn: Connection
 
     class _DistinctDown(StubLonglistBackend):
         def distinct(self, *, options: list[dict[str, object]]) -> Any:
-            self.distinct_calls += 1
+            self.calls["distinct"] += 1
             raise RuntimeError("malformed answer")
 
     backend = _DistinctDown()
 
     _, summary = _constrain(walk, backend)
 
-    assert backend.distinct_calls == 2  # the call and its one retry
+    assert backend.calls["distinct"] == 2  # the call and its one retry
     for oid in (kept, dup):
         row = _row(walk, oid)
         assert (row.merged_into_option_id, row.state) == (None, "included")
@@ -787,7 +787,7 @@ def test_thin_evidence_never_excludes(conn: Connection) -> None:
     assert summary["excluded"] == 0
     row = _row(walk, empty)
     assert (row.state, row.exclusion, row.no_in_scope_evidence) == ("included", None, False)
-    coverage = backend.constrain_inputs[0]["options"][0]["coverage"]
+    coverage = backend.inputs["constrain"][0]["options"][0]["coverage"]
     assert coverage["documents"] == 0 and coverage["evaluated"] == 0
 
 
@@ -807,7 +807,7 @@ def test_every_preference_but_transferability_yields_one_guess(conn: Connection)
     _, summary = _constrain(walk, backend)
 
     # ... and never reaches the prompt.
-    sent = backend.constrain_inputs[0]
+    sent = backend.inputs["constrain"][0]
     assert sent["preferences"] == [{"id": "pref-1", "text": "Prefer low cost per participant"}]
     assert transferability.text not in repr(sent)
     guesses = _latest(walk).guesses
@@ -967,7 +967,7 @@ def test_the_in_scope_check_makes_no_backend_call(conn: Connection) -> None:
     backend = StubLonglistBackend()
     checked = in_scope_evidence(conn, task_id=walk.task_id, plan=plan, option_ids=[oid])
     assert checked[oid]["no_in_scope_evidence"] is True
-    assert backend.constrain_calls == 0
+    assert backend.calls["constrain"] == 0
 
     class _Down(StubLonglistBackend):
         def constrain(
@@ -979,12 +979,12 @@ def test_the_in_scope_check_makes_no_backend_call(conn: Connection) -> None:
             preferences: list[dict[str, str]],
             options: list[dict[str, object]],
         ) -> UsageResult[ConstrainResponse]:
-            self.constrain_calls += 1
+            self.calls["constrain"] += 1
             raise RuntimeError("provider down")
 
     down = _Down()
     _, summary = _constrain(walk, down)
-    assert down.constrain_calls == 2  # the batch and its one retry, nothing else
+    assert down.calls["constrain"] == 2  # the batch and its one retry, nothing else
     assert summary["no_in_scope"] == 1 and summary["cannot_check"] == 1
     assert _row(walk, oid).no_in_scope_evidence is True
 
@@ -1061,7 +1061,7 @@ def test_a_malformed_batch_degrades_to_cannot_check(conn: Connection) -> None:
 
     _, summary = _constrain(walk, backend)
 
-    assert backend.constrain_calls == 2
+    assert backend.calls["constrain"] == 2
     assert summary == {
         "options": 2,
         "excluded": 0,
@@ -1111,7 +1111,7 @@ def test_a_breach_with_a_blank_reason_makes_the_batch_malformed(conn: Connection
 
     _constrain(walk, backend)
 
-    assert backend.constrain_calls == 2
+    assert backend.calls["constrain"] == 2
     assert _row(walk, oid).state == "included"
     record = _latest(walk).judgements[str(oid)]["1"]["req-1"]
     assert (record["verdict"], record["reason"]) == ("cannot_check", JUDGEMENT_UNAVAILABLE)
@@ -1128,7 +1128,7 @@ def test_a_malformed_batch_is_retried_once(conn: Connection) -> None:
 
     _constrain(walk, backend)
 
-    assert backend.constrain_calls == 2
+    assert backend.calls["constrain"] == 2
     assert _row(walk, oid).exclusion["constraint"] == STORED_SCREEN_TEXT["in_scope"]
 
 
@@ -1154,7 +1154,7 @@ def test_options_are_judged_in_batches(conn: Connection) -> None:
     _, summary = _constrain(walk, backend)
 
     # The batches run in parallel, so they may answer in either order.
-    assert sorted(len(call["options"]) for call in backend.constrain_inputs) == [
+    assert sorted(len(call["options"]) for call in backend.inputs["constrain"]) == [
         2,
         CONSTRAIN_BATCH_SIZE,
     ]
@@ -1219,7 +1219,7 @@ def test_the_plan_data_reaches_the_prompt_as_the_plan_holds_it(conn: Connection)
 
     _constrain(walk, backend)
 
-    sent = backend.constrain_inputs[0]
+    sent = backend.inputs["constrain"][0]
     assert sent["plan"] == {
         "question": plan.question,
         "target_unit": "16 to 24 year olds",
@@ -1242,10 +1242,10 @@ def test_the_option_payload_has_no_where_tried(conn: Connection) -> None:
 
     _constrain(walk, backend)
 
-    coverage = backend.constrain_inputs[0]["options"][0]["coverage"]
+    coverage = backend.inputs["constrain"][0]["options"][0]["coverage"]
     assert set(coverage) == {"documents", "evaluated", "roles", "tried_on", "settings"}
     assert coverage["documents"] == 1
-    assert "where_tried" not in repr(backend.constrain_inputs)
+    assert "where_tried" not in repr(backend.inputs["constrain"])
 
 
 def test_the_baseline_reaches_the_batches(
@@ -1267,7 +1267,7 @@ def test_the_baseline_reaches_the_batches(
     _constrain(walk, backend)
 
     assert seen == [walk.task_id]
-    assert backend.constrain_inputs[0]["baseline_sections"] == sections
+    assert backend.inputs["constrain"][0]["baseline_sections"] == sections
 
 
 def test_silence_passes_and_a_setting_break_excludes_with_the_requirement_named(
@@ -1339,7 +1339,7 @@ def test_a_pathway_only_option_reaches_the_prompt_and_passes_relevant(conn: Conn
 
     _constrain(walk, backend)
 
-    sent = backend.constrain_inputs[0]["options"][0]
+    sent = backend.inputs["constrain"][0]["options"][0]
     assert sent["outcomes_served"] == []
     assert sent["description"] == "Producers cut the sugar in everyday foods."
     assert sent["design_features"] == ["voluntary targets for producers"]
@@ -1363,7 +1363,7 @@ def test_the_batches_run_in_parallel(conn: Connection) -> None:
 
     _, summary = _constrain(walk, backend)
 
-    assert backend.constrain_calls == 3
+    assert backend.calls["constrain"] == 3
     assert summary["options"] == 2 * CONSTRAIN_BATCH_SIZE + 1
     assert _latest(walk).provenance["constrain"]["failed_batches"] == 0
 
@@ -1424,7 +1424,7 @@ def test_no_consideration_on_who_decides_makes_no_call_and_no_label(conn: Connec
 
     _constrain(walk, backend)
 
-    assert backend.authority_calls == 0
+    assert backend.calls["authority"] == 0
     latest = _latest(walk)
     assert all(AUTHORITY_KEY not in latest.judgements[str(oid)]["1"] for oid in oids)
     assert latest.provenance["constrain"]["authority"] == {"calls": 0}
@@ -1443,8 +1443,8 @@ def test_one_authority_call_holds_every_profiled_option_and_the_users_texts(
 
     _, summary = _constrain(walk, backend)
 
-    assert backend.authority_calls == 1  # one call over the whole list, never per batch
-    sent = backend.authority_inputs[0]
+    assert backend.calls["authority"] == 1  # one call over the whole list, never per batch
+    sent = backend.inputs["authority"][0]
     assert sent["considerations"] == [WHO_CAN_ACT, second]
     assert sorted(o["option_id"] for o in sent["options"]) == sorted(str(o) for o in oids)
     for entry in sent["options"]:
@@ -1542,7 +1542,7 @@ def test_no_exclusion_comes_from_the_label_or_from_any_consideration(conn: Conne
     assert latest.counts["included"] == len(oids)
     assert latest.counts["authority_labelled"] == len(oids)
     # Neither consideration is a requirement: the batches judge the screens only.
-    assert backend.constrain_inputs[0]["requirements"] == [
+    assert backend.inputs["constrain"][0]["requirements"] == [
         {"id": key, "text": label} for key, label in DEFAULT_SCREENS
     ]
 
@@ -1570,19 +1570,19 @@ def test_the_batches_and_the_distinct_call_get_no_who_decides_line_and_no_where(
     _constrain(walk, backend)
 
     # The authority call reads the line (the one place exception) ...
-    assert {o["who_decides"] for o in backend.authority_inputs[0]["options"]} == {
+    assert {o["who_decides"] for o in backend.inputs["authority"][0]["options"]} == {
         text for _, text in sentences.values()
     }
     # ... and nothing else does.
     others = json.dumps(
-        [backend.constrain_inputs, backend.distinct_inputs], ensure_ascii=False, default=str
+        [backend.inputs["constrain"], backend.inputs["distinct"]], ensure_ascii=False, default=str
     )
     assert "who_decides" not in others
     for _, text in sentences.values():
         assert text not in others
     assert "United Kingdom" not in others
     # The Where slot itself is never sent; the question's own words are.
-    assert set(backend.constrain_inputs[0]["plan"]) == {
+    assert set(backend.inputs["constrain"][0]["plan"]) == {
         "question",
         "target_unit",
         "intended_change",
@@ -1612,7 +1612,7 @@ def test_an_authority_call_malformed_twice_gives_no_label_and_the_step_succeeds(
 
     _, summary = _constrain(walk, backend)
 
-    assert backend.authority_calls == 2  # the call and its one retry
+    assert backend.calls["authority"] == 2  # the call and its one retry
     latest = _latest(walk)
     assert all(AUTHORITY_KEY not in latest.judgements[str(oid)]["1"] for oid in (kept, broken))
     authority = latest.provenance["constrain"]["authority"]
@@ -1633,8 +1633,8 @@ def test_an_authority_call_that_raises_is_tried_once_more(conn: Connection) -> N
 
     class _Flaky(StubLonglistBackend):
         def authority(self, **kwargs: Any) -> Any:
-            if self.authority_calls == 0:
-                self.authority_calls += 1
+            if self.calls["authority"] == 0:
+                self.calls["authority"] += 1
                 raise RuntimeError("provider down")
             return super().authority(**kwargs)
 
@@ -1642,7 +1642,7 @@ def test_an_authority_call_that_raises_is_tried_once_more(conn: Connection) -> N
 
     _constrain(walk, backend)
 
-    assert backend.authority_calls == 2
+    assert backend.calls["authority"] == 2
     assert _latest(walk).judgements[str(oid)]["1"][AUTHORITY_KEY]["label"] == "unclear"
     authority = _latest(walk).provenance["constrain"]["authority"]
     assert (authority["retries"], authority["failed"]) == (1, False)
@@ -1694,7 +1694,7 @@ def test_an_option_with_no_profile_entry_is_not_sent_and_gets_no_label(
 
     _constrain(walk, backend)
 
-    assert [o["option_id"] for o in backend.authority_inputs[0]["options"]] == [str(profiled)]
+    assert [o["option_id"] for o in backend.inputs["authority"][0]["options"]] == [str(profiled)]
     judgements = _latest(walk).judgements
     assert AUTHORITY_KEY in judgements[str(profiled)]["1"]
     assert AUTHORITY_KEY not in judgements[str(added)]["1"]
