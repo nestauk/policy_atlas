@@ -321,7 +321,7 @@ describe("SourceDossierBody authorships (042)", () => {
 
   it("renders authors with superscript markers and numbered, deduped institutions", () => {
     const { container } = render(
-      <SourceDossierBody taskId={TASK_ID} sourceId={null} source={authored} findings={[]} findingsPending={false} />,
+      <SourceDossierBody source={authored} findings={[]} findingsPending={false} />,
     );
     expect(screen.getAllByText(/Alex Sampleton/).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Casey Mockford/).length).toBeGreaterThan(0);
@@ -336,7 +336,7 @@ describe("SourceDossierBody authorships (042)", () => {
 
   it("renders a corporate author with no markers and no institutions line", () => {
     const { container } = render(
-      <SourceDossierBody taskId={TASK_ID} sourceId={null} source={corporate} findings={[]} findingsPending={false} />,
+      <SourceDossierBody source={corporate} findings={[]} findingsPending={false} />,
     );
     expect(screen.getAllByText(/Example Policy Institute/).length).toBeGreaterThan(0);
     expect(container.querySelector("sup")).toBeNull();
@@ -345,8 +345,6 @@ describe("SourceDossierBody authorships (042)", () => {
   it("renders no authors line at all when the source carries none", () => {
     const { container } = render(
       <SourceDossierBody
-        taskId={TASK_ID}
-        sourceId={null}
         source={{ ...authored, authorships: [] }}
         findings={[]}
         findingsPending={false}

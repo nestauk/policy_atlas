@@ -909,6 +909,7 @@ function SourceDossier({
   findingsPending: boolean;
   onClose: () => void;
 }) {
+  const records = useDossierRecords(taskId, sourceId, optionId);
   if (!sourceId) return null;
   return (
     <Sheet open onOpenChange={(open) => { if (!open) onClose(); }}>
@@ -917,9 +918,7 @@ function SourceDossier({
         {isError && <p role="alert" className="text-body text-navy">This source dossier couldn't be loaded.</p>}
         {source && (
           <SourceDossierBody
-            taskId={taskId}
-            sourceId={sourceId}
-            optionId={optionId}
+            records={records}
             source={source}
             findings={findings}
             findingsPending={findingsPending}
@@ -1015,34 +1014,53 @@ function RecordEntry({
   );
 }
 
+/** A dossier's option records on an options-scoping task (none otherwise),
+ *  and whether it was opened from an option card. */
+export type DossierRecords = {
+  records: components["schemas"]["OptionRecordOut"][] | undefined;
+  pending: boolean;
+  fromOption: boolean;
+};
+
+/** The source dossier sheet's records read, shared by both sheets. */
+export function useDossierRecords(
+  taskId: string,
+  sourceId: string | null,
+  optionId: string | null | undefined,
+): DossierRecords {
+  const task = useTask(taskId);
+  const scoping = isScoping(task.data);
+  const query = useSourceRecords(taskId, sourceId, optionId, { enabled: scoping });
+  return {
+    records: scoping ? query.data?.records : undefined,
+    pending: scoping && query.isPending,
+    fromOption: optionId !== null,
+  };
+}
+
 /** Full source provenance, used by every route into the source dossier sheet.
  *
- *  On an options-scoping task it reads the document's intervention profile
- *  records; when there are any they fill the findings slot, under "In this
+ *  On an options-scoping task the sheet passes the document's intervention
+ *  profile records; when there are any they fill the findings slot, under "In this
  *  option" when the dossier was opened from an option card (`optionId`) or
  *  "Records" otherwise, one per option. With none, the slot shows the
  *  findings as on an Evidence search task (task 046, amendment 3, R67). */
 export function SourceDossierBody({
-  taskId,
-  sourceId,
-  optionId = null,
+  records: dossierRecords,
   source,
   findings,
   findingsPending,
 }: {
-  taskId: string;
-  sourceId: string | null;
-  optionId?: string | null;
+  /** From `useDossierRecords`, called by the sheet so the read starts with
+   *  the dossier's own. */
+  records?: DossierRecords;
   source: components["schemas"]["SourceDossierOut"];
   findings: components["schemas"]["FindingOut"][] | undefined;
   findingsPending: boolean;
 }) {
-  const task = useTask(taskId);
-  const scoping = isScoping(task.data);
-  const recordsQuery = useSourceRecords(taskId, sourceId, optionId, { enabled: scoping });
-  const records = scoping ? recordsQuery.data?.records : undefined;
-  const recordsPending = scoping && recordsQuery.isPending;
-  const fromOption = optionId !== null;
+  const records = dossierRecords?.records;
+  const recordsPending = dossierRecords?.pending ?? false;
+  const fromOption = dossierRecords?.fromOption ?? false;
   const byAsserter = new Map<string, NonNullable<typeof source.tags>>();
   for (const tag of source.tags ?? []) {
     byAsserter.set(tag.asserted_by, [...(byAsserter.get(tag.asserted_by) ?? []), tag]);

@@ -56,7 +56,7 @@ import {
   useExpandForPrint,
 } from "./ArtefactOutline";
 import { Tooltip } from "../ui/radix/Tooltip";
-import { AuthorsLine, InstitutionsLine, SourceDossierBody } from "./SourcesView";
+import { AuthorsLine, InstitutionsLine, SourceDossierBody, useDossierRecords } from "./SourcesView";
 import { referenceAuthorsLine } from "./artefactPresentation";
 import { useActiveConversation } from "./workspace/chat/conversationState";
 
@@ -1058,6 +1058,7 @@ export function SourceDossier({
     taskId,
     sourceId !== null ? { page_size: 200, source_id: sourceId } : undefined,
   );
+  const records = useDossierRecords(taskId, sourceId, optionId);
   return (
     <Sheet
       open
@@ -1079,9 +1080,7 @@ export function SourceDossier({
         {dossier.isError && <p role="alert" className="text-body text-navy">This source dossier couldn't be loaded.</p>}
         {dossier.data && (
           <SourceDossierBody
-            taskId={taskId}
-            sourceId={sourceId}
-            optionId={optionId}
+            records={records}
             source={dossier.data}
             findings={findings.data?.data}
             findingsPending={findings.isPending}
