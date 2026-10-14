@@ -821,14 +821,35 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
 - **Dual-view coverage** — corpus-view vs evidence-view distributions need the
   source/evidence policy object (contract decision 9); v3.0 ships single-view with the
   explicit `base` ladder and **no absence claims** (test-asserted).
-- **Bedrock routes** — both seams (`EmbeddingBackend`, `ThemeGroupingBackend`) swap
-  implementations; first pass OpenAI → target Bedrock is the documented v3.0 posture.
-  **Infra ready on the DevOps side (user, 2026-07-10)** — the migration is now a pull
-  decision, deliberately sequenced **after the eval slice**: it is a model-family swap
-  (Bedrock does not serve the OpenAI models), which re-opens every empirically-settled
-  model-routing choice, so the eval harness is the regression net that licenses it.
-  Standing constraint until then (018 contract): nothing new couples to
-  OpenAI-specific API surface (e.g. no Responses-API server-side conversation state).
+- **Bedrock routes — SUPERSEDED by task 045 (2026-10-14, ADR 0039).** The earlier entry
+  said the move must wait for the eval slice because it was a model-family swap. That
+  premise changed: Bedrock now serves the GPT-5.6 family through an OpenAI-compatible
+  endpoint, so the text route moved with the same model family and no forced
+  re-tuning. Task 045 built the local route: every model is named in
+  `backend/src/policy_atlas/model_routes.toml`, selected by `POLICY_ATLAS_MODEL_ROUTE`
+  (unset = pre-045 behaviour); embeddings moved to Cohere Embed v4 on Bedrock (EU
+  profile) under profile `cohere_embed_v4_1536_v1`; search query generation gained a
+  Claude backend (tool-use JSON, fresh prompt per prompting rule 12). The standing
+  constraint from 018 stays: nothing new couples to a provider-specific API surface.
+  What remains deferred, and to which slice:
+  - **Staging and production (deploy slice):** task-role permissions per model, the
+    container minting its own short-term key, `POLICY_ATLAS_MODEL_ROUTE` per
+    environment from `pa_config.json`, Marketplace model access per account, the
+    organisation's region policy allowing `aws:RequestedRegion = unspecified` for
+    Bedrock's global profiles, quota checks, removal of `OPENAI_API_KEY` from the app
+    secret, Langfuse pricing for the Bedrock model ids, the Anthropic use-case form if
+    any Claude path needs it. Whether to re-embed older projects under the Cohere
+    profile or simply not offer chat retrieval on them is a cost decision for that slice
+    (owner, 2026-09-25); the old vectors stay in the database under their old profile.
+  - **Model quality (evaluation slice):** Luna in place of gpt-5.4-mini, Terra in place
+    of gpt-5.5, the Claude tier for query generation, and Cohere vectors for grouping
+    and retrieval are all unmeasured. Compare by writing an overlay route file per
+    experiment (`POLICY_ATLAS_MODEL_ROUTE_FILE`); the committed file changes only when a
+    choice is made. Whether reformulation and suggestion also move to Claude.
+  - **Retired variables:** the nine `POLICY_ATLAS_*_MODEL` overrides are ignored with a
+    start-up warning; anyone finding one in an old `.env` should delete it.
+  - **Later, if a third seam moves to Claude:** pull the shared Converse plumbing into
+    `core/`; one Claude backend is not enough to justify it.
 - **Upload audit-event seam** — when the web-app slice gives uploads a real surface they
   get their own audit event + observable processing (incl. embed counts, currently a
   structured log line `ingest_upload.embed_counts`) — an app-boundary event, not a run

@@ -195,19 +195,68 @@ wait on it. The owner was asked for an IAM policy on the developer identity allo
 
 ## Rubric status
 
-<!-- filled at step 6 -->
+Walked at step 6 against [rubric.md](rubric.md). "Holds" means the evidence is in this
+file or in the named test; "open" means it waits on the live checks.
+
+| # | Item | Status |
+|---|---|---|
+| 1 | Satisfies the contract incl. D1 to D8, O1 (Terra), O2 (Claude for query generation only) | holds; four build-time deviations flagged above |
+| 2 | `make verify` passes; live checks ran in budget | verify holds (gate 3 at Phase E); live checks 2 and 3 **open** |
+| 3 | No unapproved gated change | holds: egress and the `boto3` move are the two approved gates; nothing under `infra/` |
+| 4 | No generated files or secrets edited by hand; no key in the diff | holds; `.env` untouched, `.env.example` has empty values |
+| 5 | No tests deleted, skipped or weakened without justification | holds; the one repointed guard is justified in § Test changes |
+| 6 | Verification evidence recorded | this file |
+| 7 | Known gaps and deferred seams in `docs/deferred.md` | holds; the "Bedrock routes" entry is superseded, gaps listed |
+| 8 | Tier 3 review stack ran | **open**, review conversation |
+| 9 | Unset means unchanged | holds: `test_default_route_reproduces_every_pre_045_model` plus the diff showing no other request field changed |
+| 10 | No literal model name left; loader fails loud; retired variables ignored with a warning | holds: default-route test; `grep -rnE '= "(gpt-\|text-embedding-)' backend/src` empty; `grep -rn 'environ.get("POLICY_ATLAS_[A-Z_]*MODEL' backend/src` empty; loader tests |
+| 11 | Claude fails loud, no silent fallback | holds: `test_claude_generate_queries_rejects_invalid_responses` |
+| 12 | Only query generation moved | holds: `test_claude_reformulate_and_suggest_delegate_to_inner_backend` |
+| 13 | Usage and tracing hold for Claude | holds in tests; live trace **open** (live check 2) |
+| 14 | Prompt text unchanged; pins honest | holds: one new pin; six re-pins, each diff import + constant only (§ Diff summary) |
+| 15 | Tests stay offline; scrub list extended | holds: `conftest.py`; the suite ran socket-denied throughout |
+| 16 | Dependency change exactly as approved; `make audit` green after lock change and at exit | holds after Phase A; exit run at Phase E |
+| 17 | A cold reader can set it up from `.env.example` | holds (file rewritten); the "reach step 2 of the live check" proof is **open** with the key |
+| 18 | Nothing under `infra/` changed | holds: `git diff --stat 5f84bef..HEAD -- infra` is empty |
+| 19 | Embeddings follow the route; old profile rows not read | holds: factory tests and `test_pending_chunks_with_old_profile_are_pending_for_cohere` |
+| 20 | Cohere batching and input types | holds: `test_cohere_embedding_backend_batches_100_texts_in_order`, `..._sends_complete_request` for both kinds, the two `kind="query"` call sites |
+| 21 | Claude tier is a one-line swap | mechanical half holds (`test_claude_generate_queries_uses_route_model_only_in_model_id`); live half **open** |
+| 22 | Nothing built from § Future work | holds: no key minting, no `infra/`, no shared Converse layer, old vectors kept, live-mode detection unchanged |
+| 23 | Route file committed, shipped and readable | holds: `test_route_file_ships_inside_the_package`; 23 steps; comments beside each non-obvious value |
+| 24 | The web API follows the route | holds: `test_chat_embedding_backend_selects_cohere_in_live_mode` |
+| 25 | Claude reply shape enforced, six failure shapes | holds: parametrised test |
+| 26 | Overlay works and is bounded; Sonnet and Opus live calls ran through an overlay | tests hold; live half **open** |
 
 ## Intent & assumptions
 
-<!-- filled at step 6 -->
+- The three routes reproduce the owner's decisions: Terra for the frontier tier (O1),
+  Haiku first for Claude with the tier swappable in the file, Cohere for embeddings.
+- The fourth tier `fast` exists only so that the default route reproduces task 051's
+  model choice for screening and query generation exactly. On the Bedrock routes it
+  resolves to the same Luna as `mini`.
+- The `reasoning_effort` knob is keyed by model id, not by tier, because that is what
+  the code compared before (the literal `gpt-5.6-terra`), so the default route is
+  byte-identical, and because a step exception can name a model directly.
+- Retiring the nine variables assumes nobody relies on them in a deployed environment;
+  checked: the CDK stack sets none of them.
 
 ## Known unverified items
 
-<!-- filled at step 6 -->
+- Live checks 2 and 3 (Claude side by side; end-to-end run with Cohere embeddings)
+  could not run on 2026-10-14: the September short-term key had expired and two
+  replacement keys were rejected by AWS as invalid (§ Checks beyond the build). The code
+  paths are exercised by tests against the real service definitions (`Stubber`) and the
+  Cohere path reached AWS and was refused only at authentication, so the request shapes
+  are known good. They remain the one open item for step 6.
+- Claude prompt quality is not measured (contract D8).
 
 ## Public safety
 
-<!-- filled at step 6 -->
+- No key, `.env` or trace body is in the diff or in this file. The live-check script and
+  overlay file live in the session scratch directory and are not committed.
+- Token counts and model ids are the only live-call data recorded.
+- The research questions used for live check 2 are generic policy questions, not from
+  any private project.
 
 ## Review handoff (step-7/8 inputs)
 
