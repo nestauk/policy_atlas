@@ -84,3 +84,11 @@ scripts/.rename_044_state.json
 *.csv
 # Search eval: the policy-side ground truth lives on S3 (sync_s3.py search download)
 scripts/evals/search/ground_truth/policy_gt_specific*
+
+# One-off feasibility-check scripts and task working notes stay on disk, not in git
+# (owner ruling 2026-10-14). The 035 check reports and the four standard task files
+# (contract, rubric, plan, verification) are still committed.
+scripts/feasibility_checks/
+docs/tasks/*/research/
+docs/tasks/*/spec-changes-proposed.md
+docs/tasks/*/intent.md
