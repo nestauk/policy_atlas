@@ -32,6 +32,7 @@ import { conflictSentences, errorCode, isConflictCode } from "../../lib/errors";
 import { ReauthRedirect } from "../../ui/feedback";
 import { groupSearchDecisions } from "../decisionsPresentation";
 import { LIFECYCLE_PAGE_CLASS } from "../listPageChrome";
+import { hasLonglist, isScoping } from "../scopingActivity";
 import { ChatAnswer } from "./chat/ChatMessages";
 import { JumpToEnd } from "./chat/JumpToEnd";
 import { useFooterReveal } from "./chat/useFooterReveal";
@@ -724,7 +725,7 @@ export function TaskAgentPane({
   // this pause. The fence stays for every Evidence search check-in and for a
   // scoping walk that is still running.
   const atScopingGate =
-    planQuery.data?.capability === "options_scoping" &&
+    isScoping(planQuery.data) &&
     runStatus === "paused" &&
     stream.pendingCheckIn?.kind === BASELINE_GATE_KIND;
   const composerFenced = runActive && !atScopingGate;
@@ -1049,7 +1050,7 @@ export function TaskAgentPane({
           value={message}
           onChange={setMessage}
           onSubmit={() => send({ message, clientTurnId: crypto.randomUUID() })}
-          placeholder={taskAgentComposerPlaceholder(runStatus, planReady, isOwner, atScopingGate, taskQuery.data?.has_longlist === true)}
+          placeholder={taskAgentComposerPlaceholder(runStatus, planReady, isOwner, atScopingGate, hasLonglist(taskQuery.data))}
           disabled={composerFenced || !isOwner}
           sendDisabled={composerDisabled}
         />

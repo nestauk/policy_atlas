@@ -1,5 +1,6 @@
 import { LIFECYCLE_LABELS } from "../../lib/vocabulary";
 import type { PlanDraft, RunStatus, StageEntry, StageStatus } from "../../store";
+import { isScoping } from "../scopingActivity";
 import { timelineSummary } from "./journey/presentation";
 import { stepsForAnalysisDepth, type PlanStepPreview } from "./planVocabulary";
 
@@ -62,7 +63,7 @@ export function walkKind(
   stages: StageEntry[],
   purpose?: string | null,
 ): WalkKind {
-  if (capability !== "options_scoping") return "evidence_search";
+  if (!isScoping({ capability })) return "evidence_search";
   if (purpose === "targeted") return "option_search";
   if (purpose === "longlist" || purpose === "baseline") return purpose;
   return stages.some((entry) => LONGLIST_STAGES.has(entry.stage)) ? "longlist" : "baseline";

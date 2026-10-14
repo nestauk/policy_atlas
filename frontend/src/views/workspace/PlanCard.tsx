@@ -2,6 +2,7 @@ import { usePlan } from "../../api/queries";
 import type { components } from "../../api/gen/types";
 import { Button } from "../../ui/brand/Button";
 import { cn } from "../../ui/brand/cn";
+import { isScoping } from "../scopingActivity";
 import type { PlanOverlay } from "./planOverlay";
 import { START_SEARCH_CLASS, usePlanStart } from "./planStart";
 
@@ -55,24 +56,24 @@ export function PlanCard({
   // the pane: one card, one capability check). Scoping's own multi-state
   // start action lives in the opened plan document (`planStart.ts`'s
   // `useScopingPlanStart`) — this inline card only ever offers the door in.
-  const isScoping = planOut?.capability === "options_scoping";
-  const plan: PlanDraft | null = isScoping ? null : (planOut?.plan ?? null);
+  const scoping = isScoping(planOut);
+  const plan: PlanDraft | null = scoping ? null : (planOut?.plan ?? null);
   const approved = planOut?.status === "approved";
-  const scopingReady = isScoping && planOut?.scoping?.ready === true;
+  const scopingReady = scoping && planOut?.scoping?.ready === true;
   if (started || !approved) return null;
-  if (isScoping ? !scopingReady : plan === null || !plan.ready) return null;
+  if (scoping ? !scopingReady : plan === null || !plan.ready) return null;
 
   return (
     <div className="anim-rise mr-8 flex flex-wrap items-center gap-3" data-testid="plan-ready-actions">
       <Button className="px-6 py-3.5 text-body" onClick={() => onReviewPlan?.()}>
         Review the plan
       </Button>
-      {isOwner && !isScoping && (
+      {isOwner && !scoping && (
         <Button className={cn(START_SEARCH_CLASS)} disabled={disabled} onClick={start}>
           {label}
         </Button>
       )}
-      {isOwner && !isScoping && startNotice != null && (
+      {isOwner && !scoping && startNotice != null && (
         <div className="flex w-full flex-wrap items-center gap-3">
           <p role="alert" className="text-body text-red">
             {startNotice}

@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import { Link, useParams, useSearchParams } from "react-router";
 
 import type { components } from "../api/gen/types";
-import { useApiClient, useArtefact, useConversations, useEvidence, useFindings, useLandscape, useLonglist, useTask, useSourceDossier, useSourceRecords } from "../api/queries";
+import { useApiClient, useArtefact, useConversations, useEvidence, useFindings, useLandscape, useLonglist, useTask, useSourceDossier } from "../api/queries";
 import { useQuery } from "@tanstack/react-query";
 import {
   cardEvidenceMeta,
@@ -27,11 +27,11 @@ import { errorCode } from "../lib/errors";
 import { scrub } from "../lib/scrub";
 import { useDocumentTitle } from "../lib/title";
 import { COPY } from "../lib/vocabulary";
-import { hasResult, resultView, resultViews, type TabOptions } from "./lifecycle";
-import { hasLonglist, hasTaskResult, statusRun } from "./scopingActivity";
+import { RESULT_VIEWS, resultView } from "./lifecycle";
+import { hasLonglist, isBaselineArtefact, statusRun } from "./scopingActivity";
+import { useChatsEnabled } from "./taskResult";
 import { LonglistView } from "./longlist/LonglistView";
 import { Tabs, TabsList, TabsTrigger } from "../ui/radix/Tabs";
-import { isBaselineArtefact } from "./baselineBand";
 import { hasTerminalPartialLiveArtefact, useRunStream } from "../store";
 import type { LiveSection, RunStreamState } from "../store";
 import { Card } from "../ui/brand/Card";
@@ -1058,9 +1058,6 @@ export function SourceDossier({
     taskId,
     sourceId !== null ? { page_size: 200, source_id: sourceId } : undefined,
   );
-  const task = useTask(taskId);
-  const scoping = task.data?.capability === "options_scoping";
-  const records = useSourceRecords(taskId, sourceId, optionId, { enabled: scoping });
   return (
     <Sheet
       open
@@ -1082,12 +1079,12 @@ export function SourceDossier({
         {dossier.isError && <p role="alert" className="text-body text-navy">This source dossier couldn't be loaded.</p>}
         {dossier.data && (
           <SourceDossierBody
+            taskId={taskId}
+            sourceId={sourceId}
+            optionId={optionId}
             source={dossier.data}
             findings={findings.data?.data}
             findingsPending={findings.isPending}
-            records={scoping ? records.data?.records : undefined}
-            recordsPending={scoping && records.isPending}
-            fromOption={optionId !== null}
           />
         )}
         {!byId && evidence.data !== undefined && source === undefined && (
@@ -1333,18 +1330,16 @@ export function ArtefactView() {
   const { taskId = "" } = useParams();
   const isPublicView = usePublicView();
   const task = useTask(taskId);
-  const options = { hasLonglist: !isPublicView && hasLonglist(task.data) };
-  if (resultViews(options) === null) return <ArtefactReport />;
-  return <ScopingResult taskId={taskId} options={options} />;
+  if (isPublicView || !hasLonglist(task.data)) return <ArtefactReport />;
+  return <ScopingResult taskId={taskId} />;
 }
 
 /** A scoping task's Result once its longlist exists: the switch, then the
  *  chosen view. */
-function ScopingResult({ taskId, options }: { taskId: string; options: TabOptions }) {
+function ScopingResult({ taskId }: { taskId: string }) {
   const [searchParams, setSearchParams] = useSearchParams();
   const longlist = useLonglist(taskId);
-  const view = resultView(searchParams.get("view"), options);
-  const views = resultViews(options) ?? [];
+  const view = resultView(searchParams.get("view"));
   const select = (next: string) => {
     setSearchParams((current) => {
       const params = new URLSearchParams(current);
@@ -1358,11 +1353,11 @@ function ScopingResult({ taskId, options }: { taskId: string; options: TabOption
     <>
       <Tabs value={view} onValueChange={select} className="mx-auto w-full max-w-5xl px-6 pt-6 max-md:px-4">
         <TabsList aria-label="Result view">
-          {views.map((option) => (
+          {RESULT_VIEWS.map((option) => (
             <TabsTrigger
               key={option.key}
               value={option.key}
-              disabled={!option.available}
+              disabled={option.note !== undefined}
               title={option.note}
               className="disabled:cursor-default disabled:text-grey/70"
             >
@@ -1443,11 +1438,7 @@ function ArtefactReport() {
   };
   const { setActiveConversation, openDraftChat } = useActiveConversation();
   // Chats need a result to ask about (038 V8) — the same gate as New chat.
-  // Task 045 (S15): a scoping task has a result once a baseline or a
-  // longlist exists; an Evidence search reads its latest run, as before.
-  const chatsEnabled =
-    hasTaskResult(task.data, { hasBaseline: isBaselineArtefact(artefact.data) }) ||
-    hasResult(stream.run?.status);
+  const chatsEnabled = useChatsEnabled(taskId);
   const askAboutAnalysis = () => {
     // The open artefact is the chat's entry context (a chip and provenance
     // fact, never a scope fence); reuse a blank chat already carrying it,
@@ -1598,15 +1589,11 @@ function ArtefactReport() {
   // A baseline is one linear profile, not a summary over a full report: the
   // two part headings would frame an empty half (it mints no key findings and
   // no case studies), so the outline lists its sections flat.
-  const outlineEntries: SidebarEntry[] = baseline
-    ? [
-        ...sections.map((section, index) => ({
-          id: sectionAnchor(section.title, index),
-          title: sectionNavLabel(section, 28),
-        })),
-        ...((data.references ?? []).length > 0 ? [{ id: "references", title: "References" }] : []),
-        { id: "gathered", title: "Method" },
-      ]
+  const outlineHead: SidebarEntry[] = baseline
+    ? sections.map((section, index) => ({
+        id: sectionAnchor(section.title, index),
+        title: sectionNavLabel(section, 28),
+      }))
     : [
         { kind: "part", id: EXECUTIVE_SUMMARY_ANCHOR, title: "Executive summary" },
         ...frontSections.map(({ section, index }) => ({
@@ -1623,9 +1610,12 @@ function ArtefactReport() {
           id: sectionAnchor(section.title, index),
           title: sectionNavLabel(section, 28),
         })),
-        ...((data.references ?? []).length > 0 ? [{ id: "references", title: "References" }] : []),
-        { id: "gathered", title: "Method" },
       ];
+  const outlineEntries: SidebarEntry[] = [
+    ...outlineHead,
+    ...((data.references ?? []).length > 0 ? [{ id: "references", title: "References" }] : []),
+    { id: "gathered", title: "Method" },
+  ];
 
   return (
     <ReportPage entries={outlineEntries}>

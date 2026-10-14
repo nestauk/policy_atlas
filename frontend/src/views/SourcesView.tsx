@@ -32,6 +32,7 @@ import {
   type SortOrder,
 } from "./sourcesPresentation";
 import { numberedAuthorships } from "./artefactPresentation";
+import { isScoping } from "./scopingActivity";
 
 const STATUS_FILTERS = [
   { key: "all", label: "All" },
@@ -101,8 +102,6 @@ export function SourcesView() {
   });
   const dossier = useSourceDossier(taskId, sourceId);
   const findings = useFindings(taskId, sourceId ? { page_size: 200, source_id: sourceId } : undefined);
-  const scoping = task.data?.capability === "options_scoping";
-  const records = useSourceRecords(taskId, sourceId, optionId, { enabled: scoping });
   const queryBackends = (coverage.data?.backends_detail ?? []).filter(
     (backend) => (backend.queries ?? []).length > 0,
   );
@@ -422,15 +421,14 @@ export function SourcesView() {
       )}
 
       <SourceDossier
+        taskId={taskId}
         sourceId={sourceId}
+        optionId={optionId}
         source={dossier.data}
         isPending={dossier.isPending}
         isError={dossier.isError}
         findings={findings.data?.data}
         findingsPending={findings.isPending}
-        records={scoping ? records.data?.records : undefined}
-        recordsPending={scoping && records.isPending}
-        fromOption={optionId !== null}
         onClose={() => updateParams((next) => { next.delete("source"); next.delete("option"); })}
       />
     </main>
@@ -891,26 +889,24 @@ function RelevantCell({ item }: { item: Parameters<typeof screeningDetails>[0] }
 }
 
 function SourceDossier({
+  taskId,
   sourceId,
+  optionId,
   source,
   isPending,
   isError,
   findings,
   findingsPending,
-  records,
-  recordsPending,
-  fromOption,
   onClose,
 }: {
+  taskId: string;
   sourceId: string | null;
+  optionId: string | null;
   source: components["schemas"]["SourceDossierOut"] | undefined;
   isPending: boolean;
   isError: boolean;
   findings: components["schemas"]["FindingOut"][] | undefined;
   findingsPending: boolean;
-  records: components["schemas"]["OptionRecordOut"][] | undefined;
-  recordsPending: boolean;
-  fromOption: boolean;
   onClose: () => void;
 }) {
   if (!sourceId) return null;
@@ -921,12 +917,12 @@ function SourceDossier({
         {isError && <p role="alert" className="text-body text-navy">This source dossier couldn't be loaded.</p>}
         {source && (
           <SourceDossierBody
+            taskId={taskId}
+            sourceId={sourceId}
+            optionId={optionId}
             source={source}
             findings={findings}
             findingsPending={findingsPending}
-            records={records}
-            recordsPending={recordsPending}
-            fromOption={fromOption}
           />
         )}
       </SheetContent>
@@ -1021,26 +1017,32 @@ function RecordEntry({
 
 /** Full source provenance, used by every route into the source dossier sheet.
  *
- *  On an options-scoping task the parent passes the document's intervention
- *  profile records (`records`); when there are any they fill the findings slot,
- *  under "In this option" when the dossier was opened from an option card
- *  (`fromOption`) or "Records" otherwise, one per option. With none, the slot
- *  shows the findings as on an Evidence search task (task 046, amendment 3, R67). */
+ *  On an options-scoping task it reads the document's intervention profile
+ *  records; when there are any they fill the findings slot, under "In this
+ *  option" when the dossier was opened from an option card (`optionId`) or
+ *  "Records" otherwise, one per option. With none, the slot shows the
+ *  findings as on an Evidence search task (task 046, amendment 3, R67). */
 export function SourceDossierBody({
+  taskId,
+  sourceId,
+  optionId = null,
   source,
   findings,
   findingsPending,
-  records,
-  recordsPending = false,
-  fromOption = false,
 }: {
+  taskId: string;
+  sourceId: string | null;
+  optionId?: string | null;
   source: components["schemas"]["SourceDossierOut"];
   findings: components["schemas"]["FindingOut"][] | undefined;
   findingsPending: boolean;
-  records?: components["schemas"]["OptionRecordOut"][];
-  recordsPending?: boolean;
-  fromOption?: boolean;
 }) {
+  const task = useTask(taskId);
+  const scoping = isScoping(task.data);
+  const recordsQuery = useSourceRecords(taskId, sourceId, optionId, { enabled: scoping });
+  const records = scoping ? recordsQuery.data?.records : undefined;
+  const recordsPending = scoping && recordsQuery.isPending;
+  const fromOption = optionId !== null;
   const byAsserter = new Map<string, NonNullable<typeof source.tags>>();
   for (const tag of source.tags ?? []) {
     byAsserter.set(tag.asserted_by, [...(byAsserter.get(tag.asserted_by) ?? []), tag]);

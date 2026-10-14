@@ -5,7 +5,6 @@ import {
   isTabOpen,
   lifecycleTabs,
   resultView,
-  resultViews,
   taskDestination,
   withChat,
 } from "./lifecycle";
@@ -165,22 +164,11 @@ describe("the longlist and the scoping readers (task 045)", () => {
     expect(isTabOpen("result", "aborted", { hasLonglist: false })).toBe(false);
   });
 
-  it("Result opens on the longlist once one exists, and on the baseline before", () => {
-    expect(resultView(null, { hasBaseline: true })).toBe("baseline");
-    expect(resultView(null, { hasBaseline: true, hasLonglist: true })).toBe("longlist");
-    expect(resultView("baseline", { hasLonglist: true })).toBe("baseline");
-    // A view the switch does not offer, or cannot open, falls back.
-    expect(resultView("report", { hasLonglist: true })).toBe("longlist");
-    expect(resultView("longlist", { hasLonglist: false })).toBe("baseline");
-  });
-
-  it("the view switch: Baseline · Longlist · Report, Report available after assessment", () => {
-    expect(resultViews({ hasBaseline: true })).toBeNull();
-    expect(resultViews({ hasLonglist: true })).toEqual([
-      { key: "baseline", label: "Baseline", available: true },
-      { key: "longlist", label: "Longlist", available: true },
-      { key: "report", label: "Report", available: false, note: "available after assessment" },
-    ]);
+  it("Result opens on the longlist unless the baseline is asked for", () => {
+    expect(resultView(null)).toBe("longlist");
+    expect(resultView("baseline")).toBe("baseline");
+    // A view the switch cannot open falls back.
+    expect(resultView("report")).toBe("longlist");
   });
 
   it("a running child shows as activity but never opens or locks a tab", () => {

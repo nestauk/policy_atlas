@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { components } from "../api/gen/types";
-import { isBaselineArtefact } from "./baselineBand";
+import { isBaselineArtefact } from "./scopingActivity";
 
 type ArtefactOut = components["schemas"]["ArtefactOut"];
 
