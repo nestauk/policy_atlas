@@ -154,10 +154,15 @@ def test_all_stacks_synth_without_aws_calls():
     assert all(template["Resources"] for template in TEMPLATES.values())
 
 
-def test_analytics_enablement_is_staging_only_and_boolean():
+def test_analytics_is_enabled_in_every_environment_with_its_own_config():
     environments = _load_environments("pa_config.json")
-    assert environments["staging"]["deploy_analytics"] is True
-    assert environments["prod"].get("deploy_analytics", False) is False
+    metabase_environments = _load_environments("metabase_config.json")
+    for env_name, application in environments.items():
+        assert application["deploy_analytics"] is True
+        assert (
+            metabase_environments[env_name]["domain_name"]
+            == application["policy_atlas_config"]["domain_name"]
+        )
 
 
 def test_namespacing_table_is_rendered_in_its_designated_stacks():

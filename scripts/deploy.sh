@@ -52,8 +52,6 @@ if type(deploy_analytics) is not bool:
     raise SystemExit(
         f"FAIL: {env_name!r} deploy_analytics must be a JSON boolean"
     )
-if deploy_analytics and env_name != "staging":
-    raise SystemExit("FAIL: the analytics stack is currently approved only for staging")
 
 analytics = None
 analytics_allowlist_parameter = "-"
@@ -137,7 +135,7 @@ if analytics is not None:
         )
     if container.get("desired_count") != 1:
         raise SystemExit(
-            "FAIL: staging Metabase must use desired_count 1 for safe migrations"
+            "FAIL: Metabase must use desired_count 1 for safe migrations"
         )
     internal_port = container.get("internal_port")
     if type(internal_port) is not int or not 1 <= internal_port <= 65535:
