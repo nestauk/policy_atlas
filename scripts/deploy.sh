@@ -547,6 +547,12 @@ resolve_frontend_publish_config() {
     require_value "fonts bucket SSM export" "$FONTS_BUCKET"
     require_value "CloudFront distribution SSM export" "$DISTRIBUTION_ID"
     export VITE_API_BASE_URL VITE_OIDC_AUTHORITY VITE_OIDC_CLIENT_ID
+    # Options scoping is built up to the longlist only. Show it on staging for
+    # colleagues to test; keep it hidden (listed as planned) in production
+    # until shortlist + assessment land. Drop this once the capability is done.
+    if [[ "$ENV_NAME" == "staging" ]]; then
+        export VITE_OPTIONS_SCOPING=1
+    fi
 }
 
 publish_frontend() {

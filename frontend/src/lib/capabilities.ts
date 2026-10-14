@@ -16,7 +16,11 @@ export const CAPABILITIES = [
     // translation table in between.
     key: "options_scoping",
     name: "Options scoping",
-    available: true,
+    // Shown only where VITE_OPTIONS_SCOPING=1 at build time (local dev, staging,
+    // tests). Production builds leave it unset until the capability is complete,
+    // so the entry reads as planned there, like the two below. Delete the flag
+    // once shortlist + assessment land.
+    available: import.meta.env.VITE_OPTIONS_SCOPING === "1",
   },
   {
     key: "theory_of_change",
@@ -36,7 +40,10 @@ const LABEL_BY_KEY = new Map<string, string>(
 
 /** The keys a new task can actually be created with (task 044). */
 export const SELECTABLE_CAPABILITY_KEYS = CAPABILITIES.filter(
-  (capability) => capability.available,
+  // The predicate keeps the key union narrow: entries that are never
+  // available drop out of the type as well as the array.
+  (capability): capability is Exclude<typeof capability, { available: false }> =>
+    capability.available,
 ).map((capability) => capability.key);
 
 /** One of the keys the New task screen offers. */
