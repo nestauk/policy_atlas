@@ -716,6 +716,22 @@ def test_chat_embedding_backend_selects_cohere_in_live_mode(
     assert isinstance(deps.get_chat_embedding_backend(), CohereEmbeddingBackend)
 
 
+def test_chat_embedding_backend_selects_openai_in_live_mode(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(deps, "_live", lambda: True)
+    monkeypatch.setattr(
+        embeddings_module,
+        "route",
+        lambda: SimpleNamespace(embeddings=SimpleNamespace(backend="openai")),
+    )
+    monkeypatch.setattr(
+        embeddings_module, "resolve_openai_client", lambda *_args, **_kwargs: object()
+    )
+
+    assert isinstance(deps.get_chat_embedding_backend(), OpenAIEmbeddingBackend)
+
+
 def test_pending_chunks_with_old_profile_are_pending_for_cohere(
     conn: Connection, monkeypatch: pytest.MonkeyPatch
 ) -> None:

@@ -212,9 +212,105 @@ def test_retired_variables_change_nothing_and_are_named(tmp_path: Path) -> None:
     assert not [entry for entry in logs if entry["event"] == "model_routes.retired_env_ignored"]
 
 
-def test_stray_openai_base_url_does_not_move_a_route() -> None:
-    route = load_route(ROUTE_FILE, "openai-direct", {"OPENAI_BASE_URL": "https://stray.test"})
-    assert route.openai_base_url == "https://api.openai.com/v1"
+@pytest.mark.parametrize(
+    ("text", "match"),
+    [
+        (
+            MINIMAL.replace('backend = "openai"\nmodel = "e"', 'backend = "cohre"\nmodel = "e"'),
+            "embeddings: 'backend' is 'cohre', not one of",
+        ),
+        (
+            MINIMAL.replace(
+                '[routes.r.search_queries]\nbackend = "openai"',
+                '[routes.r.search_queries]\nbackend = "Claude"\nmodel = "m"',
+            ),
+            "search_queries: 'backend' is 'Claude', not one of",
+        ),
+        (
+            MINIMAL.replace(
+                '[routes.r.text]\nmini = "m-mini"\nstandard = "m-std"\n', 'text = "oops"\n'
+            ),
+            "'text' must be a table, not str",
+        ),
+        (MINIMAL + '[routes.r.steps]\nscreen = "mini"\n[[routes.r.steps]]\n', "not valid TOML"),
+    ],
+)
+def test_unknown_backend_names_and_wrong_shapes_fail_loud(
+    tmp_path: Path, text: str, match: str
+) -> None:
+    path = _write(tmp_path, "bad.toml", text)
+    with pytest.raises(RuntimeError, match=match):
+        load_route(path, "r", {})
+
+
+def test_malformed_overlay_fails_loud_naming_the_overlay(tmp_path: Path) -> None:
+    base = _write(tmp_path, "r.toml", MINIMAL)
+    overlay = _write(tmp_path, "overlay.toml", "routes = [1, 2]\n")
+    with pytest.raises(RuntimeError, match="overlay.toml: 'routes' must be a table, not list"):
+        load_route(base, "r", {}, overlay_path=overlay)
+    # A route that the overlay defines is reported against the overlay, not the base file.
+    broken = _write(tmp_path, "broken.toml", '[routes.r2]\nopenai_base_url = "x"\n')
+    with pytest.raises(RuntimeError, match=r"broken.toml \[routes.r2\]: missing key 'text'"):
+        load_route(base, "r2", {}, overlay_path=broken)
+
+
+def test_stray_openai_base_url_does_not_move_the_client(monkeypatch: pytest.MonkeyPatch) -> None:
+    """F6: the client seam takes its address from the route, never from the environment."""
+    from policy_atlas.core.openai_client import resolve_openai_client
+
+    monkeypatch.setenv("OPENAI_BASE_URL", "https://stray.test/v1")
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    client = resolve_openai_client(None, backend_name="test", timeout=1.0, max_retries=0)
+    assert str(client.base_url).rstrip("/") == "https://api.openai.com/v1"
+
+
+def test_every_module_constant_equals_its_pre_045_literal() -> None:
+    """Rubric item 10: the 25 constants the sweep rewired, each under the default route."""
+    from policy_atlas.core import embeddings
+    from policy_atlas.evidence_search.assess import classify_prompt, screen_prompt
+    from policy_atlas.evidence_search.corpus import ranking, theme_grouping
+    from policy_atlas.evidence_search.extract import (
+        finding_vetter,
+        icf_prompt,
+        iof_prompt,
+        relevance_annotator,
+    )
+    from policy_atlas.evidence_search.group import group_clustering
+    from policy_atlas.evidence_search.sourcing import search_prompts
+    from policy_atlas.evidence_search.synthesis import grounding_judge, synthesis_backend
+    from policy_atlas.runtime import agent_backend, chat_prompt, planner
+
+    mini, luna, terra, big = "gpt-5.4-mini", "gpt-5.6-luna", "gpt-5.6-terra", "gpt-5.5"
+    expected = {
+        (classify_prompt, "CLASSIFY_MODEL"): mini,
+        (screen_prompt, "SCREEN_MODEL"): luna,
+        (ranking, "RERANK_MODEL"): mini,
+        (theme_grouping, "DISCOVERY_MODEL"): mini,
+        (theme_grouping, "ASSIGNMENT_MODEL"): mini,
+        (finding_vetter, "FINDING_VETTER_MODEL"): mini,
+        (finding_vetter, "ICF_FINDING_VETTER_MODEL"): mini,
+        (icf_prompt, "ICF_EXTRACTION_MODEL"): mini,
+        (iof_prompt, "EXTRACTION_MODEL"): mini,
+        (relevance_annotator, "RELEVANCE_ANNOTATOR_MODEL"): mini,
+        (group_clustering, "GROUP_CLUSTERING_MODEL"): mini,
+        (search_prompts, "SEARCH_QUERIES_MODEL"): luna,
+        (search_prompts, "SEARCH_REFORMULATE_MODEL"): luna,
+        (search_prompts, "SEARCH_SUGGEST_MODEL"): luna,
+        (grounding_judge, "JUDGE_MODEL"): mini,
+        (synthesis_backend, "SYNTHESIS_MODEL"): terra,
+        (synthesis_backend, "CASE_STUDIES_MODEL"): terra,
+        (synthesis_backend, "MRS_NOTE_MODEL"): mini,
+        (synthesis_backend, "FULL_REPORT_INTRO_MODEL"): mini,
+        (agent_backend, "AGENT_MODEL"): big,
+        (agent_backend, "AGENT_TRIAGE_MODEL"): mini,
+        (chat_prompt, "CHAT_MODEL"): terra,
+        (planner, "PLANNER_MODEL"): big,
+        (embeddings, "EMBEDDING_MODEL"): "text-embedding-3-small",
+        (embeddings, "EMBEDDING_PROFILE"): "openai_text_embedding_3_small_v1",
+    }
+    assert len(expected) == 25
+    for (module, constant), value in expected.items():
+        assert getattr(module, constant) == value, f"{module.__name__}.{constant}"
 
 
 def _resolve_in_subprocess(env_extra: dict[str, str]) -> list[str]:

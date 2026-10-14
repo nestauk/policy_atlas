@@ -371,12 +371,10 @@ def live_embedding_backend() -> EmbeddingBackend:
 
 
 def _embedding_rate_limit_delay_s(attempt: int) -> float:
-    base_s = float(
-        min(
-            EMBEDDING_RATE_LIMIT_BACKOFF_BASE_S * (2**attempt),
-            EMBEDDING_RATE_LIMIT_BACKOFF_CAP_S,
-        )
-    )
+    base_s = float(min(
+        EMBEDDING_RATE_LIMIT_BACKOFF_BASE_S * (2**attempt),
+        EMBEDDING_RATE_LIMIT_BACKOFF_CAP_S,
+    ))
     return float(base_s + random.uniform(0.0, base_s))
 
 
@@ -406,10 +404,14 @@ def _choose_unit_end(
     # repeatedly end where the previous unit ended, creating tiny non-progressing
     # units when a long sentence follows a boundary.
     min_boundary_end = min(start + UNIT_CHAR_OVERLAP + 1, limit)
-    sentence_end = _rightmost_boundary(sentence_boundaries, min_end=min_boundary_end, limit=limit)
+    sentence_end = _rightmost_boundary(
+        sentence_boundaries, min_end=min_boundary_end, limit=limit
+    )
     if sentence_end is not None:
         return sentence_end
-    paragraph_end = _rightmost_boundary(paragraph_boundaries, min_end=min_boundary_end, limit=limit)
+    paragraph_end = _rightmost_boundary(
+        paragraph_boundaries, min_end=min_boundary_end, limit=limit
+    )
     if paragraph_end is not None:
         return paragraph_end
     return limit
@@ -442,7 +444,9 @@ def derive_units(content: str) -> list[_UnitDict]:
 
     effective_end = len(content.rstrip())
     scan_content = content[:effective_end]
-    sentence_boundaries = [match.start() for match in _SENTENCE_BOUNDARY_RE.finditer(scan_content)]
+    sentence_boundaries = [
+        match.start() for match in _SENTENCE_BOUNDARY_RE.finditer(scan_content)
+    ]
     paragraph_boundaries = [
         match.start() for match in _PARAGRAPH_BOUNDARY_RE.finditer(scan_content)
     ]
@@ -458,14 +462,12 @@ def derive_units(content: str) -> list[_UnitDict]:
         )
         if end <= start:
             end = min(start + UNIT_CHAR_BUDGET, effective_end)
-        units.append(
-            {
-                "unit_index": len(units),
-                "start": start,
-                "end": end,
-                "text": content[start:end],
-            }
-        )
+        units.append({
+            "unit_index": len(units),
+            "start": start,
+            "end": end,
+            "text": content[start:end],
+        })
         if end >= effective_end:
             break
         next_start = _overlap_start(content, unit_start=start, unit_end=end)
@@ -540,8 +542,12 @@ def _embed_units_with_isolation(
         if len(units) == 1:
             return [], [(units[0], exc)]
         midpoint = len(units) // 2
-        left_vectors, left_failures = _embed_units_with_isolation(embedder, units[:midpoint])
-        right_vectors, right_failures = _embed_units_with_isolation(embedder, units[midpoint:])
+        left_vectors, left_failures = _embed_units_with_isolation(
+            embedder, units[:midpoint]
+        )
+        right_vectors, right_failures = _embed_units_with_isolation(
+            embedder, units[midpoint:]
+        )
         return left_vectors + right_vectors, left_failures + right_failures
 
     return list(zip(units, vectors, strict=True)), []
@@ -568,10 +574,12 @@ def _pending_chunks(
     conn: Connection, task_id: uuid.UUID, *, max_hydrated: int
 ) -> tuple[int, int, list[_PendingChunk]]:
     eligible_snapshot_ids = union(
-        select(task_source_snapshot.c.source_snapshot_id.label("source_snapshot_id")).where(
-            task_source_snapshot.c.task_id == task_id
-        ),
-        select(task_source_snapshot.c.full_text_snapshot_id.label("source_snapshot_id"))
+        select(
+            task_source_snapshot.c.source_snapshot_id.label("source_snapshot_id")
+        ).where(task_source_snapshot.c.task_id == task_id),
+        select(
+            task_source_snapshot.c.full_text_snapshot_id.label("source_snapshot_id")
+        )
         .where(task_source_snapshot.c.task_id == task_id)
         .where(task_source_snapshot.c.full_text_snapshot_id.is_not(None)),
     ).subquery()
@@ -613,19 +621,15 @@ def _pending_chunks(
         .where(pending_filter)
         .order_by(chunk_table.c.source_snapshot_id, chunk_table.c.sequence)
     ).fetchall()
-    return (
-        eligible_count,
-        pending_count,
-        [
-            _PendingChunk(
-                chunk_id=row.chunk_id,
-                source_snapshot_id=row.source_snapshot_id,
-                sequence=row.sequence,
-                content=row.content,
-            )
-            for row in rows
-        ],
-    )
+    return eligible_count, pending_count, [
+        _PendingChunk(
+            chunk_id=row.chunk_id,
+            source_snapshot_id=row.source_snapshot_id,
+            sequence=row.sequence,
+            content=row.content,
+        )
+        for row in rows
+    ]
 
 
 def _derive_unit_work(
@@ -731,10 +735,9 @@ def embed_pending_chunks(
     units_embedded = 0
 
     for batch_index, start in enumerate(range(0, len(all_units), batch_size), start=1):
-        batch_units = all_units[start : start + batch_size]
+        batch_units = all_units[start:start + batch_size]
         active_units = [
-            unit
-            for unit in batch_units
+            unit for unit in batch_units
             if not states[unit.chunk_id].failed and not states[unit.chunk_id].inserted
         ]
         if not active_units:
@@ -751,7 +754,9 @@ def embed_pending_chunks(
                 batch_index=batch_index,
                 chunk_count=len(failed_chunk_ids),
                 unit_count=len(failed_units),
-                error_type=",".join(sorted({type(exc).__name__ for _unit, exc in failed_units})),
+                error_type=",".join(
+                    sorted({type(exc).__name__ for _unit, exc in failed_units})
+                ),
                 run_id=str(run_id),
             )
 

@@ -841,6 +841,14 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
     any Claude path needs it. Whether to re-embed older projects under the Cohere
     profile or simply not offer chat retrieval on them is a cost decision for that slice
     (owner, 2026-09-25); the old vectors stay in the database under their old profile.
+    Two notes from the 045 review (2026-10-14): `infra/DEPLOYMENT.md` § tuning knobs still
+    lists the retired `POLICY_ATLAS_*_MODEL` variables and must be rewritten when that
+    slice touches `infra/`; and the `boto3` region for Cohere and Claude comes from
+    `AWS_REGION` alone (default `eu-west-2`, contract D5) while the OpenAI address is
+    written in the route, so a shell with `AWS_REGION` set for other AWS work sends the
+    EU profiles to the wrong region. Reading the region from the route file beside
+    `openai_base_url` is the one-line fix; it waits for the deploy slice, which sets the
+    container's region anyway.
   - **Model quality (evaluation slice):** Luna in place of gpt-5.4-mini, Terra in place
     of gpt-5.5, the Claude tier for query generation, and Cohere vectors for grouping
     and retrieval are all unmeasured. Compare by writing an overlay route file per

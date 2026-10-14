@@ -1,7 +1,7 @@
 # Environment
 
 How to bring up a working local environment and the gotchas that bite. Reflects the repo as it
-stands (tasks 001–040; 040 is frontend-only and changes no env; 051 changes no env and no schema (the single-pass search and the Luna model ids are code constants; nothing new to set); 039 adds the APO test-mod (`publisher_source`,
+stands (tasks 001–040; 040 is frontend-only and changes no env; 051 changes no env and no schema (the single-pass search; model ids were code constants until 045); 045 adds one optional selector, `POLICY_ATLAS_MODEL_ROUTE` (unset = OpenAI direct, as before), and for a Bedrock route the same short-term key in `OPENAI_API_KEY` and `AWS_BEARER_TOKEN_BEDROCK`, no schema change, see `backend/.env.example`; 039 adds the APO test-mod (`publisher_source`,
 Overton `source=apo`) plus planning/artefact bug fixes — no migration; when
 another checkout of this repo may be running tests, isolate the gate with a
 per-checkout `TEST_DATABASE_URL` `*_test` override; 038 renames the catalog (`project`→`task`,
@@ -19,8 +19,8 @@ from the image — plus the organisation schema, so run `alembic upgrade head`
 against the dev DB after pulling it; the ops CLI (`python -m policy_atlas.ops`)
 is tunnel-only and needs no local setup, but `make dev-seed` puts the tenancy
 UI on screen locally — it enrols dev-user/dev-colleague/dev-admin into
-"Dev Org" on the dev DB via the real enrol logic with a faked Cognito; 029 adds the chat surface: no new env vars required locally,
-`POLICY_ATLAS_CHAT_MODEL` optional with an application default; a live chat turn needs the
+"Dev Org" on the dev DB via the real enrol logic with a faked Cognito; 029 adds the chat surface: no new env vars required locally
+(the chat model is read from the committed route file since task 045); a live chat turn needs the
 funded OpenAI key `make dev` already loads; 025 hoists the Python project to `backend/` and adds the `frontend/`
 web app; 026 adds `infra/` (CDK, own venv from `infra/requirements*.txt`; `make -C infra test`
 joined `make verify` — no AWS/Docker needed) plus `make fe-api-smoke` (real-HTTP Playwright

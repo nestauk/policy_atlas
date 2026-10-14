@@ -69,7 +69,8 @@ AGENT_TRIAGE_MODEL = route().model_for("agent_triage")
 def _warn_stale_agent_env(environ: Mapping[str, str]) -> list[str]:
     """Name any pre-038 ``POLICY_ATLAS_ORCHESTRATOR_*`` override still set.
 
-    Task 038 renamed the overrides to ``POLICY_ATLAS_AGENT_*``; an old name is
+    Task 038 renamed the overrides to ``POLICY_ATLAS_AGENT_*`` and task 045 retired
+    those too: the route file is the only way to choose a model. An old name is
     ignored, so it is logged rather than silently falling back to the default.
 
     Args:
@@ -80,7 +81,7 @@ def _warn_stale_agent_env(environ: Mapping[str, str]) -> list[str]:
     """
     stale = sorted(key for key in environ if key.startswith("POLICY_ATLAS_ORCHESTRATOR_"))
     if stale:
-        log.warning("agent_env_override_stale", keys=stale, renamed_to="POLICY_ATLAS_AGENT_*")
+        log.warning("agent_env_override_stale", keys=stale, use_instead="model_routes.toml")
     return stale
 
 

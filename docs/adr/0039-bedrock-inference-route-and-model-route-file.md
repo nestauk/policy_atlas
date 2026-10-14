@@ -45,7 +45,9 @@ environment files.
    text-model call site once with its default tier; named routes giving the model for
    each tier, the provider knobs, the embedding section and the search-queries backend;
    and optional per-route step exceptions naming a tier or a specific model. Code asks
-   for a model by step name. An unknown route, step or tier fails at start-up. With the
+   for a model by step name. An unknown route, step, tier or backend name, or a section
+   of the wrong shape, fails at start-up. A step exception that is not a tier name is
+   sent as a model id as written, so it is the one value the loader cannot check. With the
    variable unset, the `openai-direct` route reproduces the pre-045 behaviour exactly.
    Secrets stay in the environment. An optional, uncommitted overlay file named by
    `POLICY_ATLAS_MODEL_ROUTE_FILE` can replace or add routes by name, so an evaluation
@@ -56,8 +58,10 @@ environment files.
 
 3. **Provider knobs live in the route file, not in code.** The pin of
    `reasoning_effort="none"` for the Terra model, previously a string comparison on the
-   model name in two places and an unconditional literal in a third, becomes a knob on
-   the route's standard tier. This is the prompting spec's rule applied.
+   model name in two places and an unconditional literal in a third, becomes a knob in
+   the route keyed by model id (`[routes.<name>.knobs.reasoning_effort]`), because that
+   is what the code compared before and because a step exception can name a model
+   directly. This is the prompting spec's rule applied.
 
 4. **Embeddings move to Cohere Embed v4 on Bedrock**, 1536 numbers, through the EU
    profile, under a new embedding profile label `cohere_embed_v4_1536_v1`. The vector
@@ -78,7 +82,7 @@ environment files.
    model.
 
 6. **The Claude backend gets a fresh, short system prompt, not a port of the OpenAI
-   prompt** (prompting spec rule 12). The OpenAI prompts are unchanged. Five prompt
+   prompt** (prompting spec rule 12). The OpenAI prompts are unchanged. Six prompt
    modules are re-pinned only because a model constant moved out of them, with the diff
    recorded.
 

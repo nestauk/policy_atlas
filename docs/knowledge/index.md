@@ -59,6 +59,8 @@ code that shipped, so it can't drift from it. `/okf validate` and `/okf viz` are
 * [A displayed count comes from the producing component's own summary](read-the-producing-components-summary.md) - acquire defines its headline as the sum of its per-backend counts, so a card reading that payload agrees by construction; a parallel recount is a second source of truth for one number, and a shared read helper right for one caller (P2, all rounds) is wrong for the next (P1, one round) — narrow by opt-in parameter and assert both halves (031).
 * [Every model-bearing surface carries its own literal model id](model-pin-per-surface.md) - the triage default borrowed `SCREEN_MODEL`, so a screening pin would have moved triage; own literals per surface, `test_model_routing_by_moment` is the guard (051).
 
+* [Model names live in model_routes.toml; module constants read the cached route at import](model-route-constants-read-at-import.md) - one committed file plus a selector variable (unset = pre-045 requests); constants resolve once per process, so other-route tests run in a subprocess; the pin is the 25-constant test plus an assignment-line grep; unknown route/step/tier/backend name/wrong shape fail at import, a non-tier step-exception value is sent verbatim (045).
+
 ## Prompting
 
 * [An earlier prompt honesty rule can silently defeat a new capability line](prompt-honesty-rules-route-around-new-capability.md) - the planner routed group asks away from the new filter surface via correct study-vs-source reasoning until the prompt said which reading selects which surface; only replay rounds catch this class (019 planner replay, round 1→2).
@@ -88,6 +90,8 @@ code that shipped, so it can't drift from it. `/okf validate` and `/okf viz` are
 * [CDK synth tests — lookups only via the manifest; framework constructs add hidden Lambdas](cdk-synth-tests-lookups-and-hidden-lambdas.md) - a green synth proves nothing about `from_lookup` filters (CDK substitutes dummy context silently) — assert `manifest.json`'s missing-context queries; `triggers.Trigger` synthesizes a provider Lambda, so exactly-N-Lambda assertions exempt the framework (026 A.3).
 * [The live search transport caches responses process-wide; tests start with it empty](transport-response-cache-is-process-global.md) - `_SEARCH_CACHE` is one dict per process keyed by URL and params; an autouse conftest fixture clears it; an order-dependent failure may come from another file in the same process (051 review).
 * [A test of one delay must switch the other delays off](timing-test-removes-the-other-delay.md) - the retry back-off satisfied the 429-pause assertion with the pause deleted; zero the back-off, assert equality, prove the failure; clear shared sleep lists between halves; coalesce a shared pause (051 review, two lanes).
+
+* [A protocol change or an approved gate change must be swept through every test fake and every structural pin before the gate runs](interface-change-sweeps-fakes-and-premise-pins.md) - grep tests for every fake of a changed method before a targeted run; when a contract approves a gate that overturns a premise, repoint the pin at what is still true (keep the witness), never delete it; a repointed guard keeps its original reach (045).
 
 ## Invariants (verified)
 
@@ -148,6 +152,8 @@ code that shipped, so it can't drift from it. `/okf validate` and `/okf viz` are
 * [Facet partitioning has a hard value-list scale limit on the current prompt/model](facet-partition-value-list-scale-limit.md) - group_facet_v1 on gpt-5.4-mini emits duplicate value ids at ~184 distinct values (4/4 live attempts incl. repairs, reasons persisted); kind-spanning doubles the list — Slice C's facet redesign must bound the per-call value list, not retry (021 live check; CLOSED by 022's two-stage engine, addendum in the concept).
 * [OpenAlex search.semantic rejects the date, SDG, paratext, OA and country filters](openalex-semantic-search-filter-support.md) - accepts `type`, `language`, `is_retracted`, `publication_year`; dates go as a year fence plus a local check, the rest local, recorded as `semantic_local_filters`; a split filter's local predicate spans every variant (051 probe and review).
 * [Overton returns date order with no scores unless sort=relevance is sent](overton-relevance-order-needs-sort-parameter.md) - the client sends and protects it; fetch-by-id checks the echoed id; landmarks carry no wire filters (049 experiments, 051).
+
+* [Bedrock from London — which models answer, through which API, with which key variable](bedrock-route-facts.md) - GPT-5.6 via the OpenAI-compatible endpoint under global.* only (no gpt-5.4-mini, gpt-5.5 US-only); Claude via Converse tool use, Cohere via InvokeModel, both eu.*; one key in OPENAI_API_KEY and AWS_BEARER_TOKEN_BEDROCK (a missing second one looks like an IAM permission gap); Terra needs reasoning_effort none for function tools, not for structured parse (045 probes).
 
 ## Integration quirks (infra / tooling)
 

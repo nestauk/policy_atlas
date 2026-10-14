@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, cast
+from typing import Any, Literal, cast
 
 import boto3
 import pytest
@@ -342,12 +342,83 @@ def test_claude_generate_queries_rejects_invalid_responses(
             ),
             "usage fields",
         ),
+        (
+            _converse_response(
+                tool_use=[
+                    {
+                        "toolUse": {
+                            **tool,
+                            "input": {"queries": [], "overton_paraphrases": []},
+                        }
+                    }
+                ],
+                usage={"inputTokens": "1", "outputTokens": 1, "totalTokens": 2},
+            ),
+            "usage fields must be integers",
+        ),
     ]
     for response, match in cases:
         client = type("InvalidResponseClient", (), {"converse": _response_method(response)})()
         backend = _claude_backend(monkeypatch, client=client)
         with pytest.raises(RuntimeError, match=match):
             backend.generate_queries(payload)
+
+
+class _RecordingSpan:
+    def __init__(self) -> None:
+        self.updates: list[dict[str, Any]] = []
+
+    def update(self, **kwargs: Any) -> None:
+        self.updates.append(kwargs)
+
+    def __enter__(self) -> _RecordingSpan:
+        return self
+
+    def __exit__(self, *_exc: Any) -> Literal[False]:
+        return False
+
+
+class _RecordingLangfuse:
+    def __init__(self) -> None:
+        self.span = _RecordingSpan()
+        self.opened: list[tuple[str, str]] = []
+
+    def start_as_current_observation(self, *, name: str, as_type: str) -> _RecordingSpan:
+        self.opened.append((name, as_type))
+        return self.span
+
+
+def test_claude_generate_queries_trace_carries_model_and_prompt_version(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Rubric item 13: the Langfuse span names the Claude model and the new prompt version."""
+    payload = QueriesPayload(intent="policy evaluation")
+    response = _converse_response(
+        tool_use=[
+            {
+                "toolUse": {
+                    "toolUseId": "a",
+                    "name": CLAUDE_QUERY_TOOL_NAME,
+                    "input": {"queries": ["q"], "overton_paraphrases": []},
+                }
+            }
+        ],
+        usage={"inputTokens": 5, "outputTokens": 2, "totalTokens": 7},
+    )
+    client = type("GoodClient", (), {"converse": _response_method(response)})()
+    _claude_backend(monkeypatch, client=client)  # pins the route the backend reads
+    langfuse = _RecordingLangfuse()
+    backend = ClaudeSearchGenerationBackend(
+        client=client, inner=cast("Any", _InnerBackend()), langfuse_client=cast("Any", langfuse)
+    )
+
+    backend.generate_queries(payload)
+
+    assert langfuse.opened == [("search:generate_queries", "generation")]
+    [update] = langfuse.span.updates
+    assert update["model"] == "eu.anthropic.claude-haiku-4-5-20251001-v1:0"
+    assert update["metadata"]["prompt_version"] == "search_queries_claude_v1"
+    assert update["usage_details"]["prompt_tokens"] == 5
 
 
 def test_claude_reformulate_and_suggest_delegate_to_inner_backend(

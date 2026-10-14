@@ -9,7 +9,9 @@ second file named by ``POLICY_ATLAS_MODEL_ROUTE_FILE`` can replace or add routes
 by name without touching the committed file (for evaluations).
 
 Design: task 045 contract D3 and ADR 0039. Every lookup fails loud: an unknown
-route, step or tier raises at import rather than falling back to anything.
+route, step, tier or backend name, or a file of the wrong shape, raises at import
+rather than falling back to anything. One value is taken as written: a step
+exception that is not a tier name is sent to the provider as a model id.
 """
 
 from __future__ import annotations
@@ -28,6 +30,8 @@ log = structlog.get_logger()
 
 ROUTE_FILE = Path(__file__).resolve().parent.parent / "model_routes.toml"
 DEFAULT_ROUTE = "openai-direct"
+EMBEDDING_BACKENDS = ("openai", "cohere")
+SEARCH_QUERIES_BACKENDS = ("openai", "claude")
 ROUTE_ENV = "POLICY_ATLAS_MODEL_ROUTE"
 OVERLAY_ENV = "POLICY_ATLAS_MODEL_ROUTE_FILE"
 
@@ -97,6 +101,9 @@ class Route:
         Returns:
             The model id to send to the provider.
 
+        A step exception on this route wins over the step's default tier. Its value
+        is a tier name when it matches one, else it is sent as a model id as written.
+
         Raises:
             RuntimeError: If the step is not in the ``[steps]`` table.
         """
@@ -114,6 +121,20 @@ def _require(table: Mapping[str, Any], key: str, where: str) -> Any:
     if key not in table:
         raise RuntimeError(f"{where}: missing key {key!r}")
     return table[key]
+
+
+def _table(table: Mapping[str, Any], key: str, where: str) -> Mapping[str, Any]:
+    value = _require(table, key, where)
+    if not isinstance(value, Mapping):
+        raise RuntimeError(f"{where}: {key!r} must be a table, not {type(value).__name__}")
+    return value
+
+
+def _choice(table: Mapping[str, Any], key: str, where: str, allowed: tuple[str, ...]) -> str:
+    value = _require(table, key, where)
+    if value not in allowed:
+        raise RuntimeError(f"{where}: {key!r} is {value!r}, not one of {list(allowed)}")
+    return str(value)
 
 
 def _read_toml(path: Path) -> dict[str, Any]:
@@ -148,35 +169,42 @@ def load_route(
         The resolved route.
 
     Raises:
-        RuntimeError: On a missing or malformed file, an unknown route, a route
-            missing a section, a tier or step exception that cannot resolve, or an
-            overlay that tries to change ``[steps]``.
+        RuntimeError: On a missing or malformed file, a section that is not a
+            table, an unknown route, a route missing a section, a step default
+            naming an undefined tier, a step exception naming an unknown step, a
+            backend name the code does not implement, or an overlay that tries to
+            change ``[steps]``.
     """
     data = _read_toml(path)
-    steps: dict[str, str] = dict(_require(data, "steps", str(path)))
-    routes: dict[str, Any] = dict(_require(data, "routes", str(path)))
+    steps: dict[str, str] = dict(_table(data, "steps", str(path)))
+    routes: dict[str, Any] = dict(_table(data, "routes", str(path)))
+    source = dict.fromkeys(routes, path)
 
     if overlay_path is not None:
         overlay = _read_toml(overlay_path)
         if "steps" in overlay:
             raise RuntimeError(f"{overlay_path}: an overlay may not change [steps]")
-        routes.update(_require(overlay, "routes", str(overlay_path)))
+        overlay_routes = _table(overlay, "routes", str(overlay_path))
+        routes.update(overlay_routes)
+        source.update(dict.fromkeys(overlay_routes, overlay_path))
 
     if name not in routes:
         raise RuntimeError(f"{path}: route {name!r} is not defined (known: {sorted(routes)})")
-    where = f"{path} [routes.{name}]"
-    table = routes[name]
-    tiers = dict(_require(table, "text", where))
+    where = f"{source[name]} [routes.{name}]"
+    table = _table(routes, name, f"{source[name]} [routes]")
+    tiers = dict(_table(table, "text", where))
     for step, tier in steps.items():
         if tier not in tiers:
             raise RuntimeError(f"{where}: step {step!r} needs tier {tier!r}, not defined")
-    exceptions = dict(table.get("steps", {}))
+    exceptions = dict(_table(table, "steps", where)) if "steps" in table else {}
     for step in exceptions:
         if step not in steps:
             raise RuntimeError(f"{where}.steps: unknown step {step!r}")
-    embeddings_table = _require(table, "embeddings", where)
-    search_table = _require(table, "search_queries", where)
-    search_backend = _require(search_table, "backend", f"{where}.search_queries")
+    embeddings_table = _table(table, "embeddings", where)
+    search_table = _table(table, "search_queries", where)
+    search_backend = _choice(
+        search_table, "backend", f"{where}.search_queries", SEARCH_QUERIES_BACKENDS
+    )
     if search_backend == "claude":
         _require(search_table, "model", f"{where}.search_queries")
 
@@ -196,7 +224,7 @@ def load_route(
         step_exceptions=exceptions,
         reasoning_effort=dict(table.get("knobs", {}).get("reasoning_effort", {})),
         embeddings=Embeddings(
-            backend=_require(embeddings_table, "backend", f"{where}.embeddings"),
+            backend=_choice(embeddings_table, "backend", f"{where}.embeddings", EMBEDDING_BACKENDS),
             model=_require(embeddings_table, "model", f"{where}.embeddings"),
             profile=_require(embeddings_table, "profile", f"{where}.embeddings"),
         ),

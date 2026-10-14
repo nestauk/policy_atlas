@@ -41,7 +41,10 @@ set on the new models and re-tuning prompts) come later and are out of scope her
 > still reproduces today's values; (2) agent triage no longer follows screen, so only the
 > case-studies "follows" rule remains to retire; (3) `chat_prompt.py` is now a hash-pinned
 > prompt module, so six pinned modules lose a model constant, not five; (4) task 051 took
-> ADR number 0038, so this slice's ADR is 0039.
+> ADR number 0038, so this slice's ADR is 0039. A fifth, found at review (2026-10-14):
+> (5) the `reasoning_effort` knob is keyed by model id, not by the `standard` tier as the
+> D3 example shows, because the code compared the model id before and a step exception
+> can name a model directly.
 
 ## Why this is safe to do now
 

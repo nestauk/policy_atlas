@@ -1,5 +1,27 @@
 # Knowledge update log
 
+## 2026-10-14 (task 045 step 8)
+* **Creation**: Added [bedrock-route-facts](bedrock-route-facts.md) — which models answer
+  from London through which API, the two key variables and the AccessDenied look-alike,
+  Terra's knob being about function tools only (045 probes and live checks; review-stack
+  probe closed the planner-on-Terra question).
+* **Creation**: Added
+  [model-route-constants-read-at-import](model-route-constants-read-at-import.md) — the
+  committed route file, import-time constants and the subprocess rule for other-route
+  tests, the 25-constant pin, what the loader can and cannot check (045 build; the
+  backend-name and overlay-shape fallbacks were convergent Codex and Claude findings).
+* **Creation**: Added
+  [interface-change-sweeps-fakes-and-premise-pins](interface-change-sweeps-fakes-and-premise-pins.md)
+  — sweep every fake of a changed Protocol method before a targeted run; repoint, never
+  delete, a structural pin an approved gate invalidates (045 Phase B gate failure and
+  the image-hygiene repoint, widened at review).
+* **Update**: [live-check-drive-runbook](live-check-drive-runbook.md) gains the
+  `if __name__ == "__main__"` rule for drivers that call `run_plan` (014's lesson,
+  re-learned by 045's live check 3).
+* **Update**: [delegated-executor-practices](delegated-executor-practices.md) — briefs
+  allow `ruff format --check` and `ruff check --fix` only; a bare `ruff format` on
+  existing files is churn (045 Phase B).
+
 ## 2026-10-09 (task 051 step 8)
 * **Creation**: Added
   [openalex-semantic-search-filter-support](openalex-semantic-search-filter-support.md) —

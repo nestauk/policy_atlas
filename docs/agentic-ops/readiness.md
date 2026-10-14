@@ -21,7 +21,7 @@ are done (spec-prep 2026-06-22; refreshed 2026-07-03); `[ ]` items are open gate
 - [x] Open/provisional decisions marked 🟡 / ❓ throughout; none silently flattened.
 - [ ] Tool/component I/O contracts — draft when the first implementation task lands.
 - [x] Task-contract map for first implementation slices — superseded by the running task sequence
-  (`docs/tasks/001`–`051` merged as of 2026-10-09, 051 the single-pass search of ADR 0038 — system live at
+  (`docs/tasks/001`–`052` merged, 045 the local Bedrock route of ADR 0039 landing with its PR on 2026-10-14 — system live at
   `v3.policyatlas.uk`; the next slice is the newest `docs/tasks/NNN-*/contract.md` and
   its `task/NNN-slug` branch).
 - [x] Verification plan for first implementation slices — per-task `verification.md` from
