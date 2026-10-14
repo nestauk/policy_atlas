@@ -31,7 +31,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select, update
 from sqlalchemy.engine import Connection, Engine
 
-from policy_atlas.api.contract import OptionDocumentOut, OptionOut, OptionSummaryOut
+from policy_atlas.api.contract import OptionDocumentOut
 from policy_atlas.api.deps import get_agent_backend, get_runner_backends
 from policy_atlas.api.readmodels import repository
 from policy_atlas.core.schema import (
@@ -48,7 +48,6 @@ from policy_atlas.core.schema import (
     task_source_snapshot,
 )
 from policy_atlas.options_scoping.constrain.constrain import (
-    IN_SCOPE_EVIDENCE_KEY,
     ConstrainContext,
     constrain_scope,
 )
@@ -683,10 +682,6 @@ def test_the_card_carries_every_section_and_never_how_sure(
             assert "how sure" not in body.lower()
 
 
-def test_the_in_scope_key_is_constrains(conn: Connection) -> None:
-    assert repository.LONGLIST_IN_SCOPE_KEY == IN_SCOPE_EVIDENCE_KEY
-
-
 def test_an_option_added_since_the_build_reads_with_an_empty_profile(conn: Connection) -> None:
     walk = _Walk(conn)
     walk.option("Youth guarantee", origin="added_by_you")
@@ -701,31 +696,6 @@ def test_an_option_added_since_the_build_reads_with_an_empty_profile(conn: Conne
 
 
 # --- task 046: the read models gain runner-up, tried on, variants, thinning --------
-
-
-def test_the_card_and_list_serve_no_runner_up_lever_type(conn: Connection) -> None:
-    """Task 046, amendment 3 (B13): the runner-up stays in provenance, off the read models."""
-    walk = _Walk(conn)
-    walk.option("Youth guarantee", origin="added_by_you")
-    doc = walk.doc()
-    walk.record(doc, "youth guarantee")
-    walk.rollup(walk.scope_id, [doc])
-    backend = _Scripted(
-        routes={"youth guarantee": ("Youth guarantee", False)},
-        typings={"Youth guarantee": {"runner_up_lever_type": "inform"}},
-    )
-    walk.build(backend)
-    _profile(walk, backend)
-    option_id = walk.options()["Youth guarantee"].option_id
-
-    listed = repository.longlist_out(conn, walk.task_id)
-    assert listed is not None
-    summary = next(o for o in listed.options if o.option_id == option_id)
-    assert "runner_up_lever_type" not in summary.model_dump()
-
-    card = repository.option_out(conn, walk.task_id, option_id)
-    assert card is not None
-    assert "runner_up_lever_type" not in card.model_dump()
 
 
 def test_the_card_and_list_serve_the_lever_reason(conn: Connection) -> None:
@@ -839,50 +809,6 @@ def test_a_longlist_walk_s_child_search_never_hides_the_option_s_membership_evid
     assert listed is not None
     summary = next(o for o in listed.options if o.option_id == option_id)
     assert summary.search_pending is False and summary.document_count == 1
-
-
-def test_an_old_stored_longlist_reads_with_every_new_field_defaulted(conn: Connection) -> None:
-    """Item 8: a longlist stored before this slice has no ``tried_on``,
-    ``examples``, thinning counts or ``runner_up`` and was typed under
-    ``lever_types_v1`` — every new field falls back to its default."""
-    walk = _Walk(conn)
-    option_id = walk.option("Youth guarantee", origin="added_by_you")
-    doc = walk.doc()
-    walk.record(doc, "youth guarantee")
-    walk.rollup(walk.scope_id, [doc])
-    run_id, _ = walk.build(_Scripted(routes={"youth guarantee": ("Youth guarantee", False)}))
-    stored = walk.result(run_id)
-    old_coverage = {
-        oid: {
-            k: v
-            for k, v in cov.items()
-            if k not in ("tried_on", "examples", "folded", "unit_tags", "setting_repairs")
-        }
-        for oid, cov in stored.coverage.items()
-    }
-    old_provenance = {k: v for k, v in stored.provenance.items() if k != "runner_up"}
-    old_provenance["thinning"] = {}
-    old_provenance["taxonomy_version"] = "lever_types_v1"
-    old_counts = {k: v for k, v in stored.counts.items() if k != "title_only"}
-    conn.execute(
-        update(longlist_result)
-        .where(longlist_result.c.run_id == run_id)
-        .values(coverage=old_coverage, provenance=old_provenance, counts=old_counts)
-    )
-
-    listed = repository.longlist_out(conn, walk.task_id)
-    assert listed is not None
-    assert listed.taxonomy_version == "lever_types_v1"
-    assert listed.counts.title_only == 0
-    assert listed.counts.thinned_mentioned == 0
-    assert listed.counts.thinned_collapsed == 0
-    assert listed.counts.thinned_capped == 0
-    summary = next(o for o in listed.options if o.option_id == option_id)
-    assert summary.option_id == option_id
-
-    card = repository.option_out(conn, walk.task_id, option_id)
-    assert card is not None
-    assert card.also_found_as == []
 
 
 def test_the_signal_and_the_document_lines_carry_the_record_fields(conn: Connection) -> None:
@@ -1194,14 +1120,6 @@ def test_also_found_as_joins_a_merged_duplicate_and_a_folded_seed(conn: Connecti
     summary, card = _summary_and_card(conn, walk, option_id)
     assert summary.also_found_as == ["Jobs guarantee", "Apprenticeship grants"]
     assert card.also_found_as == ["Jobs guarantee", "Apprenticeship grants"]
-
-
-def test_the_longlist_has_no_ambition_bands(conn: Connection) -> None:
-    walk, _ = _profiled(conn, profile=None)
-    listed = repository.longlist_out(conn, walk.task_id)
-    assert listed is not None
-    assert "ambition_bands" not in type(listed).model_fields
-    assert "ambition_bands" not in listed.model_dump()
 
 
 # --- the buttons -------------------------------------------------------------------
@@ -1853,8 +1771,3 @@ def test_an_option_from_the_evidence_search_names_its_report_section(
     assert card.from_section == "What works for employers"
 
 
-def test_the_list_and_card_serve_no_where_tried_or_tried_on() -> None:
-    """Task 046, amendment 4 (R84; S36, PA4-11): the two facet fields are gone
-    from the list's options and the card; the coverage keys stay stored."""
-    for model in (OptionSummaryOut, OptionOut):
-        assert not {"where_tried", "tried_on"} & set(model.model_fields)

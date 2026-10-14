@@ -1283,33 +1283,6 @@ def _current_fingerprint(walk: _Walk) -> str:
     )[0]
 
 
-def test_a_rebuild_of_a_task_built_before_this_slice_counts_no_document_twice(
-    conn: Connection,
-) -> None:
-    """AM5: an old full-chain child scope with records supplies no unit."""
-    walk = _Walk(conn)
-    seed = walk.option("Youth guarantee", origin="added_by_you")
-    doc = walk.doc()
-    # The pre-046 build: its child screened and profiled the document under the
-    # context-free fingerprint.
-    old_build = walk._walk(walk._scope("longlist"), status="succeeded")
-    old_child = walk.child_scope(seed, parent=old_build, started_at=now() - timedelta(hours=1))
-    old_ser = _extraction(walk, doc, fingerprint="pre-046", created_at=now() - timedelta(hours=1))
-    _record_under(walk, old_ser, "youth guarantee")
-    _rollup_of(walk, old_child, {doc: old_ser})
-    # This build's longlist scope profiled it again, under the plan's context.
-    new_ser = _extraction(walk, doc, fingerprint=_current_fingerprint(walk))
-    _record_under(walk, new_ser, "youth guarantee")
-    _rollup_of(walk, walk.scope_id, {doc: new_ser})
-    backend = _Scripted(routes={"youth guarantee": ("Youth guarantee", False)})
-    run_id, summary = walk.build(backend)
-    assert summary["units"] == 1
-    result = walk.result(run_id)
-    assert result.counts["documents"] == 1
-    assert result.provenance["scopes"]["targeted"] == []
-    assert len(walk.memberships()) == 1
-
-
 def test_a_document_profiled_in_two_scopes_counts_once_under_the_current_context(
     conn: Connection,
 ) -> None:

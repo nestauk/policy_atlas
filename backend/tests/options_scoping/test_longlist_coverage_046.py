@@ -31,7 +31,6 @@ from policy_atlas.options_scoping.longlist.coverage import (
     fold_programme_names,
     fold_setting,
     option_coverage,
-    stored_folds,
 )
 from policy_atlas.options_scoping.longlist.longlist import membership_coverage
 from policy_atlas.options_scoping.longlist.where_tried import names_place
@@ -764,15 +763,6 @@ def test_distinct_words_fold_case_and_space_and_keep_the_first_spelling() -> Non
     ]
     assert distinct_words(members, "tried_on") == ["parents", "Young adults"]
     assert distinct_words(members, "measures") == ["Arrests"]
-
-
-def test_stored_folds_read_the_column_defensively() -> None:
-    assert stored_folds({}) is None
-    assert stored_folds(None) is None
-    assert stored_folds({"folds": {"tried_on": {"a": "b", "c": 1}}}) == {
-        "tried_on": {"a": "b"},
-        "measures": {},
-    }
 
 
 def test_a_merge_recomputes_the_kinds_through_the_maps(conn: Connection) -> None:

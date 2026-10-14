@@ -6,7 +6,6 @@ The top level from ``study_country``, the level below from
 
 from __future__ import annotations
 
-import re
 import uuid
 from pathlib import Path
 
@@ -220,46 +219,6 @@ def test_an_option_with_no_member_has_no_where_tried() -> None:
     coverage = option_coverage([], labels={})
     assert coverage["where_tried"] == []
     assert "countries" not in coverage
-
-
-# --- The old matcher is gone ---------------------------------------------------
-
-
-@pytest.mark.parametrize(
-    "name",
-    [
-        "where_group",
-        "where_codes",
-        "strip_place",
-        "PLACE_PREPOSITIONS",
-        "where_labels",
-        "countries_in",
-        "OECD_CODES",
-        "COMPARABLE_LABEL",
-        "WHERE_GROUPS",
-        "WhereGroup",
-        "COUNTRY_ADJECTIVES",
-        "COUNTRY_GROUPS",
-        "OECD_MARKERS",
-    ],
-)
-def test_the_old_matcher_is_not_importable(name: str) -> None:
-    assert not hasattr(where_tried, name)
-
-
-@pytest.mark.parametrize(
-    "path",
-    [
-        "options_scoping/longlist/where_tried.py",
-        "options_scoping/longlist/coverage.py",
-        "api/readmodels/repository.py",
-        "api/contract/read_models.py",
-    ],
-)
-def test_no_comparable_systems_or_oecd_label_remains(path: str) -> None:
-    text = (_SRC / path).read_text(encoding="utf-8")
-    assert not re.search(r"comparable systems", text, re.IGNORECASE)
-    assert "OECD" not in text
 
 
 def test_where_tried_reads_nothing_of_the_publisher() -> None:

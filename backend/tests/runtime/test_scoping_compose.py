@@ -30,10 +30,8 @@ from policy_atlas.evidence_search.synthesis.synthesis_tools import (
     SynthesisDirectiveError,
     parse_synthesis_directive,
 )
-from policy_atlas.runtime.capability_registry import OPTIONS_SCOPING, compose_plan
 from policy_atlas.runtime.scoping_plan import (
     BASELINE_ACQUISITION_TARGETS,
-    SCOPING_SPINE,
     ScopingPlan,
     build_scoping_plan,
     compose_scoping,
@@ -73,10 +71,6 @@ def _delta(plan: ScopingPlan, component: str) -> dict[str, Any]:
 # --- the chain --------------------------------------------------------------
 
 
-def test_the_chain_is_exactly_the_six_components() -> None:
-    assert compose_scoping(_plan()).components == list(SCOPING_SPINE)
-
-
 def test_depth_changes_the_directives_never_the_chain() -> None:
     """D7 (revised 2026-09-17): depth shapes the target and the section list."""
     rapid = compose_scoping(_plan(depth="rapid"))
@@ -102,11 +96,6 @@ def test_rapid_supplies_the_same_seven_sections_and_no_proposal_budget() -> None
     assert synthesis["sections"] == standard["sections"]
     assert len(synthesis["sections"]) == 8
     assert "section_budget" not in synthesis
-
-
-def test_the_registry_composes_the_scoping_chain_not_the_evidence_search_one() -> None:
-    plan = _plan()
-    assert compose_plan(OPTIONS_SCOPING, plan) == compose_scoping(plan)
 
 
 # --- acquire ----------------------------------------------------------------

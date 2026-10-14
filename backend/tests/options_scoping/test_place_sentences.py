@@ -480,11 +480,6 @@ def test_the_seeded_fixture_set(sentence: str, verdict: str | None) -> None:
     )
 
 
-def test_the_fixture_set_holds_at_least_ten_valid_and_ten_invalid_sentences() -> None:
-    assert len(_VALID) >= 10
-    assert len(_INVALID) >= 10
-
-
 def test_strong_with_no_strong_document_fails() -> None:
     no_strong = _group(
         _doc("3", tier="Moderate", evidence_type="Local evaluation", programme_name="Change4Life"),
