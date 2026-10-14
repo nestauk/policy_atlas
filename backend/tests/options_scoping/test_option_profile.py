@@ -1,32 +1,24 @@
 """The ``option_profile`` component (task 046 amendment 2, Phase 12a; R37, S16, S17, S20).
 
 Lever typing moved out of ``longlist`` into ``option_profile``, a spine step
-between ``longlist`` and ``constrain``. The equivalence gate: on the same
-fixture, the lever columns, the typing keys and the typing counts are the same
-as before the move (the literals below were recorded on the code before it).
-The typing tests that ``test_longlist`` held move here with what they assert;
-``longlist`` writes no typing; the registry, the harness graph, the plan
-mapping, ``LLM_BEARING_COMPONENTS``, the run stream and the stage map know
-``option_profile``; a failed ``option_profile`` step fails the walk.
+between ``longlist`` and ``constrain``. The typing tests that ``test_longlist``
+held move here with what they assert; ``longlist`` writes no typing; a failed
+``option_profile`` step fails the walk. That the registry, the harness graph,
+the plan mapping, ``LLM_BEARING_COMPONENTS``, the run stream and the stage map
+know ``option_profile`` is asserted in ``test_theme``.
 """
 
 from __future__ import annotations
 
 import threading
 import uuid
-from typing import Any, get_args
+from typing import Any
 
 import pytest
 from pydantic import ValidationError
-from sqlalchemy import select
 from sqlalchemy.engine import Connection, Engine
 
-from policy_atlas.api.contract.sse import STAGE_KEYS
-from policy_atlas.api.contract.task_agent import PlanStageKey
-from policy_atlas.api.routers import sse
-from policy_atlas.api.stage_vocabulary import STAGE_BY_REGISTRY, STAGE_PRESENTATION
-from policy_atlas.core import events
-from policy_atlas.core.schema import longlist_result, option
+from policy_atlas.core.schema import option
 from policy_atlas.options_scoping.longlist.lever_types import LEVER_TYPE_KEYS, TAXONOMY_VERSION
 from policy_atlas.options_scoping.longlist.longlist_backend import StubLonglistBackend
 from policy_atlas.options_scoping.option_profile.folding_prompt import FoldingResponse, FoldWire
@@ -56,19 +48,13 @@ from policy_atlas.options_scoping.option_profile.place_sentences_prompt import (
     PlaceSentencesResponse,
     PlaceSentenceWire,
 )
-from policy_atlas.runtime.harness import build_graph
-from policy_atlas.runtime.run_spec import COMPONENT_REGISTRY, Plan, compile
-from policy_atlas.runtime.runner import LLM_BEARING_COMPONENTS, NullIO, run_plan
-from policy_atlas.runtime.scoping_plan import LONGLIST_CHAIN, PROFILE_LINE_KEYS
-from policy_atlas.runtime.task_plan import OPTIONS_SCOPING_STEPS, registry_component_for
+from policy_atlas.runtime.scoping_plan import PROFILE_LINE_KEYS
 from tests.options_scoping.test_longlist import _Scripted, _Walk
+from tests.options_scoping.test_theme import _longlist_walk
 from tests.runtime.test_baseline_gate import (
-    insert_scoping_plan_row,
     scoping_plan,
-    seed_scoping_task,
 )
-from tests.runtime.test_compose_by_purpose import _set_purpose
-from tests.runtime.test_runner import _cleanup, _runner_backends
+from tests.runtime.test_runner import _cleanup
 
 
 def _profile(walk: _Walk, backend: Any) -> tuple[uuid.UUID, dict[str, Any]]:
@@ -103,90 +89,6 @@ def _build(walk: _Walk, backend: Any) -> uuid.UUID:
     run_id, _summary = walk.build(backend)
     _profile(walk, backend)
     return run_id
-
-
-# --- the equivalence gate -------------------------------------------------------------
-
-
-def _snapshot(walk: _Walk, run_id: uuid.UUID) -> dict[str, Any]:
-    """The typing a build left, with every option id replaced by its name."""
-    rows = walk.options()
-    names = {str(row.option_id): name for name, row in rows.items()}
-    result = walk.result(run_id)
-    provenance = result.provenance
-    typing = dict(provenance["typing"])
-    typing["kept_ids"] = sorted(names[i] for i in typing["kept_ids"])
-    return {
-        "options": {
-            name: [
-                row.primary_lever_type,
-                list(row.secondary_lever_types),
-                row.lever_none_fits_reason,
-                row.taxonomy_version,
-            ]
-            for name, row in sorted(rows.items())
-        },
-        "lever_reason": {names[k]: v for k, v in provenance["lever_reason"].items()},
-        "runner_up": {names[k]: v for k, v in provenance["runner_up"].items()},
-        "typing": typing,
-        "prompt_versions.typing": provenance["prompt_versions"]["typing"],
-        "models.typing": provenance["models"]["typing"],
-        "taxonomy_version": provenance["taxonomy_version"],
-        "counts.typing_invalid": result.counts["typing_invalid"],
-        "counts.none_fits": result.counts["none_fits"],
-    }
-
-
-def test_the_stub_typing_is_the_same_as_before_the_move(conn: Connection) -> None:
-    walk = _Walk(conn)
-    walk.option("Youth guarantee", origin="added_by_you")
-    walk.option("Wage subsidy")
-    walk.option("Work trial", state="excluded")
-    doc = walk.doc()
-    walk.record(doc, "Youth guarantee")
-    walk.record(doc, "something else")
-    walk.rollup(walk.scope_id, [doc])
-
-    run_id = _build(walk, StubLonglistBackend())
-
-    assert _snapshot(walk, run_id) == STUB_LITERAL
-
-
-def test_the_scripted_typing_and_the_keep_previous_rule_are_the_same(conn: Connection) -> None:
-    walk = _Walk(conn)
-    walk.option("Free bus passes")
-    walk.option("A new body")
-    walk.option("Garbled")
-    walk.option("Blank reason", origin="added_by_you")
-    _build(
-        walk,
-        _Scripted(
-            typings={
-                "Free bus passes": {
-                    "runner_up_lever_type": "inform",
-                    "lever_reason": " The council pays the fares. ",
-                },
-                "A new body": {"primary_lever_type": None, "none_fits_reason": "It sets a mood."},
-                "Garbled": {"primary_lever_type": "make it so"},
-                "Blank reason": {"lever_reason": "   "},
-            }
-        ),
-    )
-    second = _build(
-        walk,
-        _Scripted(
-            typings={
-                "Free bus passes": {"primary_lever_type": "make it so"},
-                "A new body": {"primary_lever_type": None, "none_fits_reason": None},
-                "Blank reason": {
-                    "lever_reason": "A grant to each household.",
-                    "runner_up_lever_type": "regulate",
-                },
-            }
-        ),
-    )
-
-    assert _snapshot(walk, second) == SCRIPTED_LITERAL
 
 
 # --- typing (moved from test_longlist with what each asserts) --------------------------
@@ -897,73 +799,7 @@ def test_a_call_that_raises_twice_fails_the_step(conn: Connection) -> None:
         _profile(walk, _Down())
 
 
-# --- the registries -------------------------------------------------------------------
-
-
-def test_the_registry_the_graph_the_plan_mapping_and_the_stream_know_option_profile() -> None:
-    assert COMPONENT_REGISTRY["option_profile"] == {"requires": ["evidence_scope_id"]}
-    compile(Plan(component="option_profile", evidence_scope_id=uuid.uuid4()))
-    assert "option_profile" in OPTIONS_SCOPING_STEPS
-    assert registry_component_for("option_profile") == "option_profile"
-    assert "option_profile" in build_graph().get_graph().nodes
-    assert "option_profile" in LLM_BEARING_COMPONENTS
-    assert STAGE_BY_REGISTRY["option_profile"] == "option_profile"
-    assert "option_profile" in STAGE_KEYS
-    assert "option_profile" in get_args(PlanStageKey)
-    assert STAGE_PRESENTATION["option_profile"] == (
-        "Writing what each option would take",
-        "What each option would take, and what kind of action it is.",
-    )
-    chain = [component for component, _ in LONGLIST_CHAIN]
-    assert chain[-4:] == ["longlist", "option_profile", "constrain", "theme"]
-    assert dict(LONGLIST_CHAIN)["option_profile"] is True
-
-
-# --- the walk -------------------------------------------------------------------------
-
-
-def _longlist_walk(engine: Engine) -> tuple[uuid.UUID, Any]:
-    task_id, scope_id = seed_scoping_task(engine)
-    _set_purpose(engine, scope_id, "longlist")
-    plan = scoping_plan(steering_mode="moderate")
-    plan_id = insert_scoping_plan_row(engine, task_id=task_id, scope_id=scope_id, plan=plan)
-    outcome = run_plan(
-        engine,
-        task_id=task_id,
-        evidence_scope_id=scope_id,
-        plan=plan,
-        plan_id=plan_id,
-        plan_version=1,
-        plan_row_id=plan_id,
-        backends=_runner_backends(),
-        io=NullIO(),
-    )
-    return task_id, outcome
-
-
-def test_option_profile_runs_between_longlist_and_constrain(engine: Engine) -> None:
-    task_id: uuid.UUID | None = None
-    try:
-        task_id, outcome = _longlist_walk(engine)
-        assert outcome.status == "succeeded"
-        components = [step.component for step in outcome.steps]
-        assert components[-4:] == ["longlist", "option_profile", "constrain", "theme"]
-        step = outcome.steps[-3]
-        assert step.status == "succeeded"
-        with engine.connect() as conn:
-            result = conn.execute(
-                select(longlist_result).where(longlist_result.c.task_id == task_id)
-            ).one()
-            log = events.read(conn, task_id)
-            rows = [entry for entry in log if entry["run_id"] == step.run_id]
-            frames = sse._map_rows(conn, task_id=task_id, rows=rows, through=None)
-        assert result.provenance["option_profile"]["run_id"] == str(step.run_id)
-        assert result.provenance["typing"]["invalid"] == 0
-        stages = [(frame["type"], frame.get("stage")) for frame in frames]
-        assert ("stage.started", "option_profile") in stages
-        assert ("stage.completed", "option_profile") in stages
-    finally:
-        _cleanup(engine, task_id)
+# --- the walk (registry and stage-stream checks live in test_theme) -----------------
 
 
 def test_a_failed_option_profile_step_fails_the_walk(
@@ -985,74 +821,6 @@ def test_a_failed_option_profile_step_fails_the_walk(
         assert "constrain" not in statuses and "theme" not in statuses
     finally:
         _cleanup(engine, task_id)
-
-
-# The literals, recorded on the code before the move (Phase 12a). Phase 12b
-# took the ambition columns out of them (ambition is the profile's own call,
-# R40) and moved the typing prompt to ``lever_typing_v3``.
-_STUB_ROW: list[Any] = ["provide a service", [], None, "lever_types_v2"]
-
-STUB_LITERAL: dict[str, Any] = {
-    "options": {
-        "Stub discovered option": _STUB_ROW,
-        "Wage subsidy": _STUB_ROW,
-        "Work trial": _STUB_ROW,
-        "Youth guarantee": _STUB_ROW,
-    },
-    "lever_reason": {
-        "Stub discovered option": "Stub lever reason.",
-        "Wage subsidy": "Stub lever reason.",
-        "Work trial": "Stub lever reason.",
-        "Youth guarantee": "Stub lever reason.",
-    },
-    "runner_up": {},
-    "typing": {
-        "calls": 1,
-        "batch_size": 20,
-        "max_concurrent": 4,
-        "failed_batches": 0,
-        "invalid": 0,
-        "kept_ids": [],
-    },
-    "prompt_versions.typing": "lever_typing_v4",
-    "models.typing": "stub",
-    "taxonomy_version": "lever_types_v2",
-    "counts.typing_invalid": 0,
-    "counts.none_fits": 0,
-}
-
-SCRIPTED_LITERAL: dict[str, Any] = {
-    "options": {
-        "A new body": [None, ["inform"], "It sets a mood.", "lever_types_v2"],
-        "Blank reason": ["subsidise", ["inform"], None, "lever_types_v2"],
-        "Free bus passes": ["subsidise", ["inform"], None, "lever_types_v2"],
-        "Garbled": ["subsidise", ["inform"], None, "lever_types_v2"],
-    },
-    "lever_reason": {
-        "A new body": "The council pays for the scheme.",
-        "Blank reason": "A grant to each household.",
-        "Free bus passes": "The council pays the fares.",
-        "Garbled": "The council pays for the scheme.",
-    },
-    "runner_up": {
-        "Blank reason": {"lever_type": "regulate"},
-        "Free bus passes": {"lever_type": "inform", "carried_forward": True},
-    },
-    "typing": {
-        "calls": 1,
-        "batch_size": 20,
-        "max_concurrent": 4,
-        "failed_batches": 0,
-        "invalid": 2,
-        "kept_ids": ["A new body", "Free bus passes"],
-    },
-    "prompt_versions.typing": "lever_typing_v4",
-    "models.typing": "stub",
-    "taxonomy_version": "lever_types_v2",
-    "counts.typing_invalid": 2,
-    # Counted over this build's valid typings: the kept none-fits is not.
-    "counts.none_fits": 0,
-}
 
 
 # --- the folding calls (task 046, amendment 3, R54, R55; S21) -------------------------

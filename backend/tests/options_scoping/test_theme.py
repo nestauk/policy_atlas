@@ -5,18 +5,21 @@ receives the included options only; themes contain no excluded or merged
 option; ``longlist`` writes no theme; a failed ``theme`` step ends the walk
 ``degraded`` with the verdicts stored; the run stream carries the ``theme``
 stage; the registry, the harness graph and the plan mapping know ``theme``.
+The registry and walk checks cover ``option_profile`` too (one walk, one
+parametrized registry test, rather than a copy in ``test_option_profile``).
 """
 
 from __future__ import annotations
 
 import uuid
-from typing import Any
+from typing import Any, get_args
 
 import pytest
 from sqlalchemy import func, select
 from sqlalchemy.engine import Connection, Engine
 
 from policy_atlas.api.contract.sse import STAGE_KEYS
+from policy_atlas.api.contract.task_agent import PlanStageKey
 from policy_atlas.api.routers import sse
 from policy_atlas.api.stage_vocabulary import STAGE_BY_REGISTRY, STAGE_PRESENTATION
 from policy_atlas.core import events
@@ -30,7 +33,7 @@ from policy_atlas.options_scoping.theme.theme import (
 )
 from policy_atlas.runtime.harness import build_graph
 from policy_atlas.runtime.run_spec import COMPONENT_REGISTRY, Plan, compile
-from policy_atlas.runtime.runner import NullIO, run_plan
+from policy_atlas.runtime.runner import LLM_BEARING_COMPONENTS, NullIO, run_plan
 from policy_atlas.runtime.scoping_plan import LONGLIST_CHAIN
 from policy_atlas.runtime.task_plan import OPTIONS_SCOPING_STEPS, registry_component_for
 from tests.options_scoping.test_longlist import _Scripted, _Walk
@@ -153,19 +156,33 @@ def test_theme_needs_a_longlist(conn: Connection) -> None:
 # --- the registries -------------------------------------------------------------------
 
 
-def test_the_registry_the_graph_the_plan_mapping_and_the_stream_know_theme() -> None:
-    assert COMPONENT_REGISTRY["theme"] == {"requires": ["evidence_scope_id"]}
-    compile(Plan(component="theme", evidence_scope_id=uuid.uuid4()))
-    assert "theme" in OPTIONS_SCOPING_STEPS
-    assert registry_component_for("theme") == "theme"
-    graph = build_graph()
-    assert "theme" in graph.get_graph().nodes
-    assert STAGE_BY_REGISTRY["theme"] == "theme"
-    assert "theme" in STAGE_KEYS
-    assert STAGE_PRESENTATION["theme"] == (
-        "Grouping into themes",
-        "Included options grouped into themes.",
-    )
+@pytest.mark.parametrize(
+    ("component", "presentation", "spine"),
+    [
+        (
+            "option_profile",
+            (
+                "Writing what each option would take",
+                "What each option would take, and what kind of action it is.",
+            ),
+            True,
+        ),
+        ("theme", ("Grouping into themes", "Included options grouped into themes."), False),
+    ],
+)
+def test_the_registry_the_graph_the_plan_mapping_and_the_stream_know_the_step(
+    component: str, presentation: tuple[str, str], spine: bool
+) -> None:
+    assert COMPONENT_REGISTRY[component] == {"requires": ["evidence_scope_id"]}
+    compile(Plan(component=component, evidence_scope_id=uuid.uuid4()))
+    assert component in OPTIONS_SCOPING_STEPS
+    assert registry_component_for(component) == component
+    assert component in build_graph().get_graph().nodes
+    assert component in LLM_BEARING_COMPONENTS
+    assert STAGE_BY_REGISTRY[component] == component
+    assert component in STAGE_KEYS
+    assert component in get_args(PlanStageKey)
+    assert STAGE_PRESENTATION[component] == presentation
     assert STAGE_PRESENTATION["longlist"] == (
         "Clustering into options",
         "Records grouped into options.",
@@ -176,7 +193,7 @@ def test_the_registry_the_graph_the_plan_mapping_and_the_stream_know_theme() -> 
         "constrain",
         "theme",
     ]
-    assert dict(LONGLIST_CHAIN)["theme"] is False
+    assert dict(LONGLIST_CHAIN)[component] is spine
 
 
 # --- the walk -------------------------------------------------------------------------
@@ -201,28 +218,34 @@ def _longlist_walk(engine: Engine) -> tuple[uuid.UUID, Any]:
     return task_id, outcome
 
 
-def test_theme_runs_after_constrain_and_the_stream_carries_its_stage(engine: Engine) -> None:
+def test_option_profile_then_constrain_then_theme_run_last_and_the_stream_carries_them(
+    engine: Engine,
+) -> None:
     task_id: uuid.UUID | None = None
     try:
         task_id, outcome = _longlist_walk(engine)
         assert outcome.status == "succeeded"
         components = [step.component for step in outcome.steps]
-        assert components[-2:] == ["constrain", "theme"]
-        theme_step = outcome.steps[-1]
-        assert theme_step.status == "succeeded"
+        assert components[-4:] == ["longlist", "option_profile", "constrain", "theme"]
+        profile_step, theme_step = outcome.steps[-3], outcome.steps[-1]
+        assert profile_step.status == theme_step.status == "succeeded"
+        step_runs = {profile_step.run_id, theme_step.run_id}
         with engine.connect() as conn:
             result = conn.execute(
                 select(longlist_result).where(longlist_result.c.task_id == task_id)
             ).one()
             log = events.read(conn, task_id)
-            rows = [entry for entry in log if entry["run_id"] == theme_step.run_id]
+            rows = [entry for entry in log if entry["run_id"] in step_runs]
             frames = sse._map_rows(conn, task_id=task_id, rows=rows, through=None)
+        assert result.provenance["option_profile"]["run_id"] == str(profile_step.run_id)
+        assert result.provenance["typing"]["invalid"] == 0
         # The stub groups every included option under its one theme.
         assert result.counts["themes"] == len(result.themes) == 1
         assert len(result.judgements) == 1  # constrain's verdicts, on the same row
         stages = [(frame["type"], frame.get("stage")) for frame in frames]
-        assert ("stage.started", "theme") in stages
-        assert ("stage.completed", "theme") in stages
+        for stage in ("option_profile", "theme"):
+            assert ("stage.started", stage) in stages
+            assert ("stage.completed", stage) in stages
     finally:
         _cleanup(engine, task_id)
 
