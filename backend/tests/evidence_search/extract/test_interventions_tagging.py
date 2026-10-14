@@ -68,8 +68,8 @@ from tests.runtime.test_baseline_gate import scoping_plan
 #: (task 046, amendment 4, Phase 27; before that for amendment 3's v3 and v2):
 #: both are fingerprint components, so the earlier values no longer apply.
 PINNED_NO_CONTEXT = {
-    "stub": "cc524fa6a1275adf4e45e3e366f50018dc3297051355756dd0ed3e2563edc5da",
-    "live": "fbc7077be3896e20aa41c3ff33b89d6556e4ceecc9083b07167b80d6e793b3a5",
+    "stub": "b928a0f384ead5cfabd86ff7ed6ec1525cc8df680fa544902db1bf4fe9b19b97",
+    "live": "279a37ef82477badcc541996cda6b494bf7888c6dd48554b4369b248d24b2ddb",
 }
 
 CONTEXT = TaggingContext(

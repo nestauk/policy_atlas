@@ -46,6 +46,7 @@ deterministic and makes no call.
 
 from __future__ import annotations
 
+import os
 import threading
 import uuid
 from collections.abc import Callable, Mapping
@@ -58,7 +59,6 @@ from pydantic import BaseModel
 from policy_atlas.core import tracing
 from policy_atlas.core.openai_client import parse_structured, resolve_openai_client
 from policy_atlas.core.usage import UsageResult, usage_details, usage_metadata
-from policy_atlas.evidence_search.assess.screen_prompt import SCREEN_MODEL
 from policy_atlas.options_scoping.constrain.constrain_prompt import (
     AUTHORITY_MAX_OUTPUT_TOKENS,
     CONSTRAIN_MAX_OUTPUT_TOKENS,
@@ -133,12 +133,14 @@ from policy_atlas.options_scoping.theme.longlist_theme_prompt import (
     build_theme_assignment_messages,
     build_theme_discovery_messages,
 )
-from policy_atlas.runtime.agent_backend import AGENT_MODEL
 
-#: The judgment model (discovery, themes, typing) and the mini model
-#: (assignment) — contract § Model route, the Task Agent's tiers.
-LONGLIST_JUDGMENT_MODEL = AGENT_MODEL
-LONGLIST_ASSIGNMENT_MODEL = SCREEN_MODEL
+#: The judgment model (discovery, themes, typing, the profile) and the small
+#: model (assignment, folding, place sentences) — contract § Model route.
+#: Env-overridable, the `SYNTHESIS_MODEL` pattern (owner, 2026-10-14: the
+#: options scoping tiers moved from gpt-5.5 / gpt-5.4-mini to gpt-5.6-sol /
+#: gpt-5.6-luna).
+LONGLIST_JUDGMENT_MODEL = os.environ.get("POLICY_ATLAS_LONGLIST_JUDGMENT_MODEL", "gpt-5.6-sol")
+LONGLIST_ASSIGNMENT_MODEL = os.environ.get("POLICY_ATLAS_LONGLIST_ASSIGNMENT_MODEL", "gpt-5.6-luna")
 #: The output ceiling of one folding call (one short entry per distinct word).
 FOLDING_MAX_OUTPUT_TOKENS = 16_000
 

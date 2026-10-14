@@ -2102,6 +2102,23 @@ earlier run of this branch's gate failed on 692 tests because Docker Desktop
 stopped mid-run (Postgres gone); rerun green. Noted for the owner: `dev` carries
 `docs/tasks/046-search-baselines`, a second task 046 — the number is used twice.
 
+**The scoping model tiers (owner, 2026-10-14).** After a live walk whose
+`option_profile` step took 736 s (four gpt-5.5 calls stalled at the client's
+300 s timeout and were retried silently; the 12 October walks took 55–91 s),
+the owner moved the new options scoping parts off the shared tiers: the
+judgment calls (longlist, option_profile, constrain, the scoping Task Agent)
+from gpt-5.5 to gpt-5.6-sol, the small calls (assignment, folding, place
+sentences, the intervention profile's extraction) from gpt-5.4-mini to
+gpt-5.6-luna. Each constant is env-overridable
+(`POLICY_ATLAS_LONGLIST_JUDGMENT_MODEL`, `POLICY_ATLAS_LONGLIST_ASSIGNMENT_MODEL`,
+`POLICY_ATLAS_TASK_AGENT_SCOPING_MODEL`). The Evidence search components the
+walk reuses keep their own models. `extract_interventions_prompt.py` re-pinned
+in the hash guard (the model constant lives in the prompt module; the words
+are unchanged); the intervention profile's fingerprint carries the model, so
+stored extractions are not reused across the change (the two fingerprint pins
+in `test_interventions_tagging.py` re-pinned). The specs name the tiers in
+words only, so nothing there changes. Targeted tests: 1,614 passed; mypy clean.
+
 ## Rubric status
 
 Build-phase view. The review conversation checks each box against the code.

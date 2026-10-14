@@ -10,6 +10,7 @@ widened ``plan_turn``.
 
 from __future__ import annotations
 
+import os
 import uuid
 from typing import Any, Protocol
 
@@ -22,7 +23,6 @@ from policy_atlas.core.openai_client import parse_structured, resolve_openai_cli
 from policy_atlas.core.prompt_fields import scrub_nul
 from policy_atlas.core.usage import UsageResult, usage_metadata
 from policy_atlas.evidence_search.extract.extract import _scrub_nul
-from policy_atlas.runtime.task_agent import TASK_AGENT_MODEL
 from policy_atlas.runtime.task_agent_prompt import (
     CountryGroupDraft,
     PartOptionWire,
@@ -42,6 +42,11 @@ from policy_atlas.runtime.task_agent_scoping_prompt import (
 )
 
 log = structlog.get_logger()
+
+#: The scoping Task Agent's model — its own tier, apart from the Evidence
+#: search Task Agent's (owner, 2026-10-14: gpt-5.5 → gpt-5.6-sol for the new
+#: options scoping parts). Env-overridable, the `SYNTHESIS_MODEL` pattern.
+TASK_AGENT_SCOPING_MODEL = os.environ.get("POLICY_ATLAS_TASK_AGENT_SCOPING_MODEL", "gpt-5.6-sol")
 
 #: The code-authored line the prompt reads as data when nothing has run yet.
 NO_BASELINE_STATE = "no baseline built yet"
@@ -131,7 +136,7 @@ class OpenAIScopingTaskAgentBackend:
             response_format=ScopingTurnWire,
             usage_event="task_agent.scoping.turn.usage",
             label="task-agent-scoping",
-            model=TASK_AGENT_MODEL,
+            model=TASK_AGENT_SCOPING_MODEL,
             max_completion_tokens=SCOPING_MAX_OUTPUT_TOKENS,
         )
         return _scrub_turn(parsed), usage
@@ -175,7 +180,7 @@ class OpenAIScopingTaskAgentBackend:
             span.update(
                 input={"messages": messages},
                 output=parsed.model_dump(),
-                model=TASK_AGENT_MODEL,
+                model=TASK_AGENT_SCOPING_MODEL,
                 metadata={
                     "prompt_version": TASK_AGENT_SCOPING_PROMPT_VERSION,
                     "conversation_id": (

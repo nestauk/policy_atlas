@@ -50,7 +50,7 @@ PROMPT_VERSION = "extract_interventions_v4"
 
 # The mini model, as the contract's model route states: about 3,000 prompt
 # tokens per document, one call per screened-in document.
-INTERVENTIONS_MODEL = "gpt-5.4-mini"
+INTERVENTIONS_MODEL = "gpt-5.6-luna"  # owner, 2026-10-14: the scoping tiers
 # A reasoning model: the cap covers reasoning and output. An abstract yields a
 # handful of records; 8K leaves room for a review naming a dozen.
 INTERVENTIONS_MAX_OUTPUT_TOKENS = 8_192
