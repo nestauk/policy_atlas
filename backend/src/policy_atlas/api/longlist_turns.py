@@ -37,14 +37,14 @@ from __future__ import annotations
 import re
 import uuid
 from dataclasses import dataclass
-from datetime import UTC, datetime
 from typing import Any, Literal, cast
 
 import structlog
-from pydantic import ValidationError
+from pydantic import BaseModel, ConfigDict, ValidationError, model_validator
 from sqlalchemy import select, update
 from sqlalchemy.engine import Connection, Engine
 
+from policy_atlas.api import transcript_rows
 from policy_atlas.api.answer_core import AnswerBackends, answer_over_scope
 from policy_atlas.api.chat_scope import resolve_terminal_run_components
 from policy_atlas.api.contract import (
@@ -54,9 +54,9 @@ from policy_atlas.api.contract import (
     TaskAgentTurnOut,
     TurnActionOut,
 )
+from policy_atlas.api.gate_turns import said_verbatim
 from policy_atlas.api.locks import task_lock
 from policy_atlas.api.longlist_actions import (
-    LonglistActionRefused,
     OptionNotFound,
     add_option,
     current_plan_row,
@@ -64,16 +64,16 @@ from policy_atlas.api.longlist_actions import (
     include_option,
     propose_design,
 )
+from policy_atlas.api.longlist_start import LonglistRefused
 from policy_atlas.core import tracing
 from policy_atlas.core.embeddings import EmbeddingBackend
 from policy_atlas.core.schema import longlist_result, option, task_agent_transcript
 from policy_atlas.evidence_search.synthesis.synthesis_tools import (
     RetrievalUnitCapError,
-    build_section_tools,
 )
 from policy_atlas.options_scoping.design import OptionDesign
 from policy_atlas.runtime.agent_backend import AgentBackend
-from policy_atlas.runtime.capability_registry import OPTIONS_SCOPING, capability_of_task
+from policy_atlas.runtime.capability_registry import OPTIONS_SCOPING
 from policy_atlas.runtime.chat_backend import ChatBackend
 from policy_atlas.runtime.longlist_verbs_prompt import LonglistVerbWire
 from policy_atlas.runtime.runner import RunnerBackends
@@ -205,7 +205,9 @@ class LonglistSurface:
         return [{"id": str(o.option_id), "name": o.name, "state": o.state} for o in self.options]
 
 
-def read_longlist_surface(conn: Connection, *, task_id: uuid.UUID) -> LonglistSurface | None:
+def read_longlist_surface(
+    conn: Connection, *, task_id: uuid.UUID, capability: str
+) -> LonglistSurface | None:
     """Return the longlist surface when a turn should be sorted against it.
 
     Call only when no parentless walk is active (the caller's fence). The
@@ -216,11 +218,12 @@ def read_longlist_surface(conn: Connection, *, task_id: uuid.UUID) -> LonglistSu
     Args:
         conn: The caller's phase-one transaction.
         task_id: The task.
+        capability: The task's capability, from the row the caller holds.
 
     Returns:
         The surface, or ``None``.
     """
-    if capability_of_task(conn, task_id) != OPTIONS_SCOPING:
+    if capability != OPTIONS_SCOPING:
         return None
     built = conn.execute(
         select(longlist_result.c.longlist_result_id)
@@ -244,9 +247,10 @@ def read_longlist_surface(conn: Connection, *, task_id: uuid.UUID) -> LonglistSu
 # --- The pending action --------------------------------------------------------
 
 
-@dataclass(frozen=True)
-class PendingAction:
+class PendingAction(BaseModel):
     """An action proposed on one turn and awaiting the user's confirmation.
+
+    Its JSON dump, under ``"pending"``, is the stored ``task_agent_state``.
 
     Args:
         verb: ``add``, ``exclude`` or ``include_again``.
@@ -259,6 +263,8 @@ class PendingAction:
             event records them).
     """
 
+    model_config = ConfigDict(frozen=True)
+
     verb: Verb
     option_id: uuid.UUID | None
     label: str
@@ -266,18 +272,17 @@ class PendingAction:
     design: OptionDesign | None = None
     words: str | None = None
 
+    @model_validator(mode="after")
+    def _names_its_target(self) -> PendingAction:
+        if self.verb == "add" and self.design is None:
+            raise ValueError("an add carries its design")
+        if self.verb != "add" and self.option_id is None:
+            raise ValueError("an exclude or include names its option")
+        return self
+
     def as_state(self) -> dict[str, Any]:
         """Return the ``task_agent_state`` that carries this action."""
-        return {
-            "pending": {
-                "verb": self.verb,
-                "option_id": str(self.option_id) if self.option_id is not None else None,
-                "label": self.label,
-                "reason": self.reason,
-                "design": self.design.model_dump(mode="json") if self.design else None,
-                "words": self.words,
-            }
-        }
+        return {"pending": self.model_dump(mode="json")}
 
     def as_prompt(self) -> dict[str, str]:
         """Return the pending action in the shape ``longlist_verbs_v1`` reads."""
@@ -303,24 +308,8 @@ def _pending_from_state(state: object) -> PendingAction | None:
     if not isinstance(raw, dict):
         return None
     try:
-        verb = raw["verb"]
-        if verb not in _VERB_PHRASE:
-            return None
-        option_id = uuid.UUID(raw["option_id"]) if raw.get("option_id") else None
-        design = OptionDesign.model_validate(raw["design"]) if raw.get("design") else None
-        if verb == "add" and design is None:
-            return None
-        if verb != "add" and option_id is None:
-            return None
-        return PendingAction(
-            verb=cast(Verb, verb),
-            option_id=option_id,
-            label=str(raw["label"]),
-            reason=raw.get("reason"),
-            design=design,
-            words=raw.get("words"),
-        )
-    except (KeyError, TypeError, ValueError, ValidationError):
+        return PendingAction.model_validate(raw)
+    except ValidationError:
         log.warning("longlist_turn_pending_unreadable")
         return None
 
@@ -424,10 +413,6 @@ def sort_turn(
     return sort
 
 
-def _collapsed(text: str) -> str:
-    return " ".join(text.split()).casefold()
-
-
 def _verbatim(words: str | None, utterance: str) -> str:
     """The user's words for the option: the sort's quote only when it is theirs.
 
@@ -435,7 +420,7 @@ def _verbatim(words: str | None, utterance: str) -> str:
     user speaking, so a quote that is not verbatim in the utterance falls back
     to the whole utterance.
     """
-    if words is not None and words.strip() and _collapsed(words) in _collapsed(utterance):
+    if words is not None and words.strip() and said_verbatim(words, utterance):
         return " ".join(words.split())
     return " ".join(utterance.split())
 
@@ -451,34 +436,16 @@ def _complete(
     result: TaskAgentTurnOut,
     pending: PendingAction | None,
 ) -> None:
-    completed = conn.execute(
-        update(task_agent_transcript)
-        .where(task_agent_transcript.c.id == transcript_id)
-        .where(task_agent_transcript.c.task_id == task_id)
-        .where(task_agent_transcript.c.status.in_(("pending", "failed")))
-        .values(
-            reply=result.reply,
-            task_agent_state=pending.as_state() if pending is not None else None,
-            response=result.model_dump(mode="json"),
-            part=result.part.model_dump(mode="json") if result.part is not None else None,
-            suggestions=result.suggestions,
-            status="completed",
-            completed_at=datetime.now(UTC),
-        )
+    transcript_rows.complete(
+        conn,
+        task_id=task_id,
+        transcript_id=transcript_id,
+        result=result,
+        extra={
+            "task_agent_state": pending.as_state() if pending is not None else None,
+            "part": result.part.model_dump(mode="json") if result.part is not None else None,
+        },
     )
-    if completed.rowcount != 1:
-        raise RuntimeError("task_agent transcript turn was not open at its longlist commit")
-
-
-def _fail(engine: Engine, *, task_id: uuid.UUID, transcript_id: uuid.UUID) -> None:
-    with engine.begin() as conn:
-        conn.execute(
-            update(task_agent_transcript)
-            .where(task_agent_transcript.c.id == transcript_id)
-            .where(task_agent_transcript.c.task_id == task_id)
-            .where(task_agent_transcript.c.status.in_(("pending", "failed")))
-            .values(status="failed", completed_at=datetime.now(UTC))
-        )
 
 
 # --- The dispatcher ----------------------------------------------------------------
@@ -597,7 +564,7 @@ def dispatch_longlist_turn(
         turn = _Turn(TaskAgentTurnOut(reply=reply, kind="reply", **base), pending)
         return _commit(engine, task_id=task_id, transcript_id=transcript_id, turn=turn)
     except Exception:
-        _fail(engine, task_id=task_id, transcript_id=transcript_id)
+        transcript_rows.fail(engine, task_id=task_id, transcript_id=transcript_id)
         raise
 
 
@@ -613,19 +580,6 @@ def _commit(
             pending=turn.pending,
         )
     return turn.result
-
-
-def _answer_window(
-    conn: Connection, task_id: uuid.UUID, conversation_id: uuid.UUID
-) -> list[tuple[str, str]]:
-    rows = conn.execute(
-        select(task_agent_transcript.c.user_message, task_agent_transcript.c.reply)
-        .where(task_agent_transcript.c.task_id == task_id)
-        .where(task_agent_transcript.c.conversation_id == conversation_id)
-        .where(task_agent_transcript.c.status == "completed")
-        .order_by(task_agent_transcript.c.turn_index.asc())
-    ).all()
-    return [(row[0], row[1]) for row in rows if row[1] is not None]
 
 
 def _answer(
@@ -645,7 +599,7 @@ def _answer(
     if scope is None:
         return _Turn(TaskAgentTurnOut(reply=NO_SCOPE_REPLY, kind="reply", **base), pending)
     with engine.connect() as conn:
-        window = _answer_window(conn, task_id, conversation_id)
+        window = transcript_rows.answer_window(conn, task_id, conversation_id)
     try:
         prose, payload = answer_over_scope(
             engine,
@@ -658,9 +612,6 @@ def _answer(
                 chat=chat_backend,
                 embedding=embedding_backend,
                 langfuse=tracing.get_langfuse(),
-                # Resolved from this module at call time, as the gate resolves
-                # its own tool set.
-                tools_builder=build_section_tools,
             ),
             trace_run_id=transcript_id,
             # A Task Agent turn keeps the task's session (ADR 0038).
@@ -717,7 +668,7 @@ def _propose(
             design = propose_design(
                 agent, plan_payload=plan_row["payload"], words=words, session_id=task_id
             )
-        except LonglistActionRefused as exc:
+        except LonglistRefused as exc:
             return _Turn(
                 TaskAgentTurnOut(reply=_sentence(exc.message), kind="reply", **base), pending
             )
@@ -763,7 +714,7 @@ def _reason(reason: str | None, utterance: str) -> str | None:
     """The user's exclusion reason, only when it is verbatim theirs (else none)."""
     if reason is None or not reason.strip():
         return None
-    if _collapsed(reason) in _collapsed(utterance):
+    if said_verbatim(reason, utterance):
         return " ".join(reason.split())
     log.warning("longlist_sort_reason_not_verbatim", reason_chars=len(reason))
     return None
@@ -851,8 +802,8 @@ def _apply(
                 pending=turn.pending,
             )
         return turn.result
-    except (LonglistActionRefused, OptionNotFound) as exc:
-        message = exc.message if isinstance(exc, LonglistActionRefused) else OPTION_GONE_REPLY
+    except (LonglistRefused, OptionNotFound) as exc:
+        message = exc.message if isinstance(exc, LonglistRefused) else OPTION_GONE_REPLY
         # Refused (a walk started meanwhile): the action stays waiting.
         refused = _Turn(TaskAgentTurnOut(reply=_sentence(message), kind="reply", **base), pending)
         return _commit(engine, task_id=task_id, transcript_id=transcript_id, turn=refused)
@@ -909,7 +860,7 @@ def _apply_add(
             user_id=user_id,
             in_commit=complete_in_commit,
         )
-    except LonglistActionRefused as exc:
+    except LonglistRefused as exc:
         refused = _Turn(
             TaskAgentTurnOut(reply=_sentence(exc.message), kind="reply", **base), pending
         )

@@ -32,18 +32,18 @@ from datetime import UTC, datetime
 from typing import Any
 
 import structlog
-from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.engine import Connection, Engine
 
-from policy_atlas.api.app import ApiConflict
 from policy_atlas.api.locks import task_lock
+from policy_atlas.api.longlist_start import LonglistRefused
 from policy_atlas.api.readmodels.repository import (
     OPTION_ADDED,
     OPTION_EXCLUDED,
     OPTION_INCLUDED,
+    clean_text,
 )
-from policy_atlas.api.routers._common import ACTIVE_WALK_STATUSES, parentless_walk
+from policy_atlas.api.routers._common import active_parentless_walk
 from policy_atlas.api.routers.runs import (
     _await_new_run,
     _dispatch_lock,
@@ -51,17 +51,18 @@ from policy_atlas.api.routers.runs import (
     _search_reservations,
 )
 from policy_atlas.core import events
-from policy_atlas.core.schema import capability_run, option, task_plan
+from policy_atlas.core.schema import option
 from policy_atlas.options_scoping.design import OptionDesign
 from policy_atlas.runtime.agent_backend import AgentBackend
 from policy_atlas.runtime.capability_registry import (
     OPTIONS_SCOPING,
     capability_of_task,
+    expect_scoping_plan,
+    latest_approved_plan_row,
     validate_plan,
 )
 from policy_atlas.runtime.option_search import _futures, _handles_lock, run_option_search
 from policy_atlas.runtime.runner import RunnerBackends
-from policy_atlas.runtime.scoping_plan import ScopingPlan
 
 log = structlog.get_logger()
 
@@ -70,57 +71,8 @@ log = structlog.get_logger()
 USER_DECISION = "your decision"
 
 
-class LonglistActionRefused(Exception):
-    """A longlist action the task's state does not allow.
-
-    Args:
-        reason: ``not_scoping`` (an Evidence search task) · ``run_active`` (a
-            parentless walk is running or paused) · ``no_plan`` (no approved
-            scoping plan to search an added option against).
-        message: A sentence for the error body.
-    """
-
-    def __init__(self, reason: str, message: str) -> None:
-        super().__init__(message)
-        self.reason = reason
-        self.message = message
-
-
 class OptionNotFound(LookupError):
     """The task holds no such option."""
-
-
-def http_error(refusal: LonglistActionRefused) -> Exception:
-    """Map a refusal onto the error a route raises.
-
-    Args:
-        refusal: The action's refusal.
-
-    Returns:
-        ``ApiConflict("run_active")`` for a walk the user can wait out; a
-        ``422`` for a task the action does not apply to.
-    """
-    if refusal.reason == "run_active":
-        return ApiConflict("run_active", refusal.message)
-    return HTTPException(status_code=422, detail=refusal.message)
-
-
-def _refuse_unless_open(conn: Connection, *, task_id: uuid.UUID, reserved: bool) -> None:
-    if capability_of_task(conn, task_id) != OPTIONS_SCOPING:
-        raise LonglistActionRefused(
-            "not_scoping", "options belong to options-scoping tasks only"
-        )
-    active = conn.execute(
-        select(capability_run.c.capability_run_id)
-        .where(capability_run.c.task_id == task_id)
-        .where(capability_run.c.status.in_(ACTIVE_WALK_STATUSES))
-        .where(parentless_walk())
-        .limit(1)
-    ).scalar_one_or_none()
-    if active is not None or reserved:
-        raise LonglistActionRefused(
-            "run_active", "a run is in progress; wait for it to finish, then change the longlist"
-        )
 
 
 def admit_longlist_action(conn: Connection, *, task_id: uuid.UUID) -> None:
@@ -133,13 +85,18 @@ def admit_longlist_action(conn: Connection, *, task_id: uuid.UUID) -> None:
         task_id: The task.
 
     Raises:
-        LonglistActionRefused: ``not_scoping`` or ``run_active``.
+        LonglistRefused: ``not_scoping`` or ``run_active``.
     """
+    if capability_of_task(conn, task_id) != OPTIONS_SCOPING:
+        raise LonglistRefused("not_scoping", "options belong to options-scoping tasks only")
     # Read without ``_dispatch_lock``: the caller holds the task row lock, and
     # the openers take the dispatch lock *then* the row lock — taking it here
     # would invert that order. A set-membership read is atomic under the GIL,
     # and a reservation is only ever held while its walk's row is on the way.
-    _refuse_unless_open(conn, task_id=task_id, reserved=task_id in _dispatching_tasks)
+    if active_parentless_walk(conn, task_id) is not None or task_id in _dispatching_tasks:
+        raise LonglistRefused(
+            "run_active", "a run is in progress; wait for it to finish, then change the longlist"
+        )
 
 
 def _locked_option(conn: Connection, *, task_id: uuid.UUID, option_id: uuid.UUID) -> Any:
@@ -153,13 +110,6 @@ def _locked_option(conn: Connection, *, task_id: uuid.UUID, option_id: uuid.UUID
     if row is None:
         raise OptionNotFound(f"unknown option: {option_id}")
     return row
-
-
-def _clean_reason(reason: str | None) -> str | None:
-    if reason is None:
-        return None
-    text = " ".join(reason.split())
-    return text or None
 
 
 def _event(
@@ -211,14 +161,14 @@ def exclude_option(
         actor: The user (token subject) the History event names.
 
     Raises:
-        LonglistActionRefused: ``not_scoping`` or ``run_active``.
+        LonglistRefused: ``not_scoping`` or ``run_active``.
         OptionNotFound: If the task holds no such option.
     """
     admit_longlist_action(conn, task_id=task_id)
     row = _locked_option(conn, task_id=task_id, option_id=option_id)
     # A reason is optional on the button and the verb alike (owner, 2026-09-24):
     # a blank one is recorded empty, never invented.
-    text = _clean_reason(reason)
+    text = clean_text(reason)
     conn.execute(
         option.update()
         .where(option.c.task_id == task_id, option.c.option_id == option_id)
@@ -263,12 +213,12 @@ def include_option(
         reason: Why, in the user's words, when given.
 
     Raises:
-        LonglistActionRefused: ``not_scoping`` or ``run_active``.
+        LonglistRefused: ``not_scoping`` or ``run_active``.
         OptionNotFound: If the task holds no such option.
     """
     admit_longlist_action(conn, task_id=task_id)
     row = _locked_option(conn, task_id=task_id, option_id=option_id)
-    text = _clean_reason(reason)
+    text = clean_text(reason)
     conn.execute(
         option.update()
         .where(option.c.task_id == task_id, option.c.option_id == option_id)
@@ -291,27 +241,21 @@ def include_option(
 
 
 def current_plan_row(conn: Connection, *, task_id: uuid.UUID) -> dict[str, Any]:
-    """The task's current approved plan version, as the option search takes it.
+    """The task's current approved plan row, as the option search takes it.
 
     Args:
         conn: Open database connection.
         task_id: The options-scoping task.
 
     Returns:
-        ``{"plan_id", "version", "payload"}``.
+        The ``task_plan`` row as a dict.
 
     Raises:
-        LonglistActionRefused: ``no_plan`` when there is no approved scoping plan.
+        LonglistRefused: ``no_plan`` when there is no approved scoping plan.
     """
-    row = conn.execute(
-        select(task_plan.c.plan_id, task_plan.c.version, task_plan.c.payload)
-        .where(task_plan.c.task_id == task_id)
-        .where(task_plan.c.status == "approved")
-        .order_by(task_plan.c.version.desc())
-        .limit(1)
-    ).mappings().one_or_none()
+    row = latest_approved_plan_row(conn, task_id)
     if row is None:
-        raise LonglistActionRefused("no_plan", "the task has no approved plan to search against")
+        raise LonglistRefused("no_plan", "the task has no approved plan to search against")
     return dict(row)
 
 
@@ -337,8 +281,7 @@ def propose_design(
         RuntimeError: If the backend cannot produce a usable design.
         ValueError: If the proposal carries no usable name, description or feature.
     """
-    plan = validate_plan(OPTIONS_SCOPING, plan_payload)
-    assert isinstance(plan, ScopingPlan)
+    plan = expect_scoping_plan(validate_plan(OPTIONS_SCOPING, plan_payload))
     wire = agent.propose_option_design(
         words,
         question=plan.question,
@@ -432,13 +375,13 @@ def add_option(
         The option and its option search.
 
     Raises:
-        LonglistActionRefused: ``not_scoping``, ``run_active`` or ``no_plan``.
+        LonglistRefused: ``not_scoping``, ``run_active`` or ``no_plan``.
     """
     option_id = uuid.uuid4()
     with _dispatch_lock:
         with engine.begin() as conn:
             task_lock(conn, task_id)
-            _refuse_unless_open(conn, task_id=task_id, reserved=task_id in _dispatching_tasks)
+            admit_longlist_action(conn, task_id=task_id)
             plan_row = current_plan_row(conn, task_id=task_id)
             now = datetime.now(UTC)
             conn.execute(

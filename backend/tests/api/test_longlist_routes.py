@@ -53,7 +53,7 @@ from policy_atlas.options_scoping.constrain.constrain import (
     constrain_scope,
 )
 from policy_atlas.options_scoping.constrain.constrain_prompt import ConstrainResponse
-from policy_atlas.options_scoping.longlist.lever_types import lever_types_by_version
+from policy_atlas.options_scoping.longlist.lever_types import LEVER_TYPES, TAXONOMY_VERSION
 from policy_atlas.options_scoping.longlist.longlist_backend import StubLonglistBackend
 from policy_atlas.runtime.agent_backend import StubAgentBackend
 from policy_atlas.runtime.option_design_prompt import OptionDesignWire
@@ -794,21 +794,17 @@ def test_the_list_serves_title_only_and_the_thinning_counts(conn: Connection) ->
     assert counts.thinned_capped == 2
 
 
-def test_the_list_serves_every_lever_type_taxonomy_version(conn: Connection) -> None:
+def test_the_list_serves_the_current_lever_type_taxonomy(conn: Connection) -> None:
     walk = _Walk(conn)
     walk.option("Youth guarantee", origin="added_by_you")
     walk.build(_Scripted())
     listed = repository.longlist_out(conn, walk.task_id)
     assert listed is not None
-    by_version = lever_types_by_version()
-    assert set(listed.lever_type_definitions_by_version) == set(by_version)
-    for version, levers in by_version.items():
-        assert [d.key for d in listed.lever_type_definitions_by_version[version]] == [
-            lever.key for lever in levers
-        ]
-        assert [d.definition for d in listed.lever_type_definitions_by_version[version]] == [
-            lever.definition for lever in levers
-        ]
+    assert list(listed.lever_type_definitions_by_version) == [TAXONOMY_VERSION]
+    served = listed.lever_type_definitions_by_version[TAXONOMY_VERSION]
+    assert [(d.key, d.definition) for d in served] == [
+        (lever.key, lever.definition) for lever in LEVER_TYPES
+    ]
 
 
 def test_a_longlist_walk_s_child_search_never_hides_the_option_s_membership_evidence(
@@ -1671,7 +1667,10 @@ def test_the_documents_are_one_per_document_best_first_with_a_year(conn: Connect
 
 
 def test_a_document_with_no_row_here_takes_its_twin_s_own_row() -> None:
-    from policy_atlas.api.readmodels.repository import _collapse_documents
+    from policy_atlas.api.readmodels.repository import _collapse_document_lines
+
+    def _collapse_documents(entries: list[Any]) -> list[OptionDocumentOut]:
+        return [line.document for line in _collapse_document_lines(entries)]
 
     own = uuid.uuid4()
 

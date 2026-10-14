@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from typing import Any, Protocol, cast
 
 from sqlalchemy import select
@@ -68,19 +68,6 @@ class CancelCheck(Protocol):
         """Raise the caller's cancellation signal if this answer should stop."""
 
 
-class ToolsBuilder(Protocol):
-    """The section-tool builder seam, defaulting to ``build_section_tools``."""
-
-    def __call__(
-        self,
-        *,
-        retriever: Any,
-        findings_reader: Callable[[dict[str, Any]], dict[str, Any]] | None,
-        lookup_reader: Callable[[dict[str, Any]], dict[str, Any]],
-    ) -> dict[str, Callable[[dict[str, Any]], dict[str, Any]]]:
-        """Return the read-only tool set for one answer."""
-
-
 @dataclass(frozen=True)
 class AnswerBackends:
     """The provider seams one grounded answer calls out through.
@@ -89,14 +76,11 @@ class AnswerBackends:
         chat: Provider-neutral chat backend.
         embedding: Optional query embedding backend for retrieval.
         langfuse: Optional tracing client.
-        tools_builder: Section-tool builder, injectable so a caller can bind
-            its own tool set.
     """
 
     chat: ChatBackend
     embedding: EmbeddingBackend | None = None
     langfuse: Any = None
-    tools_builder: ToolsBuilder = cast(ToolsBuilder, build_section_tools)
 
 
 @dataclass(frozen=True)
@@ -137,20 +121,7 @@ class AnswerPayload:
 
     def as_payload(self) -> dict[str, Any]:
         """Return the durable JSON payload shape, key order included."""
-        return {
-            "claims": self.claims,
-            "citations": self.citations,
-            "warning_not_evidence_checked": self.warning_not_evidence_checked,
-            "stripped": self.stripped,
-            "evidence_not_held": self.evidence_not_held,
-            "handoff": self.handoff,
-            "tool_digest": self.tool_digest,
-            "model_id": self.model_id,
-            "prompt_version": self.prompt_version,
-            "trace_id": self.trace_id,
-            "stopped_before_evidence_check": self.stopped_before_evidence_check,
-            "enrichment": self.enrichment,
-        }
+        return asdict(self)
 
 
 def apply_appraisal_labels(citations: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -488,7 +459,7 @@ def answer_over_scope(
     retriever, findings_reader, lookup_reader = build_chat_readers(
         engine, scope, task_id, embedding_backend=backends.embedding
     )
-    tools = backends.tools_builder(
+    tools = build_section_tools(
         retriever=retriever,
         findings_reader=findings_reader,
         lookup_reader=lookup_reader,

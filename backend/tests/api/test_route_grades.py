@@ -30,7 +30,7 @@ import pytest
 from sqlalchemy import select, update
 from sqlalchemy.engine import Connection, Engine
 
-from policy_atlas.api import chat_turns
+from policy_atlas.api import answer_core
 from policy_atlas.api.app import create_app
 from policy_atlas.api.deps import get_chat_backend, get_chat_embedding_backend
 from policy_atlas.api.dev_issuer import init, mint_token
@@ -959,7 +959,7 @@ def test_colleague_posts_and_cancels_a_turn_in_their_own_chat(
     to a terminal `completed` NDJSON event, and cancels a second pending turn
     of their own. None of it requires anything of the owner.
     """
-    monkeypatch.setattr(chat_turns, "build_section_tools", _citable_tools)
+    monkeypatch.setattr(answer_core, "build_section_tools", _citable_tools)
     task_id: uuid.UUID | None = None
     try:
         with tenancy_client(tmp_path, count=2, overrides=_chat_overrides()) as (
@@ -1099,7 +1099,7 @@ def test_owner_posts_into_a_legacy_null_created_by_conversation(
     nobody else: the owner posts and cancels into it, a colleague who can read
     the task 404s on both.
     """
-    monkeypatch.setattr(chat_turns, "build_section_tools", _citable_tools)
+    monkeypatch.setattr(answer_core, "build_section_tools", _citable_tools)
     task_id: uuid.UUID | None = None
     try:
         with tenancy_client(tmp_path, count=2, overrides=_chat_overrides()) as (
@@ -1167,7 +1167,7 @@ def test_de_enrolment_kills_a_colleagues_chat_mutations(
     — what ops de-enrolment does — takes every one of their three mutations
     to 404 on the very next request, with nothing else changed and no deploy.
     """
-    monkeypatch.setattr(chat_turns, "build_section_tools", _citable_tools)
+    monkeypatch.setattr(answer_core, "build_section_tools", _citable_tools)
     task_id: uuid.UUID | None = None
     try:
         with tenancy_client(tmp_path, count=2, overrides=_chat_overrides()) as (

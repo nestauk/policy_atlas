@@ -315,7 +315,7 @@ def _write_task_links(
     3.  **Same project.** The source must share at least one project with the
         new task *as just assigned*. This is the create-time invariant; a pair
         that later stops sharing one is flagged on read, never broken
-        (:func:`task_links_for`).
+        (:func:`_common.links_for_tasks`).
     4.  **Finished walk.** The source's latest walk must be ``succeeded`` or
         ``degraded``, and its id is pinned onto the row. A running, paused or
         failed source has nothing stable to inherit.

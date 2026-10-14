@@ -37,6 +37,7 @@ from policy_atlas.api.contract import (
 )
 from policy_atlas.api.deps import get_current_user, get_engine, get_settings
 from policy_atlas.api.lifecycle import LIFECYCLE_EVENT_KINDS, both_generations
+from policy_atlas.api.readmodels.repository import walks_of_event_runs
 from policy_atlas.api.routers._access import (
     accessible_task,
     may_read_task,
@@ -58,7 +59,7 @@ from policy_atlas.api.stage_vocabulary import (
 )
 from policy_atlas.core import events
 from policy_atlas.core.liveness import Tick, tick_hub
-from policy_atlas.core.schema import event_log, runs, task_plan
+from policy_atlas.core.schema import event_log, task_plan
 from policy_atlas.runtime import steering_events
 from policy_atlas.runtime.capability_registry import (
     capability_of_task,
@@ -222,7 +223,7 @@ def _map_rows(
             if through is None or row["sequence"] <= through
         ]
     frames: list[dict[str, Any]] = []
-    walks = _walks_of_runs(conn, task_id=task_id, rows=all_rows)
+    walks = walks_of_event_runs(conn, task_id, all_rows, _STAGE_EVENT_TYPES)
     for row in all_rows:
         frames.extend(
             _frames_for_row(
@@ -230,28 +231,6 @@ def _map_rows(
             )
         )
     return frames
-
-
-def _walks_of_runs(
-    conn: Connection, *, task_id: uuid.UUID, rows: list[dict[str, Any]]
-) -> dict[uuid.UUID, uuid.UUID]:
-    """Each stage event's component run → the walk it belongs to (task 045, A3)."""
-    run_ids = {
-        row["run_id"]
-        for row in rows
-        if row.get("run_id") is not None and row["event_type"] in _STAGE_EVENT_TYPES
-    }
-    if not run_ids:
-        return {}
-    return {
-        run_id: walk_id
-        for run_id, walk_id in conn.execute(
-            select(runs.c.run_id, runs.c.capability_run_id)
-            .where(runs.c.task_id == task_id)
-            .where(runs.c.run_id.in_(run_ids))
-        )
-        if walk_id is not None
-    }
 
 
 #: The event types that map to stage frames.
@@ -270,7 +249,7 @@ def _frames_for_row(
 ) -> list[dict[str, Any]]:
     """Return zero or more public frames for one allowlisted event row.
 
-    ``walks`` maps a component run to its walk (:func:`_walks_of_runs`); a
+    ``walks`` maps a component run to its walk (:func:`repository.walks_of_event_runs`); a
     stage frame carries that walk as ``capability_run_id`` (task 045, A3).
     """
     payload = row["payload"]
