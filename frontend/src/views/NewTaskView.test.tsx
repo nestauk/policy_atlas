@@ -238,6 +238,7 @@ describe("NewTaskView — project selector", () => {
       question: "How do we cut the number of young people not in work or study?",
       projectId: null,
       capability: "options_scoping",
+      fromTaskIds: [],
     });
   });
 

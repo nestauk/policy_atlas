@@ -2,7 +2,7 @@ import { useLayoutEffect, useState } from "react";
 import { Outlet, useLocation, useParams } from "react-router";
 
 import { useArchiveTask, useUpdateTask } from "../api/mutations";
-import { useArtefact, useCheckIns, useMe, useTask, useTasks } from "../api/queries";
+import { useCheckIns, useMe, useTask, useTasks } from "../api/queries";
 import { useAuth } from "../auth";
 import { capabilityLabel } from "../lib/capabilities";
 import { TitleMarkerProvider } from "../lib/title";
@@ -13,10 +13,10 @@ import { cn } from "../ui/brand/cn";
 import { LifecycleBar, LifecycleBottomBar } from "../ui/brand/LifecycleBar";
 import { NavBar, NavHomeLink, NavItem } from "../ui/brand/Nav";
 import { COPY, PROJECT, TASK, TENANCY_COPY } from "../lib/vocabulary";
-import { isBaselineArtefact } from "./baselineBand";
 import { lifecycleTabs, publicLifecycleTabs, withChat } from "./lifecycle";
 import { PublicViewProvider } from "./publicView";
-import { activeRun, hasLonglist, isScoping, tabRunStatus } from "./scopingActivity";
+import { activeRun, tabRunStatus } from "./scopingActivity";
+import { useTabOptions } from "./taskResult";
 import { ErrorBoundary } from "../ui/feedback/ErrorBoundary";
 import { RunStreamProvider } from "../store";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/radix/Popover";
@@ -335,9 +335,8 @@ export function AppShell() {
   // below, the nav badge, the lifecycle-tab marker and the cross-tab banner.
   const isOwner = task.data?.is_owner === true;
   // Task 044 (A17): a scoping task's Result tab unlocks on its baseline, not
-  // on the walk's ending. Only a scoping task pays for the read — the empty
-  // task id disables the query (and `ArtefactView` shares its cache entry).
-  const baselineArtefact = useArtefact(isScoping(task.data) ? (taskId ?? "") : "");
+  // on the walk's ending (`ArtefactView` shares the read's cache entry).
+  const tabOptions = useTabOptions(taskId ?? "");
   const pendingCheckIns = useCheckIns(taskId ?? "", "pending", {
     enabled: base !== null && !inWorkspace && isOwner,
     refetchInterval: 15_000,
@@ -361,10 +360,7 @@ export function AppShell() {
       : withChat(
           publicAccess
             ? publicLifecycleTabs(base)
-            : lifecycleTabs(base, tabRunStatus(task.data), {
-                hasBaseline: isBaselineArtefact(baselineArtefact.data),
-                hasLonglist: hasLonglist(task.data),
-              }),
+            : lifecycleTabs(base, tabRunStatus(task.data), tabOptions.options),
           chatParam,
         ).map((item) =>
           item.tab === "agent" && hasPendingCheckIn

@@ -10,6 +10,7 @@ import {
   GRID_COLUMN_LINES,
   LEVEL_WORDS,
   LINE_NAMES,
+  MIDDLE_WORD,
   capitalise,
 } from "./longlistPresentation";
 
@@ -39,12 +40,12 @@ const CELL_LIMIT = 4;
 export function LonglistGrid({
   taskId,
   longlist,
-  showExcluded = false,
+  showExcluded,
 }: {
   taskId: string;
   longlist: LonglistOut;
   /** Excluded options stay out of the grid unless the reader asks. */
-  showExcluded?: boolean;
+  showExcluded: boolean;
 }) {
   const options = (longlist.options ?? []).filter(
     (option) => showExcluded || option.state !== "excluded",
@@ -68,7 +69,7 @@ export function LonglistGrid({
   const rows = [...leverTypes, ...(hasNoneFits ? [NONE_FITS_KEY] : [])];
   const columns: { key: string; label: string }[] = [
     { key: "less", label: LEVEL_WORDS[line].less ?? "" },
-    { key: MIDDLE_KEY, label: "Middle" },
+    { key: MIDDLE_KEY, label: MIDDLE_WORD },
     { key: "more", label: LEVEL_WORDS[line].more ?? "" },
     ...(hasUntagged ? [{ key: UNTAGGED_KEY, label: "Untagged" }] : []),
   ];
@@ -151,10 +152,7 @@ export function LonglistGrid({
                     const cellKey = `${leverKey}|${columnKey}`;
                     const all = cellOptions(leverKey, columnKey);
                     const open = openCells.has(cellKey);
-                    const shown =
-                      open || all.length <= CELL_LIMIT
-                        ? all
-                        : all.slice(0, CELL_LIMIT);
+                    const shown = open ? all : all.slice(0, CELL_LIMIT);
                     const hidden = all.length - shown.length;
                     return (
                       <td key={columnKey} className="px-3 py-3 text-body">
@@ -190,7 +188,7 @@ export function LonglistGrid({
                             </li>
                           ))}
                         </ul>
-                        {(hidden > 0 || (open && all.length > CELL_LIMIT)) && (
+                        {all.length > CELL_LIMIT && (
                           <button
                             type="button"
                             aria-expanded={open}

@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "../auth";
 import { createAuthedApiClient } from "./client";
 import type { components } from "./gen/types";
+import { isRunActive } from "../views/scopingActivity";
 
 /**
  * Query-key roots, shared with `src/store/useRunStream.tsx` so SSE-driven
@@ -155,16 +156,6 @@ export function useMe() {
   });
 }
 
-const ACTIVE_RUN_STATUSES = new Set(["running", "paused"]);
-
-/** A scoping task can be busy while its `latest_run` is finished — an option
- *  search (a child walk, or one the chat's *add* started) runs under
- *  `active_run` only (task 045, S15). The views read this through
- *  `views/scopingActivity.ts`; the polls here need the same fact. */
-function scopingWalkActive(task: { capability?: string | null; active_run?: unknown }): boolean {
-  return task.capability === "options_scoping" && task.active_run != null;
-}
-
 /** `GET /api/v1/tasks` — paginated, owner-scoped. Live landing statuses
  *  (contract strand 14): while any listed task's `latest_run.status` is
  *  non-terminal, the list refetches on a modest interval so a card never
@@ -182,12 +173,9 @@ export function useTasks(query?: TasksQuery, options?: { enabled?: boolean }) {
       return data;
     },
     refetchInterval: (activeQuery) => {
-      const hasActiveRun = activeQuery.state.data?.data.some((task) =>
-        (task.latest_run !== null &&
-          task.latest_run !== undefined &&
-          ACTIVE_RUN_STATUSES.has(task.latest_run.status)) ||
-        scopingWalkActive(task),
-      );
+      // A scoping task can be busy while its `latest_run` is finished (an
+      // option search runs under `active_run` only — task 045, S15).
+      const hasActiveRun = activeQuery.state.data?.data.some(isRunActive);
       return hasActiveRun ? 15_000 : false;
     },
   });
@@ -254,12 +242,7 @@ export function useTask(taskId: string, options?: { pollWhileRunning?: boolean }
     },
     refetchInterval: (activeQuery) => {
       if (options?.pollWhileRunning !== true) return false;
-      const data = activeQuery.state.data;
-      const status = data?.latest_run?.status;
-      const active =
-        (status !== undefined && ACTIVE_RUN_STATUSES.has(status)) ||
-        (data !== undefined && scopingWalkActive(data));
-      return active ? 15_000 : false;
+      return isRunActive(activeQuery.state.data) ? 15_000 : false;
     },
   });
 }
@@ -631,10 +614,6 @@ export function useGroups(taskId: string) {
 }
 
 // --- Longlist (task 045 phase 6.2) --------------------------------------
-//
-// `useLonglist` is appended below by the sibling slice (phase 6.3, which
-// also wires the lifecycle/view-switch readers) — reused here rather than
-// duplicated, per the task brief.
 
 /** `GET /api/v1/tasks/{task_id}/options/{option_id}` — one option's card,
  *  assembled (D15). A 404 is treated as absence, not an error. */

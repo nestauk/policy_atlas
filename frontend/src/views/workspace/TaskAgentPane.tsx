@@ -8,7 +8,6 @@ import { COPY, TASK } from "../../lib/vocabulary";
 import {
   composeTaskAgentThread,
   taskAgentAnswerRow,
-  taskAgentTurnKind,
   useTaskAgentTranscript,
 } from "../../store";
 import type {
@@ -32,6 +31,7 @@ import { conflictSentences, errorCode, isConflictCode } from "../../lib/errors";
 import { ReauthRedirect } from "../../ui/feedback";
 import { groupSearchDecisions } from "../decisionsPresentation";
 import { LIFECYCLE_PAGE_CLASS } from "../listPageChrome";
+import { hasLonglist, isScoping } from "../scopingActivity";
 import { ChatAnswer } from "./chat/ChatMessages";
 import { JumpToEnd } from "./chat/JumpToEnd";
 import { useFooterReveal } from "./chat/useFooterReveal";
@@ -57,20 +57,6 @@ import {
 
 /** The server page-size cap; one task_agent conversation fits comfortably. */
 const TRANSCRIPT_PAGE_SIZE = 200;
-
-/** The composer's invitation while a scoping walk is parked on the baseline
- *  gate (task 044 Phase 5.5, the Baseline board). */
-const SCOPING_GATE_PLACEHOLDER = "Question the baseline…";
-/** Task 045: while a longlist exists and nothing runs, the thread takes the
- *  longlist verbs as well as questions. */
-const LONGLIST_PLACEHOLDER = "Ask about the longlist, or add, exclude or include an option.";
-
-/** A decision turn's one line: the option as it was labelled, that it is on
- *  the record, and the plan version it was taken against. */
-const DECISION_RECORDED = "recorded";
-
-/** The prefix before a decision's plan version. */
-const DECISION_PLAN_VERSION = "plan version";
 
 /**
  * Assign each run its turn boundary and each decision its run block. TaskAgent
@@ -208,13 +194,15 @@ export function taskAgentComposerPlaceholder(
   // a question about the baseline is exactly what this pause is for, so the
   // composer invites one instead of fencing it off.
   if (atScopingGate) {
-    return SCOPING_GATE_PLACEHOLDER;
+    return "Question the baseline…";
   }
   if (runStatus === "running" || runStatus === "paused") {
     return "Replanning unlocks when this run finishes.";
   }
+  // Task 045: with a longlist and nothing running, the thread takes the
+  // longlist verbs as well as questions.
   if (hasLonglist) {
-    return LONGLIST_PLACEHOLDER;
+    return "Ask about the longlist, or add, exclude or include an option.";
   }
   if (runStatus === "succeeded" || runStatus === "degraded") {
     return "Describe a change to the plan to run again.";
@@ -344,8 +332,8 @@ export function DecisionLine({
   return (
     <div className="mr-8 border-l-2 border-l-green bg-paper-2 px-3 py-2">
       <p className="text-body text-ink">
-        <span className="font-semibold">{scrub(label)}</span> · {DECISION_RECORDED}
-        {planVersion !== null && ` · ${DECISION_PLAN_VERSION} ${planVersion}`}
+        <span className="font-semibold">{scrub(label)}</span> · recorded
+        {planVersion !== null && ` · plan version ${planVersion}`}
       </p>
     </div>
   );
@@ -397,7 +385,8 @@ function DurableTurn({
   // A button-confirm turn's record is the ✓ on its part card — the canned
   // marker bubble would only duplicate it (binding record: task_agent-stage).
   const isConfirmTurn = confirmTarget(turn.user_message) !== null;
-  const kind = taskAgentTurnKind(turn);
+  // A turn stored before task 044 carries no kind: it is a reply.
+  const kind = turn.kind ?? "reply";
   const taskAgentText = [turn.reply, turn.part?.body]
     .filter((piece): piece is string => piece != null && piece !== "")
     .join("\n\n");
@@ -724,7 +713,7 @@ export function TaskAgentPane({
   // this pause. The fence stays for every Evidence search check-in and for a
   // scoping walk that is still running.
   const atScopingGate =
-    planQuery.data?.capability === "options_scoping" &&
+    isScoping(planQuery.data) &&
     runStatus === "paused" &&
     stream.pendingCheckIn?.kind === BASELINE_GATE_KIND;
   const composerFenced = runActive && !atScopingGate;
@@ -862,7 +851,7 @@ export function TaskAgentPane({
         <div ref={contentRef} className={cn("space-y-6", LIFECYCLE_PAGE_CLASS)}>
         {transcript.isPending && (
           <div role="status" className="anim-breathe text-body text-grey">
-            Loading your task_agent conversation…
+            Loading your conversation…
           </div>
         )}
         {transcript.isError &&
@@ -986,7 +975,7 @@ export function TaskAgentPane({
         {transcript.isSubmitting && (
           <div role="status" className="anim-breathe mr-8 flex items-center gap-2 px-3.5 text-body text-grey">
             <span aria-hidden="true" className="h-2 w-2 bg-blue" />
-            TaskAgent…
+            Planning…
           </div>
         )}
 
@@ -1049,7 +1038,7 @@ export function TaskAgentPane({
           value={message}
           onChange={setMessage}
           onSubmit={() => send({ message, clientTurnId: crypto.randomUUID() })}
-          placeholder={taskAgentComposerPlaceholder(runStatus, planReady, isOwner, atScopingGate, taskQuery.data?.has_longlist === true)}
+          placeholder={taskAgentComposerPlaceholder(runStatus, planReady, isOwner, atScopingGate, hasLonglist(taskQuery.data))}
           disabled={composerFenced || !isOwner}
           sendDisabled={composerDisabled}
         />

@@ -2,7 +2,6 @@ import { useState, type ReactNode } from "react";
 import { Link, useParams } from "react-router";
 
 import type { components } from "../../api/gen/types";
-import { useExcludeOption, useIncludeOption } from "../../api/mutations";
 import { useOption, useTask } from "../../api/queries";
 import { errorCode } from "../../lib/errors";
 import { scrub } from "../../lib/scrub";
@@ -18,7 +17,6 @@ import { SectionDisclosure, type SidebarEntry } from "../ArtefactOutline";
 import { LIFECYCLE_PAGE_CLASS } from "../listPageChrome";
 import { REPORT_TITLE_CLASS, ReportKindRow, ReportPage } from "../reportPage";
 import {
-  actionFailedNotice,
   authorityWords,
   GRID_COLUMN_LINES,
   LEVEL_WORD_CLASS,
@@ -26,6 +24,7 @@ import {
   LINE_NAMES,
   MIDDLE_WORD,
   PROFILE_LINE_KEYS,
+  WORD_TINT_BASE,
   capitalise,
   constraintLabel,
   constraintNotices,
@@ -33,6 +32,7 @@ import {
   documentsSummary,
   evidenceOpener,
   evidenceSignal,
+  leverLabel,
   leverLine,
   noOutcomeMeasuredLine,
   originLabel,
@@ -41,6 +41,7 @@ import {
   relationLabel,
   servesOutcome,
 } from "./longlistPresentation";
+import { ExcludeReasonForm, OptionActionButton, useOptionActions } from "./optionActions";
 
 type OptionDocumentOut = components["schemas"]["OptionDocumentOut"];
 
@@ -212,10 +213,27 @@ function CardSection({
 
 /** The authority word's tint beside "Who decides" (R70): pale tint, dark text, as the level words. */
 const AUTHORITY_WORD_CLASS: Record<"within_your_power" | "needs_action_by" | "unclear", string> = {
-  within_your_power: "inline-block bg-green-tint px-1.5 py-0.5 text-meta font-semibold leading-tight text-navy",
-  needs_action_by: "inline-block bg-yellow-tint px-1.5 py-0.5 text-meta font-semibold leading-tight text-navy",
-  unclear: "inline-block bg-paper-2 px-1.5 py-0.5 text-meta font-semibold leading-tight text-grey",
+  within_your_power: `${WORD_TINT_BASE} bg-green-tint text-navy`,
+  needs_action_by: `${WORD_TINT_BASE} bg-yellow-tint text-navy`,
+  unclear: `${WORD_TINT_BASE} bg-paper-2 text-grey`,
 };
+
+/** A line's level word on its tint, or "Middle" when the line has no mark. */
+function LevelWord({
+  line,
+  mark,
+  middleClassName = "font-semibold text-navy",
+}: {
+  line: keyof typeof LEVEL_WORDS;
+  mark: "less" | "more" | null;
+  middleClassName?: string;
+}) {
+  return mark === null ? (
+    <span className={middleClassName}>{MIDDLE_WORD}</span>
+  ) : (
+    <span className={LEVEL_WORD_CLASS[mark]}>{LEVEL_WORDS[line][mark]}</span>
+  );
+}
 
 /** The profile table's cells: three columns from `sm` up; stacked blocks below it, so the
  *  sentence keeps the full width at 390 px (22b, after the browser check). */
@@ -236,13 +254,8 @@ export function OptionCard() {
   const { taskId = "", optionId = "" } = useParams();
   const task = useTask(taskId);
   const option = useOption(taskId, optionId);
-  const excludeOption = useExcludeOption(taskId);
-  const includeOption = useIncludeOption(taskId);
-  const [excluding, setExcluding] = useState(false);
-  const [reason, setReason] = useState("");
   // Task 045 (F15): a refused exclude / include says so under the header.
-  const [notice, setNotice] = useState<string | null>(null);
-  const walkActive = isRunActive(task.data);
+  const actions = useOptionActions(taskId, isRunActive(task.data));
 
   useDocumentTitle(task.data?.name, option.data?.name ?? "Option");
 
@@ -316,37 +329,11 @@ export function OptionCard() {
   // One reason only: the none-fits reason says what the option does instead.
   const leverReason = (item.primary_lever_type == null ? (item.lever_none_fits_reason ?? item.lever_reason) : item.lever_reason) ?? "";
   const headerLine = [
-    item.primary_lever_type == null ? "No lever fits" : capitalise(item.primary_lever_type),
+    leverLabel(item),
     originLabel(item.origin, item.document_count, item.from_section),
     ...(item.relations ?? []).map(relationLabel),
     ...((item.also_found_as ?? []).length > 0 ? [`also found as: ${(item.also_found_as ?? []).join(", ")}`] : []),
   ].join(" · ");
-
-  // The reason is optional (owner, 2026-09-24): blank sends none.
-  const submitExclude = () => {
-    const trimmed = reason.trim();
-    if (excludeOption.isPending || walkActive) return;
-    setNotice(null);
-    excludeOption.mutate(
-      trimmed === "" ? { optionId } : { optionId, reason: trimmed },
-      {
-        onSuccess: () => {
-          setExcluding(false);
-          setReason("");
-        },
-        onError: (error) => setNotice(actionFailedNotice(error, "The option couldn't be excluded. Try again.")),
-      },
-    );
-  };
-
-  const includeAgain = () => {
-    if (includeOption.isPending || walkActive) return;
-    setNotice(null);
-    includeOption.mutate(
-      { optionId },
-      { onError: (error) => setNotice(actionFailedNotice(error, "The option couldn't be included again. Try again.")) },
-    );
-  };
 
   return (
     <ReportPage entries={sidebarEntries(item.profile != null)}>
@@ -361,22 +348,7 @@ export function OptionCard() {
       <header className="mb-8">
         <ReportKindRow kind="Option">
           <div className="print-hide flex items-center gap-2">
-            {excluded ? (
-              <Button
-                variant="secondary"
-                size="sm"
-                disabled={includeOption.isPending || walkActive}
-                onClick={includeAgain}
-              >
-                Include again
-              </Button>
-            ) : (
-              !excluding && (
-                <Button variant="secondary" size="sm" disabled={walkActive} onClick={() => setExcluding(true)}>
-                  Exclude
-                </Button>
-              )
-            )}
+            <OptionActionButton actions={actions} optionId={optionId} excluded={excluded} />
           </div>
         </ReportKindRow>
         <h1 className={cn(REPORT_TITLE_CLASS, excluded && "text-grey")}>{scrub(item.name)}</h1>
@@ -384,34 +356,11 @@ export function OptionCard() {
         <p className="mt-2 text-body text-grey">{scrub(headerLine)}</p>
         <p className="mt-1.5 text-body text-navy">{evidenceSignal(item)}</p>
 
-        {excluding && (
-          <form
-            className="mt-4 flex flex-wrap items-center gap-2"
-            onSubmit={(event) => {
-              event.preventDefault();
-              submitExclude();
-            }}
-          >
-            <input
-              autoFocus
-              aria-label="Why exclude this option?"
-              value={reason}
-              onChange={(event) => setReason(event.target.value)}
-              placeholder="Why exclude this option?"
-              className="min-w-0 flex-1 border border-line-2 bg-paper px-3 py-1.5 text-body text-ink placeholder:text-grey/80 focus-visible:outline-2 focus-visible:outline-blue"
-            />
-            <Button type="submit" variant="secondary" size="sm" disabled={excludeOption.isPending || walkActive}>
-              Exclude
-            </Button>
-            <Button variant="ghost" size="sm" onClick={() => setExcluding(false)}>
-              Cancel
-            </Button>
-          </form>
-        )}
+        <ExcludeReasonForm actions={actions} optionId={optionId} className="mt-4 flex flex-wrap items-center gap-2" />
 
-        {notice !== null && (
+        {actions.notice !== null && (
           <p role="alert" className="mt-3 text-body text-red">
-            {notice}
+            {actions.notice.text}
           </p>
         )}
 
@@ -470,11 +419,7 @@ export function OptionCard() {
                 <li key={key}>
                   <span className="block text-meta text-grey">{LINE_NAMES[key]}</span>
                   <span className="mt-1 block min-h-6">
-                    {mark === null ? (
-                      <span className="text-meta font-semibold text-navy">{MIDDLE_WORD}</span>
-                    ) : (
-                      <span className={LEVEL_WORD_CLASS[mark]}>{LEVEL_WORDS[key][mark]}</span>
-                    )}
+                    <LevelWord line={key} mark={mark} middleClassName="text-meta font-semibold text-navy" />
                   </span>
                 </li>
               ))}
@@ -486,11 +431,7 @@ export function OptionCard() {
               <tr>
                 <th scope="row" className={PROFILE_NAME_CELL}>{LINE_NAMES.ambition}</th>
                 <td className={PROFILE_WORD_CELL}>
-                  {ambitionMark === null ? (
-                    <span className="font-semibold text-navy">{MIDDLE_WORD}</span>
-                  ) : (
-                    <span className={LEVEL_WORD_CLASS[ambitionMark]}>{LEVEL_WORDS.ambition[ambitionMark]}</span>
-                  )}
+                  <LevelWord line="ambition" mark={ambitionMark} />
                 </td>
                 <td className={PROFILE_SENTENCE_CELL}>{scrub(item.ambition_reason ?? "")}</td>
               </tr>
@@ -504,10 +445,8 @@ export function OptionCard() {
                     <td className={PROFILE_WORD_CELL}>
                       {authority != null ? (
                         <span className={AUTHORITY_WORD_CLASS[authority.label]}>{authorityWords(authority)}</span>
-                      ) : marked && mark === null ? (
-                        <span className="font-semibold text-navy">{MIDDLE_WORD}</span>
-                      ) : marked && mark !== null ? (
-                        <span className={LEVEL_WORD_CLASS[mark]}>{LEVEL_WORDS[key][mark]}</span>
+                      ) : marked ? (
+                        <LevelWord line={key} mark={mark} />
                       ) : null}
                     </td>
                     <td className={PROFILE_SENTENCE_CELL}>{scrub(line?.sentence ?? "")}</td>

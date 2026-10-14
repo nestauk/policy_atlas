@@ -158,43 +158,17 @@ export function taskDestination(
   return status === "succeeded" || options?.hasLonglist === true ? `${base}/result` : base;
 }
 
-/** The views the Result tab switches between for an options-scoping task
- *  (task 045, deliverable 9). */
-export type ResultViewKey = "baseline" | "longlist" | "report";
+/** The Result's view switch once a scoping task has a longlist (task 045,
+ *  deliverable 9): **Baseline · Longlist · Report**, Report shown but not
+ *  openable until assessment. */
+export const RESULT_VIEWS: readonly { key: string; label: string; note?: string }[] = [
+  { key: "baseline", label: "Baseline" },
+  { key: "longlist", label: "Longlist" },
+  { key: "report", label: "Report", note: "available after assessment" },
+];
 
-/** One entry of the Result's view switch. */
-export interface ResultViewOption {
-  key: ResultViewKey;
-  label: string;
-  /** False for a view that is on the switch but cannot be opened yet. */
-  available: boolean;
-  /** Why an unavailable view is unavailable. */
-  note?: string;
-}
-
-/**
- * The Result's view switch: **Baseline · Longlist · Report**, Report shown
- * but not openable until assessment (task 045, deliverable 9). `null` when
- * there is nothing to switch between — an Evidence search, or a scoping task
- * before its longlist exists (the Result is then the baseline alone).
- */
-export function resultViews(options?: TabOptions): readonly ResultViewOption[] | null {
-  if (options?.hasLonglist !== true) return null;
-  return [
-    { key: "baseline", label: "Baseline", available: true },
-    { key: "longlist", label: "Longlist", available: true },
-    { key: "report", label: "Report", available: false, note: "available after assessment" },
-  ];
-}
-
-/**
- * Which view the Result opens on: the longlist once one exists, the baseline
- * before (ruling 50; task 045, A7). A requested view is honoured only when
- * the switch offers it and it can be opened.
- */
-export function resultView(requested: string | null, options?: TabOptions): "baseline" | "longlist" {
-  const views = resultViews(options);
-  if (views === null) return "baseline";
-  const match = views.find((view) => view.key === requested && view.available);
-  return match?.key === "baseline" ? "baseline" : "longlist";
+/** Which view the Result opens on: the longlist unless the baseline is asked
+ *  for (ruling 50; task 045, A7). */
+export function resultView(requested: string | null): "baseline" | "longlist" {
+  return requested === "baseline" ? "baseline" : "longlist";
 }

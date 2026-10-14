@@ -22,16 +22,15 @@ export function ReportPage({
   entries,
   className,
   children,
-  ...props
 }: {
   entries?: SidebarEntry[];
   className?: string;
   children: ReactNode;
-} & Omit<React.HTMLAttributes<HTMLElement>, "className" | "children">) {
+}) {
   return (
     <div className="mx-auto flex w-full flex-col justify-center gap-6 px-6 max-md:gap-0 max-md:px-0 md:flex-row">
       {entries !== undefined && entries.length > 0 && <ContentsSidebar entries={entries} />}
-      <main className={className === undefined ? REPORT_PAGE_CLASS : `${REPORT_PAGE_CLASS} ${className}`} {...props}>
+      <main className={className === undefined ? REPORT_PAGE_CLASS : `${REPORT_PAGE_CLASS} ${className}`}>
         {children}
       </main>
     </div>

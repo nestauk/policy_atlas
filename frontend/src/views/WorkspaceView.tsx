@@ -8,9 +8,8 @@ import { useRunStream } from "../store";
 import { cn } from "../ui/brand/cn";
 import { NotFoundView } from "../ui/feedback/NotFoundView";
 import { AppFooter } from "./AppFooter";
-import { hasResult } from "./lifecycle";
-import { hasTaskResult } from "./scopingActivity";
-import { isBaselineArtefact } from "./baselineBand";
+import { isScoping } from "./scopingActivity";
+import { useChatsEnabled } from "./taskResult";
 import { ChatPane } from "./workspace/chat/ChatPane";
 import { DraftChatPane } from "./workspace/chat/DraftChatPane";
 import { ConversationSidebar } from "./workspace/chat/ConversationSidebar";
@@ -43,14 +42,7 @@ export function WorkspaceView() {
   const onTaskAgent = activeConversationId === null || isTaskAgentConversation(activeConversationId, rows);
   const chatId = onTaskAgent ? null : activeConversationId;
   const sectionTitles = (artefact.data?.sections ?? []).map((section) => section.title);
-  // Chats need a result to ask about. Either source may be behind: the task
-  // read model until its next refetch, the run stream until its replay
-  // reaches the final status frame.
-  // Task 045 (S15): a scoping task has a result once a baseline or a
-  // longlist exists; an Evidence search reads its latest run, as before.
-  const chatsEnabled =
-    hasTaskResult(task.data, { hasBaseline: isBaselineArtefact(artefact.data) }) ||
-    hasResult(stream.run?.status);
+  const chatsEnabled = useChatsEnabled(taskId);
   // The site footer opens only on a deliberate scroll past the conversation's
   // end (the other tabs reveal theirs at the end of their scroll pane), and
   // hides again on any scroll up — so the composer can rest at the bottom.
@@ -76,7 +68,7 @@ export function WorkspaceView() {
   // Undefined while `task` is still loading reads as "not the owner" —
   // fail closed, never grant the mutation surface before ownership is known.
   const isOwner = task.data?.is_owner === true;
-  const isScoping = task.data?.capability === "options_scoping";
+  const scoping = isScoping(task.data);
   const openPlan = () => {
     setPlanPlacement("center");
     setPlanOpen(true);
@@ -96,7 +88,7 @@ export function WorkspaceView() {
       // the Evidence search rule would lock the plan the moment a walk had
       // ever run, leaving that state unreachable. Only an ACTIVE walk locks
       // a scoping plan; ownership still gates both.
-      readOnly={(isScoping ? runActive : hasRun) || !isOwner}
+      readOnly={(scoping ? runActive : hasRun) || !isOwner}
       onClose={() => setPlanOpen(false)}
       onDock={() => setPlanPlacement("side")}
       onStarted={() => {

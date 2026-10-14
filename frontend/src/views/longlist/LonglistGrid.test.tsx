@@ -135,7 +135,7 @@ describe("LonglistGrid", () => {
     }));
     render(
       <MemoryRouter>
-        <LonglistGrid taskId={TASK_ID} longlist={longlist} />
+        <LonglistGrid taskId={TASK_ID} longlist={longlist} showExcluded={false} />
       </MemoryRouter>,
     );
     expect(screen.getAllByRole("link", { name: /Crowd option/ })).toHaveLength(4);
@@ -159,7 +159,7 @@ describe("LonglistGrid", () => {
     }));
     render(
       <MemoryRouter>
-        <LonglistGrid taskId={TASK_ID} longlist={longlist} />
+        <LonglistGrid taskId={TASK_ID} longlist={longlist} showExcluded={false} />
       </MemoryRouter>,
     );
     expect(screen.getAllByRole("link", { name: /Five option/ })).toHaveLength(4);

@@ -1,5 +1,5 @@
 import type { components } from "../../api/gen/types";
-import { conflictSentences, isConflictCode } from "../../lib/errors";
+import { countOf } from "../../lib/vocabulary";
 import { PROFILE_LINE_LABELS } from "../workspace/planVocabulary";
 
 /**
@@ -38,7 +38,7 @@ export function originLabel(
 ): string {
   switch (origin) {
     case "clustered":
-      return `clustered from ${documentCount} ${documentCount === 1 ? "document" : "documents"}`;
+      return `clustered from ${countOf(documentCount, "document", "documents")}`;
     case "suggested":
       return "suggested by Policy Atlas";
     case "from_evidence_search":
@@ -65,24 +65,6 @@ export function documentPlaceLabel(place: string | null | undefined): string | n
   return place;
 }
 
-/** Join a `{label: count}` map as "{n} {label}, …" (the evidence-type and
- *  quality-tier sentences), in insertion order — the fixture and the real
- *  read model both order "not rated" last. Tier names are single words and
- *  read better lowercase; evidence-type names keep their case (acronyms). */
-export function joinCounts(counts: Record<string, number> | undefined, lowercase = false): string {
-  return Object.entries(counts ?? {})
-    .map(([label, n]) => `${n} ${lowercase ? label.toLowerCase() : label}`)
-    .join(", ");
-}
-
-/** The notice a failed add / exclude / include shows (task 045, F15): the
- *  API's conflict sentence when it names one (a walk opened meanwhile),
- *  else the action's own fallback. */
-export function actionFailedNotice(error: unknown, fallback: string): string {
-  const code = (error as { code?: string } | null | undefined)?.code;
-  return isConflictCode(code) ? conflictSentences[code] : fallback;
-}
-
 /** A constraint's text as a label: its own full stop dropped, so "…cuts.:
  *  passes" and 'breaks "…run.".' do not double up. */
 export function constraintLabel(text: string): string {
@@ -104,16 +86,7 @@ export function originShort(
   origin: OptionSummaryOut["origin"],
   fromSection?: string | null,
 ): string | null {
-  switch (origin) {
-    case "clustered":
-      return null;
-    case "suggested":
-      return "suggested by Policy Atlas";
-    case "from_evidence_search":
-      return fromEvidenceSearch(fromSection);
-    case "added_by_you":
-      return "added by you";
-  }
+  return origin === "clustered" ? null : originLabel(origin, 0, fromSection);
 }
 
 /** A list row's grey meta parts after the lever type (task 046, amendment 4, R85):
@@ -224,11 +197,6 @@ export function leverDefinitionFor(
   return typed === undefined ? current : definitionSentence(typed.definition);
 }
 
-/** "{n} document(s)", the unit the card counts evidence in. */
-export function documentCount(n: number): string {
-  return `${n} ${n === 1 ? "document" : "documents"}`;
-}
-
 export const SCOPING_PASS_SENTENCE =
   "Screened on titles and abstracts · nothing read in full · document set not confirmed";
 
@@ -248,8 +216,8 @@ export function countsParts(counts: LonglistCountsOut): {
     // No theme count before the theme step has run (or when it wrote none):
     // "in 0 themes" would read as a result (review of task 046, 2026-10-12).
     head:
-      `${counts.options} ${counts.options === 1 ? "option" : "options"}` +
-      (counts.themes > 0 ? ` in ${counts.themes} ${counts.themes === 1 ? "theme" : "themes"}` : ""),
+      countOf(counts.options, "option", "options") +
+      (counts.themes > 0 ? ` in ${countOf(counts.themes, "theme", "themes")}` : ""),
     excluded: counts.excluded > 0 ? `${counts.excluded} excluded` : null,
     noInScope: counts.no_in_scope > 0 ? `${counts.no_in_scope} with no in-scope evidence` : null,
   };
@@ -284,17 +252,10 @@ export const PROFILE_LINE_KEYS = (Object.keys(PROFILE_LINE_LABELS) as string[]).
 );
 
 /** The name of a profile line or of ambition (R40). */
-export const LINE_NAMES: Record<ProfileLineKey | "ambition", string> = {
-  cost: PROFILE_LINE_LABELS.cost,
-  time_to_set_up: PROFILE_LINE_LABELS.time_to_set_up,
-  time_to_effect: PROFILE_LINE_LABELS.time_to_effect,
-  workforce: PROFILE_LINE_LABELS.workforce,
-  who_decides: PROFILE_LINE_LABELS.who_decides,
-  dependencies: PROFILE_LINE_LABELS.dependencies,
-  coordination: PROFILE_LINE_LABELS.coordination,
-  delivery_complexity: PROFILE_LINE_LABELS.delivery_complexity,
-  ambition: "Ambition",
-};
+export const LINE_NAMES = { ...PROFILE_LINE_LABELS, ambition: "Ambition" } as Record<
+  ProfileLineKey | "ambition",
+  string
+>;
 
 /** The level word each mark takes on each line (R40, R44); `null` where the
  *  line never carries a mark. */
@@ -322,18 +283,16 @@ export const GRID_COLUMN_LINES: readonly (ProfileLineKey | "ambition")[] = [
   "delivery_complexity",
 ];
 
+/** The shape every tinted word shares (level words, authority words). */
+export const WORD_TINT_BASE = "inline-block px-1.5 py-0.5 text-meta font-semibold leading-tight";
+
 /** The tint behind a level word: pale aqua for the lower level, pale violet
  *  for the higher one; navy text on both (the lead's proposal, for the owner
  *  to decide on the built screen). */
 export const LEVEL_WORD_CLASS: Record<Mark, string> = {
-  less: "inline-block bg-aqua-tint px-1.5 py-0.5 text-meta font-semibold leading-tight text-navy",
-  more: "inline-block bg-violet-tint px-1.5 py-0.5 text-meta font-semibold leading-tight text-navy",
+  less: `${WORD_TINT_BASE} bg-aqua-tint text-navy`,
+  more: `${WORD_TINT_BASE} bg-violet-tint text-navy`,
 };
-
-/** The level word for a mark on a line, or null when there is none to show. */
-export function levelWord(line: ProfileLineKey | "ambition", mark: Mark | null | undefined): string | null {
-  return mark == null ? null : LEVEL_WORDS[line][mark];
-}
 
 /** The authority labels' words (R43); a null body reads "another body". */
 export const AUTHORITY_LABELS: Record<AuthorityOut["label"], string> = {
@@ -363,11 +322,6 @@ export function servesOutcome(served: readonly string[] | undefined, outcome: st
   return (served ?? []).some((name) => name.trim().toLowerCase() === key);
 }
 
-/** A document's role on the option, as a chip: "Evaluated it". */
-export function roleLabel(role: "evaluated" | "described" | "recommended" | "mentioned"): string {
-  return `${capitalise(role)} it`;
-}
-
 type EvaluatedCountryOut = components["schemas"]["EvaluatedCountryOut"];
 type JudgementOut = components["schemas"]["JudgementOut"];
 type GuessOut = components["schemas"]["GuessOut"];
@@ -390,9 +344,6 @@ export function countryWithArticle(name: string): string {
   const key = fold(name);
   return key.startsWith("united") || COUNTRIES_WITH_THE.includes(key) ? `the ${name}` : name;
 }
-
-/** "1 document" / "3 documents" with the number. */
-const countOf = (n: number, one: string, many: string): string => `${n} ${n === 1 ? one : many}`;
 
 /** The countries part of the evidence signal (R76): the countries in served order. */
 function evaluatedInPart(countries: readonly EvaluatedCountryOut[]): string {

@@ -1,5 +1,6 @@
-import { LIFECYCLE_LABELS } from "../../lib/vocabulary";
+import { LIFECYCLE_LABELS, countOf } from "../../lib/vocabulary";
 import type { PlanDraft, RunStatus, StageEntry, StageStatus } from "../../store";
+import { isScoping } from "../scopingActivity";
 import { timelineSummary } from "./journey/presentation";
 import { stepsForAnalysisDepth, type PlanStepPreview } from "./planVocabulary";
 
@@ -33,10 +34,6 @@ export const RUNNING_CARD_RULE_CLASS = "border-t border-[rgba(23,168,141,0.4)]";
 export const SEE_PLAN_CTA_CLASS =
   "inline-block cursor-pointer border-2 border-blue bg-paper px-6 py-3.5 text-body font-bold text-blue";
 
-/** Chat-thread notice once the run has landed. */
-export const RUN_FINISHED_MESSAGE =
-  `Evidence search is finished. You can read the report in the ${LIFECYCLE_LABELS.result} tab.`;
-
 /** What kind of walk a run card describes (task 045): an Evidence search, a
  *  scoping task's baseline walk, its longlist walk, or an added option's own
  *  search. The words on the card and the finished notice follow it — "the
@@ -62,7 +59,7 @@ export function walkKind(
   stages: StageEntry[],
   purpose?: string | null,
 ): WalkKind {
-  if (capability !== "options_scoping") return "evidence_search";
+  if (!isScoping({ capability })) return "evidence_search";
   if (purpose === "targeted") return "option_search";
   if (purpose === "longlist" || purpose === "baseline") return purpose;
   return stages.some((entry) => LONGLIST_STAGES.has(entry.stage)) ? "longlist" : "baseline";
@@ -297,11 +294,6 @@ function num(summary: StageEntry["summary"] | undefined, key: string): number | 
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
-/** Pluralise a count: `1 option` / `2 options`. */
-function count(n: number, singular: string, plural: string): string {
-  return `${n} ${n === 1 ? singular : plural}`;
-}
-
 /**
  * One code-authored beat sentence for a completed stage, read from the
  * frame's `summary` counts. `null` for stages with no beat (including every
@@ -317,7 +309,7 @@ export function beatSentence(
       const suggested = num(summary, "suggested");
       if (suggested === null) return null;
       const fromReport = num(summary, "from_report") ?? 0;
-      let out = `Suggested ${count(suggested, "option", "options")}`;
+      let out = `Suggested ${countOf(suggested, "option", "options")}`;
       if (fromReport > 0) out += ` · ${fromReport} from your evidence search`;
       return out;
     }
@@ -327,7 +319,7 @@ export function beatSentence(
       if (total === 0) return "No option searches to run";
       const finished = num(summary, "finished") ?? 0;
       const failed = num(summary, "failed") ?? 0;
-      let out = `Searched for ${finished} of ${count(total, "option", "options")}`;
+      let out = `Searched for ${finished} of ${countOf(total, "option", "options")}`;
       if (failed > 0) out += ` · ${failed} failed`;
       return out;
     }
@@ -336,7 +328,7 @@ export function beatSentence(
       if (documents === null) return null;
       const links = num(summary, "links") ?? 0;
       const failedLinks = num(summary, "failed_links") ?? 0;
-      let out = `${count(documents, "document", "documents")} from ${count(links, "linked task", "linked tasks")}`;
+      let out = `${countOf(documents, "document", "documents")} from ${countOf(links, "linked task", "linked tasks")}`;
       if (failedLinks > 0) out += ` · ${failedLinks} could not be read`;
       return out;
     }
@@ -345,8 +337,8 @@ export function beatSentence(
       const records = num(summary, "records");
       if (documents === null && records === null) return null;
       const parts: string[] = [];
-      if (documents !== null) parts.push(`Read ${count(documents, "abstract", "abstracts")}`);
-      if (records !== null) parts.push(`${count(records, "intervention", "interventions")} covered`);
+      if (documents !== null) parts.push(`Read ${countOf(documents, "abstract", "abstracts")}`);
+      if (records !== null) parts.push(`${countOf(records, "intervention", "interventions")} covered`);
       return parts.join(" · ");
     }
     case "longlist": {
@@ -354,8 +346,8 @@ export function beatSentence(
       if (options === null) return null;
       const unclustered = num(summary, "unclustered");
       const notAnOption = num(summary, "not_an_option");
-      const parts: string[] = [count(options, "option", "options")];
-      if (unclustered !== null) parts.push(`${count(unclustered, "record", "records")} unclustered`);
+      const parts: string[] = [countOf(options, "option", "options")];
+      if (unclustered !== null) parts.push(`${countOf(unclustered, "record", "records")} unclustered`);
       if (notAnOption !== null) parts.push(`${notAnOption} not an option`);
       return parts.join(" · ");
     }
@@ -371,12 +363,9 @@ export function beatSentence(
     case "theme": {
       const themes = num(summary, "themes");
       if (themes === null) return null;
-      return `${count(themes, "theme", "themes")}`;
+      return `${countOf(themes, "theme", "themes")}`;
     }
-    // Task 046 (R37): the step's label, "Writing what each option would
-    // take", is its only sentence; it shows no count.
-    case "option_profile":
-      return null;
+    // option_profile (task 046, R37): the step's label is its only sentence.
     default:
       return null;
   }

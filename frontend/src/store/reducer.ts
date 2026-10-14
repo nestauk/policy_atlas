@@ -27,7 +27,7 @@ import {
 /** Task 045 (A3): a stage frame names its walk; one from a different walk
  *  than the tracked run (a longlist walk's option search) is not this
  *  timeline's. A frame without a run id (older events) still applies. */
-function isOtherRunsStage(state: RunStreamState, runId: string | null): boolean {
+export function isOtherRunsStage(state: RunStreamState, runId: string | null): boolean {
   return runId !== null && state.run !== null && runId !== state.run.id;
 }
 

@@ -1,6 +1,6 @@
 export { hasTerminalPartialLiveArtefact } from "./reducer";
 export { useTaskAgentTranscript } from "./transcript";
-export { composeTaskAgentThread, taskAgentAnswerRow, taskAgentTurnKind } from "./thread";
+export { composeTaskAgentThread, taskAgentAnswerRow } from "./thread";
 export { useChatConversation, useComposerDraft } from "./conversations";
 export { RunStreamProvider, useRunStream } from "./useRunStream";
 export { createInitialRunStreamState } from "./types";

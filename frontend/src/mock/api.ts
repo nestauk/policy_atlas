@@ -9,7 +9,6 @@ import {
   mockBaselineGateCheckIn,
   mockScopingAnswerTurn,
   mockScopingDecisionTurn,
-  seedScopingTaskAgentTurns,
   MOCK_BASELINE_CHECK_IN_ID,
   mockArtefactSkeleton,
   mockCheckIn,
@@ -194,6 +193,11 @@ let currentPlan: components["schemas"]["PlanDraft"] = { ...mockPlanReady };
 // while `mockTask.capability === "options_scoping"`.
 let currentScopingPlan: components["schemas"]["ScopingPlanDraft"] = { ...mockScopingPlanReady };
 
+/** A scoping task's `PlanOut` at a version. */
+function scopingPlanOut(version: number) {
+  return { capability: "options_scoping", plan: null, scoping: currentScopingPlan, version, status: "approved" } as const;
+}
+
 // --- Identity + projects (task 033 phase 10a) --------------------------
 // `currentMe` defaults to the unenrolled fixture — dark launch: every
 // pre-033 mock journey sees `organisation: null` and stays unchanged. Tests
@@ -325,12 +329,7 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
     // current task as a "Starts from" candidate — its name is captured here,
     // before the same object below is overwritten to become the new task.
     const sourceTaskName = mockTask.name;
-    // Task 044 Phase 5.5: a scoping task's thread starts from its own one
-    // planning turn — the Evidence search seed above is another task's
-    // history and would read as this one's.
     if (capability === "options_scoping") {
-      taskAgentTurns = seedScopingTaskAgentTurns();
-      nextTurnIndex = 2;
       baselineGateAnswer = createDeferred();
       baselineGateDecision = null;
     }
@@ -490,15 +489,9 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
   // `ready` — see mockPlanReady / mockScopingPlanReady) -------------------
   if (method === "GET" && path.endsWith(`/api/v1/tasks/${MOCK_TASK_ID}/plan`)) {
     if (mockTask.capability === "options_scoping") {
-      return json({
-        capability: "options_scoping",
-        plan: null,
-        scoping: currentScopingPlan,
-        // Task 045 (6.3): the version moves with each edit and confirm, so
-        // the plan document can tell a longlist built from an older version.
-        version: mockScopingPlanVersion,
-        status: "approved",
-      });
+      // Task 045 (6.3): the version moves with each edit and confirm, so
+      // the plan document can tell a longlist built from an older version.
+      return json(scopingPlanOut(mockScopingPlanVersion));
     }
     return json({ capability: "evidence_search", plan: currentPlan, version: 1, status: "approved" });
   }
@@ -518,14 +511,7 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
     // minted (a rebuild when a longlist already exists — D14, P12).
     mockScopingPlanVersion = minted;
     const openedRun = requestMockLonglistWalk(minted);
-    return json({
-      capability: "options_scoping",
-      plan: null,
-      scoping: currentScopingPlan,
-      version: minted,
-      status: "approved",
-      opened_run: openedRun,
-    });
+    return json({ ...scopingPlanOut(minted), opened_run: openedRun });
   }
   if (method === "PATCH" && path.endsWith(`/api/v1/tasks/${MOCK_TASK_ID}/plan`)) {
     const body = await requestBody(request, init);
@@ -551,13 +537,7 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
         };
       }
       mockScopingPlanVersion += 1;
-      return json({
-        capability: "options_scoping",
-        plan: null,
-        scoping: currentScopingPlan,
-        version: mockScopingPlanVersion,
-        status: "approved",
-      });
+      return json(scopingPlanOut(mockScopingPlanVersion));
     }
     if (isRecord(body)) {
       if (typeof body.question === "string") currentPlan = { ...currentPlan, question: body.question };
@@ -887,24 +867,19 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
   if (method === "GET" && path.endsWith(`/api/v1/tasks/${MOCK_TASK_ID}/longlist`)) {
     return json(mockLonglist());
   }
-  const optionExcludeMatch = new RegExp(`^/api/v1/tasks/${MOCK_TASK_ID}/options/([^/]+)/exclude$`).exec(path);
-  if (method === "POST" && optionExcludeMatch) {
-    const option = mockLonglistOptionCards[optionExcludeMatch[1]];
+  const optionVerbMatch = new RegExp(`^/api/v1/tasks/${MOCK_TASK_ID}/options/([^/]+)/(exclude|include)$`).exec(path);
+  if (method === "POST" && optionVerbMatch) {
+    const option = mockLonglistOptionCards[optionVerbMatch[1]];
     if (option === undefined) return json({ detail: "resource not found" }, 404);
+    if (optionVerbMatch[2] === "include") {
+      option.state = "included";
+      option.exclusion = null;
+      return json(option);
+    }
     const body = await requestBody(request, init);
     const reason = isRecord(body) && typeof body.reason === "string" ? body.reason : "";
     option.state = "excluded";
     option.exclusion = { by: "user", constraint: "your decision", reason };
-    return json(option);
-  }
-  const optionIncludeMatch = new RegExp(`^/api/v1/tasks/${MOCK_TASK_ID}/options/([^/]+)/include$`).exec(path);
-  if (method === "POST" && optionIncludeMatch) {
-    const option = mockLonglistOptionCards[optionIncludeMatch[1]];
-    if (option === undefined) return json({ detail: "resource not found" }, 404);
-    const body = await requestBody(request, init);
-    void body; // OptionIncludeIn's optional reason isn't rendered anywhere yet
-    option.state = "included";
-    option.exclusion = null;
     return json(option);
   }
   if (method === "POST" && path.endsWith(`/api/v1/tasks/${MOCK_TASK_ID}/options`)) {

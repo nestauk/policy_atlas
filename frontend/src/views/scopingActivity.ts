@@ -1,4 +1,5 @@
 import type { components } from "../api/gen/types";
+import { hasResult } from "./lifecycle";
 
 /**
  * What exists and what is active (task 045, S15; ADR 0039 decision 5).
@@ -101,8 +102,13 @@ export function hasTaskResult(
   task: TaskActivity | null | undefined,
   options?: { hasBaseline?: boolean },
 ): boolean {
-  const finished = (status: RunStatus | undefined) =>
-    status === "succeeded" || status === "degraded";
-  if (!isScoping(task)) return finished(task?.latest_run?.status);
-  return hasLonglist(task) || options?.hasBaseline === true || finished(task?.latest_run?.status);
+  if (!isScoping(task)) return hasResult(task?.latest_run?.status);
+  return hasLonglist(task) || options?.hasBaseline === true || hasResult(task?.latest_run?.status);
+}
+
+/** Whether this artefact is an options-scoping baseline (task 044): the
+ *  roll-up's own `template` word (written by synthesise in baseline mode),
+ *  never inferred from the section titles or the task's kind. */
+export function isBaselineArtefact(artefact: { template?: string | null } | null | undefined): boolean {
+  return artefact?.template === "baseline";
 }

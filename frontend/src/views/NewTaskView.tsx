@@ -259,9 +259,7 @@ function QuestionForm({ capability }: { capability: SelectableCapabilityKey }) {
         question,
         projectId: projectId === "" ? null : projectId,
         capability,
-        // Omitted rather than sent empty: keeps the create body identical to
-        // before this control existed for every caller that picks nothing.
-        ...(capability === "options_scoping" && fromTaskIds.length > 0 ? { fromTaskIds } : {}),
+        fromTaskIds,
       },
       { onSuccess: (task) => void navigate(`/tasks/${task.task_id}`) },
     );

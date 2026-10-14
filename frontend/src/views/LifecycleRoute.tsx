@@ -1,11 +1,11 @@
 import type { ReactNode } from "react";
 import { Navigate, useLocation, useParams } from "react-router";
 
-import { useArtefact, useTask } from "../api/queries";
-import { isBaselineArtefact } from "./baselineBand";
+import { useTask } from "../api/queries";
 import { PUBLIC_TABS, isTabOpen } from "./lifecycle";
 import type { LifecycleTab } from "./lifecycle";
-import { hasLonglist, isScoping, tabRunStatus } from "./scopingActivity";
+import { tabRunStatus } from "./scopingActivity";
+import { useTabOptions } from "./taskResult";
 
 /**
  * Gate one lifecycle route on the task's run state.
@@ -21,10 +21,7 @@ import { hasLonglist, isScoping, tabRunStatus } from "./scopingActivity";
 export function LifecycleRoute({ tab, children }: { tab: LifecycleTab; children: ReactNode }) {
   const { taskId } = useParams();
   const task = useTask(taskId ?? "");
-  // Task 044 (A17): only a scoping task's lock depends on a baseline
-  // existing, so only a scoping task pays for the read (an empty task id
-  // disables the query).
-  const artefact = useArtefact(isScoping(task.data) ? (taskId ?? "") : "");
+  const tabOptions = useTabOptions(taskId ?? "");
 
   if (task.isPending || task.data === undefined) return null;
   // Public-leg access (task 037): a signed-in outsider reading a public Task
@@ -42,13 +39,8 @@ export function LifecycleRoute({ tab, children }: { tab: LifecycleTab; children:
   // Task 045 (S15): the longlist's existence rides the task read model
   // (`has_longlist`), so the task's own fence above already covers it; the
   // tab status is `latest_run`'s, never an option search's.
-  if (isScoping(task.data) && artefact.isLoading) return null;
-  if (
-    !isTabOpen(tab, tabRunStatus(task.data), {
-      hasBaseline: isBaselineArtefact(artefact.data),
-      hasLonglist: hasLonglist(task.data),
-    })
-  ) {
+  if (tabOptions.baselineLoading) return null;
+  if (!isTabOpen(tab, tabRunStatus(task.data), tabOptions.options)) {
     return <Navigate to={`/tasks/${taskId}`} replace />;
   }
   return <>{children}</>;

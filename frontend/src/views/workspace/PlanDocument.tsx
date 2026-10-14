@@ -11,6 +11,7 @@ import { cn } from "../../ui/brand/cn";
 import { Popover, PopoverContent, PopoverTrigger } from "../../ui/radix/Popover";
 import { Tooltip } from "../../ui/radix/Tooltip";
 import { READING_COLUMN_MAX_W } from "../listPageChrome";
+import { isScoping } from "../scopingActivity";
 import {
   displayedEnum,
   displayedGeography,
@@ -123,11 +124,13 @@ function PanelSection({
 }: {
   label: string;
   editing: boolean;
-  onEdit: () => void;
-  onCancel: () => void;
-  onSave: () => void;
+  /** Omitted for a section with no Edit (the scoping plan's Starts from and
+   *  Steps). */
+  onEdit?: () => void;
+  onCancel?: () => void;
+  onSave?: () => void;
   view: React.ReactNode;
-  children: React.ReactNode;
+  children?: React.ReactNode;
   readOnly?: boolean;
 }) {
   return (
@@ -149,9 +152,11 @@ function PanelSection({
             </button>
           </div>
         ) : (
-          <button type="button" className={panelEditButtonClass} onClick={onEdit}>
-            Edit
-          </button>
+          onEdit !== undefined && (
+            <button type="button" className={panelEditButtonClass} onClick={onEdit}>
+              Edit
+            </button>
+          )
         ))}
       </div>
       <div className="mt-3">{editing ? children : view}</div>
@@ -325,35 +330,25 @@ function OriginTag({ origin }: { origin?: TaggedOut["origin"] | null }) {
   return <span className={cn("ml-2 italic", panelHintClass)}>({label})</span>;
 }
 
-/** One scoping section's frame: the same label/border chrome as the ES's
- *  `PanelSection`, but Edit seeds the composer rather than opening an inline
- *  form — there is nothing here to edit in place. */
+/** One scoping section: the ES's `PanelSection`, never in edit mode — Edit
+ *  seeds the composer rather than opening an inline form. */
 function ScopingSection({
   label,
   onEdit,
-  readOnly,
+  readOnly = true,
   children,
 }: {
   label: string;
-  /** Omitted entirely for a section the ES pattern also leaves un-editable
-   *  (Starts from, Steps and check-ins). */
   onEdit?: () => void;
-  readOnly: boolean;
+  readOnly?: boolean;
   children: React.ReactNode;
 }) {
-  return (
-    <section className="border-b border-white/15 pb-6 last:border-b-0">
-      <div className="flex items-start justify-between gap-3">
-        <h3 className={panelLabelClass}>{label}</h3>
-        {!readOnly && onEdit !== undefined && (
-          <button type="button" className={panelEditButtonClass} onClick={onEdit}>
-            Edit
-          </button>
-        )}
-      </div>
-      <div className="mt-3">{children}</div>
-    </section>
-  );
+  return <PanelSection label={label} editing={false} onEdit={onEdit} readOnly={readOnly} view={children} />;
+}
+
+/** The grey "Not decided yet" an unset field shows. */
+function NotDecided() {
+  return <span className="text-[#97a8bc] italic">{COPY.notDecided}</span>;
 }
 
 /** One provenance-tagged field, rendered with its origin words. */
@@ -368,7 +363,7 @@ function TaggedField({ label, tagged }: { label: string; tagged?: TaggedOut | nu
             <OriginTag origin={tagged.origin} />
           </>
         ) : (
-          <span className="text-[#97a8bc] italic">{COPY.notDecided}</span>
+          <NotDecided />
         )}
       </dd>
     </div>
@@ -383,7 +378,7 @@ function TaggedListField({ label, items }: { label: string; items?: TaggedOut[] 
       <dt className={panelHintClass}>{label}</dt>
       <dd className={panelValueClass}>
         {list.length === 0 ? (
-          <span className="text-[#97a8bc] italic">{COPY.notDecided}</span>
+          <NotDecided />
         ) : (
           <ul className="space-y-1">
             {list.map((item, index) => (
@@ -404,9 +399,8 @@ function TaggedListField({ label, items }: { label: string; items?: TaggedOut[] 
 function StartsFromSection({ links }: { links: TaskLinkOut[] }) {
   if (links.length === 0) return null;
   return (
-    <section className="border-b border-white/15 pb-6 last:border-b-0">
-      <h3 className={panelLabelClass}>Starts from</h3>
-      <ul className="mt-3 space-y-1.5 text-lead text-white">
+    <ScopingSection label="Starts from">
+      <ul className="space-y-1.5 text-lead text-white">
         {links.map((link) => (
           <li key={link.link_id}>
             {link.source_task_name === null
@@ -418,7 +412,7 @@ function StartsFromSection({ links }: { links: TaskLinkOut[] }) {
           </li>
         ))}
       </ul>
-    </section>
+    </ScopingSection>
   );
 }
 
@@ -470,13 +464,13 @@ function ScopingSettingsSection({
         <div>
           <dt className={panelHintClass}>Depth</dt>
           <dd className={panelValueClass}>
-            {depthLabel ?? <span className="text-[#97a8bc] italic">{COPY.notDecided}</span>}
+            {depthLabel ?? <NotDecided />}
           </dd>
         </div>
         <div>
           <dt className={panelHintClass}>Check-ins</dt>
           <dd className={panelValueClass}>
-            {checkInsLabel ?? <span className="text-[#97a8bc] italic">{COPY.notDecided}</span>}
+            {checkInsLabel ?? <NotDecided />}
           </dd>
         </div>
       </dl>
@@ -663,9 +657,8 @@ function ScopingStepsSection({ steps }: { steps: ScopingPlanDraft["steps"] }) {
   const list = steps ?? [];
   if (list.length === 0) return null;
   return (
-    <section className="border-b border-white/15 pb-6 last:border-b-0">
-      <h3 className={panelLabelClass}>Steps and check-ins</h3>
-      <ol className="mt-3 list-none space-y-2 pl-1 text-lead text-[#e8edf2]">
+    <ScopingSection label="Steps and check-ins">
+      <ol className="list-none space-y-2 pl-1 text-lead text-[#e8edf2]">
         {list.map((step, index) => (
           <li key={step.stage} className="flex gap-1.5">
             <span aria-hidden="true" className="w-4 shrink-0 tabular-nums">
@@ -678,7 +671,7 @@ function ScopingStepsSection({ steps }: { steps: ScopingPlanDraft["steps"] }) {
           </li>
         ))}
       </ol>
-    </section>
+    </ScopingSection>
   );
 }
 
@@ -707,12 +700,11 @@ function ScopingStartActions({
   }
 
   if (state.kind === "confirmed" || state.kind === "rebuild_longlist") {
-    const action = state.kind === "confirmed" ? state.build : state.rebuild;
     return (
       <div className="space-y-3">
         {lineElement}
-        <Button className={cn(START_SEARCH_CLASS)} disabled={action.disabled} onClick={action.onConfirm}>
-          {action.label}
+        <Button className={cn(START_SEARCH_CLASS)} disabled={state.action.disabled} onClick={state.action.onClick}>
+          {state.action.label}
         </Button>
         {state.notice != null && (
           <p role="alert" className="text-body text-red-tint">
@@ -726,8 +718,8 @@ function ScopingStartActions({
   if (state.kind === "build") {
     return (
       <div>
-        <Button className={cn(START_SEARCH_CLASS)} disabled={state.disabled} onClick={state.onStart}>
-          {state.label}
+        <Button className={cn(START_SEARCH_CLASS)} disabled={state.action.disabled} onClick={state.action.onClick}>
+          {state.action.label}
         </Button>
         {state.timeBand != null && state.timeBand !== "" && (
           <p className="mt-2 text-body text-[#97a8bc]">{scrub(state.timeBand)}</p>
@@ -743,10 +735,10 @@ function ScopingStartActions({
 
   return (
     <div className="flex flex-wrap items-center gap-3">
-      <Button className={cn(START_SEARCH_CLASS)} disabled={state.rebuild.disabled} onClick={state.rebuild.onStart}>
+      <Button className={cn(START_SEARCH_CLASS)} disabled={state.rebuild.disabled} onClick={state.rebuild.onClick}>
         {state.rebuild.label}
       </Button>
-      <Button variant="secondary" disabled={state.confirm.disabled} onClick={state.confirm.onConfirm}>
+      <Button variant="secondary" disabled={state.confirm.disabled} onClick={state.confirm.onClick}>
         {state.confirm.label}
       </Button>
       {state.notice != null && (
@@ -865,8 +857,8 @@ export function PlanDocument({
   // normalizes `draft` to `undefined` for a scoping task so every existing
   // `draft !== undefined` check below stays an honest "no ES plan to show",
   // never a null slipping through as a truthy-looking draft object.
-  const isScoping = planQuery.data?.capability === "options_scoping";
-  const draft = isScoping ? undefined : (planQuery.data?.plan ?? undefined);
+  const scopingPlan = isScoping(planQuery.data);
+  const draft = scopingPlan ? undefined : (planQuery.data?.plan ?? undefined);
   const {
     start,
     discardAndStart,
@@ -962,12 +954,13 @@ export function PlanDocument({
   const previewSources = editingFilters ? filterDraft.backend_scope : sources;
   const expectedRunTime = timeBandFor(previewEffort, previewDepth) ?? draft?.time_band ?? null;
   const agreedSteps = stepsForAnalysisDepth(previewDepth, previewSources);
+  const closeLabel = scopingPlan ? "Close the scoping plan" : "Close the search plan";
 
   return (
     <aside
       role="dialog"
       aria-modal={placement === "center"}
-      aria-label={isScoping ? "Scoping plan" : "Search plan"}
+      aria-label={scopingPlan ? "Scoping plan" : "Search plan"}
       className={cn(
         "relative flex h-full min-h-0 flex-col overflow-hidden bg-navy text-white",
         placement === "side"
@@ -982,7 +975,7 @@ export function PlanDocument({
               showDock
               onDock={onDock}
               onClose={onClose}
-              closeLabel={isScoping ? "Close the scoping plan" : "Close the search plan"}
+              closeLabel={closeLabel}
               className="pointer-events-auto absolute top-0 right-0 translate-x-[calc(100%+0.5rem)] max-[52rem]:translate-x-0"
             />
           </div>
@@ -994,9 +987,9 @@ export function PlanDocument({
           <div className="mb-6 flex items-start justify-between gap-3 border-b border-white/15 pb-6">
             <header className="min-w-0 flex-1">
               <h2 className="text-heading font-extrabold text-white">
-                {isScoping ? "Scoping plan" : "Search plan"}
+                {scopingPlan ? "Scoping plan" : "Search plan"}
               </h2>
-              {!isScoping && expectedRunTime != null && expectedRunTime !== "" && (
+              {!scopingPlan && expectedRunTime != null && expectedRunTime !== "" && (
                 <p className="mt-1 text-body text-[#97a8bc]">
                   Expected run time: {scrub(expectedRunTime)}
                 </p>
@@ -1006,7 +999,7 @@ export function PlanDocument({
               <PlanChrome
                 showDock={false}
                 onClose={onClose}
-                closeLabel={isScoping ? "Close the scoping plan" : "Close the search plan"}
+                closeLabel={closeLabel}
                 className="shrink-0"
               />
             )}
@@ -1019,7 +1012,7 @@ export function PlanDocument({
             </p>
           )}
 
-          {isScoping && planQuery.data?.scoping != null && (
+          {scopingPlan && planQuery.data?.scoping != null && (
             <ScopingPlanSections
               taskId={taskId}
               scoping={planQuery.data.scoping}
@@ -1030,7 +1023,7 @@ export function PlanDocument({
             />
           )}
 
-          {!isScoping && draft !== undefined && (
+          {draft !== undefined && (
             <div className="space-y-6">
             <PanelSection
               readOnly={readOnly}
@@ -1093,7 +1086,7 @@ export function PlanDocument({
                         <FieldTitle label={label} hint={hint} className={panelHintClass} />
                       </dt>
                       <dd className={panelValueClass}>
-                        {value ?? <span className="text-[#97a8bc] italic">{COPY.notDecided}</span>}
+                        {value ?? <NotDecided />}
                       </dd>
                     </div>
                   ))}
@@ -1167,7 +1160,7 @@ export function PlanDocument({
                     <dt className={panelHintClass}>Sources</dt>
                     <dd className={panelValueClass}>
                       {vocabLabel(SOURCES_LABEL, sources) ?? (
-                        <span className="text-[#97a8bc] italic">{COPY.notDecided}</span>
+                        <NotDecided />
                       )}
                     </dd>
                   </div>
@@ -1330,7 +1323,7 @@ export function PlanDocument({
           </div>
           )}
 
-          {!isScoping && !readOnly && (
+          {!scopingPlan && !readOnly && (
           <div className="pt-8">
             <Button className={cn(START_SEARCH_CLASS)} disabled={startDisabled} onClick={start}>
               {startLabel}

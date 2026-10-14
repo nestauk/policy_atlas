@@ -267,9 +267,8 @@ export function useConfirmBaseline(taskId: string) {
 
 // --- Longlist (task 045 phase 6.2) --------------------------------------
 
-/** Invalidate the longlist, every option card and the task itself — shared
- *  by the three longlist mutations below (each writes the longlist's
- *  header counts, an option's card, and can change `TaskOut.active_run`). */
+/** Invalidate the longlist, every option card and the task itself (an add
+ *  writes the header counts and can change `TaskOut.active_run`). */
 function invalidateLonglist(queryClient: ReturnType<typeof useQueryClient>, taskId: string) {
   queryClient.invalidateQueries({ queryKey: [...queryKeys.taskRoot(taskId), "longlist"] });
   queryClient.invalidateQueries({ queryKey: [...queryKeys.taskRoot(taskId), "options"] });
@@ -295,15 +294,16 @@ export function useAddOption(taskId: string) {
   });
 }
 
-/** `POST .../options/{option_id}/exclude` — exclude an option, with the
- *  user's reason when given (optional — owner, 2026-09-24). */
-export function useExcludeOption(taskId: string) {
+/** `POST .../options/{option_id}/exclude` (with the user's optional reason)
+ *  or `.../include` (a rebuild's constrain will not exclude it again). Both
+ *  return the option's card, written straight into its query. */
+export function useOptionVerb(taskId: string, verb: "exclude" | "include") {
   const client = useApiClient();
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (input: { optionId: string; reason?: string }) => {
       const { data, error, response } = await client.POST(
-        "/api/v1/tasks/{task_id}/options/{option_id}/exclude",
+        `/api/v1/tasks/{task_id}/options/{option_id}/${verb}`,
         {
           params: { path: { task_id: taskId, option_id: input.optionId } },
           body: input.reason !== undefined ? { reason: input.reason } : null,
@@ -312,28 +312,11 @@ export function useExcludeOption(taskId: string) {
       if (data === undefined) raise(error, response.status);
       return data;
     },
-    onSuccess: () => invalidateLonglist(queryClient, taskId),
-  });
-}
-
-/** `POST .../options/{option_id}/include` — include an option again; a
- *  rebuild's constrain will not exclude it. */
-export function useIncludeOption(taskId: string) {
-  const client = useApiClient();
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async (input: { optionId: string; reason?: string }) => {
-      const { data, error, response } = await client.POST(
-        "/api/v1/tasks/{task_id}/options/{option_id}/include",
-        {
-          params: { path: { task_id: taskId, option_id: input.optionId } },
-          body: input.reason !== undefined ? { reason: input.reason } : null,
-        },
-      );
-      if (data === undefined) raise(error, response.status);
-      return data;
+    onSuccess: (data, input) => {
+      queryClient.setQueryData([...queryKeys.taskRoot(taskId), "options", input.optionId], data);
+      queryClient.invalidateQueries({ queryKey: [...queryKeys.taskRoot(taskId), "longlist"] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.task(taskId) });
     },
-    onSuccess: () => invalidateLonglist(queryClient, taskId),
   });
 }
 

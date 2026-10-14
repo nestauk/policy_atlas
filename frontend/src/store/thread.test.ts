@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { composeTaskAgentThread, taskAgentAnswerRow, taskAgentTurnKind } from "./thread";
+import { composeTaskAgentThread, taskAgentAnswerRow } from "./thread";
 import type {
   GateThreadInput,
   TaskAgentThreadCheckIn,
@@ -255,16 +255,6 @@ describe("composeTaskAgentThread at the baseline gate", () => {
   });
 });
 
-describe("taskAgentTurnKind", () => {
-  it("reads a pre-044 turn, which carries no kind at all, as a reply", () => {
-    expect(taskAgentTurnKind(turn(1))).toBe("reply");
-    expect(taskAgentTurnKind({ ...turn(1), kind: "answer" })).toBe("answer");
-  });
-
-  it("reads a confirmed longlist verb as an action (task 045)", () => {
-    expect(taskAgentTurnKind({ ...turn(1), kind: "action" })).toBe("action");
-  });
-});
 
 describe("taskAgentAnswerRow", () => {
   it("projects an answer turn onto the chat's turn shape, citations and all", () => {
