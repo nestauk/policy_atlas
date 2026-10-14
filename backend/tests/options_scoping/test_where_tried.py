@@ -26,6 +26,7 @@ from policy_atlas.options_scoping.longlist.where_tried import (
     document_where,
     record_where,
 )
+from tests.options_scoping.test_longlist_coverage_046 import _member as coverage_member
 
 _SRC = Path(__file__).resolve().parents[2] / "src" / "policy_atlas"
 
@@ -33,22 +34,21 @@ _SRC = Path(__file__).resolve().parents[2] / "src" / "policy_atlas"
 def _member(
     doc_key: str,
     *,
+    role: str = "evaluated",
     country: str | None = None,
     geography: str | None = None,
     tss_id: uuid.UUID | None = None,
+    outcome_tag: str | None = None,
 ) -> CoverageMember:
-    return CoverageMember(
-        unit_kind="interventions",
+    """The shared coverage-member factory, keyed by a whole document key."""
+    return coverage_member(
+        "",
         doc_key=doc_key,
-        tss_id=tss_id,
-        role="evaluated",
-        basis="abstract_only",
-        flagged=False,
-        unit=None,
-        setting=None,
-        outcome=None,
-        study_geography=geography,
+        role=role,
         study_country=country,
+        study_geography=geography,
+        tss_id=tss_id,
+        outcome_tag=outcome_tag,
     )
 
 
@@ -365,28 +365,7 @@ def test_the_place_key_folds_hyphens_spaces_and_the(text: str, key: str) -> None
 # --- The evidence signal and the place checks (R76, R87; S29, S32) ------------
 
 
-def _signal_member(
-    doc_key: str,
-    *,
-    role: str = "evaluated",
-    country: str | None = None,
-    geography: str | None = None,
-    outcome_tag: str | None = None,
-) -> CoverageMember:
-    return CoverageMember(
-        unit_kind="interventions",
-        doc_key=doc_key,
-        tss_id=None,
-        role=role,
-        basis="abstract_only",
-        flagged=False,
-        unit=None,
-        setting=None,
-        outcome=None,
-        study_geography=geography,
-        study_country=country,
-        outcome_tag=outcome_tag,
-    )
+_signal_member = _member
 
 
 def _countries(members: list[CoverageMember], where: str | None = None) -> list[object]:
