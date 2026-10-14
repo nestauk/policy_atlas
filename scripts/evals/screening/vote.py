@@ -1,20 +1,13 @@
-"""Turn stage-1 screen replies into the keep-or-drop the app would record.
-
-The rule is the one in ``evidence_search.assess.screen``: ``unsure`` votes to
-keep, a tie keeps, and a document with no abstract flips back to keep when any
-reply said ``relevant``. A run that asked for several replies needs at least
-``SCREEN_QUORUM`` replies that parsed; a one-reply run decides from that
-single reply, which is the cheaper experiment.
-"""
+"""Turn stage-1 screen replies into decisions for screening experiments."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 
-from policy_atlas.evidence_search.assess.screen_prompt import (
-    SCREEN_QUORUM,
-    ScreenRepWire,
-)
+from policy_atlas.evidence_search.assess.screen import decide_stage1
+from policy_atlas.evidence_search.assess.screen_prompt import ScreenRepWire
+
+MAJORITY_QUORUM = 2
 
 
 @dataclass(frozen=True)
@@ -25,7 +18,7 @@ class KeepDecision:
         status: ``relevant`` (kept), ``not_relevant`` (dropped), or ``failed``
             (too few replies parsed to decide).
         confidence: Probability the status is right, or ``None`` when failed.
-        flags: Short labels such as ``tie_broken`` or ``title_only_unanimity_applied`` (the production names).
+        flags: Short labels emitted by the selected vote rule.
     """
 
     status: str
@@ -51,41 +44,42 @@ def combine_reps(
     reps_requested: int,
     title_only: bool,
 ) -> KeepDecision:
-    """Apply the stage-1 keep rule to the replies that parsed.
+    """Apply the historical fixed-repetition majority rule to parsed replies.
+
+    This is ADR 0011's historical production rule, replaced in production by
+    task 051's adaptive vote.
 
     Args:
         reps: Replies that parsed and had a confidence between 0 and 1.
         reps_requested: How many replies the run asked for. Two or more use
-            the production quorum. One reply is a decision by itself.
-        title_only: True when the document has no abstract. Only then does a
-            single ``relevant`` reply overturn a ``not_relevant`` majority.
+            the literal quorum of two. One reply is a decision by itself.
+        title_only: Retained for historical call compatibility; it has no effect.
 
     Returns:
         The keep decision, including a confidence in ``[0, 1]`` when it decided.
     """
-    need_quorum = reps_requested >= SCREEN_QUORUM
-    if not reps or (need_quorum and len(reps) < SCREEN_QUORUM):
+    need_quorum = reps_requested >= MAJORITY_QUORUM
+    if not reps or (need_quorum and len(reps) < MAJORITY_QUORUM):
         return KeepDecision(status="failed", confidence=None, flags=())
 
     relevant_votes = sum(1 for rep in reps if _vote(rep) == "relevant")
     not_relevant_votes = len(reps) - relevant_votes
     flags: list[str] = []
-    if relevant_votes == not_relevant_votes:
-        status = "relevant"
-        flags.append("tie_broken")
-    elif relevant_votes > not_relevant_votes:
-        status = "relevant"
-    else:
-        status = "not_relevant"
-
-    if (
-        title_only
-        and status == "not_relevant"
-        and any(rep.decision == "relevant" for rep in reps)
-    ):
-        status = "relevant"
-        flags.append("title_only_unanimity_applied")
+    status = "relevant" if relevant_votes >= not_relevant_votes else "not_relevant"
 
     mean_p = sum(_p_relevant(rep) for rep in reps) / len(reps)
     confidence = mean_p if status == "relevant" else 1.0 - mean_p
     return KeepDecision(status=status, confidence=confidence, flags=tuple(flags))
+
+
+def combine_adaptive(attempts: list[ScreenRepWire | None]) -> KeepDecision:
+    """Apply production's adaptive stage-1 decision to up to two attempts."""
+    decision = decide_stage1(
+        attempts[0] if attempts else None,
+        attempts[1] if len(attempts) > 1 else None,
+    )
+    return KeepDecision(
+        status=decision.status,
+        confidence=decision.confidence,
+        flags=decision.flags,
+    )

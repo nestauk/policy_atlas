@@ -26,6 +26,13 @@ timestamp: 2026-09-25
 - **Sub-cent amounts print at four decimals.** OpenAlex reports `meta.cost_usd` of 0.0001
   per page with a key, so a two-decimal column shows $0.00 and reads as free. One shared
   formatter (`history.usd`) serves every table.
+- **An `llm` figure is Langfuse's price row, not the list price.** Langfuse computes
+  `total_cost` from the model rows configured in the project; the row for
+  `gpt-5.6-luna` was $1.00 / $0.10 / $6.00 per million (input / cached / output) against
+  the list price of $0.20 / $0.02 / $1.20 checked on 2026-10-08, so every 051 cost
+  figure read five times too high and a spend ceiling was "reached" on paper. Check the
+  row against the list price before reading a ceiling off Langfuse, and recompute from
+  the token counts when they differ (051 review, F11).
 - **A fetch-once cache checks the request, not only the entity.** A cache file keyed on
   the dataset item id must also store and compare the intent and cutoff it was fetched
   for; otherwise an edited item is scored against stale results with zero calls and no

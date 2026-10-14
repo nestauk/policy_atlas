@@ -68,7 +68,7 @@ say about).
 
 ### 2.1 Four one-request probes
 
-`measure/overton_recall.py`, intent sent verbatim, cutoff server-side.
+`experiments/overton_recall.py`, intent sent verbatim, cutoff server-side.
 
 | arm | what it does | cap 200 | ceiling |
 |---|---|---:|---:|
@@ -88,7 +88,7 @@ Pattern: topics governments write about gain; clinical topics do not.
 
 ### 2.2 Merged ranking
 
-`measure/merge_rank.py`. The OpenAlex pool of the best task-047 run (about 600 papers
+`experiments/merge_rank.py`. The OpenAlex pool of the best task-047 run (about 600 papers
 with in-set citations, coupling and citation counts) joined on DOI with the Overton
 cited papers (about 1,000, with policy in-set citations). Fourteen rules: one
 specificity for the union with policy citations weighted 0.5 to 3, reciprocal rank
@@ -127,7 +127,7 @@ rank first, for two extra hits.
 
 ### 2.4 What the DOI metric hides
 
-`measure/title_match.py`. The sample keeps a review only if 70% of its references have a
+`experiments/title_match.py`. The sample keeps a review only if 70% of its references have a
 DOI (50% for YEF), leaving 53 of 797 references outside the measure. Normalised title
 matching (strict, and a loose near-match rule with every match printed) of all 797
 against 5,341 Overton policy documents, the Overton-cited works without a DOI, and the
@@ -156,7 +156,7 @@ add them before concluding anything about policy-document recall.
 
 ### 3.1 Signals and orders
 
-`measure/policy_rank.py`. 200 policy documents by relevance, then:
+`experiments/policy_rank.py`. 200 policy documents by relevance, then:
 
 | order | what it is | calls |
 |---|---|---:|
@@ -208,7 +208,7 @@ tables under `results/overton/policy/`):
   (the SEED series, Starting Strong III, the systematic reviews). Held, pending a
   document-type filter. Forward added little the snowball lacked. Held.
 
-**Against a policy ground truth built from Overton** (`measure/policy_gt.py`). The
+**Against a policy ground truth built from Overton** (`experiments/policy_gt.py`). The
 paper ground truth holds no policy documents, so a second instrument: the target is
 the policy documents a gov.uk document cites, the cutoff its own date, itself
 excluded. Caveats first: every target is in Overton by construction, a strategy's

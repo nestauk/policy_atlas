@@ -35,7 +35,7 @@ A "document" in this eval is one row with four parts. The model sees the first t
 | Part | What it is |
 | --- | --- |
 | **Question** | The published title of the review or map, with an ending such as ": a systematic review" removed. It goes to the model as the scope intent, the same way a user's research question does in the app. With `--criteria`, the review's published criteria are added under it (see below). |
-| **Title and abstract** | One study from that review's data. The median abstract is about 1,500 characters. In `mini`, 19 of the 288 rows have no abstract; those go through the title-only keep rule. |
+| **Title and abstract** | One study from that review's data. The median abstract is about 1,500 characters. In `mini`, 13 of the 288 rows have no abstract and go through the title-only keep rule; 4 more have an abstract under 50 characters, which the screen reads as an abstract. |
 | **Human label** | 1 = include, 0 = exclude. What "exclude" means depends on the source (see below). |
 | **Model answer** | The stage-1 screen: three replies, then the vote, giving keep or drop. |
 
@@ -103,13 +103,15 @@ scripts/evals/screening/
 ├── adapter.py          load the three sources and sample them (mini or full)
 ├── vote.py             the app's keep rule
 ├── metrics.py          recall, precision, F2, and the dollar cost
-├── sync_s3.py          download the datasets and upload a run, via the AWS command line
-├── measure/run_screen.py     one run: screen, score, write a folder
-├── measure/analyse_runs.py   summarise and compare saved runs (no model calls)
-├── measure/rank_baselines.py non-AI baselines: BM25, embeddings, hybrid
+├── upload.py           the sampled rows -> Langfuse dataset (screening-ground-truth-mini / -full)
+├── checks/             measures the app's screen as built
+│   ├── run_screen.py   one run: screen, score, write a folder (flags change one setting for an experiment)
+│   └── analyse_runs.py summarise and compare saved runs (no model calls)
+├── experiments/        research scripts
+│   └── rank_baselines.py non-AI baselines: BM25, embeddings, hybrid
 ├── prompts/            replacement system prompts for prompt experiments
 ├── tests               self-checks, no network and no model calls
-├── datasets/           the downloaded files (not in git)
+├── datasets/           the downloaded files (not in git; ../sync_s3.py fills it)
 └── results/
     ├── history.md      headline numbers, kept by hand
     ├── analyses/       dated write-ups of an experiment (kept in git)
@@ -148,7 +150,25 @@ aws sts get-caller-identity
 Do this once, or again when the files on S3 change. The folder name `CESMeD` is the spelling in the bucket (capitals matter on Linux); the source itself is called CSMeD.
 
 ```
-uv run --project backend python scripts/evals/screening/sync_s3.py download
+uv run --project backend python scripts/evals/sync_s3.py screening download
+```
+
+`scripts/evals/sync_s3.py` is shared with the search eval: the first argument names the area. `--dry-run` lists what would be copied.
+
+### Where the data lives
+
+| Copy | Where | What |
+| --- | --- | --- |
+| Master | `s3://discovery-policy-atlas/eval/datasets/screening/` | The three labelled sources, about 300 MB |
+| Working | `datasets/` on your machine, not in git | What `sync_s3.py screening download` fetched |
+| Langfuse | `screening-ground-truth-mini`, `screening-ground-truth-full` | The sampled rows the eval scores, one item per document (288 and 2,949 items; 0.7 MB and 7.6 MB), from `upload.py`; uploaded 2026-10-14 |
+| Runs | `s3://discovery-policy-atlas/eval/results/screening/<folder>/` | One folder per uploaded run |
+
+The scripts still read `datasets/`. The Langfuse copy is there so the rows can be read without the source files and a run can be linked to its items. Run this again after the sample changes; it upserts, so items are updated, not duplicated:
+
+```
+# builds the items and prints a summary; add --dry-run to upload nothing
+uv run --project backend --env-file backend/.env python scripts/evals/screening/upload.py --dataset mini
 ```
 
 ### Where the questions come from
@@ -180,19 +200,19 @@ OpenAlex and 3ie can change their records, so the build also writes `targets_sou
 
 ```
 # mini dataset, production settings: gpt-5.4-mini, three replies per document
-uv run --project backend --env-file backend/.env python scripts/evals/screening/measure/run_screen.py
+uv run --project backend --env-file backend/.env python scripts/evals/screening/checks/run_screen.py
 
 # The same, with each question's published criteria added under it
-uv run --project backend --env-file backend/.env python scripts/evals/screening/measure/run_screen.py --criteria
+uv run --project backend --env-file backend/.env python scripts/evals/screening/checks/run_screen.py --criteria
 
 # One reply per document (about a third of the calls)
-uv run --project backend --env-file backend/.env python scripts/evals/screening/measure/run_screen.py --reps 1
+uv run --project backend --env-file backend/.env python scripts/evals/screening/checks/run_screen.py --reps 1
 
 # The same one-reply run on gpt-5.6-luna
-uv run --project backend --env-file backend/.env python scripts/evals/screening/measure/run_screen.py --reps 1 --model gpt-5.6-luna
+uv run --project backend --env-file backend/.env python scripts/evals/screening/checks/run_screen.py --reps 1 --model gpt-5.6-luna
 
 # full dataset (about 3,000 documents), only for a setting that looks good on mini
-uv run --project backend --env-file backend/.env python scripts/evals/screening/measure/run_screen.py --dataset full
+uv run --project backend --env-file backend/.env python scripts/evals/screening/checks/run_screen.py --dataset full
 ```
 
 `--targets Name1 Name2` scores a chosen subset, for example a pilot of a few cents. `--reasoning-effort low` sets the reasoning effort; leaving it off matches the app. `--system-prompt scripts/evals/screening/prompts/<file>.txt` replaces the stage-1 system prompt for this run only. The production prompt is hash-pinned and is never edited by the eval; the run JSON records the file name and a hash of the text (`system_prompt`).
@@ -207,7 +227,7 @@ The cost is tokens times the published OpenAI rate stored in `metrics.py` (check
 ### 3. Upload the run
 
 ```
-uv run --project backend python scripts/evals/screening/sync_s3.py upload \
+uv run --project backend python scripts/evals/sync_s3.py screening upload \
     scripts/evals/screening/results/runs/<folder name>
 ```
 
@@ -216,7 +236,7 @@ uv run --project backend python scripts/evals/screening/sync_s3.py upload \
 `analyse_runs.py` reads saved run folders and prints Markdown. It makes no model calls, so the same folders always give the same numbers. Every number in `results/history.md` and the task notes comes from it.
 
 ```
-uv run --project backend python scripts/evals/screening/measure/analyse_runs.py \
+uv run --project backend python scripts/evals/screening/checks/analyse_runs.py \
     scripts/evals/screening/results/runs/<run A> scripts/evals/screening/results/runs/<run B>
 ```
 
@@ -241,7 +261,7 @@ For a run with three calls per document it also replays other ways of combining 
 A ranking is not a keep-or-drop decision. The report says whether the rankers got the same scope text as the run (question only, or question and criteria); match it with `--criteria` for a like-for-like comparison. With `--match <run folder>`, each ranker keeps, for every question, as many documents as that language-model run kept. Both then spend the same reading effort, and the table compares recall, excludes dropped, precision, F1 and F2, with an exact McNemar test on the included documents. A "chance" row gives what a random pick of the same size would reach on average. Without `--match` it prints only ranking quality (AUC and average precision, per question).
 
 ```
-uv run --project backend --env-file backend/.env python scripts/evals/screening/measure/rank_baselines.py \
+uv run --project backend --env-file backend/.env python scripts/evals/screening/experiments/rank_baselines.py \
     --criteria --match scripts/evals/screening/results/runs/<run folder>
 ```
 

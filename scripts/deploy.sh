@@ -52,8 +52,6 @@ if type(deploy_analytics) is not bool:
     raise SystemExit(
         f"FAIL: {env_name!r} deploy_analytics must be a JSON boolean"
     )
-if deploy_analytics and env_name != "staging":
-    raise SystemExit("FAIL: the analytics stack is currently approved only for staging")
 
 analytics = None
 analytics_allowlist_parameter = "-"
@@ -137,7 +135,7 @@ if analytics is not None:
         )
     if container.get("desired_count") != 1:
         raise SystemExit(
-            "FAIL: staging Metabase must use desired_count 1 for safe migrations"
+            "FAIL: Metabase must use desired_count 1 for safe migrations"
         )
     internal_port = container.get("internal_port")
     if type(internal_port) is not int or not 1 <= internal_port <= 65535:
@@ -310,12 +308,22 @@ check_metabase_allowlist_parameter() {
         PYTHONPATH="$REPO_ROOT/infra" python3 -m infra.metabase_allowlist
 }
 
-# The listener rule reads the allowlist through an AWS::SSM::Parameter::Value
-# template parameter, so its CIDRs are re-resolved by CloudFormation on every
+metabase_allowlist_size() {
+    aws ssm get-parameter \
+        --region "$DEPLOY_REGION" \
+        --name "$METABASE_ALLOWLIST_PARAMETER" \
+        --query Parameter \
+        --output json | \
+        PYTHONPATH="$REPO_ROOT/infra" python3 -m infra.metabase_allowlist size
+}
+
+# The listener rules read the allowlist through an AWS::SSM::Parameter::Value
+# template parameter, so their CIDRs are re-resolved by CloudFormation on every
 # stack update (the CDK CLI never skips a stack that carries such a parameter,
 # even when the template is unchanged). This check turns that assumption into
-# an observed post-condition: after the CDK deploy, the rule on the shared
-# listener must match the parameter exactly. It prints counts, never addresses.
+# an observed post-condition: after the CDK deploy, the Metabase rules on the
+# shared listener must together match the parameter exactly. It prints counts,
+# never addresses.
 check_metabase_listener_rule_matches_allowlist() {
     local listener_arn allowlist_value
     listener_arn="$(ssm_value "$SSM_SHARED_LISTENER_ARN")"
@@ -378,24 +386,31 @@ run_cdk() {
 }
 
 deploy_all_stacks() {
+    local analytics_context=()
+    if [[ "$METABASE_ALLOWLIST_PARAMETER" != "-" ]]; then
+        local allowlist_size
+        allowlist_size="$(metabase_allowlist_size)"
+        analytics_context=(-c "metabase_allowlist_size=${allowlist_size}")
+    fi
     (
         cd "$REPO_ROOT/infra"
         # app.py requires env_name; stage=all is explicit for reproducible deploys.
-        run_cdk deploy -c "env_name=${ENV_NAME}" -c stage=all --all
+        run_cdk deploy -c "env_name=${ENV_NAME}" -c stage=all \
+            ${analytics_context[@]+"${analytics_context[@]}"} --all
     )
     verify_metabase_allowlist_applied
 }
 
 # Removing an address from the allowlist only takes effect once a deploy has
-# re-resolved the SSM parameter into the listener rule; fail loudly if the rule
-# the deploy left behind differs from the parameter.
+# re-resolved the SSM parameter into the listener rules; fail loudly if the
+# rules the deploy left behind differ from the parameter.
 verify_metabase_allowlist_applied() {
     if [[ "$METABASE_ALLOWLIST_PARAMETER" == "-" ]]; then
         return 0
     fi
     echo "Postconditions gate: Metabase allowlist"
     gate_check \
-        "Metabase listener rule source-ip condition matches the SSM allowlist" \
+        "Metabase listener rules' source-ip conditions match the SSM allowlist" \
         check_metabase_listener_rule_matches_allowlist
 }
 
@@ -647,7 +662,7 @@ fi
 
 if [[ "$METABASE_ALLOWLIST_PARAMETER" != "-" ]]; then
     gate_check \
-        "Metabase allowlist SSM parameter contains one to five valid IPv4 CIDRs" \
+        "Metabase allowlist SSM parameter contains one to eight valid IPv4 CIDRs" \
         check_metabase_allowlist_parameter
 fi
 

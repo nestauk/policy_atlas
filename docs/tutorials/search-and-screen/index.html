@@ -1,0 +1,577 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Search and Screening</title>
+<meta name="description" content="How Policy Atlas searches for evidence and screens it, as built in task 051: one search pass at every scope with citation chasing, two ranked pools, and an adaptive one-or-two-call screen. Diagrams, constants and measured numbers.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;800&family=Manrope:wght@400;500;600;700&display=swap">
+<style>
+/* Same layout and palette as the experiment write-ups under scripts/evals/search and scripts/evals/screening (results/analyses):
+   one reading column, figures break out wider, Nesta navy with electric blue as the single
+   accent. Categorical colours: paper (blue), policy document (orange), language-model step
+   (purple), free citation step (green), plain mechanics (grey). */
+:root {
+  --paper: #ffffff; --ground: #f4f4f5; --ink: #1c1c1e; --ink-2: #4b4b4f; --grey: #646363; --line: #e4e4e7;
+  --navy: #0f294a; --navy-muted: #c8d6e6; --blue: #0000ff; --blue-tint: #ececff;
+  --yellow: #fdb633; --yellow-tint: #fff6e3; --green-tint: #e7f5f2; --red: #eb003b; --red-tint: #ffe9ee;
+  --c-paper: #2d3ff0; --c-policy: #e8552b; --c-land: #18a48c; --c-plain: #9a9aa3; --c-sem: #9a1bbe;
+  --font-display: "Zosia Display", "Archivo", "Helvetica Neue", Arial, sans-serif;
+  --font-body: "Averta", "Manrope", "Helvetica Neue", Arial, sans-serif;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #0f294a; --ground: #0b1f38; --ink: #f4f6fa; --ink-2: #c8d6e6; --grey: #a9b7c9; --line: #27405f;
+    --navy: #f4f6fa; --navy-muted: #27405f; --blue: #8c9bff; --blue-tint: #1a2f52;
+    --yellow: #fdb633; --yellow-tint: #2b2a1a; --green-tint: #123a35; --red: #ff5f85; --red-tint: #3a1a24;
+    --c-paper: #5f6dff; --c-policy: #e2603a; --c-land: #149a81; --c-plain: #6f7d93; --c-sem: #ad66d4;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #0f294a; --ground: #0b1f38; --ink: #f4f6fa; --ink-2: #c8d6e6; --grey: #a9b7c9; --line: #27405f;
+  --navy: #f4f6fa; --navy-muted: #27405f; --blue: #8c9bff; --blue-tint: #1a2f52;
+  --yellow: #fdb633; --yellow-tint: #2b2a1a; --green-tint: #123a35; --red: #ff5f85; --red-tint: #3a1a24;
+  --c-paper: #5f6dff; --c-policy: #e2603a; --c-land: #149a81; --c-plain: #6f7d93; --c-sem: #ad66d4;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { background: var(--paper); color: var(--ink); font-family: var(--font-body); font-size: 17px; line-height: 1.55; padding-block: 0 4rem; padding-inline: 16px; -webkit-font-smoothing: antialiased; }
+.wrap { max-width: 72ch; margin: 0 auto; }
+.wide { max-width: 980px; margin-inline: auto; }
+header.masthead { border-bottom: 3px solid var(--navy); padding-block: 1.25rem 1.5rem; margin-bottom: 2.5rem; }
+.eyebrow { font-size: .8rem; letter-spacing: .08em; text-transform: uppercase; color: var(--grey); font-weight: 600; }
+h1, h2, h3 { font-family: var(--font-display); color: var(--navy); text-wrap: balance; line-height: 1.1; margin: 0; }
+h1 { font-size: clamp(2.1rem, 5vw, 3.4rem); font-weight: 800; margin-top: .4rem; }
+h2 { font-size: clamp(1.5rem, 3vw, 2.1rem); font-weight: 800; margin-top: 3rem; margin-bottom: .75rem; }
+h3 { font-size: 1.15rem; font-weight: 700; margin-top: 1.75rem; margin-bottom: .4rem; font-family: var(--font-body); }
+p { margin: 0 0 1rem; }
+.lede { font-size: 1.2rem; color: var(--ink-2); max-width: 60ch; margin-top: 1rem; }
+a { color: var(--blue); }
+code { overflow-wrap: anywhere; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .9em; background: var(--ground); padding: .05em .35em; border-radius: 3px; }
+ul, ol { padding-left: 1.3rem; }
+li { margin-bottom: .35rem; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); margin: 1.5rem 0 0; }
+.tile { background: var(--paper); padding: 1rem 1.1rem; }
+.tile .num { font-family: var(--font-display); font-size: 2.6rem; font-weight: 800; line-height: 1; color: var(--navy); font-variant-numeric: tabular-nums; }
+.tile .num.accent { color: var(--blue); }
+.tile .lab { font-size: .85rem; color: var(--grey); margin-top: .35rem; line-height: 1.3; }
+figure { margin: 1.5rem 0 2rem; }
+figure svg { display: block; width: 100%; height: auto; max-width: 100%; color: var(--ink); }
+figcaption { font-size: .9rem; color: var(--ink-2); margin-top: .6rem; max-width: 70ch; }
+figcaption b { color: var(--ink); }
+.legend { display: flex; flex-wrap: wrap; gap: .4rem 1.2rem; font-size: .85rem; color: var(--ink-2); margin: .5rem 0 0; }
+.legend span::before { content: ""; display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: .4rem; vertical-align: -1px; background: var(--dot); }
+table { border-collapse: collapse; width: 100%; font-size: .92rem; font-variant-numeric: tabular-nums; }
+th, td { text-align: left; padding: .45rem .6rem; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-size: .78rem; letter-spacing: .05em; text-transform: uppercase; color: var(--grey); font-weight: 600; }
+td.n, th.n { text-align: right; }
+tr.hl td { background: var(--blue-tint); font-weight: 600; }
+.scroll { overflow-x: auto; }
+.note { border-left: 4px solid var(--yellow); background: var(--yellow-tint); padding: .8rem 1rem; margin: 1.25rem 0; font-size: .95rem; }
+.key { border-left: 4px solid var(--blue); background: var(--blue-tint); padding: .8rem 1rem; margin: 1.25rem 0; font-size: .95rem; }
+.warn { border-left: 4px solid var(--red); background: var(--red-tint); padding: .8rem 1rem; margin: 1.25rem 0; font-size: .95rem; }
+.formula { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1rem; background: var(--ground); padding: .9rem 1rem; border-radius: 4px; overflow-x: auto; margin: 1rem 0; }
+.steps { counter-reset: step; list-style: none; padding: 0; margin: 1rem 0; display: grid; gap: .6rem; }
+.steps li { position: relative; padding-left: 2.6rem; }
+.steps li::before { counter-increment: step; content: counter(step); position: absolute; left: 0; top: .05rem; width: 1.9rem; height: 1.9rem; border-radius: 50%; background: var(--navy); color: var(--paper); font-family: var(--font-display); font-weight: 800; display: grid; place-items: center; font-size: .95rem; }
+.two { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1rem; margin: 1rem 0; }
+.two > div { border-top: 3px solid var(--line); padding-top: .6rem; }
+.two b.h { display: block; font-family: var(--font-display); color: var(--navy); font-size: 1.1rem; margin-bottom: .3rem; }
+.didnt { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: .8rem; margin: 1rem 0; }
+.didnt div { border-top: 2px solid var(--line); padding-top: .6rem; font-size: .93rem; }
+.didnt b { display: block; color: var(--navy); margin-bottom: .2rem; }
+.toc { font-size: .95rem; color: var(--ink-2); margin: 1.25rem 0 0; }
+.toc { display: flex; flex-wrap: wrap; gap: .3rem .9rem; }
+.toc a { white-space: nowrap; }
+footer { margin-top: 3.5rem; padding-top: 1rem; border-top: 1px solid var(--line); font-size: .85rem; color: var(--grey); }
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+</style>
+</head>
+<body>
+<header class="masthead wrap">
+  <div class="eyebrow">Policy Atlas · evidence search · task 051 · as built, October 2026</div>
+  <h1>How search and screening work</h1>
+  <p class="lede">This page explains what the app does when a user asks it to find evidence for a research question, and how it then decides which of the documents it found are worth keeping. In short: the question is turned into a handful of database searches; the papers those searches return are used to find more papers through their citations; the whole pool is ordered so that the most relevant, the most cited and the most recent papers come first; the top of the list is kept, more or less of it depending on the scope the user chose; and a language model then reads each kept document and says whether it is relevant.</p>
+  
+  <p class="toc">
+    <a href="#pass">A1: The search pass</a><a href="#chase">A2: Citation chasing</a><a href="#landmarks">A3: Landmarks</a><a href="#ordering">A4: Ordering papers</a><a href="#scopes">Scopes</a><a href="#filters">Filters</a><a href="#screen">B: Screening</a><a href="#measured">Measured</a><a href="#replaced">What it replaced</a><a href="#parked">Parked</a>
+  </p>
+</header>
+
+<main>
+<section class="wrap" id="pass">
+  <h2>Diagram A1: the search pass</h2>
+  <p>Every search follows the diagram below once, whatever the scope. Diagrams A2 to A4 then open up its three middle steps: the citation chasing, the policy landmarks, and the ordering of the paper pool. It uses two databases. <b>OpenAlex</b> is a free index of about 400+ million academic works. It offers a keyword search and a meaning-based search (one that matches on what a sentence means rather than the words in it), and every record carries the paper's reference list and the number of times it has been cited. <b>Overton</b> is a subscription index of policy documents (government reports, think-tank papers and the like). It offers a meaning-based search that takes a whole sentence, and every record lists the other policy documents it cites.</p>
+  <p>The two databases are searched at the same time, and within the OpenAlex side up to 8 requests go out together. Requests to each database are spaced out, and a "too many requests" reply pauses that database for a second. This is why a search takes about 45 seconds at every scope, where the earlier version took about 130. The call counts in the diagram are for a plan with one set of filters; a plan that names more than 100 author countries has to split its keyword searches in two, which doubles those calls.</p>
+</section>
+
+<section class="wide">
+  <figure>
+    <svg viewBox="0 0 980 660" role="img" aria-label="The question goes to one query-generation call. OpenAlex receives fifteen keyword calls and eight semantic calls, interleaved by rank to two hundred seeds; Overton receives three searches in relevance order, four hundred documents, de-duplicated by title. The seeds' reference lists feed a backward snowball of four resolve calls and a forward chase of up to ten pages; the Overton results' cited documents become fifteen landmark fetches. Papers lose duplicate copies (same title and authors), then one paper is taken in turn from three lists, relevant by rank fusion over the queries and citing the seeds, seminal by citations from the seeds, and novel from the last five years, and the first papers cap are kept; policy documents are ranked by in-set citations and cut at the policy cap. Everything kept is screened once.">
+      <defs><marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="currentColor"/></marker></defs>
+      <g font-family="inherit" font-size="13">
+        <rect x="20" y="30" width="140" height="70" rx="6" fill="var(--ground)" stroke="currentColor"/>
+        <text x="90" y="60" text-anchor="middle" font-weight="600">Research question</text>
+        <text x="90" y="80" text-anchor="middle" font-size="11" fill="var(--grey)">plus criteria, filters</text>
+        <line x1="160" y1="65" x2="190" y2="65" stroke="currentColor" stroke-width="1.5" marker-end="url(#arr)"/>
+        <rect x="195" y="22" width="230" height="86" rx="6" fill="var(--c-sem)" fill-opacity=".12" stroke="var(--c-sem)" stroke-width="1.5"/>
+        <text x="310" y="47" text-anchor="middle" font-weight="600">Query generation</text>
+        <text x="310" y="66" text-anchor="middle" font-size="12">one gpt-5.6-luna call, search_queries_v3</text>
+        <text x="310" y="84" text-anchor="middle" font-size="12">5 keyword queries, 2 paraphrases</text>
+        <text x="310" y="100" text-anchor="middle" font-size="11" fill="var(--grey)">a query over 1,300 characters is dropped</text>
+        <line x1="310" y1="108" x2="310" y2="140" stroke="currentColor" stroke-width="1.5" marker-end="url(#arr)"/>
+        <line x1="425" y1="65" x2="740" y2="140" stroke="currentColor" stroke-width="1.5" marker-end="url(#arr)"/>
+
+        <rect x="20" y="145" width="440" height="100" rx="6" fill="var(--c-paper)" fill-opacity=".14" stroke="var(--c-paper)" stroke-width="1.5"/>
+        <text x="32" y="168" font-weight="600">OpenAlex seeds · 23 calls</text><text x="448" y="168" text-anchor="end" font-size="11" fill="var(--grey)">search, search_semantic</text>
+        <text x="32" y="190" font-size="11">5 generated queries × 3 forms (plain, reviews-only, trials-only): 15 keyword calls × 200</text>
+        <text x="32" y="206" font-size="11">the question + 2 paraphrases + the 5 queries to the embedding search: 8 calls × 50</text>
+        <text x="32" y="228" font-size="11" font-weight="600">rank-merge the 23 lists (top of each in turn); the first 200 distinct papers are the seeds</text>
+
+        <rect x="520" y="145" width="440" height="100" rx="6" fill="var(--c-policy)" fill-opacity=".14" stroke="var(--c-policy)" stroke-width="1.5"/>
+        <text x="532" y="168" font-weight="600">Overton results · 3 calls</text><text x="948" y="168" text-anchor="end" font-size="11" fill="var(--grey)">search, sort=relevance</text>
+        <text x="532" y="190" font-size="11">the question + 2 paraphrases, best-match order, 134 documents each (3 pages × 50)</text>
+        <text x="532" y="206" font-size="11">rank-merged; a repeated title (normalised) keeps only its best-ranked copy</text>
+        <text x="532" y="228" font-size="11" font-weight="600">each record already lists the policy documents it cites: no extra calls</text>
+
+        <g stroke="currentColor" stroke-width="1.5" marker-end="url(#arr)">
+          <line x1="125" y1="245" x2="125" y2="275"/><line x1="350" y1="245" x2="350" y2="275"/><line x1="740" y1="245" x2="740" y2="275"/>
+        </g>
+
+        <rect x="20" y="280" width="210" height="100" rx="6" fill="var(--c-land)" fill-opacity=".14" stroke="var(--c-land)" stroke-width="1.5"/>
+        <text x="32" y="303" font-weight="600">Backward snowball</text>
+        <text x="32" y="323" font-size="11">from the seeds' reference lists, count</text>
+        <text x="32" y="339" font-size="11">how many seeds cite each one; fetch</text>
+        <text x="32" y="355" font-size="11">the 200 most cited non-seeds, 50 a call</text>
+        <text x="32" y="372" font-size="11" fill="var(--grey)">lookup_ids · 4 calls</text>
+
+        <rect x="245" y="280" width="215" height="100" rx="6" fill="var(--c-land)" fill-opacity=".14" stroke="var(--c-land)" stroke-width="1.5"/>
+        <text x="257" y="303" font-weight="600">Forward chasing</text>
+        <text x="257" y="323" font-size="11">the 20 seeds most cited by other seeds,</text>
+        <text x="257" y="339" font-size="11">each cited ≤300 times in all: fetch the</text>
+        <text x="257" y="355" font-size="11">papers citing them; keep the 200 best-linked</text>
+        <text x="257" y="372" font-size="11" fill="var(--grey)">fetch_citing · up to 10 pages of 200</text>
+
+        <rect x="520" y="280" width="450" height="100" rx="6" fill="var(--c-land)" fill-opacity=".14" stroke="var(--c-land)" stroke-width="1.5"/>
+        <text x="532" y="303" font-weight="600">Landmarks</text><text x="958" y="303" text-anchor="end" font-size="11" fill="var(--grey)">fetch_by_id · 15 calls</text>
+        <text x="532" y="323" font-size="12">count the policy documents the results cite; fetch by id the 15 cited</text>
+        <text x="532" y="339" font-size="12">most that the search did not return. The academic papers Overton says</text>
+        <text x="532" y="355" font-size="12">each document cites are not fetched: the paper pool is OpenAlex only.</text>
+
+        <g stroke="currentColor" stroke-width="1.5" marker-end="url(#arr)">
+          <line x1="125" y1="380" x2="125" y2="410"/><line x1="350" y1="380" x2="350" y2="410"/><line x1="800" y1="380" x2="800" y2="410"/>
+        </g>
+
+        <rect x="20" y="415" width="440" height="140" rx="6" fill="var(--c-paper)" fill-opacity=".14" stroke="var(--c-paper)" stroke-width="1.5"/>
+        <text x="32" y="438" font-weight="600">De-duplicate, order, then cut</text><text x="448" y="438" text-anchor="end" font-size="11" fill="var(--grey)">pool.dedupe_papers · pool.rank_mix</text>
+        <text x="32" y="455" font-size="11">same title + authors → one copy (the most cited); then one from each list in turn:</text>
+        <g font-size="11">
+          <rect x="32" y="463" width="132" height="48" rx="4" fill="var(--ground)" stroke="var(--c-paper)"/>
+          <text x="98" y="479" text-anchor="middle" font-weight="600">relevant</text>
+          <text x="98" y="492" text-anchor="middle" font-size="10">reciprocal rank fusion:</text>
+          <text x="98" y="504" text-anchor="middle" font-size="10">query lists + cites seeds</text>
+          <rect x="174" y="463" width="132" height="48" rx="4" fill="var(--ground)" stroke="var(--c-paper)"/>
+          <text x="240" y="479" text-anchor="middle" font-weight="600">established</text>
+          <text x="240" y="492" text-anchor="middle" font-size="10">most cited by seeds,</text>
+          <text x="240" y="504" text-anchor="middle" font-size="10">then by all citations</text>
+          <rect x="316" y="463" width="132" height="48" rx="4" fill="var(--ground)" stroke="var(--c-paper)"/>
+          <text x="382" y="479" text-anchor="middle" font-weight="600">recent</text>
+          <text x="382" y="492" text-anchor="middle" font-size="10">published in the last</text>
+          <text x="382" y="504" text-anchor="middle" font-size="10">5 years, by relevance</text>
+        </g>
+        <text x="32" y="528" font-size="11" fill="var(--grey)">when the relevant and recent lists run out, the established list supplies the rest (Diagram A4)</text>
+        <text x="32" y="546" font-size="13" font-weight="700">keep the first 100 · 200 · 400 papers</text>
+
+        <rect x="520" y="415" width="440" height="85" rx="6" fill="var(--c-policy)" fill-opacity=".14" stroke="var(--c-policy)" stroke-width="1.5"/>
+        <text x="532" y="438" font-weight="600">Order policy documents by citations, then cut</text><text x="948" y="438" text-anchor="end" font-size="11" fill="var(--grey)">pool.rank_policy</text>
+        <text x="532" y="456" font-size="11">tie score = citations from the other results ÷ log10(total citations + 10)</text>
+        <text x="532" y="471" font-size="11" fill="var(--grey)">ties by that citation count, then search order; landmarks after results</text>
+        <text x="532" y="491" font-size="13" font-weight="700">keep the first 50 · 100 · 200 policy documents</text>
+
+        <line x1="240" y1="555" x2="430" y2="588" stroke="currentColor" stroke-width="1.5" marker-end="url(#arr)"/>
+        <line x1="740" y1="500" x2="550" y2="588" stroke="currentColor" stroke-width="1.5" marker-end="url(#arr)"/>
+        <rect x="260" y="593" width="460" height="55" rx="6" fill="var(--c-sem)" fill-opacity=".12" stroke="var(--c-sem)" stroke-width="1.5"/>
+        <text x="490" y="616" text-anchor="middle" font-weight="600">Screen once · gpt-5.6-luna · prompt screen_v4</text>
+        <text x="490" y="636" text-anchor="middle" font-size="11">1 call per document; a 2nd only after "not relevant"; relevant or unsure keeps (Diagram B)</text>
+      </g>
+    </svg>
+    <figcaption><b>One method, every scope.</b> The green boxes are citation lookups, which cost nothing; the only language-model calls are the query generation at the top and the screen at the bottom. Each search has a budget of calls per database (45 to OpenAlex per set of filters, 30 to Overton); a call that fetches several pages or retries still counts once. Every call is recorded with the reason it was made. After the screen, the rest of the app's chain (classify, appraise, and so on) runs as before.
+    <br><br><b>Terms.</b> <b>Seeds</b>: the 200 papers the 23 OpenAlex calls return, merged by rank. <b>Backward snowball</b>: papers the seeds cite. <b>Forward chasing</b>: papers that cite the seeds. <b>Landmarks</b>: policy documents the Overton results cite but the search did not return. <b>Reciprocal rank fusion</b>: a standard way to merge ranked lists; a paper scores 1 ÷ (60 + its position) in every list that holds it, summed, so a paper near the top of several lists scores highest. The lists fused are the 23 query result lists plus the pool ordered by how many seeds each paper cites, that last list counted three times. <b>Tie score</b> (called specificity in the code): how strongly a document is tied to this search, from the citations between it and the search's own results, divided by the log of its total citation count so that a paper cited by everything is not favoured for that alone. Papers use it inside the recent list and to break ties in the established list (Diagram A4); policy documents are ordered by it directly (Diagram A3). <b>Normalised title</b>: lower case, punctuation removed, so the same title in two spellings counts once.</figcaption>
+  </figure>
+</section>
+
+<section class="wrap" id="chase">
+  <h2>Diagram A2: citation chasing</h2>
+  <p>The 23 database searches give 200 seed papers. A search matches words or meaning, so it misses papers that describe the same thing in other vocabulary. Citations do not care about vocabulary: a paper that many seeds cite is on the topic whatever it is called, and so is a paper that cites several seeds. The search therefore follows citations from the seeds in both directions. Both directions are plain database lookups and cost no language-model calls.</p>
+  <p><b>Backward: the papers the seeds cite.</b> Every OpenAlex record carries the paper's reference list. The app counts, over the 200 seeds, how many seeds cite each work. That count is the work's <b>in-set citations</b> (<code>inset</code> in the code), and the seeds themselves get their count from the same tally. The works with the highest count that are not already seeds, up to 200 of them, are fetched by id, 50 per call. A reference that several seeds share is a much stronger signal than one that a single seed holds, and the count follows the paper into the ordering.</p>
+  <p><b>Forward: the papers that cite the seeds.</b> Fetching everything that cites all 200 seeds would be far too much, and one seed with thousands of citations would flood the pool with its citers. So the app chases only 20 seeds: the ones other seeds cite most, skipping any seed cited more than 300 times in all. It fetches the papers that cite any of the 20, in pages of 200, up to 10 pages. Each citing paper is scored by <b>coupling</b>, the number of distinct seeds it cites, and by a weighted form in which each cited seed counts log<sub>2</sub>(1 + that seed's in-set citations). Citing a seed the set itself relies on is worth more than citing a peripheral one. The 200 citing papers with the highest weighted coupling join the pool.</p>
+</section>
+
+<section class="wide">
+  <figure>
+    <svg viewBox="0 0 980 460" role="img" aria-label="In the centre, the 200 seeds, each with an in-set citation count: how many other seeds cite it. On the left, backward chasing: the works the seeds cite, ranked by how many seeds cite them; the top 200 non-seeds are fetched, 50 ids per call. On the right, forward chasing: the papers that cite any of the 20 best-connected seeds with at most 300 citations in all, scored by weighted coupling, the sum of log2 of one plus the in-set citations of each seed they cite; the 200 highest are kept. At the bottom, every paper now carries in-set citations, coupling and total citations, which combine into the tie score: in-set plus coupling, divided by log10 of total citations plus ten.">
+      <g font-family="inherit" font-size="13">
+        <rect x="350" y="40" width="280" height="270" rx="6" fill="var(--c-paper)" fill-opacity=".14" stroke="var(--c-paper)" stroke-width="1.5"/>
+        <text x="490" y="63" text-anchor="middle" font-weight="600">The 200 seeds</text>
+        <text x="490" y="80" text-anchor="middle" font-size="11" fill="var(--grey)">each record carries its reference list</text>
+        <g font-size="11">
+          <rect x="370" y="95" width="115" height="44" rx="4" fill="var(--ground)" stroke="var(--c-paper)"/>
+          <text x="427" y="112" text-anchor="middle" font-weight="600">seed S1</text>
+          <text x="427" y="128" text-anchor="middle" font-size="10">cited by 5 other seeds</text>
+          <rect x="495" y="95" width="115" height="44" rx="4" fill="var(--ground)" stroke="var(--c-paper)"/>
+          <text x="552" y="112" text-anchor="middle" font-weight="600">seed S2</text>
+          <text x="552" y="128" text-anchor="middle" font-size="10">cited by 2 other seeds</text>
+          <rect x="370" y="150" width="115" height="44" rx="4" fill="var(--ground)" stroke="var(--c-paper)"/>
+          <text x="427" y="167" text-anchor="middle" font-weight="600">seed S3</text>
+          <text x="427" y="183" text-anchor="middle" font-size="10">cited by 1 other seed</text>
+          <rect x="495" y="150" width="115" height="44" rx="4" fill="var(--ground)" stroke="var(--c-paper)"/>
+          <text x="552" y="167" text-anchor="middle" font-weight="600">seed S4</text>
+          <text x="552" y="183" text-anchor="middle" font-size="10">cited by no other seed</text>
+        </g>
+        <text x="490" y="224" text-anchor="middle" font-size="11">Count, over all 200 reference lists, how many</text>
+        <text x="490" y="240" text-anchor="middle" font-size="11">seeds cite each work: its <tspan font-weight="600">in-set citations</tspan>.</text>
+        <text x="490" y="256" text-anchor="middle" font-size="11">Seeds and non-seeds are counted in the same tally.</text>
+        <text x="490" y="290" text-anchor="middle" font-size="11" fill="var(--grey)">S1 is central to this topic; S4 is peripheral</text>
+
+        <rect x="20" y="40" width="300" height="270" rx="6" fill="var(--c-land)" fill-opacity=".14" stroke="var(--c-land)" stroke-width="1.5"/>
+        <text x="32" y="63" font-weight="600">Backward: papers the seeds cite</text>
+        <text x="32" y="80" font-size="11" fill="var(--grey)">lookup_ids · 50 ids a call · 4 calls</text>
+        <g font-size="11">
+          <rect x="40" y="95" width="120" height="36" rx="4" fill="var(--ground)" stroke="var(--c-land)"/>
+          <text x="100" y="110" text-anchor="middle" font-weight="600">work R1</text>
+          <text x="100" y="124" text-anchor="middle" font-size="10">cited by 7 seeds</text>
+          <rect x="40" y="145" width="120" height="36" rx="4" fill="var(--ground)" stroke="var(--c-land)"/>
+          <text x="100" y="160" text-anchor="middle" font-weight="600">work R2</text>
+          <text x="100" y="174" text-anchor="middle" font-size="10">cited by 4 seeds</text>
+          <rect x="40" y="195" width="120" height="36" rx="4" fill="var(--ground)" stroke="var(--c-land)"/>
+          <text x="100" y="210" text-anchor="middle" font-weight="600">work R3</text>
+          <text x="100" y="224" text-anchor="middle" font-size="10">cited by 1 seed</text>
+        </g>
+        <g stroke="currentColor" stroke-width="1.2" marker-end="url(#arr)">
+          <line x1="350" y1="150" x2="166" y2="113"/>
+          <line x1="350" y1="160" x2="166" y2="163"/>
+          <line x1="350" y1="170" x2="166" y2="213"/>
+        </g>
+        <text x="255" y="130" font-size="10" fill="var(--grey)">seeds cite</text>
+        <text x="32" y="255" font-size="11">Rank the cited works that are not seeds by</text>
+        <text x="32" y="271" font-size="11">in-set citations; fetch the top 200 by id.</text>
+        <text x="32" y="293" font-size="11" fill="var(--grey)">R1 and R2 are fetched; R3 only if it is within the 200.</text>
+
+        <rect x="660" y="40" width="300" height="270" rx="6" fill="var(--c-land)" fill-opacity=".14" stroke="var(--c-land)" stroke-width="1.5"/>
+        <text x="672" y="63" font-weight="600">Forward: papers that cite the seeds</text>
+        <text x="672" y="80" font-size="11" fill="var(--grey)">fetch_citing · pages of 200 · up to 10 pages</text>
+        <g font-size="11">
+          <rect x="820" y="95" width="120" height="44" rx="4" fill="var(--ground)" stroke="var(--c-land)"/>
+          <text x="880" y="112" text-anchor="middle" font-weight="600">paper C1</text>
+          <text x="880" y="128" text-anchor="middle" font-size="10">cites S1 and S2</text>
+          <rect x="820" y="150" width="120" height="44" rx="4" fill="var(--ground)" stroke="var(--c-land)"/>
+          <text x="880" y="167" text-anchor="middle" font-weight="600">paper C2</text>
+          <text x="880" y="183" text-anchor="middle" font-size="10">cites S3 only</text>
+        </g>
+        <g stroke="currentColor" stroke-width="1.2" marker-end="url(#arr)">
+          <line x1="815" y1="117" x2="636" y2="117"/>
+          <line x1="815" y1="172" x2="636" y2="172"/>
+        </g>
+        <text x="700" y="110" font-size="10" fill="var(--grey)">cites seeds</text>
+        <text x="672" y="222" font-size="11">Chase only 20 seeds: the most cited by other seeds,</text>
+        <text x="672" y="238" font-size="11">each with at most 300 citations in all.</text>
+        <text x="672" y="258" font-size="11">Weighted coupling = Σ log₂(1 + in-set citations of each</text>
+        <text x="672" y="274" font-size="11">seed the paper cites). Keep the 200 highest.</text>
+        <text x="672" y="294" font-size="11" fill="var(--grey)">C1: log₂6 + log₂3 = 4.17 · C2: log₂2 = 1.0</text>
+
+        <rect x="20" y="335" width="940" height="115" rx="6" fill="var(--ground)" stroke="currentColor"/>
+        <text x="32" y="358" font-weight="600">Every paper in the pool now carries three numbers</text>
+        <text x="32" y="380" font-size="11"><tspan font-weight="600">in-set citations</tspan>: how many seeds cite it · <tspan font-weight="600">coupling</tspan>: how many seeds it cites · <tspan font-weight="600">total citations</tspan>: OpenAlex's count over all papers, on or off topic</text>
+        <text x="32" y="404" font-size="12" font-weight="600">tie score (specificity in the code) = (in-set citations + coupling) ÷ log₁₀(total citations + 10)</text>
+        <text x="32" y="424" font-size="11" fill="var(--grey)">cited by 4 seeds, cites 2 seeds, 120 citations in all: 6 ÷ 2.11 = 2.84 · cited by 4 seeds, cites none, 20,000 citations in all: 4 ÷ 4.30 = 0.93</text>
+        <text x="32" y="440" font-size="11" fill="var(--grey)">the reference lists of backward-found works are not scored, so their coupling is 0 and only their in-set count carries them</text>
+      </g>
+    </svg>
+    <figcaption><b>Why the numbers look like this.</b> In-set citations and coupling are counts within this search's own 200 seeds, so they measure how tightly a paper is tied to this topic. Total citations is a global count, so dividing by its logarithm stops a paper that everything cites, a statistics textbook say, from winning on fame alone: in the example, the same four seed citations are worth three times more for the paper with 120 citations than for the one with 20,000. The logarithm is base 10 with 10 added so that a paper with no citations divides by 1, not by 0. The weighted coupling uses log<sub>2</sub>(1 + count) so that citing a seed with 5 in-set citations (2.6) counts more than citing one with 1 (1.0), but not five times more. The 300-citation ceiling on forward chasing is about cost: fetching the citers of a paper cited 5,000 times would take 25 pages on its own and most of them would be off topic.</figcaption>
+  </figure>
+</section>
+
+<section class="wrap" id="landmarks">
+  <h2>Diagram A3: policy documents and landmarks</h2>
+  <p>The policy side is simpler. Overton has no "cited by" lookup, and its search takes a whole sentence, so three meaning-based searches go out: the question itself and its two paraphrases, each asking for best-match order and taking up to 134 documents (three pages of 50, the last page cut so that the three together stay within 400). The three lists are merged by taking the top of each in turn. Overton often holds the same report twice, once from the publisher and once from an archive, so a title that appears twice, compared after lower-casing and removing punctuation, keeps only its best-ranked copy.</p>
+  <p><b>Landmarks.</b> Every Overton record lists the policy documents it cites. Counting those citations across the results shows which documents the result set leans on. A document that many results cite but that the search itself did not return is usually a central report of the field, one whose title did not happen to match any paraphrase. The app calls it a landmark, and fetches the 15 most cited such documents by id, one call each. If the plan filters policy documents by country, a landmark from another country is dropped like any other result. The academic papers that Overton says each document cites are not fetched: the paper pool comes from OpenAlex only.</p>
+  <p><b>Ranking.</b> Results and landmarks are ranked together by the same kind of tie score as the papers: citations from the other results, divided by log<sub>10</sub>(total citations + 10). Equal scores are broken by the raw count of citing results, then by search position. A landmark has no search position, so it comes after a result with the same score. Most results cite nothing else in the set and score 0, so the tail of the list is simply the merged search order. The first 50, 100 or 200 are kept.</p>
+</section>
+
+<section class="wide">
+  <figure>
+    <svg viewBox="0 0 980 370" role="img" aria-label="Top row: three Overton searches in best-match order, merged by taking the top of each list in turn and dropping repeated titles; each record lists the policy documents it cites, so the app counts how many results cite each document; the 15 most cited documents the search did not return are fetched by id as landmarks. Bottom row: results and landmarks are ranked together by in-set citations divided by log10 of total citations plus ten, ties by the raw count then search position; a document cited by six results with forty citations in all scores 3.53, one with six and two thousand scores 1.82, one cited by none scores zero and keeps its search position; the first fifty, one hundred or two hundred are kept.">
+      <g font-family="inherit" font-size="13">
+        <rect x="20" y="30" width="205" height="95" rx="6" fill="var(--c-policy)" fill-opacity=".14" stroke="var(--c-policy)" stroke-width="1.5"/>
+        <text x="32" y="53" font-weight="600">3 searches</text><text x="213" y="53" text-anchor="end" font-size="11" fill="var(--grey)">search</text>
+        <text x="32" y="73" font-size="11">the question + 2 paraphrases</text>
+        <text x="32" y="89" font-size="11">best-match order, up to 134 each</text>
+        <text x="32" y="105" font-size="11">400 documents in all</text>
+        <line x1="225" y1="77" x2="250" y2="77" stroke="currentColor" stroke-width="1.5" marker-end="url(#arr)"/>
+
+        <rect x="255" y="30" width="205" height="95" rx="6" fill="var(--c-policy)" fill-opacity=".14" stroke="var(--c-policy)" stroke-width="1.5"/>
+        <text x="267" y="53" font-weight="600">Merge, drop repeats</text>
+        <text x="267" y="73" font-size="11">take the top of each list in turn</text>
+        <text x="267" y="89" font-size="11">same normalised title → keep the</text>
+        <text x="267" y="105" font-size="11">best-ranked copy</text>
+        <line x1="460" y1="77" x2="485" y2="77" stroke="currentColor" stroke-width="1.5" marker-end="url(#arr)"/>
+
+        <rect x="490" y="30" width="230" height="95" rx="6" fill="var(--c-policy)" fill-opacity=".14" stroke="var(--c-policy)" stroke-width="1.5"/>
+        <text x="502" y="53" font-weight="600">Count in-set citations</text>
+        <text x="502" y="73" font-size="11">each record already lists the policy</text>
+        <text x="502" y="89" font-size="11">documents it cites; count how many</text>
+        <text x="502" y="105" font-size="11">results cite each document</text>
+        <line x1="720" y1="77" x2="745" y2="77" stroke="currentColor" stroke-width="1.5" marker-end="url(#arr)"/>
+
+        <rect x="750" y="30" width="210" height="95" rx="6" fill="var(--c-land)" fill-opacity=".14" stroke="var(--c-land)" stroke-width="1.5"/>
+        <text x="762" y="53" font-weight="600">Landmarks</text><text x="948" y="53" text-anchor="end" font-size="11" fill="var(--grey)">fetch_by_id · 15 calls</text>
+        <text x="762" y="73" font-size="11">the 15 most cited documents</text>
+        <text x="762" y="89" font-size="11">the search did not return,</text>
+        <text x="762" y="105" font-size="11">fetched one by one</text>
+
+        <rect x="20" y="155" width="440" height="200" rx="6" fill="var(--ground)" stroke="currentColor"/>
+        <text x="32" y="178" font-weight="600">What a landmark is</text>
+        <g font-size="11">
+          <rect x="40" y="195" width="120" height="32" rx="4" fill="var(--paper)" stroke="var(--c-policy)"/>
+          <text x="100" y="215" text-anchor="middle" font-weight="600">result 1</text>
+          <rect x="40" y="240" width="120" height="32" rx="4" fill="var(--paper)" stroke="var(--c-policy)"/>
+          <text x="100" y="260" text-anchor="middle" font-weight="600">result 2</text>
+          <rect x="40" y="285" width="120" height="32" rx="4" fill="var(--paper)" stroke="var(--c-policy)"/>
+          <text x="100" y="305" text-anchor="middle" font-weight="600">result 3</text>
+          <rect x="290" y="232" width="150" height="48" rx="4" fill="var(--paper)" stroke="var(--c-land)" stroke-width="1.5"/>
+          <text x="365" y="251" text-anchor="middle" font-weight="600">landmark L</text>
+          <text x="365" y="267" text-anchor="middle" font-size="10">cited by 3 results, not returned</text>
+        </g>
+        <g stroke="currentColor" stroke-width="1.2" marker-end="url(#arr)">
+          <line x1="160" y1="211" x2="285" y2="248"/>
+          <line x1="160" y1="256" x2="285" y2="256"/>
+          <line x1="160" y1="301" x2="285" y2="264"/>
+        </g>
+        <text x="200" y="245" font-size="10" fill="var(--grey)">cite</text>
+        <text x="32" y="340" font-size="11" fill="var(--grey)">a result that other results cite is counted the same way; it just needs no fetch</text>
+
+        <rect x="490" y="155" width="470" height="200" rx="6" fill="var(--c-policy)" fill-opacity=".14" stroke="var(--c-policy)" stroke-width="1.5"/>
+        <text x="502" y="178" font-weight="600">Rank results and landmarks together</text><text x="948" y="178" text-anchor="end" font-size="11" fill="var(--grey)">pool.rank_policy</text>
+        <text x="502" y="202" font-size="12" font-weight="600">tie score = cited by results ÷ log₁₀(total citations + 10)</text>
+        <g font-size="11">
+          <text x="502" y="226">A: cited by 6 results, 40 citations in all → 6 ÷ 1.70 = <tspan font-weight="600">3.53</tspan></text>
+          <text x="502" y="244">B: cited by 6 results, 2,000 citations in all → 6 ÷ 3.30 = <tspan font-weight="600">1.82</tspan></text>
+          <text x="502" y="262">C: cited by no result → <tspan font-weight="600">0</tspan>, so it keeps its search position</text>
+        </g>
+        <text x="502" y="290" font-size="11" fill="var(--grey)">ties: the raw count of citing results, then search position;</text>
+        <text x="502" y="306" font-size="11" fill="var(--grey)">a landmark has no search position, so it follows a result with the same score</text>
+        <text x="502" y="338" font-size="13" font-weight="700">keep the first 50 · 100 · 200 policy documents</text>
+      </g>
+    </svg>
+    <figcaption><b>Why not fetch landmarks for papers too?</b> The paper side already has backward chasing, which does the same job with the seeds' reference lists. The policy side has no reference-list lookup of its own, so the citation lists that Overton attaches to each result are the only citation signal available, and the 15 landmark fetches are how the app follows them. The policy caps are half the paper caps because, in the design experiments, the first 50 policy documents held 90% of what the whole 400-document pool could find, and the first 100 held 97% (8.0% and 8.5% recall against a pool ceiling of 8.8%; the ceiling is low because most cited policy documents are reached by nothing the search returns).</figcaption>
+  </figure>
+</section>
+
+<section class="wrap" id="ordering">
+  <h2>Diagram A4: ordering the paper pool</h2>
+  <p>The pool now holds up to 600 papers: 200 seeds, up to 200 that the seeds cite, up to 200 that cite the seeds. Only the first 100, 200 or 400 are kept, so the order decides what the user sees and what the screen reads. First, duplicate copies go. OpenAlex often holds a preprint and the journal version of one paper as two records. Two records with the same normalised title and the same set of author names are one paper, and the more cited copy is kept. A shared title with different authors stays two papers (many reviews have the same title), and a record with no title or no author names is never merged, because there is not enough evidence that it is the same work.</p>
+  <p>Then the order. One score alone favours one kind of paper. Ordering by tie score put heavily cross-cited classics first and pushed recent work out of the cut; ordering by search rank let a broad query's off-topic results in. So the pool is built from three ordered lists, and the final order takes one paper from each list in turn:</p>
+  <ol>
+    <li><b>Relevant</b>, by reciprocal rank fusion. This is a standard way to merge several ranked lists without comparing their scores: a paper gets 1 ÷ (60 + its position) from every list that holds it, and the amounts are summed. A paper near the top of several lists scores highest; a paper that one broad query returned at position 150 scores almost nothing. The lists fused are the 23 query result lists plus the pool ordered by weighted coupling (how strongly each paper cites the seeds), and that last list is counted three times, so a paper that cites many seeds is treated as if three queries had returned it near the top. Only papers that some query returned, or that cite at least one seed, have a score and appear in this list.</li>
+    <li><b>Established</b> (<code>seminal</code> in the code): every paper in the pool, by in-set citations, then by total citations. The works the seed set leans on most, whether or not any query found them.</li>
+    <li><b>Recent</b> (<code>novel</code>): papers published in the last five years, 2021 onward in 2026. Those that have a fusion score come first, in fusion order; the rest follow by tie score.</li>
+  </ol>
+  <p>The final order takes the top paper from the relevant list, then the top of the established list, then the top of the recent list, and round again. A paper already placed is skipped, which happens often because a recent paper is usually also a relevant one. When the relevant and recent lists run out, the established list, which holds every paper, supplies the rest, so the tail of the pool is in in-set citation order. The first 100, 200 or 400 are kept, skipping any paper the task already holds. In practice the first 100 hold about a third of each kind. On the 15 test reviews this raised recall at every scope compared with the tie score alone; the figures are in the measured section below.</p>
+</section>
+
+<section class="wide">
+  <figure>
+    <svg viewBox="0 0 980 560" role="img" aria-label="The de-duplicated pool of up to six hundred papers feeds three ordered lists. Relevant: reciprocal rank fusion over the twenty-three query result lists plus the pool ordered by weighted coupling counted three times, score equals the sum of one over sixty plus position. Established: every paper by in-set citations then total citations. Recent: papers from 2021 onward, fused ones first then by tie score. The final order takes one paper from each list in turn, skipping a paper already placed and dropping a list that runs out, then keeps the first one hundred, two hundred or four hundred.">
+      <g font-family="inherit" font-size="13">
+        <rect x="20" y="20" width="940" height="56" rx="6" fill="var(--c-paper)" fill-opacity=".14" stroke="var(--c-paper)" stroke-width="1.5"/>
+        <text x="32" y="43" font-weight="600">The de-duplicated pool: up to 600 papers</text><text x="948" y="43" text-anchor="end" font-size="11" fill="var(--grey)">pool.dedupe_papers</text>
+        <text x="32" y="63" font-size="11">200 seeds + up to 200 cited by the seeds + up to 200 citing the seeds; same normalised title and authors → one copy, the most cited; each carries its three numbers from Diagram A2</text>
+        <g stroke="currentColor" stroke-width="1.5" marker-end="url(#arr)">
+          <line x1="170" y1="76" x2="170" y2="104"/><line x1="490" y1="76" x2="490" y2="104"/><line x1="810" y1="76" x2="810" y2="104"/>
+        </g>
+
+        <rect x="20" y="108" width="300" height="230" rx="6" fill="var(--ground)" stroke="var(--c-paper)" stroke-width="1.5"/>
+        <text x="32" y="131" font-weight="600">1 · Relevant</text><text x="308" y="131" text-anchor="end" font-size="11" fill="var(--grey)">pool.query_fusion</text>
+        <text x="32" y="151" font-size="11">lists fused: the 23 query result lists</text>
+        <text x="32" y="167" font-size="11">+ the pool ordered by weighted coupling,</text>
+        <text x="32" y="183" font-size="11">counted as 3 more lists</text>
+        <text x="32" y="207" font-size="11" font-weight="600">score = Σ 1 ÷ (60 + position), over every</text>
+        <text x="32" y="223" font-size="11" font-weight="600">list that holds the paper</text>
+        <text x="32" y="247" font-size="11" fill="var(--grey)">position 1 in one list, 10 in another:</text>
+        <text x="32" y="263" font-size="11" fill="var(--grey)">1/61 + 1/70 = 0.031</text>
+        <text x="32" y="279" font-size="11" fill="var(--grey)">top of the coupling order only: 3 × 1/61 = 0.049</text>
+        <text x="32" y="295" font-size="11" fill="var(--grey)">position 150 in one broad query: 1/210 = 0.005</text>
+        <text x="32" y="322" font-size="11">papers with a score, highest first</text>
+
+        <rect x="340" y="108" width="300" height="230" rx="6" fill="var(--ground)" stroke="var(--c-paper)" stroke-width="1.5"/>
+        <text x="352" y="131" font-weight="600">2 · Established</text><text x="628" y="131" text-anchor="end" font-size="11" fill="var(--grey)">seminal in the code</text>
+        <text x="352" y="151" font-size="11">every paper in the pool, ordered by</text>
+        <text x="352" y="171" font-size="11" font-weight="600">in-set citations (how many seeds cite it),</text>
+        <text x="352" y="187" font-size="11" font-weight="600">then total citations</text>
+        <text x="352" y="211" font-size="11" fill="var(--grey)">the works this search's own seeds lean on</text>
+        <text x="352" y="227" font-size="11" fill="var(--grey)">most, whether or not any query found them</text>
+        <text x="352" y="243" font-size="11" fill="var(--grey)">(typically the backward-found papers)</text>
+        <text x="352" y="322" font-size="11">this list holds every paper, so it never runs out</text>
+
+        <rect x="660" y="108" width="300" height="230" rx="6" fill="var(--ground)" stroke="var(--c-paper)" stroke-width="1.5"/>
+        <text x="672" y="131" font-weight="600">3 · Recent</text><text x="948" y="131" text-anchor="end" font-size="11" fill="var(--grey)">novel in the code</text>
+        <text x="672" y="151" font-size="11">papers published in the last 5 years</text>
+        <text x="672" y="167" font-size="11">(2021 onward in 2026)</text>
+        <text x="672" y="191" font-size="11" font-weight="600">those with a fusion score first, in that order;</text>
+        <text x="672" y="207" font-size="11" font-weight="600">then the rest by tie score</text>
+        <text x="672" y="231" font-size="11" fill="var(--grey)">guarantees new work a place in the cut:</text>
+        <text x="672" y="247" font-size="11" fill="var(--grey)">a paper from last year has had no time</text>
+        <text x="672" y="263" font-size="11" fill="var(--grey)">to collect citations</text>
+        <text x="672" y="322" font-size="11">often the same papers as list 1, only younger</text>
+
+        <g stroke="currentColor" stroke-width="1.5" marker-end="url(#arr)">
+          <line x1="170" y1="338" x2="400" y2="372"/><line x1="490" y1="338" x2="490" y2="372"/><line x1="810" y1="338" x2="580" y2="372"/>
+        </g>
+
+        <rect x="20" y="376" width="940" height="92" rx="6" fill="var(--c-paper)" fill-opacity=".14" stroke="var(--c-paper)" stroke-width="1.5"/>
+        <text x="32" y="399" font-weight="600">Take one paper from each list in turn</text><text x="948" y="399" text-anchor="end" font-size="11" fill="var(--grey)">pool.rank_mix</text>
+        <g font-size="11" font-weight="600">
+          <rect x="32" y="410" width="54" height="24" rx="4" fill="var(--paper)" stroke="var(--c-paper)"/><text x="59" y="426" text-anchor="middle">rel 1</text>
+          <rect x="92" y="410" width="54" height="24" rx="4" fill="var(--paper)" stroke="var(--c-paper)"/><text x="119" y="426" text-anchor="middle">est 1</text>
+          <rect x="152" y="410" width="54" height="24" rx="4" fill="var(--paper)" stroke="var(--c-paper)"/><text x="179" y="426" text-anchor="middle">rec 1</text>
+          <rect x="212" y="410" width="54" height="24" rx="4" fill="var(--paper)" stroke="var(--c-paper)"/><text x="239" y="426" text-anchor="middle">rel 2</text>
+          <rect x="272" y="410" width="54" height="24" rx="4" fill="var(--paper)" stroke="var(--c-paper)"/><text x="299" y="426" text-anchor="middle">est 2</text>
+          <rect x="332" y="410" width="54" height="24" rx="4" fill="var(--paper)" stroke="var(--c-paper)"/><text x="359" y="426" text-anchor="middle">rec 2</text>
+          <rect x="392" y="410" width="54" height="24" rx="4" fill="var(--paper)" stroke="var(--c-paper)"/><text x="419" y="426" text-anchor="middle">rel 3</text>
+          <rect x="452" y="410" width="54" height="24" rx="4" fill="var(--paper)" stroke="var(--c-paper)"/><text x="479" y="426" text-anchor="middle">est 3</text>
+          <rect x="512" y="410" width="54" height="24" rx="4" fill="var(--paper)" stroke="var(--c-paper)" stroke-dasharray="3 2"/><text x="539" y="426" text-anchor="middle" fill="var(--grey)">rec 3</text>
+          <rect x="572" y="410" width="54" height="24" rx="4" fill="var(--paper)" stroke="var(--c-paper)"/><text x="599" y="426" text-anchor="middle">rec 4</text>
+          <text x="640" y="426" font-weight="400">… then the rest of the established list</text>
+        </g>
+        <text x="32" y="456" font-size="11" fill="var(--grey)">a paper already placed is skipped (rec 3 was already placed as rel 2, so rec 4 takes its turn); when the relevant and recent lists run out, the established list supplies the rest</text>
+
+        <line x1="490" y1="468" x2="490" y2="496" stroke="currentColor" stroke-width="1.5" marker-end="url(#arr)"/>
+        <rect x="20" y="500" width="940" height="46" rx="6" fill="var(--c-paper)" fill-opacity=".14" stroke="var(--c-paper)" stroke-width="1.5"/>
+        <text x="32" y="520" font-size="13" font-weight="700">keep the first 100 · 200 · 400 papers</text><text x="948" y="520" text-anchor="end" font-size="11" fill="var(--grey)">acquire.acquire_sources</text>
+        <text x="32" y="538" font-size="11">walk down the list; a paper the task already holds is skipped and does not count; each kept paper records its position in the list (pool_rank) and which call found it</text>
+      </g>
+    </svg>
+    <figcaption><b>Why 60 in the fusion formula.</b> The constant is the one the original rank-fusion paper used, and it sets how steeply the credit falls off with position: position 1 earns 1/61 and position 20 earns 1/80, so the top of a list is favoured but not overwhelmingly. Without it, position 1 would earn 1 and position 20 only 1/20, and a single top-ranked hit in one broad query would outweigh steady mid-list hits in many queries. <b>Why count the coupling order three times.</b> Counted once, next to 23 query lists, it changed almost nothing on the three hand-checked topics. Counted three times it brought the on-topic papers found only through citations into the cut (a set of Dutch supermarket-checkout experiments moved from position 565 to 160) while the question's direct matches stayed at position 1 and 41% to 49% of the first 100 were still papers that two or more queries returned. Adding the coupling score outside the fusion instead pulled harder toward the citation graph: about half of its first 100 were papers no query had returned, so it was not adopted. <b>Tie score</b> for papers is used in the recent list (for papers no query returned) and to break ties in the established list; it is not a separate stage.</figcaption>
+  </figure>
+</section>
+
+<section class="wrap">
+  <h3>Keeping the top of each list</h3>
+  <p>The search ends with two ordered lists, one of papers and one of policy documents, and a limit for each. The app walks down each list, skips any document the task already holds (matched by record id, DOI or identical text), stops at the limit, and stores only what it kept. Every record a call returned is accounted for exactly once, as kept, already held, unusable (no title) or over the limit, so the counts add up to the number returned. Each kept document records which call found it: a generated query, one of its narrowed variants, the meaning-based search, a backward or forward citation lookup, or a landmark fetch.</p>
+</section>
+
+<section class="wrap" id="scopes">
+  <h2>The three scopes are three pairs of caps</h2>
+  <div class="tiles" role="list">
+    <div class="tile" role="listitem"><div class="num">100 + 50</div><div class="lab"><b>Focused.</b> Papers and policy documents kept; about 150 documents screened.</div></div>
+    <div class="tile" role="listitem"><div class="num accent">200 + 100</div><div class="lab"><b>Broad.</b> About 300 documents screened.</div></div>
+    <div class="tile" role="listitem"><div class="num accent">400 + 200</div><div class="lab"><b>Broadest.</b> About 600 documents screened.</div></div>
+  </div>
+  <p style="margin-top:1rem">Why the scopes differ only in how much they keep, not in how they search: in the design experiments every extra 100 papers kept raised recall by 2 to 5 points, with no point at which it stopped paying, and screening is now cheap enough to read the larger pool. The policy limits are half the paper limits because the policy side found 90% of everything it would ever find within 50 documents and 97% within 100. One method for all three scopes is also easier to test: one search, one measurement, three pairs of numbers. The scope hint in the app says exactly this: "Focused: up to 100 papers and 50 policy documents".</p>
+</section>
+
+<section class="wrap" id="filters">
+  <h2>Where the plan's filters go</h2>
+  <p>A plan can carry filters: publication dates, Sustainable Development Goals, document types, languages, open-access status and author countries for papers; publisher type, country, region, source and language for policy documents. A filter is never relaxed. Where each one is applied:</p>
+  <ul>
+    <li><b>Keyword searches:</b> every filter is sent to the database with the query, so only matching records come back. The same for the policy searches.</li>
+    <li><b>Meaning-based searches:</b> OpenAlex's meaning-based search accepts only the document type, language and retraction filters, plus a year range. So a date range is sent as whole years and the exact dates are checked by the app on the records that come back; the Sustainable Development Goal, open-access and author-country filters are checked by the app in the same way. The search record lists which filters were checked by the app rather than the database.</li>
+    <li><b>Citation lookups:</b> every filter is sent except the author-country one, which the app checks on the papers that come back. A paper with no affiliation data fails that check and is dropped: when in doubt, the filter wins.</li>
+    <li><b>Landmarks:</b> a plan's country filter on policy documents applies to the fetched landmarks as it does to the search results.</li>
+  </ul>
+  <p>Each call records how many of its results the app's own checks removed.</p>
+</section>
+
+<section class="wrap" id="screen">
+  <h2>Diagram B: screening, stage 1</h2>
+  <p>Every kept document goes to the title-and-abstract screen. The model (<code>gpt-5.6-luna</code>, prompt <code>screen_v4</code>) is given the document's title and abstract, or the title alone when there is no abstract, together with the research question and any inclusion criteria from the plan. It answers relevant, not relevant or unsure, with a confidence. One call is usually enough: a second call is made only when the first says not relevant, so that a single hasty "no" does not lose a relevant document.</p>
+</section>
+
+<section class="wide">
+  <figure>
+    <svg viewBox="0 0 980 250" role="img" aria-label="One call per document. If it says relevant or unsure the document is kept. If it says not relevant, one more call is made: relevant or unsure keeps the document with the flag second call kept; not relevant drops it; a failed second call drops it on the first call alone with the flag second call failed. A failed first call marks the document failed and it is retried on the next run.">
+      <g font-family="inherit" font-size="13">
+        <rect x="20" y="90" width="150" height="70" rx="6" fill="var(--ground)" stroke="currentColor"/>
+        <text x="95" y="120" text-anchor="middle" font-weight="600">Document</text>
+        <text x="95" y="140" text-anchor="middle" font-size="11" fill="var(--grey)">title, abstract, question</text>
+        <line x1="170" y1="125" x2="205" y2="125" stroke="currentColor" stroke-width="1.5" marker-end="url(#arr)"/>
+        <rect x="210" y="85" width="190" height="80" rx="6" fill="var(--c-sem)" fill-opacity=".12" stroke="var(--c-sem)" stroke-width="1.5"/>
+        <text x="305" y="112" text-anchor="middle" font-weight="600">Call 1</text>
+        <text x="305" y="132" text-anchor="middle" font-size="12">gpt-5.6-luna · screen_v4</text>
+        <text x="305" y="150" text-anchor="middle" font-size="11" fill="var(--grey)">one retry on failure</text>
+        <line x1="400" y1="105" x2="560" y2="45" stroke="currentColor" stroke-width="1.5" marker-end="url(#arr)"/>
+        <text x="470" y="62" text-anchor="middle" font-size="11">relevant or unsure</text>
+        <line x1="400" y1="125" x2="560" y2="125" stroke="currentColor" stroke-width="1.5" marker-end="url(#arr)"/>
+        <text x="480" y="118" text-anchor="middle" font-size="11">not relevant</text>
+        <line x1="400" y1="145" x2="560" y2="215" stroke="currentColor" stroke-width="1.5" marker-end="url(#arr)"/>
+        <text x="470" y="192" text-anchor="middle" font-size="11">failed after the retry</text>
+        <rect x="565" y="20" width="180" height="50" rx="6" fill="var(--green-tint)" stroke="var(--c-land)" stroke-width="1.5"/>
+        <text x="655" y="50" text-anchor="middle" font-weight="600">kept</text>
+        <rect x="565" y="95" width="180" height="60" rx="6" fill="var(--c-sem)" fill-opacity=".12" stroke="var(--c-sem)" stroke-width="1.5"/>
+        <text x="655" y="120" text-anchor="middle" font-weight="600">Call 2</text>
+        <text x="655" y="140" text-anchor="middle" font-size="11" fill="var(--grey)">same prompt, one retry</text>
+        <rect x="565" y="190" width="180" height="50" rx="6" fill="var(--yellow-tint)" stroke="var(--yellow)" stroke-width="1.5"/>
+        <text x="655" y="213" text-anchor="middle" font-weight="600">failed</text>
+        <text x="655" y="230" text-anchor="middle" font-size="11" fill="var(--grey)">retried on the next screen run</text>
+        <line x1="745" y1="110" x2="820" y2="55" stroke="currentColor" stroke-width="1.5" marker-end="url(#arr)"/>
+        <text x="800" y="70" text-anchor="end" font-size="11">relevant or unsure</text>
+        <line x1="745" y1="125" x2="820" y2="125" stroke="currentColor" stroke-width="1.5" marker-end="url(#arr)"/>
+        <text x="782" y="118" text-anchor="middle" font-size="11">not relevant</text>
+        <line x1="745" y1="140" x2="820" y2="195" stroke="currentColor" stroke-width="1.5" marker-end="url(#arr)"/>
+        <text x="800" y="185" text-anchor="end" font-size="11">failed</text>
+        <rect x="825" y="30" width="135" height="50" rx="6" fill="var(--green-tint)" stroke="var(--c-land)" stroke-width="1.5"/>
+        <text x="892" y="52" text-anchor="middle" font-weight="600">kept</text>
+        <text x="892" y="68" text-anchor="middle" font-size="10" fill="var(--grey)">second_call_kept</text>
+        <rect x="825" y="100" width="135" height="50" rx="6" fill="var(--red-tint)" stroke="var(--red)" stroke-width="1.5"/>
+        <text x="892" y="130" text-anchor="middle" font-weight="600">dropped</text>
+        <rect x="825" y="170" width="135" height="50" rx="6" fill="var(--red-tint)" stroke="var(--red)" stroke-width="1.5"/>
+        <text x="892" y="192" text-anchor="middle" font-weight="600">dropped</text>
+        <text x="892" y="208" text-anchor="middle" font-size="10" fill="var(--grey)">on call 1 · second_call_failed</text>
+      </g>
+    </svg>
+    <figcaption><b>The one-or-two-call screen</b> (<code>screen.decide_stage1</code>). A document with no abstract follows the same table. The stored confidence is the model's average probability that the document is relevant over the one or two calls, so that a confident "not relevant" followed by an "unsure" is kept but marked as shaky. The record for each document lists its calls in order. Measured on a labelled test set (task 050): 92% of the documents human reviewers had included were kept, at 1.5 calls per document; on real search results, 97% of the known relevant papers were kept at 1.3 calls per document.</figcaption>
+  </figure>
+</section>
+
+<section class="wrap" id="measured">
+  <h2>What it finds and what it costs</h2>
+  <p>The search is measured against 15 published systematic reviews. For each one, the app is given the review's question and must find the papers the review included; recall is the share it found. <code>scripts/evals/search/checks/production_recall.py</code> runs the real search and screen on those reviews and reports recall, documents, cost and time per review. The recall figures below were measured on 12 October 2026 with one Broadest run; the Focused and Broad rows are the same run's pool cut at their smaller limits, so the three rows share one set of generated queries. The documents, cost and time columns are from the runs of 9 October 2026; the ordering change made on the 12th does not alter them.</p>
+  <div class="scroll"><table>
+    <thead><tr><th>scope</th><th class="n">papers + policy kept</th><th class="n">search recall</th><th class="n">screen recall</th><th class="n">documents screened</th><th class="n">cost per review (list price)</th><th class="n">wall clock per review</th></tr></thead>
+    <tbody>
+      <tr><td>Focused</td><td class="n">100 + 50</td><td class="n" data-phase8="search_recall_rapid">15.3%</td><td class="n" data-phase8="screen_recall_rapid">14.8%</td><td class="n" data-phase8="docs_rapid">150</td><td class="n" data-phase8="cost_rapid">$0.03</td><td class="n" data-phase8="wall_rapid">86 s</td></tr>
+      <tr class="hl"><td>Broad</td><td class="n">200 + 100</td><td class="n" data-phase8="search_recall_standard">19.7%</td><td class="n" data-phase8="screen_recall_standard">19.0%</td><td class="n" data-phase8="docs_standard">300</td><td class="n" data-phase8="cost_standard">$0.07</td><td class="n" data-phase8="wall_standard">107 s</td></tr>
+      <tr><td>Broadest</td><td class="n">400 + 200</td><td class="n" data-phase8="search_recall_deep">25.3%</td><td class="n" data-phase8="screen_recall_deep">24.3%</td><td class="n" data-phase8="docs_deep">574–600</td><td class="n" data-phase8="cost_deep">$0.14</td><td class="n" data-phase8="wall_deep">197 s</td></tr>
+    </tbody>
+  </table></div>
+  <p class="note"><b>Targets.</b> The task set a minimum search recall of 12.5% / 17.3% / 24.6% at Focused / Broad / Broadest (what the design experiments reached, less 3 points for noise), and required the screen to keep at least 90% of what the search found. All three are met: before the ordering change of 12 October the figures were 12.9% / 17.8% / 22.3%, with Broadest 2.3 points short. The screen keeps 96% to 97% of what the search found at every scope. One database call failed in the 12 October run, a policy-document search on the human-rights review, so that review's policy side is an undercount. For comparison, the search before this work found 5.0% at Broad on the same reviews (<code>scripts/evals/search/results/history.md</code>, 5 October 2026). <b>Cost note:</b> the dollar figures use the model's list price. The monitoring tool reports five times these amounts because its price entry for the model is five times the list price.</p>
+  <p>The policy side cannot be measured this way, because published reviews do not list the policy documents they drew on. Instead it is pinned by tests that replay recorded Overton responses for three questions (<code>backend/tests/data/policy_replay/</code>) and check the order of results, the removal of repeated titles, the 15 landmarks, the ordering score, a UK-only filter and the limit.</p>
+</section>
+
+<section class="wrap" id="replaced">
+  <h2>What it replaced</h2>
+  <p>Before this work (<a href="../../adr/0012-depth-graded-agentic-search.md">ADR 0012</a>), a Focused search was the 15 keyword searches and 3 policy searches, merged and cut at 50 documents per database, with no citation lookups. Broad and Broadest then repeated search and screen up to three times, each round choosing among four strategies (rewriting the queries from the documents the screen had kept, a small citation lookup, papers suggested by a language model, and a reserve of varied results) and stopping by a rule of its own. The screen asked the model three times per document and took a majority. The policy search returned documents newest first rather than best match first, because no sort order was being requested.</p>
+  <p>None of the four strategies had been measured on its own. The whole three-round Broadest found 15.3% of the reference lists on four reviews; one pass of the method above found 20.3% on fifteen reviews at the same pool size. The old loop is deleted; its last working version is tagged <code>search-round-loop-last</code>, with the restore recipe in <a href="../../adr/0038-single-pass-search-and-adaptive-screen.md">ADR 0038</a>. Old search records keep their old vocabulary and remain readable.</p>
+</section>
+
+<section class="wrap" id="parked">
+  <h2>Parked, with their measurements</h2>
+  <div class="didnt">
+    <div><b>A second search for Broadest.</b> Search, screen, rewrite the queries from the documents the screen kept, and search once more: measured at about 4 points more recall. The one old strategy that showed value. Parked in <code>docs/deferred.md</code>.</div>
+    <div><b>Weighting policy documents by how close their text is to the question.</b> Agreed in principle; it needs about 5 extra model calls per search, and the measurements above are without it.</div>
+    <div><b>Putting the first 50 keyword results ahead of everything else.</b> Tried offline in October 2026: it let a broad query's off-topic results in. Replaced by the three-list ordering described above.</div>
+    <div><b>Measuring recall on the most-cited papers separately.</b> The experiment script reports it; the production check does not yet.</div>
+    <div><b>Policy documents with a placeholder title</b> and <b>a country-of-origin option in the plan.</b> Out of this piece of work.</div>
+  </div>
+</section>
+</main>
+
+<footer class="wrap">
+  <p>Sources: <code>docs/tasks/051-improve-production-search-screen/</code> (contract, plan, notes, verification); ADR 0038, 0011 and 0012; the write-ups <code>scripts/evals/search/results/analyses/2026-10-09-design-experiments.md</code>, <code>2026-10-06-search-experiments.md</code>, <code>2026-10-07-overton-experiments.md</code> and <code>scripts/evals/screening/results/analyses/2026-10-08-screening-experiments.md</code>; code in <code>sourcing/search_loop.py</code>, <code>sourcing/pool.py</code>, <code>sourcing/acquire.py</code>, <code>sourcing/search_live.py</code>, <code>assess/screen.py</code>, <code>assess/screen_prompt.py</code>.</p>
+</footer>
+</body>
+</html>

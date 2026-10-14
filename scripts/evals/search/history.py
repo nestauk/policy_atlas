@@ -97,7 +97,12 @@ def fetch_runs(
                 "commit": meta.get("git_commit", "")[:7],
                 "depth": meta.get("depth", ""),
                 "backend": meta.get("generation_backend", ""),
-                "cap": meta.get("record_cap_per_backend", ""),
+                "cap": meta.get("record_cap_per_backend")
+                or (
+                    f"{meta['papers_cap']}+{meta['policy_cap']}"
+                    if "papers_cap" in meta and "policy_cap" in meta
+                    else ""
+                ),
                 "n_reviews": len(items),
                 "search_recall": mean.get("search_recall"),
                 "screen_recall": mean.get("screen_recall"),

@@ -16,13 +16,14 @@ export const SOURCES_LABEL: Record<string, string> = {
 };
 
 /**
- * Owner-set acquire caps (`record_cap_per_backend` in search_loop
- * DEPTH_CONSTANTS): documents kept per database per round.
+ * Owner-set acquire caps (`papers_cap` / `policy_cap` in search_loop
+ * DEPTH_CONSTANTS): papers (OpenAlex) and policy documents (Overton) kept
+ * per run after ranking.
  */
 export const SEARCH_SCOPE_RECORD_CAP = {
-  rapid: 50,
-  standard: 100,
-  deep: 200,
+  rapid: { papers: 100, policy: 50 },
+  standard: { papers: 200, policy: 100 },
+  deep: { papers: 400, policy: 200 },
 } as const;
 
 /** Shortlist sizes from ``ANALYSIS_DEPTH_TABLE`` selection budgets. */
@@ -34,10 +35,10 @@ export const ANALYSIS_SHORTLIST_CAP = {
 /** Axis title for `search_effort` — how widely the databases are queried. */
 export const SEARCH_SCOPE_TITLE = "Search scope";
 export const SEARCH_SCOPE_HINT = [
-  "How many relevant results each database may collect:",
-  `Focused: up to ${SEARCH_SCOPE_RECORD_CAP.rapid} relevant results per database`,
-  `Broad: up to ${SEARCH_SCOPE_RECORD_CAP.standard} relevant results per database`,
-  `Broadest: up to ${SEARCH_SCOPE_RECORD_CAP.deep} relevant results per database`,
+  "How many documents the search may keep:",
+  `Focused: up to ${SEARCH_SCOPE_RECORD_CAP.rapid.papers} papers and ${SEARCH_SCOPE_RECORD_CAP.rapid.policy} policy documents`,
+  `Broad: up to ${SEARCH_SCOPE_RECORD_CAP.standard.papers} papers and ${SEARCH_SCOPE_RECORD_CAP.standard.policy} policy documents`,
+  `Broadest: up to ${SEARCH_SCOPE_RECORD_CAP.deep.papers} papers and ${SEARCH_SCOPE_RECORD_CAP.deep.policy} policy documents`,
 ].join("\n");
 
 export const SEARCH_EFFORT_LABEL: Record<string, string> = {

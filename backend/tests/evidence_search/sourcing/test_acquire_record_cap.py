@@ -1,9 +1,11 @@
-"""Tests for the per-round acquisition cap: merge, dedup, trim, persist.
+"""Tests for the acquisition cap: pool order, dedup, trim, persist.
 
-The cap replaced the standard/deep wall clock as the run's volume brake. Its
-contract is: rank-interleave the search fan-out so every query is represented,
-dedup *before* trimming so a capped round still yields a full cap of new
-documents, cap each backend separately, and never trim targeted verbs.
+The cap is the run's volume brake. Its contract (task 051, D7): the caller
+hands ``acquire_sources`` one ranked pool per backend; acquire dedups *before*
+trimming so a capped run still yields a full cap of new documents, caps each
+backend separately, and keeps ``results_returned`` as the raw provider count.
+These tests build their pools with ``pool.interleave`` (rank round-robin over
+the calls), the order the search uses for seeds.
 """
 
 import uuid
@@ -13,32 +15,15 @@ from sqlalchemy import func, select
 from sqlalchemy.engine import Connection
 
 from policy_atlas.core.schema import source_snapshot, task_source_snapshot
+from policy_atlas.evidence_search.sourcing import pool
 from policy_atlas.evidence_search.sourcing.acquire import (
     AcquireContext,
     SearchBackend,
-    _Candidate,
-    _interleave,
     acquire_sources,
 )
 from policy_atlas.evidence_search.sourcing.search_loop import ExecutedCall
 from tests.helpers import oa_record, seed_run, seed_scope, seed_task_and_run
 from tests.provider_fixtures import OpenAlexFixtureBackend, OvertonFixtureBackend
-
-
-def _candidate(name: str) -> _Candidate:
-    """A candidate carrying only the fields _interleave reads."""
-    return _Candidate(
-        backend_name="openalex",
-        verb="search",
-        record={},
-        mapped={},
-        text=name,
-        chash=name,
-    )
-
-
-def _names(candidates: list[_Candidate]) -> list[str]:
-    return [candidate.text for candidate in candidates]
 
 
 def _ov_record(suffix: str) -> dict[str, Any]:
@@ -97,8 +82,34 @@ def _acquire(
         context=AcquireContext(scope_id=scope_id, intent="Test intent", context={}),
         backends=cast("list[SearchBackend]", backends),
         executed_calls=calls,
-        record_cap_per_backend=cap,
+        pools=_pools(calls),
+        caps=({"openalex": cap, "overton": cap} if cap is not None else None),
     )
+
+
+def _pools(calls: list[ExecutedCall]) -> dict[str, list[tuple[dict[str, Any], str, str]]]:
+    """Rank-interleave each backend's calls, then list every other copy after."""
+    pools: dict[str, list[tuple[dict[str, Any], str, str]]] = {}
+    for name in {call.backend_name for call in calls}:
+        mine = [call for call in calls if call.backend_name == name]
+        key = (
+            (lambda r: r.get("id"))
+            if name == "openalex"
+            else (lambda r: r.get("policy_document_id"))
+        )
+        ranked = pool.interleave([call.records for call in mine], key)
+        placed = {id(record) for record in ranked}
+        origin = {id(r): (call.query_origin, call.verb) for call in mine for r in call.records}
+        entries: list[tuple[dict[str, Any], str, str]] = [
+            (record, *origin[id(record)]) for record in ranked
+        ]
+        for call in mine:
+            for record in call.records:
+                if id(record) not in placed:
+                    placed.add(id(record))
+                    entries.append((record, *origin[id(record)]))
+        pools[name] = entries
+    return pools
 
 
 def _persisted_titles(conn: Connection, task_id: uuid.UUID) -> set[str]:
@@ -107,43 +118,12 @@ def _persisted_titles(conn: Connection, task_id: uuid.UUID) -> set[str]:
         .select_from(
             task_source_snapshot.join(
                 source_snapshot,
-                task_source_snapshot.c.source_snapshot_id
-                == source_snapshot.c.source_snapshot_id,
+                task_source_snapshot.c.source_snapshot_id == source_snapshot.c.source_snapshot_id,
             )
         )
         .where(task_source_snapshot.c.task_id == task_id)
     ).fetchall()
     return {row.metadata["title"] for row in rows}
-
-
-# --- _interleave (pure) ---
-
-
-def test_interleave_round_robins_by_rank_position() -> None:
-    merged = _interleave(
-        [
-            [_candidate("A1"), _candidate("A2"), _candidate("A3")],
-            [_candidate("B1"), _candidate("B2"), _candidate("B3")],
-            [_candidate("C1"), _candidate("C2"), _candidate("C3")],
-        ]
-    )
-    assert _names(merged) == ["A1", "B1", "C1", "A2", "B2", "C2", "A3", "B3", "C3"]
-
-
-def test_interleave_drains_uneven_calls_without_reordering_the_rest() -> None:
-    """A short query stops contributing; the others keep their rank order."""
-    merged = _interleave(
-        [
-            [_candidate("A1")],
-            [_candidate("B1"), _candidate("B2"), _candidate("B3")],
-        ]
-    )
-    assert _names(merged) == ["A1", "B1", "B2", "B3"]
-
-
-def test_interleave_handles_no_calls_and_empty_calls() -> None:
-    assert _interleave([]) == []
-    assert _interleave([[], []]) == []
 
 
 # --- Cap behaviour through acquire_sources ---
@@ -172,37 +152,22 @@ def test_cap_keeps_the_top_ranked_slice_of_every_query(conn: Connection) -> None
     }
 
 
-def test_cap_is_per_backend(conn: Connection) -> None:
-    """OpenAlex breaching its cap does not consume Overton's."""
-    task_id, run_id = seed_task_and_run(conn)
-    scope_id = seed_scope(conn, task_id)
-    calls = [
-        _call("openalex", [oa_record(f"a{i}") for i in range(10)]),
-        _call("overton", [_ov_record(f"b{i}") for i in range(10)]),
-    ]
+def test_the_cap_is_a_cut_by_position_not_refilled_past_it(conn: Connection) -> None:
+    """A repeat inside the cut counts as already acquired and is not replaced
+    from beyond the cut.
 
-    counts = _acquire(conn, task_id, run_id, scope_id, calls, cap=3)
-
-    assert counts["by_backend"]["openalex"]["acquired"] == 3
-    assert counts["by_backend"]["overton"]["acquired"] == 3
-    assert counts["by_backend"]["openalex"]["dropped_over_cap"] == 7
-    assert counts["by_backend"]["overton"]["dropped_over_cap"] == 7
-
-
-def test_dedup_runs_before_the_trim_so_the_cap_is_filled(conn: Connection) -> None:
-    """Repeats from an earlier round do not consume cap slots.
-
-    This is the property that makes later deep rounds work as hard as the
-    first: capping candidates instead of acquisitions would let a round of
-    mostly-repeats acquire far fewer than its budget.
+    Until task 051 this test pinned the opposite ("repeats do not consume cap
+    slots"), a property of the deleted round loop, where later rounds had to
+    work as hard as the first. The single pass hands over one ranked list
+    and the cap is a cut on it by position (contract D7): everything after the
+    cut is dropped, so a re-run of the same scope persists nothing the ranking
+    left out (review finding, 2026-10-09).
     """
     task_id, run_id = seed_task_and_run(conn)
     scope_id = seed_scope(conn, task_id)
     first = [oa_record(f"a{i}") for i in range(4)]
     _acquire(conn, task_id, run_id, scope_id, [_call("openalex", first)], cap=None)
-    assert _persisted_titles(conn, task_id) == {
-        f"OpenAlex record a{i}" for i in range(4)
-    }
+    assert _persisted_titles(conn, task_id) == {f"OpenAlex record a{i}" for i in range(4)}
 
     # Round 2 re-returns all four, then four genuinely new records.
     second = first + [oa_record(f"c{i}") for i in range(4)]
@@ -216,11 +181,9 @@ def test_dedup_runs_before_the_trim_so_the_cap_is_filled(conn: Connection) -> No
     )
 
     assert counts["already_acquired"] == 4
-    assert counts["acquired"] == 4, "the cap should fill with new documents"
-    assert counts["dropped_over_cap"] == 0
-    assert _persisted_titles(conn, task_id) == {
-        f"OpenAlex record a{i}" for i in range(4)
-    } | {f"OpenAlex record c{i}" for i in range(4)}
+    assert counts["acquired"] == 0, "nothing past the cut is persisted"
+    assert counts["dropped_over_cap"] == 4
+    assert _persisted_titles(conn, task_id) == {f"OpenAlex record a{i}" for i in range(4)}
 
 
 def test_dedup_keeps_the_best_ranked_copy(conn: Connection) -> None:
@@ -275,8 +238,9 @@ def test_dropped_records_do_not_claim_identities(conn: Connection) -> None:
     assert "Overton document twin" in _persisted_titles(conn, task_id)
 
 
-def test_targeted_verbs_are_never_trimmed(conn: Connection) -> None:
-    """Snowball and suggest results are individually chosen; their arms cap upstream."""
+def test_every_pool_entry_counts_toward_the_cap(conn: Connection) -> None:
+    """Citation-found records are pool members like any other (task 051, D7):
+    the old exemption for targeted verbs is gone, the cap bounds the pool."""
     task_id, run_id = seed_task_and_run(conn)
     scope_id = seed_scope(conn, task_id)
     calls = [
@@ -286,9 +250,8 @@ def test_targeted_verbs_are_never_trimmed(conn: Connection) -> None:
 
     counts = _acquire(conn, task_id, run_id, scope_id, calls, cap=1)
 
-    # 5 snowball records kept in full, plus 1 from the capped search fan-out.
-    assert counts["acquired"] == 6
-    assert counts["dropped_over_cap"] == 4
+    assert counts["acquired"] == 1
+    assert counts["dropped_over_cap"] == 9
 
 
 def test_cap_none_acquires_everything(conn: Connection) -> None:

@@ -39,6 +39,13 @@ timestamp: 2026-09-25
   already edited it: snapshot the file at gate time and stage the snapshot blob
   with `git update-index --cacheinfo`, so the commit carries what the gate saw
   and the sibling's edits stay in the working tree (046 build, `tests/test_measure.py`).
+- **Codex cannot start `uv` either** (its cache sits outside the sandbox), so a
+  Codex brief that needs any Python test run says "tests run lead-side"; and **Codex
+  runs `ruff format` over the whole tree unless told the exact files** (051: one round
+  reformatted about 170 unrelated files, reverted by path). Name the files in the brief
+  and say "no formatter" for a read-only pass.
+- **Fixture doubles return the same objects on every call** (`functools.cache`), so
+  any bookkeeping by `id(record)` must copy what a backend returns (051 Phase 3a).
 - **Two families editing one working tree concurrently** is safe when the
   briefs carry disjoint file lists AND each names the sibling's files;
   string-anchored edits on one SHARED file from two agents also merged

@@ -21,7 +21,7 @@ are done (spec-prep 2026-06-22; refreshed 2026-07-03); `[ ]` items are open gate
 - [x] Open/provisional decisions marked 🟡 / ❓ throughout; none silently flattened.
 - [ ] Tool/component I/O contracts — draft when the first implementation task lands.
 - [x] Task-contract map for first implementation slices — superseded by the running task sequence
-  (`docs/tasks/001`–`043` merged to `dev`; 044, 045 and 046 — options scoping tasks 1 and 2 (the
+  (`docs/tasks/001`–`043` and `047`–`051` merged to `dev` as of 2026-10-09, 051 the single-pass search of ADR 0038; 044, 045 and 046 — options scoping tasks 1 and 2 (the
   longlist) and the longlist refinement with its four amendments — merge to the
   `feat/options-scoping` feature branch (draft PR #69 → `dev`) as of 2026-10-12, so `dev` and
   production carry one capability until that branch lands; system live at

@@ -2,6 +2,7 @@
 
 from aws_cdk import (
     Duration,
+    Fn,
     RemovalPolicy,
     Stack,
     aws_ec2 as ec2,
@@ -18,6 +19,7 @@ from aws_cdk import (
 from constructs import Construct
 
 from infra.components.shared_alb import import_shared_alb
+from infra.metabase_allowlist import CIDRS_PER_LISTENER_RULE, MAX_ALLOWLIST_ENTRIES
 
 
 class PaV3AnalyticsStack(Stack):
@@ -32,6 +34,8 @@ class PaV3AnalyticsStack(Stack):
         id: Logical stack identifier.
         metabase_config: Environment-specific Metabase configuration.
         env_name: Deployment environment name.
+        allowlist_size: Number of CIDRs in the SSM allowlist, which sets how
+            many listener rules carry it.
         **kwargs: Additional CDK stack properties.
     """
 
@@ -41,6 +45,7 @@ class PaV3AnalyticsStack(Stack):
         id: str,
         metabase_config: dict,
         env_name: str,
+        allowlist_size: int,
         **kwargs,
     ) -> None:
         """Initialize the Metabase resources.
@@ -50,8 +55,22 @@ class PaV3AnalyticsStack(Stack):
             id: Logical stack identifier.
             metabase_config: Environment-specific Metabase configuration.
             env_name: Deployment environment name.
+            allowlist_size: Number of CIDRs in the SSM allowlist (one to
+                ``MAX_ALLOWLIST_ENTRIES``), which sets how many listener rules
+                carry it.
             **kwargs: Additional CDK stack properties.
+
+        Raises:
+            ValueError: If ``allowlist_size`` is outside one to
+                ``MAX_ALLOWLIST_ENTRIES``.
         """
+        if (
+            type(allowlist_size) is not int
+            or not 1 <= allowlist_size <= MAX_ALLOWLIST_ENTRIES
+        ):
+            raise ValueError(
+                f"allowlist_size must be an integer from 1 to {MAX_ALLOWLIST_ENTRIES}"
+            )
         super().__init__(scope, id, **kwargs)
 
         container_config = metabase_config["container"]
@@ -317,15 +336,29 @@ class PaV3AnalyticsStack(Stack):
                 )
             ],
         )
-        shared_alb.listener.add_target_groups(
-            "MetabaseTargetGroupAttachment",
-            target_groups=[metabase_target_group],
-            priority=20,
-            conditions=[
-                elbv2.ListenerCondition.host_headers([metabase_domain]),
-                elbv2.ListenerCondition.source_ips(allowed_source_cidrs),
-            ],
-        )
+        for rule_index, first_cidr in enumerate(
+            range(0, allowlist_size, CIDRS_PER_LISTENER_RULE)
+        ):
+            rule_cidrs = [
+                Fn.select(cidr_index, allowed_source_cidrs)
+                for cidr_index in range(
+                    first_cidr,
+                    min(first_cidr + CIDRS_PER_LISTENER_RULE, allowlist_size),
+                )
+            ]
+            # The first rule keeps its original construct id so CloudFormation
+            # updates it in place; a replacement would collide on priority 20.
+            shared_alb.listener.add_target_groups(
+                "MetabaseTargetGroupAttachment"
+                if rule_index == 0
+                else f"MetabaseTargetGroupAttachment{rule_index + 1}",
+                target_groups=[metabase_target_group],
+                priority=20 + rule_index,
+                conditions=[
+                    elbv2.ListenerCondition.host_headers([metabase_domain]),
+                    elbv2.ListenerCondition.source_ips(rule_cidrs),
+                ],
+            )
 
         r53.ARecord(
             self,

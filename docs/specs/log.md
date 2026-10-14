@@ -220,6 +220,13 @@ owner's words quoted (item 10, the decision sheet, landed at plan approval). Con
   cell reads existing source and finding fields (D3 folded into C3). [OS components](capabilities/options-scoping/components.md),
   [OS capability](capabilities/options-scoping/capability.md), [OS trust](capabilities/options-scoping/trust.md)
   and [EB components](capabilities/evidence-search/components.md) § 0 aligned. Frozen sources untouched.
+## 2026-10-09
+* **Update**: Evidence search [components.md](capabilities/evidence-search/components.md) §1 acquire
+  and §2 screen describe the task 051 build ([ADR 0038](../adr/0038-single-pass-search-and-adaptive-screen.md)):
+  one search pass at every scope (keyword + semantic seeds, backward and forward citation chasing,
+  two specificity-ranked pools cut at a papers cap and a policy cap, Overton in relevance order with
+  cited landmarks) replaces the task 015 acquire↔screen round loop, and the stage-1 screen's
+  three-sample majority becomes an adaptive one-or-two-call vote on `screen_v4`.
 
 ## 2026-09-08
 * **Update**: Options scoping board refinement — concept rulings 45–47 (the report stays linear with

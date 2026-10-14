@@ -729,13 +729,8 @@ def screening_score_summary(
         decided = summary["relevant"] + summary["not_relevant"]
         if decided > 0:
             client.score_current_trace(
-                name="non_unanimous_share",
-                value=summary.get("non_unanimous", 0) / decided,
-                data_type="NUMERIC",
-            )
-            client.score_current_trace(
-                name="tie_broken_count",
-                value=float(summary.get("tie_broken", 0)),
+                name="second_call_kept_count",
+                value=float(summary.get("second_call_kept", 0)),
                 data_type="NUMERIC",
             )
     if "stage2_screened" in summary:

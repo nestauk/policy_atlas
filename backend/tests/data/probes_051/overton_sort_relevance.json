@@ -1,0 +1,192 @@
+{
+  "text": "interventions to reduce loneliness in older adults",
+  "status_default": 200,
+  "status_relevance": 200,
+  "default_order": [
+    {
+      "policy_document_id": "aloneie-b22cbd133a7498687602a9b609888c59",
+      "title": "ALONE ECC Quarterly Report Q2 2026",
+      "published_on": "2026-10-05",
+      "es_score": null,
+      "citation_count": 0,
+      "source_country": "Ireland",
+      "n_cites_policy": 0
+    },
+    {
+      "policy_document_id": "departmentofhautespyreneesfr-2a3eac08c311692969daab4d34e31ba2",
+      "title": "Local Development Department",
+      "published_on": "2026-09-30",
+      "es_score": null,
+      "citation_count": 0,
+      "source_country": "France",
+      "n_cites_policy": 0
+    },
+    {
+      "policy_document_id": "aloneie-ec453a243db2ac07a3a8a9b47df0c620",
+      "title": "ALONE Annual Report 2025",
+      "published_on": "2026-09-29",
+      "es_score": null,
+      "citation_count": 0,
+      "source_country": "Ireland",
+      "n_cites_policy": 0
+    },
+    {
+      "policy_document_id": "departmentoflozerefr-c0d4f7fdf2ef91a8b24836d2cfe62ba3",
+      "title": "MEMORY Workshop",
+      "published_on": "2026-09-29",
+      "es_score": null,
+      "citation_count": 0,
+      "source_country": "France",
+      "n_cites_policy": 0
+    },
+    {
+      "policy_document_id": "cityofcopenhagen-30fb9c63d61068eb88945866492e51ee",
+      "title": "Memorandum on the implementation of pension reform funds",
+      "published_on": "2026-09-21",
+      "es_score": null,
+      "citation_count": 0,
+      "source_country": "Denmark",
+      "n_cites_policy": 0
+    },
+    {
+      "policy_document_id": "stateofhamburg-98a6a32fe25496db6651678238cca74a",
+      "title": "Help with loneliness",
+      "published_on": "2026-09-16",
+      "es_score": null,
+      "citation_count": 0,
+      "source_country": "Germany",
+      "n_cites_policy": 2
+    },
+    {
+      "policy_document_id": "departmentoftarnetgaronnefr-95322eb5b43e978b3b94e007c6a98620",
+      "title": "Actions to prevent loss of autonomy in nursing homes, Year 2026",
+      "published_on": "2026-09-11",
+      "es_score": null,
+      "citation_count": 0,
+      "source_country": "France",
+      "n_cites_policy": 0
+    },
+    {
+      "policy_document_id": "regionfriuliveneziagiuliait-a29217523efabdf4b2e1200e57e3d26f",
+      "title": "Art. 6",
+      "published_on": "2026-08-20",
+      "es_score": null,
+      "citation_count": 0,
+      "source_country": "Italy",
+      "n_cites_policy": 0
+    },
+    {
+      "policy_document_id": "regionfriuliveneziagiuliait-afc832a6a7b8a2e793ec413817462fc1",
+      "title": "[THIS TITLE IS BROKEN AND HAS BEEN REMOVED]",
+      "published_on": "2026-08-20",
+      "es_score": null,
+      "citation_count": 0,
+      "source_country": "Italy",
+      "n_cites_policy": 0
+    },
+    {
+      "policy_document_id": "regionfriuliveneziagiuliait-cdd11491b7f52ce561350d9a9bd6730c",
+      "title": "Combating loneliness and promoting active aging. Art. 1",
+      "published_on": "2026-08-20",
+      "es_score": null,
+      "citation_count": 0,
+      "source_country": "Italy",
+      "n_cites_policy": 0
+    }
+  ],
+  "relevance_order": [
+    {
+      "policy_document_id": "norweiganinstituteofpublichealth-d488750a9a6a0de4f226e675f9c79657",
+      "title": "A systematic review of review articles on the effects of measures to reduce loneliness and social isolation (2017-2022)",
+      "published_on": "2023-10-09",
+      "es_score": 0.9530325,
+      "citation_count": 1,
+      "source_country": "Norway",
+      "n_cites_policy": 2
+    },
+    {
+      "policy_document_id": "pagov-9e517af6ba98b92aaf40a4a155731069",
+      "title": "Interventions to reduce social isolation and loneliness among older people: an integrative review",
+      "published_on": "2018-02-07",
+      "es_score": 0.9386983,
+      "citation_count": 0,
+      "source_country": "USA",
+      "n_cites_policy": 0
+    },
+    {
+      "policy_document_id": "norweiganinstituteofpublichealth-ddb16c73899640f0934386616369d508",
+      "title": "Are measures to reduce loneliness and social isolation in people over 65 effective?",
+      "published_on": "2025-10-10",
+      "es_score": 0.9357811,
+      "citation_count": 0,
+      "source_country": "Norway",
+      "n_cites_policy": 0
+    },
+    {
+      "policy_document_id": "stateofeuskadi-df4d7e2402be7f2000079789b6fc42aa",
+      "title": "The Loneliness of Older People",
+      "published_on": "2018-06-21",
+      "es_score": 0.9284454,
+      "citation_count": 1,
+      "source_country": "Spain",
+      "n_cites_policy": 1
+    },
+    {
+      "policy_document_id": "who-282d028d8de68d958360be3bb2c26e98",
+      "title": "Preventing social isolation and loneliness among older people",
+      "published_on": "2020-06-19",
+      "es_score": 0.92831403,
+      "citation_count": 9,
+      "source_country": "IGO",
+      "n_cites_policy": 0
+    },
+    {
+      "policy_document_id": "stateofmurcia-94f91167c1e615c707f0876e95515fd2",
+      "title": "The Loneliness Of Older People",
+      "published_on": "2018-06-21",
+      "es_score": 0.9244678,
+      "citation_count": 0,
+      "source_country": "Spain",
+      "n_cites_policy": 1
+    },
+    {
+      "policy_document_id": "regionstockholmse-1813c3772959af47758e1466a31f5e8e",
+      "title": "Strategies for preventing loneliness in the elderly",
+      "published_on": "2021-09-27",
+      "es_score": 0.92035306,
+      "citation_count": 0,
+      "source_country": "Sweden",
+      "n_cites_policy": 1
+    },
+    {
+      "policy_document_id": "govuk-90b545eae4fc4311216d73510c9fb2d5",
+      "title": "Exploring interventions to tackle loneliness",
+      "published_on": "2023-09-04",
+      "es_score": 0.9181057,
+      "citation_count": 1,
+      "source_country": "UK",
+      "n_cites_policy": 3
+    },
+    {
+      "policy_document_id": "healthwelfaresweden-cba1007011ae8b9c3d61f6226ca34c73",
+      "title": "Guidance to prevent involuntary loneliness among older people",
+      "published_on": "2022-12-16",
+      "es_score": 0.91425174,
+      "citation_count": 13,
+      "source_country": "Sweden",
+      "n_cites_policy": 8
+    },
+    {
+      "policy_document_id": "stateofcastillamancha-15544a580d388a2cdd1ed5a714e272a7",
+      "title": "Brief Instrument to Detect Risk of Unwanted Loneliness in Older Adults in Castilla-La Mancha:",
+      "published_on": "2023-11-24",
+      "es_score": 0.91232646,
+      "citation_count": 0,
+      "source_country": "Spain",
+      "n_cites_policy": 0
+    }
+  ],
+  "relevance_scores_descend": true,
+  "first_result_differs": true,
+  "default_dates_descend": true
+}
