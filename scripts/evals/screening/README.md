@@ -103,7 +103,7 @@ scripts/evals/screening/
 ├── adapter.py          load the three sources and sample them (mini or full)
 ├── vote.py             the app's keep rule
 ├── metrics.py          recall, precision, F2, and the dollar cost
-├── sync_s3.py          download the datasets and upload a run, via the AWS command line
+├── upload.py           the sampled rows -> Langfuse dataset (screening-ground-truth-mini / -full)
 ├── checks/             measures the app's screen as built
 │   ├── run_screen.py   one run: screen, score, write a folder (flags change one setting for an experiment)
 │   └── analyse_runs.py summarise and compare saved runs (no model calls)
@@ -111,7 +111,7 @@ scripts/evals/screening/
 │   └── rank_baselines.py non-AI baselines: BM25, embeddings, hybrid
 ├── prompts/            replacement system prompts for prompt experiments
 ├── tests               self-checks, no network and no model calls
-├── datasets/           the downloaded files (not in git)
+├── datasets/           the downloaded files (not in git; ../sync_s3.py fills it)
 └── results/
     ├── history.md      headline numbers, kept by hand
     ├── analyses/       dated write-ups of an experiment (kept in git)
@@ -150,7 +150,25 @@ aws sts get-caller-identity
 Do this once, or again when the files on S3 change. The folder name `CESMeD` is the spelling in the bucket (capitals matter on Linux); the source itself is called CSMeD.
 
 ```
-uv run --project backend python scripts/evals/screening/sync_s3.py download
+uv run --project backend python scripts/evals/sync_s3.py screening download
+```
+
+`scripts/evals/sync_s3.py` is shared with the search eval: the first argument names the area. `--dry-run` lists what would be copied.
+
+### Where the data lives
+
+| Copy | Where | What |
+| --- | --- | --- |
+| Master | `s3://discovery-policy-atlas/eval/datasets/screening/` | The three labelled sources, about 300 MB |
+| Working | `datasets/` on your machine, not in git | What `sync_s3.py screening download` fetched |
+| Langfuse | `screening-ground-truth-mini`, `screening-ground-truth-full` | The sampled rows the eval scores, one item per document (0.7 MB and 7.6 MB), from `upload.py` |
+| Runs | `s3://discovery-policy-atlas/eval/results/screening/<folder>/` | One folder per uploaded run |
+
+The scripts still read `datasets/`. The Langfuse copy is there so the rows can be read without the source files and a run can be linked to its items:
+
+```
+# builds the items and prints a summary; add --dry-run to upload nothing
+uv run --project backend --env-file backend/.env python scripts/evals/screening/upload.py --dataset mini
 ```
 
 ### Where the questions come from
@@ -209,7 +227,7 @@ The cost is tokens times the published OpenAI rate stored in `metrics.py` (check
 ### 3. Upload the run
 
 ```
-uv run --project backend python scripts/evals/screening/sync_s3.py upload \
+uv run --project backend python scripts/evals/sync_s3.py screening upload \
     scripts/evals/screening/results/runs/<folder name>
 ```
 

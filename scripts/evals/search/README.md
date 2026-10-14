@@ -126,7 +126,7 @@ scripts/evals/search/
 │   ├── fetch_helpers.py    shared code for the getters
 │   ├── select_sample.py    quality check, makes the mini and full samples
 │   ├── upload.py           CSV files -> Langfuse dataset
-│   └── policy_gt_specific.csv  15 topic-specific gov.uk documents and questions (task 049, policy-side ground truth)
+│   └── policy_gt_specific.csv  15 topic-specific gov.uk documents and questions (task 049, policy-side ground truth; not in git, from S3)
 ├── checks/                 measures the app as built (the numbers in results/history.md)
 │   ├── production_recall.py  the real pipeline at each depth
 │   ├── baseline_recall.py    one plain search per service, no language model
@@ -151,8 +151,10 @@ scripts/evals/search/
     ├── cache/              raw baseline results, one JSON file per arm and review
     ├── snowball/           snowball scores, ranked candidates, manual-question exports; pool/ for the re-rank experiment
     ├── overton/            scores of the Overton probes (overton_recall.py); merge/, policy/, policy_gt*/ for the other 049 scripts
-    └── ground_truth/       fetched collections and the two samples
+    └── ground_truth/       fetched collections and the two samples (not in git, from S3)
 ```
+
+`../sync_s3.py` (shared with the screening eval) copies the ground-truth files between S3 and these folders.
 
 Each script starts with `import _bootstrap`. This short file lets the script import its neighbours, so you can run any script directly.
 
@@ -171,6 +173,24 @@ getters ──> select_sample.py ──> upload.py ──> Langfuse dataset
 ```
 
 The measuring scripts read the ground truth from Langfuse, not from the CSV files. Upload the dataset first.
+
+### Where the data lives
+
+| Copy | Where | What |
+| --- | --- | --- |
+| Master | `s3://discovery-policy-atlas/eval/datasets/search/ground_truth/` | The fetched collections and the two samples as CSV, about 30 MB |
+| Master | `s3://discovery-policy-atlas/eval/datasets/search/policy_gt/` | The policy-side ground truth (`policy_gt_specific.csv` and its targets) |
+| Working | `results/ground_truth/` and `ground_truth/policy_gt_specific*`, not in git | What `sync_s3.py search download` fetched |
+| Langfuse | `retrieval-ground-truth`, `-mini`, `-full` | What the measuring scripts read: one item per review (1.2 MB for the 100) |
+| Runs | `s3://discovery-policy-atlas/eval/results/search/<folder>/` | Run folders uploaded with `sync_s3.py search upload` |
+
+The 1.6 GB SR4ALL source file is not on S3: download it by its DOI (step 1 below). The Langfuse datasets are not versioned, so after `upload.py` changes one, note it in `history.md`.
+
+```
+# fetch the ground-truth files; after a new fetch or sample, push them back
+uv run --project backend python scripts/evals/sync_s3.py search download
+uv run --project backend python scripts/evals/sync_s3.py search upload-datasets
+```
 
 ## Commands
 
