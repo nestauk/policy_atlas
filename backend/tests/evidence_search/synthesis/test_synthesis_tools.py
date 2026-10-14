@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import uuid
-from typing import Any
+from typing import Any, Literal
 
 import pytest
 from sqlalchemy import select
@@ -73,7 +73,9 @@ class FakeEmbedder:
         self.vectors = vectors or {}
         self.calls: list[list[str]] = []
 
-    def embed_texts(self, texts: list[str]) -> list[list[float]]:
+    def embed_texts(
+        self, texts: list[str], *, kind: Literal["document", "query"] = "document"
+    ) -> list[list[float]]:
         self.calls.append(texts)
         return [self.vectors.get(text, _vector(1.0)) for text in texts]
 

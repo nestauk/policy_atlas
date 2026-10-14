@@ -16,8 +16,8 @@ from policy_atlas.api.settings import Settings
 from policy_atlas.core import tracing
 from policy_atlas.core.embeddings import (
     EmbeddingBackend,
-    OpenAIEmbeddingBackend,
     StubEmbeddingBackend,
+    live_embedding_backend,
 )
 from policy_atlas.evidence_search.synthesis.grounding_judge import (
     GroundingJudgeBackend,
@@ -193,7 +193,7 @@ def get_chat_backend() -> ChatBackend:
 def get_chat_embedding_backend() -> EmbeddingBackend:
     """Return the retrieval embedder matching the chat provider posture."""
     if _live():
-        return OpenAIEmbeddingBackend()
+        return live_embedding_backend()
     return StubEmbeddingBackend()
 
 

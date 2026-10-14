@@ -218,11 +218,14 @@ class TracedEmbeddingBackend:
             self._batch_count += 1
             return self._batch_count
 
-    def embed_texts(self, texts: list[str]) -> list[list[float]]:
+    def embed_texts(
+        self, texts: list[str], *, kind: Literal["document", "query"] = "document"
+    ) -> list[list[float]]:
         """Embed texts and trace the batch I/O.
 
         Args:
             texts: Text units to embed.
+            kind: Whether the texts are documents or search queries.
 
         Returns:
             Vectors returned by the wrapped backend.
@@ -233,7 +236,7 @@ class TracedEmbeddingBackend:
             name="embed:batch",
             as_type="embedding",
         ) as span:
-            vectors = self._backend.embed_texts(texts)
+            vectors = self._backend.embed_texts(texts, kind=kind)
             prompt_tokens = embeddings.take_last_prompt_tokens()
             span.update(
                 usage_details=(
@@ -252,6 +255,7 @@ class TracedEmbeddingBackend:
                     "model": embeddings.EMBEDDING_MODEL,
                     "text_count": len(texts),
                     "batch_index": batch_index,
+                    "input_kind": kind,
                 },
                 model=embeddings.EMBEDDING_MODEL,
             )

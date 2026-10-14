@@ -1502,7 +1502,7 @@ class ChunkRetriever:
             uncached.append(query)
         if not uncached:
             return
-        vectors = self._embedder.embed_texts(uncached)
+        vectors = self._embedder.embed_texts(uncached, kind="query")
         if len(vectors) != len(uncached):
             raise RuntimeError("embedding backend returned wrong query vector count")
         for query, vector in zip(uncached, vectors, strict=True):
@@ -1511,7 +1511,7 @@ class ChunkRetriever:
     def _query_vector(self, query: str) -> list[float]:
         vector = self._query_vectors.get(query)
         if vector is None:
-            vectors = self._embedder.embed_texts([query])
+            vectors = self._embedder.embed_texts([query], kind="query")
             if len(vectors) != 1:
                 raise RuntimeError("embedding backend returned wrong query vector count")
             vector = validate_vector(vectors[0])

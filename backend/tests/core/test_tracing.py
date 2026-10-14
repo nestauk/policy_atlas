@@ -6,7 +6,7 @@ import contextvars
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from types import SimpleNamespace
-from typing import Any, cast
+from typing import Any, Literal, cast
 
 from policy_atlas.core import tracing
 from policy_atlas.core.usage import TokenUsage, UsageResult
@@ -539,17 +539,23 @@ def test_traced_embedding_backend_records_provider_prompt_tokens_as_usage() -> N
     class _LiveLike:
         mode = "live"
 
-        def embed_texts(self, texts: list[str]) -> list[list[float]]:
+        def embed_texts(
+            self, texts: list[str], *, kind: Literal["document", "query"] = "document"
+        ) -> list[list[float]]:
+            self.kind = kind
             embeddings._last_usage.prompt_tokens = 7  # what the OpenAI backend parks
             return [[0.0] * embeddings.EMBEDDING_DIMENSIONS for _ in texts]
 
     client = _Client()
-    traced = tracing.TracedEmbeddingBackend(cast(Any, _LiveLike()), cast(Any, client))
-    traced.embed_texts(["a", "b"])
+    inner = _LiveLike()
+    traced = tracing.TracedEmbeddingBackend(cast(Any, inner), cast(Any, client))
+    traced.embed_texts(["a", "b"], kind="query")
     update = client.spans[0].updates[0]
     assert update["usage_details"] == {"input": 7, "total": 7}
     assert update["model"] == embeddings.EMBEDDING_MODEL
     assert update["metadata"]["batch_index"] == 1
+    assert update["metadata"]["input_kind"] == "query"
+    assert inner.kind == "query"
     assert embeddings.take_last_prompt_tokens() is None  # consumed, not re-read
 
 

@@ -9,7 +9,9 @@ and snapshots are corpus-global, not task-owned.
 from __future__ import annotations
 
 import hashlib
+import json
 import math
+import os
 import random
 import re
 import threading
@@ -17,9 +19,11 @@ import time
 import uuid
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import Any, Protocol, TypedDict
+from typing import Any, Literal, Protocol, TypedDict
 
+import boto3
 import structlog
+from botocore.exceptions import ClientError
 from openai import RateLimitError
 from sqlalchemy import exists, func, select, union
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -40,7 +44,7 @@ UNIT_POLICY = "embedding_unit_policy_v1"
 UNIT_CHAR_BUDGET = 2000
 UNIT_CHAR_OVERLAP = 200
 
-API_BATCH_SIZE = 128
+API_BATCH_SIZE = 96
 DEFAULT_MAX_CHUNKS = 20_000
 EMBEDDING_RATE_LIMIT_BACKOFF_BASE_S = 2.0
 EMBEDDING_RATE_LIMIT_BACKOFF_CAP_S = 60.0
@@ -107,11 +111,14 @@ class EmbeddingBackend(Protocol):
         """``"live"`` or ``"stub"``; read-only so tracing wrappers can proxy it."""
         ...
 
-    def embed_texts(self, texts: list[str]) -> list[list[float]]:
+    def embed_texts(
+        self, texts: list[str], *, kind: Literal["document", "query"] = "document"
+    ) -> list[list[float]]:
         """Embed texts in input order.
 
         Args:
             texts: Text units to embed.
+            kind: Whether the texts are documents or search queries.
 
         Returns:
             One vector per input text, in the same order.
@@ -138,11 +145,15 @@ class StubEmbeddingBackend:
 
     mode = "stub"
 
-    def embed_texts(self, texts: list[str]) -> list[list[float]]:
+    def embed_texts(
+        self, texts: list[str], *, kind: Literal["document", "query"] = "document"
+    ) -> list[list[float]]:
         """Return deterministic hash-derived vectors.
 
         Args:
             texts: Text units to embed.
+            kind: Whether the texts are documents or search queries. The stub
+                uses the same deterministic vector for either kind.
 
         Returns:
             One 1536-dimensional vector per input text.
@@ -170,11 +181,15 @@ class OpenAIEmbeddingBackend:
             api_key, backend_name="OpenAIEmbeddingBackend", timeout=30.0, max_retries=2
         )
 
-    def embed_texts(self, texts: list[str]) -> list[list[float]]:
+    def embed_texts(
+        self, texts: list[str], *, kind: Literal["document", "query"] = "document"
+    ) -> list[list[float]]:
         """Embed texts through OpenAI's embeddings API.
 
         Args:
             texts: Text units to embed.
+            kind: Whether the texts are documents or search queries. OpenAI's
+                embedding endpoint does not distinguish them.
 
         Returns:
             One 1536-dimensional vector per input text, in input order.
@@ -221,11 +236,147 @@ class OpenAIEmbeddingBackend:
         raise RuntimeError("unreachable embedding retry state")
 
 
+class CohereEmbeddingBackend:
+    """Live Cohere Embed v4 backend served through Amazon Bedrock.
+
+    Args:
+        client: Optional Bedrock Runtime client. Tests provide a stubbed client;
+            live calls use the standard boto3 credential chain.
+    """
+
+    mode = "live"
+
+    def __init__(self, client: Any | None = None) -> None:
+        self._client = client or boto3.client(
+            "bedrock-runtime",
+            region_name=os.environ.get("AWS_REGION") or "eu-west-2",
+        )
+
+    def embed_texts(
+        self, texts: list[str], *, kind: Literal["document", "query"] = "document"
+    ) -> list[list[float]]:
+        """Embed texts through Cohere Embed v4 on Bedrock.
+
+        Args:
+            texts: Text units to embed.
+            kind: Whether the texts are documents or search queries.
+
+        Returns:
+            One 1536-dimensional vector per input text, in input order.
+
+        Raises:
+            ClientError: If Bedrock rejects a request other than for throttling,
+                or continues throttling after all attempts.
+            RuntimeError: If Bedrock returns an invalid embedding response.
+        """
+        if not texts:
+            return []
+
+        vectors: list[list[float]] = []
+        token_count: int | None = 0
+        for start in range(0, len(texts), API_BATCH_SIZE):
+            batch = texts[start : start + API_BATCH_SIZE]
+            log.info("embedding.cohere.request", text_count=len(batch), input_kind=kind)
+            response = self._invoke_model_with_backoff(batch, kind=kind)
+            batch_vectors = self._parse_vectors(response, text_count=len(batch))
+            vectors.extend(batch_vectors)
+            header = (
+                response.get("ResponseMetadata", {})
+                .get("HTTPHeaders", {})
+                .get("x-amzn-bedrock-input-token-count")
+            )
+            if header is None:
+                token_count = None
+            elif token_count is not None:
+                token_count += int(header)
+            log.info(
+                "embedding.cohere.response",
+                text_count=len(batch),
+                vector_count=len(batch_vectors),
+                input_kind=kind,
+            )
+
+        _last_usage.prompt_tokens = token_count
+        return vectors
+
+    def _invoke_model_with_backoff(
+        self, texts: list[str], *, kind: Literal["document", "query"]
+    ) -> Any:
+        for attempt in range(EMBEDDING_RATE_LIMIT_MAX_ATTEMPTS):
+            try:
+                return self._client.invoke_model(
+                    modelId=EMBEDDING_MODEL,
+                    contentType="application/json",
+                    accept="application/json",
+                    body=json.dumps(
+                        {
+                            "texts": texts,
+                            "input_type": (
+                                "search_query" if kind == "query" else "search_document"
+                            ),
+                            "embedding_types": ["float"],
+                            "output_dimension": EMBEDDING_DIMENSIONS,
+                            "truncate": "NONE",
+                        }
+                    ),
+                )
+            except ClientError as error:
+                if error.response["Error"]["Code"] != "ThrottlingException":
+                    raise
+                if attempt == EMBEDDING_RATE_LIMIT_MAX_ATTEMPTS - 1:
+                    raise
+                delay_s = _embedding_rate_limit_delay_s(attempt)
+                log.warning(
+                    "embedding.cohere_rate_limited",
+                    attempt=attempt + 1,
+                    max_attempts=EMBEDDING_RATE_LIMIT_MAX_ATTEMPTS,
+                    sleep_s=delay_s,
+                )
+                _sleep(delay_s)
+
+        raise RuntimeError("unreachable embedding retry state")
+
+    @staticmethod
+    def _parse_vectors(response: Any, *, text_count: int) -> list[list[float]]:
+        try:
+            body = json.loads(response["body"].read())
+            vectors = body["embeddings"]["float"]
+        except (KeyError, TypeError, json.JSONDecodeError) as exc:
+            raise RuntimeError("Cohere embeddings response body was invalid.") from exc
+        if not isinstance(vectors, list) or len(vectors) != text_count:
+            raise RuntimeError("Cohere embeddings response length did not match input length.")
+        if any(
+            not isinstance(vector, list) or len(vector) != EMBEDDING_DIMENSIONS
+            for vector in vectors
+        ):
+            raise RuntimeError("Cohere embeddings response had an invalid vector dimension.")
+        return vectors
+
+
+def live_embedding_backend() -> EmbeddingBackend:
+    """Build the live embedding backend selected by the active model route.
+
+    Returns:
+        The route-selected live embedding backend.
+
+    Raises:
+        RuntimeError: If the route names an unsupported embedding backend.
+    """
+    backend = route().embeddings.backend
+    if backend == "cohere":
+        return CohereEmbeddingBackend()
+    if backend == "openai":
+        return OpenAIEmbeddingBackend()
+    raise RuntimeError(f"Unsupported embedding backend: {backend}")
+
+
 def _embedding_rate_limit_delay_s(attempt: int) -> float:
-    base_s = float(min(
-        EMBEDDING_RATE_LIMIT_BACKOFF_BASE_S * (2**attempt),
-        EMBEDDING_RATE_LIMIT_BACKOFF_CAP_S,
-    ))
+    base_s = float(
+        min(
+            EMBEDDING_RATE_LIMIT_BACKOFF_BASE_S * (2**attempt),
+            EMBEDDING_RATE_LIMIT_BACKOFF_CAP_S,
+        )
+    )
     return float(base_s + random.uniform(0.0, base_s))
 
 
@@ -255,14 +406,10 @@ def _choose_unit_end(
     # repeatedly end where the previous unit ended, creating tiny non-progressing
     # units when a long sentence follows a boundary.
     min_boundary_end = min(start + UNIT_CHAR_OVERLAP + 1, limit)
-    sentence_end = _rightmost_boundary(
-        sentence_boundaries, min_end=min_boundary_end, limit=limit
-    )
+    sentence_end = _rightmost_boundary(sentence_boundaries, min_end=min_boundary_end, limit=limit)
     if sentence_end is not None:
         return sentence_end
-    paragraph_end = _rightmost_boundary(
-        paragraph_boundaries, min_end=min_boundary_end, limit=limit
-    )
+    paragraph_end = _rightmost_boundary(paragraph_boundaries, min_end=min_boundary_end, limit=limit)
     if paragraph_end is not None:
         return paragraph_end
     return limit
@@ -295,9 +442,7 @@ def derive_units(content: str) -> list[_UnitDict]:
 
     effective_end = len(content.rstrip())
     scan_content = content[:effective_end]
-    sentence_boundaries = [
-        match.start() for match in _SENTENCE_BOUNDARY_RE.finditer(scan_content)
-    ]
+    sentence_boundaries = [match.start() for match in _SENTENCE_BOUNDARY_RE.finditer(scan_content)]
     paragraph_boundaries = [
         match.start() for match in _PARAGRAPH_BOUNDARY_RE.finditer(scan_content)
     ]
@@ -313,12 +458,14 @@ def derive_units(content: str) -> list[_UnitDict]:
         )
         if end <= start:
             end = min(start + UNIT_CHAR_BUDGET, effective_end)
-        units.append({
-            "unit_index": len(units),
-            "start": start,
-            "end": end,
-            "text": content[start:end],
-        })
+        units.append(
+            {
+                "unit_index": len(units),
+                "start": start,
+                "end": end,
+                "text": content[start:end],
+            }
+        )
         if end >= effective_end:
             break
         next_start = _overlap_start(content, unit_start=start, unit_end=end)
@@ -393,12 +540,8 @@ def _embed_units_with_isolation(
         if len(units) == 1:
             return [], [(units[0], exc)]
         midpoint = len(units) // 2
-        left_vectors, left_failures = _embed_units_with_isolation(
-            embedder, units[:midpoint]
-        )
-        right_vectors, right_failures = _embed_units_with_isolation(
-            embedder, units[midpoint:]
-        )
+        left_vectors, left_failures = _embed_units_with_isolation(embedder, units[:midpoint])
+        right_vectors, right_failures = _embed_units_with_isolation(embedder, units[midpoint:])
         return left_vectors + right_vectors, left_failures + right_failures
 
     return list(zip(units, vectors, strict=True)), []
@@ -425,12 +568,10 @@ def _pending_chunks(
     conn: Connection, task_id: uuid.UUID, *, max_hydrated: int
 ) -> tuple[int, int, list[_PendingChunk]]:
     eligible_snapshot_ids = union(
-        select(
-            task_source_snapshot.c.source_snapshot_id.label("source_snapshot_id")
-        ).where(task_source_snapshot.c.task_id == task_id),
-        select(
-            task_source_snapshot.c.full_text_snapshot_id.label("source_snapshot_id")
-        )
+        select(task_source_snapshot.c.source_snapshot_id.label("source_snapshot_id")).where(
+            task_source_snapshot.c.task_id == task_id
+        ),
+        select(task_source_snapshot.c.full_text_snapshot_id.label("source_snapshot_id"))
         .where(task_source_snapshot.c.task_id == task_id)
         .where(task_source_snapshot.c.full_text_snapshot_id.is_not(None)),
     ).subquery()
@@ -472,15 +613,19 @@ def _pending_chunks(
         .where(pending_filter)
         .order_by(chunk_table.c.source_snapshot_id, chunk_table.c.sequence)
     ).fetchall()
-    return eligible_count, pending_count, [
-        _PendingChunk(
-            chunk_id=row.chunk_id,
-            source_snapshot_id=row.source_snapshot_id,
-            sequence=row.sequence,
-            content=row.content,
-        )
-        for row in rows
-    ]
+    return (
+        eligible_count,
+        pending_count,
+        [
+            _PendingChunk(
+                chunk_id=row.chunk_id,
+                source_snapshot_id=row.source_snapshot_id,
+                sequence=row.sequence,
+                content=row.content,
+            )
+            for row in rows
+        ],
+    )
 
 
 def _derive_unit_work(
@@ -586,9 +731,10 @@ def embed_pending_chunks(
     units_embedded = 0
 
     for batch_index, start in enumerate(range(0, len(all_units), batch_size), start=1):
-        batch_units = all_units[start:start + batch_size]
+        batch_units = all_units[start : start + batch_size]
         active_units = [
-            unit for unit in batch_units
+            unit
+            for unit in batch_units
             if not states[unit.chunk_id].failed and not states[unit.chunk_id].inserted
         ]
         if not active_units:
@@ -605,9 +751,7 @@ def embed_pending_chunks(
                 batch_index=batch_index,
                 chunk_count=len(failed_chunk_ids),
                 unit_count=len(failed_units),
-                error_type=",".join(
-                    sorted({type(exc).__name__ for _unit, exc in failed_units})
-                ),
+                error_type=",".join(sorted({type(exc).__name__ for _unit, exc in failed_units})),
                 run_id=str(run_id),
             )
 

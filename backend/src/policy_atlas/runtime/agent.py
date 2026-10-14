@@ -32,7 +32,7 @@ from sqlalchemy.engine import Connection, Engine
 
 from policy_atlas.core import events, tracing
 from policy_atlas.core.db import get_engine
-from policy_atlas.core.embeddings import EmbeddingBackend, OpenAIEmbeddingBackend
+from policy_atlas.core.embeddings import EmbeddingBackend, live_embedding_backend
 from policy_atlas.core.fixtures import get_source
 from policy_atlas.core.logging import configure_logging
 from policy_atlas.core.schema import artefact, evidence_scope, task, task_plan
@@ -788,7 +788,7 @@ def live_planner_and_backends(
     Returns:
         The live planner backend and the live runner backend bundle.
     """
-    embedding: EmbeddingBackend = OpenAIEmbeddingBackend()
+    embedding: EmbeddingBackend = live_embedding_backend()
     theme_grouping: ThemeGroupingBackend = OpenAIThemeGroupingBackend()
     if langfuse_client is not None:
         embedding = tracing.TracedEmbeddingBackend(embedding, langfuse_client)
