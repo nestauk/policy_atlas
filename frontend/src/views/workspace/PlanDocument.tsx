@@ -707,12 +707,11 @@ function ScopingStartActions({
   }
 
   if (state.kind === "confirmed" || state.kind === "rebuild_longlist") {
-    const action = state.kind === "confirmed" ? state.build : state.rebuild;
     return (
       <div className="space-y-3">
         {lineElement}
-        <Button className={cn(START_SEARCH_CLASS)} disabled={action.disabled} onClick={action.onConfirm}>
-          {action.label}
+        <Button className={cn(START_SEARCH_CLASS)} disabled={state.action.disabled} onClick={state.action.onClick}>
+          {state.action.label}
         </Button>
         {state.notice != null && (
           <p role="alert" className="text-body text-red-tint">
@@ -726,8 +725,8 @@ function ScopingStartActions({
   if (state.kind === "build") {
     return (
       <div>
-        <Button className={cn(START_SEARCH_CLASS)} disabled={state.disabled} onClick={state.onStart}>
-          {state.label}
+        <Button className={cn(START_SEARCH_CLASS)} disabled={state.action.disabled} onClick={state.action.onClick}>
+          {state.action.label}
         </Button>
         {state.timeBand != null && state.timeBand !== "" && (
           <p className="mt-2 text-body text-[#97a8bc]">{scrub(state.timeBand)}</p>
@@ -743,10 +742,10 @@ function ScopingStartActions({
 
   return (
     <div className="flex flex-wrap items-center gap-3">
-      <Button className={cn(START_SEARCH_CLASS)} disabled={state.rebuild.disabled} onClick={state.rebuild.onStart}>
+      <Button className={cn(START_SEARCH_CLASS)} disabled={state.rebuild.disabled} onClick={state.rebuild.onClick}>
         {state.rebuild.label}
       </Button>
-      <Button variant="secondary" disabled={state.confirm.disabled} onClick={state.confirm.onConfirm}>
+      <Button variant="secondary" disabled={state.confirm.disabled} onClick={state.confirm.onClick}>
         {state.confirm.label}
       </Button>
       {state.notice != null && (

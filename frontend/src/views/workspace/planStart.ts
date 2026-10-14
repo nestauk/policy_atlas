@@ -2,7 +2,8 @@ import { useState } from "react";
 
 import { useConfirmBaseline, usePatchPlan, useStartRun } from "../../api/mutations";
 import { useLonglist, usePlan, useRuns, useTask } from "../../api/queries";
-import { conflictSentences, isConflictCode } from "../../lib/errors";
+import { actionFailedNotice, conflictSentences, isConflictCode } from "../../lib/errors";
+import { countOf } from "../../lib/vocabulary";
 import { activeRun, hasLonglist } from "../scopingActivity";
 import { overlayIsDirty, overlayToPlanPatch, type PlanOverlay } from "./planOverlay";
 
@@ -57,12 +58,7 @@ export function usePlanStart({
   const beginRun = () => {
     startRun.mutate(undefined, {
       onSuccess: () => onStarted?.(),
-      onError: (error) => {
-        const code = (error as { code?: string }).code;
-        setStartNotice(
-          isConflictCode(code) ? conflictSentences[code] : "The search couldn't start. Try again.",
-        );
-      },
+      onError: (error) => setStartNotice(actionFailedNotice(error, "The search couldn't start. Try again.")),
     });
   };
 
@@ -150,31 +146,22 @@ export function usePlanStart({
  *   - no `baselineRun` (nothing has ever reached synthesise) → `build`, the
  *     same fresh-start action.
  */
+/** One button in the start area. */
+export type Action = { label: string; onClick: () => void; disabled: boolean };
+
 export type ScopingStartState =
-  | {
-      kind: "build";
-      label: string;
-      timeBand: string | null;
-      onStart: () => void;
-      disabled: boolean;
-      notice: string | null;
-    }
+  | { kind: "build"; action: Action; timeBand: string | null; notice: string | null }
   | {
       kind: "none";
       /** The walk that is running builds (or rebuilds) the longlist: the plan
        *  is confirmed for this version, or a longlist already exists. */
       buildingLonglist: boolean;
     }
-  | {
-      kind: "rebuild_or_confirm";
-      rebuild: { label: string; onStart: () => void; disabled: boolean };
-      confirm: { label: string; onConfirm: () => void; disabled: boolean };
-      notice: string | null;
-    }
+  | { kind: "rebuild_or_confirm"; rebuild: Action; confirm: Action; notice: string | null }
   | {
       kind: "confirmed";
       /** Confirmed but no longlist and nothing running — ask for it again. */
-      build: { label: string; onConfirm: () => void; disabled: boolean };
+      action: Action;
       notice: string | null;
     }
   | { kind: "longlist_built"; options: number }
@@ -183,15 +170,9 @@ export type ScopingStartState =
       /** The plan version the longlist on hand was built from; null when the
        *  longlist could not be read (task 045, L6). */
       builtFrom: number | null;
-      rebuild: { label: string; onConfirm: () => void; disabled: boolean };
+      action: Action;
       notice: string | null;
     };
-
-/** The longlist fields the start states read. */
-export interface ScopingLonglist {
-  plan_version: number;
-  counts: { options: number };
-}
 
 /**
  * The one sentence that says where the plan stands, or `null` when a state
@@ -203,7 +184,7 @@ export interface ScopingLonglist {
 export function scopingStatusLine(state: ScopingStartState): string | null {
   switch (state.kind) {
     case "longlist_built":
-      return `Longlist built · ${state.options} ${state.options === 1 ? "option" : "options"}`;
+      return `Longlist built · ${countOf(state.options, "option", "options")}`;
     case "rebuild_longlist":
       // An unread longlist (L6) says so in its notice instead.
       return state.builtFrom === null
@@ -246,10 +227,8 @@ interface ScopingWalk {
  * The scoping task's walk status: the latest walk and how the current plan
  * version stands against it.
  *
- * The one place the walk-status rule lives. `useScopingPlanStart` turns it
- * into the plan document's actions and `baselineBandState` turns it into the
- * Result band's words — neither re-derives it, so the two surfaces cannot
- * disagree about whether a plan is confirmed (task 044, C18).
+ * The one place the walk-status rule lives; `useScopingPlanStart` turns it
+ * into the plan document's actions (task 044, C18).
  *
  * Args:
  *   runs: The task's walks, in any order.
@@ -296,10 +275,6 @@ export function scopingWalkStatus({
      *  so, or the walk that wrote the baseline finished on this very version
      *  (it can only have finished through Confirm or the standing default). */
     confirmed: confirmedForCurrentVersion || baselineRunConfirmed,
-    /** The plan has moved on since `baselineRun` wrote the baseline — the
-     *  Result band's "built from plan version N" mark (task 044, C18). */
-    newerVersionThanBaselineRun:
-      baselineRun !== null && currentVersion !== null && currentVersion > baselineRun.plan_version,
   };
 }
 
@@ -339,10 +314,7 @@ export function useScopingPlanStart({
     setNotice(null);
     startRun.mutate(undefined, {
       onSuccess: () => onStarted?.(),
-      onError: (error) => {
-        const code = (error as { code?: string }).code;
-        setNotice(isConflictCode(code) ? conflictSentences[code] : "The run couldn't start. Try again.");
-      },
+      onError: (error) => setNotice(actionFailedNotice(error, "The run couldn't start. Try again.")),
     });
   };
 
@@ -354,131 +326,67 @@ export function useScopingPlanStart({
     setNotice(null);
     confirmBaseline.mutate(
       { artefact_id: baselineRun.artefact_id, plan_version: currentVersion },
-      {
-        onError: (error) => {
-          const code = (error as { code?: string }).code;
-          setNotice(
-            isConflictCode(code) ? conflictSentences[code] : "The plan couldn't be confirmed. Try again.",
-          );
-        },
-      },
+      { onError: (error) => setNotice(actionFailedNotice(error, "The plan couldn't be confirmed. Try again.")) },
     );
   };
-  const confirmDisabled = confirmBaseline.isPending || runActive || baselineRun === null;
 
-  const build = (): ScopingStartState => ({
-    kind: "build",
-    label: startRun.isPending ? "Starting…" : "Confirm and build baseline",
-    timeBand: scoping?.time_band ?? null,
-    onStart: beginRun,
+  const startAction = (label: string): Action => ({
+    label: startRun.isPending ? "Starting…" : label,
+    onClick: beginRun,
     disabled: startRun.isPending || runActive,
+  });
+  const confirmAction = (label: string, pendingLabel = "Starting…"): Action => ({
+    label: confirmBaseline.isPending ? pendingLabel : label,
+    onClick: confirmAndBuildLonglist,
+    disabled: confirmBaseline.isPending || runActive || baselineRun === null,
+  });
+  const build: ScopingStartState = {
+    kind: "build",
+    action: startAction("Confirm and build baseline"),
+    timeBand: scoping?.time_band ?? null,
     notice,
-  });
-
-  const rebuildOrConfirm = (): ScopingStartState => ({
-    kind: "rebuild_or_confirm",
-    rebuild: {
-      label: startRun.isPending ? "Starting…" : "Rebuild baseline",
-      onStart: beginRun,
-      disabled: startRun.isPending || runActive,
-    },
-    confirm: {
-      label: confirmBaseline.isPending ? "Confirming…" : "Confirm plan and build longlist",
-      onConfirm: confirmAndBuildLonglist,
-      disabled: confirmDisabled,
-    },
-    notice,
-  });
-
-  return scopingStartDispatch({
-    // Any of three sources may be first to know: the run stream, the task
-    // read model (`active_run`, option searches included) and the walk list.
-    active:
-      runActive ||
-      activeRun(taskQuery.data) !== null ||
-      latestRun?.status === "running" ||
-      latestRun?.status === "paused",
-    anyWalk: latestRun !== null,
-    longlistExists,
-    longlist: longlistQuery.data,
-    longlistError: longlistQuery.isError,
-    currentVersion,
-    confirmed,
-    baselineRun: baselineRun !== null,
-    states: {
-      build,
-      rebuildOrConfirm,
-      confirmed: () => ({
-        kind: "confirmed",
-        build: {
-          label: confirmBaseline.isPending ? "Starting…" : "Build longlist",
-          onConfirm: confirmAndBuildLonglist,
-          disabled: confirmDisabled,
-        },
-        notice,
-      }),
-      rebuildLonglist: (builtFrom) => ({
-        kind: "rebuild_longlist",
-        builtFrom,
-        rebuild: {
-          label: confirmBaseline.isPending ? "Starting…" : "Rebuild longlist",
-          onConfirm: confirmAndBuildLonglist,
-          disabled: confirmDisabled,
-        },
-        notice: notice ?? (builtFrom === null ? LONGLIST_UNREAD_NOTICE : null),
-      }),
-    },
-  });
-}
-
-/**
- * The start area's dispatch order (see `ScopingStartState`), apart from the
- * hooks so the order itself is one readable function. The longlist states
- * come **before** `confirmed` (task 045, A7): a confirmed plan with a
- * longlist says so, not "no longlist yet".
- */
-function scopingStartDispatch({
-  active,
-  anyWalk,
-  longlistExists,
-  longlist,
-  longlistError,
-  currentVersion,
-  confirmed,
-  baselineRun,
-  states,
-}: {
-  active: boolean;
-  anyWalk: boolean;
-  longlistExists: boolean;
-  longlist: ScopingLonglist | null | undefined;
-  longlistError: boolean;
-  currentVersion: number | null;
-  confirmed: boolean;
-  baselineRun: boolean;
-  states: {
-    build: () => ScopingStartState;
-    rebuildOrConfirm: () => ScopingStartState;
-    confirmed: () => ScopingStartState;
-    rebuildLonglist: (builtFrom: number | null) => ScopingStartState;
   };
-}): ScopingStartState {
+  const rebuildLonglist = (builtFrom: number | null): ScopingStartState => ({
+    kind: "rebuild_longlist",
+    builtFrom,
+    action: confirmAction("Rebuild longlist"),
+    notice: notice ?? (builtFrom === null ? LONGLIST_UNREAD_NOTICE : null),
+  });
+
+  // The dispatch order (see `ScopingStartState`). The longlist states come
+  // before `confirmed` (task 045, A7): a confirmed plan with a longlist says
+  // so, not "no longlist yet". Any of three sources may be first to know a
+  // walk is active: the run stream, the task read model (`active_run`,
+  // option searches included) and the walk list.
+  const active =
+    runActive ||
+    activeRun(taskQuery.data) !== null ||
+    latestRun?.status === "running" ||
+    latestRun?.status === "paused";
   if (active) return { kind: "none", buildingLonglist: confirmed || longlistExists };
-  if (!anyWalk) return states.build();
+  if (latestRun === null) return build;
   if (longlistExists) {
     // Its plan version decides the state; until it has loaded, say nothing
     // rather than guess. A read that failed (L6) still leaves Rebuild.
-    if (longlist == null && longlistError) return states.rebuildLonglist(null);
+    const longlist = longlistQuery.data;
+    if (longlist == null && longlistQuery.isError) return rebuildLonglist(null);
     if (longlist == null || currentVersion === null) return { kind: "none", buildingLonglist: false };
-    if (currentVersion > longlist.plan_version) return states.rebuildLonglist(longlist.plan_version);
+    if (currentVersion > longlist.plan_version) return rebuildLonglist(longlist.plan_version);
     return { kind: "longlist_built", options: longlist.counts.options };
   }
-  if (confirmed) return states.confirmed();
+  if (confirmed) return { kind: "confirmed", action: confirmAction("Build longlist"), notice };
   // A baseline exists but not for the version on screen — the plan moved on,
   // or the walk that wrote it was aborted at the gate, or a later rebuild
   // aborted/failed before writing one of its own.
-  if (baselineRun) return states.rebuildOrConfirm();
+  if (baselineRun !== null) {
+    return {
+      kind: "rebuild_or_confirm",
+      rebuild: startAction("Rebuild baseline"),
+      confirm: confirmAction("Confirm plan and build longlist", "Confirming…"),
+      notice,
+    };
+  }
   // Nothing was ever produced (`failed`/`interrupted`, or aborted before
   // synthesise) — the same fresh-start action as before any walk at all.
-  return states.build();
+  return build;
 }

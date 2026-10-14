@@ -219,7 +219,7 @@ describe("useScopingPlanStart — the five start states (task 044, contract deli
     expect(result.current.kind).toBe("build");
     if (result.current.kind === "build") {
       expect(result.current.timeBand).toBe("10-15 minutes");
-      expect(result.current.label).toBe("Confirm and build baseline");
+      expect(result.current.action.label).toBe("Confirm and build baseline");
     }
   });
 
@@ -349,7 +349,7 @@ describe("useScopingPlanStart — the five start states (task 044, contract deli
     expect(result.current.kind).toBe("rebuild_or_confirm");
     if (result.current.kind !== "rebuild_or_confirm") throw new Error("expected rebuild_or_confirm");
     expect(result.current.confirm.disabled).toBe(false);
-    act(() => result.current.kind === "rebuild_or_confirm" && result.current.confirm.onConfirm());
+    act(() => result.current.kind === "rebuild_or_confirm" && result.current.confirm.onClick());
 
     expect(confirmBaseline.mutate).toHaveBeenCalledWith(
       { artefact_id: "artefact-X", plan_version: 2 },
@@ -364,7 +364,7 @@ describe("useScopingPlanStart — the five start states (task 044, contract deli
 
     const { result } = renderHook(() => useScopingPlanStart({ taskId: "t1", runActive: false }));
     if (result.current.kind !== "rebuild_or_confirm") throw new Error("expected rebuild_or_confirm");
-    act(() => result.current.kind === "rebuild_or_confirm" && result.current.confirm.onConfirm());
+    act(() => result.current.kind === "rebuild_or_confirm" && result.current.confirm.onClick());
 
     expect(confirmBaseline.mutate).toHaveBeenCalledWith(
       { artefact_id: "artefact-9", plan_version: 3 },
@@ -468,12 +468,12 @@ describe("useScopingPlanStart — the longlist's states (task 045, S13/S15)", ()
     });
     if (result.current.kind !== "rebuild_longlist") throw new Error(`got ${result.current.kind}`);
     expect(result.current.builtFrom).toBe(2);
-    expect(result.current.rebuild.label).toBe("Rebuild longlist");
+    expect(result.current.action.label).toBe("Rebuild longlist");
     expect(scopingStatusLine(result.current)).toBe(
       "Longlist built from plan version 2 · the plan has changed",
     );
     // Rebuild longlist posts to confirm-baseline on the NEW version (P12).
-    act(() => result.current.kind === "rebuild_longlist" && result.current.rebuild.onConfirm());
+    act(() => result.current.kind === "rebuild_longlist" && result.current.action.onClick());
     expect(confirmBaseline.mutate).toHaveBeenCalledWith(
       { artefact_id: "artefact-1", plan_version: 3 },
       expect.anything(),
@@ -509,7 +509,7 @@ describe("useScopingPlanStart — the longlist's states (task 045, S13/S15)", ()
       runs: [{ ...longlistWalk, status: "failed" }, baseline],
     });
     if (result.current.kind !== "confirmed") throw new Error(`got ${result.current.kind}`);
-    expect(result.current.build.label).toBe("Build longlist");
+    expect(result.current.action.label).toBe("Build longlist");
     expect(scopingStatusLine(result.current)).toBe("Plan confirmed · no longlist yet");
   });
 
