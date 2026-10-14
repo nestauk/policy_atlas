@@ -21,7 +21,6 @@ from __future__ import annotations
 import math
 import uuid
 from collections.abc import Mapping
-from dataclasses import dataclass
 from typing import Any
 
 import structlog
@@ -41,6 +40,7 @@ from policy_atlas.evidence_search.clustering_engine import (
     ClusterUnit,
     cluster_units,
 )
+from policy_atlas.options_scoping.context import ScopeContext
 from policy_atlas.options_scoping.design import OptionDesign
 from policy_atlas.options_scoping.longlist.longlist import (
     ASSIGNMENT_REPAIR_CAP,
@@ -95,21 +95,6 @@ def theme_ceiling(option_count: int) -> int:
 
 class ThemeFailure(Exception):
     """The themes could not be built (no longlist, or the clustering failed)."""
-
-
-@dataclass
-class ThemeContext:
-    """Scope-level input to a ``theme`` run.
-
-    Attributes:
-        scope_id: The longlist walk's intent record.
-        intent: Its intent text (unused).
-        context: Its context JSONB (unused).
-    """
-
-    scope_id: uuid.UUID
-    intent: str
-    context: dict[str, Any]
 
 
 class _ThemeClusteringBackend(ClusteringBackend):
@@ -207,7 +192,7 @@ def theme_scope(
     *,
     task_id: uuid.UUID,
     run_id: uuid.UUID,
-    context: ThemeContext,
+    context: ScopeContext,
     backend: LonglistBackend,
 ) -> dict[str, Any]:
     """Group the walk's included options into themes and write them.

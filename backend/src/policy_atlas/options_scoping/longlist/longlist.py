@@ -125,6 +125,7 @@ from policy_atlas.evidence_search.extract.interventions_records import (
     PROFILE_ID as INTERVENTIONS_PROFILE_ID,
 )
 from policy_atlas.evidence_search.extract.iof_records import PROFILE_ID as IOF_PROFILE_ID
+from policy_atlas.options_scoping.context import ScopeContext
 from policy_atlas.options_scoping.design import OptionDesign
 from policy_atlas.options_scoping.labels import DocumentLabels, labels_for_snapshots
 from policy_atlas.options_scoping.longlist.coverage import (
@@ -221,21 +222,6 @@ def discovery_bounds(seed_count: int) -> tuple[int, int]:
 
 class LonglistFailure(Exception):
     """The longlist could not be built (clustering failed or an invariant broke)."""
-
-
-@dataclass
-class LonglistContext:
-    """Scope-level input to a ``longlist`` run.
-
-    Attributes:
-        scope_id: The longlist walk's intent record.
-        intent: Its intent text (unused: the plan is read whole).
-        context: Its context JSONB (unused: no directive in this slice).
-    """
-
-    scope_id: uuid.UUID
-    intent: str
-    context: dict[str, Any]
 
 
 # --- units ----------------------------------------------------------------------
@@ -1625,7 +1611,7 @@ def longlist_scope(
     *,
     task_id: uuid.UUID,
     run_id: uuid.UUID,
-    context: LonglistContext,
+    context: ScopeContext,
     backend: LonglistBackend,
 ) -> dict[str, Any]:
     """Build the longlist for one longlist walk.

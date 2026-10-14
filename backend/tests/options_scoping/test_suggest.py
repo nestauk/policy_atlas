@@ -30,9 +30,9 @@ from policy_atlas.core.schema import (
     task_plan,
     task_source_snapshot,
 )
+from policy_atlas.options_scoping.context import ScopeContext
 from policy_atlas.options_scoping.design import OptionDesign
 from policy_atlas.options_scoping.suggest.suggest import (
-    SuggestContext,
     suggest_options,
     suggest_plan_context,
 )
@@ -211,7 +211,7 @@ class _Walk:
             self.conn,
             task_id=self.task_id,
             run_id=run_id,
-            context=SuggestContext(scope_id=self.scope_id, intent="", context={}),
+            context=ScopeContext(scope_id=self.scope_id, intent="", context={}),
             backend=backend,
         )
         return run_id, summary

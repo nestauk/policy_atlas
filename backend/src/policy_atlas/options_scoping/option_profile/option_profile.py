@@ -94,6 +94,7 @@ from policy_atlas.core.schema import (
     task_source_snapshot,
 )
 from policy_atlas.core.usage import UsageAccumulator, UsageResult
+from policy_atlas.options_scoping.context import ScopeContext
 from policy_atlas.options_scoping.longlist.coverage import (
     FOLD_FIELDS,
     distinct_words,
@@ -201,21 +202,6 @@ class OptionProfileFailure(Exception):
     No longlist exists for the walk, or a profile call (a line, the ambition,
     the setting or a folding call) failed twice.
     """
-
-
-@dataclass
-class OptionProfileContext:
-    """Scope-level input to an ``option_profile`` run.
-
-    Attributes:
-        scope_id: The longlist walk's intent record.
-        intent: Its intent text (unused).
-        context: Its context JSONB (unused).
-    """
-
-    scope_id: uuid.UUID
-    intent: str
-    context: dict[str, Any]
 
 
 @dataclass(frozen=True)
@@ -848,7 +834,7 @@ def option_profile_scope(
     *,
     task_id: uuid.UUID,
     run_id: uuid.UUID,
-    context: OptionProfileContext,
+    context: ScopeContext,
     backend: LonglistBackend,
 ) -> dict[str, Any]:
     """Write what is said about each option of the walk's list (S16, S17, S20).

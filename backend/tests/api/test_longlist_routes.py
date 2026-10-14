@@ -49,10 +49,10 @@ from policy_atlas.core.schema import (
 )
 from policy_atlas.options_scoping.constrain.constrain import (
     IN_SCOPE_EVIDENCE_KEY,
-    ConstrainContext,
     constrain_scope,
 )
 from policy_atlas.options_scoping.constrain.constrain_prompt import ConstrainResponse
+from policy_atlas.options_scoping.context import ScopeContext
 from policy_atlas.options_scoping.longlist.lever_types import lever_types_by_version
 from policy_atlas.options_scoping.longlist.longlist_backend import StubLonglistBackend
 from policy_atlas.runtime.agent_backend import StubAgentBackend
@@ -239,7 +239,7 @@ def _constrain(engine: Engine, built: _Built, backend: StubLonglistBackend) -> N
             conn,
             task_id=built.task_id,
             run_id=run_id,
-            context=ConstrainContext(scope_id=built.scope_id, intent="", context={}),
+            context=ScopeContext(scope_id=built.scope_id, intent="", context={}),
             backend=backend,
         )
 

@@ -11,7 +11,7 @@ import functools
 import uuid
 from collections.abc import Callable
 from datetime import UTC, datetime
-from typing import Any, Protocol, TypedDict
+from typing import Any, Literal, Protocol, TypedDict
 
 import structlog
 from langgraph.graph import END, StateGraph
@@ -103,23 +103,17 @@ from policy_atlas.evidence_search.synthesis.synthesise import (
     SynthesiseFailure,
     synthesise_scope,
 )
-from policy_atlas.options_scoping.constrain.constrain import ConstrainContext, constrain_scope
-from policy_atlas.options_scoping.longlist.longlist import LonglistContext, longlist_scope
+from policy_atlas.options_scoping.constrain.constrain import constrain_scope
+from policy_atlas.options_scoping.context import ScopeContext
+from policy_atlas.options_scoping.longlist.longlist import longlist_scope
 from policy_atlas.options_scoping.longlist.longlist_backend import (
     LonglistBackend,
     StubLonglistBackend,
 )
 from policy_atlas.options_scoping.longlist_intent import plan_tagging_context
-from policy_atlas.options_scoping.option_profile.option_profile import (
-    OptionProfileContext,
-    option_profile_scope,
-)
-from policy_atlas.options_scoping.suggest.suggest import (
-    SuggestBackend,
-    SuggestContext,
-    suggest_options,
-)
-from policy_atlas.options_scoping.theme.theme import ThemeContext, theme_scope
+from policy_atlas.options_scoping.option_profile.option_profile import option_profile_scope
+from policy_atlas.options_scoping.suggest.suggest import SuggestBackend, suggest_options
+from policy_atlas.options_scoping.theme.theme import theme_scope
 from policy_atlas.runtime.agent_backend import StubAgentBackend
 from policy_atlas.runtime.capability_registry import OPTIONS_SCOPING, validate_plan
 from policy_atlas.runtime.inherit import inherit_documents
@@ -436,61 +430,38 @@ def _inherit_sources(
     *,
     task_id: uuid.UUID,
     run_id: uuid.UUID,
-    context: SuggestContext,
+    context: ScopeContext,
 ) -> dict[str, Any]:
     del context  # inherit reads the task's links, not the scope
     return inherit_documents(conn, task_id=task_id, run_id=run_id).as_summary()
 
 
-def _run_inherit(state: HarnessState) -> HarnessState:
-    """The document part of inherit (task 045, S6): the longlist walk's first step.
-
-    Completes even when a link cannot be read — the readable links' documents
-    are kept and the unreadable ones named in the summary, whose
-    ``degrades_walk`` flag the runner turns into a ``degraded`` walk.
-    """
-    return _run_scope_component(state, SuggestContext, _inherit_sources)
-
-
-def _run_suggest(state: HarnessState) -> HarnessState:
-    """The suggest step (task 045, S10): one judgment call, the entrants minted."""
-    sources_fn = functools.partial(suggest_options, backend=state["suggest_backend"])
-    return _run_scope_component(state, SuggestContext, sources_fn)
-
-
-def _run_longlist(state: HarnessState) -> HarnessState:
-    """The longlist step (task 045, S8): records clustered into options."""
-    sources_fn = functools.partial(longlist_scope, backend=state["longlist_backend"])
-    return _run_scope_component(state, LonglistContext, sources_fn)
+#: The options-scoping nodes: the step and the state key of its backend.
+#: ``inherit`` (task 045, S6) completes even when a link cannot be read, its
+#: ``degrades_walk`` flag making a degraded walk; ``option_profile`` is a
+#: spine step (a failure fails the walk); ``theme`` is not (a failure
+#: degrades the walk). ``constrain``, ``option_profile`` and ``theme`` ride
+#: the longlist backend.
+_BackendKey = Literal["suggest_backend", "longlist_backend"]
+_SCOPING_STEPS: dict[str, tuple[Callable[..., dict[str, Any]], _BackendKey | None]] = {
+    "inherit": (_inherit_sources, None),
+    "suggest": (suggest_options, "suggest_backend"),
+    "longlist": (longlist_scope, "longlist_backend"),
+    "option_profile": (option_profile_scope, "longlist_backend"),
+    "constrain": (constrain_scope, "longlist_backend"),
+    "theme": (theme_scope, "longlist_backend"),
+}
 
 
-def _run_constrain(state: HarnessState) -> HarnessState:
-    """The constrain step (task 045, S9): judgements, guesses, the in-scope check.
+def _scoping_node(name: str) -> Any:
+    def run(state: HarnessState) -> HarnessState:
+        step, backend_key = _SCOPING_STEPS[name]  # read at run time, so a test can swap a step
+        sources_fn = (
+            step if backend_key is None else functools.partial(step, backend=state[backend_key])
+        )
+        return _run_scope_component(state, ScopeContext, sources_fn)
 
-    Rides the longlist backend's ``constrain`` call (the same seam).
-    """
-    sources_fn = functools.partial(constrain_scope, backend=state["longlist_backend"])
-    return _run_scope_component(state, ConstrainContext, sources_fn)
-
-
-def _run_option_profile(state: HarnessState) -> HarnessState:
-    """The option_profile step (task 046, R37): what is said about each option.
-
-    Rides the longlist backend's typing and profile calls (the same seam,
-    S20). A spine step: a failure fails the walk.
-    """
-    sources_fn = functools.partial(option_profile_scope, backend=state["longlist_backend"])
-    return _run_scope_component(state, OptionProfileContext, sources_fn)
-
-
-def _run_theme(state: HarnessState) -> HarnessState:
-    """The theme step (task 046, R28): the included options grouped into themes.
-
-    Rides the longlist backend's theme calls (the same seam). Not a spine
-    step: a failure degrades the walk and the verdicts stay.
-    """
-    sources_fn = functools.partial(theme_scope, backend=state["longlist_backend"])
-    return _run_scope_component(state, ThemeContext, sources_fn)
+    return run
 
 
 def _run_group(state: HarnessState) -> HarnessState:
@@ -701,12 +672,8 @@ def build_graph() -> Any:
     g.add_node("select", _run_select)
     g.add_node("extract", _run_extract)
     g.add_node("extract_interventions", _run_extract_interventions)
-    g.add_node("inherit", _run_inherit)
-    g.add_node("suggest", _run_suggest)
-    g.add_node("longlist", _run_longlist)
-    g.add_node("option_profile", _run_option_profile)
-    g.add_node("constrain", _run_constrain)
-    g.add_node("theme", _run_theme)
+    for name in _SCOPING_STEPS:
+        g.add_node(name, _scoping_node(name))
     g.add_node("group", _run_group)
     g.add_node("synthesise", _run_synthesise)
     g.add_node("finish", _finish)

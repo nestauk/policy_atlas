@@ -56,12 +56,12 @@ from policy_atlas.evidence_search.extract.interventions_records import (
     PROFILE_ID as INTERVENTIONS_PROFILE_ID,
 )
 from policy_atlas.evidence_search.extract.iof_records import PROFILE_ID as IOF_PROFILE_ID
+from policy_atlas.options_scoping.context import ScopeContext
 from policy_atlas.options_scoping.design import OptionDesign
 from policy_atlas.options_scoping.longlist.longlist import (
     LONGLIST_HARD_CEILING,
     LONGLIST_TARGET_SIZE,
     RECORDS_PER_DOCUMENT_MAX,
-    LonglistContext,
     LonglistFailure,
     corpus_digest,
     current_profile_fingerprints,
@@ -533,7 +533,7 @@ class _Walk:
             self.conn,
             task_id=self.task_id,
             run_id=run_id,
-            context=LonglistContext(scope_id=self.scope_id, intent="longlist intent", context={}),
+            context=ScopeContext(scope_id=self.scope_id, intent="longlist intent", context={}),
             backend=backend,
         )
         return run_id, summary

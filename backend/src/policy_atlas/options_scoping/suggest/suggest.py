@@ -53,6 +53,7 @@ from policy_atlas.core.schema import (
     synthesis_result,
     task_plan,
 )
+from policy_atlas.options_scoping.context import ScopeContext
 from policy_atlas.options_scoping.design import DESIGN_TEXT_MAX, OptionDesign
 from policy_atlas.options_scoping.suggest.suggest_prompt import (
     SUGGEST_BOUND,
@@ -105,21 +106,6 @@ class SuggestBackend(Protocol):
             The parsed suggestions.
         """
         ...
-
-
-@dataclass
-class SuggestContext:
-    """Scope-level input to a ``suggest`` run.
-
-    Attributes:
-        scope_id: The longlist walk's intent record.
-        intent: Its intent text (unused: the plan is read whole).
-        context: Its context JSONB (unused: ``suggest`` reads no directive).
-    """
-
-    scope_id: uuid.UUID
-    intent: str
-    context: dict[str, Any]
 
 
 @dataclass(frozen=True)
@@ -348,7 +334,7 @@ def suggest_options(
     *,
     task_id: uuid.UUID,
     run_id: uuid.UUID,
-    context: SuggestContext,
+    context: ScopeContext,
     backend: SuggestBackend,
 ) -> dict[str, Any]:
     """Suggest options and mint the longlist walk's entrants.

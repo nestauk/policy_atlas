@@ -122,6 +122,7 @@ from policy_atlas.options_scoping.constrain.constrain_prompt import (
     DistinctResponse,
 )
 from policy_atlas.options_scoping.constrain.in_scope import in_scope_evidence
+from policy_atlas.options_scoping.context import ScopeContext
 from policy_atlas.options_scoping.design import OptionDesign
 from policy_atlas.options_scoping.longlist.coverage import stored_folds
 from policy_atlas.options_scoping.longlist.longlist import (
@@ -175,21 +176,6 @@ _DISTINCT = DISTINCT_SCREEN[0]
 
 class ConstrainFailure(Exception):
     """Constrain could not run (no longlist for the walk)."""
-
-
-@dataclass
-class ConstrainContext:
-    """Scope-level input to a ``constrain`` run.
-
-    Attributes:
-        scope_id: The longlist walk's intent record.
-        intent: Its intent text (unused).
-        context: Its context JSONB (unused).
-    """
-
-    scope_id: uuid.UUID
-    intent: str
-    context: dict[str, Any]
 
 
 @dataclass(frozen=True)
@@ -754,7 +740,7 @@ def constrain_scope(
     *,
     task_id: uuid.UUID,
     run_id: uuid.UUID,
-    context: ConstrainContext,
+    context: ScopeContext,
     backend: LonglistBackend,
 ) -> dict[str, Any]:
     """Judge every option of the walk's longlist and write the verdicts.

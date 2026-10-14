@@ -27,6 +27,7 @@ from policy_atlas.api.routers import sse
 from policy_atlas.api.stage_vocabulary import STAGE_BY_REGISTRY, STAGE_PRESENTATION
 from policy_atlas.core import events
 from policy_atlas.core.schema import longlist_result, option
+from policy_atlas.options_scoping.context import ScopeContext
 from policy_atlas.options_scoping.longlist.lever_types import LEVER_TYPE_KEYS, TAXONOMY_VERSION
 from policy_atlas.options_scoping.longlist.longlist_backend import StubLonglistBackend
 from policy_atlas.options_scoping.option_profile.folding_prompt import FoldingResponse, FoldWire
@@ -34,7 +35,6 @@ from policy_atlas.options_scoping.option_profile.lever_typing_prompt import (
     build_lever_typing_messages,
 )
 from policy_atlas.options_scoping.option_profile.option_profile import (
-    OptionProfileContext,
     OptionProfileFailure,
     _checked_folds,
     option_profile_scope,
@@ -55,6 +55,7 @@ from policy_atlas.options_scoping.option_profile.place_sentences_prompt import (
     PlaceSentencesResponse,
     PlaceSentenceWire,
 )
+from policy_atlas.runtime import harness
 from policy_atlas.runtime.harness import build_graph
 from policy_atlas.runtime.run_spec import COMPONENT_REGISTRY, Plan, compile
 from policy_atlas.runtime.runner import LLM_BEARING_COMPONENTS, NullIO, run_plan
@@ -77,7 +78,7 @@ def _profile(walk: _Walk, backend: Any) -> tuple[uuid.UUID, dict[str, Any]]:
         walk.conn,
         task_id=walk.task_id,
         run_id=run_id,
-        context=OptionProfileContext(scope_id=walk.scope_id, intent="longlist intent", context={}),
+        context=ScopeContext(scope_id=walk.scope_id, intent="longlist intent", context={}),
         backend=backend,
     )
     return run_id, summary
@@ -972,7 +973,7 @@ def test_a_failed_option_profile_step_fails_the_walk(
     def _down(*args: Any, **kwargs: Any) -> Any:
         raise OptionProfileFailure("option_profile: down")
 
-    monkeypatch.setattr("policy_atlas.runtime.harness.option_profile_scope", _down)
+    monkeypatch.setitem(harness._SCOPING_STEPS, "option_profile", (_down, "longlist_backend"))
     task_id: uuid.UUID | None = None
     try:
         task_id, outcome = _longlist_walk(engine)

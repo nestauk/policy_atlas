@@ -45,7 +45,6 @@ from policy_atlas.options_scoping.constrain.constrain import (
     IN_SCOPE_EVIDENCE_KEY,
     JUDGEMENT_UNAVAILABLE,
     PACKAGE_DISTINCT_REASON,
-    ConstrainContext,
     ConstrainFailure,
     _constraint_lists,
     constrain_scope,
@@ -70,13 +69,13 @@ from policy_atlas.options_scoping.constrain.in_scope import (
     document_year,
     in_scope_evidence,
 )
+from policy_atlas.options_scoping.context import ScopeContext
 from policy_atlas.options_scoping.longlist.longlist_backend import StubLonglistBackend
 from policy_atlas.options_scoping.longlist.longlist_cluster_prompt import (
     DiscoveredOptionWire,
     OptionDiscoveryResponse,
 )
 from policy_atlas.options_scoping.option_profile.option_profile import (
-    OptionProfileContext,
     option_profile_scope,
 )
 from policy_atlas.runtime.scoping_plan import TRANSFERABILITY_DEFAULT, find_default
@@ -180,7 +179,7 @@ def _constrain(walk: _Walk, backend: Any) -> tuple[uuid.UUID, dict[str, Any]]:
         walk.conn,
         task_id=walk.task_id,
         run_id=run_id,
-        context=ConstrainContext(scope_id=walk.scope_id, intent="longlist intent", context={}),
+        context=ScopeContext(scope_id=walk.scope_id, intent="longlist intent", context={}),
         backend=backend,
     )
     return run_id, summary
@@ -1384,7 +1383,7 @@ def _run_profile(walk: _Walk) -> None:
         walk.conn,
         task_id=walk.task_id,
         run_id=walk.run(),
-        context=OptionProfileContext(scope_id=walk.scope_id, intent="longlist intent", context={}),
+        context=ScopeContext(scope_id=walk.scope_id, intent="longlist intent", context={}),
         backend=StubLonglistBackend(),
     )
 
