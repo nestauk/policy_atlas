@@ -2549,7 +2549,9 @@ sent; found in task 049), now `sort=relevance` on every search, protected.
   wires and backend methods (`ReformulatePayload`, `SuggestPayload`, `ExemplarRecord`,
   `reformulate`, `suggest`) stay in the tree, tested and unreachable; the orchestration
   is at the tag `search-round-loop-last` (restore recipe in ADR 0038). Build it as one
-  more pass after the screen, not as a loop.
+  more pass after the screen, not as a loop. `confident_relevant_count` and its two
+  thresholds (`CONFIDENT_FLOOR`, `THIN_CONFIDENT_RELEVANT`) were deleted at the PR 96
+  review (2026-10-14); they are at the same tag.
 - **Seminal-decile recall as a Langfuse score (D17, ⏸).** The experiment script reports
   it (the share of a review's ten most-cited references found); `production_recall.py`
   does not. Add the score when the ground truth carries citation counts per reference.

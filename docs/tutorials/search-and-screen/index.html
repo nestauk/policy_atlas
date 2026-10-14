@@ -51,7 +51,7 @@ h3 { font-size: 1.15rem; font-weight: 700; margin-top: 1.75rem; margin-bottom: .
 p { margin: 0 0 1rem; }
 .lede { font-size: 1.2rem; color: var(--ink-2); max-width: 60ch; margin-top: 1rem; }
 a { color: var(--blue); }
-code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .9em; background: var(--ground); padding: .05em .35em; border-radius: 3px; }
+code { overflow-wrap: anywhere; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .9em; background: var(--ground); padding: .05em .35em; border-radius: 3px; }
 ul, ol { padding-left: 1.3rem; }
 li { margin-bottom: .35rem; }
 .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); margin: 1.5rem 0 0; }
@@ -85,7 +85,8 @@ tr.hl td { background: var(--blue-tint); font-weight: 600; }
 .didnt div { border-top: 2px solid var(--line); padding-top: .6rem; font-size: .93rem; }
 .didnt b { display: block; color: var(--navy); margin-bottom: .2rem; }
 .toc { font-size: .95rem; color: var(--ink-2); margin: 1.25rem 0 0; }
-.toc a { margin-right: .9rem; white-space: nowrap; }
+.toc { display: flex; flex-wrap: wrap; gap: .3rem .9rem; }
+.toc a { white-space: nowrap; }
 footer { margin-top: 3.5rem; padding-top: 1rem; border-top: 1px solid var(--line); font-size: .85rem; color: var(--grey); }
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
 </style>
@@ -366,7 +367,7 @@ footer { margin-top: 3.5rem; padding-top: 1rem; border-top: 1px solid var(--line
         <text x="502" y="338" font-size="13" font-weight="700">keep the first 50 · 100 · 200 policy documents</text>
       </g>
     </svg>
-    <figcaption><b>Why not fetch landmarks for papers too?</b> The paper side already has backward chasing, which does the same job with the seeds' reference lists. The policy side has no reference-list lookup of its own, so the citation lists that Overton attaches to each result are the only citation signal available, and the 15 landmark fetches are how the app follows them. The policy caps are half the paper caps because, in the design experiments, the policy side found 90% of everything it would ever find within 50 documents and 97% within 100.</figcaption>
+    <figcaption><b>Why not fetch landmarks for papers too?</b> The paper side already has backward chasing, which does the same job with the seeds' reference lists. The policy side has no reference-list lookup of its own, so the citation lists that Overton attaches to each result are the only citation signal available, and the 15 landmark fetches are how the app follows them. The policy caps are half the paper caps because, in the design experiments, the first 50 policy documents held 90% of what the whole 400-document pool could find, and the first 100 held 97% (8.0% and 8.5% recall against a pool ceiling of 8.8%; the ceiling is low because most cited policy documents are reached by nothing the search returns).</figcaption>
   </figure>
 </section>
 

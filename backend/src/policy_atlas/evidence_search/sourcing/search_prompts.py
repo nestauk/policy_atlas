@@ -79,12 +79,13 @@ SEARCH_GEN_MAX_OUTPUT_TOKENS = 8_192
 # HTTP client. Over-length values are dropped, never trimmed — see
 # ``validated_queries``.
 #
-# 2,000 is derived from OpenAlex's own limit: it rejects any request whose URL
-# exceeds 8,190 bytes ("Request URL too long"). Our fixed overhead — host, path,
-# the 286-character `select` field list, paging and credentials — is ~500 bytes,
-# and URL-encoding expands a query by at most 3x (every character escaped). So
-# 2,000 characters is ~6,500 bytes worst case, comfortably inside the limit,
-# and far longer than any real systematic-review boolean.
+# 1,300 comes from OpenAlex's search-string limit: it refuses any `search`
+# value over 1,500 characters ("Your search is too long (1558 characters; the
+# limit is 1500)", seen in task 047 and re-checked 2026-10-14). The URL length
+# limit (8,190 bytes) that set the earlier 2,000 is no longer the binding one.
+# The search pass appends the systematic-review or randomised-trial clause to
+# each query (`_compose_variant`), up to about 130 characters, so a query of
+# 1,300 characters keeps every variant under 1,500.
 N_QUERIES = 5
 QUERY_MAX_CHARS = 1_300
 MAX_PARAPHRASES = 2

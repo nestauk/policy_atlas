@@ -29,7 +29,6 @@ from policy_atlas.core.schema import (
     search_coverage_record,
 )
 from policy_atlas.core.usage import UsageAccumulator
-from policy_atlas.evidence_search.assess import screen
 from policy_atlas.evidence_search.sourcing import acquire, pool
 from policy_atlas.evidence_search.sourcing.country_filters import (
     OVERTON_DISPLAY_ALLOWLIST,
@@ -79,12 +78,6 @@ CallStatus = Literal["ok", "error"]
 # reported 'adequate'. Volume is bounded at acquisition instead (the two caps
 # in DEPTH_CONSTANTS), which brakes the thing that actually costs money, and by
 # the logical-call budgets here.
-#
-# Kept for the parked reformulation contingency (task 051, docs/deferred.md):
-# `confident_relevant_count` and its two thresholds have no caller in the
-# single pass.
-CONFIDENT_FLOOR = 0.7
-THIN_CONFIDENT_RELEVANT = 8
 
 
 class DepthConstants(TypedDict):
@@ -764,7 +757,7 @@ def _scope_wire_params_payload(
     }
 
 
-def count_existing_rounds(
+def count_search_runs(
     conn: Connection,
     *,
     task_id: uuid.UUID,
@@ -773,8 +766,9 @@ def count_existing_rounds(
     """Count completed search runs for a scope (one coverage row per run).
 
     ``run_search`` reports its ``round_index`` from this (1 on a fresh scope;
-    a re-run of the search on the same scope counts up). Search is one pass
-    at every scope (task 051); historical rows from the round loop still count.
+    a check-in steer that re-runs the search on the same scope counts up).
+    Search is one pass at every scope (task 051); historical rows from the
+    round loop still count.
 
     Args:
         conn: Open database connection.
@@ -789,35 +783,6 @@ def count_existing_rounds(
         .select_from(search_coverage_record)
         .where(search_coverage_record.c.task_id == task_id)
         .where(search_coverage_record.c.evidence_scope_id == scope_id)
-    ).scalar_one()
-    return int(count)
-
-
-def confident_relevant_count(
-    conn: Connection,
-    *,
-    task_id: uuid.UUID,
-    scope_id: uuid.UUID,
-) -> int:
-    """Count effective relevant rows at or above the confidence floor.
-
-    Args:
-        conn: Open database connection.
-        task_id: Owning task.
-        scope_id: Evidence scope being searched.
-
-    Returns:
-        Count of effective screened rows with ``status='relevant'`` and
-        ``screen_decision_confidence >= CONFIDENT_FLOOR``.
-    """
-    effective = screen.effective_screen_rows()
-    count = conn.execute(
-        select(func.count())
-        .select_from(effective)
-        .where(effective.c.task_id == task_id)
-        .where(effective.c.evidence_scope_id == scope_id)
-        .where(effective.c.status == "relevant")
-        .where(effective.c.screen_decision_confidence >= CONFIDENT_FLOOR)
     ).scalar_one()
     return int(count)
 
@@ -1491,7 +1456,7 @@ def run_search(
     variants = {name: _filter_variants(name, validated[name]) for name in names}
     wires = {name: [to_wire_params(name, item) for item in variants[name]] for name in names}
     scope_wire_params = _scope_wire_params_payload(wires) if raw_filters is not None else None
-    round_index = count_existing_rounds(conn, task_id=task_id, scope_id=context.scope_id) + 1
+    round_index = count_search_runs(conn, task_id=task_id, scope_id=context.scope_id) + 1
     started = time.monotonic()
 
     wire, usage = generation_backend.generate_queries(
