@@ -551,20 +551,129 @@ def seed_source(
 
 
 def seed_scope(
-    conn: Connection, task_id: uuid.UUID, context: dict[str, Any] | None = None
+    conn: Connection,
+    task_id: uuid.UUID,
+    context: dict[str, Any] | None = None,
+    *,
+    intent: str = "Test intent",
+    purpose: str | None = None,
+    plan_id: uuid.UUID | None = None,
+    created_at: datetime | None = None,
 ) -> uuid.UUID:
-    """Insert a evidence_scope; return scope_id."""
+    """Insert a evidence_scope (an intent record); return scope_id.
+
+    ``purpose`` and ``plan_id`` are written only when given, so migration
+    tests can seed at revisions that predate those columns.
+    """
     from policy_atlas.core.schema import evidence_scope
 
     scope_id = uuid.uuid4()
-    conn.execute(evidence_scope.insert().values(
-        evidence_scope_id=scope_id,
-        task_id=task_id,
-        intent="Test intent",
-        context=context or {},
-        created_at=now(),
-    ))
+    values: dict[str, Any] = {
+        "evidence_scope_id": scope_id,
+        "task_id": task_id,
+        "intent": intent,
+        "context": context or {},
+        "created_at": created_at or now(),
+    }
+    if purpose is not None:
+        values["purpose"] = purpose
+    if plan_id is not None:
+        values["plan_id"] = plan_id
+    conn.execute(evidence_scope.insert().values(**values))
     return scope_id
+
+
+@dataclass(frozen=True)
+class SeededWalk:
+    """The ids :func:`seed_walk` wrote."""
+
+    scope_id: uuid.UUID
+    plan_id: uuid.UUID
+    walk_id: uuid.UUID
+    run_id: uuid.UUID | None
+
+
+def seed_walk(
+    conn: Connection,
+    task_id: uuid.UUID,
+    *,
+    capability: str = "options_scoping",
+    purpose: str | None = None,
+    status: str = "succeeded",
+    parent: uuid.UUID | None = None,
+    plan_payload: dict[str, Any] | None = None,
+    plan_created_by: str = "user",
+    scope_id: uuid.UUID | None = None,
+    plan_id: uuid.UUID | None = None,
+    plan_version: int = 1,
+    walk_id: uuid.UUID | None = None,
+    context: dict[str, Any] | None = None,
+    intent: str | None = None,
+    scope_created_at: datetime | None = None,
+    started_at: datetime | None = None,
+    ended_at: datetime | None = None,
+    with_run: bool = False,
+) -> SeededWalk:
+    """Insert a walk (a ``capability_run`` row) and what it hangs off.
+
+    A walk needs an intent record and a plan. Each is created unless given:
+
+    - ``scope_id`` absent: an ``evidence_scope`` of ``purpose`` is inserted.
+    - ``plan_payload`` given: an approved ``task_plan`` row is inserted at
+      ``plan_version``; otherwise the walk points at ``plan_id`` (or a fresh id
+      with no row; the walk table carries no foreign key to the plan).
+
+    A walk in a terminal status ends at ``ended_at`` (default: when it
+    started); a ``running`` or ``paused`` walk has not ended. ``with_run``
+    adds one ``runs`` row under the walk, in the walk's status.
+    """
+    from policy_atlas.core.schema import capability_run, task_plan
+
+    started = started_at or now()
+    plan_id = plan_id or uuid.uuid4()
+    if plan_payload is not None:
+        conn.execute(
+            task_plan.insert().values(
+                plan_id=plan_id,
+                task_id=task_id,
+                version=plan_version,
+                status="approved",
+                payload=plan_payload,
+                created_at=started,
+                created_by=plan_created_by,
+            )
+        )
+    if scope_id is None:
+        scope_id = seed_scope(
+            conn,
+            task_id,
+            context,
+            intent=intent or f"{purpose or 'es'} intent",
+            purpose=purpose,
+            created_at=scope_created_at,
+        )
+    walk_id = walk_id or uuid.uuid4()
+    ended = None if status in ("running", "paused") else (ended_at or started)
+    values: dict[str, Any] = {
+        "capability_run_id": walk_id,
+        "task_id": task_id,
+        "evidence_scope_id": scope_id,
+        "capability": capability,
+        "plan_id": plan_id,
+        "plan_version": plan_version,
+        "status": status,
+        "started_at": started,
+        "ended_at": ended,
+    }
+    if parent is not None:
+        values["parent_capability_run_id"] = parent
+    conn.execute(capability_run.insert().values(**values))
+    run_id = (
+        seed_run(conn, task_id, capability_run_id=walk_id, status=status, started_at=started)
+        if with_run
+        else None
+    )
+    return SeededWalk(scope_id=scope_id, plan_id=plan_id, walk_id=walk_id, run_id=run_id)
 
 
 def seed_screening_result(
@@ -631,16 +740,31 @@ def seed_task_and_run(conn: Connection) -> tuple[uuid.UUID, uuid.UUID]:
     return pid, seed_run(conn, pid)
 
 
-def seed_run(conn: Connection, task_id: uuid.UUID) -> uuid.UUID:
-    """Insert an additional running run for an existing task; return run_id."""
+def seed_run(
+    conn: Connection,
+    task_id: uuid.UUID,
+    *,
+    capability_run_id: uuid.UUID | None = None,
+    status: str = "running",
+    started_at: datetime | None = None,
+) -> uuid.UUID:
+    """Insert an additional run for an existing task (running by default); return run_id.
+
+    ``capability_run_id`` files the run under a walk; it is written only when
+    given, so migration tests can seed at revisions that predate the column.
+    """
     from policy_atlas.core.schema import runs
 
     rid = uuid.uuid4()
-    conn.execute(
-        runs.insert().values(
-            run_id=rid, task_id=task_id, status="running", started_at=now()
-        )
-    )
+    values: dict[str, Any] = {
+        "run_id": rid,
+        "task_id": task_id,
+        "status": status,
+        "started_at": started_at or now(),
+    }
+    if capability_run_id is not None:
+        values["capability_run_id"] = capability_run_id
+    conn.execute(runs.insert().values(**values))
     return rid
 
 

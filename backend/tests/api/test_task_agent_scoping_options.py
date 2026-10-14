@@ -18,7 +18,6 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.engine import Engine
@@ -30,8 +29,6 @@ from policy_atlas.core.schema import (
     evidence_scope,
     longlist_result,
     runs,
-    task,
-    task_link,
     task_plan,
 )
 from policy_atlas.runtime.agent_backend import StubAgentBackend
@@ -41,26 +38,13 @@ from policy_atlas.runtime.task_agent_scoping_prompt import (
     ScopingTurnWire,
     YourOptionWire,
 )
-from tests.api.resource_support import api_client
-from tests.helpers import delete_task_data
-
-
-@pytest.fixture(autouse=True)
-def _remove_committed_tasks(engine: Engine):  # type: ignore[no-untyped-def]
-    """Hard-delete every task these tests commit (a left scoping task blocks downgrades)."""
-    before = _all_task_ids(engine)
-    yield
-    created = list(_all_task_ids(engine) - before)
-    with engine.begin() as conn:
-        conn.execute(task_link.delete().where(task_link.c.source_task_id.in_(created)))
-        conn.execute(task_link.delete().where(task_link.c.target_task_id.in_(created)))
-        for task_id in created:
-            delete_task_data(conn, task_id)
-
-
-def _all_task_ids(engine: Engine) -> set[uuid.UUID]:
-    with engine.connect() as conn:
-        return {row[0] for row in conn.execute(select(task.c.task_id))}
+from tests.api.resource_support import (
+    api_client,
+    create_scoping_task,
+    remove_committed_tasks,  # noqa: F401 — autouse
+    task_agent_turn_ok,
+    to_ready,
+)
 
 
 class _OptionsScopingAgent(StubScopingTaskAgentBackend):
@@ -99,40 +83,6 @@ def _overrides(
         get_scoping_task_agent_backend: lambda: scoping,
         get_agent_backend: lambda: agent,
     }
-
-
-def _scoping_task(client: TestClient, headers: dict[str, str]) -> str:
-    response = client.post(
-        "/api/v1/tasks",
-        headers=headers,
-        json={
-            "name": "Youth employment options",
-            "question": "What could reduce the number of young people not in work?",
-            "capability": "options_scoping",
-        },
-    )
-    assert response.status_code == 201, response.text
-    return str(response.json()["task_id"])
-
-
-def _turn(
-    client: TestClient, headers: dict[str, str], task_id: str, message: str
-) -> dict[str, Any]:
-    response = client.post(
-        f"/api/v1/tasks/{task_id}/task-agent-turns",
-        headers=headers,
-        json={"message": message, "client_turn_id": str(uuid.uuid4())},
-    )
-    assert response.status_code == 200, response.text
-    return dict(response.json())
-
-
-def _to_ready(client: TestClient, headers: dict[str, str], task_id: str) -> dict[str, Any]:
-    _turn(client, headers, task_id, "Young people are not getting into work.")
-    _turn(client, headers, task_id, "16 to 24 year olds")
-    ready = _turn(client, headers, task_id, "[confirm part=depth option=standard_pass]")
-    assert ready["scoping_plan"]["ready"] is True
-    return ready
 
 
 def _plan(client: TestClient, headers: dict[str, str], task_id: str) -> dict[str, Any]:
@@ -175,8 +125,8 @@ def test_the_approving_turn_proposes_a_design_for_each_option(
     scoping, agent = _OptionsScopingAgent(), StubAgentBackend()
     scoping.options = ["  a youth guarantee  ", "wage subsidies"]
     with api_client(tmp_path, _overrides(scoping, agent)) as (client, owner, _other):
-        task_id = _scoping_task(client, owner)
-        ready = _to_ready(client, owner, task_id)
+        task_id = create_scoping_task(client, owner)
+        ready = to_ready(client, owner, task_id)
         options = ready["scoping_plan"]["your_options"]
         assert [o["text"] for o in options] == ["  a youth guarantee  ", "wage subsidies"]
         assert all(o["design"] is not None for o in options)
@@ -193,10 +143,10 @@ def test_a_reworded_option_is_proposed_again_and_the_others_keep_their_design(
     scoping, agent = _OptionsScopingAgent(), StubAgentBackend()
     scoping.options = ["a youth guarantee", "wage subsidies"]
     with api_client(tmp_path, _overrides(scoping, agent)) as (client, owner, _other):
-        task_id = _scoping_task(client, owner)
-        first = _to_ready(client, owner, task_id)["scoping_plan"]["your_options"]
+        task_id = create_scoping_task(client, owner)
+        first = to_ready(client, owner, task_id)["scoping_plan"]["your_options"]
         scoping.options = ["a youth guarantee", "wage subsidies for employers"]
-        again = _turn(client, owner, task_id, "make it wage subsidies for employers")
+        again = task_agent_turn_ok(client, owner, task_id, "make it wage subsidies for employers")
         options = again["scoping_plan"]["your_options"]
         assert options[0] == first[0]
         assert options[1]["design"]["name"] == "wage subsidies for employers"
@@ -206,8 +156,8 @@ def test_a_reworded_option_is_proposed_again_and_the_others_keep_their_design(
 def test_no_options_is_a_plan_and_calls_nothing(engine: Engine, tmp_path: Path) -> None:
     scoping, agent = _OptionsScopingAgent(), StubAgentBackend()
     with api_client(tmp_path, _overrides(scoping, agent)) as (client, owner, _other):
-        task_id = _scoping_task(client, owner)
-        ready = _to_ready(client, owner, task_id)
+        task_id = create_scoping_task(client, owner)
+        ready = to_ready(client, owner, task_id)
         assert ready["scoping_plan"]["your_options"] == []
         assert agent.option_design_calls == 0
 
@@ -218,8 +168,10 @@ def test_an_unready_draft_shows_the_options_without_a_design(
     scoping, agent = _OptionsScopingAgent(), StubAgentBackend()
     scoping.options = ["a youth guarantee"]
     with api_client(tmp_path, _overrides(scoping, agent)) as (client, owner, _other):
-        task_id = _scoping_task(client, owner)
-        draft = _turn(client, owner, task_id, "Young people are not getting into work.")
+        task_id = create_scoping_task(client, owner)
+        draft = task_agent_turn_ok(
+            client, owner, task_id, "Young people are not getting into work."
+        )
         assert draft["scoping_plan"]["ready"] is False
         assert draft["scoping_plan"]["your_options"] == [
             {"text": "a youth guarantee", "design": None, "turn_index": None}
@@ -233,8 +185,8 @@ def test_a_patch_rewording_an_option_drops_and_re_proposes_its_design(
     scoping, agent = _OptionsScopingAgent(), StubAgentBackend()
     scoping.options = ["a youth guarantee", "wage subsidies"]
     with api_client(tmp_path, _overrides(scoping, agent)) as (client, owner, _other):
-        task_id = _scoping_task(client, owner)
-        first = _to_ready(client, owner, task_id)["scoping_plan"]["your_options"]
+        task_id = create_scoping_task(client, owner)
+        first = to_ready(client, owner, task_id)["scoping_plan"]["your_options"]
         patched = _patch(
             client,
             owner,
@@ -250,8 +202,8 @@ def test_a_patch_rewording_an_option_drops_and_re_proposes_its_design(
 def test_a_patch_may_not_edit_another_users_options(engine: Engine, tmp_path: Path) -> None:
     scoping, agent = _OptionsScopingAgent(), StubAgentBackend()
     with api_client(tmp_path, _overrides(scoping, agent)) as (client, owner, other):
-        task_id = _scoping_task(client, owner)
-        _to_ready(client, owner, task_id)
+        task_id = create_scoping_task(client, owner)
+        to_ready(client, owner, task_id)
         response = client.patch(
             f"/api/v1/tasks/{task_id}/plan",
             headers=other,
@@ -269,10 +221,12 @@ def test_every_scoping_plan_carries_the_default_preference(
 ) -> None:
     scoping, agent = _OptionsScopingAgent(), StubAgentBackend()
     with api_client(tmp_path, _overrides(scoping, agent)) as (client, owner, _other):
-        task_id = _scoping_task(client, owner)
-        draft = _turn(client, owner, task_id, "Young people are not getting into work.")
+        task_id = create_scoping_task(client, owner)
+        draft = task_agent_turn_ok(
+            client, owner, task_id, "Young people are not getting into work."
+        )
         assert _defaults(draft["scoping_plan"])[0]["text"] == "Transferable to United Kingdom"
-        _to_ready(client, owner, task_id)
+        to_ready(client, owner, task_id, fresh=False)
         [default] = _defaults(_plan(client, owner, task_id))
         assert default["kind"] == "preference"
         assert default["origin"] == "assumed"
@@ -285,8 +239,8 @@ def test_the_default_follows_where_until_the_user_edits_it(
 ) -> None:
     scoping, agent = _OptionsScopingAgent(), StubAgentBackend()
     with api_client(tmp_path, _overrides(scoping, agent)) as (client, owner, _other):
-        task_id = _scoping_task(client, owner)
-        _to_ready(client, owner, task_id)
+        task_id = create_scoping_task(client, owner)
+        to_ready(client, owner, task_id)
         moved = _patch(client, owner, task_id, {"where": {"text": "Wales", "origin": "your_call"}})
         assert [d["text"] for d in _defaults(moved)] == ["Transferable to Wales"]
 
@@ -304,13 +258,13 @@ def test_the_default_follows_where_until_the_user_edits_it(
 def test_a_removed_default_is_never_minted_again(engine: Engine, tmp_path: Path) -> None:
     scoping, agent = _OptionsScopingAgent(), StubAgentBackend()
     with api_client(tmp_path, _overrides(scoping, agent)) as (client, owner, _other):
-        task_id = _scoping_task(client, owner)
-        ready = _to_ready(client, owner, task_id)
+        task_id = create_scoping_task(client, owner)
+        ready = to_ready(client, owner, task_id)
         kept = [c for c in ready["scoping_plan"]["constraints"] if not c.get("default")]
         removed = _patch(client, owner, task_id, {"constraints": kept})
         assert _defaults(removed) == []
         # A later Task Agent turn builds a new version from its draft.
-        _turn(client, owner, task_id, "one more thing")
+        task_agent_turn_ok(client, owner, task_id, "one more thing")
         assert _defaults(_plan(client, owner, task_id)) == []
         with engine.connect() as conn:
             payload = conn.execute(
@@ -328,8 +282,8 @@ def test_a_patch_that_carries_a_removed_default_back_restores_it(
     """L4: removing the default records it; sending it back restores it (not a 422)."""
     scoping, agent = _OptionsScopingAgent(), StubAgentBackend()
     with api_client(tmp_path, _overrides(scoping, agent)) as (client, owner, _other):
-        task_id = _scoping_task(client, owner)
-        ready = _to_ready(client, owner, task_id)
+        task_id = create_scoping_task(client, owner)
+        ready = to_ready(client, owner, task_id)
         constraints = ready["scoping_plan"]["constraints"]
         kept = [c for c in constraints if not c.get("default")]
         assert _defaults(_patch(client, owner, task_id, {"constraints": kept})) == []
@@ -384,7 +338,7 @@ def _walk(
 def test_the_baseline_state_names_the_longlist_states(engine: Engine, tmp_path: Path) -> None:
     scoping, agent = _OptionsScopingAgent(), StubAgentBackend()
     with api_client(tmp_path, _overrides(scoping, agent)) as (client, owner, _other):
-        task_id = uuid.UUID(_scoping_task(client, owner))
+        task_id = uuid.UUID(create_scoping_task(client, owner))
         with engine.connect() as conn:
             assert _baseline_state(conn, task_id) == NO_BASELINE_STATE
 

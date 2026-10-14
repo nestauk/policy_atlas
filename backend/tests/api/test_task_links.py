@@ -21,7 +21,6 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import httpx
-import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import func, select
 from sqlalchemy.engine import Connection, Engine
@@ -29,62 +28,12 @@ from sqlalchemy.engine import Connection, Engine
 from policy_atlas.core.schema import (
     capability_run,
     evidence_scope,
-    project,
     project_membership,
     task,
-    task_link,
     task_plan,
 )
-from tests.api.org_support import make_org, ops_enrol, seeded, tenancy_client
-from tests.helpers import delete_task_data
-
-
-@pytest.fixture(autouse=True)
-def _remove_committed_tasks(engine: Engine):  # type: ignore[no-untyped-def]
-    """Hard-delete every task these tests commit, links and memberships first.
-
-    These tests drive real routes, so they commit; the rolled-back ``conn``
-    fixture cannot clean up after them. Leaving the rows behind is not merely
-    untidy here — an ``options_scoping`` task committed by one test makes
-    ``b5e1d7a4c026``'s downgrade **refuse**, which is exactly what it is
-    supposed to do, and every historical migration round-trip in the suite
-    fails behind it.
-    """
-    before = _all_task_ids(engine)
-    yield
-    created = list(_all_task_ids(engine) - before)
-    with engine.begin() as conn:
-        # Every link across the whole batch first: a link pins the SOURCE
-        # task's walk, so deleting the source's rows while the target's link
-        # still names them is a foreign-key violation.
-        conn.execute(task_link.delete().where(task_link.c.source_task_id.in_(created)))
-        conn.execute(task_link.delete().where(task_link.c.target_task_id.in_(created)))
-        for task_id in created:
-            conn.execute(
-                project_membership.delete().where(project_membership.c.task_id == task_id)
-            )
-            delete_task_data(conn, task_id)
-
-
-def _all_task_ids(engine: Engine) -> set[uuid.UUID]:
-    with engine.connect() as conn:
-        return {row[0] for row in conn.execute(select(task.c.task_id))}
-
-
-def _make_project(conn: Connection, *, org_id: uuid.UUID, owner_user_id: str) -> uuid.UUID:
-    project_id = uuid.uuid4()
-    conn.execute(
-        project.insert().values(
-            project_id=project_id,
-            name=f"Project {uuid.uuid4()}",
-            description=None,
-            created_at=datetime.now(UTC),
-            owner_user_id=owner_user_id,
-            org_id=org_id,
-            visibility="org",
-        )
-    )
-    return project_id
+from tests.api.org_support import make_org, make_project, ops_enrol, seeded, tenancy_client
+from tests.api.resource_support import remove_committed_tasks  # noqa: F401 — autouse
 
 
 def _finish_walk(
@@ -164,7 +113,7 @@ def test_a_scoping_task_is_created_with_its_capability_project_and_link(
         with seeded(engine) as conn:
             org_id = make_org(conn)
             ops_enrol(conn, user_id=owner.user_id, org_id=org_id)
-            project_id = _make_project(conn, org_id=org_id, owner_user_id=owner.user_id)
+            project_id = make_project(conn, org_id=org_id, owner_user_id=owner.user_id)
         source = _create(client, owner.headers, name="Source", project_ids=[str(project_id)])
         assert source.status_code == 201, source.text
         source_id = source.json()["task_id"]
@@ -222,8 +171,8 @@ def test_a_link_to_a_source_in_no_shared_project_is_refused_and_no_task_survives
         with seeded(engine) as conn:
             org_id = make_org(conn)
             ops_enrol(conn, user_id=owner.user_id, org_id=org_id)
-            one = _make_project(conn, org_id=org_id, owner_user_id=owner.user_id)
-            two = _make_project(conn, org_id=org_id, owner_user_id=owner.user_id)
+            one = make_project(conn, org_id=org_id, owner_user_id=owner.user_id)
+            two = make_project(conn, org_id=org_id, owner_user_id=owner.user_id)
         source = _create(client, owner.headers, name="Elsewhere", project_ids=[str(one)])
         source_id = source.json()["task_id"]
         with seeded(engine) as conn:
@@ -250,7 +199,7 @@ def test_a_link_to_a_source_with_no_finished_walk_is_refused(
         with seeded(engine) as conn:
             org_id = make_org(conn)
             ops_enrol(conn, user_id=owner.user_id, org_id=org_id)
-            project_id = _make_project(conn, org_id=org_id, owner_user_id=owner.user_id)
+            project_id = make_project(conn, org_id=org_id, owner_user_id=owner.user_id)
         source = _create(client, owner.headers, name="Unrun", project_ids=[str(project_id)])
         source_id = source.json()["task_id"]
 
@@ -307,7 +256,7 @@ def test_a_scoping_task_cannot_start_from_another_scoping_task(
         with seeded(engine) as conn:
             org_id = make_org(conn)
             ops_enrol(conn, user_id=owner.user_id, org_id=org_id)
-            project_id = _make_project(conn, org_id=org_id, owner_user_id=owner.user_id)
+            project_id = make_project(conn, org_id=org_id, owner_user_id=owner.user_id)
         source = _create(
             client,
             owner.headers,
@@ -361,7 +310,7 @@ def test_a_link_never_widens_what_the_caller_can_read(
             owner_org = make_org(conn)
             ops_enrol(conn, user_id=owner.user_id, org_id=owner_org)
             ops_enrol(conn, user_id=stranger.user_id, org_id=make_org(conn))
-            project_id = _make_project(conn, org_id=owner_org, owner_user_id=owner.user_id)
+            project_id = make_project(conn, org_id=owner_org, owner_user_id=owner.user_id)
         source = _create(
             client, owner.headers, name="Private source", project_ids=[str(project_id)]
         )
@@ -395,7 +344,7 @@ def test_a_link_whose_tasks_stop_sharing_a_project_is_flagged_not_deleted(
         with seeded(engine) as conn:
             org_id = make_org(conn)
             ops_enrol(conn, user_id=owner.user_id, org_id=org_id)
-            project_id = _make_project(conn, org_id=org_id, owner_user_id=owner.user_id)
+            project_id = make_project(conn, org_id=org_id, owner_user_id=owner.user_id)
         source = _create(
             client, owner.headers, name="Shared source", project_ids=[str(project_id)]
         )
@@ -454,7 +403,7 @@ def test_a_reader_who_cannot_open_the_source_is_not_told_its_name(
             org_id = make_org(conn)
             ops_enrol(conn, user_id=owner.user_id, org_id=org_id)
             ops_enrol(conn, user_id=colleague.user_id, org_id=org_id)
-            project_id = _make_project(conn, org_id=org_id, owner_user_id=owner.user_id)
+            project_id = make_project(conn, org_id=org_id, owner_user_id=owner.user_id)
         source = _create(
             client, owner.headers, name="Private later", project_ids=[str(project_id)]
         )
@@ -513,7 +462,7 @@ def test_the_tasks_listing_carries_the_capability_and_the_links(
         with seeded(engine) as conn:
             org_id = make_org(conn)
             ops_enrol(conn, user_id=owner.user_id, org_id=org_id)
-            project_id = _make_project(conn, org_id=org_id, owner_user_id=owner.user_id)
+            project_id = make_project(conn, org_id=org_id, owner_user_id=owner.user_id)
         source = _create(
             client, owner.headers, name="Listed source", project_ids=[str(project_id)]
         )

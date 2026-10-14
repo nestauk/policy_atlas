@@ -19,15 +19,11 @@ from sqlalchemy.engine import Connection
 from policy_atlas.core.schema import (
     artefact,
     block,
-    capability_run,
-    evidence_scope,
     intervention_profile_record,
     option,
     option_membership,
-    runs,
     synthesis_result,
     task,
-    task_plan,
     task_source_snapshot,
 )
 from policy_atlas.options_scoping.design import OptionDesign
@@ -48,6 +44,7 @@ from policy_atlas.runtime.scoping_plan import (
     YourOption,
 )
 from tests.helpers import now
+from tests.options_scoping.test_longlist import _Walk as LonglistWalk
 from tests.runtime.test_baseline_gate import scoping_plan
 from tests.runtime.test_inherit import OWNER, _seed_linked_source
 
@@ -88,73 +85,16 @@ def _plan(**updates: Any) -> ScopingPlan:
     return plan.model_copy(update=defaults)
 
 
-class _Walk:
-    """A scoping task with a longlist walk (plan, intent record, walk, run)."""
+class _Walk(LonglistWalk):
+    """``test_longlist``'s walk, owned by the linked source's owner."""
 
     def __init__(self, conn: Connection, plan: ScopingPlan) -> None:
-        self.conn = conn
-        self.task_id = uuid.uuid4()
+        super().__init__(conn, plan)
         conn.execute(
-            task.insert().values(
-                task_id=self.task_id,
-                created_at=now(),
-                name="Youth employment options",
-                status="active",
-                updated_at=now(),
-                capability="options_scoping",
-                owner_user_id=OWNER,
-            )
+            task.update()
+            .where(task.c.task_id == self.task_id)
+            .values(owner_user_id=OWNER, name="Youth employment options")
         )
-        plan_id = uuid.uuid4()
-        conn.execute(
-            task_plan.insert().values(
-                plan_id=plan_id,
-                task_id=self.task_id,
-                version=1,
-                status="approved",
-                payload=plan.model_dump(mode="json"),
-                created_at=now(),
-                created_by="task_agent",
-            )
-        )
-        self.scope_id = uuid.uuid4()
-        conn.execute(
-            evidence_scope.insert().values(
-                evidence_scope_id=self.scope_id,
-                task_id=self.task_id,
-                intent="longlist intent",
-                context={},
-                created_at=now(),
-                purpose="longlist",
-                plan_id=plan_id,
-            )
-        )
-        self.walk_id = uuid.uuid4()
-        conn.execute(
-            capability_run.insert().values(
-                capability_run_id=self.walk_id,
-                task_id=self.task_id,
-                evidence_scope_id=self.scope_id,
-                capability="options_scoping",
-                plan_id=plan_id,
-                plan_version=1,
-                status="running",
-                started_at=now(),
-            )
-        )
-
-    def run(self) -> uuid.UUID:
-        run_id = uuid.uuid4()
-        self.conn.execute(
-            runs.insert().values(
-                run_id=run_id,
-                task_id=self.task_id,
-                status="running",
-                started_at=now(),
-                capability_run_id=self.walk_id,
-            )
-        )
-        return run_id
 
     def baseline(self, sections: list[tuple[str, str]]) -> None:
         run_id = self.run()
@@ -216,7 +156,7 @@ class _Walk:
         )
         return run_id, summary
 
-    def options(self) -> list[Any]:
+    def option_rows(self) -> list[Any]:
         return list(
             self.conn.execute(
                 select(option)
@@ -282,7 +222,7 @@ def test_suggestions_are_minted_labelled_each_with_a_design(conn: Connection) ->
 
     run_id, summary = walk.suggest(backend)
 
-    by_name = {row["name"]: row for row in walk.options()}
+    by_name = {row["name"]: row for row in walk.option_rows()}
     assert set(by_name) == {"Wage subsidy", "Mentoring scheme"}
     assert by_name["Wage subsidy"]["origin"] == "from_evidence_search"
     assert by_name["Mentoring scheme"]["origin"] == "suggested"
@@ -315,7 +255,7 @@ def test_at_most_the_bound_is_minted(conn: Connection) -> None:
 
     _run_id, summary = walk.suggest(backend)
 
-    assert len(walk.options()) == SUGGEST_BOUND
+    assert len(walk.option_rows()) == SUGGEST_BOUND
     assert summary["suggested"] == SUGGEST_BOUND
     assert summary["dropped"] == 2
 
@@ -344,7 +284,7 @@ def test_the_plan_s_own_options_become_added_by_you_entrants(conn: Connection) -
 
     _run_id, summary = walk.suggest(backend)
 
-    own = {row["name"]: row for row in walk.options() if row["origin"] == "added_by_you"}
+    own = {row["name"]: row for row in walk.option_rows() if row["origin"] == "added_by_you"}
     assert set(own) == {"Youth guarantee", "free bus passes for apprentices"}
     assert OptionDesign.model_validate(own["Youth guarantee"]["design"]) == _DESIGNED
     # A design that failed to be proposed: the entrant stands on the words.
@@ -371,11 +311,11 @@ def test_a_rebuild_keeps_the_existing_option_ids(conn: Connection) -> None:
         ]
     )
     first_run, first = walk.suggest(StubAgentBackend(suggest_responses=response))
-    before = {row["option_id"]: row for row in walk.options()}
+    before = {row["option_id"]: row for row in walk.option_rows()}
 
     _second_run, second = walk.suggest(StubAgentBackend(suggest_responses=response))
 
-    after = {row["option_id"]: row for row in walk.options()}
+    after = {row["option_id"]: row for row in walk.option_rows()}
     assert set(after) == set(before)
     assert {row["created_by_run_id"] for row in after.values()} == {first_run}
     # The user's own are entrants again (kept); the repeated suggestions are
@@ -387,13 +327,13 @@ def test_a_rebuild_keeps_the_existing_option_ids(conn: Connection) -> None:
 def test_a_rebuild_adds_a_new_suggestion_beside_the_kept_ones(conn: Connection) -> None:
     walk = _Walk(conn, _plan(your_options=[]))
     walk.suggest(StubAgentBackend(suggest_responses=SuggestResponse(options=[_wire("A")])))
-    [kept] = walk.options()
+    [kept] = walk.option_rows()
 
     _run, summary = walk.suggest(
         StubAgentBackend(suggest_responses=SuggestResponse(options=[_wire("A"), _wire("B")]))
     )
 
-    rows = {row["name"]: row["option_id"] for row in walk.options()}
+    rows = {row["name"]: row["option_id"] for row in walk.option_rows()}
     assert rows["A"] == kept["option_id"]
     assert set(rows) == {"A", "B"}
     assert (summary["minted"], summary["kept"], summary["dropped"]) == (1, 0, 1)
@@ -419,7 +359,7 @@ def test_a_rebuild_shows_the_model_the_existing_options_and_drops_repeats(
             )
         )
     )
-    before = {row["option_id"] for row in walk.options()}
+    before = {row["option_id"] for row in walk.option_rows()}
     assert len(before) == 7
 
     renamed = _wire("A new name for the same thing", source="linked_report")
@@ -443,7 +383,7 @@ def test_a_rebuild_shows_the_model_the_existing_options_and_drops_repeats(
         {"name": name, "description": f"{name}, described in one sentence."}
         for name in first_names
     ]
-    new_rows = [row for row in walk.options() if row["option_id"] not in before]
+    new_rows = [row for row in walk.option_rows() if row["option_id"] not in before]
     assert [row["name"] for row in new_rows] == ["A genuinely new option"]
     assert (summary["minted"], summary["dropped"]) == (1, 2)
     assert summary["entrants"] == [str(new_rows[0]["option_id"])]
@@ -466,7 +406,7 @@ def test_a_report_label_without_a_linked_report_is_suggested(conn: Connection) -
 
     _run, summary = walk.suggest(backend)
 
-    [row] = walk.options()
+    [row] = walk.option_rows()
     assert row["origin"] == "suggested"
     assert summary["report_sections"] == {}
 
@@ -482,7 +422,7 @@ def test_a_section_the_report_does_not_carry_is_not_recorded(conn: Connection) -
 
     _run, summary = walk.suggest(backend)
 
-    [row] = walk.options()
+    [row] = walk.option_rows()
     assert row["origin"] == "from_evidence_search"
     assert summary["report_sections"] == {str(row["option_id"]): None}
 
@@ -495,7 +435,7 @@ def test_a_suggestion_repeating_the_user_s_option_is_dropped(conn: Connection) -
 
     _run, summary = walk.suggest(backend)
 
-    assert sorted(row["name"] for row in walk.options()) == [
+    assert sorted(row["name"] for row in walk.option_rows()) == [
         "Other",
         "Youth guarantee",
         "free bus passes for apprentices",
@@ -509,7 +449,7 @@ def test_the_stub_default_mints_one_of_each_label(conn: Connection) -> None:
 
     _run, summary = walk.suggest(StubAgentBackend())
 
-    origins = sorted(row["origin"] for row in walk.options())
+    origins = sorted(row["origin"] for row in walk.option_rows())
     assert origins == ["from_evidence_search", "suggested"]
     assert list(summary["report_sections"].values()) == [REPORT_SECTION]
 
@@ -532,7 +472,7 @@ def test_a_failed_suggestion_call_still_leaves_the_user_s_own_options(
     else:  # pragma: no cover - the call must fail
         raise AssertionError("suggest did not fail")
 
-    assert sorted((row["origin"], row["name"]) for row in walk.options()) == [
+    assert sorted((row["origin"], row["name"]) for row in walk.option_rows()) == [
         ("added_by_you", "Youth guarantee"),
         ("added_by_you", "free bus passes for apprentices"),
     ]

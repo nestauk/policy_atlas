@@ -26,7 +26,6 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from fastapi.testclient import TestClient
 from sqlalchemy import select, update
 from sqlalchemy.engine import Connection, Engine
 
@@ -66,14 +65,18 @@ from policy_atlas.runtime.chat_backend import StubChatBackend
 from policy_atlas.runtime.conversation_lifecycle import ensure_active_task_agent_conversation
 from policy_atlas.runtime.longlist_verbs_prompt import LonglistVerbWire
 from policy_atlas.runtime.option_design_prompt import OptionDesignWire
-from tests.api.resource_support import api_client, create_task
+from tests.api.org_support import tenancy_client
+from tests.api.resource_support import (  # noqa: F401 — the autouse teardown
+    api_client,
+    create_task,
+    remove_committed_tasks_after_walks,
+)
+from tests.api.resource_support import task_agent_turn as _turn
 from tests.api.test_longlist_routes import (
     _await_walks_ended,
     _Built,
-    _clients,
     _decisions,
     _org_build,
-    _remove_committed_tasks,  # noqa: F401 — the autouse teardown applies here too
 )
 from tests.helpers import now, seed_ingested_full_text
 from tests.options_scoping.test_longlist import RCT
@@ -133,16 +136,6 @@ def _overrides(
         get_chat_embedding_backend: lambda: StubEmbeddingBackend(),
         get_runner_backends: _runner_backends,
     }
-
-
-def _turn(
-    client: TestClient, headers: dict[str, str], task_id: uuid.UUID | str, message: str
-) -> Any:
-    return client.post(
-        f"/api/v1/tasks/{task_id}/task-agent-turns",
-        headers=headers,
-        json={"message": message, "client_turn_id": str(uuid.uuid4())},
-    )
 
 
 def _option_row(engine: Engine, option_id: uuid.UUID) -> Any:
@@ -350,7 +343,7 @@ def test_a_question_is_answered_over_the_longlist_and_its_option_searches(
 ) -> None:
     """A document only an option search found is searched and cited."""
     agent = _agent(_sort("question"))
-    with _clients(tmp_path, engine, _overrides(agent)) as (client, (owner, colleague, _)):
+    with tenancy_client(tmp_path, overrides=_overrides(agent)) as (client, (owner, colleague, _)):
         built = _org_build(engine, owner, colleague, linked=False)
         with engine.begin() as conn:
             child_scope, _child, child_run = _walk(conn, built, parent=built.walk_id)
@@ -391,7 +384,7 @@ def test_an_inherited_document_is_cited_with_its_inherited_label(
 ) -> None:
     """Labels read across a link reach the retriever and the citation alike."""
     agent = _agent(_sort("question"))
-    with _clients(tmp_path, engine, _overrides(agent)) as (client, (owner, colleague, _)):
+    with tenancy_client(tmp_path, overrides=_overrides(agent)) as (client, (owner, colleague, _)):
         built = _org_build(engine, owner, colleague, linked=True)
         with engine.begin() as conn:
             link = conn.execute(
@@ -453,7 +446,7 @@ def test_a_document_in_two_scopes_is_one_row_with_the_longlist_labels(
     engine: Engine, tmp_path: Path
 ) -> None:
     """P13: the longlist scope's row wins; between two others, the latest."""
-    with _clients(tmp_path, engine) as (_client, (owner, colleague, _)):
+    with tenancy_client(tmp_path) as (_client, (owner, colleague, _)):
         built = _org_build(engine, owner, colleague, linked=False)
         with engine.begin() as conn:
             child_scope, _c, child_run = _walk(conn, built, parent=built.walk_id)
@@ -525,7 +518,7 @@ def test_the_ordinary_chat_resolves_the_longlist_walk_after_it_runs(
     engine: Engine, tmp_path: Path
 ) -> None:
     """A8: the longlist walk and every option search once it runs; the baseline before."""
-    with _clients(tmp_path, engine) as (_client, (owner, colleague, _)):
+    with tenancy_client(tmp_path) as (_client, (owner, colleague, _)):
         built = _org_build(engine, owner, colleague, linked=False)
         with engine.begin() as conn:
             baseline_scope, baseline_walk, _run = _walk(
@@ -576,7 +569,7 @@ def test_a_retrieval_cap_is_answered_honestly(
 
     monkeypatch.setattr(longlist_turns, "answer_over_scope", _too_many)
     agent = _agent(_sort("question"))
-    with _clients(tmp_path, engine, _overrides(agent)) as (client, (owner, colleague, _)):
+    with tenancy_client(tmp_path, overrides=_overrides(agent)) as (client, (owner, colleague, _)):
         built = _org_build(engine, owner, colleague, linked=False)
         response = _turn(client, owner.headers, built.task_id, "What works?")
         assert response.status_code == 200, response.text
@@ -589,7 +582,7 @@ def test_other_with_nothing_pending_says_what_the_chat_can_do(
     engine: Engine, tmp_path: Path
 ) -> None:
     agent = _agent()
-    with _clients(tmp_path, engine, _overrides(agent)) as (client, (owner, colleague, _)):
+    with tenancy_client(tmp_path, overrides=_overrides(agent)) as (client, (owner, colleague, _)):
         built = _org_build(engine, owner, colleague, linked=False)
         response = _turn(client, owner.headers, built.task_id, "Assess the options for me")
         assert response.status_code == 200, response.text
@@ -607,7 +600,7 @@ def test_exclude_is_proposed_then_applied_on_assent_and_writes_what_the_button_w
 ) -> None:
     """Two turns; the reason is recorded; the same rows as the button route."""
     holder = _Holder()
-    with _clients(tmp_path, engine, _overrides(holder)) as (client, (owner2, colleague, _)):
+    with tenancy_client(tmp_path, overrides=_overrides(holder)) as (client, (owner2, colleague, _)):
         built = _org_build(engine, owner2, colleague, linked=False)
         mentoring = built.options["Mentoring"]
         agent = holder.agent = _agent(
@@ -695,7 +688,7 @@ def test_the_button_confirms_include_again_without_a_second_sort(
     engine: Engine, tmp_path: Path
 ) -> None:
     holder = _Holder()
-    with _clients(tmp_path, engine, _overrides(holder)) as (client, (owner2, colleague, _)):
+    with tenancy_client(tmp_path, overrides=_overrides(holder)) as (client, (owner2, colleague, _)):
         built = _org_build(engine, owner2, colleague, linked=False)
         guarantee = built.options["Youth guarantee"]
         agent = holder.agent = _agent(_sort("include_again", option_id=str(guarantee)))
@@ -729,7 +722,7 @@ def test_a_question_never_applies_and_keeps_the_pending_action(
 ) -> None:
     """A question-shaped turn is answered, even one the sort marks as assent."""
     holder = _Holder()
-    with _clients(tmp_path, engine, _overrides(holder)) as (client, (owner2, colleague, _)):
+    with tenancy_client(tmp_path, overrides=_overrides(holder)) as (client, (owner2, colleague, _)):
         built = _org_build(engine, owner2, colleague, linked=False)
         mentoring = built.options["Mentoring"]
         holder.agent = _agent(
@@ -760,7 +753,7 @@ def test_a_different_verb_replaces_the_pending_action_and_other_keeps_it(
     engine: Engine, tmp_path: Path
 ) -> None:
     holder = _Holder()
-    with _clients(tmp_path, engine, _overrides(holder)) as (client, (owner2, colleague, _)):
+    with tenancy_client(tmp_path, overrides=_overrides(holder)) as (client, (owner2, colleague, _)):
         built = _org_build(engine, owner2, colleague, linked=False)
         mentoring = built.options["Mentoring"]
         guarantee = built.options["Youth guarantee"]
@@ -821,7 +814,7 @@ def test_add_proposes_a_design_then_mints_it_and_opens_a_parentless_walk(
         _assent(),
         design=design,
     )
-    with _clients(tmp_path, engine, _overrides(agent)) as (client, (owner2, colleague, _)):
+    with tenancy_client(tmp_path, overrides=_overrides(agent)) as (client, (owner2, colleague, _)):
         built = _org_build(engine, owner2, colleague, linked=False)
         proposed = _turn(
             client,
@@ -906,7 +899,7 @@ def test_a_confirmed_add_that_fails_after_its_commit_is_never_applied_twice(
         _assent(),
         design=design,
     )
-    with _clients(tmp_path, engine, _overrides(agent)) as (client, (owner2, colleague, _)):
+    with tenancy_client(tmp_path, overrides=_overrides(agent)) as (client, (owner2, colleague, _)):
         built = _org_build(engine, owner2, colleague, linked=False)
         proposed = _turn(client, owner2.headers, built.task_id, "Add a wage subsidy")
         assert proposed.status_code == 200, proposed.text
@@ -975,7 +968,7 @@ def test_a_parentless_option_search_never_closes_the_conversation(engine: Engine
 
 def test_a_turn_while_a_walk_runs_is_run_active(engine: Engine, tmp_path: Path) -> None:
     agent = _agent(_sort("question"))
-    with _clients(tmp_path, engine, _overrides(agent)) as (client, (owner, colleague, _)):
+    with tenancy_client(tmp_path, overrides=_overrides(agent)) as (client, (owner, colleague, _)):
         built = _org_build(engine, owner, colleague, linked=False)
         with engine.begin() as conn:
             conn.execute(

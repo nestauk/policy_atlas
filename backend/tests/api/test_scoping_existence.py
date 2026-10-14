@@ -12,75 +12,30 @@ user action.
 from __future__ import annotations
 
 import uuid
-from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.engine import Engine
 
-from policy_atlas.api.deps import get_executor, get_scoping_task_agent_backend
 from policy_atlas.core.schema import (
     artefact,
     capability_run,
     evidence_scope,
     longlist_result,
     runs,
-    task,
-    task_link,
     task_plan,
 )
-from policy_atlas.runtime.task_agent_scoping import StubScopingTaskAgentBackend
-from tests.api.resource_support import api_client, create_task
-from tests.api.test_longlist_start import RecordingExecutor
-from tests.helpers import delete_task_data
-
-
-@pytest.fixture(autouse=True)
-def _remove_committed_tasks(engine: Engine):  # type: ignore[no-untyped-def]
-    """Hard-delete every task these tests commit (a left scoping walk blocks downgrades)."""
-    before = _all_task_ids(engine)
-    yield
-    created = list(_all_task_ids(engine) - before)
-    with engine.begin() as conn:
-        conn.execute(task_link.delete().where(task_link.c.source_task_id.in_(created)))
-        conn.execute(task_link.delete().where(task_link.c.target_task_id.in_(created)))
-        for task_id in created:
-            delete_task_data(conn, task_id)
-
-
-def _all_task_ids(engine: Engine) -> set[uuid.UUID]:
-    with engine.connect() as conn:
-        return {row[0] for row in conn.execute(select(task.c.task_id))}
-
-
-def _overrides() -> dict[Callable[..., object], Callable[..., object]]:
-    # A confirm opens the longlist walk (task 045, S3); these tests are about
-    # the plan versions, so the walk executor opens the walk's row and runs
-    # nothing.
-    executor = RecordingExecutor(status="succeeded")
-    return {
-        get_scoping_task_agent_backend: lambda: StubScopingTaskAgentBackend(),
-        get_executor: lambda: executor,
-    }
-
-
-def _scoping_task(client: TestClient, headers: dict[str, str]) -> str:
-    response = client.post(
-        "/api/v1/tasks",
-        headers=headers,
-        json={
-            "name": "Youth employment options",
-            "question": "What could reduce the number of young people not in work?",
-            "capability": "options_scoping",
-        },
-    )
-    assert response.status_code == 201, response.text
-    return str(response.json()["task_id"])
-
+from tests.api.resource_support import (
+    api_client,
+    create_scoping_task,
+    create_task,
+    remove_committed_tasks,  # noqa: F401 — autouse
+    to_ready,
+)
+from tests.api.test_task_agent_scoping import _overrides
 
 _T0 = datetime(2026, 9, 22, 9, 0, tzinfo=UTC)
 
@@ -144,7 +99,7 @@ def _listed(client: TestClient, headers: dict[str, str], task_id: str) -> dict[s
 
 def test_a_child_walk_is_never_the_task_s_latest_run(engine: Engine, tmp_path: Path) -> None:
     with api_client(tmp_path, _overrides()) as (client, owner, _other):
-        task_id = _scoping_task(client, owner)
+        task_id = create_scoping_task(client, owner)
         baseline = _walk(engine, task_id, purpose="baseline", status="succeeded", minutes=0)
         longlist = _walk(engine, task_id, purpose="longlist", status="running", minutes=5)
         child = _walk(
@@ -178,7 +133,7 @@ def test_a_parentless_option_search_is_never_the_latest_run(
 ) -> None:
     """The chat verb *add* starts a targeted walk with no parent (ADR 0039 d5)."""
     with api_client(tmp_path, _overrides()) as (client, owner, _other):
-        task_id = _scoping_task(client, owner)
+        task_id = create_scoping_task(client, owner)
         longlist = _walk(engine, task_id, purpose="longlist", status="succeeded", minutes=0)
         added = _walk(engine, task_id, purpose="targeted", status="running", minutes=5)
         body = _get(client, owner, task_id)
@@ -206,7 +161,7 @@ def test_the_parentless_runs_read_lists_the_task_own_walks_only(
     """A13: ``?parentless=true`` drops children and option searches, so the plan
     document finds the baseline however many option searches ran after it."""
     with api_client(tmp_path, _overrides()) as (client, owner, _other):
-        task_id = _scoping_task(client, owner)
+        task_id = create_scoping_task(client, owner)
         baseline = _walk(engine, task_id, purpose=None, status="succeeded", minutes=0)
         longlist = _walk(engine, task_id, purpose="longlist", status="succeeded", minutes=1)
         _walk(engine, task_id, purpose="targeted", status="succeeded", minutes=2, parent=longlist)
@@ -224,7 +179,7 @@ def test_has_longlist_is_the_existence_of_a_longlist_result(
     engine: Engine, tmp_path: Path
 ) -> None:
     with api_client(tmp_path, _overrides()) as (client, owner, _other):
-        task_id = _scoping_task(client, owner)
+        task_id = create_scoping_task(client, owner)
         assert _get(client, owner, task_id)["has_longlist"] is False
         walk = _walk(engine, task_id, purpose="longlist", status="succeeded", minutes=0)
         tid = uuid.UUID(task_id)
@@ -297,7 +252,7 @@ def _finished_parent_with_running_child(engine: Engine, task_id: str) -> None:
 def test_a_running_child_does_not_fence_post_runs(engine: Engine, tmp_path: Path) -> None:
     """Past the fence: the refusal is the missing plan, not ``run_active``."""
     with api_client(tmp_path, _overrides()) as (client, owner, _other):
-        task_id = _scoping_task(client, owner)
+        task_id = create_scoping_task(client, owner)
         _finished_parent_with_running_child(engine, task_id)
         response = client.post(f"/api/v1/tasks/{task_id}/runs", headers=owner, json={})
         assert response.status_code == 400, response.text
@@ -313,7 +268,7 @@ def test_a_running_child_does_not_fence_a_task_agent_turn(
     engine: Engine, tmp_path: Path
 ) -> None:
     with api_client(tmp_path, _overrides()) as (client, owner, _other):
-        task_id = _scoping_task(client, owner)
+        task_id = create_scoping_task(client, owner)
         _finished_parent_with_running_child(engine, task_id)
         response = client.post(
             f"/api/v1/tasks/{task_id}/task-agent-turns",
@@ -326,26 +281,12 @@ def test_a_running_child_does_not_fence_a_task_agent_turn(
         assert response.status_code == 200, response.text
 
 
-def _to_ready(client: TestClient, headers: dict[str, str], task_id: str) -> None:
-    for message in (
-        "Young people are not getting into work.",
-        "16 to 24 year olds",
-        "[confirm part=depth option=standard_pass]",
-    ):
-        response = client.post(
-            f"/api/v1/tasks/{task_id}/task-agent-turns",
-            headers=headers,
-            json={"message": message, "client_turn_id": str(uuid.uuid4())},
-        )
-        assert response.status_code == 200, response.text
-
-
 def test_a_running_child_does_not_fence_confirm_baseline(
     engine: Engine, tmp_path: Path
 ) -> None:
     with api_client(tmp_path, _overrides()) as (client, owner, _other):
-        task_id = _scoping_task(client, owner)
-        _to_ready(client, owner, task_id)
+        task_id = create_scoping_task(client, owner)
+        to_ready(client, owner, task_id)
         artefact_id = uuid.uuid4()
         with engine.begin() as conn:
             conn.execute(

@@ -27,7 +27,6 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from fastapi.testclient import TestClient
 from sqlalchemy import select, update
 from sqlalchemy.engine import Engine
 
@@ -61,7 +60,7 @@ from policy_atlas.runtime.task_agent_scoping_prompt import (
     ScopingPlanDraftWire,
     ScopingTurnWire,
 )
-from tests.api.resource_support import api_client, create_task
+from tests.api.resource_support import api_client, create_task, task_agent_turn
 from tests.api.test_answer_core import _citing_tools, _first_seeded_chunk
 from tests.api.test_baseline_gate_checkin import _own, _park_at_gate
 from tests.helpers import now
@@ -192,24 +191,6 @@ def _overrides(
     }
 
 
-def _turn(
-    client: TestClient,
-    headers: dict[str, str],
-    task_id: uuid.UUID,
-    message: str,
-    *,
-    client_turn_id: uuid.UUID | None = None,
-) -> Any:
-    return client.post(
-        f"/api/v1/tasks/{task_id}/task-agent-turns",
-        headers=headers,
-        json={
-            "message": message,
-            "client_turn_id": str(client_turn_id or uuid.uuid4()),
-        },
-    )
-
-
 def _decision_events(engine: Engine, task_id: uuid.UUID) -> list[dict[str, Any]]:
     """Return the decisions taken *at the gate* — the walk's own boundaries aside."""
     with engine.connect() as conn:
@@ -317,7 +298,7 @@ def test_a_question_at_the_gate_is_answered_from_the_baseline(
             _other,
         ):
             _own(engine, task_id, owner)
-            response = _turn(client, owner, task_id, "Is the rise in the baseline real?")
+            response = task_agent_turn(client, owner, task_id, "Is the rise in the baseline real?")
 
         assert response.status_code == 200, response.text
         body = response.json()
@@ -356,7 +337,7 @@ def test_the_answer_turn_reloads_from_the_transcript_as_an_answer(
             _other,
         ):
             _own(engine, task_id, owner)
-            _turn(client, owner, task_id, "Which sources say the offer works?")
+            task_agent_turn(client, owner, task_id, "Which sources say the offer works?")
             listed = client.get(
                 f"/api/v1/tasks/{task_id}/task-agent-turns", headers=owner
             )
@@ -390,7 +371,7 @@ def test_a_gate_answer_carries_the_appraisal_label_not_the_score(
             _other,
         ):
             _own(engine, task_id, owner)
-            posted = _turn(client, owner, task_id, "How good is that source?")
+            posted = task_agent_turn(client, owner, task_id, "How good is that source?")
             listed = client.get(
                 f"/api/v1/tasks/{task_id}/task-agent-turns", headers=owner
             )
@@ -430,7 +411,7 @@ def test_a_question_that_loses_the_race_to_the_card_is_not_a_500(
             _other,
         ):
             _own(engine, task_id, owner)
-            response = _turn(client, owner, task_id, "Is the rise real?")
+            response = task_agent_turn(client, owner, task_id, "Is the rise real?")
 
         assert response.status_code == 200, response.text
         body = response.json()
@@ -462,7 +443,7 @@ def test_a_decision_in_words_lands_in_the_check_in_transaction(
             _other,
         ):
             _own(engine, task_id, owner)
-            response = _turn(client, owner, task_id, "Looks right, go ahead")
+            response = task_agent_turn(client, owner, task_id, "Looks right, go ahead")
             assert response.status_code == 200, response.text
             ended = _await_walk_ended(engine, walk_id, transient=("paused", "running"))
 
@@ -528,7 +509,7 @@ def test_a_confirm_whose_longlist_did_not_open_says_so(
             _other,
         ):
             _own(engine, task_id, owner)
-            response = _turn(client, owner, task_id, "Looks right, go ahead")
+            response = task_agent_turn(client, owner, task_id, "Looks right, go ahead")
         assert response.status_code == 200, response.text
         body = response.json()
         assert body["decision"]["opened_run"] is None
@@ -587,7 +568,7 @@ def test_one_decision_survives_a_race_between_the_chat_and_the_card(
             _own(engine, task_id, owner)
             thread = threading.Thread(target=answer_from_the_card)
             thread.start()
-            response = _turn(client, owner, task_id, "Change the plan")
+            response = task_agent_turn(client, owner, task_id, "Change the plan")
             thread.join(timeout=30)
 
         assert response.status_code == 200, response.text
@@ -623,7 +604,7 @@ def test_change_the_plan_with_an_instruction_ends_the_walk_and_replans(
             ),
         ) as (client, owner, _other):
             _own(engine, task_id, owner)
-            response = _turn(client, owner, task_id, f"No — {_CHANGE_WHERE}")
+            response = task_agent_turn(client, owner, task_id, f"No — {_CHANGE_WHERE}")
             plan_read = client.get(f"/api/v1/tasks/{task_id}/plan", headers=owner)
 
         assert response.status_code == 200, response.text
@@ -678,7 +659,7 @@ def test_a_carried_instruction_the_user_never_typed_falls_back_to_the_utterance(
             ),
         ) as (client, owner, _other):
             _own(engine, task_id, owner)
-            response = _turn(client, owner, task_id, utterance)
+            response = task_agent_turn(client, owner, task_id, utterance)
 
         assert response.status_code == 200, response.text
         assert agent.messages == [utterance]
@@ -727,10 +708,10 @@ def test_a_replayed_gate_turn_returns_its_stored_projection(
             ),
         ) as (client, owner, _other):
             _own(engine, task_id, owner)
-            first = _turn(
+            first = task_agent_turn(
                 client, owner, task_id, "Change it", client_turn_id=client_turn_id
             )
-            second = _turn(
+            second = task_agent_turn(
                 client, owner, task_id, "Change it", client_turn_id=client_turn_id
             )
 
@@ -762,7 +743,7 @@ def test_a_failure_after_the_decision_leaves_it_durable_and_the_retry_replans(
             ),
         ) as (client, owner, _other):
             _own(engine, task_id, owner)
-            failed = _turn(
+            failed = task_agent_turn(
                 client, owner, task_id, "Change it", client_turn_id=client_turn_id
             )
             assert failed.status_code == 500, failed.text
@@ -771,7 +752,7 @@ def test_a_failure_after_the_decision_leaves_it_durable_and_the_retry_replans(
             assert _rows(engine, task_id)[-1]["status"] == "failed"
             assert len(_plans(engine, task_id)) == 1
 
-            retried = _turn(
+            retried = task_agent_turn(
                 client, owner, task_id, "Change it", client_turn_id=client_turn_id
             )
 
@@ -817,7 +798,7 @@ def test_rebuilding_after_a_change_runs_the_new_version(
             ),
         ) as (client, owner, _other):
             _own(engine, task_id, owner)
-            _turn(client, owner, task_id, f"No — {_CHANGE_WHERE}")
+            task_agent_turn(client, owner, task_id, f"No — {_CHANGE_WHERE}")
             started = client.post(
                 f"/api/v1/tasks/{task_id}/runs", headers=owner, json={}
             )
@@ -862,7 +843,7 @@ def test_confirming_without_rebuilding_records_both_versions(
             ),
         ) as (client, owner, _other):
             _own(engine, task_id, owner)
-            _turn(client, owner, task_id, f"No — {_CHANGE_WHERE}")
+            task_agent_turn(client, owner, task_id, f"No — {_CHANGE_WHERE}")
             confirmed = client.post(
                 f"/api/v1/tasks/{task_id}/plan/confirm-baseline",
                 headers=owner,
@@ -900,7 +881,7 @@ def test_an_unsortable_turn_is_asked_back_and_applies_nothing(
         task_id, walk_id, _check_in_id, _plan_id = _park_at_gate(engine)
         with api_client(tmp_path, _overrides()) as (client, owner, _other):
             _own(engine, task_id, owner)
-            response = _turn(client, owner, task_id, "Search for more evidence first")
+            response = task_agent_turn(client, owner, task_id, "Search for more evidence first")
 
         assert response.status_code == 200, response.text
         body = response.json()
@@ -928,7 +909,7 @@ def test_a_decision_naming_an_unoffered_option_is_asked_back(
             tmp_path, _overrides(agent=_sorts(_decision("start_the_longlist")))
         ) as (client, owner, _other):
             _own(engine, task_id, owner)
-            response = _turn(client, owner, task_id, "Start the assessment")
+            response = task_agent_turn(client, owner, task_id, "Start the assessment")
 
         assert response.json()["reply"] == gate_turns.ASK_BACK_REPLY
         assert _walk_status(engine, walk_id) == "paused"
@@ -957,7 +938,7 @@ def test_a_turn_while_the_walk_is_running_is_still_refused(
                     .where(capability_run.c.capability_run_id == walk_id)
                     .values(status="running")
                 )
-            response = _turn(client, owner, task_id, "Is the rise real?")
+            response = task_agent_turn(client, owner, task_id, "Is the rise real?")
         assert response.status_code == 409, response.text
         assert response.json()["error"]["code"] == "run_active"
     finally:
@@ -995,9 +976,9 @@ def test_an_evidence_search_pause_still_refuses_turns(
     ):
         task_id = uuid.UUID(create_task(client, owner))
         try:
-            first = _turn(client, owner, task_id, "What works for youth employment?")
+            first = task_agent_turn(client, owner, task_id, "What works for youth employment?")
             assert first.status_code == 200, first.text
-            second = _turn(client, owner, task_id, "A one-off briefing")
+            second = task_agent_turn(client, owner, task_id, "A one-off briefing")
             assert second.status_code == 200, second.text
             with engine.begin() as conn:
                 row = conn.execute(
@@ -1019,7 +1000,7 @@ def test_an_evidence_search_pause_still_refuses_turns(
                         started_at=now(),
                     )
                 )
-            refused = _turn(client, owner, task_id, "Is the rise real?")
+            refused = task_agent_turn(client, owner, task_id, "Is the rise real?")
             assert refused.status_code == 409, refused.text
             assert refused.json()["error"]["code"] == "run_active"
         finally:
@@ -1048,7 +1029,7 @@ def test_the_approving_branch_refuses_a_run_that_started_meanwhile(
                 actor="user-1",
             )
             assert _walk_status(engine, walk_id) == "aborted"
-            refused = _turn(client, owner, task_id, "Make it England")
+            refused = task_agent_turn(client, owner, task_id, "Make it England")
 
         assert refused.status_code == 409, refused.text
         assert refused.json()["error"]["code"] == "run_active"

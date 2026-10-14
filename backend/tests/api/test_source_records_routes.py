@@ -20,13 +20,13 @@ from sqlalchemy import select
 from sqlalchemy.engine import Engine
 
 from policy_atlas.core.schema import source_snapshot, task_source_snapshot
-from tests.api.resource_support import api_client, create_task
-from tests.api.test_longlist_routes import (  # noqa: F401 - the autouse cleanup
-    _build,
-    _clients,
-    _org_build,
-    _remove_committed_tasks,
+from tests.api.org_support import tenancy_client
+from tests.api.resource_support import (  # noqa: F401 - the autouse cleanup
+    api_client,
+    create_task,
+    remove_committed_tasks_after_walks,
 )
+from tests.api.test_longlist_routes import _build, _org_build
 
 
 def _document(engine: Engine, task_id: uuid.UUID, title: str) -> uuid.UUID:
@@ -78,7 +78,7 @@ def _words(body: dict[str, Any]) -> list[tuple[Any, ...]]:
 def test_a_document_s_records_one_per_option_in_their_own_words(
     engine: Engine, tmp_path: Path
 ) -> None:
-    with _clients(tmp_path, engine) as (client, (owner, colleague, _)):
+    with tenancy_client(tmp_path) as (client, (owner, colleague, _)):
         built = _org_build(engine, owner, colleague, linked=False)
         uk = _document(engine, built.task_id, "UK guarantee evaluation")
         preprint = _document(engine, built.task_id, "UK guarantee preprint")
@@ -121,7 +121,7 @@ def test_a_document_s_records_one_per_option_in_their_own_words(
 
 
 def test_the_records_filter_to_one_option(engine: Engine, tmp_path: Path) -> None:
-    with _clients(tmp_path, engine) as (client, (owner, colleague, _)):
+    with tenancy_client(tmp_path) as (client, (owner, colleague, _)):
         built = _org_build(engine, owner, colleague, linked=False)
         uk = _document(engine, built.task_id, "UK guarantee evaluation")
         body = _records(
@@ -137,7 +137,7 @@ def test_a_document_with_no_record_under_the_option_reads_empty(
     engine: Engine, tmp_path: Path
 ) -> None:
     """B8: the frontend then shows the document's findings."""
-    with _clients(tmp_path, engine) as (client, (owner, colleague, _)):
+    with tenancy_client(tmp_path) as (client, (owner, colleague, _)):
         built = _org_build(engine, owner, colleague, linked=False)
         uk = _document(engine, built.task_id, "UK guarantee evaluation")
         response = _records(client, built.task_id, uk, owner.headers, built.options["Mentoring"])
@@ -146,7 +146,7 @@ def test_a_document_with_no_record_under_the_option_reads_empty(
 
 
 def test_an_unreadable_task_is_the_indistinguishable_404(engine: Engine, tmp_path: Path) -> None:
-    with _clients(tmp_path, engine) as (client, (owner, colleague, stranger)):
+    with tenancy_client(tmp_path) as (client, (owner, colleague, stranger)):
         built = _org_build(engine, owner, colleague, linked=False)
         uk = _document(engine, built.task_id, "UK guarantee evaluation")
         hidden = _records(client, built.task_id, uk, stranger.headers)
@@ -168,7 +168,7 @@ def test_an_unreadable_task_is_the_indistinguishable_404(engine: Engine, tmp_pat
 def test_another_owner_s_option_or_document_gives_nothing(
     engine: Engine, tmp_path: Path
 ) -> None:
-    with _clients(tmp_path, engine) as (client, (owner, colleague, stranger)):
+    with tenancy_client(tmp_path) as (client, (owner, colleague, stranger)):
         mine = _org_build(engine, owner, colleague, linked=False)
         theirs = _build(engine, owner=stranger.user_id, linked=False)
         my_uk = _document(engine, mine.task_id, "UK guarantee evaluation")
@@ -190,7 +190,7 @@ def test_another_owner_s_option_or_document_gives_nothing(
 def test_the_sibling_dossier_route_and_an_evidence_search_task_are_unchanged(
     engine: Engine, tmp_path: Path
 ) -> None:
-    with _clients(tmp_path, engine) as (client, (owner, colleague, _)):
+    with tenancy_client(tmp_path) as (client, (owner, colleague, _)):
         built = _org_build(engine, owner, colleague, linked=False)
         uk = _document(engine, built.task_id, "UK guarantee evaluation")
         dossier = client.get(f"/api/v1/tasks/{built.task_id}/sources/{uk}", headers=owner.headers)

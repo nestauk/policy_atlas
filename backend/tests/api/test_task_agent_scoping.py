@@ -23,8 +23,6 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-import pytest
-from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.engine import Connection, Engine
 
@@ -33,76 +31,19 @@ from policy_atlas.core.schema import (
     artefact,
     capability_run,
     evidence_scope,
-    task,
-    task_link,
     task_plan,
 )
 from policy_atlas.runtime.scoping_plan import BASELINE_TIME_BAND
 from policy_atlas.runtime.task_agent_scoping import StubScopingTaskAgentBackend
-from tests.api.resource_support import api_client, create_task
+from tests.api.resource_support import (
+    api_client,
+    create_scoping_task,
+    create_task,
+    remove_committed_tasks,  # noqa: F401 — autouse
+    task_agent_turn_ok,
+    to_ready,
+)
 from tests.api.test_longlist_start import RecordingExecutor
-from tests.helpers import delete_task_data
-
-
-@pytest.fixture(autouse=True)
-def _remove_committed_tasks(engine: Engine):  # type: ignore[no-untyped-def]
-    """Hard-delete every task these tests commit.
-
-    These tests drive real routes, so they commit; the rolled-back ``conn``
-    fixture cannot clean up after them. An ``options_scoping`` task left behind
-    makes the slice revision's downgrade **refuse** — which is exactly what it
-    is for — and every migration round-trip in the suite fails behind it.
-    """
-    before = _all_task_ids(engine)
-    yield
-    created = list(_all_task_ids(engine) - before)
-    with engine.begin() as conn:
-        conn.execute(task_link.delete().where(task_link.c.source_task_id.in_(created)))
-        conn.execute(task_link.delete().where(task_link.c.target_task_id.in_(created)))
-        for task_id in created:
-            delete_task_data(conn, task_id)
-
-
-def _all_task_ids(engine: Engine) -> set[uuid.UUID]:
-    with engine.connect() as conn:
-        return {row[0] for row in conn.execute(select(task.c.task_id))}
-
-
-def _scoping_task(client: TestClient, headers: dict[str, str]) -> str:
-    response = client.post(
-        "/api/v1/tasks",
-        headers=headers,
-        json={
-            "name": "Youth employment options",
-            "question": "What could reduce the number of young people not in work?",
-            "capability": "options_scoping",
-        },
-    )
-    assert response.status_code == 201, response.text
-    return str(response.json()["task_id"])
-
-
-def _turn(
-    client: TestClient, headers: dict[str, str], task_id: str, message: str
-) -> dict[str, Any]:
-    response = client.post(
-        f"/api/v1/tasks/{task_id}/task-agent-turns",
-        headers=headers,
-        json={"message": message, "client_turn_id": str(uuid.uuid4())},
-    )
-    assert response.status_code == 200, response.text
-    return dict(response.json())
-
-
-def _to_ready(client: TestClient, headers: dict[str, str], task_id: str) -> dict[str, Any]:
-    """Drive the stub conversation to a ready plan in three turns."""
-    first = _turn(client, headers, task_id, "Young people are not getting into work.")
-    assert first["scoping_plan"]["ready"] is False
-    assert first["part"]["id"] == "settings"
-    second = _turn(client, headers, task_id, "16 to 24 year olds")
-    assert second["scoping_plan"]["ready"] is False
-    assert second["part"]["id"] == "depth"
-    return _turn(client, headers, task_id, "[confirm part=depth option=standard_pass]")
 
 
 def _scope_rows(engine: Engine, task_id: str) -> list[dict[str, Any]]:
@@ -147,8 +88,8 @@ def test_the_stub_conversation_reaches_a_ready_plan_in_three_turns(
     engine: Engine, tmp_path: Path
 ) -> None:
     with api_client(tmp_path, _overrides()) as (client, owner, _other):
-        task_id = _scoping_task(client, owner)
-        final = _to_ready(client, owner, task_id)
+        task_id = create_scoping_task(client, owner)
+        final = to_ready(client, owner, task_id)
 
     assert final["capability"] == "options_scoping"
     assert final["plan"] is None
@@ -169,9 +110,9 @@ def test_the_stub_conversation_reaches_a_ready_plan_in_three_turns(
 def test_the_depth_card_carries_no_recommendation(engine: Engine, tmp_path: Path) -> None:
     """OS ruling 25: neither depth is the recommended one, so no primary."""
     with api_client(tmp_path, _overrides()) as (client, owner, _other):
-        task_id = _scoping_task(client, owner)
-        _turn(client, owner, task_id, "Young people are not getting into work.")
-        second = _turn(client, owner, task_id, "16 to 24 year olds")
+        task_id = create_scoping_task(client, owner)
+        task_agent_turn_ok(client, owner, task_id, "Young people are not getting into work.")
+        second = task_agent_turn_ok(client, owner, task_id, "16 to 24 year olds")
     options = second["part"]["options"]
     assert [option["id"] for option in options] == ["rapid_pass", "standard_pass"]
     assert not any(option["primary"] for option in options)
@@ -182,7 +123,7 @@ def test_an_evidence_search_task_still_gets_the_evidence_search_shape(
 ) -> None:
     with api_client(tmp_path, _overrides()) as (client, owner, _other):
         task_id = create_task(client, owner)
-        turn = _turn(client, owner, task_id, "What works for youth employment?")
+        turn = task_agent_turn_ok(client, owner, task_id, "What works for youth employment?")
     assert turn["capability"] == "evidence_search"
     assert turn["scoping_plan"] is None
     assert turn["plan"] is not None
@@ -196,8 +137,8 @@ def test_the_first_plan_writes_a_baseline_scope_pointing_at_it(
     engine: Engine, tmp_path: Path
 ) -> None:
     with api_client(tmp_path, _overrides()) as (client, owner, _other):
-        task_id = _scoping_task(client, owner)
-        _to_ready(client, owner, task_id)
+        task_id = create_scoping_task(client, owner)
+        to_ready(client, owner, task_id)
 
     scopes = _scope_rows(engine, task_id)
     plans = _plan_rows(engine, task_id)
@@ -216,8 +157,8 @@ def test_the_first_plan_writes_a_baseline_scope_pointing_at_it(
 def test_an_amended_plan_gets_its_own_scope_row(engine: Engine, tmp_path: Path) -> None:
     """C3: one scope per plan version, so the baseline's provenance is unique."""
     with api_client(tmp_path, _overrides()) as (client, owner, _other):
-        task_id = _scoping_task(client, owner)
-        _to_ready(client, owner, task_id)
+        task_id = create_scoping_task(client, owner)
+        to_ready(client, owner, task_id)
         patched = client.patch(
             f"/api/v1/tasks/{task_id}/plan",
             headers=owner,
@@ -249,14 +190,14 @@ def test_a_rebuild_after_a_change_reads_the_new_version(
 ) -> None:
     """A second approval through the Task Agent mints version 3 and its scope."""
     with api_client(tmp_path, _overrides()) as (client, owner, _other):
-        task_id = _scoping_task(client, owner)
-        _to_ready(client, owner, task_id)
+        task_id = create_scoping_task(client, owner)
+        to_ready(client, owner, task_id)
         client.patch(
             f"/api/v1/tasks/{task_id}/plan",
             headers=owner,
             json={"scoping": {"where": {"text": "England", "origin": "your_call"}}},
         )
-        _turn(client, owner, task_id, "standard, and run it unattended")
+        task_agent_turn_ok(client, owner, task_id, "standard, and run it unattended")
 
     scopes = _scope_rows(engine, task_id)
     plans = _plan_rows(engine, task_id)
@@ -273,8 +214,8 @@ def test_a_rebuild_after_a_change_reads_the_new_version(
 
 def test_get_plan_returns_the_scoping_shape(engine: Engine, tmp_path: Path) -> None:
     with api_client(tmp_path, _overrides()) as (client, owner, _other):
-        task_id = _scoping_task(client, owner)
-        _to_ready(client, owner, task_id)
+        task_id = create_scoping_task(client, owner)
+        to_ready(client, owner, task_id)
         read = client.get(f"/api/v1/tasks/{task_id}/plan", headers=owner)
 
     assert read.status_code == 200, read.text
@@ -290,8 +231,8 @@ def test_an_evidence_search_field_on_a_scoping_plan_is_refused(
     engine: Engine, tmp_path: Path
 ) -> None:
     with api_client(tmp_path, _overrides()) as (client, owner, _other):
-        task_id = _scoping_task(client, owner)
-        _to_ready(client, owner, task_id)
+        task_id = create_scoping_task(client, owner)
+        to_ready(client, owner, task_id)
         refused = client.patch(
             f"/api/v1/tasks/{task_id}/plan",
             headers=owner,
@@ -305,8 +246,8 @@ def test_a_scoping_patch_on_an_evidence_search_plan_is_refused(
 ) -> None:
     with api_client(tmp_path, _overrides()) as (client, owner, _other):
         task_id = create_task(client, owner)
-        _turn(client, owner, task_id, "What works for youth employment?")
-        _turn(client, owner, task_id, "A one-off briefing")
+        task_agent_turn_ok(client, owner, task_id, "What works for youth employment?")
+        task_agent_turn_ok(client, owner, task_id, "A one-off briefing")
         refused = client.patch(
             f"/api/v1/tasks/{task_id}/plan",
             headers=owner,
@@ -357,8 +298,8 @@ def test_confirming_writes_the_record_as_a_new_plan_version(
     engine: Engine, tmp_path: Path
 ) -> None:
     with api_client(tmp_path, _overrides()) as (client, owner, _other):
-        task_id = _scoping_task(client, owner)
-        _to_ready(client, owner, task_id)
+        task_id = create_scoping_task(client, owner)
+        to_ready(client, owner, task_id)
         artefact_id = _seed_artefact(engine, task_id)
         confirmed = client.post(
             f"/api/v1/tasks/{task_id}/plan/confirm-baseline",
@@ -379,8 +320,8 @@ def test_confirming_the_same_pair_twice_mints_one_version(
     engine: Engine, tmp_path: Path
 ) -> None:
     with api_client(tmp_path, _overrides()) as (client, owner, _other):
-        task_id = _scoping_task(client, owner)
-        _to_ready(client, owner, task_id)
+        task_id = create_scoping_task(client, owner)
+        to_ready(client, owner, task_id)
         artefact_id = _seed_artefact(engine, task_id)
         body = {"artefact_id": str(artefact_id), "plan_version": 1}
         first = client.post(
@@ -398,8 +339,8 @@ def test_confirming_is_refused_while_a_walk_is_paused(
     engine: Engine, tmp_path: Path
 ) -> None:
     with api_client(tmp_path, _overrides()) as (client, owner, _other):
-        task_id = _scoping_task(client, owner)
-        _to_ready(client, owner, task_id)
+        task_id = create_scoping_task(client, owner)
+        to_ready(client, owner, task_id)
         artefact_id = _seed_artefact(engine, task_id)
         with engine.begin() as conn:
             _seed_paused_walk(conn, task_id)
@@ -416,8 +357,8 @@ def test_confirming_an_artefact_of_another_task_is_not_found(
     engine: Engine, tmp_path: Path
 ) -> None:
     with api_client(tmp_path, _overrides()) as (client, owner, _other):
-        task_id = _scoping_task(client, owner)
-        _to_ready(client, owner, task_id)
+        task_id = create_scoping_task(client, owner)
+        to_ready(client, owner, task_id)
         refused = client.post(
             f"/api/v1/tasks/{task_id}/plan/confirm-baseline",
             headers=owner,

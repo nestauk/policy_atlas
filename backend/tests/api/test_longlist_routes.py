@@ -19,9 +19,7 @@ the application's own connections see it.
 
 from __future__ import annotations
 
-import time
 import uuid
-from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, cast
@@ -69,8 +67,13 @@ from tests.api.org_support import (
     seeded,
     tenancy_client,
 )
-from tests.api.resource_support import api_client, create_task
-from tests.helpers import delete_task_data, now
+from tests.api.resource_support import (  # noqa: F401 — autouse teardown
+    api_client,
+    create_task,
+    remove_committed_tasks_after_walks,
+)
+from tests.api.resource_support import await_walks_ended as _await_walks_ended
+from tests.helpers import now, seed_run
 from tests.options_scoping.test_longlist import (
     RCT,
     _current_fingerprint,
@@ -85,66 +88,6 @@ from tests.options_scoping.test_longlist import (
 from tests.options_scoping.test_option_profile import _profile
 from tests.runtime.test_baseline_gate import scoping_plan
 from tests.runtime.test_runner import _runner_backends
-
-# --- cleanup -----------------------------------------------------------------------
-
-
-def _all_task_ids(engine: Engine) -> set[uuid.UUID]:
-    with engine.connect() as conn:
-        return {row[0] for row in conn.execute(select(task.c.task_id))}
-
-
-def _await_walks_ended(engine: Engine, task_ids: list[uuid.UUID]) -> None:
-    """Let any option search a test opened finish before its task is deleted."""
-    deadline = time.monotonic() + 60
-    while time.monotonic() < deadline:
-        with engine.connect() as conn:
-            active = conn.execute(
-                select(capability_run.c.capability_run_id)
-                .where(capability_run.c.task_id.in_(task_ids))
-                .where(capability_run.c.status.in_(("running", "paused")))
-            ).first()
-        if active is None:
-            return
-        time.sleep(0.1)
-
-
-@pytest.fixture(autouse=True)
-def _remove_committed_tasks(engine: Engine) -> Iterator[None]:
-    """Hard-delete every task these tests commit (a left scoping walk blocks downgrades)."""
-    before = _all_task_ids(engine)
-    yield
-    created = list(_all_task_ids(engine) - before)
-    _await_walks_ended(engine, created)
-    with engine.begin() as conn:
-        conn.execute(
-            capability_run.update()
-            .where(capability_run.c.task_id.in_(created))
-            .where(capability_run.c.status.in_(("running", "paused")))
-            .values(status="aborted", ended_at=now())
-        )
-        conn.execute(task_link.delete().where(task_link.c.source_task_id.in_(created)))
-        conn.execute(task_link.delete().where(task_link.c.target_task_id.in_(created)))
-        # A linked finding's membership names its source task.
-        conn.execute(option_membership.delete().where(option_membership.c.task_id.in_(created)))
-        # A target's row for a snapshot its source also holds (inherit copied
-        # it) goes first, so each task's delete removes only its own snapshots.
-        other = task_source_snapshot.alias("other")
-        conn.execute(
-            task_source_snapshot.delete()
-            .where(task_source_snapshot.c.task_id.in_(created))
-            .where(
-                select(other.c.task_source_snapshot_id)
-                .where(other.c.source_snapshot_id == task_source_snapshot.c.source_snapshot_id)
-                .where(other.c.task_id != task_source_snapshot.c.task_id)
-                .where(other.c.origin == "acquired")
-                .where(other.c.ingested_at < task_source_snapshot.c.ingested_at)
-                .exists()
-            )
-        )
-        for task_id in created:
-            delete_task_data(conn, task_id)
-
 
 # --- the fixture -------------------------------------------------------------------
 
@@ -224,20 +167,10 @@ class _Breaks(StubLonglistBackend):
 def _constrain(engine: Engine, built: _Built, backend: StubLonglistBackend) -> None:
     """Run the walk's constrain step again (a rebuild's last step)."""
     with engine.begin() as conn:
-        run_id = uuid.uuid4()
-        conn.execute(
-            runs.insert().values(
-                run_id=run_id,
-                task_id=built.task_id,
-                status="running",
-                started_at=now(),
-                capability_run_id=built.walk_id,
-            )
-        )
         constrain_scope(
             conn,
             task_id=built.task_id,
-            run_id=run_id,
+            run_id=seed_run(conn, built.task_id, capability_run_id=built.walk_id),
             context=ConstrainContext(scope_id=built.scope_id, intent="", context={}),
             backend=backend,
         )
@@ -403,14 +336,6 @@ def _build(
     return built
 
 
-def _clients(
-    tmp_path: Path,
-    engine: Engine,
-    overrides: dict[Callable[..., object], Callable[..., object]] | None = None,
-) -> Any:
-    return tenancy_client(tmp_path, count=3, overrides=overrides)
-
-
 def _org_build(
     engine: Engine, owner: Principal, colleague: Principal, *, linked: bool = True
 ) -> _Built:
@@ -437,7 +362,7 @@ def _card(client: TestClient, built: _Built, name: str, headers: dict[str, str] 
 def test_the_reads_are_org_scoped_and_public_like_the_artefact(
     engine: Engine, tmp_path: Path
 ) -> None:
-    with _clients(tmp_path, engine) as (client, (owner, colleague, stranger)):
+    with tenancy_client(tmp_path) as (client, (owner, colleague, stranger)):
         built = _org_build(engine, owner, colleague)
         for caller in (owner, colleague):
             assert _longlist(client, built.task_id, caller.headers).status_code == 200
@@ -475,7 +400,7 @@ def test_the_reads_are_org_scoped_and_public_like_the_artefact(
 
 def test_a_link_grants_no_read_of_the_targets_options(engine: Engine, tmp_path: Path) -> None:
     """A user who can read the linked source task only is refused the target's longlist."""
-    with _clients(tmp_path, engine) as (client, (owner, colleague, source_owner)):
+    with tenancy_client(tmp_path) as (client, (owner, colleague, source_owner)):
         built = _org_build(engine, owner, colleague)
         with engine.begin() as conn:
             conn.execute(
@@ -503,7 +428,7 @@ def test_no_longlist_is_a_404_and_an_unknown_option_too(engine: Engine, tmp_path
 
 
 def test_the_list_matches_the_stored_rows(engine: Engine, tmp_path: Path) -> None:
-    with _clients(tmp_path, engine) as (client, (owner, colleague, _)):
+    with tenancy_client(tmp_path) as (client, (owner, colleague, _)):
         built = _org_build(engine, owner, colleague)
         body = _longlist(client, built.task_id, owner.headers).json()
         with engine.connect() as conn:
@@ -597,7 +522,7 @@ def test_the_list_matches_the_stored_rows(engine: Engine, tmp_path: Path) -> Non
 def test_the_card_carries_every_section_and_never_how_sure(
     engine: Engine, tmp_path: Path
 ) -> None:
-    with _clients(tmp_path, engine) as (client, (owner, colleague, _)):
+    with tenancy_client(tmp_path) as (client, (owner, colleague, _)):
         built = _org_build(engine, owner, colleague)
         response = _card(client, built, "Youth guarantee", owner.headers)
         assert response.status_code == 200
@@ -1136,7 +1061,7 @@ def _decisions(client: TestClient, built: _Built, headers: dict[str, str]) -> li
 def test_exclude_records_the_reason_and_include_reverses_it(
     engine: Engine, tmp_path: Path
 ) -> None:
-    with _clients(tmp_path, engine) as (client, (owner, colleague, _)):
+    with tenancy_client(tmp_path) as (client, (owner, colleague, _)):
         built = _org_build(engine, owner, colleague)
         oid = built.options["Youth guarantee"]
         excluded = client.post(
@@ -1191,7 +1116,7 @@ def test_exclude_records_the_reason_and_include_reverses_it(
 
 def test_user_state_survives_a_rebuilds_constrain(engine: Engine, tmp_path: Path) -> None:
     """5.3's rule: a user exclusion stands, and a user inclusion is never re-excluded."""
-    with _clients(tmp_path, engine) as (client, (owner, colleague, _)):
+    with tenancy_client(tmp_path) as (client, (owner, colleague, _)):
         built = _org_build(engine, owner, colleague)
         guarantee = built.options["Youth guarantee"]
         mentoring = built.options["Mentoring"]
@@ -1218,7 +1143,7 @@ def test_user_state_survives_a_rebuilds_constrain(engine: Engine, tmp_path: Path
 
 
 def test_constrains_exclusion_reads_by_constrain(engine: Engine, tmp_path: Path) -> None:
-    with _clients(tmp_path, engine) as (client, (owner, colleague, _)):
+    with tenancy_client(tmp_path) as (client, (owner, colleague, _)):
         built = _org_build(engine, owner, colleague)
         _constrain(engine, built, _Breaks({built.options["Guarantee package"]}))
         card = _card(client, built, "Guarantee package", owner.headers).json()
@@ -1250,7 +1175,7 @@ def test_add_proposes_a_design_mints_it_and_opens_a_parentless_walk(
 ) -> None:
     agent = _design_backend()
     overrides = {get_agent_backend: lambda: agent, get_runner_backends: _runner_backends}
-    with _clients(tmp_path, engine, overrides) as (client, (owner, colleague, _)):
+    with tenancy_client(tmp_path, overrides=overrides) as (client, (owner, colleague, _)):
         built = _org_build(engine, owner, colleague, linked=False)
         response = client.post(
             f"/api/v1/tasks/{built.task_id}/options",
@@ -1310,7 +1235,7 @@ def test_the_buttons_are_run_active_while_a_parentless_walk_runs(
 ) -> None:
     agent = _design_backend()
     overrides = {get_agent_backend: lambda: agent, get_runner_backends: _runner_backends}
-    with _clients(tmp_path, engine, overrides) as (client, (owner, colleague, _)):
+    with tenancy_client(tmp_path, overrides=overrides) as (client, (owner, colleague, _)):
         built = _org_build(engine, owner, colleague)
         oid = built.options["Mentoring"]
         with engine.begin() as conn:
@@ -1652,7 +1577,7 @@ def test_add_answers_with_the_option_when_its_search_is_still_queued(
     agent = _design_backend()
     overrides = {get_agent_backend: lambda: agent, get_runner_backends: _runner_backends}
     try:
-        with _clients(tmp_path, engine, overrides) as (client, (owner, colleague, _)):
+        with tenancy_client(tmp_path, overrides=overrides) as (client, (owner, colleague, _)):
             built = _org_build(engine, owner, colleague, linked=False)
             response = client.post(
                 f"/api/v1/tasks/{built.task_id}/options",
