@@ -78,11 +78,76 @@ contract's own vocabulary and is recorded in the contract's build-time note:
   (`test_synthesis_tools.py`, `test_acquire_pools.py`, `test_tracing.py`). No
   assertion changed.
 
-<!-- Phases C to E are appended below as they land. -->
+### Phase C (Claude search-generation backend), diff summary
+
+- `evidence_search/sourcing/search_queries_system_claude_v1.txt`, new: a fresh, short
+  system prompt for the Claude family (prompting spec rule 12), lead-authored. Pinned
+  as the one new entry in `scripts/prompt_hashes.json`; the three OpenAI `.txt` prompts
+  and `search_prompts.py` text are unchanged.
+- `evidence_search/sourcing/search_generation.py`: `ClaudeSearchGenerationBackend`.
+  `generate_queries` calls Bedrock Converse with one tool (`emit_search_queries`, input
+  schema from `SearchQueriesWire`), forced tool choice, the Claude system prompt, the
+  user turn from the existing message builder (so the guidance splice is kept), and the
+  existing output-token cap. Exactly one `toolUse` block with the expected name and an
+  object input is required; the six failure shapes in contract D5 raise `RuntimeError`.
+  Usage maps `inputTokens`, `outputTokens`, `totalTokens`, `cacheReadInputTokens` to
+  `TokenUsage`. Traced through `tracing.traced_call` like the OpenAI class, with the
+  Claude model id and `prompt_version = search_queries_claude_v1`. `reformulate` and
+  `suggest` delegate to an inner OpenAI backend (contract O2). The model comes from the
+  route's `search_queries` section; a route without one fails at construction with a
+  plain error (the lead replaced Codex's `assert` with a `RuntimeError`, since asserts
+  vanish under `python -O`).
+- `runtime/agent.py`: the live builder picks the Claude class when the route's
+  `search_queries.backend` is `claude`, else the OpenAI class. One expression changed.
+- Tests, 6 new in `test_search_generation.py` plus one in `test_agent.py`: the complete
+  Converse request through `Stubber`; a good reply parsed with usage; a route fixture
+  with Sonnet changes only `modelId`; the six failure shapes (through a small local fake
+  client, because `Stubber` refuses to serve a response that violates the service
+  model, which is itself the point of those cases); delegation of the other two
+  methods; builder selection per route.
+- **Executor note:** Codex kept to the three named files and ran no formatter. Two
+  brief mismatches it reported and resolved sensibly: the current `botocore` service
+  model requires `metrics.latencyMs` in a stubbed Converse response (added to the
+  fixture), and `Stubber` cannot emit malformed usage (hence the local fake for those
+  cases).
+
+<!-- Phases D and E are appended below as they land. -->
 
 ## Checks beyond the build
 
-<!-- filled at step 6 -->
+### Live check 1: API shapes on Terra through the route (2026-10-14)
+
+Route `bedrock-local`, model `global.openai.gpt-5.6-terra`, kwargs from the route
+`{"reasoning_effort": "none"}`, base address `bedrock-runtime.eu-west-2`. Throwaway
+script in the scratch directory, not committed. Budget 2 minutes; took 3 seconds.
+
+| Shape | Result | Tokens in / out |
+|---|---|---|
+| `chat.completions.parse` with a pydantic model | parsed `city='London' population_millions=8.9` | 60 / 21 |
+| `create` with one function tool, `tool_choice="required"`, parallel calls on | one call `lookup({"id":"abc-123"})` | 52 / 19 |
+| `create` with `stream=True` | 18 chunks, prose returned | n/a |
+
+The usage block carried `cached_tokens`, `cache_write_tokens` and `reasoning_tokens`
+fields in the OpenAI shape, so the existing usage accounting reads it unchanged.
+
+### Live probe: Cohere through the route, refused by AWS (2026-10-14)
+
+`live_embedding_backend()` under `bedrock-local` built `CohereEmbeddingBackend` and sent
+the request correctly; AWS answered `AccessDeniedException`: the developer's IAM user
+is not authorised for `bedrock:InvokeModel` on
+`arn:aws:bedrock:eu-west-2:<account>:inference-profile/eu.cohere.embed-v4:0`. The
+2026-09-25 probe of the same call succeeded because it used a short-term key minted
+from a console session with broader rights; the key in use on 2026-10-14 is a long-term
+key bound to the IAM user, which has no policy for the Cohere (and, see below, Claude)
+EU profiles. A follow-up probe through Converse was refused for every inference
+profile tried (Claude Haiku 4.5, Sonnet 5 and Opus 5 on `eu.`, and even
+`global.openai.gpt-5.6-luna`), while the same key succeeds on the OpenAI-compatible
+Chat Completions path for the OpenAI global profiles. So the user's policy covers the
+OpenAI-compatible path but grants no `bedrock:InvokeModel` on inference-profile
+resources. This is an account permission gap, outside the slice; live checks 2 and 3
+wait on it. The owner was asked for an IAM policy on the developer identity allowing
+`bedrock:InvokeModel` and `bedrock:InvokeModelWithResponseStream` on
+`arn:aws:bedrock:*:*:inference-profile/*` and `arn:aws:bedrock:*::foundation-model/*`.
 
 ## End-to-end command
 

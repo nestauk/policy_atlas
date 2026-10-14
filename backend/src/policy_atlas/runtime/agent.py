@@ -35,6 +35,7 @@ from policy_atlas.core.db import get_engine
 from policy_atlas.core.embeddings import EmbeddingBackend, live_embedding_backend
 from policy_atlas.core.fixtures import get_source
 from policy_atlas.core.logging import configure_logging
+from policy_atlas.core.model_routes import route
 from policy_atlas.core.schema import artefact, evidence_scope, task, task_plan
 from policy_atlas.evidence_search.assess.classification_backend import OpenAIClassificationBackend
 from policy_atlas.evidence_search.assess.screening_backend import OpenAIScreeningBackend
@@ -813,8 +814,10 @@ def live_planner_and_backends(
         synthesis=OpenAISynthesisBackend(langfuse_client=langfuse_client),
         grounding_judge=OpenAIGroundingJudgeBackend(langfuse_client=langfuse_client),
         search_backends=cast(list[SearchBackend], search_live.live_search_backends()),
-        search_generation=search_generation.OpenAISearchGenerationBackend(
-            langfuse_client=langfuse_client
+        search_generation=(
+            search_generation.ClaudeSearchGenerationBackend(langfuse_client=langfuse_client)
+            if route().search_queries.backend == "claude"
+            else search_generation.OpenAISearchGenerationBackend(langfuse_client=langfuse_client)
         ),
         document_fetcher=fetcher,
         langfuse_client=langfuse_client,
