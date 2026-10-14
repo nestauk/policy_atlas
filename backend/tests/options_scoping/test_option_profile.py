@@ -423,7 +423,7 @@ def test_the_profile_merges_into_the_row_and_types_every_option_not_merged(
     after = walk.result(run_id)
     # The folded keys are merged into each option's coverage (S21); the
     # rest is as the build wrote it.
-    folded_keys = {"tried_on_kinds", "measures_kinds", "outcome_counts", "place_sentences"}
+    folded_keys = {"outcome_counts", "place_sentences"}
     assert set(after.coverage) == set(before.coverage)
     for option_id, entry in after.coverage.items():
         assert {k: v for k, v in entry.items() if k not in folded_keys} == {
@@ -1174,29 +1174,20 @@ def test_the_maps_are_stored_at_list_level_and_the_kinds_merged_into_coverage(
     }
     coverage = after.coverage[str(ids["yg"])]
     # The old keys stay as the build wrote them (constrain reads them).
-    for key in ("tried_on", "units", "settings", "unit_tags", "outcomes"):
+    for key in ("tried_on", "settings"):
         assert coverage[key] == before.coverage[str(ids["yg"])][key]
-    # Target unit first; two words of one kind in one document count once.
-    assert coverage["tried_on_kinds"] == [
-        {"kind": "16 to 24 year olds", "documents": 1},
-        {"kind": "graduates", "documents": 1},
-        {"kind": "parents", "documents": 1},
-        {"kind": "school leavers", "documents": 1},
-        {"kind": "young adults", "documents": 1},
-    ]
-    assert coverage["measures_kinds"] == [
+    # These records carry no tag of this plan's context (read as not tagged):
+    # every kind that is not the plan outcome is an ``other`` row.
+    assert coverage["outcome_counts"]["other"] == [
         {"kind": "employment", "documents": 2, "evaluated": 1},
         {"kind": "earnings", "documents": 1, "evaluated": 0},
         {"kind": "neet rate", "documents": 1, "evaluated": 1},
         {"kind": "neet status", "documents": 1, "evaluated": 1},
         {"kind": "wellbeing", "documents": 1, "evaluated": 0},
     ]
-    # These records carry no tag of this plan's context (read as not tagged):
-    # every kind that is not the plan outcome is an ``other`` row.
     assert coverage["outcome_counts"]["by_outcome"] == [
         {"outcome": "the NEET rate", "documents": 0, "evaluated": 0}
     ]
-    assert coverage["outcome_counts"]["other"] == coverage["measures_kinds"]
     wage = after.coverage[str(ids["ws"])]
     # An ``other`` record whose kind is the plan outcome counts on its row, not
     # under ``other``.
@@ -1204,7 +1195,6 @@ def test_the_maps_are_stored_at_list_level_and_the_kinds_merged_into_coverage(
         {"outcome": "the NEET rate", "documents": 1, "evaluated": 1}
     ]
     assert wage["outcome_counts"]["other"] == []
-    assert wage["tried_on_kinds"] == [{"kind": "firms", "documents": 1}]
     folding = after.provenance["option_profile"]["folding"]
     assert folding == {
         "prompt_version": "folding_v8",

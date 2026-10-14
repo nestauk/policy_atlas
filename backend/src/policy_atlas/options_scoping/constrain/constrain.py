@@ -124,7 +124,7 @@ from policy_atlas.options_scoping.longlist.coverage import stored_folds
 from policy_atlas.options_scoping.longlist.longlist import (
     ON_THE_LIST,
     ORIGIN_WORDS,
-    membership_coverage,
+    read_membership,
 )
 from policy_atlas.options_scoping.longlist.longlist_backend import LONGLIST_JUDGMENT_MODEL
 from policy_atlas.options_scoping.longlist.where_tried import resolve_country
@@ -968,16 +968,16 @@ def constrain_scope(
         _move_memberships(conn, task_id=task_id, duplicate=duplicate, kept=kept_id)
     where_country = resolve_country(plan.where.text)
     coverage_updates = (
-        membership_coverage(
+        read_membership(
             conn,
             task_id=task_id,
             scope_id=context.scope_id,
             option_ids=sorted(set(merged_into.values()), key=str),
+        ).coverage(
             plan_outcomes=[outcome.text for outcome in plan.outcomes],
             # The list's folding maps, applied again to the merged members
             # (task 046, amendment 3, S21).
             folds=stored_folds(profile),
-            target_unit=str(plan_data["target_unit"]),
             where_country=where_country[1] if where_country is not None else None,
         )
         if merged_into

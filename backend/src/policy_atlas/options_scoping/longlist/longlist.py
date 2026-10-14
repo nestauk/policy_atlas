@@ -150,6 +150,7 @@ from policy_atlas.options_scoping.longlist.longlist_cluster_prompt import (
 from policy_atlas.options_scoping.longlist.where_tried import resolve_country
 from policy_atlas.options_scoping.longlist_intent import longlist_plan_data, plan_tagging_context
 from policy_atlas.options_scoping.suggest.suggest import baseline_sections, walk_plan
+from policy_atlas.options_scoping.text import fold_text
 from policy_atlas.runtime.capability_registry import OPTIONS_SCOPING, validate_plan
 from policy_atlas.runtime.scoping_plan import TARGETED_PURPOSE, ScopingPlan
 
@@ -420,7 +421,7 @@ def _thin(rows: Sequence[Any]) -> tuple[set[uuid.UUID], dict[str, int]]:
     for row in sorted(survivors, key=_thin_order):
         name = _bound(row.intervention)
         if name is not None:
-            doc_name = (row.task_source_snapshot_id, _key(name))
+            doc_name = (row.task_source_snapshot_id, fold_text(name))
             if doc_name in named:
                 collapsed += 1
                 continue
@@ -898,10 +899,6 @@ class _Answer:
     design_feature_not_stated: bool
 
 
-def _key(value: str) -> str:
-    return " ".join(value.split()).casefold()
-
-
 def corpus_digest(
     entries: Iterable[tuple[object, object]], *, limit: int = DIGEST_NAMES_MAX
 ) -> tuple[list[dict[str, object]], int]:
@@ -930,7 +927,7 @@ def corpus_digest(
         name = _bound(intervention)
         if name is None:
             continue
-        key = _key(name)
+        key = fold_text(name)
         records[key] = records.get(key, 0) + 1
         by_role = roles.setdefault(key, {})
         if isinstance(role, str) and role in _ROLE_RANK:
@@ -1021,7 +1018,9 @@ class LonglistClusteringBackend(ClusteringBackend):
         self._baseline = baseline
         self._seeds = seeds
         self._residual = residual
-        self._seed_keys = {_key(seed.label) for seed in seeds} | {_key(n) for n in retired}
+        self._seed_keys = {fold_text(seed.label) for seed in seeds} | {
+            fold_text(n) for n in retired
+        }
         self._lock = threading.Lock()
         self.discovered: dict[str, DiscoveredOptionWire] = {}
         self.folds: dict[uuid.UUID, _Fold] = {}
@@ -1092,7 +1091,7 @@ class LonglistClusteringBackend(ClusteringBackend):
         taken: set[str] = set()
         for wire in response.options:
             label = wire.label.strip()
-            key = _key(label)
+            key = fold_text(label)
             if key in self._seed_keys:
                 self.restated_seeds_dropped += 1
                 continue
@@ -1110,12 +1109,12 @@ class LonglistClusteringBackend(ClusteringBackend):
 
     def _fold(self, seed_label: str, into_label: str) -> None:
         """Accept one fold, or record why it is rejected (the four guards, S8)."""
-        seeds = {_key(seed.label): seed for seed in self._seeds}
-        new = {_key(label): label for label in self.discovered}
-        seed = seeds.get(_key(seed_label))
-        target_key = _key(into_label)
+        seeds = {fold_text(seed.label): seed for seed in self._seeds}
+        new = {fold_text(label): label for label in self.discovered}
+        seed = seeds.get(fold_text(seed_label))
+        target_key = fold_text(into_label)
         folded = {fold.seed.option_id for fold in self.folds.values()}
-        targets = {_key(fold.into_label) for fold in self.folds.values()}
+        targets = {fold_text(fold.into_label) for fold in self.folds.values()}
         reason: str | None = None
         if self._residual:
             reason = "residual_pass"
@@ -1125,7 +1124,7 @@ class LonglistClusteringBackend(ClusteringBackend):
             reason = "added_by_you"
         elif seed.user_held:
             reason = "user_held"
-        elif target_key == _key(seed.label):
+        elif target_key == fold_text(seed.label):
             reason = "into_itself"
         elif target_key not in seeds and target_key not in new:
             reason = "unknown_target"
@@ -1133,7 +1132,7 @@ class LonglistClusteringBackend(ClusteringBackend):
             reason = "already_folded"
         elif target_key in seeds and seeds[target_key].option_id in folded:
             reason = "into_folded_seed"
-        elif _key(seed.label) in targets:
+        elif fold_text(seed.label) in targets:
             reason = "seed_is_fold_target"
         if reason is not None or seed is None:
             self.rejected_folds.append(
@@ -1196,16 +1195,16 @@ class LonglistClusteringBackend(ClusteringBackend):
             options=[self._option_data(label) for label in labels],
             records=records,
         )
-        by_key = {_key(label.label): label.label for label in labels}
-        not_an_option = _key(NOT_AN_OPTION_LABEL)
-        residual_keys = {_key(MODEL_RESIDUAL_LABEL), _key(RESIDUAL_LABEL)}
+        by_key = {fold_text(label.label): label.label for label in labels}
+        not_an_option = fold_text(NOT_AN_OPTION_LABEL)
+        residual_keys = {fold_text(MODEL_RESIDUAL_LABEL), fold_text(RESIDUAL_LABEL)}
         known = set(short.values())
         assignments: list[ClusterAssignment] = []
         with self._lock:
             for wire in response.assignments:
                 unit_id, repaired = _short_id(wire.unit_id, short)
                 self.short_id_repairs += int(repaired)
-                raw = _key(wire.option_label)
+                raw = fold_text(wire.option_label)
                 if raw == not_an_option:
                     answer = _Answer("not_an_option", RESIDUAL_LABEL, wire.reason, False)
                 elif raw in residual_keys:
@@ -1287,8 +1286,8 @@ def _member_outcomes(members: Sequence[_Unit], plan_outcomes: Sequence[str]) -> 
     ``other`` and a tag that names no plan outcome are left out; empty when no
     member has a plan outcome.
     """
-    tags = {_key(unit.outcome_tag) for unit in members if unit.outcome_tag}
-    return [outcome for outcome in plan_outcomes if _key(outcome) in tags]
+    tags = {fold_text(unit.outcome_tag) for unit in members if unit.outcome_tag}
+    return [outcome for outcome in plan_outcomes if fold_text(outcome) in tags]
 
 
 def _discovered_design(
@@ -1480,7 +1479,6 @@ class MembershipRead:
         *,
         plan_outcomes: Sequence[str] = (),
         folds: Mapping[str, Mapping[str, str]] | None = None,
-        target_unit: str | None = None,
         where_country: str | None = None,
     ) -> dict[str, dict[str, Any]]:
         """Each option's coverage (:func:`option_coverage`).
@@ -1489,7 +1487,6 @@ class MembershipRead:
             plan_outcomes: The plan's outcome texts, in plan order (R42).
             folds: The list's folding maps (task 046, amendment 3, S21), or
                 ``None``.
-            target_unit: The plan's target unit, place stripped.
             where_country: The plan's Where as one country's short name
                 (task 046, amendment 4, S29), or ``None``.
 
@@ -1503,7 +1500,6 @@ class MembershipRead:
                 folded_seeds=self.folded.get(oid, ()),
                 plan_outcomes=plan_outcomes,
                 folds=folds,
-                target_unit=target_unit,
                 where_country=where_country,
             )
             for oid, ms in self.members.items()
@@ -1576,47 +1572,6 @@ def read_membership(
         },
         labels=labels,
         folded=folded,
-    )
-
-
-def membership_coverage(
-    conn: Connection,
-    *,
-    task_id: uuid.UUID,
-    scope_id: uuid.UUID,
-    option_ids: Sequence[uuid.UUID],
-    plan_outcomes: Sequence[str] = (),
-    folds: Mapping[str, Mapping[str, str]] | None = None,
-    target_unit: str | None = None,
-    where_country: str | None = None,
-) -> dict[str, dict[str, Any]]:
-    """The options' coverage recomputed from their membership rows as they stand.
-
-    For constrain's *distinct* merge, which moves a duplicate's memberships
-    to the kept option after the build wrote its coverage (:func:`read_membership`).
-
-    Args:
-        conn: Open connection.
-        task_id: The scoping task.
-        scope_id: The longlist walk's intent record.
-        option_ids: The options to recompute.
-        plan_outcomes: The plan's outcome texts, in plan order (R42).
-        folds: The list's stored folding maps (task 046, amendment 3, S21),
-            applied to the kinds; ``None`` leaves them empty.
-        target_unit: The plan's target unit, place stripped.
-        where_country: The plan's Where as one country's short name
-            (task 046, amendment 4, S29), or ``None``.
-
-    Returns:
-        ``{option_id: coverage}`` for each of ``option_ids``.
-    """
-    return read_membership(
-        conn, task_id=task_id, scope_id=scope_id, option_ids=option_ids
-    ).coverage(
-        plan_outcomes=plan_outcomes,
-        folds=folds,
-        target_unit=target_unit,
-        where_country=where_country,
     )
 
 

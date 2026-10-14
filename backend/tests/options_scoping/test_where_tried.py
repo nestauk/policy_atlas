@@ -25,7 +25,6 @@ from policy_atlas.options_scoping.longlist.where_tried import (
     OTHER_PLACE,
     countries_named,
     document_where,
-    record_where,
 )
 
 _SRC = Path(__file__).resolve().parents[2] / "src" / "policy_atlas"
@@ -72,11 +71,11 @@ def _member(
     ],
 )
 def test_a_record_s_top_level(country: str | None, geography: str | None, top: str) -> None:
-    assert record_where(country, geography) == top
+    assert document_where([(country, geography)])[0] == top
 
 
 def test_the_same_country_twice_in_a_record_is_one_country() -> None:
-    assert record_where("United Kingdom; united kingdom", None) == "United Kingdom"
+    assert document_where([("United Kingdom; united kingdom", None)])[0] == "United Kingdom"
     assert countries_named("United Kingdom;  united kingdom ; France") == (
         ["United Kingdom", "France"],
         False,
@@ -119,107 +118,6 @@ def test_a_document_with_a_place_and_no_country_is_other() -> None:
 def test_a_document_with_nothing_stated_is_not_stated() -> None:
     assert document_where([(None, None)]) == (NOT_STATED, [])
     assert document_where([]) == (NOT_STATED, [])
-
-
-# --- Coverage: the two levels, counted in documents ---------------------------
-
-
-def _where(members: list[CoverageMember]) -> list[dict[str, object]]:
-    where: list[dict[str, object]] = option_coverage(members, labels={})["where_tried"]
-    return where
-
-
-def test_coverage_counts_documents_under_one_top_level_each() -> None:
-    where = _where(
-        [
-            _member("doc:a", country="Germany", geography="Hamburg"),
-            _member("doc:a", country="Germany", geography="Hamburg"),
-            _member("doc:b", country="Germany", geography="Berlin"),
-            _member("doc:c", country="multiple", geography="12 high-income countries"),
-            _member("doc:d", geography="a coastal town"),
-            _member("doc:e"),
-        ]
-    )
-    assert where == [
-        {
-            "top": "Germany",
-            "documents": 2,
-            "places": [
-                {"place": "Berlin", "documents": 1},
-                {"place": "Hamburg", "documents": 1},
-            ],
-            "countries": [],
-        },
-        # No place under "multiple countries" (task 046, amendment 4, R87; S32).
-        {"top": "multiple countries", "documents": 1, "places": [], "countries": []},
-        {"top": "not stated", "documents": 1, "places": [], "countries": []},
-        {
-            "top": "other",
-            "documents": 1,
-            "places": [{"place": "a coastal town", "documents": 1}],
-            "countries": [],
-        },
-    ]
-
-
-def test_multiple_countries_carries_its_component_countries() -> None:
-    where = _where(
-        [
-            _member("doc:a", country="United Kingdom; United States"),
-            _member("doc:b", country="France", geography="Lyon"),
-            _member("doc:b", country="united kingdom", geography="Leeds"),
-        ]
-    )
-    assert where == [
-        {
-            "top": "multiple countries",
-            "documents": 2,
-            # No place under "multiple countries" (task 046, amendment 4, R87; S32).
-            "places": [],
-            "countries": ["France", "United Kingdom", "United States"],
-        }
-    ]
-
-
-def test_country_case_is_folded_and_one_spelling_is_shown() -> None:
-    where = _where(
-        [
-            _member("doc:a", country="united kingdom", geography="leeds"),
-            _member("doc:b", country="United Kingdom", geography="Leeds"),
-        ]
-    )
-    assert where == [
-        {
-            "top": "United Kingdom",
-            "documents": 2,
-            "places": [{"place": "Leeds", "documents": 2}],
-            "countries": [],
-        }
-    ]
-
-
-def test_doi_twins_count_once_under_where_tried() -> None:
-    doc = "doi:10.1/abc"
-    where = _where(
-        [
-            _member(doc, country="Canada", geography="Ontario", tss_id=uuid.uuid4()),
-            _member(doc, country="Canada", geography="Ontario", tss_id=uuid.uuid4()),
-        ]
-    )
-    assert where == [
-        {
-            "top": "Canada",
-            "documents": 1,
-            "places": [{"place": "Ontario", "documents": 1}],
-            "countries": [],
-        }
-    ]
-
-
-def test_an_option_with_no_member_has_no_where_tried() -> None:
-    coverage = option_coverage([], labels={})
-    assert coverage["where_tried"] == []
-    assert "countries" not in coverage
 
 
 # --- The old matcher is gone ---------------------------------------------------
@@ -537,63 +435,38 @@ def test_an_unknown_country_is_kept_as_written_and_counted() -> None:
         {"country": "France", "documents": 1},
         {"country": "Narnia", "documents": 1},
     ]
-    # Every document under the unknown top level, whatever its role (R87).
-    assert coverage["places_unknown_country"] == [{"country": "Narnia", "documents": 2}]
 
 
 def test_the_empty_coverage_carries_the_signal_keys() -> None:
     coverage = option_coverage([], labels={})
     assert coverage["evaluated_countries"] == []
     assert coverage["outcomes_evaluated"] == 0
-    assert coverage["places_unknown_country"] == []
 
 
-def _places(members: list[CoverageMember]) -> dict[str, list[object]]:
-    return {entry["top"]: entry["places"] for entry in _where(members)}  # type: ignore[misc]
-
-
-def test_south_west_spellings_are_one_place() -> None:
-    places = _places(
-        [
-            _signal_member("doc:a", country="United Kingdom", geography="south-west"),
-            _signal_member("doc:b", country="United Kingdom", geography="Southwest"),
-            _signal_member("doc:c", country="United Kingdom", geography="the South West"),
-        ]
-    )
-    assert places["United Kingdom"] == [{"place": "Southwest", "documents": 3}]
-
-
-def test_an_organisation_as_a_geography_stays_as_written() -> None:
-    places = _places(
-        [_signal_member("doc:a", country="Spain", geography="Spanish Ministry of Health")]
-    )
-    assert places == {"Spain": [{"place": "Spanish Ministry of Health", "documents": 1}]}
-
-
-def test_a_geography_that_is_the_record_s_country_has_no_place_below() -> None:
-    places = _places(
-        [
-            _signal_member("doc:a", country="United Kingdom", geography="Scotland"),
-            _signal_member("doc:b", country="United Kingdom", geography="UK"),
-            _signal_member("doc:c", country="United Kingdom", geography="London"),
-        ]
-    )
-    # "London" is a place within the country, kept below it.
-    assert places == {"United Kingdom": [{"place": "London", "documents": 1}]}
-
-
-def test_a_geography_of_another_country_stays_the_place_below() -> None:
-    places = _places(
-        [_signal_member("doc:a", country="United Kingdom", geography="Georgia")]
-    )
-    assert places == {"United Kingdom": [{"place": "Georgia", "documents": 1}]}
+@pytest.mark.parametrize(
+    ("country", "geography", "read"),
+    [
+        # A geography that is the record's own country has no place below.
+        ("United Kingdom", "Scotland", ("United Kingdom", None)),
+        ("United Kingdom", "UK", ("United Kingdom", None)),
+        # A place within the country, another country's name, or an
+        # organisation, stays as written.
+        ("United Kingdom", "London", ("United Kingdom", "London")),
+        ("United Kingdom", "Georgia", ("United Kingdom", "Georgia")),
+        ("Spain", "Spanish Ministry of Health", ("Spain", "Spanish Ministry of Health")),
+        # A country geography with no country is the country.
+        (None, "Wales", ("Wales", None)),
+        ("multiple", "France", ("multiple", "France")),
+    ],
+)
+def test_country_level_reads_a_country_geography_as_the_country(
+    country: str | None, geography: str, read: tuple[str | None, str | None]
+) -> None:
+    assert where_tried.country_level(country, geography) == read
 
 
 def test_a_country_geography_with_no_country_is_the_top_level() -> None:
     coverage = option_coverage([_signal_member("doc:a", geography="Wales")], labels={})
-    assert coverage["where_tried"] == [
-        {"top": "Wales", "documents": 1, "places": [], "countries": []}
-    ]
     assert coverage["evaluated_countries"] == [{"country": "United Kingdom", "documents": 1}]
 
 
@@ -601,7 +474,6 @@ def test_a_geography_under_multiple_countries_is_no_place_and_no_country() -> No
     coverage = option_coverage(
         [_signal_member("doc:a", country="multiple", geography="France")], labels={}
     )
-    assert coverage["where_tried"][0]["places"] == []
     assert coverage["evaluated_countries"] == []
 
 

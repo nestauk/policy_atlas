@@ -550,9 +550,9 @@ def test_the_list_matches_the_stored_rows(engine: Engine, tmp_path: Path) -> Non
         assert guarantee["document_count"] == coverage["documents"] == 2
         assert guarantee["evaluated_count"] == coverage["role"]["evaluated"]
         # The list serves no where-tried or tried-on field (amendment 4, R84; S36):
-        # the coverage keys stay stored for the constraint step.
+        # the tried-on key stays stored for the constraint step.
         assert "where_tried" not in guarantee and "tried_on" not in guarantee
-        assert coverage["where_tried"]
+        assert "tried_on" in coverage
         # The evidence signal (task 046, amendment 4, R76; S29): read from the
         # stored coverage; the total is the built-from plan's outcome count.
         assert guarantee["evaluated_countries"] == coverage["evaluated_countries"]

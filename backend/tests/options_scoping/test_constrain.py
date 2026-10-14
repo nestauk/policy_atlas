@@ -551,17 +551,13 @@ def test_a_merge_recomputes_the_kinds_from_the_stored_maps_and_keeps_the_old_key
 
     coverage = _latest(walk).coverage[str(kept)]
     assert coverage["documents"] == 2
-    assert coverage["tried_on_kinds"] == [{"kind": "16 to 24 year olds", "documents": 2}]
-    assert coverage["measures_kinds"] == [
-        {"kind": "the NEET rate", "documents": 2, "evaluated": 2}
-    ]
     # Not tagged under this plan's context: both count on the plan outcome's row.
     assert coverage["outcome_counts"]["by_outcome"] == [
         {"outcome": "the NEET rate", "documents": 2, "evaluated": 2}
     ]
     assert coverage["outcome_counts"]["other"] == []
     # The old keys constrain reads stay in the coverage, and in its payload.
-    for key in ("tried_on", "units", "settings", "unit_tags"):
+    for key in ("tried_on", "settings"):
         assert key in coverage
     sent = backend.constrain_inputs[0]["options"][0]["coverage"]
     assert set(sent) == {"documents", "evaluated", "roles", "tried_on", "settings"}
@@ -1237,12 +1233,11 @@ def test_the_plan_data_reaches_the_prompt_as_the_plan_holds_it(conn: Connection)
 def test_the_option_payload_has_no_where_tried(conn: Connection) -> None:
     """AM7: ``where_tried`` leaves the payload; the role counts and *tried on* stay."""
     walk = _walk(conn)
-    oid = walk.option("Youth guarantee")
+    walk.option("Youth guarantee")
     doc = walk.doc()
     walk.record(doc, "Youth guarantee")
     walk.rollup(walk.scope_id, [doc])
     walk.build(StubLonglistBackend())
-    assert "where_tried" in _latest(walk).coverage[str(oid)]  # the build still writes it
     backend = StubLonglistBackend()
 
     _constrain(walk, backend)

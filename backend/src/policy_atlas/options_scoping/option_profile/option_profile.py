@@ -150,6 +150,7 @@ from policy_atlas.options_scoping.option_profile.place_sentences_prompt import (
     PlaceSentencesResponse,
 )
 from policy_atlas.options_scoping.suggest.suggest import baseline_sections, walk_plan
+from policy_atlas.options_scoping.text import fold_text
 from policy_atlas.runtime.scoping_plan import PROFILE_LINE_KEYS
 
 log = structlog.get_logger()
@@ -190,7 +191,7 @@ FOLDING_KINDS_MAX = 12
 FOLDING_CATCH_ALL_SHARE = 0.5
 FOLDING_CATCH_ALL_MIN_WORDS = 20
 #: The coverage keys the folding maps recompute and merge (S21, S24).
-FOLDED_COVERAGE_KEYS: tuple[str, ...] = ("tried_on_kinds", "measures_kinds", "outcome_counts")
+FOLDED_COVERAGE_KEYS: tuple[str, ...] = ("outcome_counts",)
 #: The coverage key the place sentences are merged under (task 046, amendment
 #: 4, R80; S31): ``[{place, sentence, generated, where}]`` in the card's order.
 #: Written by the second wave only; ``membership.coverage`` never computes it,
@@ -873,7 +874,7 @@ def _checked_folds(
                     outcome=mapped,
                 )
     by_key = {
-        " ".join(text.split()).casefold(): text for text in references if text and text.strip()
+        fold_text(text): text for text in references if text and text.strip()
     }
     folds: dict[str, str] = {}
     for word_id, word in words.items():
@@ -1237,13 +1238,11 @@ def _folded_coverage(
     """
     coverage = dict(stored) if isinstance(stored, Mapping) else {}
     outcomes = plan.get("outcomes")
-    target_unit = plan.get("target_unit")
     recomputed = membership.coverage(
         plan_outcomes=[o for o in outcomes if isinstance(o, str)]
         if isinstance(outcomes, list)
         else [],
         folds=folds,
-        target_unit=target_unit if isinstance(target_unit, str) else None,
         where_country=where_country,
     )
     for option_id, fresh in recomputed.items():

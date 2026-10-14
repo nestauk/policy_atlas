@@ -123,6 +123,7 @@ from policy_atlas.options_scoping.option_profile.place_sentences_prompt import (
     PlaceSentenceWire,
     build_place_sentences_messages,
 )
+from policy_atlas.options_scoping.text import fold_text
 from policy_atlas.options_scoping.theme.longlist_theme_prompt import (
     LONGLIST_THEME_PROMPT_VERSION,
     THEME_MAX_OUTPUT_TOKENS,
@@ -715,10 +716,6 @@ STUB_DISCOVERED_LABEL = "Stub discovered option"
 STUB_THEME_LABEL = "Stub theme"
 
 
-def _casefold(value: object) -> str:
-    return " ".join(str(value).split()).casefold()
-
-
 #: A line call's response: marked on six lines, plain on two.
 type _LineResponse = MarkedLineResponse | PlainLineResponse
 
@@ -843,8 +840,10 @@ class StubLonglistBackend:
     ) -> UsageResult[OptionDiscoveryResponse]:
         """Propose the one stub option when a digest name matches no seed; fold none."""
         del plan, baseline_sections, target_size, residual
-        seed_labels = {_casefold(seed["label"]) for seed in seeds}
-        unmatched = any(_casefold(entry.get("name", "")) not in seed_labels for entry in digest)
+        seed_labels = {fold_text(str(seed["label"])) for seed in seeds}
+        unmatched = any(
+            fold_text(str(entry.get("name", ""))) not in seed_labels for entry in digest
+        )
         options = (
             [
                 DiscoveredOptionWire(
@@ -862,11 +861,11 @@ class StubLonglistBackend:
         self, *, options: list[dict[str, object]], records: list[dict[str, object]]
     ) -> UsageResult[OptionAssignmentsResponse]:
         """Assign by name match, else to the stub option, else ungroupable."""
-        by_name = {_casefold(o["label"]): str(o["label"]) for o in options}
-        fallback = by_name.get(_casefold(STUB_DISCOVERED_LABEL), "ungroupable")
+        by_name = {fold_text(str(o["label"])): str(o["label"]) for o in options}
+        fallback = by_name.get(fold_text(STUB_DISCOVERED_LABEL), "ungroupable")
         assignments = []
         for record in records:
-            label = by_name.get(_casefold(record.get("intervention", "")), fallback)
+            label = by_name.get(fold_text(str(record.get("intervention", ""))), fallback)
             assignments.append(
                 OptionAssignmentWire(
                     unit_id=str(record["unit_id"]),
@@ -1124,11 +1123,11 @@ def _stub_folds(plan: dict[str, object], words: dict[str, str]) -> FoldingRespon
         for text in [plan.get("target_unit"), *(outcomes if isinstance(outcomes, list) else [])]
         if isinstance(text, str) and text.strip()
     ]
-    by_key = {_casefold(text): text for text in references}
+    by_key = {fold_text(text): text for text in references}
     kinds: list[str] = []
     folds: list[FoldWire] = []
     for word_id, word in words.items():
-        kind = by_key.get(_casefold(word), word.lower())
+        kind = by_key.get(fold_text(word), word.lower())
         if kind not in kinds:
             kinds.append(kind)
         folds.append(FoldWire(word_id=word_id, kind=kinds.index(kind)))

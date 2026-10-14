@@ -61,6 +61,7 @@ from policy_atlas.options_scoping.suggest.suggest_prompt import (
     SuggestPlanContext,
     SuggestResponse,
 )
+from policy_atlas.options_scoping.text import fold_text
 from policy_atlas.runtime.capability_registry import OPTIONS_SCOPING, validate_plan
 from policy_atlas.runtime.inherit import linked_reports, report_sections_from_blocks
 from policy_atlas.runtime.scoping_plan import ScopingPlan, YourOption
@@ -271,12 +272,8 @@ def _headings(reports: list[LinkedReportContext]) -> dict[str, str]:
         for line in report.report_markdown.splitlines():
             if line.startswith("## ") and line[3:].strip():
                 heading = line[3:].strip()
-                headings.setdefault(_norm(heading), heading)
+                headings.setdefault(fold_text(heading), heading)
     return headings
-
-
-def _norm(text: str) -> str:
-    return " ".join(text.split()).casefold()
 
 
 def _suggested_entrant(
@@ -305,7 +302,7 @@ def _suggested_entrant(
         # Nothing was linked, so nothing can be "from your evidence search".
         log.warning("suggest.report_source_without_report")
         return _Entrant(origin="suggested", design=design)
-    section = headings.get(_norm(wire.report_section or ""))
+    section = headings.get(fold_text(wire.report_section or ""))
     if section is None:
         log.warning("suggest.report_section_unmatched")
     return _Entrant(origin="from_evidence_search", design=design, report_section=section)
@@ -395,7 +392,7 @@ def suggest_options(
     existing_options = [
         {"name": row.name, "description": row.description} for row in prior_rows
     ]
-    prior_descriptions = {_norm(row.description) for row in prior_rows}
+    prior_descriptions = {fold_text(row.description) for row in prior_rows}
     counts = dict.fromkeys(ENTRANT_ORDER, 0)
     minted = 0
     minted_ids: dict[EntrantOrigin, list[str]] = {origin: [] for origin in ENTRANT_ORDER}
@@ -412,15 +409,15 @@ def suggest_options(
         if entrant.origin == "from_evidence_search":
             report_sections[str(option_id)] = entrant.report_section
 
-    taken: set[str] = {_norm(row.name) for row in prior_rows}
+    taken: set[str] = {fold_text(row.name) for row in prior_rows}
     own_taken: set[str] = set()
     fallback_designs = 0
     for own in plan.your_options:
         design, fell_back = _own_option_design(own)
-        if _norm(design.name) in own_taken:
+        if fold_text(design.name) in own_taken:
             continue
-        own_taken.add(_norm(design.name))
-        taken.add(_norm(design.name))
+        own_taken.add(fold_text(design.name))
+        taken.add(fold_text(design.name))
         fallback_designs += int(fell_back)
         _enter(_Entrant(origin="added_by_you", design=design))
     if fallback_designs:
@@ -444,13 +441,13 @@ def suggest_options(
         entrant = _suggested_entrant(wire, headings=headings, has_reports=bool(reports))
         if (
             entrant is None
-            or _norm(entrant.design.name) in taken
-            or _norm(entrant.design.description) in prior_descriptions
+            or fold_text(entrant.design.name) in taken
+            or fold_text(entrant.design.description) in prior_descriptions
         ):
             dropped += 1
             continue
-        taken.add(_norm(entrant.design.name))
-        prior_descriptions.add(_norm(entrant.design.description))
+        taken.add(fold_text(entrant.design.name))
+        prior_descriptions.add(fold_text(entrant.design.description))
         _enter(entrant)
 
     log.info(

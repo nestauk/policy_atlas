@@ -50,13 +50,13 @@ from policy_atlas.options_scoping.longlist.longlist import (
     RESIDUAL_LABEL,
     _engine_stats,
     _forbidden_label,
-    _key,
 )
 from policy_atlas.options_scoping.longlist.longlist_backend import (
     LONGLIST_JUDGMENT_MODEL,
     LonglistBackend,
 )
 from policy_atlas.options_scoping.suggest.suggest import walk_plan
+from policy_atlas.options_scoping.text import fold_text
 from policy_atlas.options_scoping.theme.longlist_theme_prompt import (
     LONGLIST_THEME_PROMPT_VERSION,
     THEME_DESCRIPTION_MAX,
@@ -151,15 +151,15 @@ class _ThemeClusteringBackend(ClusteringBackend):
             themes=[{"label": label.label, "description": label.description} for label in labels],
             records=[unit.payload for unit in batch],
         )
-        by_key = {_key(label.label): label.label for label in labels}
-        residual_keys = {_key(MODEL_RESIDUAL_LABEL), _key(RESIDUAL_LABEL)}
+        by_key = {fold_text(label.label): label.label for label in labels}
+        residual_keys = {fold_text(MODEL_RESIDUAL_LABEL), fold_text(RESIDUAL_LABEL)}
         assignments = [
             ClusterAssignment(
                 unit_id=wire.unit_id,
                 label=(
                     RESIDUAL_LABEL
-                    if _key(wire.theme_label) in residual_keys
-                    else by_key.get(_key(wire.theme_label), wire.theme_label)
+                    if fold_text(wire.theme_label) in residual_keys
+                    else by_key.get(fold_text(wire.theme_label), wire.theme_label)
                 ),
             )
             for wire in response.assignments
