@@ -100,15 +100,17 @@ from collections.abc import Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import Any, Protocol
+from itertools import batched
+from typing import Any
 
 import structlog
+from pydantic import ValidationError
 from sqlalchemy import exists, select
 from sqlalchemy.engine import Connection
 
 from policy_atlas.core import tracing
 from policy_atlas.core.schema import longlist_result, option, option_membership, option_relation
-from policy_atlas.core.usage import TokenUsage, UsageAccumulator, UsageResult
+from policy_atlas.core.usage import TokenUsage, UsageAccumulator
 from policy_atlas.options_scoping.constrain.constrain_prompt import (
     CONSTRAIN_BATCH_SIZE,
     CONSTRAIN_PROMPT_VERSION,
@@ -120,6 +122,7 @@ from policy_atlas.options_scoping.constrain.constrain_prompt import (
     DistinctResponse,
 )
 from policy_atlas.options_scoping.constrain.in_scope import in_scope_evidence
+from policy_atlas.options_scoping.design import OptionDesign
 from policy_atlas.options_scoping.longlist.coverage import stored_folds
 from policy_atlas.options_scoping.longlist.longlist import (
     ON_THE_LIST,
@@ -127,16 +130,18 @@ from policy_atlas.options_scoping.longlist.longlist import (
     latest_longlist,
     read_membership,
 )
-from policy_atlas.options_scoping.longlist.longlist_backend import LONGLIST_JUDGMENT_MODEL
+from policy_atlas.options_scoping.longlist.longlist_backend import (
+    LONGLIST_JUDGMENT_MODEL,
+    LonglistBackend,
+)
 from policy_atlas.options_scoping.longlist.where_tried import resolve_country
 from policy_atlas.options_scoping.longlist_intent import who_decides_considerations
+from policy_atlas.options_scoping.model_calls import CallOutcome, call_with_retry
 from policy_atlas.options_scoping.suggest.suggest import baseline_sections, walk_plan
 from policy_atlas.runtime.scoping_plan import TRANSFERABILITY_DEFAULT, ScopingPlan
 
 log = structlog.get_logger()
 
-#: Attempts per batch and for the distinct call: the call and one retry.
-BATCH_ATTEMPTS = 2
 #: Constrain batches in flight at once (task 046, S13).
 CONSTRAIN_MAX_CONCURRENT = 4
 #: The reason recorded when a batch or the distinct call stays malformed.
@@ -170,37 +175,6 @@ _DISTINCT = DISTINCT_SCREEN[0]
 
 class ConstrainFailure(Exception):
     """Constrain could not run (no longlist for the walk)."""
-
-
-class ConstrainBackend(Protocol):
-    """The seam :func:`constrain_scope` calls; the longlist backends satisfy it."""
-
-    @property
-    def mode(self) -> str:
-        """``"live"`` or ``"stub"``."""
-        ...
-
-    def constrain(
-        self,
-        *,
-        plan: dict[str, object],
-        baseline_sections: list[tuple[str, str]],
-        requirements: list[dict[str, str]],
-        preferences: list[dict[str, str]],
-        options: list[dict[str, object]],
-    ) -> UsageResult[ConstrainResponse]:
-        """Judge one batch (see ``LonglistBackend.constrain``); called from a thread pool."""
-        ...
-
-    def distinct(self, *, options: list[dict[str, object]]) -> UsageResult[DistinctResponse]:
-        """Report the duplicates over the whole list (see ``LonglistBackend.distinct``)."""
-        ...
-
-    def authority(
-        self, *, considerations: list[str], options: list[dict[str, object]]
-    ) -> UsageResult[AuthorityResponse]:
-        """Label every option by who can adopt it (see ``LonglistBackend.authority``)."""
-        ...
 
 
 @dataclass
@@ -334,21 +308,16 @@ def _relations(
     return out
 
 
-def _mapping(value: object) -> Mapping[str, Any]:
-    return value if isinstance(value, Mapping) else {}
-
-
-def _coverage_summary(coverage: object) -> dict[str, object]:
+def _coverage_summary(coverage: Mapping[str, Any] | None) -> dict[str, object]:
     """A compact coverage summary: context for the screens, never an exclusion input.
 
     No ``where_tried`` (AM7: place never reaches the prompt); the counts by
     role and the *tried on* units stay.
     """
-    cov = _mapping(coverage)
-    roles = _mapping(cov.get("role"))
-    settings = _mapping(cov.get("settings"))
+    cov = coverage or {}
+    roles = cov.get("role") or {}
+    settings = cov.get("settings") or {}
     top_settings = sorted(settings.items(), key=lambda kv: (-int(kv[1] or 0), str(kv[0])))
-    tried_on = cov.get("tried_on")
     return {
         "documents": int(cov.get("documents") or 0),
         "evaluated": int(roles.get("evaluated") or 0),
@@ -358,31 +327,36 @@ def _coverage_summary(coverage: object) -> dict[str, object]:
                 "unit": str(entry.get("unit") or ""),
                 "documents": int(entry.get("documents") or 0),
             }
-            for entry in (tried_on if isinstance(tried_on, list) else [])
-            if isinstance(entry, Mapping)
+            for entry in cov.get("tried_on") or []
         ],
         "settings": [str(text) for text, _ in top_settings[:COVERAGE_SETTINGS_MAX]],
     }
 
 
-def _design_features(row: Any) -> list[object]:
-    design = row.design if isinstance(row.design, Mapping) else {}
-    features = design.get("design_features")
-    return list(features) if isinstance(features, list) else []
+def _design(row: Any) -> OptionDesign | None:
+    try:
+        return OptionDesign.model_validate(row.design)
+    except ValidationError:
+        log.warning("constrain.option_design_invalid", option_id=str(row.option_id))
+        return None
+
+
+def _design_features(row: Any) -> list[str]:
+    design = _design(row)
+    return list(design.design_features) if design is not None else []
 
 
 def _option_data(
-    row: Any, relations: list[dict[str, object]], coverage: object
+    row: Any, relations: list[dict[str, object]], coverage: Mapping[str, Any] | None
 ) -> dict[str, object]:
-    design = row.design if isinstance(row.design, Mapping) else {}
-    outcomes = design.get("outcomes_served")
+    design = _design(row)
     return {
         "option_id": str(row.option_id),
         "label": row.name,
         "description": row.description,
-        "design_features": _design_features(row),
+        "design_features": list(design.design_features) if design is not None else [],
         "outcomes_served": (
-            list(outcomes) if isinstance(outcomes, list) else list(row.outcomes or [])
+            list(design.outcomes_served) if design is not None else list(row.outcomes or [])
         ),
         "relations": relations,
         "coverage": _coverage_summary(coverage),
@@ -442,58 +416,40 @@ def _unavailable(requirement_ids: Sequence[str]) -> _Judged:
     )
 
 
-@dataclass
-class _BatchOutcome:
-    """One batch's result, built in a worker thread and merged in the caller."""
-
-    result: dict[str, _Judged] | None = None
-    usages: list[TokenUsage | None] = field(default_factory=list)
-    calls: int = 0
-
-
 def _judge_batch(
-    backend: ConstrainBackend,
+    backend: LonglistBackend,
     *,
     plan: dict[str, object],
     baseline: list[tuple[str, str]],
     requirements: list[dict[str, str]],
     preferences: list[dict[str, str]],
     batch: list[dict[str, object]],
-) -> _BatchOutcome:
-    """One batch: the call and one retry; ``result`` is ``None`` when it stays malformed.
+) -> CallOutcome[dict[str, _Judged]]:
+    """One batch: the call and one retry; ``value`` is ``None`` when it stays malformed.
 
     Runs in a worker thread: it touches no connection and no shared state.
     """
-    option_ids = [str(o["option_id"]) for o in batch]
-    outcome = _BatchOutcome()
-    for attempt in range(BATCH_ATTEMPTS):
-        outcome.calls += 1
-        try:
-            response, call_usage = backend.constrain(
-                plan=plan,
-                baseline_sections=baseline,
-                requirements=requirements,
-                preferences=preferences,
-                options=batch,
-            )
-        except Exception as exc:  # fail-closed: a failed call is a malformed batch
-            log.warning("constrain.batch_call_failed", error_type=type(exc).__name__)
-            continue
-        outcome.usages.append(call_usage)
-        outcome.result = _validated(
+    return call_with_retry(
+        "batch",
+        lambda: backend.constrain(
+            plan=plan,
+            baseline_sections=baseline,
+            requirements=requirements,
+            preferences=preferences,
+            options=batch,
+        ),
+        lambda response: _validated(
             response,
-            option_ids=option_ids,
+            option_ids=[str(o["option_id"]) for o in batch],
             requirement_ids=[r["id"] for r in requirements],
             preference_ids=[p["id"] for p in preferences],
-        )
-        if outcome.result is not None:
-            break
-        log.warning("constrain.batch_malformed", attempt=attempt, options=len(batch))
-    return outcome
+        ),
+        event="constrain",
+    )
 
 
 def _judge(
-    backend: ConstrainBackend,
+    backend: LonglistBackend,
     *,
     plan: dict[str, object],
     baseline: list[tuple[str, str]],
@@ -508,10 +464,7 @@ def _judge(
     the batches that stayed malformed.
     """
     requirement_ids = [r["id"] for r in requirements]
-    batches = [
-        options[start : start + CONSTRAIN_BATCH_SIZE]
-        for start in range(0, len(options), CONSTRAIN_BATCH_SIZE)
-    ]
+    batches = [list(batch) for batch in batched(options, CONSTRAIN_BATCH_SIZE)]
     with ThreadPoolExecutor(max_workers=CONSTRAIN_MAX_CONCURRENT) as pool:
         futures = [
             tracing.submit_with_context(
@@ -531,11 +484,11 @@ def _judge(
     failed: set[str] = set()
     stats = {"calls": 0, "retries": 0, "failed_batches": 0}
     for batch, outcome in zip(batches, outcomes, strict=True):
-        stats["calls"] += outcome.calls
-        stats["retries"] += outcome.calls - 1
+        stats["calls"] += outcome.attempts
+        stats["retries"] += outcome.attempts - 1
         for call_usage in outcome.usages:
             usage.add(call_usage)
-        result = outcome.result
+        result = outcome.value
         if result is None:
             option_ids = [str(o["option_id"]) for o in batch]
             stats["failed_batches"] += 1
@@ -554,11 +507,13 @@ class _Distinct:
         kept: The kept option id per duplicate option id.
         stats: ``calls``, ``retries``, ``failed``, ``pairs`` (accepted) and
             ``dropped`` counts by cause.
+        usages: Every call's token usage, added to the step's total by the caller.
     """
 
     verdicts: dict[str, _Verdict]
     kept: dict[str, str]
     stats: dict[str, Any]
+    usages: list[TokenUsage | None] = field(default_factory=list)
 
 
 def _keep_order(row: Any) -> tuple[int, Any, str]:
@@ -631,37 +586,33 @@ def _distinct_verdicts(response: DistinctResponse, rows: Sequence[Any]) -> _Dist
 
 
 def _distinct(
-    backend: ConstrainBackend,
+    backend: LonglistBackend,
     *,
     rows: Sequence[Any],
     relations: Mapping[uuid.UUID, list[dict[str, object]]],
-    usage: UsageAccumulator,
 ) -> _Distinct:
-    """The one distinct call over the whole list, before the batches (S13).
+    """The one distinct call over the whole list, beside the batches (S13).
 
     The call and one retry. A call that fails both times (a raised error,
     which is how a malformed structured answer surfaces) gives every option
-    ``cannot_check`` and no pair.
+    ``cannot_check`` and no pair. Runs in a worker thread: it touches no
+    connection and no shared state.
     """
     options = [_distinct_option_data(row, relations.get(row.option_id, [])) for row in rows]
-    calls = 0
-    response: DistinctResponse | None = None
-    if rows:
-        for attempt in range(BATCH_ATTEMPTS):
-            calls += 1
-            try:
-                response, call_usage = backend.distinct(options=options)
-            except Exception as exc:  # fail-closed: no merge on a failed call
-                log.warning(
-                    "constrain.distinct_call_failed",
-                    attempt=attempt,
-                    error_type=type(exc).__name__,
-                )
-                continue
-            usage.add(call_usage)
-            break
+    outcome = (
+        call_with_retry(
+            "distinct",
+            lambda: backend.distinct(options=options),
+            lambda response: response,
+            event="constrain",
+        )
+        if rows
+        else None
+    )
+    calls = outcome.attempts if outcome is not None else 0
+    usages = outcome.usages if outcome is not None else []
     base = {"calls": calls, "retries": max(calls - 1, 0)}
-    if rows and response is None:
+    if outcome is not None and outcome.value is None:
         return _Distinct(
             verdicts={
                 str(row.option_id): _Verdict("cannot_check", JUDGEMENT_UNAVAILABLE)
@@ -669,9 +620,12 @@ def _distinct(
             },
             kept={},
             stats={**base, "failed": True, "pairs": 0, "turned": 0, "dropped": {}},
+            usages=usages,
         )
+    response = outcome.value if outcome is not None else None
     checked = _distinct_verdicts(response or DistinctResponse(duplicates=[]), rows)
     checked.stats = {**base, "failed": False, **checked.stats}
+    checked.usages = usages
     return checked
 
 
@@ -702,8 +656,8 @@ def _move_memberships(
 
 def _who_decides_sentence(profile: Mapping[str, Any], row: Any) -> str | None:
     """The option's ``who_decides`` sentence for its current design version, if any."""
-    entry = _mapping(_mapping(profile.get(str(row.option_id))).get(str(row.design_version)))
-    sentence = _mapping(_mapping(entry.get("lines")).get(WHO_DECIDES)).get("sentence")
+    entry = (profile.get(str(row.option_id)) or {}).get(str(row.design_version)) or {}
+    sentence = ((entry.get("lines") or {}).get(WHO_DECIDES) or {}).get("sentence")
     return sentence.strip() if isinstance(sentence, str) and sentence.strip() else None
 
 
@@ -759,7 +713,7 @@ class _Authority:
 
 
 def _authority(
-    backend: ConstrainBackend, *, considerations: list[str], options: list[dict[str, object]]
+    backend: LonglistBackend, *, considerations: list[str], options: list[dict[str, object]]
 ) -> _Authority:
     """The one authority call over the whole list, and one retry (R38, S18).
 
@@ -767,40 +721,32 @@ def _authority(
     A call that raises or stays malformed after its retry gives no label
     (``failed``): never a crash, never an exclusion.
     """
-    outcome = _Authority()
     option_ids = [str(o["option_id"]) for o in options]
-    calls = 0
-    labels: dict[str, dict[str, Any]] | None = None
-    if options:
-        for attempt in range(BATCH_ATTEMPTS):
-            calls += 1
-            try:
-                response, call_usage = backend.authority(
-                    considerations=considerations, options=options
-                )
-            except Exception as exc:  # fail-closed: no label on a failed call
-                log.warning(
-                    "constrain.authority_call_failed",
-                    attempt=attempt,
-                    error_type=type(exc).__name__,
-                )
-                continue
-            outcome.usages.append(call_usage)
-            labels = _validated_authority(response, option_ids)
-            if labels is not None:
-                break
-            log.warning("constrain.authority_malformed", attempt=attempt, options=len(options))
+    called = (
+        call_with_retry(
+            "authority",
+            lambda: backend.authority(considerations=considerations, options=options),
+            lambda response: _validated_authority(response, option_ids),
+            event="constrain",
+        )
+        if options
+        else None
+    )
+    calls = called.attempts if called is not None else 0
+    labels = called.value if called is not None else None
     failed = bool(options) and labels is None
     if failed:
         log.warning("constrain.authority_failed", calls=calls, options=len(options))
-    outcome.labels = labels or {}
-    outcome.stats = {
-        "calls": calls,
-        "retries": max(calls - 1, 0),
-        "failed": failed,
-        "options": len(options),
-    }
-    return outcome
+    return _Authority(
+        labels=labels or {},
+        usages=called.usages if called is not None else [],
+        stats={
+            "calls": calls,
+            "retries": max(calls - 1, 0),
+            "failed": failed,
+            "options": len(options),
+        },
+    )
 
 
 def constrain_scope(
@@ -809,7 +755,7 @@ def constrain_scope(
     task_id: uuid.UUID,
     run_id: uuid.UUID,
     context: ConstrainContext,
-    backend: ConstrainBackend,
+    backend: LonglistBackend,
 ) -> dict[str, Any]:
     """Judge every option of the walk's longlist and write the verdicts.
 
@@ -845,15 +791,15 @@ def constrain_scope(
     )
     labels = {row.option_id: row.name for row in rows}
     relations = _relations(conn, task_id=task_id, labels=labels)
-    coverage = result_row.coverage if isinstance(result_row.coverage, Mapping) else {}
-    provenance = dict(result_row.provenance) if isinstance(result_row.provenance, Mapping) else {}
+    coverage = dict(result_row.coverage or {})
+    provenance = dict(result_row.provenance or {})
     requirements, preferences = _constraint_lists(plan)
     checks = _checks(requirements)
     texts = {r["id"]: r["text"] for r in checks + preferences}
     plan_data = _plan_data(plan)
 
     considerations = who_decides_considerations(plan)
-    profile = _mapping(result_row.option_profile)
+    profile = dict(result_row.option_profile or {})
     authority_options = [
         _authority_option_data(row, sentence)
         for row in rows
@@ -861,13 +807,13 @@ def constrain_scope(
     ]
 
     # 1. Every model call, before any write: the authority call (only with a
-    # consideration on who decides) in a worker at the same time as the
-    # distinct call over the whole list, then the batches in parallel.
+    # consideration on who decides) and the distinct call over the whole list
+    # in workers, at the same time as the batches in parallel.
     usage = UsageAccumulator()
-    with ThreadPoolExecutor(max_workers=1) as authority_pool:
+    with ThreadPoolExecutor(max_workers=2) as side_pool:
         authority_future = (
             tracing.submit_with_context(
-                authority_pool,
+                side_pool,
                 _authority,
                 backend,
                 considerations=considerations,
@@ -876,7 +822,9 @@ def constrain_scope(
             if considerations
             else None
         )
-        distinct = _distinct(backend, rows=rows, relations=relations, usage=usage)
+        distinct_future = tracing.submit_with_context(
+            side_pool, _distinct, backend, rows=rows, relations=relations
+        )
         judged, stats, failed = _judge(
             backend,
             plan=plan_data,
@@ -891,10 +839,10 @@ def constrain_scope(
             ],
             usage=usage,
         )
+        distinct = distinct_future.result()
         authority = authority_future.result() if authority_future is not None else None
-    if authority is not None:
-        for call_usage in authority.usages:
-            usage.add(call_usage)
+    for call_usage in [*distinct.usages, *(authority.usages if authority is not None else [])]:
+        usage.add(call_usage)
     # 2. Verdicts -> state or merge, every kept option before the duplicates,
     # so a duplicate's kept option is settled before it. No write yet.
     ordered = sorted(
@@ -1040,7 +988,7 @@ def constrain_scope(
         )
 
     # 5. The walk's longlist row.
-    counts = dict(result_row.counts) if isinstance(result_row.counts, Mapping) else {}
+    counts = dict(result_row.counts or {})
     counts.update(
         options=len(rows) - len(merged_into),
         merged=len(merged_into),

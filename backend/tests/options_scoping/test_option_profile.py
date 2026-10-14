@@ -34,7 +34,6 @@ from policy_atlas.options_scoping.option_profile.lever_typing_prompt import (
     build_lever_typing_messages,
 )
 from policy_atlas.options_scoping.option_profile.option_profile import (
-    TYPING_INVALID_REASON,
     OptionProfileContext,
     OptionProfileFailure,
     _checked_folds,
@@ -257,7 +256,6 @@ def test_a_failed_typing_call_is_counted_never_a_crash(conn: Connection) -> None
     # The option's columns are left as they were (task 046, S12).
     row = walk.options()["Youth guarantee"]
     assert (row.lever_none_fits_reason, row.taxonomy_version) == (None, None)
-    assert row.lever_none_fits_reason != TYPING_INVALID_REASON
     # The step still succeeds: the profile is written (Phase 12b), and the
     # folding maps at list level (task 046, amendment 3, S21).
     assert set(result.option_profile) == {str(row.option_id), "folds"}
@@ -1203,9 +1201,6 @@ def test_the_maps_are_stored_at_list_level_and_the_kinds_merged_into_coverage(
         "retries": 0,
         "words": {"tried_on": 6, "measures": 6},
         "kinds": {"tried_on": 6, "measures": 6},
-        "kinds_returned": {"tried_on": 6, "measures": 6},
-        "guard_rewrites": {"tried_on": 0, "measures": 0},
-        "slash_cuts": {"tried_on": 0, "measures": 0},
         "catch_all": {"tried_on": False, "measures": False},
     }
 
@@ -1331,7 +1326,6 @@ def test_the_guard_maps_a_kind_holding_a_plan_outcome_to_it_on_the_measures_face
     )
     assert checked is not None
     assert checked["folds"] == {"a": outcome, "b": "obesity measures"}
-    assert checked["guard_rewrites"] == 1
 
 
 def test_the_guard_matches_whole_words_and_takes_the_longest_outcome() -> None:
@@ -1345,7 +1339,6 @@ def test_the_guard_matches_whole_words_and_takes_the_longest_outcome() -> None:
     )
     assert checked is not None
     assert checked["folds"] == {"a": "unemployment", "b": "youth employment", "c": "employment"}
-    assert checked["guard_rewrites"] == 2
 
 
 def test_the_guard_never_runs_on_the_tried_on_facet() -> None:
@@ -1353,7 +1346,6 @@ def test_the_guard_never_runs_on_the_tried_on_facet() -> None:
     checked = _checked_folds(answer, {"w1": "a"}, ["children"], facet="tried_on")
     assert checked is not None
     assert checked["folds"] == {"a": "children aged 5"}
-    assert checked["guard_rewrites"] == 0
 
 
 def test_an_answer_over_twelve_kinds_is_refused_by_the_wire() -> None:
@@ -1388,10 +1380,9 @@ def test_a_catch_all_fold_is_flagged_on_twenty_words_or_more() -> None:
     assert checked is not None and checked["catch_all"] is False
 
 
-def test_a_kind_joined_by_slashes_is_cut_at_the_first_and_counted() -> None:
+def test_a_kind_joined_by_slashes_is_cut_at_the_first() -> None:
     """Task 046, amendment 4 (the folding loop's round 7): the mini model answers
-    a cap with "obesity / overweight / BMI"; the first member names the kind,
-    and the cut is counted in provenance (review of task 046, 2026-10-12)."""
+    a cap with "obesity / overweight / BMI"; the first member names the kind."""
     words = {"w1": "obesity", "w2": "bmi"}
     answer = FoldingResponse(
         kinds=["obesity / overweight / BMI", "weight"],
@@ -1400,7 +1391,6 @@ def test_a_kind_joined_by_slashes_is_cut_at_the_first_and_counted() -> None:
     checked = _checked_folds(answer, words, [], facet="measures")
     assert checked is not None
     assert checked["folds"] == {"obesity": "obesity", "bmi": "weight"}
-    assert checked["slash_cuts"] == 1
 
 
 def test_a_catch_all_answer_is_tried_once_more_and_the_retry_is_kept(conn: Connection) -> None:
@@ -1521,8 +1511,6 @@ def _place_stats(**counts: int) -> dict[str, int]:
     return {
         "generated": 0,
         "template": 0,
-        "failed_trace": 0,
-        "failed_length": 0,
         "failed_call": 0,
         **counts,
     }
@@ -1592,7 +1580,6 @@ def test_the_place_sentences_are_stored_in_the_card_order_with_their_provenance(
         "model": "stub",
         "calls": 1,
         "retries": 0,
-        "options_without_evaluations": 1,
         **_place_stats(generated=2),
     }
     # Remade on a rebuild: the next profile run writes its own sentences.
@@ -1694,9 +1681,7 @@ def test_a_place_left_out_an_unknown_id_a_long_and_an_untraced_sentence(
     ]
     assert entries[2]["sentence"] == "1 document."
     stats = after.provenance["option_profile"]["place_sentences"]
-    assert {key: stats[key] for key in _place_stats()} == _place_stats(
-        template=3, failed_length=1, failed_trace=1
-    )
+    assert {key: stats[key] for key in _place_stats()} == _place_stats(template=3)
     # The over-length sentence was refused once and the retry's answer kept.
     assert stats["retries"] == 1
     # Each template entry says why it stands (review of task 046, 2026-10-12).

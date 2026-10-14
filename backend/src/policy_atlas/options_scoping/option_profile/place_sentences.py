@@ -483,7 +483,9 @@ def vocabulary_from_folds(folds: Mapping[str, Mapping[str, str]] | None) -> dict
 def call_input(
     option_name: str,
     option_description: str,
-    plan: Mapping[str, object],
+    *,
+    plan_outcomes: Sequence[str],
+    target_unit: str | None,
     vocabulary: Mapping[str, Sequence[str]],
     groups: Sequence[PlaceGroup],
 ) -> dict[str, Any]:
@@ -496,8 +498,8 @@ def call_input(
     Args:
         option_name: The option's name.
         option_description: Its description.
-        plan: The place-stripped plan data (``target_unit`` and ``outcomes``
-            are read).
+        plan_outcomes: The plan's outcome texts.
+        target_unit: The plan's target unit.
         vocabulary: :func:`vocabulary_from_folds`.
         groups: :func:`group_places`.
 
@@ -505,8 +507,6 @@ def call_input(
         The keyword arguments of ``build_place_sentences_messages``:
         ``{"option", "plan", "vocabulary", "places"}``.
     """
-    outcomes = plan.get("outcomes")
-    target_unit = plan.get("target_unit")
     places: list[dict[str, Any]] = []
     counter = 0
     for group in groups:
@@ -541,13 +541,9 @@ def call_input(
     return {
         "option": {"name": option_name, "description": option_description},
         "plan": {
-            "target_unit": target_unit if isinstance(target_unit, str) else None,
-            "target_unit_short": (
-                head_phrase(target_unit) if isinstance(target_unit, str) else None
-            ),
-            "outcomes": [o for o in outcomes if isinstance(o, str)]
-            if isinstance(outcomes, list)
-            else [],
+            "target_unit": target_unit,
+            "target_unit_short": head_phrase(target_unit) if target_unit is not None else None,
+            "outcomes": list(plan_outcomes),
         },
         "vocabulary": {
             "tried_on_kinds": list(vocabulary.get("tried_on_kinds", [])),
