@@ -350,7 +350,6 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
         isRecord(body) && Array.isArray(body.project_ids)
           ? body.project_ids.filter((value): value is string => typeof value === "string")
           : [],
-      from_task_ids: fromTaskIds,
       links:
         fromTaskIds.length > 0
           ? [
@@ -710,7 +709,7 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
             option_name: card.name,
             record_id: `${card.option_id}-${sourceId}`,
             intervention: card.name,
-            setting: card.settings?.[0] ?? null,
+            setting: card.profile?.settings?.[0] ?? null,
             unit: card.documents?.[0]?.tried_on_kind ?? null,
             outcome: card.outcomes_served?.[0] ?? null,
             study_geography: document.place ?? null,
@@ -1382,7 +1381,7 @@ async function mockLonglistWalk(
     { stage: "suggest", label: "Suggesting options", blurb: "From the plan, the baseline and any linked report.", summary: { suggested: 6, from_report: 2 } },
     { stage: "option_searches", label: "Searching for each option", blurb: "One search per suggestion and per option of yours.", summary: { total: 7, finished: 7, failed: 0 } },
     { stage: "extract_interventions", label: "Reading the abstracts", blurb: "Which interventions each one covers, and how.", summary: { documents: 118, records: 64 } },
-    { stage: "longlist", label: "Clustering into options", blurb: "Records grouped into options, options into themes.", summary: { options: counts.options, themes: counts.themes, unclustered: counts.unclustered, not_an_option: counts.not_an_option } },
+    { stage: "longlist", label: "Clustering into options", blurb: "Records grouped into options, options into themes.", summary: { options: counts.options, themes: counts.themes, unclustered: 5, not_an_option: 2 } },
     { stage: "constrain", label: "Applying your constraints", blurb: "Every option checked against the plan's requirements.", summary: { excluded: counts.excluded, no_in_scope: counts.no_in_scope } },
   ];
 

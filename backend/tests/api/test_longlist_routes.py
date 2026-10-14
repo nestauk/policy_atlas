@@ -446,8 +446,8 @@ def test_the_list_matches_the_stored_rows(engine: Engine, tmp_path: Path) -> Non
             )
         assert body["run_id"] == str(built.run_id)
         assert body["capability_run_id"] == str(built.walk_id)
-        assert body["plan_version"] == body["built_from_plan_version"] == 2
-        assert body["current_plan_version"] == 2
+        assert body["plan_version"] == 2
+        assert not {"built_from_plan_version", "current_plan_version"} & body.keys()
         assert body["depth_label"] == "scoping pass"
         assert "where_label" not in body  # the facet shows the top levels (R72)
         assert body["lever_types"][0] == "regulate" and len(body["lever_types"]) == 10
@@ -458,9 +458,10 @@ def test_the_list_matches_the_stored_rows(engine: Engine, tmp_path: Path) -> Non
         assert counts["included"] == sum(1 for r in rows.values() if r.state == "included")
         assert counts["excluded"] == sum(1 for r in rows.values() if r.state == "excluded")
         assert counts["no_in_scope"] == 1  # Mentoring: its only document is from 2010
-        assert counts["unclustered"] == result.counts["unclustered"]
-        assert counts["not_an_option"] == result.counts["not_an_option"]
         assert counts["none_fits"] == 1
+        assert set(counts) == {
+            "options", "themes", "included", "excluded", "no_in_scope", "none_fits"
+        }
 
         themed = [oid for theme in body["themes"] for oid in theme["option_ids"]]
         assert sorted(themed + body["unthemed_option_ids"]) == sorted(str(o) for o in rows)
@@ -485,15 +486,19 @@ def test_the_list_matches_the_stored_rows(engine: Engine, tmp_path: Path) -> Non
         # The list's settings are the option-level setting of its profile (R41), not coverage.
         stored_profile = result.option_profile[str(built.options["Youth guarantee"])]
         (profile_entry,) = stored_profile.values()
-        assert guarantee["settings"] == [profile_entry["setting"]["main"]] == ["stub setting"]
+        assert guarantee["profile"]["settings"] == [profile_entry["setting"]["main"]]
+        assert guarantee["profile"]["settings"] == ["stub setting"]
         assert guarantee["primary_lever_type"] == "subsidise"
         # Ambition is the profile's own call (task 046, R40): the stub marks none.
         assert guarantee["ambition"] is None
-        assert guarantee["is_entrant_with_no_documents"] is False
+        removed = {
+            "settings", "is_entrant_with_no_documents", "restriction_text",
+            "design_version", "abstract_only",
+        }
+        assert not removed & guarantee.keys()
 
         mentoring = by_name["Mentoring"]
         assert mentoring["no_in_scope_evidence"] is True
-        assert mentoring["restriction_text"] == RESTRICTION
         assert mentoring["primary_lever_type"] is None
         assert mentoring["lever_none_fits_reason"] == "Mentoring is delivered by volunteers."
         assert "where_tried" not in mentoring
@@ -547,20 +552,10 @@ def test_the_card_carries_every_section_and_never_how_sure(
         # Every document passes the restriction: the check ran, nothing is marked.
         assert card["in_scope"]["restriction"] == RESTRICTION
         assert card["in_scope"]["in_scope_documents"] == card["in_scope"]["documents"] > 0
-        assert card["no_in_scope_evidence"] is False and card["restriction_text"] is None
+        assert card["no_in_scope_evidence"] is False
         evidence = card["evidence"]
-        assert evidence["documents"] == 2
-        # The DOI twins count once; the linked document's tier did not come across.
-        assert evidence["by_tier"] == {"Strong": 1, "not rated": 1}
-        assert evidence["by_evidence_type"] == {RCT: 2}
-        assert evidence["inherited_labels"] == 1
-        assert evidence["flagged_not_stated"] == 0  # the DOI twin states the feature
-        # Removed by task 046, amendment 4 (contract § Public interface).
-        assert "by_role" not in evidence
-        # The record-level lists are gone (B13), and so are the kind lists
-        # (task 046, amendment 4, S36).
-        removed = {"units", "settings", "outcomes", "tried_on", "measures", "where_tried"}
-        assert not removed & set(evidence)
+        # The evidence profile carries the outcome counts only.
+        assert set(evidence) == {"outcome_counts"}
         assert "examples" not in card
         # The documents: one per document, DOI twins collapsed (R67).
         documents = card["documents"]
@@ -574,15 +569,17 @@ def test_the_card_carries_every_section_and_never_how_sure(
         titles = sorted(d["title"] for d in documents)
         assert titles == ["A deep read", "UK guarantee evaluation"]
         inherited = [d for d in documents if d["title"] == "A deep read"]
-        assert {d["source_task_id"] for d in inherited} == {str(built.source_task_id)}
         assert {d["role"] for d in inherited} == {"evaluated"}
+        assert all(
+            not {"source_task_id", "design_feature_not_stated"} & d.keys() for d in documents
+        )
         # The label came through the link, read by the resolver.
         assert {d["evidence_type"] for d in inherited} == {RCT}
         assert all(d["task_source_snapshot_id"] is not None for d in inherited)
         evaluation = next(d for d in documents if d["title"] == "UK guarantee evaluation")
         assert evaluation["tier"] == "Strong" and evaluation["place"] == "United Kingdom"
         assert "where_tried_group" not in evaluation
-        assert evaluation["source_task_id"] is None and evaluation["year"] == 2022
+        assert evaluation["year"] == 2022
         # The place sentences, as the profile step stored them (task 046,
         # amendment 4, R80; S31): this scripted backend has no sentence call,
         # so the step stored the templates; the plan's Where row first.
@@ -653,40 +650,6 @@ def test_the_card_and_list_serve_the_lever_reason(conn: Connection) -> None:
     card = repository.option_out(conn, walk.task_id, options["Youth guarantee"].option_id)
     assert card is not None
     assert card.lever_reason == "The state pays employers to hire."
-
-
-def test_the_list_serves_title_only_and_the_thinning_counts(conn: Connection) -> None:
-    """The read model's field names, mapped from the component's own (task 046):
-    ``thinned_mentioned`` = ``mentioned_without_features_or_outcome``,
-    ``thinned_collapsed`` = ``same_name_in_document``,
-    ``thinned_capped`` = ``over_document_cap``.
-    """
-    walk = _Walk(conn)
-    walk.option("Youth guarantee", origin="added_by_you")
-    bare, collapse, crowded = walk.doc(), walk.doc(), walk.doc()
-    # Rule 1: a bare mention goes; a mention with a feature or an outcome stays.
-    walk.record(bare, "passing mention", role="mentioned")
-    walk.record(bare, "featured mention", role="mentioned", design_features=["free"])
-    walk.record(bare, "outcome mention", role="mentioned", outcome="employment")
-    # Rule 2: the same folded name in one document collapses to the highest role.
-    walk.record(collapse, "Youth guarantee", role="described")
-    walk.record(collapse, "youth  GUARANTEE", role="evaluated")
-    # Rule 3: at most eight a document, by role; the two mentions go.
-    for i in range(7):
-        walk.record(crowded, f"programme {i}", role="evaluated")
-    walk.record(crowded, "recommended one", role="recommended")
-    for i in range(2):
-        walk.record(crowded, f"mentioned {i}", role="mentioned", outcome="x")
-    walk.rollup(walk.scope_id, [bare, collapse, crowded], counts={"title_only": 5})
-    walk.build(_Scripted(routes={"youth GUARANTEE": ("Youth guarantee", False)}))
-
-    listed = repository.longlist_out(conn, walk.task_id)
-    assert listed is not None
-    counts = listed.counts
-    assert counts.title_only == 5
-    assert counts.thinned_mentioned == 1
-    assert counts.thinned_collapsed == 1
-    assert counts.thinned_capped == 2
 
 
 def test_the_list_serves_the_current_lever_type_taxonomy(conn: Connection) -> None:
@@ -920,21 +883,21 @@ def test_a_stored_profile_is_served_with_its_marks_and_settings(conn: Connection
         assert by_key["time_to_set_up"].mark is None
         assert by_key["who_decides"].mark is None and by_key["dependencies"].mark is None
         assert out.profile.settings == ["Jobcentres", "Schools"]
-        assert out.settings == ["Jobcentres", "Schools"]
 
 
 def test_the_settings_follow_what_the_profile_names(conn: Connection) -> None:
     walk, option_id = _profiled(conn, profile=_stored_profile(second=None))
-    assert _summary_and_card(conn, walk, option_id)[0].settings == ["Jobcentres"]
+    assert _summary_and_card(conn, walk, option_id)[0].profile.settings == ["Jobcentres"]
     walk, option_id = _profiled(conn, profile=_stored_profile(main=None, second=None))
     summary, card = _summary_and_card(conn, walk, option_id)
-    assert summary.profile is not None and summary.settings == [] == card.settings
+    assert summary.profile is not None and summary.profile.settings == []
+    assert card.profile.settings == []
 
 
 def test_the_summary_settings_come_from_the_profile_not_from_coverage(conn: Connection) -> None:
     walk, option_id = _profiled(conn, profile=_stored_profile(main="Libraries", second=None))
     summary, card = _summary_and_card(conn, walk, option_id)
-    assert summary.settings == ["Libraries"]
+    assert summary.profile.settings == ["Libraries"]
     # The evidence profile has no record-level settings (B13).
     assert "settings" not in card.evidence.model_dump()
 
@@ -944,7 +907,7 @@ def test_an_option_without_a_profile_entry_or_with_an_incomplete_one_has_none(
 ) -> None:
     walk, option_id = _profiled(conn, profile=None)
     summary, card = _summary_and_card(conn, walk, option_id)
-    assert summary.profile is None and card.profile is None and summary.settings == []
+    assert summary.profile is None and card.profile is None
     incomplete = _stored_profile()
     del incomplete["lines"]["coordination"]
     walk, option_id = _profiled(conn, profile=incomplete)
@@ -1185,7 +1148,7 @@ def test_add_proposes_a_design_mints_it_and_opens_a_parentless_walk(
         assert added["origin"] == "added_by_you"
         assert added["name"] == "Wage subsidy"
         assert added["design"]["assumed"] == ["a wage subsidy for six months"]
-        assert added["is_entrant_with_no_documents"] is True
+        assert added["document_count"] == 0
         opened = uuid.UUID(body["opened_run"]["capability_run_id"])
         with engine.connect() as conn:
             row = conn.execute(
@@ -1400,7 +1363,6 @@ def test_an_added_option_reads_its_own_search_until_the_next_build(conn: Connect
     card = repository.option_out(conn, walk.task_id, added)
     assert card is not None
     assert card.search_pending is False
-    assert card.is_entrant_with_no_documents is False
     assert card.document_count == 2  # the DOI twins count once
     assert card.evaluated_count == 1
     # The twins' countries differ in case only: one country (R59); a geography
@@ -1411,10 +1373,8 @@ def test_an_added_option_reads_its_own_search_until_the_next_build(conn: Connect
         {"country": "United Kingdom", "documents": 1}
     ]
     assert card.outcomes_evaluated == 0 and card.outcomes_total == 1
-    assert card.evidence.by_tier == {"Strong": 1, "not rated": 1}
-    # An added option has no profile yet (R41): its list setting is empty; the
-    # evidence profile keeps the records' own words.
-    assert card.settings == []
+    # An added option has no profile yet (R41).
+    assert card.profile is None
     assert "settings" not in card.evidence.model_dump()
     # One per document, the DOI twins collapsed; the comparator is not a document.
     assert sorted(d.title for d in card.documents) == [
