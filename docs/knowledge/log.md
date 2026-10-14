@@ -1,5 +1,67 @@
 # Knowledge update log
 
+## 2026-10-09 (task 051 step 8)
+* **Creation**: Added
+  [openalex-semantic-search-filter-support](openalex-semantic-search-filter-support.md) —
+  the probe table, the year fence plus local check, the union predicate for split
+  filters (051 D13 amendment; review finding F2, convergent Codex and contract verifier).
+* **Creation**: Added
+  [overton-relevance-order-needs-sort-parameter](overton-relevance-order-needs-sort-parameter.md) —
+  date order and no scores without `sort=relevance`; the echo check on fetch-by-id;
+  landmarks carry no wire filters (049 experiments, 051 D8).
+* **Creation**: Added
+  [transport-response-cache-is-process-global](transport-response-cache-is-process-global.md) —
+  the shared response cache across tests, the autouse fixture, the cross-file bisect
+  (051 review, test hygiene).
+* **Creation**: Added
+  [timing-test-removes-the-other-delay](timing-test-removes-the-other-delay.md) — the
+  429-pause test that passed with the pause deleted; coalesced pauses (051 review,
+  code-review and security lanes).
+* **Creation**: Added [model-pin-per-surface](model-pin-per-surface.md) — the triage
+  default that borrowed `SCREEN_MODEL` (051 Phase 4 deviation).
+* **Creation**: Added [jsonb-reorders-dict-keys](jsonb-reorders-dict-keys.md) — key
+  order on JSONB read-back (051 build candidate).
+* **Update**: [delegated-executor-practices](delegated-executor-practices.md) — Codex
+  cannot start `uv`; it formats the whole tree unless told the files; fixture doubles
+  return shared objects (051 build candidates).
+* **Update**: [eval-cost-figures-name-their-unit](eval-cost-figures-name-their-unit.md) —
+  an `llm` figure is Langfuse's configured price row; the Luna row was five times list
+  (051 review F11).
+* **Declined** (recorded in the 051 verification handoff, not durable beyond the task):
+  the eval test that mutates `DEPTH_CONSTANTS` (test-local), `TaskPlan`'s depth and
+  component rule (derivable from the validator), the zero-valued `post_filter_exclusions`
+  entries (spec-level), the `Counter`-from-`set` ordering (a Python fact the fixture
+  export already handles), the experiment's forward-chase ceiling (task-level, in the
+  verification record and the history notes).
+
+## 2026-10-05 (task 046, mini-dataset runs)
+* **Update**: [langfuse-dataset-run-name-reuse-appends](langfuse-dataset-run-name-reuse-appends.md) —
+  corrected from "appends" to "upserts per dataset item" after a verified full re-run of
+  one arm under an existing label; `delete_run` is 404 on this instance.
+
+## 2026-09-25 (task 046 step 8)
+* **Creation**: Added
+  [consensus-api-paging-and-billing](consensus-api-paging-and-billing.md) — zero-indexed
+  pages, HTTP 400 past the 1,000 ceiling with next_page null one page early, positions
+  not results, $0.05 on every call for our beta account (046 live probe, flagged
+  deviation 1).
+* **Creation**: Added
+  [semantic-scholar-two-search-engines](semantic-scholar-two-search-engines.md) — the
+  keyword engine vs the snippet (semantic) engine, corpusId-to-DOI lookup, open-access
+  lean, rate limit (046 arms 1 and 1b).
+* **Creation**: Added
+  [eval-cost-figures-name-their-unit](eval-cost-figures-name-their-unit.md) — computed vs
+  spent, page-priced vs cap-priced, api vs llm, four decimals under a cent, and the
+  request-checking cache (046 review stack, findings 1 and 3, convergent).
+* **Creation**: Added
+  [langfuse-dataset-run-name-reuse-appends](langfuse-dataset-run-name-reuse-appends.md) —
+  same run_name appends items; zero-request checks use --dry-run or a new label (046
+  flagged deviation 2).
+* **Update**: [delegated-executor-practices](delegated-executor-practices.md) — fourth
+  confirmation that delegated tests are the defect surface (046); background
+  `make verify-fast` shares the test DB with delegated briefs; committing one phase's
+  slice of a shared file via `git update-index --cacheinfo` (046 build handoff).
+
 ## 2026-09-08 (task 040 step 8)
 * **Creation**: Added
   [additive-max-md-variants-prove-desktop-invariant](additive-max-md-variants-prove-desktop-invariant.md) —

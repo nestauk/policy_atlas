@@ -45,6 +45,8 @@ from tests.ops.support import (
     expect_create,
     expect_create_manual,
     expect_lookup,
+    expect_reissue,
+    expect_status_lookup,
     fresh_sub,
 )
 
@@ -593,6 +595,66 @@ def test_resync_then_grant_cannot_reinstate_an_administrator_for_an_offboarded_p
 
     row = _user_row(conn, sub)
     assert (row.email, row.org_id, row.is_admin) == (None, None, False)
+
+
+# --- user reissue ------------------------------------------------------------
+
+
+def test_user_reissue_mints_a_non_permanent_password_for_a_never_signed_in_account() -> None:
+    email = unique_email("reissue")
+    sub = fresh_sub()
+    with cognito() as (client, stubber):
+        expect_status_lookup(stubber, email=email, sub=sub, status="FORCE_CHANGE_PASSWORD")
+        expect_reissue(stubber, sub=sub)
+        with capture_logs() as logged:
+            reissue = commands.reissue_temporary_password(
+                client, pool_id=POOL_ID, email=email
+            )
+        stubber.assert_no_pending_responses()
+
+    minted = reissue.temporary_password
+    assert len(minted) == 20
+    assert reissue.user_id == sub
+    assert minted in reissue.summary()
+    assert "single-use" in reissue.summary()
+    assert not any(minted in str(event) for event in logged)
+
+
+@pytest.mark.parametrize("status", ["CONFIRMED", "RESET_REQUIRED", "UNCONFIRMED"])
+def test_user_reissue_refuses_an_account_not_awaiting_first_sign_in(status: str) -> None:
+    """A person who set their own password recovers it themselves.
+
+    No ``AdminSetUserPassword`` is queued, so the Stubber fails the test if the
+    refusal comes after the password was already replaced.
+    """
+    email = unique_email("confirmed")
+    with cognito() as (client, stubber):
+        expect_status_lookup(stubber, email=email, sub=fresh_sub(), status=status)
+        with pytest.raises(OpsError, match="Nothing was changed"):
+            commands.reissue_temporary_password(client, pool_id=POOL_ID, email=email)
+        stubber.assert_no_pending_responses()
+
+
+def test_user_reissue_refuses_an_unknown_address() -> None:
+    email = unique_email("nobody")
+    with cognito() as (client, stubber):
+        expect_lookup(stubber, email=email, sub=None)
+        with pytest.raises(OpsError, match="no account in the pool"):
+            commands.reissue_temporary_password(client, pool_id=POOL_ID, email=email)
+        stubber.assert_no_pending_responses()
+
+
+def test_user_reissue_turns_a_cognito_refusal_into_an_ops_error() -> None:
+    email = unique_email("refused")
+    sub = fresh_sub()
+    with cognito() as (client, stubber):
+        expect_status_lookup(stubber, email=email, sub=sub, status="FORCE_CHANGE_PASSWORD")
+        stubber.add_client_error(
+            "admin_set_user_password", service_error_code="InvalidPasswordException"
+        )
+        with pytest.raises(OpsError, match="InvalidPasswordException"):
+            commands.reissue_temporary_password(client, pool_id=POOL_ID, email=email)
+        stubber.assert_no_pending_responses()
 
 
 # --- de-enrol ----------------------------------------------------------------

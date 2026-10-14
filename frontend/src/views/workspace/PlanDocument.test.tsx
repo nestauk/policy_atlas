@@ -194,9 +194,9 @@ describe("PlanDocument", () => {
     mockUsePlan({ data: planOut(fullPlan()) });
     const user = userEvent.setup();
     renderPlan();
-    expect(screen.queryByText(/up to 50 relevant results per database/)).toBeNull();
+    expect(screen.queryByText(/up to 100 papers and 50 policy documents/)).toBeNull();
     await user.hover(screen.getByRole("button", { name: "About Search scope" }));
-    expect(await screen.findByRole("tooltip")).toHaveTextContent("Focused: up to 50 relevant results per database");
+    expect(await screen.findByRole("tooltip")).toHaveTextContent("Focused: up to 100 papers and 50 policy documents");
   });
 
   it("keeps the analysis-level descriptions in an info hover, not as body copy", async () => {

@@ -75,7 +75,8 @@ def test_no_command_accepts_an_assume_yes_flag() -> None:
 
 
 def test_the_command_tree_is_the_one_the_contract_names() -> None:
-    """The eight commands of contract § 9, and no ninth that nobody reviewed."""
+    """The eight commands of contract § 9, plus ``user reissue`` (owner-approved
+    2026-10-01), and nothing else that nobody reviewed."""
     parser = build_parser()
     groups = next(
         action
@@ -94,7 +95,7 @@ def test_the_command_tree_is_the_one_the_contract_names() -> None:
     }
     assert tree == {
         "org": ["create"],
-        "user": ["create", "de-enrol", "enrol", "resync"],
+        "user": ["create", "de-enrol", "enrol", "reissue", "resync"],
         "rows": ["assign"],
         "admin": ["grant", "revoke"],
     }

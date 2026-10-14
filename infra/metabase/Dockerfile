@@ -1,0 +1,2 @@
+ARG METABASE_VERSION
+FROM metabase/metabase:${METABASE_VERSION}

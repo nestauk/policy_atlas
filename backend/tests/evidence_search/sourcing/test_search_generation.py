@@ -51,7 +51,7 @@ def test_generate_queries_passes_model_and_returns_parsed_wire() -> None:
     assert usage is None
     [kwargs] = fake_client.chat.completions.calls
     assert kwargs["model"] == SEARCH_QUERIES_MODEL
-    assert kwargs["model"] == "gpt-5.4-mini"
+    assert kwargs["model"] == "gpt-5.6-luna"
     assert kwargs["response_format"] is SearchQueriesWire
 
 

@@ -33,7 +33,6 @@ from policy_atlas.evidence_search.corpus.select import (
     select_documents,
 )
 from policy_atlas.evidence_search.extract.extract import KNOWN_PROFILE_IDS
-from policy_atlas.evidence_search.sourcing.search_loop import DEPTH_CONSTANTS
 from policy_atlas.runtime import harness, steering_events
 from policy_atlas.runtime.runner import (
     NullIO,
@@ -575,11 +574,10 @@ def test_frequent_run_pauses_after_every_component_and_continue_matches_nullio(
 
         # Frequent pauses after every component, with P2 (before select) inserted
         # right before select runs and P4 (before synthesise) right before
-        # synthesise runs (the two before-boundary lattice points). The
-        # standard-effort round loop (task 029) runs acquire+screen_abstract
-        # round_cap (2) times, each round pausing at its own boundaries.
+        # synthesise runs (the two before-boundary lattice points). Search is
+        # one pass at every scope (task 051), so acquire and screen_abstract
+        # each pause once.
         expected_components = compose(plan).components
-        round_cap = DEPTH_CONSTANTS[plan.search_effort]["round_cap"]
         expected_sequence: list[tuple[str, str]] = []
         for component in expected_components:
             if component == "select":
@@ -587,10 +585,6 @@ def test_frequent_run_pauses_after_every_component_and_continue_matches_nullio(
             if component == "synthesise":
                 expected_sequence.append(("before_component", "synthesise"))
             expected_sequence.append(("after_component", component))
-            if component == "screen_abstract":
-                for _ in range(round_cap - 1):
-                    expected_sequence.append(("after_component", "acquire"))
-                    expected_sequence.append(("after_component", "screen_abstract"))
         assert [
             (point["boundary"], point["component"]) for point, _ in io.pauses
         ] == expected_sequence

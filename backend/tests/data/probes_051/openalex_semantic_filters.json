@@ -1,0 +1,116 @@
+{
+  "text": "interventions to reduce loneliness in older adults",
+  "rows": [
+    {
+      "directive_key": "(none)",
+      "wire_filter": "",
+      "status": 200,
+      "accepted": true,
+      "n_results": 5,
+      "error": null
+    },
+    {
+      "directive_key": "published_after",
+      "wire_filter": "from_publication_date:2015-01-01",
+      "status": 400,
+      "accepted": false,
+      "n_results": null,
+      "error": "{\"error\": \"Invalid query parameters error.\", \"message\": \"Filter 'from_publication_date' is not supported with semantic search. Supported filters: author.id, authorships.author.id, authorships.institutions.id, authorships.institutions.lineage, funders.id, has_abstract, has_fulltext, institution.id, i"
+    },
+    {
+      "directive_key": "published_before",
+      "wire_filter": "to_publication_date:2024-12-31",
+      "status": 400,
+      "accepted": false,
+      "n_results": null,
+      "error": "{\"error\": \"Invalid query parameters error.\", \"message\": \"Filter 'to_publication_date' is not supported with semantic search. Supported filters: author.id, authorships.author.id, authorships.institutions.id, authorships.institutions.lineage, funders.id, has_abstract, has_fulltext, institution.id, ins"
+    },
+    {
+      "directive_key": "sdgs",
+      "wire_filter": "sustainable_development_goals.id:https://metadata.un.org/sdg/3",
+      "status": 400,
+      "accepted": false,
+      "n_results": null,
+      "error": "{\"error\": \"Invalid query parameters error.\", \"message\": \"Filter 'sustainable_development_goals.id' is not supported with semantic search. Supported filters: author.id, authorships.author.id, authorships.institutions.id, authorships.institutions.lineage, funders.id, has_abstract, has_fulltext, instit"
+    },
+    {
+      "directive_key": "types",
+      "wire_filter": "type:article",
+      "status": 200,
+      "accepted": true,
+      "n_results": 5,
+      "error": null
+    },
+    {
+      "directive_key": "languages",
+      "wire_filter": "language:en",
+      "status": 200,
+      "accepted": true,
+      "n_results": 5,
+      "error": null
+    },
+    {
+      "directive_key": "exclude_retracted",
+      "wire_filter": "is_retracted:false",
+      "status": 200,
+      "accepted": true,
+      "n_results": 5,
+      "error": null
+    },
+    {
+      "directive_key": "exclude_paratext",
+      "wire_filter": "is_paratext:false",
+      "status": 400,
+      "accepted": false,
+      "n_results": null,
+      "error": "{\"error\": \"Invalid query parameters error.\", \"message\": \"Filter 'is_paratext' is not supported with semantic search. Supported filters: author.id, authorships.author.id, authorships.institutions.id, authorships.institutions.lineage, funders.id, has_abstract, has_fulltext, institution.id, institution"
+    },
+    {
+      "directive_key": "oa_status",
+      "wire_filter": "oa_status:gold",
+      "status": 400,
+      "accepted": false,
+      "n_results": null,
+      "error": "{\"error\": \"Invalid query parameters error.\", \"message\": \"Filter 'oa_status' is not supported with semantic search. Supported filters: author.id, authorships.author.id, authorships.institutions.id, authorships.institutions.lineage, funders.id, has_abstract, has_fulltext, institution.id, institutions."
+    },
+    {
+      "directive_key": "author_affiliation_countries",
+      "wire_filter": "authorships.countries:GB",
+      "status": 400,
+      "accepted": false,
+      "n_results": null,
+      "error": "{\"error\": \"Invalid query parameters error.\", \"message\": \"Filter 'authorships.countries' is not supported with semantic search. Supported filters: author.id, authorships.author.id, authorships.institutions.id, authorships.institutions.lineage, funders.id, has_abstract, has_fulltext, institution.id, i"
+    },
+    {
+      "directive_key": "publication_year (reference)",
+      "wire_filter": "publication_year:<2025",
+      "status": 200,
+      "accepted": true,
+      "n_results": 5,
+      "error": null
+    },
+    {
+      "directive_key": "publication_year range (reference)",
+      "wire_filter": "publication_year:2015-2024",
+      "status": 200,
+      "accepted": true,
+      "n_results": 5,
+      "error": null
+    },
+    {
+      "directive_key": "publication_year lower bound (reference)",
+      "wire_filter": "publication_year:>2014",
+      "status": 200,
+      "accepted": true,
+      "n_results": 5,
+      "error": null
+    }
+  ],
+  "keyword_page": {
+    "status": 200,
+    "requested_per_page": 200,
+    "served_per_page": 200,
+    "n_results": 200,
+    "total_count": 1674
+  }
+}
