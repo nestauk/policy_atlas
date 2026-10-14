@@ -148,7 +148,7 @@ def test_a_constraint_kind_pins_when_it_is_checked() -> None:
 
 
 def test_an_unknown_constraint_kind_is_refused() -> None:
-    with pytest.raises(ValueError, match="not a known kind"):
+    with pytest.raises(ValueError, match=r"kind\s+Input should be"):
         build_scoping_plan(
             _ready_draft(
                 constraints=[
@@ -311,7 +311,7 @@ def test_the_wire_keeps_a_considerations_aspect_and_hard() -> None:
 
 
 def test_an_unknown_aspect_is_refused() -> None:
-    with pytest.raises(ValueError, match="not a known aspect"):
+    with pytest.raises(ValueError, match=r"aspect\s+Input should be"):
         build_scoping_plan(
             _ready_draft(
                 constraints=[
