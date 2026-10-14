@@ -446,3 +446,79 @@ def test_scrub_turn_removes_nul_from_part() -> None:
     scrubbed = _scrub_turn(turn)
     assert scrubbed.part is not None
     assert "\\u0000" not in json.dumps(scrubbed.part.model_dump())
+
+
+class _RecordingObservation:
+    def __init__(self, updates: list[dict[str, Any]]) -> None:
+        self._updates = updates
+
+    def __enter__(self) -> _RecordingObservation:
+        return self
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> Literal[False]:
+        del exc_type, exc, traceback
+        return False
+
+    def update(self, **payload: Any) -> None:
+        self._updates.append(payload)
+
+
+class _RecordingLangfuse:
+    def __init__(self) -> None:
+        self.names: list[str] = []
+        self.updates: list[dict[str, Any]] = []
+
+    def start_as_current_observation(self, *, name: str, as_type: str) -> _RecordingObservation:
+        del as_type
+        self.names.append(name)
+        return _RecordingObservation(self.updates)
+
+
+def test_scoping_turns_trace_usage_details_under_a_static_name() -> None:
+    """The scoping turn goes through the shared backend, so Langfuse gets its tokens."""
+    from openai.types.completion_usage import CompletionUsage
+
+    from policy_atlas.runtime.task_agent_scoping import (
+        OPTIONS_SCOPING_TASK_AGENT,
+        ScopingInputs,
+    )
+    from policy_atlas.runtime.task_agent_scoping_prompt import (
+        ScopingPlanDraftWire,
+        ScopingTurnWire,
+    )
+
+    parsed = ScopingTurnWire(
+        reply="Who should change?\x00",
+        plan_draft=ScopingPlanDraftWire(question="Q?"),
+        ready=False,
+    )
+    backend: OpenAITaskAgentBackend = object.__new__(OpenAITaskAgentBackend)
+    langfuse = _RecordingLangfuse()
+    cast("Any", backend)._client = fake_parse_client(
+        parsed=parsed,
+        usage=CompletionUsage(prompt_tokens=120, completion_tokens=30, total_tokens=150),
+    )
+    cast("Any", backend)._langfuse_client = langfuse
+
+    turn = backend.turn(
+        OPTIONS_SCOPING_TASK_AGENT,
+        [_turn("Q?"), _turn("Reply.", role="planner"), _turn("Young people")],
+        None,
+        inputs=ScopingInputs(linked_context=[], linked_task_ids=[]),
+    )
+
+    assert isinstance(turn, ScopingTurnWire)
+    assert turn.reply == "Who should change?"
+    assert langfuse.names == ["task_agent_scoping:turn"]
+    (update,) = langfuse.updates
+    assert update["usage_details"] == {
+        "prompt_tokens": 120,
+        "completion_tokens": 30,
+        "total_tokens": 150,
+    }
+    assert update["metadata"]["turn_number"] == 3

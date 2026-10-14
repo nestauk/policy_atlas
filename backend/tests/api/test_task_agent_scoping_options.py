@@ -22,8 +22,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.engine import Engine
 
-from policy_atlas.api.deps import get_agent_backend, get_scoping_task_agent_backend
-from policy_atlas.api.routers.task_agent import _baseline_state
+from policy_atlas.api.deps import get_agent_backend, get_task_agent_backend
 from policy_atlas.core.schema import (
     capability_run,
     longlist_result,
@@ -31,9 +30,14 @@ from policy_atlas.core.schema import (
     task_plan,
 )
 from policy_atlas.runtime.agent_backend import StubAgentBackend
-from policy_atlas.runtime.task_agent_scoping import NO_BASELINE_STATE, StubScopingTaskAgentBackend
+from policy_atlas.runtime.capability_registry import TaskAgentProfile
+from policy_atlas.runtime.task_agent import TaskAgentTurnWire
+from policy_atlas.runtime.task_agent_scoping import (
+    NO_BASELINE_STATE,
+    StubScopingTaskAgentBackend,
+    read_baseline_state,
+)
 from policy_atlas.runtime.task_agent_scoping_prompt import (
-    LinkedTaskContext,
     ScopingTurnWire,
     YourOptionWire,
 )
@@ -53,24 +57,25 @@ class _OptionsScopingAgent(StubScopingTaskAgentBackend):
     def __init__(self) -> None:
         self.options: list[str] | None = None
 
-    def scope_turn(
+    def turn(
         self,
+        profile: TaskAgentProfile,
         turns: list[dict[str, str]],
         previous_draft: dict[str, object] | None,
         *,
-        linked_context: list[LinkedTaskContext] | None = None,
-        baseline_state: str = NO_BASELINE_STATE,
+        inputs: Any = None,
         session_id: uuid.UUID | None = None,
         conversation_id: uuid.UUID | None = None,
-    ) -> ScopingTurnWire:
-        turn = super().scope_turn(
+    ) -> TaskAgentTurnWire:
+        turn = super().turn(
+            profile,
             turns,
             previous_draft,
-            linked_context=linked_context,
-            baseline_state=baseline_state,
+            inputs=inputs,
             session_id=session_id,
             conversation_id=conversation_id,
         )
+        assert isinstance(turn, ScopingTurnWire)
         if self.options is not None:
             turn.plan_draft.your_options = [YourOptionWire(text=t) for t in self.options]
         return turn
@@ -80,7 +85,7 @@ def _overrides(
     scoping: _OptionsScopingAgent, agent: StubAgentBackend
 ) -> dict[Callable[..., object], Callable[..., object]]:
     return {
-        get_scoping_task_agent_backend: lambda: scoping,
+        get_task_agent_backend: lambda: scoping,
         get_agent_backend: lambda: agent,
     }
 
@@ -328,11 +333,11 @@ def test_the_baseline_state_names_the_longlist_states(engine: Engine, tmp_path: 
     with api_client(tmp_path, _overrides(scoping, agent)) as (client, owner, _other):
         task_id = uuid.UUID(create_scoping_task(client, owner))
         with engine.connect() as conn:
-            assert _baseline_state(conn, task_id) == NO_BASELINE_STATE
+            assert read_baseline_state(conn, task_id) == NO_BASELINE_STATE
 
         scope_id, walk_id = _walk(engine, task_id, purpose="longlist", status="running")
         with engine.connect() as conn:
-            assert _baseline_state(conn, task_id) == "a longlist is being built"
+            assert read_baseline_state(conn, task_id) == "a longlist is being built"
 
         run_id = uuid.uuid4()
         with engine.begin() as conn:
@@ -368,4 +373,5 @@ def test_the_baseline_state_names_the_longlist_states(engine: Engine, tmp_path: 
                 )
             )
         with engine.connect() as conn:
-            assert _baseline_state(conn, task_id) == "a longlist exists, built from plan version 2"
+            line = read_baseline_state(conn, task_id)
+        assert line == "a longlist exists, built from plan version 2"
