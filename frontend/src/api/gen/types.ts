@@ -2297,47 +2297,10 @@ export interface components {
          *     Every count is of documents, DOI-collapsed. Display only; never a verdict.
          *
          *     Args:
-         *         documents: Its documents.
-         *         by_evidence_type: Documents per evidence type; "Unknown" and
-         *             non-evidence documents are their own keys, "not rated" when unclassified.
-         *         by_tier: Documents per quality tier label, "not rated" when unappraised.
-         *         flagged_not_stated: Documents that cover the intervention without
-         *             stating the feature that defines this option.
-         *         inherited_labels: Documents whose type and tier were read from a
-         *             linked task.
-         *         abstract_only: Documents read from an abstract only.
          *         outcome_counts: The documents that evaluate the option, by plan
          *             outcome (task 046, R42; amendment 4, R79).
          */
         EvidenceProfileOut: {
-            /**
-             * Abstract Only
-             * @default 0
-             */
-            abstract_only: number;
-            /** By Evidence Type */
-            by_evidence_type?: {
-                [key: string]: number;
-            };
-            /** By Tier */
-            by_tier?: {
-                [key: string]: number;
-            };
-            /**
-             * Documents
-             * @default 0
-             */
-            documents: number;
-            /**
-             * Flagged Not Stated
-             * @default 0
-             */
-            flagged_not_stated: number;
-            /**
-             * Inherited Labels
-             * @default 0
-             */
-            inherited_labels: number;
             outcome_counts?: components["schemas"]["OutcomeCountsOut"];
         };
         /**
@@ -2863,9 +2826,8 @@ export interface components {
          * LonglistCountsOut
          * @description The list view's header counts.
          *
-         *     ``options``, ``included``, ``excluded`` and ``no_in_scope`` are read from
-         *     the option rows as they stand (a user exclusion counts at once);
-         *     ``themes``, ``unclustered`` and ``not_an_option`` are the longlist run's.
+         *     Read from the option rows as they stand (a user exclusion counts at
+         *     once); ``themes`` is the longlist run's.
          *
          *     Args:
          *         options: Options on the longlist.
@@ -2873,17 +2835,7 @@ export interface components {
          *         included: Options included.
          *         excluded: Options excluded.
          *         no_in_scope: Included options with no in-scope evidence.
-         *         unclustered: Records assigned to no option.
-         *         not_an_option: Records judged not to describe an actionable option.
          *         none_fits: Options no lever type fits.
-         *         title_only: Records the pool held with a title only (task 046).
-         *         thinned_mentioned: Records dropped for stating no design feature and
-         *             no outcome (`mentioned_without_features_or_outcome`, task 046).
-         *         thinned_collapsed: Records collapsed onto one per document for
-         *             sharing a folded intervention name (`same_name_in_document`,
-         *             task 046).
-         *         thinned_capped: Records dropped over the per-document cap
-         *             (`over_document_cap`, task 046).
          */
         LonglistCountsOut: {
             /** Excluded */
@@ -2894,34 +2846,10 @@ export interface components {
             no_in_scope: number;
             /** None Fits */
             none_fits: number;
-            /** Not An Option */
-            not_an_option: number;
             /** Options */
             options: number;
             /** Themes */
             themes: number;
-            /**
-             * Thinned Capped
-             * @default 0
-             */
-            thinned_capped: number;
-            /**
-             * Thinned Collapsed
-             * @default 0
-             */
-            thinned_collapsed: number;
-            /**
-             * Thinned Mentioned
-             * @default 0
-             */
-            thinned_mentioned: number;
-            /**
-             * Title Only
-             * @default 0
-             */
-            title_only: number;
-            /** Unclustered */
-            unclustered: number;
         };
         /**
          * LonglistOut
@@ -2931,9 +2859,6 @@ export interface components {
          *         run_id: The longlist component run the longlist came from.
          *         capability_run_id: The longlist walk that run belonged to.
          *         plan_version: The plan version the longlist was built from.
-         *         built_from_plan_version: The same number, named for the plan
-         *             document's "built from plan version N".
-         *         current_plan_version: The task's current approved plan version.
          *         counts: The header counts.
          *         themes: The themes, in display order.
          *         unthemed_option_ids: Options in no theme (including options added
@@ -2950,13 +2875,9 @@ export interface components {
          *         depth_label: The depth label every longlist surface carries.
          */
         LonglistOut: {
-            /** Built From Plan Version */
-            built_from_plan_version: number;
             /** Capability Run Id */
             capability_run_id?: string | null;
             counts: components["schemas"]["LonglistCountsOut"];
-            /** Current Plan Version */
-            current_plan_version?: number | null;
             /**
              * Depth Label
              * @default scoping pass
@@ -3121,12 +3042,8 @@ export interface components {
          *         role: What the document does with the intervention.
          *         evidence_type: Its evidence type, when classified.
          *         tier: Its quality tier label, when appraised.
-         *         design_feature_not_stated: It covers the intervention without stating
-         *             the feature that defines this option.
          *         year: Its publication year, when the metadata has one.
          *         place: Where it was studied: its where-tried top level.
-         *         source_task_id: The linked task the document or its labels came from,
-         *             when inherited.
          *         programme_name: The programme name of its first member record under
          *             the option (by role order); `null` when none is given or the
          *             document is a linked finding (task 046, amendment 4, R81).
@@ -3140,11 +3057,6 @@ export interface components {
          *             a linked finding).
          */
         OptionDocumentOut: {
-            /**
-             * Design Feature Not Stated
-             * @default false
-             */
-            design_feature_not_stated: boolean;
             /** Evidence Type */
             evidence_type?: string | null;
             /** Measured */
@@ -3165,8 +3077,6 @@ export interface components {
              * @enum {string}
              */
             role: "evaluated" | "described" | "recommended" | "mentioned";
-            /** Source Task Id */
-            source_task_id?: string | null;
             /** Task Source Snapshot Id */
             task_source_snapshot_id?: string | null;
             /** Tier */
@@ -3221,11 +3131,6 @@ export interface components {
          *             place" last (task 046, amendment 4, R80).
          */
         OptionOut: {
-            /**
-             * Abstract Only
-             * @default false
-             */
-            abstract_only: boolean;
             /** Also Found As */
             also_found_as?: string[];
             /** Ambition */
@@ -3240,8 +3145,6 @@ export interface components {
             design: components["schemas"]["OptionDesignOut"];
             /** Design Features */
             design_features?: string[];
-            /** Design Version */
-            design_version: number;
             /**
              * Document Count
              * @default 0
@@ -3263,11 +3166,6 @@ export interface components {
             /** Guesses */
             guesses?: components["schemas"]["GuessOut"][];
             in_scope?: components["schemas"]["InScopeOut"] | null;
-            /**
-             * Is Entrant With No Documents
-             * @default false
-             */
-            is_entrant_with_no_documents: boolean;
             /** Judgements */
             judgements?: components["schemas"]["JudgementOut"][];
             /** Lever None Fits Reason */
@@ -3312,8 +3210,6 @@ export interface components {
             profile?: components["schemas"]["OptionProfileOut"] | null;
             /** Relations */
             relations?: components["schemas"]["RelationOut"][];
-            /** Restriction Text */
-            restriction_text?: string | null;
             /** Run Id */
             run_id?: string | null;
             /**
@@ -3323,8 +3219,6 @@ export interface components {
             search_pending: boolean;
             /** Secondary Lever Types */
             secondary_lever_types?: string[];
-            /** Settings */
-            settings?: string[];
             /**
              * State
              * @enum {string}
@@ -3439,8 +3333,6 @@ export interface components {
          *         exclusion: Why it is excluded; `null` when included.
          *         no_in_scope_evidence: Included, but none of its documents passes the
          *             plan's evidence restriction.
-         *         restriction_text: The restriction none of its documents passes, when
-         *             `no_in_scope_evidence`.
          *         primary_lever_type: The primary lever type; `null` when none fits or
          *             the option is not typed yet.
          *         lever_none_fits_reason: Why no lever type fits.
@@ -3454,15 +3346,9 @@ export interface components {
          *         authority: Who can act on it (task 046, R43); `null` when none was
          *             recorded.
          *         taxonomy_version: The lever-type list version it was typed under.
-         *         design_version: The specified design's version.
          *         document_count: Its documents (DOI-collapsed).
          *         evaluated_count: Documents that evaluate it.
-         *         settings: The option's delivery setting, from its profile (R41);
-         *             empty when it has none.
          *         relations: Its relations to other options.
-         *         abstract_only: Every one of its documents was read from an abstract only.
-         *         is_entrant_with_no_documents: Suggested, drawn from the Evidence
-         *             search or added by the user, and no document has joined it.
          *         search_pending: An option added since the build whose own option
          *             search is still running or paused; its counts read zero until it ends.
          *         from_section: The Evidence search report section a *from your
@@ -3482,11 +3368,6 @@ export interface components {
          *             from (R76).
          */
         OptionSummaryOut: {
-            /**
-             * Abstract Only
-             * @default false
-             */
-            abstract_only: boolean;
             /** Also Found As */
             also_found_as?: string[];
             /** Ambition */
@@ -3496,8 +3377,6 @@ export interface components {
             authority?: components["schemas"]["AuthorityOut"] | null;
             /** Description */
             description: string;
-            /** Design Version */
-            design_version: number;
             /**
              * Document Count
              * @default 0
@@ -3513,11 +3392,6 @@ export interface components {
             exclusion?: components["schemas"]["ExclusionOut"] | null;
             /** From Section */
             from_section?: string | null;
-            /**
-             * Is Entrant With No Documents
-             * @default false
-             */
-            is_entrant_with_no_documents: boolean;
             /** Lever None Fits Reason */
             lever_none_fits_reason?: string | null;
             /** Lever Reason */
@@ -3556,8 +3430,6 @@ export interface components {
             profile?: components["schemas"]["OptionProfileOut"] | null;
             /** Relations */
             relations?: components["schemas"]["RelationOut"][];
-            /** Restriction Text */
-            restriction_text?: string | null;
             /**
              * Search Pending
              * @default false
@@ -3565,8 +3437,6 @@ export interface components {
             search_pending: boolean;
             /** Secondary Lever Types */
             secondary_lever_types?: string[];
-            /** Settings */
-            settings?: string[];
             /**
              * State
              * @enum {string}
@@ -5124,10 +4994,8 @@ export interface components {
          *     Args:
          *         capability: The kind of work this task does. Every pre-044 row reads
          *             `evidence_search`.
-         *         from_task_ids: The tasks this one starts from, oldest link first —
-         *             the source ids of `links`, for callers that need nothing else.
-         *         links: The same Links in full, including each source's name and
-         *             whether it is currently flagged.
+         *         links: The tasks this one starts from, oldest link first, with each
+         *             source's name and whether it is currently flagged.
          *         task_id: The task's identity.
          *         name: Current display name.
          *         question: Current evidence question, or `None` if not yet set.
@@ -5191,8 +5059,6 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
-            /** From Task Ids */
-            from_task_ids?: string[];
             /**
              * Has Longlist
              * @default false

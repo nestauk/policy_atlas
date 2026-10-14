@@ -94,7 +94,7 @@ def test_a_scoping_task_is_created_with_its_capability_project_and_link(
         body = created.json()
         assert body["capability"] == "options_scoping"
         assert body["project_ids"] == [str(project_id)]
-        assert body["from_task_ids"] == [source_id]
+        assert "from_task_ids" not in body
         assert body["links"] == [
             {
                 "link_id": body["links"][0]["link_id"],
@@ -445,7 +445,7 @@ def test_the_tasks_listing_carries_the_capability_and_the_links(
         assert rows["Listed source"]["capability"] == "evidence_search"
         assert rows["Listed source"]["links"] == []
         assert rows["Listed scoping"]["capability"] == "options_scoping"
-        assert rows["Listed scoping"]["from_task_ids"] == [source_id]
+        assert [link["source_task_id"] for link in rows["Listed scoping"]["links"]] == [source_id]
 
 
 def test_the_default_create_is_still_an_evidence_search_with_nothing_attached(
@@ -462,5 +462,4 @@ def test_the_default_create_is_still_an_evidence_search_with_nothing_attached(
         body = created.json()
         assert body["capability"] == "evidence_search"
         assert body["project_ids"] == []
-        assert body["from_task_ids"] == []
         assert body["links"] == []

@@ -3225,12 +3225,6 @@ def _count(value: object) -> int:
     return value if isinstance(value, int) and not isinstance(value, bool) else 0
 
 
-def _ranked(counts: object) -> dict[str, int]:
-    """A coverage counter, most frequent first (JSONB does not keep key order)."""
-    items = [(str(key), _count(value)) for key, value in _as_mapping(counts).items()]
-    return dict(sorted(items, key=lambda item: (-item[1], item[0])))
-
-
 def _evaluated_countries_out(raw: object) -> list[EvaluatedCountryOut]:
     """Coverage's ``evaluated_countries``, read defensively (an older stored record has none)."""
     out: list[EvaluatedCountryOut] = []
@@ -3498,9 +3492,6 @@ def _option_summary_fields(
     lever_reason: str | None = None,
     outcomes_total: int = 0,
 ) -> dict[str, Any]:
-    documents = _count(coverage.get("documents"))
-    in_scope = _in_scope_out(record)
-    profile = _profile_out(profile_entry, row.option_id)
     return {
         "option_id": row.option_id,
         "name": row.name,
@@ -3510,25 +3501,18 @@ def _option_summary_fields(
         "state": row.state,
         "exclusion": _exclusion_out(row),
         "no_in_scope_evidence": bool(row.no_in_scope_evidence),
-        "restriction_text": (
-            in_scope.restriction if row.no_in_scope_evidence and in_scope is not None else None
-        ),
         "primary_lever_type": row.primary_lever_type,
         "lever_none_fits_reason": row.lever_none_fits_reason,
         "lever_reason": lever_reason,
         "secondary_lever_types": _string_list(row.secondary_lever_types),
         "ambition": row.ambition if row.ambition in _PROFILE_MARKS else None,
         "ambition_reason": row.ambition_reason,
-        "profile": profile,
+        "profile": _profile_out(profile_entry, row.option_id),
         "authority": _authority_out(record),
         "taxonomy_version": row.taxonomy_version,
-        "design_version": int(row.design_version),
-        "document_count": documents,
+        "document_count": _count(coverage.get("documents")),
         "evaluated_count": _count(_as_mapping(coverage.get("role")).get("evaluated")),
-        "settings": list(profile.settings) if profile is not None else [],
         "relations": relations,
-        "abstract_only": documents > 0 and _count(coverage.get("abstract_only")) == documents,
-        "is_entrant_with_no_documents": row.origin != "clustered" and documents == 0,
         "search_pending": search_pending,
         "from_section": from_section,
         "also_found_as": _found_as(also_found_as, coverage.get("folded")),
@@ -3855,13 +3839,7 @@ def _search_documents(
                     role=cast(Any, unit.role),
                     evidence_type=evidence_type,
                     tier=tier,
-                    design_feature_not_stated=False,
                     year=metadata_year(metadata),
-                    source_task_id=(
-                        label.source_task_id
-                        if label is not None and label.provenance == "inherited"
-                        else None
-                    ),
                 ),
                 label.quality_score if label is not None else None,
                 (unit.study_country, unit.study_geography),
@@ -3922,7 +3900,6 @@ def longlist_out(conn: Connection, task_id: uuid.UUID) -> LonglistOut | None:
     by_id = {row.option_id: row for row in rows}
     relations = _option_relations(conn, task_id, {row.option_id: row.name for row in rows})
     built_from = _scoping_plan_version(conn, task_id, int(result.plan_version))
-    current = latest_approved_plan_row(conn, task_id)
 
     themes: list[LonglistThemeOut] = []
     themed: list[uuid.UUID] = []
@@ -3992,8 +3969,6 @@ def longlist_out(conn: Connection, task_id: uuid.UUID) -> LonglistOut | None:
         )
         for oid in [*themed, *unthemed]
     ]
-    stored = _as_mapping(result.counts)
-    thinning = _as_mapping(_as_mapping(result.provenance).get("thinning"))
     counts = LonglistCountsOut(
         options=len(rows),
         themes=len(themes),
@@ -4002,27 +3977,18 @@ def longlist_out(conn: Connection, task_id: uuid.UUID) -> LonglistOut | None:
         no_in_scope=sum(
             1 for row in rows if row.state == "included" and row.no_in_scope_evidence
         ),
-        unclustered=_count(stored.get("unclustered")),
-        not_an_option=_count(stored.get("not_an_option")),
         none_fits=sum(
             1
             for row in rows
             if row.primary_lever_type is None
             and row.lever_none_fits_reason is not None
         ),
-        title_only=_count(stored.get("title_only")),
-        thinned_mentioned=_count(thinning.get("mentioned_without_features_or_outcome")),
-        thinned_collapsed=_count(thinning.get("same_name_in_document")),
-        thinned_capped=_count(thinning.get("over_document_cap")),
     )
     taxonomy = _as_mapping(result.provenance).get("taxonomy_version")
-    plan_version = int(result.plan_version)
     return LonglistOut(
         run_id=result.run_id,
         capability_run_id=_walk_of_run(conn, task_id, result.run_id),
-        plan_version=plan_version,
-        built_from_plan_version=plan_version,
-        current_plan_version=int(current["version"]) if current is not None else None,
+        plan_version=int(result.plan_version),
         counts=counts,
         themes=themes,
         unthemed_option_ids=unthemed,
@@ -4092,23 +4058,8 @@ def _guesses_out(record: Mapping[str, Any]) -> list[GuessOut]:
     return out
 
 
-def _tier_labels(tiers: object) -> dict[str, int]:
-    """Coverage tiers ("1".."5", "not rated") as the appraisal's labels."""
-    out: dict[str, int] = {}
-    for key, value in _as_mapping(tiers).items():
-        label = SCORE_LABELS.get(int(key), str(key)) if str(key).isdigit() else str(key)
-        out[label] = out.get(label, 0) + _count(value)
-    return dict(sorted(out.items(), key=lambda item: (-item[1], item[0])))
-
-
 def _evidence_profile(coverage: Mapping[str, Any]) -> EvidenceProfileOut:
     return EvidenceProfileOut(
-        documents=_count(coverage.get("documents")),
-        by_evidence_type=_ranked(coverage.get("evidence_type")),
-        by_tier=_tier_labels(coverage.get("tier")),
-        flagged_not_stated=_count(coverage.get("flagged_documents")),
-        inherited_labels=_count(coverage.get("inherited_labels")),
-        abstract_only=_count(coverage.get("abstract_only")),
         outcome_counts=_outcome_counts_out(coverage.get("outcome_counts")),
     )
 
@@ -4270,11 +4221,6 @@ def _option_documents(
                 continue
             tss_id = member.task_source_snapshot_id
             label = labels.get(tss_id)
-            source_task_id = (
-                label.source_task_id
-                if label is not None and label.provenance == "inherited"
-                else None
-            )
             role, geography = record.role, record.study_geography
             country: str | None = record.study_country
             metadata, locator = _as_mapping(document.metadata), document.source_locator
@@ -4297,7 +4243,6 @@ def _option_documents(
                 continue
             tss_id = own_by_snapshot.get(finding.source_snapshot_id)
             label = labels.get(tss_id) if tss_id is not None else None
-            source_task_id = member.unit_task_id
             role, geography = _LINKED_FINDING_ROLE[member.unit_kind], finding.study_geography
             country = None  # a linked finding carries no study_country
             metadata, locator = _as_mapping(finding.metadata), finding.source_locator
@@ -4314,9 +4259,7 @@ def _option_documents(
                     role=cast(Any, role),
                     evidence_type=evidence_type,
                     tier=tier,
-                    design_feature_not_stated=bool(member.design_feature_not_stated),
                     year=metadata_year(metadata),
-                    source_task_id=source_task_id,
                 ),
                 label.quality_score if label is not None else None,
                 (country, geography),

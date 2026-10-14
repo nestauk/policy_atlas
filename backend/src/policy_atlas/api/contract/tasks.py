@@ -231,10 +231,8 @@ class TaskOut(BaseModel):
     Args:
         capability: The kind of work this task does. Every pre-044 row reads
             `evidence_search`.
-        from_task_ids: The tasks this one starts from, oldest link first —
-            the source ids of `links`, for callers that need nothing else.
-        links: The same Links in full, including each source's name and
-            whether it is currently flagged.
+        links: The tasks this one starts from, oldest link first, with each
+            source's name and whether it is currently flagged.
         task_id: The task's identity.
         name: Current display name.
         question: Current evidence question, or `None` if not yet set.
@@ -297,5 +295,4 @@ class TaskOut(BaseModel):
     is_public: bool
     access: Literal["full", "public"]
     capability: Capability = "evidence_search"
-    from_task_ids: list[uuid.UUID] = Field(default_factory=list)
     links: list[TaskLinkOut] = Field(default_factory=list)

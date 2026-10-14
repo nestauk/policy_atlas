@@ -446,6 +446,5 @@ def task_out(
         is_public=row["is_public"],
         access=access,
         capability=row["capability"],
-        from_task_ids=[link.source_task_id for link in links],
         links=links,
     )

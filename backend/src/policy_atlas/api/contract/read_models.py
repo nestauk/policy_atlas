@@ -742,9 +742,8 @@ OptionRelationKind = Literal["part_of", "has_part"]
 class LonglistCountsOut(BaseModel):
     """The list view's header counts.
 
-    ``options``, ``included``, ``excluded`` and ``no_in_scope`` are read from
-    the option rows as they stand (a user exclusion counts at once);
-    ``themes``, ``unclustered`` and ``not_an_option`` are the longlist run's.
+    Read from the option rows as they stand (a user exclusion counts at
+    once); ``themes`` is the longlist run's.
 
     Args:
         options: Options on the longlist.
@@ -752,17 +751,7 @@ class LonglistCountsOut(BaseModel):
         included: Options included.
         excluded: Options excluded.
         no_in_scope: Included options with no in-scope evidence.
-        unclustered: Records assigned to no option.
-        not_an_option: Records judged not to describe an actionable option.
         none_fits: Options no lever type fits.
-        title_only: Records the pool held with a title only (task 046).
-        thinned_mentioned: Records dropped for stating no design feature and
-            no outcome (`mentioned_without_features_or_outcome`, task 046).
-        thinned_collapsed: Records collapsed onto one per document for
-            sharing a folded intervention name (`same_name_in_document`,
-            task 046).
-        thinned_capped: Records dropped over the per-document cap
-            (`over_document_cap`, task 046).
     """
 
     options: int
@@ -770,13 +759,7 @@ class LonglistCountsOut(BaseModel):
     included: int
     excluded: int
     no_in_scope: int
-    unclustered: int
-    not_an_option: int
     none_fits: int
-    title_only: int = 0
-    thinned_mentioned: int = 0
-    thinned_collapsed: int = 0
-    thinned_capped: int = 0
 
 
 class LonglistThemeOut(BaseModel):
@@ -939,8 +922,6 @@ class OptionSummaryOut(BaseModel):
         exclusion: Why it is excluded; `null` when included.
         no_in_scope_evidence: Included, but none of its documents passes the
             plan's evidence restriction.
-        restriction_text: The restriction none of its documents passes, when
-            `no_in_scope_evidence`.
         primary_lever_type: The primary lever type; `null` when none fits or
             the option is not typed yet.
         lever_none_fits_reason: Why no lever type fits.
@@ -954,15 +935,9 @@ class OptionSummaryOut(BaseModel):
         authority: Who can act on it (task 046, R43); `null` when none was
             recorded.
         taxonomy_version: The lever-type list version it was typed under.
-        design_version: The specified design's version.
         document_count: Its documents (DOI-collapsed).
         evaluated_count: Documents that evaluate it.
-        settings: The option's delivery setting, from its profile (R41);
-            empty when it has none.
         relations: Its relations to other options.
-        abstract_only: Every one of its documents was read from an abstract only.
-        is_entrant_with_no_documents: Suggested, drawn from the Evidence
-            search or added by the user, and no document has joined it.
         search_pending: An option added since the build whose own option
             search is still running or paused; its counts read zero until it ends.
         from_section: The Evidence search report section a *from your
@@ -990,7 +965,6 @@ class OptionSummaryOut(BaseModel):
     state: OptionState
     exclusion: ExclusionOut | None = None
     no_in_scope_evidence: bool = False
-    restriction_text: str | None = None
     primary_lever_type: str | None = None
     lever_none_fits_reason: str | None = None
     lever_reason: str | None = None
@@ -1000,13 +974,9 @@ class OptionSummaryOut(BaseModel):
     profile: OptionProfileOut | None = None
     authority: AuthorityOut | None = None
     taxonomy_version: str | None = None
-    design_version: int
     document_count: int = 0
     evaluated_count: int = 0
-    settings: list[str] = Field(default_factory=list)
     relations: list[RelationOut] = Field(default_factory=list)
-    abstract_only: bool = False
-    is_entrant_with_no_documents: bool = False
     search_pending: bool = False
     from_section: str | None = None
     also_found_as: list[str] = Field(default_factory=list)
@@ -1034,9 +1004,6 @@ class LonglistOut(BaseModel):
         run_id: The longlist component run the longlist came from.
         capability_run_id: The longlist walk that run belonged to.
         plan_version: The plan version the longlist was built from.
-        built_from_plan_version: The same number, named for the plan
-            document's "built from plan version N".
-        current_plan_version: The task's current approved plan version.
         counts: The header counts.
         themes: The themes, in display order.
         unthemed_option_ids: Options in no theme (including options added
@@ -1056,8 +1023,6 @@ class LonglistOut(BaseModel):
     run_id: uuid.UUID
     capability_run_id: uuid.UUID | None = None
     plan_version: int
-    built_from_plan_version: int
-    current_plan_version: int | None = None
     counts: LonglistCountsOut
     themes: list[LonglistThemeOut] = Field(default_factory=list)
     unthemed_option_ids: list[uuid.UUID] = Field(default_factory=list)
@@ -1077,25 +1042,10 @@ class EvidenceProfileOut(BaseModel):
     Every count is of documents, DOI-collapsed. Display only; never a verdict.
 
     Args:
-        documents: Its documents.
-        by_evidence_type: Documents per evidence type; "Unknown" and
-            non-evidence documents are their own keys, "not rated" when unclassified.
-        by_tier: Documents per quality tier label, "not rated" when unappraised.
-        flagged_not_stated: Documents that cover the intervention without
-            stating the feature that defines this option.
-        inherited_labels: Documents whose type and tier were read from a
-            linked task.
-        abstract_only: Documents read from an abstract only.
         outcome_counts: The documents that evaluate the option, by plan
             outcome (task 046, R42; amendment 4, R79).
     """
 
-    documents: int = 0
-    by_evidence_type: dict[str, int] = Field(default_factory=dict)
-    by_tier: dict[str, int] = Field(default_factory=dict)
-    flagged_not_stated: int = 0
-    inherited_labels: int = 0
-    abstract_only: int = 0
     outcome_counts: OutcomeCountsOut = Field(default_factory=OutcomeCountsOut)
 
 
@@ -1155,12 +1105,8 @@ class OptionDocumentOut(BaseModel):
         role: What the document does with the intervention.
         evidence_type: Its evidence type, when classified.
         tier: Its quality tier label, when appraised.
-        design_feature_not_stated: It covers the intervention without stating
-            the feature that defines this option.
         year: Its publication year, when the metadata has one.
         place: Where it was studied: its where-tried top level.
-        source_task_id: The linked task the document or its labels came from,
-            when inherited.
         programme_name: The programme name of its first member record under
             the option (by role order); `null` when none is given or the
             document is a linked finding (task 046, amendment 4, R81).
@@ -1179,10 +1125,8 @@ class OptionDocumentOut(BaseModel):
     role: OptionDocumentRole
     evidence_type: str | None = None
     tier: str | None = None
-    design_feature_not_stated: bool = False
     year: int | None = None
     place: str | None = None
-    source_task_id: uuid.UUID | None = None
     programme_name: str | None = None
     tried_on_kind: str | None = None
     measured: str | None = None

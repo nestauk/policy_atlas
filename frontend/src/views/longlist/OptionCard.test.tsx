@@ -313,8 +313,6 @@ describe("OptionCard", () => {
     tried_on_kind: null,
     measured: null,
     records_count: 1,
-    design_feature_not_stated: false,
-    source_task_id: null,
     ...extra,
   });
   const evidenceOf = (id: string) => mockLonglistOptionCards[id].evidence;
@@ -526,7 +524,6 @@ describe("OptionCard", () => {
       documents: [
         doc(1, "mentioned", {
           task_source_snapshot_id: null,
-          source_task_id: "linked",
           records_count: 0,
           programme_name: "Ignored",
           tried_on_kind: "Ignored kind",
