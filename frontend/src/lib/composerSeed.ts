@@ -35,6 +35,5 @@ export function useComposerSeed(apply: (text: string) => void): void {
  * turn, seeded here rather than built as a second typed-field editor).
  */
 export function seedComposer(text: string): void {
-  if (typeof window === "undefined") return;
   window.dispatchEvent(new CustomEvent<string>(SEED_EVENT, { detail: text }));
 }

@@ -869,30 +869,6 @@ export const mockBaselineGateCheckIn: components["schemas"]["CheckInOut"] = {
   sequence: 44,
 };
 
-/** The scoping task's own seed transcript: the one planning turn that made
- *  the ready scoping plan. The answer and decision turns are not seeded —
- *  the mock mints them from real requests at the gate (a question posted
- *  while paused comes back an `answer` turn; the card's decision appends a
- *  `decision` turn), so mock mode shows the projection the way the backend
- *  produces it rather than as pre-baked history. */
-export function seedScopingTaskAgentTurns(): components["schemas"]["TaskAgentTranscriptTurnOut"][] {
-  return [
-    {
-      client_turn_id: MOCK_SCOPING_TURN_IDS.plan,
-      turn_index: 1,
-      user_message: "How can we reduce the number of young people not in education, employment or training?",
-      reply: "I've drafted a scoping plan. Review it, then build the baseline.",
-      suggestions: [],
-      part: null,
-      capability: "options_scoping",
-      kind: "reply",
-      status: "completed",
-      created_at: "2026-07-21T09:10:00Z",
-      completed_at: "2026-07-21T09:10:06Z",
-    },
-  ];
-}
-
 /** A grounded answer to a question asked at the gate: one claim, one
  *  citation, rendered by the chat's own citation renderer. */
 export function mockScopingAnswerTurn(

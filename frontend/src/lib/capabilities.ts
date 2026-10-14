@@ -38,16 +38,8 @@ const LABEL_BY_KEY = new Map<string, string>(
   CAPABILITIES.map((capability) => [capability.key, capability.name]),
 );
 
-/** The keys a new task can actually be created with (task 044). */
-export const SELECTABLE_CAPABILITY_KEYS = CAPABILITIES.filter(
-  // The predicate keeps the key union narrow: entries that are never
-  // available drop out of the type as well as the array.
-  (capability): capability is Exclude<typeof capability, { available: false }> =>
-    capability.available,
-).map((capability) => capability.key);
-
-/** One of the keys the New task screen offers. */
-export type SelectableCapabilityKey = (typeof SELECTABLE_CAPABILITY_KEYS)[number];
+/** One of the keys the New task screen can offer (task 044). */
+export type SelectableCapabilityKey = "evidence_search" | "options_scoping";
 
 /**
  * Whether a URL parameter names a capability a new task can be created with.
@@ -61,7 +53,7 @@ export type SelectableCapabilityKey = (typeof SELECTABLE_CAPABILITY_KEYS)[number
 export function isSelectableCapability(
   key: string | null | undefined,
 ): key is SelectableCapabilityKey {
-  return key != null && (SELECTABLE_CAPABILITY_KEYS as readonly string[]).includes(key);
+  return CAPABILITIES.some((capability) => capability.key === key && capability.available);
 }
 
 /**

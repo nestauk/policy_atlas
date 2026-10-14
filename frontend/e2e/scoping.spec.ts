@@ -1,6 +1,30 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 
 import { mockProject, mockTask } from "../src/mock/fixtures";
+
+/** New task → Options scoping → the question → Prepare plan, landing on the
+ *  Agent tab. */
+async function openScopingTask(page: Page) {
+  await page.goto("/new");
+  await page.getByRole("button", { name: "Options scoping" }).click();
+  await page
+    .getByLabel("Your question")
+    .fill("How can we reduce the number of young people not in education, employment or training?");
+  await page.getByRole("button", { name: "Prepare plan" }).click();
+  await expect(page.getByRole("region", { name: "Task Agent conversation" })).toBeVisible();
+}
+
+/** A new scoping task with its baseline walk started from the plan. */
+async function startScopingWalk(page: Page) {
+  await openScopingTask(page);
+  await page.getByRole("button", { name: "Review the plan" }).click();
+  const plan = page.getByRole("dialog", { name: "Scoping plan" });
+  await plan.getByRole("button", { name: "Confirm and build baseline" }).click();
+  // A started walk closes the plan (WorkspaceView's onStarted). Task 045
+  // keeps the start area mounted while a walk runs, so the close is no
+  // longer lost to a race with the stream's first frame.
+  await expect(plan).toBeHidden();
+}
 
 /**
  * Options scoping's New task journey (task 044, phase 3.4): pick the
@@ -63,13 +87,7 @@ test.describe("mock options-scoping journey", () => {
    * the walk's ending.
    */
   test("the scoping task's Result shows the baseline, headed Baseline", async ({ page }) => {
-    await page.goto("/new");
-    await page.getByRole("button", { name: "Options scoping" }).click();
-    await page
-      .getByLabel("Your question")
-      .fill("How can we reduce the number of young people not in education, employment or training?");
-    await page.getByRole("button", { name: "Prepare plan" }).click();
-    await expect(page.getByRole("region", { name: "Task Agent conversation" })).toBeVisible();
+    await openScopingTask(page);
 
     await page.getByRole("link", { name: "Result" }).first().click();
 
@@ -94,24 +112,6 @@ test.describe("mock options-scoping journey", () => {
  * actions.
  */
 test.describe("mock options-scoping baseline gate", () => {
-  async function startScopingWalk(page: import("@playwright/test").Page) {
-    await page.goto("/new");
-    await page.getByRole("button", { name: "Options scoping" }).click();
-    await page
-      .getByLabel("Your question")
-      .fill("How can we reduce the number of young people not in education, employment or training?");
-    await page.getByRole("button", { name: "Prepare plan" }).click();
-    await expect(page.getByRole("region", { name: "Task Agent conversation" })).toBeVisible();
-
-    await page.getByRole("button", { name: "Review the plan" }).click();
-    const plan = page.getByRole("dialog", { name: "Scoping plan" });
-    await plan.getByRole("button", { name: "Confirm and build baseline" }).click();
-    // A started walk closes the plan (WorkspaceView's onStarted). Task 045
-    // keeps the start area mounted while a walk runs, so the close is no
-    // longer lost to a race with the stream's first frame.
-    await expect(plan).toBeHidden();
-  }
-
   test("the gate card sits in the thread and the composer takes a question about the baseline", async ({
     page,
   }) => {
@@ -163,30 +163,15 @@ test.describe("mock options-scoping baseline gate", () => {
  * Result opens on the longlist behind the Baseline · Longlist · Report switch.
  */
 test.describe("mock options-scoping longlist states (task 045)", () => {
-  async function buildLonglist(page: import("@playwright/test").Page) {
-    await page.goto("/new");
-    await page.getByRole("button", { name: "Options scoping" }).click();
-    await page
-      .getByLabel("Your question")
-      .fill("How can we reduce the number of young people not in education, employment or training?");
-    await page.getByRole("button", { name: "Prepare plan" }).click();
-    await expect(page.getByRole("region", { name: "Task Agent conversation" })).toBeVisible();
-
-    await page.getByRole("button", { name: "Review the plan" }).click();
-    const plan = page.getByRole("dialog", { name: "Scoping plan" });
-    await plan.getByRole("button", { name: "Confirm and build baseline" }).click();
-    // A started walk closes the plan (WorkspaceView's onStarted). Task 045
-    // keeps the start area mounted while a walk runs, so the close is no
-    // longer lost to a race with the stream's first frame.
-    await expect(plan).toBeHidden();
-
+  async function buildLonglist(page: Page) {
+    await startScopingWalk(page);
     const thread = page.getByRole("region", { name: "Task Agent conversation" });
     await thread.getByRole("button", { name: "Confirm plan and build longlist" }).click();
   }
 
   /** While a walk runs the plan opens from the run card's See plan; once
    *  it has finished, from Review the plan. */
-  async function openPlan(page: import("@playwright/test").Page) {
+  async function openPlan(page: Page) {
     await page.getByRole("button", { name: /^(Review the plan|See plan)$/ }).first().click();
   }
 

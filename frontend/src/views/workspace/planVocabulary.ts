@@ -342,22 +342,15 @@ export const PROFILE_LINE_LABELS: Record<string, string> = {
   transferability: "Transferability",
 };
 
-/** The kind word shown under a consideration. The other kinds show none:
- *  their "What happens" sentence says what they are. */
-export const CONSTRAINT_KIND_LABEL: Partial<Record<ScopingConstraint["kind"], string>> = {
-  consideration: "Consideration",
-};
-
 export const STATED_LIMIT_LABEL = "Stated limit";
 
-/** The small lines shown under a consideration's text: the kind word with
- *  the profile line's name, and "Stated limit" when hard. */
+/** The small lines shown under a consideration's text: "Consideration" with
+ *  the profile line's name, and "Stated limit" when hard. The other kinds
+ *  show none: their "What happens" sentence says what they are. */
 export function constraintKindLines(constraint: ScopingConstraint): string[] {
-  const kind = CONSTRAINT_KIND_LABEL[constraint.kind];
-  if (kind === undefined) return [];
-  if (constraint.kind !== "consideration") return [kind];
+  if (constraint.kind !== "consideration") return [];
   const line = constraint.aspect != null ? (PROFILE_LINE_LABELS[constraint.aspect] ?? constraint.aspect) : null;
-  const first = line != null ? `${kind} · ${line}` : kind;
+  const first = line != null ? `Consideration · ${line}` : "Consideration";
   return constraint.hard ? [first, STATED_LIMIT_LABEL] : [first];
 }
 

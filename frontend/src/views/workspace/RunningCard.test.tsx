@@ -12,7 +12,6 @@ import {
   elapsedSeconds,
   formatElapsed,
   resultsSignpost,
-  RUN_FINISHED_MESSAGE,
   runFinishedSignpost,
   walkKind,
   RUNNING_CARD_SHELL_CLASS,
@@ -181,7 +180,7 @@ describe("runningCard helpers", () => {
     expect(runFinishedSignpost(TASK_ID, "succeeded")).toEqual({
       href: `/tasks/${TASK_ID}/result`,
       label: "Result",
-      message: RUN_FINISHED_MESSAGE,
+      message: "Evidence search is finished. You can read the report in the Result tab.",
     });
     expect(runFinishedSignpost(TASK_ID, "running")).toBeNull();
   });
@@ -483,6 +482,8 @@ describe("walk kinds (task 045)", () => {
     expect(runFinishedSignpost(TASK_ID, "degraded", "longlist")?.message).toBe(
       "The longlist is built. Open it in the Result tab.",
     );
-    expect(runFinishedSignpost(TASK_ID, "succeeded")?.message).toBe(RUN_FINISHED_MESSAGE);
+    expect(runFinishedSignpost(TASK_ID, "succeeded")?.message).toBe(
+      "Evidence search is finished. You can read the report in the Result tab.",
+    );
   });
 });
