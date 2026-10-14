@@ -17,22 +17,11 @@ from policy_atlas.api.answer_core import (
     AnswerBackends,
     answer_over_scope,
 )
-
-# Re-exported where they used to live, for the chat contract tests that drive
-# citation resolution and its read-time labels directly. The definitions moved
-# to the answer core with the rest of the generation half (task 044).
-from policy_atlas.api.answer_core import (  # noqa: F401
-    _resolve_citation_sources as _resolve_citation_sources,
-)
-from policy_atlas.api.answer_core import (  # noqa: F401
-    apply_appraisal_labels as apply_appraisal_labels,
-)
 from policy_atlas.api.app import ApiCapacity, ApiConflict
 from policy_atlas.api.chat_scope import resolve_terminal_run_components
 from policy_atlas.api.routers._access import own_chat_leg
 from policy_atlas.core.embeddings import EmbeddingBackend
 from policy_atlas.core.schema import capability_run, chat_turn, conversation, task
-from policy_atlas.evidence_search.synthesis.synthesis_tools import build_section_tools
 from policy_atlas.runtime.chat_backend import ChatBackend
 from policy_atlas.runtime.chat_prompt import CHAT_MESSAGE_MAX
 
@@ -542,9 +531,6 @@ def run_chat_turn(
                     chat=chat_backend,
                     embedding=embedding_backend,
                     langfuse=langfuse_client,
-                    # Resolved from this module at call time, so the chat
-                    # route's tool set stays the one this module names.
-                    tools_builder=build_section_tools,
                 ),
                 trace_run_id=turn_id,
                 conversation_id=conversation_id,

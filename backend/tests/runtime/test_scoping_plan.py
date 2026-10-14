@@ -20,7 +20,6 @@ from policy_atlas.runtime.capability_registry import (
     OPTIONS_SCOPING,
     UnknownCapability,
     spec_for,
-    steer_points_for,
     validate_plan,
 )
 from policy_atlas.runtime.scoping_plan import (
@@ -28,7 +27,6 @@ from policy_atlas.runtime.scoping_plan import (
     BASELINE_TIME_BAND,
     CHECKED_AT_BY_KIND,
     PROFILE_LINE_KEYS,
-    SCOPING_STEER_POINTS,
     SCOPING_STEPS,
     CheckedAt,
     ConsiderationAspect,
@@ -444,11 +442,6 @@ def test_an_evidence_search_steer_point_is_not_a_scoping_one() -> None:
 # --- the registry seam ------------------------------------------------------
 
 
-def test_the_pinned_steer_points_match_the_registry() -> None:
-    """The plan model cannot import the registry (cycle), so pin by test."""
-    assert steer_points_for(OPTIONS_SCOPING) == SCOPING_STEER_POINTS
-
-
 def test_the_scoping_lattice_holds_only_the_gate() -> None:
     lattice = spec_for(OPTIONS_SCOPING).lattice
     assert set(lattice) == {BASELINE_CONFIRM}
@@ -459,7 +452,6 @@ def test_the_scoping_lattice_holds_only_the_gate() -> None:
 def test_the_gate_is_absent_from_the_evidence_search_lattice() -> None:
     """A2: a flat table would fire the scoping pause on an ES walk."""
     assert BASELINE_CONFIRM not in spec_for(EVIDENCE_SEARCH).lattice
-    assert BASELINE_CONFIRM not in steer_points_for(EVIDENCE_SEARCH)
 
 
 def test_an_evidence_search_plan_rejects_a_baseline_confirm_default() -> None:

@@ -15,6 +15,7 @@ import pytest
 from sqlalchemy import func, select, update
 from sqlalchemy.engine import Engine
 
+from policy_atlas.api import answer_core
 from policy_atlas.api.answer_core import AnswerBackends, answer_over_scope
 from policy_atlas.api.app import ApiConflict
 from policy_atlas.api.chat_scope import resolve_run_components
@@ -136,7 +137,9 @@ def _citing_tools(chunk_record_id: str) -> object:
     return _build
 
 
-def test_answers_over_a_paused_walk_without_writing_a_row(engine: Engine) -> None:
+def test_answers_over_a_paused_walk_without_writing_a_row(
+    engine: Engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """A paused walk's scope answers with resolved citations and no durable row."""
     task_id: uuid.UUID | None = None
     try:
@@ -145,6 +148,7 @@ def test_answers_over_a_paused_walk_without_writing_a_row(engine: Engine) -> Non
             engine, task_id=task_id, scope_id=scope_id
         )
         chunk_id, title = _first_seeded_chunk(engine, task_id)
+        monkeypatch.setattr(answer_core, "build_section_tools", _citing_tools(chunk_id))
 
         scope = resolve_run_components(
             engine, task_id, capability_run_id=capability_run_id
@@ -161,10 +165,7 @@ def test_answers_over_a_paused_walk_without_writing_a_row(engine: Engine) -> Non
             entry_artefact_id=None,
             window=[],
             question="What does the baseline say?",
-            backends=AnswerBackends(
-                chat=StubChatBackend(),
-                tools_builder=_citing_tools(chunk_id),  # type: ignore[arg-type]
-            ),
+            backends=AnswerBackends(chat=StubChatBackend()),
             trace_run_id=uuid.uuid4(),
             on_delta=deltas.append,
         )

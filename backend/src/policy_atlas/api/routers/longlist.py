@@ -35,17 +35,15 @@ from policy_atlas.api.deps import (
     get_runner_backends,
 )
 from policy_atlas.api.longlist_actions import (
-    LonglistActionRefused,
     OptionNotFound,
     add_option,
     admit_longlist_action,
     current_plan_row,
     exclude_option,
-    http_error,
     include_option,
     propose_design,
 )
-from policy_atlas.api.longlist_start import opened_run
+from policy_atlas.api.longlist_start import LonglistRefused, http_error, opened_run
 from policy_atlas.api.readmodels import repository
 from policy_atlas.api.routers._access import NOT_FOUND_DETAIL, accessible_task
 from policy_atlas.api.routers.read_models import _readable
@@ -124,7 +122,7 @@ def post_option(
         try:
             admit_longlist_action(conn, task_id=task_id)
             plan_row = current_plan_row(conn, task_id=task_id)
-        except LonglistActionRefused as exc:
+        except LonglistRefused as exc:
             raise http_error(exc) from None
     try:
         with tracing.trace_scope(user_id=user.user_id):
@@ -143,7 +141,7 @@ def post_option(
             backends=backends,
             user_id=user.user_id,
         )
-    except LonglistActionRefused as exc:
+    except LonglistRefused as exc:
         raise http_error(exc) from None
     return OptionAddedOut(
         option=_card(engine, task_id, added.option_id),
@@ -176,7 +174,7 @@ def post_exclude(
                 reason=payload.reason if payload is not None else None,
                 actor=user.user_id,
             )
-        except LonglistActionRefused as exc:
+        except LonglistRefused as exc:
             raise http_error(exc) from None
         except OptionNotFound:
             raise HTTPException(status_code=404, detail=NOT_FOUND_DETAIL) from None
@@ -202,7 +200,7 @@ def post_include(
                 actor=user.user_id,
                 reason=payload.reason if payload is not None else None,
             )
-        except LonglistActionRefused as exc:
+        except LonglistRefused as exc:
             raise http_error(exc) from None
         except OptionNotFound:
             raise HTTPException(status_code=404, detail=NOT_FOUND_DETAIL) from None

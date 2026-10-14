@@ -132,7 +132,7 @@ def test_stub_turn_completes_durably_and_replays(
     try:
         task_id, scope_id, conversation_id = _chat(engine)
         _walk(engine, task_id=task_id, scope_id=scope_id, status="succeeded")
-        monkeypatch.setattr(chat_turns, "build_section_tools", _citable_tools)
+        monkeypatch.setattr(answer_core, "build_section_tools", _citable_tools)
         backend = OutputCappedChatBackend()
         turn_id = uuid.uuid4()
         first = chat_turns.run_chat_turn(
@@ -284,7 +284,7 @@ def test_explicit_cancel_keeps_partial_prose_without_citations(
     try:
         task_id, scope_id, conversation_id = _chat(engine)
         _walk(engine, task_id=task_id, scope_id=scope_id, status="succeeded")
-        monkeypatch.setattr(chat_turns, "build_section_tools", _citable_tools)
+        monkeypatch.setattr(answer_core, "build_section_tools", _citable_tools)
         cancel = threading.Event()
         result = chat_turns.run_chat_turn(
             engine,
@@ -424,7 +424,7 @@ def test_failed_turn_retries_in_place(
     try:
         task_id, scope_id, conversation_id = _chat(engine)
         _walk(engine, task_id=task_id, scope_id=scope_id, status="succeeded")
-        monkeypatch.setattr(chat_turns, "build_section_tools", _citable_tools)
+        monkeypatch.setattr(answer_core, "build_section_tools", _citable_tools)
         backend = FailOnceChatBackend()
         turn_id = uuid.uuid4()
         message = "What does the evidence say?"
@@ -471,7 +471,7 @@ def test_retry_of_non_latest_failed_turn_is_stale(
     try:
         task_id, scope_id, conversation_id = _chat(engine)
         _walk(engine, task_id=task_id, scope_id=scope_id, status="succeeded")
-        monkeypatch.setattr(chat_turns, "build_section_tools", _citable_tools)
+        monkeypatch.setattr(answer_core, "build_section_tools", _citable_tools)
         turn_a, turn_b, turn_c = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
 
         chat_turns.run_chat_turn(
@@ -578,7 +578,7 @@ def test_title_set_from_first_question_only(
     try:
         task_id, scope_id, conversation_id = _chat(engine)
         _walk(engine, task_id=task_id, scope_id=scope_id, status="succeeded")
-        monkeypatch.setattr(chat_turns, "build_section_tools", _citable_tools)
+        monkeypatch.setattr(answer_core, "build_section_tools", _citable_tools)
         message = (
             "What does the evidence base say about the effectiveness of home "
             "visiting programmes for improving outcomes for families with young "
@@ -635,7 +635,7 @@ def test_cross_chat_concurrency_isolated(
                 .values(owner_user_id="cap-owner")
             )
         _walk(engine, task_id=task_id, scope_id=scope_id, status="succeeded")
-        monkeypatch.setattr(chat_turns, "build_section_tools", _citable_tools)
+        monkeypatch.setattr(answer_core, "build_section_tools", _citable_tools)
 
         conversation_one = _second_chat_in_same_task(engine, task_id)
         conversation_two = _second_chat_in_same_task(engine, task_id)
@@ -739,7 +739,7 @@ def test_message_over_cap_rejected(engine: Engine) -> None:
 
 def test_citation_sources_resolve_to_document_titles(engine: Engine) -> None:
     """Persisted citations carry the cited document's title and source id."""
-    from policy_atlas.api.chat_turns import _resolve_citation_sources
+    from policy_atlas.api.answer_core import _resolve_citation_sources
     from policy_atlas.core.schema import chunk as chunk_table
     from tests.helpers import delete_task_data, seed_source
 
@@ -798,7 +798,7 @@ def test_citation_sources_resolve_to_document_titles(engine: Engine) -> None:
 
 def test_citation_sources_are_scoped_to_the_calling_task(engine: Engine) -> None:
     """A snapshot shared by two tasks resolves to the calling task's own tss."""
-    from policy_atlas.api.chat_turns import _resolve_citation_sources
+    from policy_atlas.api.answer_core import _resolve_citation_sources
     from policy_atlas.core.schema import chunk as chunk_table
     from policy_atlas.core.schema import source_snapshot, task_source_snapshot
     from policy_atlas.core.schema import task as task_table
@@ -923,7 +923,7 @@ def _seed_citation_chunk(engine: Engine, *, content: str) -> tuple[uuid.UUID, uu
 
 def test_citation_quote_snaps_to_verbatim_source_on_near_miss(engine: Engine) -> None:
     """A near-miss chunk quote (curly quotes/case/whitespace) snaps to verbatim source text."""
-    from policy_atlas.api.chat_turns import _resolve_citation_sources
+    from policy_atlas.api.answer_core import _resolve_citation_sources
     from tests.helpers import delete_task_data
 
     raw_span = "The report found “Clear   Evidence”\nacross studies."
@@ -952,7 +952,7 @@ def test_citation_quote_snaps_to_verbatim_source_on_near_miss(engine: Engine) ->
 
 def test_citation_quote_exact_match_persists_unchanged_without_marker(engine: Engine) -> None:
     """An exact chunk quote persists verbatim, with no snap marker either way."""
-    from policy_atlas.api.chat_turns import _resolve_citation_sources
+    from policy_atlas.api.answer_core import _resolve_citation_sources
     from tests.helpers import delete_task_data
 
     content = "Before text. The exact quoted span. After text."
@@ -980,7 +980,7 @@ def test_citation_quote_exact_match_persists_unchanged_without_marker(engine: En
 
 def test_citation_quote_paraphrase_persists_untouched(engine: Engine) -> None:
     """A paraphrased chunk quote with no located span is left untouched, no marker."""
-    from policy_atlas.api.chat_turns import _resolve_citation_sources
+    from policy_atlas.api.answer_core import _resolve_citation_sources
     from tests.helpers import delete_task_data
 
     content = "The report found clear evidence across studies."
@@ -1008,7 +1008,7 @@ def test_citation_quote_paraphrase_persists_untouched(engine: Engine) -> None:
 
 def test_citation_quote_ambiguous_persists_untouched(engine: Engine) -> None:
     """A chunk quote with two normalised occurrences is left untouched, no marker."""
-    from policy_atlas.api.chat_turns import _resolve_citation_sources
+    from policy_atlas.api.answer_core import _resolve_citation_sources
     from tests.helpers import delete_task_data
 
     content = "The New York pilot launched first. A second NEW YORK rollout followed later."
@@ -1039,9 +1039,9 @@ def test_citation_appraisal_score_and_evidence_type_resolve(engine: Engine) -> N
 
     ``evidence_search.assess.appraise`` pins labels as read-time copy, never
     persisted — ``_resolve_citation_sources`` therefore persists the numeric
-    score; ``chat_turns.apply_appraisal_labels`` is what derives the label,
+    score; ``answer_core.apply_appraisal_labels`` is what derives the label,
     and only at read time (see the point-in-time test below)."""
-    from policy_atlas.api.chat_turns import _resolve_citation_sources
+    from policy_atlas.api.answer_core import _resolve_citation_sources
     from policy_atlas.core.schema import (
         EVIDENCE_TYPES,
         evidence_scope,
@@ -1112,7 +1112,7 @@ def test_citation_appraisal_score_and_evidence_type_resolve(engine: Engine) -> N
 
 def test_citation_missing_appraisal_leaves_fields_absent(engine: Engine) -> None:
     """A cited chunk with no appraisal/classification rows leaves those fields absent."""
-    from policy_atlas.api.chat_turns import _resolve_citation_sources
+    from policy_atlas.api.answer_core import _resolve_citation_sources
     from tests.helpers import delete_task_data
 
     task_id, chunk_id, _tss_id = _seed_citation_chunk(
@@ -1134,7 +1134,7 @@ def test_citation_missing_appraisal_leaves_fields_absent(engine: Engine) -> None
 
 def test_apply_appraisal_labels_maps_score_to_label() -> None:
     """The read-time helper maps a persisted score to its current label."""
-    from policy_atlas.api.chat_turns import apply_appraisal_labels
+    from policy_atlas.api.answer_core import apply_appraisal_labels
 
     citations = [{"n": 1, "id": "chunk-1", "kind": "chunk", "appraisal_score": 4}]
     labelled = apply_appraisal_labels(citations)
@@ -1147,7 +1147,7 @@ def test_apply_appraisal_labels_maps_score_to_label() -> None:
 
 def test_apply_appraisal_labels_absent_score_leaves_citation_untouched() -> None:
     """A citation carrying no score (id-only resolution failure) passes through."""
-    from policy_atlas.api.chat_turns import apply_appraisal_labels
+    from policy_atlas.api.answer_core import apply_appraisal_labels
 
     citations = [{"n": 1, "id": "chunk-1", "kind": "chunk"}]
     labelled = apply_appraisal_labels(citations)
@@ -1168,7 +1168,7 @@ def test_appraisal_label_is_point_in_time_not_rewritten_by_a_later_reappraisal(
     pinned here so a future change that re-resolves from the DB at read time
     would be caught.
     """
-    from policy_atlas.api.chat_turns import _resolve_citation_sources, apply_appraisal_labels
+    from policy_atlas.api.answer_core import _resolve_citation_sources, apply_appraisal_labels
     from policy_atlas.core.schema import (
         EVIDENCE_TYPES,
         evidence_scope,
@@ -1328,7 +1328,7 @@ def test_retry_same_client_turn_id_after_ttl_expiry_succeeds(
     try:
         task_id, scope_id, conversation_id = _chat(engine)
         _walk(engine, task_id=task_id, scope_id=scope_id, status="succeeded")
-        monkeypatch.setattr(chat_turns, "build_section_tools", _citable_tools)
+        monkeypatch.setattr(answer_core, "build_section_tools", _citable_tools)
         turn_id = uuid.uuid4()
         client_turn_id = uuid.uuid4()
         message = "Stale question"
@@ -1371,7 +1371,7 @@ def test_run_chat_turn_reenters_its_own_reservation(
     try:
         task_id, scope_id, conversation_id = _chat(engine)
         _walk(engine, task_id=task_id, scope_id=scope_id, status="succeeded")
-        monkeypatch.setattr(chat_turns, "build_section_tools", _citable_tools)
+        monkeypatch.setattr(answer_core, "build_section_tools", _citable_tools)
         client_turn_id = uuid.uuid4()
         message = "Route-reserved question"
         with engine.begin() as conn:
@@ -1408,7 +1408,7 @@ def test_durable_cancel_after_last_check_wins_at_terminal_commit(
     try:
         task_id, scope_id, conversation_id = _chat(engine)
         _walk(engine, task_id=task_id, scope_id=scope_id, status="succeeded")
-        monkeypatch.setattr(chat_turns, "build_section_tools", _citable_tools)
+        monkeypatch.setattr(answer_core, "build_section_tools", _citable_tools)
         # The floor now runs inside the shared answer core (task 044); the
         # seam this test drives moved with it, the behaviour it pins did not.
         real_floor = getattr(answer_core, "apply_citation_floor")  # noqa: B009
@@ -1448,7 +1448,7 @@ def test_chat_call_site_pins_tool_allowlist_into_the_tool_loop(
     try:
         task_id, scope_id, conversation_id = _chat(engine)
         _walk(engine, task_id=task_id, scope_id=scope_id, status="succeeded")
-        monkeypatch.setattr(chat_turns, "build_section_tools", _citable_tools)
+        monkeypatch.setattr(answer_core, "build_section_tools", _citable_tools)
         captured: dict[str, Any] = {}
         # The tool loop now runs inside the shared answer core (task 044); the
         # call site this test pins moved with it, the allowlist did not.

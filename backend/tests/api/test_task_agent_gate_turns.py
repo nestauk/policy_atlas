@@ -31,7 +31,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select, update
 from sqlalchemy.engine import Engine
 
-from policy_atlas.api import gate_turns
+from policy_atlas.api import answer_core, gate_turns
 from policy_atlas.api.continuation import answer_check_in
 from policy_atlas.api.deps import (
     get_agent_backend,
@@ -310,7 +310,7 @@ def test_a_question_at_the_gate_is_answered_from_the_baseline(
     try:
         task_id, walk_id, _check_in_id, _plan_id = _park_at_gate(engine)
         chunk_id, title = _first_seeded_chunk(engine, task_id)
-        monkeypatch.setattr(gate_turns, "build_section_tools", _citing_tools(chunk_id))
+        monkeypatch.setattr(answer_core, "build_section_tools", _citing_tools(chunk_id))
         with api_client(tmp_path, _overrides(agent=_sorts(_question()))) as (
             client,
             owner,
@@ -349,7 +349,7 @@ def test_the_answer_turn_reloads_from_the_transcript_as_an_answer(
     try:
         task_id, _walk_id, _check_in_id, _plan_id = _park_at_gate(engine)
         chunk_id, _title = _first_seeded_chunk(engine, task_id)
-        monkeypatch.setattr(gate_turns, "build_section_tools", _citing_tools(chunk_id))
+        monkeypatch.setattr(answer_core, "build_section_tools", _citing_tools(chunk_id))
         with api_client(tmp_path, _overrides(agent=_sorts(_question()))) as (
             client,
             owner,
@@ -383,7 +383,7 @@ def test_a_gate_answer_carries_the_appraisal_label_not_the_score(
     try:
         task_id, _walk_id, _check_in_id, _plan_id = _park_at_gate(engine)
         chunk_id, _title = _first_seeded_chunk(engine, task_id)
-        monkeypatch.setattr(gate_turns, "build_section_tools", _citing_tools(chunk_id))
+        monkeypatch.setattr(answer_core, "build_section_tools", _citing_tools(chunk_id))
         with api_client(tmp_path, _overrides(agent=_sorts(_question()))) as (
             client,
             owner,

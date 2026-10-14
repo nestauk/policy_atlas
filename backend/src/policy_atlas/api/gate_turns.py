@@ -32,7 +32,6 @@ from policy_atlas.api import continuation
 from policy_atlas.api.answer_core import AnswerBackends, AnswerPayload, answer_over_scope
 from policy_atlas.api.chat_scope import resolve_run_components
 from policy_atlas.core.embeddings import EmbeddingBackend
-from policy_atlas.evidence_search.synthesis.synthesis_tools import build_section_tools
 from policy_atlas.runtime.agent_backend import AgentBackend
 from policy_atlas.runtime.chat_backend import ChatBackend
 from policy_atlas.runtime.gate_sort_prompt import GateSortWire
@@ -266,9 +265,6 @@ def answer_at_gate(
             chat=chat_backend,
             embedding=embedding_backend,
             langfuse=langfuse_client,
-            # Resolved from this module at call time, as the chat route
-            # resolves its own tool set.
-            tools_builder=build_section_tools,
         ),
         trace_run_id=trace_run_id,
         # A Task Agent turn keeps the task's session, like every planning
@@ -302,9 +298,17 @@ class DecisionOutcome:
     follow_on: str | None = None
 
 
-def _collapsed(text: str) -> str:
-    """Return one text with its whitespace collapsed, for comparison only."""
-    return " ".join(text.split()).casefold()
+def said_verbatim(quote: str, utterance: str) -> bool:
+    """Whether a quote the model carried appears in the user's own words.
+
+    Whitespace is collapsed and case ignored: the sort may quote across a line
+    break or lowercase a sentence start, and neither changes the words.
+    """
+
+    def collapsed(text: str) -> str:
+        return " ".join(text.split()).casefold()
+
+    return collapsed(quote) in collapsed(utterance)
 
 
 def verbatim_carried_text(
@@ -336,7 +340,7 @@ def verbatim_carried_text(
     """
     if carried_text is None or not carried_text.strip():
         return None
-    if _collapsed(carried_text) in _collapsed(utterance):
+    if said_verbatim(carried_text, utterance):
         return carried_text.strip()
     log.warning(
         "gate_sort_carried_text_not_verbatim",

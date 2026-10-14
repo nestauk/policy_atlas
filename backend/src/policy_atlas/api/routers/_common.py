@@ -54,6 +54,32 @@ def parentless_walk() -> ColumnElement[bool]:
     return capability_run.c.parent_capability_run_id.is_(None)
 
 
+def active_parentless_walk(conn: Connection, task_id: uuid.UUID) -> RowMapping | None:
+    """Return the task's running or paused parentless walk, or ``None`` (task 045, S15).
+
+    The admission fences' one question: any such walk refuses a new walk,
+    a plan edit and a longlist action.
+
+    Args:
+        conn: Open database connection.
+        task_id: The task.
+
+    Returns:
+        The walk's ``capability_run_id``, ``status`` and ``plan_version``.
+    """
+    return conn.execute(
+        select(
+            capability_run.c.capability_run_id,
+            capability_run.c.status,
+            capability_run.c.plan_version,
+        )
+        .where(capability_run.c.task_id == task_id)
+        .where(capability_run.c.status.in_(ACTIVE_WALK_STATUSES))
+        .where(parentless_walk())
+        .limit(1)
+    ).mappings().one_or_none()
+
+
 def executor_walk() -> ColumnElement[bool]:
     """Return the predicate "this walk runs on the walk executor" (task 045, A12).
 
@@ -292,24 +318,6 @@ def links_for_tasks(
     return grouped
 
 
-def task_links_for(
-    conn: Connection, target_task_id: uuid.UUID, *, user_id: str
-) -> list[TaskLinkOut]:
-    """Read one task's "Starts from" Links. The single-row form of
-    :func:`links_for_tasks`.
-
-    Args:
-        conn: Open database connection.
-        target_task_id: The task whose sources are wanted.
-        user_id: The calling subject, whose read grade decides whether each
-            source's name is disclosed.
-
-    Returns:
-        One :class:`TaskLinkOut` per link, oldest link first.
-    """
-    return links_for_tasks(conn, [target_task_id], user_id=user_id)[target_task_id]
-
-
 def included_source_count(conn: Connection, task_id: uuid.UUID) -> int:
     """Count effective screens with status ``relevant`` for one task.
 
@@ -408,7 +416,7 @@ def task_out(
         links = []
     else:
         if links is None:
-            links = task_links_for(conn, row["task_id"], user_id=user_id)
+            links = links_for_tasks(conn, [row["task_id"]], user_id=user_id)[row["task_id"]]
         if project_ids is None:
             project_ids = memberships_for_tasks(conn, [row["task_id"]])[row["task_id"]]
         display = (

@@ -11,7 +11,7 @@ from typing import Annotated
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
-from sqlalchemy.engine import Engine
+from sqlalchemy.engine import Connection, Engine
 
 from policy_atlas.api.app import ApiConflict
 from policy_atlas.api.auth import AuthenticatedUser
@@ -26,7 +26,7 @@ from policy_atlas.api.deps import (
 )
 from policy_atlas.api.routers._access import accessible_task
 from policy_atlas.api.routers._common import (
-    ACTIVE_WALK_STATUSES,
+    active_parentless_walk,
     executor_walk,
     parentless_walk,
     run_artefact_id_column,
@@ -36,8 +36,8 @@ from policy_atlas.api.routers._common import (
 from policy_atlas.api.run_io import ParkIO
 from policy_atlas.api.settings import Settings
 from policy_atlas.core import tracing
-from policy_atlas.core.schema import capability_run, task_agent_transcript, task_plan
-from policy_atlas.runtime.capability_registry import validate_plan
+from policy_atlas.core.schema import capability_run, task_agent_transcript
+from policy_atlas.runtime.capability_registry import latest_approved_plan_row, validate_plan
 from policy_atlas.runtime.option_search import unattended_plan
 from policy_atlas.runtime.runner import RunnerBackends, run_plan
 from policy_atlas.runtime.scoping_plan import LONGLIST_PURPOSE
@@ -61,6 +61,22 @@ _search_reservations: set[uuid.UUID] = set()
 def executor_reservations() -> int:
     """The reservations that will occupy an executor worker. Call under ``_dispatch_lock``."""
     return len(_dispatching_tasks - _search_reservations)
+
+
+def executor_full(conn: Connection, capacity: int | None) -> bool:
+    """Whether the walk executor has no free worker. Call under ``_dispatch_lock``.
+
+    Counts running parentless executor walks plus the pending reservations
+    against ``capacity`` (``None`` reads as full).
+    """
+    running = conn.execute(
+        select(func.count())
+        .select_from(capability_run)
+        .where(capability_run.c.status == "running")
+        .where(parentless_walk())
+        .where(executor_walk())
+    ).scalar_one()
+    return capacity is None or int(running) + executor_reservations() >= capacity
 
 
 def dispatch_reserved(task_id: uuid.UUID) -> bool:
@@ -284,30 +300,11 @@ def create_run(
             # option search counts against the executor, whose workers they
             # do not occupy (they run on the option-search pool) — not even
             # an *add*'s parentless one, which still fences its task (A12).
-            active = conn.execute(
-                select(capability_run.c.capability_run_id)
-                .where(capability_run.c.task_id == task_id)
-                .where(capability_run.c.status.in_(ACTIVE_WALK_STATUSES))
-                .where(parentless_walk())
-                .limit(1)
-            ).scalar_one_or_none()
-            if active is not None or task_id in _dispatching_tasks:
+            if active_parentless_walk(conn, task_id) is not None or task_id in _dispatching_tasks:
                 raise ApiConflict("run_active", "the task already has an active run")
-            running = conn.execute(
-                select(capability_run.c.capability_run_id)
-                .where(capability_run.c.status == "running")
-                .where(parentless_walk())
-                .where(executor_walk())
-            ).all()
-            if len(running) + executor_reservations() >= settings.run_executor_max:
+            if executor_full(conn, settings.run_executor_max):
                 raise ApiConflict("capacity", "the walk executor is at capacity")
-            plan_row = conn.execute(
-                select(task_plan)
-                .where(task_plan.c.task_id == task_id)
-                .where(task_plan.c.status == "approved")
-                .order_by(task_plan.c.version.desc())
-                .limit(1)
-            ).mappings().one_or_none()
+            plan_row = latest_approved_plan_row(conn, task_id)
             if plan_row is None:
                 raise HTTPException(status_code=400, detail="no approved plan")
             # Only ``source_turn_index`` is read here, and both plan models

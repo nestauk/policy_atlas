@@ -35,28 +35,25 @@ from sqlalchemy.engine import Engine
 from policy_atlas.api.app import ApiConflict
 from policy_atlas.api.contract import LatestRun
 from policy_atlas.api.locks import task_lock
-from policy_atlas.api.routers._common import (
-    ACTIVE_WALK_STATUSES,
-    executor_walk,
-    parentless_walk,
-)
+from policy_atlas.api.routers._common import ACTIVE_WALK_STATUSES, active_parentless_walk
 from policy_atlas.api.routers.runs import (
     _await_new_run,
     _dispatch_lock,
     _dispatch_run,
     _dispatching_tasks,
-    executor_reservations,
+    executor_full,
     release_when_open,
 )
 from policy_atlas.core.schema import capability_run, evidence_scope, longlist_result, task_plan
 from policy_atlas.options_scoping.longlist_intent import compile_longlist_intent
-from policy_atlas.runtime.capability_registry import OPTIONS_SCOPING, validate_plan
-from policy_atlas.runtime.runner import RunnerBackends
-from policy_atlas.runtime.scoping_plan import (
-    LONGLIST_PURPOSE,
-    ScopingPlan,
-    compose_longlist_screen_intent,
+from policy_atlas.runtime.capability_registry import (
+    OPTIONS_SCOPING,
+    expect_scoping_plan,
+    latest_approved_plan_row,
+    validate_plan,
 )
+from policy_atlas.runtime.runner import RunnerBackends
+from policy_atlas.runtime.scoping_plan import LONGLIST_PURPOSE, compose_longlist_screen_intent
 
 log = structlog.get_logger()
 
@@ -67,7 +64,7 @@ _PROCESS_STARTED = datetime.now(UTC)
 
 
 class LonglistRefused(Exception):
-    """The longlist walk could not be opened.
+    """The longlist walk could not be opened, or a longlist action is not allowed.
 
     Args:
         reason: ``not_scoping`` · ``run_active`` · ``capacity`` ·
@@ -160,31 +157,11 @@ def admit_and_mint(
                 raise LonglistRefused(
                     "not_scoping", "a longlist is built for options-scoping tasks only"
                 )
-            active = conn.execute(
-                select(capability_run.c.capability_run_id)
-                .where(capability_run.c.task_id == task_id)
-                .where(capability_run.c.status.in_(ACTIVE_WALK_STATUSES))
-                .where(parentless_walk())
-                .limit(1)
-            ).scalar_one_or_none()
-            if active is not None or task_id in _dispatching_tasks:
+            if active_parentless_walk(conn, task_id) is not None or task_id in _dispatching_tasks:
                 raise LonglistRefused("run_active", "the task already has an active run")
-            if check_capacity:
-                running = conn.execute(
-                    select(capability_run.c.capability_run_id)
-                    .where(capability_run.c.status == "running")
-                    .where(parentless_walk())
-                    .where(executor_walk())
-                ).all()
-                if capacity is None or len(running) + executor_reservations() >= capacity:
-                    raise LonglistRefused("capacity", "the walk executor is at capacity")
-            current = conn.execute(
-                select(task_plan)
-                .where(task_plan.c.task_id == task_id)
-                .where(task_plan.c.status == "approved")
-                .order_by(task_plan.c.version.desc())
-                .limit(1)
-            ).mappings().one_or_none()
+            if check_capacity and executor_full(conn, capacity):
+                raise LonglistRefused("capacity", "the walk executor is at capacity")
+            current = latest_approved_plan_row(conn, task_id)
             if current is None:
                 raise LonglistRefused("no_plan", "the task has no approved plan")
             if plan_row is not None and current["plan_id"] != plan_row["plan_id"]:
@@ -192,8 +169,7 @@ def admit_and_mint(
                     "plan_stale",
                     "the plan moved on since it was confirmed — review it, then confirm",
                 )
-            plan = validate_plan(OPTIONS_SCOPING, current["payload"])
-            assert isinstance(plan, ScopingPlan)
+            plan = expect_scoping_plan(validate_plan(OPTIONS_SCOPING, current["payload"]))
             try:
                 compose_longlist_screen_intent(plan)
             except ValueError as exc:

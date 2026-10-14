@@ -12,7 +12,7 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.engine import Engine
 
-from policy_atlas.api import chat_turns
+from policy_atlas.api import answer_core, chat_turns
 from policy_atlas.api.app import ApiCapacity, ApiConflict
 from policy_atlas.api.deps import (
     get_chat_backend,
@@ -128,7 +128,7 @@ def test_turn_streams_progress_delta_and_one_completed_event(
     """The stub path emits the contract union and terminal durable payload."""
     task_id: uuid.UUID | None = None
     try:
-        monkeypatch.setattr(chat_turns, "build_section_tools", _citable_tools)
+        monkeypatch.setattr(answer_core, "build_section_tools", _citable_tools)
         with api_client(
             tmp_path,
             {
@@ -181,7 +181,7 @@ def test_completed_stream_triggers_async_judge_enrichment(
             # task-scoped, so the cited chunk must be ingested into it.
             snapshot_id, chunk_id = _stream_chunk(engine, task_id)
             monkeypatch.setattr(
-                chat_turns,
+                answer_core,
                 "build_section_tools",
                 lambda **_: {
                     "search_chunks": lambda _arguments: {
@@ -234,7 +234,7 @@ def test_turn_stream_failure_is_a_single_terminal_event(
     """Provider errors after headers never become an HTTP error envelope."""
     task_id: uuid.UUID | None = None
     try:
-        monkeypatch.setattr(chat_turns, "build_section_tools", _citable_tools)
+        monkeypatch.setattr(answer_core, "build_section_tools", _citable_tools)
         with api_client(
             tmp_path,
             {
@@ -266,7 +266,7 @@ def test_replay_of_completed_turn_over_the_stream_is_a_single_completed_event(
     """Retrying a completed turn's client_turn_id replays once, with no deltas."""
     task_id: uuid.UUID | None = None
     try:
-        monkeypatch.setattr(chat_turns, "build_section_tools", _citable_tools)
+        monkeypatch.setattr(answer_core, "build_section_tools", _citable_tools)
         with api_client(
             tmp_path,
             {
@@ -308,7 +308,7 @@ def test_pre_header_envelope_errors_are_json_not_ndjson(
     task_id: uuid.UUID | None = None
     cap_task_ids: list[uuid.UUID] = []
     try:
-        monkeypatch.setattr(chat_turns, "build_section_tools", _citable_tools)
+        monkeypatch.setattr(answer_core, "build_section_tools", _citable_tools)
         with api_client(
             tmp_path,
             {
@@ -370,7 +370,7 @@ def test_worker_side_reservation_conflict_fails_the_reserved_row(
     """A pre-try worker conflict CASes the reserved row to failed, not left pending."""
     task_id: uuid.UUID | None = None
     try:
-        monkeypatch.setattr(chat_turns, "build_section_tools", _citable_tools)
+        monkeypatch.setattr(answer_core, "build_section_tools", _citable_tools)
         # Patches only chat_turns' own module-global lookup of _phase_one_turn,
         # which is what run_chat_turn's internal (worker-side) re-entry call
         # resolves at call time. The route's own reservation call above uses
