@@ -35,7 +35,7 @@ A "document" in this eval is one row with four parts. The model sees the first t
 | Part | What it is |
 | --- | --- |
 | **Question** | The published title of the review or map, with an ending such as ": a systematic review" removed. It goes to the model as the scope intent, the same way a user's research question does in the app. With `--criteria`, the review's published criteria are added under it (see below). |
-| **Title and abstract** | One study from that review's data. The median abstract is about 1,500 characters. In `mini`, 19 of the 288 rows have no abstract; those go through the title-only keep rule. |
+| **Title and abstract** | One study from that review's data. The median abstract is about 1,500 characters. In `mini`, 13 of the 288 rows have no abstract and go through the title-only keep rule; 4 more have an abstract under 50 characters, which the screen reads as an abstract. |
 | **Human label** | 1 = include, 0 = exclude. What "exclude" means depends on the source (see below). |
 | **Model answer** | The stage-1 screen: three replies, then the vote, giving keep or drop. |
 
@@ -161,10 +161,10 @@ uv run --project backend python scripts/evals/sync_s3.py screening download
 | --- | --- | --- |
 | Master | `s3://discovery-policy-atlas/eval/datasets/screening/` | The three labelled sources, about 300 MB |
 | Working | `datasets/` on your machine, not in git | What `sync_s3.py screening download` fetched |
-| Langfuse | `screening-ground-truth-mini`, `screening-ground-truth-full` | The sampled rows the eval scores, one item per document (0.7 MB and 7.6 MB), from `upload.py` |
+| Langfuse | `screening-ground-truth-mini`, `screening-ground-truth-full` | The sampled rows the eval scores, one item per document (288 and 2,949 items; 0.7 MB and 7.6 MB), from `upload.py`; uploaded 2026-10-14 |
 | Runs | `s3://discovery-policy-atlas/eval/results/screening/<folder>/` | One folder per uploaded run |
 
-The scripts still read `datasets/`. The Langfuse copy is there so the rows can be read without the source files and a run can be linked to its items:
+The scripts still read `datasets/`. The Langfuse copy is there so the rows can be read without the source files and a run can be linked to its items. Run this again after the sample changes; it upserts, so items are updated, not duplicated:
 
 ```
 # builds the items and prints a summary; add --dry-run to upload nothing
