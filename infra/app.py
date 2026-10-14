@@ -53,8 +53,6 @@ if not isinstance(deploy_analytics, bool):
     raise ValueError(
         f"'deploy_analytics' for environment '{env_name}' must be a JSON boolean."
     )
-if deploy_analytics and env_name != "staging":
-    raise ValueError("The analytics stack is currently approved only for staging.")
 
 if deploy_analytics:
     with open('metabase_config.json') as f:
