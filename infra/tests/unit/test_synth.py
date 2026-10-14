@@ -88,6 +88,8 @@ NETWORK_CONFIG = _load_config("network_config.json")
 DB_CONFIG = _load_config("db_config.json")
 PA_CONFIG = _load_config("pa_config.json")
 METABASE_CONFIG = _load_config("metabase_config.json")
+# Five CIDRs exercise the split: one full rule of four and a second rule of one.
+ANALYTICS_ALLOWLIST_SIZE = 5
 APP = cdk.App(context={"aws:cdk:bundling-stacks": []})
 ENV = Environment(account=DUMMY_ACCOUNT, region=NETWORK_CONFIG["aws_region"])
 CERT_ENV = Environment(account=DUMMY_ACCOUNT, region="us-east-1")
@@ -133,6 +135,7 @@ with patch("aws_cdk.aws_ecs.ContainerImage.from_asset", return_value=DUMMY_IMAGE
         metabase_config=METABASE_CONFIG,
         env=ENV,
         env_name=ENV_NAME,
+        allowlist_size=ANALYTICS_ALLOWLIST_SIZE,
     )
 
 ASSEMBLY = APP.synth()
@@ -361,19 +364,35 @@ def test_metabase_hostname_health_check_and_dns_are_pinned():
     assert target_properties["Matcher"]["HttpCode"] == "200"
     assert target_properties["TargetType"] == "ip"
 
-    _, listener_rule = _resources(
-        analytics, "AWS::ElasticLoadBalancingV2::ListenerRule"
-    )[0]
-    listener_properties = listener_rule["Properties"]
-    assert listener_properties["Priority"] == 20
-    conditions = listener_properties["Conditions"]
-    assert conditions[0] == {
-        "Field": "host-header",
-        "HostHeaderConfig": {"Values": ["metabase.v3.policyatlas.uk"]},
-    }
-    assert conditions[1]["Field"] == "source-ip"
-    allowlist_reference = conditions[1]["SourceIpConfig"]["Values"]["Ref"]
-    allowlist_parameter = analytics["Parameters"][allowlist_reference]
+    listener_rules = sorted(
+        _resources(analytics, "AWS::ElasticLoadBalancingV2::ListenerRule"),
+        key=lambda item: item[1]["Properties"]["Priority"],
+    )
+    # The first rule's logical id predates the split; changing it would make
+    # CloudFormation replace the live rule and collide on priority 20.
+    assert listener_rules[0][0] == (
+        "SharedHTTPSListenerMetabaseTargetGroupAttachmentDAB29AA1"
+    )
+    assert [rule["Properties"]["Priority"] for _, rule in listener_rules] == [20, 21]
+
+    allowlist_references = set()
+    selected_positions = []
+    for _, rule in listener_rules:
+        conditions = rule["Properties"]["Conditions"]
+        assert conditions[0] == {
+            "Field": "host-header",
+            "HostHeaderConfig": {"Values": ["metabase.v3.policyatlas.uk"]},
+        }
+        assert conditions[1]["Field"] == "source-ip"
+        rule_values = conditions[1]["SourceIpConfig"]["Values"]
+        assert 1 <= len(rule_values) <= 4
+        for value in rule_values:
+            position, reference = value["Fn::Select"]
+            selected_positions.append(position)
+            allowlist_references.add(reference["Ref"])
+    assert selected_positions == list(range(ANALYTICS_ALLOWLIST_SIZE))
+    assert len(allowlist_references) == 1
+    allowlist_parameter = analytics["Parameters"][allowlist_references.pop()]
     assert allowlist_parameter == {
         "Type": "AWS::SSM::Parameter::Value<List<String>>",
         "Default": "/policy_atlas_v3/metabase/allowed_cidrs",
@@ -393,6 +412,19 @@ def test_metabase_hostname_health_check_and_dns_are_pinned():
     assert record["Properties"]["Name"] == "metabase.v3.policyatlas.uk."
     assert record["Properties"]["Type"] == "A"
     assert "AliasTarget" in record["Properties"]
+
+
+@pytest.mark.parametrize("allowlist_size", [0, 9, "5"])
+def test_metabase_rejects_an_allowlist_size_outside_the_cap(allowlist_size):
+    with pytest.raises(ValueError, match="allowlist_size"):
+        PaV3AnalyticsStack(
+            cdk.App(),
+            "PaV3AnalyticsStack",
+            metabase_config=METABASE_CONFIG,
+            env=ENV,
+            env_name=ENV_NAME,
+            allowlist_size=allowlist_size,
+        )
 
 
 def test_metabase_has_bounded_log_retention_and_no_source_credentials():

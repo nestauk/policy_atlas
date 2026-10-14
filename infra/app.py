@@ -61,6 +61,14 @@ if deploy_analytics:
         if not metabase_config:
             raise ValueError(f"No Metabase configuration found for environment '{env_name}' in metabase_config.json.")
 
+    # The allowlist is resolved by CloudFormation at deploy time, so synth cannot
+    # see its length; scripts/deploy.sh reads the parameter and passes the count.
+    metabase_allowlist_size = app.node.try_get_context("metabase_allowlist_size")
+    if stage == "all":
+        if metabase_allowlist_size is None or not str(metabase_allowlist_size).isdigit():
+            raise ValueError("Context variable 'metabase_allowlist_size' is required when analytics is deployed. scripts/deploy.sh passes it; for a manual synth use '-c metabase_allowlist_size=<number of allowlisted CIDRs>'.")
+        metabase_allowlist_size = int(metabase_allowlist_size)
+
 # Add 'VPCManaged': true tag to all resources recursively.
 # Just in case we're looking manually and need to spot what this has built.
 cdk.Tags.of(app).add("VPCManaged", "true", apply_to_launched_instances=True)
@@ -138,6 +146,7 @@ if stage == "all":
             metabase_config=metabase_config,
             env=analytics_env,
             env_name=env_name,
+            allowlist_size=metabase_allowlist_size,
         )
         analytics_stack.add_dependency(network_stack)
         analytics_stack.add_dependency(database_stack)

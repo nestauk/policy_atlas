@@ -233,8 +233,11 @@ session. Once gate B passes, GitHub Actions owns steady-state `deploy-update` ru
      --overwrite
    ```
 
-   Supply one to five canonical **IPv4** CIDRs, separated by commas with no
-   spaces. IPv6 entries are rejected: the shared ALB is IPv4-only (IPv4 security
+   Supply one to eight canonical **IPv4** CIDRs, separated by commas with no
+   spaces. An ALB rule holds at most five condition values and the hostname
+   takes one, so the deploy splits the list into one listener rule per four
+   CIDRs (priorities 20 and 21). Changing the number of CIDRs takes effect on
+   the next deploy, like any other allowlist edit. IPv6 entries are rejected: the shared ALB is IPv4-only (IPv4 security
    group ingress, an `A` alias record, default address type), so an IPv6 entry
    could never match a client and an IPv6-only list would lock everyone out
    with a silent 404. Universal `/0` ranges are rejected because they do not
