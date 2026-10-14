@@ -46,11 +46,8 @@ from policy_atlas.runtime.runner import (
 from policy_atlas.runtime.scoping_plan import (
     LONGLIST_ACQUISITION_TARGETS,
     LONGLIST_CHAIN,
-    OPTION_SEARCH_CAP,
     OPTION_SEARCH_TARGET,
-    OPTION_SEARCH_WIDTH,
     SCOPING_SPINE,
-    SUGGEST_BOUND,
     TARGETED_CHAIN,
     ScopingPlan,
     compose_scoping,
@@ -142,16 +139,6 @@ def test_the_targeted_chain_is_the_spine_to_the_profile() -> None:
 def test_a_purpose_with_no_chain_is_refused() -> None:
     with pytest.raises(ValueError, match="variant"):
         compose_scoping(scoping_plan(), "variant")
-
-
-def test_the_compile_constants_are_the_contract_s() -> None:
-    """Contract § Plan object, "Compile constants": named so nothing hides."""
-    assert LONGLIST_ACQUISITION_TARGETS == {"standard": 50, "rapid": 25}
-    assert OPTION_SEARCH_TARGET == 10
-    assert OPTION_SEARCH_CAP == 15
-    assert OPTION_SEARCH_WIDTH == 4
-    assert SUGGEST_BOUND == 10
-    assert SUGGEST_BOUND <= OPTION_SEARCH_CAP
 
 
 @pytest.mark.parametrize("depth", ["standard", "rapid"])

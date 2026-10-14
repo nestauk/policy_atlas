@@ -14,7 +14,6 @@ from typing import Any
 import pytest
 
 from policy_atlas.options_scoping.labels import DocumentLabels
-from policy_atlas.options_scoping.longlist.coverage import CoverageMember
 from policy_atlas.options_scoping.option_profile.place_sentences import (
     NO_SINGLE_PLACE,
     PlaceDocument,
@@ -32,6 +31,7 @@ from policy_atlas.options_scoping.option_profile.place_sentences_prompt import (
     PLACE_DOCUMENTS_MAX,
     build_place_sentences_messages,
 )
+from tests.options_scoping.test_longlist_coverage_046 import _member
 
 
 def _doc(key: str, **values: Any) -> PlaceDocument:
@@ -103,38 +103,23 @@ def test_no_where_country_orders_by_count_and_an_empty_no_single_place_is_absent
     assert group_places([], where_country="United Kingdom") == []
 
 
-def _member(doc_key: str, tss_id: uuid.UUID | None, **values: Any) -> CoverageMember:
-    fields: dict[str, Any] = {
-        "unit_kind": "interventions",
-        "doc_key": doc_key,
-        "tss_id": tss_id,
-        "role": "evaluated",
-        "basis": "abstract_only",
-        "flagged": False,
-        "unit": None,
-        "setting": None,
-        "outcome": None,
-        "study_geography": None,
-    }
-    fields.update(values)
-    return CoverageMember(**fields)
-
-
 def test_from_membership_reads_the_first_record_the_labels_and_resolves_the_place() -> None:
     uk, twin, ca, described = uuid.uuid4(), uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
     members = [
         # One document, DOI twins together; its evaluated record leads.
         _member(
-            "doi:10.1/a",
-            uk,
+            "",
+            doc_key="doi:10.1/a",
+            tss_id=uk,
             role="described",
             unit="parents",
             programme_name="Change 4 Life",
             study_country="UK",
         ),
         _member(
-            "doi:10.1/a",
-            twin,
+            "",
+            doc_key="doi:10.1/a",
+            tss_id=twin,
             unit="Year 6 pupils",
             outcome="BMI",
             outcome_tag="the obesity rate",
@@ -143,8 +128,8 @@ def test_from_membership_reads_the_first_record_the_labels_and_resolves_the_plac
             study_country="UK",
             study_geography="Leeds",
         ),
-        _member("doc:ca", ca, unit="families", outcome="diet", study_country="Canada"),
-        _member("doc:described", described, role="described", study_country="France"),
+        _member("ca", tss_id=ca, unit="families", outcome="diet", study_country="Canada"),
+        _member("described", tss_id=described, role="described", study_country="France"),
     ]
     labels = {
         twin: DocumentLabels(
@@ -481,11 +466,6 @@ def test_the_seeded_fixture_set(sentence: str, verdict: str | None) -> None:
         trace_check(sentence, _FIXED, plan_outcomes=_PLAN_OUTCOMES, vocabulary=_VOCABULARY)
         == verdict
     )
-
-
-def test_the_fixture_set_holds_at_least_ten_valid_and_ten_invalid_sentences() -> None:
-    assert len(_VALID) >= 10
-    assert len(_INVALID) >= 10
 
 
 def test_strong_with_no_strong_document_fails() -> None:

@@ -47,7 +47,7 @@ from policy_atlas.runtime.conversation_lifecycle import ensure_active_task_agent
 from policy_atlas.runtime.scoping_plan import ScopingPlan
 from tests.api.resource_support import api_client, create_task
 from tests.api.test_baseline_gate_checkin import _option, _own, _park_at_gate
-from tests.helpers import now
+from tests.helpers import now, seed_scope, seed_walk
 from tests.runtime.test_baseline_gate import (
     insert_scoping_plan_row,
     scoping_plan,
@@ -81,18 +81,15 @@ class RecordingExecutor:
         with self._lock:
             self.submitted.append({"capability_run_id": run_id, **kwargs})
         with engine.begin() as conn:
-            conn.execute(
-                capability_run.insert().values(
-                    capability_run_id=run_id,
-                    task_id=kwargs["task_id"],
-                    evidence_scope_id=kwargs.get("evidence_scope_id")
-                    or plan_row["evidence_scope_id"],
-                    capability=kwargs["capability"],
-                    plan_id=plan_row["plan_id"],
-                    plan_version=plan_row["version"],
-                    status=self.status,
-                    started_at=now(),
-                )
+            seed_walk(
+                conn,
+                kwargs["task_id"],
+                walk_id=run_id,
+                scope_id=kwargs.get("evidence_scope_id") or plan_row["evidence_scope_id"],
+                capability=kwargs["capability"],
+                plan_id=plan_row["plan_id"],
+                plan_version=plan_row["version"],
+                status=self.status,
             )
         future: Future[None] = Future()
         future.set_result(None)
@@ -491,33 +488,16 @@ def test_the_capacity_rule_counts_parentless_walks_only(engine: Engine) -> None:
                 ).all()
             )
         capacity = running + len(runs_router._dispatching_tasks) + 1
-        parent = uuid.uuid4()
         with engine.begin() as conn:
-            conn.execute(
-                capability_run.insert().values(
-                    capability_run_id=parent,
-                    task_id=other_id,
-                    evidence_scope_id=other_scope,
-                    capability=OPTIONS_SCOPING,
-                    plan_id=other_plan,
-                    plan_version=1,
-                    status="succeeded",
-                    started_at=now(),
-                )
-            )
+            parent = seed_walk(conn, other_id, scope_id=other_scope, plan_id=other_plan).walk_id
             for _ in range(4):
-                conn.execute(
-                    capability_run.insert().values(
-                        capability_run_id=uuid.uuid4(),
-                        task_id=other_id,
-                        evidence_scope_id=other_scope,
-                        capability=OPTIONS_SCOPING,
-                        plan_id=other_plan,
-                        plan_version=1,
-                        status="running",
-                        started_at=now(),
-                        parent_capability_run_id=parent,
-                    )
+                seed_walk(
+                    conn,
+                    other_id,
+                    scope_id=other_scope,
+                    plan_id=other_plan,
+                    status="running",
+                    parent=parent,
                 )
         admitted = longlist_start.admit_and_mint(engine, task_id=task_id, capacity=capacity)
         with runs_router._dispatch_lock:
@@ -525,18 +505,7 @@ def test_the_capacity_rule_counts_parentless_walks_only(engine: Engine) -> None:
         assert admitted.plan_row["plan_id"] == plan_id
 
         with engine.begin() as conn:
-            conn.execute(
-                capability_run.insert().values(
-                    capability_run_id=uuid.uuid4(),
-                    task_id=other_id,
-                    evidence_scope_id=other_scope,
-                    capability=OPTIONS_SCOPING,
-                    plan_id=other_plan,
-                    plan_version=1,
-                    status="running",
-                    started_at=now(),
-                )
-            )
+            seed_walk(conn, other_id, scope_id=other_scope, plan_id=other_plan, status="running")
         with pytest.raises(longlist_start.LonglistRefused) as caught:
             longlist_start.admit_and_mint(engine, task_id=task_id, capacity=capacity)
         assert caught.value.reason == "capacity"
@@ -566,31 +535,16 @@ def test_the_capacity_rule_leaves_out_an_added_option_search(engine: Engine) -> 
                 ).all()
             )
         capacity = running + runs_router.executor_reservations() + 1
-        targeted = uuid.uuid4()
         with engine.begin() as conn:
-            conn.execute(
-                evidence_scope.insert().values(
-                    evidence_scope_id=targeted,
-                    task_id=other_id,
-                    intent="an added option",
-                    context={"capability": OPTIONS_SCOPING},
-                    created_at=now(),
-                    purpose="targeted",
-                    plan_id=other_plan,
-                )
+            targeted = seed_scope(
+                conn,
+                other_id,
+                {"capability": OPTIONS_SCOPING},
+                intent="an added option",
+                purpose="targeted",
+                plan_id=other_plan,
             )
-            conn.execute(
-                capability_run.insert().values(
-                    capability_run_id=uuid.uuid4(),
-                    task_id=other_id,
-                    evidence_scope_id=targeted,
-                    capability=OPTIONS_SCOPING,
-                    plan_id=other_plan,
-                    plan_version=1,
-                    status="running",
-                    started_at=now(),
-                )
-            )
+            seed_walk(conn, other_id, scope_id=targeted, plan_id=other_plan, status="running")
         admitted = longlist_start.admit_and_mint(engine, task_id=task_id, capacity=capacity)
         with runs_router._dispatch_lock:
             runs_router._dispatching_tasks.discard(task_id)

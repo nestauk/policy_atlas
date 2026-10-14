@@ -509,6 +509,28 @@ def _raw(conn: Connection, table: str, column: str, key: str, row_id: uuid.UUID)
     )
 
 
+def _untouched(conn: Connection, ids: dict[str, uuid.UUID]) -> dict[str, str]:
+    """The stored bytes of the rows that carry no ``population`` facet."""
+    return {
+        "grouping": _raw(
+            conn, "grouping_result", "groups", "grouping_result_id", ids["grouping_without"]
+        ),
+        "grouping_provenance": _raw(
+            conn,
+            "grouping_result",
+            "grouping_provenance",
+            "grouping_result_id",
+            ids["grouping_without"],
+        ),
+        "characterisation": _raw(
+            conn, "annotation", "payload", "annotation_id", ids["annotation_characterisation"]
+        ),
+        "synthesis": _raw(
+            conn, "synthesis_result", "blocks", "synthesis_result_id", ids["synthesis_without"]
+        ),
+    }
+
+
 def test_the_facet_key_and_its_group_ids_move_everywhere_and_back(engine: Engine) -> None:
     cfg = _alembic_cfg()
     task_id: uuid.UUID | None = None
@@ -526,24 +548,7 @@ def test_the_facet_key_and_its_group_ids_move_everywhere_and_back(engine: Engine
         with engine.begin() as conn:
             task_id, ids = _seed_grouping_chain(conn)
         with engine.connect() as conn:
-            untouched = {
-                "grouping": _raw(
-                    conn, "grouping_result", "groups", "grouping_result_id",
-                    ids["grouping_without"],
-                ),
-                "grouping_provenance": _raw(
-                    conn, "grouping_result", "grouping_provenance", "grouping_result_id",
-                    ids["grouping_without"],
-                ),
-                "characterisation": _raw(
-                    conn, "annotation", "payload", "annotation_id",
-                    ids["annotation_characterisation"],
-                ),
-                "synthesis": _raw(
-                    conn, "synthesis_result", "blocks", "synthesis_result_id",
-                    ids["synthesis_without"],
-                ),
-            }
+            untouched = _untouched(conn, ids)
 
         command.upgrade(cfg, "head")
         with engine.connect() as conn:
@@ -575,24 +580,7 @@ def test_the_facet_key_and_its_group_ids_move_everywhere_and_back(engine: Engine
             ]
 
             # Rows without the facet stay byte-identical.
-            assert untouched == {
-                "grouping": _raw(
-                    conn, "grouping_result", "groups", "grouping_result_id",
-                    ids["grouping_without"],
-                ),
-                "grouping_provenance": _raw(
-                    conn, "grouping_result", "grouping_provenance", "grouping_result_id",
-                    ids["grouping_without"],
-                ),
-                "characterisation": _raw(
-                    conn, "annotation", "payload", "annotation_id",
-                    ids["annotation_characterisation"],
-                ),
-                "synthesis": _raw(
-                    conn, "synthesis_result", "blocks", "synthesis_result_id",
-                    ids["synthesis_without"],
-                ),
-            }
+            assert untouched == _untouched(conn, ids)
 
         command.downgrade(cfg, PRE_REVISION)
         with engine.connect() as conn:

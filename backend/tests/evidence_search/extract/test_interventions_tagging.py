@@ -56,6 +56,7 @@ from policy_atlas.runtime.harness import run_harness
 from policy_atlas.runtime.run_spec import Plan, compile
 from tests.evidence_search.extract.test_extract_interventions import (
     NON_EVIDENCE,
+    _profile,
     _seed_doc,
     _wire,
 )
@@ -90,28 +91,6 @@ class _ContextRecordingBackend(StubInterventionsBackend):
     ) -> UsageResult[InterventionsResponse]:
         self.calls.append((payload, context))
         return super().extract(payload, context)
-
-
-def _profile(
-    conn: Connection,
-    task_id: uuid.UUID,
-    scope_id: uuid.UUID,
-    *,
-    backend: Any = None,
-    context: TaggingContext | None = None,
-) -> dict[str, Any]:
-    return extract_scope(
-        conn,
-        task_id=task_id,
-        run_id=seed_run(conn, task_id),
-        context=ExtractContext(
-            scope_id=scope_id, intent="unused", context={}, selection_run_id=None
-        ),
-        extraction_backend=StubExtractionBackend(),
-        interventions_backend=backend if backend is not None else StubInterventionsBackend(),
-        profiles=(INTERVENTIONS_PROFILE_ID,),
-        interventions_context=context,
-    )
 
 
 def _provenance(summary: dict[str, Any]) -> dict[str, Any]:

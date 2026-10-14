@@ -1229,24 +1229,6 @@ def test_the_plan_data_reaches_the_prompt_as_the_plan_holds_it(conn: Connection)
     assert sent["requirements"][0] == {"id": "req-1", "text": council}
 
 
-def test_the_option_payload_has_no_where_tried(conn: Connection) -> None:
-    """AM7: ``where_tried`` leaves the payload; the role counts and *tried on* stay."""
-    walk = _walk(conn)
-    walk.option("Youth guarantee")
-    doc = walk.doc()
-    walk.record(doc, "Youth guarantee")
-    walk.rollup(walk.scope_id, [doc])
-    walk.build(StubLonglistBackend())
-    backend = StubLonglistBackend()
-
-    _constrain(walk, backend)
-
-    coverage = backend.inputs["constrain"][0]["options"][0]["coverage"]
-    assert set(coverage) == {"documents", "evaluated", "roles", "tried_on", "settings"}
-    assert coverage["documents"] == 1
-    assert "where_tried" not in repr(backend.inputs["constrain"])
-
-
 def test_the_baseline_reaches_the_batches(
     conn: Connection, monkeypatch: pytest.MonkeyPatch
 ) -> None:

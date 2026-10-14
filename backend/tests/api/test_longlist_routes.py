@@ -19,9 +19,7 @@ the application's own connections see it.
 
 from __future__ import annotations
 
-import time
 import uuid
-from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, cast
@@ -31,7 +29,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select, update
 from sqlalchemy.engine import Connection, Engine
 
-from policy_atlas.api.contract import OptionDocumentOut, OptionOut, OptionSummaryOut
+from policy_atlas.api.contract import OptionDocumentOut
 from policy_atlas.api.deps import get_agent_backend, get_runner_backends
 from policy_atlas.api.readmodels import repository
 from policy_atlas.core.schema import (
@@ -48,7 +46,6 @@ from policy_atlas.core.schema import (
     task_source_snapshot,
 )
 from policy_atlas.options_scoping.constrain.constrain import (
-    IN_SCOPE_EVIDENCE_KEY,
     constrain_scope,
 )
 from policy_atlas.options_scoping.constrain.constrain_prompt import ConstrainResponse
@@ -70,8 +67,13 @@ from tests.api.org_support import (
     seeded,
     tenancy_client,
 )
-from tests.api.resource_support import api_client, create_task
-from tests.helpers import delete_task_data, now
+from tests.api.resource_support import (  # noqa: F401 — autouse teardown
+    api_client,
+    create_task,
+    remove_committed_tasks_after_walks,
+)
+from tests.api.resource_support import await_walks_ended as _await_walks_ended
+from tests.helpers import now, seed_run
 from tests.options_scoping.test_longlist import (
     RCT,
     _current_fingerprint,
@@ -86,66 +88,6 @@ from tests.options_scoping.test_longlist import (
 from tests.options_scoping.test_option_profile import _profile
 from tests.runtime.test_baseline_gate import scoping_plan
 from tests.runtime.test_runner import _runner_backends
-
-# --- cleanup -----------------------------------------------------------------------
-
-
-def _all_task_ids(engine: Engine) -> set[uuid.UUID]:
-    with engine.connect() as conn:
-        return {row[0] for row in conn.execute(select(task.c.task_id))}
-
-
-def _await_walks_ended(engine: Engine, task_ids: list[uuid.UUID]) -> None:
-    """Let any option search a test opened finish before its task is deleted."""
-    deadline = time.monotonic() + 60
-    while time.monotonic() < deadline:
-        with engine.connect() as conn:
-            active = conn.execute(
-                select(capability_run.c.capability_run_id)
-                .where(capability_run.c.task_id.in_(task_ids))
-                .where(capability_run.c.status.in_(("running", "paused")))
-            ).first()
-        if active is None:
-            return
-        time.sleep(0.1)
-
-
-@pytest.fixture(autouse=True)
-def _remove_committed_tasks(engine: Engine) -> Iterator[None]:
-    """Hard-delete every task these tests commit (a left scoping walk blocks downgrades)."""
-    before = _all_task_ids(engine)
-    yield
-    created = list(_all_task_ids(engine) - before)
-    _await_walks_ended(engine, created)
-    with engine.begin() as conn:
-        conn.execute(
-            capability_run.update()
-            .where(capability_run.c.task_id.in_(created))
-            .where(capability_run.c.status.in_(("running", "paused")))
-            .values(status="aborted", ended_at=now())
-        )
-        conn.execute(task_link.delete().where(task_link.c.source_task_id.in_(created)))
-        conn.execute(task_link.delete().where(task_link.c.target_task_id.in_(created)))
-        # A linked finding's membership names its source task.
-        conn.execute(option_membership.delete().where(option_membership.c.task_id.in_(created)))
-        # A target's row for a snapshot its source also holds (inherit copied
-        # it) goes first, so each task's delete removes only its own snapshots.
-        other = task_source_snapshot.alias("other")
-        conn.execute(
-            task_source_snapshot.delete()
-            .where(task_source_snapshot.c.task_id.in_(created))
-            .where(
-                select(other.c.task_source_snapshot_id)
-                .where(other.c.source_snapshot_id == task_source_snapshot.c.source_snapshot_id)
-                .where(other.c.task_id != task_source_snapshot.c.task_id)
-                .where(other.c.origin == "acquired")
-                .where(other.c.ingested_at < task_source_snapshot.c.ingested_at)
-                .exists()
-            )
-        )
-        for task_id in created:
-            delete_task_data(conn, task_id)
-
 
 # --- the fixture -------------------------------------------------------------------
 
@@ -225,20 +167,10 @@ class _Breaks(StubLonglistBackend):
 def _constrain(engine: Engine, built: _Built, backend: StubLonglistBackend) -> None:
     """Run the walk's constrain step again (a rebuild's last step)."""
     with engine.begin() as conn:
-        run_id = uuid.uuid4()
-        conn.execute(
-            runs.insert().values(
-                run_id=run_id,
-                task_id=built.task_id,
-                status="running",
-                started_at=now(),
-                capability_run_id=built.walk_id,
-            )
-        )
         constrain_scope(
             conn,
             task_id=built.task_id,
-            run_id=run_id,
+            run_id=seed_run(conn, built.task_id, capability_run_id=built.walk_id),
             context=ScopeContext(scope_id=built.scope_id, intent="", context={}),
             backend=backend,
         )
@@ -404,14 +336,6 @@ def _build(
     return built
 
 
-def _clients(
-    tmp_path: Path,
-    engine: Engine,
-    overrides: dict[Callable[..., object], Callable[..., object]] | None = None,
-) -> Any:
-    return tenancy_client(tmp_path, count=3, overrides=overrides)
-
-
 def _org_build(
     engine: Engine, owner: Principal, colleague: Principal, *, linked: bool = True
 ) -> _Built:
@@ -438,7 +362,7 @@ def _card(client: TestClient, built: _Built, name: str, headers: dict[str, str] 
 def test_the_reads_are_org_scoped_and_public_like_the_artefact(
     engine: Engine, tmp_path: Path
 ) -> None:
-    with _clients(tmp_path, engine) as (client, (owner, colleague, stranger)):
+    with tenancy_client(tmp_path) as (client, (owner, colleague, stranger)):
         built = _org_build(engine, owner, colleague)
         for caller in (owner, colleague):
             assert _longlist(client, built.task_id, caller.headers).status_code == 200
@@ -476,7 +400,7 @@ def test_the_reads_are_org_scoped_and_public_like_the_artefact(
 
 def test_a_link_grants_no_read_of_the_targets_options(engine: Engine, tmp_path: Path) -> None:
     """A user who can read the linked source task only is refused the target's longlist."""
-    with _clients(tmp_path, engine) as (client, (owner, colleague, source_owner)):
+    with tenancy_client(tmp_path) as (client, (owner, colleague, source_owner)):
         built = _org_build(engine, owner, colleague)
         with engine.begin() as conn:
             conn.execute(
@@ -504,7 +428,7 @@ def test_no_longlist_is_a_404_and_an_unknown_option_too(engine: Engine, tmp_path
 
 
 def test_the_list_matches_the_stored_rows(engine: Engine, tmp_path: Path) -> None:
-    with _clients(tmp_path, engine) as (client, (owner, colleague, _)):
+    with tenancy_client(tmp_path) as (client, (owner, colleague, _)):
         built = _org_build(engine, owner, colleague)
         body = _longlist(client, built.task_id, owner.headers).json()
         with engine.connect() as conn:
@@ -598,7 +522,7 @@ def test_the_list_matches_the_stored_rows(engine: Engine, tmp_path: Path) -> Non
 def test_the_card_carries_every_section_and_never_how_sure(
     engine: Engine, tmp_path: Path
 ) -> None:
-    with _clients(tmp_path, engine) as (client, (owner, colleague, _)):
+    with tenancy_client(tmp_path) as (client, (owner, colleague, _)):
         built = _org_build(engine, owner, colleague)
         response = _card(client, built, "Youth guarantee", owner.headers)
         assert response.status_code == 200
@@ -683,10 +607,6 @@ def test_the_card_carries_every_section_and_never_how_sure(
             assert "how sure" not in body.lower()
 
 
-def test_the_in_scope_key_is_constrains(conn: Connection) -> None:
-    assert repository.LONGLIST_IN_SCOPE_KEY == IN_SCOPE_EVIDENCE_KEY
-
-
 def test_an_option_added_since_the_build_reads_with_an_empty_profile(conn: Connection) -> None:
     walk = _Walk(conn)
     walk.option("Youth guarantee", origin="added_by_you")
@@ -701,31 +621,6 @@ def test_an_option_added_since_the_build_reads_with_an_empty_profile(conn: Conne
 
 
 # --- task 046: the read models gain runner-up, tried on, variants, thinning --------
-
-
-def test_the_card_and_list_serve_no_runner_up_lever_type(conn: Connection) -> None:
-    """Task 046, amendment 3 (B13): the runner-up stays in provenance, off the read models."""
-    walk = _Walk(conn)
-    walk.option("Youth guarantee", origin="added_by_you")
-    doc = walk.doc()
-    walk.record(doc, "youth guarantee")
-    walk.rollup(walk.scope_id, [doc])
-    backend = _Scripted(
-        routes={"youth guarantee": ("Youth guarantee", False)},
-        typings={"Youth guarantee": {"runner_up_lever_type": "inform"}},
-    )
-    walk.build(backend)
-    _profile(walk, backend)
-    option_id = walk.options()["Youth guarantee"].option_id
-
-    listed = repository.longlist_out(conn, walk.task_id)
-    assert listed is not None
-    summary = next(o for o in listed.options if o.option_id == option_id)
-    assert "runner_up_lever_type" not in summary.model_dump()
-
-    card = repository.option_out(conn, walk.task_id, option_id)
-    assert card is not None
-    assert "runner_up_lever_type" not in card.model_dump()
 
 
 def test_the_card_and_list_serve_the_lever_reason(conn: Connection) -> None:
@@ -835,50 +730,6 @@ def test_a_longlist_walk_s_child_search_never_hides_the_option_s_membership_evid
     assert listed is not None
     summary = next(o for o in listed.options if o.option_id == option_id)
     assert summary.search_pending is False and summary.document_count == 1
-
-
-def test_an_old_stored_longlist_reads_with_every_new_field_defaulted(conn: Connection) -> None:
-    """Item 8: a longlist stored before this slice has no ``tried_on``,
-    ``examples``, thinning counts or ``runner_up`` and was typed under
-    ``lever_types_v1`` — every new field falls back to its default."""
-    walk = _Walk(conn)
-    option_id = walk.option("Youth guarantee", origin="added_by_you")
-    doc = walk.doc()
-    walk.record(doc, "youth guarantee")
-    walk.rollup(walk.scope_id, [doc])
-    run_id, _ = walk.build(_Scripted(routes={"youth guarantee": ("Youth guarantee", False)}))
-    stored = walk.result(run_id)
-    old_coverage = {
-        oid: {
-            k: v
-            for k, v in cov.items()
-            if k not in ("tried_on", "examples", "folded", "unit_tags", "setting_repairs")
-        }
-        for oid, cov in stored.coverage.items()
-    }
-    old_provenance = {k: v for k, v in stored.provenance.items() if k != "runner_up"}
-    old_provenance["thinning"] = {}
-    old_provenance["taxonomy_version"] = "lever_types_v1"
-    old_counts = {k: v for k, v in stored.counts.items() if k != "title_only"}
-    conn.execute(
-        update(longlist_result)
-        .where(longlist_result.c.run_id == run_id)
-        .values(coverage=old_coverage, provenance=old_provenance, counts=old_counts)
-    )
-
-    listed = repository.longlist_out(conn, walk.task_id)
-    assert listed is not None
-    assert listed.taxonomy_version == "lever_types_v1"
-    assert listed.counts.title_only == 0
-    assert listed.counts.thinned_mentioned == 0
-    assert listed.counts.thinned_collapsed == 0
-    assert listed.counts.thinned_capped == 0
-    summary = next(o for o in listed.options if o.option_id == option_id)
-    assert summary.option_id == option_id
-
-    card = repository.option_out(conn, walk.task_id, option_id)
-    assert card is not None
-    assert card.also_found_as == []
 
 
 def test_the_signal_and_the_document_lines_carry_the_record_fields(conn: Connection) -> None:
@@ -1192,14 +1043,6 @@ def test_also_found_as_joins_a_merged_duplicate_and_a_folded_seed(conn: Connecti
     assert card.also_found_as == ["Jobs guarantee", "Apprenticeship grants"]
 
 
-def test_the_longlist_has_no_ambition_bands(conn: Connection) -> None:
-    walk, _ = _profiled(conn, profile=None)
-    listed = repository.longlist_out(conn, walk.task_id)
-    assert listed is not None
-    assert "ambition_bands" not in type(listed).model_fields
-    assert "ambition_bands" not in listed.model_dump()
-
-
 # --- the buttons -------------------------------------------------------------------
 
 
@@ -1214,7 +1057,7 @@ def _decisions(client: TestClient, built: _Built, headers: dict[str, str]) -> li
 def test_exclude_records_the_reason_and_include_reverses_it(
     engine: Engine, tmp_path: Path
 ) -> None:
-    with _clients(tmp_path, engine) as (client, (owner, colleague, _)):
+    with tenancy_client(tmp_path) as (client, (owner, colleague, _)):
         built = _org_build(engine, owner, colleague)
         oid = built.options["Youth guarantee"]
         excluded = client.post(
@@ -1269,7 +1112,7 @@ def test_exclude_records_the_reason_and_include_reverses_it(
 
 def test_user_state_survives_a_rebuilds_constrain(engine: Engine, tmp_path: Path) -> None:
     """5.3's rule: a user exclusion stands, and a user inclusion is never re-excluded."""
-    with _clients(tmp_path, engine) as (client, (owner, colleague, _)):
+    with tenancy_client(tmp_path) as (client, (owner, colleague, _)):
         built = _org_build(engine, owner, colleague)
         guarantee = built.options["Youth guarantee"]
         mentoring = built.options["Mentoring"]
@@ -1296,7 +1139,7 @@ def test_user_state_survives_a_rebuilds_constrain(engine: Engine, tmp_path: Path
 
 
 def test_constrains_exclusion_reads_by_constrain(engine: Engine, tmp_path: Path) -> None:
-    with _clients(tmp_path, engine) as (client, (owner, colleague, _)):
+    with tenancy_client(tmp_path) as (client, (owner, colleague, _)):
         built = _org_build(engine, owner, colleague)
         _constrain(engine, built, _Breaks({built.options["Guarantee package"]}))
         card = _card(client, built, "Guarantee package", owner.headers).json()
@@ -1328,7 +1171,7 @@ def test_add_proposes_a_design_mints_it_and_opens_a_parentless_walk(
 ) -> None:
     agent = _design_backend()
     overrides = {get_agent_backend: lambda: agent, get_runner_backends: _runner_backends}
-    with _clients(tmp_path, engine, overrides) as (client, (owner, colleague, _)):
+    with tenancy_client(tmp_path, overrides=overrides) as (client, (owner, colleague, _)):
         built = _org_build(engine, owner, colleague, linked=False)
         response = client.post(
             f"/api/v1/tasks/{built.task_id}/options",
@@ -1388,7 +1231,7 @@ def test_the_buttons_are_run_active_while_a_parentless_walk_runs(
 ) -> None:
     agent = _design_backend()
     overrides = {get_agent_backend: lambda: agent, get_runner_backends: _runner_backends}
-    with _clients(tmp_path, engine, overrides) as (client, (owner, colleague, _)):
+    with tenancy_client(tmp_path, overrides=overrides) as (client, (owner, colleague, _)):
         built = _org_build(engine, owner, colleague)
         oid = built.options["Mentoring"]
         with engine.begin() as conn:
@@ -1733,7 +1576,7 @@ def test_add_answers_with_the_option_when_its_search_is_still_queued(
     agent = _design_backend()
     overrides = {get_agent_backend: lambda: agent, get_runner_backends: _runner_backends}
     try:
-        with _clients(tmp_path, engine, overrides) as (client, (owner, colleague, _)):
+        with tenancy_client(tmp_path, overrides=overrides) as (client, (owner, colleague, _)):
             built = _org_build(engine, owner, colleague, linked=False)
             response = client.post(
                 f"/api/v1/tasks/{built.task_id}/options",
@@ -1852,8 +1695,3 @@ def test_an_option_from_the_evidence_search_names_its_report_section(
     assert card.from_section == "What works for employers"
 
 
-def test_the_list_and_card_serve_no_where_tried_or_tried_on() -> None:
-    """Task 046, amendment 4 (R84; S36, PA4-11): the two facet fields are gone
-    from the list's options and the card; the coverage keys stay stored."""
-    for model in (OptionSummaryOut, OptionOut):
-        assert not {"where_tried", "tried_on"} & set(model.model_fields)

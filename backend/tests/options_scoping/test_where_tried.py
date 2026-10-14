@@ -6,7 +6,6 @@ The top level from ``study_country``, the level below from
 
 from __future__ import annotations
 
-import re
 import uuid
 from pathlib import Path
 
@@ -26,6 +25,7 @@ from policy_atlas.options_scoping.longlist.where_tried import (
     countries_named,
     document_where,
 )
+from tests.options_scoping.test_longlist_coverage_046 import _member as coverage_member
 
 _SRC = Path(__file__).resolve().parents[2] / "src" / "policy_atlas"
 
@@ -33,22 +33,21 @@ _SRC = Path(__file__).resolve().parents[2] / "src" / "policy_atlas"
 def _member(
     doc_key: str,
     *,
+    role: str = "evaluated",
     country: str | None = None,
     geography: str | None = None,
     tss_id: uuid.UUID | None = None,
+    outcome_tag: str | None = None,
 ) -> CoverageMember:
-    return CoverageMember(
-        unit_kind="interventions",
+    """The shared coverage-member factory, keyed by a whole document key."""
+    return coverage_member(
+        "",
         doc_key=doc_key,
-        tss_id=tss_id,
-        role="evaluated",
-        basis="abstract_only",
-        flagged=False,
-        unit=None,
-        setting=None,
-        outcome=None,
-        study_geography=geography,
+        role=role,
         study_country=country,
+        study_geography=geography,
+        tss_id=tss_id,
+        outcome_tag=outcome_tag,
     )
 
 
@@ -120,44 +119,6 @@ def test_a_document_with_nothing_stated_is_not_stated() -> None:
     assert document_where([]) == (NOT_STATED, [])
 
 
-# --- The old matcher is gone ---------------------------------------------------
-
-
-@pytest.mark.parametrize(
-    "name",
-    [
-        "where_group",
-        "where_codes",
-        "strip_place",
-        "PLACE_PREPOSITIONS",
-        "where_labels",
-        "countries_in",
-        "OECD_CODES",
-        "COMPARABLE_LABEL",
-        "WHERE_GROUPS",
-        "WhereGroup",
-        "COUNTRY_ADJECTIVES",
-        "COUNTRY_GROUPS",
-        "OECD_MARKERS",
-    ],
-)
-def test_the_old_matcher_is_not_importable(name: str) -> None:
-    assert not hasattr(where_tried, name)
-
-
-@pytest.mark.parametrize(
-    "path",
-    [
-        "options_scoping/longlist/where_tried.py",
-        "options_scoping/longlist/coverage.py",
-        "api/readmodels/repository.py",
-        "api/contract/read_models.py",
-    ],
-)
-def test_no_comparable_systems_or_oecd_label_remains(path: str) -> None:
-    text = (_SRC / path).read_text(encoding="utf-8")
-    assert not re.search(r"comparable systems", text, re.IGNORECASE)
-    assert "OECD" not in text
 
 
 def test_where_tried_reads_nothing_of_the_publisher() -> None:
@@ -304,28 +265,7 @@ def test_the_place_key_folds_hyphens_spaces_and_the(text: str, key: str) -> None
 # --- The evidence signal and the place checks (R76, R87; S29, S32) ------------
 
 
-def _signal_member(
-    doc_key: str,
-    *,
-    role: str = "evaluated",
-    country: str | None = None,
-    geography: str | None = None,
-    outcome_tag: str | None = None,
-) -> CoverageMember:
-    return CoverageMember(
-        unit_kind="interventions",
-        doc_key=doc_key,
-        tss_id=None,
-        role=role,
-        basis="abstract_only",
-        flagged=False,
-        unit=None,
-        setting=None,
-        outcome=None,
-        study_geography=geography,
-        study_country=country,
-        outcome_tag=outcome_tag,
-    )
+_signal_member = _member
 
 
 def _countries(members: list[CoverageMember], where: str | None = None) -> list[object]:

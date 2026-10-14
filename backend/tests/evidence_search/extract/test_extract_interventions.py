@@ -154,21 +154,22 @@ def _profile(
     scope_id: uuid.UUID,
     *,
     backend: Any = None,
-) -> tuple[dict[str, Any], uuid.UUID]:
+    context: TaggingContext | None = None,
+    run_id: uuid.UUID | None = None,
+) -> dict[str, Any]:
     """Run the selection-free intervention profile over ``scope_id``."""
-    run_id = seed_run(conn, task_id)
-    summary = extract_scope(
+    return extract_scope(
         conn,
         task_id=task_id,
-        run_id=run_id,
+        run_id=run_id if run_id is not None else seed_run(conn, task_id),
         context=ExtractContext(
             scope_id=scope_id, intent="unused", context={}, selection_run_id=None
         ),
         extraction_backend=StubExtractionBackend(),
         interventions_backend=backend if backend is not None else StubInterventionsBackend(),
         profiles=(INTERVENTIONS_PROFILE_ID,),
+        interventions_context=context,
     )
-    return summary, run_id
 
 
 def _records(conn: Connection, task_id: uuid.UUID) -> list[Any]:
@@ -218,7 +219,8 @@ def test_the_profile_runs_over_every_screened_in_document_with_no_selection(
     _seed_doc(conn, task_id, run_id, scope_id, status="not_relevant",
               stub=[_wire("never profiled", "walking programme")])
 
-    summary, extract_run = _profile(conn, task_id, scope_id)
+    extract_run = seed_run(conn, task_id)
+    summary = _profile(conn, task_id, scope_id, run_id=extract_run)
 
     assert summary["counts"]["selected"] == 2
     assert {doc["tss_id"] for doc in summary["docs"]} == {str(kept), str(non_evidence)}
@@ -255,7 +257,7 @@ def test_the_profile_never_reads_full_text(conn: Connection) -> None:
     seed_screening_result(conn, task_id, run_id, scope_id, tss_id)
     backend = _RecordingBackend()
 
-    summary, _ = _profile(conn, task_id, scope_id, backend=backend)
+    summary = _profile(conn, task_id, scope_id, backend=backend)
 
     assert len(backend.payloads) == 1
     payload = backend.payloads[0]
@@ -288,7 +290,7 @@ def test_a_document_covering_no_intervention_is_recorded_as_such(conn: Connectio
         stub=[_wire("peer-led walking programme", "peer-led walking programme")],
     )
 
-    summary, _ = _profile(conn, task_id, scope_id)
+    summary = _profile(conn, task_id, scope_id)
 
     statuses = {
         row.task_source_snapshot_id: (row.status, row.finding_count, row.error)
@@ -317,8 +319,8 @@ def test_records_are_memoised_and_reused_across_the_longlist_and_a_targeted_scop
     seed_screening_result(conn, task_id, run_id, targeted_scope, tss_id)
     backend = _RecordingBackend()
 
-    first, _ = _profile(conn, task_id, longlist_scope, backend=backend)
-    second, _ = _profile(conn, task_id, targeted_scope, backend=backend)
+    first = _profile(conn, task_id, longlist_scope, backend=backend)
+    second = _profile(conn, task_id, targeted_scope, backend=backend)
 
     assert len(backend.payloads) == 1  # the targeted scope made no call
     assert _counts(first)["fresh"] == 1 and _counts(first)["reused"] == 0
@@ -364,7 +366,7 @@ def test_setting_and_geography_come_from_the_abstract_and_quotes_are_grounded(
         _wire("free swimming", "free swimming for older adults", role="mentioned"),
     ])
 
-    summary, _ = _profile(conn, task_id, scope_id)
+    summary = _profile(conn, task_id, scope_id)
 
     rows = {row.intervention: row for row in _records(conn, task_id)}
     walking = rows["peer-led walking programme"]
@@ -403,7 +405,7 @@ def test_a_title_only_document_is_dropped_and_counted_and_an_empty_one_fails(
     )
     empty = _seed_doc(conn, task_id, run_id, scope_id, title="", abstract=None)
 
-    summary, _ = _profile(conn, task_id, scope_id)
+    summary = _profile(conn, task_id, scope_id)
 
     outcome = {
         row.task_source_snapshot_id: (row.status, row.error)
@@ -424,7 +426,7 @@ def test_a_failing_call_is_coverage_not_component_failure(conn: Connection) -> N
     failing = _seed_doc(conn, task_id, run_id, scope_id,
                         extra_meta={"_stub_interventions_failed": True})
 
-    summary, _ = _profile(conn, task_id, scope_id)
+    summary = _profile(conn, task_id, scope_id)
 
     row = conn.execute(
         select(source_extraction_record)
@@ -444,7 +446,7 @@ def test_duplicate_and_empty_records_are_collapsed_and_dropped(conn: Connection)
         _wire("  ", "usual care"),
     ])
 
-    summary, _ = _profile(conn, task_id, scope_id)
+    summary = _profile(conn, task_id, scope_id)
 
     findings = profile_findings(summary, INTERVENTIONS_PROFILE_ID)
     assert findings["dedup_collapsed"] == 1

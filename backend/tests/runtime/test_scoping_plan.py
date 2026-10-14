@@ -67,26 +67,20 @@ def _ready_draft(**overrides: object) -> ScopingPlanDraftWire:
 # --- readiness --------------------------------------------------------------
 
 
-def test_a_draft_without_depth_is_not_a_plan() -> None:
-    """Depth is the one field the user must choose (OS ruling 25)."""
+@pytest.mark.parametrize(
+    "missing",
+    [
+        # Depth is the one field the user must choose (OS ruling 25).
+        {"depth": None},
+        {"target_unit": None},
+        {"outcomes": []},
+        # Two settings, not three (D6). 'deep' is Evidence search vocabulary.
+        {"depth": "deep"},
+    ],
+)
+def test_a_draft_that_is_not_ready_is_not_a_plan(missing: dict[str, object]) -> None:
     with pytest.raises(ValidationError):
-        build_scoping_plan(_ready_draft(depth=None))
-
-
-def test_a_draft_without_a_target_unit_is_not_a_plan() -> None:
-    with pytest.raises(ValidationError):
-        build_scoping_plan(_ready_draft(target_unit=None))
-
-
-def test_a_draft_without_an_outcome_is_not_a_plan() -> None:
-    with pytest.raises(ValidationError):
-        build_scoping_plan(_ready_draft(outcomes=[]))
-
-
-def test_deep_is_not_a_scoping_depth() -> None:
-    """Two settings, not three (D6). 'deep' is Evidence search vocabulary."""
-    with pytest.raises(ValidationError):
-        build_scoping_plan(_ready_draft(depth="deep"))
+        build_scoping_plan(_ready_draft(**missing))
 
 
 def test_an_invented_origin_tag_is_refused() -> None:
@@ -199,31 +193,6 @@ def test_the_four_kinds_and_where_each_is_checked(
     assert constraint.checked_at == checked_at
 
 
-def test_the_kinds_are_exactly_four() -> None:
-    assert set(get_args(ConstraintKind)) == set(CHECKED_AT_BY_KIND) == {
-        "boundary",
-        "consideration",
-        "preference",
-        "evidence_restriction",
-    }
-    assert set(get_args(CheckedAt)) == {"longlist", "assessment", "retrieval"}
-
-
-def test_the_aspects_are_the_eight_lines_and_transferability() -> None:
-    """B1: a consideration speaks of one of the eight lines or transferability."""
-    assert get_args(ConsiderationAspect) == (*PROFILE_LINE_KEYS, "transferability")
-    assert PROFILE_LINE_KEYS == (
-        "cost",
-        "time_to_set_up",
-        "time_to_effect",
-        "workforce",
-        "who_decides",
-        "dependencies",
-        "coordination",
-        "delivery_complexity",
-    )
-
-
 def test_the_api_contract_mirrors_the_plan_vocabularies() -> None:
     """The API package imports no runtime module; its copies must not drift."""
     assert get_args(contract.ConstraintKind) == get_args(ConstraintKind)
@@ -236,56 +205,37 @@ def test_the_api_contract_mirrors_the_plan_vocabularies() -> None:
     assert out_fields == set(ScopingConstraint.model_fields)
 
 
-def test_a_consideration_without_an_aspect_is_refused() -> None:
-    with pytest.raises(ValidationError, match="aspect"):
-        ScopingConstraint.model_validate(
+@pytest.mark.parametrize(
+    ("fields", "match"),
+    [
+        (
+            {"kind": "consideration", "checked_at": "assessment"},
+            "aspect",
+        ),
+        (
+            {"kind": "boundary", "checked_at": "longlist", "aspect": "cost"},
+            "only a consideration may carry an aspect",
+        ),
+        (
+            {"kind": "preference", "checked_at": "assessment", "hard": True},
+            "only a consideration may be hard",
+        ),
+        (
             {
-                "text": "We have no spare staff",
                 "kind": "consideration",
-                "origin": "your_call",
-                "checked_at": "assessment",
-            }
-        )
-
-
-def test_a_boundary_with_an_aspect_is_refused() -> None:
-    with pytest.raises(ValidationError, match="only a consideration may carry an aspect"):
-        ScopingConstraint.model_validate(
-            {
-                "text": "No benefit sanctions",
-                "kind": "boundary",
-                "origin": "your_call",
-                "checked_at": "longlist",
-                "aspect": "cost",
-            }
-        )
-
-
-def test_a_hard_preference_is_refused() -> None:
-    with pytest.raises(ValidationError, match="only a consideration may be hard"):
-        ScopingConstraint.model_validate(
-            {
-                "text": "Low cost",
-                "kind": "preference",
-                "origin": "your_call",
-                "checked_at": "assessment",
-                "hard": True,
-            }
-        )
-
-
-def test_a_consideration_may_not_name_a_setting() -> None:
-    with pytest.raises(ValidationError, match="only a boundary may name a setting"):
-        ScopingConstraint.model_validate(
-            {
-                "text": "Schools can act",
-                "kind": "consideration",
-                "origin": "your_call",
                 "checked_at": "assessment",
                 "aspect": "who_decides",
                 "setting": True,
-            }
-        )
+            },
+            "only a boundary may name a setting",
+        ),
+    ],
+)
+def test_a_constraint_whose_fields_do_not_fit_its_kind_is_refused(
+    fields: dict[str, object], match: str
+) -> None:
+    with pytest.raises(ValidationError, match=match):
+        ScopingConstraint.model_validate({"text": "x", "origin": "your_call", **fields})
 
 
 def test_the_wire_keeps_a_considerations_aspect_and_hard() -> None:

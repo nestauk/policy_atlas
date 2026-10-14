@@ -19,17 +19,12 @@ from sqlalchemy.engine import Connection
 
 from policy_atlas.core.schema import intervention_profile_record
 from policy_atlas.evidence_search.extract import extraction_backend as backend_module
-from policy_atlas.evidence_search.extract.extract import ExtractContext, extract_scope
 from policy_atlas.evidence_search.extract.extraction_backend import (
     OpenAIInterventionsBackend,
-    StubExtractionBackend,
     StubInterventionsBackend,
 )
 from policy_atlas.evidence_search.extract.interventions_profile import (
     InterventionsWindowAdapter,
-)
-from policy_atlas.evidence_search.extract.interventions_records import (
-    PROFILE_ID as INTERVENTIONS_PROFILE_ID,
 )
 from policy_atlas.evidence_search.extract.interventions_records import (
     InterventionsRecordWire,
@@ -38,8 +33,8 @@ from policy_atlas.evidence_search.extract.interventions_records import (
     apply_tagging_rules,
 )
 from policy_atlas.evidence_search.extract.iof_records import ExtractionWindowPayload
-from tests.evidence_search.extract.test_extract_interventions import _seed_doc, _wire
-from tests.helpers import seed_run, seed_scope, seed_task_and_run
+from tests.evidence_search.extract.test_extract_interventions import _profile, _seed_doc, _wire
+from tests.helpers import seed_scope, seed_task_and_run
 
 CONTEXT = TaggingContext(
     target_unit="young people aged 16 to 24",
@@ -155,23 +150,6 @@ def test_the_adapter_counts_repairs_and_keeps_every_record() -> None:
 # --- through extract_scope --------------------------------------------------------------
 
 
-def _profile(
-    conn: Connection, task_id: uuid.UUID, scope_id: uuid.UUID, context: TaggingContext | None
-) -> dict[str, Any]:
-    return extract_scope(
-        conn,
-        task_id=task_id,
-        run_id=seed_run(conn, task_id),
-        context=ExtractContext(
-            scope_id=scope_id, intent="unused", context={}, selection_run_id=None
-        ),
-        extraction_backend=StubExtractionBackend(),
-        interventions_backend=StubInterventionsBackend(),
-        profiles=(INTERVENTIONS_PROFILE_ID,),
-        interventions_context=context,
-    )
-
-
 _STUB = [
     _wire("peer-led walking programme", "peer-led walking programme",
           unit_tag="adjacent", outcome_tag="Employment rate at 12 months.",
@@ -193,7 +171,7 @@ def test_extract_stores_the_settled_tags_and_counts_the_repairs(conn: Connection
     scope_id = seed_scope(conn, task_id)
     _seed_doc(conn, task_id, run_id, scope_id, stub=_STUB)
 
-    summary = _profile(conn, task_id, scope_id, CONTEXT)
+    summary = _profile(conn, task_id, scope_id, context=CONTEXT)
 
     assert _stored(conn, task_id) == {
         "peer-led walking programme": ("adjacent", "employment rate at 12 months", "option"),
@@ -207,7 +185,7 @@ def test_extract_with_no_context_stores_null_tags_and_counts_none(conn: Connecti
     scope_id = seed_scope(conn, task_id)
     _seed_doc(conn, task_id, run_id, scope_id, stub=_STUB)
 
-    summary = _profile(conn, task_id, scope_id, None)
+    summary = _profile(conn, task_id, scope_id)
 
     assert _stored(conn, task_id) == {
         "peer-led walking programme": (None, None, None),
