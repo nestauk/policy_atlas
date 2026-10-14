@@ -1,0 +1,886 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Search and Screening Code</title>
+<meta name="description" content="A walkthrough of the Policy Atlas search and screening code after tasks 051 and 052: the files, the layers, each function in the order a run calls it, what a run writes, and how every change in the code maps to a change in the method.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;800&family=Manrope:wght@400;500;600;700&display=swap">
+<style>
+/* Same layout and palette as docs/tutorials/search-and-screen/index.html. Categorical colours:
+   paper and search code (blue), policy (orange), language-model step (purple), pure functions
+   and citation steps (green), persistence and mechanics (grey). */
+:root {
+  --paper: #ffffff; --ground: #f4f4f5; --ink: #1c1c1e; --ink-2: #4b4b4f; --grey: #646363; --line: #e4e4e7;
+  --navy: #0f294a; --navy-muted: #c8d6e6; --blue: #0000ff; --blue-tint: #ececff;
+  --yellow: #fdb633; --yellow-tint: #fff6e3; --green-tint: #e7f5f2; --red: #eb003b; --red-tint: #ffe9ee;
+  --c-paper: #2d3ff0; --c-policy: #e8552b; --c-land: #18a48c; --c-plain: #9a9aa3; --c-sem: #9a1bbe;
+  --font-display: "Zosia Display", "Archivo", "Helvetica Neue", Arial, sans-serif;
+  --font-body: "Averta", "Manrope", "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #0f294a; --ground: #0b1f38; --ink: #f4f6fa; --ink-2: #c8d6e6; --grey: #a9b7c9; --line: #27405f;
+    --navy: #f4f6fa; --navy-muted: #27405f; --blue: #8c9bff; --blue-tint: #1a2f52;
+    --yellow: #fdb633; --yellow-tint: #2b2a1a; --green-tint: #123a35; --red: #ff5f85; --red-tint: #3a1a24;
+    --c-paper: #5f6dff; --c-policy: #e2603a; --c-land: #149a81; --c-plain: #6f7d93; --c-sem: #ad66d4;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #0f294a; --ground: #0b1f38; --ink: #f4f6fa; --ink-2: #c8d6e6; --grey: #a9b7c9; --line: #27405f;
+  --navy: #f4f6fa; --navy-muted: #27405f; --blue: #8c9bff; --blue-tint: #1a2f52;
+  --yellow: #fdb633; --yellow-tint: #2b2a1a; --green-tint: #123a35; --red: #ff5f85; --red-tint: #3a1a24;
+  --c-paper: #5f6dff; --c-policy: #e2603a; --c-land: #149a81; --c-plain: #6f7d93; --c-sem: #ad66d4;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { background: var(--paper); color: var(--ink); font-family: var(--font-body); font-size: 17px; line-height: 1.55; padding-block: 0 4rem; padding-inline: 16px; -webkit-font-smoothing: antialiased; }
+.wrap { max-width: 72ch; margin: 0 auto; }
+.wide { max-width: 980px; margin-inline: auto; }
+header.masthead { border-bottom: 3px solid var(--navy); padding-block: 1.25rem 1.5rem; margin-bottom: 2.5rem; }
+.eyebrow { font-size: .8rem; letter-spacing: .08em; text-transform: uppercase; color: var(--grey); font-weight: 600; }
+h1, h2, h3 { font-family: var(--font-display); color: var(--navy); text-wrap: balance; line-height: 1.1; margin: 0; }
+h1 { font-size: clamp(2.1rem, 5vw, 3.4rem); font-weight: 800; margin-top: .4rem; }
+h2 { font-size: clamp(1.5rem, 3vw, 2.1rem); font-weight: 800; margin-top: 3rem; margin-bottom: .75rem; }
+h3 { font-size: 1.15rem; font-weight: 700; margin-top: 1.75rem; margin-bottom: .4rem; font-family: var(--font-body); }
+.part { font-size: .8rem; letter-spacing: .08em; text-transform: uppercase; color: var(--blue); font-weight: 700; margin-top: 3.5rem; }
+.part + h2 { margin-top: .3rem; }
+p { margin: 0 0 1rem; }
+.lede { font-size: 1.2rem; color: var(--ink-2); max-width: 60ch; margin-top: 1rem; }
+a { color: var(--blue); }
+code { overflow-wrap: anywhere; font-family: var(--font-mono); font-size: .88em; background: var(--ground); padding: .05em .35em; border-radius: 3px; }
+pre { font-family: var(--font-mono); font-size: .8rem; line-height: 1.5; background: var(--ground); border: 1px solid var(--line); border-radius: 6px; padding: .9rem 1rem; overflow-x: auto; margin: .6rem 0 .3rem; }
+pre code { background: none; padding: 0; font-size: inherit; }
+pre .c { color: var(--grey); font-style: italic; }
+pre .k { color: var(--c-sem); }
+pre .s { color: var(--c-land); }
+.src { font-size: .78rem; color: var(--grey); margin: 0 0 1.25rem; font-family: var(--font-mono); }
+ul, ol { padding-left: 1.3rem; }
+li { margin-bottom: .35rem; }
+figure { margin: 1.5rem 0 2rem; }
+figure svg { display: block; width: 100%; height: auto; max-width: 100%; color: var(--ink); }
+figcaption { font-size: .9rem; color: var(--ink-2); margin-top: .6rem; max-width: 70ch; }
+figcaption b { color: var(--ink); }
+table { border-collapse: collapse; width: 100%; font-size: .9rem; font-variant-numeric: tabular-nums; }
+th, td { text-align: left; padding: .45rem .6rem; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-size: .78rem; letter-spacing: .05em; text-transform: uppercase; color: var(--grey); font-weight: 600; }
+td.n, th.n { text-align: right; }
+.scroll { overflow-x: auto; width: min(980px, 100vw - 32px); margin-left: calc(50% - min(490px, 50vw - 16px)); }
+.scroll table { font-size: .86rem; }
+.note { border-left: 4px solid var(--yellow); background: var(--yellow-tint); padding: .8rem 1rem; margin: 1.25rem 0; font-size: .95rem; }
+.key { border-left: 4px solid var(--blue); background: var(--blue-tint); padding: .8rem 1rem; margin: 1.25rem 0; font-size: .95rem; }
+.steps { counter-reset: step; list-style: none; padding: 0; margin: 1rem 0; display: grid; gap: .6rem; }
+.steps li { position: relative; padding-left: 2.6rem; }
+.steps li::before { counter-increment: step; content: counter(step); position: absolute; left: 0; top: .05rem; width: 1.9rem; height: 1.9rem; border-radius: 50%; background: var(--navy); color: var(--paper); font-family: var(--font-display); font-weight: 800; display: grid; place-items: center; font-size: .95rem; }
+.toc { font-size: .95rem; color: var(--ink-2); margin: 1.25rem 0 0; }
+.toc { display: flex; flex-wrap: wrap; gap: .3rem .9rem; }
+.toc a { white-space: nowrap; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); margin: 1.5rem 0 0; }
+.tile { background: var(--paper); padding: 1rem 1.1rem; }
+.tile .num { font-family: var(--font-display); font-size: 2.2rem; font-weight: 800; line-height: 1; color: var(--navy); }
+.tile .num.accent { color: var(--blue); }
+.tile .lab { font-size: .85rem; color: var(--grey); margin-top: .35rem; line-height: 1.3; }
+footer { margin-top: 3.5rem; padding-top: 1rem; border-top: 1px solid var(--line); font-size: .85rem; color: var(--grey); }
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+</style>
+</head>
+<body>
+<header class="masthead wrap">
+  <div class="eyebrow">Policy Atlas · evidence search · tasks 051 and 052 · code walkthrough, October 2026</div>
+  <h1>How the search and screening code works</h1>
+  <p class="lede">This page is for someone who knows what the search does (see the <a href="../../tutorials/search-and-screen/index.html">tutorial</a>) and now wants to read the code. Part 1 goes through the files in the order a run calls them, with the actual code where it matters. Part 2 lists every change made in tasks 051 and 052 and the method decision each one carries. Read it with the files open: every snippet names its file and function.</p>
+  <div class="tiles" role="list">
+    <div class="tile" role="listitem"><div class="num">9</div><div class="lab">backend files carry the search and screen; four of them do most of the work</div></div>
+    <div class="tile" role="listitem"><div class="num accent">637</div><div class="lab">lines in <code>pool.py</code>, all pure functions: the whole ranking method, testable without a database or network</div></div>
+    <div class="tile" role="listitem"><div class="num">0</div><div class="lab">database writes outside <code>acquire.py</code> and <code>screen.py</code>; 0 network calls outside <code>search_live.py</code> and the two model backends</div></div>
+    <div class="tile" role="listitem"><div class="num accent">+1,876 / −1,410</div><div class="lab">lines of product code changed against <code>dev</code>; the old round loop is the bulk of the deletions</div></div>
+  </div>
+  <p class="toc">
+    <a href="#map">1 Files</a><a href="#layers">2 Layers</a><a href="#pass">3 The search pass</a><a href="#pool">4 pool.py</a><a href="#acquire">5 acquire.py</a><a href="#transport">6 search_live.py</a><a href="#screen">7 Screening</a><a href="#records">8 What a run leaves</a><a href="#changes">9 Changes</a><a href="#deleted">10 Deleted</a><a href="#tests">11 Tests</a><a href="#reading">12 Reading order</a>
+  </p>
+</header>
+
+<main>
+
+<section class="wrap" id="map">
+  <div class="part">Part 1 · How the code works</div>
+  <h2>1. The files and what each one owns</h2>
+  <p>All paths below are under <code>backend/src/policy_atlas/</code>. Each file has one job, and the boundaries are strict: the search loop never talks to the network, the ranking functions never touch the database, and the persistence step never makes a search call. That is what makes the parts testable on their own.</p>
+  <div class="scroll"><table>
+    <thead><tr><th>file</th><th>owns</th><th class="n">lines</th></tr></thead>
+    <tbody>
+      <tr><td><code>evidence_search/sourcing/search_loop.py</code></td><td>The search pass: scope constants, filter validation, the call plan for each database, the call budget, the two legs, the hand-off to persistence. No HTTP, no SQL writes.</td><td class="n">1,590</td></tr>
+      <tr><td><code>evidence_search/sourcing/pool.py</code></td><td>The ranking method as pure functions: seed merging, citation counting, snowball targets, scores, de-duplication, the three-list mix, the policy ranking. No I/O at all.</td><td class="n">637</td></tr>
+      <tr><td><code>evidence_search/sourcing/acquire.py</code></td><td>From ranked pools to database rows: map a provider record to the app's envelope, skip what the task already holds, cut at the cap, write snapshots, chunks, tags, events and the coverage record, embed.</td><td class="n">1,024</td></tr>
+      <tr><td><code>evidence_search/sourcing/search_live.py</code></td><td>HTTP to OpenAlex and Overton: one method per request shape, pacing, retries, the response cache, redaction of keys from logs.</td><td class="n">1,076</td></tr>
+      <tr><td><code>evidence_search/sourcing/search_generation.py</code>, <code>search_prompts.py</code></td><td>The one language-model call that writes the queries, its prompt, its output schema and the output caps.</td><td class="n">473 + 602</td></tr>
+      <tr><td><code>evidence_search/sourcing/country_filters.py</code></td><td>Validation of the author-country and publisher-country filters (ISO codes, Overton's display names).</td><td class="n">612</td></tr>
+      <tr><td><code>evidence_search/assess/screen.py</code></td><td>Screening: load the task's documents, call the model once or twice each, decide, write the screening rows and events. Stage 2 (full text) lives here too and is unchanged.</td><td class="n">1,278</td></tr>
+      <tr><td><code>evidence_search/assess/screen_prompt.py</code>, <code>screening_backend.py</code></td><td>The screening prompt (<code>screen_v4</code>), its output schema, the model name, and the OpenAI call with its trace.</td><td class="n">338 + 380</td></tr>
+      <tr><td><code>runtime/harness.py</code>, <code>runtime/runner.py</code></td><td>The chain: the runner walks the plan's components (acquire, screen_abstract, classify, …); the harness opens a run for each, calls it, and records completed or failed.</td><td class="n">—</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section class="wrap" id="layers">
+  <h2>2. The layers</h2>
+  <p>A search starts when the runner reaches the <code>acquire</code> component of a plan; screening starts at <code>screen_abstract</code>. The harness wraps each component the same way: it opens a run, hands the component a database connection and the scope's context, and records the outcome.</p>
+<pre><code><span class="k">def</span> _run_acquire(state: HarnessState) -&gt; HarnessState:
+    sources_fn = functools.partial(
+        run_search,
+        backends=state[<span class="s">"search_backends"</span>],
+        generation_backend=state[<span class="s">"search_generation_backend"</span>],
+        embedder=state[<span class="s">"embedding_backend"</span>],
+    )
+    <span class="k">return</span> _run_scope_component(state, AcquireContext, sources_fn)
+
+
+<span class="k">def</span> _run_screen(state: HarnessState) -&gt; HarnessState:
+    sources_fn = functools.partial(screen_sources, screening_backend=state[<span class="s">"screening_backend"</span>])
+    <span class="k">return</span> _run_scope_component(state, ScreenContext, sources_fn)</code></pre>
+  <p class="src">runtime/harness.py</p>
+  <p>The backends in <code>state</code> are injected. In production they are the live HTTP and OpenAI classes; in tests they are scripted objects that answer every call from fixtures and record what was asked. That is why the whole search pass can be tested with zero network traffic (<code>test_fixture_mode_runs_the_single_pass_with_zero_egress</code>).</p>
+</section>
+
+<section class="wide">
+  <figure>
+    <svg viewBox="0 0 980 440" role="img" aria-label="Layer diagram. Top: the runner walks the plan's chain and the harness opens a run per component. Below it, run_search in search_loop.py on the left and screen_sources in screen.py on the right. Under run_search: pool.py pure ranking, acquire.py persistence, search_live.py HTTP, and search_generation.py with search_prompts.py for the query model call. Under screen_sources: screening_backend.py with screen_prompt.py for the screening model call, and decide_stage1 as a pure decision table. At the bottom: the Postgres tables and the Langfuse traces every run writes.">
+      <defs><marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="currentColor"/></marker></defs>
+      <g font-family="inherit" font-size="13">
+        <rect x="20" y="20" width="940" height="60" rx="6" fill="var(--ground)" stroke="currentColor"/>
+        <text x="32" y="43" font-weight="600">runtime/runner.py · runtime/harness.py</text>
+        <text x="32" y="62" font-size="11">the runner walks the plan's chain: acquire → screen_abstract → classify → …; the harness opens a run per component, calls it with a connection and the scope context, records completed or failed</text>
+        <g stroke="currentColor" stroke-width="1.5" marker-end="url(#arr)">
+          <line x1="305" y1="80" x2="305" y2="108"/><line x1="795" y1="80" x2="795" y2="108"/>
+        </g>
+
+        <rect x="20" y="112" width="570" height="62" rx="6" fill="var(--c-paper)" fill-opacity=".14" stroke="var(--c-paper)" stroke-width="1.5"/>
+        <text x="32" y="135" font-weight="600">run_search · sourcing/search_loop.py</text>
+        <text x="32" y="154" font-size="11">plans every call, runs the two legs on threads, applies the budget, ranks, hands two pools and two caps on</text>
+        <text x="32" y="167" font-size="11" fill="var(--grey)">no HTTP here, no SQL writes here</text>
+
+        <rect x="630" y="112" width="330" height="62" rx="6" fill="var(--c-sem)" fill-opacity=".12" stroke="var(--c-sem)" stroke-width="1.5"/>
+        <text x="642" y="135" font-weight="600">screen_sources · assess/screen.py</text>
+        <text x="642" y="154" font-size="11">loads the task's documents, runs the one-or-two-call</text>
+        <text x="642" y="167" font-size="11">vote, writes the screening rows and events</text>
+
+        <g stroke="currentColor" stroke-width="1.5" marker-end="url(#arr)">
+          <line x1="90" y1="174" x2="90" y2="204"/><line x1="235" y1="174" x2="235" y2="204"/><line x1="380" y1="174" x2="380" y2="204"/><line x1="525" y1="174" x2="525" y2="204"/>
+          <line x1="710" y1="174" x2="710" y2="204"/><line x1="880" y1="174" x2="880" y2="204"/>
+        </g>
+
+        <rect x="20" y="208" width="135" height="96" rx="6" fill="var(--c-land)" fill-opacity=".14" stroke="var(--c-land)" stroke-width="1.5"/>
+        <text x="30" y="229" font-weight="600" font-size="12">pool.py</text>
+        <text x="30" y="247" font-size="11">pure functions:</text>
+        <text x="30" y="261" font-size="11">merge, count, score,</text>
+        <text x="30" y="275" font-size="11">de-duplicate, mix,</text>
+        <text x="30" y="289" font-size="11">rank policy</text>
+
+        <rect x="165" y="208" width="140" height="96" rx="6" fill="var(--ground)" stroke="currentColor"/>
+        <text x="175" y="229" font-weight="600" font-size="12">acquire.py</text>
+        <text x="175" y="247" font-size="11">map a record to the</text>
+        <text x="175" y="261" font-size="11">envelope, skip held,</text>
+        <text x="175" y="275" font-size="11">cut at the cap, write</text>
+        <text x="175" y="289" font-size="11">rows and events, embed</text>
+
+        <rect x="315" y="208" width="130" height="96" rx="6" fill="var(--ground)" stroke="currentColor"/>
+        <text x="325" y="229" font-weight="600" font-size="12">search_live.py</text>
+        <text x="325" y="247" font-size="11">HTTP to OpenAlex</text>
+        <text x="325" y="261" font-size="11">and Overton: pacing,</text>
+        <text x="325" y="275" font-size="11">retries, cache, key</text>
+        <text x="325" y="289" font-size="11">redaction</text>
+
+        <rect x="455" y="208" width="135" height="96" rx="6" fill="var(--c-sem)" fill-opacity=".12" stroke="var(--c-sem)" stroke-width="1.5"/>
+        <text x="465" y="229" font-weight="600" font-size="12">search_generation.py</text>
+        <text x="465" y="247" font-size="11">+ search_prompts.py</text>
+        <text x="465" y="261" font-size="11">one model call that</text>
+        <text x="465" y="275" font-size="11">writes 5 queries and</text>
+        <text x="465" y="289" font-size="11">2 paraphrases</text>
+
+        <rect x="630" y="208" width="160" height="96" rx="6" fill="var(--c-sem)" fill-opacity=".12" stroke="var(--c-sem)" stroke-width="1.5"/>
+        <text x="640" y="229" font-weight="600" font-size="12">screening_backend.py</text>
+        <text x="640" y="247" font-size="11">+ screen_prompt.py</text>
+        <text x="640" y="261" font-size="11">one model call per</text>
+        <text x="640" y="275" font-size="11">document, structured</text>
+        <text x="640" y="289" font-size="11">output, traced</text>
+
+        <rect x="800" y="208" width="160" height="96" rx="6" fill="var(--c-land)" fill-opacity=".14" stroke="var(--c-land)" stroke-width="1.5"/>
+        <text x="810" y="229" font-weight="600" font-size="12">decide_stage1</text>
+        <text x="810" y="247" font-size="11">pure decision table:</text>
+        <text x="810" y="261" font-size="11">two replies in,</text>
+        <text x="810" y="275" font-size="11">status + confidence</text>
+        <text x="810" y="289" font-size="11">+ flags out</text>
+
+        <g stroke="currentColor" stroke-width="1.5" marker-end="url(#arr)">
+          <line x1="235" y1="304" x2="235" y2="334"/><line x1="710" y1="304" x2="710" y2="334"/>
+        </g>
+        <rect x="20" y="338" width="580" height="82" rx="6" fill="var(--ground)" stroke="currentColor"/>
+        <text x="32" y="361" font-weight="600">Postgres</text>
+        <text x="32" y="380" font-size="11">source_snapshot · chunk · task_source_snapshot · source_tag · search_coverage_record</text>
+        <text x="32" y="395" font-size="11">source_screening_result · event_log (search.executed, source.acquired, source.screened)</text>
+        <text x="32" y="411" font-size="11" fill="var(--grey)">written only inside acquire.py and screen.py, inside the harness's transaction</text>
+        <rect x="630" y="338" width="330" height="82" rx="6" fill="var(--ground)" stroke="currentColor"/>
+        <text x="642" y="361" font-weight="600">Langfuse</text>
+        <text x="642" y="380" font-size="11">one trace per run; spans search:generate_queries and</text>
+        <text x="642" y="395" font-size="11">screen:abstract with model, prompt version, tokens and</text>
+        <text x="642" y="411" font-size="11">scores (screen_rep_confidence, second_call_kept_count)</text>
+      </g>
+    </svg>
+    <figcaption><b>Diagram 1: the layers.</b> Green boxes are pure functions, purple boxes are language-model calls, grey boxes do I/O. The search loop in the middle is the only place that knows the plan of calls; everything below it is a tool it uses. The backends are injected objects, so a test can replace the two grey I/O boxes under <code>run_search</code> with scripted stand-ins and still run the whole pass.</figcaption>
+  </figure>
+</section>
+
+<section class="wrap" id="pass">
+  <h2>3. The search pass, function by function</h2>
+  <p>Everything about a scope is three numbers in one table. The three scopes share one plan of calls and one call budget per database; they differ only in how many documents are kept at the end.</p>
+<pre><code>DEPTH_CONSTANTS: dict[SearchDepth, DepthConstants] = {
+    <span class="s">"rapid"</span>:    {<span class="s">"papers_cap"</span>: 100, <span class="s">"policy_cap"</span>: 50,  <span class="s">"call_budget"</span>: {<span class="s">"openalex"</span>: 45, <span class="s">"overton"</span>: 30}},
+    <span class="s">"standard"</span>: {<span class="s">"papers_cap"</span>: 200, <span class="s">"policy_cap"</span>: 100, <span class="s">"call_budget"</span>: {<span class="s">"openalex"</span>: 45, <span class="s">"overton"</span>: 30}},
+    <span class="s">"deep"</span>:     {<span class="s">"papers_cap"</span>: 400, <span class="s">"policy_cap"</span>: 200, <span class="s">"call_budget"</span>: {<span class="s">"openalex"</span>: 45, <span class="s">"overton"</span>: 30}},
+}</code></pre>
+  <p class="src">sourcing/search_loop.py · DEPTH_CONSTANTS (condensed to one line per scope). "rapid", "standard" and "deep" are the internal names of Focused, Broad and Broadest.</p>
+
+  <h3>3.1 <code>run_search</code>: the entry point</h3>
+  <p>The function reads the scope's directive (depth, filters, guidance), validates the filters for each database, makes the one query-generation call, and then runs the two database legs on two threads. Each leg gets its own <code>_Pass</code> object, which holds that leg's budget and every call it made, so the two threads never write to the same state. When both are done, the calls are merged in backend order and handed to <code>acquire_sources</code> with the two ranked pools and the two caps.</p>
+<pre><code>wire, usage = generation_backend.generate_queries(QueriesPayload(intent=context.intent, guidance=guidance))
+queries, paraphrases = validated_queries(wire)       <span class="c"># 5 queries, 2 paraphrases; an over-long query is dropped</span>
+
+passes = {name: _Pass(constants, variant_count) for name in names}   <span class="c"># one budget + call log per backend</span>
+<span class="k">with</span> ThreadPoolExecutor(max_workers=max(1, len(leg_jobs))) <span class="k">as</span> executor:
+    futures = {name: tracing.submit_with_context(executor, leg) for name, leg in leg_jobs.items()}
+    <span class="k">for</span> name, future <span class="k">in</span> futures.items():
+        outcome = future.result()                    <span class="c"># (pool entries, leg summary[, local filters])</span>
+        ...
+executed = [call for name in names for call in passes[name].executed]   <span class="c"># backend order, not thread order</span>
+
+counts = acquire.acquire_sources(
+    conn, task_id=task_id, run_id=run_id, context=context, backends=backends, embedder=embedder,
+    executed_calls=executed,
+    pools=pools,
+    <span class="c"># The cap cuts the ranked list; records the ranking left out never fill it.</span>
+    caps={
+        <span class="s">"openalex"</span>: min(constants[<span class="s">"papers_cap"</span>], ranked_count.get(<span class="s">"openalex"</span>, 0)),
+        <span class="s">"overton"</span>: min(constants[<span class="s">"policy_cap"</span>], ranked_count.get(<span class="s">"overton"</span>, 0)),
+    },
+    depth=depth, scope_wire_params=scope_wire_params, search_guidance=guidance,
+)</code></pre>
+  <p class="src">sourcing/search_loop.py · run_search (abridged)</p>
+  <p><code>tracing.submit_with_context</code> matters: it copies the current trace and task context into the worker thread, so a call made on a thread still lands in the right Langfuse trace and log context.</p>
+
+  <h3>3.2 <code>_CallSpec</code> and <code>_Pass</code>: one planned call, and the budget</h3>
+  <p>Every request the pass makes is first written down as a <code>_CallSpec</code>: what verb it is, what text or ids it sends, which filters go on the wire, how many records to take, a closure that performs the fetch, and an optional local filter. A spec is inert; <code>_Pass.execute</code> or <code>_Pass.execute_batch</code> runs it. The budget is counted in <strong>logical calls</strong>: one spec is one call, however many pages or retries the transport needs underneath. A spec past the budget is skipped and recorded as skipped.</p>
+<pre><code>@dataclass(frozen=True)
+<span class="k">class</span> _CallSpec:
+    verb: CallVerb                       <span class="c"># search, search_semantic, fetch_references, fetch_citations, fetch_by_id</span>
+    query: str
+    origin: QueryOrigin                  <span class="c"># generated, variant_sr, semantic, snowball_backward, landmark, …</span>
+    wire_params: dict[str, str]          <span class="c"># filters sent to the database</span>
+    max_records: int
+    fetch: Fetch                         <span class="c"># closure: size -&gt; records</span>
+    keep: Callable[[dict[str, Any]], bool] | None = None   <span class="c"># local filter, counted as post_filter_excluded</span>
+
+
+<span class="k">class</span> _Pass:
+    <span class="k">def</span> _reserve(self, backend) -&gt; bool:
+        <span class="s">"""Claim one logical call against the backend's budget, in plan order."""</span>
+        budget = self.constants[<span class="s">"call_budget"</span>].get(backend.name, 0)
+        budget *= self.variant_count.get(backend.name, 1) <span class="k">if</span> backend.name == <span class="s">"openalex"</span> <span class="k">else</span> 1
+        <span class="k">if</span> self.calls.get(backend.name, 0) &gt;= budget:
+            <span class="k">return</span> False
+        self.calls[backend.name] = self.calls.get(backend.name, 0) + 1
+        <span class="k">return</span> True
+
+    <span class="k">def</span> execute(self, backend, spec: _CallSpec) -&gt; ExecutedCall | None:
+        <span class="k">if</span> <span class="k">not</span> self._reserve(backend):
+            <span class="k">return</span> None
+        <span class="k">try</span>:
+            fetched = spec.fetch(spec.max_records)
+        <span class="k">except</span> Exception <span class="k">as</span> exc:
+            fetched = exc                            <span class="c"># an error is a recorded call with status "error"</span>
+        <span class="k">return</span> self._finish(backend, spec, fetched)</code></pre>
+  <p class="src">sourcing/search_loop.py · _CallSpec, _Pass._reserve, _Pass.execute</p>
+  <p><code>execute_batch</code> is the concurrent form: it reserves the budget for each spec in plan order, runs the fetches on up to 8 threads (<code>SEARCH_CONCURRENCY</code>), and then records the results in plan order, so the events, counts and pool order are the same as a sequential run whatever the thread timing. The pacing lock in the transport (section 6) keeps the request rate within the database's limit however many threads are sending.</p>
+  <p>One detail that explains a lot of the bookkeeping: <code>_finish</code> copies every returned record (<code>dict(record)</code>) and remembers which call returned it in <code>origin_of</code>, keyed by the Python object id. The pool functions pass record objects around, and at the end <code>entries()</code> looks each one up to say which call found it. That is how every kept document gets its <code>query_origin</code>.</p>
+
+  <h3>3.3 <code>_openalex_leg</code>: the paper pool in seven steps</h3>
+  <ol class="steps">
+    <li><b>Seeds.</b> Build 15 keyword specs (5 queries × 3 forms: as written, with the systematic-review clause, with the trial clause) per filter variant, plus 8 semantic specs (the question, 2 paraphrases, 5 queries). Run them as one concurrent batch.</li>
+    <li><b>Fallback.</b> If every keyword call came back empty, search the question verbatim once per variant and say so in the summary.</li>
+    <li><b>Interleave.</b> Merge the 23 result lists by taking the top of each in turn (<code>pool.interleave</code>); the first 200 distinct works are the seeds. Count how many seeds cite each work (<code>pool.count_references</code>).</li>
+    <li><b>Citation filters.</b> The citation calls carry every wire filter except the author-country one, which is checked locally on the papers that come back.</li>
+    <li><b>Backward.</b> The 200 most cited non-seed works, fetched by id in 4 concurrent calls of 50.</li>
+    <li><b>Forward.</b> The papers citing the 20 best-connected seeds (each under 300 total citations), fetched page by page until a short page or page 10, then scored and cut to 200 (<code>pool.score_forward</code>).</li>
+    <li><b>Pool.</b> Seeds, backward and forward become one candidate list, duplicates are removed, the list is ordered by the three-list mix, and every record the leg ever fetched is listed once for acquire.</li>
+  </ol>
+<pre><code><span class="c"># 1. Seeds, one concurrent batch (keyword specs built the same way from _rapid_plans × wires)</span>
+semantic_specs = [
+    _CallSpec(verb=<span class="s">"search_semantic"</span>, query=text, origin=<span class="s">"semantic"</span>, wire_params=semantic_wire,
+              max_records=pool.SEMANTIC_PER_CALL, fetch=_semantic_fetch(extended, text, semantic_wire), keep=keep)
+    <span class="k">for</span> text <span class="k">in</span> [intent, *paraphrases[:2], *queries[:N_QUERIES]]
+]
+results = search.execute_batch(backend, [*keyword_specs, *semantic_specs])
+
+<span class="c"># 3. The seeds are the first SEEDS distinct works, interleaved by rank.</span>
+lists = [call.records for _, call in keyword] + [call.records for call in semantic]
+seeds = pool.interleave(lists, pool.record_short_id)[: pool.SEEDS]
+counts = pool.count_references(seeds)
+
+<span class="c"># 6. Forward: the works that cite the best-connected seeds, paged until a short page.</span>
+chased = pool.forward_seeds(seeds, counts, top=pool.FORWARD_TOP, max_cites=pool.FORWARD_MAX_CITES)
+<span class="k">for</span> start <span class="k">in</span> range(0, len(chased), pool.FORWARD_IDS_PER_CALL):
+    ids = chased[start : start + pool.FORWARD_IDS_PER_CALL]
+    <span class="k">for</span> page <span class="k">in</span> range(1, pool.FORWARD_PAGES + 1):
+        page_call = search.execute(backend, _CallSpec(verb=<span class="s">"fetch_citations"</span>, query=<span class="s">"|"</span>.join(ids),
+            origin=<span class="s">"snowball_forward"</span>, wire_params=citation_wire, max_records=pool.KEYWORD_PER_CALL,
+            fetch=_citing_fetch(extended, ids, citation_wire, page), keep=country_keep))
+        <span class="k">if</span> page_call <span class="k">is</span> None <span class="k">or</span> page_call.status != <span class="s">"ok"</span>:
+            <span class="k">break</span>
+        citing.extend(page_call.records)
+        <span class="k">if</span> len(page_call.records) + (page_call.post_filter_excluded <span class="k">or</span> 0) &lt; pool.KEYWORD_PER_CALL:
+            <span class="k">break</span>                                <span class="c"># a short page means there is no next page</span>
+forward = pool.score_forward(citing, seed_ids, counts, excluded_ids=set(targets))[: pool.FORWARD_KEEP]
+
+<span class="c"># 7. One pool: duplicates dropped, then the relevant / seminal / novel mix.</span>
+seeded = [(record, search.origin_of[id(record)][0]) for record in seeds]
+cands = pool.paper_candidates(seeded, backward, forward, counts)
+unique = pool.dedupe_papers(cands)
+summary.duplicate_papers = len(cands) - len(unique)
+ranked = pool.rank_mix(unique, lists, novel_from_year=date.today().year - pool.NOVEL_YEARS)
+<span class="k">return</span> search.entries([c.record for c in ranked], <span class="s">"openalex"</span>), summary, local_filters</code></pre>
+  <p class="src">sourcing/search_loop.py · _openalex_leg (steps 1, 3, 6 and 7, abridged)</p>
+  <p>The forward loop is sequential on purpose: page 2 is only requested if page 1 was full, and "full" has to count the records the local country filter removed, otherwise a heavily filtered page would look short and stop the chase early.</p>
+
+  <h3>3.4 <code>_overton_leg</code>: the policy pool in four steps</h3>
+  <p>Three searches go out one after another (Overton's rate limit is slow, 1.2 s between requests, so there is nothing to gain from threads here): the question and the two paraphrases, each asking for best-match order and 134 documents (400 ÷ 3, rounded up). The lists are interleaved and de-duplicated by normalised title (<code>pool.dedupe_policy</code>). Each Overton record already lists the policy documents it cites, so <code>pool.count_policy_cites</code> counts, across the results, how often each document is cited. The 15 most cited that the search did not return are fetched by id (the landmarks), with the plan's country filter applied to them. <code>pool.rank_policy</code> orders results and landmarks together and the leg returns its entries.</p>
+  <p>A plan whose country filter needs Overton's post-filter form fails closed: if the backend object has no <code>search_with_post_filter</code> method the leg raises rather than search unfiltered.</p>
+
+  <h3>3.5 <code>entries()</code>: why every fetched record is listed, not just the ranked ones</h3>
+<pre><code><span class="k">def</span> entries(self, ranked: list[dict[str, Any]], backend_name: str) -&gt; list[PoolEntry]:
+    <span class="s">"""The pool handed to acquire: the ranked records, then every other record."""</span>
+    self.ranked_count[backend_name] = len(ranked)
+    placed = {id(record) for record in ranked}
+    out = [(record, *self.origin_of[id(record)]) for record in ranked]
+    <span class="k">for</span> call <span class="k">in</span> self.executed:
+        <span class="k">if</span> call.backend_name != backend_name:
+            <span class="k">continue</span>
+        <span class="k">for</span> record <span class="k">in</span> call.records:
+            <span class="k">if</span> id(record) <span class="k">not</span> <span class="k">in</span> placed:
+                placed.add(id(record))
+                out.append((record, *self.origin_of[id(record)]))
+    <span class="k">return</span> out</code></pre>
+  <p class="src">sourcing/search_loop.py · _Pass.entries</p>
+  <p>Acquire promises that every record a call returned is counted exactly once (kept, already held, unusable, or over the cap). The ranking drops duplicate copies and the records it never placed, so those are appended after the ranked list. The cap passed to acquire is never larger than the ranked count, so the appended tail can only ever be counted as "over the cap". The invariant holds and the cut is still exactly the ranked list.</p>
+</section>
+
+<section class="wide">
+  <figure>
+    <svg viewBox="0 0 980 815" role="img" aria-label="Call sequence of one search. Column one, run_search: parse the directive and pick the scope constants; validate the filters; one query-generation model call; then a bar across three columns for the thread pool that runs the two legs. Column two, the OpenAlex leg: seeds as one concurrent batch, the verbatim fallback, interleave to two hundred seeds, backward lookups as a batch, forward pages one by one, then candidates, de-duplication, the mix and entries. Column three, the Overton leg: three sequential searches, interleave and title de-duplication, fifteen landmark fetches, rank_policy and entries. A second bar merges the calls in backend order. Then run_search calls acquire_sources with the pools and caps, which in column four writes a search.executed event per call, walks each pool to its cap persisting records with a source.acquired event, writes tags, the coverage record and embeddings, and returns counts.">
+      <g font-family="inherit" font-size="13">
+        <text x="135" y="28" text-anchor="middle" font-weight="700">run_search</text>
+        <text x="370" y="28" text-anchor="middle" font-weight="700">_openalex_leg · thread 1</text>
+        <text x="605" y="28" text-anchor="middle" font-weight="700">_overton_leg · thread 2</text>
+        <text x="840" y="28" text-anchor="middle" font-weight="700">acquire_sources</text>
+        <g stroke="var(--line)" stroke-width="1"><line x1="245" y1="36" x2="245" y2="800"/><line x1="480" y1="36" x2="480" y2="800"/><line x1="715" y1="36" x2="715" y2="800"/></g>
+
+        <g font-size="11">
+          <rect x="20" y="45" width="230" height="46" rx="5" fill="var(--ground)" stroke="currentColor"/>
+          <text x="30" y="64" font-weight="600">parse_search_directive</text>
+          <text x="30" y="80">depth, filters, guidance → DEPTH_CONSTANTS[depth]</text>
+          <rect x="20" y="100" width="230" height="46" rx="5" fill="var(--ground)" stroke="currentColor"/>
+          <text x="30" y="119" font-weight="600">validate_scope_filters</text>
+          <text x="30" y="135">per-backend filters → variants → wire params</text>
+          <rect x="20" y="155" width="230" height="46" rx="5" fill="var(--c-sem)" fill-opacity=".12" stroke="var(--c-sem)" stroke-width="1.5"/>
+          <text x="30" y="174" font-weight="600">generate_queries · 1 model call</text>
+          <text x="30" y="190">validated_queries → 5 queries, 2 paraphrases</text>
+        </g>
+        <g stroke="currentColor" stroke-width="1.5" marker-end="url(#arr)">
+          <line x1="135" y1="91" x2="135" y2="98"/><line x1="135" y1="146" x2="135" y2="153"/><line x1="135" y1="201" x2="135" y2="208"/>
+        </g>
+        <rect x="20" y="210" width="700" height="30" rx="5" fill="var(--c-paper)" fill-opacity=".14" stroke="var(--c-paper)" stroke-width="1.5"/>
+        <text x="370" y="229" text-anchor="middle" font-size="11" font-weight="600">ThreadPoolExecutor: one _Pass (budget + call log) per backend; both legs submitted with the trace context</text>
+        <g stroke="currentColor" stroke-width="1.5" marker-end="url(#arr)">
+          <line x1="370" y1="240" x2="370" y2="253"/><line x1="605" y1="240" x2="605" y2="253"/>
+        </g>
+
+        <g font-size="11">
+          <rect x="255" y="255" width="220" height="46" rx="5" fill="var(--c-paper)" fill-opacity=".14" stroke="var(--c-paper)"/>
+          <text x="265" y="274" font-weight="600">1 · batch: 15 keyword + 8 semantic calls</text>
+          <text x="265" y="290">_rapid_plans × wires; semantic filters split</text>
+          <rect x="255" y="309" width="220" height="46" rx="5" fill="var(--c-paper)" fill-opacity=".14" stroke="var(--c-paper)"/>
+          <text x="265" y="328" font-weight="600">2 · every keyword call empty?</text>
+          <text x="265" y="344">one fallback_verbatim search per variant</text>
+          <rect x="255" y="363" width="220" height="46" rx="5" fill="var(--c-paper)" fill-opacity=".14" stroke="var(--c-paper)"/>
+          <text x="265" y="382" font-weight="600">3 · pool.interleave → 200 seeds</text>
+          <text x="265" y="398">pool.count_references → in-set counts</text>
+          <rect x="255" y="417" width="220" height="46" rx="5" fill="var(--c-land)" fill-opacity=".14" stroke="var(--c-land)"/>
+          <text x="265" y="436" font-weight="600">5 · backward: batch of 4 lookup_ids calls</text>
+          <text x="265" y="452">wire minus country; country_predicate locally</text>
+          <rect x="255" y="471" width="220" height="46" rx="5" fill="var(--c-land)" fill-opacity=".14" stroke="var(--c-land)"/>
+          <text x="265" y="490" font-weight="600">6 · forward: fetch_citing, page by page</text>
+          <text x="265" y="506">forward_seeds · score_forward → keep 200</text>
+          <rect x="255" y="525" width="220" height="46" rx="5" fill="var(--c-paper)" fill-opacity=".14" stroke="var(--c-paper)"/>
+          <text x="265" y="544" font-weight="600">7 · paper_candidates → dedupe_papers</text>
+          <text x="265" y="560">→ rank_mix → search.entries(ranked)</text>
+        </g>
+        <g stroke="currentColor" stroke-width="1.5" marker-end="url(#arr)">
+          <line x1="370" y1="301" x2="370" y2="307"/><line x1="370" y1="355" x2="370" y2="361"/><line x1="370" y1="409" x2="370" y2="415"/><line x1="370" y1="463" x2="370" y2="469"/><line x1="370" y1="517" x2="370" y2="523"/><line x1="370" y1="571" x2="370" y2="583"/>
+        </g>
+
+        <g font-size="11">
+          <rect x="490" y="255" width="220" height="46" rx="5" fill="var(--c-policy)" fill-opacity=".14" stroke="var(--c-policy)"/>
+          <text x="500" y="274" font-weight="600">1 · execute × 3, sequential</text>
+          <text x="500" y="290">question + 2 paraphrases, 134 each</text>
+          <rect x="490" y="309" width="220" height="46" rx="5" fill="var(--c-policy)" fill-opacity=".14" stroke="var(--c-policy)"/>
+          <text x="500" y="328" font-weight="600">2 · interleave → dedupe_policy</text>
+          <text x="500" y="344">count_policy_cites over the results</text>
+          <rect x="490" y="363" width="220" height="46" rx="5" fill="var(--c-land)" fill-opacity=".14" stroke="var(--c-land)"/>
+          <text x="500" y="382" font-weight="600">3 · landmarks: 15 fetch_by_id calls</text>
+          <text x="500" y="398">landmark_targets; country filter applied</text>
+          <rect x="490" y="417" width="220" height="46" rx="5" fill="var(--c-policy)" fill-opacity=".14" stroke="var(--c-policy)"/>
+          <text x="500" y="436" font-weight="600">4 · rank_policy → entries(ranked)</text>
+          <text x="500" y="452">results and landmarks in one order</text>
+        </g>
+        <g stroke="currentColor" stroke-width="1.5" marker-end="url(#arr)">
+          <line x1="605" y1="301" x2="605" y2="307"/><line x1="605" y1="355" x2="605" y2="361"/><line x1="605" y1="409" x2="605" y2="415"/><line x1="605" y1="463" x2="605" y2="583"/>
+        </g>
+
+        <rect x="20" y="585" width="700" height="30" rx="5" fill="var(--c-paper)" fill-opacity=".14" stroke="var(--c-paper)" stroke-width="1.5"/>
+        <text x="370" y="604" text-anchor="middle" font-size="11" font-weight="600">both legs done: executed calls merged in backend order; ranked_count and pool size per backend; semantic_local_filters noted</text>
+        <line x1="135" y1="615" x2="135" y2="628" stroke="currentColor" stroke-width="1.5" marker-end="url(#arr)"/>
+
+        <g font-size="11">
+          <rect x="20" y="630" width="230" height="46" rx="5" fill="var(--ground)" stroke="currentColor"/>
+          <text x="30" y="649" font-weight="600">acquire_sources(executed, pools, caps)</text>
+          <text x="30" y="665">caps = min(scope cap, ranked_count)</text>
+          <rect x="20" y="690" width="230" height="46" rx="5" fill="var(--ground)" stroke="currentColor"/>
+          <text x="30" y="709" font-weight="600">return counts + counts["search"]</text>
+          <text x="30" y="725">depth, calls, seeds, duplicates, landmarks, time</text>
+        </g>
+        <line x1="135" y1="676" x2="135" y2="688" stroke="currentColor" stroke-width="1.5" marker-end="url(#arr)"/>
+        <line x1="250" y1="653" x2="722" y2="653" stroke="currentColor" stroke-width="1.5" marker-end="url(#arr)"/>
+
+        <g font-size="11">
+          <rect x="725" y="630" width="235" height="46" rx="5" fill="var(--ground)" stroke="currentColor"/>
+          <text x="735" y="649" font-weight="600">search.executed event per call</text>
+          <text x="735" y="665">query, origin, verb, filters, status, count</text>
+          <rect x="725" y="686" width="235" height="58" rx="5" fill="var(--ground)" stroke="currentColor"/>
+          <text x="735" y="705" font-weight="600">walk each pool to its cap</text>
+          <text x="735" y="721">map → is_new → persist(pool_rank)</text>
+          <text x="735" y="737">source.acquired event per kept record</text>
+          <rect x="725" y="754" width="235" height="46" rx="5" fill="var(--ground)" stroke="currentColor"/>
+          <text x="735" y="773" font-weight="600">tags · search_coverage_record · embed</text>
+          <text x="735" y="789">return counts; invariant holds per backend</text>
+        </g>
+        <g stroke="currentColor" stroke-width="1.5" marker-end="url(#arr)">
+          <line x1="842" y1="676" x2="842" y2="684"/><line x1="842" y1="744" x2="842" y2="752"/>
+        </g>
+      </g>
+    </svg>
+    <figcaption><b>Diagram 2: one search, as the code calls it.</b> Step 4 of the OpenAlex leg (building the citation filters) has no box because it makes no call. Blue boxes are search calls, green boxes are citation lookups, the purple box is the only model call in the search. The two bars are the points where the threads start and join; between them the two columns run at the same time and never share state.</figcaption>
+  </figure>
+</section>
+
+<section class="wrap" id="pool">
+  <h2>4. <code>pool.py</code>: the ranking method as functions</h2>
+  <p>This file is the method. It has no imports beyond the standard library and the app's typing helpers, every function takes plain lists and dictionaries and returns the same, and the constants at the top are the knobs the tutorial quotes. If you want to change how papers are ranked, this is the only file you touch, and <code>tests/evidence_search/sourcing/test_pool.py</code> is the only test file you run.</p>
+  <div class="scroll"><table>
+    <thead><tr><th>function</th><th>in</th><th>out</th><th>used by</th></tr></thead>
+    <tbody>
+      <tr><td><code>interleave(lists, key)</code></td><td>ranked result lists, an identity function</td><td>one list: top of each in turn, each identity once</td><td>seeds, policy results</td></tr>
+      <tr><td><code>count_references(seeds)</code></td><td>seed records with <code>referenced_works</code></td><td><code>Counter</code>: work id → how many seeds cite it</td><td>backward targets, every score</td></tr>
+      <tr><td><code>backward_targets(counts, seed_ids, n)</code></td><td>the counter, the seed ids</td><td>the n most cited non-seed ids, stable order</td><td>step 5</td></tr>
+      <tr><td><code>forward_seeds(seeds, counts, top, max_cites)</code></td><td>seeds, counter</td><td>the 20 best-connected seed ids under 300 citations</td><td>step 6</td></tr>
+      <tr><td><code>score_forward(citing, seed_ids, counts, excluded_ids)</code></td><td>citing records</td><td><code>PaperCandidate</code> list by weighted coupling</td><td>step 6</td></tr>
+      <tr><td><code>paper_candidates(seeds, backward, forward, counts)</code></td><td>the three sources</td><td>one candidate list with in-set, coupling, specificity</td><td>step 7</td></tr>
+      <tr><td><code>paper_key</code>, <code>dedupe_papers(cands)</code></td><td>candidates</td><td>one copy per (normalised title, author names), the most cited</td><td>step 7</td></tr>
+      <tr><td><code>query_fusion(lists)</code></td><td>ranked lists</td><td>work id → reciprocal-rank-fusion score</td><td><code>mix_strata</code></td></tr>
+      <tr><td><code>mix_strata</code>, <code>rank_mix(cands, lists, novel_from_year)</code></td><td>candidates, the query lists</td><td>the final paper order</td><td>step 7</td></tr>
+      <tr><td><code>rank_papers(cands)</code></td><td>candidates</td><td>specificity order (ties inside the mix; the policy model)</td><td><code>mix_strata</code></td></tr>
+      <tr><td><code>country_predicate(record, countries)</code></td><td>a record, ISO codes</td><td>True when an author affiliation matches; False when unknown</td><td>citation calls' local filter</td></tr>
+      <tr><td><code>normalised_title</code>, <code>policy_key</code>, <code>dedupe_policy(records)</code></td><td>policy records</td><td>one copy per normalised title, the best ranked</td><td>Overton step 2</td></tr>
+      <tr><td><code>count_policy_cites</code>, <code>landmark_targets(counts, result_ids, n)</code></td><td>policy results</td><td>cited-by-results counter; 15 landmark ids</td><td>Overton step 3</td></tr>
+      <tr><td><code>rank_policy(results, landmarks, counts)</code></td><td>results with origin, landmarks</td><td><code>PolicyCandidate</code> list in final order</td><td>Overton step 4</td></tr>
+    </tbody>
+  </table></div>
+  <p>Three snippets carry most of the method. The scores are rounded to three decimals on purpose: near-equal scores then tie, and the next sort key (weighted coupling, in-set count, seed position) decides, which keeps the order stable and explainable.</p>
+<pre><code><span class="k">def</span> _specificity(inset: int, coupling: int, cited_by_count: int) -&gt; float:
+    <span class="s">"""Dampen local graph signals when a work is globally cited everywhere."""</span>
+    <span class="k">return</span> round((inset + coupling) / log10(cited_by_count + 10), 3)
+
+
+<span class="k">def</span> query_fusion(lists: list[list[dict[str, Any]]]) -&gt; dict[str, float]:
+    scores: dict[str, float] = {}
+    <span class="k">for</span> records <span class="k">in</span> lists:
+        <span class="k">for</span> rank, record <span class="k">in</span> enumerate(records):
+            work_id = record_short_id(record)
+            <span class="k">if</span> work_id:
+                scores[work_id] = scores.get(work_id, 0.0) + 1.0 / (RRF_K + rank + 1)   <span class="c"># RRF_K = 60</span>
+    <span class="k">return</span> scores
+
+
+<span class="k">def</span> rank_mix(cands, lists, *, novel_from_year, coupling_lists=COUPLING_LISTS):
+    strata = mix_strata(cands, lists, novel_from_year=novel_from_year, coupling_lists=coupling_lists)
+    out, seen = [], set()
+    cursors = [iter(stratum) for stratum in strata]        <span class="c"># relevant, seminal, novel</span>
+    <span class="k">while</span> cursors:
+        <span class="k">for</span> cursor <span class="k">in</span> list(cursors):
+            <span class="k">for</span> candidate <span class="k">in</span> cursor:
+                <span class="k">if</span> id(candidate) <span class="k">not</span> <span class="k">in</span> seen:            <span class="c"># skip a paper another list already placed</span>
+                    seen.add(id(candidate))
+                    out.append(candidate)
+                    <span class="k">break</span>
+            <span class="k">else</span>:
+                cursors.remove(cursor)                     <span class="c"># this list has run dry</span>
+    <span class="k">return</span> out + [c for c in rank_papers(cands) if id(c) not in seen]</code></pre>
+  <p class="src">sourcing/pool.py · _specificity, query_fusion, rank_mix (type hints abridged)</p>
+  <p class="note"><b>A small thing to know.</b> The seminal list in <code>mix_strata</code> holds every candidate, so the round-robin places every paper and the last line of <code>rank_mix</code> never adds anything. The tail of the pool, after the relevant and recent lists run dry, is therefore in in-set-citation order, not specificity order. The task 052 notes and the ADR describe the fallback as if it ran; the tutorial's diagram A4 describes what actually happens. Harmless, and worth cleaning up when the file is next touched.</p>
+</section>
+
+<section class="wrap" id="acquire">
+  <h2>5. <code>acquire.py</code>: from ranked pool to database rows</h2>
+  <p><code>acquire_sources</code> makes no search call. It receives the executed calls and the two ranked pools, and does four things in order: it writes one <code>search.executed</code> event per call (success or error, with the query, origin, verb, filters and result count); it walks each pool to its cap; it writes the tags and the coverage record; and it embeds the chunks it created. The walk is the part to understand.</p>
+<pre><code><span class="k">for</span> name <span class="k">in</span> names:
+    counts = by_backend[name]
+    cap = caps.get(name)
+    <span class="k">for</span> index, (record, origin, verb) <span class="k">in</span> enumerate(pools.get(name, [])):
+        <span class="c"># The cap is a cut on the ranked list by position: a ranked entry the task</span>
+        <span class="c"># already holds, or that is unusable, is not refilled from beyond the cut.</span>
+        <span class="k">if</span> cap <span class="k">is</span> <span class="k">not</span> None <span class="k">and</span> index &gt;= cap:
+            counts[<span class="s">"dropped_over_cap"</span>] += 1
+            <span class="k">continue</span>
+        candidates = map_records(backend_name=name, verb=verb, records=[record], counts=counts,
+                                 origin=origin, count_results=False)
+        <span class="k">if</span> <span class="k">not</span> candidates:              <span class="c"># no title or no id: counted as skipped_unusable inside map_records</span>
+            <span class="k">continue</span>
+        candidate = candidates[0]
+        <span class="k">if</span> <span class="k">not</span> is_new(candidate):         <span class="c"># record id, DOI or identical text already in this task</span>
+            counts[<span class="s">"already_acquired"</span>] += 1
+            <span class="k">continue</span>
+        persist(candidate, pool_rank=index + 1)
+        kept += 1</code></pre>
+  <p class="src">sourcing/acquire.py · acquire_sources, the cap walk (abridged)</p>
+  <p>Two choices here are deliberate and easy to get wrong. The cap test comes <em>before</em> the identity test, because <code>is_new</code> claims the keys it checks: testing a record we are about to drop anyway would make a later genuine copy look already held. And the cut is by position, not by count of kept records: if the task already holds 10 of the first 100, Focused keeps 90, not 100. The persisted set is always a subset of the first <code>cap</code> ranked entries, which is what makes recall at a smaller cap derivable from a larger run (the eval uses <code>pool_rank</code> for exactly that).</p>
+  <p><code>map_records</code> turns a raw provider record into the app's envelope (title, abstract, year, DOI, language, backend, record id, type, publisher) plus a <code>provider_fields</code> block that keeps the fields the ranking and later stages need: citation count, authorships, topics, keywords, open-access block, retraction flag, and the first 60 referenced works. An OpenAlex abstract arrives as an inverted index and is rebuilt into text here. A record without a title or an id is unusable, because there is nothing to screen and nothing to re-identify on a re-run.</p>
+</section>
+
+<section class="wide">
+  <figure>
+    <svg viewBox="0 0 980 300" role="img" aria-label="Left: a ranked pool walked from position one downward. Position one is kept, position two is already held by the task through its DOI, position three is kept, position four has no title and is unusable, positions up to one hundred continue, a dashed line marks the cap at one hundred, and everything below it is dropped over the cap. Right: the count invariant, results returned equals acquired plus already acquired plus skipped unusable plus dropped over cap, and the rows one kept record writes: source_snapshot, chunk, task_source_snapshot, source_tag rows, and a source.acquired event with backend, record id, query origin and pool rank.">
+      <g font-family="inherit" font-size="13">
+        <rect x="20" y="20" width="440" height="262" rx="6" fill="var(--c-paper)" fill-opacity=".14" stroke="var(--c-paper)" stroke-width="1.5"/>
+        <text x="32" y="43" font-weight="600">The ranked pool, walked top to bottom</text><text x="448" y="43" text-anchor="end" font-size="11" fill="var(--grey)">Focused: cap 100</text>
+        <g font-size="11">
+          <rect x="32" y="56" width="416" height="22" rx="3" fill="var(--green-tint)" stroke="var(--c-land)"/><text x="40" y="71">1 · W2056 · relevant list</text><text x="440" y="71" text-anchor="end" font-weight="600">acquired · pool_rank 1</text>
+          <rect x="32" y="82" width="416" height="22" rx="3" fill="var(--ground)" stroke="var(--c-plain)"/><text x="40" y="97">2 · W311 · seminal list</text><text x="440" y="97" text-anchor="end" font-weight="600">already_acquired (DOI held by the task)</text>
+          <rect x="32" y="108" width="416" height="22" rx="3" fill="var(--green-tint)" stroke="var(--c-land)"/><text x="40" y="123">3 · W1877 · novel list</text><text x="440" y="123" text-anchor="end" font-weight="600">acquired · pool_rank 3</text>
+          <rect x="32" y="134" width="416" height="22" rx="3" fill="var(--yellow-tint)" stroke="var(--yellow)"/><text x="40" y="149">4 · W90 · no title</text><text x="440" y="149" text-anchor="end" font-weight="600">skipped_unusable</text>
+          <text x="240" y="172" text-anchor="middle" fill="var(--grey)">… positions 5 to 100 the same way …</text>
+          <rect x="32" y="180" width="416" height="22" rx="3" fill="var(--green-tint)" stroke="var(--c-land)"/><text x="40" y="195">100 · W4420 · relevant list</text><text x="440" y="195" text-anchor="end" font-weight="600">acquired · pool_rank 100</text>
+          <line x1="32" y1="212" x2="448" y2="212" stroke="var(--red)" stroke-width="1.5" stroke-dasharray="6 4"/>
+          <text x="240" y="208" text-anchor="middle" font-size="10" fill="var(--red)">cap: index ≥ 100</text>
+          <rect x="32" y="220" width="416" height="22" rx="3" fill="var(--red-tint)" stroke="var(--red)"/><text x="40" y="235">101 · W7 …</text><text x="440" y="235" text-anchor="end" font-weight="600">dropped_over_cap</text>
+          <rect x="32" y="246" width="416" height="22" rx="3" fill="var(--red-tint)" stroke="var(--red)"/><text x="40" y="261">… the tail entries() appended</text><text x="440" y="261" text-anchor="end" font-weight="600">dropped_over_cap</text>
+        </g>
+
+        <rect x="490" y="20" width="470" height="110" rx="6" fill="var(--ground)" stroke="currentColor"/>
+        <text x="502" y="43" font-weight="600">The count invariant, per backend and in total</text>
+        <text x="502" y="68" font-size="12" font-family="var(--font-mono)">results_returned = acquired + already_acquired</text>
+        <text x="502" y="86" font-size="12" font-family="var(--font-mono)">                 + skipped_unusable + dropped_over_cap</text>
+        <text x="502" y="108" font-size="11" fill="var(--grey)">holds because entries() lists every returned record once and</text>
+        <text x="502" y="122" font-size="11" fill="var(--grey)">the cap is never larger than the ranked count</text>
+
+        <rect x="490" y="142" width="470" height="140" rx="6" fill="var(--ground)" stroke="currentColor"/>
+        <text x="502" y="165" font-weight="600">What persist() writes for one kept record</text>
+        <g font-size="11">
+          <text x="502" y="187"><tspan font-weight="600">source_snapshot</tspan>: the envelope as metadata, abstract_source, provider_fields</text>
+          <text x="502" y="204"><tspan font-weight="600">chunk</tspan>: one chunk, title + abstract text, its content hash</text>
+          <text x="502" y="221"><tspan font-weight="600">task_source_snapshot</tspan>: links the snapshot to the task and this run</text>
+          <text x="502" y="238"><tspan font-weight="600">source_tag</tspan> rows: the primary topic, topics, keywords and other provider labels (max 50)</text>
+          <text x="502" y="255"><tspan font-weight="600">event source.acquired</tspan>: backend, record id, query_origin, pool_rank</text>
+          <text x="502" y="274" fill="var(--grey)">then, once per run: search_coverage_record and the embeddings</text>
+        </g>
+      </g>
+    </svg>
+    <figcaption><b>Diagram 3: the cut and what it writes.</b> The four outcomes on the left are the four counters on the right. Each kept record also remembers which call found it (<code>query_origin</code>) and where it stood in the ranked list (<code>pool_rank</code>); the eval reads both from the event log afterwards.</figcaption>
+  </figure>
+</section>
+
+<section class="wrap" id="transport">
+  <h2>6. <code>search_live.py</code>: talking to the two databases</h2>
+  <p>Every request goes through one method, <code>_TransportMixin._request_json</code>, which does the things you would otherwise have to remember in every caller: it waits for the pacing interval, retries on 429 and 5xx up to 4 attempts with doubling backoff, times out at 30 s, caches successful responses for an hour (keyed without the API key), validates the response shape, and strips keys from any error it raises. The two backend classes add one method per request shape.</p>
+  <div class="scroll"><table>
+    <thead><tr><th>method</th><th>request</th><th>used for</th></tr></thead>
+    <tbody>
+      <tr><td><code>OpenAlexLiveBackend.search</code></td><td><code>/works?search=…&amp;filter=…</code>, pages of 200</td><td>the 15 keyword calls (and the verbatim fallback)</td></tr>
+      <tr><td><code>.search_semantic</code></td><td><code>/works?search.semantic=…</code>, one page of 50, 1 s interval</td><td>the 8 meaning-based calls</td></tr>
+      <tr><td><code>.lookup_ids</code></td><td><code>filter=ids.openalex:W1|W2|…</code>, 50 per request</td><td>backward: fetch the cited works</td></tr>
+      <tr><td><code>.fetch_citing</code></td><td><code>filter=cites:W1|W2|…</code>, up to 100 ids, one page of 200</td><td>forward: who cites the seeds</td></tr>
+      <tr><td><code>OvertonLiveBackend.search</code></td><td><code>query=…&amp;sort=relevance</code>, pages of 50, 1.2 s interval</td><td>the 3 policy searches</td></tr>
+      <tr><td><code>.fetch_by_id</code></td><td>one document by Overton id</td><td>the 15 landmarks</td></tr>
+    </tbody>
+  </table></div>
+  <p>Because the search now sends 8 OpenAlex requests at once, the pacing changed from "sleep before each request" to a lock: one thread at a time sleeps and stamps the time, the request itself runs outside the lock. A "too many requests" reply pushes every later admission out by a second, and several refusals at once pause once, not several times.</p>
+<pre><code><span class="k">def</span> _pause_admission(self, seconds: float) -&gt; None:
+    <span class="s">"""Push every later admission at least ``seconds`` away."""</span>
+    <span class="k">with</span> self._pace_lock:
+        latest = self._last_request_at <span class="k">or</span> 0.0
+        <span class="c"># Pauses coalesce: eight threads refused at once pause once, not eight times over.</span>
+        self._last_request_at = max(latest, _monotonic() + seconds - self._min_interval_s)
+
+<span class="c"># inside _request_json, per attempt:</span>
+<span class="k">with</span> self._pace_lock:
+    self._wait_rate_limit(min_interval_s=min_interval_s)   <span class="c"># sleep, then stamp</span>
+    self.http_calls += 1
+<span class="c"># … the request runs here, outside the lock …</span>
+<span class="k">if</span> redacted.status_code == 429:
+    self._pause_admission(RATE_LIMIT_PAUSE_S)</code></pre>
+  <p class="src">sourcing/search_live.py · _TransportMixin (abridged)</p>
+  <p>The <code>sort</code> parameter on Overton is in the protected set: a plan's filters cannot override it, so every policy search is best-match order. This one-word change is what fixed the "newest first" defect found in task 049.</p>
+</section>
+
+<section class="wrap" id="screen">
+  <h2>7. Screening, function by function</h2>
+  <p><code>screen_sources</code> reads the scope's screening directive (which stage, any extra criteria, whether this is a re-screen), folds the criteria into the intent text, and calls <code>_run_stage1</code>. Stage 1 then:</p>
+  <ol class="steps">
+    <li><b>Loads</b> every document of the task that has no non-failed stage-1 row yet (<code>_load_stage1_docs</code>). A re-screen loads all of them into a fresh generation. Each document is tagged <code>title_abstract</code> or <code>title_only</code>.</li>
+    <li><b>Sets aside retracted documents</b> before any model call, writing an <code>excluded_retracted</code> row for each (<code>_exclude_retracted_docs</code>). Retraction is a policy exclusion, never a relevance verdict.</li>
+    <li><b>Runs batch 1</b>: one call per document on 12 threads, one retry for a failed call (<code>_run_stage1_calls</code>).</li>
+    <li><b>Runs batch 2</b> for the documents whose first reply was <code>not_relevant</code>.</li>
+    <li><b>Decides</b> each document with the pure table <code>decide_stage1</code>, writes its row and its event, and totals the counts.</li>
+  </ol>
+<pre><code>run_batch([(doc_index, 0) for doc_index in range(len(docs))])
+second_tasks = [
+    (doc_index, 1)
+    <span class="k">for</span> doc_index <span class="k">in</span> range(len(docs))
+    <span class="k">if</span> (first := results.get((doc_index, 0))) <span class="k">is</span> <span class="k">not</span> None <span class="k">and</span> first.decision == <span class="s">"not_relevant"</span>
+]
+run_batch(second_tasks)</code></pre>
+  <p class="src">assess/screen.py · _run_stage1_calls</p>
+<pre><code><span class="k">def</span> _p_relevant(rep: ScreenRepWire) -&gt; float:
+    <span class="k">if</span> rep.decision == <span class="s">"relevant"</span>:
+        <span class="k">return</span> float(rep.confidence)
+    <span class="k">if</span> rep.decision == <span class="s">"not_relevant"</span>:
+        <span class="k">return</span> 1.0 - float(rep.confidence)
+    <span class="k">return</span> 0.5                                                 <span class="c"># unsure</span>
+
+
+<span class="k">def</span> decide_stage1(first: ScreenRepWire | None, second: ScreenRepWire | None) -&gt; Stage1Decision:
+    <span class="k">if</span> first <span class="k">is</span> None:
+        <span class="k">return</span> Stage1Decision(<span class="s">"failed"</span>, None, ())
+    <span class="k">if</span> first.decision <span class="k">in</span> (<span class="s">"relevant"</span>, <span class="s">"unsure"</span>):
+        <span class="k">if</span> second <span class="k">is</span> <span class="k">not</span> None:
+            <span class="k">raise</span> ValueError(<span class="s">"second stage-1 call supplied after a kept first reply"</span>)
+        <span class="k">return</span> Stage1Decision(<span class="s">"relevant"</span>, _p_relevant(first), ())
+
+    <span class="k">if</span> second <span class="k">is</span> None:
+        <span class="k">return</span> Stage1Decision(<span class="s">"not_relevant"</span>, 1.0 - _p_relevant(first), (<span class="s">"second_call_failed"</span>,))
+    mean_p = (_p_relevant(first) + _p_relevant(second)) / 2
+    <span class="k">if</span> second.decision <span class="k">in</span> (<span class="s">"relevant"</span>, <span class="s">"unsure"</span>):
+        <span class="k">return</span> Stage1Decision(<span class="s">"relevant"</span>, mean_p, (<span class="s">"second_call_kept"</span>,))
+    <span class="k">return</span> Stage1Decision(<span class="s">"not_relevant"</span>, 1.0 - mean_p, ())</code></pre>
+  <p class="src">assess/screen.py · _p_relevant, decide_stage1 (complete)</p>
+  <p>The whole decision is these twelve lines, and they take no connection and make no call, which is why the screening eval under <code>scripts/evals/screening/</code> imports this function and replays recorded replies through it rather than re-implementing the rule. The stored confidence is the mean probability of relevance over the calls made, so a confident "no" followed by an "unsure" is kept with a confidence near 0.5, visibly shaky.</p>
+  <p>The model call itself is in <code>OpenAIScreeningBackend.screen_envelope</code>: it builds the messages from <code>screen_v4</code>, asks for structured output in the <code>ScreenRepWire</code> shape (decision, confidence, one-line reason), wraps the call in a traced span named <code>screen:abstract</code>, and rejects a confidence outside [0, 1]. The prompt's rules that changed in <code>screen_v4</code> are the ones the task 050 eval found costly: a different population excludes only when the intent names one; a match on the main subject with one other element different is relevant or unsure, never not relevant; a criterion the abstract does not report never excludes.</p>
+</section>
+
+<section class="wide">
+  <figure>
+    <svg viewBox="0 0 980 330" role="img" aria-label="Screening flow. screen_sources parses the directive and composes the intent; _load_stage1_docs loads the task's documents without a non-failed stage-1 row; _exclude_retracted_docs writes excluded_retracted rows and keeps those documents away from the model; _run_stage1_calls runs batch one for every document on twelve threads with one retry, then batch two for documents whose first reply was not relevant; decide_stage1 turns the one or two replies into status, confidence and flags. Below: _insert_screen_row writes source_screening_result and _append_screened_event writes the source.screened event with every reply; effective_screen_rows is the view the rest of the chain reads, the latest generation then highest stage per document, failed rows excluded.">
+      <g font-family="inherit" font-size="13">
+        <g font-size="11">
+          <rect x="20" y="30" width="170" height="78" rx="5" fill="var(--ground)" stroke="currentColor"/>
+          <text x="30" y="50" font-weight="600" font-size="12">screen_sources</text>
+          <text x="30" y="68">_parse_screen_directive →</text>
+          <text x="30" y="82">stage, criteria, rescreen</text>
+          <text x="30" y="96">_compose_screen_intent</text>
+          <rect x="215" y="30" width="170" height="78" rx="5" fill="var(--ground)" stroke="currentColor"/>
+          <text x="225" y="50" font-weight="600" font-size="12">_load_stage1_docs</text>
+          <text x="225" y="68">task documents with no</text>
+          <text x="225" y="82">non-failed stage-1 row</text>
+          <text x="225" y="96">basis: title_abstract | title_only</text>
+          <rect x="410" y="30" width="170" height="78" rx="5" fill="var(--yellow-tint)" stroke="var(--yellow)" stroke-width="1.5"/>
+          <text x="420" y="50" font-weight="600" font-size="12">_exclude_retracted_docs</text>
+          <text x="420" y="68">is_retracted → row with status</text>
+          <text x="420" y="82">excluded_retracted (conf. 1)</text>
+          <text x="420" y="96">never sent to the model</text>
+          <rect x="605" y="30" width="170" height="78" rx="5" fill="var(--c-sem)" fill-opacity=".12" stroke="var(--c-sem)" stroke-width="1.5"/>
+          <text x="615" y="50" font-weight="600" font-size="12">_run_stage1_calls</text>
+          <text x="615" y="68">batch 1: every doc, 12 threads,</text>
+          <text x="615" y="82">1 retry · batch 2: docs whose</text>
+          <text x="615" y="96">first reply was not_relevant</text>
+          <rect x="800" y="30" width="160" height="78" rx="5" fill="var(--c-land)" fill-opacity=".14" stroke="var(--c-land)" stroke-width="1.5"/>
+          <text x="810" y="50" font-weight="600" font-size="12">decide_stage1</text>
+          <text x="810" y="68">pure truth table</text>
+          <text x="810" y="82">→ status, confidence,</text>
+          <text x="810" y="96">flags</text>
+        </g>
+        <g stroke="currentColor" stroke-width="1.5" marker-end="url(#arr)">
+          <line x1="190" y1="69" x2="212" y2="69"/><line x1="385" y1="69" x2="407" y2="69"/><line x1="580" y1="69" x2="602" y2="69"/><line x1="775" y1="69" x2="797" y2="69"/>
+          <line x1="880" y1="108" x2="880" y2="138"/>
+        </g>
+        <g font-size="11">
+          <rect x="605" y="142" width="355" height="70" rx="5" fill="var(--ground)" stroke="currentColor"/>
+          <text x="615" y="162" font-weight="600" font-size="12">per document, in one transaction</text>
+          <text x="615" y="180">_insert_screen_row → source_screening_result</text>
+          <text x="615" y="194">(status, basis, confidence, stage 1, generation)</text>
+          <text x="615" y="208">_append_screened_event → source.screened (each reply, flags)</text>
+          <rect x="20" y="142" width="560" height="70" rx="5" fill="var(--ground)" stroke="currentColor"/>
+          <text x="30" y="162" font-weight="600" font-size="12">effective_screen_rows(): what the rest of the chain reads</text>
+          <text x="30" y="180">for each document, the row with the latest generation, then the highest stage,</text>
+          <text x="30" y="194">status ≠ failed. A failed first call has no effective row, so the next screen run</text>
+          <text x="30" y="208">loads that document again (step 1).</text>
+          <rect x="20" y="230" width="940" height="82" rx="5" fill="var(--c-sem)" fill-opacity=".08" stroke="var(--c-sem)" stroke-width="1"/>
+          <text x="30" y="250" font-weight="600" font-size="12">budget and counts</text>
+          <text x="30" y="268">call budget = 2 × documents × (1 + SCREEN_RETRY_CAP); a call refused by the budget is recorded as a failed reply, never silently skipped</text>
+          <text x="30" y="284">counts: screened, relevant, not_relevant, failed, excluded_retracted, title_abstract, title_only, unsure_reps, rep_failures,</text>
+          <text x="30" y="300">second_calls, second_call_kept, second_call_failed, retries · plus token usage; the harness stores them on component.completed</text>
+        </g>
+      </g>
+    </svg>
+    <figcaption><b>Diagram 4: stage-1 screening.</b> The yellow box runs before any model call. The purple box is the only place the model is called, and the green box is the only place a verdict is formed. "Generation" is the re-screen counter: a normal run writes generation 0, a re-screen writes every document again at the next generation, and the effective-rows view always prefers the newest.</figcaption>
+  </figure>
+</section>
+
+<section class="wrap" id="records">
+  <h2>8. What a run leaves behind, and where to look first</h2>
+  <p>When a search or screen looks wrong, the record is usually enough to explain it without a trace. In order of how often they answer the question:</p>
+  <ul>
+    <li><b><code>event_log</code>, type <code>search.executed</code></b>: one per call, with the query text, its origin, the verb, the filters sent, the status, the error text, the result count, how many pages it took and how many records a local filter removed. The order is the plan order. If a database call failed, this is where it says so.</li>
+    <li><b><code>event_log</code>, type <code>source.acquired</code></b>: one per kept document, with <code>query_origin</code> and <code>pool_rank</code>. Join on <code>task_source_snapshot_id</code> to find out why a document is in the task and where it ranked.</li>
+    <li><b><code>event_log</code>, type <code>source.screened</code></b>: one per screened document, with every model reply (decision, confidence, one-line reason) and the flags. This is where "why was this dropped" is answered.</li>
+    <li><b><code>component.completed</code> payload</b> for the acquire run: the acquire counts plus <code>counts["search"]</code> (depth, calls per backend, zero-result queries, dropped queries, fallback, seeds, backward targets, forward candidates, duplicate papers, landmarks, pool sizes, wall clock, locally applied semantic filters).</li>
+    <li><b><code>search_coverage_record</code></b>: one row per acquire run, with the filters as sent, the local filters, the post-filter exclusions per call, the stop condition (<code>completed</code> or <code>error</code>) and the adequacy verdict (inadequate if any backend errored or nothing usable came back).</li>
+    <li><b>Langfuse</b>: the trace for the run has the query-generation span (input, output, tokens, prompt version) and one <code>screen:abstract</code> span per screening call. Use it for model input and output; use the event log for everything else.</li>
+  </ul>
+  <p>To watch a whole run on a question of your choice without writing to the database, the eval engine does exactly that: <code>scripts/evals/search/checks/engine.py</code> seeds a throwaway task in a transaction, calls the real <code>run_search</code> and <code>screen_sources</code>, scores the result and rolls back. <code>checks/production_recall.py --reviews TEXT --depths rapid</code> runs it for one ground-truth review; <code>checks/inspect_run.py</code> unpicks a run afterwards.</p>
+</section>
+
+<section class="wrap" id="changes">
+  <div class="part">Part 2 · What changed, and why</div>
+  <h2>9. Each method change and the code that carries it</h2>
+  <p>Tasks 051 and 052 changed 11 product files. The table lists each decision of <a href="../../adr/0038-single-pass-search-and-adaptive-screen.md">ADR 0038</a> (numbered as there), the code that implements it, the test that would fail if it were undone, and what was measured. "D" numbers are the task contract's decisions. Measurements are on the 15-review mini set unless stated.</p>
+  <div class="scroll"><table>
+    <thead><tr><th>method change</th><th>code change</th><th>pinned by</th><th>measured</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><b>1 · One search pass at every scope; a scope is two caps.</b> Before: Focused was one round, Broad and Broadest looped search and screen up to 2 or 3 times with four unmeasured strategies.</td>
+        <td><code>DEPTH_CONSTANTS</code> reshaped to <code>papers_cap</code>, <code>policy_cap</code>, <code>call_budget</code>; <code>run_search</code> rewritten around two legs; the runner's round gate (<code>_search_round_continues</code>) and the loop's stop logic deleted; <code>count_search_runs</code> (renamed from <code>count_existing_rounds</code> at review) kept to number the coverage record when a check-in steer runs the search again.</td>
+        <td><code>test_every_depth_runs_the_same_pass_and_cuts_at_its_caps</code>, <code>test_fanout_runs_every_planned_call_with_no_time_budget</code></td>
+        <td>Broad recall 5.0% (5 Oct) → 17.8% (9 Oct) with everything below; one pass found 20.3% where three rounds found 15.3% at the same pool size</td>
+      </tr>
+      <tr>
+        <td><b>2 · Seeds from 15 keyword and 8 meaning-based calls.</b> Each query also in a reviews-only and a trials-only form; the question, paraphrases and queries through the embedding search.</td>
+        <td><code>_rapid_plans</code> builds the three forms; <code>OpenAlexLiveBackend.search_semantic</code> is new; <code>_semantic_filter_parts</code> and <code>_semantic_record_passes</code> split the plan's filters into what the endpoint accepts and what is checked locally; <code>SEARCH_QUERIES_MODEL</code> → <code>gpt-5.6-luna</code>, <code>QUERY_MAX_CHARS</code> 2,000 → 1,300.</td>
+        <td><code>test_semantic_dates_are_fenced_on_the_wire_and_checked_locally</code>, <code>test_semantic_local_filter_rules</code>, <code>test_overlong_generated_query_is_dropped_at_validation</code></td>
+        <td>part of the best configuration in the task 047 experiments: about 22% recall at 200 candidates against 3% for a plain OpenAlex search (write-up of 6 Oct)</td>
+      </tr>
+      <tr>
+        <td><b>3 · Backward and forward citation chasing at every scope.</b> Papers no query can reach, found through the seeds' reference lists and citers.</td>
+        <td><code>pool.count_references</code>, <code>backward_targets</code>, <code>forward_seeds</code>, <code>score_forward</code>; <code>OpenAlexLiveBackend.lookup_ids</code> and <code>fetch_citing</code>; the <code>ExtendedSearchBackend</code> protocol and the new <code>BackendCaps</code> flags in <code>acquire.py</code>; steps 5 and 6 of <code>_openalex_leg</code>.</td>
+        <td><code>test_pool.py</code> (counting, targets, ceiling, forward scoring), <code>test_call_budget_stops_a_backend</code>, <code>test_logical_calls_count_pages_and_retries_once</code></td>
+        <td>papers found only through citations are screened in at the same rate as query-found ones (97 to 100% on the three probes of 12 Oct)</td>
+      </tr>
+      <tr>
+        <td><b>4 · The pool is ranked in memory and cut by position.</b> Before: acquire merged the raw search results round-robin and trimmed per backend.</td>
+        <td><code>pool.paper_candidates</code>, <code>rank_papers</code>, <code>_specificity</code>; <code>_Pass.entries</code>; <code>acquire_sources</code> takes <code>pools</code> and <code>caps</code> instead of <code>record_cap_per_backend</code>, and its own <code>_interleave</code> is deleted; the cap test moved ahead of the identity test.</td>
+        <td><code>test_acquire_pools.py</code> (independent caps, pool order decides the kept copy, only kept records persisted and embedded, events carry origin and verb)</td>
+        <td>the ranking of the task 047 configuration above; its order is superseded by the mix below, the in-memory cut stays</td>
+      </tr>
+      <tr>
+        <td><b>4, amended (task 052) · De-duplicate, then order by taking turns from three lists.</b> Specificity alone pushed the question's direct matches past the Focused cap and left out recent papers.</td>
+        <td><code>pool.paper_key</code>, <code>dedupe_papers</code>, <code>query_fusion</code>, <code>mix_strata</code>, <code>rank_mix</code> and the constants <code>RRF_K</code>, <code>NOVEL_YEARS</code>, <code>COUPLING_LISTS</code>; step 7 of <code>_openalex_leg</code>; <code>duplicate_papers</code> in the summary; <code>pool_rank</code> on <code>source.acquired</code>.</td>
+        <td><code>test_dedupe_papers_needs_same_title_and_authors_and_keeps_the_cited_copy</code>, <code>test_rank_mix_alternates_relevant_seminal_and_novel_then_the_rest</code>, <code>test_rank_mix_counts_citing_the_seeds_as_three_query_lists</code>, <code>test_rank_mix_with_an_empty_stratum_still_places_every_paper_once</code></td>
+        <td>12 Oct: 15.3 / 19.7 / 25.3% at Focused / Broad / Broadest against 12.9 / 17.8 / 22.3% under specificity alone</td>
+      </tr>
+      <tr>
+        <td><b>5 · Overton in best-match order, 400 documents, title de-duplication, landmarks, cut.</b> Before: newest first (no sort was requested), 50 per round, repeated titles, no citation step.</td>
+        <td><code>sort</code> added to the protected Overton parameters and sent on every search; <code>OvertonLiveBackend.fetch_by_id</code>; <code>pool.normalised_title</code>, <code>policy_key</code>, <code>dedupe_policy</code>, <code>count_policy_cites</code>, <code>landmark_targets</code>, <code>rank_policy</code>; <code>_overton_leg</code>.</td>
+        <td><code>test_policy_pool_replays_recorded_overton_results</code> (three recorded questions under <code>tests/data/policy_replay/</code>), <code>test_landmark_fetches_apply_the_country_post_filter</code>, <code>test_overton_cited_papers_never_enter_the_paper_pool</code></td>
+        <td>date order had cost four times the recall (ADR 0038 context); 90% of what the policy side ever finds is within 50 documents, 97% within 100</td>
+      </tr>
+      <tr>
+        <td><b>6 · Filters fail closed.</b> A filter the semantic endpoint rejects is applied locally; the country filter is checked locally on citation-found papers and a paper with no affiliation data is dropped.</td>
+        <td><code>_CallSpec.keep</code> and <code>post_filter_excluded</code> on the executed call; <code>_without_country_filter</code>, <code>pool.country_predicate</code>, <code>_overton_country</code>; <code>semantic_local_filters</code> written to the coverage record; <code>post_filter_exclusions</code> listed per call.</td>
+        <td><code>test_two_variant_country_filter_runs_semantic_once_and_filters_locally</code>, <code>test_country_predicate_is_case_insensitive_and_fails_closed</code></td>
+        <td>—</td>
+      </tr>
+      <tr>
+        <td><b>7 · Stage-1 screening is one adaptive vote on a new model with a new prompt.</b> Before: three calls per document and a majority, on <code>gpt-5.4-mini</code> with <code>screen_v2</code>.</td>
+        <td><code>decide_stage1</code> and <code>Stage1Decision</code>; <code>_run_stage1_calls</code> runs two batches; <code>SCREEN_REPS</code> and <code>SCREEN_QUORUM</code> deleted; <code>SCREEN_MODEL</code> → <code>gpt-5.6-luna</code>; the <code>screen_v4</code> prompt text; the trace score <code>second_call_kept_count</code> replaces the two vote scores; the agent's triage model no longer borrows the screening model.</td>
+        <td><code>test_decide_stage1.py</code> (the full table), <code>test_screen.py</code>, the screening eval's <code>vote.py</code> importing the same function</td>
+        <td>1.1 calls per document, down from 3; 92% of human-included documents kept on the labelled set (task 050); 96 to 97% of search-found target papers kept at every scope</td>
+      </tr>
+      <tr>
+        <td><b>9 · The two legs run in parallel and the OpenAlex calls in concurrent batches.</b></td>
+        <td><code>_Pass.execute_batch</code>, <code>SEARCH_CONCURRENCY</code>, <code>tracing.submit_with_context</code>; in the transport the pacing lock, <code>_pause_admission</code>, <code>RATE_LIMIT_PAUSE_S</code>, <code>OPENALEX_SEMANTIC_MIN_INTERVAL_S</code>.</td>
+        <td><code>test_the_two_legs_run_side_by_side_and_record_in_backend_order</code>, <code>test_seed_calls_run_concurrently_and_are_recorded_in_plan_order</code>, <code>test_budget_under_concurrency_admits_the_first_planned_calls</code>, <code>test_worker_threads_carry_the_task_context</code></td>
+        <td>search time per review about 130 s → 45 s at every scope</td>
+      </tr>
+      <tr>
+        <td><b>User-facing words.</b> The plan options and the planner now say "up to 100 papers and 50 policy documents" instead of "50 relevant results per database".</td>
+        <td><code>runtime/planner_prompt.py</code> (the three option subs and the search_effort key), <code>frontend/src/views/workspace/planVocabulary.ts</code> (<code>SEARCH_SCOPE_RECORD_CAP</code> becomes a pair).</td>
+        <td><code>PlanDocument.test.tsx</code>, <code>planVocabulary.test.ts</code></td>
+        <td>—</td>
+      </tr>
+      <tr>
+        <td><b>Measurement.</b> The production check runs the real pass and screen on the ground-truth reviews; one Broadest run also scores the two smaller scopes from its own pool.</td>
+        <td><code>scripts/evals/search/checks/</code> (renamed from <code>measure/</code>): <code>engine.py</code> gains <code>_acquired_ranks</code> and <code>recall_at_smaller_caps</code>, <code>production_recall.py</code> emits the derived scores; the experiment scripts move to <code>experiments/</code>, with the task 052 probes and the fixture exporter beside them.</td>
+        <td><code>scripts/evals/search/tests/test_measure.py</code>, <code>scripts/evals/screening/tests/test_screening.py</code></td>
+        <td>the figures quoted in this table and in <code>results/history.md</code></td>
+      </tr>
+    </tbody>
+  </table></div>
+  <p class="note"><b>Not in the table.</b> ADR decision 8 is the deletion (next section). The README of the search evals still describes the standard and deep depths as "search, screen, then search again until the round limit" in its Production runs table; that paragraph predates this work and should be brought in line with the page you are reading.</p>
+</section>
+
+<section class="wrap" id="deleted">
+  <h2>10. What was deleted, and how to get it back</h2>
+  <p>The round loop and its four strategies are gone from the product: in <code>search_loop.py</code> the constants <code>ROUND_CAP</code>, <code>POS_EXEMPLARS</code>, <code>NEG_EXEMPLARS</code>, <code>SNOWBALL_SEEDS</code>, <code>SNOWBALL_RESULTS</code>, <code>SHORT_CIRCUIT_RATE</code>, <code>DIVERSITY_FRACTION</code> and the four call caps; the classes <code>_ScreenedRecord</code> and <code>StopDecision</code>; the functions that read screened documents as exemplars, evaluated the stop rule and wrote it to the coverage record; and in <code>runner.py</code> the gate that re-opened acquire and screen for another round. In <code>screen.py</code> the three-sample majority with its quorum and tie-break went with them. The tests that pinned the loop were deleted with it.</p>
+  <p>Two things were kept on purpose. The reformulate and suggest prompt builders, their output schemas and backend methods stay in <code>search_prompts.py</code> and <code>search_generation.py</code>, tested but unreachable from the runner, because the prompts are the expensive part to recreate if the parked "second search for Broadest" is ever built (<code>docs/deferred.md</code>). <code>confident_relevant_count</code> and its two thresholds were kept at first for the same contingency, then deleted at the PR review (2026-10-14); they are at the same tag.</p>
+  <p>The last commit on which the loop ran end to end is tagged <code>search-round-loop-last</code>. The restore recipe in ADR 0038 decision 8 is <code>git checkout search-round-loop-last -- &lt;path&gt;</code> for <code>search_loop.py</code>, <code>runner.py</code> and the two deleted test files, then re-wiring a strategy's output to the pool hand-off of section 3.5. Old coverage records keep their old stop vocabulary and remain readable.</p>
+</section>
+
+<section class="wrap" id="tests">
+  <h2>11. The tests, and how to read them</h2>
+  <p>Run them from <code>backend/</code> against the test database (the conftest refuses the development one):</p>
+<pre><code>DATABASE_URL=<span class="s">"postgresql+psycopg://policy_atlas:policy_atlas@localhost:5432/policy_atlas_test"</span> \
+  uv run pytest tests/evidence_search/sourcing/test_pool.py \
+                tests/evidence_search/sourcing/test_search_single_pass.py \
+                tests/evidence_search/sourcing/test_acquire_pools.py \
+                tests/evidence_search/assess/test_decide_stage1.py -q</code></pre>
+  <p class="src">four files, about 45 tests, no network, under a minute</p>
+  <ul>
+    <li><b><code>test_pool.py</code></b> (12 tests): pure functions with hand-made candidates, plus one replay of a recorded experiment pool (<code>tests/data/pool_fixture.json</code>) that pins the exact ranking a real question produced. Start here: the <code>_cand</code> helper shows which fields matter.</li>
+    <li><b><code>test_search_single_pass.py</code></b> (25 tests): the whole pass with scripted backends that answer every verb from fixtures and record each call. The tests assert the exact call plan: how many calls, in what order, with which filters, what happens when a budget runs out, when a call errors, when every query comes back empty. The two concurrency tests check that thread timing never changes the recorded order.</li>
+    <li><b><code>test_acquire_pools.py</code></b> (5 tests): the hand-off. Two pools, two caps, the count invariant, and that nothing beyond the cap is persisted or embedded.</li>
+    <li><b><code>test_policy_replay.py</code></b> (3 cases): recorded Overton responses for three questions replayed through the pure policy rules, checking the order, the title de-duplication, the 15 landmarks, the scores, a UK-only filter and the cut.</li>
+    <li><b><code>test_decide_stage1.py</code></b>: the full decision table as parametrised cases, and the guard against a second reply after a kept first one.</li>
+    <li><b><code>test_search_live.py</code></b> (45 tests): the transport with an injected fetch function and a recorded sleep: pacing, retries, the cache, redaction, the response-shape checks.</li>
+  </ul>
+  <p>The pattern to copy when you add behaviour: put the rule in <code>pool.py</code> or <code>decide_stage1</code> as a pure function with a unit test, and let the integration test in <code>test_search_single_pass.py</code> assert only that the function is called in the right place with the right inputs.</p>
+</section>
+
+<section class="wrap" id="reading">
+  <h2>12. A reading order</h2>
+  <ol class="steps">
+    <li>The <a href="../../tutorials/search-and-screen/index.html">tutorial</a>, diagrams A1 to A4 and B, for the method and the numbers.</li>
+    <li><code>pool.py</code> top to bottom. It is the method in code and has no dependencies; <code>test_pool.py</code> beside it shows each function on a small example.</li>
+    <li><code>search_loop.py</code>: <code>DEPTH_CONSTANTS</code>, then <code>_CallSpec</code> and <code>_Pass</code>, then <code>_openalex_leg</code> and <code>_overton_leg</code>, then <code>run_search</code>. Skip the filter validation functions on a first pass; they are long and mechanical.</li>
+    <li><code>acquire.py</code>: only <code>acquire_sources</code>, from the identity preload to the cap walk. The mappers above it are what the envelope fields mean.</li>
+    <li><code>screen.py</code>: <code>decide_stage1</code>, <code>_run_stage1_calls</code>, <code>_run_stage1</code>, then <code>screen_prompt.py</code> for the prompt text.</li>
+    <li><code>search_live.py</code>: <code>_request_json</code> and one verb of each class. The rest is sanitisers and guards you will only need when a provider misbehaves.</li>
+    <li>ADR 0038 for the decisions and their evidence, then the task notes (<code>notes.md</code> in this folder and in <code>052-rank-mix-paper-dedupe/</code>) for what was tried and rejected.</li>
+  </ol>
+</section>
+</main>
+
+<footer class="wrap">
+  <p>Sources: the files named above at commit <code>b19a476</code> on <code>task/051-improve-production-search-screen</code>; ADR 0038; <code>docs/tasks/051-improve-production-search-screen/</code> (contract, plan, notes, verification, PR body) and <code>docs/tasks/052-rank-mix-paper-dedupe/notes.md</code>; <code>scripts/evals/search/results/history.md</code>. Line counts from <code>wc -l</code> on 14 October 2026.</p>
+</footer>
+</body>
+</html>
