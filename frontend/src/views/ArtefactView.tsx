@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import { Link, useParams, useSearchParams } from "react-router";
 
 import type { components } from "../api/gen/types";
-import { useApiClient, useArtefact, useConversations, useEvidence, useFindings, useLandscape, useTask, useSourceDossier } from "../api/queries";
+import { useApiClient, useArtefact, useConversations, useEvidence, useFindings, useLandscape, useLonglist, useTask, useSourceDossier } from "../api/queries";
 import { useQuery } from "@tanstack/react-query";
 import {
   cardEvidenceMeta,
@@ -27,7 +27,11 @@ import { errorCode } from "../lib/errors";
 import { scrub } from "../lib/scrub";
 import { useDocumentTitle } from "../lib/title";
 import { COPY } from "../lib/vocabulary";
-import { hasResult } from "./lifecycle";
+import { RESULT_VIEWS, resultView } from "./lifecycle";
+import { hasLonglist, isBaselineArtefact, statusRun } from "./scopingActivity";
+import { useChatsEnabled } from "./taskResult";
+import { LonglistView } from "./longlist/LonglistView";
+import { Tabs, TabsList, TabsTrigger } from "../ui/radix/Tabs";
 import { hasTerminalPartialLiveArtefact, useRunStream } from "../store";
 import type { LiveSection, RunStreamState } from "../store";
 import { Card } from "../ui/brand/Card";
@@ -35,9 +39,9 @@ import { Chip, type ChipProps } from "../ui/brand/Chip";
 import { ReauthRedirect } from "../ui/feedback";
 import { Sheet, SheetContent } from "../ui/radix/Sheet";
 import { LIFECYCLE_PAGE_CLASS, READING_COLUMN_MAX_W } from "./listPageChrome";
+import { REPORT_TITLE_CLASS, ReportKindRow, ReportPage, SnapshotCells, type SnapshotCell } from "./reportPage";
 import { usePublicView } from "./publicView";
 import {
-  ContentsSidebar,
   FullReportExpandAllButton,
   FullReportExpandProvider,
   GatheredSection,
@@ -52,7 +56,7 @@ import {
   useExpandForPrint,
 } from "./ArtefactOutline";
 import { Tooltip } from "../ui/radix/Tooltip";
-import { AuthorsLine, InstitutionsLine, SourceDossierBody } from "./SourcesView";
+import { AuthorsLine, InstitutionsLine, SourceDossierBody, useDossierRecords } from "./SourcesView";
 import { referenceAuthorsLine } from "./artefactPresentation";
 import { useActiveConversation } from "./workspace/chat/conversationState";
 
@@ -1030,12 +1034,17 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 export function SourceDossier({
   taskId,
   sourceRef,
+  optionId = null,
   onClose,
 }: {
   taskId: string;
   /** A source id (citations carry one) or a display title (references,
    *  theme members — the legacy title-keyed path). */
   sourceRef: string;
+  /** The option whose card opened the dossier (the `option` search
+   *  parameter): on an options-scoping task the slot then reads "In this
+   *  option" (task 046, amendment 3, R67). */
+  optionId?: string | null;
   onClose: () => void;
 }) {
   const byId = UUID_RE.test(sourceRef);
@@ -1049,6 +1058,7 @@ export function SourceDossier({
     taskId,
     sourceId !== null ? { page_size: 200, source_id: sourceId } : undefined,
   );
+  const records = useDossierRecords(taskId, sourceId, optionId);
   return (
     <Sheet
       open
@@ -1068,7 +1078,14 @@ export function SourceDossier({
           </p>
         )}
         {dossier.isError && <p role="alert" className="text-body text-navy">This source dossier couldn't be loaded.</p>}
-        {dossier.data && <SourceDossierBody source={dossier.data} findings={findings.data?.data} findingsPending={findings.isPending} />}
+        {dossier.data && (
+          <SourceDossierBody
+            records={records}
+            source={dossier.data}
+            findings={findings.data?.data}
+            findingsPending={findings.isPending}
+          />
+        )}
         {!byId && evidence.data !== undefined && source === undefined && (
           <p className="text-body text-grey">This source isn't in the evidence list yet.</p>
         )}
@@ -1300,11 +1317,81 @@ function MostRelevantSources({
   );
 }
 
+/**
+ * The Result tab. An Evidence search's report, or a scoping task's baseline,
+ * renders as it always has; once a scoping task has a longlist the Result
+ * gains the view switch — **Baseline · Longlist · Report** — and opens on
+ * the longlist (task 045, deliverable 9; ruling 50). The chosen view rides
+ * `?view=` so a link or a refresh keeps it. The public view never switches:
+ * a link grants no read of options.
+ */
+export function ArtefactView() {
+  const { taskId = "" } = useParams();
+  const isPublicView = usePublicView();
+  const task = useTask(taskId);
+  if (isPublicView || !hasLonglist(task.data)) return <ArtefactReport />;
+  return <ScopingResult taskId={taskId} />;
+}
+
+/** A scoping task's Result once its longlist exists: the switch, then the
+ *  chosen view. */
+function ScopingResult({ taskId }: { taskId: string }) {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const longlist = useLonglist(taskId);
+  const view = resultView(searchParams.get("view"));
+  const select = (next: string) => {
+    setSearchParams((current) => {
+      const params = new URLSearchParams(current);
+      // The longlist is the default; only the baseline needs spelling out.
+      if (next === "baseline") params.set("view", next);
+      else params.delete("view");
+      return params;
+    });
+  };
+  return (
+    <>
+      <Tabs value={view} onValueChange={select} className="mx-auto w-full max-w-5xl px-6 pt-6 max-md:px-4">
+        <TabsList aria-label="Result view">
+          {RESULT_VIEWS.map((option) => (
+            <TabsTrigger
+              key={option.key}
+              value={option.key}
+              disabled={option.note !== undefined}
+              title={option.note}
+              className="disabled:cursor-default disabled:text-grey/70"
+            >
+              {option.label}
+              {option.note !== undefined && (
+                <span className="ml-1.5 font-normal">· {option.note}</span>
+              )}
+            </TabsTrigger>
+          ))}
+        </TabsList>
+      </Tabs>
+      {view === "baseline" ? (
+        <ArtefactReport />
+      ) : longlist.data != null ? (
+        <LonglistView taskId={taskId} longlist={longlist.data} />
+      ) : longlist.isPending ? (
+        <main aria-busy="true" aria-label="Loading the longlist" className={`${LIFECYCLE_PAGE_CLASS} py-10`}>
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="mb-4 h-16 animate-pulse border border-line bg-paper-2" />
+          ))}
+        </main>
+      ) : (
+        // The task says a longlist exists but the read found none (a stale
+        // read model, or a failed fetch): the baseline is still there.
+        <ArtefactReport />
+      )}
+    </>
+  );
+}
+
 /** The evidence base: A4 page frame, coverage snapshot, key-findings-first
  *  ordering, typed annotated prose, citation ladder, shared dossier
  *  (?source=… — deep-linkable, refresh-safe), and the live streaming state
  *  while synthesis writes. */
-export function ArtefactView() {
+function ArtefactReport() {
   const { taskId = "" } = useParams();
   const isPublicView = usePublicView();
   const task = useTask(taskId);
@@ -1323,13 +1410,20 @@ export function ArtefactView() {
   const stream = useRunStream(taskId);
   const [searchParams, setSearchParams] = useSearchParams();
   const dossierSource = searchParams.get("source");
+  const dossierOption = searchParams.get("option");
   const [detailClaim, setDetailClaim] = useState<ClaimLike | null>(null);
-  useDocumentTitle(task.data?.name, "Report");
+  // Task 044 (deliverable 9): an options-scoping task's Result is the
+  // baseline, not a report. It is headed "Baseline" and nothing else; the
+  // walk's state lives on the plan document (owner ruling 2026-09-18 — the
+  // band under the title came off).
+  const baseline = isBaselineArtefact(artefact.data);
+  useDocumentTitle(task.data?.name, baseline ? "Baseline" : "Report");
 
   const openDossier = (title: string) => {
     setSearchParams((current) => {
       const next = new URLSearchParams(current);
       next.set("source", title);
+      next.delete("option");
       return next;
     });
   };
@@ -1337,12 +1431,13 @@ export function ArtefactView() {
     setSearchParams((current) => {
       const next = new URLSearchParams(current);
       next.delete("source");
+      next.delete("option");
       return next;
     });
   };
   const { setActiveConversation, openDraftChat } = useActiveConversation();
   // Chats need a result to ask about (038 V8) — the same gate as New chat.
-  const chatsEnabled = hasResult(task.data?.latest_run?.status) || hasResult(stream.run?.status);
+  const chatsEnabled = useChatsEnabled(taskId);
   const askAboutAnalysis = () => {
     // The open artefact is the chat's entry context (a chip and provenance
     // fact, never a scope fence); reuse a blank chat already carrying it,
@@ -1393,7 +1488,7 @@ export function ArtefactView() {
   if (artefact.isError || artefact.data === undefined || artefact.data === null) {
     // No committed artefact: show the in-progress skeleton when sections are
     // streaming (or streamed before a bad ending) — otherwise the empty state.
-    if (showLiveArtefact(stream, task.data?.latest_run)) {
+    if (showLiveArtefact(stream, statusRun(task.data))) {
       return <LiveArtefactBody stream={stream} />;
     }
     return (
@@ -1416,7 +1511,7 @@ export function ArtefactView() {
   // hiding that behind the old artefact would be dishonest (live-check
   // adjudication, 2026-07-29). A new run or a fresh mount clears it. Replay
   // of a finished succeeded run must not flash through this view.
-  if (showLiveArtefact(stream, task.data?.latest_run)) {
+  if (showLiveArtefact(stream, statusRun(task.data))) {
     return <LiveArtefactBody stream={stream} />;
   }
 
@@ -1449,7 +1544,7 @@ export function ArtefactView() {
   // Sources links into the sources view, filtered to the cited set
   // (028 F.5): there is no `status=cited` value, so the cited count routes
   // through the boolean `cited=true` param.
-  const snapshotCells: Array<[string, string, string | null]> = [];
+  const snapshotCells: SnapshotCell[] = [];
   if (typeof snapshot?.source_count === "number" && typeof snapshot?.included === "number") {
     // Transcription trap 3: `source_count` is the cited/reference count —
     // never "found".
@@ -1490,63 +1585,49 @@ export function ArtefactView() {
 
   const roadmapText = fullReportIntro(bodySections.length, data.full_report_intro);
 
+  // A baseline is one linear profile, not a summary over a full report: the
+  // two part headings would frame an empty half (it mints no key findings and
+  // no case studies), so the outline lists its sections flat.
+  const outlineHead: SidebarEntry[] = baseline
+    ? sections.map((section, index) => ({
+        id: sectionAnchor(section.title, index),
+        title: sectionNavLabel(section, 28),
+      }))
+    : [
+        { kind: "part", id: EXECUTIVE_SUMMARY_ANCHOR, title: "Executive summary" },
+        ...frontSections.map(({ section, index }) => ({
+          id: sectionAnchor(section.title, index),
+          title: sectionNavLabel(section, 28),
+        })),
+        ...(topSources.length > 0
+          ? [{ id: "sources", title: "Most relevant sources" }]
+          : []),
+        ...(bodySections.length > 0
+          ? [{ kind: "part" as const, id: FULL_REPORT_ANCHOR, title: "Full report" }]
+          : []),
+        ...bodySections.map(({ section, index }) => ({
+          id: sectionAnchor(section.title, index),
+          title: sectionNavLabel(section, 28),
+        })),
+      ];
   const outlineEntries: SidebarEntry[] = [
-    { kind: "part", id: EXECUTIVE_SUMMARY_ANCHOR, title: "Executive summary" },
-    ...frontSections.map(({ section, index }) => ({
-      id: sectionAnchor(section.title, index),
-      title: sectionNavLabel(section, 28),
-    })),
-    ...(topSources.length > 0 ? [{ id: "sources", title: "Most relevant sources" }] : []),
-    ...(bodySections.length > 0
-      ? [{ kind: "part" as const, id: FULL_REPORT_ANCHOR, title: "Full report" }]
-      : []),
-    ...bodySections.map(({ section, index }) => ({
-      id: sectionAnchor(section.title, index),
-      title: sectionNavLabel(section, 28),
-    })),
+    ...outlineHead,
     ...((data.references ?? []).length > 0 ? [{ id: "references", title: "References" }] : []),
     { id: "gathered", title: "Method" },
   ];
 
   return (
-    <div className="mx-auto flex w-full flex-col justify-center gap-6 px-6 max-md:gap-0 max-md:px-0 md:flex-row">
-      <ContentsSidebar entries={outlineEntries} />
-      <main className={`artefact-page anim-rise my-8 min-w-0 ${READING_COLUMN_MAX_W} flex-1 bg-paper px-10 py-9 shadow-sm ring-1 ring-line max-md:my-0 max-md:px-4 max-md:py-6 max-md:shadow-none max-md:ring-0`}>
+    <ReportPage entries={outlineEntries}>
       <header id="answer" className="mb-8">
-        <div className="flex items-center justify-between gap-4">
-          <p className="text-meta font-extrabold uppercase tracking-[0.06em] text-grey">
-            Report
-          </p>
+        <ReportKindRow kind={baseline ? "Baseline" : "Report"}>
+          {/* The kind-of-artefact slot. The roll-up's depth label
+              ("scoping pass") stays on the wire for the later per-row
+              surfaces; the Result's heading says what the reader is looking
+              at (owner ruling 2026-09-18). */}
           <ArtefactDownload artefact={data} />
-        </div>
-        <h1 className="mt-1 text-display font-extrabold leading-tight tracking-[-0.5px] text-navy max-md:text-title">
-          {scrub(data.title)}
-        </h1>
-        {snapshotCells.length > 0 && (
-          <div className="mt-4 grid grid-cols-2 border border-line sm:grid-cols-4">
-            {snapshotCells.map(([label, value, href]) => {
-              const content = (
-                <>
-                  <p className="text-meta font-bold uppercase tracking-[0.06em] text-grey">{label}</p>
-                  <p className="mt-1 text-body font-medium leading-snug text-navy">{scrub(value)}</p>
-                </>
-              );
-              return href !== null ? (
-                <Link
-                  key={label}
-                  to={href}
-                  className="border-r border-line p-3 last:border-r-0 hover:underline"
-                >
-                  {content}
-                </Link>
-              ) : (
-                <div key={label} className="border-r border-line p-3 last:border-r-0">
-                  {content}
-                </div>
-              );
-            })}
-          </div>
-        )}
+        </ReportKindRow>
+        <h1 className={REPORT_TITLE_CLASS}>{scrub(data.title)}</h1>
+        <SnapshotCells cells={snapshotCells} />
         {!isPublicView && (
           <button
             type="button"
@@ -1562,10 +1643,13 @@ export function ArtefactView() {
             surfaces where it matters — inside each gap claim's detail. */}
       </header>
 
-      {/* Executive summary part — In brief hidden (034 owner steer: overlaps key findings). */}
-      <h2 id={EXECUTIVE_SUMMARY_ANCHOR} className={`mb-6 ${REPORT_PART_HEADING_CLASS}`}>
-        Executive summary
-      </h2>
+      {/* Executive summary part — In brief hidden (034 owner steer: overlaps key findings).
+          A baseline has no summary half to head (see the outline above). */}
+      {!baseline && (
+        <h2 id={EXECUTIVE_SUMMARY_ANCHOR} className={`mb-6 ${REPORT_PART_HEADING_CLASS}`}>
+          Executive summary
+        </h2>
+      )}
 
       {frontSections.map(({ section, index }) =>
         section.role === "case_studies" ? (
@@ -1585,20 +1669,31 @@ export function ArtefactView() {
         ),
       )}
 
-      <MostRelevantSources sources={topSources} onOpenDossier={openDossier} />
+      {/* A baseline writes no most-relevant-source notes and cites few sources
+          per section, so the report's "cited most often" block would rank two
+          or three documents as if that were a finding. Report only (task 044). */}
+      {baseline ? null : <MostRelevantSources sources={topSources} onOpenDossier={openDossier} />}
 
       {/* Full report part */}
       {bodySections.length > 0 ? (
         <FullReportExpandProvider key={data.artefact_id}>
-          <div id={FULL_REPORT_ANCHOR} className="mb-6 mt-10 border-t border-line pt-4">
-            <div className="flex items-baseline gap-2">
-              <h2 className={`flex-1 ${REPORT_PART_HEADING_CLASS}`}>Full report</h2>
+          {baseline ? (
+            // The baseline's sections ARE the document — no "Full report"
+            // part to open, just the one control that opens them all.
+            <div className="mb-6 flex justify-end">
               <FullReportExpandAllButton />
             </div>
-            {roadmapText !== null && (
-              <p className={`mt-1.5 max-w-prose-measure ${REPORT_BODY_CLASS}`}>{scrub(roadmapText)}</p>
-            )}
-          </div>
+          ) : (
+            <div id={FULL_REPORT_ANCHOR} className="mb-6 mt-10 border-t border-line pt-4">
+              <div className="flex items-baseline gap-2">
+                <h2 className={`flex-1 ${REPORT_PART_HEADING_CLASS}`}>Full report</h2>
+                <FullReportExpandAllButton />
+              </div>
+              {roadmapText !== null && (
+                <p className={`mt-1.5 max-w-prose-measure ${REPORT_BODY_CLASS}`}>{scrub(roadmapText)}</p>
+              )}
+            </div>
+          )}
 
           {bodySections.map(({ section, index }) => (
             <SectionDisclosure
@@ -1646,10 +1741,9 @@ export function ArtefactView() {
       />
 
       {dossierSource !== null && (
-        <SourceDossier taskId={taskId} sourceRef={dossierSource} onClose={closeDossier} />
+        <SourceDossier taskId={taskId} sourceRef={dossierSource} optionId={dossierOption} onClose={closeDossier} />
       )}
-      </main>
-    </div>
+    </ReportPage>
   );
 }
 

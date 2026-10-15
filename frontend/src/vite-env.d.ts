@@ -21,4 +21,10 @@ interface ImportMetaEnv {
    * by `sessionStorage` (never `localStorage`, never committed anywhere).
    */
   readonly VITE_DEV_TOKEN?: string;
+  /**
+   * `"1"` shows the Options scoping capability (New task picker, nav, route).
+   * Set for local dev, tests and staging; unset in production until the
+   * capability is complete.
+   */
+  readonly VITE_OPTIONS_SCOPING?: string;
 }

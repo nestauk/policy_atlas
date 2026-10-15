@@ -332,12 +332,19 @@ export function SectionDisclosure({
   section,
   defaultOpen,
   collapsible,
+  meta,
+  summaryNode,
   children,
 }: {
   id: string;
   section: OutlineSection;
   defaultOpen: boolean;
   collapsible: boolean;
+  /** Small text after the title in the heading row (a theme's option count). */
+  meta?: React.ReactNode;
+  /** Shown while collapsed in place of the summary sentence (the option
+   *  card's "What it would take" row of cells). */
+  summaryNode?: React.ReactNode;
   children: React.ReactNode;
 }) {
   const [open, setOpen] = useState(defaultOpen);
@@ -346,6 +353,9 @@ export function SectionDisclosure({
   useExpandAll(setOpen, collapsible);
   const summary = sectionSummary(section);
   const expanded = !collapsible || open;
+  const metaSpan = meta !== undefined && (
+    <span className="ml-2 whitespace-nowrap text-meta font-normal text-grey max-md:ml-0 max-md:block">{meta}</span>
+  );
 
   return (
     <section
@@ -361,18 +371,23 @@ export function SectionDisclosure({
         >
           <h2 className={`flex-1 ${REPORT_SECTION_HEADING_CLASS}`}>
             {scrub(section.title)}
+            {metaSpan}
           </h2>
           <span aria-hidden="true" className={`${SECTION_EXPAND_LINK_CLASS} max-md:hidden`}>
             {expanded ? "Collapse −" : "Expand +"}
           </span>
         </button>
       ) : (
-        <h2 className={REPORT_SECTION_HEADING_CLASS}>{scrub(section.title)}</h2>
+        <h2 className={REPORT_SECTION_HEADING_CLASS}>
+          {scrub(section.title)}
+          {metaSpan}
+        </h2>
       )}
       {/* Fallback (first-sentence) summaries render unmarked — the checked/
           fallback distinction is provenance for reviewers, not users
           (owner, 2026-08-05). */}
-      {!expanded && summary !== null && (
+      {!expanded && summaryNode !== undefined && <div className="mt-2">{summaryNode}</div>}
+      {!expanded && summaryNode === undefined && summary !== null && (
         <p className="mt-1.5 max-w-prose-measure text-lead text-grey max-md:text-body">{scrub(summary.text)}</p>
       )}
       {!expanded && <MobileDisclosureToggle expanded={false} onToggle={() => setOpen(true)} />}

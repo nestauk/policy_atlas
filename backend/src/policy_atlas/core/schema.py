@@ -1,4 +1,4 @@
-"""SQLAlchemy Core table metadata — thirty-seven tables plus one read view.
+"""SQLAlchemy Core table metadata — forty-two tables plus one read view.
 
 No deferred columns (no same_content_as or lineage key).
 """
@@ -112,7 +112,16 @@ task = Table(
     Column("org_id", UUID(as_uuid=True), ForeignKey("organisation.org_id"), nullable=True),
     Column("visibility", Text, nullable=False, server_default="private"),
     Column("is_public", Boolean, nullable=False, server_default=text("false")),
+    # The kind of work the task does (task 044, ADR 0037 decision 1). Written
+    # at creation and never changed — turning one task into another is what a
+    # ``task_link`` row is for. Every pre-044 row is an Evidence search, which
+    # is what the server default backfills.
+    Column("capability", Text, nullable=False, server_default="evidence_search"),
     CheckConstraint("status IN ('active', 'archived')", name="ck_task_status"),
+    CheckConstraint(
+        "capability IN ('evidence_search', 'options_scoping')",
+        name="ck_task_capability",
+    ),
     CheckConstraint(
         "(status = 'archived') = (archived_at IS NOT NULL)",
         name="ck_task_archived_at",
@@ -165,7 +174,7 @@ conversation = Table(
         name="fk_conversation_entry_artefact_task",
         match="SIMPLE",
     ),
-    CheckConstraint("kind IN ('planning', 'chat')", name="ck_conversation_kind"),
+    CheckConstraint("kind IN ('task_agent', 'chat')", name="ck_conversation_kind"),
     CheckConstraint(
         "status IN ('active', 'closed', 'archived')", name="ck_conversation_status"
     ),
@@ -175,13 +184,13 @@ conversation = Table(
     ),
     CheckConstraint(
         "kind = 'chat' OR status <> 'archived'",
-        name="ck_conversation_planning_never_archived",
+        name="ck_conversation_task_agent_never_archived",
     ),
     Index(
-        "uq_conversation_one_active_planning",
+        "uq_conversation_one_active_task_agent",
         "task_id",
         unique=True,
-        postgresql_where=text("kind = 'planning' AND status = 'active'"),
+        postgresql_where=text("kind = 'task_agent' AND status = 'active'"),
     ),
 )
 
@@ -412,8 +421,29 @@ evidence_scope = Table(
     Column("intent", Text, nullable=False),
     Column("context", JSONB, nullable=False),
     Column("created_at", DateTime(timezone=True), nullable=False),
+    # What this intent record is for (task 044, ADR 0037 decision 4). NULL on
+    # every pre-044 row and on every Evidence search record: a plan had exactly
+    # one scope before options scoping made several per plan.
+    Column("purpose", Text, nullable=True),
+    # The plan VERSION this record belongs to (A16/C3: ``plan_version`` alone
+    # is a weak pointer, and ``plan.evidence_scope_id`` only says which record
+    # the plan row points back at). Composite with ``task_id`` so a record can
+    # never name a plan of a different task.
+    Column("plan_id", UUID(as_uuid=True), nullable=True),
     # Composite unique target for source_screening_result FK
     UniqueConstraint("evidence_scope_id", "task_id", name="uq_evidence_scope_id_task"),
+    CheckConstraint(
+        "purpose IN ('baseline', 'longlist', 'variant', 'targeted')",
+        name="ck_scope_purpose",
+    ),
+    # MATCH SIMPLE, per the ``plan.evidence_scope_id`` precedent above it: a
+    # NULL ``plan_id`` skips the check, so the guard binds only once set.
+    ForeignKeyConstraint(
+        ["plan_id", "task_id"],
+        ["plan.plan_id", "plan.task_id"],
+        name="fk_scope_plan_task",
+        match="SIMPLE",
+    ),
 )
 
 source_screening_result = Table(
@@ -926,7 +956,8 @@ intervention_outcome_finding = Table(
     # Source-named references — never canonical entities (data-model findings layer).
     Column("intervention", Text, nullable=False),
     Column("outcome", Text, nullable=False),  # base measure only; qualifiers are stratum
-    Column("population", Text, nullable=True),
+    # Who or what the intervention was delivered to (task 046, amendment 3, R71).
+    Column("unit", Text, nullable=True),
     Column("setting", Text, nullable=True),
     Column("comparator", Text, nullable=True),
     Column("effect_direction", Text, nullable=False),  # a reported null result is a finding
@@ -986,7 +1017,7 @@ implementation_context_finding = Table(
     # Source-named references — shared meaning with IOF; requiredness is per schema.
     Column("intervention", Text, nullable=False),
     Column("outcome", Text, nullable=True),
-    Column("population", Text, nullable=True),
+    Column("unit", Text, nullable=True),
     Column("setting", Text, nullable=True),
     Column("study_geography", Text, nullable=True),
     Column("study_design", Text, nullable=True),
@@ -1025,6 +1056,95 @@ implementation_context_finding = Table(
     Index("ix_icf_record", "extraction_record_id"),
 )
 
+# --- The options-scoping intervention profile (task 045, ADR 0039 decision 6) ---
+#
+# One row per intervention a document's abstract covers, with the role the
+# abstract gives it. Not a finding of effect: a mention is not support. The
+# shared reference columns match the IOF/ICF tables so the record joins
+# ``finding_reference_union`` as its third branch without NULL aliases.
+
+#: What an abstract does with an intervention (contract § Terms, "role").
+#: ``comparator`` records never count as option membership; role sorts and
+#: describes, it never excludes.
+INTERVENTION_ROLES: tuple[str, ...] = (
+    "evaluated",
+    "described",
+    "recommended",
+    "comparator",
+    "mentioned",
+)
+_INTERVENTION_ROLES_SQL = ", ".join(f"'{r}'" for r in INTERVENTION_ROLES)
+
+#: How a record's unit stands to the plan's target unit (task 046, S5):
+#: the target unit itself, a wider or adjacent unit, or neither. Null
+#: means "not tagged" (a record profiled before the tagging context existed).
+UNIT_TAGS: tuple[str, ...] = ("on_target", "adjacent", "other")
+_UNIT_TAGS_SQL = ", ".join(f"'{t}'" for t in UNIT_TAGS)
+
+#: Whether a record names the plan's object of change, an option, or neither
+#: (task 046, S5). Null means "not tagged".
+OBJECT_TAGS: tuple[str, ...] = ("plan_object", "option", "neither")
+_OBJECT_TAGS_SQL = ", ".join(f"'{t}'" for t in OBJECT_TAGS)
+
+intervention_profile_record = Table(
+    "intervention_profile_record",
+    metadata,
+    Column("record_id", UUID(as_uuid=True), primary_key=True),
+    Column("task_id", UUID(as_uuid=True), ForeignKey("task.task_id"), nullable=False),
+    Column("extraction_record_id", UUID(as_uuid=True), nullable=False),
+    # Source-named references — never canonical entities (data-model findings layer).
+    Column("intervention", Text, nullable=False),
+    Column("role", Text, nullable=False),
+    # The stated design features, as a JSON array of strings.
+    Column("design_features", JSONB, nullable=False),
+    Column("is_bundle", Boolean, nullable=False, server_default=text("false")),
+    # The bundle's parts when ``is_bundle``, as a JSON array.
+    Column("components", JSONB, nullable=False),
+    Column("outcome", Text, nullable=True),
+    Column("unit", Text, nullable=True),
+    Column("setting", Text, nullable=True),
+    Column("study_geography", Text, nullable=True),
+    Column("study_design", Text, nullable=True),
+    # The programme's own name and the countries of the stated place (task 046,
+    # amendment 3, R71); null on a record written before that revision.
+    Column("programme_name", Text, nullable=True),
+    Column("study_country", Text, nullable=True),
+    # Document level, carried on each record: the abstract covers no intervention.
+    Column("covers_no_intervention", Boolean, nullable=False, server_default=text("false")),
+    # The plan-relative tags (task 046, S5): null is "not tagged".
+    # ``outcome_tag`` is free text — a plan outcome's text, or ``other``.
+    Column("unit_tag", Text, nullable=True),
+    Column("outcome_tag", Text, nullable=True),
+    Column("object_tag", Text, nullable=True),
+    Column("field_coverage", JSONB, nullable=False),
+    # Anchors: the qv_v1 grounding payload shape the IOF/ICF rows use.
+    Column("grounding", JSONB, nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    ForeignKeyConstraint(
+        ["extraction_record_id", "task_id"],
+        [
+            "source_extraction_record.extraction_record_id",
+            "source_extraction_record.task_id",
+        ],
+        name="fk_ipr_record_task",
+    ),
+    CheckConstraint(f"role IN ({_INTERVENTION_ROLES_SQL})", name="ck_ipr_role"),
+    CheckConstraint(
+        f"unit_tag IS NULL OR unit_tag IN ({_UNIT_TAGS_SQL})",
+        name="ck_ipr_unit_tag",
+    ),
+    CheckConstraint(
+        f"object_tag IS NULL OR object_tag IN ({_OBJECT_TAGS_SQL})",
+        name="ck_ipr_object_tag",
+    ),
+    CheckConstraint("jsonb_typeof(design_features) = 'array'", name="ck_ipr_design_features_array"),
+    CheckConstraint("jsonb_typeof(components) = 'array'", name="ck_ipr_components_array"),
+    CheckConstraint("jsonb_typeof(grounding) = 'array'", name="ck_ipr_grounding_array"),
+    Index("ix_ipr_record", "extraction_record_id"),
+)
+
+#: The union view of the three finding tables (task 045, S4): the alembic
+#: revisions create it, each with its own frozen definition.
 finding_reference_union = Table(
     "finding_reference_union",
     metadata,
@@ -1034,7 +1154,7 @@ finding_reference_union = Table(
     Column("task_id", UUID(as_uuid=True)),
     Column("intervention", Text),
     Column("outcome", Text),
-    Column("population", Text),
+    Column("unit", Text),
     Column("setting", Text),
     Column("study_geography", Text),
     Column("study_design", Text),
@@ -1047,7 +1167,10 @@ extraction_result = Table(
     Column("task_id", UUID(as_uuid=True), ForeignKey("task.task_id"), nullable=False),
     Column("evidence_scope_id", UUID(as_uuid=True), nullable=False),
     Column("run_id", UUID(as_uuid=True), nullable=False),
-    Column("selection_run_id", UUID(as_uuid=True), nullable=False),  # the executed reference
+    # The executed reference. NULL on the selection-free path (task 045, D24):
+    # the intervention profile reads a scope's whole screened-in set, with no
+    # select run. ``fk_exr_selection`` is MATCH SIMPLE, so a NULL passes it.
+    Column("selection_run_id", UUID(as_uuid=True), nullable=True),
     # Fingerprint + full component map: profile, schema, prompt, model, mode,
     # field rules, verifier, window params, max output tokens, retry cap, pass count.
     Column("extraction_provenance", JSONB, nullable=False),
@@ -1084,7 +1207,7 @@ extraction_result = Table(
 GROUPING_FACETS: tuple[str, ...] = (
     "intervention",
     "outcome",
-    "population",
+    "unit",
     "barrier_theme",
     "enabler_theme",
     "mechanism_theme",
@@ -1224,7 +1347,7 @@ task_plan = Table(
     Column("status", Text, nullable=False),  # proposed|approved|superseded|abandoned
     Column("payload", JSONB, nullable=False),  # the validated TaskPlan dump
     Column("created_at", DateTime(timezone=True), nullable=False),
-    Column("created_by", Text, nullable=False),  # 'user'|'planner' attribution
+    Column("created_by", Text, nullable=False),  # 'user'|'task_agent' attribution
     Column("approved_at", DateTime(timezone=True), nullable=True),
     # Cross-task FK guard, per the synthesis-result precedent: NULL
     # evidence_scope_id skips the check (MATCH SIMPLE), so the guard binds
@@ -1236,6 +1359,9 @@ task_plan = Table(
     ),
     # One plan lineage per task in v1 — amendments append new-version rows.
     UniqueConstraint("task_id", "version", name="uq_plan_task_version"),
+    # Composite-FK target for ``evidence_scope.plan_id`` (task 044): an intent
+    # record may name a plan version only of its own task.
+    UniqueConstraint("plan_id", "task_id", name="uq_plan_id_task"),
     CheckConstraint(
         "status IN ('proposed', 'approved', 'superseded', 'abandoned')",
         name="ck_plan_status",
@@ -1243,10 +1369,10 @@ task_plan = Table(
     CheckConstraint("jsonb_typeof(payload) = 'object'", name="ck_plan_payload_object"),
 )
 
-# --- Durable planning transcript (task 027) ---
+# --- Durable task_agent transcript (task 027) ---
 
-planning_transcript = Table(
-    "planning_transcript",
+task_agent_transcript = Table(
+    "task_agent_transcript",
     metadata,
     Column("id", UUID(as_uuid=True), primary_key=True),
     Column("task_id", UUID(as_uuid=True), ForeignKey("task.task_id"), nullable=False),
@@ -1257,21 +1383,21 @@ planning_transcript = Table(
     Column("turn_index", Integer, nullable=False),
     Column("user_message", Text, nullable=False),
     Column("reply", Text, nullable=True),
-    # ``planner_state`` is the raw PlanDraftWire dump used as the next call's
+    # ``task_agent_state`` is the raw PlanDraftWire dump used as the next call's
     # ``previous_draft``. ``response`` is the distinct projected API result.
-    Column("planner_state", JSONB, nullable=True),
+    Column("task_agent_state", JSONB, nullable=True),
     Column("response", JSONB, nullable=True),
     Column("part", JSONB, nullable=True),
     Column("suggestions", JSONB, nullable=False),
     Column("status", Text, nullable=False),  # pending|completed|failed
     Column("created_at", DateTime(timezone=True), nullable=False),
     Column("completed_at", DateTime(timezone=True), nullable=True),
-    UniqueConstraint("task_id", "client_turn_id", name="uq_ptr_task_client_turn"),
-    UniqueConstraint("task_id", "turn_index", name="uq_ptr_task_turn_index"),
+    UniqueConstraint("task_id", "client_turn_id", name="uq_tat_task_client_turn"),
+    UniqueConstraint("task_id", "turn_index", name="uq_tat_task_turn_index"),
     CheckConstraint(
-        "status IN ('pending', 'completed', 'failed')", name="ck_ptr_status"
+        "status IN ('pending', 'completed', 'failed')", name="ck_tat_status"
     ),
-    CheckConstraint("jsonb_typeof(suggestions) = 'array'", name="ck_ptr_suggestions_array"),
+    CheckConstraint("jsonb_typeof(suggestions) = 'array'", name="ck_tat_suggestions_array"),
 )
 
 # --- Capability run (task 024) ---
@@ -1301,20 +1427,274 @@ capability_run = Table(
     Column("session_id", UUID(as_uuid=True), nullable=True),
     Column("started_at", DateTime(timezone=True), nullable=False),
     Column("ended_at", DateTime(timezone=True), nullable=True),
+    # The walk that asked for this one (task 045, ADR 0039 decision 3): a
+    # longlist walk's option searches are its child walks. NULL for every
+    # other walk, including an option search the Task Agent starts for the
+    # chat verb *add*. Composite with ``task_id``: a parent is always a walk
+    # of the same task.
+    Column("parent_capability_run_id", UUID(as_uuid=True), nullable=True),
     # Cross-task FK guard, per the selection-result precedent.
     ForeignKeyConstraint(
         ["evidence_scope_id", "task_id"],
         ["evidence_scope.evidence_scope_id", "evidence_scope.task_id"],
         name="fk_capr_scope_task",
     ),
+    ForeignKeyConstraint(
+        ["parent_capability_run_id", "task_id"],
+        ["capability_run.capability_run_id", "capability_run.task_id"],
+        name="fk_capr_parent_task",
+        match="SIMPLE",
+    ),
     # Composite-FK target for runs.capability_run_id.
     UniqueConstraint("capability_run_id", "task_id", name="uq_capr_id_task"),
-    CheckConstraint("capability IN ('evidence_search')", name="ck_capr_capability"),
+    CheckConstraint(
+        "capability IN ('evidence_search', 'options_scoping')",
+        name="ck_capr_capability",
+    ),
     CheckConstraint(
         "status IN ('running', 'paused', 'succeeded', 'degraded', 'failed', "
         "'aborted', 'interrupted')",
         name="ck_capr_status",
     ),
+    Index("ix_capr_parent", "parent_capability_run_id"),
+)
+
+# --- Links between tasks (task 044, ADR 0037 decision 2) -------------------
+#
+# A Link says "this task starts from that one". Many-to-many, one row per
+# ordered pair, source never itself, and the source's contribution pinned to
+# ONE finished walk (`source_capability_run_id`) so what the target inherited
+# cannot change under it when the source runs again.
+#
+# Two rules are deliberately NOT columns. Both tasks must share a project when
+# the link is written, but a link whose tasks later stop sharing one is
+# **flagged on read, never deleted** (C12) — the check lives in
+# `task_links_for`. And a link grants no access at all: reading the target
+# tells the caller nothing about the source they could not already read.
+#
+# The option id the data model declares arrived in task 045 with the option
+# table (044 D13): nullable, and guarded to an option of the TARGET task.
+
+task_link = Table(
+    "task_link",
+    metadata,
+    Column("link_id", UUID(as_uuid=True), primary_key=True),
+    Column("source_task_id", UUID(as_uuid=True), ForeignKey("task.task_id"), nullable=False),
+    Column("target_task_id", UUID(as_uuid=True), ForeignKey("task.task_id"), nullable=False),
+    Column("source_capability_run_id", UUID(as_uuid=True), nullable=False),
+    Column("created_by", Text, nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    # The option this link feeds (task 045). MATCH SIMPLE: NULL skips the guard.
+    Column("option_id", UUID(as_uuid=True), nullable=True),
+    ForeignKeyConstraint(
+        ["option_id", "target_task_id"],
+        ["option.option_id", "option.task_id"],
+        name="fk_task_link_option_target",
+        match="SIMPLE",
+    ),
+    # The pinned walk must belong to the source task — the same cross-task FK
+    # guard every composite reference in this schema uses, over
+    # ``uq_capr_id_task``.
+    ForeignKeyConstraint(
+        ["source_capability_run_id", "source_task_id"],
+        ["capability_run.capability_run_id", "capability_run.task_id"],
+        name="fk_task_link_source_run_task",
+    ),
+    UniqueConstraint("source_task_id", "target_task_id", name="uq_task_link_pair"),
+    CheckConstraint("source_task_id <> target_task_id", name="ck_task_link_distinct"),
+    # The read direction is target → sources ("Starts from"), so the target
+    # side is the one that needs an index; the source side is covered by
+    # ``uq_task_link_pair``'s leading column.
+    Index("ix_task_link_target_task_id", "target_task_id"),
+)
+
+# --- Options scoping: the option records (task 045, ADR 0039 decision 7) -----
+#
+# An option is a task-scoped row with a stable id and a versioned specified
+# design (concept ruling 44). Not a document, not a theme. Option-level
+# judgements are keyed ``(option_id, design_version)`` in ``longlist_result``,
+# so a changed design can never inherit them.
+
+#: Where an option came from (contract § Terms, "entrant").
+OPTION_ORIGINS: tuple[str, ...] = (
+    "clustered",
+    "suggested",
+    "from_evidence_search",
+    "added_by_you",
+)
+#: An option's state. "No in-scope evidence" is a condition, not a state.
+OPTION_STATES: tuple[str, ...] = ("included", "excluded")
+#: What a membership row's unit is: an intervention profile record of this
+#: task, or a linked task's IOF/ICF finding read through the union view.
+OPTION_UNIT_KINDS: tuple[str, ...] = ("interventions", "iof", "icf")
+#: The relations between options. ``variant_of`` is reserved for task 3.
+OPTION_RELATION_KINDS: tuple[str, ...] = ("part_of", "variant_of")
+
+_OPTION_ORIGINS_SQL = ", ".join(f"'{o}'" for o in OPTION_ORIGINS)
+_OPTION_STATES_SQL = ", ".join(f"'{s}'" for s in OPTION_STATES)
+_OPTION_UNIT_KINDS_SQL = ", ".join(f"'{k}'" for k in OPTION_UNIT_KINDS)
+_OPTION_RELATION_KINDS_SQL = ", ".join(f"'{k}'" for k in OPTION_RELATION_KINDS)
+
+option = Table(
+    "option",
+    metadata,
+    Column("option_id", UUID(as_uuid=True), primary_key=True),
+    Column("task_id", UUID(as_uuid=True), ForeignKey("task.task_id"), nullable=False),
+    Column("name", Text, nullable=False),
+    Column("description", Text, nullable=False),
+    # The specified design: its defining features (offer, obligation, …).
+    Column("design", JSONB, nullable=False),
+    Column("design_version", Integer, nullable=False, server_default=text("1")),
+    # The stated outcomes the option serves, as a JSON array.
+    Column("outcomes", JSONB, nullable=False),
+    Column("origin", Text, nullable=False),
+    Column("state", Text, nullable=False, server_default="included"),
+    # ``{constraint, reason, by}`` when excluded; NULL otherwise.
+    Column("exclusion", JSONB, nullable=True),
+    Column("no_in_scope_evidence", Boolean, nullable=False, server_default=text("false")),
+    # Lever typing: NULL until the typing pass has run over the option.
+    Column("primary_lever_type", Text, nullable=True),
+    Column("secondary_lever_types", JSONB, nullable=False),
+    Column("lever_none_fits_reason", Text, nullable=True),
+    Column("taxonomy_version", Text, nullable=True),
+    # Do minimum · incremental · structural, "as described, not measured".
+    Column("ambition", Text, nullable=True),
+    Column("ambition_reason", Text, nullable=True),
+    # The component run that minted the row; NULL for an option added by hand.
+    Column("created_by_run_id", UUID(as_uuid=True), nullable=True),
+    # The kept option a duplicate was folded into (constrain's *distinct*
+    # merge): its documents moved there and it leaves the list. NULL otherwise.
+    Column("merged_into_option_id", UUID(as_uuid=True), nullable=True),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    Column("updated_at", DateTime(timezone=True), nullable=False),
+    ForeignKeyConstraint(
+        ["created_by_run_id", "task_id"],
+        ["runs.run_id", "runs.task_id"],
+        name="fk_option_run_task",
+        match="SIMPLE",
+    ),
+    ForeignKeyConstraint(
+        ["merged_into_option_id", "task_id"],
+        ["option.option_id", "option.task_id"],
+        name="fk_option_merged_into_task",
+        match="SIMPLE",
+    ),
+    CheckConstraint("merged_into_option_id <> option_id", name="ck_option_merged_not_self"),
+    # Composite-FK target for membership, relation and ``task_link.option_id``.
+    UniqueConstraint("option_id", "task_id", name="uq_option_id_task"),
+    CheckConstraint(f"origin IN ({_OPTION_ORIGINS_SQL})", name="ck_option_origin"),
+    CheckConstraint(f"state IN ({_OPTION_STATES_SQL})", name="ck_option_state"),
+    CheckConstraint("design_version >= 1", name="ck_option_design_version"),
+    CheckConstraint("jsonb_typeof(outcomes) = 'array'", name="ck_option_outcomes_array"),
+    CheckConstraint(
+        "jsonb_typeof(secondary_lever_types) = 'array'",
+        name="ck_option_secondary_levers_array",
+    ),
+    Index("ix_option_task", "task_id"),
+)
+
+option_membership = Table(
+    "option_membership",
+    metadata,
+    Column("membership_id", UUID(as_uuid=True), primary_key=True),
+    Column("option_id", UUID(as_uuid=True), nullable=False),
+    Column("task_id", UUID(as_uuid=True), ForeignKey("task.task_id"), nullable=False),
+    Column("unit_kind", Text, nullable=False),
+    # A record id (``interventions``) or a finding id (``iof`` / ``icf``).
+    Column("unit_id", UUID(as_uuid=True), nullable=False),
+    # The task the unit belongs to: this task for its own records, the linked
+    # source task for an inherited finding.
+    Column("unit_task_id", UUID(as_uuid=True), ForeignKey("task.task_id"), nullable=False),
+    # This task's document row, for own records only.
+    Column("task_source_snapshot_id", UUID(as_uuid=True), nullable=True),
+    Column("assignment_reason", Text, nullable=True),
+    # The document covers the intervention but its abstract does not state the
+    # feature that defines this option (D11): counted and shown, never dropped.
+    Column("design_feature_not_stated", Boolean, nullable=False, server_default=text("false")),
+    Column("assigned_by_run_id", UUID(as_uuid=True), nullable=False),
+    ForeignKeyConstraint(
+        ["option_id", "task_id"],
+        ["option.option_id", "option.task_id"],
+        name="fk_om_option_task",
+    ),
+    ForeignKeyConstraint(
+        ["task_source_snapshot_id", "task_id"],
+        [
+            "task_source_snapshot.task_source_snapshot_id",
+            "task_source_snapshot.task_id",
+        ],
+        name="fk_om_tss_task",
+        match="SIMPLE",
+    ),
+    ForeignKeyConstraint(
+        ["assigned_by_run_id", "task_id"],
+        ["runs.run_id", "runs.task_id"],
+        name="fk_om_run_task",
+    ),
+    UniqueConstraint("option_id", "unit_kind", "unit_id", name="uq_om_option_unit"),
+    CheckConstraint(f"unit_kind IN ({_OPTION_UNIT_KINDS_SQL})", name="ck_om_unit_kind"),
+    Index("ix_om_task", "task_id"),
+)
+
+option_relation = Table(
+    "option_relation",
+    metadata,
+    Column("relation_id", UUID(as_uuid=True), primary_key=True),
+    Column("task_id", UUID(as_uuid=True), ForeignKey("task.task_id"), nullable=False),
+    Column("from_option_id", UUID(as_uuid=True), nullable=False),
+    Column("to_option_id", UUID(as_uuid=True), nullable=False),
+    Column("kind", Text, nullable=False),
+    Column("created_by", Text, nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    ForeignKeyConstraint(
+        ["from_option_id", "task_id"],
+        ["option.option_id", "option.task_id"],
+        name="fk_orel_from_task",
+    ),
+    ForeignKeyConstraint(
+        ["to_option_id", "task_id"],
+        ["option.option_id", "option.task_id"],
+        name="fk_orel_to_task",
+    ),
+    UniqueConstraint("from_option_id", "to_option_id", "kind", name="uq_orel_pair_kind"),
+    CheckConstraint("from_option_id <> to_option_id", name="ck_orel_distinct"),
+    CheckConstraint(f"kind IN ({_OPTION_RELATION_KINDS_SQL})", name="ck_orel_kind"),
+)
+
+# The run-keyed longlist roll-up — the characterise pattern. A longlist exists
+# when a row of this table exists (contract A6).
+longlist_result = Table(
+    "longlist_result",
+    metadata,
+    Column("longlist_result_id", UUID(as_uuid=True), primary_key=True),
+    Column("task_id", UUID(as_uuid=True), ForeignKey("task.task_id"), nullable=False),
+    Column("evidence_scope_id", UUID(as_uuid=True), nullable=False),
+    Column("run_id", UUID(as_uuid=True), nullable=False),
+    # The plan version the longlist was built from (D14: "built from plan version N").
+    Column("plan_version", Integer, nullable=False),
+    Column("themes", JSONB, nullable=False),
+    Column("coverage", JSONB, nullable=False),
+    # Keyed ``(option_id, design_version)`` so a changed design cannot inherit them.
+    Column("judgements", JSONB, nullable=False),
+    Column("guesses", JSONB, nullable=False),
+    # Keyed ``[option_id][design_version]``: the eight lines (sentence, mark)
+    # and the setting (task 046, R45).
+    Column("option_profile", JSONB, nullable=False),
+    Column("counts", JSONB, nullable=False),
+    Column("provenance", JSONB, nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    ForeignKeyConstraint(
+        ["evidence_scope_id", "task_id"],
+        ["evidence_scope.evidence_scope_id", "evidence_scope.task_id"],
+        name="fk_llr_scope_task",
+    ),
+    ForeignKeyConstraint(
+        ["run_id", "task_id"],
+        ["runs.run_id", "runs.task_id"],
+        name="fk_llr_run_task",
+    ),
+    UniqueConstraint("evidence_scope_id", "run_id", name="uq_llr_scope_run"),
+    Index("ix_llr_task", "task_id"),
 )
 
 chat_turn = Table(

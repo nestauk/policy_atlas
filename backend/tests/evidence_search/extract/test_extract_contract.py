@@ -117,7 +117,7 @@ def _finding_values(
         "extraction_record_id": extraction_record_id,
         "intervention": "Coaching",
         "outcome": "Test scores",
-        "population": None,
+        "unit": None,
         "comparator": None,
         "effect_direction": "increase",
         "estimate_level": "study",

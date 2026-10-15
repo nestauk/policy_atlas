@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ConversationList } from "./ConversationList";
-import { DRAFT_CHAT_ID, PLANNING_TAB_ID } from "./conversationState";
+import { DRAFT_CHAT_ID, TASK_AGENT_TAB_ID } from "./conversationState";
 
 const state = vi.hoisted(() => ({
   update: vi.fn(async () => undefined),
@@ -17,7 +17,7 @@ const iso = (minutesAgo: number) => new Date(now - minutesAgo * 60_000).toISOStr
 
 // Deliberately interleaved (not grouped by kind) — a bug that re-sorts by
 // kind before rendering would still pass a kind-grouped fixture. Several
-// planning lineages, one still open: the Task Agent selection rule and the
+// task_agent lineages, one still open: the Task Agent selection rule and the
 // "Earlier plan" label both need that shape (contract 038 § V8).
 type Row = {
   id: string; kind: string; status: string; closed_at: string | null; title: string;
@@ -26,9 +26,9 @@ type Row = {
 };
 const defaultActiveRows = (): Row[] => [
   { id: "c1", kind: "chat", status: "active", closed_at: null, title: "Cost barriers", created_at: iso(1), entry_artefact_id: "a1", latest_turn_preview: { reply_snippet: "A short answer", user_message: "Why?", at: iso(1) } },
-  { id: "p1", kind: "planning", status: "active", closed_at: null, title: "Plan for Task Alpha", created_at: iso(2), entry_artefact_id: null, latest_turn_preview: null },
-  { id: "p2", kind: "planning", status: "active", closed_at: iso(3), title: "Plan round 1", created_at: iso(3), entry_artefact_id: null, latest_turn_preview: null },
-  { id: "p3", kind: "planning", status: "active", closed_at: iso(4), title: "Plan round 2", created_at: iso(4), entry_artefact_id: null, latest_turn_preview: null },
+  { id: "p1", kind: "task_agent", status: "active", closed_at: null, title: "Plan for Task Alpha", created_at: iso(2), entry_artefact_id: null, latest_turn_preview: null },
+  { id: "p2", kind: "task_agent", status: "active", closed_at: iso(3), title: "Plan round 1", created_at: iso(3), entry_artefact_id: null, latest_turn_preview: null },
+  { id: "p3", kind: "task_agent", status: "active", closed_at: iso(4), title: "Plan round 2", created_at: iso(4), entry_artefact_id: null, latest_turn_preview: null },
 ];
 const defaultArchivedRows = (): Row[] => [
   { id: "c2", kind: "chat", status: "archived", closed_at: null, title: "Old thread", created_at: iso(5), entry_artefact_id: null, latest_turn_preview: null },
@@ -93,7 +93,7 @@ describe("ConversationList", () => {
 
   it("pins the Task Agent first, then keeps the API's own order for the rest", () => {
     renderList();
-    // p1 (the open planning lineage) is pinned above the date groups; the
+    // p1 (the open task_agent lineage) is pinned above the date groups; the
     // chat and the two older lineages keep the order the API sent.
     expect(rowNames()).toEqual(["Task Agent", "Cost barriers", "Earlier plan", "Earlier plan"]);
   });
@@ -102,7 +102,7 @@ describe("ConversationList", () => {
     renderList();
     // The label is the only marker (fork F4): one row, one label, no chip.
     expect(screen.getAllByText("Task Agent")).toHaveLength(1);
-    // Several closed planning rows on one task is the expected state
+    // Several closed task_agent rows on one task is the expected state
     // (rubric 44) — both render, neither is deduped or dropped.
     expect(screen.getAllByText("Earlier plan")).toHaveLength(2);
     expect(screen.queryByText("Planning")).toBeNull();
@@ -117,17 +117,17 @@ describe("ConversationList", () => {
     expect(screen.getAllByText("Task Agent")).toHaveLength(1);
   });
 
-  it("still lists the Task Agent when the listing carries no planning row at all (a completed task)", async () => {
-    // A run closes the planning lineage, and the active listing then has no
-    // planning row — the Task Agent must still be there to select.
+  it("still lists the Task Agent when the listing carries no task_agent row at all (a completed task)", async () => {
+    // A run closes the task_agent lineage, and the active listing then has no
+    // task_agent row — the Task Agent must still be there to select.
     const user = userEvent.setup();
-    activeRows = activeRows.filter((row) => row.kind !== "planning");
-    renderList(PLANNING_TAB_ID);
+    activeRows = activeRows.filter((row) => row.kind !== "task_agent");
+    renderList(TASK_AGENT_TAB_ID);
     const taskAgent = screen.getByRole("button", { name: "Task Agent" });
     expect(rowNames()[0]).toBe("Task Agent");
     expect(taskAgent).toHaveAttribute("aria-current", "true");
     await user.click(taskAgent);
-    expect(state.onOpen).toHaveBeenCalledWith(expect.objectContaining({ id: PLANNING_TAB_ID, kind: "planning" }));
+    expect(state.onOpen).toHaveBeenCalledWith(expect.objectContaining({ id: TASK_AGENT_TAB_ID, kind: "task_agent" }));
   });
 
   it("shows a selected New chat row while a draft chat is open, with no rename or archive on it", () => {
@@ -140,7 +140,7 @@ describe("ConversationList", () => {
 
   it("a non-owner's list is exactly the rows the API returned plus the Task Agent, only the labels differ (A9)", () => {
     // The listing is owner-relative server-side: a colleague's page carries
-    // their own chats and no planning row at all. Nothing here filters,
+    // their own chats and no task_agent row at all. Nothing here filters,
     // hides or invents a chat.
     activeRows = [
       { id: "c9", kind: "chat", status: "active", closed_at: null, title: "Colleague question", created_at: iso(1), entry_artefact_id: null, latest_turn_preview: null },
@@ -154,7 +154,7 @@ describe("ConversationList", () => {
     expect(screen.queryByRole("heading", { name: "Archived" })).toBeNull();
   });
 
-  it("offers neither a rename nor an archive control on a planning row", () => {
+  it("offers neither a rename nor an archive control on a task_agent row", () => {
     renderList();
     expect(screen.queryByRole("button", { name: "Rename Plan for Task Alpha" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Archive Plan for Task Alpha" })).toBeNull();
@@ -170,11 +170,11 @@ describe("ConversationList", () => {
     expect(screen.getByRole("button", { name: "Archive Cost barriers" })).toBeInTheDocument();
   });
 
-  it("hands the chosen row to the caller — a planning row as itself, a chat as itself", async () => {
+  it("hands the chosen row to the caller — a task_agent row as itself, a chat as itself", async () => {
     const user = userEvent.setup();
     renderList();
     await user.click(screen.getByRole("button", { name: "Task Agent" }));
-    expect(state.onOpen).toHaveBeenLastCalledWith(expect.objectContaining({ id: "p1", kind: "planning" }));
+    expect(state.onOpen).toHaveBeenLastCalledWith(expect.objectContaining({ id: "p1", kind: "task_agent" }));
     await user.click(screen.getByRole("button", { name: "Cost barriers" }));
     expect(state.onOpen).toHaveBeenLastCalledWith(expect.objectContaining({ id: "c1", kind: "chat" }));
   });

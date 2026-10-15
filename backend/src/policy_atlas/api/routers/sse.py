@@ -37,13 +37,14 @@ from policy_atlas.api.contract import (
 )
 from policy_atlas.api.deps import get_current_user, get_engine, get_settings
 from policy_atlas.api.lifecycle import LIFECYCLE_EVENT_KINDS, both_generations
+from policy_atlas.api.readmodels.repository import walks_of_event_runs
 from policy_atlas.api.routers._access import (
     accessible_task,
     may_read_task,
     readable_task_exists,
     trace_admin_stream_read,
 )
-from policy_atlas.api.routers.planning import _draft_from_plan
+from policy_atlas.api.routers.task_agent import plan_slot
 from policy_atlas.api.settings import Settings
 
 # Shared with the check-in read model — one vocabulary, one leak surface.
@@ -60,7 +61,11 @@ from policy_atlas.core import events
 from policy_atlas.core.liveness import Tick, tick_hub
 from policy_atlas.core.schema import event_log, task_plan
 from policy_atlas.runtime import steering_events
-from policy_atlas.runtime.task_plan import TaskPlan
+from policy_atlas.runtime.capability_registry import (
+    capability_of_task,
+    spec_for,
+    validate_plan,
+)
 
 log = structlog.get_logger()
 
@@ -217,11 +222,20 @@ def _map_rows(
             if through is None or row["sequence"] <= through
         ]
     frames: list[dict[str, Any]] = []
+    walks = walks_of_event_runs(conn, task_id, all_rows, _STAGE_EVENT_TYPES)
     for row in all_rows:
         frames.extend(
-            _frames_for_row(conn, task_id=task_id, row=row, all_events=decision_events)
+            _frames_for_row(
+                conn, task_id=task_id, row=row, all_events=decision_events, walks=walks
+            )
         )
     return frames
+
+
+#: The event types that map to stage frames.
+_STAGE_EVENT_TYPES = frozenset(
+    {"run.started", "component.completed", "component.failed", "component.skipped"}
+)
 
 
 def _frames_for_row(
@@ -230,13 +244,19 @@ def _frames_for_row(
     task_id: uuid.UUID,
     row: dict[str, Any],
     all_events: list[dict[str, Any]],
+    walks: dict[uuid.UUID, uuid.UUID] | None = None,
 ) -> list[dict[str, Any]]:
-    """Return zero or more public frames for one allowlisted event row."""
+    """Return zero or more public frames for one allowlisted event row.
+
+    ``walks`` maps a component run to its walk (:func:`repository.walks_of_event_runs`); a
+    stage frame carries that walk as ``capability_run_id`` (task 045, A3).
+    """
     payload = row["payload"]
     if not isinstance(payload, dict):
         return []
     event_type = row["event_type"]
     persisted = _persisted_kwargs(row)
+    stage_walk = (walks or {}).get(row["run_id"]) if row.get("run_id") is not None else None
     if event_type in {
         "run.opened",
         "run.parked",
@@ -271,7 +291,12 @@ def _frames_for_row(
             return []
         label, blurb = _presentation(stage)
         stage_frame = StageStartedFrame(
-            type="stage.started", stage=stage, label=label, blurb=blurb, **persisted
+            type="stage.started",
+            stage=stage,
+            label=label,
+            blurb=blurb,
+            capability_run_id=stage_walk,
+            **persisted,
         )
         return [stage_frame.model_dump(mode="json")]
     if event_type == "component.completed":
@@ -286,6 +311,7 @@ def _frames_for_row(
                 label=label,
                 summary=_summary(payload),
                 seconds=_seconds(conn, task_id=task_id, row=row, payload=payload),
+                capability_run_id=stage_walk,
                 **persisted,
             ).model_dump(mode="json")
         ]
@@ -306,6 +332,7 @@ def _frames_for_row(
                 label=label,
                 reason=str(reason or "The stage did not complete."),
                 skipped=event_type == "component.skipped",
+                capability_run_id=stage_walk,
                 **persisted,
             ).model_dump(mode="json")
         ]
@@ -531,8 +558,13 @@ def _plan_frame(
     ).mappings().one_or_none()
     if row is None or not isinstance(row["payload"], dict):
         return None
-    plan = _draft_from_plan(TaskPlan.model_validate(row["payload"]))
-    return PlanUpdatedFrame(type="plan.updated", plan=plan, version=version, **persisted)
+    capability = capability_of_task(conn, task_id)
+    validated = validate_plan(capability, row["payload"])
+    # Task 044: a scoping plan travels on its own field; the other is null.
+    draft = spec_for(capability).task_agent.draft_from_plan(validated)
+    return PlanUpdatedFrame(
+        type="plan.updated", **plan_slot(draft), version=version, **persisted
+    )
 
 
 def _task_frame(

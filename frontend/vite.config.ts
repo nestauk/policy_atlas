@@ -28,6 +28,8 @@ export default defineConfig({
   test: {
     environment: "jsdom",
     setupFiles: ["./src/test/setup.ts"],
+    // Tests exercise options scoping, which is behind this build-time flag.
+    env: { VITE_OPTIONS_SCOPING: "1" },
     globals: false,
     // `e2e/` holds Playwright specs (`pnpm e2e`), not vitest ones — vitest's
     // default include glob would otherwise pick up `e2e/journey.spec.ts` too

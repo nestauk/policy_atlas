@@ -91,7 +91,7 @@ dev:
 	  token=$$(cd backend && uv run python -m policy_atlas.api.dev_issuer mint \
 	    --dir .dev-issuer --sub dev-user --client-id policy-atlas-dev \
 	    --ttl 14400 2>/dev/null | tail -1); \
-	  cd frontend && VITE_DEV_TOKEN="$$token" pnpm dev & \
+	  cd frontend && VITE_DEV_TOKEN="$$token" VITE_OPTIONS_SCOPING=1 pnpm dev & \
 	  wait)
 
 # Seed the LOCAL dev DB with "Dev Org" + three enrolled identities so the 033

@@ -5,7 +5,7 @@ from policy_atlas.runtime.agent import (
     _build_plan,
     _render_full_plan,
 )
-from policy_atlas.runtime.planner_prompt import CountryGroupDraft, PlanDraftWire
+from policy_atlas.runtime.task_agent_prompt import CountryGroupDraft, PlanDraftWire
 from policy_atlas.runtime.task_plan import CountryGroupAuthorship
 
 

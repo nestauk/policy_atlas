@@ -1,5 +1,34 @@
 # Knowledge update log
 
+## 2026-10-12 (task 046 step 8, all four amendments)
+* **Creation**: Added [mini-model-limits-live-in-the-schema-and-code](mini-model-limits-live-in-the-schema-and-code.md)
+  (build candidates a3 "a ceiling in words does not bind", a4 "will not count characters",
+  "a ban on one joiner", base "memo key holds the version") and
+  [mini-model-loops-examples-over-rules](mini-model-loops-examples-over-rules.md) (a3 "never X",
+  "the reps quote the criterion", "each rule moved faults"; a4 "a worked example"; base "reason
+  before the label", "two ways out").
+* **Creation**: Added [alembic-revision-freezes-the-sql-it-executes](alembic-revision-freezes-the-sql-it-executes.md)
+  (a3 candidate; review A7/B7 — the fix landed in the review) and
+  [facet-key-rename-rewrites-stored-id-prefixes](facet-key-rename-rewrites-stored-id-prefixes.md)
+  (a3 candidate; review C3/X3/B8 on `facet_runs`).
+* **Creation**: Added [evidence-readbacks-name-the-task-they-read](evidence-readbacks-name-the-task-they-read.md)
+  (review LT1; a2 "put_state merges", a3 "replay stage order", a4 "cannot re-mint", "re-profiled clone")
+  and [trace-check-is-lexical-not-semantic](trace-check-is-lexical-not-semantic.md) (review LT2, LT3,
+  S1, X6, X8; a4 "plain words in the data").
+* **Creation**: Added [gate-snapshots-commit-from-tree-ids](gate-snapshots-commit-from-tree-ids.md)
+  (a2 "index snapshot", "one test DB per agent"; a3 "shared working tree", "commit <pathspec>";
+  a4 "commit-tree path list").
+* **Update**: [delegated-executor-practices](delegated-executor-practices.md) gains the background-gate
+  and invented-attribution lines (base candidates).
+* **Update**: [mini-model-loops-examples-over-rules](mini-model-loops-examples-over-rules.md)
+  rule 4 — the owner accepted the 1-in-175 residual at step 9 and the place strip was deleted.
+* **Declined** (recorded in verification.md § Review findings, step 8): JSONB key order (textbook);
+  the fold key is not a label, `head_phrase` negation, `document_where` first spelling, the
+  evaluated-country rule, the first-record rule (each a code comment and a test); one screen per
+  document as the cost lever (the system-level cost task in `docs/deferred.md` carries the figures);
+  `test_capability_registry` (covered by [capability-registry-one-plan-reader](capability-registry-one-plan-reader.md));
+  environment gotchas (token TTL, vitest timeouts under load, open event streams and `networkidle`,
+  a new stage key and `drift-check`) went to `docs/agentic-ops/environment.md`.
 ## 2026-10-09 (task 051 step 8)
 * **Creation**: Added
   [openalex-semantic-search-filter-support](openalex-semantic-search-filter-support.md) —
@@ -61,6 +90,61 @@
   confirmation that delegated tests are the defect surface (046); background
   `make verify-fast` shares the test DB with delegated briefs; committing one phase's
   slice of a shared file via `git update-index --cacheinfo` (046 build handoff).
+## 2026-09-24 (task 045 step 8)
+* **Creation**: Added [child-walks-end-on-every-parent-exit](child-walks-end-on-every-parent-exit.md) —
+  abandon children on every end of the parent, the self-ending straggler, one terminal write under
+  a row lock (review A2/A6/A11, F10/F13, L5).
+* **Creation**: Added [walk-existence-reads-intent-record-and-status](walk-existence-reads-intent-record-and-status.md) —
+  key existence on the scope row, count only live or good walks (review B2, B3, F2).
+* **Creation**: Added [longlist-rebuild-reads-every-earlier-build](longlist-rebuild-reads-every-earlier-build.md) —
+  latest finished search per option whatever its parent; suggest sees existing options (review
+  A1/B1; build candidate "a rebuild's model step must see what already exists").
+* **Creation**: Added [mutation-never-fails-after-its-commit](mutation-never-fails-after-its-commit.md)
+  (review A4, deviation 48) and [concurrent-walk-frames-carry-the-walk-id](concurrent-walk-frames-carry-the-walk-id.md)
+  (review A3, A7–A9, F11).
+* **Creation**: Added [sibling-walk-memo-writes-reuse-and-sorted-locks](sibling-walk-memo-writes-reuse-and-sorted-locks.md) —
+  memo race → reuse in a savepoint; sorted advisory locks against sibling deadlock (build candidate
+  "memo races under concurrent walks"; review L7, F9).
+* **Creation**: Added [task-link-grants-no-read](task-link-grants-no-read.md) (security S1 with the
+  owner's "Recheck access only", S2) and [multi-scope-retrieval-primary-scope-wins](multi-scope-retrieval-primary-scope-wins.md)
+  (the (g) misread; F16).
+* **Creation**: Added [study-geography-from-abstracts-mostly-unknown](study-geography-from-abstracts-mostly-unknown.md)
+  (build candidate; Phase 8 (c); L1).
+* **Update**: [event-log-sequence](event-log-sequence.md) gains the third writer family, the 5 → 32
+  retry bound, ADR 0001's one-writer-per-task retired and the serialisation cost (deviation 16,
+  B8, build candidate); [fail-loud-before-first-write](fail-loud-before-first-write.md) gains the
+  045 harness-layer recurrence (build candidate); [db-row-is-the-single-flight-authority](db-row-is-the-single-flight-authority.md)
+  gains 045's process-local admission as a single-process constraint (B10/B11);
+  [plan-lineage-by-fencing-not-custody](plan-lineage-by-fencing-not-custody.md) gains the
+  confirmed-version opener (A10); [residual-counted-after-narrowing](residual-counted-after-narrowing.md)
+  gains the two-sided residual count (F14); [wire-field-additions-break-all-construction-sites](wire-field-additions-break-all-construction-sites.md)
+  gains the openapi-typescript defaulted-field and full-object `PlanOut` expectations (build
+  candidates); [live-check-drive-runbook](live-check-drive-runbook.md) gains the dev-token subject
+  (build candidate). Declined: steering mode vs plan row and compose-time filters (ADR 0039
+  records both); the single-option confirm part (a UI observation, nothing to re-learn); the
+  clustering ceiling binding at 40 (open question 4, the owner's measurement, not a rule); the
+  setting-facet cap (one fixed UI cap); the component-level fixes (A5, A12, A13, B4, B6, B7, B9,
+  L3, L4, F3, F5, F12, F15, S4 — each local and test-pinned).
+
+## 2026-09-17 (task 044 step 8)
+* **Creation**: Added [baseline-gate-invariants-as-built](baseline-gate-invariants-as-built.md) —
+  the five gate properties the review stack pinned (failed synthesise, non-pausing IO, unattended
+  `proceed_flag` only, no `abort` floor, baseline = artefact written); five findings, three lanes.
+* **Creation**: Added [capability-registry-one-plan-reader](capability-registry-one-plan-reader.md) —
+  the registry as the one plan reader, 14 + 7 sites, the two-direction AST seam, the import-cycle
+  reason per-capability validators keep their own steer-point sets (044 build handoff + verifier F1/F8).
+* **Creation**: Added [evidence-scope-row-lock-serialises-synthesise](evidence-scope-row-lock-serialises-synthesise.md) —
+  check 7's summed "parallel" arms (044 build handoff).
+* **Creation**: Added [gitignore-needs-dockerignore-mirror](gitignore-needs-dockerignore-mirror.md)
+  (044 build-open red base) and [repo-root-scripts-not-typechecked](repo-root-scripts-not-typechecked.md)
+  (044 build handoff; security lane S8, verifier N2).
+* **Update**: [two-step-rename-needs-ledger-and-anchored-exemptions](two-step-rename-needs-ledger-and-anchored-exemptions.md)
+  gains the one-to-two joiner rule; [rename-sweep-inverts-screen-sense-words](rename-sweep-inverts-screen-sense-words.md)
+  gains stored enum literals; [testing-database](testing-database.md) gains the idle-in-transaction
+  lock and the downgrade-refusal cleanup; [prompt-hash-guard-hashes-whole-module](prompt-hash-guard-hashes-whole-module.md)
+  gains the name-based pin and the whole-module sweep exclusion (all from the 044 build handoff's
+  knowledge candidates). Declined: the "coverage statement port" candidate (a deviation record, not
+  durable knowledge).
 
 ## 2026-09-08 (task 040 step 8)
 * **Creation**: Added
@@ -81,7 +165,7 @@
 ## 2026-09-08 (task 039 step 8)
 * **Creation**: Added
   [scope-constraint-fields-projection-surfaces](scope-constraint-fields-projection-surfaces.md) —
-  the five surfaces a new `ScopeConstraints` field must touch; the planner
+  the five surfaces a new `ScopeConstraints` field must touch; the Task Agent
   sees constraints via `PlanDraftWire`, not the CLI render (the build's
   claim, corrected by the step-7 contract verifier), and the loose-wire →
   strict-draft fold needs a normaliser (039 review stack).
@@ -356,7 +440,7 @@
 * **Creation**: Added [run-id-fk-shapes-audit-carriers](run-id-fk-shapes-audit-carriers.md) — no run, no event: the carrier decision (table-first / outcome-object / re-run provenance) recurred three times in 017.
 * **Creation**: Added [two-phase-run-lifecycle-evented-vs-escaped](two-phase-run-lifecycle-evented-vs-escaped.md) — evented failure vs escaped exception; identity-first commit makes the failure backstop's FK trivial (017, decision 8).
 * **Creation**: Added [compile-target-parity-covers-composed-wholes](compile-target-parity-covers-composed-wholes.md) — parity checks compose with the real composer against the real bound; containment for canonicalising round-trips; registries for runtime-consumed names (017 review stack, three instances of one class).
-* **Update**: [model-output-nul-scrub](model-output-nul-scrub.md) — the planner became `_scrub_nul`'s second consumer; the scrub must be recursive over the whole record (017 review stack).
+* **Update**: [model-output-nul-scrub](model-output-nul-scrub.md) — the Task Agent became `_scrub_nul`'s second consumer; the scrub must be recursive over the whole record (017 review stack).
 * **Declined**: weight_emphasis multiplier semantics (already carried by `steering.py`'s constants comment + rank-shift tests); planner ~20–30 s/turn latency (an 018 surface input, carried in 017's review handoff, not durable knowledge).
 
 ## 2026-07-10 (task 016 step 8)

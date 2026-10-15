@@ -6,6 +6,10 @@ import type { EvidenceSortField } from "../views/sourcesPresentation";
 import {
   mockArtefact,
   mockArtefactSectionProse,
+  mockBaselineGateCheckIn,
+  mockScopingAnswerTurn,
+  mockScopingDecisionTurn,
+  MOCK_BASELINE_CHECK_IN_ID,
   mockArtefactSkeleton,
   mockCheckIn,
   mockCoverage,
@@ -19,9 +23,10 @@ import {
   mockMeUnenrolled,
   mockPlanReady,
   mockProject,
+  mockScopingPlanReady,
   mockTask,
   mockSourceDossiers,
-  seedPlanningTurns,
+  seedTaskAgentTurns,
   MOCK_CHAT_ANSWER_DELTAS,
   MOCK_CHAT_CITATION_CHUNK_ID,
   MOCK_CHAT_CITATION_QUOTE,
@@ -29,18 +34,26 @@ import {
   MOCK_CHAT_CLAIM_TEXT,
   MOCK_CHAT_PROGRESS_LABEL,
   MOCK_CHECK_IN_ID,
+  MOCK_LINK_ID,
+  MOCK_LINK_SOURCE_RUN_ID,
   MOCK_PLAN_ID,
-  MOCK_PLANNING_CONVERSATION_ID,
+  MOCK_TASK_AGENT_CONVERSATION_ID,
   MOCK_TASK_ID,
   MOCK_RUN_ID,
   mockAuthorships,
+  mockBaselineArtefact,
+  buildMockAddedOption,
+  mockLonglist,
+  mockLonglistExtraOptionIds,
+  mockLonglistOptionCards,
 } from "./fixtures";
 
 type MeOut = components["schemas"]["MeOut"];
 type ProjectOut = components["schemas"]["ProjectOut"];
 
 type RunOut = components["schemas"]["RunOut"];
-type PlanningTranscriptTurnOut = components["schemas"]["PlanningTranscriptTurnOut"];
+type TaskOut = components["schemas"]["TaskOut"];
+type TaskAgentTranscriptTurnOut = components["schemas"]["TaskAgentTranscriptTurnOut"];
 type EvidenceItemOut = components["schemas"]["EvidenceItemOut"];
 type ConversationOut = components["schemas"]["ConversationOut"];
 type ConversationListItemOut = components["schemas"]["ConversationListItemOut"];
@@ -139,21 +152,25 @@ interface Deferred {
 
 let checkInAnswer = createDeferred();
 let checkInAnswered = false;
+// Task 044 Phase 5.5: the options-scoping baseline gate, held separately
+// from the Evidence search check-in above so the two scripts cannot collide.
+let baselineGateAnswer = createDeferred();
+let baselineGateDecision: { optionId: string; label: string } | null = null;
 let runStarted = createDeferred();
 let currentRun: RunOut | null = null;
-let planningTurns: PlanningTranscriptTurnOut[] = seedPlanningTurns();
+let taskAgentTurns: TaskAgentTranscriptTurnOut[] = seedTaskAgentTurns();
 let nextTurnIndex = 4; // the seed transcript occupies turn_index 1-3
 
 // --- Chat conversations + turns (task 029 phase G3 mock) -----------------
-// Follow-up chats are created on demand. The planning conversation is
-// pre-seeded so the chats overlay (G14) has a planning row in mock mode,
+// Follow-up chats are created on demand. The task_agent conversation is
+// pre-seeded so the chats overlay (G14) has a task_agent row in mock mode,
 // matching a real task that already has a plan lineage.
 function seedConversations(): ConversationOut[] {
   return [
     {
-      id: MOCK_PLANNING_CONVERSATION_ID,
+      id: MOCK_TASK_AGENT_CONVERSATION_ID,
       task_id: MOCK_TASK_ID,
-      kind: "planning",
+      kind: "task_agent",
       title: "Planning",
       status: "active",
       entry_artefact_id: null,
@@ -172,6 +189,14 @@ let chatTurnsByConversation = new Map<string, ChatTurnOut[]>();
 // which this flips to `enriched` — the scripted async-judge fixture.
 let chatTurnEnrichmentReads = new Map<string, number>();
 let currentPlan: components["schemas"]["PlanDraft"] = { ...mockPlanReady };
+// Task 044: the mock's scoping-plan counterpart to `currentPlan`, read only
+// while `mockTask.capability === "options_scoping"`.
+let currentScopingPlan: components["schemas"]["ScopingPlanDraft"] = { ...mockScopingPlanReady };
+
+/** A scoping task's `PlanOut` at a version. */
+function scopingPlanOut(version: number) {
+  return { capability: "options_scoping", plan: null, scoping: currentScopingPlan, version, status: "approved" } as const;
+}
 
 // --- Identity + projects (task 033 phase 10a) --------------------------
 // `currentMe` defaults to the unenrolled fixture — dark launch: every
@@ -190,17 +215,21 @@ export function setMockMe(me: MeOut) {
 export function resetMockScenario() {
   checkInAnswer = createDeferred();
   checkInAnswered = false;
+  baselineGateAnswer = createDeferred();
+  baselineGateDecision = null;
   runStarted = createDeferred();
   currentRun = null;
   mockTask.latest_run = null;
-  planningTurns = seedPlanningTurns();
+  taskAgentTurns = seedTaskAgentTurns();
   nextTurnIndex = 4;
   chatConversations = seedConversations();
   chatTurnsByConversation = new Map();
   chatTurnEnrichmentReads = new Map();
   currentPlan = { ...mockPlanReady };
+  currentScopingPlan = { ...mockScopingPlanReady };
   currentMe = { ...mockMeUnenrolled };
   mockProjects = [{ ...mockProject }];
+  resetMockLonglistWalks();
 }
 
 function currentMockScenario(requestUrl: URL): MockScenario {
@@ -243,6 +272,31 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
       headers: { "Content-Type": "text/event-stream", "Cache-Control": "no-cache" },
     });
   }
+  // Task 044 Phase 5.5: the baseline gate. Both options end the walk — one
+  // through to the longlist, one back to an editable plan — and each leaves a
+  // `decision` turn in the Task Agent thread, exactly as the turn route does.
+  if (method === "POST" && path.endsWith(`/api/v1/tasks/${MOCK_TASK_ID}/check-ins/${MOCK_BASELINE_CHECK_IN_ID}/response`)) {
+    const body = await requestBody(request, init);
+    if (baselineGateDecision !== null) {
+      return json({ error: { code: "already_answered", message: "This check-in has already been answered." } }, 409);
+    }
+    const optionId = isRecord(body) && typeof body.option_id === "string" ? body.option_id : "confirm_plan";
+    const option = (mockBaselineGateCheckIn.options ?? []).find((entry) => entry.id === optionId);
+    baselineGateDecision = { optionId, label: option?.label ?? optionId };
+    const decidedAt = new Date().toISOString();
+    taskAgentTurns.push(
+      mockScopingDecisionTurn(optionId, baselineGateDecision.label, nextTurnIndex, decidedAt),
+    );
+    nextTurnIndex += 1;
+    // The walk ends in the same request the decision lands in, so the runs
+    // read is already terminal when the answer's invalidation refetches it.
+    finishRun(optionId === "change_plan" ? "aborted" : "succeeded");
+    // Task 045 (6.3): the gate's Confirm opens the longlist walk, as the
+    // turn route and the card do.
+    if (optionId !== "change_plan") requestMockLonglistWalk(mockScopingPlanVersion);
+    baselineGateAnswer.resolve();
+    return json({ accepted: true });
+  }
   if (method === "POST" && path.endsWith(`/api/v1/tasks/${MOCK_TASK_ID}/check-ins/${MOCK_CHECK_IN_ID}/response`)) {
     const body = await requestBody(request, init);
     checkInAnswer.resolve();
@@ -254,6 +308,81 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
       }, 202);
     }
     return json({ accepted: true });
+  }
+
+  // Task 044 (C10): create is ONE request carrying the kind of work, the
+  // projects and the tasks it starts from. The mock stores the capability so
+  // the New task screen's two paths are exercisable without a backend; it
+  // does not simulate the Link rules, which are server-side invariants with
+  // their own backend tests.
+  if (method === "POST" && path.endsWith("/api/v1/tasks")) {
+    const body = await requestBody(request, init);
+    const capability =
+      isRecord(body) && body.capability === "options_scoping"
+        ? "options_scoping"
+        : "evidence_search";
+    const fromTaskIds =
+      isRecord(body) && Array.isArray(body.from_task_ids)
+        ? body.from_task_ids.filter((value): value is string => typeof value === "string")
+        : [];
+    // Task 044 (C10, C11): the mock's single-task world only ever offers the
+    // current task as a "Starts from" candidate — its name is captured here,
+    // before the same object below is overwritten to become the new task.
+    const sourceTaskName = mockTask.name;
+    if (capability === "options_scoping") {
+      baselineGateAnswer = createDeferred();
+      baselineGateDecision = null;
+    }
+    const created = new Date().toISOString();
+    const task: TaskOut = {
+      ...mockTask,
+      task_id: MOCK_TASK_ID,
+      name: isRecord(body) && typeof body.name === "string" ? body.name : mockTask.name,
+      question:
+        isRecord(body) && typeof body.question === "string" ? body.question : null,
+      capability,
+      status: "active",
+      created_at: created,
+      updated_at: created,
+      archived_at: null,
+      latest_run: null,
+      project_ids:
+        isRecord(body) && Array.isArray(body.project_ids)
+          ? body.project_ids.filter((value): value is string => typeof value === "string")
+          : [],
+      links:
+        fromTaskIds.length > 0
+          ? [
+              {
+                link_id: MOCK_LINK_ID,
+                source_task_id: fromTaskIds[0],
+                source_task_name: sourceTaskName,
+                source_capability_run_id: MOCK_LINK_SOURCE_RUN_ID,
+                flagged: false,
+              },
+            ]
+          : [],
+    };
+    Object.assign(mockTask, task);
+    // A fresh task starts a fresh session in the mock's single-task world —
+    // the previous task's transcript, run and chats must not bleed into it.
+    // The task_agent transcript is then re-seeded to a pre-scripted ready
+    // plan for the chosen capability (like `currentPlan` above) so the New
+    // task journey can show a finished plan document without scripting
+    // every intermediate turn.
+    taskAgentTurns = [];
+    nextTurnIndex = 1;
+    currentRun = null;
+    resetMockLonglistWalks();
+    chatConversations = seedConversations();
+    chatTurnsByConversation = new Map();
+    chatTurnEnrichmentReads = new Map();
+    currentPlan = { ...mockPlanReady };
+    currentScopingPlan =
+      capability === "options_scoping"
+        ? { ...mockScopingPlanReady, linked_task_ids: fromTaskIds }
+        : { ...mockScopingPlanReady };
+    return json(task, 201);
   }
 
   // --- Project lifecycle (landing rename/archive, contract strand 8) ------
@@ -291,17 +420,41 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
     return json(mockTask);
   }
 
-  // --- Durable planning transcript (contract strand 12) -------------------
-  if (method === "GET" && path.endsWith(`/api/v1/tasks/${MOCK_TASK_ID}/planning-turns`)) {
-    return json(page(planningTurns));
+  // --- Durable task_agent transcript (contract strand 12) -------------------
+  if (method === "GET" && path.endsWith(`/api/v1/tasks/${MOCK_TASK_ID}/task-agent-turns`)) {
+    return json(page(taskAgentTurns));
   }
-  if (method === "POST" && path.endsWith(`/api/v1/tasks/${MOCK_TASK_ID}/planning-turns`)) {
+  if (method === "POST" && path.endsWith(`/api/v1/tasks/${MOCK_TASK_ID}/task-agent-turns`)) {
     const body = await requestBody(request, init);
     const clientTurnId = isRecord(body) && typeof body.client_turn_id === "string" ? body.client_turn_id : crypto.randomUUID();
     const message = isRecord(body) && typeof body.message === "string" ? body.message : "";
     const now = new Date().toISOString();
     const reply = "Noted — I'll keep that in mind for the analysis.";
-    const existing = planningTurns.find((turn) => turn.client_turn_id === clientTurnId);
+    // Task 044 Phase 5.5: while the scoping walk is parked on the baseline
+    // gate the turn route answers FROM the baseline — an `answer` turn with
+    // citations, not a planning reply.
+    // The mock's REST run row stays `running` while the stream parks (the
+    // pause is a stream state), so the gate is "open" from the walk's start
+    // until its decision lands.
+    const atGate =
+      mockTask.capability === "options_scoping" &&
+      currentRun !== null &&
+      currentRun.status === "running" &&
+      baselineGateDecision === null;
+    if (atGate && taskAgentTurns.every((turn) => turn.client_turn_id !== clientTurnId)) {
+      const answerTurn = mockScopingAnswerTurn(clientTurnId, message, nextTurnIndex, now);
+      taskAgentTurns.push(answerTurn);
+      nextTurnIndex += 1;
+      return json({
+        reply: answerTurn.reply,
+        suggestions: [],
+        capability: "options_scoping",
+        kind: "answer",
+        answer: answerTurn.answer,
+        scoping_plan: currentScopingPlan,
+      });
+    }
+    const existing = taskAgentTurns.find((turn) => turn.client_turn_id === clientTurnId);
     if (existing !== undefined) {
       // Retry-in-place (finding 6): the same client_turn_id re-runs, never a
       // fresh turn_index.
@@ -310,7 +463,7 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
       existing.suggestions = [];
       existing.completed_at = now;
     } else {
-      planningTurns.push({
+      taskAgentTurns.push({
         client_turn_id: clientTurnId,
         turn_index: nextTurnIndex,
         user_message: message,
@@ -323,16 +476,68 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
       });
       nextTurnIndex += 1;
     }
-    return json({ plan: currentPlan, reply, suggestions: [] });
+    // Task 044: a scoping task's turn carries `scoping_plan`, never `plan`
+    // (`PlanOut`'s own capability-keyed shape, mirrored here).
+    if (mockTask.capability === "options_scoping") {
+      return json({ scoping_plan: currentScopingPlan, reply, suggestions: [], capability: "options_scoping" });
+    }
+    return json({ plan: currentPlan, reply, suggestions: [], capability: "evidence_search" });
   }
 
   // --- Plan (a resumed session: the transcript above already reached
-  // `ready` — see mockPlanReady) ------------------------------------------
+  // `ready` — see mockPlanReady / mockScopingPlanReady) -------------------
   if (method === "GET" && path.endsWith(`/api/v1/tasks/${MOCK_TASK_ID}/plan`)) {
-    return json({ plan: currentPlan, version: 1, status: "approved" });
+    if (mockTask.capability === "options_scoping") {
+      // Task 045 (6.3): the version moves with each edit and confirm, so
+      // the plan document can tell a longlist built from an older version.
+      return json(scopingPlanOut(mockScopingPlanVersion));
+    }
+    return json({ capability: "evidence_search", plan: currentPlan, version: 1, status: "approved" });
+  }
+  if (method === "POST" && path.endsWith(`/api/v1/tasks/${MOCK_TASK_ID}/plan/confirm-baseline`)) {
+    const body = await requestBody(request, init);
+    const planVersion = isRecord(body) && typeof body.plan_version === "number" ? body.plan_version : 1;
+    const artefactId = isRecord(body) && typeof body.artefact_id === "string" ? body.artefact_id : "";
+    // Mirrors the API: the record is minted as a NEW approved version and
+    // names that version, so "the record names the current version" holds
+    // until the next plan edit mints a version without it.
+    const minted = planVersion + 1;
+    currentScopingPlan = {
+      ...currentScopingPlan,
+      baseline_confirmed: { artefact_id: artefactId, plan_version: minted },
+    };
+    // Task 045 (6.3): the confirm opens the longlist walk on the version it
+    // minted (a rebuild when a longlist already exists — D14, P12).
+    mockScopingPlanVersion = minted;
+    const openedRun = requestMockLonglistWalk(minted);
+    return json({ ...scopingPlanOut(minted), opened_run: openedRun });
   }
   if (method === "PATCH" && path.endsWith(`/api/v1/tasks/${MOCK_TASK_ID}/plan`)) {
     const body = await requestBody(request, init);
+    // Task 045: a scoping plan's direct edits — the constraint list (removing
+    // the default transferability preference) and the options by their words
+    // (unchanged words keep their design; the mock proposes none for new ones).
+    if (mockTask.capability === "options_scoping" && isRecord(body) && isRecord(body.scoping)) {
+      const edits = body.scoping;
+      if (Array.isArray(edits.constraints)) {
+        currentScopingPlan = {
+          ...currentScopingPlan,
+          constraints: edits.constraints as NonNullable<typeof currentScopingPlan.constraints>,
+        };
+      }
+      if (Array.isArray(edits.your_options)) {
+        const previous = currentScopingPlan.your_options ?? [];
+        currentScopingPlan = {
+          ...currentScopingPlan,
+          your_options: edits.your_options.filter(isRecord).map((option) => {
+            const text = typeof option.text === "string" ? option.text : "";
+            return previous.find((kept) => kept.text === text) ?? { text, design: null, turn_index: null };
+          }),
+        };
+      }
+      mockScopingPlanVersion += 1;
+      return json(scopingPlanOut(mockScopingPlanVersion));
+    }
     if (isRecord(body)) {
       if (typeof body.question === "string") currentPlan = { ...currentPlan, question: body.question };
       if (typeof body.backend_scope === "string") {
@@ -373,6 +578,7 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
       status: "running",
       started_at: now,
       ended_at: null,
+      artefact_id: null,
     };
     mockTask.latest_run = {
       capability_run_id: currentRun.capability_run_id,
@@ -384,11 +590,28 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
     return json(currentRun, 201);
   }
   if (method === "GET" && path.endsWith(`/api/v1/tasks/${MOCK_TASK_ID}/runs`)) {
-    return json(page(currentRun ? [currentRun] : []));
+    // Newest first, as the API lists them: the longlist walks (task 045)
+    // were all opened after the baseline walk.
+    const walks = [...mockLonglistWalks, ...(currentRun ? [currentRun] : [])];
+    // `parentless` (A13): the task's own walks only, never an option search.
+    const parentless = url.searchParams.get("parentless") === "true";
+    return json(
+      page(
+        parentless
+          ? walks.filter((walk) => walk.parent_capability_run_id == null && walk.purpose !== "targeted")
+          : walks,
+      ),
+    );
   }
 
   if (method === "GET" && path.endsWith(`/api/v1/tasks/${MOCK_TASK_ID}/check-ins`)) {
     const status = url.searchParams.get("status");
+    if (mockTask.capability === "options_scoping") {
+      const decided = baselineGateDecision !== null;
+      if (currentRun === null) return json(page([]));
+      if (status === "pending" && decided) return json(page([]));
+      return json(page([{ ...mockBaselineGateCheckIn, status: decided ? "decided" : "pending" }]));
+    }
     const rows = status === "pending" && checkInAnswered ? [] : [mockCheckIn];
     return json(page(rows));
   }
@@ -470,6 +693,31 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
     }
     return json(page(rows));
   }
+  // Task 046, amendment 3 (R67): the dossier's records on a scoping task,
+  // derived from the option cards' documents (one per option holding it).
+  const sourceRecordsMatch = path.match(new RegExp(`/api/v1/tasks/${MOCK_TASK_ID}/sources/([^/]+)/records$`));
+  if (method === "GET" && sourceRecordsMatch) {
+    const sourceId = sourceRecordsMatch[1];
+    const optionId = url.searchParams.get("option_id");
+    const records = Object.values(mockLonglistOptionCards)
+      .filter((card) => optionId === null || card.option_id === optionId)
+      .flatMap((card) =>
+        (card.documents ?? [])
+          .filter((document) => document.task_source_snapshot_id === sourceId)
+          .map((document) => ({
+            option_id: card.option_id,
+            option_name: card.name,
+            record_id: `${card.option_id}-${sourceId}`,
+            intervention: card.name,
+            setting: card.profile?.settings?.[0] ?? null,
+            unit: card.documents?.[0]?.tried_on_kind ?? null,
+            outcome: card.outcomes_served?.[0] ?? null,
+            study_geography: document.place ?? null,
+            role: document.role,
+          })),
+      );
+    return json({ task_source_snapshot_id: sourceId, records });
+  }
   if (method === "GET" && path.includes(`/api/v1/tasks/${MOCK_TASK_ID}/sources/`)) {
     const sourceId = path.split("/").at(-1) ?? "";
     const source = mockSourceDossiers[sourceId];
@@ -524,7 +772,11 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
     return json(page(rows));
   }
   if (method === "GET" && path.endsWith(`/api/v1/tasks/${MOCK_TASK_ID}/decisions`)) return json(page(mockDecisions));
-  if (method === "GET" && path.endsWith(`/api/v1/tasks/${MOCK_TASK_ID}/artefact`)) return json(mockArtefact);
+  // Task 044 (deliverable 9): a scoping task's Result is its baseline, not an
+  // Evidence search report.
+  if (method === "GET" && path.endsWith(`/api/v1/tasks/${MOCK_TASK_ID}/artefact`)) {
+    return json(mockTask.capability === "options_scoping" ? mockBaselineArtefact : mockArtefact);
+  }
   if (method === "GET" && path.endsWith(`/api/v1/tasks/${MOCK_TASK_ID}/coverage`)) return json(mockCoverage);
 
   // --- Conversations + chat turns (task 029 phase G3 mock) ---------------
@@ -606,6 +858,55 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
     }
   }
 
+  // task 045 (6.2) — the longlist's three surfaces: list view, reduced
+  // grid and option card. The two GETs and the three POSTs `pnpm e2e`
+  // drives them through; the POSTs mutate `mockLonglistOptionCards` in
+  // place (the same fixture `GET /longlist`'s summaries project from) so a
+  // refetch after a mutation shows the flipped state.
+  if (method === "GET" && path.endsWith(`/api/v1/tasks/${MOCK_TASK_ID}/longlist`)) {
+    return json(mockLonglist());
+  }
+  const optionVerbMatch = new RegExp(`^/api/v1/tasks/${MOCK_TASK_ID}/options/([^/]+)/(exclude|include)$`).exec(path);
+  if (method === "POST" && optionVerbMatch) {
+    const option = mockLonglistOptionCards[optionVerbMatch[1]];
+    if (option === undefined) return json({ detail: "resource not found" }, 404);
+    if (optionVerbMatch[2] === "include") {
+      option.state = "included";
+      option.exclusion = null;
+      return json(option);
+    }
+    const body = await requestBody(request, init);
+    const reason = isRecord(body) && typeof body.reason === "string" ? body.reason : "";
+    option.state = "excluded";
+    option.exclusion = { by: "user", constraint: "your decision", reason };
+    return json(option);
+  }
+  if (method === "POST" && path.endsWith(`/api/v1/tasks/${MOCK_TASK_ID}/options`)) {
+    const body = await requestBody(request, init);
+    const text = isRecord(body) && typeof body.text === "string" ? body.text : "";
+    const option = buildMockAddedOption(text);
+    mockLonglistOptionCards[option.option_id] = option;
+    mockLonglistExtraOptionIds.push(option.option_id);
+    return json(
+      {
+        option,
+        opened_run: {
+          capability_run_id: crypto.randomUUID(),
+          started_at: new Date().toISOString(),
+          ended_at: null,
+          status: "running",
+        },
+      },
+      201,
+    );
+  }
+  const optionCardMatch = new RegExp(`^/api/v1/tasks/${MOCK_TASK_ID}/options/([^/]+)$`).exec(path);
+  if (method === "GET" && optionCardMatch) {
+    const option = mockLonglistOptionCards[optionCardMatch[1]];
+    if (option === undefined) return json({ detail: "resource not found" }, 404);
+    return json(option);
+  }
+
   return json({ detail: "Mock endpoint not found" }, 404);
 }
 
@@ -614,7 +915,7 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
  *  cross-kind preview join closely enough for the mock library surface. */
 function conversationListItem(conversation: ConversationOut): ConversationListItemOut {
   const latestChat = (chatTurnsByConversation.get(conversation.id) ?? []).at(-1);
-  const latestPlanning = conversation.kind === "planning" ? planningTurns.at(-1) : undefined;
+  const latestTaskAgent = conversation.kind === "task_agent" ? taskAgentTurns.at(-1) : undefined;
   const latestTurnPreview =
     latestChat !== undefined
       ? {
@@ -622,11 +923,11 @@ function conversationListItem(conversation: ConversationOut): ConversationListIt
           reply_snippet: latestChat.status === "completed" ? latestChat.answer : null,
           at: latestChat.completed_at,
         }
-      : latestPlanning !== undefined
+      : latestTaskAgent !== undefined
         ? {
-            user_message: latestPlanning.user_message,
-            reply_snippet: latestPlanning.status === "completed" ? latestPlanning.reply : null,
-            at: latestPlanning.completed_at,
+            user_message: latestTaskAgent.user_message,
+            reply_snippet: latestTaskAgent.status === "completed" ? latestTaskAgent.reply : null,
+            at: latestTaskAgent.completed_at,
           }
         : null;
   return {
@@ -765,6 +1066,14 @@ function createMockEventStream(scenario: MockScenario): ReadableStream<Uint8Arra
       await runStarted.promise;
       const emit = (frame: SseFrame) => controller.enqueue(encoder.encode(toSse(frame)));
 
+      if (mockTask.capability === "options_scoping") {
+        await scopingBaselineWalk(emit, nextSequence);
+        // Task 045 (6.3): the stream stays open for the longlist walks the
+        // gate and the plan document's confirm open.
+        await mockLonglistWalkLoop(emit, nextSequence);
+        return;
+      }
+
       emit(runStatus("running", nextSequence()));
       emit(stageStarted("acquire", "Finding relevant sources", "Searching policy and research evidence", nextSequence()));
       emit(stageCompleted("acquire", "Finding relevant sources", { found: 128 }, nextSequence()));
@@ -846,6 +1155,7 @@ function createMockEventStream(scenario: MockScenario): ReadableStream<Uint8Arra
         sequence: nextSequence(),
       });
       emit(stageCompleted("synthesise", "Writing the report", { cited: 12, sections: 2 }, nextSequence()));
+      setRunArtefact(mockArtefact.artefact_id);
       finishRun("succeeded");
       emit(runStatus("succeeded", nextSequence()));
       controller.close();
@@ -853,10 +1163,54 @@ function createMockEventStream(scenario: MockScenario): ReadableStream<Uint8Arra
   });
 }
 
+/**
+ * The options-scoping baseline walk (task 044, Phase 5.5): three components,
+ * then a genuine park on the baseline gate. The walk holds there until the
+ * gate is answered — by the card or by a Task Agent decision turn — and ends
+ * the way that decision says: `succeeded` through to the longlist, or
+ * `aborted` back to an editable plan.
+ *
+ * Args:
+ *   emit: Frame sink for the open stream.
+ *   nextSequence: The stream's sequence counter.
+ */
+async function scopingBaselineWalk(emit: (frame: SseFrame) => void, nextSequence: () => number) {
+  emit(runStatus("running", nextSequence()));
+  emit(stageStarted("acquire", "Searching sources", "Queries out to academic and policy databases", nextSequence()));
+  emit(stageCompleted("acquire", "Searching sources", { found: 74 }, nextSequence()));
+  emit(stageStarted("screen", "Screening sources", "Checking relevance to the plan's scope", nextSequence()));
+  emit(stageCompleted("screen", "Screening sources", { relevant: 28, screened_out: 46 }, nextSequence()));
+  emit(stageStarted("synthesise", "Writing the baseline", "Setting out what happens if nothing changes", nextSequence()));
+  emit(stageCompleted("synthesise", "Writing the baseline", { sections: 4 }, nextSequence()));
+  setRunArtefact(mockBaselineArtefact.artefact_id);
+  emit(runStatus("paused", nextSequence()));
+  emit({ type: "checkin.pending", check_in: mockBaselineGateCheckIn, occurred_at: frameTime(), sequence: nextSequence() });
+
+  await baselineGateAnswer.promise;
+  const decision = baselineGateDecision ?? { optionId: "confirm_plan", label: "Confirm plan and build longlist" };
+  emit({
+    type: "checkin.resolved",
+    check_in_id: MOCK_BASELINE_CHECK_IN_ID,
+    response: { kind: "option", option_id: decision.optionId, params: null },
+    decided_by: "user",
+    occurred_at: frameTime(),
+    sequence: nextSequence(),
+  });
+  emit(runStatus(decision.optionId === "change_plan" ? "aborted" : "succeeded", nextSequence()));
+}
+
+/** Records the artefact this walk wrote, once synthesise completes — before
+ *  the walk necessarily reaches a terminal status (the baseline gate pauses
+ *  it first; task 044 review, C6). */
+function setRunArtefact(artefactId: string) {
+  if (currentRun === null) return;
+  currentRun = { ...currentRun, artefact_id: artefactId };
+}
+
 /** Keep the REST-visible run/task state in step with the stream's
  *  terminal frame, so the landing card and nav badge stop claiming
  *  "Analysing…" once the scripted run has actually finished. */
-function finishRun(status: "succeeded" | "failed") {
+function finishRun(status: "succeeded" | "failed" | "aborted") {
   if (currentRun === null) return;
   const endedAt = new Date().toISOString();
   currentRun = { ...currentRun, status, ended_at: endedAt };
@@ -872,20 +1226,20 @@ function frameTime(): string {
   return new Date().toISOString();
 }
 
-function runStatus(status: "running" | "paused" | "succeeded" | "failed", sequence: number): SseFrame {
+function runStatus(status: "running" | "paused" | "succeeded" | "failed" | "aborted", sequence: number): SseFrame {
   return { type: "run.status", capability_run_id: MOCK_RUN_ID, status, occurred_at: frameTime(), sequence };
 }
 
 function stageStarted(stage: "acquire" | "screen" | "classify" | "appraise" | "characterise" | "synthesise", label: string, blurb: string, sequence: number): SseFrame {
-  return { type: "stage.started", stage, label, blurb, occurred_at: frameTime(), sequence };
+  return { type: "stage.started", capability_run_id: MOCK_RUN_ID, stage, label, blurb, occurred_at: frameTime(), sequence };
 }
 
 function stageCompleted(stage: "acquire" | "screen" | "classify" | "appraise" | "characterise" | "synthesise", label: string, summary: Record<string, number>, sequence: number): SseFrame {
-  return { type: "stage.completed", stage, label, summary, seconds: 4, occurred_at: frameTime(), sequence };
+  return { type: "stage.completed", capability_run_id: MOCK_RUN_ID, stage, label, summary, seconds: 4, occurred_at: frameTime(), sequence };
 }
 
 function stageFailed(stage: "synthesise", label: string, reason: string, sequence: number): SseFrame {
-  return { type: "stage.failed", stage, label, reason, skipped: false, occurred_at: frameTime(), sequence };
+  return { type: "stage.failed", capability_run_id: MOCK_RUN_ID, stage, label, reason, skipped: false, occurred_at: frameTime(), sequence };
 }
 
 function toSse(frame: SseFrame): string {
@@ -927,4 +1281,142 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// --- task 045 (6.3): the longlist walk, what exists and what is active ---
+
+/** The scoping plan's current version; edits and confirms move it. */
+let mockScopingPlanVersion = 1;
+/** The longlist walks opened so far, newest first. */
+let mockLonglistWalks: RunOut[] = [];
+/** Walks opened but not yet streamed. */
+let mockLonglistPending: string[] = [];
+let mockLonglistWake = createDeferred();
+
+function resetMockLonglistWalks() {
+  mockScopingPlanVersion = 1;
+  mockLonglistWalks = [];
+  mockLonglistPending = [];
+  mockLonglistWake = createDeferred();
+  mockTask.active_run = null;
+  mockTask.has_longlist = false;
+}
+
+function latestRunOf(run: RunOut): components["schemas"]["LatestRun"] {
+  return {
+    capability_run_id: run.capability_run_id,
+    status: run.status,
+    started_at: run.started_at,
+    ended_at: run.ended_at,
+  };
+}
+
+/**
+ * Open a longlist walk the way the API does: at once, in the read models
+ * (`active_run`, the walk list, `latest_run` — a longlist walk is parentless
+ * and untargeted), with its frames following on the open stream.
+ *
+ * Returns:
+ *   The opened walk, as the confirm route's `opened_run`.
+ */
+function requestMockLonglistWalk(planVersion: number): components["schemas"]["LatestRun"] {
+  const walk: RunOut = {
+    capability_run_id: crypto.randomUUID(),
+    task_id: MOCK_TASK_ID,
+    plan_id: MOCK_PLAN_ID,
+    plan_version: planVersion,
+    status: "running",
+    started_at: new Date().toISOString(),
+    ended_at: null,
+    artefact_id: null,
+    parent_capability_run_id: null,
+    purpose: "longlist",
+  };
+  mockLonglistWalks = [walk, ...mockLonglistWalks];
+  mockTask.active_run = latestRunOf(walk);
+  mockTask.latest_run = latestRunOf(walk);
+  mockLonglistPending.push(walk.capability_run_id);
+  mockLonglistWake.resolve();
+  return latestRunOf(walk);
+}
+
+/** Stream every longlist walk as it is opened, for as long as the stream
+ *  stays connected. */
+async function mockLonglistWalkLoop(emit: (frame: SseFrame) => void, nextSequence: () => number) {
+  for (;;) {
+    await mockLonglistWake.promise;
+    mockLonglistWake = createDeferred();
+    while (mockLonglistPending.length > 0) {
+      const walkId = mockLonglistPending.shift();
+      if (walkId !== undefined) await mockLonglistWalk(walkId, emit, nextSequence);
+    }
+  }
+}
+
+/**
+ * One longlist walk's frames: the six stage keys with the counts their beat
+ * sentences read, then the longlist exists and nothing is active. Held
+ * briefly at the start so "Building the longlist" is observable.
+ */
+async function mockLonglistWalk(
+  walkId: string,
+  emit: (frame: SseFrame) => void,
+  nextSequence: () => number,
+) {
+  const status = (value: "running" | "succeeded"): SseFrame => ({
+    type: "run.status",
+    capability_run_id: walkId,
+    status: value,
+    occurred_at: frameTime(),
+    sequence: nextSequence(),
+  });
+  const counts = mockLonglist().counts;
+  const stages: Array<{
+    stage: "inherit" | "suggest" | "option_searches" | "extract_interventions" | "longlist" | "constrain";
+    label: string;
+    blurb: string;
+    summary: Record<string, number>;
+  }> = [
+    { stage: "inherit", label: "Reading the linked search", blurb: "Its documents and report join this task.", summary: { documents: 42, links: 1 } },
+    { stage: "suggest", label: "Suggesting options", blurb: "From the plan, the baseline and any linked report.", summary: { suggested: 6, from_report: 2 } },
+    { stage: "option_searches", label: "Searching for each option", blurb: "One search per suggestion and per option of yours.", summary: { total: 7, finished: 7, failed: 0 } },
+    { stage: "extract_interventions", label: "Reading the abstracts", blurb: "Which interventions each one covers, and how.", summary: { documents: 118, records: 64 } },
+    { stage: "longlist", label: "Clustering into options", blurb: "Records grouped into options, options into themes.", summary: { options: counts.options, themes: counts.themes, unclustered: 5, not_an_option: 2 } },
+    { stage: "constrain", label: "Applying your constraints", blurb: "Every option checked against the plan's requirements.", summary: { excluded: counts.excluded, no_in_scope: counts.no_in_scope } },
+  ];
+
+  emit(status("running"));
+  await sleep(1200);
+  // One option search, a child walk (S12): listed by `/runs` with its
+  // parent, never a block of its own in the thread.
+  const childStarted = new Date().toISOString();
+  mockLonglistWalks = [
+    {
+      capability_run_id: crypto.randomUUID(),
+      task_id: MOCK_TASK_ID,
+      plan_id: MOCK_PLAN_ID,
+      plan_version: mockLonglistWalks.find((walk) => walk.capability_run_id === walkId)?.plan_version ?? 1,
+      status: "succeeded",
+      started_at: childStarted,
+      ended_at: childStarted,
+      artefact_id: null,
+      parent_capability_run_id: walkId,
+      purpose: "targeted",
+    },
+    ...mockLonglistWalks,
+  ];
+  for (const entry of stages) {
+    emit({ type: "stage.started", capability_run_id: walkId, stage: entry.stage, label: entry.label, blurb: entry.blurb, occurred_at: frameTime(), sequence: nextSequence() });
+    await sleep(150);
+    emit({ type: "stage.completed", capability_run_id: walkId, stage: entry.stage, label: entry.label, summary: entry.summary, seconds: 3, occurred_at: frameTime(), sequence: nextSequence() });
+  }
+  const endedAt = new Date().toISOString();
+  mockLonglistWalks = mockLonglistWalks.map((walk) =>
+    walk.capability_run_id === walkId ? { ...walk, status: "succeeded", ended_at: endedAt } : walk,
+  );
+  const finished = mockLonglistWalks.find((walk) => walk.capability_run_id === walkId);
+  if (finished !== undefined) mockTask.latest_run = latestRunOf(finished);
+  mockTask.active_run = null;
+  mockTask.has_longlist = true;
+  emit(status("succeeded"));
 }

@@ -3,7 +3,7 @@ type: Convention
 title: A two-step rename whose second step produces the first step's source word needs a per-checkout ledger, anchored never-map patterns and a fresh-clone guard
 description: `portfolio→project` after `project→task` makes a swept tree indistinguishable from an unswept one by tokenising alone. The sweep tool keeps a gitignored hash ledger and refuses a tree that already looks swept; its never-map exemptions must be anchored (`[project]` matched a list literal, `--project` matched the ops CLI flag and caused a mid-sweep collision); its collision check counts prose and sees symbols, not senses — never re-run `--apply` on an edited post-sweep tree.
 tags: [rename, sweep, tooling, idempotence, task-038]
-timestamp: 2026-09-05
+timestamp: 2026-09-17
 ---
 
 # Rule
@@ -29,6 +29,13 @@ shape to copy for any ordered rename:
   vocabulary would be renamed on to Task. Run the tool on the *arriving*
   pre-sweep branch, never on a post-sweep tree that still carries its
   ledger.
+
+- **A one-to-two word rule needs a joiner derived from the identifier itself
+  (044).** The 038 engine's separator/casing logic assumed equal-length word
+  rules; the first expansion (`planner` → `task_agent`) produced
+  `TASKAGENT_MODEL` and `_ModerateStubTask_Agent` until
+  `rename_engine.infer_separator` read the joiner from the identifier's own
+  inter-word separator — and a leading underscore is not one.
 
 # Why
 

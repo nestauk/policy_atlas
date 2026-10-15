@@ -106,7 +106,7 @@ def _record(
     record: dict[str, Any] = {
         "intervention": intervention,
         "outcome": outcome,
-        "population": None,
+        "unit": None,
         "setting": None,
         "comparator": None,
         "effect_direction": effect_direction,
@@ -1188,7 +1188,7 @@ def test_nul_bearing_model_output_is_scrubbed(conn: Connection) -> None:
                 intervention="free school\x00 meals", outcome="absence rates",
                 quote="Free school meals reduced absence rates",
                 segment_id=payload.segments[0]["segment_id"],
-                population="pupils\x00",
+                unit="pupils\x00",
             )
             return ExtractionResponse(findings=[IOFRecordWire.model_validate(record)]), None
 
@@ -1216,7 +1216,7 @@ def test_nul_bearing_model_output_is_scrubbed(conn: Connection) -> None:
         .where(intervention_outcome_finding.c.task_id == task_id)
     ).one()
     assert row.intervention == "free school meals"
-    assert row.population == "pupils"
+    assert row.unit == "pupils"
     assert "\x00" not in str(row.grounding)
 
 
@@ -1385,7 +1385,7 @@ def test_pre_existing_icf_v1_row_reader_keeps_context_label_coverage_absent(
             claim="Training gaps slowed delivery.",
             intervention="home visiting",
             outcome=None,
-            population=None,
+            unit=None,
             setting=None,
             study_geography=None,
             study_design=None,
@@ -1544,7 +1544,7 @@ def test_judge_payload_entry_key_set_excludes_effect_basis_and_study_geography()
     record = IOFRecord(
         intervention="Coaching",
         outcome="Test scores",
-        population=None,
+        unit=None,
         setting=None,
         comparator=None,
         effect_direction="increase",

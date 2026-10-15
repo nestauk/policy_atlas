@@ -178,7 +178,7 @@ def make_icf_wire_record(**overrides: Any) -> "ICFRecordWire":
         "context_label": None,
         "intervention": "home visiting",
         "outcome": None,
-        "population": "families with young children",
+        "unit": "families with young children",
         "setting": "primary care",
         "study_geography": "England",
         "study_design": "process evaluation",
@@ -274,7 +274,11 @@ def delete_task_data(conn: Connection, task_id: uuid.UUID) -> None:
         grouping_result,
         implementation_context_finding,
         intervention_outcome_finding,
-        planning_transcript,
+        intervention_profile_record,
+        longlist_result,
+        option,
+        option_membership,
+        option_relation,
         runs,
         search_coverage_record,
         selection_result,
@@ -286,6 +290,8 @@ def delete_task_data(conn: Connection, task_id: uuid.UUID) -> None:
         source_tag,
         synthesis_result,
         task,
+        task_agent_transcript,
+        task_link,
         task_plan,
         task_source_snapshot,
     )
@@ -321,6 +327,22 @@ def delete_task_data(conn: Connection, task_id: uuid.UUID) -> None:
         annotation.c.block_id.in_(block_ids_subq)
     )
 
+    # Task 045 option records first: membership and relation FK onto option;
+    # option FKs onto runs and is named by task_link.option_id (cleared here,
+    # the link rows themselves go below); longlist_result FKs onto scope/runs;
+    # the profile records FK onto source_extraction_record.
+    conn.execute(delete(option_membership).where(option_membership.c.task_id == task_id))
+    conn.execute(delete(option_relation).where(option_relation.c.task_id == task_id))
+    conn.execute(
+        task_link.update()
+        .where(task_link.c.target_task_id == task_id)
+        .values(option_id=None)
+    )
+    conn.execute(delete(option).where(option.c.task_id == task_id))
+    conn.execute(delete(longlist_result).where(longlist_result.c.task_id == task_id))
+    conn.execute(delete(intervention_profile_record).where(
+        intervention_profile_record.c.task_id == task_id
+    ))
     # Task 013 row first: FKs onto artefact and all four upstream result tables
     # (characterisation/selection/extraction/grouping) plus scope/runs.
     conn.execute(delete(synthesis_result).where(
@@ -411,17 +433,29 @@ def delete_task_data(conn: Connection, task_id: uuid.UUID) -> None:
         conn.execute(delete(source_snapshot).where(
             source_snapshot.c.source_snapshot_id.in_(snapshot_ids)
         ))
-    # Durable planning turns before their task parent.
-    conn.execute(delete(planning_transcript).where(
-        planning_transcript.c.task_id == task_id
+    # Links in BOTH directions before their task parent (task 044): a link
+    # row names two tasks, and either end blocks the delete.
+    conn.execute(delete(task_link).where(task_link.c.source_task_id == task_id))
+    conn.execute(delete(task_link).where(task_link.c.target_task_id == task_id))
+    # Durable task_agent turns before their task parent.
+    conn.execute(delete(task_agent_transcript).where(
+        task_agent_transcript.c.task_id == task_id
     ))
+    # The two tables point at each other (task 044): plan.evidence_scope_id one
+    # way, evidence_scope.plan_id the other. Break the second edge first, or
+    # deleting the plan trips fk_scope_plan_task.
+    conn.execute(
+        evidence_scope.update()
+        .where(evidence_scope.c.task_id == task_id)
+        .values(plan_id=None)
+    )
     # task_plan before evidence_scope (fk_plan_scope_task) and
     # before conversation (task_plan.conversation_id FKs onto it).
     conn.execute(delete(task_plan).where(
         task_plan.c.task_id == task_id
     ))
     # conversation after its FK dependants (chat_turn above,
-    # planning_transcript/task_plan above) and before task.
+    # task_agent_transcript/task_plan above) and before task.
     conn.execute(delete(conversation).where(conversation.c.task_id == task_id))
     conn.execute(delete(evidence_scope).where(evidence_scope.c.task_id == task_id))
     conn.execute(delete(task).where(task.c.task_id == task_id))
@@ -517,20 +551,129 @@ def seed_source(
 
 
 def seed_scope(
-    conn: Connection, task_id: uuid.UUID, context: dict[str, Any] | None = None
+    conn: Connection,
+    task_id: uuid.UUID,
+    context: dict[str, Any] | None = None,
+    *,
+    intent: str = "Test intent",
+    purpose: str | None = None,
+    plan_id: uuid.UUID | None = None,
+    created_at: datetime | None = None,
 ) -> uuid.UUID:
-    """Insert a evidence_scope; return scope_id."""
+    """Insert a evidence_scope (an intent record); return scope_id.
+
+    ``purpose`` and ``plan_id`` are written only when given, so migration
+    tests can seed at revisions that predate those columns.
+    """
     from policy_atlas.core.schema import evidence_scope
 
     scope_id = uuid.uuid4()
-    conn.execute(evidence_scope.insert().values(
-        evidence_scope_id=scope_id,
-        task_id=task_id,
-        intent="Test intent",
-        context=context or {},
-        created_at=now(),
-    ))
+    values: dict[str, Any] = {
+        "evidence_scope_id": scope_id,
+        "task_id": task_id,
+        "intent": intent,
+        "context": context or {},
+        "created_at": created_at or now(),
+    }
+    if purpose is not None:
+        values["purpose"] = purpose
+    if plan_id is not None:
+        values["plan_id"] = plan_id
+    conn.execute(evidence_scope.insert().values(**values))
     return scope_id
+
+
+@dataclass(frozen=True)
+class SeededWalk:
+    """The ids :func:`seed_walk` wrote."""
+
+    scope_id: uuid.UUID
+    plan_id: uuid.UUID
+    walk_id: uuid.UUID
+    run_id: uuid.UUID | None
+
+
+def seed_walk(
+    conn: Connection,
+    task_id: uuid.UUID,
+    *,
+    capability: str = "options_scoping",
+    purpose: str | None = None,
+    status: str = "succeeded",
+    parent: uuid.UUID | None = None,
+    plan_payload: dict[str, Any] | None = None,
+    plan_created_by: str = "user",
+    scope_id: uuid.UUID | None = None,
+    plan_id: uuid.UUID | None = None,
+    plan_version: int = 1,
+    walk_id: uuid.UUID | None = None,
+    context: dict[str, Any] | None = None,
+    intent: str | None = None,
+    scope_created_at: datetime | None = None,
+    started_at: datetime | None = None,
+    ended_at: datetime | None = None,
+    with_run: bool = False,
+) -> SeededWalk:
+    """Insert a walk (a ``capability_run`` row) and what it hangs off.
+
+    A walk needs an intent record and a plan. Each is created unless given:
+
+    - ``scope_id`` absent: an ``evidence_scope`` of ``purpose`` is inserted.
+    - ``plan_payload`` given: an approved ``task_plan`` row is inserted at
+      ``plan_version``; otherwise the walk points at ``plan_id`` (or a fresh id
+      with no row; the walk table carries no foreign key to the plan).
+
+    A walk in a terminal status ends at ``ended_at`` (default: when it
+    started); a ``running`` or ``paused`` walk has not ended. ``with_run``
+    adds one ``runs`` row under the walk, in the walk's status.
+    """
+    from policy_atlas.core.schema import capability_run, task_plan
+
+    started = started_at or now()
+    plan_id = plan_id or uuid.uuid4()
+    if plan_payload is not None:
+        conn.execute(
+            task_plan.insert().values(
+                plan_id=plan_id,
+                task_id=task_id,
+                version=plan_version,
+                status="approved",
+                payload=plan_payload,
+                created_at=started,
+                created_by=plan_created_by,
+            )
+        )
+    if scope_id is None:
+        scope_id = seed_scope(
+            conn,
+            task_id,
+            context,
+            intent=intent or f"{purpose or 'es'} intent",
+            purpose=purpose,
+            created_at=scope_created_at,
+        )
+    walk_id = walk_id or uuid.uuid4()
+    ended = None if status in ("running", "paused") else (ended_at or started)
+    values: dict[str, Any] = {
+        "capability_run_id": walk_id,
+        "task_id": task_id,
+        "evidence_scope_id": scope_id,
+        "capability": capability,
+        "plan_id": plan_id,
+        "plan_version": plan_version,
+        "status": status,
+        "started_at": started,
+        "ended_at": ended,
+    }
+    if parent is not None:
+        values["parent_capability_run_id"] = parent
+    conn.execute(capability_run.insert().values(**values))
+    run_id = (
+        seed_run(conn, task_id, capability_run_id=walk_id, status=status, started_at=started)
+        if with_run
+        else None
+    )
+    return SeededWalk(scope_id=scope_id, plan_id=plan_id, walk_id=walk_id, run_id=run_id)
 
 
 def seed_screening_result(
@@ -597,16 +740,31 @@ def seed_task_and_run(conn: Connection) -> tuple[uuid.UUID, uuid.UUID]:
     return pid, seed_run(conn, pid)
 
 
-def seed_run(conn: Connection, task_id: uuid.UUID) -> uuid.UUID:
-    """Insert an additional running run for an existing task; return run_id."""
+def seed_run(
+    conn: Connection,
+    task_id: uuid.UUID,
+    *,
+    capability_run_id: uuid.UUID | None = None,
+    status: str = "running",
+    started_at: datetime | None = None,
+) -> uuid.UUID:
+    """Insert an additional run for an existing task (running by default); return run_id.
+
+    ``capability_run_id`` files the run under a walk; it is written only when
+    given, so migration tests can seed at revisions that predate the column.
+    """
     from policy_atlas.core.schema import runs
 
     rid = uuid.uuid4()
-    conn.execute(
-        runs.insert().values(
-            run_id=rid, task_id=task_id, status="running", started_at=now()
-        )
-    )
+    values: dict[str, Any] = {
+        "run_id": rid,
+        "task_id": task_id,
+        "status": status,
+        "started_at": started_at or now(),
+    }
+    if capability_run_id is not None:
+        values["capability_run_id"] = capability_run_id
+    conn.execute(runs.insert().values(**values))
     return rid
 
 

@@ -9,9 +9,9 @@ import { RAIL_RECENT, type RailChat } from "./ConversationRail";
 type ConversationOut = components["schemas"]["ConversationOut"];
 type ConversationListPage = components["schemas"]["Page_ConversationListItemOut_"];
 
-/** URL token for the planning thread in the chat overlay (`?chat=planning`)
- *  when the task has no planning-conversation row yet. */
-export const PLANNING_TAB_ID = "planning";
+/** URL token for the task_agent thread in the chat overlay (`?chat=task_agent`)
+ *  when the task has no task_agent-conversation row yet. */
+export const TASK_AGENT_TAB_ID = "task_agent";
 
 /** URL token for a chat that does not exist yet (`?chat=new`, 038 V8): the
  *  reader sees an empty chat and a composer, and the row is created on the
@@ -37,7 +37,7 @@ export function takeFirstMessage(conversationId: string): string | null {
 
 /** The rail's recent chat marks: the newest chats (the listing is newest first). */
 export function recentChats(
-  rows: readonly { id: string; kind: "planning" | "chat"; title: string }[],
+  rows: readonly { id: string; kind: "task_agent" | "chat"; title: string }[],
 ): RailChat[] {
   return rows
     .filter((row) => row.kind === "chat")
@@ -47,7 +47,7 @@ export function recentChats(
 
 /** The Task Agent: a Task's primary chat.
  *
- * The `kind = planning` conversation — the open one, or, once a run has
+ * The `kind = task_agent` conversation — the open one, or, once a run has
  * closed that lineage, the most recently closed one (contract 038 § Terms).
  * Exactly one row is ever the Task Agent (invariant I8 / fold A10); older
  * closed lineages are "Earlier plan" and are never pinned. No new state:
@@ -57,35 +57,35 @@ export function recentChats(
  *   rows: The task's listed conversations, newest created first.
  *
  * Returns:
- *   The Task Agent's conversation id, or `PLANNING_TAB_ID` when the task has
- *   no planning row yet.
+ *   The Task Agent's conversation id, or `TASK_AGENT_TAB_ID` when the task has
+ *   no task_agent row yet.
  */
 export function taskAgentConversationId(
   rows: ReadonlyArray<{ id: string; kind: string; closed_at?: string | null }>,
 ): string {
-  const planning = rows.filter((row) => row.kind === "planning");
-  const open = planning.find((row) => (row.closed_at ?? null) === null);
+  const taskAgent = rows.filter((row) => row.kind === "task_agent");
+  const open = taskAgent.find((row) => (row.closed_at ?? null) === null);
   if (open !== undefined) return open.id;
   // Newest closure wins. `rows` arrives created_at-descending, so rows
   // carrying no closure time keep that order behind the ones that do.
-  return [...planning].sort((a, b) => (b.closed_at ?? "").localeCompare(a.closed_at ?? ""))[0]?.id
-    ?? PLANNING_TAB_ID;
+  return [...taskAgent].sort((a, b) => (b.closed_at ?? "").localeCompare(a.closed_at ?? ""))[0]?.id
+    ?? TASK_AGENT_TAB_ID;
 }
 
-/** True when the overlay is showing the planning thread, not a follow-up chat. */
-export function isPlanningConversation(
+/** True when the overlay is showing the task_agent thread, not a follow-up chat. */
+export function isTaskAgentConversation(
   conversationId: string | null,
   rows: ReadonlyArray<{ id: string; kind: string }>,
 ): boolean {
   if (conversationId === null) return false;
-  if (conversationId === PLANNING_TAB_ID) return true;
-  return rows.find((row) => row.id === conversationId)?.kind === "planning";
+  if (conversationId === TASK_AGENT_TAB_ID) return true;
+  return rows.find((row) => row.id === conversationId)?.kind === "task_agent";
 }
 
 /** Read and update the URL-addressable active conversation.
  *
  * Returns:
- *   The selected chat id (or planning) and a URL-preserving setter.
+ *   The selected chat id (or task_agent) and a URL-preserving setter.
  */
 export function useActiveConversation() {
   const [searchParams, setSearchParams] = useSearchParams();

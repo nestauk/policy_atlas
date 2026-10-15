@@ -24,15 +24,15 @@ from policy_atlas.core.schema import (
 )
 from policy_atlas.evidence_search.extract.finding_references import (
     INTERVENTION_DESC,
-    POPULATION_DESC,
     STUDY_DESIGN_DESC,
     STUDY_GEOGRAPHY_DESC,
+    UNIT_DESC,
     render_field_sections,
 )
 
 # Fingerprint components (contract decision 2): named constants; any
 # output-affecting change bumps a version and thus the extraction fingerprint.
-# PROFILE_ID is a stable requirement-family id ("EB's base IOF extraction");
+# PROFILE_ID is a stable requirement-family id ("ES's base IOF extraction");
 # field-set evolution rides the schema/prompt/rules version components, which
 # enter the fingerprint and recorded components map, so field additions do not
 # bump the profile.
@@ -149,8 +149,8 @@ class IOFRecordWire(BaseModel):
             "belong in stratum_qualifiers."
         )
     )
-    population: str | None = Field(
-        description=POPULATION_DESC
+    unit: str | None = Field(
+        description=UNIT_DESC
     )
     setting: str | None = Field(
         description=(
@@ -311,7 +311,7 @@ class IOFRecord(BaseModel):
 
     intervention: str = Field(min_length=1)
     outcome: str = Field(min_length=1)
-    population: str | None
+    unit: str | None
     setting: str | None
     comparator: str | None
     effect_direction: EffectDirection

@@ -33,32 +33,47 @@ class ProgressEmitter:
         self._run_id = run_id
         self._sections_by_synthesis_index: list[dict[str, Any]] = []
         self._key_findings: dict[str, Any] | None = None
+        self._skeleton_emitted = False
         self._disabled = False
 
-    def emit_skeleton(self, sections: Sequence[dict[str, str]]) -> None:
+    def emit_skeleton(
+        self, sections: Sequence[dict[str, str]], *, key_findings: bool = True
+    ) -> None:
         """Emit the presentation-ordered skeleton and establish display indexes.
 
         Args:
-            sections: Non-key-findings sections in synthesis order, including
-                the code-injected conclusion foot.
+            sections: Sections in synthesis order, including any code-rendered
+                foot section. The skeleton IS this list — nothing is added to
+                it beyond the key-findings slot below.
+            key_findings: Whether the run ends in a key-findings pass, which is
+                generated last and presented first. True for the Evidence
+                search report; False for an output kind that runs no such pass
+                (the baseline, task 044 X8), whose skeleton is exactly
+                ``sections``.
 
         Raises:
             RuntimeError: If a skeleton was already emitted for this emitter.
         """
-        if self._key_findings is not None:
+        if self._skeleton_emitted:
             raise RuntimeError("synthesis progress skeleton already emitted")
-        self._key_findings = {
-            "index": 0,
-            "title": "Key findings",
-            "focus": "The report's headline claims.",
-        }
+        self._skeleton_emitted = True
+        self._key_findings = (
+            {
+                "index": 0,
+                "title": "Key findings",
+                "focus": "The report's headline claims.",
+            }
+            if key_findings
+            else None
+        )
         self._sections_by_synthesis_index = [
             {"index": index, "title": section["title"], "focus": section["focus"]}
-            for index, section in enumerate(sections, start=1)
+            for index, section in enumerate(sections, start=1 if key_findings else 0)
         ]
+        leading = [self._key_findings] if self._key_findings is not None else []
         self._append(
             "artefact.skeleton",
-            {"sections": [self._key_findings, *self._sections_by_synthesis_index]},
+            {"sections": [*leading, *self._sections_by_synthesis_index]},
         )
 
     def section_started(self, synthesis_index: int) -> None:
@@ -134,7 +149,7 @@ class ProgressEmitter:
 
     def _key_findings_section(self) -> dict[str, Any]:
         if self._key_findings is None:
-            raise RuntimeError("synthesis progress skeleton has not been emitted")
+            raise RuntimeError("synthesis progress skeleton carries no key-findings slot")
         return self._key_findings
 
     def _append(self, event_type: str, payload: dict[str, Any]) -> None:

@@ -23,7 +23,7 @@ function Probe() {
 describe("useRail", () => {
   it("collapse is a keyboard-operable button that hides the region and renames itself", async () => {
     render(<Probe />);
-    const toggle = screen.getByRole("button", { name: "Collapse the planning rail" });
+    const toggle = screen.getByRole("button", { name: "Collapse the Task Agent rail" });
     expect(toggle).toHaveAttribute("aria-expanded", "true");
     expect(screen.getByText("pane content")).toBeVisible();
 
@@ -31,7 +31,7 @@ describe("useRail", () => {
     expect(toggle).toHaveFocus();
     await userEvent.keyboard("{Enter}");
 
-    const expand = screen.getByRole("button", { name: "Expand the planning rail" });
+    const expand = screen.getByRole("button", { name: "Expand the Task Agent rail" });
     expect(expand).toHaveAttribute("aria-expanded", "false");
     expect(screen.getByText("pane content")).not.toBeVisible();
     expect(screen.getByTestId("grid").style.width).toBe("48px");

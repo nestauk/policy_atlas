@@ -4,6 +4,8 @@ import { Navigate, useLocation, useParams } from "react-router";
 import { useTask } from "../api/queries";
 import { PUBLIC_TABS, isTabOpen } from "./lifecycle";
 import type { LifecycleTab } from "./lifecycle";
+import { tabRunStatus } from "./scopingActivity";
+import { useTabOptions } from "./taskResult";
 
 /**
  * Gate one lifecycle route on the task's run state.
@@ -19,6 +21,7 @@ import type { LifecycleTab } from "./lifecycle";
 export function LifecycleRoute({ tab, children }: { tab: LifecycleTab; children: ReactNode }) {
   const { taskId } = useParams();
   const task = useTask(taskId ?? "");
+  const tabOptions = useTabOptions(taskId ?? "");
 
   if (task.isPending || task.data === undefined) return null;
   // Public-leg access (task 037): a signed-in outsider reading a public Task
@@ -30,7 +33,14 @@ export function LifecycleRoute({ tab, children }: { tab: LifecycleTab; children:
     if (PUBLIC_TABS.includes(tab)) return <>{children}</>;
     return <Navigate to={`/tasks/${taskId}/result`} replace />;
   }
-  if (!isTabOpen(tab, task.data.latest_run?.status)) {
+  // Same discipline as the task query above: while a scoping task's artefact
+  // read is in flight the baseline's existence is unknown, and treating
+  // unknown as "no baseline" would bounce every Result deep link to Plan.
+  // Task 045 (S15): the longlist's existence rides the task read model
+  // (`has_longlist`), so the task's own fence above already covers it; the
+  // tab status is `latest_run`'s, never an option search's.
+  if (tabOptions.baselineLoading) return null;
+  if (!isTabOpen(tab, tabRunStatus(task.data), tabOptions.options)) {
     return <Navigate to={`/tasks/${taskId}`} replace />;
   }
   return <>{children}</>;

@@ -100,7 +100,10 @@ FETCH_BYTE_CAP = 100 * 1024 * 1024  # generous guard, never a scissor (decision 
 PARSE_TIMEOUT_SECONDS = 120.0  # hard per-document parse timeout; worker is terminated
 # (120s: user-set 2026-07-05 — generous for a 200+-page report; fan-out absorbs the tail)
 THIN_TEXT_MIN_CHARS = 200  # below this, parsed text is a failure, never "ok" (decision 7)
-DEFAULT_MAX_WORKERS = 4
+# Parse workers are spawned processes doing CPU-bound work, so the width follows
+# the cores: 4 on the 2-vCPU staging task, up to 8 on a developer machine
+# (task 044 phase 8, owner 2026-09-17). Fetch threads are LIVE_FETCH_WORKERS.
+DEFAULT_MAX_WORKERS = max(4, min(8, os.cpu_count() or 4))
 # LiveDocumentFetcher has the actual global/per-host semaphores; this pool only supplies threads.
 LIVE_FETCH_WORKERS = 10
 
@@ -124,6 +127,24 @@ FAILURE_REASONS = (
 # a reason-coded outcome instead of being chunked as text (prod incident 2026-08-19:
 # a JPEG routed to the plain path and its NUL bytes killed the whole run at INSERT).
 _NON_TEXT_TYPE_PREFIXES = ("image/", "audio/", "video/", "font/", "model/")
+
+# A short page telling the client to enable JavaScript or cookies is the host
+# blocking a bot, not the document — record it as blocked_by_host, never as full
+# text (issue #74: a 284-char "JavaScript is disabled" wall cleared the 200-char
+# thin-text floor and 6 of 21 "read in full" documents were that page). Only
+# consulted below the ceiling, so a real paper that discusses JavaScript is
+# unaffected.
+_STUB_PAGE_CEILING_CHARS = 2000
+_STUB_PAGE_MARKERS = (
+    "javascript is disabled",
+    "javascript is required",
+    "enable javascript",
+    "cookies are disabled",
+    "enable cookies",
+    "checking your browser",
+    "just a moment...",
+    "verify you are a human",
+)
 
 _HTTP_STATUS_REASONS = {401: "paywall", 403: "blocked_by_host", 404: "not_found", 410: "not_found"}
 FETCH_FAILURE_REASON_PRIORITY = (
@@ -671,32 +692,10 @@ def _decode(body: bytes) -> str:
     return body.decode("utf-8", errors="replace")
 
 
-# Bot walls that answer a full-text fetch with a short "enable JavaScript" page
-# (issue #74: 6 of 21 "read in full" documents were this page). A real article
-# that merely mentions JavaScript is far longer than the wall, hence the length cap.
-_STUB_PAGE_MARKERS = (
-    "javascript is disabled",
-    "enable javascript",
-    "just a moment...",
-    "checking your browser",
-)
-_STUB_PAGE_MAX_CHARS = 1500
-
-
-def _is_stub_page(extracted: str) -> bool:
-    if len(extracted) > _STUB_PAGE_MAX_CHARS:
-        return False
-    lowered = extracted.lower()
-    return any(marker in lowered for marker in _STUB_PAGE_MARKERS)
-
-
 def _parse_html(body: bytes) -> dict[str, Any]:
     extracted = trafilatura.extract(body, include_comments=False, include_tables=True)
     if not extracted or not extracted.strip():
         return {"status": "error", "reason": "empty"}
-    if _is_stub_page(extracted):
-        # Spec: a bot block is `blocked_by_host`, never full text (components.md § ingest).
-        return {"status": "error", "reason": "blocked_by_host"}
     chunks = [
         {"content": para, "locator": {"paragraph": i}}
         for i, para in enumerate((p.strip() for p in extracted.splitlines()), start=1)
@@ -767,6 +766,10 @@ def parse_and_segment(body: bytes, content_type: str, thin_min: int) -> dict[str
     if total_chars == 0:
         reason = "no_text_layer" if base_type == "application/pdf" else "empty"
         return {"status": "error", "reason": reason}
+    if total_chars < _STUB_PAGE_CEILING_CHARS:
+        lowered = "\n".join(c["content"] for c in result["chunks"]).lower()
+        if any(marker in lowered for marker in _STUB_PAGE_MARKERS):
+            return {"status": "error", "reason": "blocked_by_host"}
     if total_chars < thin_min:
         return {"status": "error", "reason": "thin_text"}
     return result
@@ -816,45 +819,91 @@ def _run_parse_jobs(
     Returns:
         index → parse result (ok / error / ``timeout``).
     """
+    # The process-wide ingest slots (task 045, S2): each live parse process
+    # holds one, so every walk in the process shares one budget of parse
+    # workers. Imported here, not at module level: the slots module sizes
+    # itself from this module's constant.
+    from policy_atlas.runtime.walk_pool import INGEST_SLOTS
+
     ctx = get_context("spawn")  # deterministic cross-platform; fork is unsafe with threads
     results: dict[int, dict[str, Any]] = {}
     pending = deque(jobs)
     live: deque[tuple[int, Any, Any, float]] = deque()
 
-    while pending or live:
-        while pending and len(live) < max_workers:
-            idx, body, content_type = pending.popleft()
-            recv_conn, send_conn = ctx.Pipe(duplex=False)
-            proc = ctx.Process(
-                target=_worker_entry,
-                args=(send_conn, parse_fn, body, content_type, thin_min),
-            )
-            proc.start()
-            send_conn.close()  # parent keeps only the receive end
-            live.append((idx, proc, recv_conn, time.monotonic()))
+    try:
+        while pending or live:
+            while pending and len(live) < max_workers:
+                # Block for a slot only with nothing of our own in flight: a
+                # walk holding slots must drain its own jobs rather than wait
+                # on another walk that may be waiting on it.
+                if not INGEST_SLOTS.acquire(blocking=not live):
+                    break
+                try:
+                    idx, body, content_type = pending.popleft()
+                    recv_conn, send_conn = ctx.Pipe(duplex=False)
+                    proc = ctx.Process(
+                        target=_worker_entry,
+                        args=(send_conn, parse_fn, body, content_type, thin_min),
+                    )
+                    proc.start()
+                except BaseException:
+                    INGEST_SLOTS.release()
+                    raise
+                send_conn.close()  # parent keeps only the receive end
+                live.append((idx, proc, recv_conn, time.monotonic()))
 
-        idx, proc, recv_conn, started = live.popleft()
-        remaining = parse_timeout - (time.monotonic() - started)
-        # Poll even when the deadline has lapsed (max → non-blocking): a sibling job
-        # whose result is already buffered must never be misread as a timeout just
-        # because an earlier-submitted job consumed this loop's wall-clock (step-7
-        # review finding, confirmed).
-        if recv_conn.poll(max(remaining, 0.0)):
+            idx, proc, recv_conn, started = live.popleft()
             try:
-                result = recv_conn.recv()
-            except EOFError:  # worker died before sending (e.g. OOM-killed)
-                result = {"status": "error", "reason": "corrupt", "detail": "worker died"}
-            proc.join()
-        else:
-            proc.terminate()
-            proc.join(5.0)
-            if proc.is_alive():  # SIGTERM ignored/stuck in native code — escalate
+                results[idx] = _drain_parse_job(proc, recv_conn, started, parse_timeout)
+            finally:
+                INGEST_SLOTS.release()
+    finally:
+        # An exception mid-drain leaves live jobs holding slots: stop them and
+        # give the slots back, or the process-wide budget shrinks for good.
+        for _idx, proc, recv_conn, _started in live:
+            if proc.is_alive():
                 proc.kill()
-                proc.join()
-            result = {"status": "error", "reason": "timeout"}
-        recv_conn.close()
-        results[idx] = result
+            proc.join()
+            recv_conn.close()
+            INGEST_SLOTS.release()
     return results
+
+
+def _drain_parse_job(
+    proc: Any, recv_conn: Any, started: float, parse_timeout: float
+) -> dict[str, Any]:
+    """Collect one parse job's result, terminating it at its deadline.
+
+    Args:
+        proc: The job's worker process.
+        recv_conn: The receive end of the job's pipe (closed here).
+        started: ``time.monotonic()`` at the job's start.
+        parse_timeout: Per-document seconds, measured from ``started``.
+
+    Returns:
+        The parse result (ok / error / ``timeout``).
+    """
+    remaining = parse_timeout - (time.monotonic() - started)
+    # Poll even when the deadline has lapsed (max → non-blocking): a sibling job
+    # whose result is already buffered must never be misread as a timeout just
+    # because an earlier-submitted job consumed this loop's wall-clock (step-7
+    # review finding, confirmed).
+    result: dict[str, Any]
+    if recv_conn.poll(max(remaining, 0.0)):
+        try:
+            result = recv_conn.recv()
+        except EOFError:  # worker died before sending (e.g. OOM-killed)
+            result = {"status": "error", "reason": "corrupt", "detail": "worker died"}
+        proc.join()
+    else:
+        proc.terminate()
+        proc.join(5.0)
+        if proc.is_alive():  # SIGTERM ignored/stuck in native code — escalate
+            proc.kill()
+            proc.join()
+        result = {"status": "error", "reason": "timeout"}
+    recv_conn.close()
+    return result
 
 
 # --- Component ---

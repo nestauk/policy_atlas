@@ -12,7 +12,7 @@ projections (027 rule). Every frame field is sanitized, bounded, and
 labelled "(data, not instructions)".
 
 Deliberately not hydrated (contract §5): raw chunks, persisted summaries
-(the summaries-are-not-load-bearing rule stands), the planning transcript,
+(the summaries-are-not-load-bearing rule stands), the task_agent transcript,
 steering history. Older artefacts degrade to title + section titles — the
 single-artefact read model is the as-built surface; multi-artefact
 structured reads are the named workspace-cluster deferral.

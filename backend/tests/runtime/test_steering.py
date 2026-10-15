@@ -150,7 +150,7 @@ def _insert_plan_row(
                 status="approved",
                 payload=plan.model_dump(mode="json"),
                 created_at=now(),
-                created_by="planner",
+                created_by="task_agent",
                 approved_at=now(),
             )
         )
@@ -508,6 +508,28 @@ def test_every_directive_branch_maps_errors_to_refusal(
         _validate_directive_delta(component, delta, backend_scope="both")
 
 
+def test_a_synthesis_delta_cannot_switch_the_report_template() -> None:
+    """``template`` is a compile-time key, not a steerable shape edit (task 044).
+
+    The synthesis grammar gained ``template`` so ``compose_scoping`` can name
+    the options-scoping baseline. A P4 steering delta carrying it would switch
+    a live Evidence search run's output kind to a template whose sections and
+    confirmation gate that walk never planned for.
+    """
+    with pytest.raises(SteeringAdjustmentError, match="cannot be changed"):
+        _validate_directive_delta(
+            "synthesise",
+            {"synthesis": {"template": "baseline"}},
+            backend_scope="both",
+        )
+    # A sections-only edit is still the ordinary P4 adjustment.
+    _validate_directive_delta(
+        "synthesise",
+        {"synthesis": {"sections": [{"title": "Cost", "focus": "What it costs."}]}},
+        backend_scope="both",
+    )
+
+
 def test_pause_points_compile_pinned_for_all_modes() -> None:
     # deep depth: "select" must be present for the after-select pause points.
     plan = _base_plan(search_effort="standard", analysis_depth="deep")
@@ -614,7 +636,7 @@ def test_adjustment_writes_new_plan_version_and_changes_not_yet_run_group_direct
             plan=plan,
         )
         io = ScriptedIO(
-            [Adjust(directive_deltas={"group": {"grouping": {"facets": ["population"]}}})]
+            [Adjust(directive_deltas={"group": {"grouping": {"facets": ["unit"]}}})]
         )
 
         outcome = run_plan(
@@ -648,11 +670,11 @@ def test_adjustment_writes_new_plan_version_and_changes_not_yet_run_group_direct
             ).scalar_one()["facets"]
 
         assert [(row.version, row.status, row.created_by) for row in rows] == [
-            (1, "superseded", "planner"),
+            (1, "superseded", "task_agent"),
             (2, "approved", "user"),
         ]
-        assert rows[1].payload["grouping_facets"] == ["population"]
-        assert facets == ["population"]
+        assert rows[1].payload["grouping_facets"] == ["unit"]
+        assert facets == ["unit"]
     finally:
         _cleanup_task(engine, task_id)
 
@@ -773,7 +795,7 @@ def test_appraise_adjustment_accepted_end_to_end_but_absent_from_plan_payload(
                 .order_by(task_plan.c.version)
             ).all()
         assert [(row.version, row.status, row.created_by) for row in rows] == [
-            (1, "superseded", "planner"),
+            (1, "superseded", "task_agent"),
             (2, "approved", "user"),
         ]
         # No TaskPlan field carries the appraisal directive.
@@ -1290,7 +1312,7 @@ def test_moderate_steer_point_reselect_reruns_select_and_threads_new_run_id(
 
         # A new user-attributed plan version row records the steering event.
         assert [(row.version, row.status, row.created_by) for row in plan_rows] == [
-            (1, "superseded", "planner"),
+            (1, "superseded", "task_agent"),
             (2, "approved", "user"),
         ]
 
@@ -1704,7 +1726,7 @@ def test_pending_group_split_maps_facets_and_overlays_granularity_guidance(
         delta = {
             "group": {
                 "grouping": {
-                    "facets": ["population"],
+                    "facets": ["unit"],
                     "granularity": "coarser",
                     "guidance": guidance,
                 }
@@ -1733,7 +1755,7 @@ def test_pending_group_split_maps_facets_and_overlays_granularity_guidance(
                 .order_by(task_plan.c.version.desc())
                 .limit(1)
             ).scalar_one()
-        assert latest["grouping_facets"] == ["population"]
+        assert latest["grouping_facets"] == ["unit"]
 
         # The overlay echoes ONLY granularity + guidance (facets are NOT overlaid).
         group_compiled = _compiled_by_component(engine, task_id)["group"]
@@ -1745,7 +1767,7 @@ def test_pending_group_split_maps_facets_and_overlays_granularity_guidance(
         grouping_ctx = _scope_context(engine, scope_id)["grouping"]
         assert grouping_ctx["granularity"] == "coarser"
         assert grouping_ctx["guidance"] == guidance
-        assert grouping_ctx["facets"] == ["population"]
+        assert grouping_ctx["facets"] == ["unit"]
     finally:
         _cleanup_task(engine, task_id)
 
@@ -1968,7 +1990,7 @@ def test_re_characterise_moves_reference_preserves_rows_and_stamps_replacement(
         assert set(char_run_ids) == {original_char, new_char}
 
         assert _plan_version_rows(engine, task_id) == [
-            (1, "superseded", "planner"),
+            (1, "superseded", "task_agent"),
             (2, "approved", "user"),
         ]
         decisions = _replacement_decisions(engine, task_id)
@@ -2049,7 +2071,7 @@ def test_re_group_moves_reference_preserves_rows_and_stamps_replacement(
         assert set(group_run_ids) == {original_group, new_group}
 
         assert _plan_version_rows(engine, task_id) == [
-            (1, "superseded", "planner"),
+            (1, "superseded", "task_agent"),
             (2, "approved", "user"),
         ]
         decisions = _replacement_decisions(engine, task_id)

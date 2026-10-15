@@ -13,6 +13,8 @@ vi.mock("../api/queries", () => ({
     data: { task_id: TASK_ID, name: "Acme task", visibility: "org", is_owner: true },
   }),
   useCheckIns: () => ({ data: { data: [] } }),
+  // Task 044: the lifecycle bar asks whether a scoping task has a baseline.
+  useArtefact: () => ({ data: null, isLoading: false }),
   // The nav logo checks all tasks for an active run outside a task.
   useTasks: () => ({ data: { data: [] } }),
   // The header's task-settings popover wires rename/archive mutations,

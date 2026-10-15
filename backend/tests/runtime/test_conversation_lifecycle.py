@@ -1,4 +1,4 @@
-"""Database coverage for planning-conversation lifecycle helpers."""
+"""Database coverage for task_agent-conversation lifecycle helpers."""
 
 from __future__ import annotations
 
@@ -10,8 +10,8 @@ from sqlalchemy.engine import Connection, Engine
 
 from policy_atlas.core.schema import conversation, task
 from policy_atlas.runtime.conversation_lifecycle import (
-    close_planning_conversation,
-    ensure_active_planning_conversation,
+    close_task_agent_conversation,
+    ensure_active_task_agent_conversation,
 )
 
 
@@ -35,43 +35,43 @@ def _seed_task(conn: Connection) -> uuid.UUID:
 
 
 def test_ensure_reuses_active_conversation_and_close_is_idempotent(conn: Connection) -> None:
-    """Active planning conversations are reused, closed, then cleanly succeeded."""
+    """Active task_agent conversations are reused, closed, then cleanly succeeded."""
     task_id = _seed_task(conn)
     created_at = datetime.now(UTC)
 
-    first_id = ensure_active_planning_conversation(
+    first_id = ensure_active_task_agent_conversation(
         conn, task_id=task_id, now=created_at
     )
-    assert ensure_active_planning_conversation(
+    assert ensure_active_task_agent_conversation(
         conn, task_id=task_id, now=datetime.now(UTC)
     ) == first_id
 
     closed_at = datetime.now(UTC)
-    close_planning_conversation(conn, task_id=task_id, closed_at=closed_at)
-    close_planning_conversation(conn, task_id=task_id, closed_at=datetime.now(UTC))
+    close_task_agent_conversation(conn, task_id=task_id, closed_at=closed_at)
+    close_task_agent_conversation(conn, task_id=task_id, closed_at=datetime.now(UTC))
     predecessor = conn.execute(
         select(conversation).where(conversation.c.id == first_id)
     ).one()
     assert predecessor.status == "closed"
     assert predecessor.closed_at == closed_at
 
-    successor_id = ensure_active_planning_conversation(
+    successor_id = ensure_active_task_agent_conversation(
         conn, task_id=task_id, now=datetime.now(UTC)
     )
     assert successor_id != first_id
     active_ids = conn.execute(
         select(conversation.c.id)
         .where(conversation.c.task_id == task_id)
-        .where(conversation.c.kind == "planning")
+        .where(conversation.c.kind == "task_agent")
         .where(conversation.c.status == "active")
     ).scalars().all()
     assert active_ids == [successor_id]
 
 
-def test_finish_run_closes_planning_conversation_in_terminal_transaction(
+def test_finish_run_closes_task_agent_conversation_in_terminal_transaction(
     engine: Engine,
 ) -> None:
-    """A succeeded run closes the active planning conversation atomically (B3).
+    """A succeeded run closes the active task_agent conversation atomically (B3).
 
     Drives the real ``_finish_run`` so the closure is proven at the runner's
     terminal transaction, not just at the helper: status, ``run.finished``
@@ -86,7 +86,7 @@ def test_finish_run_closes_planning_conversation_in_terminal_transaction(
     try:
         with engine.begin() as conn:
             task_id = _seed_task(conn)
-            conversation_id = ensure_active_planning_conversation(
+            conversation_id = ensure_active_task_agent_conversation(
                 conn, task_id=task_id, now=datetime.now(UTC)
             )
             scope_id = uuid.uuid4()

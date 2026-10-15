@@ -1,9 +1,9 @@
 ---
 type: Invariant
 title: The continuation reducer's plan selection is correct by fencing, not by custody
-description: continuation_state.build() picks the latest APPROVED plan task-wide with no join to the specific walk — that is only the parked walk's own lineage because steering amendments supersede within-lineage and planning turns 409 run_active while a walk is running/parked. Remove the fence and plans cross-contaminate silently.
+description: continuation_state.build() picks the latest APPROVED plan task-wide with no join to the specific walk — that is only the parked walk's own lineage because steering amendments supersede within-lineage and Task Agent turns 409 run_active while a walk is running/parked. Remove the fence and plans cross-contaminate silently.
 tags: [continuation, planning, invariant, review-lesson]
-timestamp: 2026-07-21
+timestamp: 2026-09-24
 ---
 
 # Rule
@@ -17,8 +17,8 @@ files with no code-level link between them:
 1. Steering amendments always supersede plan versions **within the parked walk's
    own lineage** — never branch to an unrelated plan (`continuation.py`'s
    `apply_adjustment` / `apply_replacement_rerun` paths).
-2. `planning.py`'s `create_planning_turn` returns 409 `run_active` whenever a walk
-   is `running` or `paused` for the task, so no unrelated planning conversation
+2. `task_agent.py`'s `create_task_agent_turn` returns 409 `run_active` whenever a walk
+   is `running` or `paused` for the task, so no unrelated Task Agent conversation
    can approve a new plan version while a walk is parked.
 
 Together, these make "latest approved" provably equal to "this walk's lineage."
@@ -36,14 +36,22 @@ comments the dependency without this concept naming it.
 
 Relaxing the `run_active` 409 gate (e.g. "let users plan ahead while a walk
 runs") silently breaks continuation: the reducer would then pick up whatever plan
-an unrelated, concurrent planning conversation happened to approve, instead of
+an unrelated, concurrent Task Agent conversation happened to approve, instead of
 the parked walk's own lineage — with no error raised anywhere, because the
 reducer's query has no way to notice. Any change to the planning-turn gate must
 re-examine this invariant first.
+
+"Latest approved" is only safe **where** this fence holds. 045's gate confirm
+(review A10) opened the longlist walk by re-reading the latest approved plan
+after its own commit, so the opener's `plan_stale` guard compared latest with
+latest and could never fire. An opener acting on a confirmation takes the
+confirmed version (`out.version`; gate paths pass the gate walk's version via
+`longlist_start.plan_row_of_walk`) — the same rule as
+[read-model-refs-pin-by-fk](read-model-refs-pin-by-fk.md).
 
 # Citations
 
 - `backend/src/policy_atlas/runtime/continuation_state.py` (`build()`, latest-
   approved plan selection)
-- `backend/src/policy_atlas/api/routers/planning.py` (`create_planning_turn`,
+- `backend/src/policy_atlas/api/routers/task_agent.py` (`create_task_agent_turn`,
   the `run_active` 409 check)

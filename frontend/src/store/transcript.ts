@@ -1,15 +1,15 @@
 import { useCallback, useReducer } from "react";
 
-import { usePlanningTurn } from "../api/mutations";
-import { usePlanningTurns } from "../api/queries";
+import { useTaskAgentTurn } from "../api/mutations";
+import { useTaskAgentTurns } from "../api/queries";
 import { errorCode } from "../lib/errors";
 import type { components } from "../api/gen/types";
 
-export type PlanningTranscriptTurn = components["schemas"]["PlanningTranscriptTurnOut"];
+export type TaskAgentTranscriptTurn = components["schemas"]["TaskAgentTranscriptTurnOut"];
 
 /** A local composer row which exists before the durable transcript query can
  * return the corresponding server row. */
-export interface OptimisticPlanningTurn {
+export interface OptimisticTaskAgentTurn {
   clientTurnId: string;
   userMessage: string;
   createdAt: string;
@@ -20,11 +20,11 @@ export interface OptimisticPlanningTurn {
 }
 
 interface OptimisticTranscriptState {
-  turns: OptimisticPlanningTurn[];
+  turns: OptimisticTaskAgentTurn[];
 }
 
 type OptimisticTranscriptAction =
-  | { type: "submitted"; turn: OptimisticPlanningTurn }
+  | { type: "submitted"; turn: OptimisticTaskAgentTurn }
   | { type: "reconciled"; clientTurnId: string }
   | { type: "failed"; clientTurnId: string; errorMessage: string; errorCode?: string }
   | { type: "discarded"; clientTurnId: string };
@@ -105,7 +105,7 @@ export function retryInputForOptimisticTurn(
  * Combine the durable transcript page and local composer rows for a view.
  *
  * Args:
- *   durableTurns: Rows returned by the planning-turns query.
+ *   durableTurns: Rows returned by the task-agent-turns query.
  *   optimisticTurns: Locally pending or failed turns awaiting reconciliation.
  *
  * Returns:
@@ -113,30 +113,30 @@ export function retryInputForOptimisticTurn(
  *   pending rows have no durable `turn_index` until the query refetches.
  */
 export function transcriptRows(
-  durableTurns: PlanningTranscriptTurn[],
-  optimisticTurns: OptimisticPlanningTurn[],
-): Array<PlanningTranscriptTurn | OptimisticPlanningTurn> {
+  durableTurns: TaskAgentTranscriptTurn[],
+  optimisticTurns: OptimisticTaskAgentTurn[],
+): Array<TaskAgentTranscriptTurn | OptimisticTaskAgentTurn> {
   return [...durableTurns, ...optimisticTurns];
 }
 
 /**
- * Query the durable planning transcript and expose optimistic composer
+ * Query the durable task_agent transcript and expose optimistic composer
  * transitions. The UI owns id minting for a new logical message; retrying
  * always resends the original `client_turn_id`.
  *
  * Args:
- *   taskId: Project whose single planning conversation is active.
+ *   taskId: Project whose single task_agent conversation is active.
  *   query: Optional transcript page parameters.
  *
  * Returns:
  *   Query state, merged rows, and submit/retry actions for the composer.
  */
-export function usePlanningTranscript(
+export function useTaskAgentTranscript(
   taskId: string,
   query?: { page?: number; page_size?: number },
 ) {
-  const transcript = usePlanningTurns(taskId, query);
-  const planningTurn = usePlanningTurn(taskId);
+  const transcript = useTaskAgentTurns(taskId, query);
+  const taskAgentTurn = useTaskAgentTurn(taskId);
   const [optimistic, dispatch] = useReducer(reduceOptimisticTranscript, initialOptimisticTranscriptState);
 
   const send = useCallback(
@@ -151,7 +151,7 @@ export function usePlanningTranscript(
         },
       });
       try {
-        const result = await planningTurn.mutateAsync(input);
+        const result = await taskAgentTurn.mutateAsync(input);
         dispatch({ type: "reconciled", clientTurnId: input.clientTurnId });
         return result;
       } catch (error) {
@@ -164,7 +164,7 @@ export function usePlanningTranscript(
         throw error;
       }
     },
-    [planningTurn],
+    [taskAgentTurn],
   );
 
   const retry = useCallback(
@@ -193,7 +193,7 @@ export function usePlanningTranscript(
     send,
     retry,
     discard,
-    isSubmitting: planningTurn.isPending,
+    isSubmitting: taskAgentTurn.isPending,
   };
 }
 

@@ -25,6 +25,8 @@ vi.mock("../api/queries", async (importOriginal) => {
     useEvidence: vi.fn(),
     useFindings: vi.fn(),
     useSourceDossier: vi.fn(),
+    usePlan: vi.fn(),
+    useRuns: vi.fn(),
   };
 });
 
@@ -130,6 +132,13 @@ function renderResults(initialPending: boolean) {
     typeof queries.useFunnel
   >);
   vi.mocked(queries.useApiClient).mockReturnValue({} as ReturnType<typeof queries.useApiClient>);
+  // Task 044: the Result band's walk state (unused for an ES report).
+  vi.mocked(queries.usePlan).mockReturnValue({ data: null } as unknown as ReturnType<
+    typeof queries.usePlan
+  >);
+  vi.mocked(queries.useRuns).mockReturnValue({ data: undefined } as unknown as ReturnType<
+    typeof queries.useRuns
+  >);
   vi.mocked(store.useRunStream).mockReturnValue(createInitialRunStreamState());
   vi.mocked(conversationState.useActiveConversation).mockReturnValue({
     setActiveConversation: vi.fn(),

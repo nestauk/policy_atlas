@@ -1,5 +1,225 @@
 # Spec update log
 
+## 2026-10-12
+Task 046 (the longlist refinement), contract § Spec changes, applied at the step-7 review on the
+owner's word ("Make the spec changes"; items 1–17 of `spec-changes-proposed.md` and the amendment 3
+and 4 items of the contract). Items that amendments 3 and 4 superseded are applied in their final
+form, so the specs describe the system as built. Contract:
+`docs/tasks/046-longlist-refinement/contract.md`; decisions in ADR 0040.
+* **Update** (item 1; R1, R2, R9, R14; owner: "even 40 feels like a lot of options to expect the
+  user to decide on" · "user options aren't folded"): [OS components § 6](capabilities/options-scoping/components.md)
+  and [OS capability § Longlist](capabilities/options-scoping/capability.md) — reader grain; target 20,
+  ceiling 25 in place of the formula; the corpus digest; the fold and *also found as*; the residual
+  pass; the flag's meaning; discovery mints no package; lever list v2; open question 4 closed.
+* **Update** (item 2; R3, R17, R63, R72, R73, R87): [OS components § 2–5 and § 10](capabilities/options-scoping/components.md)
+  — the record's fields (unit, outcome, programme name, study geography and study country) and the
+  three tags against the plan; the setting and place rules; title-only documents are not profiled.
+* **Update** (item 3; R13, R15, R18, R19; owner: "remove ingest, full text fetched in task 3" · "we
+  shouldn't let that stop potentially transferable evidence not getting in at the screen step"):
+  [OS components § 2–5 and ⟨longlist depth⟩](capabilities/options-scoping/components.md) and
+  [OS capability § Depths and modes, § Plan](capabilities/options-scoping/capability.md) — no ingest at
+  longlist depth; the option search only acquires in a longlist walk and the pool is screened once;
+  the screen input is the wide target unit and the outcomes, no setting.
+* **Update** (item 3a; R19; owner: "We should separate the target unit … from the target
+  intervention setting and geography"): [OS components § 1](capabilities/options-scoping/components.md),
+  [OS capability § Plan](capabilities/options-scoping/capability.md) and
+  [plan-as-object § What a plan contains](system/plan-as-object.md) — target unit, setting and place
+  kept apart.
+* **Update** (item 4; R4, R21, item 5; R74, the strip deleted on the owner's ruling 2026-10-12):
+  [OS components § 7](capabilities/options-scoping/components.md), [OS capability § Screening](capabilities/options-scoping/capability.md)
+  and [OS trust § Screening](capabilities/options-scoping/trust.md) — the option judged as a kind of
+  action; place never reaches `constrain`, by a rule in words; a wider population never excludes;
+  the pathway rule; the distinct screen over the whole list.
+* **Update** (items 5, 13 and the amendment 4 items 10–12; R42, R43, R60–R68, R76–R90; owner: "Let's
+  move the estimates to above the evidence" · "Shall we just remove them?" · "Let's keep
+  evaluated/evaluations for now"): [OS capability § Output structure (Longlist)](capabilities/options-scoping/capability.md)
+  — the list header, no facets, the row's grey line and the evidence signal, the grid cell limit;
+  the card: the callout, How it works, What it would take (Policy Atlas's estimate; seven cells with
+  "Middle"), Evidence (the opener, Your outcomes, the place sentences, the Documents disclosure);
+  thin and empty cards; the vocabulary rule. *Tried on* as a line and a facet, the where-tried
+  groups, the examples block and the transferability line are gone.
+* **Update** (item 6; item 9, R13; owner: "using the baseline more to inform judgements … is
+  especially important"): [OS capability § Baseline](capabilities/options-scoping/capability.md) — the
+  baseline is the reference for every judgement after it; task 3 fetches full text for shortlisted
+  options.
+* **Update** (items 7, 12, 16; R90): [vocabulary.md](vocabulary.md) — reader grain, boundary,
+  consideration, preference, option profile, line, mark, authority label, setting, tried on and
+  measures as folded kinds, evidence signal, place sentence, describing document, also found as;
+  option search, intervention profile and where tried redefined.
+* **Update** (item 8): [decision sheet rows A9 and E4](../tasks/035-options-scoping/checks/decision-sheet.md).
+* **Update** (items 10–12, amendment 2; R34, R36–R38, R40, R43, R53, R58, R70; owner: "Yes these 5
+  kinds feel right." · "I think it is its own step." · "Why don't we just run profile before
+  constrain" · "Yes leave as is"): [OS components § 1, § 6, new § 6a, § 7 and the table](capabilities/options-scoping/components.md),
+  [OS capability § Plan, § Four kinds of constraint](capabilities/options-scoping/capability.md) and
+  [plan-as-object](system/plan-as-object.md) — the four kinds of statement; the aim and the
+  who-can-act question; `option_profile` as a spine component; ambition relative to the list; the
+  authority label.
+* **Update** (item 14; R44; owner: "we don't need 'a guess, not evidence', it sounds too
+  LLM-generated."): [OS trust § Reasoned guesses](capabilities/options-scoping/trust.md) — the label
+  sits on the block heading.
+* **Update** (item 15; R47; owner: "the guesses are useful for how the shortlist selects"):
+  [OS capability § Shortlist](capabilities/options-scoping/capability.md) — the task 3 principle for
+  the cut; rulings 12 and 19 reopened for the profile only.
+* **Update** (amendment 3 items; R54–R59, R64, R66, R67; owner: "is population the right concept"
+  · "that OECD rule feels weak" · "just because a document is published in one country, it doesn't
+  necessarily mean that's where the option was tried"): [OS components § 2–5, § 6, § 6a](capabilities/options-scoping/components.md)
+  and [vocabulary.md](vocabulary.md) — `unit` in place of population; the folding calls; where
+  tried in two levels from `study_country`; the dossier's records slot.
+* **Update** (AM12): [OS trust § Provenance labels](capabilities/options-scoping/trust.md) and
+  [OS capability § Depths and modes](capabilities/options-scoping/capability.md) — the *scoping pass*
+  label reads "at the longlist, abstracts only".
+
+## 2026-09-28
+* **Update**: [OS components](capabilities/options-scoping/components.md) and
+  [OS capability](capabilities/options-scoping/capability.md) — `theme` is a component of its own
+  after `constrain` (§ 7a): it groups the included options into themes; `longlist` no longer makes
+  themes. Owner ruling R28, task 046 contract; ADR 0040 decision 5. Wording accepted by the owner
+  2026-09-28 ("Looks good").
+
+## 2026-09-24
+Task 045 step-7 review (contract-verifier finding F1: D33 had removed the words from the card
+while the trust rule still required them). Contract: `docs/tasks/045-scoping-longlist/contract.md`.
+* **Update** (task 045, review F1; owner: "D33 wins, amend trust.md"):
+  [OS trust § The principle](capabilities/options-scoping/trust.md) and
+  [OS capability § Longlist](capabilities/options-scoping/capability.md) — the ambition tag stays a
+  tier-4 reasoning claim; the option card no longer carries the words "as described, not measured".
+* **Update** (task 045, review P1; owner: "If there are duplicate options, then shouldn't they be
+  merged instead of one being excluded? …" and "Fold into the kept option"):
+  [OS components § 7](capabilities/options-scoping/components.md) — a *distinct* breach merges the
+  duplicate into the kept option instead of excluding it.
+* **Update** (task 045, review deviation 46; owner: "Also allow empty reasons via the button"):
+  [OS components § 7](capabilities/options-scoping/components.md) — the user's exclusion never
+  requires a reason.
+
+## 2026-09-23
+Task 045 (the options-scoping longlist), contract § Spec changes, applied in its phase 8 with the
+owner's words quoted (item 10, the decision sheet, landed at plan approval). Contract:
+`docs/tasks/045-scoping-longlist/contract.md`.
+* **Update** (task 045, item 1; D19 accepted, D22 "Should be a default preference"):
+  [OS components § 1](capabilities/options-scoping/components.md) and
+  [plan-as-object § What a plan contains](system/plan-as-object.md) — the optional plan slot
+  *Options you already have in mind* (the user's words, a design proposed back, each an entrant with
+  its option search) and the default preference "Transferable to *Where*" on every scoping plan.
+* **Update** (task 045, item 2; D20, D21, D6, D25 — "Directly saying Z in the search scope may
+  constrain the results too much"; "let's go with option search"):
+  [OS components § 2–5](capabilities/options-scoping/components.md) and
+  [OS capability § Pipeline and gates](capabilities/options-scoping/capability.md) (Plan) — the
+  longlist intent is PICO-shaped without Where; Where enters nothing in retrieval and is shown as
+  *where tried*; setting is the optional S; an entrant's own search is the **option search**, a
+  child walk; "mini evidence search" stays the assessment-depth term.
+* **Update** (task 045, item 3; D3 owner naming, D4, D7 "free with the checklist", A15, D8, D11):
+  [OS components § 6](capabilities/options-scoping/components.md) (and the table, compositions,
+  § 0, § 2–5, interface ruling 1) and [OS capability](capabilities/options-scoping/capability.md)
+  — "abstract profile" → **intervention profile** and "intervention mention" →
+  **`intervention_profile_record`** in the living specs (not the frozen sources); suggest first
+  with the linked report as input; seeded assignment under `clamp(ceil(N/4), 8, 40)`; the
+  assignment reason and `design_feature_not_stated` flag on membership; the taxonomy version and
+  *none fits*; the 🟡 "unproven at option grain" closes on check 3; open question 5 closes.
+* **Update** (task 045, item 4; D9 "the ruling stands, deterministic check", D22):
+  [OS components § 7](capabilities/options-scoping/components.md),
+  [OS capability § Three kinds of constraint](capabilities/options-scoping/capability.md) and
+  [OS trust § Reasoned guesses](capabilities/options-scoping/trust.md) — "no in-scope evidence" is
+  computed from publication metadata; the transferability preference carries no guess.
+* **Update** (task 045, item 5; D12 "reduced grid in task 2", D15 "Assembled in task 2, on-demand
+  summary as a seam", D20): [OS capability § Output structure](capabilities/options-scoping/capability.md)
+  (Longlist) — the reduced grid before the proposal; the assembled option page and the on-demand
+  summary seam; the where-tried line and facet.
+* **Update** (task 045, item 6; A3 "origin stays the original source; inherited = created by the
+  inherit step", D23): [OS components § 0](capabilities/options-scoping/components.md) and
+  [data-model](system/data-model.md) § Corpus, § The findings layer, § The option entity, § Links
+  between tasks — inherited rows keep their origin; classification and appraisal read across
+  through one resolver; `intervention_profile_record`; the option tables; `task_link.option_id`
+  (unique per pair, noted for task 5 — A21); `capability_run.parent_capability_run_id`.
+* **Update** (task 045, item 7; D1, D13 "chat verbs in task 2, buttons as the second way", D14,
+  A2, A23, P4, P16a "card route stays 204"): [web-api](system/web-api.md) § Tasks, § Task Agent
+  turns, § Runs, § Check-ins, § Read models — the longlist routes, the longlist verbs, the two
+  confirm surfaces opening the longlist walk, `active_run` and `has_longlist`, `your_options` and
+  the default preference on the plan bodies, child walks on the run stream.
+* **Update** (task 045, item 8; D2 "start there, measure, I'll set it after"; "cap at 15, run the
+  live check at rapid"): [plan-as-object § Thoroughness](system/plan-as-object.md) — broad search
+  50 · 25 per backend (standard · rapid), option search 10 per backend, at most 15 option searches
+  per walk at width 4; the owner sets the final numbers after measurement.
+* **Update** (task 045, item 9; owner naming 2026-09-22): [vocabulary.md](vocabulary.md) — entrant,
+  option search, child walk, intervention profile, `intervention_profile_record`, where tried.
+* **Update** (task 045, item 11; D3, D24 "Yes, selection-free, record it as an edit to those
+  rows"): [ES components § 7](capabilities/evidence-search/components.md) — the third profile and
+  the selection-free path; § 0's inherited "abstract profiles" renamed; § 1 acquire unchanged.
+
+## 2026-09-17
+* **Update** (task 044, phase 8; owner ruling "Go with options 2 and 5, targets 20 and 10"): the
+  depth sets the baseline's acquisition target and proposed-section allowance —
+  [OS capability](capabilities/options-scoping/capability.md) § Output structure,
+  [OS components](capabilities/options-scoping/components.md) § 11 and
+  [plan-as-object](system/plan-as-object.md) § Thoroughness. Rapid: the same eight required sections,
+  no proposed sections, acquisition target 10 per search backend. Standard: eight plus up to two proposed, target 20
+  per backend (was one target of 25 per backend; "per backend" made explicit on 2026-09-18 — owner:
+  "Add per backend to the docs", after the 044 review stack found the four documents read as totals). A five-section rapid merge was built, measured (no shorter write: 168 s and
+  189 s against 183 s for seven) and reverted the same day on the owner's ruling. Re-revises the
+  2026-09-09 "one shape at every depth" line after the measured 4.3 to 7.5 minute baselines.
+
+## 2026-09-09
+* **Update** (task 044, deliverable 2): the abbreviation **EB → ES** across the
+  living specs, `docs/tasks/_templates/`, `docs/agentic-ops/` and code comments
+  (the four "EB handoff" citations of the frozen source keep their name; ADRs,
+  merged task docs, frozen sources and this log's past entries untouched);
+  the Task Agent code names in [web-api.md](system/web-api.md) and
+  `docs/knowledge/` content (`planning` → `task_agent`, `/planning-turns` →
+  `/task-agent-turns`, `planning_transcript` → `task_agent_transcript`).
+* **Update** (task 044, contract § Spec changes 7; plan-review P9):
+  [web-api.md](system/web-api.md) § Task Agent turns and § Check-ins — a
+  sorted, non-approving Task Agent turn is admitted while an Options scoping
+  walk is **paused** (question → the answer core; decision → the check-in
+  response transaction); the approving branch and `PATCH /plan` stay 409
+  `run_active` while a walk is running or paused. Owner ruling D9
+  (2026-09-09): the gate is answered in the Task Agent chat; routing hangs on
+  the turn, not the conversation kind. New: check-in kind `baseline_confirm`,
+  `POST /tasks/{id}/plan/confirm-baseline`, `POST /tasks` with `capability`,
+  `project_ids` and `from_task_ids` in one transaction.
+* **Update** (task 044, owner ruling 2026-09-09 "option 2"):
+  [prompting.md](system/prompting.md) / ES components § 9 — the synthesis
+  section writer is **template-keyed**: one writer, a shared core plus a
+  preamble per output kind (report · baseline; profile and scoping report
+  arrive with tasks 3 and 5); the Evidence search assembly is byte-identical
+  and pinned by a test.
+
+## 2026-09-09
+* **Update** (owner rulings at the task 044 contract interview; applied with the owner's words
+  quoted): [OS capability § Output structure](capabilities/options-scoping/capability.md) and
+  [OS components § 11](capabilities/options-scoping/components.md) — the baseline's eight sections are
+  required and the writer may add up to two problem-specific sections; one shape at every depth.
+  [plan-as-object § Thoroughness](system/plan-as-object.md) — the baseline is not graded by depth
+  (revises decision-sheet row E12's baseline part); one measured compute target; the latency
+  levers. [OS capability § Check-in points](capabilities/options-scoping/capability.md) and
+  [OS components](capabilities/options-scoping/components.md) — the two structural gates pass on
+  standing defaults in unattended mode, recorded and flagged; unattended is never the default.
+  [vocabulary.md](vocabulary.md) — the Task Agent's code names (`task_agent`).
+* **Update** (owner rulings at the task 044 contract re-approval, after the adversarial reviews):
+  [plan-as-object § Plan vs config](system/plan-as-object.md) — plan ↔ turn provenance is at
+  **version grain**, not field grain; [plan-as-object § Thoroughness](system/plan-as-object.md) —
+  the baseline is written sequentially, with a development-time feasibility check against a
+  parallel version; no parallel mode in the product without a revision of the durability contract.
+
+## 2026-09-09
+* **Update**: Owner rulings on the sixteen pre-task-1 rows of the options-scoping decision sheet
+  (`docs/tasks/035-options-scoping/checks/decision-sheet.md`), decided one at a time and applied
+  with the ruling quoted. [data-model](system/data-model.md): a generic task-to-task **`task_link`**
+  (many-to-many, same project only, no purpose column; `inherit` reads across a link and copies
+  nothing beyond the receiving task's own document rows and screening; archive-not-delete for linked
+  tasks); inherited documents need no column (inherited = created by the inherit run); linked
+  findings read across the link and reused piecemeal, memo unchanged; document identity across
+  snapshots deferred to an Evidence search slice (`docs/deferred.md`); `setting` generalised to where
+  the target unit experiences the intervention; a stub-page ingest defect noted (issue #74).
+  [plan-as-object](system/plan-as-object.md): "face" retired ("where we search" / "what may be cited
+  as support"); the **evidence restriction** of OS ruling 23 is the existing search directive's
+  filters at retrieval; a **Your context** plan section (present fact / commitment, verbatim words,
+  turn provenance, attribution by user id, an entry may be flagged "test this as a condition");
+  **Where** defaults to the United Kingdom and setting is an optional scope-shaped constraint;
+  several intent records per plan; time managed by design targets not run-time cut-offs (baseline
+  ≈ 2 min rapid / 5 min standard), no small reading cap, compute and waiting time stated separately,
+  no rapid number promised. [provenance-grounding](system/provenance-grounding.md): the retrieved
+  cell reads existing source and finding fields (D3 folded into C3). [OS components](capabilities/options-scoping/components.md),
+  [OS capability](capabilities/options-scoping/capability.md), [OS trust](capabilities/options-scoping/trust.md)
+  and [EB components](capabilities/evidence-search/components.md) § 0 aligned. Frozen sources untouched.
 ## 2026-10-09
 * **Update**: Evidence search [components.md](capabilities/evidence-search/components.md) §1 acquire
   and §2 screen describe the task 051 build ([ADR 0038](../adr/0038-single-pass-search-and-adaptive-screen.md)):

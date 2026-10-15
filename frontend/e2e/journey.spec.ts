@@ -16,7 +16,7 @@ import {
  * step drives the scripted fixture task + SSE narrative in `src/mock/`.
  * The mock task starts with no run — the journey begins at the plan pane
  * and starts the analysis itself, matching the "resumed session" fixture (a
- * durable planning transcript already formed a ready plan; see
+ * durable task_agent transcript already formed a ready plan; see
  * `src/mock/fixtures.ts`). Selectors favour roles/labels/text over CSS — the
  * same accessible surface a screen-reader or keyboard user would rely on.
  */
@@ -88,7 +88,7 @@ test.describe("mock task-lifecycle journey", () => {
     // chat), and it is what the main view shows.
     await chats.getByRole("button", { name: "Show chats" }).click();
     await expect(chats.getByRole("button").nth(2)).toHaveAccessibleName("Task Agent");
-    await expect(page.getByRole("region", { name: "Planning conversation" })).toHaveCount(1);
+    await expect(page.getByRole("region", { name: "Task Agent conversation" })).toHaveCount(1);
 
     // (c) Rename/archive now lives in the header's "Task settings"
     // popover: inline rename (cancel restores the original, then a real
@@ -134,7 +134,7 @@ test.describe("mock task-lifecycle journey", () => {
     }
 
     // (e) Pre-run, the workspace is a centred single-column chat (028 strand
-    // 3): no planning rail, no two-pane split — the conversation itself is
+    // 3): no task_agent rail, no two-pane split — the conversation itself is
     // the surface. The durable seed transcript renders as structured part
     // cards rather than plain reply bubbles: turn 1's question part shows
     // the ✓ confirm recorded via turn 2's canned marker message — the raw
@@ -266,13 +266,13 @@ test.describe("mock task-lifecycle journey", () => {
     // chat yet the launcher opens the Task Agent itself (nothing is created),
     // its header names it, and the header's list toggle shows the same list
     // with the Task Agent pinned first (038 V8, invariant I8).
-    await expect(overlay.getByRole("region", { name: "Planning conversation" })).toBeVisible();
+    await expect(overlay.getByRole("region", { name: "Task Agent conversation" })).toBeVisible();
     await expect(overlay.getByText("Task Agent").first()).toBeVisible();
     await overlay.getByRole("button", { name: "Chats" }).click();
     const overlayList = overlay.getByRole("region", { name: "Chats" });
     await expect(overlayList.getByRole("button").first()).toHaveAccessibleName("Task Agent");
     await overlayList.getByRole("button", { name: "Task Agent" }).click();
-    await expect(overlay.getByRole("region", { name: "Planning conversation" })).toBeVisible();
+    await expect(overlay.getByRole("region", { name: "Task Agent conversation" })).toBeVisible();
     await overlay.getByRole("button", { name: "Close sidebar" }).click();
     await sourcesSubnav.getByRole("link", { name: "Themes" }).click();
     await sourcesSubnav.getByRole("link", { name: "Findings" }).click();
@@ -406,7 +406,7 @@ test.describe("mock task-lifecycle journey", () => {
       expect(
         await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
       ).toBe(true);
-      await expect(page.getByRole("button", { name: "Collapse the planning rail" })).toHaveCount(0);
+      await expect(page.getByRole("button", { name: "Collapse the Task Agent rail" })).toHaveCount(0);
     }
   });
 
@@ -538,8 +538,8 @@ test.describe("mock task-lifecycle journey", () => {
     await expect(library.getByRole("button", { name: "Restore" })).toBeVisible();
 
     // The Agent tab on the completed task: the Task Agent is still listed
-    // (the run closed the planning lineage), New chat opens a draft in the
-    // main view, and the Task Agent brings the planning pane back.
+    // (the run closed the task_agent lineage), New chat opens a draft in the
+    // main view, and the Task Agent brings the task_agent pane back.
     await page.getByRole("link", { name: /^Agent/ }).click();
     const chats = page.getByRole("complementary", { name: "Chats" });
     await chats.getByRole("button", { name: "Show chats" }).click();
@@ -547,10 +547,10 @@ test.describe("mock task-lifecycle journey", () => {
     await chats.getByRole("button", { name: "New chat" }).first().click();
     await expect(page).toHaveURL(new RegExp(`/tasks/${MOCK_TASK_ID}\\?chat=new`));
     await expect(page.getByRole("region", { name: "Chat" })).toBeVisible();
-    await expect(page.getByRole("region", { name: "Planning conversation" })).toHaveCount(0);
+    await expect(page.getByRole("region", { name: "Task Agent conversation" })).toHaveCount(0);
     await chats.getByRole("button", { name: "Task Agent" }).click();
     await expect(page).toHaveURL(new RegExp(`/tasks/${MOCK_TASK_ID}$`));
-    await expect(page.getByRole("region", { name: "Planning conversation" })).toBeVisible();
+    await expect(page.getByRole("region", { name: "Task Agent conversation" })).toBeVisible();
   });
 
   // --- Two regressions this slice introduced, found while updating this
@@ -587,6 +587,6 @@ test.describe("mock task-lifecycle journey", () => {
     await expect(page.getByRole("region", { name: "Analysis run" })).toBeVisible({
       timeout: 15_000,
     });
-    await expect(page.getByRole("button", { name: "Collapse the planning rail" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Collapse the Task Agent rail" })).toHaveCount(0);
   });
 });
