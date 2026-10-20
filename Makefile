@@ -46,7 +46,8 @@ setup:
 #     verify`;
 #   - the tty passes through, so the environment guard's typed day-zero
 #     confirmation still reaches a human.
-# Usage: make user-create ENV=staging EMAIL=a@b.org NAME="A Name" ORG="Org"
+# Usage: make user-create ENV=staging EMAIL=a@b.org NAME="A Name" [ORG="Org"]
+# Omit ORG to create the account in no organisation.
 # Optional on every target: OPERATOR="ticket-123" (an annotation; the STS ARN
 # is logged regardless).
 # The wrappers forward through scripts/ops_run.sh to the real CLI
@@ -61,7 +62,7 @@ OPS_COMMON = $(if $(OPERATOR),--operator "$(OPERATOR)")
 org-create:
 	@$(call ops-require,ENV NAME) scripts/ops_run.sh $(ENV) $(OPS_COMMON) org create --name "$(NAME)"
 user-create:
-	@$(call ops-require,ENV EMAIL NAME ORG) scripts/ops_run.sh $(ENV) $(OPS_COMMON) user create --email "$(EMAIL)" --display-name "$(NAME)" --org "$(ORG)" $(if $(INVITE),--invite "$(INVITE)")
+	@$(call ops-require,ENV EMAIL NAME) scripts/ops_run.sh $(ENV) $(OPS_COMMON) user create --email "$(EMAIL)" --display-name "$(NAME)" $(if $(ORG),--org "$(ORG)") $(if $(INVITE),--invite "$(INVITE)")
 user-enrol:
 	@$(call ops-require,ENV EMAIL NAME ORG) scripts/ops_run.sh $(ENV) $(OPS_COMMON) user enrol --email "$(EMAIL)" --display-name "$(NAME)" --org "$(ORG)"
 user-resync:

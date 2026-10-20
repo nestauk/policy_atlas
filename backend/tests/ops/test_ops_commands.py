@@ -61,24 +61,21 @@ def _org(conn: Connection, name: str = "Org") -> commands.Organisation:
 
 def _task_row(conn: Connection, task_id: uuid.UUID) -> Any:
     return conn.execute(
-        select(task.c.org_id, task.c.visibility, task.c.updated_at).where(
-            task.c.task_id == task_id
-        )
+        select(task.c.org_id, task.c.visibility, task.c.updated_at).where(task.c.task_id == task_id)
     ).one()
 
 
 def _project_row(conn: Connection, project_id: uuid.UUID) -> Any:
     return conn.execute(
-        select(project.c.org_id, project.c.visibility).where(
-            project.c.project_id == project_id
-        )
+        select(project.c.org_id, project.c.visibility).where(project.c.project_id == project_id)
     ).one()
 
 
 def _user_row(conn: Connection, sub: str) -> Any:
     return conn.execute(
-        select(app_user.c.org_id, app_user.c.email, app_user.c.is_admin, app_user.c.display_name)
-        .where(app_user.c.user_id == sub)
+        select(
+            app_user.c.org_id, app_user.c.email, app_user.c.is_admin, app_user.c.display_name
+        ).where(app_user.c.user_id == sub)
     ).one_or_none()
 
 
@@ -89,9 +86,7 @@ def test_org_create_inserts_the_organisation(conn: Connection) -> None:
     name = f"Nesta {uuid.uuid4()}"
     created = commands.create_organisation(conn, name=name)
     stored = conn.execute(
-        select(organisation.c.name).where(
-            organisation.c.org_id == created.org_id
-        )
+        select(organisation.c.name).where(organisation.c.org_id == created.org_id)
     ).scalar_one()
     assert stored == name
     assert name in created.summary()
@@ -314,6 +309,71 @@ def test_user_create_turns_a_cognito_refusal_into_a_refusal_not_a_traceback(
     assert "user enrol" in message
 
 
+def test_user_create_without_an_org_stores_the_name_and_the_address(
+    conn: Connection,
+) -> None:
+    """Omitting the organisation leaves a findable account and no organisation.
+
+    The address is stored so an operator can look the person up. The support
+    role still requires an organisation: ``admin grant`` refuses this row.
+    """
+    email = unique_email("bare")
+    sub = fresh_sub()
+    with cognito() as (client, stubber):
+        expect_lookup(stubber, email=email, sub=None)
+        expect_create(stubber, email=email, sub=sub)
+        created = commands.create_user(
+            conn, client, pool_id=POOL_ID, email=email, display_name="Bare Person"
+        )
+        stubber.assert_no_pending_responses()
+    assert isinstance(created, commands.CreatedAccount)
+    assert created.created is True
+    assert "not in an organisation" in created.summary()
+    assert "temporary password" not in created.summary()
+    row = _user_row(conn, sub)
+    assert row is not None
+    assert (row.org_id, row.email, row.is_admin, row.display_name) == (
+        None,
+        email,
+        False,
+        "Bare Person",
+    )
+    with pytest.raises(OpsError, match="no organisation"):
+        commands.set_admin(conn, email=email, grant=True)
+    assert _user_row(conn, sub).is_admin is False
+
+
+def test_user_create_without_an_org_records_an_account_that_already_exists(
+    conn: Connection,
+) -> None:
+    """A kept Cognito account can be recorded by re-running the same command."""
+    email = unique_email("kept")
+    sub = fresh_sub()
+    with cognito() as (client, stubber):
+        expect_lookup(stubber, email=email, sub=sub)
+        created = commands.create_user(
+            conn, client, pool_id=POOL_ID, email=email, display_name="Kept Person"
+        )
+        stubber.assert_no_pending_responses()
+    assert created.created is False
+    assert "recorded" in created.summary()
+    row = _user_row(conn, sub)
+    assert (row.org_id, row.email, row.display_name) == (None, email, "Kept Person")
+
+
+def test_user_create_without_an_org_refuses_someone_already_enrolled(conn: Connection) -> None:
+    org = _org(conn)
+    email = unique_email("placed")
+    sub = fresh_sub()
+    ops_enrol(conn, user_id=sub, org_id=org.org_id, email=email, display_name="Placed")
+    with cognito() as (client, stubber):
+        expect_lookup(stubber, email=email, sub=sub)
+        with pytest.raises(OpsError, match="already in an organisation"):
+            commands.create_user(conn, client, pool_id=POOL_ID, email=email, display_name="Placed")
+        stubber.assert_no_pending_responses()
+    assert _user_row(conn, sub).org_id == org.org_id
+
+
 # --- user enrol --------------------------------------------------------------
 
 
@@ -374,9 +434,7 @@ def test_user_enrol_severs_memberships_linking_their_rows_to_colleagues_rows(
             project_id=colleagues_project, task_id=movers_task, created_at=now()
         )
     )
-    own_link = make_task(
-        conn, owner_user_id=mover, visibility="org", project_id=movers_project
-    )
+    own_link = make_task(conn, owner_user_id=mover, visibility="org", project_id=movers_project)
 
     with cognito() as (client, stubber):
         expect_lookup(stubber, email=email, sub=mover)
@@ -387,8 +445,7 @@ def test_user_enrol_severs_memberships_linking_their_rows_to_colleagues_rows(
     assert enrolment.memberships_severed == 2
     assert "cut 2 membership(s)" in enrolment.summary()
     remaining = {
-        (row.project_id, row.task_id)
-        for row in conn.execute(select(project_membership)).all()
+        (row.project_id, row.task_id) for row in conn.execute(select(project_membership)).all()
     }
     assert (movers_project, own_link) in remaining
     assert (movers_project, colleagues_task) not in remaining
@@ -449,13 +506,9 @@ def test_re_enrolment_into_a_second_organisation_re_privatises_a_shared_row(
 
     with cognito() as (client, stubber):
         expect_lookup(stubber, email=email, sub=sub)
-        commands.enrol_user(
-            conn, client, pool_id=POOL_ID, email=email, display_name="R", org=first
-        )
+        commands.enrol_user(conn, client, pool_id=POOL_ID, email=email, display_name="R", org=first)
         # The person opts the row back into their organisation, deliberately.
-        conn.execute(
-            update(task).where(task.c.task_id == task_id).values(visibility="org")
-        )
+        conn.execute(update(task).where(task.c.task_id == task_id).values(visibility="org"))
         expect_lookup(stubber, email=email, sub=sub)
         again = commands.enrol_user(
             conn, client, pool_id=POOL_ID, email=email, display_name="R", org=second
@@ -490,9 +543,7 @@ def test_user_enrol_never_touches_the_support_role(conn: Connection) -> None:
     ops_enrol(conn, user_id=sub, org_id=None, email=email, is_admin=True)
     with cognito() as (client, stubber):
         expect_lookup(stubber, email=email, sub=sub)
-        commands.enrol_user(
-            conn, client, pool_id=POOL_ID, email=email, display_name="A", org=org
-        )
+        commands.enrol_user(conn, client, pool_id=POOL_ID, email=email, display_name="A", org=org)
     assert _user_row(conn, sub).is_admin is True
 
 
@@ -547,12 +598,9 @@ def test_user_resync_refuses_a_de_enrolled_row_rather_than_restoring_its_address
 ) -> None:
     """Rubric 27's interlock, from the side that reverses it.
 
-    De-enrolment clears ``email`` and ``admin grant`` resolves *by* address:
-    that pairing is the whole guard. ``resync`` writing the address back onto a
-    de-enrolled row restores the selector, so the guard is defeated by two
-    commands neither of which looks wrong on its own. The row keeps its cleared
-    address, and the operator is sent to ``user enrol`` — the only command that
-    also names the organisation the address is for.
+    De-enrolment keeps the address and clears the organisation. ``resync`` will
+    not rewrite that address until the person is enrolled again, and the
+    operator is sent to ``user enrol``.
     """
     org = _org(conn)
     sub = fresh_sub()
@@ -565,7 +613,7 @@ def test_user_resync_refuses_a_de_enrolled_row_rather_than_restoring_its_address
         with pytest.raises(OpsError, match="user enrol"):
             commands.resync_user(conn, client, pool_id=POOL_ID, email=email)
 
-    assert _user_row(conn, sub).email is None
+    assert _user_row(conn, sub).email == email
 
 
 def test_resync_then_grant_cannot_reinstate_an_administrator_for_an_offboarded_person(
@@ -574,11 +622,9 @@ def test_resync_then_grant_cannot_reinstate_an_administrator_for_an_offboarded_p
     """The two-command sequence, run as a sequence — which is how it would happen.
 
     An offboarded person, a support ticket, and an operator who reaches for
-    ``resync`` because ``admin grant`` said it could not find the address. Both
-    halves refuse: the first because the row has no organisation, and the second
-    because the address is still cleared. The role is not resurrected either way,
-    and the remediation both messages name is the one that is actually correct —
-    re-enrol the person first, deliberately.
+    ``resync`` and then ``admin grant``. Both refuse because the row has no
+    organisation. The address is still there, and the role is not resurrected.
+    Re-enrol the person first.
     """
     org = _org(conn)
     sub = fresh_sub()
@@ -590,11 +636,11 @@ def test_resync_then_grant_cannot_reinstate_an_administrator_for_an_offboarded_p
         expect_lookup(stubber, email=email, sub=sub)
         with pytest.raises(OpsError, match="user enrol"):
             commands.resync_user(conn, client, pool_id=POOL_ID, email=email)
-    with pytest.raises(OpsError, match="de-enrolled"):
+    with pytest.raises(OpsError, match="no organisation"):
         commands.set_admin(conn, email=email, grant=True)
 
     row = _user_row(conn, sub)
-    assert (row.email, row.org_id, row.is_admin) == (None, None, False)
+    assert (row.email, row.org_id, row.is_admin) == (email, None, False)
 
 
 # --- user reissue ------------------------------------------------------------
@@ -607,9 +653,7 @@ def test_user_reissue_mints_a_non_permanent_password_for_a_never_signed_in_accou
         expect_status_lookup(stubber, email=email, sub=sub, status="FORCE_CHANGE_PASSWORD")
         expect_reissue(stubber, sub=sub)
         with capture_logs() as logged:
-            reissue = commands.reissue_temporary_password(
-                client, pool_id=POOL_ID, email=email
-            )
+            reissue = commands.reissue_temporary_password(client, pool_id=POOL_ID, email=email)
         stubber.assert_no_pending_responses()
 
     minted = reissue.temporary_password
@@ -676,7 +720,7 @@ def test_de_enrol_clears_the_organisation_on_every_row_they_own(conn: Connection
     assert (result.tasks_cleared, result.projects_cleared) == (1, 1)
     assert result.admin_revoked is True
     row = _user_row(conn, sub)
-    assert (row.org_id, row.email, row.is_admin) == (None, None, False)
+    assert (row.org_id, row.email, row.is_admin) == (None, email, False)
     # visibility is untouched: the NULL-org rule already hides these rows.
     assert _task_row(conn, task_id)[:2] == (None, "org")
     assert _project_row(conn, project_id) == (None, "org")
@@ -687,8 +731,9 @@ def test_de_enrol_refuses_a_second_time(conn: Connection) -> None:
     sub = fresh_sub()
     ops_enrol(conn, user_id=sub, org_id=org.org_id, email=unique_email("once"))
     commands.de_enrol_user(conn, sub=sub)
-    with pytest.raises(OpsError, match="already de-enrolled"):
+    with pytest.raises(OpsError, match="no organisation"):
         commands.de_enrol_user(conn, sub=sub)
+    assert _user_row(conn, sub).email is not None
 
 
 def test_de_enrol_refuses_an_ambiguous_address(conn: Connection) -> None:
@@ -789,9 +834,7 @@ def test_rows_assign_of_an_org_visible_project_across_organisations_arrives_priv
     first = _org(conn, "First")
     second = _org(conn, "Second")
     owner = fresh_sub()
-    project_id = make_project(
-        conn, owner_user_id=owner, org_id=first.org_id, visibility="org"
-    )
+    project_id = make_project(conn, owner_user_id=owner, org_id=first.org_id, visibility="org")
     member = make_task(
         conn,
         owner_user_id=owner,
@@ -818,9 +861,7 @@ def test_rows_assign_into_the_organisation_a_row_is_already_in_keeps_its_visibil
     """
     org = _org(conn)
     owner = fresh_sub()
-    project_id = make_project(
-        conn, owner_user_id=owner, org_id=org.org_id, visibility="org"
-    )
+    project_id = make_project(conn, owner_user_id=owner, org_id=org.org_id, visibility="org")
     member = make_task(
         conn,
         owner_user_id=owner,
@@ -892,9 +933,9 @@ def test_de_enrolling_an_administrator_carries_a_revoke_to_trace(conn: Connectio
     admin_leaver = commands.de_enrol_user(conn, email=admin_email)
     plain_leaver = commands.de_enrol_user(conn, email=plain_email)
 
-    assert [
-        (change.subject, change.direction) for change in admin_leaver.admin_changes()
-    ] == [(admin_sub, "revoke")]
+    assert [(change.subject, change.direction) for change in admin_leaver.admin_changes()] == [
+        (admin_sub, "revoke")
+    ]
     # Nothing to record when nothing changed: a de-enrolment is not a privilege
     # change on its own.
     assert plain_leaver.admin_changes() == ()
@@ -910,17 +951,16 @@ def test_admin_grant_refuses_when_the_role_is_already_held(conn: Connection) -> 
 
 
 def test_admin_grant_refuses_an_address_no_row_carries(conn: Connection) -> None:
-    with pytest.raises(OpsError, match="de-enrolled"):
+    with pytest.raises(OpsError, match="no user with the address"):
         commands.set_admin(conn, email=unique_email("nobody"), grant=True)
 
 
 def test_admin_grant_refuses_a_subject_in_no_organisation(conn: Connection) -> None:
-    """Defence in depth behind ``user resync``'s refusal (the interlock's other end).
+    """The support role requires an organisation, whichever selector finds the row.
 
-    Only ``user enrol --org`` writes an address, so a row carrying one with no
-    organisation should not exist. If one ever does — a hand-written row, a
-    future command, a bug — it is not a row that gets the support role, and
-    ``--sub`` must not be a way around that either.
+    ``user create`` without an organisation stores an address, and de-enrolment
+    keeps it. Neither shape gets the support role, and ``--sub`` is not a way
+    around that.
     """
     sub = fresh_sub()
     email = unique_email("orphaned")
@@ -983,8 +1023,8 @@ def test_a_de_enrolment_stops_a_concurrent_operator_resurrecting_admin(
 
     Operator A de-enrols and commits. Operator B — who resolved the same person
     by address a moment earlier — then runs ``admin grant``. B's ``FOR UPDATE``
-    read finds no row carrying that address, because de-enrolment cleared it,
-    and refuses. The support role is not resurrected.
+    read finds the row, sees no organisation, and refuses. The support role is
+    not resurrected.
     """
     email = unique_email("race")
     sub = fresh_sub()
@@ -995,13 +1035,14 @@ def test_a_de_enrolment_stops_a_concurrent_operator_resurrecting_admin(
     with seeded(engine) as operator_a:
         commands.de_enrol_user(operator_a, email=email)
 
-    with seeded(engine) as operator_b, pytest.raises(OpsError, match="de-enrolled"):
+    with seeded(engine) as operator_b, pytest.raises(OpsError, match="no organisation"):
         commands.set_admin(operator_b, email=email, grant=True)
 
     with seeded(engine) as check:
-        assert check.execute(
-            select(app_user.c.is_admin).where(app_user.c.user_id == sub)
-        ).scalar_one() is False
+        assert (
+            check.execute(select(app_user.c.is_admin).where(app_user.c.user_id == sub)).scalar_one()
+            is False
+        )
 
 
 def test_admin_grant_takes_a_real_row_lock_by_address_and_by_sub(engine: Engine) -> None:
