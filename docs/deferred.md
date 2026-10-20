@@ -2232,10 +2232,10 @@ omissions.
   lever**, and it carries two consequences whoever offboards a real user must know:
   **(1) it does not stop them signing in** — the Cognito account survives, so an
   offboarded person still authenticates and still sees their own work; disabling or
-  deleting the account is a Cognito operation done outside this tooling; **(2) erasure is
-  two-part** — de-enrolment clears `org_id`, `email` and `is_admin` from
-  the application database (`display_name` is NOT NULL and stays), but the address in
-  Cognito is untouched, so a genuine erasure
+  deleting the account is a Cognito operation done outside this tooling;   **(2) erasure is
+  two-part** — de-enrolment clears `org_id` and `is_admin` from the application
+  database and keeps `email` and `display_name` so the person stays findable.
+  The address in Cognito is untouched either way, so a genuine erasure
   request needs the Cognito side handled separately.
 - **Three standing discrepancies in the published privacy notice** (escalated by 033,
   2026-08-24; the owner ruled that the slice does not edit legal copy, so these are open

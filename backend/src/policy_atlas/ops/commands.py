@@ -23,10 +23,12 @@ all — which is also why operator IAM needs nothing beyond ``ListUsers``,
 *Compare and refuse under the row lock.* Every write to ``app_user`` reads the
 row ``FOR UPDATE`` first and refuses when the state is not what the operator was
 acting on. The interlock the contract names — "operator B can resurrect admin on
-a row operator A just de-enrolled" — falls out of one fact: **de-enrolment
-clears ``email``**, and ``admin grant`` resolves its subject *by* address. So an
-admin grant that raced a de-enrolment finds no row to grant and refuses, in
-either commit order. See :func:`set_admin`.
+a row operator A just de-enrolled" — is the organisation check on
+:func:`set_admin`: a grant refuses a subject in no organisation. De-enrolment
+keeps the stored address, so the person stays findable, and clears ``is_admin``.
+A grant that races a de-enrolment finds the row and refuses; in the other order
+the grant lands and the de-enrolment clears the role. Neither order leaves an
+administrator behind.
 
 *Row moves are set operations, never walks.* ``UPDATE ... WHERE owner_user_id =
 :sub`` in one statement per table. Colleague assignment (owner ruling
@@ -179,11 +181,43 @@ class Enrolment(Record):
                 "rows to colleagues' rows left behind"
             )
         if self.temporary_password is not None:
-            line += (
-                f"\ntemporary password (single-use, 30-day expiry, they set their "
-                f"own at first sign-in): {self.temporary_password}"
-            )
+            line += _temporary_password_line(self.temporary_password)
         return line
+
+
+@dataclass(frozen=True)
+class CreatedAccount(Record):
+    """A Cognito account recorded with no organisation.
+
+    Attributes:
+        user_id: The Cognito subject.
+        email: The address stored on ``app_user``. An organisation is not
+            required for the address to be stored.
+        created: Whether this call created the Cognito account. False when the
+            account already existed and this call only wrote the identity row.
+        temporary_password: Set only by ``user create --invite manual``.
+    """
+
+    user_id: str
+    email: str
+    created: bool
+    temporary_password: str | None = None
+
+    def summary(self) -> str:
+        """Render the unenrolled-account line."""
+        verb = "created" if self.created else "recorded"
+        line = f"{verb} {self.email} ({self.user_id}); not in an organisation"
+        if self.temporary_password is not None:
+            line += _temporary_password_line(self.temporary_password)
+        return line
+
+
+def _temporary_password_line(password: str) -> str:
+    """The one-time credential sentence shared by the create summaries."""
+    return (
+        "\ntemporary password (single-use, 30-day expiry, they set their "
+        f"own at first sign-in): {password}"
+    )
 
 
 @dataclass(frozen=True)
@@ -204,8 +238,7 @@ class DeEnrolment(Record):
         who = self.email or self.user_id
         admin = "; support role revoked" if self.admin_revoked else ""
         severed = (
-            f"; cut {self.memberships_severed} membership(s) linking their "
-            "rows to colleagues' rows"
+            f"; cut {self.memberships_severed} membership(s) linking their rows to colleagues' rows"
             if self.memberships_severed
             else ""
         )
@@ -354,9 +387,7 @@ def create_organisation(conn: Connection, *, name: str) -> Organisation:
         raise OpsError(f"an organisation named {name!r} already exists ({existing})")
     org_id = uuid.uuid4()
     try:
-        conn.execute(
-            insert(organisation).values(org_id=org_id, name=name, created_at=_now())
-        )
+        conn.execute(insert(organisation).values(org_id=org_id, name=name, created_at=_now()))
     except IntegrityError as error:  # a second operator won the race to the name
         raise OpsError(f"an organisation named {name!r} already exists") from error
     return Organisation(org_id=org_id, name=name)
@@ -379,9 +410,7 @@ def resolve_organisation(conn: Connection, token: str) -> Organisation:
         org_id = uuid.UUID(token)
     except ValueError:
         row = conn.execute(
-            select(organisation.c.org_id, organisation.c.name).where(
-                organisation.c.name == token
-            )
+            select(organisation.c.org_id, organisation.c.name).where(organisation.c.name == token)
         ).one_or_none()
         if row is None:
             raise OpsError(
@@ -416,9 +445,7 @@ def _mint_temporary_password() -> str:
     chars = [secrets.choice(pool) for pool in pools]
     chars += [secrets.choice(everything) for _ in range(16)]
     # secrets-driven order, so the guaranteed classes are not positionally fixed.
-    return "".join(
-        chars.pop(secrets.randbelow(len(chars))) for _ in range(len(chars))
-    )
+    return "".join(chars.pop(secrets.randbelow(len(chars))) for _ in range(len(chars)))
 
 
 def create_user(
@@ -428,10 +455,10 @@ def create_user(
     pool_id: str,
     email: str,
     display_name: str,
-    org: Organisation,
+    org: Organisation | None = None,
     invite: str = "email",
-) -> Enrolment:
-    """Create a Cognito account, then enrol it.
+) -> Enrolment | CreatedAccount:
+    """Create a Cognito account, and enrol it when an organisation is named.
 
     **Cognito first, because its ``sub`` is the key** (contract § 9) — there is
     nothing to write in the database until the account exists. That ordering
@@ -462,27 +489,40 @@ def create_user(
         pool_id: The verified user pool.
         email: The new account's address; also its sign-in identifier.
         display_name: Required, and never the email (contract § 3b).
-        org: Where to enrol them.
+        org: Where to enrol them. Omit it to leave them in no organisation.
         invite: ``email`` or ``manual`` (validated by the parser).
 
     Returns:
-        The enrolment (zero rows moved — a new account owns nothing yet),
-        carrying the minted temporary password in ``manual`` mode.
+        The enrolment when ``org`` is given (zero rows moved — a new account
+        owns nothing yet), or a :class:`CreatedAccount` when it is not. Either
+        carries the minted temporary password in ``manual`` mode.
 
     Raises:
-        OpsError: If the address already exists in the pool, if Cognito refuses
-            the creation, or if the database write fails after the account was
-            created — in ``manual`` mode that message carries the minted
-            password, because the kept account has it and no email was sent.
+        OpsError: If the address already exists and an organisation was named,
+            if an existing account is already enrolled when none was named, if
+            Cognito refuses the creation, or if the database write fails after
+            the account was created — in ``manual`` mode that message carries
+            the minted password, because the kept account has it and no email
+            was sent.
     """
     _require_filter_safe(email)
-    if _find_sub_by_email(cognito, pool_id=pool_id, email=email) is not None:
+    existing_sub = _find_sub_by_email(cognito, pool_id=pool_id, email=email)
+    if existing_sub is not None and org is not None:
         raise OpsError(
             f"{email} already exists in the pool — use "
             f"`user enrol --email {email} --org {org.name!r} "
             f"--display-name {display_name!r}`"
         )
     minted: str | None = None
+    if existing_sub is not None:
+        return _finish_unenrolled(
+            conn,
+            sub=existing_sub,
+            email=email,
+            display_name=display_name,
+            temporary_password=None,
+            created_in_cognito=False,
+        )
     request: dict[str, object] = {
         "UserPoolId": pool_id,
         "Username": email,
@@ -506,6 +546,12 @@ def create_user(
         # `UsernameExistsException`, and an operator is owed a refusal naming
         # the remediation rather than a botocore traceback.
         code = error.response.get("Error", {}).get("Code", "") or "ClientError"
+        if org is None:
+            raise OpsError(
+                f"Cognito refused to create {email} ({code}). Nothing was written. If the "
+                f"account already exists, re-run `user create --email {email} "
+                f"--display-name {display_name!r}` with no `--org`."
+            ) from error
         raise OpsError(
             f"Cognito refused to create {email} ({code}). Nothing was written. If the "
             f"account already exists, enrol it: `user enrol --email {email} "
@@ -513,10 +559,25 @@ def create_user(
         ) from error
     sub = _sub_of(response["User"].get("Attributes", []))
     if not sub:
+        if org is None:
+            raise OpsError(
+                f"Cognito created {email} but returned no `sub` attribute. The account "
+                f"exists; re-run `user create --email {email} --display-name "
+                f"{display_name!r}` with no `--org`."
+            )
         raise OpsError(
             f"Cognito created {email} but returned no `sub` attribute. The account "
             f"exists; enrol it with `user enrol --email {email} "
             f"--org {org.name!r} --display-name {display_name!r}`."
+        )
+    if org is None:
+        return _finish_unenrolled(
+            conn,
+            sub=sub,
+            email=email,
+            display_name=display_name,
+            temporary_password=minted,
+            created_in_cognito=True,
         )
     try:
         enrolment = _enrol(
@@ -531,8 +592,9 @@ def create_user(
         # account carries it, no email was ever sent, and `user create` refuses
         # existing addresses — losing it here would strand the account.
         kept_password = (
-            f" Its single-use temporary password is: {minted} (printed once, "
-            f"30-day expiry)." if minted is not None else ""
+            f" Its single-use temporary password is: {minted} (printed once, 30-day expiry)."
+            if minted is not None
+            else ""
         )
         raise OpsError(
             f"the Cognito account for {email} was created and has been KEPT, but the "
@@ -541,6 +603,101 @@ def create_user(
             f"--org {org.name!r} --display-name {display_name!r}`"
         ) from error
     return replace(enrolment, temporary_password=minted)
+
+
+def _finish_unenrolled(
+    conn: Connection,
+    *,
+    sub: str,
+    email: str,
+    display_name: str,
+    temporary_password: str | None,
+    created_in_cognito: bool,
+) -> CreatedAccount:
+    """Record an account with no organisation, keeping Cognito on a write failure.
+
+    Args:
+        conn: Open connection inside the command's transaction.
+        sub: The Cognito subject.
+        email: The address, for the operator line only. Not stored.
+        display_name: Written onto the unenrolled row.
+        temporary_password: Minted this call, if any. A failure message
+            includes it when this call created the Cognito account.
+        created_in_cognito: Whether this call called ``AdminCreateUser``.
+
+    Returns:
+        The unenrolled account.
+
+    Raises:
+        OpsError: If the subject is already enrolled, or the database write fails.
+    """
+    try:
+        _record_unenrolled(conn, sub=sub, email=email, display_name=display_name)
+    except OpsError:
+        raise
+    except Exception as error:
+        if not created_in_cognito:
+            raise OpsError(
+                f"the database write for {email} failed ({error}). Nothing was written."
+            ) from error
+        kept_password = (
+            f" Its single-use temporary password is: {temporary_password} (printed once, "
+            f"30-day expiry)."
+            if temporary_password is not None
+            else ""
+        )
+        raise OpsError(
+            f"the Cognito account for {email} was created and has been KEPT, but the "
+            f"database write failed ({error}).{kept_password} Nothing was written in "
+            f"the database. Re-run `user create --email {email} --display-name "
+            f"{display_name!r}` with no `--org`."
+        ) from error
+    return CreatedAccount(
+        user_id=sub,
+        email=email,
+        created=created_in_cognito,
+        temporary_password=temporary_password,
+    )
+
+
+def _record_unenrolled(conn: Connection, *, sub: str, email: str, display_name: str) -> None:
+    """Insert or refresh an ``app_user`` row with no organisation.
+
+    The address is stored so an operator can find the person later. It does not
+    place them in an organisation, and :func:`set_admin` still refuses the
+    support role until an enrolment does.
+
+    Args:
+        conn: Open connection inside the command's transaction.
+        sub: The Cognito subject.
+        email: The address to store.
+        display_name: The name to store. Updated when the row is already
+            unenrolled, so a retry after a failed write lands the name.
+
+    Raises:
+        OpsError: If the subject is already in an organisation.
+    """
+    existing = _lock_user(conn, sub)
+    if existing is not None and existing["org_id"] is not None:
+        raise OpsError(
+            f"{email} ({sub}) is already in an organisation. Nothing was written. "
+            f"Move them with `user enrol --email {email} --display-name {display_name!r} "
+            f"--org '<organisation>'`."
+        )
+    if existing is None:
+        conn.execute(
+            insert(app_user).values(
+                user_id=sub, display_name=display_name, email=email, created_at=_now()
+            )
+        )
+        return
+    changes: dict[str, str] = {}
+    if existing["display_name"] != display_name:
+        changes["display_name"] = display_name
+    if existing["email"] != email:
+        changes["email"] = email
+    if changes:
+        conn.execute(update(app_user).where(app_user.c.user_id == sub).values(**changes))
 
 
 def reissue_temporary_password(
@@ -637,9 +794,7 @@ def enrol_user(
             f"`user create --email {email} --org {org.name!r} "
             f"--display-name {display_name!r}`"
         )
-    return _enrol(
-        conn, sub=sub, email=email, display_name=display_name, org=org
-    )
+    return _enrol(conn, sub=sub, email=email, display_name=display_name, org=org)
 
 
 def _enrol(
@@ -711,14 +866,12 @@ def resync_user(
     § 3b), so it is the only fixed point available; the old address is not an
     input, and does not need to be known.
 
-    **It refuses a row with no organisation, and that refusal is load-bearing.**
-    De-enrolment clears ``email``, and ``admin grant`` resolves its subject *by*
-    address: that pairing is the whole interlock (see :func:`set_admin`).
-    Resync writing the address back onto a de-enrolled row would restore the
-    selector, so ``user resync`` followed by ``admin grant`` would hand the
-    support role to somebody who has been offboarded — in two commands, with
-    neither one looking wrong. Only ``user enrol`` re-establishes an address,
-    because only ``user enrol`` also names the organisation it is for.
+    **It refuses a row with no organisation.** The stored address of someone
+    outside an organisation is written by ``user create`` and kept by
+    de-enrolment, so an operator can still find them. Updating it is part of
+    keeping an enrolled person's record current; placing them back is
+    ``user enrol``, which is also what makes a support-role grant possible
+    (see :func:`set_admin`).
 
     Args:
         conn: Open connection inside the command's transaction.
@@ -740,14 +893,13 @@ def resync_user(
     row = _lock_user(conn, sub)
     if row is None:
         raise OpsError(
-            f"{email} ({sub}) has a Cognito account but is not enrolled — "
-            "use `user enrol`"
+            f"{email} ({sub}) has a Cognito account but is not enrolled — use `user enrol`"
         )
     if row["org_id"] is None:
         raise OpsError(
             f"{sub} is in no organisation — de-enrolled, or has only ever signed in. "
-            f"Nothing was written: use `user enrol --email {email}` instead, which is "
-            "the only command that stores an address."
+            f"Nothing was written. Place them with `user enrol --email {email}` "
+            "before updating the stored address."
         )
     previous = row["email"]
     if previous == email:
@@ -761,10 +913,12 @@ def de_enrol_user(
 ) -> DeEnrolment:
     """Remove a person from their organisation and take their rows out with them.
 
-    Clears ``org_id``, ``email`` and ``is_admin`` on ``app_user``, and ``org_id``
-    on every task and project the person owns — so the organisation they
-    left loses sight of their work (contract § 7; flagged there as an owner
-    decision, because the alternative needs ownership transfer, which is Out).
+    Clears ``org_id`` and ``is_admin`` on ``app_user``, and ``org_id`` on every
+    task and project the person owns — so the organisation they left loses
+    sight of their work (contract § 7; flagged there as an owner decision,
+    because the alternative needs ownership transfer, which is Out). The stored
+    address stays, so the person remains findable. The support role does not:
+    :func:`set_admin` refuses a grant while ``org_id`` is null.
 
     **``visibility`` is deliberately untouched.** The rows return to
     ``org_id IS NULL``, where the NULL rule already makes them reachable by
@@ -783,16 +937,14 @@ def de_enrol_user(
 
     Raises:
         OpsError: If the person cannot be resolved, resolves ambiguously, or is
-            already de-enrolled.
+            already in no organisation and holds no support role.
     """
     row = _resolve_and_lock(conn, email=email, sub=sub)
     user_id = str(row["user_id"])
-    if row["org_id"] is None and row["email"] is None and not row["is_admin"]:
-        raise OpsError(f"{user_id} is already de-enrolled; nothing to do")
+    if row["org_id"] is None and not row["is_admin"]:
+        raise OpsError(f"{user_id} is in no organisation; nothing to do")
     conn.execute(
-        update(app_user)
-        .where(app_user.c.user_id == user_id)
-        .values(org_id=None, email=None, is_admin=False)
+        update(app_user).where(app_user.c.user_id == user_id).values(org_id=None, is_admin=False)
     )
     severed = _sever_cross_owner_memberships(conn, sub=user_id)
     tasks_cleared, projects_cleared = _clear_owned_rows(conn, sub=user_id)
@@ -817,19 +969,18 @@ def set_admin(
     module docstring gives.
 
     **The subject is resolved in the database, not in Cognito**, and by address
-    by default: that is the concurrency guard. De-enrolment clears ``email``; so
-    if operator A de-enrols while operator B grants, the ``FOR UPDATE`` read
-    serialises them and B finds no row carrying that address — the grant refuses
-    instead of resurrecting the role. In the other commit order B's grant lands
-    first and A's de-enrolment clears it. Neither order leaves an administrator
-    behind.
+    by default. De-enrolment keeps that address and clears the organisation and
+    the support role. If operator A de-enrols while operator B grants, the
+    ``FOR UPDATE`` read serialises them and B finds a row in no organisation —
+    the grant refuses instead of resurrecting the role. In the other commit
+    order B's grant lands first and A's de-enrolment clears it. Neither order
+    leaves an administrator behind.
 
     ``--sub`` exists because an address is not unique (``app_user.email`` carries
     no constraint) and the ambiguous case has to stay resolvable — revoking a
     compromised administrator is the least acceptable place for a dead end. It
-    bypasses the address selector, not the interlock: a **grant** additionally
-    refuses a subject with no organisation, so neither selector can reach a
-    de-enrolled row.
+    bypasses the address selector, not the interlock: a **grant** refuses a
+    subject with no organisation, whichever selector found them.
 
     Args:
         conn: Open connection inside the command's transaction.
@@ -852,11 +1003,10 @@ def set_admin(
     who = stored_email or user_id
     direction = "grant" if grant else "revoke"
     if grant and row["org_id"] is None:
-        # Defence in depth behind `user resync`'s refusal: `user enrol --org` is
-        # the only command that writes an address, so a row with an address and
-        # no organisation should not exist — and if one ever does, it is not a
-        # row that gets the support role. Revoke is deliberately still allowed:
-        # taking the role away must never be the blocked direction.
+        # The address stays on an unenrolled row so an operator can find the
+        # person. The organisation is what the support role requires. Revoke is
+        # deliberately still allowed: taking the role away must never be the
+        # blocked direction.
         raise OpsError(
             f"{who} is in no organisation, so the support role cannot be granted — "
             "`user enrol` first. Nothing was written."
@@ -864,9 +1014,7 @@ def set_admin(
     if bool(row["is_admin"]) == grant:
         state = "already an administrator" if grant else "not an administrator"
         raise OpsError(f"{who} ({user_id}) is {state}; nothing to {direction}")
-    conn.execute(
-        update(app_user).where(app_user.c.user_id == user_id).values(is_admin=grant)
-    )
+    conn.execute(update(app_user).where(app_user.c.user_id == user_id).values(is_admin=grant))
     return AdminChange(user_id=user_id, email=stored_email, direction=direction)
 
 
@@ -941,9 +1089,7 @@ def assign_rows(
     followed = False
     if task_id is not None:
         row = conn.execute(
-            select(task.c.task_id, task.c.org_id)
-            .where(task.c.task_id == task_id)
-            .with_for_update()
+            select(task.c.task_id, task.c.org_id).where(task.c.task_id == task_id).with_for_update()
         ).one_or_none()
         if row is None:
             raise OpsError(f"no task {task_id}")
@@ -963,9 +1109,7 @@ def assign_rows(
             # belongs on the operator writer of the same two columns.
             if privatised:
                 conn.execute(
-                    moving.values(
-                        org_id=org.org_id, visibility=_PRIVATE, updated_at=_now()
-                    )
+                    moving.values(org_id=org.org_id, visibility=_PRIVATE, updated_at=_now())
                 )
             else:
                 conn.execute(moving.values(org_id=org.org_id, updated_at=_now()))
@@ -1015,9 +1159,7 @@ def assign_rows(
         component |= frontier
     privatised = current.org_id != org.org_id
     member_rows = task.c.task_id.in_(
-        select(project_membership.c.task_id).where(
-            project_membership.c.project_id.in_(component)
-        )
+        select(project_membership.c.task_id).where(project_membership.c.project_id.in_(component))
     )
     # A cross-organisation move privatises everything it carries (owner call
     # (j)). A same-organisation assignment moves nobody's audience, so the
@@ -1042,9 +1184,7 @@ def assign_rows(
         ).rowcount
     else:
         projects_moved = conn.execute(
-            update(project)
-            .where(project.c.project_id.in_(component))
-            .values(org_id=org.org_id)
+            update(project).where(project.c.project_id.in_(component)).values(org_id=org.org_id)
         ).rowcount
         in_any_org_project = (
             select(project_membership.c.task_id)
@@ -1109,9 +1249,7 @@ def _stamp_owned_rows(
         ``(tasks, projects)`` row counts.
     """
     tasks = conn.execute(
-        update(task)
-        .where(task.c.owner_user_id == sub)
-        .values(org_id=org_id, visibility=visibility)
+        update(task).where(task.c.owner_user_id == sub).values(org_id=org_id, visibility=visibility)
     ).rowcount
     projects = conn.execute(
         update(project)
@@ -1146,9 +1284,7 @@ def _sever_cross_owner_memberships(conn: Connection, *, sub: str) -> int:
         The number of membership rows deleted.
     """
     own_tasks = select(task.c.task_id).where(task.c.owner_user_id == sub)
-    own_projects = select(project.c.project_id).where(
-        project.c.owner_user_id == sub
-    )
+    own_projects = select(project.c.project_id).where(project.c.owner_user_id == sub)
     return int(
         conn.execute(
             delete(project_membership).where(
@@ -1193,17 +1329,13 @@ def _clear_owned_rows(conn: Connection, *, sub: str) -> tuple[int, int]:
 def _lock_user(conn: Connection, sub: str) -> RowMapping | None:
     """Read one ``app_user`` row ``FOR UPDATE``, or ``None`` if it does not exist."""
     return (
-        conn.execute(
-            select(app_user).where(app_user.c.user_id == sub).with_for_update()
-        )
+        conn.execute(select(app_user).where(app_user.c.user_id == sub).with_for_update())
         .mappings()
         .one_or_none()
     )
 
 
-def _resolve_and_lock(
-    conn: Connection, *, email: str | None, sub: str | None
-) -> RowMapping:
+def _resolve_and_lock(conn: Connection, *, email: str | None, sub: str | None) -> RowMapping:
     """Resolve a subject in the database by address or id, and lock the row.
 
     Raises:
@@ -1219,23 +1351,19 @@ def _resolve_and_lock(
             raise OpsError(f"no user {sub}")
         return row
     rows = (
-        conn.execute(
-            select(app_user).where(app_user.c.email == email).with_for_update()
-        )
+        conn.execute(select(app_user).where(app_user.c.email == email).with_for_update())
         .mappings()
         .all()
     )
     if not rows:
         raise OpsError(
-            f"no enrolled user with the address {email}. `user enrol` is what stores "
-            "the address this resolves by, and de-enrolment clears it — if the person "
-            "was just de-enrolled, that is why."
+            f"no user with the address {email}. `user create` and `user enrol` store "
+            "the address this resolves by; a person who has only signed in has none yet."
         )
     if len(rows) > 1:
         subjects = ", ".join(str(row["user_id"]) for row in rows)
         raise OpsError(
-            f"{len(rows)} users share the address {email} ({subjects}); resolve with "
-            "--sub instead"
+            f"{len(rows)} users share the address {email} ({subjects}); resolve with --sub instead"
         )
     return rows[0]
 
@@ -1265,9 +1393,7 @@ def _find_user_by_email(
 
     The same exact-match lookup :func:`_find_sub_by_email` relies on; see there.
     """
-    response = cognito.list_users(
-        UserPoolId=pool_id, Filter=f'email = "{email}"', Limit=1
-    )
+    response = cognito.list_users(UserPoolId=pool_id, Filter=f'email = "{email}"', Limit=1)
     users = response.get("Users") or []
     return users[0] if users else None
 

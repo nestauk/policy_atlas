@@ -99,6 +99,14 @@ def test_exclusive_pairs_are_forwarded_as_given_so_the_cli_owns_the_refusal() ->
         build_parser().parse_args(argv)
 
 
+def test_user_create_omits_the_org_flag_when_org_is_not_given() -> None:
+    argv = _dry_run("user-create", ENV="staging", EMAIL="a@b.org", NAME="A Name")
+    args = build_parser().parse_args(argv)
+    assert args.org is None
+    assert args.email == "a@b.org"
+    assert args.display_name == "A Name"
+
+
 def test_the_invite_mode_rides_the_create_wrapper() -> None:
     argv = _dry_run(
         "user-create",

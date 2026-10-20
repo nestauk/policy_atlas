@@ -5,7 +5,7 @@ The command tree, with every global option before the subcommand::
     python -m policy_atlas.ops --env {staging,prod} [options] <group> <command>
 
       org   create    --name NAME
-      user  create    --email E --display-name D --org ORG
+      user  create    --email E --display-name D [--org ORG]
       user  enrol     --email E --display-name D --org ORG
       user  resync    --email E
       user  reissue   --email E
@@ -218,15 +218,18 @@ def build_parser() -> argparse.ArgumentParser:
     org_create = org.add_parser("create", help="create an organisation")
     org_create.add_argument("--name", required=True)
 
-    user = groups.add_parser("user", help="people").add_subparsers(
-        dest="command", required=True
-    )
+    user = groups.add_parser("user", help="people").add_subparsers(dest="command", required=True)
     user_create = user.add_parser(
-        "create", help="create a Cognito account (emailed an invitation) and enrol it"
+        "create",
+        help="create a Cognito account (emailed an invitation); enrol it when --org is given",
     )
     user_create.add_argument("--email", required=True, type=_email)
     user_create.add_argument("--display-name", required=True)
-    user_create.add_argument("--org", required=True, help="organisation name or id")
+    user_create.add_argument(
+        "--org",
+        default=None,
+        help="organisation name or id; omit to leave the account in no organisation",
+    )
     user_create.add_argument(
         "--invite",
         choices=("email", "manual"),
@@ -407,6 +410,15 @@ def _dispatch(
             )
         if args.command == "de-enrol":
             return commands.de_enrol_user(conn, email=args.email, sub=args.sub)
+        if args.command == "create" and args.org is None:
+            return commands.create_user(
+                conn,
+                cognito,
+                pool_id=target.user_pool_id,
+                email=args.email,
+                display_name=args.display_name,
+                invite=args.invite,
+            )
         org = commands.resolve_organisation(conn, args.org)
         if args.command == "create":
             return commands.create_user(
@@ -429,13 +441,9 @@ def _dispatch(
 
     if args.group == "rows":
         org = commands.resolve_organisation(conn, args.org)
-        return commands.assign_rows(
-            conn, org=org, task_id=args.task, project_id=args.project
-        )
+        return commands.assign_rows(conn, org=org, task_id=args.task, project_id=args.project)
 
-    return commands.set_admin(
-        conn, email=args.email, sub=args.sub, grant=args.command == "grant"
-    )
+    return commands.set_admin(conn, email=args.email, sub=args.sub, grant=args.command == "grant")
 
 
 def _prompt(emit: Callable[[str], None]) -> Callable[[Target], bool]:

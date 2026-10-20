@@ -19,6 +19,8 @@ belongs to the human operator, not to a task role.
    uv run python -m policy_atlas.ops --env staging org create --name "Nesta"
    uv run python -m policy_atlas.ops --env staging user create \\
        --email person@example.org --display-name "A Person" --org "Nesta"
+   uv run python -m policy_atlas.ops --env staging user create \\
+       --email person@example.org --display-name "A Person"
 
 **No password ever passes through this CLI** (contract § 9). ``user create``
 calls ``AdminCreateUser`` with ``DesiredDeliveryMediums=["EMAIL"]`` — AWS
