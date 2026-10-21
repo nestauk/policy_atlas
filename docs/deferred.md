@@ -859,7 +859,11 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   Claude backend (tool-use JSON, fresh prompt per prompting rule 12). The standing
   constraint from 018 stays: nothing new couples to a provider-specific API surface.
   What remains deferred, and to which slice:
-  - **Staging and production (deploy slice):** the owner's plan changed on 2026-10-21:
+  - **Staging and production:** the wiring landed in 053 on 2026-10-21 (owner decision,
+    contract note 9): `backend.model_route` in `infra/pa_config.json` (both environments
+    `openai-direct`), the stack maps `AWS_BEARER_TOKEN_BEDROCK` only on a Bedrock route,
+    and `infra/DEPLOYMENT.md` § 5 has the switch procedure. The history below is kept
+    for the reasoning. The owner's plan changed on 2026-10-21:
     the container does **not** mint its own key from the task role. Both keys live in
     the app secret for good (`OPENAI_API_KEY` for OpenAI, a new `AWS_BEARER_TOKEN_BEDROCK`
     field holding a long-term Bedrock API key owned by an IAM user with Bedrock invoke
@@ -878,10 +882,8 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
     Cohere profile or simply not offer chat retrieval on them is a cost decision for
     that slice (owner, 2026-09-25); the old vectors stay in the database under their
     old profile. Two notes from the 053 review (2026-10-14): `infra/DEPLOYMENT.md`
-    § tuning knobs still lists the retired `POLICY_ATLAS_*_MODEL` variables, and its
-    secret-field list and env-var table name `OPENAI_API_KEY` alone (no
-    `AWS_BEARER_TOKEN_BEDROCK`, no `POLICY_ATLAS_MODEL_ROUTE` row; 053 delta review,
-    2026-10-21); both must be rewritten when that slice touches `infra/`; and the `boto3` region for Cohere and
+    § tuning knobs listed the retired `POLICY_ATLAS_*_MODEL` variables and named
+    `OPENAI_API_KEY` alone (rewritten in 053 with the infra wiring, 2026-10-21); and the `boto3` region for Cohere and
     Claude comes from `AWS_REGION` alone (default `eu-west-2`, contract D5) while the
     OpenAI address is written in the route, so a shell with `AWS_REGION` set for other
     AWS work sends the EU profiles to the wrong region. Reading the region from the

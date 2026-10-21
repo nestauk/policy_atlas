@@ -74,8 +74,11 @@ does not restate them.
         in one or two plain sentences what it does, and gives the working values for
         London. A developer who has only that file and a Bedrock key can reach step 2 of
         the live check.
-18. [ ] **Nothing under `infra/` changed.** `git diff --stat` on the PR shows no file in
-        that folder.
+18. [ ] **Infra changes only as the owner approved (contract note 9).** Under `infra/`, only
+        the model route in `pa_config.json`, its wiring in `policy_atlas_stack.py`, the
+        infra tests and `DEPLOYMENT.md` change; both environments stay on `openai-direct`;
+        the Bedrock key is mapped only on a Bedrock route, shown by a test. (Was: nothing
+        under `infra/` changed; replaced 2026-10-21.)
 19. [ ] **Embeddings follow the route (N3).** Under `openai-direct` the OpenAI class and
         the old profile are used. Under `bedrock-local` the Cohere class and
         `cohere_embed_v4_1536_v1` are used, and a test shows a stored OpenAI vector is not

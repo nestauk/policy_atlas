@@ -57,6 +57,14 @@ set on the new models and re-tuning prompts) come later and are out of scope her
 > `longlist_assignment` and `extract_interventions` run on `fast`; four more
 > `POLICY_ATLAS_*_MODEL` overrides are retired. The constant pin counts 29 across 19
 > modules.
+> Owner decision after the delta review (2026-10-21): (9) the deployment wiring joins
+> this slice instead of a separate deploy slice. `infra/` changes: `pa_config.json`
+> gains `backend.model_route` (`openai-direct` in both environments, so merging moves
+> nothing), the stack passes it as `POLICY_ATLAS_MODEL_ROUTE` and maps
+> `AWS_BEARER_TOKEN_BEDROCK` from the app secret only on a Bedrock route;
+> `infra/DEPLOYMENT.md` describes the switch. This is a production-config change the
+> owner approved in writing in the review conversation. Rubric item 18 is replaced
+> accordingly.
 
 ## Why this is safe to do now
 

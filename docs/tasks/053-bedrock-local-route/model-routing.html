@@ -434,11 +434,11 @@ POLICY_ATLAS_MODEL_ROUTE=my-test</code></pre>The extra file can add or replace r
 
 <section class="wrap" id="later">
   <h2>Switching staging and production</h2>
-  <p>Merging this change does not move anything. Staging and production set no route, so they keep calling OpenAI exactly as today. Switching an environment to Bedrock takes three steps:</p>
+  <p>Merging this change does not move anything. Each environment's route is set in <code>infra/pa_config.json</code>, and both say <code>openai-direct</code>, so staging and production keep calling OpenAI exactly as today. Switching an environment to Bedrock takes three steps:</p>
   <ol class="steps">
-    <li><b>Add the key to the app secret.</b> Put a long-term Bedrock API key in <code>policy_atlas_v3/app</code> as a new field, <code>AWS_BEARER_TOKEN_BEDROCK</code>.</li>
-    <li><b>Pass it to the app, and choose the route.</b> The deployment code hands the container only the secret fields it names one by one, so it needs two new lines: one for the new key, and one setting <code>POLICY_ATLAS_MODEL_ROUTE=bedrock-local</code>. Putting the route in <code>infra/pa_config.json</code> lets staging and production differ.</li>
-    <li><b>Deploy.</b> The app reads the key and the route when it starts.</li>
+    <li><b>Add the key to the app secret.</b> Put a long-term Bedrock API key in <code>policy_atlas_v3/app</code> as a new field, <code>AWS_BEARER_TOKEN_BEDROCK</code>. Do this first: once the route is a Bedrock one, the app asks for this field when it starts, and it cannot start without it.</li>
+    <li><b>Change one word in the config.</b> Set that environment's <code>model_route</code> in <code>infra/pa_config.json</code> to <code>bedrock-local</code>, and merge.</li>
+    <li><b>Deploy.</b> The app reads the key and the route when it starts. To go back, set the route to <code>openai-direct</code> and deploy again.</li>
   </ol>
   <div class="note"><b>One side effect.</b> Projects that already exist were embedded with OpenAI. On Bedrock their chat search finds nothing until they are ingested again (Diagram 4). New projects are not affected.</div>
   <p><b>Models.</b> Luna has already been evaluated. Claude is not used: the <code>bedrock-local-claude</code> route is there for testing it later. Terra in place of gpt-5.5 (the Task Agent and the agent's routing) and the Cohere embeddings have run live but have not been evaluated on their own.</p>

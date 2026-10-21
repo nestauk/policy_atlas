@@ -687,7 +687,7 @@ file or in the named test; "open" means it waits on the live checks.
 |---|---|---|
 | 1 | Satisfies the contract incl. D1 to D8, O1 (Terra), O2 (Claude for query generation only) | holds; four build-time deviations flagged above |
 | 2 | `make verify` passes; live checks ran in budget | holds: verify green at step-6 exit, step-7 entry and step-7 exit; live checks 1 and 2 in budget; live check 3 failed on a driver defect first, then the owner-approved re-run succeeded in 548 s inside its 15-minute cap (§ Live check 3, re-run) |
-| 3 | No unapproved gated change | holds: egress and the `boto3` move are the two approved gates; nothing under `infra/` |
+| 3 | No unapproved gated change | holds: egress and the `boto3` move are the two approved gates; the infra change is the owner's written approval of 2026-10-21 (contract note 9) |
 | 4 | No generated files or secrets edited by hand; no key in the diff | holds; `.env` untouched, `.env.example` has empty values |
 | 5 | No tests deleted, skipped or weakened without justification | holds; the one repointed guard is justified in § Test changes |
 | 6 | Verification evidence recorded | this file |
@@ -702,11 +702,11 @@ file or in the named test; "open" means it waits on the live checks.
 | 15 | Tests stay offline; scrub list extended | holds: `conftest.py`; the suite ran socket-denied throughout |
 | 16 | Dependency change exactly as approved; `make audit` green after lock change and at exit | holds: Phase A and step-6 exit summaries above; full step-7 exit output under § Gate after fixes |
 | 17 | A cold reader can set it up from `.env.example` | holds: file rewritten; the owner reached live check 2 from it, after one round trip on "the same key in both variables"; since the key-variable change the file says which variable each route reads, and the delta review fixed the two `PA_BACKEND_MODE` lines that still said `OPENAI_API_KEY` |
-| 18 | Nothing under `infra/` changed | holds: `git diff --stat 5f84bef..HEAD -- infra` is empty |
+| 18 | Infra changes only as approved (replaced 2026-10-21) | holds: `pa_config.json` (route per environment, both `openai-direct`), `policy_atlas_stack.py` (route variable, Bedrock key only on a Bedrock route), two infra tests, `DEPLOYMENT.md`; `test_bedrock_route_adds_only_the_bedrock_key_from_the_app_secret`, `test_every_configured_model_route_exists_in_the_backend_route_file`; infra 95 passed |
 | 19 | Embeddings follow the route; old profile rows not read | holds: factory tests (both classes, both callers) and `test_pending_chunks_with_old_profile_are_pending_for_cohere` for the writer side; the live re-run shows the reader side (finding 5) |
 | 20 | Cohere batching and input types | holds: `test_cohere_embedding_backend_batches_100_texts_in_order`, `..._sends_complete_request` for both kinds, `FakeEmbedder.kinds == ["query"]` in the retriever test, and 2 live query-kind calls in the re-run |
 | 21 | Claude tier is a one-line swap | holds: the mechanical test, and live check 2 ran Haiku, Sonnet 5 and Opus 5 by changing only the model line |
-| 22 | Nothing built from § Future work | holds: no key minting, no `infra/`, no shared Converse layer, old vectors kept, live-mode detection unchanged |
+| 22 | Nothing built from § Future work | holds: no key minting, `infra/` only as contract note 9, no shared Converse layer, old vectors kept, live-mode detection unchanged |
 | 23 | Route file committed, shipped and readable | holds: `test_route_file_ships_inside_the_package`; 27 steps after the dev merge (23 before); comments beside each non-obvious value |
 | 24 | The web API follows the route | holds: `test_chat_embedding_backend_selects_cohere_in_live_mode` and `..._selects_openai_in_live_mode` |
 | 25 | Claude reply shape enforced, six failure shapes | holds: the case list in `test_claude_generate_queries_rejects_invalid_responses`, now including non-integer usage |
@@ -867,6 +867,28 @@ Authored from the build's candidates and the stack's findings, each adjudicated:
 | Approved gate invalidates a structural pin; targeted runs must cover every fake of a changed interface; guard scope (finding 4) | **new** [interface-change-sweeps-fakes-and-premise-pins](../../knowledge/interface-change-sweeps-fakes-and-premise-pins.md) |
 | `if __name__ == "__main__"` for drivers that call `run_plan` | **folded** into [live-check-drive-runbook](../../knowledge/live-check-drive-runbook.md) |
 | No bare `ruff format` on existing files in delegate briefs | **folded** into [delegated-executor-practices](../../knowledge/delegated-executor-practices.md) |
+
+### Infra wiring (2026-10-21, owner decision after the delta review)
+
+The owner asked for the deployment wiring in this PR rather than a separate slice
+(contract note 9). What changed and why:
+
+- `infra/pa_config.json`: `backend.model_route` per environment, `openai-direct` in both.
+  Merging to `dev` deploys staging automatically, so the default keeps the deployed
+  behaviour unchanged.
+- `infra/infra/policy_atlas_stack.py`: the route goes into the container as
+  `POLICY_ATLAS_MODEL_ROUTE`; `AWS_BEARER_TOKEN_BEDROCK` is mapped from the app secret
+  only when the route starts with `bedrock`. ECS refuses to start a task whose secret
+  names a missing JSON field, so mapping it always would break the next deploy until
+  the field exists.
+- Tests: the staging container carries the route variable and no Bedrock key; a second
+  app stack synthesised with `bedrock-local` carries the key from `policy_atlas_v3/app`;
+  every route named in `pa_config.json` exists in the backend's route file.
+- `infra/DEPLOYMENT.md`: the secret field, the env map (route and Bedrock rows in, the
+  retired model rows out) and a three-step switch procedure.
+
+To switch staging: add the field to the secret, set staging's route to `bedrock-local`,
+merge, deploy. `make -C infra test`: 95 passed.
 
 ### Knowledge records, delta (2026-10-21)
 
