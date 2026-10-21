@@ -3,7 +3,7 @@ type: Runbook
 title: Live-check drives — environment and product facts that cost debugging time
 description: Kill the dev API by PORT with LISTEN scope (uvicorn --reload's worker never has "uvicorn" in argv; SIGTERM drains SSE for minutes; unscoped lsof kills the test's own sockets); the dev DB is NOT migrated by make test — run alembic upgrade head before any live check on a schema slice; Playwright specs here are ESM (fileURLToPath shim for __dirname); an unattended plan takes ~6 approvals; findings rows need deep analysis depth.
 tags: [live-check, uvicorn, playwright, alembic, dev-environment]
-timestamp: 2026-10-14
+timestamp: 2026-10-21
 ---
 
 # Rules
@@ -46,6 +46,18 @@ timestamp: 2026-10-14
   the leg-B FIRST restart targets the `make dev`-started API and requires
   `LIVE_ALLOW_API_TAKEOVER=1`; it verifies every port-8000 listener is a
   policy-atlas uvicorn before killing, and refuses otherwise.
+- **An options-scoping walk's first `paused` is a steering check-in, not the
+  baseline gate** (053 live check 4): the run pauses after appraise with
+  `kind = check_in`; a driver must read `/check-ins` and wait for
+  `kind = baseline_confirm` before confirming. The confirm decision at that steer
+  point opens the longlist walk itself, so `POST /plan/confirm-baseline` afterwards
+  is refused with `409 run_active`; use one entry point or the other, not both.
+- **Reading traces on a Langfuse v3 host** (053 delta review): `langfuse-cli` refuses
+  the deprecated `trace list` and the v2 observations endpoint answers "v4 write mode
+  only", so call the REST API directly (`GET /api/public/traces?fromTimestamp=…&toTimestamp=…`
+  with basic auth, then `GET /api/public/traces/{id}` for the observations). Filter
+  by `sessionId` (the task id): a peer session's run on another route can share the
+  time window, and its models and errors are not yours.
 
 # Why
 

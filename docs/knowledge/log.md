@@ -1,5 +1,22 @@
 # Knowledge update log
 
+## 2026-10-21 (task 053, delta review)
+* **Update**: [live-check-drive-runbook](live-check-drive-runbook.md) — an
+  options-scoping walk's first pause is a steering check-in, the confirm decision opens
+  the longlist walk (053 live check 4); reading traces on a Langfuse v3 host goes through
+  the REST API, filtered by session.
+* **Update**: [two-step-rename-needs-ledger-and-anchored-exemptions](two-step-rename-needs-ledger-and-anchored-exemptions.md)
+  — a renumber after a numbering clash sweeps only the branch's own lines and re-reads
+  hand-merged lines (053 sent two dev citations to the wrong ADR).
+* **Update**: [model-route-constants-read-at-import](model-route-constants-read-at-import.md)
+  — 27 steps, five tiers, twelve retired variables (one silent); the step-exception
+  model-id pass-through named as deliberate.
+* **Update**: [bedrock-route-facts](bedrock-route-facts.md) — planner → task_agent after
+  the merge; index description now states the per-route key variable.
+* **Update**: [tests-are-zero-egress-scrub-keys](tests-are-zero-egress-scrub-keys.md),
+  [orchestrate-stub-smoke](orchestrate-stub-smoke.md) — "live iff `OPENAI_API_KEY`" is now
+  "the route's key variable".
+
 ## 2026-10-21 (task 053, dev merge)
 * **Creation**: Added
   [merge-take-theirs-drops-unconflicted-hunks](merge-take-theirs-drops-unconflicted-hunks.md)

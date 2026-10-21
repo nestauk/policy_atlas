@@ -57,6 +57,8 @@ contract's own vocabulary and is recorded in the contract's build-time note:
 | `python3 scripts/prompt_hash_guard.py --update` (2026-10-21, dev merge) | pass | 7 modules re-pinned: the six 045 re-pins merged with dev's prompt edits, plus `extract_interventions_prompt.py` (constant now reads the route) |
 | `uv run --env-file backend/.env python probe_sol.py` (2026-10-21, dev merge) | pass | `bedrock-local`: `task_agent_scoping` and `longlist_judgment` resolve to `global.openai.gpt-5.6-sol`; plain reply `Ok.` in 1.2 s (9 in, 6 out); structured parse of a two-field schema in 1.6 s, no knob |
 | `make verify` + `make audit` (2026-10-21, after the dev merge) | pass (second run; the first found the four merge losses above) | backend 3638 passed in 9:28; mypy 420 files; infra 93; frontend 882; prompt-guard 36 unchanged; okf 178 concepts; audit: no known vulnerabilities after the certifi bump |
+| `make verify` (2026-10-21, delta review entry, fresh conversation, before any fix) | pass | backend 3638 passed in 9:56; mypy 420; infra 93; frontend 882; prompt-guard 36; okf 178 |
+| `make verify` + `make audit` (2026-10-21, delta review exit, after the fixes) | pass | backend 3641 passed in 9:44 (three new route tests); mypy 420; infra 93; frontend 882; prompt-guard 36 unchanged; okf 178 concepts, 0 violations; audit: no known vulnerabilities |
 | `drive_scoping.py` + `wait_longlist.py` against `make dev` on `bedrock-local` (2026-10-21, live check 4: options scoping) | pass | task `365d5eb5`, "interventions to reduce obesity", England, rapid: two Task Agent turns on Sol (11 s, 8 s) approved plan v1; baseline walk 90 s to its first steering pause, 3.5 min to the `baseline_confirm` gate (artefact written, 8 blocks); confirm decision 1 s opened the longlist walk; longlist walk 14 min 45 s, `succeeded`: 20 options in 6 themes, 20 included, 0 excluded, 0 without in-scope evidence; about 810 model calls (323 screen, 193 classify, 156 intervention extractions, 11 query generations, the longlist and profile calls), 2.80 M prompt + 0.38 M completion tokens, 26 Cohere batches, 0 errors |
 
 ### Phase B (Cohere embeddings), diff summary
@@ -553,7 +555,9 @@ is Sol on `openai-direct` and `global.openai.gpt-5.6-sol` on both Bedrock routes
 reasoning-effort knob, and the live probe (§ Commands run) parsed structured output
 without one. The default route reproduces dev's values exactly (`PRE_053_MODELS` grows by
 four steps; the constant pin is 29 across 19 modules). `extract_interventions_prompt.py`
-is hash-pinned, so its re-pin is the one new prompt-module hash beyond the six 045 ones.
+is hash-pinned, and so is `grounding_judge.py` (dev pinned it after the design), so two
+more prompt modules are re-pinned beyond the six 045 ones; each diff is the import, the
+constant line and, for the judge, one docstring line from the key-variable sweep.
 
 **Not changed.** Nothing under `infra/`; dev's options-scoping logic is untouched beyond
 the constant lines and one import each; `boto3` region handling as before.
@@ -589,6 +593,91 @@ now pins 2026.10.19. Lesson for the knowledge record: a wholesale "take theirs" 
 conflicted file silently loses every hunk of ours that did not conflict; diff the file
 against our pre-merge commit before accepting it.
 
+## Review findings, delta (2026-10-21, fresh conversation)
+
+The delta pass of § Review handoff, delta ran in a fresh conversation; the lead that
+wrote the four commits adjudicated nothing. Entry gate: `make verify` green on the
+unchanged branch (backend 3638, mypy 420, infra 93, frontend 882, okf 178). Lanes, Tier
+3 baseline, delta-scoped:
+
+| Lane | Reviewer | Result |
+|---|---|---|
+| Contract verifier | `contract-verifier` agent (fresh, read-only) | rubric items 4, 9, 10, 11, 12, 15, 19, 23, 24 satisfied in code; 17 contradicted by stale `.env.example` lines; 6 findings (4 minor, 2 notes); decisions 1 to 4 and 8 confirmed, 6 contested |
+| Claude code review | `/code-review medium`, delta pathspec | no medium or high bug; 4 low (two loader, two docs) |
+| Codex adversarial | `codex-rescue`, read-only, delta brief | 2 minor; five of the brief's questions not covered by that run, closed by the lead (below) |
+| Security | one reasoning-class finder on the delta (the `/security-review` recipe; nothing reached the false-positive filter) | none at High or Medium; eight angles recorded (no key value in any error or log line; key and address come from one `Route`; overlay path is env-only) |
+| Live-trace content | lead, live check 4 | every generation in the session ran on a Bedrock model (723 Luna, 22 Sol, 43 Terra; 788 calls, 2.80 M in / 0.38 M out; 26 Cohere batches), matching § Commands run; the two scoping turns on Sol parse into sensible plan drafts; no non-default-level observation in the session; the one `ERROR` in the window (`tool:lookup` grouping) belongs to a peer session's run on `openai-direct`, not this task |
+| Docstring sweep | `fast-worker`, prose only | 16 stale "live iff `OPENAI_API_KEY`" lines beyond the three the lead found |
+| OKF | `make okf-validate` | see § Gate after the delta fixes |
+| `/simplify` | not run | the delta's cleanup surface is three one-line constant reads and one helper; the Claude lane's cleanup angles found nothing |
+
+Codex's uncovered questions, closed by the lead: the 27 `model_for("…")` call sites in
+`backend/src` equal the 27 `[steps]` names and the 27 keys of `PRE_053_MODELS` exactly;
+no Sol step passes `tools=` (all parse or structured calls, so the Terra knob lesson does
+not apply); `route()` is `functools.cache` per process and the full-text ingest workers
+are `spawn`ed with the same environment, so they read the same route; with both keys set
+and the selector unset, `_live()` reads `OPENAI_API_KEY` through `openai-direct`, the
+pre-slice behaviour.
+
+### Findings and how each was settled
+
+1. **Malformed `[knobs]` raised `AttributeError`, not the loader's named error** (Claude
+   code review, low). `knobs = "none"` or `reasoning_effort = "none"` crashed at import
+   with a bare `AttributeError`. **Adopted:** both go through `_table` now, with two new
+   wrong-shape cases in `test_unknown_backend_names_and_wrong_shapes_fail_loud`.
+2. **Only one of the three key readers was tested** (contract verifier, note). **Adopted:**
+   `test_live_mode_switch_reads_the_route_key_variable` runs `api/deps._live()` under
+   `bedrock-local` with only `OPENAI_API_KEY` set: `auto` is stub, `live` refuses naming
+   `AWS_BEARER_TOKEN_BEDROCK`, and the Bedrock key turns it live. The CLI switch is the
+   same one-line call.
+3. **Decision 6 contested: the hand-merged environment line sent two dev citations to the
+   wrong ADR** (contract verifier, minor). "ADR 0039 decision 13" and "ADR 0039 § Rollback"
+   are the options-scoping ADR's; the renumber sweep rewrote them to 0041, which has
+   neither. **Adopted:** restored to 0039; lesson folded into the two-step-rename concept.
+4. **Stale "live iff `OPENAI_API_KEY`" prose** (convergent: contract verifier, Claude code
+   review, security lane, docstring sweep). **Adopted** in the living documents: the three
+   docstrings (`task_agent.py`, `longlist_backend.py`, `extraction_backend.py`), the two
+   `PA_BACKEND_MODE` lines in `.env.example`, `README.md`, `docs/specs/system/web-api.md`,
+   `environment.md` line 109 (with one note covering its per-task history lines), and two
+   knowledge records. **Declined** for `infra/DEPLOYMENT.md` (rubric 18: nothing under
+   `infra/` in this slice; the secret-field and env-var rows are added to the deploy slice's
+   note in `deferred.md`) and for the eval READMEs under `scripts/evals/` (their runs stay
+   on `openai-direct`).
+5. **`POLICY_ATLAS_PLANNER_MODEL` documented as "ignored with a warning"** (lead; Codex
+   proposed keeping the warning through the rename sweep's `_KEPT` list). **Declined the
+   code change:** 044 had already stopped reading the variable with no fallback, so the
+   warning would name a variable that was dead on `dev` before this slice; the sweep's
+   kept list is dev's rule. **Adopted the docs:** `.env.example`, `environment.md`, ADR
+   0041, `deferred.md` and the knowledge record say it is ignored silently.
+6. **Counts not updated after the merge** (contract verifier, minor; siblings of the lead's
+   "nine"). **Adopted:** rubric status rows 10, 14, 17, 23; § Intent; ADR 0041 (twelve
+   variables, eight re-pins); `deferred.md`; the knowledge record (27 steps, five tiers,
+   twelve); a build-time note on `rubric.md` for items 10 and 23.
+7. **The prompt-pin claim was short by one module** (contract verifier, minor):
+   `grounding_judge.py` was pinned by dev and is re-pinned here too; its diff is the
+   import, the constant and one docstring line from the key-variable sweep. **Adopted:**
+   § Post-merge integration and ADR decision 6 corrected; `make prompt-guard` green.
+8. **ADR 0041 § Consequences still described task-role key minting** (lead). **Adopted:**
+   rewritten to the owner's 2026-10-21 plan (long-term key in the app secret).
+9. **Overlay routes cannot name a third provider's key** (Codex, minor). **Deferred** to
+   `deferred.md` § Bedrock routes with a note: today every overlay reaches OpenAI or
+   Bedrock; widen `API_KEY_ENVS` when an experiment needs a third provider.
+10. **A typo'd tier name in a step exception is sent as a model id** (Claude code review,
+    low). **Declined:** ADR 0041 decision 2 names this as the one value the loader cannot
+    check; the knowledge record now says so in the same words.
+11. **Live check 4's driver lessons** (handoff decision 8). **Confirmed as driver errors:**
+    `docs/specs/system/web-api.md` documents both the `409 run_active` and the confirm
+    decision opening the longlist walk. Folded into the live-check runbook.
+12. **A peer session's run shared the Langfuse window** (lead, trace lane). Not a finding
+    against the slice; recorded in the runbook as a filtering rule.
+
+Convergent across families: finding 4 (four lanes). Unique to one lane: 1 (Claude code
+review), 3 and 7 (contract verifier), 9 (Codex), 12 (trace lane).
+
+### Gate after the delta fixes
+
+Recorded in § Commands run (rows dated 2026-10-21, delta review).
+
 ## Rubric status
 
 Walked at step 6 against [rubric.md](rubric.md). "Holds" means the evidence is in this
@@ -605,20 +694,20 @@ file or in the named test; "open" means it waits on the live checks.
 | 7 | Known gaps and deferred seams in `docs/deferred.md` | holds; the "Bedrock routes" entry is superseded, gaps listed |
 | 8 | Tier 3 review stack ran | holds: contract verifier, `/code-review medium`, `/security-review`, Codex adversarial, lead trace lane; 14 findings settled above; human deep review at the PR |
 | 9 | Unset means unchanged | holds for every model id, the profile and the client address (`test_default_route_reproduces_every_pre_053_model`, `test_every_module_constant_equals_its_pre_053_literal`, `test_stray_openai_base_url_does_not_move_the_client`); one approved request-shape change on the default route: OpenAI embedding batches are 96 texts, not 128 (contract D4, finding 6) |
-| 10 | No literal model name left; loader fails loud; retired variables ignored with a warning | holds: the 25-constant test; `grep -rnE '= "(gpt-\|text-embedding-)' backend/src` matches only the four lines of `model_routes.toml`; `grep -rn 'environ.get("POLICY_ATLAS_[A-Z_]*MODEL' backend/src` empty; loader tests incl. backend names and wrong shapes (findings 1, 2) |
+| 10 | No literal model name left; loader fails loud; retired variables ignored with a warning | holds: the 29-constant test (25 before the dev merge); `grep -rnE '= "(gpt-\|text-embedding-)' backend/src` matches only the model lines of `model_routes.toml` (six after the merge); `grep -rn 'environ.get("POLICY_ATLAS_[A-Z_]*MODEL' backend/src` empty; loader tests incl. backend names and wrong shapes (findings 1, 2) |
 | 11 | Claude fails loud, no silent fallback | holds: `test_claude_generate_queries_rejects_invalid_responses` |
 | 12 | Only query generation moved | holds: `test_claude_reformulate_and_suggest_delegate_to_inner_backend` |
 | 13 | Usage and tracing hold for Claude | holds: usage by `..._sends_converse_request_and_parses_reply`, trace by `..._trace_carries_model_and_prompt_version`; live check 2 returned token counts for all three Claude tiers |
-| 14 | Prompt text unchanged; pins honest | holds: one new pin; six re-pins, each diff import + constant only (§ Diff summary) |
+| 14 | Prompt text unchanged; pins honest | holds: one new pin; six re-pins, each diff import + constant only (§ Diff summary); two more after the dev merge (§ Post-merge integration) |
 | 15 | Tests stay offline; scrub list extended | holds: `conftest.py`; the suite ran socket-denied throughout |
 | 16 | Dependency change exactly as approved; `make audit` green after lock change and at exit | holds: Phase A and step-6 exit summaries above; full step-7 exit output under § Gate after fixes |
-| 17 | A cold reader can set it up from `.env.example` | holds: file rewritten; the owner reached live check 2 from it, after one round trip on "the same key in both variables", which the file now states first |
+| 17 | A cold reader can set it up from `.env.example` | holds: file rewritten; the owner reached live check 2 from it, after one round trip on "the same key in both variables"; since the key-variable change the file says which variable each route reads, and the delta review fixed the two `PA_BACKEND_MODE` lines that still said `OPENAI_API_KEY` |
 | 18 | Nothing under `infra/` changed | holds: `git diff --stat 5f84bef..HEAD -- infra` is empty |
 | 19 | Embeddings follow the route; old profile rows not read | holds: factory tests (both classes, both callers) and `test_pending_chunks_with_old_profile_are_pending_for_cohere` for the writer side; the live re-run shows the reader side (finding 5) |
 | 20 | Cohere batching and input types | holds: `test_cohere_embedding_backend_batches_100_texts_in_order`, `..._sends_complete_request` for both kinds, `FakeEmbedder.kinds == ["query"]` in the retriever test, and 2 live query-kind calls in the re-run |
 | 21 | Claude tier is a one-line swap | holds: the mechanical test, and live check 2 ran Haiku, Sonnet 5 and Opus 5 by changing only the model line |
 | 22 | Nothing built from § Future work | holds: no key minting, no `infra/`, no shared Converse layer, old vectors kept, live-mode detection unchanged |
-| 23 | Route file committed, shipped and readable | holds: `test_route_file_ships_inside_the_package`; 23 steps; comments beside each non-obvious value |
+| 23 | Route file committed, shipped and readable | holds: `test_route_file_ships_inside_the_package`; 27 steps after the dev merge (23 before); comments beside each non-obvious value |
 | 24 | The web API follows the route | holds: `test_chat_embedding_backend_selects_cohere_in_live_mode` and `..._selects_openai_in_live_mode` |
 | 25 | Claude reply shape enforced, six failure shapes | holds: the case list in `test_claude_generate_queries_rejects_invalid_responses`, now including non-integer usage |
 | 26 | Overlay works and is bounded; Sonnet and Opus live calls ran through an overlay | holds: replace/add/no-`[steps]`/missing tests, plus the malformed-overlay test (finding 2); live check 2's Sonnet and Opus arms were selected from an uncommitted overlay file |
@@ -633,7 +722,7 @@ file or in the named test; "open" means it waits on the live checks.
 - The `reasoning_effort` knob is keyed by model id, not by tier, because that is what
   the code compared before (the literal `gpt-5.6-terra`), so the default route is
   byte-identical, and because a step exception can name a model directly.
-- Retiring the nine variables assumes nobody relies on them in a deployed environment;
+- Retiring the variables (nine, twelve after the merge) assumes nobody relies on them in a deployed environment;
   checked: the CDK stack sets none of them.
 
 ## Known unverified items
@@ -643,6 +732,10 @@ file or in the named test; "open" means it waits on the live checks.
   shown live (§ Live check 3, re-run).
 - Chat retrieval through the web API on Cohere vectors ran only in tests (the same
   `kind="query"` call the synthesis retriever made live).
+- After the delta (2026-10-21): `bedrock-local-claude` has not been run live since the
+  merge (its loader path is covered by the subprocess test); Sol under function tools is
+  untested (and unused today); the options-scoping run's quality against the 046 measures
+  is unmeasured (evaluation slice).
 - Claude prompt quality is not measured (contract D8).
 - `boto3` client timeouts/retries and the Converse cached-token accounting (finding 13)
   are unexercised at volume.
@@ -774,6 +867,15 @@ Authored from the build's candidates and the stack's findings, each adjudicated:
 | Approved gate invalidates a structural pin; targeted runs must cover every fake of a changed interface; guard scope (finding 4) | **new** [interface-change-sweeps-fakes-and-premise-pins](../../knowledge/interface-change-sweeps-fakes-and-premise-pins.md) |
 | `if __name__ == "__main__"` for drivers that call `run_plan` | **folded** into [live-check-drive-runbook](../../knowledge/live-check-drive-runbook.md) |
 | No bare `ruff format` on existing files in delegate briefs | **folded** into [delegated-executor-practices](../../knowledge/delegated-executor-practices.md) |
+
+### Knowledge records, delta (2026-10-21)
+
+| Candidate | Decision |
+|---|---|
+| The two scoping-driver lessons from live check 4 | **folded** into [live-check-drive-runbook](../../knowledge/live-check-drive-runbook.md) |
+| A renumber after a numbering clash sweeps only the branch's own lines, and hand-merged lines need a re-read (finding 3) | **folded** into [two-step-rename-needs-ledger-and-anchored-exemptions](../../knowledge/two-step-rename-needs-ledger-and-anchored-exemptions.md) |
+| Reading traces on a Langfuse v3 host: REST API, filtered by session (trace lane) | **folded** into the runbook |
+| Stale counts after a merge (finding 6) | **declined** as a concept: the merge record already says "run the full gate and re-read the records"; a count audit is review work, not a rule |
 
 ## Deferred work
 

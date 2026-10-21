@@ -878,8 +878,10 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
     Cohere profile or simply not offer chat retrieval on them is a cost decision for
     that slice (owner, 2026-09-25); the old vectors stay in the database under their
     old profile. Two notes from the 053 review (2026-10-14): `infra/DEPLOYMENT.md`
-    § tuning knobs still lists the retired `POLICY_ATLAS_*_MODEL` variables and must be
-    rewritten when that slice touches `infra/`; and the `boto3` region for Cohere and
+    § tuning knobs still lists the retired `POLICY_ATLAS_*_MODEL` variables, and its
+    secret-field list and env-var table name `OPENAI_API_KEY` alone (no
+    `AWS_BEARER_TOKEN_BEDROCK`, no `POLICY_ATLAS_MODEL_ROUTE` row; 053 delta review,
+    2026-10-21); both must be rewritten when that slice touches `infra/`; and the `boto3` region for Cohere and
     Claude comes from `AWS_REGION` alone (default `eu-west-2`, contract D5) while the
     OpenAI address is written in the route, so a shell with `AWS_REGION` set for other
     AWS work sends the EU profiles to the wrong region. Reading the region from the
@@ -890,8 +892,13 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
     and retrieval are all unmeasured. Compare by writing an overlay route file per
     experiment (`POLICY_ATLAS_MODEL_ROUTE_FILE`); the committed file changes only when a
     choice is made. Whether reformulation and suggestion also move to Claude.
-  - **Retired variables:** the nine `POLICY_ATLAS_*_MODEL` overrides are ignored with a
-    start-up warning; anyone finding one in an old `.env` should delete it.
+  - **Retired variables:** the twelve `POLICY_ATLAS_*_MODEL` overrides are ignored with a
+    start-up warning (`POLICY_ATLAS_PLANNER_MODEL` silently, see ADR 0041 decision 2);
+    anyone finding one in an old `.env` should delete it.
+  - **Overlay routes are limited to the two committed key variables** (`API_KEY_ENVS`):
+    an evaluation overlay cannot name a third provider's key (Codex, 053 delta review
+    2026-10-21). Widen the list, or validate any non-empty name, when an experiment
+    needs a third provider; today every overlay reaches OpenAI or Bedrock.
   - **Later, if a third seam moves to Claude:** pull the shared Converse plumbing into
     `core/`; one Claude backend is not enough to justify it.
 - **Upload audit-event seam** — when the web-app slice gives uploads a real surface they

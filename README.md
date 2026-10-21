@@ -83,7 +83,8 @@ curl http://localhost:8000/healthz   # => {"status": "ok"}
 ```
 
 The API composes **stub** planner/search backends by default and goes live
-when `OPENAI_API_KEY` is set; `PA_BACKEND_MODE=live|stub|auto` makes the
+when the selected model route's key variable is set (`OPENAI_API_KEY` on the
+default route, `AWS_BEARER_TOKEN_BEDROCK` on a Bedrock route); `PA_BACKEND_MODE=live|stub|auto` makes the
 posture explicit (see `backend/.env.example`).
 
 **4. Frontend dev server** (from `frontend/`; installs once with `pnpm install`):

@@ -248,6 +248,17 @@ def test_retired_variables_change_nothing_and_are_named(tmp_path: Path) -> None:
             MINIMAL.replace('api_key_env = "OPENAI_API_KEY"', 'api_key_env = "OPENAI_KEY"'),
             "'api_key_env' is 'OPENAI_KEY', not one of",
         ),
+        (
+            MINIMAL.replace(
+                'api_key_env = "OPENAI_API_KEY"\n',
+                'api_key_env = "OPENAI_API_KEY"\nknobs = "none"\n',
+            ),
+            "'knobs' must be a table, not str",
+        ),
+        (
+            MINIMAL + '[routes.r.knobs]\nreasoning_effort = "none"\n',
+            "knobs: 'reasoning_effort' must be a table, not str",
+        ),
     ],
 )
 def test_unknown_backend_names_and_wrong_shapes_fail_loud(
@@ -294,6 +305,24 @@ def test_bedrock_route_reads_its_own_key_variable(monkeypatch: pytest.MonkeyPatc
     client = openai_client.resolve_openai_client(None, backend_name="t", timeout=1.0, max_retries=0)
     assert client.api_key == "bedrock-key"
     assert model_routes.live_api_key() == "bedrock-key"
+
+
+def test_live_mode_switch_reads_the_route_key_variable(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The web API's live switch and the dev CLI read the same helper as the client."""
+    from policy_atlas.api import deps
+    from policy_atlas.core import model_routes
+
+    bedrock = load_route(ROUTE_FILE, "bedrock-local", {})
+    monkeypatch.setattr(model_routes, "route", lambda: bedrock)
+    monkeypatch.setattr(deps, "route", lambda: bedrock)
+    monkeypatch.setenv("OPENAI_API_KEY", "openai-key")
+    monkeypatch.delenv("PA_BACKEND_MODE", raising=False)
+    assert deps._live() is False
+    monkeypatch.setenv("PA_BACKEND_MODE", "live")
+    with pytest.raises(RuntimeError, match="requires AWS_BEARER_TOKEN_BEDROCK"):
+        deps._live()
+    monkeypatch.setenv("AWS_BEARER_TOKEN_BEDROCK", "bedrock-key")
+    assert deps._live() is True
 
 
 def test_every_module_constant_equals_its_pre_053_literal() -> None:

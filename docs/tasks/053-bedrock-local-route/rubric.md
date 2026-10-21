@@ -4,6 +4,9 @@ The task is **done only if every box holds**. Otherwise it is in progress, not d
 Terms and need numbers (N1 to N8) are defined in [contract.md](contract.md). This file
 does not restate them.
 
+> **Build-time note (2026-10-21).** After the dev merge the counts in items 10 and 23
+> are 29 constants and 27 steps (contract note 8); the items are read with those numbers.
+
 ## Standard items
 
 1. [ ] Implementation satisfies [contract.md](contract.md), including decisions D1 to D8

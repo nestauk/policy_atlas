@@ -404,7 +404,7 @@ class OpenAILonglistBackend:
     """Live OpenAI implementation of the longlist seam.
 
     Args:
-        api_key: Optional OpenAI API key; ``OPENAI_API_KEY`` otherwise.
+        api_key: Optional OpenAI API key; the route's key variable otherwise.
         langfuse_client: Optional Langfuse client; tracing is a no-op without one.
         session_id: Optional Langfuse session id.
 

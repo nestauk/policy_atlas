@@ -3,7 +3,7 @@ type: Integration quirk
 title: Bedrock from London — which models answer, through which API, with which key variable
 description: From eu-west-2 the GPT-5.6 family (Terra, Luna, Sol) answers through Bedrock's OpenAI-compatible endpoint under global.* profiles only (gpt-5.4-mini is absent, gpt-5.5 is US-only); Claude and Cohere answer through eu.* profiles via boto3 Converse / InvokeModel; each route names its key variable (Bedrock routes read AWS_BEARER_TOKEN_BEDROCK for both clients), and a missing Bedrock variable surfaces as an AccessDeniedException naming the IAM user; Terra refuses function tools without reasoning_effort "none" but parses structured output without it.
 tags: [bedrock, openai, claude, cohere, boto3, credentials, live-probe]
-timestamp: 2026-10-14
+timestamp: 2026-10-21
 ---
 
 # Rules
@@ -27,7 +27,7 @@ timestamp: 2026-10-14
   OpenAI direct, `chat.completions.create(tools=...)` on Terra returns 400 unless
   `reasoning_effort="none"`; `chat.completions.parse(response_format=...)` works
   without it (with more completion tokens spent on reasoning). Probed 2026-10-14. So
-  moving a parse-only step (planner, agent) onto Terra needs no knob; a tool-bearing
+  moving a parse-only step (task_agent, agent) onto Terra needs no knob; a tool-bearing
   step (synthesis, chat) does, and the route file carries it keyed by model id.
 - **Claude JSON through tool use, not Bedrock structured output.** Structured output
   is supported on Haiku only and was refused for this account ("Model use case

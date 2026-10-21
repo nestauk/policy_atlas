@@ -171,7 +171,7 @@ code that shipped, so it can't drift from it. `/okf validate` and `/okf viz` are
 * [OpenAlex search.semantic rejects the date, SDG, paratext, OA and country filters](openalex-semantic-search-filter-support.md) - accepts `type`, `language`, `is_retracted`, `publication_year`; dates go as a year fence plus a local check, the rest local, recorded as `semantic_local_filters`; a split filter's local predicate spans every variant (051 probe and review).
 * [Overton returns date order with no scores unless sort=relevance is sent](overton-relevance-order-needs-sort-parameter.md) - the client sends and protects it; fetch-by-id checks the echoed id; landmarks carry no wire filters (049 experiments, 051).
 
-* [Bedrock from London — which models answer, through which API, with which key variable](bedrock-route-facts.md) - GPT-5.6 via the OpenAI-compatible endpoint under global.* only (no gpt-5.4-mini, gpt-5.5 US-only); Claude via Converse tool use, Cohere via InvokeModel, both eu.*; one key in OPENAI_API_KEY and AWS_BEARER_TOKEN_BEDROCK (a missing second one looks like an IAM permission gap); Terra needs reasoning_effort none for function tools, not for structured parse (053 probes).
+* [Bedrock from London — which models answer, through which API, with which key variable](bedrock-route-facts.md) - GPT-5.6 via the OpenAI-compatible endpoint under global.* only (no gpt-5.4-mini, gpt-5.5 US-only); Claude via Converse tool use, Cohere via InvokeModel, both eu.*; each route names its key variable (Bedrock routes read AWS_BEARER_TOKEN_BEDROCK for both clients; a missing one looks like an IAM permission gap); Terra needs reasoning_effort none for function tools, not for structured parse (053 probes).
 
 ## Integration quirks (infra / tooling)
 

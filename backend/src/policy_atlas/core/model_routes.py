@@ -219,6 +219,13 @@ def load_route(
     if search_backend == "claude":
         _require(search_table, "model", f"{where}.search_queries")
 
+    knobs = _table(table, "knobs", where) if "knobs" in table else {}
+    reasoning_effort = (
+        dict(_table(knobs, "reasoning_effort", f"{where}.knobs"))
+        if "reasoning_effort" in knobs
+        else {}
+    )
+
     retired = sorted(key for key in RETIRED_ENV if environ.get(key))
     if retired:
         log.warning(
@@ -234,7 +241,7 @@ def load_route(
         tiers=tiers,
         steps=steps,
         step_exceptions=exceptions,
-        reasoning_effort=dict(table.get("knobs", {}).get("reasoning_effort", {})),
+        reasoning_effort=reasoning_effort,
         embeddings=Embeddings(
             backend=_choice(embeddings_table, "backend", f"{where}.embeddings", EMBEDDING_BACKENDS),
             model=_require(embeddings_table, "model", f"{where}.embeddings"),

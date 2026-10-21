@@ -53,9 +53,11 @@ environment files.
    variable unset, the `openai-direct` route reproduces the pre-053 behaviour exactly.
    Secrets stay in the environment. An optional, uncommitted overlay file named by
    `POLICY_ATLAS_MODEL_ROUTE_FILE` can replace or add routes by name, so an evaluation
-   run can try any model without editing the committed file. The nine existing per-step
-   environment overrides, such as `POLICY_ATLAS_SYNTHESIS_MODEL`, are retired: the
-   loader ignores them and logs one warning naming any that are set. There is one
+   run can try any model without editing the committed file. The existing per-step
+   environment overrides, such as `POLICY_ATLAS_SYNTHESIS_MODEL` (nine at design, twelve
+   after the options-scoping merge), are retired: the loader ignores them and logs one
+   warning naming any that are set (`POLICY_ATLAS_PLANNER_MODEL` is ignored silently,
+   because the 044 rename sweep forbids the literal and 044 had already stopped reading it). There is one
    mechanism for choosing a model, and it is a file.
 
 3. **Provider knobs live in the route file, not in code.** The pin of
@@ -86,7 +88,8 @@ environment files.
 6. **The Claude backend gets a fresh, short system prompt, not a port of the OpenAI
    prompt** (prompting spec rule 12). The OpenAI prompts are unchanged. Six prompt
    modules are re-pinned only because a model constant moved out of them, with the diff
-   recorded.
+   recorded (eight after the dev merge of 2026-10-21: `extract_interventions_prompt.py`
+   and `grounding_judge.py` were pinned by dev and lose their constant the same way).
 
 7. **Quality is not claimed by this move.** Luna stands in for gpt-5.4-mini, Terra for
    gpt-5.5, and Claude Haiku is the first Claude tier, all unmeasured. The evaluation set
@@ -102,12 +105,13 @@ environment files.
   Bedrock routes, where `boto3` reads the same variable. Both keys may be set at once,
   so a route switch never edits a key. Locally a short-term Bedrock key expires within
   12 hours.
-- Staging and production need task-role permissions per model, Marketplace terms
-  accepted per account, an organisation-level allowance for the `unspecified` region
-  value that global profiles evaluate against, quota checks, and a cost-based decision on
-  re-embedding older projects. The
-  container mints its own short-term key from its task role. None of this is in task
-  053; it is the staging slice.
+- Staging and production need an IAM user with Bedrock invoke permissions whose
+  long-term API key sits in the app secret beside the OpenAI key (owner decision
+  2026-10-21, replacing the task-role key minting this ADR first planned), Marketplace
+  terms accepted per account, an organisation-level allowance for the `unspecified`
+  region value that global profiles evaluate against, quota checks, and a cost-based
+  decision on re-embedding older projects. None of this is in task 053; it is the
+  staging slice (`docs/deferred.md` § Bedrock routes).
 - Moving further steps to Claude is one class per seam, following the query generation
   backend. A shared Converse layer is deferred until a third seam needs it.
 - The deferred log's "Bedrock routes" entry is superseded by this ADR.

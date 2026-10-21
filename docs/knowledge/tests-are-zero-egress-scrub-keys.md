@@ -27,7 +27,8 @@ process unscrubbed. Three coordinated pieces enforce this:
   with no dotenv call of their own; `make -C backend dev` owns real `.env`
   loading via `uv run --env-file` for the actual server process. Backend mode
   is explicit via `PA_BACKEND_MODE` (`stub` / `live` / `auto`), and `live` fails
-  loud (`RuntimeError`) without `OPENAI_API_KEY`.
+  loud (`RuntimeError`) without the selected route's key variable (`OPENAI_API_KEY` on
+  the default route, `AWS_BEARER_TOKEN_BEDROCK` on a Bedrock route, task 053).
 
 # Why
 

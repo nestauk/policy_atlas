@@ -1,22 +1,24 @@
 ---
 type: Convention
 title: Model names live in model_routes.toml; module constants read the cached route at import
-description: Every model id is resolved once per process from the committed route file (route() is functools.cache, selected by POLICY_ATLAS_MODEL_ROUTE) into module-level constants, so a test of a non-default route must run in a subprocess, not a reload; the mechanical pin against regressions is the 29-constant equality test plus a grep narrowed to assignment lines (comments may name models); the loader rejects unknown routes, steps, tiers, backend names and wrong-shaped sections at import, but a step-exception value that is not a tier name is sent verbatim as a model id.
+description: Every model id is resolved once per process from the committed route file (route() is functools.cache, selected by POLICY_ATLAS_MODEL_ROUTE) into module-level constants, so a test of a non-default route must run in a subprocess, not a reload; the mechanical pin against regressions is the 29-constant equality test plus a grep narrowed to assignment lines (comments may name models); the loader rejects unknown routes, steps, tiers, backend names and wrong-shaped sections at import, but a step-exception value that is not a tier name is sent verbatim as a model id (deliberate, ADR 0041 decision 2: a typo in a tier name there fails at the first call, not at import).
 tags: [model-routes, configuration, import-time, testing, bedrock]
-timestamp: 2026-10-14
+timestamp: 2026-10-21
 ---
 
 # Rules
 
 - **One file, one selector.** `backend/src/policy_atlas/model_routes.toml` names every
-  text-model call site once (`[steps]`, 23 steps, four tiers) and, per route, the model
+  text-model call site once (`[steps]`, 27 steps, five tiers) and, per route, the model
   for each tier, the `reasoning_effort` knob keyed by model id, the embedding section
   and the search-queries backend. `POLICY_ATLAS_MODEL_ROUTE` picks the route; unset is
   `openai-direct`, byte-identical to the pre-053 requests except the embedding batch
   size (128 to 96, contract D4). An uncommitted overlay named by
   `POLICY_ATLAS_MODEL_ROUTE_FILE` replaces or adds whole routes for experiments and
-  may not carry `[steps]`. The nine `POLICY_ATLAS_*_MODEL` variables are retired:
-  ignored, named in one start-up warning.
+  may not carry `[steps]`. The `POLICY_ATLAS_*_MODEL` variables are retired (twelve after the
+  options-scoping merge): ignored, named in one start-up warning. The one exception is
+  `POLICY_ATLAS_PLANNER_MODEL`, ignored silently, because task 044's rename sweep forbids
+  the literal in `backend/src` and 044 had already stopped reading it.
 - **Constants resolve at import and stay resolved.** `route()` is cached for the
   process and `CLASSIFY_MODEL = route().model_for("classify")` runs when the module
   loads. A test that wants another route must start a fresh interpreter
@@ -43,7 +45,7 @@ timestamp: 2026-10-14
 # Why
 
 Task 053 replaced 25 literals in 15 modules and nine environment overrides with one
-(29 literals in 19 modules and thirteen overrides once the options-scoping merge of
+(29 literals in 19 modules and twelve overrides once the options-scoping merge of
 2026-10-21 was folded in; Sol joined as the `judgment` tier)
 reviewed file so that a Bedrock route could name models that exist there and an
 evaluation could try any model by adding a route. The review stack found two silent
