@@ -57,6 +57,7 @@ contract's own vocabulary and is recorded in the contract's build-time note:
 | `python3 scripts/prompt_hash_guard.py --update` (2026-10-21, dev merge) | pass | 7 modules re-pinned: the six 045 re-pins merged with dev's prompt edits, plus `extract_interventions_prompt.py` (constant now reads the route) |
 | `uv run --env-file backend/.env python probe_sol.py` (2026-10-21, dev merge) | pass | `bedrock-local`: `task_agent_scoping` and `longlist_judgment` resolve to `global.openai.gpt-5.6-sol`; plain reply `Ok.` in 1.2 s (9 in, 6 out); structured parse of a two-field schema in 1.6 s, no knob |
 | `make verify` + `make audit` (2026-10-21, after the dev merge) | pass (second run; the first found the four merge losses above) | backend 3638 passed in 9:28; mypy 420 files; infra 93; frontend 882; prompt-guard 36 unchanged; okf 178 concepts; audit: no known vulnerabilities after the certifi bump |
+| `drive_scoping.py` + `wait_longlist.py` against `make dev` on `bedrock-local` (2026-10-21, live check 4: options scoping) | pass | task `365d5eb5`, "interventions to reduce obesity", England, rapid: two Task Agent turns on Sol (11 s, 8 s) approved plan v1; baseline walk 90 s to its first steering pause, 3.5 min to the `baseline_confirm` gate (artefact written, 8 blocks); confirm decision 1 s opened the longlist walk; longlist walk 14 min 45 s, `succeeded`: 20 options in 6 themes, 20 included, 0 excluded, 0 without in-scope evidence; about 810 model calls (323 screen, 193 classify, 156 intervention extractions, 11 query generations, the longlist and profile calls), 2.80 M prompt + 0.38 M completion tokens, 26 Cohere batches, 0 errors |
 
 ### Phase B (Cohere embeddings), diff summary
 
@@ -556,6 +557,22 @@ is hash-pinned, so its re-pin is the one new prompt-module hash beyond the six 0
 
 **Not changed.** Nothing under `infra/`; dev's options-scoping logic is untouched beyond
 the constant lines and one import each; `boto3` region handling as before.
+
+**Live check 4: the options-scoping pipeline end to end on Bedrock (2026-10-21).** The
+owner asked for one topic, "interventions to reduce obesity". Driven through the local API
+on `bedrock-local` (server started with the selector set; dev DB first upgraded six
+migrations to `f1b6d3a8c2e5`). Every step ran on Bedrock models through the route file:
+the scoping Task Agent and the longlist judgment calls on Sol, screening, classification,
+intervention extraction, query generation and the small longlist calls on Luna, synthesis
+on Terra, embeddings on Cohere. Result in § Commands run. Two driver lessons, not product
+defects: a walk's first `paused` is a mid-walk steering check-in (after appraise), not the
+baseline gate, so a driver must read `/check-ins` for `kind = baseline_confirm` before
+confirming; and the confirm decision turn itself opens the longlist walk, so
+`POST /plan/confirm-baseline` afterwards is refused with `run_active`. One
+`option_profile.call_malformed` warning was retried by design. The twenty options read as
+sensible obesity levers (family weight programmes, school meals, HFSS promotion limits, a
+sugar levy, planning controls, labelling, bariatric surgery, anti-obesity medicines, active
+travel); quality against the 046 measures is the evaluation slice's job, not this check's.
 
 **First gate after the merge: four failures, all merge losses, plus one audit item.**
 Taking dev's version of `api/deps.py` and `runtime/agent.py` wholesale had dropped three
